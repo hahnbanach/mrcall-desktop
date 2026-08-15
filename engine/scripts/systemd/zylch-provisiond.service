@@ -1,0 +1,43 @@
+[Unit]
+# Vendor-side profile provisioning + status service. Singleton — ONE
+# process for the whole box (unlike zylch-server@<uid>, one per profile).
+# Owned and run by the dedicated service user `mrcalld`, same as every
+# other daemon here — root-owned profile dirs would be unwritable by
+# them. Listens on a Unix socket in /run/mrcalld/; Caddy reverse-proxies
+# /api/provision* to it (engine/scripts/caddy/desktop.Caddyfile). See
+# engine/scripts/server/README-provisiond.md.
+#   sudo systemctl enable --now zylch-provisiond
+Description=mrcall-desktop vendor-side provisioning + status service
+After=network-online.target
+Wants=network-online.target
+# Don't crash-loop forever on a misconfigured box (e.g. no systemd, or
+# /run/mrcalld missing): give up after 5 starts in 60s, same policy as
+# zylch-server@.service.
+StartLimitIntervalSec=60
+StartLimitBurst=5
+
+[Service]
+Type=simple
+User=mrcalld
+Group=mrcalld
+Environment=HOME=/home/mrcalld
+# Same optional at-rest env this box already uses for the per-profile
+# daemons (currently just ENCRYPTION_KEY); `-` makes it non-fatal if
+# absent. Lives out of git at /etc/mrcalld/env (mode 600).
+EnvironmentFile=-/etc/mrcalld/env
+WorkingDirectory=/home/mrcalld
+# The socket is /run/mrcalld/provisiond.sock. That dir is setgid group
+# `caddy` (engine/scripts/tmpfiles.d/mrcalld.conf), so the socket
+# inherits group `caddy`; UMask=0007 + an explicit chmod(0o660) in
+# __main__.py make it group-writable so the Caddy reverse-proxy (group
+# caddy) can connect.
+UMask=0007
+ExecStart=/home/mrcalld/mrcall-desktop/engine/venv/bin/python -m zylch.provisiond
+ExecStopPost=/bin/rm -f /run/mrcalld/provisiond.sock
+Restart=on-failure
+RestartSec=3
+# Logs to stderr -> journald only (no per-profile zylch.log — this
+# daemon is not bound to any one profile): journalctl -u zylch-provisiond
+
+[Install]
+WantedBy=multi-user.target
