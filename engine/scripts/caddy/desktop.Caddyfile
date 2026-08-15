@@ -17,8 +17,18 @@
 # This file is STATIC: adding/removing profiles never changes it (the socket
 # path is computed from the uid at request time). See
 # docs/execution-plans/multi-profile-routing.md.
+#
+# /api/provision* routes to provisiond (engine/zylch/provisiond/), the
+# singleton vendor-side provisioning + status service — ONE fixed socket,
+# not a per-uid one, so this matcher needs no path-derived variable and
+# stays exactly as static as the /ws/<uid> rule above: adding/removing
+# profiles never touches this file either way. See
+# engine/scripts/server/README-provisiond.md.
 
 desktop.mrcall.ai {
 	@ws path_regexp uid ^/ws/([^/]+)$
 	reverse_proxy @ws unix//run/mrcalld/{re.uid.1}.sock
+
+	@provision path /api/provision*
+	reverse_proxy @provision unix//run/mrcalld/provisiond.sock
 }
