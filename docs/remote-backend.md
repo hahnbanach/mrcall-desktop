@@ -25,6 +25,15 @@ Two ways to run it remotely:
 Your `<uid>` is the Firebase UID shown next to your email in the app's
 IdentityBanner — it is also the profile directory name.
 
+**Automated provisioning (in progress, branch `phase-b-provisiond`).** A
+vendor-side service, `zylch-provisiond`, is replacing the by-hand rsync
+step in B.2 below with a POST from the desktop app itself, authenticated
+with the same Firebase ID token the app already carries — see
+[`../engine/scripts/server/README-provisiond.md`](../engine/scripts/server/README-provisiond.md)
+for what it does, the install steps, and curl examples for both routes.
+Service-first: not yet wired into the app, so B.2's rsync flow remains
+how profiles actually land on the server today.
+
 ---
 
 ## A · Quick: one profile over an SSH tunnel
@@ -119,6 +128,11 @@ Day-to-day you don't even need that — admin runs as root: `sudo update-daemons
 `sudo systemctl {status,restart} zylch-server@<uid>`, `journalctl -u zylch-server@<uid>`.
 
 ### B.2 · Per profile: bring the data, then run the updater
+
+> Being replaced by `zylch-provisiond` (branch `phase-b-provisiond`) —
+> see the note above. This rsync-by-hand flow stays the documented path
+> until that service is wired into the app; nothing below is deleted or
+> deprecated yet.
 
 The engine **discovers** profiles; it does not create them. Copy **only the
 profiles you want to run remotely** (not necessarily all of them), one dir per

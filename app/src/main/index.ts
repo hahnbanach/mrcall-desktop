@@ -23,6 +23,7 @@ import {
   writeProfileEnvValue
 } from './profileFS'
 import { readLastProfile, writeLastProfile } from './lastProfile'
+import { writeCsDescriptor } from './csDescriptor'
 import { cancelGoogleSignin, startGoogleSignin } from './googleSignin'
 import { GOOGLE_SIGNIN_CLIENT_ID, GOOGLE_SIGNIN_CLIENT_SECRET } from './oauthConfig'
 
@@ -1257,6 +1258,22 @@ function registerIpc(): void {
       const entry = windowEntries.get(win.id)
       if (entry) {
         await forwardTokenToLocalEngine(entry, cached)
+      }
+      // Refresh tokens are what makes headless `cs login` possible — write
+      // (or refresh) that profile's cs-descriptor once we have one, but
+      // only if this window's bound profile actually belongs to the
+      // pushed uid (guards a stale/mismatched entry mid-rebind). Cheap,
+      // idempotent overwrite: freshest refresh token wins, no debounce.
+      if (
+        entry &&
+        cached.refreshToken &&
+        readProfileEnvValue(entry.profile, 'OWNER_ID') === cached.uid
+      ) {
+        writeCsDescriptor({
+          uid: cached.uid,
+          email: cached.email ?? readProfileEnvValue(entry.profile, 'EMAIL_ADDRESS') ?? '',
+          refreshToken: cached.refreshToken
+        })
       }
       return { ok: true }
     }

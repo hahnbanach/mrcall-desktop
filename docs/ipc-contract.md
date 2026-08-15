@@ -1,9 +1,12 @@
 ---
 description: |
   JSON-RPC method surface between the Electron app (client) and the
-  Python sidecar (server). Source of truth for method names, payload
-  shapes, and notification streams. Updated whenever either side
-  changes a method signature.
+  Python sidecar (server) — prose for the methods whose payload shape is
+  not self-evident. It is NOT the enforced contract: since 2026-08-03
+  that role belongs to each handler's own docstring signature, which
+  `engine/zylch/rpc/param_spec.py` parses into the accepted and required
+  parameter sets the dispatcher rejects calls against. Read this file for
+  intent and gotchas; read the docstring for what a call must carry.
 ---
 
 # IPC Contract — Engine ↔ App
@@ -38,9 +41,12 @@ The method surface, payload shapes, and notification streams below are
 - **Client**: `app/src/preload/index.ts` exposes `window.zylch.*` to the renderer; `app/src/main/` brokers stdio or WebSocket.
 - **Owner identity**: every call resolves `owner_id` server-side from the active profile — the client never sends it.
 
-This file is incomplete. It tracks methods that have been touched
-recently or have non-obvious payload shape; older methods live in
-code as the source of truth until they're touched.
+This file is incomplete by design. It tracks methods that have been
+touched recently or have a non-obvious payload shape; every other method
+lives in code as the source of truth. The registered surface is 65
+methods — the ones this file does not describe are enumerated under
+[Other methods](#other-methods) so the gap is visible rather than
+silent.
 
 ## Conventions
 
@@ -49,6 +55,33 @@ code as the source of truth until they're touched.
 - Notifications use `<method>.<event>` (`tasks.solve.event`, `update.run.progress`).
 - Errors are returned as `{ ok: false, error: string }` for "expected" failures (task not found, validation) and as JSON-RPC `error` objects for unexpected exceptions.
 - Owner-scoped calls do NOT carry `owner_id` — the server resolves it from the active profile lock.
+
+### Parameter validation at the dispatch boundary (since 2026-08-03)
+
+The dispatcher used to validate the method NAME and nothing else, so a
+caller could send `tasks.list(status="open")`, get a success-shaped reply,
+and never learn that `status` had been dropped on the floor. Two gates now
+run in `engine/zylch/rpc/dispatch.py` BEFORE the handler, both answering
+JSON-RPC `-32602`:
+
+- **Unknown parameters are refused.** The accepted set comes from the
+  handler's docstring signature via `rpc/param_spec.py`. A method whose
+  signature contains a non-identifier placeholder (`…fields`) is marked
+  OPEN and skips this check rather than guessing.
+- **Genuinely-missing required parameters are refused** —
+  `Missing required parameter(s) for <method>: …`. A name is required only
+  where the handler cannot proceed without it (i.e. it *raises*); where the
+  handler answers instead — an empty result, an `{ok: false}` a caller can
+  render — the signature must mark it `?`. Promoting such a param to
+  mandatory would turn an answer the engine has always given into a
+  `-32602` for every independent consumer relying on the default.
+
+This is wire-visible: a call that used to come back as `-32603 ValueError`
+now comes back as `-32602`. The envelope is otherwise unchanged.
+`engine/tests/rpc/test_contract_boundaries.py` drives every registered
+method through the real `dispatch_raw` with its minimal payload, repeats
+it leave-one-out, and cross-checks every `app/src/preload/index.ts`
+binding against the registry.
 
 ## Methods
 
@@ -70,24 +103,51 @@ code as the source of truth until they're touched.
 > | `account.who_am_i` | `{ signed_in, uid?, email?, expires_at_ms? }` |
 > | mutations (`tasks.complete/reopen/pin/skip`, `emails.pin/mark_read`, `chat.approve`) | `{ ok: boolean, … }` |
 
-### `tasks.complete(task_id, note?)`
+### `tasks.complete(task_id, note?, actor?, why?)`
 
 | Param | Type | Required | Notes |
 |-------|------|----------|-------|
 | `task_id` | string | yes | TaskItem UUID |
-| `note` | string \| null | no | Optional free-text closing reason. Stored on `task_items.close_note`. **Display-only — never injected into the task-detection prompt or any other LLM context.** Whitespace-only notes are stored as NULL. |
+| `note` | string \| null | no | Optional free-text closing reason. Stored on `task_items.close_note`. **Display-only — never injected into the task-detection prompt or any other LLM context.** Whitespace-only notes are stored as NULL. Must be a string when present. |
+| `actor` | string | no | WHO closed it — a stable machine token, `"human"` by default (a user action in the desktop), otherwise the calling code path or external operator, e.g. `"operator"`. Lands in `task_items.close_actor`. |
+| `why` | string | no | The audit reason, distinct from the display `note`. Falls back to `note`, then to a default describing the desktop-human close. |
 
 Returns `{ ok: boolean }`.
+
+A close is the one irreversible thing this ledger does, so it records who
+did it and why. Note, actor and reason are appended as **separate** fields
+to `sources.closes[]`, and both reopen paths preserve that history — as
+does any conflicting `tasks.create` upsert, which carries `sources.closes`
+and `sources.snoozes` over instead of replacing `sources` wholesale.
+
+`actor` and `why` are additive: they default to the desktop-human close,
+so a caller written before they existed is unaffected. The `mrcall-cs`
+consumer sends `actor="operator"` and a non-empty `why`.
 
 Auto-close paths (worker, reanalyze sweep, task_interactive) call this
 with `note=None` so closing reasons are never fabricated by the LLM.
 
+### `tasks.snooze(task_id, due_at?, days?, actor?, why?)`
+
+Parks an OPEN task until a moment in the future — the "call me back in N
+days" the ledger never had. Give **exactly one** of `due_at` (absolute
+epoch seconds, UTC) or `days` (relative to now; `0` or negative makes the
+task actionable again immediately); passing both or neither raises.
+`actor` / `why` follow the same audit convention as `tasks.complete` and
+are recorded on the task's snooze history.
+
+A snooze is not a close: the task stays open with its urgency intact, it
+merely drops out of `tasks.list(due_filter="due_now")`, out of the
+reanalyze sweep, and out of reach of the phone age-close until it comes
+due. Returns `{ ok, due_at, … }`, or `{ ok: false, error }` for a missing
+or already-closed task — reviving a closed task is `tasks.reopen`'s job.
+
 ### `tasks.reopen(task_id)`
 
 Returns `{ ok: boolean }`. Clears `completed_at` AND `close_note` so a
-reopened task starts fresh.
+reopened task starts fresh; the `sources.closes[]` audit history survives.
 
-### `tasks.list(include_completed?, include_skipped?, limit?)`
+### `tasks.list(include_completed?, include_skipped?, limit?, due_filter?)`
 
 Returns an array of `TaskItem` dicts. Each row includes (when present):
 - standard fields (id, owner_id, event_type, contact_email, …)
@@ -95,7 +155,16 @@ Returns an array of `TaskItem` dicts. Each row includes (when present):
 - `channel: 'email' | 'phone' | 'calendar' | 'whatsapp' | null`
 - `close_note: string | null`
 - `pinned: boolean`
-- `sources: { emails: string[], whatsapp_messages?: string[], blobs: string[], calendar_events: string[], thread_id?: string | null, whatsapp_chat_jid?: string | null }`
+- `due_at: number | null` — epoch seconds a `tasks.snooze` parked the task until
+- `sources: { emails: string[], whatsapp_messages?: string[], blobs: string[], calendar_events: string[], thread_id?: string | null, whatsapp_chat_jid?: string | null, closes?: […], snoozes?: […], skipped_at?: string }`
+
+`due_filter` decides what to do with snoozed tasks and accepts exactly two
+values: `"all"` (the default — every task, snoozed or not, identical to the
+behaviour before `due_at` existed, which is why the desktop UI needs no
+change) and `"due_now"` (only tasks actionable right now: `due_at` NULL or
+already past — the "what should I do today" list). Anything else raises.
+`include_skipped` is applied client-side of storage, filtering rows whose
+`sources.skipped_at` is set.
 
 `sources.whatsapp_messages` carries WhatsAppMessage row PKs; `sources.whatsapp_chat_jid` is stamped on the FIRST WA touchpoint to the task (engine: `update_task_item(whatsapp_chat_jid=…)` is idempotent — subsequent WA messages don't overwrite). Renderer uses it as the explicit pointer for the cross-channel Source-panel toggle so it doesn't have to sniff a `thread_id` suffix.
 
@@ -587,14 +656,43 @@ the renderer's ready signal when the socket reaches OPEN.
 
 ### Other methods
 
-For the rest of the surface (emails.\*, chat.\*, update.\*, settings.\*,
-profile.\*, files.\*, narration.\*, etc.) see:
+The registry holds 65 methods. The 22 below are registered and served but
+have no prose here — their signature (as parsed and enforced by
+`rpc/param_spec.py`) is reproduced so nobody has to guess whether a method
+exists, but for behaviour read the handler docstring it came from.
+
+| Method | Signature → return |
+|---|---|
+| `account.sign_out` | `account.sign_out() -> {ok}` |
+| `agents.get_prompt` | `agents.get_prompt(key="task_email") -> {ok, key, prompt}` |
+| `chat.send` | `chat.send(message, conversation_history=[], conversation_id="general", context={}) -> ChatService result dict` |
+| `drafts.list` | `drafts.list(status?) -> list of draft dicts` |
+| `emails.delete` | `emails.delete(thread_id) -> {ok, deleted}` |
+| `emails.mark_read` | `emails.mark_read(thread_id) -> {ok, affected}` |
+| `google.calendar.connect` | `google.calendar.connect() -> {ok, email, scope}` |
+| `google.calendar.status` | `google.calendar.status() -> {connected, signed_in, email?}` |
+| `google.calendar.disconnect` | `google.calendar.disconnect() -> {ok}` |
+| `google.calendar.cancel` | `google.calendar.cancel() -> {cancelled}` |
+| `memory.reconsolidate_now` | `memory.reconsolidate_now() -> summary dict` |
+| `narration.predict` | `narration.predict(message?, context="") -> {text}` |
+| `narration.summarize` | `narration.summarize(lines?, context="") -> {text}` |
+| `profiles.create` | `profiles.create(email, values) -> {ok, profile} \| error` |
+| `tasks.get` | `tasks.get(task_id) -> task dict \| null` |
+| `tasks.list_by_thread` | `tasks.list_by_thread(thread_id) -> list of task dicts` |
+| `tasks.pin` | `tasks.pin(task_id, pinned: bool) -> {ok}` — pinned tasks float to the top of `tasks.list` regardless of urgency |
+| `tasks.skip` | `tasks.skip(task_id) -> {ok}` — non-destructive; stores `skipped_at` inside `sources` |
+| `usage.today` | `usage.today() -> today's spend snapshot + per-call-site breakdown` |
+| `whatsapp.status` | `whatsapp.status() -> {connected, has_session, jid?}` |
+| `whatsapp.disconnect` | `whatsapp.disconnect(forget_session=False) -> {ok}` |
+| `whatsapp.cancel` | `whatsapp.cancel() -> {cancelled}` |
+
+For anything not covered above, the source of truth is:
+- `engine/zylch/rpc/*.py` — the handler docstring signature, which is what
+  the dispatcher enforces
 - `app/src/preload/index.ts` — typed client signatures
 - `app/src/renderer/src/types.ts` — `ZylchAPI` interface
-- `engine/zylch/rpc/methods.py` — server dispatch table
 
-These are the source of truth. This document tracks recent additions
-and deltas; bringing the full surface into this file is a separate
+Bringing the full surface into this file as prose remains a separate
 documentation push.
 
 ## Out of scope: renderer-only IPCs

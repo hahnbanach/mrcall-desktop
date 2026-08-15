@@ -1,231 +1,231 @@
 ---
-status: proposed — NICE-TO-HAVE / deferred (brief pronto; NON si fa ora)
+status: planned
 priority: |
-  nice-to-have. Electron resta il client primario; web/mobile è comodità
-  "di emergenza", non è in roadmap e non blocca nulla. Se Mario lo
-  richiede in futuro (e magari ha dimenticato che esiste): ricordaglielo e
-  riparti DA QUESTO BRIEF, non da zero.
-owner: cross-cutting (engine + app + IPC + nuovo client web)
+  nice-to-have. Electron stays the primary client; web/mobile is an
+  "emergency" convenience, is not on the roadmap and blocks nothing. If
+  Mario asks for it in the future (possibly having forgotten it exists):
+  remind him and restart FROM THIS BRIEF, not from scratch.
+owner: cross-cutting (engine + app + IPC + a new web client)
 created: 2026-06-02
-depends-on: cross-machine-transport.md (Phase 1–3 devono essere live PRIMA)
+depends-on: cross-machine-transport.md (Phase 1–3 must be live FIRST)
 discipline: |
-  Standard regole Mario. Questo è un BRIEF di analisi, non codice: quando
-  verrà ripreso, una phase alla volta, e NEVER claim "fatto"/"funziona"
-  finché Mario non l'ha usato end-to-end (daemon su una macchina, client
-  PWA dal browser/telefono) e confermato. Unit tests / typecheck / probe
-  RPC NON contano. Tell Mario exactly what to test, wait, NEVER commit
-  senza "funziona". Italian register in chat.
+  Mario's standard rules. This is an analysis BRIEF, not code: when it is
+  picked up, one phase at a time, NEVER claim "done"/"it works" until
+  Mario has used it end-to-end (daemon on one machine, PWA client from a
+  browser/phone) and confirmed. Unit tests / typecheck / RPC probes do
+  NOT count. Tell Mario exactly what to test, wait, NEVER commit without
+  his confirmation. Italian register in the chat.
 ---
 
-# Client thin web/mobile sopra il transport cross-machine
+# Thin web/mobile client on top of the cross-machine transport
 
-> **Brief, non piano esecutivo — NICE-TO-HAVE differito.** Cattura
-> l'analisi del 2026-06-02. Electron resta il client primario; questo non
-> è in roadmap e non blocca nulla. Non si parte finché
-> `cross-machine-transport.md` non ha consegnato WS server + auth JWT +
-> TLS (le sue Phase 1–3). Il documento esiste perché l'analisi non vada
-> persa e perché — se Mario lo richiede e l'avesse dimenticato — gli si
-> ricordi che il brief c'è già: ripartire da qui, non da zero.
+> **A brief, not an execution plan — NICE-TO-HAVE, deferred.** It captures
+> the 2026-06-02 analysis. Electron stays the primary client; this is not
+> on the roadmap and blocks nothing. Work does not start until
+> `cross-machine-transport.md` has delivered the WS server + JWT auth +
+> TLS (its Phase 1–3). The document exists so the analysis isn't lost, and
+> so that — if Mario asks for it having forgotten — he can be reminded the
+> brief already exists: restart from here, not from scratch.
 
-## Il modello che Mario ha fissato
+## The model Mario fixed
 
-- **Electron resta il client preferito.** Web/mobile sono client thin
-  **"di emergenza"**: ti ci attacchi quando non hai il Mac davanti.
-- **Single-tenant.** Un daemon, un profilo, su una macchina che è tua.
-  Te lo fai partire e ti ci connetti. Niente SaaS, niente multi-utente,
-  niente supervisor per-tenant. (Quel costo grosso è fuori scope —
-  vedi sotto.)
-- **Single-active-client con eviction "vince l'ultimo".** *Correzione
-  esplicita di Mario:* NON "un profilo / N client insieme". È **un solo
-  client attivo alla volta**: se apri da remoto, **il daemon chiude la
-  sessione dell'Electron a casa**. È l'opzione **Q6=(c)** di
-  `cross-machine-transport.md`, variante "il server kick-a il vecchio".
+- **Electron stays the preferred client.** Web/mobile are thin
+  **"emergency"** clients: you attach to one when you don't have the Mac
+  in front of you.
+- **Single-tenant.** One daemon, one profile, on a machine that is yours.
+  You start it and you connect to it. No SaaS, no multi-user, no per-tenant
+  supervisor. (That large cost is out of scope — see below.)
+- **Single-active-client with "last one wins" eviction.** *Mario's explicit
+  correction:* NOT "one profile / N clients together". It is **one active
+  client at a time**: if you open remotely, **the daemon closes the session
+  of the Electron back home**. This is option **Q6=(c)** of
+  `cross-machine-transport.md`, the "the server kicks the old one" variant.
 
-Conseguenza che semplifica tutto: niente broadcast multi-client, niente
-race fra client, un cursore solo, uno stato solo.
+The consequence simplifies everything: no multi-client broadcast, no races
+between clients, one cursor, one state.
 
-## Perché è quasi gratis: il punto di sutura già esiste
+## Why it is nearly free: the seam already exists
 
-Il renderer (`app/src/renderer/`, ~9.000 righe `.tsx`, 12 view) **non
-importa mai Electron** — parla solo con `window.zylch.*`, cioè
-l'interfaccia `ZylchAPI` (`app/src/renderer/src/types.ts`). Chi fornisce
-`window.zylch` è intercambiabile. Spaccando il preload
+The renderer (`app/src/renderer/`, ~9,000 lines of `.tsx`, 12 views)
+**never imports Electron** — it talks only to `window.zylch.*`, i.e. the
+`ZylchAPI` interface (`app/src/renderer/src/types.ts`). Whoever provides
+`window.zylch` is interchangeable. Splitting the preload
 (`app/src/preload/index.ts`):
 
-- **~40 metodi sono RPC puri** (`call(method, params)` → sidecar): tutto
+- **~40 methods are pure RPC** (`call(method, params)` → sidecar): all of
   `tasks.*`, `emails.*`, `chat.*`, `update.run`, `settings.*`,
-  `account.*`, `mrcall.*`, `memory.*`, `narration.*`, e i `connect/status`
-  di `google.calendar` e `whatsapp`. **Non cambiano di una riga**: cambia
-  solo *chi* esegue `call()` — non più preload→main→stdio ma una
-  connessione WS diretta dal browser. È lo stesso `RpcClient` del transport
-  plan (Phase 2), solo che nel PWA vive nel browser, non nel main process.
-- **~13 sono IPC "main-only"** (`ipcRenderer.invoke` su canali non-RPC) =
-  la colla Electron da rifare. Due famiglie:
-  1. **Shim di piattaforma, banali:** `files.select` (dialog → `<input
+  `account.*`, `mrcall.*`, `memory.*`, `narration.*`, and the
+  `connect/status` pairs of `google.calendar` and `whatsapp`. **They don't
+  change by a single line**: only *who* executes `call()` changes — no
+  longer preload→main→stdio but a direct WS connection from the browser.
+  It is the same `RpcClient` as the transport plan (Phase 2), except that
+  in the PWA it lives in the browser, not in the main process.
+- **~13 are "main-only" IPCs** (`ipcRenderer.invoke` on non-RPC channels) =
+  the Electron glue to be redone. Two families:
+  1. **Platform shims, trivial:** `files.select` (dialog → `<input
      type=file>`), `shell.openExternal` (→ `window.open`),
      `signin.googleStart` (loopback PKCE `:19276` → Firebase **Web SDK**
-     `signInWithPopup`, *più semplice* nel browser).
-  2. **Stato/lifecycle che per qualunque client remoto deve stare
-     server-side:** `onboarding.createProfile*` (oggi scrive su disco
-     locale), `profiles.list`, `profile.current`, `auth.bindProfile`.
-     **Nel nostro modello questi NON servono al client urgenza**: il
-     profilo lo crei e configuri da Electron; il PWA assume un daemon già
-     pronto e si limita a connettersi.
+     `signInWithPopup`, which is *simpler* in the browser).
+  2. **State/lifecycle that must be server-side for any remote client:**
+     `onboarding.createProfile*` (today it writes to the local disk),
+     `profiles.list`, `profile.current`, `auth.bindProfile`.
+     **In our model the emergency client does NOT need these**: you create
+     and configure the profile from Electron; the PWA assumes a
+     ready daemon and only connects to it.
 
-Il main process Electron (~2.176 righe) è il delta concettuale; ma per il
-client urgenza ne serve solo una frazione (gli shim della famiglia 1).
+The Electron main process (~2,176 lines) is the conceptual delta; but the
+emergency client needs only a fraction of it (the family-1 shims).
 
-## Decisioni raggiunte
+## Decisions reached
 
-### W1 — Client urgenza = PWA, NON app nativa
-Una sola codebase web copre browser desktop *e* mobile; installabile in
-home-screen come PWA (sembra un'app, zero App Store, zero review, zero
-signing). **L'access pattern "apro quando ho urgenza" elimina il bisogno
-di push APNs/FCM** — che era il costo #1 e l'unica vera ragione del
-nativo. Non dipendi dalla consegna in background: apri on-demand e fai un
-full load al connect. Se un giorno vuoi "pingami a client chiuso", la
-**Web Push del PWA** (service worker; Android Chrome, iOS 16.4+ su PWA
-installata) copre buona parte senza nativo. **Native mobile: deferred a
-tempo indefinito.**
+### W1 — The emergency client is a PWA, NOT a native app
+A single web codebase covers desktop *and* mobile browsers; installable to
+the home screen as a PWA (feels like an app, no App Store, no review, no
+signing). **The "I open it when it's urgent" access pattern removes the
+need for APNs/FCM push** — which was cost #1 and the only real reason to go
+native. You don't depend on background delivery: you open on demand and do
+a full load at connect. If one day you want "ping me with the client
+closed", the **PWA's Web Push** (service worker; Android Chrome, iOS 16.4+
+on an installed PWA) covers much of it without going native. **Native
+mobile: deferred indefinitely.**
 
-### W2 — Single-active-session: l'eviction è logica nuova nel daemon, NON il fcntl
-Distinzione critica (il transport plan in Q6c la confonde):
-- **fcntl flock** (`engine/zylch/cli/profiles.py`) garantisce **un solo
-  *daemon* per cartella-profilo**. Tutti i client colpiscono *lo stesso*
-  processo daemon → il lock NON li distingue.
-- L'**eviction del client** è una **policy nuova dentro il WS server**:
-  "al massimo una sessione WS attiva per profilo; vince l'ultima". Nuovo WS
-  autenticato per il profilo → il daemon chiude il WS precedente.
+### W2 — Single-active-session: the eviction is new daemon logic, NOT the fcntl
+A critical distinction (the transport plan conflates it in Q6c):
+- **fcntl flock** (`engine/zylch/cli/profiles.py`) guarantees **one
+  *daemon* per profile directory**. All clients hit the *same* daemon
+  process → the lock does NOT distinguish between them.
+- **Client eviction** is a **new policy inside the WS server**: "at most
+  one active WS session per profile; the last one wins". A new
+  authenticated WS for the profile → the daemon closes the previous one.
 
-### W3 — Il takeover deve essere pulito (la trappola della guerra di riconnessione)
-Il transport plan (Phase 2) prevede "auto-reconnect con backoff". Se è
-generico → ping-pong infinito: A chiuso → A si riconnette → chiude B → B
-si riconnette → … Nessuno usabile. Fix = **close code semantici**:
-- **"superseded"** (es. close code custom `4409`) → client va **passivo**,
-  banner "Sessione aperta altrove", **NIENTE auto-reconnect**; solo un
-  bottone manuale **"Riprendi qui"** riprende il controllo (ed espelle
-  l'altro).
-- **"network drop"** (1006/1001) → quello sì, auto-reconnect con backoff.
+### W3 — The takeover must be clean (the reconnection-war trap)
+The transport plan (Phase 2) foresees "auto-reconnect with backoff". If it
+is generic → an endless ping-pong: A closed → A reconnects → closes B → B
+reconnects → … Nobody can use it. The fix is **semantic close codes**:
+- **"superseded"** (e.g. custom close code `4409`) → the client goes
+  **passive**, with a "Session open elsewhere" banner and **NO
+  auto-reconnect**; only a manual **"Resume here"** button takes control
+  back (evicting the other).
+- **"network drop"** (1006/1001) → that one does auto-reconnect with backoff.
 
-Distinguere i due casi è *l'unica* cosa che separa "funziona" da "due
-finestre che si scannano". Da aggiungere alla D3 del transport plan come
-gemello dell'auth handshake.
+Distinguishing the two cases is the *only* thing separating "it works" from
+"two windows tearing each other apart". To be added to the transport plan's
+D3 as the twin of the auth handshake.
 
-### W4 — Resume ri-mansionato: è la feature-firma, non un dettaglio
-Il resume (D8 del transport plan) **non serve** a sincronizzare più client
-(ce n'è uno). Serve a **ri-attaccare l'unico client attivo a operazioni
-daemon-side long-running attraverso un takeover**: fai partire un `update`
-o un `tasks.solve` dall'Electron, chiudi il laptop, apri il telefono → il
-telefono prende il controllo e **si ri-aggancia allo stream di progresso
-dell'operazione che gira ancora sul daemon**. È letteralmente ciò che
-Mario ha chiesto all'origine ("inizio sul server, continuo in remoto").
-Quindi: **versione leggera** — al connect → full state load +
-re-subscribe alle operazioni in corso. Niente ring-buffer elaborato da
-fan-out multi-client.
+### W4 — Resume re-scoped: it is the signature feature, not a detail
+Resume (D8 of the transport plan) is **not** for synchronising several
+clients (there is only one). It is for **re-attaching the single active
+client to long-running daemon-side operations across a takeover**: you
+start an `update` or a `tasks.solve` from Electron, close the laptop, open
+the phone → the phone takes control and **re-attaches to the progress
+stream of the operation still running on the daemon**. That is literally
+what Mario asked for originally ("start on the server, continue remotely").
+So: a **light version** — at connect → full state load + re-subscribe to
+in-flight operations. No elaborate ring buffer for multi-client fan-out.
 
-### W5 — "Un cervello solo": anche l'Electron di casa è remote-mode
-Perché "se apro da remoto si chiude quello a casa" abbia senso, deve
-esserci **un solo cervello** e tutti devono attaccarsi a quello — Electron
-incluso. Se l'Electron-casa girasse in local-spawn (sidecar suo, lock suo
-sulla *sua* cartella) e il telefono parlasse col daemon, sarebbero **due
-cervelli su due dischi**, e "chiudere quello a casa" non vorrebbe dire
-niente. Quindi per l'utente-con-daemon il default è **Electron in
-remote-mode**. Il local-spawn resta solo per l'utente "tutto-locale,
-privacy puro" — che per definizione non ha web, né mobile, né eviction.
-**Due mondi distinti**; l'eviction vive solo nel primo.
+### W5 — "One brain only": the Electron at home is in remote mode too
+For "if I open remotely the one at home closes" to mean anything, there
+must be **one brain** and everyone must attach to it — Electron included.
+If the Electron at home ran in local-spawn (its own sidecar, its own lock
+on *its own* directory) and the phone talked to the daemon, there would be
+**two brains on two disks**, and "closing the one at home" would mean
+nothing. So for the user-with-a-daemon the default is **Electron in remote
+mode**. Local-spawn remains only for the "all-local, pure privacy" user —
+who by definition has no web, no mobile, and no eviction. **Two distinct
+worlds**; eviction lives only in the first.
 
-### W6 — Superficie ridotta del client urgenza
-Non replicare le 12 view. Setup, Onboarding, Settings, OAuth, gestione
-profili → **restano su Electron**. Il PWA è **"read + act"**: Tasks (lista
-+ solve/Open), chat, lettura Email/WhatsApp, trigger `update`. ~4-5 view,
-le più semplici (niente wizard, niente form di config).
+### W6 — Reduced surface for the emergency client
+Don't replicate the 12 views. Setup, Onboarding, Settings, OAuth, profile
+management → **stay in Electron**. The PWA is **"read + act"**: Tasks (list
++ solve/Open), chat, reading Email/WhatsApp, triggering `update`. ~4-5
+views, the simplest ones (no wizard, no config forms).
 
-### W7 — OAuth: public client + PKCE, niente client_secret nel bundle web
-Un browser non può nascondere un secret. OAuth Calendar nel PWA = **public
-client + PKCE con redirect ospitato** (es. `https://<host>/oauth/callback`),
-non loopback. *Forza l'igiene giusta* che il transport plan lasciava
-come compromesso (secret nel bundle Electron). E comunque il client
-urgenza normalmente **non inizia un OAuth**: usa i token già installati da
-Electron (server-side via `oauth.installTokens`).
+### W7 — OAuth: public client + PKCE, no client_secret in the web bundle
+A browser cannot hide a secret. Calendar OAuth in the PWA = **public client
++ PKCE with a hosted redirect** (e.g. `https://<host>/oauth/callback`), not
+loopback. *This forces the right hygiene* that the transport plan left as a
+compromise (the secret inside the Electron bundle). And in any case the
+emergency client normally **does not start an OAuth**: it uses the tokens
+Electron already installed (server-side, via `oauth.installTokens`).
 
-### W8 — Raggiungibilità / self-host (l'unica rogna nuova)
-"Una macchina" decide la Phase 3 del transport plan:
-- **VPS con dominio** → `wss://desktop.mrcall.ai` + Caddy/Let's Encrypt.
-  Pulito, è già il disegno.
-- **Box di casa dietro NAT** → serve un tunnel (Cloudflare Tunnel /
-  Tailscale / reverse-proxy + DDNS): il telefono in 4G non raggiunge un IP
-  privato. Cambia il deploy, non l'architettura.
+### W8 — Reachability / self-hosting (the one genuinely new nuisance)
+"One machine" decides the transport plan's Phase 3:
+- **VPS with a domain** → `wss://desktop.mrcall.ai` + Caddy/Let's Encrypt.
+  Clean, and already the design.
+- **Home box behind NAT** → a tunnel is needed (Cloudflare Tunnel /
+  Tailscale / reverse proxy + DDNS): a phone on 4G cannot reach a private
+  IP. That changes the deploy, not the architecture.
 
-## Come ricade sulle Open Q di `cross-machine-transport.md`
+## How this lands on the Open Qs of `cross-machine-transport.md`
 
-| Punto | Risoluzione dal modello di Mario |
+| Point | Resolution from Mario's model |
 |---|---|
-| **Q6** | → **(c)** "server kicks old" (NON (b) multi-client). |
-| **D4** broadcast | → **eliminato** in questo scenario (un client solo). |
-| **D8** resume | → **ridotto** a "re-attach a operazioni in corso + full load al connect". È la feature-firma. |
-| **D3** auth | → **aggiungere** single-active-session + close code semantico + no-auto-reconnect-on-eviction. |
-| **Q7** persistenza compat | → per l'utente-con-daemon, Electron è **remote-mode** di default. |
-| **Q1/Q2** host + TLS | → dipendono dal bivio W8 (VPS vs box di casa). |
+| **Q6** | → **(c)** "server kicks old" (NOT (b) multi-client). |
+| **D4** broadcast | → **eliminated** in this scenario (a single client). |
+| **D8** resume | → **reduced** to "re-attach to in-flight operations + full load at connect". It is the signature feature. |
+| **D3** auth | → **add** single-active-session + a semantic close code + no-auto-reconnect-on-eviction. |
+| **Q7** persistence compat | → for the user-with-a-daemon, Electron is in **remote mode** by default. |
+| **Q1/Q2** host + TLS | → they depend on the W8 fork (VPS vs home box). |
 
-## Gratis vs costo proprio
+## Free vs its own cost
 
-- **Gratis (ereditato dal transport plan):** WS client, auth JWT, files
-  bridge (`files.upload/download`), `whatsapp.qr.event`,
-  `oauth.installTokens`, le ~40 RPC pure. Lato engine il PWA aggiunge
-  quasi nulla oltre a ciò che il transport plan già elenca.
-- **Costo proprio del PWA:** host web del renderer riusato + i pochi shim
-  main-only (famiglia 1) riportati a browser + la **policy
-  single-session/eviction** nel WS server + le 4-5 view ridotte + manifest
-  PWA + service worker.
-- **Mobile nativo:** NON lo facciamo. Il PWA è la storia mobile.
+- **Free (inherited from the transport plan):** the WS client, JWT auth,
+  the files bridge (`files.upload/download`), `whatsapp.qr.event`,
+  `oauth.installTokens`, the ~40 pure RPCs. Engine-side the PWA adds almost
+  nothing beyond what the transport plan already lists.
+- **The PWA's own cost:** a web host for the reused renderer + the few
+  main-only shims (family 1) ported to the browser + the
+  **single-session/eviction policy** in the WS server + the 4-5 reduced
+  views + a PWA manifest + a service worker.
+- **Native mobile:** we are not doing it. The PWA is the mobile story.
 
-## Leva architetturale da prendere ORA (anche se il PWA non si fa adesso)
+## Architectural leverage to take NOW (even if the PWA isn't built yet)
 
-Quando il transport plan scrive `WebSocketRpcClient` in **Phase 2**, NON
-farne una classe accoppiata al main process Electron. Progettarlo come
-**core-di-protocollo + socket pluggable**: framing JSON-RPC, correlazione
-request/response, demux notification, loop `auth.refresh`, reconnect +
-re-attach sono tutti agnostici alla piattaforma. Sotto, una sottile socket
-binding per piattaforma — Node `ws` (Electron-main), browser `WebSocket`
-(PWA), RN `WebSocket` (eventuale futuro). Così il PWA eredita gratis la
-parte più facile da sbagliare (reconnect/re-attach/refresh corretti). È
-l'Obiettivo 2 del transport plan ("trasporto agnostico al client"):
-decisione a costo ~zero adesso, che non preclude il PWA dopo.
+When the transport plan writes `WebSocketRpcClient` in **Phase 2**, do NOT
+make it a class coupled to the Electron main process. Design it as a
+**protocol core + pluggable socket**: JSON-RPC framing, request/response
+correlation, notification demux, the `auth.refresh` loop, reconnect +
+re-attach are all platform-agnostic. Underneath, a thin per-platform socket
+binding — Node `ws` (Electron main), browser `WebSocket` (PWA), RN
+`WebSocket` (a possible future). That way the PWA inherits for free the
+part that is easiest to get wrong (correct reconnect/re-attach/refresh). It
+is Objective 2 of the transport plan ("client-agnostic transport"): a
+~zero-cost decision now that doesn't foreclose the PWA later.
 
-## Files che verrebbero toccati (indicativo — è un brief)
+## Files that would be touched (indicative — this is a brief)
 
 ```
-# Riuso del renderer come web app
-app/  (o nuovo package web/)        entry-point web che inietta un
-                                    `window.zylch` WS-backed al posto del
-                                    preload; build Vite "pure web"
-app/src/.../WebSocketRpcClient      condiviso col core del transport plan
-                                    (vedi leva architetturale sopra)
-web manifest + service worker       PWA installabile + (futuro) Web Push
+# Reusing the renderer as a web app
+app/  (or a new web/ package)       web entry point injecting a WS-backed
+                                    `window.zylch` in place of the preload;
+                                    a "pure web" Vite build
+app/src/.../WebSocketRpcClient      shared with the transport plan's core
+                                    (see architectural leverage above)
+web manifest + service worker       installable PWA + (future) Web Push
 
-# Engine — sopra a quanto già previsto dal transport plan
-engine/zylch/rpc/server_ws.py       + policy single-active-session
-                                    + close code "superseded" (4409)
-engine/zylch/rpc/notification_bus   degenerato a "1 subscriber, swap su
-                                    takeover" (NON fan-out multi-client)
+# Engine — on top of what the transport plan already foresees
+engine/zylch/rpc/server_ws.py       + single-active-session policy
+                                    + "superseded" close code (4409)
+engine/zylch/rpc/notification_bus   degenerated to "1 subscriber, swapped on
+                                    takeover" (NOT multi-client fan-out)
 ```
 
-## Out of scope (di questo brief)
+## Out of scope (of this brief)
 
-- **App mobile nativa (iOS/Android/RN).** Il PWA la copre. Riconsiderare
-  solo se servisse push aggressiva a client chiuso oltre Web Push.
-- **Multi-tenant / SaaS.** Single-tenant only. Il supervisor per-uid +
-  routing WS + lifecycle profilo server-side restano fuori.
-- **Push a client chiuso.** Deferred; Web Push come upgrade graduale.
-- **E2E encryption sul canale.** TLS basta per la threat model
-  ("macchina mia, traffico interno in chiaro").
+- **A native mobile app (iOS/Android/RN).** The PWA covers it. Reconsider
+  only if aggressive push to a closed client were needed beyond Web Push.
+- **Multi-tenant / SaaS.** Single-tenant only. The per-uid supervisor + WS
+  routing + server-side profile lifecycle stay out.
+- **Push to a closed client.** Deferred; Web Push as a gradual upgrade.
+- **E2E encryption on the channel.** TLS is enough for the threat model
+  ("my machine, internal traffic in the clear").
 
-## Come iniziare la prossima sessione (quando si farà)
+## How to start the next session (whenever it happens)
 
-1. Pre-requisito: `cross-machine-transport.md` Phase 1–3 LIVE e verificate
-   da Mario (daemon WS + auth JWT + TLS).
-2. Verificare che la leva architetturale (W "core + socket pluggable") sia
-   stata presa in Phase 2 del transport plan; se no, rifattorizzare lì
-   prima.
-3. Rileggere questo brief + il discipline header.
-4. NON è un'urgenza. Electron resta il client primario; il PWA è comodità.
+1. Prerequisite: `cross-machine-transport.md` Phase 1–3 LIVE and verified
+   by Mario (WS daemon + JWT auth + TLS).
+2. Check that the architectural leverage (the "core + pluggable socket" W)
+   was taken in the transport plan's Phase 2; if not, refactor there first.
+3. Re-read this brief + the discipline header.
+4. This is NOT urgent. Electron stays the primary client; the PWA is a
+   convenience.

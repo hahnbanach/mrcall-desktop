@@ -1,92 +1,95 @@
 ---
-status: in-progress (Livello A landed 2026-05-20; Livello B = phone-call memory ingestion, next)
+status: active
+stage: Livello A landed 2026-05-20; Livello B (phone-call memory ingestion) is next
 owner: cross-cutting (engine + app + IPC)
 created: 2026-05-19
 template: engine/docs/execution-plans/whatsapp-pipeline-parity.md
 discipline: |
-  Standard regole Mario. NEVER claim a feature is "fixed", "done", or
+  Mario's standard rules. NEVER claim a feature is "fixed", "done", or
   "verified" until Mario has clicked / used it himself in the real
   Electron app and reported back. Unit tests, typecheck, RPC probes,
   log lines do NOT count. One change at a time. Tell Mario exactly
   what to test. Wait. NEVER push to origin. NEVER commit until Mario
-  says "funziona". Italian register in the chat.
+  says it works. Italian register in the chat.
 ---
 
 # MrCall pipeline parity + cross-channel toggle
 
-> **Stato 2026-05-20** (live-verified by Mario, on `worktree-sprightly-floating-anchor`):
+> **Status 2026-05-20** (live-verified by Mario, on `worktree-sprightly-floating-anchor`):
 > - **Prerequisite DONE** — legacy delegated/PKCE OAuth2 + `/mrcall` command surface + `mrcall_link` removed; StarChat reached via Firebase JWT only.
 > - **Livello A (read-only customer-service lookup) DONE** — MrCall tab lists + searches businesses (`mrcall.list_my_businesses`, `mrcall.search_businesses`; StarChat role-scopes admin cross-owner vs owner own-only). Onboarding unblocked for MrCall-only users + in-wizard Calendar session fix.
 > - **Livello B (phone-call memory + task ingestion — the D1–D5 plan below) = NEXT.** `sync_mrcall` is currently a graceful no-op; it must be reimplemented over the **Firebase JWT path** (`{realm}/customer/conversation/search`, NOT `delegated_`) before Livello B. StarChat's `FirebaseCustomerConversationService` already hard-scopes conversation search to the caller's uid (so "only own businesses' calls" is enforced server-side), but add a defence-in-depth owner filter before ingestion anyway — Mario's hard constraint: never put another owner's contacts/calls into memory.
 
-## Cosa Mario ha chiesto
+## What Mario asked for
 
-> "Inglobare MrCall. Il tab MrCall è ancora un placeholder disabilitato.
->  Il workstream WhatsApp ha gettato le fondamenta (person_identifiers
->  con kind futura `mrcall_phone` citata in Phase 1c, pattern `*_blobs`
->  join table, F7 cross-channel). Il modello `MrcallConversation` e
->  `StarChatClient` OAuth2 esistono lato engine ma niente li processa.
->  Plan analogo a WA parity, 4 fasi: memory extraction → task creation
->  → UI MrCall tab → cross-channel toggle MrCall/email/WA nel Source
->  panel."
+*(translated from Mario's Italian)*
 
-Due obiettivi accoppiati, identici al WhatsApp plan:
+> "Bring MrCall in. The MrCall tab is still a disabled placeholder. The
+>  WhatsApp workstream laid the foundations (`person_identifiers` with a
+>  future `mrcall_phone` kind mentioned in Phase 1c, the `*_blobs` join
+>  table pattern, F7 cross-channel). The `MrcallConversation` model and
+>  the OAuth2 `StarChatClient` exist engine-side but nothing processes
+>  them. Plan it like WA parity, 4 phases: memory extraction → task
+>  creation → MrCall tab UI → MrCall/email/WA cross-channel toggle in the
+>  Source panel."
 
-1. **Pipeline parity**: ogni `MrcallConversation` passa attraverso memory
-   extraction + task creation, stessa via di email e WhatsApp oggi.
-2. **Cross-channel identity**: un blob su John Smith mette insieme
-   email + WA + telefonata MrCall; UN task su John indipendentemente
-   da quale dei tre canali lo ha innescato.
+Two coupled goals, identical to the WhatsApp plan:
 
-## Stato attuale: cosa esiste vs cosa manca
+1. **Pipeline parity**: every `MrcallConversation` goes through memory
+   extraction + task creation, the same route email and WhatsApp take today.
+2. **Cross-channel identity**: one blob on John Smith brings together
+   email + WA + the MrCall phone call; ONE task on John regardless of
+   which of the three channels triggered it.
 
-### Engine — esiste ✅
+## Current state: what exists vs what is missing
 
-| Pezzo | Dove | Note |
+### Engine — exists ✅
+
+| Piece | Where | Notes |
 |---|---|---|
-| `MrcallConversation` model | `storage/models.py:575` | PK text, owner_id-scoped, `memory_processed_at` già presente (mirror di Email + WhatsAppMessage), `contact_phone`/`contact_name`, `subject`/`body` JSON, `custom_values` JSON, `raw_data`, `call_duration_ms`, `call_started_at` |
-| `OAuthToken` provider='mrcall' | `storage/models.py:349` | Flusso completo PKCE in `tools/mrcall/oauth.py`, refresh in `_refresh_token_if_needed` |
-| `StarChatClient` | `tools/starchat.py:13` | CRUD contatti, business config, variables, `initiate_outbound_call` |
-| `sync_mrcall()` | `services/sync_service.py:142` | Già funzionante: chiama `/mrcall/v1/delegated_{realm}/customer/conversation/search`, scrive in `mrcall_conversations`. Wired nel pipeline (`run()` linea 495 via `_sync_mrcall_if_connected`) |
-| `InitiateCallTool` + `SendSMSTool` | `tools/call_tools.py`, `tools/sms_tools.py` | Codice esiste; **NON registrati** in `factory.create_all_tools()`. Fuori dallo scope di questo plan (vedi Out of scope). |
-| RPC `mrcall.list_my_businesses` | `rpc/mrcall_actions.py:37` | Solo metodo del namespace lato server |
-| `PersonIdentifier` con kind `'phone'` | `storage/models.py:314` | Già condivisibile per cross-channel match: il numero MrCall si scrive in `kind='phone'` e si aggancia al blob email/WA esistente. **Niente kind nuovo `'mrcall_phone'`** — vedi Out of scope. |
+| `MrcallConversation` model | `storage/models.py:575` | Text PK, owner_id-scoped, `memory_processed_at` already present (mirrors Email + WhatsAppMessage), `contact_phone`/`contact_name`, `subject`/`body` JSON, `custom_values` JSON, `raw_data`, `call_duration_ms`, `call_started_at` |
+| `OAuthToken` provider='mrcall' | `storage/models.py:349` | Full PKCE flow in `tools/mrcall/oauth.py`, refresh in `_refresh_token_if_needed` |
+| `StarChatClient` | `tools/starchat.py:13` | Contact CRUD, business config, variables, `initiate_outbound_call` |
+| `sync_mrcall()` | `services/sync_service.py:142` | Already working: calls `/mrcall/v1/delegated_{realm}/customer/conversation/search`, writes into `mrcall_conversations`. Wired into the pipeline (`run()` line 495 via `_sync_mrcall_if_connected`) |
+| `InitiateCallTool` + `SendSMSTool` | `tools/call_tools.py`, `tools/sms_tools.py` | Code exists; **NOT registered** in `factory.create_all_tools()`. Out of scope for this plan (see Out of scope). |
+| RPC `mrcall.list_my_businesses` | `rpc/mrcall_actions.py:37` | The namespace's only server-side method |
+| `PersonIdentifier` with kind `'phone'` | `storage/models.py:314` | Already shareable for cross-channel match: the MrCall number is written as `kind='phone'` and attaches to the existing email/WA blob. **No new `'mrcall_phone'` kind** — see Out of scope. |
 
-### Engine — manca ❌
+### Engine — missing ❌
 
-- **No `MrcallBlob` join table** (analogo a EmailBlob/CalendarBlob/WhatsAppBlob).
-- **No `MemoryWorker.process_mrcall_conversation()`** — `process_email` + `process_whatsapp_message` esistono; MrCall path zero.
-- **No envelope MrCall nel trainer `memory_message`** — oggi il META_PROMPT menziona email + WhatsApp; manca il terzo envelope (phone call con transcript).
-- **No `TaskWorker._analyze_recent_mrcall_events()`** — `_analyze_recent_email_events` + `_analyze_recent_whatsapp_events` esistono; MrCall zero.
-- **`task_items.channel = 'mrcall'`** mai usato (la column accetta qualsiasi stringa, basta scriverla).
-- **Storage helpers mancanti**: `add_mrcall_blob_link`, `get_blobs_for_mrcall_conversation`, `get_unprocessed_mrcall_conversations`, `mark_mrcall_task_processed`, `update_task_item(add_source_mrcall_conversation=…)`.
-- **`migrate_blob_references` da estendere** con `mrcall_blobs_migrated` (analogo a `whatsapp_blobs_migrated` Phase 1c WA), così la Phase 1c reconsolidation preserva i link MrCall sui blob mergiati.
-- **Pipeline wiring**: `process_pipeline.py` step [3/5] memory loop, step [4/5] task loop da estendere per MrCall.
-- **RPC methods**: `mrcall.listConversations`, `mrcall.getConversation` (forma analoga a `whatsapp.listMessages`).
-- **Sources schema extension**: `task_items.sources.mrcall_conversations` + `sources.mrcall_conversation_id` (analogo a `whatsapp_chat_jid`).
-- **Column `mrcall_conversations.task_processed_at`** (mirror dello stesso pattern email + WA).
+- **No `MrcallBlob` join table** (the analogue of EmailBlob/CalendarBlob/WhatsAppBlob).
+- **No `MemoryWorker.process_mrcall_conversation()`** — `process_email` + `process_whatsapp_message` exist; the MrCall path is empty.
+- **No MrCall envelope in the `memory_message` trainer** — today the META_PROMPT mentions email + WhatsApp; the third envelope (phone call with transcript) is missing.
+- **No `TaskWorker._analyze_recent_mrcall_events()`** — `_analyze_recent_email_events` + `_analyze_recent_whatsapp_events` exist; MrCall has nothing.
+- **`task_items.channel = 'mrcall'`** never used (the column accepts any string, it just has to be written).
+- **Missing storage helpers**: `add_mrcall_blob_link`, `get_blobs_for_mrcall_conversation`, `get_unprocessed_mrcall_conversations`, `mark_mrcall_task_processed`, `update_task_item(add_source_mrcall_conversation=…)`.
+- **`migrate_blob_references` needs extending** with `mrcall_blobs_migrated` (the analogue of WA Phase 1c's `whatsapp_blobs_migrated`), so Phase 1c reconsolidation preserves MrCall links on merged blobs.
+- **Pipeline wiring**: `process_pipeline.py` step [3/5] memory loop and step [4/5] task loop both need extending for MrCall.
+- **RPC methods**: `mrcall.listConversations`, `mrcall.getConversation` (shaped like `whatsapp.listMessages`).
+- **Sources schema extension**: `task_items.sources.mrcall_conversations` + `sources.mrcall_conversation_id` (the analogue of `whatsapp_chat_jid`).
+- **Column `mrcall_conversations.task_processed_at`** (mirrors the same email + WA pattern).
 
-### App — manca ❌
+### App — missing ❌
 
-- **Tab MrCall**: disabled placeholder in `App.tsx:643-646` (`disabled: true, disabledTitle: 'Not connected'`).
-- **View `Mrcall.tsx`** (mirror `WhatsApp.tsx`): lista conversazioni, dettaglio con trascrizione, filtro per business_id se ne hai più di uno.
-- **Connect MrCall**: oggi unico entry è CLI `zylch init`. Da aggiungere come card in Settings (mirror di `ConnectGoogleCalendar.tsx`) o come vuoto-tab CTA (mirror di `ConnectWhatsApp.tsx`).
-- **ThreadPanel branch MrCall**: oggi gestisce solo `email`/`whatsapp` (`ThreadSourceType`).
-- **Cross-channel pills** in ThreadPanel: oggi mostra Email/WhatsApp; aggiungere MrCall → 3 valori, conteggi paralleli, fetch parallelo, instant tab switch.
-- **Preload bindings** in `app/src/preload/index.ts`: namespace `mrcall.*` esiste con `list_my_businesses` solo; aggiungere `listConversations`, `getConversation`.
+- **MrCall tab**: disabled placeholder in `App.tsx:643-646` (`disabled: true, disabledTitle: 'Not connected'`).
+- **`Mrcall.tsx` view** (mirroring `WhatsApp.tsx`): conversation list, detail with transcript, filter by business_id when there is more than one.
+- **Connect MrCall**: today the only entry point is the `zylch init` CLI. To be added as a Settings card (mirroring `ConnectGoogleCalendar.tsx`) or as an empty-tab CTA (mirroring `ConnectWhatsApp.tsx`).
+- **ThreadPanel MrCall branch**: today it handles only `email`/`whatsapp` (`ThreadSourceType`).
+- **Cross-channel pills** in ThreadPanel: today it shows Email/WhatsApp; add MrCall → 3 values, parallel counts, parallel fetch, instant tab switch.
+- **Preload bindings** in `app/src/preload/index.ts`: the `mrcall.*` namespace exists with `list_my_businesses` only; add `listConversations`, `getConversation`.
 - **Type extension** in `types.ts`: `ThreadSourceType = 'email' | 'whatsapp' | 'mrcall'`, `ZylchTask.sources.mrcall_conversations?`, `sources.mrcall_conversation_id?`.
 
-### IPC contract — manca ❌
+### IPC contract — missing ❌
 
-- `tasks.list` payload: `sources.mrcall_conversations?: string[]` (lista di PK `MrcallConversation.id`) + `sources.mrcall_conversation_id?: string | null` (first-touch conv id, analogo a `whatsapp_chat_jid` per email).
-- `mrcall.listConversations(business_id?, limit?, offset?)` — array di conversation row dicts.
-- `mrcall.getConversation(conversation_id)` — single conversation con `body` (transcript) decoded.
+- `tasks.list` payload: `sources.mrcall_conversations?: string[]` (list of `MrcallConversation.id` PKs) + `sources.mrcall_conversation_id?: string | null` (first-touch conv id, the analogue of `whatsapp_chat_jid` for email).
+- `mrcall.listConversations(business_id?, limit?, offset?)` — array of conversation row dicts.
+- `mrcall.getConversation(conversation_id)` — a single conversation with `body` (transcript) decoded.
 
-## Architettura proposta (D1–D5, decisioni per Mario)
+## Proposed architecture (D1–D5, decisions for Mario)
 
-Lo schema replica esattamente quello che ha funzionato per WhatsApp.
+The design replicates exactly what worked for WhatsApp.
 
-### D1 — `mrcall_blobs` join table (mirror di `whatsapp_blobs`)
+### D1 — `mrcall_blobs` join table (mirroring `whatsapp_blobs`)
 
 ```python
 class MrcallBlob(Base):
@@ -105,13 +108,13 @@ class MrcallBlob(Base):
     created_at = Column(DateTime, default=_utcnow)
 ```
 
-Scritto da `process_mrcall_conversation()`. Letto da `TaskWorker` via nuovo `Storage.get_blobs_for_mrcall_conversation()`.
+Written by `process_mrcall_conversation()`. Read by `TaskWorker` through a new `Storage.get_blobs_for_mrcall_conversation()`.
 
-`migrate_blob_references(owner, dup, keeper)` esteso con un quinto step `mrcall_blobs_migrated` analogo a `whatsapp_blobs_migrated`, così la Phase 1c reconsolidation preserva i link MrCall sui blob mergiati durante `reconsolidate_now`.
+`migrate_blob_references(owner, dup, keeper)` gains a fifth step, `mrcall_blobs_migrated`, analogous to `whatsapp_blobs_migrated`, so Phase 1c reconsolidation preserves MrCall links on blobs merged during `reconsolidate_now`.
 
-### D2 — Memory extraction: estendere `memory_message` trainer
+### D2 — Memory extraction: extend the `memory_message` trainer
 
-**Non** creare `memory_mrcall.py`. Il trainer `memory_message.py` è già channel-aware (post-WA Phase 2b: rinominato da `memory_email`, accetta email + WhatsApp envelope). Estendere la sua META_PROMPT per dichiarare un terzo envelope:
+Do **not** create `memory_mrcall.py`. The `memory_message.py` trainer is already channel-aware (post-WA Phase 2b: renamed from `memory_email`, accepts email + WhatsApp envelopes). Extend its META_PROMPT to declare a third envelope:
 
 ```
 Channel: MrCall (phone call)
@@ -122,113 +125,113 @@ Duration: <call_duration_ms / 1000>s
 Transcript: <body.transcript|body.text|stringified body>
 ```
 
-Il prompt istruisce il LLM a emettere `Phone:` e `Name:` in `#IDENTIFIERS`. Niente kind nuovo: il numero va in `kind='phone'`, così cross-channel match scatta naturale contro blob già esistenti dalla pipeline WA.
+The prompt instructs the LLM to emit `Phone:` and `Name:` in `#IDENTIFIERS`. No new kind: the number goes into `kind='phone'`, so cross-channel match fires naturally against blobs the WA pipeline already created.
 
-**Rationale per estendere invece di creare un trainer nuovo**: l'envelope è solo un wrapper testuale; il prompt di extraction è lo stesso. Un trainer in più aggiunge solo training redundancy + 3-4 punti di sincronizzazione. La Phase 2b di WA-parity ha già fatto esattamente questa scelta (`memory_email` → `memory_message`), e ha funzionato.
+**Rationale for extending instead of creating a new trainer**: the envelope is only a textual wrapper; the extraction prompt is the same. One more trainer adds nothing but training redundancy and 3-4 synchronisation points. WA-parity Phase 2b already made exactly this call (`memory_email` → `memory_message`), and it worked.
 
-### D3 — `MemoryWorker.process_mrcall_conversation(conv)` (mirror `process_whatsapp_message`)
+### D3 — `MemoryWorker.process_mrcall_conversation(conv)` (mirroring `process_whatsapp_message`)
 
-- Input: una `MrcallConversation` row.
-- `_format_mrcall_data(conv)` produce l'envelope di sopra.
-- Chiama lo stesso LLM con prompt `memory_message`.
-- Per ogni entità: stessa pipeline `_upsert_entity` (identifier-first match → cosine fallback → MERGE/CREATE → write `person_identifiers` rows).
-- Scrive `mrcall_blobs(conv_id, blob_id)` link.
-- Marca `mrcall_conversations.memory_processed_at = now()`.
+- Input: one `MrcallConversation` row.
+- `_format_mrcall_data(conv)` produces the envelope above.
+- Calls the same LLM with the `memory_message` prompt.
+- For each entity: the same `_upsert_entity` pipeline (identifier-first match → cosine fallback → MERGE/CREATE → write `person_identifiers` rows).
+- Writes the `mrcall_blobs(conv_id, blob_id)` link.
+- Marks `mrcall_conversations.memory_processed_at = now()`.
 
-Wire in `process_pipeline.py` step [3/5]: loop email → loop WA → loop MrCall (sempre filtrato per `memory_processed_at IS NULL`).
+Wire into `process_pipeline.py` step [3/5]: email loop → WA loop → MrCall loop (always filtered on `memory_processed_at IS NULL`).
 
-`[update.summary]` log line carries `mrcall_memory=A/B` accanto a `memory=` e `wa_memory=`.
+The `[update.summary]` log line carries `mrcall_memory=A/B` alongside `memory=` and `wa_memory=`.
 
-### D4 — `TaskWorker._analyze_recent_mrcall_events()` (mirror WA path)
+### D4 — `TaskWorker._analyze_recent_mrcall_events()` (mirroring the WA path)
 
-- Itera conversations con `memory_processed_at IS NOT NULL AND task_processed_at IS NULL`.
-- Dedup per `(business_id, contact_phone)` come WA dedup per `chat_jid`: se un contatto ha 3 call non processate, ne consideriamo l'evento aggregato.
-- Per ogni evento aggregato: colleziona `existing_tasks_all` =
-  - **thread tasks**: `Storage.get_tasks_by_mrcall_conversation_id(owner, conv_id)` (nuovo helper, prima call → null; call successive matchano via `sources.mrcall_conversation_id`);
-  - **contact tasks**: `Storage.get_tasks_by_contact_phone(owner, contact_phone)` (già esistente post-WA Phase 3a; channel-agnostic);
-  - **topical (F7)**: `Storage.get_blobs_for_mrcall_conversation(conv_id)` → `get_open_tasks_by_blobs(owner, blobs)` (helper già esistente, già channel-agnostic).
-- LLM con system prompt task_creation, envelope MrCall, decide `task_action ∈ {create, update, close, none}` + `target_task_id`.
-- CREATE: nuovo `TaskItem` con `channel='mrcall'`, `contact_phone=<phone>`, `contact_email=null`, `sources.mrcall_conversations=[conv_id]`, `sources.mrcall_conversation_id=<conv_id>` (first-touch, idempotente: subsequent UPDATE non sovrascrivono).
-- UPDATE: aggiungere conv_id a `sources.mrcall_conversations` esistente; stampare `sources.mrcall_conversation_id` se ancora null (Fix-D guard mantenuto: F7 topical-blob siblings restano LLM context, MAI auto-merge una CREATE su una task di un cliente diverso).
-- `_infer_task_channel` (o l'assegnazione inline corrente) impara `'mrcall'`.
+- Iterates conversations with `memory_processed_at IS NOT NULL AND task_processed_at IS NULL`.
+- Dedups by `(business_id, contact_phone)` the way WA dedups by `chat_jid`: if one contact has 3 unprocessed calls, we consider their aggregate event.
+- For each aggregate event, collect `existing_tasks_all` =
+  - **thread tasks**: `Storage.get_tasks_by_mrcall_conversation_id(owner, conv_id)` (new helper; first call → null, later calls match via `sources.mrcall_conversation_id`);
+  - **contact tasks**: `Storage.get_tasks_by_contact_phone(owner, contact_phone)` (already exists post-WA Phase 3a; channel-agnostic);
+  - **topical (F7)**: `Storage.get_blobs_for_mrcall_conversation(conv_id)` → `get_open_tasks_by_blobs(owner, blobs)` (helper already exists, already channel-agnostic).
+- LLM with the task_creation system prompt and the MrCall envelope decides `task_action ∈ {create, update, close, none}` + `target_task_id`.
+- CREATE: a new `TaskItem` with `channel='mrcall'`, `contact_phone=<phone>`, `contact_email=null`, `sources.mrcall_conversations=[conv_id]`, `sources.mrcall_conversation_id=<conv_id>` (first-touch, idempotent: later UPDATEs don't overwrite it).
+- UPDATE: append conv_id to the existing `sources.mrcall_conversations`; stamp `sources.mrcall_conversation_id` if still null (the Fix-D guard is kept: F7 topical-blob siblings stay LLM context, NEVER auto-merge a CREATE onto a different customer's task).
+- `_infer_task_channel` (or the current inline assignment) learns `'mrcall'`.
 
-F4 reanalyze sweep, F8 dedup sweep, F9 topic dedup, age-based auto-close: già channel-agnostic, ereditano gratis (come WA). Fix-D restriction (`f5196e7f`) protegge anche MrCall.
+The F4 reanalyze sweep, F8 dedup sweep, F9 topic dedup and age-based auto-close are already channel-agnostic and inherit this for free (as WA did). The Fix-D restriction (`f5196e7f`) protects MrCall too.
 
-### D5 — UI MrCall tab + cross-channel toggle (Phase 3 + Phase 4)
+### D5 — MrCall tab UI + cross-channel toggle (Phase 3 + Phase 4)
 
-- `views/Mrcall.tsx`: clone di `WhatsApp.tsx`. Lista conversazioni dell'attivo business_id, click → ThreadPanel con `mrcall_conversation_id`. Top bar per switchare business se `list_my_businesses` > 1.
-- `components/ThreadPanel.tsx`: gain branch `source.type === 'mrcall'` che fa `mrcall.getConversation` + renderizza trascrizione (forma esatta da confermare in Phase 0 sample body — vedi Open Questions #1).
-- Cross-channel pills: `ThreadPanel` header oggi mostra "Email (N) / WhatsApp (M)"; estendere a "Email (N) / WhatsApp (M) / MrCall (K)" quando una task ha ≥ 2 dei 3 canali nelle sources. Logic da `b57fcc4f` (WA cross-channel) generalizzato a 3-way.
-- `views/Settings.tsx`: nuova card "Connect MrCall" che lancia il flusso OAuth PKCE — mirror di `ConnectGoogleCalendar.tsx`. Quando linkato, il tab MrCall in `App.tsx` diventa `disabled: false`.
+- `views/Mrcall.tsx`: a clone of `WhatsApp.tsx`. Lists the active business_id's conversations, click → ThreadPanel with `mrcall_conversation_id`. Top bar to switch business when `list_my_businesses` > 1.
+- `components/ThreadPanel.tsx`: gains a `source.type === 'mrcall'` branch that calls `mrcall.getConversation` and renders the transcript (exact shape to be confirmed against the Phase 0 sample body — see Open Questions #1).
+- Cross-channel pills: the `ThreadPanel` header shows "Email (N) / WhatsApp (M)" today; extend it to "Email (N) / WhatsApp (M) / MrCall (K)" when a task has ≥ 2 of the 3 channels in its sources. Logic from `b57fcc4f` (WA cross-channel) generalised to 3-way.
+- `views/Settings.tsx`: a new "Connect MrCall" card launching the OAuth PKCE flow — mirroring `ConnectGoogleCalendar.tsx`. Once linked, the MrCall tab in `App.tsx` becomes `disabled: false`.
 
 ## Phasing
 
-### Phase 0 — preparazione e verifica baseline
+### Phase 0 — preparation and baseline verification
 
-- **Sample body**: chiedere a Mario di esportare 1-2 row di `mrcall_conversations` di un profilo reale (raw SQL fine: `sqlite3 ~/.zylch/profiles/<uid>/zylch.db "SELECT id, contact_name, subject, body FROM mrcall_conversations LIMIT 2;"`). Capire la forma esatta di `body` (transcript array? testo libero? markdown?) per definire `_format_mrcall_data` e il renderer.
-- Re-read `engine/docs/execution-plans/whatsapp-pipeline-parity.md` Phase 1c + Phase 2 — sono il template letterale di Phase 1 di questo plan.
-- Re-read this brief; rispondere alle 6 design questions sotto.
+- **Sample body**: ask Mario to export 1-2 `mrcall_conversations` rows from a real profile (raw SQL is fine: `sqlite3 ~/.zylch/profiles/<uid>/zylch.db "SELECT id, contact_name, subject, body FROM mrcall_conversations LIMIT 2;"`). Understand the exact shape of `body` (transcript array? free text? markdown?) in order to define `_format_mrcall_data` and the renderer.
+- Re-read `engine/docs/execution-plans/whatsapp-pipeline-parity.md` Phase 1c + Phase 2 — they are the literal template for this plan's Phase 1.
+- Re-read this brief; answer the 6 design questions below.
 
-**STOP. Mario conferma sample body + risposte design questions. NON partire con Phase 1 prima.**
+**STOP. Mario confirms the sample body + the answers to the design questions. Do NOT start Phase 1 before that.**
 
 ### Phase 1 — `mrcall_blobs` table + memory extraction (D1 + D2 + D3)
 
-Single landing, sul modello di Phase 2 WA (che fece 2a/2b/2c in un commit unico — sono funzionalmente indivisibili):
+A single landing, on the model of WA Phase 2 (which did 2a/2b/2c in one commit — they are functionally indivisible):
 
-- **1a (storage)**: `MrcallBlob` model + storage helpers (`add_mrcall_blob_link`, `get_blobs_for_mrcall_conversation`, `get_unprocessed_mrcall_conversations`). `migrate_blob_references` esteso con `mrcall_blobs_migrated`.
-- **1b (trainer + worker)**: trainer `memory_message` esteso per envelope MrCall. `_format_mrcall_data` in `workers/memory.py`. `MemoryWorker.process_mrcall_conversation`.
-- **1c (pipeline)**: wire in `process_pipeline.py` step [3/5]. `[update.summary]` log line carries `mrcall_memory=A/B`.
-- **Test**:
-  - `tests/storage/test_mrcall_blobs.py` — idempotency add, FK CASCADE da entrambi i lati, `migrate_blob_references` con `mrcall_blobs_migrated`.
-  - `tests/workers/test_memory_mrcall.py` — happy path; cross-channel merge into pre-existing blob via phone identifier (un blob "Jane Doe" già esistente con `Phone: +393...` cattura il MrCall di Jane via identifier-first match); empty body skip path; identifier extraction roundtrip.
+- **1a (storage)**: `MrcallBlob` model + storage helpers (`add_mrcall_blob_link`, `get_blobs_for_mrcall_conversation`, `get_unprocessed_mrcall_conversations`). `migrate_blob_references` extended with `mrcall_blobs_migrated`.
+- **1b (trainer + worker)**: the `memory_message` trainer extended for the MrCall envelope. `_format_mrcall_data` in `workers/memory.py`. `MemoryWorker.process_mrcall_conversation`.
+- **1c (pipeline)**: wire into `process_pipeline.py` step [3/5]. The `[update.summary]` log line carries `mrcall_memory=A/B`.
+- **Tests**:
+  - `tests/storage/test_mrcall_blobs.py` — add idempotency, FK CASCADE from both sides, `migrate_blob_references` with `mrcall_blobs_migrated`.
+  - `tests/workers/test_memory_mrcall.py` — happy path; cross-channel merge into a pre-existing blob via the phone identifier (an existing "Jane Doe" blob carrying `Phone: +393...` captures Jane's MrCall call through identifier-first match); empty-body skip path; identifier extraction roundtrip.
 
-**STOP. Mario clicca Update su profilo con MrCall conversations sincronizzate. Verifica:**
-- `mrcall_blobs` popolata.
-- Un blob esistente di un contatto noto (es. Jane Doe che ha già blob email + WA) acquisisce il link MrCall, NON viene creato un nuovo blob duplicato.
-- `[update.summary]` mostra `mrcall_memory=N/N`.
+**STOP. Mario clicks Update on a profile with MrCall conversations synced. He verifies:**
+- `mrcall_blobs` is populated.
+- An existing blob for a known contact (e.g. Jane Doe, who already has email + WA blobs) acquires the MrCall link, and NO duplicate blob is created.
+- `[update.summary]` shows `mrcall_memory=N/N`.
 
-### Phase 2 — task creation da MrCall (D4)
+### Phase 2 — task creation from MrCall (D4)
 
-- `mrcall_conversations.task_processed_at` column (nullable, mirror `email_blobs`/`whatsapp_blobs` watermark pattern).
-- `TaskWorker._analyze_recent_mrcall_events` mirror del WA path. Dedup per `(business_id, contact_phone)`.
-- `TaskItem.sources` JSON esteso con `mrcall_conversations` + `mrcall_conversation_id`. Storage helper `update_task_item(add_source_mrcall_conversation=…, mrcall_conversation_id=…)` (mirror Phase 3a WA `add_source_whatsapp_message` + `whatsapp_chat_jid`).
-- `task_items.channel='mrcall'` flowed via il branch task-creation MrCall (Open Question #4 conferma `'mrcall'` vs `'phone'`).
-- F4/F8/F9 sweeps ereditano (channel-agnostic).
-- **IPC contract**: aggiornare `docs/ipc-contract.md` `tasks.list` payload con `sources.mrcall_conversations` + `sources.mrcall_conversation_id`.
-- **Test**: `tests/workers/test_tasks_mrcall.py` — task creata da MrCall conv; seconda call sullo stesso contatto aggiorna stessa task; email + WA + MrCall sullo stesso person → UNA task con tutti e tre i source array popolati.
+- `mrcall_conversations.task_processed_at` column (nullable, mirroring the `email_blobs`/`whatsapp_blobs` watermark pattern).
+- `TaskWorker._analyze_recent_mrcall_events` mirroring the WA path. Dedup by `(business_id, contact_phone)`.
+- `TaskItem.sources` JSON extended with `mrcall_conversations` + `mrcall_conversation_id`. Storage helper `update_task_item(add_source_mrcall_conversation=…, mrcall_conversation_id=…)` (mirroring WA Phase 3a's `add_source_whatsapp_message` + `whatsapp_chat_jid`).
+- `task_items.channel='mrcall'` flowed through the MrCall task-creation branch (Open Question #4 confirms `'mrcall'` vs `'phone'`).
+- The F4/F8/F9 sweeps inherit this (channel-agnostic).
+- **IPC contract**: update `docs/ipc-contract.md`'s `tasks.list` payload with `sources.mrcall_conversations` + `sources.mrcall_conversation_id`.
+- **Tests**: `tests/workers/test_tasks_mrcall.py` — a task created from a MrCall conv; a second call on the same contact updates the same task; email + WA + MrCall on the same person → ONE task with all three source arrays populated.
 
-**STOP. Mario verifica in app:**
-- Un MrCall call recente produce una `TaskItem` con `channel='mrcall'` e `sources.mrcall_conversations` non vuoto.
-- Una task pre-esistente su un contatto già noto (email/WA) viene aggiornata, non duplicata.
-- `sources.mrcall_conversation_id` stampato sulla prima call, idempotente sulle successive.
+**STOP. Mario verifies in the app:**
+- A recent MrCall call produces a `TaskItem` with `channel='mrcall'` and a non-empty `sources.mrcall_conversations`.
+- A pre-existing task on an already-known contact (email/WA) is updated, not duplicated.
+- `sources.mrcall_conversation_id` is stamped on the first call and idempotent on later ones.
 
-### Phase 3 — UI MrCall tab + Connect flow
+### Phase 3 — MrCall tab UI + Connect flow
 
-- `views/Mrcall.tsx` clone di `WhatsApp.tsx` (lista conv + dettaglio + business selector se >1).
-- Nuova card "Connect MrCall" in `views/Settings.tsx` che lancia OAuth PKCE — mirror di `ConnectGoogleCalendar.tsx`. Quando linkato → tab abilitato.
-- RPC nuovi (`rpc/mrcall_actions.py`): `mrcall.listConversations(business_id?, limit=50, offset=0)`, `mrcall.getConversation(conversation_id)`. Owner-scoped come il resto del contratto.
-- `app/src/preload/index.ts`: bindings tipizzati.
-- IPC contract documentato.
-- Tab MrCall in `App.tsx`: `disabled: !mrcallLinked` (gated su presence di OAuthToken `provider='mrcall'` per il profilo attivo — query via `account.whoAmI()` o RPC dedicato `mrcall.isLinked()`).
-- ThreadPanel branch `mrcall` (fetch + render trascrizione).
+- `views/Mrcall.tsx`, a clone of `WhatsApp.tsx` (conv list + detail + business selector when >1).
+- A new "Connect MrCall" card in `views/Settings.tsx` launching OAuth PKCE — mirroring `ConnectGoogleCalendar.tsx`. Once linked → tab enabled.
+- New RPCs (`rpc/mrcall_actions.py`): `mrcall.listConversations(business_id?, limit=50, offset=0)`, `mrcall.getConversation(conversation_id)`. Owner-scoped like the rest of the contract.
+- `app/src/preload/index.ts`: typed bindings.
+- IPC contract documented.
+- The MrCall tab in `App.tsx`: `disabled: !mrcallLinked` (gated on the presence of an OAuthToken with `provider='mrcall'` for the active profile — queried via `account.whoAmI()` or a dedicated `mrcall.isLinked()` RPC).
+- ThreadPanel `mrcall` branch (fetch + transcript render).
 
-**STOP. Mario verifica:**
-- Click "Connect MrCall" in Settings → flusso OAuth completa → tab si abilita.
-- Click tab MrCall → mostra lista conversazioni reali del business linkato.
-- Click su una conv → ThreadPanel mostra trascrizione formattata.
-- Open di una task con `channel='mrcall'` da Tasks view → ThreadPanel renderizza la conversazione MrCall (non email).
+**STOP. Mario verifies:**
+- Clicking "Connect MrCall" in Settings → the OAuth flow completes → the tab enables.
+- Clicking the MrCall tab → shows the linked business's real conversation list.
+- Clicking a conv → ThreadPanel shows the formatted transcript.
+- Opening a task with `channel='mrcall'` from the Tasks view → ThreadPanel renders the MrCall conversation (not email).
 
-### Phase 4 — cross-channel toggle Email/WhatsApp/MrCall
+### Phase 4 — Email/WhatsApp/MrCall cross-channel toggle
 
-- `ThreadPanel` header pills da 2 a 3 valori quando una task ha sources cross-canale.
+- `ThreadPanel` header pills go from 2 to 3 values when a task has cross-channel sources.
 - `ThreadSourceType` widened to `'email' | 'whatsapp' | 'mrcall'`.
-- Generalizzare la cross-channel detection in Workspace.tsx: oggi è binary email-vs-WA; serve N-way con `available = [...]` calcolato da `sources.emails?.length`, `sources.whatsapp_messages?.length`, `sources.mrcall_conversations?.length`.
-- Test sintetico (SQL) come per WA Phase 4 cross-channel: forzare una task con sources di tutti e tre i canali (Tom Lee email + Jane Doe WA + MrCall call), verificare che le 3 pill si mostrino con counter corretto e switch instant funzioni in tutte le combinazioni (E↔WA, E↔M, WA↔M, E↔WA↔M).
-- **Reverter post-test** come per WA Phase 4: ripristinare sources originali una volta verificato.
+- Generalise cross-channel detection in `Workspace.tsx`: today it is binary email-vs-WA; it needs to be N-way with `available = [...]` computed from `sources.emails?.length`, `sources.whatsapp_messages?.length`, `sources.mrcall_conversations?.length`.
+- A synthetic (SQL) test as for WA Phase 4 cross-channel: force a task with sources from all three channels (Tom Lee email + Jane Doe WA + a MrCall call), verify the 3 pills show with the right counters and that instant switching works in every combination (E↔WA, E↔M, WA↔M, E↔WA↔M).
+- **Revert after the test**, as for WA Phase 4: restore the original sources once verified.
 
-**STOP. Mario verifica con test sintetico + (idealmente, ma non bloccante) con una task cross-channel naturale.**
+**STOP. Mario verifies with the synthetic test + (ideally, but not blocking) with a naturally-occurring cross-channel task.**
 
-## Files toccati
+## Files touched
 
 ```
 engine/zylch/storage/models.py            +MrcallBlob, +mrcall_conversations.task_processed_at
@@ -239,9 +242,9 @@ engine/zylch/storage/storage.py           +add_mrcall_blob_link, +get_blobs_for_
                                           migrate_blob_references += mrcall_blobs_migrated
 engine/zylch/workers/memory.py            +_format_mrcall_data, +process_mrcall_conversation
 engine/zylch/workers/task_creation.py     +_analyze_recent_mrcall_events, _infer_task_channel learns 'mrcall'
-engine/zylch/agents/trainers/memory_message.py  envelope MrCall in META_PROMPT
-engine/zylch/services/process_pipeline.py wire MrCall loops in step [3/5] e [4/5]; [update.summary] += mrcall_memory mrcall_tasks
-engine/zylch/rpc/mrcall_actions.py        +listConversations, +getConversation, +isLinked (per UI gating)
+engine/zylch/agents/trainers/memory_message.py  MrCall envelope in META_PROMPT
+engine/zylch/services/process_pipeline.py wire the MrCall loops into steps [3/5] and [4/5]; [update.summary] += mrcall_memory mrcall_tasks
+engine/zylch/rpc/mrcall_actions.py        +listConversations, +getConversation, +isLinked (for UI gating)
 engine/zylch/rpc/methods.py               dispatch entries
 engine/tests/storage/test_mrcall_blobs.py NEW
 engine/tests/workers/test_memory_mrcall.py NEW
@@ -249,34 +252,34 @@ engine/tests/workers/test_tasks_mrcall.py NEW
 docs/ipc-contract.md                      +tasks.list sources.mrcall_*, +mrcall.listConversations, +mrcall.getConversation, +mrcall.isLinked
 app/src/preload/index.ts                  +mrcall.listConversations, +mrcall.getConversation, +mrcall.isLinked
 app/src/renderer/src/types.ts             ThreadSourceType += 'mrcall', ZylchTask.sources.mrcall_*
-app/src/renderer/src/App.tsx              tab MrCall gated su mrcall.isLinked()
-app/src/renderer/src/views/Mrcall.tsx     NEW (mirror WhatsApp.tsx)
-app/src/renderer/src/views/Settings.tsx   nuova ConnectMrcallCard
-app/src/renderer/src/components/ThreadPanel.tsx  branch 'mrcall' + 3-way pills (generalizzazione N-way)
-app/src/renderer/src/views/Workspace.tsx  cross-channel detection N-way
+app/src/renderer/src/App.tsx              MrCall tab gated on mrcall.isLinked()
+app/src/renderer/src/views/Mrcall.tsx     NEW (mirrors WhatsApp.tsx)
+app/src/renderer/src/views/Settings.tsx   new ConnectMrcallCard
+app/src/renderer/src/components/ThreadPanel.tsx  'mrcall' branch + 3-way pills (N-way generalisation)
+app/src/renderer/src/views/Workspace.tsx  N-way cross-channel detection
 ```
 
-## Open design questions per Mario (rispondere PRIMA di Phase 1)
+## Open design questions for Mario (answer BEFORE Phase 1)
 
-1. **`body` shape**: la trascrizione è strutturata (es. `[{role: 'user'|'agent', text: '…', ts: …}]`) o testo libero / markdown? Determina (a) come `_format_mrcall_data` la passa al LLM (vogliamo dare `role`-tagged per chiarezza, o flat text?), (b) come `ThreadPanel.tsx` la renderizza (bubbles allineate per role come WA, o paragrafi piatti).
-2. **Memoria su chiamate brevi/perse**: una call di 5 secondi (caller hangup, no transcript) genera comunque `MrcallConversation` con body vuoto/minimale? Vogliamo skipparla in memory extraction (LLM call sprecata) o lasciare che il trainer la veda? Recommend: skip se `body` vuoto o transcript-equivalent < 50 char.
-3. **Granularity dei task**: una task per *conversation* (è già un evento singolo, no thread tipo email) o vogliamo raggrupparle per `contact_phone` come WA per `chat_jid`? Recommend: stessa granularity di WA — l'evento "richiamare John" può accumulare N conversation_id sulla stessa TaskItem tramite `sources.mrcall_conversations`, esattamente come WA aggrega N message_id sulla stessa task.
-4. **`channel='mrcall'` vs riusare `'phone'`**: il valore `'phone'` già esiste come canale legacy (mai usato in produzione ma documentato in IPC contract). Recommend: **`'mrcall'`** nuovo per distinguere chiaramente dal "phone CRM" generico, lasciando `'phone'` ai task derivati da telefoni che NON passano da MrCall (CRM contact, future feature).
-5. **Multi-business**: se un owner ha N business MrCall, syncchiamo tutti, oppure solo il business "default" (quello in `mrcall_link`)? Recommend: in Phase 1 solo il default linked (zero impact su `sync_mrcall` esistente); Phase 3 UI aggiunge un business selector se `list_my_businesses` > 1 (sync su demand del business selezionato).
-6. **Connect flow**: replica del ConnectWhatsApp (CTA dentro un tab vuoto), o card in Settings come Connect Google Calendar? Recommend: **card in Settings** — più discoverable, l'OAuth è set-and-forget, e per consistency con Google Calendar che ha lo stesso pattern PKCE.
+1. **`body` shape**: is the transcript structured (e.g. `[{role: 'user'|'agent', text: '…', ts: …}]`) or free text / markdown? This determines (a) how `_format_mrcall_data` passes it to the LLM (do we want it `role`-tagged for clarity, or flat text?), and (b) how `ThreadPanel.tsx` renders it (bubbles aligned by role as in WA, or flat paragraphs).
+2. **Memory for short / missed calls**: does a 5-second call (caller hangs up, no transcript) still produce a `MrcallConversation` with an empty or minimal body? Do we want to skip it in memory extraction (a wasted LLM call) or let the trainer see it? Recommend: skip when `body` is empty or the transcript-equivalent is < 50 chars.
+3. **Task granularity**: one task per *conversation* (it is already a single event, no email-style thread) or do we group by `contact_phone` as WA groups by `chat_jid`? Recommend: the same granularity as WA — the "call John back" event can accumulate N conversation_ids on the same TaskItem through `sources.mrcall_conversations`, exactly as WA aggregates N message_ids onto the same task.
+4. **`channel='mrcall'` vs reusing `'phone'`**: the value `'phone'` already exists as a legacy channel (never used in production but documented in the IPC contract). Recommend: a new **`'mrcall'`**, to distinguish it clearly from the generic "phone CRM", leaving `'phone'` for tasks derived from phone calls that do NOT go through MrCall (CRM contact, future feature).
+5. **Multi-business**: if an owner has N MrCall businesses, do we sync all of them or only the "default" business (the one in `mrcall_link`)? Recommend: in Phase 1, only the default linked one (zero impact on the existing `sync_mrcall`); the Phase 3 UI adds a business selector when `list_my_businesses` > 1 (on-demand sync of the selected business).
+6. **Connect flow**: replicate ConnectWhatsApp (a CTA inside an empty tab), or a Settings card like Connect Google Calendar? Recommend: **a Settings card** — more discoverable, the OAuth is set-and-forget, and it is consistent with Google Calendar, which uses the same PKCE pattern.
 
-## Out of scope di questo plan
+## Out of scope for this plan
 
-- **Outbound** (`InitiateCallTool` + `SendSMSTool` registrazione in factory + esposizione al LLM agentic solver). Separato perché tocca approval flow + agentic loop, indipendente dalla pipeline di ingestion. Sarà naturale follow-up post-Phase 4.
-- **Configuratore lato server** (`mrcall-agent`): out of repo. Le settings business + variables si toccano via chat configurator esterno, già esistente.
-- **Calendar** già fatta (`calendar_blobs`).
-- **Nuovo kind `'mrcall_phone'`** in `person_identifiers`: scartato. Riusiamo `'phone'` esistente per cross-channel match — più semplice e più potente (un solo namespace identificatore phone-based, zero migration). Il riferimento "future kind `mrcall_phone`" in WA-parity Phase 1c era un placeholder architetturale; rivisto qui dopo aver constatato che `'phone'` basta.
-- **`MrCallConfiguratorTrainer` cleanup**: dead-code removal separato in [`cleanup-mrcall-configurator-deadcode.md`](cleanup-mrcall-configurator-deadcode.md), ortogonale a questo plan.
+- **Outbound** (`InitiateCallTool` + `SendSMSTool` registration in the factory + exposure to the agentic LLM solver). Kept separate because it touches the approval flow + agentic loop, independently of the ingestion pipeline. It will be the natural follow-up after Phase 4.
+- **Server-side configurator** (`mrcall-agent`): out of repo. Business settings + variables are edited through the existing external chat configurator.
+- **Calendar**, already done (`calendar_blobs`).
+- **A new `'mrcall_phone'` kind** in `person_identifiers`: discarded. We reuse the existing `'phone'` for cross-channel match — simpler and more powerful (a single phone-based identifier namespace, zero migration). The "future kind `mrcall_phone`" reference in WA-parity Phase 1c was an architectural placeholder; revised here after establishing that `'phone'` suffices.
+- **`MrCallConfiguratorTrainer` cleanup**: already done, orthogonal to this plan. The dead-code removal landed in `e5b2c2be`; the separate `cleanup-mrcall-configurator-deadcode.md` plan was deleted as obsolete in `0bec32e`.
 
-## Come iniziare la prossima sessione
+## How to start the next session
 
-1. Apri questo file. Re-read discipline header.
-2. Apri `engine/docs/execution-plans/whatsapp-pipeline-parity.md` Phase 1c (storage + migrate) + Phase 2 (single-landing memory worker) + Phase 3 (task creation) — è il template letterale.
-3. **Phase 0 PRIMA di toccare codice**: chiedi a Mario (a) sample body di 1-2 `MrcallConversation` reali, (b) risposte alle 6 design questions sopra. NON partire con Phase 1 prima.
-4. Phase 1 = un PR (memory pipeline complete: D1 + D2 + D3 + test storage + test memory worker). Land, Mario verifica in app, poi Phase 2.
-5. NEVER claim "done" finché Mario non scrive "funziona". NEVER push to origin. NEVER commit senza ok esplicito.
+1. Open this file. Re-read the discipline header.
+2. Open `engine/docs/execution-plans/whatsapp-pipeline-parity.md` Phase 1c (storage + migrate) + Phase 2 (single-landing memory worker) + Phase 3 (task creation) — it is the literal template.
+3. **Phase 0 BEFORE touching code**: ask Mario for (a) a sample body from 1-2 real `MrcallConversation` rows, (b) answers to the 6 design questions above. Do NOT start Phase 1 first.
+4. Phase 1 = one PR (the complete memory pipeline: D1 + D2 + D3 + storage tests + memory-worker tests). Land it, Mario verifies in the app, then Phase 2.
+5. NEVER claim "done" until Mario writes that it works. NEVER push to origin. NEVER commit without an explicit go-ahead.
