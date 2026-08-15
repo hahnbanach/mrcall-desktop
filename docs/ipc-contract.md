@@ -1,9 +1,11 @@
 ---
 description: |
   JSON-RPC method surface between the Electron app (client) and the
-  Python sidecar (server). Source of truth for method names, payload
-  shapes, and notification streams. Updated whenever either side
-  changes a method signature.
+  Python sidecar (server): method names, accepted parameters, payload
+  shapes, notification streams, and the dispatch-boundary rules that
+  decide what gets refused. The engine's registry is the authority; this
+  file mirrors it in full and must be re-checked against it whenever a
+  method or a parameter changes.
 ---
 
 # IPC Contract — Engine ↔ App
@@ -34,13 +36,18 @@ read/write of bytes is the adapter's job). Two adapters:
 The method surface, payload shapes, and notification streams below are
 **identical across both transports** — only the framing differs.
 
-- **Server**: `engine/zylch/rpc/methods.py` (dispatch table, line ~1480) + per-domain modules (`email_actions.py`, `task_queries.py`).
+- **Server**: `engine/zylch/rpc/methods.py` — the `METHODS` dispatch table (line 2061) plus the per-domain modules merged into it (`email_actions.py`, `task_queries.py`, `account.py`, `mrcall_actions.py`, `campaign_actions.py`, `draft_queries.py`, `maintenance.py`, `google_actions.py`, `whatsapp_actions.py`, `agents.py`, `setup.py`, `sms_actions.py`, `usage_queries.py`). A duplicate method name raises at import.
 - **Client**: `app/src/preload/index.ts` exposes `window.zylch.*` to the renderer; `app/src/main/` brokers stdio or WebSocket.
 - **Owner identity**: every call resolves `owner_id` server-side from the active profile — the client never sends it.
 
-This file is incomplete. It tracks methods that have been touched
-recently or have non-obvious payload shape; older methods live in
-code as the source of truth until they're touched.
+**Completeness.** The method index below covers the **whole** registry —
+all 65 methods and all 10 notification streams as of 2026-08-15 — and its
+parameter column is transcribed from each handler's own declared
+signature, which is also what the dispatcher enforces at runtime (see
+"Parameter contract" below). The prose sections that follow the index go
+deeper on the methods with non-obvious semantics; a method that appears
+only in the index is one whose signature and return shape say everything
+there is to say about it.
 
 ## Conventions
 
@@ -50,10 +57,71 @@ code as the source of truth until they're touched.
 - Errors are returned as `{ ok: false, error: string }` for "expected" failures (task not found, validation) and as JSON-RPC `error` objects for unexpected exceptions.
 - Owner-scoped calls do NOT carry `owner_id` — the server resolves it from the active profile lock.
 
+## Parameter contract — what the dispatcher refuses
+
+Since 2026-08-03 the dispatch boundary validates parameters *before* the
+handler runs (`engine/zylch/rpc/dispatch.py`, rules in
+`engine/zylch/rpc/param_spec.py`). Two refusals, both JSON-RPC
+**`-32602`** (`INVALID_PARAMS`), both raised with the offending names in
+the message:
+
+| Condition | Response |
+|---|---|
+| The call carries a parameter the method does not accept | `-32602 Unknown parameter(s) for <method>: <names>` |
+| The call omits a parameter the method cannot do without | `-32602 Missing required parameter(s) for <method>: <names>` |
+
+This is a **behaviour change for existing clients**. Before the gate, an
+unrecognised parameter was silently dropped: `tasks.list(status="open")`
+returned every task and looked like a filtered list, and a genuinely
+missing required param surfaced as a `-32603` `ValueError` from inside
+the handler. A client that was passing junk now gets a hard refusal.
+
+**Where the accepted set comes from.** Not from a hand-maintained table —
+from the handler's own docstring, whose first line is its signature:
+
+```python
+async def tasks_complete(params, notify):
+    """tasks.complete(task_id, note?, actor?, why?) -> {ok: bool}."""
+```
+
+`param_spec.build_registry()` parses that once at import over every
+registered method. A bare name is **required**; a name with `?` or a
+`=default` is optional. If a signature cannot be parsed (a placeholder
+like `…fields` rather than identifiers) the method is marked *open* and
+no unknown-key check runs for it — a visible gap rather than a guess.
+The registry currently has **zero** open methods.
+
+**The required mark carries an obligation.** A parameter may be declared
+required only where the handler genuinely cannot proceed — where it
+*raises*. Where the handler can answer instead (an empty result, an
+`{ok: false}` the caller can render), the parameter stays optional and
+must carry `?`. Promoting such a parameter to required would turn an
+answer the engine has always given into a `-32602` for every independent
+consumer relying on the default.
+
+**Enforcement.** `engine/tests/rpc/test_contract_boundaries.py` holds the
+gate: every method must declare a checkable signature; required must be a
+subset of accepted; every method must answer its documented minimal
+payload through the real `dispatch_raw` (an internal `-32603` does not
+count as an answer); required-ness is proven leave-one-out over the whole
+registry; and every `window.zylch.*` binding in
+`app/src/preload/index.ts` must resolve to a registered engine method.
+The suite is not wired into CI — `.github/workflows/` holds only
+`release.yml` — so it runs when someone runs it.
+
+**Secret redaction.** The dispatcher's DEBUG `params=` line is recursively
+redacted before it is written: exact names (`token`, `password`, `secret`,
+`session`, `key`, `credential`…) plus the `*_token` / `*_key` /
+`*_secret` / `*_password` compounds. This matters because stderr feeds
+the renderer's narration pipeline, which forwards to the LLM proxy — an
+unredacted Firebase `id_token` reached Anthropic's request logs that way
+once. One asserted carve-out: `agents.get_prompt(key=…)` names a prompt,
+not a secret, and stays readable at top level only.
+
 ## Methods
 
 > **Return-shape quick reference — the wrapper key is NOT uniform.**
-> Most list-style methods wrap their array under a domain key, but three
+> Most list-style methods wrap their array under a domain key, but five
 > return a **bare array** and the two email-list families use *different*
 > keys (`threads` vs `emails`). Parsing the wrong key silently yields zero
 > rows — it cost a debugging session on the mrcall-cs (support@) side on
@@ -63,21 +131,222 @@ code as the source of truth until they're touched.
 > |---|---|
 > | `emails.search`, `emails.list_inbox`, `emails.list_sent` | `{ threads: InboxThread[] }` (thread *summaries*) |
 > | `emails.list_by_thread` | `{ emails: Email[] }` (full *messages*, chronological) — **`emails`, not `threads`** |
-> | `tasks.list`, `campaign.list`, `campaign.contacts` | a **bare array** `[...]` (no wrapper object) |
+> | `tasks.list`, `tasks.list_by_thread`, `drafts.list`, `campaign.list`, `campaign.contacts` | a **bare array** `[...]` (no wrapper object) |
 > | `campaign.create`, `campaign.add_contact` | the row dict; `campaign.update_contact` → `{ ok, contact }` |
 > | `mrcall.search_businesses`, `mrcall.list_my_businesses` | `{ businesses: CrmBusiness[], role }` |
 > | `settings.get` | `{ values: {KEY: string} }` (secrets masked `"<set>"`); `settings.update` → `{ ok, applied, skipped_unchanged }`; `settings.schema` → `{ fields: [...] }` |
 > | `account.who_am_i` | `{ signed_in, uid?, email?, expires_at_ms? }` |
 > | mutations (`tasks.complete/reopen/pin/skip`, `emails.pin/mark_read`, `chat.approve`) | `{ ok: boolean, … }` |
 
-### `tasks.complete(task_id, note?)`
+### Complete method index
+
+Every registered method, with the parameters it declares and the shape it
+returns. `?` and `=default` mark optional parameters; everything else is
+required and its absence is a `-32602`. Transcribed from the engine
+registry on 2026-08-15 (65 methods).
+
+**`account.*`**
+
+| Method | Declared parameters | Returns |
+|---|---|---|
+| `account.balance` | — | {balance_credits, balance_micro_usd, ...} |
+| `account.set_firebase_token` | `uid, id_token, expires_at_ms, email?, refresh_token?` | {ok} |
+| `account.sign_out` | — | {ok} |
+| `account.who_am_i` | — | {signed_in, uid?, email?, expires_at_ms?} |
+
+**`agents.*`**
+
+| Method | Declared parameters | Returns |
+|---|---|---|
+| `agents.get_prompt` | `key="task_email"` | {ok, key, prompt} |
+| `agents.train_all` | — | {ok, results} |
+
+**`auth.*`**
+
+| Method | Declared parameters | Returns |
+|---|---|---|
+| `auth.refresh` | `id_token, refresh_token?` | {ok, uid, expires_at_ms} |
+
+**`campaign.*`**
+
+| Method | Declared parameters | Returns |
+|---|---|---|
+| `campaign.add_contact` | `campaign_id, email, uid?, stratum?, verdict?, language?, dossier?, draft_subject?, draft_body?, state?, message_id?` | contact dict |
+| `campaign.contacts` | `campaign_id, state?` | list of contact dicts |
+| `campaign.create` | `name, brief?` | campaign dict |
+| `campaign.list` | — | list of campaigns with contact/state counts |
+| `campaign.update_contact` | `contact_id, uid?, stratum?, verdict?, language?, dossier?, draft_subject?, draft_body?, state?, message_id?` | {ok, contact} |
+
+**`chat.*`**
+
+| Method | Declared parameters | Returns |
+|---|---|---|
+| `chat.approve` | `tool_use_id, mode?, approved?, edited_input?` | {ok: true} |
+| `chat.send` | `message, conversation_history=[], conversation_id="general", context={}` | ChatService result dict |
+
+**`drafts.*`**
+
+| Method | Declared parameters | Returns |
+|---|---|---|
+| `drafts.list` | `status?` | list of draft dicts |
+
+**`emails.*`**
+
+| Method | Declared parameters | Returns |
+|---|---|---|
+| `emails.archive` | `thread_id` | {ok, archived, imap} |
+| `emails.delete` | `thread_id` | {ok, deleted} |
+| `emails.list_by_thread` | `thread_id` | {"emails": [...]} |
+| `emails.list_inbox` | `limit=50, offset=0` | {"threads": [...]} |
+| `emails.list_sent` | `limit=50, offset=0` | {"threads": [...]} |
+| `emails.mark_read` | `thread_id` | {ok, affected} |
+| `emails.pin` | `thread_id, pinned: bool` | {ok, affected} |
+| `emails.search` | `query?, folder='inbox', limit=50, offset=0` | {"threads": [...]} |
+
+**`google.*`**
+
+| Method | Declared parameters | Returns |
+|---|---|---|
+| `google.calendar.cancel` | — | {cancelled} |
+| `google.calendar.connect` | — | {ok, email, scope} |
+| `google.calendar.disconnect` | — | {ok} |
+| `google.calendar.status` | — | {connected, signed_in, email?} |
+
+**`memory.*`**
+
+| Method | Declared parameters | Returns |
+|---|---|---|
+| `memory.reconsolidate_now` | — | summary dict |
+
+**`mrcall.*`**
+
+| Method | Declared parameters | Returns |
+|---|---|---|
+| `mrcall.list_my_businesses` | `offset?, limit?` | {businesses, role} |
+| `mrcall.search_businesses` | `businessId?, name?, surname?, companyName?, nickname?, businessPhoneNumber?, emailAddress?, vatId?, address?, countryAlpha2?, subscriptionStatus?, offset?, limit?` | {businesses, role} |
+
+**`narration.*`**
+
+| Method | Declared parameters | Returns |
+|---|---|---|
+| `narration.predict` | `message?, context=""` | {"text": str} |
+| `narration.summarize` | `lines?, context=""` | {"text": str} |
+
+**`profiles.*`**
+
+| Method | Declared parameters | Returns |
+|---|---|---|
+| `profiles.create` | `email, values` | {ok, profile} \| error |
+
+**`settings.*`**
+
+| Method | Declared parameters | Returns |
+|---|---|---|
+| `settings.get` | — | {values: {KEY: string}} — the active profile's `.env`, secrets masked |
+| `settings.schema` | — | {fields: [...]} — field descriptors, no values |
+| `settings.update` | `updates: {key: value}` | {ok, applied, skipped_unchanged} |
+
+**`setup.*`**
+
+| Method | Declared parameters | Returns |
+|---|---|---|
+| `setup.state` | — | current onboarding state |
+
+**`sms.*`**
+
+| Method | Declared parameters | Returns |
+|---|---|---|
+| `sms.get_sender` | — | {sender, business_id} \| {error: 'auth_expired'} |
+| `sms.set_sender` | `sender` | {sender, business_id} \| {error: 'auth_expired'} |
+
+**`sync.*`**
+
+| Method | Declared parameters | Returns |
+|---|---|---|
+| `sync.run` | `days_back?` | result dict |
+
+**`tasks.*`**
+
+| Method | Declared parameters | Returns |
+|---|---|---|
+| `tasks.complete` | `task_id, note?, actor?, why?` | {ok: bool} |
+| `tasks.create` | `contact_email, title, event_id, event_type="email", contact_name?, contact_phone?, urgency?, reason?, suggested_action?, action_required=True, channel?, sources?, reopen_if_closed=False` | {ok, task_id, created, reopened} \| {ok: false, closed: true, …} |
+| `tasks.dedup_now` | — | summary dict |
+| `tasks.get` | `task_id` | task dict \| null |
+| `tasks.list` | `include_completed=False, include_skipped=False, limit=200, due_filter="all"` | list of task dicts |
+| `tasks.list_by_thread` | `thread_id` | list of task dicts |
+| `tasks.pin` | `task_id, pinned: bool` | {ok: bool} |
+| `tasks.reanalyze` | `task_id` | {ok, action, reason, task_id} |
+| `tasks.reopen` | `task_id` | {ok: bool} |
+| `tasks.skip` | `task_id` | {ok: bool} |
+| `tasks.snooze` | `task_id, due_at?, days?, actor?, why?` | {ok, due_at, …} |
+| `tasks.solve` | `task_id, instructions=""` | streams `tasks.solve.event` notifications; pauses on tool approval (waits for tasks.solve.approve). Returns {ok, result} when done |
+| `tasks.solve.approve` | `tool_use_id, approved?, edited_input=None` | {ok: bool}, or {ok: false, error: "no active solve"} |
+| `tasks.solve.cancel` | `task_id?` | {ok: true, task_id} with an id; {ok: true, cancelled_pending} without; {ok: false, error} if there is nothing to cancel |
+| `tasks.topic_dedup_now` | — | summary dict |
+
+**`update.*`**
+
+| Method | Declared parameters | Returns |
+|---|---|---|
+| `update.run` | — | pipeline result with a DIFF summary |
+
+**`usage.*`**
+
+| Method | Declared parameters | Returns |
+|---|---|---|
+| `usage.today` | — | today's spend snapshot + per-call-site breakdown |
+
+**`whatsapp.*`**
+
+| Method | Declared parameters | Returns |
+|---|---|---|
+| `whatsapp.cancel` | — | {cancelled} |
+| `whatsapp.connect` | — | {ok: bool, jid?: str, reason?: str} |
+| `whatsapp.disconnect` | `forget_session=False` | {ok} |
+| `whatsapp.list_messages` | `chat_jid?, limit=200, offset=0` | {messages} |
+| `whatsapp.list_threads` | `limit=200, offset=0` | {threads: [...]} |
+| `whatsapp.search_messages` | `query?, limit=200` | {threads, query} |
+| `whatsapp.send_message` | `chat_jid?, text?` | {ok, message?, error?} |
+| `whatsapp.status` | — | {connected, has_session, jid?} |
+
+### Notification streams
+
+Ten server→client notifications exist. They carry no `id` and expect no
+response; the renderer subscribes through `rpc:notification` in the
+preload bridge.
+
+| Notification | Emitted by | When |
+|---|---|---|
+| `engine.ready` | `rpc/server.py` | Sidecar finished booting. **stdio only** — the WS server does not emit it; the client synthesises the ready signal when the socket reaches OPEN. |
+| `sync.progress` | `rpc/setup.py` | Per-stage progress during `sync.run`. |
+| `update.progress` | `rpc/methods.py` | Per-stage progress during `update.run`. |
+| `agents.train.progress` | `rpc/agents.py` | Between the three trainers during `agents.train_all`. |
+| `tasks.solve.event` | `rpc/methods.py` | The solve stream — see the dedicated section below. |
+| `chat.context` | `rpc/methods.py` | Context the chat turn assembled, pushed mid-`chat.send`. |
+| `chat.pending_approval` | `rpc/methods.py` | A destructive tool needs approval; the turn blocks until `chat.approve`. |
+| `whatsapp.qr_ready` | `rpc/whatsapp_actions.py` | First QR payload of a `whatsapp.connect` (base64 PNG when `segno` is available, raw text otherwise). |
+| `whatsapp.threads.changed` | `rpc/whatsapp_actions.py` | New inbound WhatsApp traffic landed — see the dedicated section below. |
+| `google.calendar.auth_url_ready` | `rpc/google_actions.py` | Consent URL for an in-flight `google.calendar.connect`, published *before* the await so the renderer can `shell.openExternal` without racing. |
+
+### `tasks.complete(task_id, note?, actor?, why?)`
 
 | Param | Type | Required | Notes |
 |-------|------|----------|-------|
 | `task_id` | string | yes | TaskItem UUID |
 | `note` | string \| null | no | Optional free-text closing reason. Stored on `task_items.close_note`. **Display-only — never injected into the task-detection prompt or any other LLM context.** Whitespace-only notes are stored as NULL. |
+| `actor` | string \| null | no | WHO closed it, as a stable machine token: `human` for a user action in the desktop (the default), otherwise the calling code path or external operator — `mrcall-cs` sends `operator`. Lands in `task_items.close_actor`. A non-string raises. |
+| `why` | string \| null | no | The audit reason, distinct from the display `note`; falls back to `note` when omitted. A non-string raises. |
 
 Returns `{ ok: boolean }`.
+
+A close is the one irreversible thing this ledger does, so it records WHO
+and WHY — the same audit convention `tasks.snooze` follows. Both
+parameters default to the desktop-human close, so a client written before
+they existed is unaffected. Each successful close appends note, actor and
+reason as a separate entry to `sources.closes[]`; both reopen paths, and
+every conflicting `tasks.create` upsert, carry that history over rather
+than replacing `sources` wholesale.
 
 Auto-close paths (worker, reanalyze sweep, task_interactive) call this
 with `note=None` so closing reasons are never fabricated by the LLM.
@@ -87,7 +356,88 @@ with `note=None` so closing reasons are never fabricated by the LLM.
 Returns `{ ok: boolean }`. Clears `completed_at` AND `close_note` so a
 reopened task starts fresh.
 
-### `tasks.list(include_completed?, include_skipped?, limit?)`
+### `tasks.snooze(task_id, due_at?, days?, actor?, why?)`
+
+Park an OPEN task until a moment in the future — the "call me back in N
+days" the ledger never had. Give **exactly one** of:
+
+| Param | Type | Notes |
+|---|---|---|
+| `due_at` | int | Absolute epoch seconds, UTC. |
+| `days` | number | Relative to now. `3` = three days out; `0` or negative makes the task actionable again immediately. |
+| `actor` / `why` | string | Same audit convention as `tasks.complete`; recorded on the task's snooze history (`sources.snoozes[]`). Defaults: `human`, and a "snoozed by the user from the desktop Tasks view" reason. |
+
+A snooze is **not** a close. The task stays open with its urgency intact;
+it merely drops out of `tasks.list(due_filter="due_now")`, out of the F4
+reanalyze sweep, and out of reach of the phone age-close until it comes
+due. Returns `{ok, due_at, …}`, or `{ok: false, error}` for a missing or
+already-closed task — reviving a closed task is `tasks.reopen`'s job.
+
+### `tasks.get(task_id)`
+
+One task by primary key, **open or closed**. The row is the full record:
+`completed_at`, `close_note` and the `close_actor` audit column are
+included, so a caller can tell an open task from a closed one, and a
+human close from a machine one. `due_at` (epoch seconds, NULL when the
+task is actionable now) comes back too, so a parked task is
+distinguishable from a pending one.
+
+Returns `null` — not an error — when no task with that id belongs to the
+owner. "Does this task still exist?" is a legitimate question with a
+legitimate negative answer.
+
+### `tasks.create(contact_email, title, event_id, …)`
+
+Record a task the engine's own detection pipeline never created (e.g. a
+mail it did not see). Wraps the same `storage.store_task_item` the
+detection pipeline writes, so the task lives in the normal ledger and its
+lifecycle works normally. **Idempotent**: upsert on
+`(owner_id, event_type, event_id)`, so re-creating the same event is a
+no-op update, never a duplicate.
+
+Optional beyond the three required params: `event_type="email"`,
+`contact_name?`, `contact_phone?`, `urgency?`, `reason?`,
+`suggested_action?`, `action_required=True`, `channel?`, `sources?`,
+`reopen_if_closed=False`.
+
+**Closed targets are refused by default.** When the key already belongs
+to a task somebody closed, a blind upsert would rewrite its content while
+leaving it closed — the caller would get `ok: true` and nothing visible
+would change. Instead:
+
+- `reopen_if_closed` absent/false → **nothing is written**. The reply is
+  `{ok: false, closed: true, task_id, completed_at, close_note, error}`,
+  and `error` names the flag that revives it.
+- `reopen_if_closed: true` → the task is revived (close fields cleared,
+  dedup protection stamped) and refreshed with the supplied content; the
+  reply carries `reopened: true`.
+
+### `tasks.pin(task_id, pinned)` / `tasks.skip(task_id)`
+
+`pin` toggles the flag that floats a task to the top of `tasks.list`
+regardless of urgency. `skip` is non-destructive: it stores a `skipped_at`
+ISO timestamp inside the existing `sources` JSON, and skipped tasks drop
+out of `tasks.list` unless `include_skipped=True`. Both return
+`{ok: boolean}`.
+
+### `tasks.list_by_thread(thread_id)`
+
+Every **open** task whose `sources.emails` references at least one email
+in the given thread — what the desktop "Open from Inbox" flow calls.
+Returns a bare array; an empty list is a valid answer and must not be
+rendered as an error, since a thread with no tasks is the common case.
+
+### `tasks.list(include_completed?, include_skipped?, limit?, due_filter?)`
+
+`due_filter` decides what to do with tasks parked into the future by
+`tasks.snooze`:
+
+- `"all"` (**default**) — every task, snoozed or not. Identical to the
+  behaviour before `due_at` existed, so no caller changes by accident;
+  the desktop UI, which knows nothing of the field, keeps seeing exactly
+  what it saw.
+- `"due_now"` — only tasks actionable right now (`due_at` NULL or already
+  past). The "what should I do today" list.
 
 Returns an array of `TaskItem` dicts. Each row includes (when present):
 - standard fields (id, owner_id, event_type, contact_email, …)
@@ -99,7 +449,7 @@ Returns an array of `TaskItem` dicts. Each row includes (when present):
 
 `sources.whatsapp_messages` carries WhatsAppMessage row PKs; `sources.whatsapp_chat_jid` is stamped on the FIRST WA touchpoint to the task (engine: `update_task_item(whatsapp_chat_jid=…)` is idempotent — subsequent WA messages don't overwrite). Renderer uses it as the explicit pointer for the cross-channel Source-panel toggle so it doesn't have to sniff a `thread_id` suffix.
 
-### `whatsapp.list_messages(chat_jid, limit?)`
+### `whatsapp.list_messages(chat_jid?, limit?, offset?)`
 
 Returns an array of WhatsAppMessage dicts for one chat (renderer:
 `whatsapp.listMessages({ chat_jid, limit })`). Each row includes (when
@@ -112,7 +462,7 @@ present):
   🎤-marked transcript once present. Engine wires it via
   `rpc/whatsapp_actions.py`. See [`../engine/docs/execution-plans/whatsapp-voice-transcription.md`](../engine/docs/execution-plans/whatsapp-voice-transcription.md).
 
-### `whatsapp.search_messages(query, limit?)`
+### `whatsapp.search_messages(query?, limit?)`
 
 | Param | Type | Required | Notes |
 |-------|------|----------|-------|
@@ -136,7 +486,7 @@ Implemented in `engine/zylch/services/whatsapp_search.py` (shared
 `build_thread_rows` + `search_thread_jids`), exposed via
 `rpc/whatsapp_actions.py`.
 
-### `whatsapp.send_message(chat_jid, text)`
+### `whatsapp.send_message(chat_jid?, text?)`
 
 | Param | Type | Required | Notes |
 |-------|------|----------|-------|
@@ -159,7 +509,7 @@ onto the same row. This is a direct user action (typed + sent), so it is
 **not** approval-gated — unlike the LLM-initiated `send_whatsapp` inside
 `tasks.solve`. Preload binding has a 30 s timeout.
 
-### `emails.search(query, folder?, limit?, offset?)`
+### `emails.search(query?, folder?, limit?, offset?)`
 
 | Param | Type | Required | Notes |
 |-------|------|----------|-------|
@@ -202,6 +552,24 @@ messages matches; the thread summary still reflects the latest
 message of the thread (not the matching one), mirroring
 `list_inbox_threads`.
 
+### `emails.archive(thread_id)` / `emails.delete(thread_id)` / `emails.mark_read(thread_id)` / `emails.pin(thread_id, pinned)`
+
+Thread-level mutations, all keyed on `thread_id`, all differing in how
+far they reach:
+
+| Method | Reach | Returns |
+|---|---|---|
+| `emails.archive` | IMAP MOVE of every row of the thread to the archive folder, **then** the local flag. If IMAP fails the local flag is NOT set and the error surfaces to the caller, so the UI can show it. | `{ok, archived, imap}` |
+| `emails.delete` | **Local-only soft delete** — `deleted_at = now()` on every row so the thread drops out of inbox/sent views. Deliberately does NOT touch IMAP: the server copy is preserved so any `TaskItem` pointing at these emails stays resolvable. | `{ok, deleted}` |
+| `emails.mark_read` | `read_at = now()` on every row that lacks one. Idempotent; fire-and-forget from the renderer when the user opens a thread. | `{ok, affected}` |
+| `emails.pin` | Thread-level flag written as `pinned_at` on every row. `affected` counts rows whose value actually changed — re-pinning an already-pinned thread returns `0`. | `{ok, affected}` |
+
+### `drafts.list(status?)`
+
+Read-only enumeration of composed reply/outreach drafts for the owner,
+ordered `created_at` descending, each row's `to_dict()`. `status` defaults
+to `"draft"` (the unsent ones). Returns a bare array. Sends nothing.
+
 ### `account.balance()`
 
 Forwards to `mrcall-agent`'s `GET /api/desktop/llm/balance` with the
@@ -228,6 +596,25 @@ Used by the `LLMProviderCard` in `views/Settings.tsx` (BYOK ↔ MrCall
 credits toggle) on mount and on every window `focus` event so a top-up
 done in another tab is reflected when the user returns. Preload binding
 at `app/src/preload/index.ts` has a 15 s timeout.
+
+### `account.set_firebase_token(uid, id_token, expires_at_ms, email?, refresh_token?)` / `account.who_am_i()` / `account.sign_out()`
+
+The in-band session trio. `set_firebase_token` **trusts the caller** — it
+installs the token as-is, which is safe only because the local sidecar's
+parent process is the app itself; the cross-machine path uses
+`auth.refresh` instead, which verifies. `expires_at_ms` is the absolute
+Unix-ms instant at which Firebase will reject the token; the renderer
+reads it from `user.getIdTokenResult().expirationTime`. The engine holds
+the token **in memory only** and never persists it.
+
+`who_am_i` answers `{signed_in, uid?, email?, expires_at_ms?}` and
+deliberately **never echoes the token back** — the renderer is the source
+of truth for the token itself. It exists to answer "did the engine see my
+push?" and to render the active-account label. `sign_out` drops the
+session, returning `{ok}`.
+
+Note the canonical token path from the renderer is the main-process
+`account:pushToken` IPC, not this method — see "Out of scope" at the end.
 
 ### `sms.get_sender()` / `sms.set_sender(sender)`
 
@@ -288,7 +675,7 @@ Renderer guards by not firing solve when busy.
 (`app/src/main/index.ts:'tasks.solve'`), matching the executor's
 `max_turns=10`.
 
-### `tasks.solve.approve(tool_use_id, approved, edited_input?)`
+### `tasks.solve.approve(tool_use_id, approved?, edited_input?)`
 
 Resolves a pending approval future inside the active solve. The
 renderer's approval card in `Workspace.tsx` calls this when the
@@ -301,9 +688,16 @@ alternatives.
 Returns `{ok: boolean}`. `ok=false` only when no solve is active or
 the `tool_use_id` doesn't match a pending future.
 
-### `tasks.solve.cancel()`
+### `tasks.solve.cancel(task_id?)`
 
-Aborts the active solve, if any. Sets `asyncio.CancelledError` on
+With a `task_id`, cancels that specific solve — queued or active — by
+cancelling its asyncio task, and answers `{ok: true, task_id}` (or
+`{ok: false, error: "no solve for that task_id"}`). Solves queue on a
+lock rather than being rejected, so this is how a caller pulls one out of
+the queue.
+
+Without a `task_id` it takes the legacy path below: abort whatever is
+active. Sets `asyncio.CancelledError` on
 every pending approval future; the executor catches it inside
 `TaskExecutor.run()` and emits a clean `done` event (with
 `result.cancelled: True`) — NOT an `error` event, so the renderer
@@ -557,7 +951,7 @@ together server-side. `owner` / `owners` are deliberately NOT accepted
 (StarChat derives owner scope from the caller's role, so a client-supplied
 owner is ignored). Backs the MrCall tab's search bar + status dropdown.
 
-### `auth.refresh(id_token)`
+### `auth.refresh(id_token, refresh_token?)`
 
 Cross-machine transport (WebSocket backend). Verifies a fresh Firebase ID
 token server-side (RS256 against Google's certs — unlike
@@ -585,17 +979,163 @@ JSON object per WS TEXT message instead of one per stdout line). The WS
 engine does NOT emit `engine.ready` (stdio-only); the client synthesises
 the renderer's ready signal when the socket reaches OPEN.
 
-### Other methods
+### `chat.send(message, conversation_history?, conversation_id?, context?)` / `chat.approve(tool_use_id, mode?, approved?, edited_input?)`
 
-For the rest of the surface (emails.\*, chat.\*, update.\*, settings.\*,
-profile.\*, files.\*, narration.\*, etc.) see:
-- `app/src/preload/index.ts` — typed client signatures
-- `app/src/renderer/src/types.ts` — `ZylchAPI` interface
-- `engine/zylch/rpc/methods.py` — server dispatch table
+`chat.send` runs one assistant turn and returns the `ChatService` result
+dict verbatim. `conversation_id` defaults to `"general"`; `context` is a
+free-form dict, and when it carries a `task_id` the engine emits a
+`chat.context` notification first so the UI can confirm the turn is
+scoped to that task.
 
-These are the source of truth. This document tracks recent additions
-and deltas; bringing the full surface into this file is a separate
-documentation push.
+**One in-flight turn per `conversation_id`.** A second `chat.send` for a
+conversation whose previous turn is still awaiting approval is refused
+with JSON-RPC **`-32001`** (`ChatBusyError`, "approve or decline pending
+action first").
+
+When the turn reaches a destructive tool it emits `chat.pending_approval`
+(`{conversation_id, tool_use_id, name, input, preview}`) and blocks for up
+to **600 s**; a timeout counts as a deny. The client answers with
+`chat.approve`, whose `mode` is:
+
+| `mode` | Effect |
+|---|---|
+| `"once"` (default) | Approve this single tool call. |
+| `"session"` | Approve it *and* auto-approve later calls to the same tool in the same conversation. Send tools never get a session grant — the renderer's `ApprovalCard` withholds the option. |
+| `"deny"` | Reject this call. |
+
+`edited_input` carries the user's corrections from the approval card (a
+fixed recipient, a rewritten body) and is applied before the tool runs;
+a non-dict is ignored. Back-compat: with `mode` absent the legacy
+`approved: bool` is honoured (`true` → `"once"`, `false` → `"deny"`). An
+unknown `tool_use_id` or an invalid `mode` is `-32602`.
+
+### `google.calendar.connect()` / `.status()` / `.disconnect()` / `.cancel()`
+
+`connect` runs the PKCE consent flow and **awaits up to 5 minutes** for
+the user to finish in the browser, returning `{ok, email, scope}`. The
+renderer learns the consent URL from the `google.calendar.auth_url_ready`
+notification, which is published *before* the await precisely so the
+renderer can `shell.openExternal` without racing the flow. `cancel`
+aborts a pending connect → `{cancelled}`; `disconnect` drops the stored
+token → `{ok}`.
+
+`status` returns `{connected, signed_in, email?}` and **soft-fails with
+no Firebase session** rather than raising: the renderer mounts the
+Calendar card from Settings before the auth handover has finished pushing
+the token to the sidecar, so raising would spam a stack trace on every
+mount in the auth-pending window. "Not signed in" is a valid status
+answer.
+
+### `whatsapp.connect()` / `.status()` / `.disconnect(forget_session?)` / `.cancel()`
+
+`connect` spawns a neonize client, registers QR + connected callbacks,
+publishes `whatsapp.qr_ready` on the first QR payload (base64 PNG when
+`segno` is available, raw text payload otherwise) and awaits the connected
+event with a 5-minute soft timeout → `{ok, jid?, reason?}`.
+
+`status` is deliberately **cheap**: it reads module state and the on-disk
+session file without importing neonize, because the renderer mounts it on
+every Settings visit and loading the Go runtime there would freeze the
+UI. Returns `{connected, has_session, jid?}`.
+
+`disconnect(forget_session=False)` closes the client; passing `true` also
+discards the stored session, so the next connect needs a fresh QR scan.
+`cancel` aborts a pending connect → `{cancelled}`.
+
+### `narration.predict(message?, context?)` / `narration.summarize(lines?, context?)`
+
+Two cosmetic helpers for the "what is the assistant doing right now"
+line while a `chat.send` is in flight. `predict` guesses the upcoming
+action from the user's message (the immediate placeholder, before
+stderr-driven narration kicks in); `summarize` condenses recent sidecar
+stderr lines with Haiku. Both **never raise** — any failure, including
+the no-argument call, returns `{"text": ""}`, which is why both
+parameters are optional. Output is first-person Italian.
+
+### `usage.today()`
+
+Today's LLM spend for the active profile, since UTC midnight:
+
+```jsonc
+{
+  "spent_usd": 0.42,      // SUM(est_cost_usd)
+  "budget_usd": 5.0,      // live LLM_DAILY_BUDGET_USD (0 = uncapped)
+  "exceeded": false,      // cap set AND reached
+  "calls_today": 137,
+  "by_site": { "<call_site>": { "calls": 12, "est_usd": 0.08 } }
+}
+```
+
+### `memory.reconsolidate_now()` / `tasks.dedup_now()`
+
+The two manual-maintenance buttons in Settings; both return a worker
+summary dict. `memory.reconsolidate_now` runs the reconsolidation pass
+(`zylch.memory.llm_merge`), walking blob entities and merging
+semantically-equivalent duplicates — the same "John Smith PERSON" spread
+across several blobs. `tasks.dedup_now` runs the F8 dedup sweep
+immediately and returns counts the renderer can phrase as "Closed N tasks
+across M cluster(s)"; it tolerates a profile with no LLM configured,
+answering `no_llm=True` instead of failing.
+
+### `profiles.create(email, values)`
+
+Creates a new profile under `~/.zylch/profiles/<email>/` and writes
+`values` into its `.env`. Validates the email shape, that the profile
+does not already exist, that every key in `values` belongs to the
+settings schema, and that the obligatory fields are present (LLM provider
++ matching API key + email address). Returns `{ok, profile}` or an error.
+**Never logs values** — only key names and counts.
+
+Note this is the *email-keyed* legacy path; profiles created through
+Firebase sign-in are keyed by the immutable Firebase uid and are created
+by the app's onboarding IPCs instead.
+
+### `settings.get()` / `settings.update(updates)` / `settings.schema()`
+
+`get` returns the active profile's `.env` as `{values: {KEY: string}}`
+with every secret field (password / api_key) **always masked**: `"<set>"`
+when a value is present, `""` when absent. There is no `include_secrets`
+opt-out — to change a secret the user types a new value over it.
+
+`update` takes `{updates: {KEY: value}}`, validates every key against the
+schema, and **skips any secret whose value is still the literal
+`"<set>"`** — that means the UI echoed the mask back unchanged. Returns
+`{ok, applied, skipped_unchanged}`. `schema` returns `{fields: [...]}` —
+the field descriptors, no values.
+
+### `campaign.*`
+
+Durable state for operator-driven outreach (the `mrcall-cs` support
+sessions). **None of these send anything** — they are the ledger, not the
+transport. `campaign.create(name, brief?)` and `campaign.list()` manage
+campaigns; `campaign.add_contact` / `campaign.update_contact` /
+`campaign.contacts` manage the contact rows, carrying the operator's
+per-contact working state (`stratum`, `verdict`, `language`, `dossier`,
+`draft_subject`, `draft_body`, `state`, `message_id`).
+
+`add_contact` is idempotent on `(campaign_id, email)`: re-adding an
+existing contact updates the supplied fields rather than failing the
+unique constraint, so re-running a backfill never duplicates.
+`update_contact` with `state="sent"` stamps `sent_at` server-side.
+
+### Keeping this file honest
+
+The registry is the authority. To re-derive the index above after a
+change, read the declared signatures straight out of the engine:
+
+```bash
+cd engine && .venv/bin/python -c "
+import zylch.rpc.dispatch
+from zylch.rpc.methods import METHODS
+for n in sorted(METHODS):
+    print(n, (METHODS[n].__doc__ or '').strip().split(chr(10))[0])
+"
+```
+
+The client side lives in `app/src/preload/index.ts` (typed signatures)
+and `app/src/renderer/src/types.ts` (the `ZylchAPI` interface);
+`engine/tests/rpc/test_contract_boundaries.py` already fails when a
+preload binding names a method the registry does not have.
 
 ## Out of scope: renderer-only IPCs
 

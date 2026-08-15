@@ -1,5 +1,6 @@
 ---
-status: planned
+status: completed
+completed: 2026-06-05
 owner: cross-cutting (engine + ops/Caddy + deploy)
 created: 2026-06-05
 supersedes: the "Next session — multi-profile / multi-user routing (brief)" section in cross-machine-transport.md

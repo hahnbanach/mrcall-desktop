@@ -1,5 +1,6 @@
 ---
-status: in-progress (Livello A landed 2026-05-20; Livello B = phone-call memory ingestion, next)
+status: active
+stage: Livello A landed 2026-05-20; Livello B (phone-call memory ingestion) is next
 owner: cross-cutting (engine + app + IPC)
 created: 2026-05-19
 template: engine/docs/execution-plans/whatsapp-pipeline-parity.md
@@ -271,7 +272,7 @@ app/src/renderer/src/views/Workspace.tsx  cross-channel detection N-way
 - **Configuratore lato server** (`mrcall-agent`): out of repo. Le settings business + variables si toccano via chat configurator esterno, già esistente.
 - **Calendar** già fatta (`calendar_blobs`).
 - **Nuovo kind `'mrcall_phone'`** in `person_identifiers`: scartato. Riusiamo `'phone'` esistente per cross-channel match — più semplice e più potente (un solo namespace identificatore phone-based, zero migration). Il riferimento "future kind `mrcall_phone`" in WA-parity Phase 1c era un placeholder architetturale; rivisto qui dopo aver constatato che `'phone'` basta.
-- **`MrCallConfiguratorTrainer` cleanup**: dead-code removal separato in [`cleanup-mrcall-configurator-deadcode.md`](cleanup-mrcall-configurator-deadcode.md), ortogonale a questo plan.
+- **`MrCallConfiguratorTrainer` cleanup**: done, orthogonal to this plan. The dead-code removal landed in `e5b2c2be`; the separate `cleanup-mrcall-configurator-deadcode.md` plan was deleted as obsolete in `0bec32e`.
 
 ## Come iniziare la prossima sessione
 

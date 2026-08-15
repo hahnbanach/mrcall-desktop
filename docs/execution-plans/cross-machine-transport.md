@@ -1,5 +1,5 @@
 ---
-status: in-progress
+status: active
 owner: cross-cutting (engine + app + IPC + release)
 created: 2026-05-31
 discipline: |

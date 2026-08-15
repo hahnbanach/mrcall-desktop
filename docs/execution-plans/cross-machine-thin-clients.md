@@ -1,5 +1,5 @@
 ---
-status: proposed — NICE-TO-HAVE / deferred (brief pronto; NON si fa ora)
+status: planned
 priority: |
   nice-to-have. Electron resta il client primario; web/mobile è comodità
   "di emergenza", non è in roadmap e non blocca nulla. Se Mario lo

@@ -15,19 +15,18 @@ files. Each tree owns one concern; cross-cutting state lives here.
 
 ## Index
 
-The cross-cutting doc tree is the youngest. Files appear here as
-content moves out of the engine's active-context (which historically
-played a dual role) and as new cross-cutting concerns surface. Likely
-first entries:
+- [`active-context.md`](active-context.md) — cross-cutting living snapshot: `State now` / `Unresolved` / `Next`, nothing else
+- [`active-context-archive.md`](active-context-archive.md) — dated narrative pruned out of the living snapshot
+- [`ipc-contract.md`](ipc-contract.md) — the JSON-RPC method surface between `app/src/main/` and `engine/zylch/rpc/`
+- [`remote-backend.md`](remote-backend.md) — running the engine as a remote daemon (mrcalld, per-uid sockets, Caddy/TLS), operator guide + runbook
+- [`harness-backlog.md`](harness-backlog.md) — cross-cutting enforcement / tooling gaps
+- [`claude-agent-sdk-analysis.md`](claude-agent-sdk-analysis.md) — evaluation of the Claude Agent SDK against the engine's own agent loop
+- [`execution-plans/`](execution-plans/) — workstreams that span both subsystems, one file each, `status:` in the frontmatter
+- `.doc-profile` — doc-harness configuration (leaf mode, `CLAUDE.md` as the single index)
 
-- `active-context.md` — cross-cutting state: IPC contract drift, release pipeline, rename rollout
-- `ipc-contract.md` — the JSON-RPC method surface between `app/src/main/` and `engine/zylch/rpc/`
-- `release.md` — tag-driven matrix, signing, notarization, electron-builder quirks
-- `harness-backlog.md` — cross-cutting enforcement / tooling gaps
-
-## Existing entries
-
-- [`execution-plans/`](execution-plans/) — active workstreams that span both subsystems
+The release pipeline (tag-driven matrix, signing, notarization,
+electron-builder quirks) is documented inside
+[`execution-plans/release-and-rename-l2.md`](execution-plans/release-and-rename-l2.md).
 
 Engine-side and app-side counterparts (worth knowing about from
 anywhere in the repo):
