@@ -21,6 +21,11 @@ structure). Read those for details:
 - [`app/CLAUDE.md`](app/CLAUDE.md) + [`app/docs/`](app/docs/) — Electron layout, dev workflow, packaging.
 - [`docs/`](docs/) — cross-cutting docs: IPC contract, release pipeline, brand/rename rollout.
 
+Work traces: orchestrated or multi-session work starts by creating
+`docs/briefs/YYYY-MM-DD-<slug>.md` (what/why) +
+`docs/execution-plans/YYYY-MM-DD-<slug>.md` (status frontmatter) before
+execution.
+
 ## Identity (Firebase) — added 2026-05-02
 
 The Electron renderer now gates the entire UI behind a Firebase Auth
