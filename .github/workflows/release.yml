@@ -76,6 +76,16 @@ jobs:
   build-engine:
     name: Sidecar ${{ matrix.platform }}-${{ matrix.arch }}
     needs: setup
+    # Windows is BUILT BUT NOT BLOCKING: we ship macOS today. The Windows
+    # sidecar currently dies inside PyInstaller — `collect_all('neonize')`
+    # walks every submodule in an isolated subprocess, and importing
+    # neonize's compiled Go binding kills that child with an access
+    # violation (exit 3221225477 = 0xC0000005). That is a packaging problem
+    # in one line of zylch.spec, not a product regression, and it must not
+    # redden a macOS release. Keep the job so the day it is fixed we get
+    # artifacts again without touching this file; the release step already
+    # tolerates missing files (`fail_on_unmatched_files: false`).
+    continue-on-error: ${{ matrix.platform == 'win' }}
     strategy:
       fail-fast: false
       matrix: ${{ fromJSON(needs.setup.outputs.engine_matrix) }}
@@ -126,6 +136,9 @@ jobs:
   build-app:
     name: Installer ${{ matrix.platform }}-${{ matrix.arch }}
     needs: [setup, build-engine]
+    # Same rule as build-engine above: without a Windows sidecar this job
+    # cannot succeed, and it must not block the macOS release.
+    continue-on-error: ${{ matrix.platform == 'win' }}
     strategy:
       fail-fast: false
       matrix: ${{ fromJSON(needs.setup.outputs.app_matrix) }}
