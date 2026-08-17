@@ -183,6 +183,11 @@ jobs:
 
       - name: Validate notarytool credentials (macOS only)
         if: runner.os == 'macOS'
+        id: notarycheck
+        # NOT fatal: when Apple refuses (see below) we still want the
+        # installer. The Build installer step reads this step's outcome
+        # and decides whether to notarize.
+        continue-on-error: true
         env:
           APPLE_ID: ${{ secrets.APPLE_ID }}
           APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
@@ -196,6 +201,25 @@ jobs:
             --password "$APPLE_APP_SPECIFIC_PASSWORD" \
             --team-id "$APPLE_TEAM_ID"
 
+      - name: Note un-notarized build (macOS only)
+        if: runner.os == 'macOS' && steps.notarycheck.outcome != 'success'
+        shell: bash
+        run: |
+          {
+            echo "### macOS installer is SIGNED but NOT notarized"
+            echo
+            echo "\`notarytool history\` failed, so notarization was skipped and the"
+            echo "build continued. The commonest cause is an Apple Developer Program"
+            echo "agreement that needs re-accepting by the Account Holder"
+            echo "(\`HTTP 403 … A required agreement is missing or has expired\`)."
+            echo
+            echo "The dmg is usable: on first launch macOS shows a Gatekeeper warning"
+            echo "and the user opens it once with right-click → Open."
+            echo
+            echo "Fix the agreement at developer.apple.com and re-run this workflow —"
+            echo "no edit here is needed, notarization resumes by itself."
+          } >> "$GITHUB_STEP_SUMMARY"
+
       - name: Build installer
         env:
           # macOS code-signing + notarization. electron-builder reads
@@ -207,9 +231,17 @@ jobs:
           # on Windows.
           CSC_LINK: ${{ secrets.MACOS_CERT_P12_BASE64 }}
           CSC_KEY_PASSWORD: ${{ secrets.MACOS_CERT_PASSWORD }}
-          APPLE_ID: ${{ secrets.APPLE_ID }}
-          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
-          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          # Passed ONLY when the credential probe above succeeded.
+          # `app/scripts/notarize.js` skips notarization when these are
+          # empty, so an Apple-side refusal (an expired Program agreement,
+          # say) yields a SIGNED BUT UN-NOTARIZED dmg instead of no dmg at
+          # all — the user opens it once with right-click → Open. Signing
+          # is a separate mechanism (CSC_LINK) and is unaffected.
+          # Self-healing: fix the agreement and the next run notarizes
+          # again with no edit here.
+          APPLE_ID: ${{ steps.notarycheck.outcome == 'success' && secrets.APPLE_ID || '' }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ steps.notarycheck.outcome == 'success' && secrets.APPLE_APP_SPECIFIC_PASSWORD || '' }}
+          APPLE_TEAM_ID: ${{ steps.notarycheck.outcome == 'success' && secrets.APPLE_TEAM_ID || '' }}
         # `-- --${matrix.arch}` is the sole source of truth for which
         # arch electron-builder builds. `package.json`'s `mac.target` /
         # `win.target` deliberately do NOT carry an `arch` list — when
