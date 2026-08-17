@@ -1,7 +1,7 @@
 # -*- mode: python ; coding: utf-8 -*-
 import os
 import sys
-from PyInstaller.utils.hooks import collect_all
+from PyInstaller.utils.hooks import collect_all, collect_data_files, collect_dynamic_libs
 
 datas = []
 binaries = []
@@ -10,8 +10,38 @@ tmp_ret = collect_all('zylch')
 datas += tmp_ret[0]; binaries += tmp_ret[1]; hiddenimports += tmp_ret[2]
 tmp_ret = collect_all('fastembed')
 datas += tmp_ret[0]; binaries += tmp_ret[1]; hiddenimports += tmp_ret[2]
-tmp_ret = collect_all('neonize')
-datas += tmp_ret[0]; binaries += tmp_ret[1]; hiddenimports += tmp_ret[2]
+
+# ─── neonize (WhatsApp / whatsmeow bindings) — Windows needs a special path ──
+# `collect_all('neonize')` calls collect_submodules(), which IMPORTS every
+# submodule it finds inside an isolated PyInstaller subprocess to enumerate
+# them. Importing anything under `neonize` (even just `import neonize`)
+# transitively runs `neonize/_binder.py`, which loads the package's compiled
+# Go shared library via `ctypes.CDLL(...)` and immediately calls into it
+# (`gocode.GetVersion()`). On windows-latest that ctypes call inside the
+# isolated subprocess dies with an access violation (exit 3221225477 =
+# 0xC0000005), which kills PyInstaller's build — see the `continue-on-error`
+# comment on the `build-engine` job in .github/workflows/release.yml.
+#
+# Fix, Windows-only: skip collect_submodules() entirely. Pull datas/binaries
+# with the same two helper calls collect_all() itself would use internally
+# (so the actual bundled files are unchanged), and hand-write hiddenimports
+# from the neonize modules our own code imports (`grep -rn "from neonize" zylch/`
+# turned up only neonize.client, neonize.events, neonize.utils — no dynamic
+# imports anywhere in neonize itself, so PyInstaller's normal static bytecode
+# scan of client.py/events.py's own imports already reaches every proto/utils
+# submodule those need; nothing here is walked/imported by PyInstaller, so
+# nothing can crash the isolated subprocess).
+#
+# macOS/Linux are untouched — they still take the original collect_all()
+# path PyInstaller has always used there, so this is a no-op on darwin.
+if sys.platform == 'win32':
+    datas += collect_data_files('neonize', include_py_files=True)
+    binaries += collect_dynamic_libs('neonize')
+    hiddenimports += ['neonize.client', 'neonize.events', 'neonize.utils']
+else:
+    tmp_ret = collect_all('neonize')
+    datas += tmp_ret[0]; binaries += tmp_ret[1]; hiddenimports += tmp_ret[2]
+
 tmp_ret = collect_all('onnxruntime')
 datas += tmp_ret[0]; binaries += tmp_ret[1]; hiddenimports += tmp_ret[2]
 
