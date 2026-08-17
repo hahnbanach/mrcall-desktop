@@ -445,6 +445,24 @@ export interface ZylchAPI {
   sidecar: {
     restart: () => Promise<{ ok: boolean }>
   }
+  /** Vendor-side provisioning (B4). POSTs this window's bound profile's
+   *  Settings values to provisiond so a vendor-hosted zylch-server@<uid>
+   *  daemon can be reconciled up. Requires a Firebase ID token already
+   *  pushed via account.pushToken. `code` is one of: 'not_signed_in',
+   *  'no_profile', 'already_provisioned', 'session_expired',
+   *  'bad_request', 'network_error', 'server_error', 'no_window'. */
+  provision: {
+    start: () => Promise<
+      | { ok: true; uid: string; state: 'preparing' }
+      | { ok: false; code: string; message: string }
+    >
+    /** Polls provisiond's status route for the signed-in uid. `state` is
+     *  one of 'active' | 'preparing' | 'problem' | 'not_provisioned'. */
+    status: () => Promise<
+      | { ok: true; state: 'active' | 'preparing' | 'problem' | 'not_provisioned' }
+      | { ok: false; code: string; message: string }
+    >
+  }
   account: {
     /** Out-of-band Firebase token push to the MAIN process (canonical
      *  Phase-2 path). Main caches it per window for the remote-WS

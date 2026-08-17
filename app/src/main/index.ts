@@ -16,6 +16,7 @@ import {
   createProfileFS,
   createProfileForFirebaseUser,
   findProfileByPartition,
+  KNOWN_KEYS,
   listProfilesWithEmail,
   ProfileSummary,
   profileDir,
@@ -24,6 +25,12 @@ import {
 } from './profileFS'
 import { readLastProfile, writeLastProfile } from './lastProfile'
 import { writeCsDescriptor } from './csDescriptor'
+import {
+  getProvisionStatus,
+  provisionProfile,
+  type ProvisionResult,
+  type ProvisionStatusResult
+} from './provisionClient'
 import { cancelGoogleSignin, startGoogleSignin } from './googleSignin'
 import { GOOGLE_SIGNIN_CLIENT_ID, GOOGLE_SIGNIN_CLIENT_SECRET } from './oauthConfig'
 
@@ -1339,6 +1346,64 @@ function registerIpc(): void {
       return testBackendConnection(u, cached, windowEntries.get(win.id)?.profile ?? '')
     }
   )
+
+  // Vendor-side provisioning (B4, app half — see
+  // `engine/zylch/provisiond/`). POSTs this window's bound profile's
+  // Settings values so `provisiond` can write the vendor-hosted profile
+  // dir and let B3's reconciler bring a `zylch-server@<uid>` daemon up.
+  // Requires a Firebase ID token already pushed via `account:pushToken`
+  // — same cache `backend:testConnection` reads; provisioning is
+  // independent of the LOCAL/REMOTE backend-location choice (it always
+  // targets the vendor host, or the configured remote host's own
+  // provisiond if backend location is remote).
+  ipcMain.handle('provision:start', async (event): Promise<ProvisionResult> => {
+    const win = BrowserWindow.fromWebContents(event.sender)
+    if (!win) return { ok: false, code: 'no_window', message: 'No window' }
+    const cached = windowTokens.get(win.id)
+    if (!cached?.idToken) {
+      return {
+        ok: false,
+        code: 'not_signed_in',
+        message: 'Not signed in — sign in before provisioning.'
+      }
+    }
+    const profile = windowEntries.get(win.id)?.profile
+    if (!profile) {
+      return { ok: false, code: 'no_profile', message: 'No profile bound to this window.' }
+    }
+    // Only forward keys the service accepts (KNOWN_KEYS), and never
+    // OWNER_ID — provisiond derives the owning uid from the token itself
+    // and rejects a client-supplied OWNER_ID as an unknown key.
+    const values: Record<string, string> = {}
+    for (const key of KNOWN_KEYS) {
+      if (key === 'OWNER_ID') continue
+      const v = readProfileEnvValue(profile, key)
+      if (v !== null) values[key] = v
+    }
+    const result = await provisionProfile(cached.idToken, values)
+    console.log(
+      `[main][w${win.id}] provision:start ${
+        result.ok ? `ok uid=${result.uid}` : `failed code=${result.code}`
+      }`
+    )
+    return result
+  })
+
+  // Poll `provisiond`'s status route for the signed-in uid. Same
+  // "requires a pushed token" precondition as provision:start above.
+  ipcMain.handle('provision:status', async (event): Promise<ProvisionStatusResult> => {
+    const win = BrowserWindow.fromWebContents(event.sender)
+    if (!win) return { ok: false, code: 'no_window', message: 'No window' }
+    const cached = windowTokens.get(win.id)
+    if (!cached?.idToken) {
+      return {
+        ok: false,
+        code: 'not_signed_in',
+        message: 'Not signed in — sign in to check provisioning status.'
+      }
+    }
+    return getProvisionStatus(cached.idToken)
+  })
 }
 
 function bootFirstWindow(): void {

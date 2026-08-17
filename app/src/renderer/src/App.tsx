@@ -6,6 +6,7 @@ import Update from './views/Update'
 import Logs from './views/Logs'
 import Settings from './views/Settings'
 import EngineReadySplash from './components/EngineReadySplash'
+import ProvisionStatus from './components/ProvisionStatus'
 import Email from './views/Email'
 import WhatsAppView from './views/WhatsApp'
 import MrcallView from './views/Mrcall'
@@ -894,6 +895,7 @@ function Sidebar({
             <span className="truncate">{profileEmail}</span>
           </div>
         )}
+        <ProvisionStatus />
         <ProfilesDropdown
           currentEmail={profileEmail}
           refreshKey={profilesRefreshKey}
