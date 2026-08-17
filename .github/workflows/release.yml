@@ -1,10 +1,12 @@
 name: Build installers
 
 # Builds the Python sidecar (PyInstaller) and the Electron app
-# (electron-builder). Default targets: macOS arm64 and Windows x64.
-# Intel x64 is opt-in:
-#   - tag push ending in `-intel` (e.g. `v0.1.25-intel`)
-#   - workflow_dispatch with input `include_intel: true`
+# (electron-builder). Default target: macOS arm64 ONLY.
+# Windows x64 and macOS Intel x64 are both opt-in:
+#   - tag push ending in `-win` / `-intel` (e.g. `v0.1.25-intel`)
+#   - workflow_dispatch with input `include_win` / `include_intel: true`
+# Windows is opt-in because its sidecar build is currently unreliable and a
+# hanging matrix leg blocks the macOS release — see the matrix comment.
 #
 # Intel runs on `macos-13-large` (paid larger runner) — the free
 # `macos-13` pool has multi-hour queues. "Larger runners" must be
@@ -28,6 +30,10 @@ on:
         description: 'Also build macOS Intel x64 (paid macos-13-large runner)'
         type: boolean
         default: false
+      include_win:
+        description: 'Also build the Windows x64 sidecar + installer (currently unreliable — see the matrix comment)'
+        type: boolean
+        default: false
 
 jobs:
   setup:
@@ -44,6 +50,7 @@ jobs:
           REF_NAME: ${{ github.ref_name }}
           EVENT_NAME: ${{ github.event_name }}
           INPUT_INTEL: ${{ inputs.include_intel }}
+          INPUT_WIN: ${{ inputs.include_win }}
         run: |
           set -euo pipefail
           INCLUDE_INTEL=false
@@ -56,16 +63,40 @@ jobs:
           echo "include_intel=$INCLUDE_INTEL" >> "$GITHUB_OUTPUT"
           echo "Building with include_intel=$INCLUDE_INTEL"
 
+          # Windows is OPT-IN, like Intel — and for a harder reason than
+          # cost. A matrix leg that never finishes BLOCKS EVERY DOWNSTREAM
+          # JOB: `build-app` needs `build-engine`, and `needs` waits for
+          # the whole matrix, so one hanging leg means no installer job
+          # starts and no release is published — for macOS either.
+          # `continue-on-error` does not help, it only forgives a leg that
+          # actually ENDS. Observed 2026-08-17: the Windows sidecar sat in
+          # PyInstaller for ~4h (confounded by a GitHub outage the same
+          # afternoon, so the cause is not established) and took the whole
+          # v0.1.41 release down with it, while the mac sidecar had
+          # finished in minutes.
+          # Turn it back on with a `-win` tag suffix or the workflow_dispatch
+          # input once the sidecar build is trustworthy again.
+          INCLUDE_WIN=false
+          if [[ "$EVENT_NAME" == "push" && "$REF_NAME" == *-win ]]; then
+            INCLUDE_WIN=true
+          fi
+          if [[ "$EVENT_NAME" == "workflow_dispatch" && "$INPUT_WIN" == "true" ]]; then
+            INCLUDE_WIN=true
+          fi
+          echo "Building with include_win=$INCLUDE_WIN"
+
           ENGINE_BASE='[
-            {"os":"macos-14","platform":"mac","arch":"arm64","sidecar_name":"zylch"},
-            {"os":"windows-latest","platform":"win","arch":"x64","sidecar_name":"zylch.exe"}
+            {"os":"macos-14","platform":"mac","arch":"arm64","sidecar_name":"zylch"}
           ]'
+          WIN_ENTRY='{"os":"windows-latest","platform":"win","arch":"x64","sidecar_name":"zylch.exe"}'
           INTEL_ENTRY='{"os":"macos-13-large","platform":"mac","arch":"x64","sidecar_name":"zylch"}'
 
+          ENGINE_MATRIX=$(jq -c '.' <<<"$ENGINE_BASE")
+          if [[ "$INCLUDE_WIN" == "true" ]]; then
+            ENGINE_MATRIX=$(jq -c --argjson e "$WIN_ENTRY" '. + [$e]' <<<"$ENGINE_MATRIX")
+          fi
           if [[ "$INCLUDE_INTEL" == "true" ]]; then
-            ENGINE_MATRIX=$(jq -c --argjson e "$INTEL_ENTRY" '. + [$e]' <<<"$ENGINE_BASE")
-          else
-            ENGINE_MATRIX=$(jq -c '.' <<<"$ENGINE_BASE")
+            ENGINE_MATRIX=$(jq -c --argjson e "$INTEL_ENTRY" '. + [$e]' <<<"$ENGINE_MATRIX")
           fi
 
           # app_matrix is identical to engine_matrix — same runners, same arch labels
@@ -86,6 +117,9 @@ jobs:
     # artifacts again without touching this file; the release step already
     # tolerates missing files (`fail_on_unmatched_files: false`).
     continue-on-error: ${{ matrix.platform == 'win' }}
+    # Backstop: a leg that hangs blocks every downstream job until GitHub's
+    # 6h default kills it. The mac sidecar builds in minutes.
+    timeout-minutes: 45
     strategy:
       fail-fast: false
       matrix: ${{ fromJSON(needs.setup.outputs.engine_matrix) }}
