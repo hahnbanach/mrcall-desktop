@@ -6,7 +6,19 @@ import { indexedDBLocalPersistence, initializeAuth } from 'firebase/auth'
 // not the bearer; security rules and the Firebase Admin SDK key (held
 // server-side only) are what gate access.
 const firebaseConfig = {
-  apiKey: 'AIzaSyDTaGASuYL5ZEW5YUaJvOa3DN-7LSaXn8g',
+  // Restricted by API (Identity Toolkit + Token Service), NOT by HTTP
+  // referrer. That distinction is the whole point: Electron sends no
+  // Referer header, so a referrer-restricted key rejects every sign-in
+  // with `auth/requests-from-referer-<empty>-are-blocked`. The previous
+  // key (AIzaSyDTaGA…Xn8g) acquired exactly that restriction and broke
+  // sign-in on 2026-08-18 — the second time this project has been bitten
+  // by it: the same thing hit the cs clones on 2026-08-09, which is why
+  // this server-side key was minted in the first place. Verified by
+  // probing both keys against accounts:signInWithPassword — the old one
+  // returns the referer error, this one reaches credential validation.
+  // If you ever swap this, check the restriction TYPE, not just that a
+  // key exists.
+  apiKey: 'AIzaSyA_LnUBg1dfafu9RMMRNvAm4_ZTfjoHEEI',
   authDomain: 'talkmeapp-e696c.firebaseapp.com',
   projectId: 'talkmeapp-e696c',
   storageBucket: 'talkmeapp-e696c.appspot.com',
