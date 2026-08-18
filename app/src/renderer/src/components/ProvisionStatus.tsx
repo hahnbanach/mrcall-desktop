@@ -21,8 +21,14 @@
  * renders for the four `ProvisionState` values plus the three "hidden"
  * codes, and a transient network hiccup will self-correct on the next
  * poll tick without a UI invented to explain it.
+ *
+ * Every visible variant of the row also carries a `ProvisionInfoButton`
+ * — the small circled-"i" that opens a plain-language explainer of what
+ * the vendor engine is and what "Activate" does. Its own open/close
+ * state is a separate concern from the poll-driven `ViewState` above;
+ * see `nextInfoOpen`.
  */
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useId, useRef, useState } from 'react'
 
 type ProvisionState = 'active' | 'preparing' | 'problem' | 'not_provisioned'
 
@@ -84,6 +90,19 @@ export function isSilent(code: string): boolean {
   return SILENT_CODES.has(code)
 }
 
+// Open/close state for the "What is this?" explanatory popover attached
+// to the status row. Kept as a pure reducer — same reasoning as
+// `deriveView`/`applyStartResult` above — so the toggle/dismiss logic can
+// be exercised without mounting React or a DOM. `toggle` is the (i)
+// button's own click; `dismiss` is every other way the popover closes
+// (outside click, Escape, focus leaving) and always yields closed
+// regardless of the current state.
+export type InfoPopoverAction = 'toggle' | 'dismiss'
+export function nextInfoOpen(open: boolean, action: InfoPopoverAction): boolean {
+  if (action === 'toggle') return !open
+  return false
+}
+
 // Dot colours drawn from the existing brand palette (tailwind.config.js)
 // — no new hex values.
 const DOT_CLASS: Record<'active' | 'preparing' | 'problem' | 'not_provisioned', string> = {
@@ -91,6 +110,111 @@ const DOT_CLASS: Record<'active' | 'preparing' | 'problem' | 'not_provisioned', 
   preparing: 'bg-brand-orange',
   problem: 'bg-brand-danger',
   not_provisioned: 'bg-brand-mid-grey'
+}
+
+// Small "(i)" affordance next to the status label, explaining what the
+// vendor engine is and why "Activate" exists. Follows the same
+// outside-click / Escape dismissal pattern as `ProfilesDropdown` in
+// `App.tsx` (document-level `mousedown` + `keydown` listeners scoped to
+// `open`, `containerRef.contains` to detect outside clicks) rather than
+// inventing a second convention. The sidebar is only 220px wide, so the
+// panel is an absolutely-positioned popover that is allowed to overflow
+// it — same `absolute` + `z-40` idiom `ProfilesDropdown` already uses for
+// its own menu, opening downward (`top-full`) like that menu does in
+// this same header (`direction="down"`), since there's more room below
+// the row than above it.
+function ProvisionInfoButton(): JSX.Element {
+  const [open, setOpen] = useState(false)
+  const containerRef = useRef<HTMLDivElement | null>(null)
+  const buttonRef = useRef<HTMLButtonElement | null>(null)
+  const panelRef = useRef<HTMLDivElement | null>(null)
+  const panelId = useId()
+
+  const close = (returnFocus: boolean): void => {
+    setOpen((prev) => nextInfoOpen(prev, 'dismiss'))
+    if (returnFocus) buttonRef.current?.focus()
+  }
+
+  useEffect(() => {
+    if (!open) return
+    // Move keyboard focus into the panel so Escape/Tab work from it
+    // immediately, without requiring a prior click inside it.
+    panelRef.current?.focus()
+    const onDown = (e: MouseEvent): void => {
+      const node = containerRef.current
+      if (node && !node.contains(e.target as Node)) close(false)
+    }
+    const onKey = (e: KeyboardEvent): void => {
+      if (e.key === 'Escape') close(true)
+    }
+    document.addEventListener('mousedown', onDown)
+    document.addEventListener('keydown', onKey)
+    return () => {
+      document.removeEventListener('mousedown', onDown)
+      document.removeEventListener('keydown', onKey)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open])
+
+  return (
+    <div ref={containerRef} className="relative shrink-0 leading-none">
+      <button
+        ref={buttonRef}
+        type="button"
+        onClick={() => setOpen((prev) => nextInfoOpen(prev, 'toggle'))}
+        aria-label="What is this?"
+        aria-haspopup="dialog"
+        aria-expanded={open}
+        aria-controls={open ? panelId : undefined}
+        className="inline-flex items-center justify-center w-3.5 h-3.5 rounded-full border border-brand-mid-grey text-brand-grey-80 text-[9px] leading-none hover:bg-brand-light-grey hover:text-brand-black"
+      >
+        i
+      </button>
+      {open && (
+        <div
+          ref={panelRef}
+          id={panelId}
+          role="dialog"
+          aria-label="Running on the MrCall server"
+          tabIndex={-1}
+          className="absolute z-40 left-0 top-full mt-1 w-[280px] max-w-[calc(100vw-2rem)] bg-white border border-brand-mid-grey rounded shadow-lg p-3 text-[11px] leading-snug text-brand-grey-80"
+        >
+          <h3 className="text-xs font-semibold text-brand-black mb-1.5">
+            Running on the MrCall server
+          </h3>
+          <p className="mb-2">
+            Your assistant normally runs on this computer. It syncs your mailbox, keeps its
+            memory of your customers, and prepares replies — but only while the app is open.
+            Close it, or shut the Mac, and it stops.
+          </p>
+          <p className="mb-2">
+            Activating puts a copy of your profile on the MrCall server, so the same assistant
+            keeps working when your computer is off: overnight, at weekends, while you travel.
+          </p>
+          <p className="mb-2">
+            When you click Activate, the app sends this profile&rsquo;s mailbox settings to the
+            server over an encrypted connection, signed in as you. Preparing usually takes under
+            a minute.
+          </p>
+          <ul className="mb-2 pl-4 list-disc space-y-0.5">
+            <li>
+              <strong className="text-brand-black">Preparing</strong> — the server is setting
+              your assistant up.
+            </li>
+            <li>
+              <strong className="text-brand-black">Active</strong> — it is running on the
+              server.
+            </li>
+            <li>
+              <strong className="text-brand-black">Problem</strong> — something went wrong. We
+              have been notified.
+            </li>
+          </ul>
+          <p>Either way, the app works exactly as before.</p>
+        </div>
+      )}
+    </div>
+  )
 }
 
 export default function ProvisionStatus(): JSX.Element | null {
@@ -164,6 +288,7 @@ export default function ProvisionStatus(): JSX.Element | null {
           <span className="truncate flex-1" title="Not on the vendor engine">
             Not on the vendor engine
           </span>
+          <ProvisionInfoButton />
           <button
             type="button"
             onClick={onActivate}
@@ -202,9 +327,10 @@ export default function ProvisionStatus(): JSX.Element | null {
           className={`inline-block w-2 h-2 rounded-full shrink-0 ${DOT_CLASS[view.kind]}`}
           aria-hidden="true"
         />
-        <span className="truncate" title={label}>
+        <span className="truncate flex-1" title={label}>
           {label}
         </span>
+        <ProvisionInfoButton />
       </div>
       {hint && (
         <div className="truncate text-brand-grey-80/70" title={hint}>
