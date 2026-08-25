@@ -1064,39 +1064,27 @@ For simple drafts without context, use the `compose_email` tool in chat."""
             # Get draft_id from first positional arg after 'send'
             draft_id = sub_args[0] if sub_args and not sub_args[0].startswith("--") else None
 
-            if draft_id:
-                # Find the draft by ID
-                with get_session() as session:
-                    draft_row = (
-                        session.query(Draft)
-                        .filter(
-                            Draft.owner_id == owner_id,
-                            Draft.status == "draft",
-                            Draft.id == draft_id,
-                        )
-                        .first()
-                    )
-                    draft = draft_row.to_dict() if draft_row else None
+            # No id, no send. A mailbox normally holds several drafts, so
+            # picking "the most recent" for the caller mails a real customer
+            # something they did not ask to send. Same rule as `/email delete`.
+            if not draft_id:
+                return "❌ Missing draft ID\n\nUsage: `/email send <draft_id>`\n\nUse `/email list` to see your drafts."
 
-                if not draft:
-                    return (
-                        f"❌ Draft not found: `{draft_id}`\n\nUse `/email list` to see your drafts."
+            # Find the draft by ID
+            with get_session() as session:
+                draft_row = (
+                    session.query(Draft)
+                    .filter(
+                        Draft.owner_id == owner_id,
+                        Draft.status == "draft",
+                        Draft.id == draft_id,
                     )
-            else:
-                # No draft_id provided - use the most recent draft
-                with get_session() as session:
-                    draft_row = (
-                        session.query(Draft)
-                        .filter(Draft.owner_id == owner_id, Draft.status == "draft")
-                        .order_by(Draft.updated_at.desc())
-                        .first()
-                    )
-                    draft = draft_row.to_dict() if draft_row else None
+                    .first()
+                )
+                draft = draft_row.to_dict() if draft_row else None
 
-                if not draft:
-                    return "❌ No drafts found.\n\nCreate a draft first with `/email create` or use the `compose_email` tool."
-
-                draft_id = draft["id"]
+            if not draft:
+                return f"❌ Draft not found: `{draft_id}`\n\nUse `/email list` to see your drafts."
 
             # Get user's email provider
             provider = get_provider(owner_id)

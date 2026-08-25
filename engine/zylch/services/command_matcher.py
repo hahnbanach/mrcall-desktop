@@ -133,8 +133,16 @@ class SemanticCommandMatcher:
             f"[CommandMatcher] Raw match: command={result.command}, confidence={result.confidence:.2f}, template='{result.matched_template}'"
         )
 
-        # Format the command with extracted parameters
+        # Format the command with extracted parameters. A formatter returns
+        # None when it cannot express the message faithfully as a slash
+        # command; a rewrite that means something else is worse than none.
         command = self._format_command(result, user_message)
+        if not command:
+            logger.info(
+                f"[CommandMatcher] Declining rewrite of '{user_message}' "
+                f"(template='{best_template}'): parameters could not be recovered"
+            )
+            return None
 
         logger.info(
             f"Semantic match: '{user_message}' → '{command}' "
@@ -200,7 +208,7 @@ class SemanticCommandMatcher:
 
         return params
 
-    def _format_command(self, result: MatchResult, original_input: str) -> str:
+    def _format_command(self, result: MatchResult, original_input: str) -> Optional[str]:
         """
         Format a MatchResult into a command string.
 
@@ -214,7 +222,8 @@ class SemanticCommandMatcher:
             original_input: The original user input (for --search full message)
 
         Returns:
-            Formatted command string
+            Formatted command string, or None when the message cannot be
+            expressed as a slash command without changing what it asks for
         """
         command = result.command
         params = result.params
@@ -278,7 +287,7 @@ class SemanticCommandMatcher:
         # Default to search with original input
         return f"/memory search {original_input}"
 
-    def _format_email(self, params: Dict[str, Any], template: str) -> str:
+    def _format_email(self, params: Dict[str, Any], template: str) -> Optional[str]:
         """/email [list --draft | create | send | delete | search]"""
         # Drafts - List
         if "list draft" in template or "show draft" in template or "my draft" in template:
@@ -306,12 +315,20 @@ class SemanticCommandMatcher:
         # Drafts - Send
         # NOTE: "send it" is intentionally NOT matched here. It's a confirmation
         # phrase that must be interpreted by the LLM via the send_draft tool
-        # (see chat_service.py:211). Only explicit phrases rewrite to /email send.
+        # (see chat_service.py:211). Only a phrase carrying an explicit draft
+        # id rewrites to /email send.
         if "send draft" in template or "send the email" in template:
             draft_id = params.get("draft_id", "")
             if draft_id:
                 return f"/email send {draft_id}"
-            return "/email send"
+            # `_extract_params` cannot pull a {draft_id:text} out of free text,
+            # so an id the user DID spell out is lost here. Rewriting to a bare
+            # `/email send` would silently turn "send that draft" into "send
+            # whichever draft the handler picks" — and the slash-command path
+            # skips the tool-approval gate the LLM path goes through. Decline
+            # the rewrite instead: the message reaches the LLM, which reads the
+            # id from the full text and calls the gated `send_draft`.
+            return None
 
         # Drafts - Delete
         if "delete draft" in template or "discard draft" in template:

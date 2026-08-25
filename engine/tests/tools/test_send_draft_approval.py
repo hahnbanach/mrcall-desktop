@@ -76,19 +76,20 @@ def test_approval_input_hydrates_draft_content(fresh_storage):
     assert card["cc"] == "sales@example.com"
 
 
-def test_approval_input_defaults_to_most_recent_draft_when_no_id(fresh_storage):
+def test_approval_input_hydrates_nothing_without_an_id(fresh_storage):
+    """No id, no card content — hydrating from "the most recent draft" would
+    put a different customer's email in front of the approver."""
     from zylch.tools.gmail_tools import SendDraftTool
 
     fresh_storage.create_draft(owner_id=OWNER, to="first@example.com", subject="First", body="...")
-    latest = fresh_storage.create_draft(
+    fresh_storage.create_draft(
         owner_id=OWNER, to="second@example.com", subject="Second", body="..."
     )
 
     tool = SendDraftTool(imap_client=MagicMock(), storage=fresh_storage, owner_id=OWNER)
     card = tool.approval_input({})
 
-    assert card["draft_id"] == latest["id"]
-    assert card["to"] == "second@example.com"
+    assert card == {}
 
 
 def test_execute_applies_card_edits_before_sending(fresh_storage):

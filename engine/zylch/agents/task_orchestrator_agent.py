@@ -63,7 +63,14 @@ RESPOND_TOOL = {
     },
 }
 
-# Tool to send the pending email draft
+# Tool to send the pending email draft.
+#
+# No `draft_id` parameter, deliberately: the model is never shown a draft id in
+# this flow (`_format_emailer_result` renders To / Subject / body only), so the
+# only id it could put in such a field is an invented one. The authoritative id
+# is the one the compose step recorded in session state, and `_handle_send_email`
+# reads it from there. A second, guessable source of the identifier would be
+# strictly worse than none.
 SEND_EMAIL_TOOL = {
     "name": "send_email",
     "description": "Send the pending email draft. Use when user confirms with 'send it', 'ok', 'yes', 'invia', 'conferma', etc. Only works if there's a pending email draft from a previous call_agent to emailer.",
@@ -383,14 +390,20 @@ The sub-agents can handle multi-step workflows. Give them the full picture.
 
         Uses the draft_id from last_action_result to fetch and send the
         email via the user's connected email provider (Gmail or Outlook).
+        No id, no send: there is no fallback to "whatever draft is newest".
 
         Returns:
             Success/error message for the user
         """
-        from zylch.storage import Storage
         from zylch.api.token_storage import get_provider, get_email, get_graph_token
 
-        # 1. Get draft_id from session state (or try to find latest draft)
+        # 1. Get draft_id from session state.
+        #
+        # The id recorded by the preceding compose step is the ONLY identifier
+        # of "the pending draft": this tool fires on a bare "send it", the
+        # model is never shown a draft id, and a mailbox normally holds several
+        # drafts. Falling back to the newest row in the DB would answer
+        # "send it" with a different customer's email.
         draft_id = None
         last_result = self.session_state.get_last_action_result()
 
@@ -400,23 +413,10 @@ The sub-agents can handle multi-step workflows. Give them the full picture.
                 f"[TaskOrchestrator] send_email: draft_id from last_action_result = {draft_id}"
             )
 
-        # 2. If no draft_id in memory, try to get most recent draft from DB
         if not draft_id:
-            logger.debug("[TaskOrchestrator] No draft_id in memory, checking DB for recent drafts")
-            try:
-                supabase = Storage.get_instance()
-                drafts = supabase.list_drafts(self.owner_id, status="draft")
-                if drafts:
-                    # Get the most recent draft
-                    draft_id = drafts[0].get("id")
-                    logger.debug(f"[TaskOrchestrator] Found most recent draft in DB: {draft_id}")
-            except Exception as e:
-                logger.error(f"[TaskOrchestrator] Failed to query drafts: {e}")
+            return '⚠️ No pending email draft to send.\n\nCompose an email first, then say "send it" — or send a specific draft with `/email send <draft_id>` (`/email list --draft` shows the ids).'
 
-        if not draft_id:
-            return "⚠️ No pending email draft to send.\n\nPlease compose an email first, or check `/email list --draft` to see your drafts."
-
-        # 3. Fetch draft from database
+        # 2. Fetch draft from database
         try:
             with get_session() as session:
                 draft_row = (
@@ -433,14 +433,28 @@ The sub-agents can handle multi-step workflows. Give them the full picture.
             logger.error(f"[TaskOrchestrator] Failed to fetch draft {draft_id}: {e}")
             return f"❌ Failed to load draft: {str(e)}"
 
-        # 4. Get email provider for this user
+        # 3. Get email provider for this user
         provider = get_provider(self.owner_id)
         user_email = get_email(self.owner_id)
 
         if not provider:
             return "❌ No email provider connected.\n\nUse `/connect google` or `/connect microsoft` first."
 
-        # 5. Extract draft fields
+        # Every reason to REFUSE is decided BEFORE the draft is marked
+        # `sending`. That write means "handed to a transport"; a refusal after
+        # it leaves the draft in a status `/email send` filters out, so the
+        # draft this code could never mail becomes unsendable by any later
+        # attempt either.
+        if provider not in ("google", "microsoft"):
+            return f"❌ Unknown email provider: {provider}"
+
+        graph_token = None
+        if provider == "microsoft":
+            graph_token = get_graph_token(self.owner_id)
+            if not graph_token:
+                return "❌ Microsoft token expired. Please reconnect with `/connect microsoft`."
+
+        # 4. Extract draft fields
         to_addresses = draft.get("to_addresses", [])
         to_str = ", ".join(to_addresses) if isinstance(to_addresses, list) else to_addresses
         subject = draft.get("subject", "")
@@ -466,7 +480,7 @@ The sub-agents can handle multi-step workflows. Give them the full picture.
             logger.warning(f"[TaskOrchestrator] Failed to update draft status: {e}")
 
         try:
-            # 6. Send via appropriate provider
+            # 5. Send via appropriate provider
             if provider == "google":
                 from zylch.tools.gmail import GmailClient
 
@@ -491,10 +505,6 @@ The sub-agents can handle multi-step workflows. Give them the full picture.
             elif provider == "microsoft":
                 from zylch.tools.outlook import OutlookClient
 
-                graph_token = get_graph_token(self.owner_id)
-                if not graph_token:
-                    return "❌ Microsoft token expired. Please reconnect with `/connect microsoft`."
-
                 outlook = OutlookClient(graph_token=graph_token["access_token"], account=user_email)
 
                 sent_message = outlook.send_message(
@@ -506,9 +516,13 @@ The sub-agents can handle multi-step workflows. Give them the full picture.
                 sent_id = sent_message.get("id", "")
 
             else:
-                return f"❌ Unknown email provider: {provider}"
+                # Unreachable while the whitelist above holds. Raise rather
+                # than return, so any future provider added in one place and
+                # not the other unwinds through the handler below, which puts
+                # the draft back to `draft`.
+                raise RuntimeError(f"Unknown email provider: {provider}")
 
-            # 7. Delete draft after successful send
+            # 6. Delete draft after successful send
             try:
                 with get_session() as session:
                     session.query(Draft).filter(Draft.id == draft_id).delete()
@@ -516,7 +530,7 @@ The sub-agents can handle multi-step workflows. Give them the full picture.
             except Exception as e:
                 logger.warning(f"[TaskOrchestrator] Failed to delete draft after send: {e}")
 
-            # 8. Clear the pending draft from session state
+            # 7. Clear the pending draft from session state
             self.session_state.set_last_action_result(None)
 
             logger.info(f"[TaskOrchestrator] Email sent successfully: {sent_id}")

@@ -738,8 +738,8 @@ class SendDraftTool(Tool):
             description=(
                 "Send a draft email. When user says"
                 " 'send it', 'inviala', 'spedisci',"
-                " call this tool. If no draft_id"
-                " provided, sends most recent draft."
+                " call this tool with the draft_id of"
+                " the draft being discussed."
             ),
         )
         self.imap = imap_client
@@ -747,18 +747,23 @@ class SendDraftTool(Tool):
         self.owner_id = owner_id
 
     def _resolve_draft(self, draft_id):
-        """Return the draft to send: the one named by ``draft_id``, or the
-        most recent draft when no id is given. ``None`` if none exists."""
-        if draft_id:
-            return self.storage.get_draft(self.owner_id, draft_id)
-        drafts = self.storage.list_drafts(self.owner_id)
-        return drafts[0] if drafts else None
+        """Return the draft named by ``draft_id``, or ``None``.
+
+        There is deliberately NO "most recent draft" fallback. A mailbox
+        normally holds several drafts, so resolving an absent or unknown id
+        to whatever happens to be newest turns "send THAT draft" into an
+        email to a different recipient. An id that does not resolve must
+        fail the send, never redirect it.
+        """
+        if not draft_id:
+            return None
+        return self.storage.get_draft(self.owner_id, draft_id)
 
     def approval_input(self, tool_input):
         """Hydrate the send-approval card with the draft's editable content.
 
-        The model only supplies ``draft_id`` (or nothing → most recent),
-        but the human needs To / Subject / Body in front of them to review
+        The model only supplies ``draft_id``, but the human needs To /
+        Subject / Body in front of them to review
         and correct before the email goes out — the same inline-edit
         affordance the WhatsApp card already has. ``draft_id`` rides along
         (hidden in the card) so ``execute`` still knows which draft to send;
@@ -805,9 +810,12 @@ class SendDraftTool(Tool):
                     status=ToolStatus.ERROR,
                     data=None,
                     error=(
-                        f"Draft not found: {draft_id}"
+                        f"Draft not found: {draft_id}. Nothing was sent."
                         if draft_id
-                        else "No drafts found. Create a draft first."
+                        else (
+                            "send_draft requires the draft_id of the draft to"
+                            " send. Nothing was sent."
+                        )
                     ),
                 )
             draft_id = draft.get("id", draft_id)
@@ -949,8 +957,10 @@ class SendDraftTool(Tool):
         return {
             "name": self.name,
             "description": (
-                "Send a draft email. If no draft_id"
-                " provided, sends the most recent draft."
+                "Send a draft email. The draft_id is"
+                " REQUIRED and must be the id of the"
+                " draft the user meant: nothing is sent"
+                " if it is missing or unknown."
                 " IMPORTANT: Always confirm with user"
                 " before sending."
             ),
@@ -960,10 +970,12 @@ class SendDraftTool(Tool):
                     "draft_id": {
                         "type": "string",
                         "description": (
-                            "Draft ID to send" " (optional - uses most" " recent if not provided)"
+                            "Exact ID of the draft to send"
+                            " (from create_draft or list_drafts)."
+                            " Never guess it."
                         ),
                     },
                 },
-                "required": [],
+                "required": ["draft_id"],
             },
         }
