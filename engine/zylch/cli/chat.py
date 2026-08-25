@@ -649,6 +649,26 @@ def _handle_update_task(task_id_prefix: str, owner_id: str) -> None:
         )
 
 
+async def _console_approval(tool_use_id: str, tool_name: str, tool_input: dict):
+    """Approval gate for the REPL: the approving human is at this terminal.
+
+    Every other surface answers the gate over a wire (the desktop app's card,
+    a `cs` allow-list). Here the process owns stdin, so the gate is a prompt —
+    and a surface that cannot prompt gets no callback at all and is refused.
+    """
+    from zylch.services.task_executor import format_approval_preview
+
+    console.print()
+    console.print(f"[bold yellow]Approval required:[/bold yellow] {tool_name}")
+    _print_response(format_approval_preview(tool_name, tool_input))
+    try:
+        answer = input("Approve? [y/N] ").strip().lower()
+    except (EOFError, KeyboardInterrupt):
+        console.print()
+        return (False, None)
+    return (answer in ("y", "yes"), None)
+
+
 def _handle_slash_command(
     raw_input: str,
     owner_id: str,
@@ -696,6 +716,15 @@ def _handle_slash_command(
         return
 
     handler = COMMAND_HANDLERS[cmd]
+
+    # The REPL dispatches slash commands itself, so ChatService's gate never
+    # sees them. Run the same one here, with the terminal as the approver.
+    from zylch.services.approval_gate import gate_slash_command
+
+    refusal = asyncio.run(gate_slash_command(cmd, args, owner_id, _console_approval))
+    if refusal is not None:
+        _print_response(refusal)
+        return
 
     try:
         if cmd in ("/sync", "/update"):
@@ -750,6 +779,10 @@ def _handle_chat_message(
                 user_id=owner_id,
                 conversation_history=conversation_history,
                 context={"user_id": owner_id},
+                # Same terminal gate the REPL's slash dispatch uses. Without
+                # it the LLM's own `send_draft` would run ungated here while
+                # `/email send` asked — one surface, two answers.
+                approval_callback=_console_approval,
             )
         )
 

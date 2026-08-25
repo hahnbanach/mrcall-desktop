@@ -14,6 +14,7 @@ from zylch.llm.exceptions import (
 from zylch.tools import ToolFactory, ToolConfig
 from zylch.assistant.core import ZylchAIAgent
 from zylch.config import settings
+from zylch.services.approval_gate import gate_slash_command
 from sqlalchemy import Text as SAText, cast as sa_cast
 from zylch.storage import Storage
 from zylch.storage.database import get_session
@@ -334,7 +335,7 @@ class ChatService:
             if ToolFactory._session_state and ToolFactory._session_state.is_task_mode():
                 owner_id = (context.get("user_id") if context else None) or user_id
                 response_text = await self._process_task_mode_message(
-                    user_message, owner_id, context
+                    user_message, owner_id, context, approval_callback
                 )
                 return {
                     "response": self._prepend_notification(response_text, notification_banner),
@@ -426,6 +427,27 @@ class ChatService:
                     logger.info(
                         f"Command {cmd}: owner_id={owner_id}, user_email={user_email}, context={context}"
                     )
+
+                    # 🛡️ APPROVAL GATE — a slash command that can reach a
+                    # transport goes through the same gate as the equivalent
+                    # LLM tool call, and is refused when there is no gate to
+                    # go through. Without this a caller granting no send tool
+                    # at all could still mail a customer with `/email send`.
+                    refusal = await gate_slash_command(
+                        cmd, args, owner_id, approval_callback, storage=self.storage
+                    )
+                    if refusal is not None:
+                        return {
+                            "response": self._prepend_notification(refusal, notification_banner),
+                            "tool_calls": [],
+                            "metadata": {
+                                "execution_time_ms": round((time.time() - start_time) * 1000, 2),
+                                "command": cmd,
+                                "blocked_by_approval": True,
+                                "instant": True,
+                            },
+                            "session_id": session_id,
+                        }
 
                     # Call handler based on required parameters
                     if cmd == "/sync":
@@ -933,16 +955,29 @@ What would you like to do?"""
             return None
 
     async def _process_task_mode_message(
-        self, user_message: str, owner_id: str, context: Optional[Dict[str, Any]] = None
+        self,
+        user_message: str,
+        owner_id: str,
+        context: Optional[Dict[str, Any]] = None,
+        approval_callback: Optional[Callable[..., Awaitable[Any]]] = None,
     ) -> str:
         """Process a message while in task mode.
 
         Routes the message to TaskOrchestratorAgent.
 
+        The orchestrator has its own `send_email` tool, so it gets the caller's
+        `approval_callback` and gates that send exactly as the LLM tool path
+        does. It is handed over even though task mode is dead code in this tree
+        (`zylch.agents.mrcall_agent` no longer exists, so the orchestrator
+        module cannot be imported): restoring those modules must not silently
+        re-arm an ungated send path.
+
         Args:
             user_message: User's message
             owner_id: Owner ID
             context: Optional context dict
+            approval_callback: Gate for the orchestrator's send tool; without
+                one, a send is refused rather than run ungated
 
         Returns:
             Response from TaskOrchestratorAgent
@@ -961,9 +996,16 @@ What would you like to do?"""
                         owner_id=owner_id,
                         storage=self.storage,
                         starchat_client=ToolFactory._starchat_client,
+                        approval_callback=approval_callback,
                     )
                 except RuntimeError as exc:
                     return f"❌ {exc}"
+
+            # The orchestrator outlives the turn that created it, but the gate
+            # belongs to the CALLER of this turn. Re-point it every time, or a
+            # send would be approved through a channel that has gone away — or,
+            # worse, through one that never asked for this send.
+            self._task_orchestrator.approval_callback = approval_callback
 
             # Process message through orchestrator
             response = await self._task_orchestrator.process_message(

@@ -21,6 +21,13 @@ from zylch.agents.base import BaseConversationalAgent
 from zylch.agents.emailer_agent import EmailerAgent, EMAIL_AGENT_TOOLS
 from zylch.agents.mrcall_agent import MrCallAgent, MRCALL_AGENT_TOOLS
 from zylch.llm import make_llm_client
+from zylch.services.approval_gate import (
+    APPROVED,
+    draft_approval_card,
+    draft_updates_from_card,
+    refusal_text,
+    request_approval,
+)
 from zylch.storage import Storage
 from zylch.storage.database import get_session
 from zylch.storage.models import Draft
@@ -124,6 +131,7 @@ class TaskOrchestratorAgent(BaseConversationalAgent):
         owner_id: str,
         storage: Optional[Storage] = None,
         starchat_client=None,
+        approval_callback=None,
     ):
         """Initialize TaskOrchestratorAgent.
 
@@ -132,11 +140,17 @@ class TaskOrchestratorAgent(BaseConversationalAgent):
             owner_id: Owner ID
             storage: Storage instance
             starchat_client: Optional StarChat client for MrCall operations
+            approval_callback: The caller's approval gate. `send_email` is
+                announced through it and runs only if approved; absent, the
+                send is refused. Task mode is the one agent surface the LLM
+                tool gate in `AssistantCore` never covers, so the gate has to
+                travel with the orchestrator.
         """
         self.session_state = session_state
         self.owner_id = owner_id
         self.storage = storage or Storage.get_instance()
         self.starchat_client = starchat_client
+        self.approval_callback = approval_callback
 
         # LLM client for orchestration decisions
         self.llm = make_llm_client()
@@ -453,6 +467,29 @@ The sub-agents can handle multi-step workflows. Give them the full picture.
             graph_token = get_graph_token(self.owner_id)
             if not graph_token:
                 return "❌ Microsoft token expired. Please reconnect with `/connect microsoft`."
+
+        # 3b. Approval. Same gate and same tool name as every other send in the
+        # engine, placed after the cheap refusals (so nobody is asked to approve
+        # a send that cannot happen) and before the `sending` write. `send_email`
+        # is what `APPROVAL_TOOLS` calls this act on the solve surface, so a
+        # client's allow-list decides it once for both.
+        decision, edited = await request_approval(
+            self.approval_callback,
+            "send_email",
+            draft_approval_card(draft, draft_id),
+        )
+        if decision != APPROVED:
+            return refusal_text(decision, "Sending this draft", "send_email")
+
+        # A human who corrected the recipient or body in the card must get the
+        # corrected mail, so persist the edits and re-read before extracting.
+        updates = draft_updates_from_card(edited)
+        if updates:
+            try:
+                self.storage.update_draft(self.owner_id, draft_id, updates)
+                draft = self.storage.get_draft(self.owner_id, draft_id) or draft
+            except Exception as e:
+                logger.warning(f"[TaskOrchestrator] Failed to apply approval-card edits: {e}")
 
         # 4. Extract draft fields
         to_addresses = draft.get("to_addresses", [])

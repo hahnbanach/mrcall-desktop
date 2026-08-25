@@ -1070,13 +1070,21 @@ For simple drafts without context, use the `compose_email` tool in chat."""
             if not draft_id:
                 return "❌ Missing draft ID\n\nUsage: `/email send <draft_id>`\n\nUse `/email list` to see your drafts."
 
-            # Find the draft by ID
+            # Find the draft by ID.
+            #
+            # Sendable means "not yet handed to a transport": `sent` and
+            # `sending` are excluded, `failed` is not. The same rule now holds
+            # in `SendDraftTool.execute`, so the two send paths cannot disagree
+            # about which draft may go out — they used to, and a draft one path
+            # marked `failed` became unsendable by the other. `failed` is
+            # legacy (both paths now restore a failed send to `draft`), and
+            # accepting it is what makes those rows recoverable.
             with get_session() as session:
                 draft_row = (
                     session.query(Draft)
                     .filter(
                         Draft.owner_id == owner_id,
-                        Draft.status == "draft",
+                        Draft.status.in_(("draft", "failed")),
                         Draft.id == draft_id,
                     )
                     .first()

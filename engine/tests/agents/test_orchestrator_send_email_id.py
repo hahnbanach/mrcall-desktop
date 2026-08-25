@@ -92,6 +92,14 @@ def _two_drafts(storage):
     return target, decoy
 
 
+async def _approve(tool_use_id, tool_name, tool_input):
+    """These tests are about WHICH draft is sent and WHEN its status is
+    written, not about the approval gate — so they answer the gate yes and
+    let the send proceed. The gate itself is covered in
+    test_orchestrator_send_approval.py."""
+    return (True, None)
+
+
 def _orchestrator(storage, last_action_result=None):
     session_state = SessionState(owner_id=OWNER)
     session_state.enter_task_mode("task-1", {"title": "reply to the customer"})
@@ -107,6 +115,7 @@ def _orchestrator(storage, last_action_result=None):
             session_state=session_state,
             owner_id=OWNER,
             storage=storage,
+            approval_callback=_approve,
         )
 
 

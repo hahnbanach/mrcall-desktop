@@ -368,8 +368,33 @@ class ZylchAIAgent(BaseConversationalAgent):
                     f"[chat turn={tid} step={step}] tool={tool_name}" f" full_input={tool_input}"
                 )
 
-                # Approval gate for destructive tools
-                if approval_callback is not None and tool_name in APPROVAL_TOOLS:
+                # Approval gate for destructive tools.
+                #
+                # The condition is on the TOOL, not on whether a gate happens
+                # to be wired: `approval_callback is not None and ...` meant a
+                # caller that supplied no gate got every approval-listed tool
+                # executed without one, which is the opposite of what a gate is
+                # for. No callback means there is nobody to ask, and nobody to
+                # ask means refuse.
+                if tool_name in APPROVAL_TOOLS:
+                    if approval_callback is None:
+                        logger.warning(
+                            f"[chat turn={tid} step={step}] tool={tool_name}"
+                            " status=refused reason=no_approval_channel"
+                        )
+                        results.append(
+                            {
+                                "type": "tool_result",
+                                "tool_use_id": block.id,
+                                "content": (
+                                    f"{tool_name} needs approval and this client offers"
+                                    " no approval channel, so it was not run. Tell the"
+                                    " user to complete the action from a surface that"
+                                    " can confirm it."
+                                ),
+                            }
+                        )
+                        continue
                     approved = False
                     edited_input: Optional[Dict[str, Any]] = None
                     # The card shows/edits the tool's `approval_input`, not

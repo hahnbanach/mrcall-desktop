@@ -9,15 +9,17 @@ Usage:
     TELEGRAM_BOT_TOKEN=... zylch telegram
 """
 
+import asyncio
 import html
 import logging
 import re
-from typing import Optional
+from typing import Dict, Optional
 
-from telegram import Update
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.constants import ParseMode
 from telegram.ext import (
     Application,
+    CallbackQueryHandler,
     CommandHandler,
     ContextTypes,
     MessageHandler,
@@ -80,6 +82,93 @@ def _check_authorized(user_id: int) -> bool:
         )
         return False
     return str(user_id) == str(allowed)
+
+
+# Approval futures awaiting a button press, keyed by tool_use_id. The engine's
+# tool loop blocks on the future while the human decides, so this never grows
+# beyond the handful of approvals one conversation has in flight.
+_pending_approvals: Dict[str, asyncio.Future] = {}
+
+# How long the bot waits for a tap before treating silence as a refusal. The
+# same budget the RPC gate uses, for the same reason: an approval nobody
+# answered is not an approval.
+APPROVAL_TIMEOUT_S = 600
+
+
+def _make_approval_callback(update: Update):
+    """Build the approval gate for one Telegram conversation.
+
+    The bot reaches the same tools as the desktop app and the REPL, so it needs
+    the same gate rather than an exemption from it — a bot that could send mail
+    without asking would be the widest ungated surface of the three, since the
+    human is not even at the machine.
+
+    One difference from the desktop card, and it is a real limitation: Telegram
+    inline buttons approve or refuse, they cannot EDIT the recipient or body.
+    A draft that is wrong has to be redrafted, not corrected here.
+    """
+
+    async def approval_callback(tool_use_id: str, tool_name: str, tool_input: dict):
+        from zylch.services.task_executor import format_approval_preview
+
+        loop = asyncio.get_event_loop()
+        fut: asyncio.Future = loop.create_future()
+        _pending_approvals[tool_use_id] = fut
+
+        preview = format_approval_preview(tool_name, tool_input)
+        if len(preview) > 3000:
+            preview = preview[:2997] + "..."
+        keyboard = InlineKeyboardMarkup(
+            [
+                [
+                    InlineKeyboardButton("✅ Approve", callback_data=f"approve:{tool_use_id}"),
+                    InlineKeyboardButton("❌ Refuse", callback_data=f"refuse:{tool_use_id}"),
+                ]
+            ]
+        )
+        try:
+            await update.effective_chat.send_message(
+                text=_md_to_telegram_html(f"**Approval required: {tool_name}**\n\n{preview}"),
+                parse_mode=ParseMode.HTML,
+                reply_markup=keyboard,
+            )
+        except Exception as e:
+            # Could not even ask. That is a refusal, not a licence to proceed.
+            logger.error(f"[telegram] could not post approval for {tool_name}: {e}")
+            _pending_approvals.pop(tool_use_id, None)
+            return (False, None)
+
+        try:
+            approved = await asyncio.wait_for(fut, timeout=APPROVAL_TIMEOUT_S)
+        except asyncio.TimeoutError:
+            logger.warning(f"[telegram] approval timed out for {tool_name}")
+            approved = False
+        finally:
+            _pending_approvals.pop(tool_use_id, None)
+        return (bool(approved), None)
+
+    return approval_callback
+
+
+async def handle_approval_press(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE,
+) -> None:
+    """Resolve the future the tool loop is waiting on."""
+    query = update.callback_query
+    if not _check_authorized(update.effective_user.id):
+        await query.answer("Not authorized.")
+        return
+
+    await query.answer()
+    action, _, tool_use_id = (query.data or "").partition(":")
+    approved = action == "approve"
+    fut = _pending_approvals.get(tool_use_id)
+    if fut is None or fut.done():
+        await query.edit_message_text("This approval has already been answered or expired.")
+        return
+    fut.set_result(approved)
+    await query.edit_message_text("✅ Approved." if approved else "❌ Refused.")
 
 
 def _md_to_telegram_html(text: str) -> str:
@@ -240,6 +329,7 @@ async def handle_message(
             user_id=owner_id,
             conversation_history=_conversation_history,
             context={"user_id": owner_id},
+            approval_callback=_make_approval_callback(update),
         )
 
         response = result.get("response", "")
@@ -291,6 +381,7 @@ async def handle_slash_command(
             user_id=owner_id,
             conversation_history=_conversation_history,
             context={"user_id": owner_id},
+            approval_callback=_make_approval_callback(update),
         )
 
         response = result.get("response", "")
@@ -331,6 +422,10 @@ def run_telegram_bot(token: Optional[str] = None):
     # /start and /clear handled explicitly
     app.add_handler(CommandHandler("start", handle_start))
     app.add_handler(CommandHandler("clear", handle_clear))
+
+    # Button presses on an approval card. Registered before the catch-all
+    # message handlers because the tool loop is blocked waiting on it.
+    app.add_handler(CallbackQueryHandler(handle_approval_press))
 
     # All other /commands → route to Zylch command handlers
     app.add_handler(MessageHandler(filters.COMMAND, handle_slash_command))

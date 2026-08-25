@@ -10,6 +10,7 @@ import logging
 import os
 from typing import List, Optional
 
+from ..services.approval_gate import draft_approval_card, draft_updates_from_card
 from .base import Tool, ToolResult, ToolStatus
 
 logger = logging.getLogger(__name__)
@@ -778,17 +779,7 @@ class SendDraftTool(Tool):
             return data
         if not draft:
             return data
-        to_addresses = draft.get("to_addresses", [])
-        card = {
-            "draft_id": draft.get("id", data.get("draft_id")),
-            "to": ", ".join(to_addresses) if to_addresses else "",
-            "subject": draft.get("subject", "") or "",
-            "body": draft.get("body", "") or "",
-        }
-        cc_addresses = draft.get("cc_addresses") or []
-        if cc_addresses:
-            card["cc"] = ", ".join(cc_addresses)
-        return card
+        return draft_approval_card(draft, data.get("draft_id"))
 
     async def execute(
         self,
@@ -820,25 +811,43 @@ class SendDraftTool(Tool):
                 )
             draft_id = draft.get("id", draft_id)
 
-            edits = {}
-            if to is not None:
-                edits["to_addresses"] = [a.strip() for a in str(to).split(",") if a.strip()]
-            if subject is not None:
-                edits["subject"] = subject
-            if body is not None:
-                edits["body"] = body
-            if cc is not None:
-                edits["cc_addresses"] = (
-                    [a.strip() for a in str(cc).split(",") if a.strip()]
-                    if isinstance(cc, str)
-                    else list(cc)
+            # A draft is sendable unless it has already been handed to a
+            # transport. `get_draft` deliberately does NOT filter on status —
+            # hiding rows there would surprise `approval_input`, the card
+            # hydrator and `update_draft`, all of which must still see a sent
+            # draft — so the refusal lives here. Without it, calling
+            # `send_draft(draft_id=X)` twice mails the same customer twice.
+            #
+            # `failed` stays sendable, and `/email send` was widened to match.
+            # A transport error is the case where a retry by id is exactly what
+            # the operator wants, and the two paths must not disagree about
+            # which draft is sendable. Note that no live path writes `failed`
+            # any more (both send paths restore the draft to `draft` on error,
+            # which is also what keeps it visible in `drafts.list`); accepting
+            # it here is what makes rows stranded by the old behaviour
+            # recoverable instead of permanently unsendable.
+            status = (draft.get("status") or "draft").lower()
+            if status in ("sent", "sending"):
+                already = (
+                    "has already been sent"
+                    if status == "sent"
+                    else "is already being sent by another request"
                 )
-            if bcc is not None:
-                edits["bcc_addresses"] = (
-                    [a.strip() for a in str(bcc).split(",") if a.strip()]
-                    if isinstance(bcc, str)
-                    else list(bcc)
+                return ToolResult(
+                    status=ToolStatus.ERROR,
+                    data=None,
+                    error=(
+                        f"Draft {draft_id} {already}. Nothing was sent."
+                        " Compose a new draft if you meant to write again."
+                    ),
                 )
+
+            # Same translation the slash-command gate uses, so a correction
+            # made in the approval card lands on the draft identically
+            # whichever path is sending it.
+            edits = draft_updates_from_card(
+                {"to": to, "subject": subject, "body": body, "cc": cc, "bcc": bcc}
+            )
             if edits:
                 logger.debug(f"[send_draft] applying card edits keys={list(edits.keys())}")
                 self.storage.update_draft(self.owner_id, draft_id, edits)
@@ -937,11 +946,19 @@ class SendDraftTool(Tool):
             logger.error(f"Failed to send draft: {e}")
             if draft_id:
                 try:
+                    # Back to `draft`, not `failed` — the same thing `/email
+                    # send` does on the same error, so the two paths agree.
+                    # Every surface that shows drafts (`drafts.list`, `/email
+                    # list --draft`, `list_drafts`) filters `status == "draft"`
+                    # and NOTHING reads `failed`, so parking a transport error
+                    # there deleted the draft from the operator's view: an
+                    # email nobody can see is an email nobody retries.
+                    # `error_message` keeps the diagnosis.
                     self.storage.update_draft(
                         self.owner_id,
                         draft_id,
                         {
-                            "status": "failed",
+                            "status": "draft",
                             "error_message": str(e),
                         },
                     )
