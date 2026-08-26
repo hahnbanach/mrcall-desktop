@@ -586,7 +586,11 @@ marks nothing.
 A thread the engine has never synced, or one holding only our own mail, is
 **absent** from the mapping rather than present with a verdict — so a caller
 can tell "nothing is owed here" from "the engine knows nothing about this
-conversation". At most 200 thread ids per call; more is a `-32602`. Providers
+conversation". At most 200 thread ids per call; more is refused, but as
+`-32603` and not `-32602` — the cap is a plain `ValueError` raised inside the
+handler (`rpc/reply_queries.py`), and `dispatch.py` reserves `-32602` for the
+param-spec gate that runs *before* the handler. Verified live against the
+deployed engine, not read off the source. Providers
 without a thread reader (`google`, `microsoft` in this build) are refused
 loudly rather than answered with a blanket "nothing owed".
 

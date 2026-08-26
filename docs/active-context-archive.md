@@ -5,6 +5,30 @@ That file is a living snapshot and carries only `State now` / `Unresolved` /
 `Next`; anything chronological lands here instead. Newest section first.
 Nothing is discarded — only relocated, verbatim.
 
+## 2026-08-26 — Claims pruned from the living snapshot
+
+*Relocated from `active-context.md` on 2026-08-26. Each of these was true when
+written and is false now; they are kept because a reader who remembers them
+should be able to see when and why they stopped being true.*
+
+- **"Provisiond is merged to main but NOT deployed, and the app-side call at
+  'use vendor engine' time is not wired yet."** Written 2026-08-15. Superseded:
+  `zylch-provisiond.service` has been `enabled` + `active` on the VPS since
+  2026-08-17 with the `/api/provision*` Caddy route live, and the app side
+  landed the same week (`6c06657`, `f26011c`, `81e93ad`).
+- **"The newest packaged build is `v0.1.37` (2026-07-07) … Nothing from August
+  is in a packaged build."** Superseded by the `v0.1.38 … v0.1.44` release run
+  of 2026-08-16→18. The shape of the claim survives with new numbers: `v0.1.44`
+  predates the send-approval work and `emails.needs_reply`, so a packaged
+  client is still behind the daemons.
+- **"Cut a `v*` tag past `v0.1.37` so the PyInstaller-bundled sidecar carries
+  the August work — the dispatch contract gates and the `actor?`/`why?`
+  close-audit params."** Done by `v0.1.44`.
+- **"Deploy `provisiond` on the VPS and wire the app-side `POST /api/provision`
+  at 'use vendor engine' time — both explicitly out of B4's build scope."**
+  Done; what remains is a live round trip from a packaged build, which is now
+  the entry in `Next`.
+
 ## 2026-06-15 → 2026-05-20 — Recent landings
 
 *Relocated verbatim from `active-context.md` on 2026-08-04, during the

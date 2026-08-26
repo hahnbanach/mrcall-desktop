@@ -167,6 +167,21 @@ materialises) `app/docs/harness-backlog.md`.
   as a whole is stale (separate engine harness gap), but the two
   curated dirs above are the live test set.
 
+## Oversized docs — reviewed
+
+The mechanical gate names documents past `doc_max_lines` as an advisory. Each
+one gets a verdict here once, and is never asked about again. `split` means
+"cut it up and delete what no longer deserves to exist" and is work, so it
+also gets an `Open` entry; `keep whole` carries its reason on the same line
+and is a decision, not a deferral. The rule that decides: **split logs, never
+split indexes.**
+
+| doc | lines at review | verdict | date |
+|---|---|---|---|
+| docs/ipc-contract.md | 1218 | keep whole — it is the method index, retrieved by traversal; splitting it buys more reads, not fewer | 2026-08-26 |
+| docs/execution-plans/proactive-task-open.md | 575 | keep whole — one workstream's argument, read end to end | 2026-08-26 |
+| docs/execution-plans/cross-machine-transport.md | 428 | keep whole — one workstream's argument, read end to end | 2026-08-26 |
+
 ## Resolved
 
 (none yet)
