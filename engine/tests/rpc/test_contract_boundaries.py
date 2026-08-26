@@ -98,7 +98,7 @@ _MINIMAL_PAYLOAD_OVERRIDES = {
 }
 
 _SYNTHETIC_DICT_PARAMS = {"values", "updates", "context", "sources", "edited_input"}
-_SYNTHETIC_LIST_PARAMS = {"lines", "conversation_history"}
+_SYNTHETIC_LIST_PARAMS = {"lines", "conversation_history", "thread_ids"}
 _SYNTHETIC_BOOL_PARAMS = {"pinned", "approved", "action_required", "forget_session"}
 _SYNTHETIC_INT_PARAMS = {"expires_at_ms", "limit", "offset", "days", "due_at"}
 

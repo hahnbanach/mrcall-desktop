@@ -41,7 +41,7 @@ The method surface, payload shapes, and notification streams below are
 - **Owner identity**: every call resolves `owner_id` server-side from the active profile — the client never sends it.
 
 **Completeness.** The method index below covers the **whole** registry —
-all 65 methods and all 10 notification streams as of 2026-08-15 — and its
+all 66 methods and all 10 notification streams as of 2026-08-26 — and its
 parameter column is transcribed from each handler's own declared
 signature, which is also what the dispatcher enforces at runtime (see
 "Parameter contract" below). The prose sections that follow the index go
@@ -143,7 +143,8 @@ not a secret, and stays readable at top level only.
 Every registered method, with the parameters it declares and the shape it
 returns. `?` and `=default` mark optional parameters; everything else is
 required and its absence is a `-32602`. Transcribed from the engine
-registry on 2026-08-15 (65 methods).
+registry on 2026-08-15 (65 methods), plus `emails.needs_reply` added
+2026-08-26.
 
 **`account.*`**
 
@@ -200,6 +201,7 @@ registry on 2026-08-15 (65 methods).
 | `emails.list_inbox` | `limit=50, offset=0` | {"threads": [...]} |
 | `emails.list_sent` | `limit=50, offset=0` | {"threads": [...]} |
 | `emails.mark_read` | `thread_id` | {ok, affected} |
+| `emails.needs_reply` | `thread_ids` | {"threads": {tid: {...}}, asked, note} |
 | `emails.pin` | `thread_id, pinned: bool` | {ok, affected} |
 | `emails.search` | `query?, folder='inbox', limit=50, offset=0` | {"threads": [...]} |
 
@@ -563,6 +565,37 @@ far they reach:
 | `emails.delete` | **Local-only soft delete** — `deleted_at = now()` on every row so the thread drops out of inbox/sent views. Deliberately does NOT touch IMAP: the server copy is preserved so any `TaskItem` pointing at these emails stays resolvable. | `{ok, deleted}` |
 | `emails.mark_read` | `read_at = now()` on every row that lacks one. Idempotent; fire-and-forget from the renderer when the user opens a thread. | `{ok, affected}` |
 | `emails.pin` | Thread-level flag written as `pinned_at` on every row. `affected` counts rows whose value actually changed — re-pinning an already-pinned thread returns `0`. | `{ok, affected}` |
+
+### `emails.needs_reply(thread_ids)`
+
+Does our side still owe an answer? Asked per conversation, answered about
+the **newest inbound message** of each — the only message on a thread whose
+answer can still be owed. Read-only: it writes nothing, closes nothing and
+marks nothing.
+
+```jsonc
+{"threads": {"<thread-id>": {
+    "message_id": "…", "date": "2026-08-26T09:10:06", "from_email": "…",
+    "subject": "Re: Support",
+    "needs_reply": false,
+    "reason": "closing_courtesy: agrees and thanks",
+    "decided_by": "screen" | "llm" | "degraded"}},
+ "asked": 1, "note": null}
+```
+
+A thread the engine has never synced, or one holding only our own mail, is
+**absent** from the mapping rather than present with a verdict — so a caller
+can tell "nothing is owed here" from "the engine knows nothing about this
+conversation". At most 200 thread ids per call; more is a `-32602`. Providers
+without a thread reader (`google`, `microsoft` in this build) are refused
+loudly rather than answered with a blanket "nothing owed".
+
+The judgement is `zylch/utils/reply_need.py` and its docstring is the
+contract that matters: a deterministic screen that can only ever say *needs a
+reply*, then one batched LLM call over what is left, and **every** failure —
+no transport, spend cap, malformed answer, a verdict missing for one index —
+resolves to `needs_reply: true`. Nothing in this method can produce silence
+by breaking.
 
 ### `drafts.list(status?)`
 
