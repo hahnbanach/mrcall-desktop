@@ -1,10 +1,9 @@
 # MrCall Desktop
 
 Local AI assistant for business communication — email (IMAP / SMTP),
-WhatsApp, SMS, and phone (via MrCall), unified with a shared memory of
-every contact. It watches your inbox, figures out what needs doing, and
-drafts replies for you to review. Available today as a desktop app for
-**macOS on Apple Silicon**.
+WhatsApp, SMS, and phone (via MrCall), unified with a shared memory of contacts, companies and templates (contracts, offers etc). 
+It watches your inbox, figures out what needs doing, and
+drafts replies for you to review.
 
 ## What stays on your machine
 
@@ -18,10 +17,9 @@ your machine is your sign-in, used to talk to MrCall's own services
 1. **Create a (free) MrCall account** if you don't have one — the app
    signs in with the same account as the
    [web dashboard](https://mrcall.ai).
-2. **Download** the macOS (Apple Silicon) installer from
-   [Releases](https://github.com/hahnbanach/mrcall-desktop/releases) and
-   open the `.dmg`, then drag **MrCall Desktop** into **Applications**.
-3. **First launch.** The app is signed but not yet notarized, so macOS
+2. **Download** the installer from
+   [Releases](https://github.com/hahnbanach/mrcall-desktop/releases).
+3. **First launch on Mac:** the app is signed but not yet notarized, so macOS
    will refuse to open it with *"Apple could not verify…"* — the usual
    right-click → Open trick no longer works around this on current
    macOS. Instead:
@@ -38,18 +36,16 @@ That's it — the assistant runs locally while the app is open. (For the AI
 itself you pick a mode in **Settings**: your own LLM key, or MrCall
 credits.)
 
-## Keep it running when your Mac is closed
+## Keep it running when your laptop is closed
 
-Normally the assistant only works while the app is open — close it, or
-shut the Mac, and it stops. There's a one-click fix: in the app's left
+In the app's left
 sidebar, a row shows whether this profile is running on MrCall's servers,
 with an **Activate** button.
 
 Click it and, in under a minute, a copy of your profile is running on
 MrCall's servers — same assistant, same mailbox, still syncing and
 drafting replies overnight, on weekends, while you travel. Nothing to
-configure. Click the small **(i)** next to the row in the app for the
-full explanation.
+configure.
 
 If you'd rather run your own always-on server instead of using MrCall's,
 that's the advanced route: see
