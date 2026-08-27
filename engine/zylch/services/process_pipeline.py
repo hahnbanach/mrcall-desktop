@@ -8,7 +8,10 @@ import logging
 import os
 
 import sys
-from typing import Callable, Optional
+import threading
+import time
+from contextlib import contextmanager
+from typing import Callable, Iterator, Optional
 
 from rich.console import Console
 
@@ -29,7 +32,125 @@ console = Console(file=sys.stderr)
 ProgressFn = Callable[[int, str, Optional[str]], None]
 
 
+# ── Single-flight guard ─────────────────────────────────────────────
+#
+# The pipeline has three entrypoints into ONE process: the chat
+# `/update` slash command, the JSON-RPC `update.run`, and — through
+# that same `update.run` — the headless auto-update loop that
+# `rpc/server_ws.py` ticks every `AUTO_UPDATE_INTERVAL_MINUTES`.
+# Nothing kept them apart. An on-demand catch-up landing on top of a
+# scheduled tick analyses the same mail twice: the LLM spend is paid
+# twice and two writers race on the task ledger, one of them closing
+# tasks the other has just created.
+#
+# A `threading.Lock`, not an `asyncio.Lock`: `update.run` runs the
+# pipeline via `asyncio.to_thread(asyncio.run, ...)`, i.e. on a
+# different thread with its OWN event loop, so an asyncio primitive
+# acquired on one loop would be invisible to the other.
+#
+# The second caller is REFUSED, not queued. It asked for a fresh pass
+# and a pass is already producing exactly that; by the time a queued
+# run started, its answer would be the one already on the way. What it
+# must not do is silently look like it ran, so the refusal travels back
+# as `PIPELINE_BUSY_MESSAGE` and `update.run` turns it into an explicit
+# `busy` answer.
+#
+# Boundary, stated because it is a real one: the lock is per-process.
+# It cannot separate a `zylch update` CLI invocation from a running
+# `zylch serve` daemon — those are two processes. It covers the
+# overlap that actually exists on the server, where the scheduled tick
+# and every RPC caller live inside the one daemon.
+_pipeline_lock = threading.Lock()
+#: Who holds the guard, and since when (monotonic). Read for the log
+#: line the refused caller leaves behind; only ever written under the
+#: lock.
+_pipeline_holder: Optional[str] = None
+_pipeline_started_at: float = 0.0
+
+PIPELINE_BUSY_MESSAGE = (
+    "A pipeline run is already in progress — this request did NOT start a "
+    "second one. Nothing was synced, analysed or changed by it."
+)
+
+
+class PipelineBusy(RuntimeError):
+    """The single-flight guard refused a concurrent pipeline run."""
+
+
+@contextmanager
+def pipeline_single_flight(caller: str) -> Iterator[None]:
+    """Admit one pipeline run; raise :class:`PipelineBusy` for the rest.
+
+    Non-blocking by construction — a caller that cannot have the guard
+    learns so immediately instead of waiting out a run whose result it
+    was going to get anyway.
+    """
+    global _pipeline_holder, _pipeline_started_at
+
+    if not _pipeline_lock.acquire(blocking=False):
+        held_by = _pipeline_holder or "another caller"
+        held_for = time.monotonic() - _pipeline_started_at if _pipeline_started_at else 0.0
+        raise PipelineBusy(
+            f"pipeline already running (started by {held_by} "
+            f"{held_for:.0f}s ago); {caller} refused"
+        )
+    _pipeline_holder = caller
+    _pipeline_started_at = time.monotonic()
+    try:
+        yield
+    finally:
+        _pipeline_holder = None
+        _pipeline_started_at = 0.0
+        _pipeline_lock.release()
+
+
+def pipeline_running_for() -> Optional[float]:
+    """Seconds the current pipeline run has been going, or None if idle.
+
+    Observational only — never gate a run on this, because the answer
+    can change between the read and the act. :func:`pipeline_single_flight`
+    is the one that decides.
+    """
+    if not _pipeline_started_at:
+        return None
+    return time.monotonic() - _pipeline_started_at
+
+
 async def handle_process(
+    args: list,
+    config: ToolConfig,
+    owner_id: str,
+    progress: Optional[ProgressFn] = None,
+    errors_out: Optional[list] = None,
+) -> str:
+    """Run the full pipeline once, or refuse if one is already running.
+
+    Thin single-flight wrapper around :func:`_run_pipeline`, which holds
+    the actual sync → memory → tasks chain. When another run holds the
+    guard this returns :data:`PIPELINE_BUSY_MESSAGE` verbatim — the
+    sentinel `update.run` compares against to answer `busy` — and does
+    no work at all. `--help` is answered before the guard, so asking
+    what the command does never depends on whether it is running.
+    """
+    if "--help" in args:
+        return await _run_pipeline(args, config, owner_id, progress, errors_out)
+
+    caller = f"{threading.current_thread().name}"
+    try:
+        with pipeline_single_flight(caller):
+            return await _run_pipeline(args, config, owner_id, progress, errors_out)
+    except PipelineBusy as e:
+        logger.warning(f"[/process] {e}")
+        console.print(f"[yellow]{PIPELINE_BUSY_MESSAGE}[/yellow]")
+        if progress is not None:
+            try:
+                progress(100, "Already running — no second pass started", None)
+            except Exception as cb_err:
+                logger.warning(f"[/process] progress callback failed: {cb_err}")
+        return PIPELINE_BUSY_MESSAGE
+
+
+async def _run_pipeline(
     args: list,
     config: ToolConfig,
     owner_id: str,
@@ -39,7 +160,8 @@ async def handle_process(
     """Run the full pipeline: sync, memory extraction, task detection.
 
     Each step runs to completion before starting the next.
-    Does not use background jobs.
+    Does not use background jobs. Callers come through
+    :func:`handle_process`, which is what keeps two runs apart.
 
     Usage:
         /process           — full pipeline

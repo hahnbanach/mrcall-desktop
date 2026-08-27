@@ -281,7 +281,12 @@ async def _auto_update_loop() -> None:
                 except Exception as e:
                     logger.warning(f"[auto-update] session refresh failed (non-fatal): {e}")
                 result = await update_run({}, _notify)
-                if isinstance(result, dict) and result.get("success"):
+                if isinstance(result, dict) and result.get("busy"):
+                    # An on-demand caller (e.g. an operator catch-up) is
+                    # already running the pipeline. Nothing failed; this
+                    # tick simply had nothing left to do.
+                    logger.info("[auto-update] tick skipped — a pipeline run is already in flight")
+                elif isinstance(result, dict) and result.get("success"):
                     logger.info("[auto-update] tick OK")
                 else:
                     errs = result.get("errors") if isinstance(result, dict) else result

@@ -1205,12 +1205,19 @@ async def update_run(params: Dict[str, Any], notify: NotifyFn) -> Any:
     Return shape:
         {
             "success": True,
+            "busy": False,
             "summary": "<markdown diff>",
             "updated_tasks": {"created": [...], "closed": [...],
                               "updated": [...]},
         }
+
+    `busy` is True — with `success` False and an empty diff — when the
+    pipeline's single-flight guard refused this call because a run was
+    already in flight (typically the headless auto-update tick). The
+    caller asked for a fresh pass and one is already producing it;
+    nothing here ran, and saying so beats reporting "no changes".
     """
-    from zylch.services.process_pipeline import handle_process
+    from zylch.services.process_pipeline import PIPELINE_BUSY_MESSAGE, handle_process
     from zylch.storage.database import get_session
     from zylch.storage.models import TaskItem
     from zylch.storage.storage import Storage
@@ -1276,14 +1283,26 @@ async def update_run(params: Dict[str, Any], notify: NotifyFn) -> Any:
     # writes to stderr, so we no longer need to swap sys.stdout.
     try:
         config = ToolConfig.from_settings()
-        # We intentionally discard the inner summary — it is the full
-        # open-tasks dump we are replacing with the diff below.
-        await asyncio.to_thread(
+        # The inner summary is the full open-tasks dump, which the diff
+        # below replaces — EXCEPT for the one value that is not a
+        # summary at all: the single-flight sentinel, which says this
+        # call never ran the pipeline.
+        pipeline_result = await asyncio.to_thread(
             asyncio.run,
             handle_process(
                 [], config, owner_id, progress=_pipeline_progress, errors_out=pipeline_errors
             ),
         )
+        if pipeline_result == PIPELINE_BUSY_MESSAGE:
+            logger.info("[rpc] update.run refused — a pipeline run is already in flight")
+            _emit(100, "Already running")
+            return {
+                "success": False,
+                "busy": True,
+                "summary": PIPELINE_BUSY_MESSAGE,
+                "errors": [],
+                "updated_tasks": {"created": [], "closed": [], "updated": []},
+            }
     except Exception as e:
         # Unexpected crash outside the per-stage guards: treat it as a
         # fatal pipeline error and surface it below, rather than raising a
@@ -1351,6 +1370,7 @@ async def update_run(params: Dict[str, Any], notify: NotifyFn) -> Any:
             summary += f"\n\n→ {lead['action']}"
         return {
             "success": False,
+            "busy": False,
             "summary": summary,
             "errors": humanized,
             "updated_tasks": diff["updated_tasks"],
@@ -1359,6 +1379,7 @@ async def update_run(params: Dict[str, Any], notify: NotifyFn) -> Any:
     _emit(100, "Done")
     return {
         "success": True,
+        "busy": False,
         "summary": diff["summary"],
         "errors": humanized,  # non-fatal warnings only (e.g. WhatsApp), if any
         "updated_tasks": diff["updated_tasks"],
@@ -2150,6 +2171,15 @@ for _name, _fn in _CAMPAIGN_METHODS.items():
 from zylch.rpc.draft_queries import METHODS as _DRAFT_QUERY_METHODS  # noqa: E402
 
 for _name, _fn in _DRAFT_QUERY_METHODS.items():
+    if _name in METHODS:
+        raise RuntimeError(f"Duplicate RPC method name: {_name}")
+    METHODS[_name] = _fn
+
+# Engine drafts, write side — `drafts.discard` retires one draft whose
+# conversation has moved past it. Owner-scoped; sends nothing.
+from zylch.rpc.draft_actions import METHODS as _DRAFT_ACTION_METHODS  # noqa: E402
+
+for _name, _fn in _DRAFT_ACTION_METHODS.items():
     if _name in METHODS:
         raise RuntimeError(f"Duplicate RPC method name: {_name}")
     METHODS[_name] = _fn

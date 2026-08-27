@@ -189,6 +189,7 @@ registry on 2026-08-15 (65 methods), plus `emails.needs_reply` added
 
 | Method | Declared parameters | Returns |
 |---|---|---|
+| `drafts.discard` | `draft_id` | {ok, discarded, draft_id, reason?} |
 | `drafts.list` | `status?` | list of draft dicts |
 
 **`emails.*`**
@@ -291,7 +292,7 @@ registry on 2026-08-15 (65 methods), plus `emails.needs_reply` added
 
 | Method | Declared parameters | Returns |
 |---|---|---|
-| `update.run` | — | pipeline result with a DIFF summary |
+| `update.run` | — | {success, busy, summary, errors, updated_tasks} — a DIFF summary |
 
 **`usage.*`**
 
@@ -607,6 +608,34 @@ Read-only enumeration of composed reply/outreach drafts for the owner,
 ordered `created_at` descending, each row's `to_dict()`. `status` defaults
 to `"draft"` (the unsent ones). Returns a bare array. Sends nothing.
 
+### `drafts.discard(draft_id)`
+
+Retires ONE engine draft, owner-scoped: the row is **deleted**, so it
+leaves `drafts.list`, `/email list --draft` and the UI drafts count
+together. This is the only way out of `status='draft'` other than being
+sent, and it exists so a draft the conversation has moved past (the
+customer wrote again, someone answered another way) can be taken off the
+operator's screen.
+
+Deletion rather than a new terminal status: `drafts.status` carries a
+SQLite `CHECK (status IN ('draft','sending','sent','failed'))` baked into
+every existing profile database, and `storage/database.py` migrates by
+`ALTER TABLE ADD COLUMN` only. The chat `delete_draft` tool already
+retires drafts from the same table the same way.
+
+Refusals are answers, not errors — `{ok: false, discarded: false,
+reason}` with `reason` one of:
+
+| `reason` | When |
+|---|---|
+| `not_found` | no such draft for this owner (an id alone never reaches another owner's row) |
+| `send_in_flight` | `status == "sending"` — a transport is holding it |
+| `already_sent` | `status == "sent"` — the row is the record of what left the mailbox |
+
+`failed` stays discardable, matching `send_draft` keeping it sendable. On
+success the answer echoes the discarded draft's `to` and `subject` so the
+caller can log what it retired. Missing `draft_id` is a `-32602`.
+
 ### `account.balance()`
 
 Forwards to `mrcall-agent`'s `GET /api/desktop/llm/balance` with the
@@ -897,6 +926,36 @@ Notification stream — `agents.train.progress`:
 ```
 
 Backs the "Train assistant" card in `Update.tsx` (above the Update button). 30-minute RPC timeout in `app/src/preload/index.ts`.
+
+### `update.run()`
+
+The full pipeline — sync, memory extraction, task detection — with the
+diff of what THIS run changed instead of a dump of every open task.
+
+```jsonc
+{
+  "success": true,
+  "busy": false,
+  "summary": "<markdown diff>",
+  "errors": [ /* humanized, non-fatal warnings when success is true */ ],
+  "updated_tasks": { "created": [], "closed": [], "updated": [] }
+}
+```
+
+**Only one pipeline run happens at a time per process.** The chat
+`/update` command, this method, and the headless auto-update tick
+(`rpc/server_ws.py`, every `AUTO_UPDATE_INTERVAL_MINUTES`) all enter
+`process_pipeline.handle_process`, which admits one caller and refuses
+the rest — the alternative is the same mail analysed twice, the LLM
+spend paid twice, and two writers on the task ledger. The guard is a
+`threading.Lock` because `update.run` runs the pipeline on its own
+thread with its own event loop; it is per-process, so a separate
+`zylch update` CLI invocation is outside it.
+
+A refused call answers `busy: true`, `success: false`, an empty
+`updated_tasks` and no `errors` — nothing ran and nothing failed. A
+caller that treats it as a completed pass would present stale state as
+fresh; the auto-update loop logs it as a skipped tick.
 
 ### `sync.run(days_back?)`
 
