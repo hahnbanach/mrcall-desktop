@@ -193,14 +193,46 @@ def test_a_draft_deleted_between_the_read_and_the_delete_is_not_claimed(wired):
 # ─── how the engine exposes it ────────────────────────────────────────
 
 
+def _dispatch(params):
+    """Drive the real dispatcher, not the handler — the param gates the
+    docstring declares only exist on this path."""
+    import json
+
+    from zylch.rpc.dispatch import dispatch_raw
+
+    request = json.dumps(
+        {"jsonrpc": "2.0", "id": 1, "method": "drafts.discard", "params": params}
+    )
+    return asyncio.run(dispatch_raw(request, _notify))
+
+
 def test_the_method_is_registered_under_its_wire_name():
     from zylch.rpc.methods import METHODS
 
     assert METHODS["drafts.discard"] is draft_actions.drafts_discard
 
 
-def test_the_wire_contract_takes_draft_id_and_nothing_else():
-    from zylch.rpc.param_spec import ACCEPTED_PARAMS, REQUIRED_PARAMS
+def test_the_dispatcher_reaches_the_handler(wired):
+    store = wired([_draft("d1")])
+    assert _dispatch({"draft_id": "d1"})["result"]["discarded"] is True
+    assert store.drafts == {}
 
-    assert ACCEPTED_PARAMS["drafts.discard"] == {"draft_id"}
-    assert REQUIRED_PARAMS["drafts.discard"] == {"draft_id"}
+
+def test_a_call_without_a_draft_id_is_refused_before_the_handler_runs(wired):
+    from zylch.rpc.dispatch import INVALID_PARAMS
+
+    store = wired([_draft("d1")])
+    error = _dispatch({})["error"]
+    assert error["code"] == INVALID_PARAMS
+    assert store.delete_calls == []
+
+
+def test_an_unknown_parameter_is_refused_rather_than_dropped(wired):
+    """`drafts.discard(force=True)` must not silently discard anyway."""
+    from zylch.rpc.dispatch import INVALID_PARAMS
+
+    store = wired([_draft("d1", status="sent")])
+    error = _dispatch({"draft_id": "d1", "force": True})["error"]
+    assert error["code"] == INVALID_PARAMS
+    assert "force" in error["message"]
+    assert store.delete_calls == []
