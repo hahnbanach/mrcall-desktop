@@ -1,6 +1,6 @@
 ---
-doc_baseline_commit: ba8c0aa
-doc_baseline_date: 2026-08-15
+doc_baseline_commit: 6b94746
+doc_baseline_date: 2026-08-28
 ---
 
 # Active Context — Cross-cutting
