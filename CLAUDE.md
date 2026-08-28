@@ -6,6 +6,15 @@
 
 <!-- orientation ends -->
 
+<!-- doc-scope:start -->
+Scope: the thin index of this monorepo — what each of the three trees owns, and
+the cross-cutting facts a session needs before it routes anywhere (identity,
+LLM billing modes, the naming rename in flight). Engine detail is
+[`engine/CLAUDE.md`](engine/CLAUDE.md), app detail
+[`app/CLAUDE.md`](app/CLAUDE.md), cross-cutting volatile state
+[`docs/active-context.md`](docs/active-context.md).
+<!-- doc-scope:end -->
+
 **MrCall Desktop** — local AI assistant for business communication. This
 is a **monorepo**: a Python sidecar (the engine) and an Electron + React
 frontend (the app), shipped together as a single desktop application

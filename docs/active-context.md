@@ -1,19 +1,20 @@
 ---
 doc_baseline_commit: ba8c0aa
 doc_baseline_date: 2026-08-15
-description: |
-  Cross-cutting state of mrcall-desktop — things that span engine ↔ app
-  or the repo as a whole (JSON-RPC contract drift, release pipeline,
-  brand/rename rollout, monorepo conventions). Engine-only state lives
-  in `../engine/docs/active-context.md`; app-only state in
-  `../app/docs/active-context.md`.
-
-  This is a LIVING SNAPSHOT, not a changelog: the only sections are
-  `State now`, `Unresolved`, `Next`, and it targets ≤ ~120 lines.
-  Chronological narrative moves to `active-context-archive.md`.
 ---
 
 # Active Context — Cross-cutting
+
+<!-- doc-scope:start -->
+Scope: the cross-cutting volatile state of mrcall-desktop — what spans
+engine ↔ app or describes the repo as a whole (the JSON-RPC contract, the
+release pipeline, the brand rename, monorepo conventions). Engine-only state
+lives in [`../engine/docs/active-context.md`](../engine/docs/active-context.md),
+durable cross-cutting facts in [`../CLAUDE.md`](../CLAUDE.md) and the documents
+[`README.md`](README.md) routes to, pruned narrative in
+[`active-context-archive.md`](active-context-archive.md). A living snapshot of
+what is *current*, targeting ≤ ~120 lines.
+<!-- doc-scope:end -->
 
 ## State now
 

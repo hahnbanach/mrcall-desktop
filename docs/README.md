@@ -1,5 +1,13 @@
 # MrCall Desktop — monorepo docs
 
+<!-- doc-scope:start -->
+Scope: the router for the documents under `docs/` — the ones that span
+`engine/` and `app/` or describe the repository as a whole. It navigates and
+nothing else: the repo's layout, roles and ownership live only in the index
+file ([`../CLAUDE.md`](../CLAUDE.md)), and cross-cutting volatile state only in
+[`active-context.md`](active-context.md).
+<!-- doc-scope:end -->
+
 This directory holds documentation that **spans the whole monorepo** —
 things that touch both `engine/` and `app/`, or describe the repository
 as a whole.
