@@ -1,5 +1,11 @@
 # CLAUDE.md
 
+**Stack**: Electron + React (app), Python 3.11+ (engine), SQLite
+**Entry point**: `engine/` (Python sidecar) and `app/` (Electron + React) — each has its own CLAUDE.md
+**Do not break**: The Firebase ID token is never persisted to disk; profiles are keyed by the immutable Firebase UID (`~/.zylch/profiles/<firebase_uid>/`), never by email
+
+<!-- orientation ends -->
+
 **MrCall Desktop** — local AI assistant for business communication. This
 is a **monorepo**: a Python sidecar (the engine) and an Electron + React
 frontend (the app), shipped together as a single desktop application
