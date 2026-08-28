@@ -10,6 +10,7 @@ Scope: the cross-cutting volatile state of mrcall-desktop — what spans
 engine ↔ app or describes the repo as a whole (the JSON-RPC contract, the
 release pipeline, the brand rename, monorepo conventions). Engine-only state
 lives in [`../engine/docs/active-context.md`](../engine/docs/active-context.md),
+app-only state in [`../app/docs/active-context.md`](../app/docs/active-context.md),
 durable cross-cutting facts in [`../CLAUDE.md`](../CLAUDE.md) and the documents
 [`README.md`](README.md) routes to, pruned narrative in
 [`active-context-archive.md`](active-context-archive.md). A living snapshot of
@@ -37,7 +38,9 @@ what is *current*, targeting ≤ ~120 lines.
 
 **Solve loop is opt-in + self-closing.** Open from Tasks no longer auto-fires `tasks.solve`; the user clicks the lightbulb on the chat composer to trigger the agent loop with optional typed instructions. After a mutating solve the engine auto-runs `reanalyze_task` and decorates the `done` event with `auto_reanalyzed = {action, reason}`; the renderer flips the conversation to read-only on `closed` and refreshes `tasks.list`. Outbound `send_email`/`send_whatsapp` mirror their row into the local store so reanalyze sees the user's reply without waiting for IMAP-Sent / WA echo.
 
-**Live verification status.** Engine path verified end-to-end via `npm run dev` against the production `mrcall-agent` proxy (real credits consumption, real reanalyze, real Solve). The vendor daemons run the newest code: `/home/mrcalld/mrcall-desktop` is at `810d7a4` and all five `zylch-server@` units are active. The newest packaged build is **`v0.1.44` (2026-08-18)**, a GitHub Release carrying one asset, `MrCall.Desktop-0.1.44-arm64.dmg` — no Windows installer, which is the intended behaviour since Windows became opt-in (`3ec5d36`). The tag resolves to `f2fcfd7`, so it carries the August dispatch contract gates and Phase B, but **not** the send-approval work or `emails.needs_reply` — both post-date it (`c341963` is not an ancestor of `v0.1.44`). A DMG user therefore still gets the ungated slash-command dispatchers. Continue-with-Google signin paths, cross-channel `ThreadPanel`, and Mac packaged-bundle bring-up all still pending.
+**A draft can be retired, and only one pipeline runs at a time — coded and unit-tested, NOT live-verified** (`11e8db5` + `9c72683`, on `main`, unpushed). Two additions to the RPC surface that an external operator needs and could not fake. `drafts.discard(draft_id)` (`engine/zylch/rpc/draft_actions.py`) retires ONE engine draft for the calling owner: it DELETES the row, because every listing filters `status == 'draft'` and a new terminal status would need a full table rebuild on every existing profile database. `sending` and `sent` are refused with `{ok: false, reason}` — an answer about the mailbox, not a transport error — matching what `send_draft` refuses; `failed` stays discardable for the same reason it stays sendable. Separately, `handle_process` admits one pipeline run at a time, so an on-demand catch-up landing on a scheduled tick can no longer analyse the same mail twice; a refused `update.run` answers `busy: true`, `success: false` and an empty diff, which a caller cannot confuse with a pass that found nothing. Contract: [`ipc-contract.md`](ipc-contract.md). Consumer: cs-kernel `v0.31.0` (tagged locally, unpushed) drives both surfaces through `cs catchup` and its draft-retire path, and degrades until this engine is deployed.
+
+**Live verification status.** Engine path verified end-to-end via `npm run dev` against the production `mrcall-agent` proxy (real credits consumption, real reanalyze, real Solve). **The vendor daemons are behind `main`**: `/home/mrcalld/mrcall-desktop` is at `810d7a4`, which predates both `11e8db5` and `9c72683`, so neither `drafts.discard` nor the single-flight guard is reachable over the wire yet; all five `zylch-server@` units are active on that older revision. Deploying is step 1 of the cross-repo rollout plan, meta-repo `~/hb/docs/execution-plans/2026-08-27-cs-review-fresh-state.md`, and waits on Mario's go. The newest packaged build is **`v0.1.44` (2026-08-18)**, a GitHub Release carrying one asset, `MrCall.Desktop-0.1.44-arm64.dmg` — no Windows installer, which is the intended behaviour since Windows became opt-in (`3ec5d36`). The tag resolves to `f2fcfd7`, so it carries the August dispatch contract gates and Phase B, but **not** the send-approval work or `emails.needs_reply` — both post-date it (`c341963` is not an ancestor of `v0.1.44`). A DMG user therefore still gets the ungated slash-command dispatchers. Continue-with-Google signin paths, cross-channel `ThreadPanel`, and Mac packaged-bundle bring-up all still pending.
 
 ### Where stable state lives
 
@@ -82,12 +85,13 @@ what is *current*, targeting ≤ ~120 lines.
 
 ### Queued
 
-1. Cut a `v*` tag past `v0.1.44` so the PyInstaller-bundled sidecar carries the send-approval work (`c341963`, `343540a`) and `emails.needs_reply` (`1139da2`). Until then a packaged client's slash-command dispatchers are still ungated, and `send_draft` there still accepts a missing `draft_id`.
-2. Wire `humanize_error` into the remaining RPC surfaces that still raise raw `httpx`/`imaplib` tracebacks (`rpc/account.py:account.balance`, Settings test-connection, chat tools, solve tools).
-3. Add the `GOOGLE_SIGNIN_CLIENT_SECRET` repo secret at *Settings → Secrets and variables → Actions*. Until it exists, packaged builds with Google signin fail at the materialise step.
-4. Configure `GOOGLE_CALENDAR_CLIENT_ID` in profile Settings → "Connect Google Calendar" → confirm consent + token persistence + self-healing recovery path.
-5. Wire `engine/zylch/tools/calendar_sync.py` to the new `provider='google_calendar'` tokens.
-6. Open **MrCall pipeline parity Livello B** workstream — phone-call memory ingestion. Plan: [`execution-plans/mrcall-pipeline-parity.md`](execution-plans/mrcall-pipeline-parity.md).
+1. Deploy the five `zylch-server@` daemons past `810d7a4` (`scripts/server/update-daemons.sh`) so `drafts.discard` and the single-flight guard exist over the wire, then live-verify both against the support@ daemon. Step 1 of meta-repo `~/hb/docs/execution-plans/2026-08-27-cs-review-fresh-state.md`; cs-kernel `v0.31.0` degrades until it happens. Timing is Mario's.
+2. Cut a `v*` tag past `v0.1.44` so the PyInstaller-bundled sidecar carries the send-approval work (`c341963`, `343540a`), `emails.needs_reply` (`1139da2`), and the draft-retire + single-flight pair (`11e8db5`, `9c72683`). Until then a packaged client's slash-command dispatchers are still ungated, and `send_draft` there still accepts a missing `draft_id`.
+3. Wire `humanize_error` into the remaining RPC surfaces that still raise raw `httpx`/`imaplib` tracebacks (`rpc/account.py:account.balance`, Settings test-connection, chat tools, solve tools).
+4. Add the `GOOGLE_SIGNIN_CLIENT_SECRET` repo secret at *Settings → Secrets and variables → Actions*. Until it exists, packaged builds with Google signin fail at the materialise step.
+5. Configure `GOOGLE_CALENDAR_CLIENT_ID` in profile Settings → "Connect Google Calendar" → confirm consent + token persistence + self-healing recovery path.
+6. Wire `engine/zylch/tools/calendar_sync.py` to the new `provider='google_calendar'` tokens.
+7. Open **MrCall pipeline parity Livello B** workstream — phone-call memory ingestion. Plan: [`execution-plans/mrcall-pipeline-parity.md`](execution-plans/mrcall-pipeline-parity.md).
 
 ### Deferred (nice-to-have)
 

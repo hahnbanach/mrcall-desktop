@@ -5,6 +5,16 @@ That file is a living snapshot and carries only `State now` / `Unresolved` /
 `Next`; anything chronological lands here instead. Newest section first.
 Nothing is discarded — only relocated, verbatim.
 
+## 2026-08-28 — Claims pruned from the living snapshot
+
+*Relocated from `active-context.md` on 2026-08-28.*
+
+- **"The vendor daemons run the newest code: `/home/mrcalld/mrcall-desktop` is
+  at `810d7a4` and all five `zylch-server@` units are active."** Written
+  2026-08-26. Superseded the moment `11e8db5` and `9c72683` landed on `main`:
+  the sha and the five active units are still accurate, but they are no longer
+  the newest code, and the gap is now what the entry in `Next` is about.
+
 ## 2026-08-26 — Claims pruned from the living snapshot
 
 *Relocated from `active-context.md` on 2026-08-26. Each of these was true when
