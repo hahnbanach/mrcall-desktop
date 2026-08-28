@@ -1894,6 +1894,42 @@ async def settings_get(params: Dict[str, Any], notify: NotifyFn) -> Any:
     return {"values": out}
 
 
+async def settings_get_secret(params: Dict[str, Any], notify: NotifyFn) -> Any:
+    """settings.get_secret(key) -> {key, value} for ONE secret field.
+
+    The deliberate counterpart to `settings.get`'s mask, not a hole in it.
+    `settings.get` returns every key at once and is what a UI renders, so a
+    secret in that payload would leak onto a screen or into a log; here the
+    caller names one key and gets its raw value, and nothing is logged but
+    the key and whether it was set.
+
+    Who may call it is decided one layer up: every websocket connection is
+    gated `token.sub == OWNER_ID` (`server_ws.py`), so the only caller that
+    reaches this is the profile's own owner — who can already read and send
+    this mailbox's mail through the engine. What it adds is a credential
+    that outlives the token, so it stays deliberate: one key per call,
+    secrets only, empty when unset.
+
+    Its reason to exist is `cs init` on a machine that is not the engine's:
+    a clone needs the mailbox's own IMAP/SMTP credential (Gmail Sent is its
+    dedup ground truth, and fixed-template bulk is cs-owned), and the
+    alternative was asking a human to paste an app password.
+    """
+    from zylch.services.settings_io import read_env
+    from zylch.services.settings_schema import SECRET_KEYS
+
+    key = str(params.get("key") or "").strip()
+    if not key:
+        raise ValueError("settings.get_secret requires 'key'")
+    if key not in SECRET_KEYS:
+        raise ValueError(
+            f"{key!r} is not a secret field — read it with settings.get"
+        )
+    value = read_env().get(key, "")
+    logger.info(f"[rpc] settings.get_secret {key} -> {'set' if value else 'unset'}")
+    return {"key": key, "value": value}
+
+
 _EMAIL_REGEX = None
 
 
@@ -2104,6 +2140,7 @@ METHODS: Dict[str, Callable[[Dict[str, Any], NotifyFn], Awaitable[Any]]] = {
     "emails.mark_read": emails_mark_read,
     "settings.schema": settings_schema,
     "settings.get": settings_get,
+    "settings.get_secret": settings_get_secret,
     "settings.update": settings_update,
     "profiles.create": profiles_create,
 }

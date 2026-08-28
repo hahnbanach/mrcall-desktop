@@ -95,6 +95,11 @@ _MINIMAL_PAYLOAD_EXEMPT = {
 _MINIMAL_PAYLOAD_OVERRIDES = {
     "tasks.snooze": lambda _ctx: {"days": 1},
     "campaign.add_contact": lambda ctx: {"campaign_id": ctx["campaign_id"]},
+    # `key` must name a real secret field — refusing anything else IS the
+    # method's contract, so the synthetic probe string is a legitimate
+    # rejection rather than a dispatcher problem. An override keeps the
+    # method covered here instead of exempting it from coverage.
+    "settings.get_secret": lambda _ctx: {"key": "EMAIL_PASSWORD"},
 }
 
 _SYNTHETIC_DICT_PARAMS = {"values", "updates", "context", "sources", "edited_input"}
