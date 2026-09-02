@@ -5,7 +5,12 @@ The old SQLite-based ZylchMemory system has been removed.
 """
 
 from .config import MemoryConfig
-from .embeddings import EmbeddingEngine
+from .embeddings import (
+    EmbeddingEngine,
+    engine_cache_key,
+    get_shared_engine,
+    reset_shared_engines,
+)
 from .blob_storage import BlobStorage
 from .hybrid_search import (
     HybridSearchEngine,
@@ -23,6 +28,9 @@ from .pattern_detection import detect_pattern
 __all__ = [
     "MemoryConfig",
     "EmbeddingEngine",
+    "engine_cache_key",
+    "get_shared_engine",
+    "reset_shared_engines",
     "BlobStorage",
     "HybridSearchEngine",
     "InMemoryVectorIndex",

@@ -2,8 +2,9 @@
 
 import logging
 import os
+import threading
 from pathlib import Path
-from typing import List, Union
+from typing import Dict, List, Tuple, Union
 
 import numpy as np
 
@@ -42,6 +43,10 @@ class EmbeddingEngine:
         self.config = config
         self.model_name = config.embedding_model
         self.dim = config.embedding_dim
+        # One engine is shared process-wide (see `get_shared_engine`) and
+        # its `encode` is reachable from worker threads, while the ONNX
+        # session underneath makes no thread-safety promise. Serialize.
+        self._encode_lock = threading.RLock()
 
         cache_dir = _persistent_cache_dir()
         logger.info(
@@ -84,16 +89,18 @@ class EmbeddingEngine:
         """
         if isinstance(text, str):
             logger.debug(f"[EmbeddingEngine] encode single text " f"(len={len(text)})")
-            embedding = list(self.model.embed([text]))[0]
+            with self._encode_lock:
+                embedding = list(self.model.embed([text]))[0]
             return np.array(embedding, dtype=np.float32)
         else:
             logger.debug(f"[EmbeddingEngine] encode batch " f"(n={len(text)})")
-            embeddings = list(
-                self.model.embed(
-                    text,
-                    batch_size=self.config.batch_size,
+            with self._encode_lock:
+                embeddings = list(
+                    self.model.embed(
+                        text,
+                        batch_size=self.config.batch_size,
+                    )
                 )
-            )
             return np.array(embeddings, dtype=np.float32)
 
     def similarity(
@@ -158,3 +165,50 @@ class EmbeddingEngine:
             Embedding vector
         """
         return np.frombuffer(data, dtype=np.float32)
+
+
+# ─── Process-wide engine cache ────────────────────────────────────────
+#
+# Building a `TextEmbedding` loads an ONNX model and runs a warm-up
+# encode — seconds of work for an object that holds no per-caller state.
+# Every construction site goes through `get_shared_engine` so a process
+# pays that cost once per model, not once per chat turn.
+
+_shared_engines: Dict[Tuple[str, int, int], "EmbeddingEngine"] = {}
+_shared_engines_lock = threading.Lock()
+
+
+def engine_cache_key(config: MemoryConfig) -> Tuple[str, int, int]:
+    """Every config field that changes what an engine produces.
+
+    The model name alone is not enough: `embedding_dim` decides the
+    dimensionality check `__init__` performs, and `batch_size` decides
+    how a batch encode is chunked.
+    """
+    return (config.embedding_model, config.embedding_dim, config.batch_size)
+
+
+def get_shared_engine(config: MemoryConfig) -> "EmbeddingEngine":
+    """Return the process-wide engine matching ``config``.
+
+    Args:
+        config: Memory configuration. Configs that agree on model,
+            dimensionality and batch size share one engine.
+
+    Returns:
+        A shared, ready `EmbeddingEngine`.
+    """
+    key = engine_cache_key(config)
+    with _shared_engines_lock:
+        engine = _shared_engines.get(key)
+        if engine is None:
+            engine = EmbeddingEngine(config)
+            _shared_engines[key] = engine
+            logger.info(f"[EmbeddingEngine] shared engine cached for {key}")
+        return engine
+
+
+def reset_shared_engines() -> None:
+    """Drop the cached engines. For tests only."""
+    with _shared_engines_lock:
+        _shared_engines.clear()

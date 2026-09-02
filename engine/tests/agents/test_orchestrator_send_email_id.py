@@ -222,6 +222,65 @@ def test_an_expired_microsoft_token_leaves_the_draft_sendable(fresh_storage):
     assert _statuses(fresh_storage, target, decoy) == ["draft", "draft"]
 
 
+def test_a_draft_already_sent_is_named_as_sent_not_as_in_flight(fresh_storage):
+    """A lost claim has two very different causes and the operator needs the
+    right one: somebody is mailing this draft right now, or the mail is
+    already out."""
+    target, _decoy = _two_drafts(fresh_storage)
+    fresh_storage.mark_draft_sent(OWNER, target["id"], "already-sent-id")
+    agent = _orchestrator(fresh_storage, _compose_result(target["id"]))
+
+    gmail = MagicMock()
+    with (
+        patch("zylch.api.token_storage.get_provider", return_value="google"),
+        patch("zylch.api.token_storage.get_email", return_value="me@example.com"),
+        patch("zylch.tools.gmail.GmailClient", return_value=gmail),
+    ):
+        out = _run(agent._handle_send_email())
+
+    gmail.send_message.assert_not_called()
+    assert "already been sent" in out
+    assert "being sent by another request" not in out
+
+
+def test_a_lost_claim_does_not_persist_the_approval_card_edits(fresh_storage):
+    """The edits are written INSIDE the claim. A caller that lost the race
+    must not rewrite the body of a row another request is mailing."""
+    target, _decoy = _two_drafts(fresh_storage)
+    # Somebody else is already sending it.
+    assert fresh_storage.claim_draft_for_send(OWNER, target["id"]) is True
+
+    async def _approve_with_edit(tool_use_id, tool_name, tool_input):
+        return (True, {"body": "EDITED BODY", "to": "hijack@example.com"})
+
+    session_state = SessionState(owner_id=OWNER)
+    session_state.enter_task_mode("task-1", {"title": "reply"})
+    session_state.set_last_action_result(_compose_result(target["id"]))
+    with patch("zylch.agents.task_orchestrator_agent.make_llm_client", return_value=MagicMock()):
+        from zylch.agents.task_orchestrator_agent import TaskOrchestratorAgent
+
+        agent = TaskOrchestratorAgent(
+            session_state=session_state,
+            owner_id=OWNER,
+            storage=fresh_storage,
+            approval_callback=_approve_with_edit,
+        )
+
+    gmail = MagicMock()
+    with (
+        patch("zylch.api.token_storage.get_provider", return_value="google"),
+        patch("zylch.api.token_storage.get_email", return_value="me@example.com"),
+        patch("zylch.tools.gmail.GmailClient", return_value=gmail),
+    ):
+        out = _run(agent._handle_send_email())
+
+    gmail.send_message.assert_not_called()
+    assert "already being sent" in out
+    stored = fresh_storage.get_draft(OWNER, target["id"])
+    assert stored["body"] == "Target body."
+    assert stored["to_addresses"] == ["target@example.com"]
+
+
 def test_send_email_tool_declares_no_guessable_draft_id(fresh_storage):
     """The model is never shown a draft id in this flow, so the schema must not
     offer it a field to invent one into."""

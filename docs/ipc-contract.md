@@ -629,7 +629,7 @@ reason}` with `reason` one of:
 | `reason` | When |
 |---|---|
 | `not_found` | no such draft for this owner (an id alone never reaches another owner's row) |
-| `send_in_flight` | `status == "sending"` — a transport is holding it |
+| `send_in_flight` | `status == "sending"` **and the claim is still fresh** — a transport is holding it right now. Past that draft's own claim window (`storage.send_claim_window_minutes`, which grows with the recipient count because the SMTP worst case does) the claim counts as abandoned and the discard succeeds: nothing else surfaces a stranded `sending` row, so refusing forever would make it unreachable. |
 | `already_sent` | `status == "sent"` — the row is the record of what left the mailbox |
 
 `failed` stays discardable, matching `send_draft` keeping it sendable. On
@@ -1104,6 +1104,51 @@ fixed recipient, a rewritten body) and is applied before the tool runs;
 a non-dict is ignored. Back-compat: with `mode` absent the legacy
 `approved: bool` is honoured (`true` → `"once"`, `false` → `"deny"`). An
 unknown `tool_use_id` or an invalid `mode` is `-32602`.
+
+**A `chat.send` turn does not outlive its connection.** When the socket
+closes, the engine **cancels** the `chat.send` handlers that were in
+flight on it rather than letting them run to completion. The cancel is
+scoped to `chat.send` on purpose: other methods perform an irreversible
+remote action and then record it locally — `emails.archive` IMAP-MOVEs
+before it sets the local flag, `whatsapp.send_message` sends before it
+stores the message — so those are allowed to finish.
+
+What a cancelled turn guarantees:
+
+- It starts no further tool call, and it never returns to the LLM.
+- A tool that had not started does not start. A tool already running in
+  the engine's worker pool (the IMAP-, SMTP- and subprocess-backed ones)
+  runs to completion — a thread cannot be interrupted — so its side
+  effect and its bookkeeping both land, or neither does. There is no
+  half-finished tool.
+- A tool that spends its time on `await` is interrupted there, and what
+  that means depends on what the await was covering:
+  - `compose_email` is the case this design exists for. Its draft is
+    written *after* the LLM returns, so a turn cancelled while the model
+    is composing writes **no draft**. `web_search` is read-only and
+    leaves nothing behind either way.
+  - `send_sms` is **not** stopped. Its await covers a thread
+    (`run_in_executor`), so the HTTP call to the SMS proxy completes and
+    **the message is delivered** — only the result is lost, and the
+    credits are spent.
+  - An outbound MrCall call is left **indeterminate**. Its await is the
+    HTTP POST itself, so a cancel aborts the request mid-flight: the
+    call may or may not have been placed, and either way the engine
+    records nothing about it.
+
+So the honest summary is not "nothing happened". It is: nothing new
+started, an already-running blocking tool may have finished, an SMS
+already in flight was delivered, and an outbound call already in flight
+has an unknown outcome.
+
+The client-visible consequence is on **reconnect**. The desktop app
+reconnects automatically and its approval card survives the drop, but
+the turn behind that card does not. Answering it with `chat.approve`
+after a reconnect gets `-32602` with a message saying the turn is gone
+and nothing was sent; the request has to be made again. This is the
+intended outcome — an approval must not reach a turn no client is
+listening to — and the message is written for the operator to read, not
+just for a log.
 
 ### `google.calendar.connect()` / `.status()` / `.disconnect()` / `.cancel()`
 

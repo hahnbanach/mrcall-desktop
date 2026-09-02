@@ -1,7 +1,13 @@
 """Core Zylch AI agent using LLM abstraction layer."""
 
+import asyncio
+import atexit
+import contextvars
 import copy
 import logging
+import os
+import threading
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 from typing import Any, Awaitable, Callable, Dict, List, Optional, Tuple
 
@@ -25,6 +31,90 @@ ApprovalCallback = Callable[
 ]
 
 logger = logging.getLogger(__name__)
+
+
+# ─── Where a tool runs ────────────────────────────────────────────────
+#
+# Two properties are in tension.
+#
+# *Responsiveness*: a tool that blocks the event loop — imaplib, smtplib,
+# a subprocess, an ONNX encode — stops the WebSocket keepalive, every
+# other RPC, and the loop's ability to act on a cancellation, for as long
+# as it runs. Those belong in a thread.
+#
+# *Interruptibility*: `run_in_executor` cannot stop a thread that has
+# started. A turn cancelled while such a tool runs still finishes it and
+# still commits its side effect. A tool that spends its time on `await`
+# instead is genuinely interruptible, and moving it to a thread would
+# THROW THAT AWAY. `compose_email` is the case that matters: it awaits an
+# LLM call and then writes a draft, so on the loop a cancelled turn
+# writes nothing, and in a thread it writes the orphaned draft this whole
+# fix exists to prevent.
+#
+# So the offload is an explicit list of the tools that genuinely block,
+# not a blanket rule. Forgetting to add a blocking tool costs latency;
+# adding an interruptible one costs correctness — the list errs toward
+# the loop on purpose.
+_BLOCKING_TOOLS = frozenset(
+    {
+        # IMAP / SMTP
+        "search_provider_emails",
+        "send_draft",
+        "sync_emails",
+        "search_emails",
+        "close_email_threads",
+        "email_stats",
+        "download_attachment",
+        # Subprocess
+        "run_python",
+        # Local files
+        "read_document",
+        # Embedding (ONNX) + full-corpus SQLite scans
+        "search_local_memory",
+        "search_local_emails",
+        "update_memory",
+        "create_memory",
+        # neonize (synchronous Go bindings) + WhatsApp SQLite
+        "search_whatsapp",
+        "get_whatsapp_conversation",
+        "send_whatsapp_message",
+        "whatsapp_gap_analysis",
+        "get_contact_timeline",
+        "get_whatsapp_contacts",
+        # Synchronous httpx client
+        "search_pipedrive_person",
+        "get_pipedrive_deals",
+    }
+)
+
+# The pool blocking tools run in. NOT `job_executor`'s pool: that one has
+# four workers shared with multi-minute email syncs, so an interactive
+# turn submitted there can queue behind four of them.
+_INTERACTIVE_TOOL_WORKERS = max(2, int(os.environ.get("ZYLCH_TOOL_WORKERS", "8") or 8))
+_tool_executor: Optional[ThreadPoolExecutor] = None
+
+
+def get_tool_executor() -> ThreadPoolExecutor:
+    """The thread pool blocking tool calls run in (created on first use)."""
+    global _tool_executor
+    if _tool_executor is None:
+        _tool_executor = ThreadPoolExecutor(
+            max_workers=_INTERACTIVE_TOOL_WORKERS,
+            thread_name_prefix="zylch-tool",
+        )
+        # Do not let a stuck tool thread hold the interpreter open at
+        # exit: `concurrent.futures` joins its threads via atexit.
+        atexit.register(_shutdown_tool_executor)
+        logger.info(f"[tools] blocking-tool executor started ({_INTERACTIVE_TOOL_WORKERS} workers)")
+    return _tool_executor
+
+
+def _shutdown_tool_executor() -> None:
+    """Stop accepting work and stop waiting for what is still running."""
+    global _tool_executor
+    executor, _tool_executor = _tool_executor, None
+    if executor is not None:
+        executor.shutdown(wait=False, cancel_futures=True)
 
 
 class ZylchAIAgent(BaseConversationalAgent):
@@ -506,11 +596,63 @@ class ZylchAIAgent(BaseConversationalAgent):
         tool = self.tool_map[name]
 
         try:
-            result = await tool.execute(**input_data)
+            if name in _BLOCKING_TOOLS:
+                result = await self._execute_off_loop(tool, input_data)
+            else:
+                # Stays on the loop, where a cancellation reaches it.
+                result = await tool.execute(**input_data)
             return result
         except Exception as e:
             logger.error(f"Tool execution failed: {name} - {e}")
             return ToolResult(status=ToolStatus.ERROR, data=None, error=str(e))
+
+    async def _execute_off_loop(self, tool: Tool, input_data: Dict[str, Any]) -> ToolResult:
+        """Run a blocking tool's coroutine in the worker pool.
+
+        Only tools in `_BLOCKING_TOOLS` come here: their work would
+        otherwise freeze the event loop, and they have no `await` for a
+        cancellation to land on anyway.
+
+        Cancelling the caller returns immediately, and a thread that has
+        already started keeps running — which at least keeps a tool's
+        side effect and its bookkeeping on the same side of the
+        interruption. A tool that has NOT started does not start: the
+        executor future is cancellable while the work item is queued, and
+        the flag below closes the sliver between "the worker picked the
+        item up" and "the tool body began".
+
+        The turn's context is carried across explicitly: a worker thread
+        starts with an empty one, which would lose the turn id tools put
+        in their log lines and the call-site tag LLM spend is attributed
+        by. Each call copies its own context, so two concurrent turns
+        never enter the same one.
+
+        Args:
+            tool: The tool to run.
+            input_data: Keyword arguments for `tool.execute`.
+
+        Returns:
+            Whatever `tool.execute` returns.
+        """
+        loop = asyncio.get_running_loop()
+        ctx = contextvars.copy_context()
+        cancelled = threading.Event()
+
+        def _runner() -> ToolResult:
+            if cancelled.is_set():
+                return ToolResult(
+                    status=ToolStatus.ERROR,
+                    data=None,
+                    error=f"{tool.name} was not run - the turn was cancelled first",
+                )
+            return ctx.run(lambda: asyncio.run(tool.execute(**input_data)))
+
+        try:
+            return await loop.run_in_executor(get_tool_executor(), _runner)
+        except asyncio.CancelledError:
+            cancelled.set()
+            logger.info(f"[tools] turn cancelled during blocking tool={tool.name}")
+            raise
 
     def _format_tool_result(self, result: ToolResult) -> str:
         """Format tool result for Anthropic.

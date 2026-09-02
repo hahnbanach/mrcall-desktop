@@ -860,6 +860,27 @@ async def handle_connect(args: List[str], owner_id: str, user_email: str = None)
         return f"❌ **Error:** {str(e)}"
 
 
+def _force_sent_after_delivery(owner_id: str, draft_id: str, sent_id: str) -> None:
+    """Last-resort `sent` write for a draft whose mail has already gone out.
+
+    Called only when the normal post-delivery bookkeeping (mark-sent, or the
+    delete the OAuth providers do) has just failed. The draft must never fall
+    back to a sendable status after delivery, so the only correct move is to
+    keep pushing it towards `sent`. A failure here leaves the row in
+    `sending`, where the stale-claim window will eventually offer it up
+    again — loud in the log, because only a human can settle that.
+    """
+    from zylch.storage import Storage as _Storage
+
+    try:
+        _Storage().force_draft_sent(owner_id, draft_id, sent_id)
+    except Exception as e:
+        logger.error(
+            f"draft {draft_id} DELIVERED but could not be marked sent: {e}",
+            exc_info=True,
+        )
+
+
 async def handle_email(args: List[str], config: ToolConfig, owner_id: str) -> str:
     """Handle /email command - email listing, drafts, and search.
 
@@ -1072,19 +1093,24 @@ For simple drafts without context, use the `compose_email` tool in chat."""
 
             # Find the draft by ID.
             #
-            # Sendable means "not yet handed to a transport": `sent` and
-            # `sending` are excluded, `failed` is not. The same rule now holds
-            # in `SendDraftTool.execute`, so the two send paths cannot disagree
+            # Sendable means "not yet handed to a transport": `sent` is
+            # excluded, `failed` is not. The same rule holds in
+            # `SendDraftTool.execute`, so the two send paths cannot disagree
             # about which draft may go out — they used to, and a draft one path
             # marked `failed` became unsendable by the other. `failed` is
             # legacy (both paths now restore a failed send to `draft`), and
             # accepting it is what makes those rows recoverable.
+            #
+            # `sending` is fetched but not decided here: the claim below
+            # refuses a live one and takes over an abandoned one. Excluding it
+            # from the lookup would answer "draft not found" for a row that a
+            # killed daemon left mid-send and that no other surface can reach.
             with get_session() as session:
                 draft_row = (
                     session.query(Draft)
                     .filter(
                         Draft.owner_id == owner_id,
-                        Draft.status.in_(("draft", "failed")),
+                        Draft.status.in_(("draft", "failed", "sending")),
                         Draft.id == draft_id,
                     )
                     .first()
@@ -1101,17 +1127,31 @@ For simple drafts without context, use the `compose_email` tool in chat."""
             if not provider:
                 return "❌ No email provider connected\n\nUse `/connect google` or `/connect microsoft` first."
 
-            # Mark as sending.
+            # Claim the draft for this send attempt.
+            #
+            # The claim is a conditional UPDATE that returns whether it
+            # matched (`storage.claim_draft_for_send`), not a blind write:
+            # reading the status above and writing `sending` here left a
+            # window in which two callers both believed the draft was theirs
+            # and both mailed it. Only the caller that wins the claim sends.
+            #
             # NOTE: only persist `provider` for OAuth providers. The drafts
             # table has CHECK (provider IN ('google','microsoft')), so writing
             # 'imap' would raise sqlite3.IntegrityError. For IMAP the provider
-            # is recoverable at runtime via get_provider(owner_id).
-            with get_session() as session:
-                update_fields = {"status": "sending"}
-                if provider in ("google", "microsoft"):
-                    update_fields["provider"] = provider
-                session.query(Draft).filter(Draft.id == draft["id"]).update(update_fields)
+            # is recoverable at runtime via get_provider(owner_id). The helper
+            # applies that rule itself.
+            from zylch.storage import Storage as _Storage
 
+            if not _Storage().claim_draft_for_send(owner_id, draft["id"], provider=provider):
+                return (
+                    f"❌ Draft `{draft_id}` is already being sent by another request."
+                    "\n\nNothing was sent."
+                )
+
+            # Everything from here to the transport call may fail without a
+            # mail going out, so it rolls the draft back to `draft`. Nothing
+            # AFTER the transport call may do that: once the message is
+            # accepted, a rollback would make a delivered mail sendable again.
             try:
                 # Convert list fields to comma-separated strings for email APIs
                 to_str = (
@@ -1223,50 +1263,84 @@ For simple drafts without context, use the `compose_email` tool in chat."""
 
                     sent_id = sent_message.get("id", "")
 
-                    # Mark draft as sent (status='sent', sent_at, sent_message_id).
-                    # Do NOT delete — per task spec, status must become 'sent'.
-                    from zylch.storage import Storage as _Storage
-
-                    _Storage().mark_draft_sent(owner_id, draft["id"], sent_id)
-
-                    to_str = ", ".join(draft["to_addresses"])
-                    return f"""✅ **Email sent!**
-
-**To:** {to_str}
-**Subject:** {draft.get('subject', '(no subject)')}
-**Via:** IMAP/SMTP
-
-Message ID: `{sent_id if sent_id else 'N/A'}`"""
-
                 else:
                     raise Exception(f"Unknown provider: {provider}")
 
-                # Delete draft after successful send (google/microsoft only — IMAP
-                # branch already returned above after mark_draft_sent).
-                with get_session() as session:
-                    session.query(Draft).filter(Draft.id == draft["id"]).delete()
+            except Exception as e:
+                from zylch.tools.gmail_tools import delivery_is_uncertain
 
-                to_str = ", ".join(draft["to_addresses"])
-                return f"""✅ **Email sent!**
+                logger.error(f"Failed to send email: {e}", exc_info=True)
+
+                # Hand the claim back CONDITIONALLY — the write lands only
+                # while this caller still owns the row. An unguarded write
+                # here re-opened a draft that a second caller had meanwhile
+                # re-claimed and delivered, which turned a race into a
+                # repeatable double-send.
+                if delivery_is_uncertain(e):
+                    # The socket died without a verdict: the message may be
+                    # in the recipient's mailbox already. Leave the draft in
+                    # `sending` and tell the operator the truth instead of
+                    # promising that nothing went out.
+                    #
+                    # The draft is held for the length of its own claim window
+                    # and cannot be sent OR discarded until that expires, so
+                    # the message must not point at an action that will be
+                    # refused for the next twenty minutes.
+                    from zylch.storage.storage import (
+                        send_claim_recipient_count,
+                        send_claim_window_minutes,
+                    )
+
+                    held_for = send_claim_window_minutes(
+                        send_claim_recipient_count(
+                            draft.get("to_addresses"),
+                            draft.get("cc_addresses"),
+                            draft.get("bcc_addresses"),
+                        )
+                    )
+                    _Storage().release_draft_claim(owner_id, draft["id"], "sending", str(e))
+                    return (
+                        f"**Connection lost while sending:** {str(e)}\n\n"
+                        f"It is NOT known whether the email went out. Check the"
+                        f" mailbox. Draft `{draft_id}` is held for {held_for}"
+                        f" minutes and can be neither sent nor discarded until"
+                        f" then; after that, send it again if the mail never"
+                        f" arrived, or retire it with `drafts.discard`."
+                    )
+
+                _Storage().release_draft_claim(owner_id, draft["id"], "draft", str(e))
+                return f"❌ **Failed to send:** {str(e)}\n\nNothing was sent. Draft saved — fix the issue and try again with `/email send {draft_id}`"
+
+            # ── The transport accepted the message. From here the draft may
+            # only move towards `sent` (or be deleted); a rollback would make
+            # a delivered mail sendable again.
+            if provider == "imap":
+                # Mark draft as sent (status='sent', sent_at, sent_message_id).
+                # Do NOT delete — per task spec, status must become 'sent'.
+                try:
+                    _Storage().mark_draft_sent(owner_id, draft["id"], sent_id)
+                except Exception as e:
+                    logger.error(f"mark_draft_sent failed after delivery: {e}", exc_info=True)
+                    _force_sent_after_delivery(owner_id, draft["id"], sent_id)
+                via = "IMAP/SMTP"
+            else:
+                # Delete draft after successful send (google/microsoft only —
+                # the provider keeps its own copy of the sent message).
+                try:
+                    with get_session() as session:
+                        session.query(Draft).filter(Draft.id == draft["id"]).delete()
+                except Exception as e:
+                    logger.error(f"draft delete failed after delivery: {e}", exc_info=True)
+                    _force_sent_after_delivery(owner_id, draft["id"], sent_id)
+                via = provider.title()
+
+            return f"""✅ **Email sent!**
 
 **To:** {to_str}
 **Subject:** {draft.get('subject', '(no subject)')}
-**Via:** {provider.title()}
+**Via:** {via}
 
 Message ID: `{sent_id if sent_id else 'N/A'}`"""
-
-            except Exception as e:
-                # Restore draft status on failure (so it appears in /email list --draft)
-                with get_session() as session:
-                    session.query(Draft).filter(Draft.id == draft["id"]).update(
-                        {
-                            "status": "draft",
-                            "error_message": str(e),
-                        }
-                    )
-
-                logger.error(f"Failed to send email: {e}", exc_info=True)
-                return f"❌ **Failed to send:** {str(e)}\n\nDraft saved. Fix the issue and try again with `/email send {draft_id}`"
 
         # --- DELETE DRAFT ---
         if subcommand == "delete":
@@ -2865,20 +2939,32 @@ to use MrCall credits."""
             body = tool_result.get("body", "")
             recipient = tool_result.get("recipient_email", "(not specified)")
 
-            # Auto-save draft
-            to_addresses = [recipient] if recipient and recipient != "(not specified)" else []
-            draft = storage.create_draft(
-                owner_id=owner_id,
-                to=to_addresses,
-                subject=subject,
-                body=body,
-                in_reply_to=tool_result.get("in_reply_to"),
-                references=tool_result.get("references"),
-                thread_id=tool_result.get("thread_id"),
-            )
-            draft_id = draft.get("id", "") if draft else ""
+            # The agent already saved the draft (`EmailerAgent
+            # ._process_write_email` persists it and returns the id), so
+            # reuse that id. Creating a second row here left `/agent email
+            # run` producing two identical drafts of every composed mail,
+            # one of which nothing referenced.
+            draft_id = tool_result.get("draft_id") or ""
+            created = bool(tool_result.get("created", True))
+            if not draft_id:
+                # The agent could not persist — it only saves when it
+                # resolved a recipient. Keep the draft anyway, so the composed
+                # text is not lost and the operator can add the address.
+                to_addresses = [recipient] if recipient and recipient != "(not specified)" else []
+                draft = storage.create_draft(
+                    owner_id=owner_id,
+                    to=to_addresses,
+                    subject=subject,
+                    body=body,
+                    in_reply_to=tool_result.get("in_reply_to"),
+                    references=tool_result.get("references"),
+                    thread_id=tool_result.get("thread_id"),
+                )
+                draft_id = draft.get("id", "") if draft else ""
+                created = draft.get("created", True) if draft else False
 
-            return f"""**📝 Draft Created** (ID: `{draft_id}`)
+            headline = "📝 Draft Created" if created else "📝 Draft Already Exists"
+            return f"""**{headline}** (ID: `{draft_id}`)
 
 **To:** {recipient}
 **Subject:** {subject}

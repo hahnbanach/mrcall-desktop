@@ -55,14 +55,16 @@ class EmailArchiveManager:
         logger.info(f"EmailArchiveManager initialized" f" for owner {owner_id}")
 
     def _ensure_connected(self) -> None:
-        """Ensure IMAP client is connected (lazy)."""
+        """Ensure IMAP client is connected (lazy).
+
+        Delegates to the client's own gate rather than inspecting its
+        `_conn`: reading that attribute from here is outside the client's
+        command lock, so two threads could both find it `None` and both
+        log in, leaking a socket.
+        """
         if not self._connected:
-            # IMAPClient auto-reconnects via
-            # _ensure_connected(), but we call
-            # connect() if not yet done
-            if hasattr(self.gmail, "_conn"):
-                if self.gmail._conn is None:
-                    self.gmail.connect()
+            if hasattr(self.gmail, "_ensure_connected"):
+                self.gmail._ensure_connected()
             else:
                 # Legacy GmailClient compat
                 if not self.gmail.service:

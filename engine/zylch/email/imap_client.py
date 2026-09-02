@@ -4,12 +4,14 @@ Replaces Gmail/Outlook OAuth API clients with standard
 IMAP + app password. Works with any IMAP provider.
 """
 
+import functools
 import imaplib
 import logging
 import mimetypes
 import os
 import re
 import smtplib
+import threading
 import email as email_lib
 from dataclasses import dataclass
 from email.header import decode_header
@@ -20,6 +22,75 @@ from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple
 from datetime import datetime
 
 logger = logging.getLogger(__name__)
+
+
+# ─── Transport deadlines ──────────────────────────────────────────────
+#
+# Both sockets here were unbounded. A bare `imaplib.IMAP4_SSL(host, port)`
+# or `smtplib.SMTP(host, port)` inherits the kernel's TCP retry budget —
+# ~15 minutes at best, and *forever* against a peer that accepts the
+# connection and then stops answering. That is not a theoretical shape:
+# the 108-second IMAP connect that stalled a whole chat turn is the same
+# socket with nothing to stop it.
+#
+# Both values below are PER SOCKET OPERATION, not per call: Python sets
+# them on the socket, so each connect / each recv gets its own deadline.
+
+# Bounds the cold path — TCP handshake, TLS handshake, server greeting,
+# LOGIN. A handshake that needs more than this is broken rather than
+# slow, even on a phone tether, and capping each step here is what keeps
+# `connect()` from reproducing the 108-second stall.
+IMAP_CONNECT_TIMEOUT_SECONDS = 30
+
+# Relaxed once authenticated, because a healthy server may legitimately
+# think for a long time before the first byte of a SEARCH over a large
+# mailbox. Generous for that, still far below anything a human or the
+# 30-minute auto-update tick would read as a hang.
+IMAP_COMMAND_TIMEOUT_SECONDS = 120
+
+
+def _smtp_timeout_seconds() -> float:
+    """The deadline an SMTP socket must be built with.
+
+    Imported from `storage`, which derives each draft's send-claim window
+    from it (`storage.send_claim_window_minutes`): the window after which
+    a `sending` draft may be re-claimed has to sit above the worst case
+    of a bounded send, or a slow-but-legitimate delivery gets sent twice.
+    That worst case is the SUM of this deadline over every blocking round
+    trip `send` below performs — nine fixed, plus one RCPT TO per
+    recipient — which is why the window is per draft rather than a
+    constant. One definition of the deadline, so the derivation stays a
+    consequence instead of an assumption.
+
+    Imported lazily to keep `zylch.email` free of a module-level
+    dependency on the storage layer.
+    """
+    from zylch.storage.storage import SMTP_TRANSPORT_TIMEOUT_SECONDS
+
+    return SMTP_TRANSPORT_TIMEOUT_SECONDS
+
+
+def _imap_serialized(method: Callable) -> Callable:
+    """Serialize an IMAP operation on the client's connection lock.
+
+    One `IMAPClient` is shared by every tool in the process, and tool
+    bodies run in a worker thread pool, so two operations can reach the
+    same `imaplib` connection at once. imaplib gives no ordering
+    guarantee there: interleaved commands read each other's untagged
+    responses. The lock is re-entrant, so a public method that calls a
+    decorated helper keeps its whole SELECT/SEARCH/FETCH sequence atomic
+    rather than releasing between steps.
+
+    SMTP sends are deliberately NOT serialized — they open their own
+    connection and must not queue behind a long folder scan.
+    """
+
+    @functools.wraps(method)
+    def wrapper(self, *args, **kwargs):
+        with self._imap_lock:
+            return method(self, *args, **kwargs)
+
+    return wrapper
 
 
 class IMAPError(RuntimeError):
@@ -459,6 +530,9 @@ class IMAPClient:
         self._conn: Optional[imaplib.IMAP4_SSL] = None
         self._sent_folder: Optional[str] = None
         self._sent_folder_resolved: bool = False
+        # Guards every IMAP command sequence: this client is shared
+        # process-wide and its callers run in worker threads.
+        self._imap_lock = threading.RLock()
 
         logger.debug(
             f"[IMAP] Configured for {email_addr} "
@@ -466,13 +540,67 @@ class IMAPClient:
             f"smtp={self.smtp_host}:{self.smtp_port}"
         )
 
+    @_imap_serialized
     def connect(self) -> None:
-        """Connect and authenticate to IMAP server."""
-        logger.debug(f"[IMAP] Connecting to " f"{self.imap_host}:{self.imap_port}")
-        self._conn = imaplib.IMAP4_SSL(self.imap_host, self.imap_port)
-        self._conn.login(self.email_addr, self.password)
+        """Connect and authenticate to the IMAP server.
+
+        Every step is bounded by `IMAP_CONNECT_TIMEOUT_SECONDS`; the
+        socket is then relaxed to `IMAP_COMMAND_TIMEOUT_SECONDS` for the
+        rest of its life, so a slow SEARCH is not mistaken for a dead
+        server.
+
+        Raises:
+            IMAPError: The server did not complete the handshake or the
+                login inside the deadline, or refused the credentials.
+                `self._conn` is left None, so the next call retries from
+                scratch rather than reusing a half-built connection.
+        """
+        logger.debug(
+            f"[IMAP] Connecting to {self.imap_host}:{self.imap_port} "
+            f"(timeout={IMAP_CONNECT_TIMEOUT_SECONDS}s)"
+        )
+        conn = None
+        try:
+            conn = imaplib.IMAP4_SSL(
+                self.imap_host,
+                self.imap_port,
+                timeout=IMAP_CONNECT_TIMEOUT_SECONDS,
+            )
+            conn.login(self.email_addr, self.password)
+            # Authenticated: give ordinary commands room to breathe.
+            sock = getattr(conn, "sock", None)
+            if sock is not None:
+                sock.settimeout(IMAP_COMMAND_TIMEOUT_SECONDS)
+        except OSError as e:
+            # socket.timeout is an OSError subclass, as are refusals and
+            # TLS/DNS failures. Never leave a half-built connection
+            # behind: `_ensure_connected` would find a non-None `_conn`
+            # and reconnect around it, leaking the socket.
+            self._discard_connection(conn)
+            raise IMAPError(
+                f"IMAP connect to {self.imap_host}:{self.imap_port} failed after "
+                f"{IMAP_CONNECT_TIMEOUT_SECONDS}s: {type(e).__name__}: {e}"
+            ) from e
+        except Exception as e:
+            self._discard_connection(conn)
+            raise IMAPError(
+                f"IMAP login for {self.email_addr} failed: {type(e).__name__}: {e}"
+            ) from e
+
+        self._conn = conn
         logger.info(f"[IMAP] Connected as {self.email_addr}")
 
+    @staticmethod
+    def _discard_connection(conn) -> None:
+        """Close a connection we are about to stop referencing."""
+        if conn is None:
+            return
+        try:
+            conn.shutdown()
+        except Exception as e:
+            logger.debug(f"[IMAP] discarding failed connection: {e}")
+
+    @_imap_serialized
     def disconnect(self) -> None:
         """Disconnect from IMAP server."""
         if self._conn:
@@ -483,6 +611,7 @@ class IMAPClient:
             self._conn = None
             logger.debug("[IMAP] Disconnected")
 
+    @_imap_serialized
     def _ensure_connected(self) -> imaplib.IMAP4_SSL:
         """Ensure IMAP connection is active.
 
@@ -492,17 +621,25 @@ class IMAPClient:
             Active IMAP connection
 
         Raises:
-            ConnectionError: If connection cannot be established
+            IMAPError: If a connection cannot be established inside
+                `IMAP_CONNECT_TIMEOUT_SECONDS`.
         """
         if self._conn is None:
             self.connect()
+            return self._conn
         try:
             self._conn.noop()
         except Exception:
             logger.debug("[IMAP] Connection lost, reconnecting")
+            # Let go of the dead one first: `connect()` raising would
+            # otherwise leave this stale object in place to be probed
+            # again on every later call.
+            dead, self._conn = self._conn, None
+            self._discard_connection(dead)
             self.connect()
         return self._conn
 
+    @_imap_serialized
     def fetch_emails(
         self,
         folder: str = "INBOX",
@@ -561,6 +698,7 @@ class IMAPClient:
         logger.info(f"[IMAP] fetch_emails -> {len(results)} emails " f"from {folder}")
         return results
 
+    @_imap_serialized
     def _fetch_one(
         self,
         conn: imaplib.IMAP4_SSL,
@@ -593,6 +731,7 @@ class IMAPClient:
 
         return _parse_message_bytes(entry[1])
 
+    @_imap_serialized
     def _find_sent_folder(self) -> Optional[str]:
         """Find the Sent mail folder name (cached per session).
 
@@ -608,6 +747,7 @@ class IMAPClient:
         self._sent_folder_resolved = True
         return result
 
+    @_imap_serialized
     def _find_sent_folder_uncached(self) -> Optional[str]:
         """Find the Sent mail folder (no cache)."""
         conn = self._ensure_connected()
@@ -648,6 +788,7 @@ class IMAPClient:
                 continue
         return None
 
+    @_imap_serialized
     def find_archive_folder(self) -> Optional[str]:
         """Find the Archive/All-Mail folder name.
 
@@ -707,6 +848,7 @@ class IMAPClient:
         logger.warning("[IMAP] No archive folder found")
         return None
 
+    @_imap_serialized
     def move_message_by_message_id(
         self,
         message_id_header: str,
@@ -796,6 +938,7 @@ class IMAPClient:
             logger.warning(f"[IMAP] COPY+EXPUNGE failed: {e}")
             return False
 
+    @_imap_serialized
     def sync_folders(self) -> List[str]:
         """Folders the archive sync must scan, in scan order.
 
@@ -839,6 +982,7 @@ class IMAPClient:
         logger.info(f"[IMAP] sync_folders -> {folders}")
         return folders
 
+    @_imap_serialized
     def examine_folder(self, folder: str) -> FolderState:
         """EXAMINE a folder read-only and report its UID state.
 
@@ -899,6 +1043,7 @@ class IMAPClient:
         )
         return state
 
+    @_imap_serialized
     def _uid_search_selected(self, folder: str, criteria: str) -> List[int]:
         """UID SEARCH in the ALREADY-selected folder.
 
@@ -942,11 +1087,13 @@ class IMAPClient:
         logger.debug(f"[IMAP] UID SEARCH {criteria!r} in {folder} -> {len(uids)} uids")
         return uids
 
+    @_imap_serialized
     def uid_search(self, folder: str, criteria: str) -> List[int]:
         """EXAMINE ``folder`` then UID SEARCH it. Raises on failure."""
         self.examine_folder(folder)
         return self._uid_search_selected(folder, criteria)
 
+    @_imap_serialized
     def _fetch_message_ids_selected(
         self,
         folder: str,
@@ -1021,6 +1168,7 @@ class IMAPClient:
         )
         return resolved, failed
 
+    @_imap_serialized
     def _fetch_single_message_id(self, folder: str, uid: int) -> Optional[str]:
         """Retry a single UID's Message-ID fetch. None means 'failed'.
 
@@ -1051,6 +1199,7 @@ class IMAPClient:
         )
         return ""
 
+    @_imap_serialized
     def scan_folder(
         self,
         folder: str,
@@ -1097,6 +1246,7 @@ class IMAPClient:
             unresolved_uids=failed,
         )
 
+    @_imap_serialized
     def fetch_messages_by_uid(
         self,
         folder: str,
@@ -1159,6 +1309,7 @@ class IMAPClient:
         )
         return messages, failed
 
+    @_imap_serialized
     def get_message(self, message_id: str) -> Optional[Dict[str, Any]]:
         """Get a single message by Message-ID header.
 
@@ -1197,6 +1348,7 @@ class IMAPClient:
         logger.debug(f"[IMAP] Message not found: {message_id}")
         return None
 
+    @_imap_serialized
     def fetch_attachments(
         self,
         message_id: str,
@@ -1294,6 +1446,7 @@ class IMAPClient:
 
         return results
 
+    @_imap_serialized
     def get_batch(
         self,
         message_ids: List[str],
@@ -1319,6 +1472,7 @@ class IMAPClient:
         logger.info(f"[IMAP] get_batch -> {len(results)}" f"/{len(message_ids)} fetched")
         return results
 
+    @_imap_serialized
     def search(
         self,
         query: str,
@@ -1365,6 +1519,7 @@ class IMAPClient:
         logger.info(f"[IMAP] search -> {len(results)} results " f"for '{query}'")
         return results
 
+    @_imap_serialized
     def search_messages(
         self,
         query: str,
@@ -1472,8 +1627,14 @@ class IMAPClient:
         recipients.extend(cc_list)
         recipients.extend(bcc_list)
 
+        # Bounded on purpose, and per socket operation. Unbounded, one
+        # stalled send outlives the window after which its draft becomes
+        # claimable again (`storage.send_claim_window_minutes`, computed
+        # from this deadline and from the number of recipients gathered
+        # just above) and the same mail goes out twice.
+        smtp_timeout = _smtp_timeout_seconds()
         try:
-            with smtplib.SMTP(self.smtp_host, self.smtp_port) as smtp:
+            with smtplib.SMTP(self.smtp_host, self.smtp_port, timeout=smtp_timeout) as smtp:
                 smtp.ehlo()
                 smtp.starttls()
                 smtp.ehlo()

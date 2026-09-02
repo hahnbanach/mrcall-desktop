@@ -11,9 +11,9 @@ from .config import ToolConfig
 from .session_state import SessionState
 
 from zylch.memory import (
-    EmbeddingEngine,
     HybridSearchEngine,
     MemoryConfig,
+    get_shared_engine,
 )
 from .web_search import WebSearchTool
 
@@ -81,7 +81,10 @@ class ToolFactory:
 
     # Class attributes for storing service clients
     _starchat_client = None
-    _email_client = None  # IMAPClient
+    # purpose ("interactive" / "sync") -> the IMAPClient reused across
+    # turns, and the credentials it was built for.
+    _imap_clients: dict = {}
+    _imap_client_keys: dict = {}
     _email_archive = None
     _session_state = None
 
@@ -116,18 +119,21 @@ class ToolFactory:
             starchat = None
             logger.info("StarChat disabled" " - pending OAuth2.0 implementation")
 
-            # Email client via IMAP
-            email_client = ToolFactory._create_imap_client(config)
-
-            # Save client reference
-            ToolFactory._email_client = email_client
+            # Email client via IMAP. Two of them, on purpose: a single
+            # shared client serializes every IMAP command on one
+            # connection, so a `sync_emails` run (its own schema says
+            # "~15-30 minutes") would block every chat turn's search and
+            # fetch behind it. Interactive tools get one connection, the
+            # archive/sync chain gets another.
+            email_client = ToolFactory._create_imap_client(config, purpose="interactive")
+            sync_client = ToolFactory._create_imap_client(config, purpose="sync")
 
             # Email archive manager (lazy auth)
             email_archive = None
-            if email_client:
+            if sync_client:
                 try:
                     email_archive = EmailArchiveManager(
-                        gmail_client=email_client,
+                        gmail_client=sync_client,
                         owner_id=config.owner_id,
                         supabase_storage=(supabase_storage),
                     )
@@ -162,7 +168,7 @@ class ToolFactory:
             )
 
             mem_config = MemoryConfig()
-            embedding_engine = EmbeddingEngine(mem_config)
+            embedding_engine = get_shared_engine(mem_config)
             search_engine = HybridSearchEngine(
                 get_session=get_session,
                 embedding_engine=embedding_engine,
@@ -309,6 +315,7 @@ class ToolFactory:
     @staticmethod
     def _create_imap_client(
         config: ToolConfig,
+        purpose: str = "interactive",
     ) -> Optional[IMAPClient]:
         """Create IMAPClient from config/env.
 
@@ -316,8 +323,18 @@ class ToolFactory:
         Optionally IMAP_HOST, IMAP_PORT, SMTP_HOST,
         SMTP_PORT.
 
+        One client is cached per `purpose` and reused for every later
+        call with the same credentials, so a chat turn does not pay for a
+        fresh IMAP login. The client is NOT connected here: every IMAP
+        entry point goes through `IMAPClient._ensure_connected`, so the
+        login happens on first actual use — off the turn's preamble.
+
         Args:
             config: Tool configuration
+            purpose: Which connection to hand back. `"interactive"`
+                serves chat tools (search, fetch, send); `"sync"` serves
+                the archive/sync chain, whose runs are long enough to
+                monopolise a connection.
 
         Returns:
             IMAPClient or None if not configured
@@ -344,6 +361,20 @@ class ToolFactory:
         imap_port = int(imap_port_str) if imap_port_str else None
         smtp_port = int(smtp_port_str) if smtp_port_str else None
 
+        # Reuse the live client when nothing about the account changed.
+        # A settings edit (new mailbox, new app password, new host) makes
+        # the key differ and builds a fresh client.
+        key = (email_addr, email_pass, imap_host, imap_port, smtp_host, smtp_port)
+        cached = ToolFactory._imap_clients.get(purpose)
+        if cached is not None and ToolFactory._imap_client_keys.get(purpose) == key:
+            logger.debug(f"[IMAP] reusing cached {purpose} client for {email_addr}")
+            return cached
+
+        # A superseded client is NOT disconnected here. `disconnect()`
+        # takes the client's command lock, so a sync still running on it
+        # would block this call for minutes, and earlier turns'
+        # `EmailArchiveManager` / `EmailSyncManager` may still be using
+        # it. Drop the reference and let it die with its last owner.
         client = IMAPClient(
             email_addr=email_addr,
             password=email_pass,
@@ -352,12 +383,9 @@ class ToolFactory:
             smtp_host=smtp_host,
             smtp_port=smtp_port,
         )
-
-        try:
-            client.connect()
-            logger.info(f"IMAP connected as {email_addr}")
-        except Exception as e:
-            logger.warning(f"IMAP connection failed: {e}." " Will retry on first use.")
+        ToolFactory._imap_clients[purpose] = client
+        ToolFactory._imap_client_keys[purpose] = key
+        logger.info(f"IMAP {purpose} client created for {email_addr} " f"(connects on first use)")
 
         return client
 

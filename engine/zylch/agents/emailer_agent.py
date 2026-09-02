@@ -844,13 +844,25 @@ use that information to write the email or provide the answer. Don't just report
             if not to_email:
                 to_email = latest_email.get("from_email")
 
-        # Get user's email provider
+        # Get user's email provider.
+        #
+        # Only 'google' and 'microsoft' may be persisted: the drafts table
+        # carries CHECK (provider IN ('google','microsoft')), and storing an
+        # IMAP profile's 'imap' raises IntegrityError, which loses the draft.
+        # Anything else is stored as NULL — the CHECK admits it, and it is the
+        # truth: this row's provider is not one of the two the column can
+        # name. Writing 'google' on an IMAP profile would be a lie the next
+        # reader has no way to detect. The send paths do not consult it; they
+        # resolve the provider at send time via get_provider(owner_id).
         from zylch.api.token_storage import get_provider
 
-        provider = get_provider(self.owner_id) or "google"
+        provider = get_provider(self.owner_id)
+        if provider not in ("google", "microsoft"):
+            provider = None
 
         # SAVE DRAFT TO DATABASE
         draft_id = None
+        draft_created = False
         if to_email:
             try:
                 draft = self.storage.create_draft(
@@ -865,7 +877,11 @@ use that information to write the email or provide the answer. Don't just report
                 )
                 if draft:
                     draft_id = draft.get("id")
-                    logger.info(f"[EMAILER] Draft saved to DB with id={draft_id}")
+                    draft_created = draft.get("created", True)
+                    logger.info(
+                        f"[EMAILER] Draft saved to DB with id={draft_id}"
+                        f" created={draft_created}"
+                    )
             except Exception as e:
                 logger.error(f"[EMAILER] Failed to save draft to DB: {e}")
                 # Continue without draft_id - the email can still be shown but not sent
@@ -877,7 +893,10 @@ use that information to write the email or provide the answer. Don't just report
             "in_reply_to": in_reply_to,
             "references": references,
             "thread_id": thread_id,
-            "draft_id": draft_id,  # NEW: For sending later
+            "draft_id": draft_id,  # For sending later
+            # False when an identical unsent draft already existed and
+            # `create_draft` handed that row back instead of duplicating it.
+            "created": draft_created,
         }
 
         return result

@@ -10,6 +10,27 @@ This module exposes the existing `storage.list_drafts` query as a
 read-only, owner-scoped RPC. It MUST NOT create / edit / send / mutate
 anything — sending stays behind the existing approval-gated paths.
 
+**How a caller sees a draft the engine did not create but did compose.**
+`storage.create_draft` is idempotent: composing the same mail twice
+within its window returns the existing row instead of a second one. A
+caller that decides "did this turn produce a reply?" by diffing the ids
+in `drafts.list` before and after therefore sees an EMPTY diff for a
+reply that was genuinely composed, and reports that nothing was written.
+
+The answer rides on `updated_at`, which every row already carries: a
+reuse stamps it, so the rule for such a caller is
+
+    new id in the after-set        -> the engine composed a new draft
+    same ids, one `updated_at`
+      at or after the turn started -> the engine composed the same mail
+                                      again and reused the existing draft
+    neither                        -> the engine composed nothing
+
+No new method and no new field: a per-turn flag would have to be
+invented, transported and kept true, while `updated_at` already means
+"when this row last changed" and a re-compose is exactly that. The
+consumer is `cs draft-reply` (`cs-kernel/cs/cli.py`).
+
 Kept separate from `rpc/methods.py` per the 500-line module guideline;
 merged into the dispatch table the same way the other sub-modules are.
 """

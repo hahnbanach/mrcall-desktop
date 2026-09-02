@@ -11,13 +11,39 @@ Example:
 """
 
 import logging
+import threading
 from dataclasses import dataclass
-from typing import Optional, Dict, Any
+from typing import Any, Dict, List, Optional, Tuple
 import re
+
+import numpy as np
 
 from zylch.services.command_handlers import COMMAND_PATTERNS
 
 logger = logging.getLogger(__name__)
+
+
+def _clean_template(template: str) -> str:
+    """Strip parameter types for embedding ("{limit:int}" -> "limit").
+
+    Comparing "show 5 drafts" against "show drafts" matches better than
+    against "show {limit:int} drafts".
+    """
+    return re.sub(r"\{([^:}]+)(?::[^}]+)?\}", r"\1", template)
+
+
+@dataclass
+class TemplateIndex:
+    """The encoded command templates, computed once per process.
+
+    `commands` and `templates` are parallel to the rows of `matrix`,
+    which holds L2-normalized embeddings so a match is one dot product
+    against the user's (also normalized) message embedding.
+    """
+
+    commands: List[str]
+    templates: List[str]
+    matrix: "np.ndarray"
 
 
 @dataclass
@@ -41,23 +67,34 @@ class SemanticCommandMatcher:
     # Minimum confidence for a match
     MIN_CONFIDENCE = 0.70
 
+    # The encoded templates are constant for the life of the process, so
+    # they are cached on the class: a matcher instance built per chat
+    # turn still pays the encoding once, keyed by embedding model.
+    _template_index: Dict[tuple, TemplateIndex] = {}
+    _template_index_lock = threading.Lock()
+
     def __init__(self):
         """Initialize the matcher with lazy-loaded embedding engine."""
         self._embedding_engine = None
         self._initialized = False
+        self._index: Optional[TemplateIndex] = None
 
     def _ensure_initialized(self):
-        """Lazy initialization of the embedding engine."""
+        """Lazy initialization of the embedding engine and template index."""
         if self._initialized:
             return
 
         try:
             logger.info("[CommandMatcher] Initializing SemanticCommandMatcher...")
-            from zylch.memory import EmbeddingEngine, MemoryConfig
+            from zylch.memory import MemoryConfig, engine_cache_key, get_shared_engine
 
             config = MemoryConfig()
-            self._embedding_engine = EmbeddingEngine(config)
-            logger.info("[CommandMatcher] EmbeddingEngine created")
+            self._embedding_engine = get_shared_engine(config)
+            logger.info("[CommandMatcher] EmbeddingEngine ready (shared)")
+
+            self._index = self._ensure_template_index(
+                engine_cache_key(config), self._embedding_engine
+            )
 
             self._initialized = True
             logger.info(
@@ -66,6 +103,81 @@ class SemanticCommandMatcher:
         except Exception as e:
             logger.error(f"[CommandMatcher] Failed to initialize: {e}", exc_info=True)
             self._initialized = False
+
+    @classmethod
+    def _ensure_template_index(cls, cache_key: tuple, engine) -> TemplateIndex:
+        """Encode every command template once, in a single batch.
+
+        Encoding the 200-odd templates one at a time on every `match()`
+        was the bulk of a chat turn's preamble. They never change, so
+        they are encoded once per process and reused.
+
+        Args:
+            cache_key: The engine identity the vectors belong to — the
+                same key `memory.get_shared_engine` caches under, so the
+                templates can never outlive the engine that produced
+                them.
+            engine: The embedding engine to encode with.
+
+        Returns:
+            The cached `TemplateIndex` for that engine.
+        """
+        with cls._template_index_lock:
+            index = cls._template_index.get(cache_key)
+            if index is not None:
+                return index
+
+            commands: List[str] = []
+            templates: List[str] = []
+            cleaned: List[str] = []
+            for command, command_templates in COMMAND_PATTERNS.items():
+                for template in command_templates:
+                    commands.append(command)
+                    templates.append(template)
+                    cleaned.append(_clean_template(template))
+
+            matrix = np.asarray(engine.encode(cleaned), dtype=np.float32)
+            norms = np.linalg.norm(matrix, axis=1, keepdims=True)
+            norms[norms == 0] = 1.0
+            matrix = matrix / norms
+
+            index = TemplateIndex(commands=commands, templates=templates, matrix=matrix)
+            cls._template_index[cache_key] = index
+            logger.info(
+                f"[CommandMatcher] encoded {len(templates)} templates "
+                f"(engine={cache_key}, one batch)"
+            )
+            return index
+
+    @classmethod
+    def reset_template_index(cls) -> None:
+        """Drop the encoded templates. For tests only."""
+        with cls._template_index_lock:
+            cls._template_index.clear()
+
+    def _best_template(self, user_embedding) -> Tuple[float, Optional[str], Optional[str]]:
+        """Score the user's embedding against every template.
+
+        Args:
+            user_embedding: Embedding of the user's message.
+
+        Returns:
+            ``(score, command, template)`` for the best row, or
+            ``(-1.0, None, None)`` when there is no index to score
+            against.
+        """
+        index = self._index
+        if index is None or not index.templates:
+            return (-1.0, None, None)
+
+        vector = np.asarray(user_embedding, dtype=np.float32)
+        norm = float(np.linalg.norm(vector))
+        if norm == 0:
+            return (-1.0, None, None)
+
+        scores = index.matrix @ (vector / norm)
+        best = int(np.argmax(scores))
+        return (float(scores[best]), index.commands[best], index.templates[best])
 
     def match(self, user_message: str) -> Optional[str]:
         """
@@ -90,28 +202,13 @@ class SemanticCommandMatcher:
             logger.error(f"[CommandMatcher] Embedding failed: {e}")
             return None
 
-        # 2. Find best match among all patterns
-        best_score = -1.0
-        best_command = None
-        best_template = None
-
-        # Iterate through all commands and their patterns
-        for command, templates in COMMAND_PATTERNS.items():
-            for template in templates:
-                # Remove parameter types for embedding comparison (e.g. "{limit:int}" -> "limit")
-                # This makes "show 5 drafts" match better with "show drafts" semantically
-                clean_template = re.sub(r"\{([^:}]+)(?::[^}]+)?\}", r"\1", template)
-
-                try:
-                    template_embedding = self._embedding_engine.encode(clean_template)
-                    score = self._embedding_engine.similarity(user_embedding, template_embedding)
-
-                    if score > best_score:
-                        best_score = score
-                        best_command = command
-                        best_template = template
-                except Exception:
-                    continue
+        # 2. Find best match among all patterns (one dot product against
+        #    the pre-encoded template matrix)
+        try:
+            best_score, best_command, best_template = self._best_template(user_embedding)
+        except Exception as e:
+            logger.error(f"[CommandMatcher] Scoring failed: {e}", exc_info=True)
+            return None
 
         if not best_command or best_score < self.MIN_CONFIDENCE:
             logger.info(

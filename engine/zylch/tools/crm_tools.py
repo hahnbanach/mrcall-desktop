@@ -297,13 +297,18 @@ class ComposeEmailTool(Tool):
             )
 
             draft_id = draft.get("id", "") if draft else ""
+            # `create_draft` returns an identical unsent draft instead of
+            # duplicating it, so the caller has to be told which of the two
+            # happened — a reused id is not a newly composed reply.
+            created = draft.get("created", True) if draft else False
             to_display = to_email or "(not specified)"
 
             return ToolResult(
                 status=ToolStatus.SUCCESS,
-                data={**result, "draft_id": draft_id},
+                data={**result, "draft_id": draft_id, "created": created},
                 message=(
-                    f"**Draft Saved** (ID: `{draft_id}`)\n\n"
+                    f"**Draft {'Saved' if created else 'Already Exists'}**"
+                    f" (ID: `{draft_id}`)\n\n"
                     f"**To:** {to_display}\n"
                     f"**Subject:** {subject}\n\n"
                     f"{body}\n\n"

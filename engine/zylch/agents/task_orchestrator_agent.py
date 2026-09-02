@@ -481,42 +481,61 @@ The sub-agents can handle multi-step workflows. Give them the full picture.
         if decision != APPROVED:
             return refusal_text(decision, "Sending this draft", "send_email")
 
-        # A human who corrected the recipient or body in the card must get the
-        # corrected mail, so persist the edits and re-read before extracting.
-        updates = draft_updates_from_card(edited)
-        if updates:
-            try:
-                self.storage.update_draft(self.owner_id, draft_id, updates)
-                draft = self.storage.get_draft(self.owner_id, draft_id) or draft
-            except Exception as e:
-                logger.warning(f"[TaskOrchestrator] Failed to apply approval-card edits: {e}")
-
-        # 4. Extract draft fields
-        to_addresses = draft.get("to_addresses", [])
-        to_str = ", ".join(to_addresses) if isinstance(to_addresses, list) else to_addresses
-        subject = draft.get("subject", "")
-        body = draft.get("body", "")
-        in_reply_to = draft.get("in_reply_to")
-        references = draft.get("references", [])
-        thread_id = draft.get("thread_id")
-
-        if not to_str:
-            return "❌ No recipient specified in the email draft."
-
-        logger.info(
-            f"[TaskOrchestrator] Sending email to {to_str} via {provider} (draft_id={draft_id})"
-        )
-
-        # Mark draft as sending
-        try:
-            with get_session() as session:
-                session.query(Draft).filter(Draft.id == draft_id).update(
-                    {"status": "sending", "provider": provider}
+        # 4. Claim the draft for this send attempt.
+        #
+        # A conditional UPDATE that reports whether it matched, not a blind
+        # write: the draft was read several steps ago and an approval was
+        # awaited in between, so another caller may already own it. Only the
+        # caller that wins the claim reaches the transport.
+        #
+        # It comes BEFORE the approval-card edits are persisted: a caller that
+        # loses the race must not write the operator's corrections into a row
+        # another request is at that moment mailing. Everything from here to
+        # the transport call is synchronous, so no cancellation can land in
+        # between and strand the draft in `sending`.
+        if not self.storage.claim_draft_for_send(self.owner_id, draft_id, provider=provider):
+            logger.info(f"[TaskOrchestrator] Draft {draft_id} already claimed — not sending")
+            current = self.storage.get_draft(self.owner_id, draft_id) or {}
+            if (current.get("status") or "").lower() == "sent":
+                return (
+                    f"Draft {draft_id} has already been sent. Nothing was sent."
+                    " Compose a new draft if you meant to write again."
                 )
-        except Exception as e:
-            logger.warning(f"[TaskOrchestrator] Failed to update draft status: {e}")
+            return f"Draft {draft_id} is already being sent by another request. Nothing was sent."
 
         try:
+            # A human who corrected the recipient or body in the card must get
+            # the corrected mail, so persist the edits and re-read before
+            # extracting.
+            updates = draft_updates_from_card(edited)
+            if updates:
+                try:
+                    self.storage.update_draft(self.owner_id, draft_id, updates)
+                    draft = self.storage.get_draft(self.owner_id, draft_id) or draft
+                except Exception as e:
+                    logger.warning(f"[TaskOrchestrator] Failed to apply approval-card edits: {e}")
+
+            # 5. Extract draft fields
+            to_addresses = draft.get("to_addresses", [])
+            to_str = ", ".join(to_addresses) if isinstance(to_addresses, list) else to_addresses
+            subject = draft.get("subject", "")
+            body = draft.get("body", "")
+            in_reply_to = draft.get("in_reply_to")
+            references = draft.get("references", [])
+            thread_id = draft.get("thread_id")
+
+            if not to_str:
+                # Nothing was handed to a transport, so give the claim back.
+                self.storage.release_draft_claim(
+                    self.owner_id, draft_id, "draft", "No recipient specified"
+                )
+                return "❌ No recipient specified in the email draft."
+
+            logger.info(
+                f"[TaskOrchestrator] Sending email to {to_str}"
+                f" via {provider} (draft_id={draft_id})"
+            )
+
             # 5. Send via appropriate provider
             if provider == "google":
                 from zylch.tools.gmail import GmailClient
@@ -559,42 +578,69 @@ The sub-agents can handle multi-step workflows. Give them the full picture.
                 # the draft back to `draft`.
                 raise RuntimeError(f"Unknown email provider: {provider}")
 
-            # 6. Delete draft after successful send
+        except Exception as e:
+            # The try block ends at the transport call on purpose: an
+            # exception raised after the message was accepted must NOT put the
+            # draft back to `draft`, or the delivered mail becomes sendable a
+            # second time.
+            from zylch.tools.gmail_tools import delivery_is_uncertain
+
+            logger.error(f"[TaskOrchestrator] Failed to send email: {e}", exc_info=True)
+            uncertain = delivery_is_uncertain(e)
             try:
-                with get_session() as session:
-                    session.query(Draft).filter(Draft.id == draft_id).delete()
-                logger.debug(f"[TaskOrchestrator] Deleted draft {draft_id} after sending")
-            except Exception as e:
-                logger.warning(f"[TaskOrchestrator] Failed to delete draft after send: {e}")
+                # Conditional on still holding the claim: if a second caller
+                # has re-claimed and delivered this draft meanwhile, reopening
+                # it here would offer a delivered mail for sending again.
+                self.storage.release_draft_claim(
+                    self.owner_id,
+                    draft_id,
+                    "sending" if uncertain else "draft",
+                    str(e),
+                )
+            except Exception as restore_error:
+                logger.error(
+                    f"[TaskOrchestrator] draft {draft_id} left in `sending`:"
+                    f" restore after transport error failed: {restore_error}"
+                )
 
-            # 7. Clear the pending draft from session state
-            self.session_state.set_last_action_result(None)
+            if uncertain:
+                return (
+                    f"**Connection lost while sending:** {str(e)}\n\nIt is NOT"
+                    f" known whether the email went out. Check the mailbox before"
+                    f" resending `{draft_id}`."
+                )
+            return f"❌ **Failed to send email:** {str(e)}\n\nNothing was sent. The draft is still saved — try again with `/email send {draft_id}` or modify the email."
 
-            logger.info(f"[TaskOrchestrator] Email sent successfully: {sent_id}")
+        # ── The transport accepted the message. Only `sent`/deleted from here.
+        # 6. Delete draft after successful send
+        try:
+            with get_session() as session:
+                session.query(Draft).filter(Draft.id == draft_id).delete()
+            logger.debug(f"[TaskOrchestrator] Deleted draft {draft_id} after sending")
+        except Exception as e:
+            logger.error(f"[TaskOrchestrator] Failed to delete draft after send: {e}")
+            try:
+                # The row survives; make sure it survives as `sent` and not as
+                # a `sending` row the stale-claim window would hand out again.
+                self.storage.force_draft_sent(self.owner_id, draft_id, sent_id)
+            except Exception as force_error:
+                logger.error(
+                    f"[TaskOrchestrator] draft {draft_id} DELIVERED but could not"
+                    f" be marked sent: {force_error}"
+                )
 
-            return f"""✅ **Email sent!**
+        # 7. Clear the pending draft from session state
+        self.session_state.set_last_action_result(None)
+
+        logger.info(f"[TaskOrchestrator] Email sent successfully: {sent_id}")
+
+        return f"""✅ **Email sent!**
 
 **To:** {to_str}
 **Subject:** {subject}
 **Via:** {provider.title()}
 
 The task may now be complete. Use `/tasks exit` to return to normal chat, or continue working on this task."""
-
-        except Exception as e:
-            # Restore draft status on failure
-            try:
-                with get_session() as session:
-                    session.query(Draft).filter(Draft.id == draft_id).update(
-                        {
-                            "status": "draft",
-                            "error_message": str(e),
-                        }
-                    )
-            except Exception:
-                pass
-
-            logger.error(f"[TaskOrchestrator] Failed to send email: {e}", exc_info=True)
-            return f"❌ **Failed to send email:** {str(e)}\n\nThe draft is still saved. Try again with `/email send {draft_id}` or modify the email."
 
     def _format_emailer_result(self, result: Dict[str, Any]) -> str:
         """Format EmailerAgent result for display."""

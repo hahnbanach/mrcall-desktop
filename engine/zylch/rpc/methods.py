@@ -13,6 +13,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
+from collections import OrderedDict
 from datetime import datetime, timezone
 from typing import Any, Awaitable, Callable, Dict, Optional
 
@@ -83,6 +84,45 @@ _session_auto_approvals: Dict[str, set] = {}
 # "session" grant to the right conversation + tool without trusting the
 # client to send them again.
 _approval_meta: Dict[str, tuple] = {}
+# tool_use_id -> tool_name, for approvals whose turn died before an answer
+# arrived (its WebSocket dropped, or it was cancelled). Kept ONLY so
+# `chat.approve` can tell the operator what happened instead of answering
+# a bare "unknown tool_use_id" — the card is on screen and the honest
+# answer is "that turn is gone and nothing was sent".
+_abandoned_approvals: "OrderedDict[str, str]" = OrderedDict()
+_MAX_ABANDONED_APPROVALS = 64
+
+
+# The asyncio Tasks that must not outlive the connection that asked for
+# them. A `chat.send` composes and writes on behalf of a client that is
+# watching; with the client gone the work has no owner and is cancelled
+# (see `server_ws._handle_connection`). Membership is opt-in and narrow
+# ON PURPOSE: other handlers — `emails.archive`, `whatsapp.send_message`
+# — perform an irreversible remote action and THEN record it locally, so
+# cancelling them mid-flight would desynchronise the mailbox from the
+# local store. Those are drained, not cancelled.
+_socket_bound_tasks: set = set()
+
+
+def register_socket_bound_task() -> None:
+    """Mark the running task as one to cancel when its socket dies."""
+    task = asyncio.current_task()
+    if task is not None:
+        _socket_bound_tasks.add(task)
+        task.add_done_callback(_socket_bound_tasks.discard)
+
+
+def is_socket_bound(task: asyncio.Task) -> bool:
+    """True when `task` must be cancelled with its connection."""
+    return task in _socket_bound_tasks
+
+
+def _note_abandoned_approval(tool_use_id: str, tool_name: str) -> None:
+    """Record that a turn died with this approval still unanswered."""
+    _abandoned_approvals[tool_use_id] = tool_name
+    _abandoned_approvals.move_to_end(tool_use_id)
+    while len(_abandoned_approvals) > _MAX_ABANDONED_APPROVALS:
+        _abandoned_approvals.popitem(last=False)
 
 
 def _should_auto_approve(conversation_id: str, tool_name: str) -> bool:
@@ -809,6 +849,11 @@ async def chat_send(params: Dict[str, Any], notify: NotifyFn) -> Any:
     if not isinstance(req_context, dict):
         req_context = {}
 
+    # This turn belongs to the client that asked for it: if that client
+    # goes away, the turn goes with it rather than composing and
+    # committing for nobody.
+    register_socket_bound_task()
+
     # Concurrency guard per conversation_id
     existing = _active_chats.get(conversation_id)
     if existing is not None and not existing.done():
@@ -897,6 +942,17 @@ async def chat_send(params: Dict[str, Any], notify: NotifyFn) -> Any:
             if not fut.done():
                 fut.cancel()
             approved = False
+        except asyncio.CancelledError:
+            # The turn was cancelled while parked here — its socket died,
+            # or the client aborted. The card may still be on the
+            # operator's screen, so leave a breadcrumb `chat.approve` can
+            # answer with.
+            logger.info(
+                f"[rpc] chat turn cancelled while awaiting approval "
+                f"tool_use_id={tool_use_id} tool={tool_name}"
+            )
+            _note_abandoned_approval(tool_use_id, tool_name)
+            raise
         finally:
             _pending_approvals.pop(tool_use_id, None)
             _approval_meta.pop(tool_use_id, None)
@@ -971,7 +1027,23 @@ async def chat_approve(params: Dict[str, Any], notify: NotifyFn) -> Any:
     fut = _pending_approvals.pop(tool_use_id, None)
     meta = _approval_meta.pop(tool_use_id, None)
     if fut is None:
-        err = ValueError(f"no pending approval for tool_use_id={tool_use_id}")
+        abandoned = _abandoned_approvals.pop(tool_use_id, None)
+        if abandoned is not None:
+            # The card is real; the turn behind it is not. Say so — a
+            # bare "unknown tool_use_id" reads like a bug and leaves the
+            # operator unsure whether the mail went out.
+            message = (
+                f"the turn that asked to run {abandoned} is no longer running "
+                f"(its connection dropped, or it was cancelled), so nothing was "
+                f"done and nothing was sent. Ask again to get a fresh approval."
+            )
+        else:
+            message = (
+                f"no pending approval for tool_use_id={tool_use_id} — it was "
+                f"already answered, it timed out, or its turn is gone. Nothing "
+                f"was sent."
+            )
+        err = ValueError(message)
         err.code = -32602  # type: ignore[attr-defined]
         raise err
 

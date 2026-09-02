@@ -38,6 +38,195 @@ _embedding_engine = None
 # DEDUP_SKIP_DAYS constant for messaging only.
 REOPEN_DEDUP_SKIP_DAYS = 7
 
+# The per-socket-operation timeout the SMTP transport is constructed with.
+# DEPENDENCY, not a preference: `IMAPClient.send` builds its
+# `smtplib.SMTP(...)` with exactly this value (it imports the name rather than
+# copying the number, so the two cannot drift), and the claim window below is
+# a consequence of it. An unbounded socket would be bounded only by the
+# kernel's TCP retry budget — roughly 15 minutes at best, unbounded against a
+# peer that stalls mid-DATA — and no window could then be derived at all.
+SMTP_TRANSPORT_TIMEOUT_SECONDS = 60
+
+# Blocking round trips one send costs REGARDLESS of how many people it goes
+# to. Enumerated rather than summarised, because the next person to change
+# `IMAPClient.send` has to be able to RECOUNT them against the code:
+#
+#   1 connect      4 EHLO again    7 DATA
+#   2 EHLO         5 LOGIN         8 end-of-data (".")
+#   3 STARTTLS     6 MAIL FROM     9 QUIT
+#
+# Each is bounded by SMTP_TRANSPORT_TIMEOUT_SECONDS on its own, so the worst
+# case is their SUM and not the timeout. Every recipient adds one more round
+# trip (RCPT TO) — To, Cc and Bcc share one envelope — which is why the window
+# is computed per draft below instead of being a constant.
+SMTP_FIXED_ROUND_TRIPS = 9
+
+# How much room the claim window leaves above that worst case.
+SEND_CLAIM_MARGIN = 2
+
+# Floor for the window, whatever the arithmetic says. It keeps a
+# single-recipient draft covered if the transport deadline is ever lowered,
+# and it states the direction the whole calculation errs in: a window that is
+# too LONG leaves a genuinely stuck draft unsendable for a while, which a
+# human can see and wait out, while a window that is too SHORT mails a
+# customer the same thing twice, which cannot be undone.
+SEND_CLAIM_FLOOR_MINUTES = 20
+
+
+def send_claim_window_minutes(recipient_count: int | None) -> int:
+    """How long this draft's `sending` claim stays its owner's.
+
+    A claim that is never resolved strands the row: `drafts.list` and `/email
+    list --draft` filter `status='draft'`, so nothing surfaces it (a stale row
+    IS discardable — see `rpc/draft_actions.py`), which is why the claim is
+    handed on at all.
+
+    It is a function of the RECIPIENT COUNT because the transport is: a send
+    costs SMTP_FIXED_ROUND_TRIPS round trips plus one per recipient, each
+    bounded by SMTP_TRANSPORT_TIMEOUT_SECONDS. A flat window covers a
+    one-recipient draft and silently fails a ten-recipient one — the claim
+    expires while the first send is still inside SMTP, a second caller takes
+    the row and delivers, and the customer gets the same mail twice. The
+    guarded rollback in `release_draft_claim` cannot prevent that: it stops a
+    late rollback from resurrecting a delivered row, not a second delivery.
+    """
+    n = max(1, int(recipient_count) if recipient_count else 0)
+    seconds = (SMTP_FIXED_ROUND_TRIPS + n) * SMTP_TRANSPORT_TIMEOUT_SECONDS * SEND_CLAIM_MARGIN
+    return max(SEND_CLAIM_FLOOR_MINUTES, -(-seconds // 60))  # ceil-div
+
+
+def send_claim_recipient_count(to: Any, cc: Any = None, bcc: Any = None) -> int:
+    """How many RCPT TO commands this draft's send will cost.
+
+    One envelope carries To, Cc and Bcc together (`IMAPClient.send`), and a
+    stored `to` may itself be a single comma-joined string, so the count comes
+    from the same normalization the draft identity uses rather than from
+    `len()` of the column.
+    """
+    return (
+        len(_normalize_addresses(to))
+        + len(_normalize_addresses(cc))
+        + len(_normalize_addresses(bcc))
+    )
+
+
+# How far back `create_draft` looks for an identical draft before inserting a
+# new row. Erring short fails towards inserting, which is the behaviour that
+# existed before deduplication.
+DRAFT_DEDUP_WINDOW_HOURS = 24
+
+
+def _naive_utcnow() -> datetime:
+    """Current UTC time, naive — the shape `models._utcnow` stores."""
+    return datetime.now(timezone.utc).replace(tzinfo=None)
+
+
+def _normalize_addresses(value: Any) -> List[str]:
+    """Flatten a recipient field to a sorted list of lowercase addresses.
+
+    The four `create_draft` call sites disagree about shape: the chat
+    `create_draft` tool hands over the model's raw `to` string (which may
+    itself hold several comma-separated addresses and is stored as a
+    one-element list), while `crm_tools` and the emailer path hand over a real
+    list. The same recipients must produce the same key whichever door they
+    came through, so split on commas, strip, lowercase, drop empties, sort.
+    """
+    if value is None:
+        return []
+    items = value if isinstance(value, (list, tuple)) else [value]
+    out: List[str] = []
+    for item in items:
+        if not isinstance(item, str):
+            continue
+        for part in item.split(","):
+            part = part.strip().lower()
+            if part:
+                out.append(part)
+    return sorted(out)
+
+
+def _normalize_references(value: Any) -> tuple:
+    """The References chain, order preserved — it is the reply's ancestry."""
+    if value is None:
+        return ()
+    items = value if isinstance(value, (list, tuple)) else [value]
+    return tuple(item.strip() for item in items if isinstance(item, str) and item.strip())
+
+
+def send_claim_is_stale(
+    updated_at: Any,
+    recipient_count: Optional[int] = None,
+    now: Optional[datetime] = None,
+) -> bool:
+    """Is a `sending` claim old enough that its owner is presumed gone?
+
+    Shared by the claim (which takes such a row over) and `drafts.discard`
+    (which lets the operator remove it): the two must agree, or a row is
+    sendable and undiscardable, or the reverse. That is also why the recipient
+    count is a PARAMETER — both callers hold the row, and both must compute
+    the same window for it.
+
+    Accepts what both callers actually hold — a naive datetime from the ORM
+    or the ISO string `to_dict()` produces. An unparseable or missing value
+    counts as stale: the row is unreachable by every other surface, so
+    refusing to free it is the worse failure.
+    """
+    if updated_at is None:
+        return True
+    if isinstance(updated_at, str):
+        try:
+            updated_at = datetime.fromisoformat(updated_at)
+        except ValueError:
+            return True
+    if not isinstance(updated_at, datetime):
+        return True
+    if updated_at.tzinfo is not None:
+        updated_at = updated_at.astimezone(timezone.utc).replace(tzinfo=None)
+    reference = now or _naive_utcnow()
+    window = send_claim_window_minutes(recipient_count)
+    return updated_at < reference - timedelta(minutes=window)
+
+
+def _draft_identity(
+    to: Any,
+    subject: Optional[str],
+    body: Optional[str],
+    thread_id: Optional[str],
+    cc: Any,
+    bcc: Any,
+    attachment_paths: Any,
+    in_reply_to: Optional[str] = None,
+    references: Any = None,
+) -> tuple:
+    """The tuple two drafts must share to be the same mail.
+
+    Recipients, subject, body and thread are the obvious part. `cc`, `bcc`
+    and `attachment_paths` are in the key because the caller prints its OWN
+    subject/body/attachments next to the id it gets back: returning a row that
+    differs in any of them hands the operator an id that points at a different
+    mail from the one just described.
+
+    `in_reply_to` and `references` are in the key because they decide WHERE
+    the mail lands: two replies to different messages of one thread, with the
+    same short body, are different mails, and returning one for the other
+    threads the answer under the wrong parent. With `thread_id` NULL — the
+    normal case for a fresh compose — they are the only thing that tells the
+    two apart at all. Nothing is lost by including them: a turn that re-runs
+    and re-composes carries the same threading headers, so the duplicate this
+    whole mechanism exists to catch still collapses.
+    """
+    return (
+        tuple(_normalize_addresses(to)),
+        (subject or ""),
+        (body or ""),
+        (thread_id or ""),
+        tuple(_normalize_addresses(cc)),
+        tuple(_normalize_addresses(bcc)),
+        tuple(sorted(p for p in (attachment_paths or []) if isinstance(p, str))),
+        (in_reply_to or ""),
+        _normalize_references(references),
+    )
+
 
 def _get_embedding_engine():
     """Get or create the embedding engine singleton."""
@@ -1750,18 +1939,100 @@ class Storage:
         cc: list = None,
         bcc: list = None,
     ) -> Dict[str, Any]:
-        """Create a draft email.
+        """Create a draft email, or return the identical one that already exists.
+
+        Idempotent within DRAFT_DEDUP_WINDOW_HOURS: an unsent draft for the
+        same owner with the same recipients, subject, body, thread, cc, bcc
+        and attachments is returned instead of inserting a second row. A turn
+        that outlives its caller and re-composes byte-identical text therefore
+        leaves ONE approvable draft, not two.
+
+        The check is deliberately in the application and not a unique index:
+        there is no body hash column, SQLite has no `sha1()` for an expression
+        index and treats NULLs as distinct (so every draft without a thread
+        would be exempt), `storage/database.py` migrates by ALTER TABLE ADD
+        COLUMN only, and index creation would fail outright on the profile
+        databases that already hold duplicates.
+
+        Only `status='draft'` rows match. A deliberate second mail on a thread
+        already answered must produce a new draft; returning the earlier, now
+        `sent` row would hand back an id every send path refuses.
 
         cc/bcc: optional lists of email addresses. Stored as JSON lists;
         empty list if None.
+
+        Returns:
+            The draft row, plus `created`: True when this call inserted it,
+            False when an identical draft already existed. Callers that
+            report "a new draft is waiting" must read that flag — the id
+            alone cannot tell the two cases apart.
         """
         to_list = to if isinstance(to, list) else [to]
+        cc_list = list(cc) if cc else []
+        bcc_list = list(bcc) if bcc else []
+        attach_list = list(attachment_paths) if attachment_paths else []
+        wanted = _draft_identity(
+            to=to_list,
+            subject=subject,
+            body=body,
+            thread_id=thread_id,
+            cc=cc_list,
+            bcc=bcc_list,
+            attachment_paths=attach_list,
+            in_reply_to=in_reply_to,
+            references=references,
+        )
+        cutoff = _naive_utcnow() - timedelta(hours=DRAFT_DEDUP_WINDOW_HOURS)
         with get_session() as session:
+            # Body equality narrows the scan in SQL; the rest of the identity
+            # needs normalization the DB cannot do (the same recipients are
+            # stored as "a@x, b@y" by one call site and ["a@x","b@y"] by
+            # another), so it is compared in Python.
+            candidates = (
+                session.query(Draft)
+                .filter(
+                    Draft.owner_id == owner_id,
+                    Draft.status == "draft",
+                    Draft.body == body,
+                    Draft.created_at >= cutoff,
+                )
+                .order_by(Draft.created_at.desc())
+                .all()
+            )
+            for row in candidates:
+                existing = _draft_identity(
+                    to=row.to_addresses,
+                    subject=row.subject,
+                    body=row.body,
+                    thread_id=row.thread_id,
+                    cc=row.cc_addresses,
+                    bcc=row.bcc_addresses,
+                    attachment_paths=row.attachment_paths,
+                    in_reply_to=row.in_reply_to,
+                    references=row.references,
+                )
+                if existing == wanted:
+                    # Stamp the reuse. `updated_at` is the row's "when did
+                    # this last change" field, and a re-compose IS a change of
+                    # standing: it says this draft is still the current answer
+                    # as of now. It is also the ONLY channel a caller outside
+                    # the process has for the reuse — an operator that diffs
+                    # `drafts.list` around a turn sees no new id and would
+                    # otherwise conclude that nothing was composed. See
+                    # `rpc/draft_queries.py`.
+                    row.updated_at = _naive_utcnow()
+                    session.flush()
+                    logger.info(
+                        f"[create_draft] identical draft already exists"
+                        f" (owner_id={owner_id}, draft_id={row.id}) -> reusing"
+                    )
+                    return {**row.to_dict(), "created": False}
+
             draft = Draft(
                 owner_id=owner_id,
                 to_addresses=to_list,
-                cc_addresses=list(cc) if cc else [],
-                bcc_addresses=list(bcc) if bcc else [],
+                cc_addresses=cc_list,
+                bcc_addresses=bcc_list,
                 subject=subject,
                 body=body,
                 in_reply_to=in_reply_to,
@@ -1769,11 +2040,11 @@ class Storage:
                 thread_id=thread_id,
                 provider=provider,
                 status="draft",
-                attachment_paths=attachment_paths or [],
+                attachment_paths=attach_list,
             )
             session.add(draft)
             session.flush()
-            return draft.to_dict()
+            return {**draft.to_dict(), "created": True}
 
     def list_drafts(self, owner_id: str, status: str = "draft") -> List[Dict[str, Any]]:
         """List drafts for a user."""
@@ -1785,6 +2056,43 @@ class Storage:
                 .all()
             )
             return [r.to_dict() for r in rows]
+
+    def find_drafts_by_id_prefix(
+        self, owner_id: str, prefix: str, limit: int = 5
+    ) -> List[Dict[str, Any]]:
+        """Drafts whose id starts with `prefix`, for this owner, any status.
+
+        Backs the abbreviated handle the operator is actually given: the
+        review digest prints the first 8 characters of the id and calls that
+        the handle, so the send path has to be able to resolve one. Owner
+        scoping is what keeps that safe — a prefix is only ever matched inside
+        one mailbox.
+
+        Every status is searched on purpose: the caller decides what a `sent`
+        or `sending` row means (the approval card still has to hydrate one),
+        and a lookup that hid rows would answer "no such draft" for a draft
+        that plainly exists.
+
+        `limit` is small because the only question asked of this result is
+        "exactly one, or more than one".
+        """
+        with get_session() as session:
+            rows = (
+                session.query(Draft)
+                .filter(
+                    Draft.owner_id == owner_id,
+                    Draft.id.startswith(prefix, autoescape=True),
+                )
+                .order_by(Draft.created_at.desc())
+                .limit(limit)
+                .all()
+            )
+            out = [r.to_dict() for r in rows]
+        logger.debug(
+            f"[find_drafts_by_id_prefix] prefix={prefix} owner_id={owner_id}"
+            f" -> matches={len(out)}"
+        )
+        return out
 
     def get_draft(self, owner_id: str, draft_id: str) -> Dict[str, Any] | None:
         """Get a specific draft by ID."""
@@ -1824,6 +2132,94 @@ class Storage:
             )
             return count > 0
 
+    def claim_draft_for_send(
+        self,
+        owner_id: str,
+        draft_id: str,
+        provider: str | None = None,
+    ) -> bool:
+        """Take exclusive ownership of a draft for one send attempt.
+
+        Moves the draft to `sending` with a single conditional UPDATE and
+        returns True only for the caller whose UPDATE actually matched. Two
+        callers racing on the same id therefore get exactly one True: the
+        loser sends nothing. Reading the status first and then writing it —
+        which all three send paths used to do — leaves a window in which both
+        callers believe the draft is theirs.
+
+        Sendable means "not yet handed to a transport", so the predicate is
+        `status IN ('draft','failed')`: a `failed` draft is deliberately
+        retryable by id and `/email send` accepts it too. A `sending` claim
+        older than this draft's own window (`send_claim_window_minutes`, which
+        depends on how many recipients its send has to walk) is also taken
+        over — the daemon that made it is gone and no surface would ever show
+        the row again.
+
+        MUST stay synchronous. Every caller runs it immediately before handing
+        the mail to a transport; an await in between would let a cancelled
+        turn strand the draft in `sending`.
+
+        Args:
+            owner_id: Owner of the draft.
+            draft_id: Exact draft id.
+            provider: Persisted only for 'google' / 'microsoft' — the table
+                carries CHECK (provider IN ('google','microsoft')), so writing
+                'imap' would raise.
+
+        Returns:
+            True if this call won the claim, False otherwise.
+        """
+        now = _naive_utcnow()
+        values: Dict[str, Any] = {
+            "status": "sending",
+            "updated_at": now,
+            "error_message": None,
+        }
+        if provider in ("google", "microsoft"):
+            values["provider"] = provider
+        with get_session() as session:
+            # Read the recipients first: the window a stale claim is measured
+            # against is a property of THIS draft's send, not a constant. The
+            # read decides only the window — the UPDATE below is still what
+            # picks the single winner, so two callers cannot both claim.
+            row = (
+                session.query(Draft.to_addresses, Draft.cc_addresses, Draft.bcc_addresses)
+                .filter(Draft.owner_id == owner_id, Draft.id == draft_id)
+                .one_or_none()
+            )
+            # No row means the UPDATE below will match nothing either, so the
+            # window it is measured against is moot: fall to the floor, which
+            # is what `drafts.discard` also gets for a row with no recipients.
+            # The two must degrade the same way or they disagree about one id.
+            recipients = (
+                send_claim_recipient_count(row[0], row[1], row[2]) if row is not None else 0
+            )
+            stale_before = now - timedelta(minutes=send_claim_window_minutes(recipients))
+            claimed = (
+                session.query(Draft)
+                .filter(
+                    Draft.owner_id == owner_id,
+                    Draft.id == draft_id,
+                    or_(
+                        Draft.status.in_(("draft", "failed")),
+                        and_(
+                            Draft.status == "sending",
+                            or_(
+                                Draft.updated_at.is_(None),
+                                Draft.updated_at < stale_before,
+                            ),
+                        ),
+                    ),
+                )
+                .update(values, synchronize_session=False)
+            )
+        logger.debug(
+            f"[claim_draft_for_send] claim(owner_id={owner_id},"
+            f" draft_id={draft_id}, provider={provider},"
+            f" recipients={recipients}) -> claimed={claimed}"
+        )
+        return claimed == 1
+
     def mark_draft_sent(
         self, owner_id: str, draft_id: str, sent_message_id: str
     ) -> Dict[str, Any] | None:
@@ -1837,6 +2233,114 @@ class Storage:
                 "sent_message_id": sent_message_id,
             },
         )
+
+    def release_draft_claim(
+        self,
+        owner_id: str,
+        draft_id: str,
+        status: str,
+        error_message: str | None = None,
+    ) -> bool:
+        """Give a claimed draft back, but only if this caller still holds it.
+
+        The counterpart of `claim_draft_for_send`, and guarded the same way:
+        the UPDATE matches only while the row is still `sending`. Writing the
+        status unconditionally is the defect this method exists to prevent —
+        a send that outlives the stale window is re-claimed and delivered by
+        somebody else, and the first caller's unguarded rollback then drags
+        the now-`sent` row back to `draft`, making a delivered mail sendable a
+        third time. A conditional write simply does nothing in that case,
+        which is exactly right: the row is no longer this caller's to move.
+
+        What the guard enforces is narrower than it looks, and the difference
+        matters: it compares STATUS, not ownership. It stops a release from
+        overwriting a row that has since become `sent` or has been deleted. It
+        cannot tell "still mine" from "re-claimed by a second sender", so a
+        late release CAN free a claim somebody else currently holds, and that
+        second sender may then be joined by a third. Nothing here prevents
+        that; what does is `send_claim_window_minutes`, sized so a claim
+        outlives the send it covers.
+
+        Args:
+            status: Where to park the draft — `draft` when the mail provably
+                did not go out, `sending` when that is unknown.
+            error_message: Diagnosis kept on the row for the operator.
+
+        Returns:
+            True if this caller still owned the row and the write landed.
+        """
+        values: Dict[str, Any] = {
+            "status": status,
+            "error_message": error_message,
+            "updated_at": _naive_utcnow(),
+        }
+        with get_session() as session:
+            released = (
+                session.query(Draft)
+                .filter(
+                    Draft.owner_id == owner_id,
+                    Draft.id == draft_id,
+                    Draft.status == "sending",
+                )
+                .update(values, synchronize_session=False)
+            )
+        logger.debug(
+            f"[release_draft_claim] release(owner_id={owner_id},"
+            f" draft_id={draft_id}, status={status}) -> released={released}"
+        )
+        if not released:
+            logger.warning(
+                f"[release_draft_claim] draft {draft_id} was no longer `sending`"
+                " — another request owns it now; leaving it alone"
+            )
+        return released > 0
+
+    def force_draft_sent(self, owner_id: str, draft_id: str, sent_message_id: str) -> bool:
+        """Pin a draft to `sent` when its mail has already been delivered.
+
+        The last-resort partner of `mark_draft_sent`, used by the send paths
+        when the normal bookkeeping write fails AFTER the transport accepted
+        the message. It writes with one UPDATE instead of loading the row, so
+        it does not depend on the path that has just failed. It never moves a
+        draft back to a sendable status: once the mail is out, the only
+        correct direction is `sent`.
+
+        Guarded on `status='sending'` for the same reason as
+        `release_draft_claim`, and with the same limit: the guard reads a
+        STATUS, not an owner. It stops this call from overwriting a row that
+        is already `sent` (which needs nothing from it) or gone, but if a
+        second sender has re-claimed the row this write can still stamp the
+        first sender's message id on the second sender's claim. It never makes
+        a delivered draft sendable, which is the property this method exists
+        for.
+
+        Returns:
+            True if a row was updated.
+        """
+        now = _naive_utcnow()
+        with get_session() as session:
+            updated = (
+                session.query(Draft)
+                .filter(
+                    Draft.owner_id == owner_id,
+                    Draft.id == draft_id,
+                    Draft.status == "sending",
+                )
+                .update(
+                    {
+                        "status": "sent",
+                        "sent_at": now,
+                        "sent_message_id": sent_message_id,
+                        "updated_at": now,
+                    },
+                    synchronize_session=False,
+                )
+            )
+        logger.debug(
+            f"[force_draft_sent] force(owner_id={owner_id}, draft_id={draft_id})"
+            f" -> updated={updated}"
+        )
+        return updated > 0
 
     def insert_sent_email(
         self,

@@ -22,6 +22,11 @@ from zylch.storage.models import TaskItem
 
 logger = logging.getLogger(__name__)
 
+# Fire-and-forget background tasks (the auto-sync job). Held here so the
+# event loop keeps a strong reference — without one asyncio may garbage
+# collect the task mid-run. Same pattern as `rpc.methods._bg_tasks`.
+_bg_tasks: set = set()
+
 
 class ChatService:
     """Service for managing conversational AI interactions.
@@ -812,7 +817,9 @@ class ChatService:
 
             if job["status"] == "pending":
                 executor = JobExecutor(storage)
-                asyncio.create_task(executor.execute_job(job["id"], owner_id))
+                bg = asyncio.create_task(executor.execute_job(job["id"], owner_id))
+                _bg_tasks.add(bg)
+                bg.add_done_callback(_bg_tasks.discard)
                 logger.info(
                     f"[AUTO-SYNC] Background job {job['id']} " f"scheduled for owner_id={owner_id}"
                 )

@@ -54,6 +54,23 @@ WS_CLOSE_AUTH_EXPIRED = 4401
 # fix is client-side (force-refresh a near-expiry token before connecting).
 WS_AUTH_GRACE_MS = 30_000
 
+# Keepalive, and it is a two-sided trade.
+#
+# Too short and a briefly blocked event loop kills its own socket with
+# `1011 keepalive ping timeout` — the library default gives the pong only
+# 20 s. Too long and a peer that is genuinely gone (closed lid, NAT drop)
+# keeps its turn alive for the whole timeout, because the socket closing
+# is precisely what cancels that turn.
+#
+# 40 s sits above every on-loop stall that remains: tool bodies that
+# block now run in a thread pool, LLM calls run in an executor, and the
+# per-turn engine/IMAP rebuild that once cost minutes is cached. What is
+# still on the loop is the slash-command handlers, whose IMAP work can
+# exceed this on a cold connection — they were already exceeding the 20 s
+# default before, so this is strictly more headroom, not a new exposure.
+WS_PING_INTERVAL_SECONDS = 20
+WS_PING_TIMEOUT_SECONDS = 40
+
 
 def _expected_owner_uid() -> str:
     """The Firebase uid this profile is bound to (OWNER_ID in its .env)."""
@@ -202,8 +219,25 @@ async def _handle_connection(connection) -> None:
     except Exception as e:
         logger.warning(f"[ws] connection error uid={uid}: {type(e).__name__}: {e}")
     finally:
-        # Drain in-flight handlers, then stop the writer.
+        # Cancel the handlers that belong to this client, then wait for
+        # everything. Draining a `chat.send` instead let a turn whose
+        # socket had died run to completion: it kept composing, committed
+        # a draft nobody was waiting for, and left an approval card the
+        # operator could answer into a dead turn.
+        #
+        # Only tasks that opted in (`methods.register_socket_bound_task`)
+        # are cancelled. A blanket cancel would hit handlers that perform
+        # an irreversible remote action and then record it locally —
+        # `emails.archive` IMAP-MOVEs before it sets the local flag,
+        # `whatsapp.send_message` sends before it stores the message —
+        # where stopping in between desynchronises the mailbox from the
+        # local store. Those finish.
         if inflight:
+            from zylch.rpc.methods import is_socket_bound
+
+            for task in list(inflight):
+                if is_socket_bound(task):
+                    task.cancel()
             await asyncio.gather(*inflight, return_exceptions=True)
         out_q.put_nowait(None)
         await asyncio.gather(writer_task, return_exceptions=True)
@@ -340,6 +374,8 @@ async def serve_ws(
             unix_path,
             process_request=_process_request,
             max_size=16 * 1024 * 1024,
+            ping_interval=WS_PING_INTERVAL_SECONDS,
+            ping_timeout=WS_PING_TIMEOUT_SECONDS,
         )
     else:
         logger.info(f"[ws] serving JSON-RPC on ws://{host}:{port}")
@@ -349,6 +385,8 @@ async def serve_ws(
             port,
             process_request=_process_request,
             max_size=16 * 1024 * 1024,
+            ping_interval=WS_PING_INTERVAL_SECONDS,
+            ping_timeout=WS_PING_TIMEOUT_SECONDS,
         )
 
     async with server_cm as server:
