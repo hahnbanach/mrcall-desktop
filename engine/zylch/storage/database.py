@@ -63,6 +63,10 @@ def get_engine() -> Engine:
             cursor = dbapi_conn.cursor()
             cursor.execute("PRAGMA journal_mode=WAL")
             cursor.execute("PRAGMA foreign_keys=ON")
+            # Wait for a concurrent writer instead of failing after pysqlite's
+            # 5s default — a second process on the same file is rare today but
+            # real (CLI beside the server), and mandatory once memory is shared.
+            cursor.execute("PRAGMA busy_timeout=30000")
             cursor.close()
 
         logger.info(f"SQLAlchemy engine created for {db_url}")

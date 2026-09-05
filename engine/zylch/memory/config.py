@@ -1,6 +1,5 @@
 """Configuration for Memory system."""
 
-from pathlib import Path
 
 from pydantic import Field
 from pydantic_settings import BaseSettings
@@ -12,9 +11,6 @@ class MemoryConfig(BaseSettings):
     All settings can be overridden via environment variables with prefix MEMORY_
     Example: MEMORY_DB_PATH=/custom/path/memory.db
     """
-
-    # Storage paths
-    db_path: Path = Field(default=Path(".swarm/memory.db"), description="SQLite database file path")
 
     # Embedding model
     embedding_model: str = Field(

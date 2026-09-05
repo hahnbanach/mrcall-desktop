@@ -89,14 +89,6 @@ description: |
 
 ## Known issues
 
-- **Memory-code findings from the 2026-09-05 shared-memory design reviews** —
-  one real bug (`cli/chat.py:176` calls `BlobStorage()` with no arguments; the
-  swallowed `TypeError` makes the chat CLI status line always report 0
-  entities), two dead config knobs (`MemoryConfig.db_path` / `MEMORY_DB_PATH`
-  and `Settings.database_url`, both declared and read by nothing), one
-  owner-unscoped blob read to harden, and the missing SQLite `busy_timeout`
-  that becomes mandatory under a shared memory DB. Details and acceptance:
-  [`../../docs/briefs/2026-09-05-memory-code-findings.md`](../../docs/briefs/2026-09-05-memory-code-findings.md).
 - **Stale Firebase id_token still in zylch.log + Anthropic request logs (one-time)** — pre-`_redact_params` runs leaked the JWT through narration; tokens expire ~1h so no rotation needed. Going-forward: redaction handles new RPCs only if `_SECRET_PARAM_KEYS_*` tables are kept in sync.
 - **`humanize_error` wired only to `update.run` + `sync.run`** — `account.balance` and other httpx callers still log full tracebacks. Tracked in [`harness-backlog.md`](harness-backlog.md).
 - **Urgency cap is deterministic regex on thread role lines** — disagrees with LLM judgment in edge cases (auto-template "thanks for your inquiry" replies mark user as last replier, cap fires even when the contact is the one waiting). Mario's option B was explicit; refine to "ignore senders in a known-automated set" if false-low rate gets high. (The multi-thread mis-judgment — judging the last-rendered sibling instead of the newest turn — is FIXED as of `b889eb8`; this caveat is now only about the auto-template edge case.)

@@ -236,7 +236,11 @@ class EmailContextGatherer:
         blobs = []
         with get_session() as session:
             for blob_id in blob_ids:
-                row = session.query(Blob).filter(Blob.id == blob_id).first()
+                row = (
+                    session.query(Blob)
+                    .filter(Blob.id == blob_id, Blob.owner_id == self.owner_id)
+                    .first()
+                )
                 if row:
                     blobs.append(row.to_dict())
         return blobs

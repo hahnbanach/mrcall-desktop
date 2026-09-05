@@ -172,8 +172,12 @@ def _print_dashboard(profile: str, owner_id: str):
     # --- Memory ---
     try:
         from zylch.memory.blob_storage import BlobStorage
+        from zylch.memory.config import MemoryConfig
+        from zylch.memory.embeddings import EmbeddingEngine
+        from zylch.storage.database import get_session
 
-        mem_stats = BlobStorage().get_stats(owner_id)
+        blob_store = BlobStorage(get_session, EmbeddingEngine(MemoryConfig()))
+        mem_stats = blob_store.get_stats(owner_id)
         entities = mem_stats.get("total_blobs", 0)
     except Exception:
         entities = 0

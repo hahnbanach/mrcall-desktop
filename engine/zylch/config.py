@@ -29,12 +29,6 @@ class Settings(BaseSettings):
         description="Log level: DEBUG, INFO, WARNING, ERROR",
     )
 
-    # Database (SQLite default for standalone)
-    database_url: str = Field(
-        default="",
-        description=("SQLAlchemy database URL" " (default: sqlite:///~/.zylch/zylch.db)"),
-    )
-
     # Encryption (for sensitive data at rest)
     encryption_key: str = Field(
         default="",
