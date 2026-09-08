@@ -169,7 +169,9 @@ class BlobStorage:
                 )
                 return {}
 
-            if expected_updated_at is not None and _iso(blob.updated_at) != _iso(expected_updated_at):
+            if expected_updated_at is not None and _iso(blob.updated_at) != _iso(
+                expected_updated_at
+            ):
                 logger.info(
                     f"update_blob: blob {blob_id} changed since it was read "
                     f"(expected {expected_updated_at}, now {_iso(blob.updated_at)}) — conflict"

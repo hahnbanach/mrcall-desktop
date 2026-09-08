@@ -166,7 +166,10 @@ export async function provisionProfile(
   idToken: string,
   values: Record<string, string>
 ): Promise<ProvisionResult> {
-  const { OWNER_ID: _ownerId, ...body } = values
+  // Defensive second strip of the two host-owned values (the caller
+  // already skips them): the token names the uid, the host names the
+  // company key, and provisiond refuses either from the body.
+  const { OWNER_ID: _ownerId, MEMORY_KEY: _memoryKey, ...body } = values
 
   const attempt = await safeFetch(provisionUrl('/api/provision'), {
     method: 'POST',

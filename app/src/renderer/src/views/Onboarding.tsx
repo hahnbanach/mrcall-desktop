@@ -58,7 +58,20 @@ function isValidEmail(s: string): boolean {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s.trim())
 }
 
-type Step = 'form' | 'connect'
+// 'memory' sits between 'form' and 'connect': it needs the sidecar, which
+// exists only after `finalize`. The engine mints the company memory key at
+// first boot; a key pasted at the form step is acted on here — previewed
+// (the echo: whose memory, how big), then joined — never written at
+// creation, because a typed key the engine cannot vouch for must not
+// silently open (or create) a store.
+type Step = 'form' | 'memory' | 'connect'
+
+type MemoryState =
+  | { kind: 'busy'; text: string }
+  | { kind: 'minted'; key: string }
+  | { kind: 'preview'; key: string; echo: string }
+  | { kind: 'refused'; key: string; text: string }
+  | { kind: 'joined'; text: string }
 
 export default function Onboarding({ onReady }: OnboardingProps = {}): JSX.Element {
   const firebaseUser = auth.currentUser
@@ -70,6 +83,11 @@ export default function Onboarding({ onReady }: OnboardingProps = {}): JSX.Eleme
   const [createdProfile, setCreatedProfile] = useState<string>('')
   const [submitting, setSubmitting] = useState(false)
   const [formError, setFormError] = useState<string | null>(null)
+  // The optional memory key pasted at the form step (kept out of `values`:
+  // it is never part of the creation payload) and the memory step's state.
+  const [pastedMemoryKey, setPastedMemoryKey] = useState('')
+  const [memoryState, setMemoryState] = useState<MemoryState>({ kind: 'busy', text: '' })
+  const [copied, setCopied] = useState(false)
 
   // All schema-driven values, keyed by the field's key. Pre-seed
   // EMAIL_ADDRESS from Firebase + default IMAP/SMTP ports.
@@ -172,10 +190,77 @@ export default function Onboarding({ onReady }: OnboardingProps = {}): JSX.Eleme
       await installEngineTokenPusher()
       setCreatedProfile(r.profile)
       setSubmitting(false)
-      setStep('connect')
+      setStep('memory')
+      void runMemoryStep(pastedMemoryKey.trim())
     } catch (e: unknown) {
       setFormError(errorMessage(e))
       setSubmitting(false)
+    }
+  }
+
+  // Mint-or-join. Empty field: the engine already minted at first boot,
+  // key_mint returns it — the show-once moment. Pasted key: preview first
+  // (refuse an unknown key, echo a known one), join only on confirmation.
+  const runMemoryStep = async (key: string): Promise<void> => {
+    if (!key) {
+      setMemoryState({ kind: 'busy', text: 'Creating your company memory…' })
+      try {
+        const r = await window.zylch.memory.keyMint()
+        setMemoryState({ kind: 'minted', key: r.key })
+      } catch (e) {
+        setMemoryState({ kind: 'refused', key: '', text: errorMessage(e) })
+      }
+      return
+    }
+    setMemoryState({ kind: 'busy', text: 'Looking up that memory…' })
+    try {
+      const r = await window.zylch.memory.joinPreview(key)
+      if (!r.well_formed) {
+        setMemoryState({ kind: 'refused', key, text: `Not a memory key: ${r.reason}.` })
+        return
+      }
+      if (!r.exists) {
+        setMemoryState({
+          kind: 'refused',
+          key,
+          text: 'No company memory exists for this key on this engine. Check it with whoever gave it to you.'
+        })
+        return
+      }
+      const who = (r.contributors || []).length
+      setMemoryState({
+        kind: 'preview',
+        key,
+        echo: `${r.self_notion ? `“${r.self_notion}”` : 'Company self-notion not set'} · ${
+          r.blob_count ?? 0
+        } memory entries · ${who} contributing account${who === 1 ? '' : 's'}`
+      })
+    } catch (e) {
+      setMemoryState({ kind: 'refused', key, text: errorMessage(e) })
+    }
+  }
+
+  const handleJoin = async (key: string): Promise<void> => {
+    setMemoryState({ kind: 'busy', text: 'Joining…' })
+    try {
+      const r = await window.zylch.memory.join(key)
+      if (!r.ok) {
+        setMemoryState({ kind: 'refused', key, text: r.reason || 'Join refused.' })
+        return
+      }
+      setMemoryState({ kind: 'joined', text: 'Joined. This account now shares that company memory.' })
+    } catch (e) {
+      setMemoryState({ kind: 'refused', key, text: errorMessage(e) })
+    }
+  }
+
+  const copyMintedKey = async (key: string): Promise<void> => {
+    try {
+      await navigator.clipboard.writeText(key)
+      setCopied(true)
+      setTimeout(() => setCopied(false), 1500)
+    } catch {
+      /* ignore — some platforms gate clipboard without user gesture */
     }
   }
 
@@ -192,7 +277,9 @@ export default function Onboarding({ onReady }: OnboardingProps = {}): JSX.Eleme
             <p className="text-sm text-brand-grey-80 mt-1">
               {step === 'form'
                 ? 'Set up your profile. All data stays on this machine.'
-                : 'Optional integrations — connect now or later from Settings.'}
+                : step === 'memory'
+                  ? 'Company memory — yours, or one you join.'
+                  : 'Optional integrations — connect now or later from Settings.'}
             </p>
             {firebaseEmail && (
               <p className="text-xs text-brand-grey-80 mt-2">
@@ -230,6 +317,25 @@ export default function Onboarding({ onReady }: OnboardingProps = {}): JSX.Eleme
               onChange={setField}
               includeGroups={['Email', 'Personal data', 'Documents & notes']}
             />
+            <div className="pt-4 mt-4 border-t">
+              <label className="block text-xs font-semibold text-brand-black" htmlFor="memory-key">
+                Memory key <span className="font-normal text-brand-grey-80">(optional)</span>
+              </label>
+              <p className="text-xs text-brand-grey-80 mt-1 mb-2">
+                Paste it if a colleague gave you one, to share their company memory. Leave it
+                empty to start a memory of your own — you will get a key to hand out.
+              </p>
+              <input
+                id="memory-key"
+                type="text"
+                value={pastedMemoryKey}
+                onChange={(e) => setPastedMemoryKey(e.target.value)}
+                spellCheck={false}
+                autoComplete="off"
+                placeholder="Memory key"
+                className="w-full text-sm font-mono border border-brand-mid-grey rounded px-2 py-1"
+              />
+            </div>
             <div className="flex items-center justify-end gap-2 pt-4 mt-4 border-t">
               <button
                 onClick={handleSubmit}
@@ -237,6 +343,97 @@ export default function Onboarding({ onReady }: OnboardingProps = {}): JSX.Eleme
                 className="px-4 py-2 text-sm bg-brand-black text-white rounded disabled:bg-brand-mid-grey"
               >
                 {submitting ? 'Creating…' : 'Create profile and continue'}
+              </button>
+            </div>
+          </div>
+        ) : step === 'memory' ? (
+          <div className="bg-white border border-brand-mid-grey rounded-lg shadow-sm p-5 space-y-4">
+            {memoryState.kind === 'busy' && (
+              <p className="text-sm text-brand-grey-80">{memoryState.text}</p>
+            )}
+            {memoryState.kind === 'minted' && (
+              <>
+                <p className="text-sm text-brand-black">
+                  This is your company memory key. Every account that holds it shares this
+                  memory — copy it and hand it to colleagues the way you would a Wi-Fi password.
+                  It stays in Settings, so you can copy it again later.
+                </p>
+                <div className="flex items-center gap-2">
+                  <code className="text-sm font-mono select-all break-all text-brand-black">
+                    {memoryState.key}
+                  </code>
+                  <button
+                    type="button"
+                    onClick={() => copyMintedKey(memoryState.key)}
+                    className="px-2 py-1 text-xs border rounded text-brand-grey-80 hover:text-brand-black shrink-0"
+                  >
+                    {copied ? 'Copied' : 'Copy'}
+                  </button>
+                </div>
+              </>
+            )}
+            {memoryState.kind === 'preview' && (
+              <>
+                <p className="text-sm text-brand-black">You are about to join an existing company memory:</p>
+                <p className="text-sm text-brand-grey-80">{memoryState.echo}</p>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => handleJoin(memoryState.key)}
+                    className="px-3 py-1 text-sm bg-brand-black text-white rounded"
+                  >
+                    Join this memory
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => runMemoryStep('')}
+                    className="px-3 py-1 text-sm border rounded text-brand-grey-80 hover:text-brand-black"
+                  >
+                    Start a memory of my own instead
+                  </button>
+                </div>
+              </>
+            )}
+            {memoryState.kind === 'refused' && (
+              <>
+                <p className="text-sm text-brand-danger">{memoryState.text}</p>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="text"
+                    defaultValue={memoryState.key}
+                    onChange={(e) => setPastedMemoryKey(e.target.value)}
+                    spellCheck={false}
+                    placeholder="Memory key"
+                    className="flex-1 text-sm font-mono border border-brand-mid-grey rounded px-2 py-1"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => runMemoryStep(pastedMemoryKey.trim())}
+                    className="px-3 py-1 text-sm border rounded text-brand-grey-80 hover:text-brand-black"
+                  >
+                    Try again
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => runMemoryStep('')}
+                    className="px-3 py-1 text-sm border rounded text-brand-grey-80 hover:text-brand-black"
+                  >
+                    Start a memory of my own
+                  </button>
+                </div>
+              </>
+            )}
+            {memoryState.kind === 'joined' && (
+              <p className="text-sm text-brand-black">{memoryState.text}</p>
+            )}
+            <div className="flex items-center justify-end pt-2 border-t">
+              <button
+                type="button"
+                onClick={() => setStep('connect')}
+                disabled={memoryState.kind === 'busy' || memoryState.kind === 'preview'}
+                className="px-4 py-2 text-sm bg-brand-black text-white rounded disabled:bg-brand-mid-grey"
+              >
+                Continue
               </button>
             </div>
           </div>

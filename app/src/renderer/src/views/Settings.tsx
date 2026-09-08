@@ -127,7 +127,7 @@ export default function Settings(): JSX.Element {
     if (newBid) {
       const valid = await validateBusinessId(newBid)
       if (valid === false) {
-        setError('Business ID non valido o non è tra le tue business — controlla.')
+        setError('Invalid business ID, or not one of your businesses — check it.')
         setStatus({ kind: 'error', text: 'Save failed' })
         setSaving(false)
         return
@@ -207,6 +207,13 @@ export default function Settings(): JSX.Element {
           Account
         </h2>
         <AccountCard />
+      </section>
+
+      <section className="mb-6">
+        <h2 className="text-sm font-semibold uppercase text-brand-grey-80 mb-3 border-b pb-1">
+          Company memory
+        </h2>
+        <MemoryCard />
       </section>
 
       <section className="mb-6">
@@ -929,6 +936,14 @@ function MaintenanceCard(): JSX.Element {
         setMemResult('No LLM transport configured. Sign in or paste an Anthropic key.')
         return
       }
+      if (r.skipped) {
+        // One sweep per company: another engine on the same memory holds
+        // the lock. Not a failure and not "nothing found" — say which.
+        setMemResult(
+          "Another engine is reconsolidating this company's memory right now — nothing to do here."
+        )
+        return
+      }
       const parts: string[] = []
       parts.push(`Examined ${r.blobs_examined ?? 0} blob(s) across ${r.groups_examined ?? 0} group(s)`)
       if ((r.blobs_merged ?? 0) > 0) {
@@ -995,6 +1010,210 @@ function MaintenanceCard(): JSX.Element {
         >
           {memBusy ? 'Running…' : 'Reconsolidate'}
         </button>
+      </div>
+    </div>
+  )
+}
+
+function MemoryCard(): JSX.Element {
+  // The company memory key — a capability: accounts sharing it share one
+  // company memory. Shown in clear with a copy control, laid out like the
+  // account card's uid row, never as a masked password field: its holder
+  // hands it to colleagues, who paste it at account creation or below.
+  // Read back through settings.get_secret (settings.get masks it), and
+  // written ONLY through memory.join: the engine refuses it in
+  // settings.update, because a join merges and rebinds while a plain
+  // save would just point the engine at another store.
+  const [key, setKey] = useState<string>('')
+  const [status, setStatus] = useState<{
+    available: boolean
+    reason: string
+    self_notion?: string | null
+    blob_count?: number
+    contributors?: string[]
+  } | null>(null)
+  const [copied, setCopied] = useState(false)
+  const [joinKey, setJoinKey] = useState('')
+  const [echo, setEcho] = useState<{
+    kind: 'idle' | 'busy' | 'ok' | 'err'
+    text: string
+    exists?: boolean
+  }>({ kind: 'idle', text: '' })
+  const [joining, setJoining] = useState(false)
+  const [joinMsg, setJoinMsg] = useState<{ kind: 'idle' | 'ok' | 'err'; text: string }>({
+    kind: 'idle',
+    text: ''
+  })
+
+  const refresh = async (): Promise<void> => {
+    try {
+      const [s, secret] = await Promise.all([
+        window.zylch.memory.status(),
+        window.zylch.settings.getSecret('MEMORY_KEY')
+      ])
+      setStatus(s)
+      setKey(secret.value || '')
+    } catch (e) {
+      setStatus({ available: false, reason: errorMessage(e) })
+    }
+  }
+
+  useEffect(() => {
+    void refresh()
+  }, [])
+
+  const copyKey = async (): Promise<void> => {
+    try {
+      await navigator.clipboard.writeText(key)
+      setCopied(true)
+      setTimeout(() => setCopied(false), 1500)
+    } catch {
+      /* ignore — some platforms gate clipboard without user gesture */
+    }
+  }
+
+  const handleTest = async (): Promise<void> => {
+    const k = joinKey.trim()
+    if (!k) {
+      setEcho({ kind: 'err', text: 'Paste a memory key first.' })
+      return
+    }
+    setEcho({ kind: 'busy', text: 'Looking up…' })
+    setJoinMsg({ kind: 'idle', text: '' })
+    try {
+      const r = await window.zylch.memory.joinPreview(k)
+      if (!r.well_formed) {
+        setEcho({ kind: 'err', text: `Not a memory key: ${r.reason}.`, exists: false })
+        return
+      }
+      if (!r.exists) {
+        setEcho({
+          kind: 'err',
+          text: 'No company memory exists for this key on this engine. Check it with whoever gave it to you.',
+          exists: false
+        })
+        return
+      }
+      const who = (r.contributors || []).length
+      setEcho({
+        kind: 'ok',
+        exists: true,
+        text: `${r.self_notion ? `“${r.self_notion}”` : 'Company self-notion not set'} · ${
+          r.blob_count ?? 0
+        } memory entries · ${who} contributing account${who === 1 ? '' : 's'}`
+      })
+    } catch (e) {
+      setEcho({ kind: 'err', text: errorMessage(e) })
+    }
+  }
+
+  const handleJoin = async (): Promise<void> => {
+    setJoining(true)
+    setJoinMsg({ kind: 'idle', text: '' })
+    try {
+      const r = await window.zylch.memory.join(joinKey.trim())
+      if (!r.ok) {
+        setJoinMsg({ kind: 'err', text: r.reason || 'Join refused.' })
+        return
+      }
+      const merged = r.merged || {}
+      setJoinMsg({
+        kind: 'ok',
+        text: r.already
+          ? 'Already on this memory.'
+          : `Joined. Merged ${merged.blobs ?? 0} entries${
+              merged.facts_converged ? `, ${merged.facts_converged} fact(s) converged` : ''
+            }.`
+      })
+      setJoinKey('')
+      setEcho({ kind: 'idle', text: '' })
+      await refresh()
+    } catch (e) {
+      setJoinMsg({ kind: 'err', text: errorMessage(e) })
+    } finally {
+      setJoining(false)
+    }
+  }
+
+  return (
+    <div className="bg-white border border-brand-mid-grey rounded-lg shadow-sm p-4 space-y-4">
+      <div>
+        <div className="text-sm font-semibold text-brand-black">Company memory key</div>
+        <p className="text-xs text-brand-grey-80 mt-1">
+          Every account that holds this key shares one company memory. To share yours, copy it
+          and send it to a colleague the way you would a Wi-Fi password; they paste it when they
+          create their account, or below.
+        </p>
+        <div className="mt-2 flex items-center gap-2">
+          <code className="text-xs text-brand-grey-80 font-mono select-all break-all">
+            {key || '—'}
+          </code>
+          {key && (
+            <button
+              type="button"
+              onClick={copyKey}
+              className="px-2 py-1 text-xs border rounded text-brand-grey-80 hover:text-brand-black shrink-0"
+            >
+              {copied ? 'Copied' : 'Copy'}
+            </button>
+          )}
+        </div>
+        {status && (
+          <p className={`text-xs mt-2 ${status.available ? 'text-brand-grey-80' : 'text-brand-danger'}`}>
+            {status.available
+              ? `${status.self_notion ? `“${status.self_notion}” · ` : ''}${status.blob_count ?? 0} memory entries · ${
+                  (status.contributors || []).length
+                } contributing account${(status.contributors || []).length === 1 ? '' : 's'}`
+              : `Memory unavailable: ${status.reason}`}
+          </p>
+        )}
+      </div>
+
+      <div className="border-t pt-3">
+        <div className="text-xs font-semibold text-brand-black">Join another company memory</div>
+        <p className="text-xs text-brand-grey-80 mt-1">
+          Paste a colleague's key. You will see whose memory it is and how big it is before
+          anything changes; joining merges what this account already knows into it.
+        </p>
+        <div className="mt-2 flex items-center gap-2">
+          <input
+            type="text"
+            value={joinKey}
+            onChange={(e) => {
+              setJoinKey(e.target.value)
+              setEcho({ kind: 'idle', text: '' })
+            }}
+            placeholder="Memory key"
+            spellCheck={false}
+            className="flex-1 text-xs font-mono border border-brand-mid-grey rounded px-2 py-1"
+          />
+          <button
+            type="button"
+            onClick={handleTest}
+            disabled={!joinKey.trim() || echo.kind === 'busy' || joining}
+            className="px-2 py-1 text-xs border rounded text-brand-grey-80 hover:text-brand-black disabled:opacity-50"
+          >
+            Test
+          </button>
+          <button
+            type="button"
+            onClick={handleJoin}
+            disabled={echo.kind !== 'ok' || !echo.exists || joining}
+            className="px-3 py-1 text-xs bg-brand-black text-white rounded disabled:bg-brand-mid-grey"
+          >
+            {joining ? 'Joining…' : 'Join'}
+          </button>
+        </div>
+        {echo.text && (
+          <p className={`text-xs mt-2 ${echo.kind === 'err' ? 'text-brand-danger' : 'text-brand-grey-80'}`}>
+            {echo.text}
+          </p>
+        )}
+        {joinMsg.text && (
+          <p className={`text-xs mt-2 ${joinMsg.kind === 'err' ? 'text-brand-danger' : 'text-brand-success'}`}>
+            {joinMsg.text}
+          </p>
+        )}
       </div>
     </div>
   )

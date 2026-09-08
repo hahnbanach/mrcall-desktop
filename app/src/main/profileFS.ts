@@ -42,6 +42,7 @@ export const KNOWN_KEYS: ReadonlySet<string> = new Set([
   'GOOGLE_CALENDAR_CLIENT_ID',
   'IMAP_HOST',
   'IMAP_PORT',
+  'MEMORY_KEY',
   'OWNER_ID',
   'SMTP_HOST',
   'SMTP_PORT',
@@ -268,6 +269,15 @@ export function createProfileForFirebaseUser(
   if (unknown.length > 0) {
     throw new Error(`unknown setting keys: ${JSON.stringify(unknown.sort())}`)
   }
+  // The company memory key is a known field (the engine schema declares
+  // it) but is never written at creation: the engine mints one at first
+  // boot, and a pasted key goes through the join gesture (preview, echo,
+  // memory.join), which merges and rebinds. Writing it here would boot
+  // the engine on a store it cannot vouch for. Mirrors the engine, whose
+  // settings.update refuses it for the same reason.
+  if ('MEMORY_KEY' in cleaned) {
+    throw new Error('MEMORY_KEY is set through the memory join, not at profile creation')
+  }
 
   // No LLM-side validation: the wizard doesn't write SYSTEM_LLM_PROVIDER
   // or BYOK keys at all, and the engine resolver tolerates any value
@@ -343,6 +353,15 @@ export function createProfileFS(
   }
   if (unknown.length > 0) {
     throw new Error(`unknown setting keys: ${JSON.stringify(unknown.sort())}`)
+  }
+  // The company memory key is a known field (the engine schema declares
+  // it) but is never written at creation: the engine mints one at first
+  // boot, and a pasted key goes through the join gesture (preview, echo,
+  // memory.join), which merges and rebinds. Writing it here would boot
+  // the engine on a store it cannot vouch for. Mirrors the engine, whose
+  // settings.update refuses it for the same reason.
+  if ('MEMORY_KEY' in cleaned) {
+    throw new Error('MEMORY_KEY is set through the memory join, not at profile creation')
   }
 
   // No LLM-side validation — see the matching note in

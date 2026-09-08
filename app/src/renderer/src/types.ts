@@ -267,6 +267,46 @@ export interface ZylchAPI {
       blobs_kept_distinct?: number
       pair_cap_hit?: boolean
       no_llm?: boolean
+      /** Another daemon on the same company store holds the sweep lock. */
+      skipped?: boolean
+      reason?: string
+    }>
+    /** Ensure this profile has a company memory key; returns it in clear
+     *  (the show-once moment after account creation). */
+    keyMint: () => Promise<{ key: string; minted: boolean }>
+    /** Shape check only (22 URL-safe base64 chars, 128 bits). */
+    keyValidate: (key: string) => Promise<{ well_formed: boolean; reason: string }>
+    /** Whether memory is usable and why not; sizes when it is. Never a path. */
+    status: () => Promise<{
+      has_key: boolean
+      available: boolean
+      reason: string
+      self_notion?: string | null
+      blob_count?: number
+      fact_count?: number
+      contributors?: string[]
+    }>
+    /** The echo before a join: creates nothing; unknown key → exists=false. */
+    joinPreview: (key: string) => Promise<{
+      well_formed: boolean
+      exists: boolean
+      reason: string
+      self_notion?: string | null
+      blob_count?: number
+      fact_count?: number
+      contributors?: string[]
+    }>
+    /** Merge this profile's memory into the store the key names, write
+     *  the key, rebind the running engine. The ONLY write path for
+     *  MEMORY_KEY (settings.update refuses it). */
+    join: (key: string) => Promise<{
+      ok: boolean
+      reason?: string
+      already?: boolean
+      merged?: Record<string, number>
+      self_notion?: string | null
+      blob_count?: number
+      contributors?: string[]
     }>
   }
   chat: {
@@ -420,6 +460,9 @@ export interface ZylchAPI {
       }>
     }>
     get: () => Promise<{ values: Record<string, string> }>
+    /** One secret, in clear, by name — the counterpart to `get`'s mask.
+     *  Used for the company memory key; the engine refuses a non-secret key. */
+    getSecret: (key: string) => Promise<{ key: string; value: string }>
     update: (
       updates: Record<string, string>
     ) => Promise<{ ok: boolean; applied: string[]; skipped_unchanged: string[] }>

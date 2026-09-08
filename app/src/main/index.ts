@@ -649,6 +649,7 @@ function createAuthPendingWindow(
     shell.openExternal(d.url)
     return { action: 'deny' }
   })
+  installContextMenu(win)
 
   win.on('closed', () => {
     const entry = windowEntries.get(win.id)
@@ -714,6 +715,30 @@ async function restartSidecarForWindow(win: BrowserWindow): Promise<boolean> {
   windowEntries.set(win.id, { ...entry, sidecar })
   await new Promise((r) => setTimeout(r, 500))
   return true
+}
+
+// Electron ships no right-click menu. The `editMenu` role in
+// buildAppMenu() already covers keyboard copy/paste in every input; this
+// gives the mouse the same — copy, paste, cut, select all in editable
+// fields, copy on a text selection anywhere (the company memory key is
+// shown in clear precisely so it can be selected and copied).
+function installContextMenu(win: BrowserWindow): void {
+  win.webContents.on('context-menu', (_event, params) => {
+    const items: Electron.MenuItemConstructorOptions[] = []
+    if (params.isEditable) {
+      items.push(
+        { role: 'cut', enabled: params.editFlags.canCut },
+        { role: 'copy', enabled: params.editFlags.canCopy },
+        { role: 'paste', enabled: params.editFlags.canPaste },
+        { type: 'separator' },
+        { role: 'selectAll' }
+      )
+    } else if (params.selectionText && params.selectionText.trim()) {
+      items.push({ role: 'copy' })
+    }
+    if (items.length === 0) return
+    Menu.buildFromTemplate(items).popup({ window: win })
+  })
 }
 
 function buildAppMenu(): void {
@@ -1373,10 +1398,12 @@ function registerIpc(): void {
     }
     // Only forward keys the service accepts (KNOWN_KEYS), and never
     // OWNER_ID — provisiond derives the owning uid from the token itself
-    // and rejects a client-supplied OWNER_ID as an unknown key.
+    // and rejects a client-supplied OWNER_ID as an unknown key — nor
+    // MEMORY_KEY: on an MrCall-operated engine the host holds the company
+    // key and injects it; provisiond refuses one from the client (400).
     const values: Record<string, string> = {}
     for (const key of KNOWN_KEYS) {
-      if (key === 'OWNER_ID') continue
+      if (key === 'OWNER_ID' || key === 'MEMORY_KEY') continue
       const v = readProfileEnvValue(profile, key)
       if (v !== null) values[key] = v
     }

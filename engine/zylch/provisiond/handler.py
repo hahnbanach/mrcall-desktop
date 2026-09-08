@@ -77,7 +77,9 @@ def resolve_company_key(uid: str) -> str | None:
     except (OSError, ValueError) as e:
         logger.error(f"[provisiond] company map unreadable: {e}")
         return None
-    table = data.get("uids") if isinstance(data, dict) and isinstance(data.get("uids"), dict) else data
+    table = (
+        data.get("uids") if isinstance(data, dict) and isinstance(data.get("uids"), dict) else data
+    )
     if not isinstance(table, dict):
         return None
     key = table.get(uid)
@@ -268,7 +270,9 @@ def handle_provision(claims: dict[str, Any], body: Any) -> tuple[int, dict[str, 
     # mrcalld holds the company key and injects it. The app skips it too
     # (index.ts / provisionClient.ts, like OWNER_ID); this is the backstop.
     if "MEMORY_KEY" in body or "MEMORY_KEY_SOURCE" in body:
-        raise ProvisionError(400, "MEMORY_KEY is injected by the host, not accepted from the client")
+        raise ProvisionError(
+            400, "MEMORY_KEY is injected by the host, not accepted from the client"
+        )
 
     values: dict[str, str] = {str(k): ("" if v is None else str(v)) for k, v in body.items()}
     # OWNER_ID is injected OUTSIDE the KNOWN_KEYS validation above — it is

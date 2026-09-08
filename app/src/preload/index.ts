@@ -215,7 +215,48 @@ const api = {
         blobs_kept_distinct?: number
         pair_cap_hit?: boolean
         no_llm?: boolean
-      }>('memory.reconsolidate_now', {}, 5 * 60 * 1000)
+        // Another daemon on the same company store holds the sweep lock:
+        // the sweep runs once per company, and this engine was not it.
+        skipped?: boolean
+        reason?: string
+      }>('memory.reconsolidate_now', {}, 5 * 60 * 1000),
+    // ── Company memory key (shared memory, 2026-09) ──
+    // The engine mints; the app only shows, copies, and pastes. A pasted
+    // key goes through preview (the echo) and join — never through
+    // settings.update, which refuses MEMORY_KEY.
+    keyMint: () => call<{ key: string; minted: boolean }>('memory.key_mint', {}, 30000),
+    keyValidate: (key: string) =>
+      call<{ well_formed: boolean; reason: string }>('memory.key_validate', { key }, 10000),
+    status: () =>
+      call<{
+        has_key: boolean
+        available: boolean
+        reason: string
+        self_notion?: string | null
+        blob_count?: number
+        fact_count?: number
+        contributors?: string[]
+      }>('memory.status', {}, 30000),
+    joinPreview: (key: string) =>
+      call<{
+        well_formed: boolean
+        exists: boolean
+        reason: string
+        self_notion?: string | null
+        blob_count?: number
+        fact_count?: number
+        contributors?: string[]
+      }>('memory.join_preview', { key }, 30000),
+    join: (key: string) =>
+      call<{
+        ok: boolean
+        reason?: string
+        already?: boolean
+        merged?: Record<string, number>
+        self_notion?: string | null
+        blob_count?: number
+        contributors?: string[]
+      }>('memory.join', { key }, 5 * 60 * 1000)
   },
   chat: {
     send: (
@@ -440,6 +481,12 @@ const api = {
         }>
       }>('settings.schema', {}, 30000),
     get: () => call<{ values: Record<string, string> }>('settings.get', {}, 30000),
+    // One secret, in clear, by name — the deliberate counterpart to
+    // `get`'s mask. Exposed for the company memory key, which must be
+    // visible and copyable to its holder; the engine refuses any key
+    // that is not a secret field.
+    getSecret: (key: string) =>
+      call<{ key: string; value: string }>('settings.get_secret', { key }, 30000),
     update: (updates: Record<string, string>) =>
       call<{ ok: boolean; applied: string[]; skipped_unchanged: string[] }>(
         'settings.update',

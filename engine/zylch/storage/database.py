@@ -430,7 +430,9 @@ def _apply_column_migrations(engine: Engine) -> None:
         # lives in the other file is not a failure, it is the other file's.
         present = {
             r[0]
-            for r in conn.exec_driver_sql("SELECT name FROM sqlite_master WHERE type='table'").fetchall()
+            for r in conn.exec_driver_sql(
+                "SELECT name FROM sqlite_master WHERE type='table'"
+            ).fetchall()
         }
         for table, column in indexes:
             if table not in present:

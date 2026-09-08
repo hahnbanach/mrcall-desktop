@@ -150,7 +150,6 @@ assert(isFirstRun() === true, 'isFirstRun=true when profiles dir has only files'
 // 3. createProfileFS writes expected .env
 const email = 'alice@example.com'
 const values = {
-  SYSTEM_LLM_PROVIDER: 'anthropic',
   ANTHROPIC_API_KEY: 'sk-ant-xxxxxxxx',
   EMAIL_ADDRESS: email,
   EMAIL_PASSWORD: 'app password with spaces',
@@ -182,26 +181,24 @@ if (r) {
 
   // Content checks
   const content = readFileSync(r.path, 'utf8')
-  assert(content.startsWith('# Created by Zylch desktop'), 'header comment present')
-  assert(
-    content.includes(`SYSTEM_LLM_PROVIDER=anthropic\n`),
-    'SYSTEM_LLM_PROVIDER unquoted'
-  )
+  assert(content.startsWith('# Created by MrCall Desktop onboarding'), 'header comment present')
   assert(
     content.includes(`ANTHROPIC_API_KEY=sk-ant-xxxxxxxx\n`),
     'ANTHROPIC_API_KEY unquoted'
   )
-  // Space in the password triggers shlex.quote-style quoting.
+  // A space forces quoting; profileFS uses the double-quoted form
+  // python-dotenv parses (shell-style apostrophe escaping corrupted
+  // profiles — see the quote helper's comment).
   assert(
-    content.includes(`EMAIL_PASSWORD='app password with spaces'\n`),
-    'EMAIL_PASSWORD single-quoted'
+    content.includes(`EMAIL_PASSWORD="app password with spaces"\n`),
+    'EMAIL_PASSWORD double-quoted'
   )
-  // Apostrophe in name handled via Python-style shlex.quote escape:
-  // `'Alice O'"'"'Brien'`.
-  const expectedName = `USER_FULL_NAME='Alice O'"'"'Brien'\n`
+  // An apostrophe is quoted in the same double-quoted form, never as the
+  // shell `'Alice O'"'"'Brien'` that python-dotenv cannot parse.
+  const expectedName = `USER_FULL_NAME="Alice O'Brien"\n`
   assert(
     content.includes(expectedName),
-    `USER_FULL_NAME apostrophe shlex-style (got ${JSON.stringify(
+    `USER_FULL_NAME apostrophe double-quoted (got ${JSON.stringify(
       content.split('\n').find((l) => l.startsWith('USER_FULL_NAME'))
     )})`
   )
@@ -221,7 +218,6 @@ if (r) {
 // 7. Unknown keys rejected
 try {
   createProfileFS('bob@example.com', {
-    SYSTEM_LLM_PROVIDER: 'anthropic',
     ANTHROPIC_API_KEY: 'k',
     EMAIL_ADDRESS: 'bob@example.com',
     TOTALLY_BOGUS_KEY: 'x'
@@ -234,10 +230,25 @@ try {
   )
 }
 
+// 7b. MEMORY_KEY is a known field but is never written at creation: the
+// engine mints one at first boot, and a pasted key goes through the join
+// gesture (memory.join). A creation payload carrying it is refused.
+try {
+  createProfileFS('carol@example.com', {
+    EMAIL_ADDRESS: 'carol@example.com',
+    MEMORY_KEY: 'AbCdEfGhIjKlMnOpQrStUv'
+  })
+  assert(false, 'MEMORY_KEY at creation should throw')
+} catch (e) {
+  assert(
+    /memory join/i.test(e.message),
+    `MEMORY_KEY refused at creation: ${e.message}`
+  )
+}
+
 // 8. Invalid email
 try {
   createProfileFS('not-an-email', {
-    SYSTEM_LLM_PROVIDER: 'anthropic',
     ANTHROPIC_API_KEY: 'k'
   })
   assert(false, 'invalid email should throw')
@@ -245,36 +256,22 @@ try {
   assert(/invalid email/i.test(e.message), `invalid email rejected: ${e.message}`)
 }
 
-// 9. Missing provider
+// 9. No LLM-side validation at creation: the wizard writes neither a
+// provider nor a BYOK key (billing mode is chosen later, in Settings),
+// so a payload without either is accepted — see the comment above
+// `cleaned['OWNER_ID']` in profileFS.ts.
 try {
-  createProfileFS('carol@example.com', {
-    ANTHROPIC_API_KEY: 'k',
-    EMAIL_ADDRESS: 'carol@example.com'
-  })
-  assert(false, 'missing provider should throw')
+  const r = createProfileFS('carol@example.com', { EMAIL_ADDRESS: 'carol@example.com' })
+  assert(r.ok === true, 'no provider / no api key is accepted at creation')
 } catch (e) {
-  assert(/provider/i.test(e.message), `missing provider rejected: ${e.message}`)
-}
-
-// 9b. Missing API key for chosen provider
-try {
-  createProfileFS('dave@example.com', {
-    SYSTEM_LLM_PROVIDER: 'anthropic',
-    EMAIL_ADDRESS: 'dave@example.com'
-  })
-  assert(false, 'missing api key should throw')
-} catch (e) {
-  assert(/api_key/i.test(e.message), `missing api key rejected: ${e.message}`)
+  assert(false, `provider-less creation threw: ${e.message}`)
 }
 
 // Parity check with _quote on a few tricky values
 assert(dotenvQuote('') === '', 'empty → empty')
 assert(dotenvQuote('plain') === 'plain', 'plain → unquoted')
-assert(dotenvQuote('has space') === "'has space'", 'space → quoted')
-assert(
-  dotenvQuote('a#b') === "'a#b'",
-  'hash → quoted'
-)
+assert(dotenvQuote('has space') === '"has space"', 'space → double-quoted')
+assert(dotenvQuote('a#b') === '"a#b"', 'hash → double-quoted')
 assert(
   dotenvQuote('with\nnewline') === '"with\\nnewline"',
   'newline → double-quoted with \\n escape'

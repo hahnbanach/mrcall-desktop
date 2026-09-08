@@ -251,6 +251,7 @@ registry on 2026-08-15 (65 methods), plus `emails.needs_reply` added
 | Method | Declared parameters | Returns |
 |---|---|---|
 | `settings.get` | — | {values: {KEY: string}} — the active profile's `.env`, secrets masked |
+| `settings.get_secret` | `key` | {key, value} — ONE secret field in clear; refuses a key that is not a secret. The desktop reads the company memory key back through this (the Settings memory card); `cs init` reads mail credentials |
 | `settings.schema` | — | {fields: [...]} — field descriptors, no values |
 | `settings.update` | `updates: {key: value}` | {ok, applied, skipped_unchanged} |
 

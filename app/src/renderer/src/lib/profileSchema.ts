@@ -127,6 +127,21 @@ export const PROFILE_SCHEMA: SchemaField[] = [
     group: 'Personal data',
     optional: true
   },
+  // ─── Memory ─────────────────────────────────────────────
+  // The company memory key. Onboarding collects a pasted key in its own
+  // field (not through this schema, whose `includeGroups` excludes the
+  // Memory group) and acts on it after the sidecar exists; Settings shows
+  // it in a card of its own. Listed so the mirror stays true to the
+  // engine schema.
+  {
+    key: 'MEMORY_KEY',
+    label: 'Company memory key',
+    type: 'password',
+    group: 'Memory',
+    optional: true,
+    secret: true,
+    help: 'Accounts that share this key share one company memory.'
+  },
   // ─── Documents & notes ──────────────────────────────────
   {
     key: 'DOCUMENT_PATHS',
