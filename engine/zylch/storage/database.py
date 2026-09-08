@@ -109,21 +109,75 @@ def get_session() -> Generator[Session, None, None]:
         session.close()
 
 
+# The six memory tables are the ones a company shares; everything else is
+# per-profile (mail, tasks, tokens, cursors — never shareable). Named here so
+# `create_all` is always called with an explicit table list: a shared
+# MetaData would otherwise create every table in every file, and the
+# mis-binding would be silent instead of an error.
+MEMORY_TABLE_NAMES = (
+    "blobs",
+    "blob_sentences",
+    "email_blobs",
+    "calendar_blobs",
+    "whatsapp_blobs",
+    "person_identifiers",
+)
+
+
+def _tables(names: tuple[str, ...] | None, *, exclude: bool = False):
+    from zylch.storage.models import Base as _Base
+
+    if names is None:
+        return list(_Base.metadata.sorted_tables)
+    wanted = set(names)
+    return [tbl for tbl in _Base.metadata.sorted_tables if (tbl.name in wanted) != exclude]
+
+
+def profile_tables():
+    """Tables that live in the per-profile ``zylch.db``."""
+    return _tables(MEMORY_TABLE_NAMES, exclude=True)
+
+
+def memory_tables():
+    """Tables that live in the company memory store (in ``zylch.db`` until M2)."""
+    return _tables(MEMORY_TABLE_NAMES)
+
+
+# Versioned, run-once steps for the profile database, in order. Milestones
+# append here; the ensure passes below are not steps because they are
+# idempotent and cheap enough to run on every boot.
+PROFILE_STEPS: list = []
+
+
+def _ensure_all_tables(engine: Engine) -> None:
+    """``create_all`` for every table this file owns — under the migration lock."""
+    from zylch.storage.models import Base as _Base
+
+    _Base.metadata.create_all(engine, tables=profile_tables() + memory_tables())
+
+
 def init_db():
-    """Create all tables if they don't exist."""
-    from zylch.storage.models import Base as _Base  # noqa: F811
+    """Bring the database to the current schema as its single owner.
+
+    Delegates to :mod:`zylch.storage.migrations`: takes the file's migration
+    lock (blocking, bounded), runs the ensure passes (``create_all`` with an
+    explicit table list, the column list, indexes), applies any pending
+    versioned step exactly once, then the idempotent data backfills. A
+    process that returns from here never serves against a half-migrated
+    file, because it could not get past the lock while another was writing.
+    """
+    from zylch.storage.migrations import run_migrations
 
     engine = get_engine()
-    _Base.metadata.create_all(engine)
-
-    # Light-touch migrations for columns added after initial schema.
-    # `create_all` creates missing tables but does NOT add columns to existing
-    # tables. For SQLite, ALTER TABLE ADD COLUMN is cheap and idempotent-ish.
-    _apply_column_migrations(engine)
-
-    # Idempotent row-level backfills for data shape changes (not schema).
-    _apply_data_backfills()
-
+    applied = run_migrations(
+        engine,
+        _resolve_db_path(),
+        ensure=(_ensure_all_tables, _apply_column_migrations),
+        steps=PROFILE_STEPS,
+        backfills=(_apply_data_backfills,),
+    )
+    if applied:
+        logger.info(f"Database migrated ({', '.join(applied)}) at {_resolve_db_path()}")
     logger.info(f"Database initialized at {_resolve_db_path()}")
 
 
