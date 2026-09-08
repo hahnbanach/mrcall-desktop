@@ -80,8 +80,11 @@ class BaseAgentTrainer:
         Returns:
             List of blob dicts
         """
+        from zylch.memory.company_key import require_company_key
+        from zylch.memory.scope import blob_visible
+
         with get_session() as session:
-            query = session.query(Blob).filter(Blob.owner_id == self.owner_id)
+            query = session.query(Blob).filter(blob_visible(self.owner_id, require_company_key()))
 
             if entity_type:
                 query = query.filter(Blob.content.ilike(f"%Entity type: {entity_type}%"))

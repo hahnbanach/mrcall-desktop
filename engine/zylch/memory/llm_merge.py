@@ -340,8 +340,10 @@ async def reconsolidate_now(owner_id: str) -> Dict[str, Any]:
     from zylch.storage import Storage as MainStorage
     from zylch.storage.database import get_session
     from zylch.storage.models import Blob, PersonIdentifier
+    from zylch.memory.company_key import entity_namespace, require_company_key
 
-    namespace = f"user:{owner_id}"
+    company_key = require_company_key()
+    namespace = entity_namespace(company_key)
 
     if try_make_llm_client() is None:
         logger.warning("[reconsolidate] no LLM transport configured — sweep skipped")
@@ -362,7 +364,7 @@ async def reconsolidate_now(owner_id: str) -> Dict[str, Any]:
     with get_session() as sess:
         rows = (
             sess.query(Blob.id, Blob.content)
-            .filter(Blob.owner_id == owner_id, Blob.namespace == namespace)
+            .filter(Blob.company_key == company_key, Blob.namespace == namespace)
             .all()
         )
         blobs: List[Dict[str, Any]] = [{"id": str(r[0]), "content": r[1] or ""} for r in rows]
@@ -372,7 +374,7 @@ async def reconsolidate_now(owner_id: str) -> Dict[str, Any]:
                 PersonIdentifier.kind,
                 PersonIdentifier.value,
             )
-            .filter(PersonIdentifier.owner_id == owner_id)
+            .filter(PersonIdentifier.company_key == company_key)
             .all()
         )
 

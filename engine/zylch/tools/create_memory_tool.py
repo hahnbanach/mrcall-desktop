@@ -123,15 +123,25 @@ class CreateMemoryTool(Tool):
                 error=outcome["reason"],
             )
         else:
-            # Match the namespace the memory worker uses so that newly
-            # created blobs are discoverable by the same search path.
-            # Also accept a bare category ("user", "template", …) as
-            # shorthand and scope it to this owner — the LLM doesn't know
-            # its own id.
-            if not namespace:
-                namespace = f"user:{owner_id}"
-            elif ":" not in namespace:
-                namespace = f"{namespace}:{owner_id}"
+            # The engine decides the namespace; the model only names a
+            # FAMILY. A bare "user" / "facts" / "template" / "prefs" — or a
+            # full "family:anything" — is re-scoped to the one correct
+            # namespace for this owner and company; whatever followed the
+            # colon is discarded, never stored. An unknown family is
+            # refused: a namespace nothing reads is knowledge lost.
+            from zylch.memory.company_key import (
+                family_of,
+                require_company_key,
+                scoped_namespace,
+            )
+
+            family = (
+                family_of(namespace) if namespace and ":" in namespace else (namespace or "user")
+            )
+            try:
+                namespace = scoped_namespace(family, owner_id, require_company_key())
+            except ValueError as e:
+                return ToolResult(status=ToolStatus.ERROR, data=None, error=str(e))
             if et == "entity_fact" and namespace.split(":", 1)[0] in ("template", "prefs"):
                 return ToolResult(
                     status=ToolStatus.ERROR,

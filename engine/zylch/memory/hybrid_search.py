@@ -10,6 +10,8 @@ import numpy as np
 
 from .embeddings import EmbeddingEngine
 from .pattern_detection import detect_pattern
+from .company_key import require_company_key
+from .scope import blob_visible, sentences_in_scope
 from zylch.storage.models import Blob, BlobSentence
 
 logger = logging.getLogger(__name__)
@@ -58,7 +60,10 @@ class InMemoryVectorIndex:
         self._matrix: Optional[np.ndarray] = None  # (N, 384)
         self._ids: Optional[List[str]] = None
         self._norms: Optional[np.ndarray] = None
-        self._owner_id: Optional[str] = None
+        # The scope this index was loaded for: "<owner_id>|<company_key>".
+        # Two owners under one key see different rule rows, so the owner
+        # stays part of the identity; two keys are two companies.
+        self._scope_id: Optional[str] = None
         self._count: int = 0
 
     @property
@@ -71,19 +76,19 @@ class InMemoryVectorIndex:
         self._matrix = None
         self._ids = None
         self._norms = None
-        self._owner_id = None
+        self._scope_id = None
         self._count = 0
 
     def load(
         self,
         blobs: List[Tuple[str, bytes]],
-        owner_id: str,
+        scope_id: str,
     ):
         """Load embeddings from (id, embedding_bytes) pairs.
 
         Args:
             blobs: list of (blob_id, embedding_bytes) tuples
-            owner_id: owner for cache key
+            scope_id: the (owner, key) scope these vectors were read for
         """
         t0 = time.perf_counter()
         ids = []
@@ -106,7 +111,7 @@ class InMemoryVectorIndex:
             self._ids = []
             self._norms = None
 
-        self._owner_id = owner_id
+        self._scope_id = scope_id
         self._count = len(ids)
         elapsed_ms = (time.perf_counter() - t0) * 1000
         logger.debug(f"[VectorIndex] load: {self._count} vectors " f"in {elapsed_ms:.1f}ms")
@@ -163,15 +168,19 @@ class HybridSearchEngine:
         self._index.invalidate()
 
     def _ensure_index(self, owner_id: str):
-        """Load vector index from DB if not cached."""
-        if self._index.is_loaded and self._index._owner_id == owner_id:
+        """Load the vector index for this (owner, key) scope if not cached."""
+        key = require_company_key()
+        scope_id = f"{owner_id}|{key}"
+        if self._index.is_loaded and self._index._scope_id == scope_id:
             return
 
-        logger.debug(f"[HybridSearch] loading vector index " f"for owner={owner_id}")
+        logger.debug(f"[HybridSearch] loading vector index for owner={owner_id}")
         with self._get_session() as session:
-            rows = session.query(Blob.id, Blob.embedding).filter(Blob.owner_id == owner_id).all()
+            rows = (
+                session.query(Blob.id, Blob.embedding).filter(blob_visible(owner_id, key)).all()
+            )
         blobs = [(str(r.id), r.embedding) for r in rows]
-        self._index.load(blobs, owner_id)
+        self._index.load(blobs, scope_id)
 
     def _text_search(
         self,
@@ -200,8 +209,9 @@ class HybridSearchEngine:
 
         logger.debug(f"[HybridSearch] text_search: " f"terms={terms}, namespace={namespace}")
 
+        key = require_company_key()
         with self._get_session() as session:
-            q = session.query(Blob.id, Blob.content).filter(Blob.owner_id == owner_id)
+            q = session.query(Blob.id, Blob.content).filter(blob_visible(owner_id, key))
             if namespace:
                 q = q.filter(Blob.namespace == namespace)
             rows = q.all()
@@ -282,11 +292,13 @@ class HybridSearchEngine:
             logger.debug("[HybridSearch] search returned no results")
             return []
 
-        # 5. Load blob data for candidates
+        # 5. Load blob data for candidates — the same scope the index and
+        # the text search used, or a ranked row vanishes here silently.
+        key = require_company_key()
         with self._get_session() as session:
             q = session.query(Blob).filter(
                 Blob.id.in_(list(all_ids)),
-                Blob.owner_id == owner_id,
+                blob_visible(owner_id, key),
             )
             if namespace:
                 q = q.filter(Blob.namespace == namespace)
@@ -438,6 +450,7 @@ class HybridSearchEngine:
         Deserializes sentence embeddings from LargeBinary
         and computes cosine similarity.
         """
+        key = require_company_key()
         with self._get_session() as session:
             sentences = (
                 session.query(
@@ -446,7 +459,7 @@ class HybridSearchEngine:
                 )
                 .filter(
                     BlobSentence.blob_id == blob_id,
-                    BlobSentence.owner_id == owner_id,
+                    sentences_in_scope(key),
                 )
                 .all()
             )

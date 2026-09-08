@@ -9,7 +9,8 @@ facts into the other and contaminate the offer. The solver enumerates
 categories, picks the relevant one(s), then loads ALL and ONLY that
 category's facts.
 
-Stored in namespace ``facts:<owner_id>``, one blob per fact, content::
+Stored in namespace ``facts:<company_key>`` — company knowledge, shared by
+every account holding the key — one blob per fact, content::
 
     Category: <category>
     Key: <short key>
@@ -26,7 +27,11 @@ logger = logging.getLogger(__name__)
 
 
 def facts_namespace(owner_id: str) -> str:
-    return f"facts:{owner_id}"
+    """The company's facts namespace. ``owner_id`` is accepted for signature
+    compatibility and takes no part in it: facts are company knowledge."""
+    from zylch.memory.company_key import facts_namespace as _keyed, require_company_key
+
+    return _keyed(require_company_key())
 
 
 def _parse_field(content: str, field: str) -> str:
@@ -64,11 +69,14 @@ def _all_fact_blobs(owner_id: str) -> List[Dict[str, str]]:
     from zylch.storage.database import get_session
     from zylch.storage.models import Blob
 
+    from zylch.memory.company_key import require_company_key
+
     ns = facts_namespace(owner_id)
+    key = require_company_key()
     with get_session() as session:
         rows = (
             session.query(Blob)
-            .filter(Blob.owner_id == owner_id, Blob.namespace == ns)
+            .filter(Blob.company_key == key, Blob.namespace == ns)
             .order_by(Blob.created_at.asc())
             .all()
         )
@@ -142,12 +150,21 @@ def upsert_fact(
                 parse_category(blob["content"]).lower() == want_cat
                 and parse_key(blob["content"]).lower() == want_key
             ):
-                blob_store.update_blob(
+                updated = blob_store.update_blob(
                     blob_id=blob["blob_id"],
                     owner_id=owner_id,
                     content=content,
                     event_description=event_description or "Fact updated",
                 )
+                if not updated:
+                    # An empty result is a refusal, never a success: fall
+                    # through and create rather than report an update that
+                    # did not happen (the cross-owner lost-update class).
+                    logger.warning(
+                        f"[facts] update of {blob['blob_id']} refused for owner "
+                        f"{owner_id}; creating a fresh fact row instead"
+                    )
+                    break
                 logger.debug(f"[facts] updated {category}/{key} -> {blob['blob_id']}")
                 return blob["blob_id"]
 

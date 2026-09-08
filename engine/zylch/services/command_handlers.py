@@ -477,7 +477,9 @@ Use `/agent process` to extract facts from synced data:
 
         llm_merge = LLMMergeService() if try_make_llm_client() is not None else None
 
-        namespace = f"user:{owner_id}"
+        from zylch.memory.company_key import entity_namespace, require_company_key
+
+        namespace = entity_namespace(require_company_key())
 
         # Normalize args - accept both 'search' and '--search'
         cmd = args[0].lstrip("-") if args else ""
@@ -653,10 +655,17 @@ Memory will be searchable via hybrid search."""
             # Reset processing timestamps so data can be reprocessed
             reset_counts = storage.reset_memory_processing_timestamps(owner_id)
 
+            shared_note = (
+                "\n(Other accounts share this company memory: only your own "
+                "operating rules were removed; company knowledge stays, your "
+                "contributions included.)"
+                if blob_storage.other_owners_present(owner_id)
+                else ""
+            )
             return f"""🗑️ **Memory reset complete**
 
 **Deleted:**
-• {deleted_count} memory blobs and all associated sentences
+• {deleted_count} memory blobs and all associated sentences{shared_note}
 
 **Reset timestamps:**
 • {reset_counts.get('emails', 0)} emails marked as unprocessed
@@ -1845,11 +1854,15 @@ def _load_blob_context(storage, owner_id: str, blob_ids: list) -> str:
         from zylch.storage.models import Blob
 
         contents = []
+        from zylch.memory.company_key import require_company_key
+        from zylch.memory.scope import blob_visible
+
+        key = require_company_key()
         with get_session() as session:
             for blob_id in blob_ids:
                 row = (
                     session.query(Blob.content)
-                    .filter(Blob.owner_id == owner_id, Blob.id == blob_id)
+                    .filter(blob_visible(owner_id, key), Blob.id == blob_id)
                     .one_or_none()
                 )
                 if row:
@@ -3144,8 +3157,6 @@ This action **cannot be undone**."""
     def _reset_all_data():
         from zylch.storage.database import get_session
         from zylch.storage.models import (
-            BlobSentence,
-            Blob,
             TaskItem,
             Draft,
             Email,
@@ -3155,12 +3166,21 @@ This action **cannot be undone**."""
             AgentPrompt,
         )
 
+        from zylch.memory import BlobStorage, EmbeddingEngine, MemoryConfig
+
         counts = {}
-        # Map table display names to ORM models
-        # Delete order matters: sentences before blobs (FK)
+        # Memory first, through the one door that knows the sharing rule:
+        # when other accounts share this store only this account's RULE
+        # rows go and company knowledge stays, provenance included; a
+        # sole contributor is the key holder and everything it wrote goes.
+        # Sentences cascade from their blob.
+        try:
+            counts["blobs"] = BlobStorage(get_session, EmbeddingEngine(MemoryConfig())).delete_all_blobs(
+                owner_id
+            )
+        except Exception as e:
+            counts["blobs"] = f"error: {e}"
         table_models = [
-            ("blob_sentences", BlobSentence),
-            ("blobs", Blob),
             ("task_items", TaskItem),
             ("drafts", Draft),
             ("emails", Email),

@@ -97,8 +97,10 @@ class SpecializedAgent:
         Returns:
             Formatted context string
         """
-        # Default: run hybrid search with instructions
-        namespace = f"user:{self.owner_id}"
+        # Default: run hybrid search with instructions over the company's entities
+        from zylch.memory.company_key import entity_namespace, require_company_key
+
+        namespace = entity_namespace(require_company_key())
         results = self.search_engine.search(
             owner_id=self.owner_id, query=instructions, namespace=namespace, limit=10
         )

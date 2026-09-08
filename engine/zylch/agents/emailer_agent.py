@@ -193,7 +193,9 @@ class EmailContextGatherer:
             logger.debug(f"[EMAILER] Enhanced query with recipient_email: {search_query}")
 
         # Run hybrid search - finds PERSON, COMPANY, STYLE blobs
-        namespace = f"user:{self.owner_id}"
+        from zylch.memory.company_key import entity_namespace, require_company_key
+
+        namespace = entity_namespace(require_company_key())
         results = self.search_engine.search(
             owner_id=self.owner_id,
             query=search_query,
@@ -233,12 +235,16 @@ class EmailContextGatherer:
 
     def _get_blobs_by_ids(self, blob_ids: List[str]) -> List[dict]:
         """Load blobs by their UUIDs."""
+        from zylch.memory.company_key import require_company_key
+        from zylch.memory.scope import blob_visible
+
+        key = require_company_key()
         blobs = []
         with get_session() as session:
             for blob_id in blob_ids:
                 row = (
                     session.query(Blob)
-                    .filter(Blob.id == blob_id, Blob.owner_id == self.owner_id)
+                    .filter(Blob.id == blob_id, blob_visible(self.owner_id, key))
                     .first()
                 )
                 if row:
@@ -918,7 +924,9 @@ use that information to write the email or provide the answer. Don't just report
         if not query:
             return {"results": [], "message": "No search query provided"}
 
-        namespace = f"user:{self.owner_id}"
+        from zylch.memory.company_key import entity_namespace, require_company_key
+
+        namespace = entity_namespace(require_company_key())
         results = self.search_engine.search(
             owner_id=self.owner_id, query=query, namespace=namespace, limit=5
         )

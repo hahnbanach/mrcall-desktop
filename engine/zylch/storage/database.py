@@ -149,6 +149,13 @@ def memory_tables():
 PROFILE_STEPS: list = []
 
 
+def _register_profile_steps() -> None:
+    from zylch.storage.step_company_key import STEP as company_key_step
+
+    if company_key_step not in PROFILE_STEPS:
+        PROFILE_STEPS.append(company_key_step)
+
+
 def _ensure_all_tables(engine: Engine) -> None:
     """``create_all`` for every table this file owns — under the migration lock."""
     from zylch.storage.models import Base as _Base
@@ -168,6 +175,7 @@ def init_db():
     """
     from zylch.storage.migrations import run_migrations
 
+    _register_profile_steps()
     engine = get_engine()
     applied = run_migrations(
         engine,
@@ -258,6 +266,15 @@ def _apply_column_migrations(engine: Engine) -> None:
         # NULL means "actionable now", so an ALTER on an existing table
         # leaves every current task exactly where it was.
         ("task_items", "due_at", "REAL"),
+        # 2026-09-08 (shared company memory, M1): the company key on every
+        # memory row. Nullable so reverted code can still insert; stamped on
+        # existing rows by migration step 0001_company_key.
+        ("blobs", "company_key", "TEXT"),
+        ("blob_sentences", "company_key", "TEXT"),
+        ("email_blobs", "company_key", "TEXT"),
+        ("calendar_blobs", "company_key", "TEXT"),
+        ("whatsapp_blobs", "company_key", "TEXT"),
+        ("person_identifiers", "company_key", "TEXT"),
     ]
     # Indexes the SQLAlchemy `index=True` declaration creates on FRESH
     # tables but never gets back-applied to tables that pre-date the
@@ -268,6 +285,12 @@ def _apply_column_migrations(engine: Engine) -> None:
     indexes = [
         ("task_items", "channel"),
         ("task_items", "contact_phone"),
+        ("blobs", "company_key"),
+        ("blob_sentences", "company_key"),
+        ("email_blobs", "company_key"),
+        ("calendar_blobs", "company_key"),
+        ("whatsapp_blobs", "company_key"),
+        ("person_identifiers", "company_key"),
     ]
     with engine.begin() as conn:
         for table, column, ddl in migrations:
@@ -401,15 +424,31 @@ def _backfill_email_blobs_index() -> None:
     import json
     import re
 
+    from zylch.cli.utils import get_owner_id
+    from zylch.memory.company_key import current_company_key
     from zylch.storage.models import Blob, CalendarBlob, CalendarEvent, Email, EmailBlob
 
+    owner_id = get_owner_id()
+    company_key = current_company_key()
     factory = get_session_factory()
     session = factory()
     try:
-        existing_links = session.query(EmailBlob.email_id).limit(1).first()
-        any_blobs = session.query(Blob.id).limit(1).first()
+        # Per-profile guard: under a shared store "the index is populated"
+        # must mean populated FOR THIS PROFILE'S MAIL, or only whichever
+        # profile boots first is ever backfilled. Provenance says who wrote
+        # a link, so the guard is on the writer, not on the table.
+        existing_links = (
+            session.query(EmailBlob.email_id)
+            .filter(EmailBlob.owner_id == owner_id)
+            .limit(1)
+            .first()
+        )
+        blob_scan = session.query(Blob)
+        if company_key:
+            blob_scan = blob_scan.filter(Blob.company_key == company_key)
+        any_blobs = blob_scan.with_entities(Blob.id).limit(1).first()
         if existing_links is not None:
-            return  # already populated
+            return  # already populated for this profile
         if any_blobs is None:
             return  # nothing to backfill
 
@@ -434,9 +473,11 @@ def _backfill_email_blobs_index() -> None:
 
         n_email = 0
         n_calendar = 0
-        for blob in session.query(Blob).all():
+        # The company's blobs, joined against THIS profile's mail (the
+        # `email_ids` set above is per-profile); the link rows carry the
+        # indexing profile as provenance, not the blob's contributor.
+        for blob in blob_scan.all():
             blob_id = str(blob.id)
-            owner_id = str(blob.owner_id)
             events = blob.events or []
             if not isinstance(events, list):
                 try:

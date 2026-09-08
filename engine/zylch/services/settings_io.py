@@ -30,7 +30,7 @@ def _env_path() -> str:
     when called outside a `zylch -p ...` CLI context, which means the
     caller is buggy.
     """
-    profile_dir = get_active_profile_dir()
+    profile_dir = get_active_profile_dir() or os.environ.get("ZYLCH_PROFILE_DIR")
     if not profile_dir:
         raise RuntimeError("No active profile — cannot resolve .env path")
     return os.path.join(profile_dir, ".env")

@@ -527,7 +527,9 @@ class TaskWorker:
             return "(no prior context)", None
 
         try:
-            namespace = f"user:{self.owner_id}"
+            from zylch.memory.company_key import entity_namespace, require_company_key
+
+            namespace = entity_namespace(require_company_key())
             results = self.hybrid_search.search(
                 owner_id=self.owner_id, query=contact_email, namespace=namespace, limit=1
             )

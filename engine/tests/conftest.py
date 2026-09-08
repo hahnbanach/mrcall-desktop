@@ -32,6 +32,11 @@ def _isolate_profile_dir(tmp_path_factory, monkeypatch):
     test_profile = tmp_path_factory.mktemp("zylch-test-profile", numbered=True)
     (test_profile / ".env").write_text("ANTHROPIC_API_KEY=sk-ant-test-dummy-key\n")
     monkeypatch.setenv("ZYLCH_PROFILE_DIR", str(test_profile))
+    # Shared company memory (2026-09): every boot mints a MEMORY_KEY into
+    # the profile .env AND os.environ. Pin it empty here (== unset for the
+    # engine) so monkeypatch restores it at teardown and one test's minted
+    # key never leaks into the next test's fresh database.
+    monkeypatch.setenv("MEMORY_KEY", "")
     yield
 
 

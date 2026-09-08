@@ -184,6 +184,18 @@ class CalendarEvent(DictMixin, Base):
 # -------------------------------------------------------------------
 
 
+def _current_company_key():
+    """Column default: the writing profile's company key, read at insert time.
+
+    Every memory row carries the key of the company it belongs to. A Python
+    default (not a server default) so it follows a rebind at runtime; lazy
+    import because the memory package imports these models.
+    """
+    from zylch.memory.company_key import current_company_key
+
+    return current_company_key()
+
+
 class Blob(DictMixin, Base):
     __tablename__ = "blobs"
 
@@ -193,6 +205,7 @@ class Blob(DictMixin, Base):
         default=_new_uuid,
     )
     owner_id = Column(Text, nullable=False, index=True)
+    company_key = Column(Text, nullable=True, index=True, default=_current_company_key)
     namespace = Column(Text, nullable=False)
     content = Column(Text, nullable=False)
     embedding = Column(LargeBinary)
@@ -215,6 +228,7 @@ class BlobSentence(DictMixin, Base):
         nullable=False,
     )
     owner_id = Column(Text, nullable=False, index=True)
+    company_key = Column(Text, nullable=True, index=True, default=_current_company_key)
     sentence_text = Column(Text, nullable=False)
     embedding = Column(LargeBinary, nullable=False)
     created_at = Column(DateTime, default=_utcnow)
@@ -253,6 +267,7 @@ class EmailBlob(Base):
         index=True,
     )
     owner_id = Column(Text, nullable=False, index=True)
+    company_key = Column(Text, nullable=True, index=True, default=_current_company_key)
     created_at = Column(DateTime, default=_utcnow)
 
 
@@ -271,6 +286,7 @@ class CalendarBlob(Base):
         index=True,
     )
     owner_id = Column(Text, nullable=False, index=True)
+    company_key = Column(Text, nullable=True, index=True, default=_current_company_key)
     created_at = Column(DateTime, default=_utcnow)
 
 
@@ -289,6 +305,7 @@ class WhatsAppBlob(Base):
         index=True,
     )
     owner_id = Column(Text, nullable=False, index=True)
+    company_key = Column(Text, nullable=True, index=True, default=_current_company_key)
     created_at = Column(DateTime, default=_utcnow)
 
 
@@ -321,6 +338,7 @@ class PersonIdentifier(Base):
         default=_new_uuid,
     )
     owner_id = Column(Text, nullable=False, index=True)
+    company_key = Column(Text, nullable=True, index=True, default=_current_company_key)
     blob_id = Column(
         String(36),
         ForeignKey("blobs.id", ondelete="CASCADE"),

@@ -308,6 +308,13 @@ def _generate_email_embedding(email: Dict[str, Any]) -> Optional[List[float]]:
         return None
 
 
+def _company_key() -> str:
+    """The running profile's company key — the scope of every memory-side row."""
+    from zylch.memory.company_key import require_company_key
+
+    return require_company_key()
+
+
 class Storage:
     """Storage backend using SQLite via SQLAlchemy.
 
@@ -910,7 +917,7 @@ class Storage:
                 rows = (
                     session.query(EmailBlob.blob_id)
                     .filter(
-                        EmailBlob.owner_id == owner_id,
+                        EmailBlob.company_key == _company_key(),
                         EmailBlob.email_id == email_id,
                     )
                     .all()
@@ -970,7 +977,7 @@ class Storage:
                 rows = (
                     session.query(CalendarBlob.blob_id)
                     .filter(
-                        CalendarBlob.owner_id == owner_id,
+                        CalendarBlob.company_key == _company_key(),
                         CalendarBlob.event_id == event_id,
                     )
                     .all()
@@ -1030,7 +1037,7 @@ class Storage:
                 rows = (
                     session.query(WhatsAppBlob.blob_id)
                     .filter(
-                        WhatsAppBlob.owner_id == owner_id,
+                        WhatsAppBlob.company_key == _company_key(),
                         WhatsAppBlob.whatsapp_message_id == whatsapp_message_id,
                     )
                     .all()
@@ -1084,7 +1091,7 @@ class Storage:
                 existing_rows = (
                     session.query(PersonIdentifier.kind, PersonIdentifier.value)
                     .filter(
-                        PersonIdentifier.owner_id == owner_id,
+                        PersonIdentifier.company_key == _company_key(),
                         PersonIdentifier.blob_id == blob_id,
                     )
                     .all()
@@ -1167,7 +1174,7 @@ class Storage:
                 rows = (
                     session.query(PersonIdentifier.blob_id)
                     .filter(
-                        PersonIdentifier.owner_id == owner_id,
+                        PersonIdentifier.company_key == _company_key(),
                         or_(*clauses),
                     )
                     .distinct()
@@ -1200,7 +1207,7 @@ class Storage:
                         PersonIdentifier.created_at,
                     )
                     .filter(
-                        PersonIdentifier.owner_id == owner_id,
+                        PersonIdentifier.company_key == _company_key(),
                         PersonIdentifier.blob_id == blob_id,
                     )
                     .order_by(PersonIdentifier.created_at.desc())
@@ -1270,7 +1277,7 @@ class Storage:
                 dup_id_rows = (
                     session.query(PersonIdentifier.kind, PersonIdentifier.value)
                     .filter(
-                        PersonIdentifier.owner_id == owner_id,
+                        PersonIdentifier.company_key == _company_key(),
                         PersonIdentifier.blob_id == dup_blob_id,
                     )
                     .all()
@@ -1280,7 +1287,7 @@ class Storage:
                         (str(k), str(v))
                         for k, v in session.query(PersonIdentifier.kind, PersonIdentifier.value)
                         .filter(
-                            PersonIdentifier.owner_id == owner_id,
+                            PersonIdentifier.company_key == _company_key(),
                             PersonIdentifier.blob_id == keeper_blob_id,
                         )
                         .all()
@@ -1305,7 +1312,7 @@ class Storage:
                 dup_email_links = (
                     session.query(EmailBlob.email_id)
                     .filter(
-                        EmailBlob.owner_id == owner_id,
+                        EmailBlob.company_key == _company_key(),
                         EmailBlob.blob_id == dup_blob_id,
                     )
                     .all()
@@ -1315,7 +1322,7 @@ class Storage:
                         str(r[0])
                         for r in session.query(EmailBlob.email_id)
                         .filter(
-                            EmailBlob.owner_id == owner_id,
+                            EmailBlob.company_key == _company_key(),
                             EmailBlob.blob_id == keeper_blob_id,
                         )
                         .all()
@@ -1338,7 +1345,7 @@ class Storage:
                 dup_cal_links = (
                     session.query(CalendarBlob.event_id)
                     .filter(
-                        CalendarBlob.owner_id == owner_id,
+                        CalendarBlob.company_key == _company_key(),
                         CalendarBlob.blob_id == dup_blob_id,
                     )
                     .all()
@@ -1348,7 +1355,7 @@ class Storage:
                         str(r[0])
                         for r in session.query(CalendarBlob.event_id)
                         .filter(
-                            CalendarBlob.owner_id == owner_id,
+                            CalendarBlob.company_key == _company_key(),
                             CalendarBlob.blob_id == keeper_blob_id,
                         )
                         .all()
@@ -1371,7 +1378,7 @@ class Storage:
                 dup_wa_links = (
                     session.query(WhatsAppBlob.whatsapp_message_id)
                     .filter(
-                        WhatsAppBlob.owner_id == owner_id,
+                        WhatsAppBlob.company_key == _company_key(),
                         WhatsAppBlob.blob_id == dup_blob_id,
                     )
                     .all()
@@ -1381,7 +1388,7 @@ class Storage:
                         str(r[0])
                         for r in session.query(WhatsAppBlob.whatsapp_message_id)
                         .filter(
-                            WhatsAppBlob.owner_id == owner_id,
+                            WhatsAppBlob.company_key == _company_key(),
                             WhatsAppBlob.blob_id == keeper_blob_id,
                         )
                         .all()
@@ -3424,7 +3431,7 @@ class Storage:
                 # Drop the blob links first so no orphan rows survive even
                 # if FK cascade is disabled on this connection.
                 session.query(WhatsAppBlob).filter(
-                    WhatsAppBlob.owner_id == owner_id,
+                    WhatsAppBlob.company_key == _company_key(),
                     WhatsAppBlob.whatsapp_message_id.in_(engine_ids),
                 ).delete(synchronize_session=False)
 

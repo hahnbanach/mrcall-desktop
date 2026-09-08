@@ -120,10 +120,14 @@ def load_rules(owner_id: str) -> List[Dict[str, Any]]:
         return []
 
     try:
+        from zylch.memory.company_key import require_company_key
+
+        key = require_company_key()
         with get_session() as session:
             rows = (
                 session.query(Blob)
                 .filter(
+                    Blob.company_key == key,
                     Blob.owner_id == owner_id,
                     Blob.namespace.in_(rule_namespaces(owner_id)),
                 )

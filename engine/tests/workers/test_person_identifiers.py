@@ -210,6 +210,7 @@ def fresh_db(tmp_path, monkeypatch):
 def _make_blob(owner_id: str, content: str = "dummy") -> str:
     """Insert a real Blob row so person_identifiers FK is satisfied.
     Returns the blob_id."""
+    from zylch.memory.company_key import current_company_key, entity_namespace
     from zylch.storage.database import get_session
     from zylch.storage.models import Blob
 
@@ -219,7 +220,7 @@ def _make_blob(owner_id: str, content: str = "dummy") -> str:
             Blob(
                 id=blob_id,
                 owner_id=owner_id,
-                namespace=f"user:{owner_id}",
+                namespace=entity_namespace(current_company_key()),
                 content=content,
             )
         )
@@ -324,8 +325,16 @@ def test_find_blobs_by_identifiers_finds_match(fresh_db):
     )
 
 
-def test_find_blobs_by_identifiers_isolates_owners(fresh_db):
-    """An identifier value used by user A must NOT match for user B."""
+def test_find_blobs_by_identifiers_is_company_scoped(fresh_db):
+    """The identifier index belongs to the company, not to an owner.
+
+    Two accounts sharing one memory key are one company: a phone that
+    account A indexed is found by account B — that is the point of a
+    shared memory (a WhatsApp from +39333… reaches the blob a colleague
+    built from an email signature). Until 2026-09 this index was walled
+    per owner; the wall is now the company key, and ``owner_id`` on a row
+    is provenance only.
+    """
     from zylch.storage.storage import Storage
 
     storage = Storage()
@@ -337,8 +346,7 @@ def test_find_blobs_by_identifiers_isolates_owners(fresh_db):
 
     hits_a = storage.find_blobs_by_identifiers("alice@example.com", [("phone", "+393331234567")])
     hits_b = storage.find_blobs_by_identifiers("bob@example.com", [("phone", "+393331234567")])
-    assert hits_a == [blob_a]
-    assert hits_b == [blob_b]
+    assert sorted(hits_a) == sorted(hits_b) == sorted([blob_a, blob_b])
 
 
 def test_find_blobs_normalises_input_kind_and_value(fresh_db):

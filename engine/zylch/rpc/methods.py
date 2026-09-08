@@ -2293,6 +2293,14 @@ for _name, _fn in _DRAFT_ACTION_METHODS.items():
         raise RuntimeError(f"Duplicate RPC method name: {_name}")
     METHODS[_name] = _fn
 
+# Company memory key — mint on creation, validate a pasted key.
+from zylch.rpc.memory_key import METHODS as _MEMORY_KEY_METHODS  # noqa: E402
+
+for _name, _fn in _MEMORY_KEY_METHODS.items():
+    if _name in METHODS:
+        raise RuntimeError(f"duplicate RPC method registration: {_name}")
+    METHODS[_name] = _fn
+
 # Maintenance RPCs — manual triggers for the dedup sweep + memory
 # reconsolidation pass. These are the "Clean up tasks" /
 # "Reconsolidate memory" buttons in Settings.

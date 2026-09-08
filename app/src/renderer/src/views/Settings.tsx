@@ -63,7 +63,7 @@ export default function Settings(): JSX.Element {
           window.zylch.settings.get()
         ])
         if (cancelled) return
-        setFields(schema.fields || [])
+        setFields((schema.fields || []).filter((f) => !HIDDEN_SETTINGS_KEYS.has(f.key)))
         setLoaded(current.values || {})
       } catch (e: unknown) {
         if (!cancelled) {
@@ -348,6 +348,13 @@ const TOPUP_URL = 'https://dashboard.mrcall.ai/plan'
 // the assistant sends an SMS. It's a per-business StarChat variable (same one
 // the dashboard configures + the post-call SMS uses), so this card reads/writes
 // it through the engine RPC -> mrcall-agent -> StarChat, NOT the profile .env.
+// Schema fields the generic FieldRow must NOT render. MEMORY_KEY is the
+// company memory key: a capability that must stay visible and copyable, and
+// whose only write path is the join gesture — a masked, editable password
+// field would let a typed key bypass validation and the join echo. It gets a
+// card of its own (Settings memory card), never a FieldRow.
+const HIDDEN_SETTINGS_KEYS: ReadonlySet<string> = new Set(['MEMORY_KEY'])
+
 function SMSSenderCard(): JSX.Element {
   const [saved, setSaved] = useState('')
   const [sender, setSender] = useState('')

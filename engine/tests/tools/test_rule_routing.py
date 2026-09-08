@@ -88,17 +88,22 @@ def test_entity_fact_defaults_to_user(fresh_db):
     t = CreateMemoryTool(owner_id=OWNER)
     res = _run(t.execute(content="Acme prefers email", entry_type="entity_fact"))
     ns, _ = _blob(res.data["blob_id"])
-    assert ns == f"user:{OWNER}"
+    from zylch.memory.company_key import current_company_key, entity_namespace
+
+    assert ns == entity_namespace(current_company_key())  # company family: keyed, not owner
 
 
 def test_no_entry_type_keeps_legacy_default(fresh_db):
-    # Backward compat: no entry_type → default user: (unchanged behaviour).
+    # No entry_type → the default family is still `user`; since 2026-09 that
+    # namespace is the company's, not the owner's.
     from zylch.tools.create_memory_tool import CreateMemoryTool
 
     t = CreateMemoryTool(owner_id=OWNER)
     res = _run(t.execute(content="some contact note"))
     ns, _ = _blob(res.data["blob_id"])
-    assert ns == f"user:{OWNER}"
+    from zylch.memory.company_key import current_company_key, entity_namespace
+
+    assert ns == entity_namespace(current_company_key())  # company family: keyed, not owner
 
 
 # ── update_memory guard ────────────────────────────────────────────────

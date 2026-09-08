@@ -31,6 +31,7 @@ def fresh_db(tmp_path, monkeypatch):
 
 
 def _make_blob(owner_id: str, content: str = "dummy") -> str:
+    from zylch.memory.company_key import current_company_key, entity_namespace
     from zylch.storage.database import get_session
     from zylch.storage.models import Blob
 
@@ -40,7 +41,7 @@ def _make_blob(owner_id: str, content: str = "dummy") -> str:
             Blob(
                 id=blob_id,
                 owner_id=owner_id,
-                namespace=f"user:{owner_id}",
+                namespace=entity_namespace(current_company_key()),
                 content=content,
             )
         )
@@ -135,7 +136,11 @@ def test_get_blobs_for_whatsapp_message_returns_multiple_blobs(fresh_db):
     assert set(blobs) == {blob_a, blob_b}
 
 
-def test_get_blobs_for_whatsapp_message_isolates_owners(fresh_db):
+def test_get_blobs_for_whatsapp_message_is_company_scoped(fresh_db):
+    """Link rows belong to the company (2026-09, shared memory): two
+    accounts under one key see each other's links. A message id is a
+    per-profile UUID, so in production an account only ever asks about
+    its own messages; the wall that matters is the company key."""
     from zylch.storage.storage import Storage
 
     storage = Storage()
@@ -149,7 +154,7 @@ def test_get_blobs_for_whatsapp_message_isolates_owners(fresh_db):
 
     assert storage.get_blobs_for_whatsapp_message("alice@example.com", msg_alice) == [blob_alice]
     assert storage.get_blobs_for_whatsapp_message("bob@example.com", msg_bob) == [blob_bob]
-    assert storage.get_blobs_for_whatsapp_message("alice@example.com", msg_bob) == []
+    assert storage.get_blobs_for_whatsapp_message("alice@example.com", msg_bob) == [blob_bob]
 
 
 # ---------------------------------------------------------------------
@@ -173,9 +178,7 @@ def test_cascade_delete_whatsapp_message_removes_link(fresh_db):
         s.query(WhatsAppMessage).filter(WhatsAppMessage.id == msg_id).delete()
 
     with get_session() as s:
-        rows = (
-            s.query(WhatsAppBlob).filter(WhatsAppBlob.whatsapp_message_id == msg_id).all()
-        )
+        rows = s.query(WhatsAppBlob).filter(WhatsAppBlob.whatsapp_message_id == msg_id).all()
     assert rows == []
 
 

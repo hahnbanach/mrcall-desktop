@@ -378,6 +378,27 @@ SETTINGS_SCHEMA: List[SettingsField] = [
             "of the latest incoming message."
         ),
     },
+    # ─── Memory ─────────────────────────────────────────────
+    #
+    # The company memory key: a random 128-bit capability. Every profile
+    # holding the same key shares one company memory. Minted by the engine
+    # on first boot when unset (storage migration 0001_company_key); pasted
+    # at account creation to join an existing memory. Secret at rest — the
+    # Settings tab reads it back through `settings.get_secret` and shows it
+    # in a card of its own, never as a masked password field.
+    {
+        "key": "MEMORY_KEY",
+        "label": "Company memory key",
+        "type": "password",
+        "group": "Memory",
+        "optional": True,
+        "secret": True,
+        "help": (
+            "Accounts that share this key share one company memory. Copy it "
+            "from here to a colleague; paste theirs at account creation to "
+            "join their memory."
+        ),
+    },
     # ─── Documents & notes ──────────────────────────────────
     {
         "key": "DOCUMENT_PATHS",

@@ -325,7 +325,9 @@ class EmailTaskAgentTrainer:
     def _get_blobs_for_contacts(self, contact_emails: List[str]) -> List[Dict[str, Any]]:
         """Get memory blobs for the given contacts."""
         blobs = []
-        namespace = f"user:{self.owner_id}"
+        from zylch.memory.company_key import entity_namespace, require_company_key
+
+        namespace = entity_namespace(require_company_key())
 
         for email in contact_emails[: self.search_limit]:  # Limit to avoid too many searches
             try:

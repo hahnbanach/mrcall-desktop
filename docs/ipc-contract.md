@@ -219,6 +219,8 @@ registry on 2026-08-15 (65 methods), plus `emails.needs_reply` added
 
 | Method | Declared parameters | Returns |
 |---|---|---|
+| `memory.key_mint` | — | {key, minted} — ensure this profile has a company memory key and return it in clear (the show-once moment after account creation); `minted` is false when the engine already minted one at first boot |
+| `memory.key_validate` | `key` | {well_formed, reason} — shape check (22 URL-safe base64 chars, 128 bits); never raises for a bad key |
 | `memory.reconsolidate_now` | — | summary dict |
 
 **`mrcall.*`**

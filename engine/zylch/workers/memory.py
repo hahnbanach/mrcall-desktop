@@ -239,6 +239,27 @@ class MemoryWorker:
     5. Mark email as processed
     """
 
+    @property
+    def namespace(self) -> str:
+        """The company's entity namespace, resolved at use — not at construction.
+
+        Entities are company knowledge: the namespace is the company's and
+        ``owner_id`` is written on every row as provenance only. Lazy so a
+        worker built before the key exists (tests, tooling) does not fail,
+        and so a rebind to another company at runtime is followed.
+        """
+        override = getattr(self, "_namespace_override", None)
+        if override:
+            return override
+        from zylch.memory.company_key import entity_namespace, require_company_key
+
+        return entity_namespace(require_company_key())
+
+    @namespace.setter
+    def namespace(self, value: str) -> None:
+        """Pin the namespace explicitly (tests, tooling); ``None`` restores the lazy default."""
+        self._namespace_override = value or None
+
     def __init__(self, storage: Storage, owner_id: str):
         """Initialize MemoryWorker.
 
@@ -248,7 +269,6 @@ class MemoryWorker:
         """
         self.storage = storage
         self.owner_id = owner_id
-        self.namespace = f"user:{owner_id}"
 
         # Initialize components
         config = MemoryConfig()
@@ -278,7 +298,7 @@ class MemoryWorker:
         # via the reconsolidate sweep; a silent universal merge is not.
         self.merge_enabled: bool = True
 
-        logger.info(f"MemoryWorker initialized for namespace={self.namespace}")
+        logger.info(f"MemoryWorker initialized for owner={owner_id}")
 
     def _get_extraction_prompt(self) -> Optional[str]:
         """Get extraction prompt - user-specific only.
@@ -634,13 +654,22 @@ class MemoryWorker:
                 logger.debug(f"[memory] LLM merge rejected blob_id={bid} source={source}")
                 continue
 
-            # Successful merge
-            self.blob_storage.update_blob(
+            # Successful merge. An empty return is a refusal (the blob is
+            # not visible to this owner), never a success: report it and
+            # try the next candidate, so a merge can never be silently
+            # dropped on the floor.
+            written = self.blob_storage.update_blob(
                 blob_id=bid,
                 owner_id=self.owner_id,
                 content=merged_content,
                 event_description=event_desc,
             )
+            if not written:
+                logger.warning(
+                    f"[memory] merge into blob {bid} refused for owner {self.owner_id}; "
+                    f"trying the next candidate (source={source})"
+                )
+                continue
             logger.info(
                 f"Reconsolidated blob {bid} with email {email_id} "
                 f"(entity {entity_num}/{total_entities}, source={source})"

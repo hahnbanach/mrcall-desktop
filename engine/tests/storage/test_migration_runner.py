@@ -97,17 +97,21 @@ def test_destructive_step_backs_up_first_and_the_backup_restores(db_path):
     def wipe(conn):
         conn.exec_driver_sql("DELETE FROM precious")
 
+    # init_db already applied the (destructive) 0001_company_key step, so a
+    # backup for THAT exists; what this test owns is the delta.
+    backups_dir = os.path.join(os.path.dirname(db_path), "backups")
+    before = set(os.listdir(backups_dir)) if os.path.isdir(backups_dir) else set()
+
     step = MigrationStep(id="9998_wipe", apply=wipe, destructive=True)
     run_migrations(engine, db_path, steps=[step])
     assert _count(engine, "SELECT COUNT(*) FROM precious") == 0
 
-    backups_dir = os.path.join(os.path.dirname(db_path), "backups")
-    backups = sorted(os.listdir(backups_dir))
-    assert len(backups) == 1 and "9998_wipe" in backups[0]
+    new_backups = sorted(set(os.listdir(backups_dir)) - before)
+    assert len(new_backups) == 1 and "9998_wipe" in new_backups[0]
 
     # M0.5b — restore is exercised, not assumed.
     dbm.dispose_engine()
-    restore_sqlite(os.path.join(backups_dir, backups[0]), db_path)
+    restore_sqlite(os.path.join(backups_dir, new_backups[0]), db_path)
     engine = dbm.get_engine()
     assert _count(engine, "SELECT COUNT(*) FROM precious") == 1
     # The backup predates the step's record, so the step is pending again —
@@ -121,8 +125,11 @@ def test_non_destructive_step_takes_no_backup(db_path):
     step = MigrationStep(
         id="9997_add", apply=lambda c: c.exec_driver_sql("CREATE TABLE IF NOT EXISTS t (x)")
     )
+    backups_dir = os.path.join(os.path.dirname(db_path), "backups")
+    before = set(os.listdir(backups_dir)) if os.path.isdir(backups_dir) else set()
     run_migrations(engine, db_path, steps=[step])
-    assert not os.path.exists(os.path.join(os.path.dirname(db_path), "backups"))
+    after = set(os.listdir(backups_dir)) if os.path.isdir(backups_dir) else set()
+    assert after == before  # nothing new: a non-destructive step takes no backup
 
 
 def test_backup_api_includes_wal_pages(db_path):
