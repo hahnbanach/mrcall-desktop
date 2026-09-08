@@ -123,6 +123,13 @@ class GetTasksTool(Tool):
         }
 
 
+# Bound on one page of ranked blobs. Content is never cut — the model reads
+# it back into `update_memory`, and a cut blob would be written back short —
+# so the page is clamped instead, and each blob appears once. Incident:
+# `~/hb/docs/known-issues/2026-09-08-engine-chat-prompt-unbounded.md`.
+MAX_RESULTS = 25
+
+
 class SearchLocalMemoryTool(Tool):
     """Search local memory (blobs) using hybrid FTS + semantic.
 
@@ -185,6 +192,9 @@ class SearchLocalMemoryTool(Tool):
             limit_i = 50
         if limit_i <= 0:
             limit_i = 50
+        requested = limit_i
+        if limit_i > MAX_RESULTS:
+            limit_i = MAX_RESULTS
 
         try:
             if self.search_engine:
@@ -233,7 +243,13 @@ class SearchLocalMemoryTool(Tool):
                         ),
                     )
 
-                output = [f"Found {len(results)} contacts:"]
+                clamp = (
+                    f" [limit {requested} clamped to {MAX_RESULTS}]" if requested != limit_i else ""
+                )
+                output = [
+                    f"Found {len(results)} contacts{clamp} — full content of each is in"
+                    " data.results:"
+                ]
                 formatted_results = []
 
                 for r in results:
@@ -250,10 +266,8 @@ class SearchLocalMemoryTool(Tool):
 
                     formatted_results.append(person_data)
                     output.append(
-                        f"\n**{r.namespace}** (blob_id={r.blob_id},"
-                        f" score: {r.hybrid_score:.2f})"
+                        f"- **{r.namespace}** (blob_id={r.blob_id}, score: {r.hybrid_score:.2f})"
                     )
-                    output.append(person_data["content"])
 
                 return ToolResult(
                     status=ToolStatus.SUCCESS,
@@ -303,9 +317,9 @@ class SearchLocalMemoryTool(Tool):
                     "limit": {
                         "type": "integer",
                         "description": (
-                            "Max ranked candidates to return. Default"
-                            " 50. Raise if you suspect a relevant blob"
-                            " might have ranked outside the first page."
+                            f"Max ranked candidates to return, at most {MAX_RESULTS}"
+                            " (a higher value is clamped). Narrow the query"
+                            " rather than raising it."
                         ),
                     },
                 },
