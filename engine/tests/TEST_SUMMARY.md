@@ -173,7 +173,7 @@ Created comprehensive integration and E2E tests for the Von Neumann Memory Archi
 ### Quick Start
 ```bash
 # Run all tests
-source .venv/bin/activate
+source venv/bin/activate
 ./tests/run_tests.sh all
 
 # Run integration only

@@ -32,7 +32,7 @@ Still 4 tasks. User loses trust. User curses the assistant.
    contacts on the SAME topic also count. Use:
 
    ```
-   /home/mal/hb/mrcall-desktop/engine/.venv-debug/bin/python <<'PY'
+   /home/mal/hb/mrcall-desktop/engine/venv/bin/python <<'PY'
    import sqlite3, json
    db = "/home/mal/.zylch/profiles/<UID>/zylch.db"
    c = sqlite3.connect(db); c.row_factory = sqlite3.Row
@@ -85,7 +85,7 @@ from an older release, the column-add migration runs but the row
 backfill might not.
 
 ```
-/home/mal/hb/mrcall-desktop/engine/.venv-debug/bin/python <<'PY'
+/home/mal/hb/mrcall-desktop/engine/venv/bin/python <<'PY'
 import sqlite3
 c = sqlite3.connect("/home/mal/.zylch/profiles/<UID>/zylch.db")
 for r in c.execute("""
@@ -107,7 +107,7 @@ real DB. Unit tests do not count. Use:
 ```
 ZYLCH_DB_PATH=/home/mal/.zylch/profiles/<UID>/zylch.db \
 EMAIL_ADDRESS=<email> OWNER_ID=<email> \
-/home/mal/hb/mrcall-desktop/engine/.venv-debug/bin/python <<'PY'
+/home/mal/hb/mrcall-desktop/engine/venv/bin/python <<'PY'
 import asyncio, logging, sys
 logging.basicConfig(level=logging.INFO, format='%(message)s', stream=sys.stdout)
 for n in ('anthropic._base_client','httpx','httpcore'):
@@ -139,7 +139,7 @@ expect:
 
 ```
 HOME=/tmp/zylch-test-home  # so the sidecar binds to a sandbox profile
-/home/mal/hb/mrcall-desktop/engine/.venv-debug/bin/zylch -p HxiZh-test rpc
+/home/mal/hb/mrcall-desktop/engine/venv/bin/zylch -p HxiZh-test rpc
 ```
 
 Then send `{"jsonrpc":"2.0","id":1,"method":"tasks.list","params":{}}`
