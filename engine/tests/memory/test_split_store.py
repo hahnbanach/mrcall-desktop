@@ -333,7 +333,11 @@ def test_backfill_links_this_profiles_mail_to_company_blobs(monkeypatch, tmp_pat
     )
     with get_session() as s:
         s.query(EmailBlob).delete()  # pretend the index was never written
-    dbm._backfill_email_blobs_index()  # reads Blob from the store, Email from the profile
+    # Through a REAL second boot, not by calling the backfill directly: the
+    # backfill reads Blob from the store and Email from the profile, and it
+    # must find the store attached when it runs (it did not, once).
+    dbm.dispose_engine()
+    dbm.init_db()
     with get_session() as s:
         row = s.query(EmailBlob).one()
         assert row.email_id == "mail-1" and row.owner_id == a and row.company_key == key

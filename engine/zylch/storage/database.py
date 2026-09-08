@@ -291,16 +291,32 @@ def init_db():
         _resolve_db_path(),
         ensure=(_ensure_all_tables, _apply_column_migrations),
         steps=PROFILE_STEPS,
-        backfills=(_apply_data_backfills,),
+        backfills=(_attach_store_then_backfill,),
     )
     if applied:
         logger.info(f"Database migrated ({', '.join(applied)}) at {_resolve_db_path()}")
-    # The split step attaches the store while it runs; every other boot
-    # attaches it here, after the profile lock is released (profile lock
-    # first, then the store's — never the other way round).
+    if (
+        current_memory_engine() is None
+        and memory_unavailable_reason() == "memory store not attached yet"
+    ):
+        attach_memory_store(migrating=False)  # belt and braces: the backfill wrapper already did
+    logger.info(f"Database initialized at {_resolve_db_path()}")
+
+
+def _attach_store_then_backfill() -> None:
+    """Attach the company store, THEN run the data backfills — inside the
+    profile runner's lock, so the store's lock nests inside the profile's
+    (never the other way round).
+
+    The email/calendar↔blob backfill reads ``Blob`` from the store; run
+    before the store is attached it fails softly with "memory store not
+    attached yet" on every boot after the split and never reconstructs the
+    index. The split step attaches the store itself while it runs; every
+    later boot attaches it here.
+    """
     if current_memory_engine() is None:
         attach_memory_store(migrating=False)
-    logger.info(f"Database initialized at {_resolve_db_path()}")
+    _apply_data_backfills()
 
 
 def _apply_column_migrations(engine: Engine) -> None:
