@@ -15,12 +15,32 @@ round-trip, no 1-year default cap. Sits between
 """
 
 import logging
-from typing import Any, Dict, Optional
+import textwrap
+from typing import Any, Dict, List, Optional
 
 from .base import Tool, ToolResult, ToolStatus
 from .session_state import SessionState
 
 logger = logging.getLogger(__name__)
+
+# Bounds on what one call feeds the model. A match is a locator plus a
+# preview; the full text is one `read_email` call away. On the IMAP sync
+# path `snippet` holds the whole body, so a page of unbounded matches was
+# a megabyte — the incident behind both bounds:
+# `~/hb/docs/known-issues/2026-09-08-engine-chat-prompt-unbounded.md`.
+MAX_MATCHES = 50
+PREVIEW_CHARS = 300
+
+
+def preview_text(text: str, email_id: str, limit: int = PREVIEW_CHARS) -> str:
+    """Return `text` whitespace-collapsed, whole when short, else its first
+    `limit` characters on a word boundary followed by a marker that says how
+    long the text is and how to read it whole."""
+    flat = " ".join((text or "").split())
+    if len(flat) <= limit:
+        return flat
+    marker = f" … [preview of {len(flat):,} chars; read_email id={email_id} for the full text]"
+    return textwrap.shorten(flat, width=limit + len(marker), placeholder=marker)
 
 
 class SearchLocalEmailsTool(Tool):
@@ -107,23 +127,30 @@ class SearchLocalEmailsTool(Tool):
             offset_i = 0
         if limit_i <= 0:
             limit_i = 50
+        requested = limit_i
+        if limit_i > MAX_MATCHES:
+            limit_i = MAX_MATCHES
 
         logger.debug(
             f"[search_local_emails] execute(query={query!r} folder={folder_norm} "
-            f"limit={limit_i} offset={offset_i} owner_id={owner_id})"
+            f"limit={limit_i} (requested {requested}) offset={offset_i} owner_id={owner_id})"
         )
 
-        emails = self.storage.search_emails_flat(
+        # One row past the page tells us whether a next page exists.
+        rows = self.storage.search_emails_flat(
             owner_id=owner_id,
             user_email=self._user_email(owner_id),
             query=query,
             folder=folder_norm,
-            limit=limit_i,
+            limit=limit_i + 1,
             offset=offset_i,
         )
+        has_more = len(rows) > limit_i
+        emails = rows[:limit_i]
+        next_offset = offset_i + len(emails) if has_more else None
 
         logger.debug(
-            f"[search_local_emails] -> {len(emails)} matches"
+            f"[search_local_emails] -> {len(emails)} matches has_more={has_more}"
         )
 
         if not emails:
@@ -154,9 +181,13 @@ class SearchLocalEmailsTool(Tool):
                 ),
             )
 
+        clamp = f" [limit {requested} clamped to {MAX_MATCHES}]" if requested != limit_i else ""
         lines = [
-            f"Found {len(emails)} local match(es) for `{query}` (folder={folder_norm}):"
+            f"Found {len(emails)} local match(es) for `{query}` (folder={folder_norm}){clamp}:"
         ]
+        # The preview lives in the message only; `data.matches` carries the
+        # locators, so nothing is echoed twice.
+        matches: List[Dict[str, Any]] = []
         for i, e in enumerate(emails, 1):
             sender = e["from_name"] or e["from_email"] or "(unknown)"
             attach = " [attach]" if e.get("has_attachments") else ""
@@ -164,20 +195,42 @@ class SearchLocalEmailsTool(Tool):
             date_short = (e.get("date") or "")[:10]
             subject = e.get("subject") or "(no subject)"
             recipient = e.get("to_email") or "?"
-            snippet = (e.get("snippet") or "").replace("\n", " ").strip()
+            body = e.get("snippet") or ""
+            preview = preview_text(body, e["id"])
             lines.append(
                 f"  {i}. [{date_short}] {sender} → {recipient}: {subject}{attach}{sent_marker}\n"
                 f"     id={e['id']} thread={e['thread_id']}\n"
-                f"     {snippet}"
+                f"     {preview}"
+            )
+            matches.append(
+                {
+                    "id": e["id"],
+                    "thread_id": e["thread_id"],
+                    "date": e.get("date") or "",
+                    "from_email": e.get("from_email") or "",
+                    "from_name": e.get("from_name") or "",
+                    "to_email": e.get("to_email") or "",
+                    "cc_email": e.get("cc_email") or "",
+                    "subject": e.get("subject") or "",
+                    "has_attachments": bool(e.get("has_attachments")),
+                    "is_user_sent": bool(e.get("is_user_sent")),
+                    "body_chars": len(body),
+                }
+            )
+        if has_more:
+            lines.append(
+                f"More matches exist beyond this page: call again with offset={next_offset}"
+                " (same query) for the next ones."
             )
 
         return ToolResult(
             status=ToolStatus.SUCCESS,
             data={
-                "matches": emails,
-                "count": len(emails),
+                "matches": matches,
+                "count": len(matches),
                 "query": query,
                 "folder": folder_norm,
+                "next_offset": next_offset,
             },
             message="\n".join(lines),
         )
@@ -214,14 +267,17 @@ class SearchLocalEmailsTool(Tool):
                     "limit": {
                         "type": "integer",
                         "description": (
-                            "Max matching messages to return. Default "
-                            "50. Bump higher if you suspect more matches "
-                            "than the first page surfaced."
+                            f"Max matching messages per page, at most {MAX_MATCHES} "
+                            "(a higher value is clamped). Each match carries a "
+                            "short preview; call read_email for a full text."
                         ),
                     },
                     "offset": {
                         "type": "integer",
-                        "description": "Pagination offset. Default 0.",
+                        "description": (
+                            "Pagination offset. Default 0. When more matches "
+                            "exist the result names the offset of the next page."
+                        ),
                     },
                 },
                 "required": ["query"],
