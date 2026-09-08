@@ -9,6 +9,7 @@ from zylch.llm.exceptions import (
     LLMAuthenticationError,
     LLMRateLimitError,
     LLMConnectionError,
+    LLMPromptTooLargeError,
 )
 
 from zylch.tools import ToolFactory, ToolConfig
@@ -620,6 +621,7 @@ class ChatService:
                 "metadata": {
                     "execution_time_ms": round(execution_time_ms, 2),
                     "tools_available": len(self.agent.tools),
+                    **self._truncation_metadata(),
                 },
             }
 
@@ -680,6 +682,33 @@ class ChatService:
                 "session_id": session_id if session_id else None,
             }
 
+        except LLMPromptTooLargeError as e:
+            # The prompt was refused for size before dispatch: the grounding
+            # step did not run. Structured, so a caller never mistakes this
+            # for an answer.
+            logger.error(f"Prompt over budget: {e}")
+            execution_time_ms = (time.time() - start_time) * 1000
+            error_msg = (
+                "This request could not be sent: the assembled prompt is estimated"
+                f" at {e.estimated_tokens:,} tokens against a budget of"
+                f" {e.budget_tokens:,}. Narrow the question or search a smaller"
+                " range and try again."
+            )
+
+            return {
+                "response": self._prepend_notification(error_msg, notification_banner),
+                "tool_calls": [],
+                "metadata": {
+                    "execution_time_ms": round(execution_time_ms, 2),
+                    "error": "PROMPT_TOO_LARGE",
+                    "error_detail": str(e),
+                    "estimated_tokens": e.estimated_tokens,
+                    "budget_tokens": e.budget_tokens,
+                    **self._truncation_metadata(),
+                },
+                "session_id": session_id if session_id else None,
+            }
+
         except LLMConnectionError as e:
             # Network/connection issues
             logger.error(f"API connection error: {e}")
@@ -713,6 +742,15 @@ class ChatService:
                 },
                 "session_id": session_id if session_id else None,
             }
+
+    def _truncation_metadata(self) -> Dict[str, Any]:
+        """Tool results cut for size this turn, for the response metadata.
+
+        Empty when nothing was cut, so the key is absent rather than a
+        reassuring empty list.
+        """
+        cuts = list(getattr(self.agent, "last_truncations", None) or [])
+        return {"truncated_tool_results": cuts} if cuts else {}
 
     def get_agent_info(self) -> Dict[str, Any]:
         """Get information about the agent and available tools.

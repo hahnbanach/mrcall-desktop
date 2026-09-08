@@ -12,6 +12,13 @@ from datetime import datetime
 from typing import Any, Awaitable, Callable, Dict, List, Optional, Tuple
 
 from ..llm import LLMClient, make_llm_client
+from ..llm.exceptions import LLMPromptTooLargeError
+from .budget import (
+    PROMPT_TOKEN_BUDGET,
+    TOOL_RESULT_MAX_CHARS,
+    bound_tool_result,
+    check_prompt_budget,
+)
 from .models import ModelSelector
 from .prompts import get_system_prompt_base
 from .turn_context import new_turn_id, get_turn_id
@@ -149,6 +156,9 @@ class ZylchAIAgent(BaseConversationalAgent):
         # Usage dict from the most recent LLM call — exposed for tests
         # and observability. Reset at the start of each process_message.
         self.last_usage: Dict[str, int] = {}
+        # Tool results cut for size in the most recent turn — see
+        # `budget.bound_tool_result`. `chat.send` surfaces them.
+        self.last_truncations: List[Dict[str, Any]] = []
 
         logger.info(
             f"Initialized Zylch AI agent with {len(tools)} tools, transport={self.client.transport}{f' and {len(self.triggered_instructions)} triggered instructions' if self.triggered_instructions else ''}"
@@ -237,6 +247,8 @@ class ZylchAIAgent(BaseConversationalAgent):
             f"[chat turn={turn_id}] process_message start" f" user_message_len={len(user_message)}"
         )
 
+        self.last_truncations = []
+
         # Add user message to history
         self.conversation_history.append({"role": "user", "content": user_message})
 
@@ -299,14 +311,11 @@ class ZylchAIAgent(BaseConversationalAgent):
 
         # Create message with tool support (with current date/time)
         # Note: model selection is now handled by LLMClient based on provider
-        response = await self.client.create_message(
-            messages=self._messages_with_history_cache(
-                self.conversation_history,
-                volatile_suffix=volatile_suffix,
-            ),
-            system=system_blocks,
-            tools=self._get_tool_schemas(),
-            max_tokens=self.max_tokens,
+        response = await self._create_message_within_budget(
+            system_blocks=system_blocks,
+            volatile_suffix=volatile_suffix,
+            turn_id=turn_id,
+            step=0,
         )
         try:
             u = response.usage
@@ -380,14 +389,11 @@ class ZylchAIAgent(BaseConversationalAgent):
             self.conversation_history.append({"role": "user", "content": tool_results})
 
             # Continue conversation with tool results (with current date/time)
-            response = await self.client.create_message(
-                messages=self._messages_with_history_cache(
-                    self.conversation_history,
-                    volatile_suffix=volatile_suffix,
-                ),
-                system=system_blocks,  # Same cached system prompt
-                tools=self._get_tool_schemas(),
-                max_tokens=self.max_tokens,
+            response = await self._create_message_within_budget(
+                system_blocks=system_blocks,  # Same cached system prompt
+                volatile_suffix=volatile_suffix,
+                turn_id=turn_id,
+                step=step,
             )
             try:
                 u = response.usage
@@ -414,6 +420,42 @@ class ZylchAIAgent(BaseConversationalAgent):
         self.message_count += 1
 
         return assistant_message
+
+    async def _create_message_within_budget(
+        self,
+        *,
+        system_blocks: List[Dict[str, Any]],
+        volatile_suffix: str,
+        turn_id: str,
+        step: int,
+    ) -> Any:
+        """Assemble the wire prompt, refuse it if over budget, else send it.
+
+        Every dispatch goes through here, so the check covers the first
+        call and each tool-loop iteration — the iteration that appends tool
+        results is the one that grows. A refused prompt raises
+        `LLMPromptTooLargeError` with the numbers; nothing is sent.
+        """
+        messages = self._messages_with_history_cache(
+            self.conversation_history,
+            volatile_suffix=volatile_suffix,
+        )
+        tools = self._get_tool_schemas()
+        try:
+            estimated = check_prompt_budget(system=system_blocks, tools=tools, messages=messages)
+        except LLMPromptTooLargeError as e:
+            logger.error(f"[chat turn={turn_id} step={step}] prompt refused before dispatch: {e}")
+            raise
+        logger.debug(
+            f"[chat turn={turn_id} step={step}] prompt estimate={estimated} tokens"
+            f" budget={PROMPT_TOKEN_BUDGET}"
+        )
+        return await self.client.create_message(
+            messages=messages,
+            system=system_blocks,
+            tools=tools,
+            max_tokens=self.max_tokens,
+        )
 
     # Tools that return pre-formatted output and should bypass the second LLM call
     DIRECT_RESPONSE_TOOLS = {"get_tasks"}
@@ -570,8 +612,17 @@ class ZylchAIAgent(BaseConversationalAgent):
                     # Don't add to results - we're returning directly
                     continue
 
-                # Format result for Anthropic
-                formatted_result = self._format_tool_result(tool_result)
+                # Format result for Anthropic, within the per-result budget.
+                formatted_result, cut = bound_tool_result(
+                    tool_name, self._format_tool_result(tool_result)
+                )
+                if cut:
+                    logger.warning(
+                        f"[chat turn={tid} step={step}] tool={tool_name} result truncated:"
+                        f" {cut['original_chars']} chars -> {cut['shown_chars']}"
+                        f" (budget {TOOL_RESULT_MAX_CHARS})"
+                    )
+                    self.last_truncations.append(cut)
                 logger.debug(f"Formatted tool result sent to agent:\n{formatted_result}")
 
                 results.append(
