@@ -3166,7 +3166,7 @@ This action **cannot be undone**."""
             AgentPrompt,
         )
 
-        from zylch.memory import BlobStorage, EmbeddingEngine, MemoryConfig
+        from zylch.memory import BlobStorage
 
         counts = {}
         # Memory first, through the one door that knows the sharing rule:
@@ -3175,9 +3175,9 @@ This action **cannot be undone**."""
         # sole contributor is the key holder and everything it wrote goes.
         # Sentences cascade from their blob.
         try:
-            counts["blobs"] = BlobStorage(get_session, EmbeddingEngine(MemoryConfig())).delete_all_blobs(
-                owner_id
-            )
+            # No embedder: a delete never encodes, and constructing one loads
+            # the ONNX model (seconds, hundreds of MB) for nothing.
+            counts["blobs"] = BlobStorage(get_session, None).delete_all_blobs(owner_id)
         except Exception as e:
             counts["blobs"] = f"error: {e}"
         table_models = [
