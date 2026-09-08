@@ -170,12 +170,20 @@ class HybridSearchEngine:
     def _ensure_index(self, owner_id: str):
         """Load the vector index for this (owner, key) scope if not cached."""
         key = require_company_key()
-        scope_id = f"{owner_id}|{key}"
-        if self._index.is_loaded and self._index._scope_id == scope_id:
-            return
-
-        logger.debug(f"[HybridSearch] loading vector index for owner={owner_id}")
+        # The cache identity is the scope AND the store's mutation sequence:
+        # a write by any process on this store bumps the sequence, so a
+        # cached index is used only while nothing anywhere has changed.
         with self._get_session() as session:
+            try:
+                from .store import read_mutation_seq
+
+                seq = read_mutation_seq(session)
+            except Exception:  # a store without the meta row (tests, legacy)
+                seq = -1
+            scope_id = f"{owner_id}|{key}|{seq}"
+            if self._index.is_loaded and self._index._scope_id == scope_id:
+                return
+            logger.debug(f"[HybridSearch] loading vector index for owner={owner_id} seq={seq}")
             rows = (
                 session.query(Blob.id, Blob.embedding).filter(blob_visible(owner_id, key)).all()
             )

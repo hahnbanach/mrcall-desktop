@@ -162,8 +162,13 @@ def test_get_blobs_for_whatsapp_message_is_company_scoped(fresh_db):
 # ---------------------------------------------------------------------
 
 
-def test_cascade_delete_whatsapp_message_removes_link(fresh_db):
-    """ON DELETE CASCADE on whatsapp_message_id."""
+def test_deleting_a_whatsapp_message_through_storage_removes_its_link(fresh_db):
+    """The message side of the link has no ON DELETE CASCADE any more: since
+    2026-09 `whatsapp_blobs` lives in the company memory store and
+    `whatsapp_messages` in the profile file, and SQLite cannot enforce a
+    foreign key across two files. The production delete path drops the
+    link rows itself, and that is what this asserts (the blob side keeps
+    its real, same-file cascade — see the next test)."""
     from zylch.storage.database import get_session
     from zylch.storage.models import WhatsAppBlob, WhatsAppMessage
     from zylch.storage.storage import Storage
@@ -173,9 +178,12 @@ def test_cascade_delete_whatsapp_message_removes_link(fresh_db):
     blob_id = _make_blob(owner)
     msg_id = _make_wa_message(owner)
     storage.add_whatsapp_blob_link(owner, msg_id, blob_id)
-
     with get_session() as s:
-        s.query(WhatsAppMessage).filter(WhatsAppMessage.id == msg_id).delete()
+        wa_message_id = (
+            s.query(WhatsAppMessage.message_id).filter(WhatsAppMessage.id == msg_id).scalar()
+        )
+
+    assert storage.delete_whatsapp_message_by_message_id(owner, wa_message_id) == 1
 
     with get_session() as s:
         rows = s.query(WhatsAppBlob).filter(WhatsAppBlob.whatsapp_message_id == msg_id).all()

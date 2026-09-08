@@ -1468,6 +1468,23 @@ class Storage:
             return []
 
         with get_session() as session:
+            # A blob merged away by another account's sweep leaves its old
+            # id in THIS ledger (a JSON list in a file the sweep could not
+            # open). Widen `wanted` through the alias table both ways, so
+            # a stale id and its keeper match each other.
+            try:
+                from zylch.storage.models import BlobAlias
+
+                alias_rows = (
+                    session.query(BlobAlias.merged_id, BlobAlias.keeper_id)
+                    .filter(or_(BlobAlias.merged_id.in_(wanted), BlobAlias.keeper_id.in_(wanted)))
+                    .all()
+                )
+                for merged_id, keeper_id in alias_rows:
+                    wanted.add(str(merged_id))
+                    wanted.add(str(keeper_id))
+            except Exception as e:
+                logger.debug(f"get_open_tasks_by_blobs: alias lookup skipped: {e}")
             rows = (
                 session.query(TaskItem)
                 .filter(

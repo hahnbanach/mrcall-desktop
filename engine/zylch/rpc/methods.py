@@ -2165,6 +2165,14 @@ async def settings_update(params: Dict[str, Any], notify: NotifyFn) -> Any:
         if key not in KNOWN_KEYS:
             unknown.append(key)
             continue
+        if key == "MEMORY_KEY":
+            # The only write path for the company memory key is
+            # `memory.join`: it merges, writes, and rebinds the running
+            # engine. A value written here would boot the engine on a
+            # different store with no merge and orphan the current one.
+            err = ValueError("MEMORY_KEY cannot be set through settings.update — use memory.join")
+            err.code = -32602  # type: ignore[attr-defined]
+            raise err
         if not isinstance(value, str):
             value = "" if value is None else str(value)
         if key in SECRET_KEYS and value == "<set>":
@@ -2297,6 +2305,14 @@ for _name, _fn in _DRAFT_ACTION_METHODS.items():
 from zylch.rpc.memory_key import METHODS as _MEMORY_KEY_METHODS  # noqa: E402
 
 for _name, _fn in _MEMORY_KEY_METHODS.items():
+    if _name in METHODS:
+        raise RuntimeError(f"duplicate RPC method registration: {_name}")
+    METHODS[_name] = _fn
+
+# Company memory store — status, join preview, join (the key's only write path).
+from zylch.rpc.memory_join import METHODS as _MEMORY_JOIN_METHODS  # noqa: E402
+
+for _name, _fn in _MEMORY_JOIN_METHODS.items():
     if _name in METHODS:
         raise RuntimeError(f"duplicate RPC method registration: {_name}")
     METHODS[_name] = _fn

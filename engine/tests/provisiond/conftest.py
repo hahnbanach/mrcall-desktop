@@ -28,6 +28,44 @@ def cleanup_test_data():
     yield
 
 
+# Every uid these tests provision. Since 2026-09 (shared company memory)
+# provisiond FAILS CLOSED on a uid the host's company map does not name —
+# a host-wide fallback key is how two tenants end up in one memory store —
+# so the tests declare their uids here, mapped to one throwaway company.
+_MAPPED_UIDS = (
+    "uid-abc-123",
+    "uid-1",
+    "uid-2",
+    "uid-3",
+    "uid-4",
+    "uid-quote",
+    "uid-retry",
+    "real-uid",
+    "uid",
+    "uid-a",
+    "uid-b",
+    "uid-big",
+    "uid-cl",
+    "uid-roundtrip",
+)
+TEST_COMPANY_KEY = "TestCompanyKey0000000A"
+
+
+@pytest.fixture(autouse=True)
+def company_map(tmp_path, monkeypatch):
+    """A host company map naming every uid the provisiond tests use."""
+    import json
+
+    # Outside the profiles root (tmp_path itself in these tests): a test
+    # that asserts "nothing was written" must not see the map.
+    host_dir = tmp_path.parent / (tmp_path.name + "-host")
+    host_dir.mkdir(exist_ok=True)
+    path = host_dir / "company-map.json"
+    path.write_text(json.dumps({uid: TEST_COMPANY_KEY for uid in _MAPPED_UIDS}))
+    monkeypatch.setenv("PROVISIOND_COMPANY_MAP", str(path))
+    return path
+
+
 @pytest.fixture
 def rsa_keypair():
     """A fresh 2048-bit RSA keypair, standing in for Google's signing key."""

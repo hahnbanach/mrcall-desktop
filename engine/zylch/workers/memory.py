@@ -9,7 +9,7 @@ then LLM-merges new information with existing knowledge.
 
 import logging
 import re
-from typing import Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 from zylch.llm import LLMClient, make_llm_client, routed_model
 from zylch.llm.usage import call_site
@@ -24,6 +24,10 @@ from zylch.memory import (
 )
 
 logger = logging.getLogger(__name__)
+
+# Re-merge attempts when another writer changed the entity between our
+# read and our write (compare-and-swap on updated_at).
+_CAS_ATTEMPTS = 3
 
 
 # ---------------------------------------------------------------------
@@ -183,6 +187,21 @@ def _parse_identifiers_block(entity_content: str) -> List[Tuple[str, str]]:
     return deduped
 
 
+def _shared_self_notion() -> Optional[str]:
+    """The company store's self-notion, or None when unset/unavailable."""
+    try:
+        from zylch.memory.store import get_meta
+        from zylch.storage.database import current_memory_engine
+
+        engine = current_memory_engine()
+        if engine is None:
+            return None
+        return get_meta(engine).get("self_notion") or None
+    except Exception as e:
+        logger.debug(f"[memory] self-notion unavailable: {e}")
+        return None
+
+
 def _extract_identifier_query(entity_content: str) -> Optional[str]:
     """Pull the #IDENTIFIERS block as a focused search query.
 
@@ -327,6 +346,22 @@ class MemoryWorker:
             # Treat empty string as None
             self._custom_prompt = raw if raw and raw.strip() else None
             self._custom_prompt_loaded = True
+
+            # One company self-notion, injected for EVERY profile sharing
+            # the store, whatever its own trainer inferred: the extractor
+            # must refuse to store facts about the company it works for,
+            # and two profiles disagreeing about who that is would make one
+            # of them write the company into shared memory permanently.
+            if self._custom_prompt:
+                notion = _shared_self_notion()
+                if notion:
+                    self._custom_prompt += (
+                        "\n\n**COMPANY SELF-NOTION (shared by every account of this company; "
+                        "it overrides whatever USER_COMPANY this prompt inferred above)**\n"
+                        f"USER_COMPANY: {notion}\n"
+                        "DO NOT create or update a COMPANY entity describing this company, "
+                        "and DO NOT extract its people as external contacts.\n"
+                    )
 
             if self._custom_prompt:
                 logger.info(f"Using user's custom {source_key} prompt")
@@ -602,6 +637,7 @@ class MemoryWorker:
                 {
                     "blob_id": bid,
                     "content": blob_dict["content"],
+                    "updated_at": blob_dict.get("updated_at"),
                     "source": (
                         "identifier+cosine" if bid in cosine_blob_ids else "identifier-only"
                     ),
@@ -613,10 +649,14 @@ class MemoryWorker:
             if bid in seen_ids:
                 continue
             seen_ids.add(bid)
+            # the search result has no updated_at; one cheap read gives the
+            # compare-and-swap something to key on
+            current = self.blob_storage.get_blob(bid, self.owner_id) or {}
             merge_candidates.append(
                 {
                     "blob_id": bid,
-                    "content": cand.content,
+                    "content": current.get("content") or cand.content,
+                    "updated_at": current.get("updated_at"),
                     "source": f"cosine={cand.hybrid_score:.3f}",
                 }
             )
@@ -643,31 +683,51 @@ class MemoryWorker:
         for cand in merge_candidates:
             bid = cand["blob_id"]
             existing_content = cand["content"]
+            expected_updated_at = cand.get("updated_at")
             source = cand["source"]
             logger.debug(f"[memory] merge attempt blob_id={bid} source={source}")
-            with call_site("memory.merge"):
-                merged_content = self.llm_merge.merge(existing_content, entity_content)
 
-            # If the gate returned the INSERT/SKIP sentinel (entities don't
-            # match), try next candidate.
-            if is_no_merge_response(merged_content):
-                logger.debug(f"[memory] LLM merge rejected blob_id={bid} source={source}")
-                continue
+            # Compare-and-swap loop. The LLM merge runs OUTSIDE any
+            # transaction (seconds); the write then checks the blob is
+            # still the one it read. Another daemon writing the same
+            # entity in between is a conflict, not a lost update: re-merge
+            # onto the current text, a bounded number of times.
+            written: Dict[str, Any] = {}
+            for attempt in range(1, _CAS_ATTEMPTS + 1):
+                with call_site("memory.merge"):
+                    merged_content = self.llm_merge.merge(existing_content, entity_content)
 
-            # Successful merge. An empty return is a refusal (the blob is
-            # not visible to this owner), never a success: report it and
-            # try the next candidate, so a merge can never be silently
-            # dropped on the floor.
-            written = self.blob_storage.update_blob(
-                blob_id=bid,
-                owner_id=self.owner_id,
-                content=merged_content,
-                event_description=event_desc,
-            )
+                # If the gate returned the INSERT/SKIP sentinel (entities
+                # don't match), try the next candidate.
+                if is_no_merge_response(merged_content):
+                    logger.debug(f"[memory] LLM merge rejected blob_id={bid} source={source}")
+                    written = {}
+                    break
+
+                written = self.blob_storage.update_blob(
+                    blob_id=bid,
+                    owner_id=self.owner_id,
+                    content=merged_content,
+                    event_description=event_desc,
+                    expected_updated_at=expected_updated_at,
+                )
+                if isinstance(written, dict) and written.get("conflict") is True:
+                    logger.info(
+                        f"[memory] blob {bid} changed under us (attempt {attempt}/"
+                        f"{_CAS_ATTEMPTS}); re-merging onto the current content"
+                    )
+                    existing_content = written.get("content") or existing_content
+                    expected_updated_at = written.get("updated_at")
+                    written = {}
+                    continue
+                break
+
             if not written:
+                # Refused (not visible), rejected by the gate, or still
+                # conflicting after every attempt: never silently dropped.
                 logger.warning(
-                    f"[memory] merge into blob {bid} refused for owner {self.owner_id}; "
-                    f"trying the next candidate (source={source})"
+                    f"[memory] merge into blob {bid} did not land for owner "
+                    f"{self.owner_id} (source={source}); trying the next candidate"
                 )
                 continue
             logger.info(

@@ -49,14 +49,25 @@ MEMORY_TABLES = (
 
 def apply(conn: Connection) -> None:
     key = ensure_company_key()
+    # A profile created after the split holds none of these tables (they
+    # live in the company store from the start); minting the key is then
+    # the whole step.
+    present = {
+        r[0]
+        for r in conn.exec_driver_sql(
+            "SELECT name FROM sqlite_master WHERE type='table'"
+        ).fetchall()
+    }
     stamped = 0
     for table in MEMORY_TABLES:
+        if table not in present:
+            continue
         res = conn.exec_driver_sql(
             f"UPDATE {table} SET company_key = ? WHERE company_key IS NULL", (key,)
         )
         stamped += res.rowcount or 0
     rewritten = 0
-    for fam in COMPANY_FAMILIES:
+    for fam in COMPANY_FAMILIES if "blobs" in present else ():
         target = f"{fam}:{key}"
         res = conn.exec_driver_sql(
             "UPDATE blobs SET namespace = ? WHERE namespace LIKE ? AND namespace != ?",
@@ -69,9 +80,14 @@ def apply(conn: Connection) -> None:
     )
 
 
-def reverse(engine: Engine) -> None:
-    """Undo the namespace rewrite and forget the step. Lossless."""
-    with engine.begin() as conn:
+def reverse(engine: Engine, *, blobs_engine: Engine | None = None) -> None:
+    """Undo the namespace rewrite and forget the step. Lossless.
+
+    ``engine`` is the profile file (where the step is recorded);
+    ``blobs_engine`` is wherever the blobs live — the same file before the
+    split, the company store after it (reverse 0002 first, then this).
+    """
+    with (blobs_engine or engine).begin() as conn:
         for fam in COMPANY_FAMILIES:
             conn.exec_driver_sql(
                 "UPDATE blobs SET namespace = ? || ':' || owner_id WHERE namespace LIKE ?",

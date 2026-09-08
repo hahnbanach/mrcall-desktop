@@ -52,7 +52,13 @@ def test_owner_id_always_forced_to_sub(profiles_root):
     status, _payload = handler.handle_provision(_claims("real-uid"), {})
     assert status == 200
     content = (profiles_root / "real-uid" / ".env").read_text()
-    assert content.strip() == "OWNER_ID=real-uid"
+    # OWNER_ID from the token; the company key from the host's map (never
+    # from the body) — the two values provisiond injects, nothing else.
+    assert content.strip().splitlines() == [
+        "OWNER_ID=real-uid",
+        "MEMORY_KEY=TestCompanyKey0000000A",
+        "MEMORY_KEY_SOURCE=provision",
+    ]
 
 
 def test_quoting_matches_settings_io_quote(profiles_root):

@@ -17,6 +17,16 @@ from zylch.storage.models import Blob, BlobSentence
 logger = logging.getLogger(__name__)
 
 
+def _iso(value) -> str:
+    """One comparable form for updated_at, whether it came from the ORM
+    (naive datetime) or from a to_dict() round-trip (isoformat string)."""
+    if value is None:
+        return ""
+    if isinstance(value, datetime):
+        return value.replace(tzinfo=None).isoformat()
+    return str(value).replace("+00:00", "").replace("Z", "")
+
+
 class BlobStorage:
     """Storage for entity blobs with sentence-level embeddings.
 
@@ -36,8 +46,21 @@ class BlobStorage:
         self.embeddings = embedding_engine
         self._on_mutation = on_mutation
 
-    def _notify_mutation(self):
-        """Notify listeners that blob data changed."""
+    def _notify_mutation(self, session=None):
+        """Blob data changed: bump the store's mutation sequence, tell listeners.
+
+        The sequence lives in the company store (``memory_meta``), so the
+        in-process vector index of EVERY engine on this store — not just
+        this one — sees the change on its next search. The optional
+        callback is the same-process fast path that predates it.
+        """
+        if session is not None:
+            try:
+                from .store import bump_mutation_seq
+
+                bump_mutation_seq(session)
+            except Exception as e:  # a store without the meta row (tests, legacy)
+                logger.debug(f"[BlobStorage] mutation_seq bump skipped: {e}")
         if self._on_mutation:
             logger.debug("[BlobStorage] notifying mutation callback")
             self._on_mutation()
@@ -102,16 +125,29 @@ class BlobStorage:
                 session.add(sentence)
 
             session.flush()
-            self._notify_mutation()
+            self._notify_mutation(session)
             return blob.to_dict()
 
     def update_blob(
-        self, blob_id: str, owner_id: str, content: str, event_description: Optional[str] = None
+        self,
+        blob_id: str,
+        owner_id: str,
+        content: str,
+        event_description: Optional[str] = None,
+        expected_updated_at: Optional[str] = None,
     ) -> Dict[str, Any]:
         """Update blob content and regenerate sentence embeddings.
 
-        Atomic: reads blob with FOR UPDATE lock, deletes old sentences,
-        inserts new ones — all in a single transaction.
+        Compare-and-swap: the caller read the blob, merged new facts into
+        it (an LLM call taking seconds — never inside a transaction), and
+        now writes back. With ``expected_updated_at`` set to the value it
+        read, a blob that another writer changed in between is NOT
+        overwritten: the return carries ``conflict: True`` plus the
+        current row, and the caller re-merges onto that. The store's own
+        engine opens this transaction as ``BEGIN IMMEDIATE``, so the check
+        and the write happen under one write lock.
+
+        Returns ``{}`` when the blob is not visible to this owner.
         """
         # Generate new embeddings before entering transaction
         blob_embedding = self.embeddings.encode(content)
@@ -133,6 +169,15 @@ class BlobStorage:
                 )
                 return {}
 
+            if expected_updated_at is not None and _iso(blob.updated_at) != _iso(expected_updated_at):
+                logger.info(
+                    f"update_blob: blob {blob_id} changed since it was read "
+                    f"(expected {expected_updated_at}, now {_iso(blob.updated_at)}) — conflict"
+                )
+                current = blob.to_dict()
+                current["conflict"] = True
+                return current
+
             # Append event
             events = list(blob.events or [])
             if event_description:
@@ -143,10 +188,12 @@ class BlobStorage:
                     }
                 )
 
-            # Update blob fields (embedding as bytes)
+            # Update blob fields (embedding as bytes). updated_at is what the
+            # compare-and-swap keys on, so it must move on every write.
             blob.content = content
             blob.embedding = blob_embedding.tobytes()
             blob.events = events
+            blob.updated_at = datetime.now(timezone.utc).replace(tzinfo=None)
 
             # Delete old sentences
             session.query(BlobSentence).filter(BlobSentence.blob_id == blob_id).delete(
@@ -175,7 +222,7 @@ class BlobStorage:
                 session.add(sentence)
 
             session.flush()
-            self._notify_mutation()
+            self._notify_mutation(session)
             return blob.to_dict()
 
     def get_blob(self, blob_id: str, owner_id: str) -> Optional[Dict[str, Any]]:
@@ -199,7 +246,7 @@ class BlobStorage:
                 .delete(synchronize_session=False)
             )
             if count > 0:
-                self._notify_mutation()
+                self._notify_mutation(session)
             return count > 0
 
     def list_blobs(
@@ -252,7 +299,7 @@ class BlobStorage:
         with self._get_session() as session:
             count = session.query(Blob).filter(predicate).delete(synchronize_session=False)
             if count > 0:
-                self._notify_mutation()
+                self._notify_mutation(session)
             logger.info(
                 f"delete_all_blobs owner={owner_id} shared_store={shared} -> {count} blob(s)"
             )

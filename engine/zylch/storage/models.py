@@ -255,11 +255,11 @@ class BlobSentence(DictMixin, Base):
 class EmailBlob(Base):
     __tablename__ = "email_blobs"
 
-    email_id = Column(
-        String(36),
-        ForeignKey("emails.id", ondelete="CASCADE"),
-        primary_key=True,
-    )
+    # `email_id` is a plain id, not a ForeignKey: since 2026-09 this table
+    # lives in the company memory store and `emails` in the profile file,
+    # and SQLite cannot enforce a foreign key across two files. A deleted
+    # email may leave its link row behind; readers key on the blob side.
+    email_id = Column(String(36), primary_key=True)
     blob_id = Column(
         String(36),
         ForeignKey("blobs.id", ondelete="CASCADE"),
@@ -274,11 +274,8 @@ class EmailBlob(Base):
 class CalendarBlob(Base):
     __tablename__ = "calendar_blobs"
 
-    event_id = Column(
-        String(36),
-        ForeignKey("calendar_events.id", ondelete="CASCADE"),
-        primary_key=True,
-    )
+    # plain id, not a ForeignKey — see EmailBlob
+    event_id = Column(String(36), primary_key=True)
     blob_id = Column(
         String(36),
         ForeignKey("blobs.id", ondelete="CASCADE"),
@@ -293,11 +290,8 @@ class CalendarBlob(Base):
 class WhatsAppBlob(Base):
     __tablename__ = "whatsapp_blobs"
 
-    whatsapp_message_id = Column(
-        String(36),
-        ForeignKey("whatsapp_messages.id", ondelete="CASCADE"),
-        primary_key=True,
-    )
+    # plain id, not a ForeignKey — see EmailBlob
+    whatsapp_message_id = Column(String(36), primary_key=True)
     blob_id = Column(
         String(36),
         ForeignKey("blobs.id", ondelete="CASCADE"),
@@ -358,6 +352,66 @@ class PersonIdentifier(Base):
             name="person_identifiers_owner_kind_value_blob_unique",
         ),
     )
+
+
+# -------------------------------------------------------------------
+# COMPANY MEMORY STORE — its own row, merge history, merged-blob aliases
+# -------------------------------------------------------------------
+#
+# 2026-09 (shared company memory, M2): these live in the company store
+# beside the six memory tables. They carry no owner_id: the store IS the
+# company.
+
+
+class MemoryMeta(DictMixin, Base):
+    """Exactly one row (id=1) per store: the company's self-notion and the
+    mutation sequence every process compares its vector index against."""
+
+    __tablename__ = "memory_meta"
+
+    id = Column(Integer, primary_key=True)
+    company_key = Column(Text, nullable=False)
+    # One explicit self-notion for the whole company, injected into every
+    # sharing profile's extraction prompt. NULL means "nobody set it" —
+    # never the empty string, so "unset" and "set to nothing" stay distinct.
+    self_notion = Column(Text, nullable=True)
+    mutation_seq = Column(Integer, nullable=False, default=0)
+    created_by_source = Column(Text, nullable=True)  # mint | migration | provision
+    created_at = Column(DateTime, default=_utcnow)
+
+
+class FactHistory(DictMixin, Base):
+    """The value that did not win when two facts converged on one
+    (category, key). Kept with the losing row's owner_id so a rollback can
+    still return it to the profile it came from."""
+
+    __tablename__ = "fact_history"
+
+    id = Column(String(36), primary_key=True, default=_new_uuid)
+    company_key = Column(Text, nullable=False, index=True, default=_current_company_key)
+    category = Column(Text, nullable=False)
+    fact_key = Column(Text, nullable=False)
+    losing_value = Column(Text, nullable=False)
+    losing_owner_id = Column(Text, nullable=False)
+    losing_blob_id = Column(String(36), nullable=True)
+    winning_blob_id = Column(String(36), nullable=True)
+    reason = Column(Text, nullable=True)  # join | sweep
+    merged_at = Column(DateTime, default=_utcnow)
+
+
+class BlobAlias(DictMixin, Base):
+    """merged_id -> keeper_id, written by the reconsolidation sweep.
+
+    A blob merged away by one account leaves ids in OTHER profiles' task
+    ledgers (`task_items.sources.blobs`, a JSON list in a file the sweep
+    cannot open). Readers resolve a stale id through this table instead."""
+
+    __tablename__ = "blob_aliases"
+
+    merged_id = Column(String(36), primary_key=True)
+    keeper_id = Column(String(36), nullable=False, index=True)
+    company_key = Column(Text, nullable=False, index=True, default=_current_company_key)
+    created_at = Column(DateTime, default=_utcnow)
 
 
 # -------------------------------------------------------------------

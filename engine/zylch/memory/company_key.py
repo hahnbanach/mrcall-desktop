@@ -82,8 +82,12 @@ def _profile_dir() -> Optional[str]:
     return get_active_profile_dir() or os.environ.get("ZYLCH_PROFILE_DIR") or None
 
 
-def persist_company_key(key: str) -> None:
-    """Write the key to the profile ``.env`` and the live environment.
+def persist_company_key(key: str, *, source: str) -> None:
+    """Write the key and how it was obtained to the profile ``.env`` and the live environment.
+
+    ``source`` is one of ``mint`` / ``join`` / ``provision`` — the provenance
+    the store-creation rule reads: a minted or provisioned key may create a
+    store, a joined (typed) one may only open an existing one.
 
     Raises when no profile directory can be resolved: an unpersisted key
     would be re-minted on the next boot and every row written under the
@@ -97,8 +101,8 @@ def persist_company_key(key: str) -> None:
         )
     from zylch.services.settings_io import update_env
 
-    update_env({SETTING: key})  # also hot-loads os.environ
-    logger.info("[memory] company key persisted to the profile .env")
+    update_env({SETTING: key, "MEMORY_KEY_SOURCE": source})  # also hot-loads os.environ
+    logger.info(f"[memory] company key persisted to the profile .env (source={source})")
 
 
 def ensure_company_key() -> str:
@@ -111,7 +115,7 @@ def ensure_company_key() -> str:
     if key:
         return key
     key = mint_key()
-    persist_company_key(key)
+    persist_company_key(key, source="mint")
     logger.info("[memory] minted a new company key for this profile")
     return key
 

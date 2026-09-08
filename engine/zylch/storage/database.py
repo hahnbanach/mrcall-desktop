@@ -39,6 +39,10 @@ class Base(DeclarativeBase):
 # Module-level singletons
 _engine: Engine | None = None
 _session_factory: sessionmaker | None = None
+# The company memory store's engine (since 2026-09 the six memory tables
+# live there, one file per company) and, when memory is unavailable, why.
+_memory_engine: Engine | None = None
+_memory_reason: str | None = "memory store not attached yet"
 
 
 def get_engine() -> Engine:
@@ -74,12 +78,106 @@ def get_engine() -> Engine:
     return _engine
 
 
+def current_memory_engine() -> Engine | None:
+    """The attached company store's engine, or None while unavailable."""
+    return None if _memory_reason else _memory_engine
+
+
+def memory_unavailable_reason() -> str | None:
+    """Why memory is disabled for this profile, or None when it is usable."""
+    return _memory_reason
+
+
+def _bound_memory_engine() -> Engine:
+    """What the memory tables are bound to right now.
+
+    A refusing engine while memory is unavailable: every memory statement
+    then fails loudly with the reason instead of reading a scratch file as
+    if it were the company's knowledge. Mail sync is untouched.
+    """
+    global _memory_engine
+    if _memory_reason:
+        from zylch.memory.store import refused_engine
+
+        if _memory_engine is None:
+            _memory_engine = refused_engine(_memory_reason)
+    return _memory_engine  # type: ignore[return-value]
+
+
+def set_memory_engine(engine: Engine | None, reason: str | None) -> None:
+    """Bind the memory tables to ``engine`` (or mark memory unavailable)."""
+    global _memory_engine, _memory_reason, _session_factory
+    old = _memory_engine
+    _memory_engine = engine
+    _memory_reason = reason
+    _session_factory = None  # rebuilt with the new binds on next use
+    if old is not None and old is not engine:
+        try:
+            old.dispose()
+        except Exception:
+            pass
+
+
+def rebind_memory(engine: Engine) -> None:
+    """In-process switch to another company store (the join gesture)."""
+    set_memory_engine(engine, None)
+    logger.info("[memory] session factory rebound to the joined store")
+
+
+def attach_memory_store(*, migrating: bool = False) -> Engine | None:
+    """Open this profile's company store by provenance; None when refused.
+
+    Existing store: open. Missing store: create only when something the
+    host holds vouches for the key — the engine minted it, provisiond
+    injected it, or ``migrating`` says this profile's own database is
+    pre-split and its rows carry the key. A typed key with no store
+    (``MEMORY_KEY_SOURCE=join``, or no source at all) leaves memory
+    unavailable and creates nothing.
+    """
+    from zylch.memory.company_key import current_company_key
+    from zylch.memory.store import (
+        MemoryUnavailable,
+        key_source,
+        open_memory_engine,
+        prepare_store,
+        source_is_vouched,
+        store_exists,
+    )
+
+    key = current_company_key()
+    if not key:
+        set_memory_engine(None, "this profile has no MEMORY_KEY")
+        return None
+    source = key_source()
+    may_create = migrating or source_is_vouched(source)
+    try:
+        engine = open_memory_engine(key, create=(may_create and not store_exists(key)))
+    except MemoryUnavailable as e:
+        set_memory_engine(None, e.reason)
+        logger.warning(f"[memory] unavailable: {e.reason}")
+        return None
+    prepare_store(engine, key, created_by=("migration" if migrating else source))
+    set_memory_engine(engine, None)
+    return engine
+
+
 def get_session_factory() -> sessionmaker:
-    """Get or create the singleton session factory."""
+    """Get or create the singleton session factory.
+
+    Per-table binds route every memory-table statement to the company
+    store and everything else to the profile file. No ORM join crosses
+    the boundary (every access is single-table), so one session serves
+    both; a session that touches both files commits two transactions,
+    not one — `_reset_all_data` and `migrate_blob_references` are the two
+    such places and each defines its own partial-failure outcome.
+    """
     global _session_factory
     if _session_factory is None:
+        memory_engine = _bound_memory_engine()
+        binds = {tbl: memory_engine for tbl in memory_tables()}
         _session_factory = sessionmaker(
             bind=get_engine(),
+            binds=binds,
             expire_on_commit=False,
         )
     return _session_factory
@@ -121,6 +219,10 @@ MEMORY_TABLE_NAMES = (
     "calendar_blobs",
     "whatsapp_blobs",
     "person_identifiers",
+    # the store's own tables (M2): its meta row, merge history, blob aliases
+    "memory_meta",
+    "fact_history",
+    "blob_aliases",
 )
 
 
@@ -151,16 +253,23 @@ PROFILE_STEPS: list = []
 
 def _register_profile_steps() -> None:
     from zylch.storage.step_company_key import STEP as company_key_step
+    from zylch.storage.step_memory_split import STEP as memory_split_step
 
-    if company_key_step not in PROFILE_STEPS:
-        PROFILE_STEPS.append(company_key_step)
+    for step in (company_key_step, memory_split_step):
+        if step not in PROFILE_STEPS:
+            PROFILE_STEPS.append(step)
 
 
 def _ensure_all_tables(engine: Engine) -> None:
-    """``create_all`` for every table this file owns — under the migration lock."""
+    """``create_all`` for the tables the PROFILE file owns — under the lock.
+
+    The memory tables are created on the company store by
+    ``memory.store.prepare_store``; an explicit ``tables=`` list here is
+    what keeps a shared MetaData from silently creating them in both files.
+    """
     from zylch.storage.models import Base as _Base
 
-    _Base.metadata.create_all(engine, tables=profile_tables() + memory_tables())
+    _Base.metadata.create_all(engine, tables=profile_tables())
 
 
 def init_db():
@@ -186,6 +295,11 @@ def init_db():
     )
     if applied:
         logger.info(f"Database migrated ({', '.join(applied)}) at {_resolve_db_path()}")
+    # The split step attaches the store while it runs; every other boot
+    # attaches it here, after the profile lock is released (profile lock
+    # first, then the store's — never the other way round).
+    if current_memory_engine() is None:
+        attach_memory_store(migrating=False)
     logger.info(f"Database initialized at {_resolve_db_path()}")
 
 
@@ -311,7 +425,16 @@ def _apply_column_migrations(engine: Engine) -> None:
                 logger.info(f"[migrate] Added {table}.{column} ({ddl})")
             except Exception as e:
                 logger.warning(f"[migrate] Failed to add {table}.{column}: {e}")
+        # This ensure pass runs on BOTH files (profile and company store),
+        # each holding its own subset of tables; an index on a table that
+        # lives in the other file is not a failure, it is the other file's.
+        present = {
+            r[0]
+            for r in conn.exec_driver_sql("SELECT name FROM sqlite_master WHERE type='table'").fetchall()
+        }
         for table, column in indexes:
+            if table not in present:
+                continue
             idx_name = f"ix_{table}_{column}"
             try:
                 conn.exec_driver_sql(f"CREATE INDEX IF NOT EXISTS {idx_name} ON {table}({column})")
@@ -570,10 +693,17 @@ def _backfill_task_channels() -> None:
 
 
 def dispose_engine() -> None:
-    """Dispose the engine and reset singletons. Used in tests."""
-    global _engine, _session_factory
+    """Dispose both engines and reset singletons. Used in tests."""
+    global _engine, _session_factory, _memory_engine, _memory_reason
     if _engine is not None:
         _engine.dispose()
         _engine = None
+    if _memory_engine is not None:
+        try:
+            _memory_engine.dispose()
+        except Exception:
+            pass
+        _memory_engine = None
+    _memory_reason = "memory store not attached yet"
     _session_factory = None
     logger.info("SQLAlchemy engine disposed")

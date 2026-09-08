@@ -247,6 +247,17 @@ def _extract_canonical_name(content: str) -> Optional[str]:
     return None
 
 
+def _record_alias(merged_id: str, keeper_id: str) -> None:
+    from zylch.storage.database import get_session
+    from zylch.storage.models import BlobAlias
+
+    try:
+        with get_session() as sess:
+            sess.merge(BlobAlias(merged_id=merged_id, keeper_id=keeper_id))
+    except Exception as e:
+        logger.warning(f"[reconsolidate] alias {merged_id}->{keeper_id} not recorded: {e}")
+
+
 def _build_dedup_clusters(
     blobs: List[Dict[str, Any]],
     blob_identifiers: Dict[str, set],
@@ -335,15 +346,49 @@ async def reconsolidate_now(owner_id: str) -> Dict[str, Any]:
     Returns summary counts including the migration totals so a caller
     can quantify the dedup impact across all four reference tables.
     """
+    from zylch.memory.company_key import entity_namespace, require_company_key
+    from zylch.memory.store import memory_db_path
+    from zylch.storage.migrations import MigrationLockTimeout, db_file_lock
+
+    company_key = require_company_key()
+    namespace = entity_namespace(company_key)
+
+    # One sweep per COMPANY, not per profile: N daemons share this store
+    # and each would otherwise run a company-wide LLM sweep. The lock is
+    # non-blocking on purpose — the losers answer "another engine is
+    # sweeping", which the MaintenanceCard can show, rather than a silent
+    # zero-count success.
+    try:
+        sweep_lock = db_file_lock(memory_db_path(company_key), timeout_s=0, suffix=".sweep.lock")
+        sweep_lock.__enter__()
+    except MigrationLockTimeout:
+        logger.info("[reconsolidate] another engine is sweeping this company's memory — skipped")
+        return {
+            "groups_examined": 0,
+            "blobs_examined": 0,
+            "blobs_merged": 0,
+            "blobs_kept_distinct": 0,
+            "pair_cap_hit": False,
+            "no_llm": False,
+            "skipped": True,
+            "reason": "another engine is sweeping",
+            "person_identifiers_migrated": 0,
+            "email_blobs_migrated": 0,
+            "calendar_blobs_migrated": 0,
+            "task_items_updated": 0,
+        }
+    try:
+        return await _reconsolidate_locked(owner_id, company_key, namespace)
+    finally:
+        sweep_lock.__exit__(None, None, None)
+
+
+async def _reconsolidate_locked(owner_id: str, company_key: str, namespace: str) -> Dict[str, Any]:
     from zylch.memory import EmbeddingEngine, MemoryConfig
     from zylch.memory.blob_storage import BlobStorage
     from zylch.storage import Storage as MainStorage
     from zylch.storage.database import get_session
     from zylch.storage.models import Blob, PersonIdentifier
-    from zylch.memory.company_key import entity_namespace, require_company_key
-
-    company_key = require_company_key()
-    namespace = entity_namespace(company_key)
 
     if try_make_llm_client() is None:
         logger.warning("[reconsolidate] no LLM transport configured — sweep skipped")
@@ -494,6 +539,10 @@ async def reconsolidate_now(owner_id: str) -> Dict[str, Any]:
                 )
                 deleted = blob_storage.delete_blob(other["id"], owner_id)
                 if deleted:
+                    # The merged-away id may still sit in OTHER profiles'
+                    # task ledgers, in files this sweep cannot open; the
+                    # alias lets their readers resolve it to the keeper.
+                    _record_alias(other["id"], keeper["id"])
                     keeper["content"] = merged  # so next pair sees the merged text
                     blobs_merged += 1
                     logger.info(

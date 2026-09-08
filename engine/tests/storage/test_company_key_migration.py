@@ -13,9 +13,11 @@ import sqlite3
 import pytest
 
 from zylch.memory.company_key import entity_namespace, facts_namespace, rule_namespaces
+from zylch.memory.store import memory_db_path
 from zylch.storage import database as dbm
 from zylch.storage.migrations import pending_step_ids
 from zylch.storage.step_company_key import STEP, STEP_ID, reverse
+from zylch.storage.step_memory_split import STEP as SPLIT_STEP, reverse_into_profile
 
 OWNER = "legacy@company.test"
 
@@ -61,24 +63,30 @@ def _rows(db_path, sql):
         c.close()
 
 
+def _store(_legacy_path):
+    """After the split (M2) the memory rows live in the company store."""
+    return memory_db_path(os.environ["MEMORY_KEY"])
+
+
 def test_boot_mints_the_key_then_stamps_and_rewrites_every_row(legacy):
     dbm.init_db()
     key = os.environ.get("MEMORY_KEY")
     assert key, "the step must mint before it rewrites — nothing else runs first"
 
-    ns = dict(_rows(legacy, "SELECT id, namespace FROM blobs"))
+    store = _store(legacy)
+    ns = dict(_rows(store, "SELECT id, namespace FROM blobs"))
     assert ns["e1"] == entity_namespace(key)  # C2: company family re-keyed
     assert ns["f1"] == facts_namespace(key)
-    assert ns["r1"], ns["p1"] == rule_namespaces(OWNER)  # rules keep the owner
-    keys = _rows(legacy, "SELECT DISTINCT company_key FROM blobs")
+    assert (ns["r1"], ns["p1"]) == rule_namespaces(OWNER)  # rules keep the owner
+    keys = _rows(store, "SELECT DISTINCT company_key FROM blobs")
     assert keys == [(key,)]  # C20: rule rows stamped too, not only company rows
-    assert _rows(legacy, "SELECT company_key FROM blob_sentences") == [(key,)]
-    assert _rows(legacy, "SELECT company_key FROM person_identifiers") == [(key,)]
-    assert _rows(legacy, "SELECT owner_id FROM blobs WHERE id='e1'") == [(OWNER,)]  # C7 provenance
-    assert pending_step_ids(dbm.get_engine(), [STEP]) == []
-
+    assert _rows(store, "SELECT company_key FROM blob_sentences") == [(key,)]
+    assert _rows(store, "SELECT company_key FROM person_identifiers") == [(key,)]
+    assert _rows(store, "SELECT owner_id FROM blobs WHERE id='e1'") == [(OWNER,)]  # C7 provenance
+    assert pending_step_ids(dbm.get_engine(), [STEP, SPLIT_STEP]) == []
+    # both steps are destructive: one backup of the profile file covers both
     backups = os.listdir(os.path.join(os.path.dirname(legacy), "backups"))
-    assert len(backups) == 1 and STEP_ID in backups[0]  # destructive → backed up first
+    assert len(backups) == 1 and STEP_ID in backups[0] and SPLIT_STEP.id in backups[0]
 
 
 def test_migrated_rows_are_retrievable_through_the_key(legacy, monkeypatch):
@@ -97,14 +105,18 @@ def test_migrated_rows_are_retrievable_through_the_key(legacy, monkeypatch):
 
 
 def test_forward_reverse_forward_converges(legacy):
+    """Both steps forward, both reversed (split first, then the key), a row
+    written in the old shape during the rollback window, both forward
+    again: everything converges and nothing is lost."""
     dbm.init_db()
     key = os.environ["MEMORY_KEY"]
     engine = dbm.get_engine()
 
-    reverse(engine)
+    reverse_into_profile(engine, dbm.current_memory_engine(), OWNER)  # 0002 back
+    reverse(engine)  # 0001 back — the blobs are in the profile file again
     ns = dict(_rows(legacy, "SELECT id, namespace FROM blobs"))
     assert ns["e1"] == f"user:{OWNER}" and ns["f1"] == f"facts:{OWNER}"  # exact, via owner_id
-    assert pending_step_ids(engine, [STEP]) == [STEP_ID]
+    assert pending_step_ids(engine, [STEP, SPLIT_STEP]) == [STEP_ID, SPLIT_STEP.id]
 
     # a row written during the rollback window, in the old shape
     with engine.begin() as conn:
@@ -112,16 +124,22 @@ def test_forward_reverse_forward_converges(legacy):
             f"INSERT INTO blobs (id, owner_id, namespace, content) VALUES ('e2','{OWNER}','user:{OWNER}','x')"
         )
 
-    dbm.init_db()  # forward again
-    ns = dict(_rows(legacy, "SELECT id, namespace FROM blobs"))
+    dbm.dispose_engine()
+    dbm.init_db()  # forward again: re-stamp, re-key, re-split
+    engine = dbm.get_engine()
+    store = _store(legacy)
+    ns = dict(_rows(store, "SELECT id, namespace FROM blobs"))
     assert ns["e1"] == ns["e2"] == entity_namespace(key)
-    assert _rows(legacy, "SELECT company_key FROM blobs WHERE id='e2'") == [(key,)]
-    assert pending_step_ids(engine, [STEP]) == []
+    assert _rows(store, "SELECT company_key FROM blobs WHERE id='e2'") == [(key,)]
+    assert _rows(store, "SELECT COUNT(*) FROM blobs") == [(5,)]  # 4 + e2, no duplicates
+    assert pending_step_ids(engine, [STEP, SPLIT_STEP]) == []
 
 
 def test_second_boot_is_a_no_op(legacy):
     dbm.init_db()
-    before = _rows(legacy, "SELECT id, namespace, company_key FROM blobs ORDER BY id")
+    store = _store(legacy)
+    before = _rows(store, "SELECT id, namespace, company_key FROM blobs ORDER BY id")
+    dbm.dispose_engine()
     dbm.init_db()
-    assert _rows(legacy, "SELECT id, namespace, company_key FROM blobs ORDER BY id") == before
+    assert _rows(store, "SELECT id, namespace, company_key FROM blobs ORDER BY id") == before
     assert len(os.listdir(os.path.join(os.path.dirname(legacy), "backups"))) == 1

@@ -83,6 +83,7 @@ class MigrationStep:
 def db_file_lock(
     db_path: str,
     timeout_s: float = DEFAULT_LOCK_TIMEOUT_S,
+    suffix: str = LOCK_SUFFIX,
 ) -> Generator[None, None, None]:
     """Hold the migration lock for ``db_path``: bounded blocking wait.
 
@@ -90,7 +91,7 @@ def db_file_lock(
     loop against a deadline. The kernel releases the lock when the holder
     dies, so a crashed owner never wedges the file.
     """
-    lock_path = db_path + LOCK_SUFFIX
+    lock_path = db_path + suffix
     os.makedirs(os.path.dirname(lock_path) or ".", exist_ok=True)
     fd = open(lock_path, "w")
     deadline = time.monotonic() + timeout_s

@@ -221,7 +221,10 @@ registry on 2026-08-15 (65 methods), plus `emails.needs_reply` added
 |---|---|---|
 | `memory.key_mint` | — | {key, minted} — ensure this profile has a company memory key and return it in clear (the show-once moment after account creation); `minted` is false when the engine already minted one at first boot |
 | `memory.key_validate` | `key` | {well_formed, reason} — shape check (22 URL-safe base64 chars, 128 bits); never raises for a bad key |
-| `memory.reconsolidate_now` | — | summary dict |
+| `memory.status` | — | {has_key, available, reason, self_notion?, blob_count?, fact_count?, contributors?} — whether this profile's memory is usable and why not; sizes when it is. Never a path |
+| `memory.join_preview` | `key?` | {well_formed, exists, reason, self_notion?, blob_count?, fact_count?, contributors?} — the echo before a join; creates nothing, an unknown key answers `exists: false` |
+| `memory.join` | `key?` | {ok, reason?, already?, merged?, …summary} — merge this profile's memory into the store the key names, write the key, rebind the running engine. The ONLY write path for `MEMORY_KEY` (`settings.update` refuses it) |
+| `memory.reconsolidate_now` | — | summary dict; `skipped: true, reason: "another engine is sweeping"` when another daemon holds the company's sweep lock |
 
 **`mrcall.*`**
 

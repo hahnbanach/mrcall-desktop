@@ -46,6 +46,44 @@ def config_socket_path() -> str:
     return os.environ.get("PROVISIOND_SOCKET", DEFAULT_SOCKET_PATH)
 
 
+DEFAULT_COMPANY_MAP = "/etc/mrcalld/company-map.json"
+
+
+def config_company_map_path() -> str:
+    """The host's uid -> company memory key table (operator-maintained JSON).
+
+    Shape: ``{"<firebase uid>": "<MEMORY_KEY>", ...}`` (or the same under a
+    top-level ``"uids"``). Adding a row is an operator action on the host;
+    nothing a client sends can create or change one.
+    """
+    return os.environ.get("PROVISIOND_COMPANY_MAP", DEFAULT_COMPANY_MAP)
+
+
+def resolve_company_key(uid: str) -> str | None:
+    """The company key this uid is mapped to, or None — never a default.
+
+    The vendor host is multi-tenant (MrCall's own support@ beside a
+    customer's profiles). A host-wide fallback key is precisely how two
+    tenants end up in one memory store, so an unmapped uid resolves to
+    nothing and provisioning refuses (403).
+    """
+    path = config_company_map_path()
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+    except FileNotFoundError:
+        logger.warning(f"[provisiond] company map not found at {path}")
+        return None
+    except (OSError, ValueError) as e:
+        logger.error(f"[provisiond] company map unreadable: {e}")
+        return None
+    table = data.get("uids") if isinstance(data, dict) and isinstance(data.get("uids"), dict) else data
+    if not isinstance(table, dict):
+        return None
+    key = table.get(uid)
+    return key.strip() if isinstance(key, str) and key.strip() else None
+
+
 # ─── Constants ──────────────────────────────────────────────────────
 
 # Marker file name: written BEFORE `.env` on provision, deleted the first
@@ -225,6 +263,12 @@ def handle_provision(claims: dict[str, Any], body: Any) -> tuple[int, dict[str, 
     unknown = sorted(str(k) for k in body if str(k) not in KNOWN_KEYS)
     if unknown:
         raise ProvisionError(400, f"unknown key(s): {', '.join(unknown)}")
+    # MEMORY_KEY IS a Settings field (so it passes the check above) and
+    # must still never come from the client: on an MrCall-operated engine
+    # mrcalld holds the company key and injects it. The app skips it too
+    # (index.ts / provisionClient.ts, like OWNER_ID); this is the backstop.
+    if "MEMORY_KEY" in body or "MEMORY_KEY_SOURCE" in body:
+        raise ProvisionError(400, "MEMORY_KEY is injected by the host, not accepted from the client")
 
     values: dict[str, str] = {str(k): ("" if v is None else str(v)) for k, v in body.items()}
     # OWNER_ID is injected OUTSIDE the KNOWN_KEYS validation above — it is
@@ -235,6 +279,14 @@ def handle_provision(claims: dict[str, Any], body: Any) -> tuple[int, dict[str, 
 
     if not entitlement_allows(uid, claims):
         raise ProvisionError(403, "not entitled")
+
+    # Fail closed: a uid that maps to no company gets no profile, rather
+    # than a profile in a default company.
+    company_key = resolve_company_key(uid)
+    if not company_key:
+        raise ProvisionError(403, "no company mapping for this uid on this host")
+    values["MEMORY_KEY"] = company_key
+    values["MEMORY_KEY_SOURCE"] = "provision"
 
     profile_dir = _profile_dir(uid)
     os.makedirs(profile_dir, exist_ok=True)

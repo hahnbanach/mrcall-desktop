@@ -686,8 +686,40 @@ Body: {body}
         # Append fixed suffix to ensure entity delimiter is always present
         prompt_content += self._get_entity_format_suffix()
 
+        _seed_shared_self_notion(prompt_content)
+
         logger.info(f"Generated prompt ({len(prompt_content)} chars)")
         return prompt_content
+
+
+def _seed_shared_self_notion(prompt_content: str) -> None:
+    """First trainer to run on a store whose self-notion is unset seeds it.
+
+    The generated prompt carries a ``USER_COMPANY: …`` line inferred from
+    this profile's mail. When the company store has no explicit notion yet
+    (creation seeds it from USER_COMPANY only when that setting exists)
+    that inference becomes the shared one — and from then on every profile
+    on the store gets it injected, so they cannot disagree.
+    """
+    import re
+
+    try:
+        from zylch.memory.store import get_meta, set_self_notion
+        from zylch.storage.database import current_memory_engine
+
+        engine = current_memory_engine()
+        if engine is None or get_meta(engine).get("self_notion"):
+            return
+        m = re.search(r"USER_COMPANY:\s*(.+)", prompt_content)
+        if not m:
+            return
+        notion = m.group(1).strip().rstrip(".")
+        notion = re.sub(r"\s*\(DO NOT extract.*$", "", notion).strip()
+        if notion and not notion.startswith("["):
+            set_self_notion(engine, notion)
+            logger.info("[trainer] seeded the company self-notion from the generated prompt")
+    except Exception as e:
+        logger.debug(f"[trainer] self-notion seed skipped: {e}")
 
 
 # Backward-compat aliases — pre-2026-05-08 callers used these names.

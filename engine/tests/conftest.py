@@ -37,6 +37,10 @@ def _isolate_profile_dir(tmp_path_factory, monkeypatch):
     # engine) so monkeypatch restores it at teardown and one test's minted
     # key never leaks into the next test's fresh database.
     monkeypatch.setenv("MEMORY_KEY", "")
+    # The company memory store (one file per key) lives under
+    # $MEMORY_DB_DIR; keep every test's stores inside its temp profile so
+    # nothing reaches ~/.zylch/memory.
+    monkeypatch.setenv("MEMORY_DB_DIR", str(test_profile / "memory"))
     yield
 
 

@@ -246,4 +246,6 @@ def test_two_processes_booting_init_db_on_a_fresh_file_both_succeed(tmp_path):
         out, err = p.communicate(timeout=120)
         assert p.returncode == 0, err
         results.append(json.loads(out.strip().splitlines()[-1]))
-    assert results[0]["tables"] == results[1]["tables"] > 20
+    # the profile file holds exactly its own tables plus schema_version;
+    # the memory tables live in the company store since M2
+    assert results[0]["tables"] == results[1]["tables"] == len(dbm.profile_tables()) + 1
