@@ -1855,11 +1855,11 @@ def _load_blob_context(storage, owner_id: str, blob_ids: list) -> str:
 
         contents = []
         from zylch.memory.company_key import require_company_key
-        from zylch.memory.scope import blob_visible
+        from zylch.memory.scope import blob_visible, resolve_aliases
 
         key = require_company_key()
         with get_session() as session:
-            for blob_id in blob_ids:
+            for blob_id in resolve_aliases(session, blob_ids):
                 row = (
                     session.query(Blob.content)
                     .filter(blob_visible(owner_id, key), Blob.id == blob_id)

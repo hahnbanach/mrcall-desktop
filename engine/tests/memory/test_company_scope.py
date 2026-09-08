@@ -208,6 +208,8 @@ def test_one_engine_instance_serves_two_scopes_correctly(store, search):
         ("short", "22 characters"),
         ("x" * 21 + "!", "not URL-safe"),
         ("!" * 22, "not URL-safe"),
+        ("x" * 21 + "+", "not URL-safe"),
+        ("x" * 21 + "/", "not URL-safe"),
     ],
 )
 def test_well_formed_rejects(bad, why):

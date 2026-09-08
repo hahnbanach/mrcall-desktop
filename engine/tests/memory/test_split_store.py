@@ -273,6 +273,66 @@ def test_alias_resolves_a_merged_away_id_in_the_task_ledger(monkeypatch, tmp_pat
     assert len(Storage.get_instance().get_open_tasks_by_blobs(a, ["old-blob"])) == 1
 
 
+# ─── the solve agent's task context hydrates through the wall and aliases ──
+
+
+def test_task_context_hydrates_another_accounts_entity_and_aliases(
+    monkeypatch, tmp_path, stub_embedder
+):
+    a = _boot(monkeypatch, tmp_path, "a", key=None, source=None)
+    key = current_company_key()
+    keeper = BlobStorage(get_session, stub_embedder).store_blob(
+        a, entity_namespace(key), PERSON, "x"
+    )["id"]
+    from zylch.services.solve_constants import build_task_context
+    from zylch.storage.models import BlobAlias
+
+    with get_session() as s:
+        s.add(BlobAlias(merged_id="gone-blob", keeper_id=keeper))
+    b = _boot(monkeypatch, tmp_path, "b", key=key, source="join")
+    # B's task ledger names an id that A's sweep merged away
+    ctx = build_task_context(
+        {"sources": {"blobs": ["gone-blob"]}}, [], b
+    )  # (task, store, owner_id)
+    assert "CONTACT MEMORY" in ctx and "Giulia Verdi" in ctx
+
+
+def test_join_of_own_key_attaches_a_store_that_appeared_later(monkeypatch, tmp_path, stub_embedder):
+    """A typed key with no store: memory unavailable, nothing created. The
+    colleague mints that key later. The running daemon joins its own key
+    and is attached — no restart."""
+    from zylch.memory.join import join
+    from zylch.memory.store import open_memory_engine, prepare_store
+
+    key = mint_key()
+    b = _boot(monkeypatch, tmp_path, "b", key=key, source="join")
+    assert dbm.memory_unavailable_reason()
+    store = open_memory_engine(key, create=True)  # the colleague's mint
+    prepare_store(store, key, created_by="mint")
+    store.dispose()
+    out = join(key)
+    assert out["ok"] and out.get("already") and out.get("attached")
+    assert dbm.memory_unavailable_reason() is None
+    assert BlobStorage(get_session, stub_embedder).list_blobs(b) == []
+
+
+@pytest.mark.asyncio
+async def test_worker_spends_no_llm_call_while_memory_is_unavailable(monkeypatch, tmp_path):
+    from zylch.storage.storage import Storage
+    from zylch.workers.memory import MemoryWorker
+
+    _boot(monkeypatch, tmp_path, "b", key=mint_key(), source="join")
+    assert dbm.memory_unavailable_reason()
+    w = MemoryWorker.__new__(MemoryWorker)
+    w.owner_id = "b@company.test"
+    w.storage = Storage.get_instance()
+    w.client = MagicMock()
+    ok = await w.process_email(
+        {"id": "m1", "from_email": "x@y.test", "subject": "s", "body_plain": "b"}
+    )
+    assert ok is False and not w.client.create_message.called and not w.client.method_calls
+
+
 # ─── C14: one self-notion for everyone ───────────────────────
 
 

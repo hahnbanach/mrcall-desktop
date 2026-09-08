@@ -389,6 +389,16 @@ class MemoryWorker:
             True if processed successfully, False otherwise
         """
         email_id = email.get("id", "unknown")
+        # Memory unavailable (no key, an unknown typed key, no store): the
+        # extraction would spend an LLM call and then have nowhere to write,
+        # every tick, for every unprocessed mail. Leave the mail unprocessed
+        # — it is retried once memory is back — and spend nothing.
+        from zylch.storage.database import memory_unavailable_reason
+
+        reason = memory_unavailable_reason()
+        if reason:
+            logger.warning(f"[memory] skipping email {email_id}: memory unavailable ({reason})")
+            return False
         try:
             logger.info(f"Processing email {email_id}")
 

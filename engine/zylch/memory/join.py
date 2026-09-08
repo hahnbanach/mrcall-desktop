@@ -54,6 +54,7 @@ def preview(key: str) -> Dict[str, Any]:
     ok, reason = well_formed(key)
     if not ok:
         return {"well_formed": False, "reason": reason, "exists": False}
+    key = key.strip()
     if not store_exists(key):
         return {
             "well_formed": True,
@@ -211,6 +212,21 @@ def join(key: str) -> Dict[str, Any]:
         return {"ok": False, "reason": "no company memory exists for this key on this host"}
     current = current_company_key()
     if current == key:
+        # Same key — but the store may not have existed when this profile
+        # booted (a typed key, refused then; the colleague minted since).
+        # A headless daemon has no restart to pick it up: attach now.
+        if dbm.memory_unavailable_reason() is not None and store_exists(key):
+            engine = open_memory_engine(key, create=False)
+            prepare_store(engine, key, created_by=None)
+            dbm.rebind_memory(engine)
+            logger.info("[memory] attached the store for this profile's own key")
+            return {
+                "ok": True,
+                "already": True,
+                "attached": True,
+                "merged": {},
+                **store_summary(engine),
+            }
         return {"ok": True, "already": True, "merged": {}}
 
     dst = open_memory_engine(key, create=False)

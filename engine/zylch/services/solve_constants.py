@@ -512,13 +512,26 @@ def build_task_context(task: dict, store, owner_id: str) -> str:
     blob_ids = sources.get("blobs", [])
     if blob_ids:
         try:
+            from zylch.memory.company_key import require_company_key
+            from zylch.memory.scope import blob_visible, resolve_aliases
             from zylch.storage.database import get_session
             from zylch.storage.models import Blob
 
+            key = require_company_key()
             with get_session() as session:
-                for bid in blob_ids:
-                    blob = session.query(Blob).filter_by(id=str(bid), owner_id=owner_id).first()
-                    if blob and blob.content:
+                # Company scope, never owner alone: the entity a task points
+                # at may have been contributed by another account, or merged
+                # into a keeper by another account's sweep (alias).
+                ids = resolve_aliases(session, blob_ids)
+                rows = (
+                    session.query(Blob)
+                    .filter(Blob.id.in_(list(ids)), blob_visible(owner_id, key))
+                    .all()
+                )
+                seen = set()
+                for blob in rows:
+                    if blob.content and blob.content not in seen:
+                        seen.add(blob.content)
                         parts.append("\n--- CONTACT MEMORY ---")
                         parts.append(blob.content)
         except Exception as e:

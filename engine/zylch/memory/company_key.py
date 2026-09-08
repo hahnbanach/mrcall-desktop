@@ -29,6 +29,7 @@ import base64
 import binascii
 import logging
 import os
+import re
 import secrets
 from typing import Optional, Tuple
 
@@ -58,6 +59,8 @@ def well_formed(key: Optional[str]) -> Tuple[bool, str]:
     key = key.strip()
     if len(key) != KEY_LENGTH:
         return False, f"a memory key is {KEY_LENGTH} characters, got {len(key)}"
+    if not re.fullmatch(r"[A-Za-z0-9_-]+", key):
+        return False, "not URL-safe base64"
     try:
         # strict: a character outside the URL-safe alphabet is a refusal,
         # not something to discard (the lenient decoder would skip it)

@@ -67,3 +67,31 @@ def links_in_scope(model, company_key: str):
     """Association and identifier rows belong to the company, not to an owner."""
     assert model in (EmailBlob, CalendarBlob, WhatsAppBlob, PersonIdentifier)
     return model.company_key == company_key
+
+
+def resolve_aliases(session, blob_ids) -> set:
+    """``blob_ids`` widened through ``blob_aliases`` in both directions.
+
+    A blob merged away by another account's sweep leaves its old id in
+    this profile's task ledger (a JSON list in a file the sweep could not
+    open). Every hydration of ledger ids goes through here so a stale id
+    finds its keeper and a keeper finds the ledgers still naming its
+    merged-away twins.
+    """
+    from zylch.storage.models import BlobAlias
+
+    wanted = {str(b) for b in blob_ids if b}
+    if not wanted:
+        return wanted
+    try:
+        rows = (
+            session.query(BlobAlias.merged_id, BlobAlias.keeper_id)
+            .filter(or_(BlobAlias.merged_id.in_(wanted), BlobAlias.keeper_id.in_(wanted)))
+            .all()
+        )
+    except Exception:
+        return wanted
+    for merged_id, keeper_id in rows:
+        wanted.add(str(merged_id))
+        wanted.add(str(keeper_id))
+    return wanted

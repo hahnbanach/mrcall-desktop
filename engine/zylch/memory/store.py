@@ -16,13 +16,14 @@ join — opens an existing store or nothing: an unknown typed key must never
 silently become a fresh empty memory. ``open_memory_engine(create=False)``
 is that rule.
 
-The store's own engine differs from the profile engine in one respect
-that matters for N daemons writing one file: every transaction opens with
-``BEGIN IMMEDIATE`` (pysqlite ``isolation_level=None`` plus a ``begin``
-listener — SQLAlchemy's default emits no BEGIN where one is needed), so a
-read-merge-write in ``BlobStorage.update_blob`` holds the write lock only
-for its own statements and can compare-and-swap on ``updated_at``.
-``busy_timeout`` is the retry budget behind it.
+The store's own engine owns its transaction boundaries (pysqlite
+``isolation_level=None`` plus a ``begin`` listener that emits ``BEGIN`` —
+SQLAlchemy's default emits none where one is needed). Transactions are
+DEFERRED so N daemons' readers share the file under WAL; the one place
+that must serialize — the compare-and-swap in ``BlobStorage.update_blob``
+— upgrades to the write lock with a no-op write as its first statement,
+so its read, check and write happen under one lock without every search
+on the store queueing behind it. ``busy_timeout`` is the retry budget.
 
 Memory can be *unavailable* — no key, an unknown typed key, a missing
 file. That is never a unit failure: the daemons also carry mail sync, and
@@ -104,7 +105,7 @@ def _install_pragmas(engine: Engine) -> None:
 
     @event.listens_for(engine, "begin")
     def _begin(conn):
-        conn.exec_driver_sql("BEGIN IMMEDIATE")
+        conn.exec_driver_sql("BEGIN")
 
 
 def open_memory_engine(company_key: str, *, create: bool) -> Engine:
@@ -240,6 +241,23 @@ def bump_mutation_seq(session: Session) -> None:
         update(MemoryMeta)
         .where(MemoryMeta.id == 1)
         .values(mutation_seq=MemoryMeta.mutation_seq + 1)
+    )
+
+
+def take_write_lock(session: Session) -> None:
+    """Upgrade this transaction to the store's write lock NOW.
+
+    A no-op UPDATE on the meta row: SQLite grants the RESERVED lock at the
+    first write, so everything after it in the transaction — the read, the
+    compare, the write — runs with no other writer able to interleave.
+    ORM-routed so it reaches the store, not the profile file.
+    """
+    from sqlalchemy import update
+
+    from zylch.storage.models import MemoryMeta
+
+    session.execute(
+        update(MemoryMeta).where(MemoryMeta.id == 1).values(mutation_seq=MemoryMeta.mutation_seq)
     )
 
 

@@ -430,7 +430,11 @@ export default function Onboarding({ onReady }: OnboardingProps = {}): JSX.Eleme
               <button
                 type="button"
                 onClick={() => setStep('connect')}
-                disabled={memoryState.kind === 'busy' || memoryState.kind === 'preview'}
+                disabled={
+                  memoryState.kind === 'busy' ||
+                  memoryState.kind === 'preview' ||
+                  memoryState.kind === 'refused'
+                }
                 className="px-4 py-2 text-sm bg-brand-black text-white rounded disabled:bg-brand-mid-grey"
               >
                 Continue

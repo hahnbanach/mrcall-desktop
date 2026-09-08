@@ -143,9 +143,9 @@ class BlobStorage:
         now writes back. With ``expected_updated_at`` set to the value it
         read, a blob that another writer changed in between is NOT
         overwritten: the return carries ``conflict: True`` plus the
-        current row, and the caller re-merges onto that. The store's own
-        engine opens this transaction as ``BEGIN IMMEDIATE``, so the check
-        and the write happen under one write lock.
+        current row, and the caller re-merges onto that. The transaction
+        takes the store's write lock as its first statement, so the
+        check and the write happen under one lock.
 
         Returns ``{}`` when the blob is not visible to this owner.
         """
@@ -156,6 +156,13 @@ class BlobStorage:
 
         key = require_company_key()
         with self._get_session() as session:
+            # Hold the store's write lock across read + compare + write.
+            try:
+                from .store import take_write_lock
+
+                take_write_lock(session)
+            except Exception as e:  # a store without the meta row (tests, legacy)
+                logger.debug(f"[BlobStorage] write-lock upgrade skipped: {e}")
             blob = (
                 session.query(Blob)
                 .filter(Blob.id == blob_id, blob_visible(owner_id, key))
