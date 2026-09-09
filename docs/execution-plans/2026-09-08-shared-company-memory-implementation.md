@@ -12,33 +12,43 @@ criteria and design decisions live in the paired brief
 the binding product decision is `~/hb/docs/briefs/2026-09-05-shared-company-memory.md`.
 <!-- doc-scope:end -->
 
-## Delivered — 2026-09-08
+## Delivered — 2026-09-08, shipped 2026-09-09
 
-All four milestones are implemented on `main`, **committed locally, not pushed,
-not deployed** (a push is a deploy here, via the reconcile timer):
+All four milestones are implemented, pushed (`main` at `982c192`), released as
+**`v0.1.46`** (`MrCall.Desktop-0.1.46-arm64.dmg`, GitHub Release 2026-09-09
+10:25 UTC) and **deployed** to the host at 10:16 UTC: all five daemons
+restarted on the new engine, ran `0001_company_key` and `0002_memory_split`
+at first boot, and stayed up (zero restarts).
 
 | Milestone | Commit | Gate |
 |---|---|---|
-| M0 runner | `efac9e7` | 9 tests incl. two-process races; full suite 853/2 |
-| M1 key, scope, namespaces, family filters | `cb3bef8` | 17 tests; full suite 870/2; typecheck |
-| M2 store split, provenance, join, CAS, sweep owner | `0131627` | 47 tests incl. two-process CAS/boot/index; full suite 892/2 |
-| M3 app UX | `638e721` | typecheck; `test:onboarding` PASS; full suite 892/2 |
+| M0 runner | `efac9e7` | 9 tests incl. two-process races |
+| M1 key, scope, namespaces, family filters | `cb3bef8` | 17 tests; typecheck |
+| M2 store split, provenance, join, CAS, sweep owner | `0131627` | 47 tests incl. two-process CAS/boot/index |
+| M3 app UX | `638e721` | typecheck; `test:onboarding` PASS |
+| adversarial review fixes | `dbc514b` | full suite 897/2 |
+| host tooling: `memory-status`/`memory-join` CLI, `join-company.sh` | `982c192` | CliRunner test |
 
-Not done, deliberately, and what each needs:
+State on the host after the operator's convergence (2026-09-09):
 
-- **Deploy** to the five `zylch-server@` units — Mario's go. First boot on each
-  runs `0001_company_key` (mints, backs up `zylch.db`) and `0002_memory_split`
-  (moves the six tables into `~/.zylch/memory/<key>.db`).
-- **The host company map** (`PROVISIOND_COMPANY_MAP`, default
-  `/etc/mrcalld/company-map.json`, a JSON object of `"<uid>": "<MEMORY_KEY>"`
-  pairs) — an operator action; until it exists provisiond refuses every new
-  profile (403, fail closed). The five live profiles predate provisiond and are
-  not affected.
-- **Converging the live profiles** onto per-company keys through the Settings
-  join, one at a time, after deploy; `HxiZhWEB` still has no company assigned.
-- **A dev-app run** of the onboarding memory step and the Settings card against
-  two local profiles — no display on this machine; `typecheck` and the
-  onboarding script are what ran. The packaged-app provision check is post-go.
+- **Café 124**: one store (`E3R0z_…`, 325 blobs) shared by `production@`,
+  `mario.alemi@cafe124.it`, `riccardo.cargnel@`, `ivan.marchese@`. The last two
+  are hand-made profiles carrying the key with `MEMORY_KEY_SOURCE=provision`.
+- **MrCall**: `support@mrcall.ai` on its own store (1728 blobs);
+  `mario.alemi@mrcall.ai` on its own (673) — not yet joined to support@'s.
+- `mario.alemi@gmail.com` (the uid formerly listed as unassigned) is a
+  private profile, a company of one.
+
+Closed after shipping (2026-09-09): the reconsolidation sweep now runs
+automatically after each update whenever the store changed since the last
+sweep (once per company), so duplicates from a join do not wait for a
+button; `person_identifiers` is unique per company (memory-store step
+`0001_identifiers_company_unique` rebuilds existing stores); `zylch -p <uid>
+memory-status` / `memory-join` / `memory-sweep` and `join-company.sh` serve
+headless profiles. Still open: the host company map
+(`/etc/mrcalld/company-map.json`) is an operator file (contents handed
+over); a dev-app run of the onboarding memory step and the Settings card
+has not been done on a display.
 
 ## What this plan executes
 

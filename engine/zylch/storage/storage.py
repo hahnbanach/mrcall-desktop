@@ -1117,6 +1117,16 @@ class Storage:
                     )
                     existing.add((k, v))
                     inserted += 1
+                if inserted:
+                    # identifiers are what the reconsolidation sweep clusters
+                    # on: a new one can make two blobs a merge candidate, so
+                    # it counts as a change the next sweep must see
+                    try:
+                        from zylch.memory.store import bump_mutation_seq
+
+                        bump_mutation_seq(session)
+                    except Exception as e:  # a store without the meta row (legacy tests)
+                        logger.debug(f"add_person_identifiers: mutation_seq bump skipped: {e}")
         except Exception as e:
             logger.warning(f"add_person_identifiers(blob={blob_id}) failed: {e}")
             return 0
@@ -4616,9 +4626,7 @@ class Storage:
             # task with no tasks.reopen RPC in the log (2026-06-11, support@).
             # If a stamp ever shows up again without a matching line here,
             # the writer is OUTSIDE the engine (direct SQLite access).
-            logger.info(
-                f"[reopen] task {task_id} reopened; dedup_skip_until={skip_until}"
-            )
+            logger.info(f"[reopen] task {task_id} reopened; dedup_skip_until={skip_until}")
             with get_session() as session:
                 count = (
                     session.query(TaskItem)
@@ -4861,9 +4869,7 @@ class Storage:
                     query = query.filter(TaskItem.action_required == action_required)
                 if due_filter == "due_now":
                     now_ts = datetime.now(timezone.utc).timestamp()
-                    query = query.filter(
-                        or_(TaskItem.due_at.is_(None), TaskItem.due_at <= now_ts)
-                    )
+                    query = query.filter(or_(TaskItem.due_at.is_(None), TaskItem.due_at <= now_ts))
 
                 # DB-level: pinned DESC first, then analyzed_at DESC. Urgency
                 # bucketing is applied client-side via stable sort below so
@@ -4956,9 +4962,7 @@ class Storage:
                     .all()
                 )
                 ids = [str(r[0]) for r in rows]
-                logger.debug(
-                    f"[find_task_ids_by_prefix] prefix={prefix} -> {len(ids)} match(es)"
-                )
+                logger.debug(f"[find_task_ids_by_prefix] prefix={prefix} -> {len(ids)} match(es)")
                 return ids
         except Exception as e:
             logger.error(f"Failed to resolve task id prefix {prefix}: {e}")

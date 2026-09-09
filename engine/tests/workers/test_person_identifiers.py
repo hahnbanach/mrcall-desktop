@@ -900,6 +900,11 @@ def test_dedup_cluster_builder_empty_input():
 
 # ---------------------------------------------------------------------
 # reconsolidate_now — Phase 1c end-to-end (mocked LLM)
+#
+# ``force=True`` throughout: these blobs are written straight through the
+# ORM, which does not bump the store's mutation_seq, so an unforced sweep
+# would rest ("nothing changed"). The change gate has its own tests in
+# tests/memory/test_sweep_gating.py.
 # ---------------------------------------------------------------------
 
 
@@ -975,7 +980,7 @@ async def test_reconsolidate_now_merges_and_migrates_refs(fresh_db, monkeypatch)
     )
     monkeypatch.setattr(merge_mod, "LLMMergeService", lambda *a, **kw: fake_merge_service)
 
-    summary = await merge_mod.reconsolidate_now(owner)
+    summary = await merge_mod.reconsolidate_now(owner, force=True)
 
     assert summary["groups_examined"] == 1
     assert summary["blobs_merged"] == 1
@@ -1024,7 +1029,7 @@ async def test_reconsolidate_now_keeps_distinct_when_llm_inserts(fresh_db, monke
     fake_merge_service.merge = MagicMock(return_value="INSERT")
     monkeypatch.setattr(merge_mod, "LLMMergeService", lambda *a, **kw: fake_merge_service)
 
-    summary = await merge_mod.reconsolidate_now(owner)
+    summary = await merge_mod.reconsolidate_now(owner, force=True)
     assert summary["blobs_merged"] == 0
     assert summary["blobs_kept_distinct"] == 1
     a_ids = storage.get_identifiers_for_blob(owner, blob_a)
@@ -1043,7 +1048,7 @@ async def test_reconsolidate_now_no_clusters_returns_zero(fresh_db, monkeypatch)
     monkeypatch.setattr(merge_mod, "make_llm_client", lambda *a, **kw: fake_client)
     monkeypatch.setattr(merge_mod, "try_make_llm_client", lambda *a, **kw: fake_client)
 
-    summary = await merge_mod.reconsolidate_now(owner)
+    summary = await merge_mod.reconsolidate_now(owner, force=True)
     assert summary["groups_examined"] == 0
     assert summary["blobs_merged"] == 0
 
@@ -1054,6 +1059,6 @@ async def test_reconsolidate_now_skips_when_no_llm(fresh_db, monkeypatch):
 
     monkeypatch.setattr(merge_mod, "try_make_llm_client", lambda *a, **kw: None)
 
-    summary = await merge_mod.reconsolidate_now("owner@test.com")
+    summary = await merge_mod.reconsolidate_now("owner@test.com", force=True)
     assert summary["no_llm"] is True
     assert summary["blobs_merged"] == 0

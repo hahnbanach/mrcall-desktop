@@ -74,7 +74,7 @@ async def memory_reconsolidate_now(params: Dict[str, Any], notify: NotifyFn) -> 
     owner_id = _owner_id()
     logger.debug(f"[rpc] memory.reconsolidate_now owner_id={owner_id}")
     try:
-        summary = await _reconsolidate(owner_id)
+        summary = await _reconsolidate(owner_id, force=True)  # the button always sweeps
     except Exception as e:
         logger.exception(f"[rpc] memory.reconsolidate_now failed: {e}")
         return {"ok": False, "error": str(e)}

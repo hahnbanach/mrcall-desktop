@@ -364,7 +364,9 @@ def test_sweep_is_skipped_while_another_engine_holds_it(monkeypatch, tmp_path):
     from zylch.storage.migrations import db_file_lock
 
     with db_file_lock(memory_db_path(current_company_key()), suffix=".sweep.lock"):
-        summary = asyncio.run(reconsolidate_now(a))
+        # force: the change-gating (tested elsewhere) must not short-circuit
+        # before the lock, which is what this proves
+        summary = asyncio.run(reconsolidate_now(a, force=True))
     assert summary["skipped"] is True and summary["reason"] == "another engine is sweeping"
 
 

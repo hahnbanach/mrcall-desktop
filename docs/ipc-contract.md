@@ -1271,7 +1271,7 @@ The registry is the authority. To re-derive the index above after a
 change, read the declared signatures straight out of the engine:
 
 ```bash
-cd engine && .venv/bin/python -c "
+cd engine && venv/bin/python -c "
 import zylch.rpc.dispatch
 from zylch.rpc.methods import METHODS
 for n in sorted(METHODS):

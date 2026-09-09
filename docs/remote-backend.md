@@ -291,3 +291,59 @@ curl -s -o /dev/null -w 'gate %{http_code}\n' https://<host>/ws/$PROF   # expect
   daemons re-bind their sockets on start, so a reboot self-heals.
 - **The server clock must be roughly correct** (token `exp` check); `timedatectl`
   should report synchronized.
+
+## Shared company memory on the host (since 2026-09)
+
+The six memory tables no longer live in a profile's `zylch.db`: each
+company has one SQLite store, `~mrcalld/.zylch/memory/<MEMORY_KEY>.db`,
+and every profile holding that key shares it. The key is a 128-bit
+capability in the profile `.env` (`MEMORY_KEY`, with `MEMORY_KEY_SOURCE`
+saying how it was obtained: `mint`, `provision`, `join`).
+
+**First boot after the deploy that ships it.** Each daemon runs two
+migration steps under its own lock: `0001_company_key` mints a key (the
+profile has none), backs up `zylch.db` to `<profile>/backups/`, stamps every
+memory row; `0002_memory_split` copies the six tables into a new
+`memory/<key>.db` and drops them from `zylch.db`. Five daemons therefore
+start with five separate memories — exactly what they had, now keyed.
+
+**Converging profiles of one company.** Joining is a merge (facts converge
+one row per key, entities are all kept, rules stay personal) and the old
+store file is left on disk. From the host, as root:
+
+```bash
+engine/scripts/server/join-company.sh table                  # uid, email, key, store size per profile
+engine/scripts/server/join-company.sh <uid> <MEMORY_KEY>     # stop the daemon, echo, confirm, join, start it
+```
+
+The second form runs `zylch -p <uid> memory-join <key>` as the service
+user: the preview echo (self-notion, size, contributors), a confirmation
+prompt, then the merge and the switch (`--yes` as a third argument skips
+the prompt, for scripts). **There is no company check**: the key is the
+capability, so joining `support@` to a Café 124 key merges MrCall's memory
+into Café 124's store — read the echo before confirming. The same join is available to a signed-in user from
+the desktop app (Settings → Company memory → paste, Test, Join) over the
+WebSocket.
+
+**New profiles (provisiond).** `provisiond` injects the company key from
+the host's map, `PROVISIOND_COMPANY_MAP` (default
+`/etc/mrcalld/company-map.json`, a JSON object of `"<uid>": "<MEMORY_KEY>"`
+pairs, operator-maintained). A uid the map does not name is **refused**
+(403) rather than given a default key: this host is multi-tenant, and a
+fallback is how two tenants end up in one memory. A `MEMORY_KEY` in the
+provision request body is refused too.
+
+**Duplicates after a join.** Both memories' entities are kept, so a person
+both knew exists twice until the reconsolidation sweep unites them. The
+daemon runs that sweep after every update whenever the store changed since
+the last sweep (a join, a merge, a new entity, a new identifier on an
+entity), once per company (the
+other daemons see "another engine is sweeping"); the desktop Settings →
+Maintenance → Reconsolidate button and `zylch -p <uid> memory-sweep` run it
+on demand. Each merge is one LLM call, capped per run (re-run to continue).
+
+**Memory unavailable** (no key, an unknown typed key, a missing store) is
+never a unit failure: the daemon serves mail sync, `memory.status` says why
+memory is off, and the memory worker leaves mail unprocessed — no LLM call
+is spent — until the store exists. `zylch -p <uid> memory-status` shows the
+same from the host.

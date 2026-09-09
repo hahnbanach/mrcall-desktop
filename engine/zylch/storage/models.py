@@ -343,13 +343,17 @@ class PersonIdentifier(Base):
     value = Column(Text, nullable=False)
     created_at = Column(DateTime, default=_utcnow)
 
+    # Unique per COMPANY (2026-09, shared memory): the index belongs to the
+    # store, and one identifier on one blob is one row however many accounts
+    # indexed it. Existing stores are rebuilt by the memory-side step
+    # `0001_identifiers_company_unique`.
     __table_args__ = (
         UniqueConstraint(
-            "owner_id",
+            "company_key",
             "kind",
             "value",
             "blob_id",
-            name="person_identifiers_owner_kind_value_blob_unique",
+            name="person_identifiers_company_kind_value_blob_unique",
         ),
     )
 
@@ -376,6 +380,9 @@ class MemoryMeta(DictMixin, Base):
     # never the empty string, so "unset" and "set to nothing" stay distinct.
     self_notion = Column(Text, nullable=True)
     mutation_seq = Column(Integer, nullable=False, default=0)
+    # The mutation_seq the last reconsolidation sweep started from: the
+    # daemon sweeps after an update only when something changed since.
+    last_sweep_seq = Column(Integer, nullable=False, default=0)
     created_by_source = Column(Text, nullable=True)  # mint | migration | provision
     created_at = Column(DateTime, default=_utcnow)
 

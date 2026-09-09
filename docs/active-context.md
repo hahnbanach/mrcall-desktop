@@ -22,7 +22,7 @@ what is *current*, targeting ≤ ~120 lines.
 *Snapshot as of 2026-09-08. Dated landings are in
 [`active-context-archive.md`](active-context-archive.md).*
 
-**Shared company memory — implemented on `main`, NOT pushed, NOT deployed.** One
+**Shared company memory — shipped 2026-09-09: pushed, released as `v0.1.46`, deployed to all daemons; Café 124 converged on one store, MrCall's two identities still separate.** One
 memory per company, addressed by a 128-bit capability key (`MEMORY_KEY`).
 Four commits: M0 `efac9e7` (single-owner migration runner), M1 `cb3bef8` (key,
 per-family scope — company families by key, rules by key AND owner — keyed

@@ -317,7 +317,7 @@ def _build_dedup_clusters(
     return [c for c in clusters_by_root.values() if len(c) >= 2]
 
 
-async def reconsolidate_now(owner_id: str) -> Dict[str, Any]:
+async def reconsolidate_now(owner_id: str, *, force: bool = False) -> Dict[str, Any]:
     """Walk all blobs in ``user:<owner_id>``, merge identity-equivalent groups.
 
     Algorithm (Phase 1c, whatsapp-pipeline-parity, 2026-05-08):
@@ -347,11 +347,32 @@ async def reconsolidate_now(owner_id: str) -> Dict[str, Any]:
     can quantify the dedup impact across all four reference tables.
     """
     from zylch.memory.company_key import entity_namespace, require_company_key
-    from zylch.memory.store import memory_db_path
+    from zylch.memory.store import memory_db_path, record_sweep_started, sweep_due
+    from zylch.storage.database import current_memory_engine
     from zylch.storage.migrations import MigrationLockTimeout, db_file_lock
 
     company_key = require_company_key()
     namespace = entity_namespace(company_key)
+
+    # The daemon calls this after every update. Sweep only when the store
+    # changed since the last sweep started (a merge, a join, a new entity —
+    # anything that bumps mutation_seq); a manual run (`force`) always goes.
+    engine = current_memory_engine()
+    if not force and engine is not None and not sweep_due(engine):
+        return {
+            "groups_examined": 0,
+            "blobs_examined": 0,
+            "blobs_merged": 0,
+            "blobs_kept_distinct": 0,
+            "pair_cap_hit": False,
+            "no_llm": False,
+            "skipped": True,
+            "reason": "nothing changed since the last sweep",
+            "person_identifiers_migrated": 0,
+            "email_blobs_migrated": 0,
+            "calendar_blobs_migrated": 0,
+            "task_items_updated": 0,
+        }
 
     # One sweep per COMPANY, not per profile: N daemons share this store
     # and each would otherwise run a company-wide LLM sweep. The lock is
@@ -378,6 +399,8 @@ async def reconsolidate_now(owner_id: str) -> Dict[str, Any]:
             "task_items_updated": 0,
         }
     try:
+        if engine is not None:
+            record_sweep_started(engine)
         return await _reconsolidate_locked(owner_id, company_key, namespace)
     finally:
         sweep_lock.__exit__(None, None, None)

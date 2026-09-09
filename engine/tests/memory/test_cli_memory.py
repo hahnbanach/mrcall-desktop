@@ -32,6 +32,11 @@ def _cli_for(monkeypatch, tmp_path, name):
 
     monkeypatch.setattr(pm, "PROFILES_DIR", str(tmp_path))
     monkeypatch.setattr(pm, "ZYLCH_DIR", str(tmp_path))
+    # activate_profile() inside the command sets these; registering them
+    # with monkeypatch makes teardown restore them, so no later test's
+    # persist_company_key() writes into this test's profile dir
+    monkeypatch.setattr(pm, "_active_profile_dir", None)
+    monkeypatch.setattr(pm, "_active_profile", None)
     monkeypatch.setattr(cli_main, "_configure_logging", lambda: None)
     monkeypatch.setattr(cli_main, "_setup_log_file", lambda: None, raising=False)
     return cli_main.cli

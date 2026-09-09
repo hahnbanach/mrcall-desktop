@@ -8,12 +8,18 @@
 # then merge + switch), start the daemon again.
 #
 # Usage:
-#   sudo join-company.sh table                 # every profile: uid, email, key, store size
-#   sudo join-company.sh <uid> <MEMORY_KEY>    # join <uid> to the memory <MEMORY_KEY> names
+#   sudo join-company.sh table                       # every profile: uid, email, key, store size
+#   sudo join-company.sh <uid> <MEMORY_KEY> [--yes]  # join <uid> to the memory <MEMORY_KEY> names
 #
 # The key comes from the profile you are joining TO (its `MEMORY_KEY` in
 # the table). Joining is a merge: nothing this profile learned is lost,
 # and its old store file is left on disk under ~mrcalld/.zylch/memory.
+#
+# THERE IS NO COMPANY CHECK. The key is the capability: join support@'s uid
+# to a Cafe 124 key and MrCall's memory is merged into Cafe 124's store —
+# the inverse of one memory per company, and only roughly reversible. So
+# the join shows the echo (whose memory, how big, who contributed) and asks
+# for confirmation; pass --yes only from a script that has already checked.
 set -euo pipefail
 
 SVC_USER=mrcalld
@@ -48,8 +54,9 @@ if [ "${1:-}" = "table" ]; then
   exit 0
 fi
 
-uid="${1:-}"; key="${2:-}"
-[ -n "$uid" ] && [ -n "$key" ] || { echo "usage: $0 table | $0 <uid> <MEMORY_KEY>"; exit 2; }
+uid="${1:-}"; key="${2:-}"; yes_flag=""
+[ "${3:-}" = "--yes" ] && yes_flag="--yes"
+[ -n "$uid" ] && [ -n "$key" ] || { echo "usage: $0 table | $0 <uid> <MEMORY_KEY> [--yes]"; exit 2; }
 [ -d "$PROFILES/$uid" ] || { echo "no profile dir for uid $uid under $PROFILES"; exit 2; }
 
 unit="$UNIT_PREFIX$uid"
@@ -61,4 +68,5 @@ systemctl stop "$unit"
 trap 'echo "== starting $unit =="; systemctl start "$unit"' EXIT
 
 echo "== joining $uid to $key =="
-sudo -u "$SVC_USER" env HOME="/home/$SVC_USER" "$VENV/bin/zylch" -p "$uid" memory-join --yes "$key"
+# shellcheck disable=SC2086
+sudo -u "$SVC_USER" env HOME="/home/$SVC_USER" "$VENV/bin/zylch" -p "$uid" memory-join $yes_flag "$key"

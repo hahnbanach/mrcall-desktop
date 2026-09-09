@@ -405,6 +405,8 @@ def _apply_column_migrations(engine: Engine) -> None:
         ("calendar_blobs", "company_key", "TEXT"),
         ("whatsapp_blobs", "company_key", "TEXT"),
         ("person_identifiers", "company_key", "TEXT"),
+        # 2026-09-09: the store's own row learns when it was last swept.
+        ("memory_meta", "last_sweep_seq", "INTEGER DEFAULT 0"),
     ]
     # Indexes the SQLAlchemy `index=True` declaration creates on FRESH
     # tables but never gets back-applied to tables that pre-date the

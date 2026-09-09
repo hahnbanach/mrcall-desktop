@@ -1010,6 +1010,22 @@ async def _run_memory(owner_id: str, store) -> tuple[int, int]:
         logger.info(f"[memory] skipped {skipped} WA msgs from {len(archived)} archived chats")
     wa_count = await worker.process_whatsapp_batch(wa_messages)
 
+    # Reconsolidation: unite duplicate entities in the company store. Runs
+    # only when the store changed since the last sweep started (a join, a
+    # merge, entities just written above), once per company — the other
+    # daemons on the store see "another engine is sweeping". Same tolerance
+    # contract as the task sweeps: a failure is logged, never raised.
+    try:
+        from zylch.memory.llm_merge import reconsolidate_now
+
+        sweep = await reconsolidate_now(owner_id)
+        if sweep.get("blobs_merged"):
+            console.print(
+                f"  [dim]memory: reconsolidated {sweep['blobs_merged']} duplicate entit(ies)[/dim]"
+            )
+    except Exception as e:
+        logger.warning(f"[memory] post-update reconsolidation failed: {e}")
+
     return email_count, wa_count
 
 

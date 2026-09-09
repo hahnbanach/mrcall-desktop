@@ -175,10 +175,13 @@ def prepare_store(engine: Engine, company_key: str, *, created_by: Optional[str]
     def _meta(_engine: Engine) -> None:
         ensure_meta_row(_engine, company_key, created_by=created_by)
 
+    from zylch.storage.step_identifiers_company_unique import STEP as identifiers_step
+
     run_migrations(
         engine,
         path,
         ensure=(_ensure_memory_tables, _ensure_memory_columns, _meta),
+        steps=(identifiers_step,),
     )
 
 
@@ -194,7 +197,7 @@ def ensure_meta_row(engine: Engine, company_key: str, *, created_by: Optional[st
         conn.execute(
             text(
                 "INSERT INTO memory_meta (id, company_key, self_notion, mutation_seq, "
-                "created_by_source) VALUES (1, :key, :notion, 0, :src)"
+                "last_sweep_seq, created_by_source) VALUES (1, :key, :notion, 0, 0, :src)"
             ),
             {"key": company_key, "notion": seed, "src": created_by},
         )
@@ -205,18 +208,24 @@ def get_meta(engine: Engine) -> Dict[str, Any]:
     with engine.begin() as conn:
         row = conn.execute(
             text(
-                "SELECT company_key, self_notion, mutation_seq, created_by_source, created_at "
-                "FROM memory_meta WHERE id = 1"
+                "SELECT company_key, self_notion, mutation_seq, created_by_source, created_at, "
+                "last_sweep_seq FROM memory_meta WHERE id = 1"
             )
         ).first()
     if row is None:
-        return {"self_notion": None, "mutation_seq": 0, "created_by_source": None}
+        return {
+            "self_notion": None,
+            "mutation_seq": 0,
+            "created_by_source": None,
+            "last_sweep_seq": 0,
+        }
     return {
         "company_key": row[0],
         "self_notion": row[1],
         "mutation_seq": int(row[2] or 0),
         "created_by_source": row[3],
         "created_at": row[4],
+        "last_sweep_seq": int(row[5] or 0),
     }
 
 
@@ -259,6 +268,20 @@ def take_write_lock(session: Session) -> None:
     session.execute(
         update(MemoryMeta).where(MemoryMeta.id == 1).values(mutation_seq=MemoryMeta.mutation_seq)
     )
+
+
+def sweep_due(engine: Engine) -> bool:
+    """Has the store changed since the last reconsolidation sweep started?"""
+    meta = get_meta(engine)
+    return int(meta.get("mutation_seq") or 0) != int(meta.get("last_sweep_seq") or 0)
+
+
+def record_sweep_started(engine: Engine) -> None:
+    """Remember the sequence this sweep starts from; its own merges bump the
+    sequence, so the next tick runs one more (cheap, clusterless) pass and
+    then rests."""
+    with engine.begin() as conn:
+        conn.execute(text("UPDATE memory_meta SET last_sweep_seq = mutation_seq WHERE id = 1"))
 
 
 def read_mutation_seq(session: Session) -> int:

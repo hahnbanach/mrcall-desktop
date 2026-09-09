@@ -15,6 +15,9 @@ zylch init         # Setup wizard (writes ~/.zylch/.env)
 zylch sync         # Sync emails via IMAP
 zylch tasks        # Show actionable tasks
 zylch status       # Show sync status
+zylch -p <uid> memory-status        # Company memory: key source, store, blob count, or why it is off
+zylch -p <uid> memory-join KEY      # Join another company memory (echo, confirm, merge); --yes skips the prompt
+zylch -p <uid> memory-sweep         # Reconsolidation sweep now (the daemon runs it after each update)
 ```
 
 ## Interactive Chat (REPL)
