@@ -348,6 +348,88 @@ def status(ctx):
     run_status()
 
 
+@cli.command(name="memory-status")
+@click.pass_context
+def memory_status(ctx):
+    """Show this profile's company memory: key, availability, size, contributors."""
+    _configure_logging()
+    profile_name = ctx.obj.get("profile") if ctx.obj else None
+    profile = _setup_profile(profile_name, lock=False)
+    logger.info(f"[CLI] memory-status profile={profile}")
+    from zylch.memory.company_key import current_company_key
+    from zylch.memory.join import status
+    from zylch.storage.storage import Storage
+
+    Storage.get_instance()  # boots: migrations, store attach
+    out = status()
+    click.echo(f"profile:      {profile}")
+    click.echo(f"memory key:   {current_company_key() or '(none)'}")
+    click.echo(
+        f"available:    {out['available']}" + (f"  ({out['reason']})" if out.get("reason") else "")
+    )
+    if out.get("available"):
+        click.echo(f"self-notion:  {out.get('self_notion') or '(unset)'}")
+        click.echo(
+            f"entries:      {out.get('blob_count', 0)} blobs, {out.get('fact_count', 0)} facts"
+        )
+        click.echo(f"contributors: {', '.join(out.get('contributors') or []) or '(none yet)'}")
+
+
+@cli.command(name="memory-join")
+@click.argument("key")
+@click.option("--yes", is_flag=True, help="Join without the confirmation prompt (scripts).")
+@click.pass_context
+def memory_join(ctx, key, yes):
+    """Join the company memory KEY names: preview (the echo), confirm, merge, switch.
+
+    The same gesture the desktop Settings card performs, for a headless
+    profile on the host. Needs the profile lock: stop its daemon first
+    (scripts/server/join-company.sh does stop, join, start).
+    """
+    _configure_logging()
+    profile_name = ctx.obj.get("profile") if ctx.obj else None
+    profile = _setup_profile(profile_name, lock=True)
+    logger.info(f"[CLI] memory-join profile={profile}")
+    from zylch.memory.company_key import current_company_key
+    from zylch.memory.join import join, preview
+    from zylch.storage.storage import Storage
+
+    Storage.get_instance()
+    echo = preview(key)
+    if not echo.get("well_formed"):
+        click.echo(f"refused: {echo.get('reason')}")
+        raise SystemExit(2)
+    if not echo.get("exists"):
+        click.echo("refused: no company memory exists for this key on this host")
+        raise SystemExit(2)
+    if current_company_key() == key.strip():
+        click.echo("already on this memory key")
+    click.echo(
+        f"joining: {echo.get('self_notion') or '(self-notion unset)'} · "
+        f"{echo.get('blob_count', 0)} entries · contributors: "
+        f"{', '.join(echo.get('contributors') or []) or '(none)'}"
+    )
+    if not yes and not click.confirm(
+        "Merge this profile's memory into it and switch?", default=False
+    ):
+        click.echo("aborted")
+        raise SystemExit(1)
+    out = join(key)
+    if not out.get("ok"):
+        click.echo(f"refused: {out.get('reason')}")
+        raise SystemExit(2)
+    merged = out.get("merged") or {}
+    click.echo(
+        f"joined: merged {merged.get('blobs', 0)} entries"
+        + (
+            f", {merged['facts_converged']} fact(s) converged"
+            if merged.get("facts_converged")
+            else ""
+        )
+        + f"; now {out.get('blob_count', 0)} entries, contributors: {', '.join(out.get('contributors') or [])}"
+    )
+
+
 @cli.command()
 @click.pass_context
 def rpc(ctx):
