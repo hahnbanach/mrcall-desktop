@@ -90,6 +90,37 @@ on `mrcall-agent`; the desktop never holds it. Cross-cutting context in
 [`../AGENTS.md`](../AGENTS.md), engine plumbing in
 [`../engine/CLAUDE.md`](../engine/CLAUDE.md).
 
+## Company memory — onboarding field and Settings card (since 2026-09)
+
+The memory key is one settings field, `MEMORY_KEY`, declared in the engine
+schema and mirrored in both app-side schemas (`renderer/src/lib/profileSchema.ts`
+for onboarding, `main/profileFS.ts` for the profile allow-list): a field
+missing from one of the three makes account creation reject the payload.
+
+- **Onboarding** (`views/Onboarding.tsx`, step `memory`): one optional
+  field, "memory key — paste it if you have one". Empty → the wizard asks
+  the engine to mint a key (`memory.keyMint`) and shows it once with a
+  Copy control; it is written with the profile at finalize. Pasted →
+  `memory.keyValidate` (well-formed?) then `memory.joinPreview` echoes the
+  company's self-notion, size and contributors; Continue stays disabled
+  until the echo is accepted or the field is cleared, and `memory.join`
+  runs at finalize.
+- **Settings** (`views/Settings.tsx`, `MemoryCard`): the key in clear with
+  a copy button — read through `settings.getSecret('MEMORY_KEY')`, the
+  one-secret-per-call read the preload exposes, while `settings.get` masks
+  it like every secret — plus `memory.status` (store, blob count, or why
+  memory is off) and the join gesture: paste, Test (echo), Join.
+  `settings.update` refuses `MEMORY_KEY`; `memory.join` is its only write
+  path, and the card re-reads status after it.
+- **Right-click edit menu** on text fields (`main/index.ts:installContextMenu`);
+  Electron ships none, keyboard copy/paste worked already.
+
+Preload bindings: `settings.getSecret`, `memory.keyMint`, `memory.keyValidate`,
+`memory.status`, `memory.joinPreview`, `memory.join` (`preload/index.ts`;
+types in `renderer/src/types.ts`). `scripts/test-onboarding.mjs` covers the
+step. Engine side in [`../engine/CLAUDE.md`](../engine/CLAUDE.md); design in
+[`../docs/briefs/2026-09-08-shared-company-memory-implementation.md`](../docs/briefs/2026-09-08-shared-company-memory-implementation.md).
+
 ## Naming and branding
 
 - **User-visible**: "MrCall Desktop" everywhere — window title, sidebar, onboarding, README, asset names. `appId` is `ai.mrcall.desktop`.

@@ -13,7 +13,7 @@ description: |
 | Language | Python | 3.11+ |
 | CLI Framework | Click | 8.1+ |
 | ORM | SQLAlchemy | 2.0+ |
-| Database | SQLite (WAL mode) | built-in |
+| Database | SQLite (WAL mode): the profile `zylch.db` + one memory store per company key | built-in |
 | Auth | None (mono-user, local) | - |
 | AI/LLM | Direct SDK (Anthropic, OpenAI) | anthropic 0.39+, openai 1.0+ |
 | Vector Search | numpy cosine similarity (in-memory) | numpy 1.24+ |

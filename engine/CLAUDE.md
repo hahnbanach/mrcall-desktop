@@ -1,6 +1,6 @@
 # CLAUDE.md
 
-Zylch — the MrCall Desktop engine: local AI assistant for business communication (email / WhatsApp / SMS / MrCall phone). Python 3.11+ / SQLite / IMAP / WhatsApp (neonize) / BYOK or MrCall-credits LLM. One profile per user; runs as the app's stdio sidecar or as a per-profile VPS daemon (`zylch serve`).
+Zylch — the MrCall Desktop engine: local AI assistant for business communication (email / WhatsApp / SMS / MrCall phone). Python 3.11+ / SQLite / IMAP / WhatsApp (neonize) / BYOK or MrCall-credits LLM. One profile per user, one memory store per company (`MEMORY_KEY`); runs as the app's stdio sidecar or as a per-profile VPS daemon (`zylch serve`).
 
 ## Documentation
 
@@ -108,7 +108,7 @@ Top-up flow lives on `dashboard.mrcall.ai/plan`; the desktop client just opens t
 - **DEBUG LOGGING MANDATORY**: `logger.debug(f"[/cmd] func(param={param}) -> result={result}")`
 - **NEVER log secrets**: Only "present"/"absent"
 - **FILES < 500 LINES**: Keep modules small and focused
-- **SQLITE STORAGE**: All data in SQLite. Embeddings in BLOB, search in-memory
+- **SQLITE STORAGE**: All data in SQLite — the profile `zylch.db` plus one memory store per company key (`~/.zylch/memory/<MEMORY_KEY>.db`); memory rows are reached only through the `memory/scope.py` predicates, never by `owner_id` alone. Embeddings in BLOB, search in-memory
 - **NO HARDCODED SECRETS**: Pydantic Settings from profile `.env`
 - **NO ROOT FILES**: Use `/zylch`, `/tests`, `/docs`, `/scripts`
 - **PROFILE MATCH**: Exact match only, no substring/fuzzy

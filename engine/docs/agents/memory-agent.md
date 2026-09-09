@@ -66,6 +66,20 @@ When a new entity is extracted, the agent searches for existing blobs:
 3. If LLM says INSERT (entities don't match), try next candidate
 4. If no suitable blob found, create new one
 
+The candidates come from the company store, so the worker matches against
+the entities every colleague's mail produced, not only this account's
+(scope in [`../features/entity-memory-system.md`](../features/entity-memory-system.md)).
+
+A second, company-wide pass — `reconsolidate_now` in
+`zylch/memory/llm_merge.py` — clusters blobs that share an identifier
+(union-find over `person_identifiers`, Name as fallback), asks the LLM
+whether each pair is one entity, merges the pair and migrates every
+reference before deleting the duplicate. The daemon runs it at the end of
+every update's memory stage when the shared store changed since the last
+sweep (a join, a merge, a new entity or identifier); the Settings →
+Maintenance button and `zylch memory-sweep` force it. One sweep per
+company at a time — the other daemons answer "another engine is sweeping".
+
 ## Flow
 
 ```

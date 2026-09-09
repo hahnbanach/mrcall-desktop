@@ -73,6 +73,7 @@ Threshold: 0.65 minimum confidence. Falls back to LLM for complex queries.
 | `/memory store <content>` | Store new memory blob |
 | `/memory stats` | Memory statistics |
 | `/memory list` | List all memory blobs |
+| `/memory reset` | Delete your own operating rules (templates, preferences) — and everything else only when no other account shares the memory; company knowledge shared with colleagues is never removed. Marks emails and calendar events unprocessed so `/agent process` rebuilds |
 
 ### MrCall/StarChat
 

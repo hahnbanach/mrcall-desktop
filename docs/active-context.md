@@ -19,10 +19,10 @@ what is *current*, targeting ≤ ~120 lines.
 
 ## State now
 
-*Snapshot as of 2026-09-08. Dated landings are in
+*Snapshot as of 2026-09-09. Dated landings are in
 [`active-context-archive.md`](active-context-archive.md).*
 
-**Shared company memory — shipped 2026-09-09: pushed, released as `v0.1.46`, deployed to all daemons; Café 124 converged on one store, MrCall's two identities still separate.** One
+**Shared company memory — shipped 2026-09-09: pushed, released as `v0.1.46`, deployed to all daemons; Café 124 converged on one store (four accounts analysing their mailboxes into it; the post-update sweep united its first 12 duplicates at 14:03 UTC), MrCall's two identities still separate.** One
 memory per company, addressed by a 128-bit capability key (`MEMORY_KEY`).
 Four commits: M0 `efac9e7` (single-owner migration runner), M1 `cb3bef8` (key,
 per-family scope — company families by key, rules by key AND owner — keyed
@@ -31,11 +31,15 @@ six memory tables move to `~/.zylch/memory/<key>.db`; creation gated by
 provenance; `memory.join` as the only key write path; compare-and-swap writes;
 one sweep per company; provisiond fails closed on an unmapped uid), M3 `638e721`
 (onboarding key field + mint-or-join step, Settings memory card with copy and
-join-with-echo, right-click edit menu). Brief and plan:
+join-with-echo, right-click edit menu); follow-up `e3b0e4b` (deployed):
+the sweep runs after every update when the store changed, identifiers
+unique per company, `join-company.sh` asks before merging, `zylch
+memory-sweep`. Brief and plan:
 [`briefs/2026-09-08-shared-company-memory-implementation.md`](briefs/2026-09-08-shared-company-memory-implementation.md),
 [`execution-plans/2026-09-08-shared-company-memory-implementation.md`](execution-plans/2026-09-08-shared-company-memory-implementation.md)
-(the plan's "Delivered" section lists what waits on the go: deploy, the host
-company map, converging the five live profiles, a dev-app run).
+(open: the host company map file `/etc/mrcalld/company-map.json`, a dev-app
+run of the UI). The product-facing text is the root `README.md` ("One memory
+for the whole company").
 
 **Cross-machine backend live.** The desktop engine runs as a persistent daemon on a remote machine; the Electron app reaches it over `wss://desktop.mrcall.ai` (Caddy + Let's Encrypt) instead of spawning a local stdio sidecar. Engine: a transport-agnostic dispatch core (`rpc/dispatch.py`) feeds both stdio and the WebSocket server (`rpc/server_ws.py`, `serve --ws`/`--unix`), gated by a Firebase-JWT handshake (`uid == OWNER_ID`, RS256). App: `WebSocketRpcClient` vs `StdioRpcClient` chosen per-installation (`~/.zylch/backend-config.json`), connecting to `<base>/ws/<uid>` with the token in the handshake header. Deployed on the Scaleway VPS (alongside `mrcall-agent`): a `zylch-server@<uid>` systemd template behind Caddy, installed/updated via `git` ([`remote-backend.md`](remote-backend.md)). IPC additions: `auth.refresh`, `account:pushToken`, backend-location IPCs. Multi-profile routing is live on the same URL: a dedicated `mrcalld` service user + per-uid Unix sockets (`serve --unix`) + static Caddy `path_regexp` + idempotent `sudo update-daemons.sh`, no app change. See [`execution-plans/multi-profile-routing.md`](execution-plans/multi-profile-routing.md) + [`remote-backend.md`](remote-backend.md).
 

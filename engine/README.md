@@ -58,13 +58,14 @@ When you choose "solve", Zylch searches your memory and emails, drafts replies, 
 
 - **Detects tasks** from your emails and messages — tells you what needs action
 - **Remembers contacts** across all channels — knows who said what, when
+- **Shares one memory per company** — accounts holding the same memory key read and write one store: what one mailbox teaches the assistant, every colleague's assistant knows
 - **Solves tasks** — searches, drafts emails, fills forms, makes calls
 - **Learns your style** — trains on your emails to match your tone
 - **Runs locally** — all data in SQLite on your machine, your API keys
 
 ## Architecture
 
-- Local CLI (click) + SQLite + BYOK LLM (Anthropic/OpenAI)
+- Local CLI (click) + SQLite (profile db + one memory store per company key) + BYOK LLM (Anthropic/OpenAI)
 - fastembed (ONNX) for embeddings, numpy for vector search
 - No server, no Docker, no cloud database
 

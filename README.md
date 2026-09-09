@@ -1,7 +1,9 @@
 # MrCall Desktop
 
 Local AI assistant for business communication — email (IMAP / SMTP),
-WhatsApp, SMS, and phone (via MrCall), unified with a shared memory of contacts, companies and templates (contracts, offers etc). 
+WhatsApp, SMS, and phone (via MrCall) — with **one memory per company**:
+what every colleague's mailbox teaches it about your customers, suppliers
+and deals, digested into a single memory that every account draws on.
 It watches your inbox, figures out what needs doing, and
 drafts replies for you to review.
 
@@ -10,7 +12,9 @@ drafts replies for you to review.
 Your inbox, contacts, and credentials live in a local profile on your own
 computer — none of it is uploaded anywhere. The only thing that leaves
 your machine is your sign-in, used to talk to MrCall's own services
-(phone, SMS, business lookups).
+(phone, SMS, business lookups). The company memory lives wherever your
+profile runs: on this machine, or on the server that keeps it running
+when your laptop is closed (below).
 
 ## Get started
 
@@ -50,6 +54,32 @@ configure.
 If you'd rather run your own always-on server instead of using MrCall's,
 that's the advanced route: see
 [`docs/remote-backend.md`](docs/remote-backend.md).
+
+## One memory for the whole company
+
+Every mailbox the assistant reads teaches it something — who a customer
+is, what was agreed, which supplier answers slowly. MrCall Desktop keeps
+all of it in **one memory per company**, not one per inbox: what
+`production@` learns this morning, the colleague writing from `sales@`
+uses this afternoon. The memory holds people, companies and facts,
+digested from the mail and WhatsApp of everyone who shares it, and
+duplicates unite by themselves as new mail comes in. What stays personal
+is how *you* write: your reply templates and preferences never leave your
+own account.
+
+The company is a **memory key** — a random 22-character string minted the
+first time an account is created, shown once and always available in
+**Settings → Company memory** with a copy button. To bring a colleague
+in, send them the key the way you would send a Wi-Fi password: they paste
+it in the "memory key" field when they create their account (or later, in
+the same Settings card), the app echoes what they are about to join — the
+company's name and how much it already knows — and their account joins
+the shared memory. Whoever holds the key is in; nobody else can read it.
+
+The memory is shared between accounts running on the same server:
+MrCall's always-on servers (the **Activate** button above) or a server of
+your own ([`docs/remote-backend.md`](docs/remote-backend.md)). Two
+laptops each running the app locally keep two separate memories.
 
 ---
 

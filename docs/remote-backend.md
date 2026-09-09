@@ -347,3 +347,15 @@ never a unit failure: the daemon serves mail sync, `memory.status` says why
 memory is off, and the memory worker leaves mail unprocessed — no LLM call
 is spent — until the store exists. `zylch -p <uid> memory-status` shows the
 same from the host.
+
+**LLM credential and daily budget.** A profile provisioned by hand has no
+desktop app pushing a Firebase token, so the MrCall-credits mode has no
+session there: mail syncs, but the memory and task stages skip until the
+profile `.env` carries a BYOK key (`SYSTEM_LLM_PROVIDER=anthropic` +
+`ANTHROPIC_API_KEY=…`), and the daemon reads `.env` only at start
+(`systemctl restart zylch-server@<uid>`). Spend is capped per profile and
+per UTC day by `LLM_DAILY_BUDGET_USD` (default 10, `0` = no cap; the
+`[llm-budget]` line of the tick names the numbers); the reconsolidation
+sweep spends from the budget of the profile whose tick runs it. A large
+backlog is analysed in daily instalments at the cap — raise it for a day
+with a line in `.env` and a restart.

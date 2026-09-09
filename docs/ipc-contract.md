@@ -1219,7 +1219,10 @@ The two manual-maintenance buttons in Settings; both return a worker
 summary dict. `memory.reconsolidate_now` runs the reconsolidation pass
 (`zylch.memory.llm_merge`), walking blob entities and merging
 semantically-equivalent duplicates — the same "John Smith PERSON" spread
-across several blobs. `tasks.dedup_now` runs the F8 dedup sweep
+across several blobs. It forces the sweep; the daemon's own post-update
+sweep is gated on the store's change counter and answers
+`{skipped: true, reason}` when nothing changed since the last sweep or
+another engine holds the company's sweep lock. `tasks.dedup_now` runs the F8 dedup sweep
 immediately and returns counts the renderer can phrase as "Closed N tasks
 across M cluster(s)"; it tolerates a profile with no LLM configured,
 answering `no_llm=True` instead of failing.

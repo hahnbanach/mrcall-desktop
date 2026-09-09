@@ -44,7 +44,9 @@ zylch/
 │   └── bot.py            # Long-polling bot, bridges to ChatService
 │
 ├── storage/              # Data access layer (SQLite)
-│   ├── database.py       # SQLAlchemy engine (sqlite:///~/.zylch/zylch.db)
+│   ├── database.py       # Two SQLite files per profile — zylch.db (mail, tasks, tokens) + the company memory store — bound per table
+│   ├── migrations.py     # Idempotent single-owner migration runner (schema_version, backup, <db>.migrate.lock)
+│   ├── step_*.py         # Steps: 0001_company_key, 0002_memory_split (profile); 0001_identifiers_company_unique (store)
 │   ├── models.py         # 20+ ORM models (incl. EmailBlob, CalendarBlob, WhatsAppBlob, PersonIdentifier)
 │   └── storage.py        # Storage class (CRUD, upserts, search)
 │
@@ -57,7 +59,7 @@ zylch/
 │   ├── email_sync.py     # EmailSyncManager (IMAP incremental)
 │   ├── email_archive.py  # Email archive manager
 │   ├── contact_tools.py  # Contact/task/memory search (SearchLocalMemoryTool returns blob_id)
-│   ├── create_memory_tool.py # Create NEW memory blob under user:<owner_id>
+│   ├── create_memory_tool.py # Create NEW memory blob under user:<company key>
 │   ├── update_memory_tool.py # Update EXISTING blob — requires exact blob_id + new_content
 │   ├── read_email_tool.py    # Read email by id
 │   ├── read_document_tool.py # Read document (platform-aware paths)
@@ -90,8 +92,12 @@ zylch/
 │       ├── task_email.py # Task prompt (incremental, auto after sync)
 │       └── memory_email.py # Memory prompt (PERSON priority)
 │
-├── memory/               # Entity memory system
-│   ├── blob_storage.py   # Blob CRUD (embeddings as BLOB)
+├── memory/               # Entity memory system — one store per company key
+│   ├── company_key.py    # MEMORY_KEY mint/validate; namespace families (user/facts by key, template/prefs by owner)
+│   ├── scope.py          # blob_visible — the one visibility predicate every memory path applies
+│   ├── store.py          # ~/.zylch/memory/<key>.db: open/create by provenance, memory_meta (self-notion, mutation_seq, last_sweep_seq)
+│   ├── join.py           # memory.join — merge a profile's store into another key's store, rebind in-process
+│   ├── blob_storage.py   # Blob CRUD (embeddings as BLOB), compare-and-swap updates
 │   ├── embeddings.py     # fastembed (ONNX, 384-dim)
 │   ├── hybrid_search.py  # InMemoryVectorIndex + text search
 │   ├── llm_merge.py      # Memory reconsolidation — identifier-clustered union-find + LLM merge gate + cross-reference migration before delete (Phase 1c, whatsapp-pipeline-parity)
@@ -100,14 +106,19 @@ zylch/
 │   └── config.py         # Memory configuration
 
 # Cross-channel person identity (Phase 1, whatsapp-pipeline-parity, 2026-05-08):
-# `person_identifiers(owner_id, blob_id, kind, value)` indexes structured
-# identifiers (email/phone/lid) parsed from each blob's `#IDENTIFIERS` block.
+# `person_identifiers(company_key, kind, value, blob_id)` — unique per
+# company, `owner_id` as provenance — indexes structured identifiers
+# (email/phone/lid) parsed from each blob's `#IDENTIFIERS` block.
 # `MemoryWorker._upsert_entity` matches identifier-first then falls back to
 # cosine; `reconsolidate_now` clusters via union-find on these tuples (+ Name
 # fallback). Helpers `_parse_identifiers_block` / `_normalise_phone` live in
 # `workers/memory.py`. Cross-reference migration via
 # `Storage.migrate_blob_references` before delete keeps email_blobs /
 # calendar_blobs / task_items.sources.blobs intact through dedup.
+# `reconsolidate_now` runs at the end of every update's memory stage when
+# the store changed since the last sweep (`memory_meta.mutation_seq` vs
+# `last_sweep_seq`), once per company under `<store>.sweep.lock`; the
+# Settings button and `zylch memory-sweep` force it.
 │
 ├── llm/                  # LLM client
 │   ├── client.py         # LLMClient (direct Anthropic/OpenAI SDK; "mrcall" → MrCallProxyClient)
@@ -173,7 +184,7 @@ User
 ## Profile System
 
 - Profiles stored in `~/.zylch/profiles/{email}/`
-- Each profile has `.env`, `zylch.db`, `profile.lock`
+- Each profile has `.env`, `zylch.db`, `profile.lock`; the `.env` carries `MEMORY_KEY` (+ `MEMORY_KEY_SOURCE`: `mint` | `provision` | `join`), which selects the company memory store
 - CLI `-p/--profile` option for explicit selection
 - Auto-selects if only one profile exists
 - Exclusive locking via `flock` (write commands)
@@ -182,11 +193,11 @@ User
 ## Storage
 
 - **Engine**: SQLite with WAL mode, foreign keys enabled
-- **Location**: `~/.zylch/profiles/<name>/zylch.db`
+- **Location**: `~/.zylch/profiles/<name>/zylch.db` (mail, tasks, tokens, sync cursors) + `~/.zylch/memory/<MEMORY_KEY>.db` (the memory tables: blobs, sentences, email/calendar/whatsapp links, identifiers, meta, fact history, aliases), one store per company shared by every profile with the key; a store is created only by mint, migration or provisioning — a typed key opens an existing store or is refused
 - **Models**: 20+ (Email, Blob, BlobSentence, TaskItem, OAuthToken, WhatsAppMessage, WhatsAppContact, MrcallConversation, EmailBlob/CalendarBlob/WhatsAppBlob join tables, PersonIdentifier index for cross-channel identity, etc.)
 - **Embeddings**: stored as LargeBinary (BLOB), loaded into numpy for search
 - **No pgvector**: cosine similarity computed in-memory via numpy
-- **No Alembic**: tables created via `Base.metadata.create_all()`
+- **Migrations**: `storage/migrations.py` — idempotent steps recorded in `schema_version`, one owner at a time (`<db>.migrate.lock`), SQLite backup before a destructive step; new tables via `Base.metadata.create_all()`
 - **WhatsApp session**: `~/.zylch/whatsapp.db` (neonize, separate from profile DB)
 
 ## Dependencies

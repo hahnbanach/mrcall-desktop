@@ -15,6 +15,38 @@ Everything about an entity is in a single natural-language "blob" — no structu
 
 **The thesis**: Professional relationships exist in language. LLMs don't need physics — they need memory. This system provides persistent memory that accumulates relational understanding over time.
 
+## Scope: one memory per company
+
+Memory belongs to the company, not to the account that read the mail. A
+profile's `MEMORY_KEY` selects the store, `~/.zylch/memory/<MEMORY_KEY>.db`,
+and every profile on the host holding that key shares it. Inside the store
+the namespace family decides who sees a row:
+
+| Family | Namespace | Visible to | Holds |
+|--------|-----------|------------|-------|
+| `user` | `user:<key>` | every key holder | PERSON / COMPANY entities |
+| `facts` | `facts:<key>` | every key holder | company facts, one row per (category, key) |
+| `template` | `template:<owner>` | its owner only | the account's reply templates |
+| `prefs` | `prefs:<owner>` | its owner only | the account's operating rules |
+
+`owner_id` stays on every row as provenance — which account contributed
+it — and decides nothing for the company families. One predicate,
+`zylch/memory/scope.py:blob_visible(owner_id, company_key)`, is applied on
+every read, write, update, delete and list; no call site filters on
+`owner_id` alone. Sentences, link tables and `person_identifiers` are
+scoped by the company key; an identifier is unique per
+`(company_key, kind, value, blob_id)`.
+
+Joining (`memory.join`, `zylch memory-join`, the Settings card) merges the
+profile's current store into the target key's store: entities are all kept
+and the sweep unites duplicates afterwards, facts converge to one row per
+key with the losing value in `fact_history`, rules keep their owner. The
+old store file stays on disk. Several daemons write one store: updates
+compare-and-swap on `updated_at`, the in-process vector index is keyed on
+the store's `mutation_seq`, and the reconsolidation sweep runs after each
+update only when the store changed since the last sweep, once per company
+(`<store>.sweep.lock`).
+
 ## Key Concepts
 
 ### Memory Reconsolidation
@@ -100,7 +132,11 @@ Rules:
 
 | File | Purpose |
 |------|---------|
-| `zylch/memory/blob_storage.py` | Blob CRUD (embeddings as BLOB in SQLite) |
+| `zylch/memory/company_key.py` | `MEMORY_KEY` mint/validate, namespace families |
+| `zylch/memory/scope.py` | `blob_visible` and the other scope predicates |
+| `zylch/memory/store.py` | The per-company store file, `memory_meta`, sweep gating |
+| `zylch/memory/join.py` | Joining a company memory (merge + rebind) |
+| `zylch/memory/blob_storage.py` | Blob CRUD (embeddings as BLOB in SQLite), compare-and-swap updates |
 | `zylch/memory/embeddings.py` | fastembed wrapper (ONNX, 384-dim) |
 | `zylch/memory/hybrid_search.py` | InMemoryVectorIndex + text search |
 | `zylch/memory/llm_merge.py` | LLM-assisted reconsolidation |

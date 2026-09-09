@@ -2,7 +2,7 @@
 
 **Stack**: Electron + React (app), Python 3.11+ (engine), SQLite
 **Entry point**: `engine/` (Python sidecar) and `app/` (Electron + React) — each has its own CLAUDE.md
-**Do not break**: The Firebase ID token is never persisted to disk; profiles are keyed by the immutable Firebase UID (`~/.zylch/profiles/<firebase_uid>/`), never by email
+**Do not break**: The Firebase ID token is never persisted to disk; profiles are keyed by the immutable Firebase UID (`~/.zylch/profiles/<firebase_uid>/`), never by email; the company memory key (`MEMORY_KEY`) is a capability — never logged, never in git, written only by `memory.join`
 
 <!-- orientation ends -->
 
@@ -24,7 +24,7 @@ for macOS and Windows.
 
 | Path | What | Owns |
 |------|------|------|
-| `engine/` | Python 3.11+ sidecar — IMAP / SMTP, WhatsApp (neonize), MrCall phone, blob memory, hybrid search, local SQLite store. | The `zylch` CLI binary, the on-disk profile directory, all business logic. |
+| `engine/` | Python 3.11+ sidecar — IMAP / SMTP, WhatsApp (neonize), MrCall phone, company memory (one SQLite store per memory key), hybrid search, local SQLite profile store. | The `zylch` CLI binary, the on-disk profile directory, all business logic. |
 | `app/` | Electron + React frontend that embeds the engine via JSON-RPC over stdio. Three views: chat, tasks, emails. | The desktop UI, packaging via `electron-builder`, GitHub release pipeline. |
 | `docs/` | Monorepo-wide docs: things that span engine ↔ app or describe the repo as a whole. | Cross-cutting decisions, release process, IPC contracts. |
 
@@ -66,6 +66,26 @@ The legacy CLI MrCall PKCE flow on `:19274` (`zylch init`) was **removed
 sign-in in the desktop UI (`tools/mrcall/starchat_firebase.py`); `zylch init`
 no longer runs any OAuth/PKCE code for MrCall (corrected 2026-07-14,
 doc-critic pass).
+
+## Shared company memory (since 2026-09)
+
+Memory is per company, not per account. A profile carries `MEMORY_KEY`
+(`secrets.token_urlsafe(16)`, 22 chars) in its `.env`, and every profile on
+the same engine host holding that key reads and writes one SQLite store,
+`~/.zylch/memory/<MEMORY_KEY>.db` (`MEMORY_DB_DIR` overrides the directory);
+the profile's `zylch.db` keeps mail, tasks, tokens and sync cursors.
+Company families (`user:<key>`, `facts:<key>`) are visible to every key
+holder; rule families (`template:<owner>`, `prefs:<owner>`) only to their
+owner; `owner_id` on a company row is provenance, not a wall — the one
+predicate is `engine/zylch/memory/scope.py:blob_visible`. The key is a
+capability: `memory.join` is its only write path (`settings.update` refuses
+it), a key the host does not know is refused rather than turned into an
+empty store, and duplicates left by a join are united by the sweep that
+runs after each update. Design:
+[`docs/briefs/2026-09-08-shared-company-memory-implementation.md`](docs/briefs/2026-09-08-shared-company-memory-implementation.md);
+engine detail in [`engine/docs/features/entity-memory-system.md`](engine/docs/features/entity-memory-system.md)
+("Scope"); host operations in [`docs/remote-backend.md`](docs/remote-backend.md)
+("Shared company memory on the host"); app surface in [`app/CLAUDE.md`](app/CLAUDE.md).
 
 ## LLM billing modes — BYOK vs MrCall credits (since 2026-05)
 

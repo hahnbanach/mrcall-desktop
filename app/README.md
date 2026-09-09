@@ -53,6 +53,10 @@ instead of the normal interface. Fill in:
 - **IMAP / SMTP host + port** — auto-filled from common providers
   (Gmail, Outlook, iCloud, Yahoo); override if needed.
 - **Telegram bot token** — optional.
+- **Memory key** — optional. Paste a colleague's key to join your
+  company's shared memory (the wizard echoes what you are joining before
+  it commits); leave it empty to start a new one — the key is then in
+  **Settings → Company memory**, with a copy button.
 
 On **Create profile and continue**, the wizard writes
 `~/.zylch/profiles/<email>/.env` (file perms 600, dir perms 700) and

@@ -26,6 +26,7 @@ The repo has three parallel doc trees, mirroring the three index files. Each tre
 - [`active-context-archive.md`](active-context-archive.md) — dated narrative pruned out of the living snapshot
 - [`ipc-contract.md`](ipc-contract.md) — the JSON-RPC method surface between `app/src/main/` and `engine/zylch/rpc/`
 - [`remote-backend.md`](remote-backend.md) — running the engine as a remote daemon (mrcalld, per-uid sockets, Caddy/TLS), operator guide + runbook
+- [`briefs/2026-09-08-shared-company-memory-implementation.md`](briefs/2026-09-08-shared-company-memory-implementation.md) — shared company memory: the key, per-family scope, one store per company, join; plan in [`execution-plans/2026-09-08-shared-company-memory-implementation.md`](execution-plans/2026-09-08-shared-company-memory-implementation.md), host operations in `remote-backend.md` ("Shared company memory on the host")
 - [`harness-backlog.md`](harness-backlog.md) — cross-cutting enforcement / tooling gaps
 - [`claude-agent-sdk-analysis.md`](claude-agent-sdk-analysis.md) — evaluation of the Claude Agent SDK against the engine's own agent loop
 - [`briefs/`](briefs/) — the what/why half of a work trace, paired with the execution plan of the same `YYYY-MM-DD-<slug>`
