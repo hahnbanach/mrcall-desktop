@@ -4,7 +4,7 @@
 Scope: the router for the documents under `docs/` — the ones that span
 `engine/` and `app/` or describe the repository as a whole. It navigates and
 nothing else: the repo's layout, roles and ownership live only in the index
-file ([`../CLAUDE.md`](../CLAUDE.md)), and cross-cutting volatile state only in
+file ([`../AGENTS.md`](../AGENTS.md)), and cross-cutting volatile state only in
 [`active-context.md`](active-context.md).
 <!-- doc-scope:end -->
 
@@ -12,8 +12,7 @@ This directory holds documentation that **spans the whole monorepo** —
 things that touch both `engine/` and `app/`, or describe the repository
 as a whole.
 
-The repo has three parallel doc trees, mirroring the three `CLAUDE.md`
-files. Each tree owns one concern; cross-cutting state lives here.
+The repo has three parallel doc trees, mirroring the three index files. Each tree owns one concern; cross-cutting state lives here.
 
 | If the doc is about… | It belongs in… |
 |----------------------|----------------|
@@ -29,8 +28,9 @@ files. Each tree owns one concern; cross-cutting state lives here.
 - [`remote-backend.md`](remote-backend.md) — running the engine as a remote daemon (mrcalld, per-uid sockets, Caddy/TLS), operator guide + runbook
 - [`harness-backlog.md`](harness-backlog.md) — cross-cutting enforcement / tooling gaps
 - [`claude-agent-sdk-analysis.md`](claude-agent-sdk-analysis.md) — evaluation of the Claude Agent SDK against the engine's own agent loop
+- [`briefs/`](briefs/) — the what/why half of a work trace, paired with the execution plan of the same `YYYY-MM-DD-<slug>`
 - [`execution-plans/`](execution-plans/) — workstreams that span both subsystems, one file each, `status:` in the frontmatter
-- `.doc-profile` — doc-harness configuration (leaf mode, `CLAUDE.md` as the single index)
+- `.doc-profile` — doc-harness configuration (leaf mode, `AGENTS.md` as the project index, `CLAUDE.md` as the managed harness entry point)
 
 The release pipeline (tag-driven matrix, signing, notarization,
 electron-builder quirks) is documented inside

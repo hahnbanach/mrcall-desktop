@@ -87,7 +87,7 @@ The "Top up" button uses `shell.openExternal('https://dashboard.mrcall.ai/plan')
 no business_id in the URL; the dashboard resolves the active business
 from the user's Firebase auth state. The Anthropic key lives server-side
 on `mrcall-agent`; the desktop never holds it. Cross-cutting context in
-[`../CLAUDE.md`](../CLAUDE.md), engine plumbing in
+[`../AGENTS.md`](../AGENTS.md), engine plumbing in
 [`../engine/CLAUDE.md`](../engine/CLAUDE.md).
 
 ## Naming and branding

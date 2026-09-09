@@ -114,7 +114,7 @@ Each subdir has its own dev flow — see [`engine/README.md`](engine/README.md)
 and [`app/README.md`](app/README.md).
 
 For the orientation of agents (Claude Code, etc.) landing in this
-repo, see [`CLAUDE.md`](CLAUDE.md).
+repo, see [`AGENTS.md`](AGENTS.md).
 
 ## License
 

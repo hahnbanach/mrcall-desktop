@@ -43,3 +43,9 @@ Thumbs.db
 .env.local
 .env.*
 !.env.example
+
+# ---------------------------------------------------------------------------
+# Per-session doc-harness scratch memory: one file per Claude Code session,
+# short-lived, never project knowledge.
+# ---------------------------------------------------------------------------
+docs/sessions/

@@ -24,7 +24,7 @@ The engine lives inside the `mrcall-desktop` monorepo next to `app/` (the
 Electron + React shell that embeds this sidecar via JSON-RPC over stdio) and
 the cross-cutting `../docs/`. When a change cuts across engine ↔ app (e.g. an
 RPC rename the UI relies on), check the sibling tree before merging — see
-[`../CLAUDE.md`](../CLAUDE.md). (The pre-merge `zylch`/`zylch-desktop` repos
+[`../AGENTS.md`](../AGENTS.md). (The pre-merge `zylch`/`zylch-desktop` repos
 were subtree-merged here and archived.)
 
 ## Memory discipline
