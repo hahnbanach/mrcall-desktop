@@ -171,8 +171,15 @@ async def setup_state(params: Dict[str, Any], notify: NotifyFn) -> Any:
           "has_trained": bool,
           "emails_count": int,
           "whatsapp_messages_count": int,
-          "agents_trained": [str, ...],   # e.g. ["memory_message", "task_email"]
+            "agents_trained": [str, ...],   # e.g. ["memory_message", "task_email"]
+            "emails_analyzed_count": int | None,
+            "emails_pending_analysis": int | None,
+            "last_email_analyzed_at": str | None,
         }
+
+    Analysis evidence counts this owner's mail rows with memory_processed_at.
+    It does not claim task processing or reply quality. None means the evidence
+    could not be read; old clients can ignore these additive fields.
     """
     from zylch.storage.storage import Storage
 
@@ -197,9 +204,7 @@ async def setup_state(params: Dict[str, Any], notify: NotifyFn) -> Any:
 
         with get_session() as session:
             wa_count = (
-                session.query(WhatsAppMessage)
-                .filter(WhatsAppMessage.owner_id == owner_id)
-                .count()
+                session.query(WhatsAppMessage).filter(WhatsAppMessage.owner_id == owner_id).count()
             )
     except Exception as e:
         logger.warning(f"[setup.state] whatsapp count failed: {e}")
@@ -219,12 +224,40 @@ async def setup_state(params: Dict[str, Any], notify: NotifyFn) -> Any:
     has_synced = emails_count > 0 or wa_count > 0
     has_trained = len(agents_trained) > 0
 
+    analyzed_count = None
+    pending_count = None
+    last_analyzed_at = None
+    try:
+        from sqlalchemy import func
+        from zylch.storage.database import get_session
+        from zylch.storage.models import Email
+
+        with get_session() as session:
+            total, analyzed, last = (
+                session.query(
+                    func.count(Email.id),
+                    func.count(Email.memory_processed_at),
+                    func.max(Email.memory_processed_at),
+                )
+                .filter(Email.owner_id == owner_id)
+                .one()
+            )
+        analyzed_count = int(analyzed)
+        pending_count = int(total) - analyzed_count
+        last_analyzed_at = last.isoformat() if last is not None else None
+    except Exception:
+        # Unavailable evidence is not a mailbox with zero pending work.
+        logger.warning("[setup.state] mailbox analysis evidence unavailable")
+
     state = {
         "has_synced": bool(has_synced),
         "has_trained": bool(has_trained),
         "emails_count": int(emails_count),
         "whatsapp_messages_count": int(wa_count),
         "agents_trained": agents_trained,
+        "emails_analyzed_count": analyzed_count,
+        "emails_pending_analysis": pending_count,
+        "last_email_analyzed_at": last_analyzed_at,
     }
     logger.debug(f"[rpc] setup.state -> {state}")
     return state

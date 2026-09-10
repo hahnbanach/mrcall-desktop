@@ -25,6 +25,7 @@ import {
 } from './profileFS'
 import { readLastProfile, writeLastProfile } from './lastProfile'
 import { writeCsDescriptor } from './csDescriptor'
+import { readWorkspaceStatus, type WorkspaceStatus } from './workspaceStatus'
 import {
   getProvisionStatus,
   provisionProfile,
@@ -1310,6 +1311,17 @@ function registerIpc(): void {
       return { ok: true }
     }
   )
+
+  // Metadata only: the renderer never receives the descriptor's credentials.
+  ipcMain.handle('workspace:status', (event): WorkspaceStatus => {
+    const win = BrowserWindow.fromWebContents(event.sender)
+    const entry = win ? windowEntries.get(win.id) : undefined
+    const token = win ? windowTokens.get(win.id) : undefined
+    if (!entry || !token || readProfileEnvValue(entry.profile, 'OWNER_ID') !== token.uid) {
+      return { available: false, reason: 'Sign in to this profile before creating a workspace.' }
+    }
+    return readWorkspaceStatus(token.uid)
+  })
 
   // Per-installation backend location (Settings → "Backend location").
   // Read at window-creation time to choose the transport. Stored

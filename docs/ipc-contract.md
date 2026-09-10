@@ -1020,15 +1020,41 @@ Returns:
   "has_trained": true,                   // ≥1 agent_prompts row exists
   "emails_count": 1234,
   "whatsapp_messages_count": 0,
-  "agents_trained": ["memory_message", "task_email", "emailer"]
+  "agents_trained": ["memory_message", "task_email", "emailer"],
+  "emails_analyzed_count": 1200,         // this owner's rows with memory_processed_at
+  "emails_pending_analysis": 34,         // this owner's rows without that marker
+  "last_email_analyzed_at": "2026-09-10T08:00:00"
 }
 ```
 
 Per-profile (driven by the active SQLite DB), so a brand-new profile
 starts gated even if a sibling profile on the same machine is fully
-set up. Cheap (one COUNT + three indexed lookups) — the renderer
+set up. Uses aggregate counts and prompt lookups — the renderer
 refetches on mount, after every Sync/Train/Update completion, and on
 `engine.ready` revival.
+
+The three analysis fields are additive. Counts are `null` when that evidence
+cannot be queried; an empty mailbox returns zero counts and a null timestamp.
+Older engines omit the fields. Consumers must treat missing/null evidence as
+unverified, not successful processing. These markers concern mailbox memory
+processing only, not task-detection completion or reply quality; a colleague's
+shared-memory rows do not establish processing of this profile's own mailbox.
+
+### Desktop-only `workspace:status`
+
+`window.zylch.workspace.status()` invokes Electron IPC, not engine JSON-RPC.
+It accepts no renderer-selected profile. Main resolves the requesting window's
+bound profile and checks its `OWNER_ID` against the cached sign-in UID, then
+reads the local version-1 descriptor for that UID.
+
+Success returns `{available: true, uid, email, engineWsUrl, descriptorPath,
+command}`; failure returns `{available: false, reason}`. The command is
+`cs init --descriptor PATH`, quoted for POSIX shells on macOS/Linux and
+PowerShell on Windows. No descriptor contents, refresh tokens, API keys, or
+memory keys cross this IPC. Missing/malformed descriptors, wrong UIDs, and
+endpoints that differ from the selected backend are refused. The operation
+does not write a descriptor or test the remote engine; the Setup view verifies
+remote identity and preparation separately.
 
 ### `mrcall.list_my_businesses(offset?, limit?)`
 

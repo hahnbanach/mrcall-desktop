@@ -22,6 +22,8 @@ The repo has three parallel doc trees, mirroring the three index files. Each tre
 
 ## Index
 
+- [Desktop setup to operator workspace](briefs/2026-09-10-desktop-to-operator-onboarding.md) — proposed end-to-end setup journey, current evidence, and future delegation boundary.
+- [Chat approval isolation](briefs/2026-09-10-chat-approval-isolation.md) — scoped existing cross-client approval defect and acceptance criteria.
 - [`active-context.md`](active-context.md) — cross-cutting living snapshot: `State now` / `Unresolved` / `Next`, nothing else
 - [`active-context-archive.md`](active-context-archive.md) — dated narrative pruned out of the living snapshot
 - [`ipc-contract.md`](ipc-contract.md) — the JSON-RPC method surface between `app/src/main/` and `engine/zylch/rpc/`
@@ -44,3 +46,5 @@ anywhere in the repo):
 - [`../engine/docs/ARCHITECTURE.md`](../engine/docs/ARCHITECTURE.md) — engine system map
 - [`../engine/docs/CONVENTIONS.md`](../engine/docs/CONVENTIONS.md) — engine code style, logging, security patterns
 - [`../app/CLAUDE.md`](../app/CLAUDE.md) — app-side index (long-form until `app/docs/` fills in)
+
+- [Desktop-to-operator source acceptance guide](operator-setup.md) — current UX, source installation and verification limits.

@@ -92,6 +92,12 @@ async function classifyErrorResponse(
         code: 'session_expired',
         message: 'Your session has expired — please sign in again.'
       }
+    case 403:
+      return {
+        ok: false,
+        code: 'company_access_required',
+        message: 'This account is not authorized for hosted activation. Ask MrCall support to check your company access, then retry.'
+      }
     case 409:
       return {
         ok: false,

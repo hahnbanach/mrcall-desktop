@@ -360,7 +360,17 @@ export interface ZylchAPI {
       emails_count: number
       whatsapp_messages_count: number
       agents_trained: string[]
+      emails_analyzed_count?: number | null
+      emails_pending_analysis?: number | null
+      last_email_analyzed_at?: string | null
     }>
+  }
+  /** Redacted same-machine handoff; never contains descriptor credentials. */
+  workspace: {
+    status: () => Promise<
+      | { available: true; uid: string; email: string; engineWsUrl: string; descriptorPath: string; command: string }
+      | { available: false; reason: string }
+    >
   }
   agents: {
     /** Runs the 3 personalised-agent trainers serially (memory_message —

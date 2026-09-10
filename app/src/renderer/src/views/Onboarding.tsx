@@ -16,7 +16,7 @@
  *                  sidecar bound to the new profile.
  *   2. 'connect' — Google Calendar OAuth (now that the sidecar is up
  *                  and the engine can run the PKCE flow). Skip with
- *                  "Continue to app" if the user doesn't want it now.
+ *                  "Continue to Setup" if the user doesn't want it now.
  */
 import { useEffect, useMemo, useState } from 'react'
 import { errorMessage } from '../lib/errors'
@@ -276,7 +276,7 @@ export default function Onboarding({ onReady }: OnboardingProps = {}): JSX.Eleme
             <h1 className="text-2xl font-semibold text-brand-black">Welcome to MrCall Desktop</h1>
             <p className="text-sm text-brand-grey-80 mt-1">
               {step === 'form'
-                ? 'Set up your profile. All data stays on this machine.'
+                ? 'Create your profile, then connect and prepare your engine.'
                 : step === 'memory'
                   ? 'Company memory — yours, or one you join.'
                   : 'Optional integrations — connect now or later from Settings.'}
@@ -308,9 +308,7 @@ export default function Onboarding({ onReady }: OnboardingProps = {}): JSX.Eleme
         {step === 'form' ? (
           <div className="bg-white border border-brand-mid-grey rounded-lg shadow-sm p-5">
             <p className="text-xs text-brand-grey-80 mb-4">
-              Everything here is optional — you're already signed in, so MrCall and Calendar work
-              right away. Add email only if you want inbox sync; the rest can be set later in
-              Settings.
+              Start with your mailbox details, or add them later in Settings. Calendar needs its own connection. Setup will guide you through connecting your remote engine and workspace.
             </p>
             <ProfileFormFields
               values={values}
@@ -453,7 +451,7 @@ export default function Onboarding({ onReady }: OnboardingProps = {}): JSX.Eleme
                 onClick={handleContinue}
                 className="px-4 py-2 text-sm bg-brand-black text-white rounded"
               >
-                Continue to app
+                Continue to Setup
               </button>
             </div>
           </div>

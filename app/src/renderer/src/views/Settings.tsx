@@ -53,33 +53,60 @@ export default function Settings(): JSX.Element {
   }>({ kind: 'idle', text: '' })
   const [error, setError] = useState<string | null>(null)
 
-  // Load schema + values once on mount.
+  const [contextStale, setContextStale] = useState(false)
+  const dirtyRef = useRef(false)
+  const savingRef = useRef(false)
+  const loadGeneration = useRef(0)
+  const loadedBackend = useRef<string | null>(null)
+  const reloadRef = useRef<() => void>(() => {})
+
+  // A settings snapshot belongs to one transport. Reconnection invalidates it;
+  // preserve drafts for inspection, but require a discard before saving again.
   useEffect(() => {
-    let cancelled = false
-    ;(async () => {
+    let mounted = true
+    const load = async () => {
+      const request = ++loadGeneration.current
+      setLoading(true)
       try {
+        const backend = await window.zylch.settings.getBackendLocation()
         const [schema, current] = await Promise.all([
-          window.zylch.settings.schema(),
-          window.zylch.settings.get()
+          window.zylch.settings.schema(), window.zylch.settings.get()
         ])
-        if (cancelled) return
+        if (!mounted || request !== loadGeneration.current) return
+        loadedBackend.current = JSON.stringify(backend)
         setFields((schema.fields || []).filter((f) => !HIDDEN_SETTINGS_KEYS.has(f.key)))
         setLoaded(current.values || {})
-      } catch (e: unknown) {
-        if (!cancelled) {
-          if (isProfileLockedError(e)) {
-            setError(null)
-          } else {
-            setError(errorMessage(e))
-          }
+        setContextStale(false)
+        setError(null)
+      } catch {
+        if (mounted && request === loadGeneration.current) {
+          setContextStale(true)
+          setError('Could not load engine settings. Check the backend connection below, then reload.')
         }
       } finally {
-        if (!cancelled) setLoading(false)
+        if (mounted && request === loadGeneration.current) setLoading(false)
       }
-    })()
-    return () => {
-      cancelled = true
     }
+    reloadRef.current = () => {
+      setEdits({})
+      dirtyRef.current = false
+      void load()
+    }
+    void load()
+    const off = window.zylch.onSidecarStatus(event => {
+      ++loadGeneration.current
+      if (!event.alive || !event.ready) {
+        setContextStale(true)
+        setLoading(false)
+        return
+      }
+      if (savingRef.current) return
+      if (dirtyRef.current) {
+        setContextStale(true)
+        setLoading(false)
+      } else void load()
+    })
+    return () => { mounted = false; ++loadGeneration.current; off() }
   }, [])
 
   // Group fields for rendering.
@@ -109,13 +136,15 @@ export default function Settings(): JSX.Element {
   }, [edits, loaded, fields])
 
   const hasChanges = Object.keys(changes).length > 0
+  dirtyRef.current = hasChanges
+  savingRef.current = saving
 
   const handleChange = (key: string, value: string) => {
     setEdits((prev) => ({ ...prev, [key]: value }))
   }
 
   const handleSave = async () => {
-    if (!hasChanges) return
+    if (!hasChanges || contextStale || loading) return
     setSaving(true)
     setError(null)
     setStatus({ kind: 'progress', text: 'Saving…' })
@@ -134,6 +163,12 @@ export default function Settings(): JSX.Element {
       }
     }
     try {
+      const backend = await window.zylch.settings.getBackendLocation()
+      if (JSON.stringify(backend) !== loadedBackend.current) {
+        setContextStale(true)
+        setStatus({ kind: 'error', text: 'Engine changed. Reload settings before saving.' })
+        return
+      }
       const res = await window.zylch.settings.update(changes)
       if (!res.ok) {
         throw new Error('settings.update returned ok=false')
@@ -151,6 +186,7 @@ export default function Settings(): JSX.Element {
         const current = await window.zylch.settings.get()
         setLoaded(current.values || {})
         setEdits({})
+        setContextStale(false)
       } catch {
         // Non-fatal — the user can refresh.
       }
@@ -178,14 +214,6 @@ export default function Settings(): JSX.Element {
     setError(null)
   }
 
-  if (loading) {
-    return (
-      <div className="p-6 max-w-3xl mx-auto">
-        <h1 className="text-2xl font-semibold mb-4">Settings</h1>
-        <div className="text-brand-grey-80">Loading…</div>
-      </div>
-    )
-  }
 
   return (
     <div className="p-6 max-w-3xl mx-auto pb-24">
@@ -196,6 +224,11 @@ export default function Settings(): JSX.Element {
         keep the stored value.
       </p>
 
+      {loading && <p role="status" className="mb-4 text-sm">Loading engine settings… Backend connection controls remain available below.</p>}
+      {contextStale && <div role="alert" className="mb-4 p-3 border rounded text-sm">
+        The engine connection changed or settings could not be verified. Unsaved edits remain visible, but cannot be saved to this connection.
+        <button className="block mt-2 underline" onClick={() => reloadRef.current()}>{hasChanges ? 'Discard edits and reload settings' : 'Reload settings'}</button>
+      </div>}
       {error && (
         <div className="mb-4 p-3 bg-brand-danger/10 border border-brand-danger/30 text-brand-danger rounded whitespace-pre-wrap">
           {error}
@@ -220,7 +253,7 @@ export default function Settings(): JSX.Element {
         <h2 className="text-sm font-semibold uppercase text-brand-grey-80 mb-3 border-b pb-1">
           Backend location
         </h2>
-        <BackendLocationCard />
+        <BackendLocationCard key={loadedBackend.current} />
       </section>
 
       <section className="mb-6">
@@ -284,14 +317,14 @@ export default function Settings(): JSX.Element {
       <div className="fixed bottom-0 left-0 right-0 border-t bg-white/95 backdrop-blur px-6 py-3 flex items-center gap-3">
         <button
           onClick={handleSave}
-          disabled={!hasChanges || saving}
+          disabled={!hasChanges || saving || contextStale || loading}
           className="px-4 py-2 bg-brand-black text-white rounded disabled:bg-brand-mid-grey"
         >
           {saving ? 'Saving…' : `Save${hasChanges ? ` (${Object.keys(changes).length})` : ''}`}
         </button>
         <button
           onClick={handleDiscard}
-          disabled={!hasChanges || saving}
+          disabled={!hasChanges || saving || contextStale || loading}
           className="px-4 py-2 border rounded text-brand-grey-80 disabled:text-brand-mid-grey"
         >
           Discard changes

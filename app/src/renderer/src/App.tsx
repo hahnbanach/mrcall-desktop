@@ -3,6 +3,8 @@ import { signOut, type User } from 'firebase/auth'
 import Tasks from './views/Tasks'
 import Workspace from './views/Workspace'
 import Update from './views/Update'
+import Setup from './views/Setup'
+import { needsEngineSplash } from './lib/setupReadiness'
 import Logs from './views/Logs'
 import Settings from './views/Settings'
 import EngineReadySplash from './components/EngineReadySplash'
@@ -32,6 +34,7 @@ import mrcallWordmark from './assets/logos/mrcall-wordmark.png'
 import './types'
 
 type View =
+  | 'setup'
   | 'tasks'
   | 'workspace'
   | 'email'
@@ -481,12 +484,8 @@ function ProfilesDropdown({
 }
 
 function AppInner(): JSX.Element {
-  // Land on Update by default — that's where Sync / Train / Update live
-  // (the three-step onboarding the user needs to complete after signup
-  // before Tasks / Chat have anything to show). Manually clicking a
-  // sidebar item overrides for the rest of the session; the next launch
-  // returns here again.
-  const [view, setView] = useState<View>('update')
+  // Setup connects configuration, preparation, and the operator workspace.
+  const [view, setView] = useState<View>('setup')
   const [profileEmail, setProfileEmail] = useState<string>('')
   const [pickerOpen, setPickerOpen] = useState(false)
   const [profilesRefreshKey] = useState(0)
@@ -659,7 +658,7 @@ function AppInner(): JSX.Element {
     }
   }, [])
 
-  const showSplash = !engineReady && !bypassedSplash
+  const showSplash = needsEngineSplash(view, engineReady, bypassedSplash)
 
   return (
     <div className="flex flex-col h-full">
@@ -695,6 +694,9 @@ function AppInner(): JSX.Element {
             user doesn't come back to a view that's "Loading…" or has
             lost its progress. */}
         <main className="flex-1 overflow-hidden relative">
+          <div className="absolute inset-0 overflow-auto" style={{ display: view === 'setup' ? 'block' : 'none' }}>
+            <Setup active={view === 'setup'} onNavigate={setView} />
+          </div>
           <div
             className="absolute inset-0 overflow-auto"
             style={{ display: view === 'tasks' ? 'block' : 'none' }}
@@ -802,6 +804,7 @@ function Sidebar({
   }
 
   const primary: NavItem[] = [
+    { id: 'setup', label: 'Setup', icon: 'folder' },
     { id: 'tasks', label: 'Task', icon: 'tasks' },
     { id: 'workspace', label: 'Chat', icon: 'chat' },
     {
@@ -823,7 +826,7 @@ function Sidebar({
   ]
 
   const secondary: NavItem[] = [
-    { id: 'update', label: 'Update', icon: 'refresh' },
+    { id: 'update', label: 'Prepare data', icon: 'refresh' },
     { id: 'logs', label: 'Logs', icon: 'terminal', badge: unreadErrors },
     { id: 'settings', label: 'Settings', icon: 'settings' }
   ]

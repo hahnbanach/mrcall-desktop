@@ -178,6 +178,8 @@ export default function Update(): JSX.Element {
   // Setup snapshot driving the gating between the three cards. ``null``
   // until the first fetch resolves — while null we leave the buttons
   // gated (safer than enabling everything and then disabling).
+  const setupGeneration = useRef(0)
+  const [setupError, setSetupError] = useState<string | null>(null)
   const [setup, setSetup] = useState<SetupState | null>(null)
 
   // Track sidecar liveness so we can disable every action when the
@@ -219,15 +221,20 @@ export default function Update(): JSX.Element {
   // and on sidecar revival (so a profile that came back from a crash
   // re-checks its state).
   const refreshSetup = async (): Promise<void> => {
+    const request = ++setupGeneration.current
     try {
       const s = await window.zylch.setup.state()
+      if (request !== setupGeneration.current) return
       setSetup(s)
+      setSetupError(null)
     } catch (e) {
       // setup.state can fail on a freshly-spawned sidecar that's still
       // warming up; let the caller decide whether to retry. We don't
       // surface the error inline because the cards still render in a
       // sensible (gated) state without a snapshot.
-      console.warn('[Update] setup.state failed:', e)
+      if (request !== setupGeneration.current) return
+      setSetup(null)
+      setSetupError('Could not check preparation. Check your engine connection in Settings, then retry.')
     }
   }
 
@@ -237,6 +244,7 @@ export default function Update(): JSX.Element {
 
   useEffect(() => {
     const off = window.zylch.onSidecarStatus((s: SidecarStatusEvent) => {
+      if (!s.alive || !s.ready) { setupGeneration.current++; setSetup(null) }
       const locked = !s.alive && s.code === 'profile_locked'
       setSidecarLocked(locked)
       if (s.alive && s.ready) {
@@ -250,6 +258,7 @@ export default function Update(): JSX.Element {
 
   useEffect(() => {
     return () => {
+      setupGeneration.current++
       unsubRef.current?.()
       trainUnsubRef.current?.()
       syncUnsubRef.current?.()
@@ -399,6 +408,7 @@ export default function Update(): JSX.Element {
 
   return (
     <div className="p-6 max-w-3xl mx-auto">
+      {setupError && <div role="alert" className="mb-4 p-3 border rounded text-sm">{setupError} <button className="underline" onClick={() => void refreshSetup()}>Retry checks</button></div>}
       {/* Onboarding pointer — shown until the user has set everything up.
           Disappears once both gates are open. */}
       {setup && (!setup.has_synced || !setup.has_trained) && (
@@ -421,7 +431,7 @@ export default function Update(): JSX.Element {
       {/* ───── Sync card ─────────────────────────────────────── */}
       <h1 className="text-2xl font-semibold mb-2">Sync</h1>
       <p className="text-sm text-brand-grey-80 mb-3">
-        Fetch new emails (IMAP) and WhatsApp messages into the local database. No AI
+        Fetch new emails (IMAP) and WhatsApp messages into the engine database. No AI
         runs here. Always available.
       </p>
       <button
@@ -576,7 +586,7 @@ export default function Update(): JSX.Element {
       )}
       {running && (
         <div className="text-xs text-brand-grey-80 mt-1">
-          Safe to close — progress is saved, will resume from where it left off.
+          Keep this window open to follow this run. Completed processing is saved; after a disconnect, check status before starting again.
         </div>
       )}
 
