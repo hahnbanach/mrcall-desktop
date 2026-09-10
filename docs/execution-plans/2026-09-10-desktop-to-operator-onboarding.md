@@ -205,8 +205,11 @@ normal wizard installation/login offers. It preserves the
 existing development-kernel banner is cosmetic stale wording; no installer or
 app-code change accompanies this documentation transition.
 
-Guide preparation is complete; kernel publication and FULL clone verification
-are owned by the kernel release procedure. The tag-install instructions become
-available when v0.43.0 is published. This entry does not itself claim publication
-or a successful public bootstrap. Earlier source-acceptance and Desktop-release
-observations above remain historical evidence.
+The public kernel v0.43.0 tag is published at `ead47a6`. Both maintained
+operational clones install it and reconstruct independently from their frozen
+locks; their automated FULL comparison was approved without material regression.
+The documented `uvx --from` bootstrap resolves the public tag and exposes
+`init --descriptor`. A fresh real-account wizard was not run in this release
+check. Earlier source-acceptance and Desktop-release observations above remain
+historical evidence. The kernel delivery plan records detailed verification
+limits and existing external-harness drift.
