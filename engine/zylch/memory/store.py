@@ -174,6 +174,9 @@ def prepare_store(engine: Engine, company_key: str, *, created_by: Optional[str]
 
     def _meta(_engine: Engine) -> None:
         ensure_meta_row(_engine, company_key, created_by=created_by)
+        from zylch.services.project_store import ensure_space
+
+        ensure_space(_engine)
 
     from zylch.storage.step_identifiers_company_unique import STEP as identifiers_step
 

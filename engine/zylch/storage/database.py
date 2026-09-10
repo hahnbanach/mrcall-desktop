@@ -213,6 +213,9 @@ def get_session() -> Generator[Session, None, None]:
 # MetaData would otherwise create every table in every file, and the
 # mis-binding would be silent instead of an error.
 MEMORY_TABLE_NAMES = (
+    "project_space",
+    "project_documents",
+    "project_revisions",
     "blobs",
     "blob_sentences",
     "email_blobs",

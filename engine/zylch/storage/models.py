@@ -946,3 +946,30 @@ class WorkerState(DictMixin, Base):
     key = Column(Text, primary_key=True)
     value = Column(Text)
     updated_at = Column(DateTime, default=_utcnow, onupdate=_utcnow)
+
+
+class ProjectSpace(Base):
+    """Opaque identity of the shared written-document store."""
+
+    __tablename__ = "project_space"
+    id = Column(Integer, primary_key=True)
+    space_id = Column(String(36), nullable=False, unique=True)
+
+
+class ProjectDocument(Base):
+    __tablename__ = "project_documents"
+    project = Column(String(100), primary_key=True)
+    path = Column(String(512), primary_key=True)
+    revision = Column(Integer, nullable=False)
+
+
+class ProjectRevision(Base):
+    __tablename__ = "project_revisions"
+    project = Column(String(100), primary_key=True)
+    path = Column(String(512), primary_key=True)
+    revision = Column(Integer, primary_key=True)
+    content = Column(LargeBinary, nullable=False)
+    sha256 = Column(String(64), nullable=False)
+    size = Column(Integer, nullable=False)
+    author_uid = Column(String, nullable=False)
+    created_at = Column(String, nullable=False)

@@ -125,6 +125,12 @@ def _redact_params(method: Optional[str], params: Dict[str, Any]) -> Dict[str, A
     extra = _SECRET_PARAM_KEYS_BY_METHOD.get(method or "", set())
     allowed = _NON_SECRET_PARAM_KEYS_BY_METHOD.get(method or "", set())
 
+    if method in {"projects.write", "projects.create"}:
+        params = dict(params)
+        for payload in ("content_base64", "files"):
+            if payload in params:
+                params[payload] = "<redacted project document>"
+
     def redact(value: Any, key: Optional[str] = None) -> Any:
         if key is not None and _is_secret_key(key, extra) and value:
             return f"<redacted len={len(value)}>" if isinstance(value, str) else "<redacted>"
@@ -218,6 +224,15 @@ async def dispatch_raw(raw: str, notify: NotifyFn) -> Optional[Dict[str, Any]]:
     try:
         result = await handler(params, notify)
     except Exception as e:
+        # Project storage exceptions may include SQL parameters (document bytes).
+        # Only our dedicated safe exception may cross this boundary verbatim.
+        from zylch.services.project_store import ProjectError
+
+        if method.startswith("projects.") or method == "memory.join":
+            code = e.code if isinstance(e, ProjectError) else INTERNAL_ERROR
+            message = str(e) if isinstance(e, ProjectError) else "Project storage operation failed"
+            logger.warning("[rpc] project operation failed code=%s", code)
+            return None if is_notification else _error(req_id, code, message)
         # Handlers may raise errors with a ``.code`` attribute to map
         # cleanly to JSON-RPC application error codes (e.g. -32000 for
         # "solve already in progress", -32010 for "no signed-in

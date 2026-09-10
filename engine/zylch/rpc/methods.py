@@ -2382,3 +2382,12 @@ for _name, _fn in _USAGE_METHODS.items():
     if _name in METHODS:
         raise RuntimeError(f"Duplicate RPC method name: {_name}")
     METHODS[_name] = _fn
+
+
+# Written company project memory (separate from generated blobs).
+from zylch.rpc.projects import METHODS as _PROJECT_METHODS  # noqa: E402
+
+for _name, _fn in _PROJECT_METHODS.items():
+    if _name in METHODS:
+        raise RuntimeError(f"duplicate RPC method registration: {_name}")
+    METHODS[_name] = _fn

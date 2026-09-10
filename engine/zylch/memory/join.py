@@ -106,6 +106,11 @@ def merge_store_into(
         "aliases": 0,
     }
     with src.begin() as s, dst.begin() as d:
+        # Lock before history preflight; all document/blob copies share this transaction.
+        d.exec_driver_sql("UPDATE memory_meta SET mutation_seq = mutation_seq WHERE id = 1")
+        from zylch.services.project_join import merge_projects
+
+        counts.update(merge_projects(s, d))
         # existing facts in the destination, by (category, key)
         dst_facts = {}
         for bid, content in d.exec_driver_sql(
