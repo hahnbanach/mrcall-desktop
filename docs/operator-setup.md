@@ -32,10 +32,15 @@ Opening Setup does not start paid preparation work.
 
 ## Source workspaces
 
-Both repositories use branch `feat/operator-setup-ux`:
+Use your local `mrcall-desktop` and `cs-kernel` checkouts on the Mac (or Linux).
+Their directory names and locations do not matter. In each repository, select
+and update the development branch:
 
-- Desktop: `/home/mal/worktrees/mrcall-desktop-operator-setup`
-- Kernel: `/home/mal/worktrees/cs-kernel-operator-setup`
+```bash
+git fetch origin
+git switch feat/operator-setup-ux
+git pull --ff-only
+```
 
 The changes are unreleased. The generated `requirements.txt`
 still pins the existing release, which lacks the new commands. For this
@@ -44,9 +49,10 @@ pinned-install offer. No existing operational clone needs to change.
 
 ### Desktop
 
-From the Desktop worktree's `app/` directory:
+Open a terminal in the root of your local `mrcall-desktop` checkout:
 
 ```bash
+cd app
 npm ci
 npm run typecheck
 npm run build
@@ -60,24 +66,42 @@ engine dependencies and the existing `ZYLCH_BINARY` configuration described in
 [app guidance](../app/CLAUDE.md). The setup-evidence fields require this engine
 source; an older remote engine correctly reports unverified evidence.
 
-### Kernel (POSIX development example)
+### Kernel (macOS or Linux)
 
-Install `uv` through your normal development environment first. Bootstrap the
-new CLI in its own environment:
+Install `uv` through your normal development environment first. Open a second
+terminal in the root of your local `cs-kernel` checkout, on the branch selected
+above. These variables capture its actual path and create a temporary CLI
+environment; keep using this terminal for the remaining commands.
 
 ```bash
-uv venv /tmp/mrcall-operator-cli
-uv pip install --python /tmp/mrcall-operator-cli/bin/python /home/mal/worktrees/cs-kernel-operator-setup
-/tmp/mrcall-operator-cli/bin/cs init --descriptor '/absolute/path/from/Desktop/cs-descriptor.json'
+CS_KERNEL_SOURCE="$(pwd -P)"
+CS_SETUP_ENV="$(mktemp -d "${TMPDIR:-/tmp}/mrcall-operator-cli.XXXXXX")"
+uv venv "$CS_SETUP_ENV"
+uv pip install --python "$CS_SETUP_ENV/bin/python" "$CS_KERNEL_SOURCE"
 ```
 
-Use the actual descriptor path shown by Desktop. Decline the wizard's install
-prompt for this unreleased development pass. In the newly generated workspace:
+Set `CS_DESCRIPTOR` to the descriptor path displayed by Desktop (the path from
+its **Copy workspace command**, not the entire command). Replace this placeholder:
+
+```bash
+CS_DESCRIPTOR='/paste/the/path/shown/by/Desktop/cs-descriptor.json'
+```
+
+Create the operator workspace alongside the source checkout. The wizard chooses
+its directory name from your company slug:
+
+```bash
+cd ..
+"$CS_SETUP_ENV/bin/cs" init --descriptor "$CS_DESCRIPTOR"
+```
+
+**Decline the wizard's install prompt** for this unreleased development pass.
+Then `cd` into the newly created directory shown by the wizard and run:
 
 ```bash
 uv venv .venv
-uv pip install --python .venv/bin/python /home/mal/worktrees/cs-kernel-operator-setup
-.venv/bin/cs login --descriptor '/absolute/path/from/Desktop/cs-descriptor.json'
+uv pip install --python .venv/bin/python "$CS_KERNEL_SOURCE"
+.venv/bin/cs login --descriptor "$CS_DESCRIPTOR"
 .venv/bin/cs setup
 .venv/bin/cs setup --json
 source .venv/bin/activate
@@ -108,7 +132,7 @@ node scripts/test-settings-recovery.mjs
 Set `MRCALL_PLAYWRIGHT_MODULE` to an externally installed Playwright module if
 needed and `MRCALL_BROWSER_BINARY` to a Chromium executable if not managed by
 Playwright. `MRCALL_SETUP_ARTIFACTS` optionally chooses Setup screenshot output.
-Current screenshots are in `/tmp/mrcall-operator-setup-artifacts/`.
+The browser scripts print the screenshot directory on your own machine.
 
 These checks do not prove live Firebase refresh, production company activation,
 mailbox credentials, public-tag installation, model billing, or packaged
