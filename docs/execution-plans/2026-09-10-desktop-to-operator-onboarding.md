@@ -7,7 +7,8 @@ status: completed
 <!-- doc-scope:start -->
 Scope: reviewed milestone execution and evidence for the two-worktree delivery;
 product intent is in the paired brief, and shipped behavior belongs in the
-setup guide and IPC contract. No deployment or live-account work is included.
+setup guide and IPC contract. The final section records the separately authorized
+Desktop production rollout; kernel release and clone upgrades are excluded.
 <!-- doc-scope:end -->
 
 ## Brief gate and baselines
@@ -172,4 +173,25 @@ installer workflow and confirm release asset and signing/notarization outcome.
 Rollback keeps v0.1.46 available; revert the additive source change on main and
 re-run the updater if runtime verification fails. Never force-rewrite main.
 
-Rollout status: preparing; no completion claim until runtime and release checks.
+Rollout status: completed — source, hosted engine and macOS arm64 release verified.
+Main and v0.1.47 target `6f0b8f8`. The existing updater completed without pruning;
+all seven expected profile services, provisiond and Caddy are active. Authenticated
+setup.state through the existing operator client returns the new analysis fields
+and known counts (the same call lacked those fields before rollout). No paid
+model call or operational clone upgrade was performed.
+
+Release-candidate checks: 40 targeted engine tests pass, including dispatch,
+readiness and packaged-memory identifier/sweep/split-store coverage. TypeScript
+and actual Setup browser checks pass, including the development-guide link.
+Installer workflow: https://github.com/hahnbanach/mrcall-desktop/actions/runs/34486691290.
+Production updater log: `/tmp/mrcall-0.1.47-deploy.log`.
+
+Installer workflow completed successfully. The Apple credential probe succeeded;
+installer logs confirm Developer ID signing and notarization submission with no
+skip, followed by successful build completion. The stable, non-draft v0.1.47
+release contains `MrCall.Desktop-0.1.47-arm64.dmg` (236,930,949 bytes); the public
+download responds HTTP 200. No Windows/Intel assets are claimed. Release notes
+explicitly retain the development-kernel installation prerequisite.
+
+Release: https://github.com/hahnbanach/mrcall-desktop/releases/tag/v0.1.47.
+The production identity read also confirms signed_in=true after deployment.

@@ -19,7 +19,7 @@ what is *current*, targeting ≤ ~120 lines.
 
 ## State now
 
-The source worktree adds the V1 Desktop → engine → operator setup journey.
+Desktop includes the V1 Desktop → engine → operator setup journey.
 Desktop opens Setup by default: configuration, authenticated remote connection,
 mailbox preparation, then a copyable descriptor-based workspace command.
 The engine owns mailbox processing and company memory; the cs-kernel workspace
@@ -42,10 +42,16 @@ Settings remains reachable when the engine is down. Reconnection invalidates
 stale snapshots; unsaved settings must be explicitly discarded before loading
 a different backend. Preparation actions remain user-triggered.
 
-The development work is on `feat/operator-setup-ux` in two isolated worktrees.
-No release, deployment, live-account action or operational clone upgrade is part
-of this delivery. The existing released kernel pin does not include the new
-commands; development validation requires an explicit source install.
+Desktop changes are on main and tagged `v0.1.47` at `6f0b8f8`. The hosted engine
+runs that revision: seven profile services, provisiond and Caddy are active;
+authenticated `setup.state` returns the new evidence fields. The CTO has accepted
+the macOS Desktop test. The macOS Apple Silicon installer is published as
+[v0.1.47](https://github.com/hahnbanach/mrcall-desktop/releases/tag/v0.1.47),
+Developer ID signed and Apple-notarized.
+
+The kernel changes remain on `feat/operator-setup-ux`; no kernel release or
+operational clone upgrade is included. Its released pin lacks the new commands,
+so workspace setup requires the linked development-source installation.
 See [operator setup](operator-setup.md), the
 [brief](briefs/2026-09-10-desktop-to-operator-onboarding.md), and the
 [delivery plan](execution-plans/2026-09-10-desktop-to-operator-onboarding.md).
@@ -54,14 +60,15 @@ Existing source supports local stdio and Firebase-authenticated remote engines,
 shared company memory through `memory.join`, headless descriptors, provisioning,
 BYOK and MrCall-credit LLM routing. Contracts live in [IPC](ipc-contract.md),
 [remote backend](remote-backend.md), and the per-tree documentation.
-Prior dated deployment and package observations are historical in the archive;
-this session does not establish the current production revision.
+Prior deployment/package observations remain historical in the archive;
+the production observation above is from the 2026-09-10 rollout.
 
 ## Unresolved
 
-- Packaged macOS/Windows and live Firebase/provisioning flows are not verified
-  by this work. The user reports successful fresh-account setup; the offline
-  tests neither invalidate nor reproduce that live result.
+- Windows and Intel are outside this release's default matrix. Live fresh-account
+  provisioning and a
+  packaged-app acceptance pass remain separate from the CTO's development-app
+  acceptance and the authenticated hosted-engine read check.
 - Remote provisioning requires host UID-to-company membership. Choosing
   `wss://desktop.mrcall.ai` alone does not establish that prerequisite.
 - The new CLI is unreleased. Public-install onboarding needs release coordination
@@ -79,11 +86,8 @@ this session does not establish the current production revision.
 
 ## Next
 
-1. Use the source runbook for a real-user acceptance pass, then coordinate
-   kernel release and packaged Desktop/engine rollout. Production state must
-   be checked at that time.
-2. Continue the deferred product work only after this configuration-to-operator
-   journey is accepted.
+1. Coordinate the kernel release before claiming public-install operator setup.
+2. Continue the deferred product work from its existing briefs.
 
 ### Deferred (nice-to-have)
 

@@ -47,4 +47,4 @@ anywhere in the repo):
 - [`../engine/docs/CONVENTIONS.md`](../engine/docs/CONVENTIONS.md) — engine code style, logging, security patterns
 - [`../app/CLAUDE.md`](../app/CLAUDE.md) — app-side index (long-form until `app/docs/` fills in)
 
-- [Desktop-to-operator source acceptance guide](operator-setup.md) — current UX, source installation and verification limits.
+- [Desktop-to-operator setup guide](operator-setup.md) — released Desktop, development-kernel installation and verification limits.
