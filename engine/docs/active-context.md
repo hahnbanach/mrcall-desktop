@@ -17,7 +17,8 @@ immutable revisions and a space identity live in the company memory database,
 separate from entity blobs. `projects.*` supports selective reads and revision-
 checked writes through cs-kernel v0.44.0. Import and independent downloads verify
 six 124 projects (28 documents) and four MrCall projects (23 documents), including
-binary attachments. Original clone folders remain unchanged. A second 124 owner
+binary attachments. Original clone folders are archived byte-exactly in private Git histories
+(124 `abd48c8`, MrCall `3f53462`) and removed from working trees. A second 124 owner
 sees the same six projects. See [project memory](features/project-memory.md).
 
 Company membership is a capability held in the profile; `memory.join` is its

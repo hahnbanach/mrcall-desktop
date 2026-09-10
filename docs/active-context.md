@@ -68,7 +68,8 @@ the production observation above is from the 2026-09-10 rollout.
 Shared written projects are revisioned company-engine records, separate from
 entity blobs, accessed through `cs project` in kernel v0.44.0. Six 124 projects
 (28 documents) and four MrCall projects (23 documents) are imported and independently
-verified by downloaded hashes; originals remain unchanged recovery copies. A
+verified by downloaded hashes. Original folders are archived in the private clone
+Git histories (124 `abd48c8`, MrCall `3f53462`) and removed from working trees. A
 second 124 owner sees all six shared projects. This is deployed on the hosted
 engine; the bundled v0.1.47 sidecar does not include these RPC methods.
 See the [brief](briefs/2026-09-10-shared-project-memory.md) and
