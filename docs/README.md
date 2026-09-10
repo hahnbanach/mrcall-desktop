@@ -47,4 +47,6 @@ anywhere in the repo):
 - [`../engine/docs/CONVENTIONS.md`](../engine/docs/CONVENTIONS.md) — engine code style, logging, security patterns
 - [`../app/CLAUDE.md`](../app/CLAUDE.md) — app-side index (long-form until `app/docs/` fills in)
 
-- [Desktop-to-operator setup guide](operator-setup.md) — released Desktop, development-kernel installation and verification limits.
+- [Desktop-to-operator setup guide](operator-setup.md) — released Desktop and public-kernel installation, with verification limits.
+
+- [Shared written project memory](briefs/2026-09-10-shared-project-memory.md) — engine-owned project records and kernel workflows; [execution plan](execution-plans/2026-09-10-shared-project-memory.md).
