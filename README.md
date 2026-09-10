@@ -9,12 +9,11 @@ drafts replies for you to review.
 
 ## What stays on your machine
 
-Your inbox, contacts, and credentials live in a local profile on your own
-computer — none of it is uploaded anywhere. The only thing that leaves
-your machine is your sign-in, used to talk to MrCall's own services
-(phone, SMS, business lookups). The company memory lives wherever your
-profile runs: on this machine, or on the server that keeps it running
-when your laptop is closed (below).
+Your inbox, contacts and credentials live on the machine running your engine:
+your computer for a local profile, or the selected remote server. AI processing
+sends relevant message and memory content to the configured LLM service. MrCall
+services receive the authentication and request data needed for phone, SMS,
+business lookups and credit billing. Company memory stays on the engine host.
 
 ## Get started
 

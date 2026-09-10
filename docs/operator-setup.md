@@ -23,7 +23,7 @@ fields live in ipc-contract.md. This is not a production deployment runbook.
    processing and completed memory processing. These counts do not certify
    task detection or the quality of replies.
 4. Copy the workspace command. Run it on the machine containing the Desktop
-   descriptor, using kernel v0.43.0 as described below. The descriptor remains
+   descriptor, using kernel v0.44.0 as described below. The descriptor remains
    outside the workspace; do not copy its contents into chat or tracked files.
 5. Complete the wizard, accept its installation and login offers, and run `cs setup`.
    Resolve the checklist's next actions. Then open Codex or Claude Code in the
@@ -38,7 +38,7 @@ the MrCall dashboard; it does not require an Anthropic API key.
 ## Install the operator workspace
 
 Desktop v0.1.47 includes the Setup interface. Its development-kernel banner is
-older wording: kernel v0.43.0 supplies the required commands through the normal
+older wording: kernel v0.44.0 supplies the required commands through the normal
 release installation below. The guide link in that Desktop version still opens
 this section. No Desktop rebuild is needed to use the released kernel.
 
@@ -59,7 +59,7 @@ Run the wizard directly from the release tag. This bootstrap works without a
 previously installed `cs` command:
 
 ```bash
-uvx --from "cs-kernel @ git+https://github.com/malemi/cs-kernel@v0.43.0" cs init --descriptor "$CS_DESCRIPTOR"
+uvx --from "cs-kernel @ git+https://github.com/malemi/cs-kernel@v0.44.0" cs init --descriptor "$CS_DESCRIPTOR"
 ```
 
 The wizard selects the exact desktop profile, reads available mailbox connection

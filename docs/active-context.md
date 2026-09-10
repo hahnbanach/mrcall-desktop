@@ -43,13 +43,14 @@ stale snapshots; unsaved settings must be explicitly discarded before loading
 a different backend. Preparation actions remain user-triggered.
 
 Desktop changes are on main and tagged `v0.1.47` at `6f0b8f8`. The hosted engine
-runs that revision: seven profile services, provisiond and Caddy are active;
+runs `b875cb5`, including shared project memory: seven profile services,
+provisiond and Caddy are active;
 authenticated `setup.state` returns the new evidence fields. The CTO has accepted
 the macOS Desktop test. The macOS Apple Silicon installer is published as
 [v0.1.47](https://github.com/hahnbanach/mrcall-desktop/releases/tag/v0.1.47),
 Developer ID signed and Apple-notarized.
 
-Kernel v0.43.0 is publicly released and installed in both maintained operational
+Kernel v0.44.0 is publicly released and installed in both maintained operational
 clones. Public-tag installation and independent lock rebuilds were verified.
 Desktop v0.1.47 still has cosmetic development-kernel wording; its linked guide
 now installs the public kernel release.
@@ -64,6 +65,15 @@ BYOK and MrCall-credit LLM routing. Contracts live in [IPC](ipc-contract.md),
 Prior deployment/package observations remain historical in the archive;
 the production observation above is from the 2026-09-10 rollout.
 
+Shared written projects are revisioned company-engine records, separate from
+entity blobs, accessed through `cs project` in kernel v0.44.0. Six 124 projects
+(28 documents) and four MrCall projects (23 documents) are imported and independently
+verified by downloaded hashes; originals remain unchanged recovery copies. A
+second 124 owner sees all six shared projects. This is deployed on the hosted
+engine; the bundled v0.1.47 sidecar does not include these RPC methods.
+See the [brief](briefs/2026-09-10-shared-project-memory.md) and
+[plan](execution-plans/2026-09-10-shared-project-memory.md).
+
 ## Unresolved
 
 - Windows and Intel are outside this release's default matrix. Live fresh-account
@@ -72,11 +82,6 @@ the production observation above is from the 2026-09-10 rollout.
   acceptance and the authenticated hosted-engine read check.
 - Remote provisioning requires host UID-to-company membership. Choosing
   `wss://desktop.mrcall.ai` alone does not establish that prerequisite.
-- Shared written project memory is being implemented on `feat/shared-project-memory`.
-  It stores project documents separately from blobs and exposes them through
-  cs-kernel. Production project folders have not been migrated yet; see the
-  [brief](briefs/2026-09-10-shared-project-memory.md) and
-  [plan](execution-plans/2026-09-10-shared-project-memory.md).
 - Chat approval isolation has a separate
   [brief](briefs/2026-09-10-chat-approval-isolation.md) and is deferred.
   A comprehensive security review is also deferred by the CTO.
@@ -90,7 +95,7 @@ the production observation above is from the 2026-09-10 rollout.
 
 ## Next
 
-1. Complete shared project-memory integration and verified migration acceptance.
+1. Include project-memory RPC in the next bundled-engine Desktop release.
 2. Continue the deferred product work from its existing briefs.
 
 ### Deferred (nice-to-have)

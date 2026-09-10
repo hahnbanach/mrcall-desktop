@@ -91,8 +91,9 @@ engine detail in [`engine/docs/features/entity-memory-system.md`](engine/docs/fe
 
 The desktop has two LLM billing modes, picked from the Settings card:
 
-- **BYOK** (`anthropic` / `openai`) — user supplies their own API key in
-  the profile `.env`. Direct SDK calls, no server hop. Default.
+- **BYOK** — a saved `ANTHROPIC_API_KEY` in the profile `.env` selects
+  direct Anthropic SDK calls. Without that key, a signed-in Firebase session
+  uses MrCall credits; without either credential the LLM is unavailable.
 - **Use MrCall credits** (`mrcall`) — calls route through `mrcall-agent`'s
   `POST /api/desktop/llm/proxy` and bill the user's `CALLCREDIT` balance
   on StarChat. Same unified pool that funds phone calls and the
@@ -106,7 +107,7 @@ Engine pieces: `engine/zylch/llm/proxy_client.py` (`MrCallProxyClient`),
 See [`engine/CLAUDE.md`](engine/CLAUDE.md) for full details.
 
 App pieces: new `LLMProviderCard` in `app/src/renderer/src/views/Settings.tsx`
-(BYOK ↔ MrCall-credits radio + balance display + "Top up" via
+(saved billing mode, optional Anthropic key, balance display and "Top up" via
 `shell.openExternal`). See [`app/CLAUDE.md`](app/CLAUDE.md).
 
 ## Naming and identifiers — the rename in flight
@@ -118,7 +119,7 @@ internal identifier in many places:
 
 - Python package: `zylch.*`
 - CLI binary: `zylch`
-- Data directory: `~/.zylch/profiles/<email>/`
+- Data directory: `~/.zylch/profiles/<firebase_uid>/`
 - Env var prefix: `ZYLCH_*`
 
 Treat these as synonyms for `mrcall` until the rename PR lands. Don't

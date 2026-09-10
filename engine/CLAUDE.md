@@ -81,18 +81,18 @@ ruff check zylch/
 
 ## MrCall credits mode (since 2026-05)
 
-The engine supports two LLM billing modes, selected by `SYSTEM_LLM_PROVIDER`:
+The engine uses Anthropic through two transports. A saved `ANTHROPIC_API_KEY`
+in the active profile selects direct BYOK calls. Without that key, a live
+Firebase session selects MrCall credits; without either, no LLM is configured.
+`SYSTEM_LLM_PROVIDER` does not select this transport.
 
-- **BYOK** (`anthropic`, `openai`) — user supplies their own API key. Direct SDK calls. Default.
-- **MrCall credits** (`mrcall`) — calls route through `mrcall-agent`'s `POST /api/desktop/llm/proxy` and bill the user's `CALLCREDIT` balance on StarChat. Same unified pool that funds phone calls and configurator chat — there is no separate LLM-only category. The Anthropic API key lives server-side; the desktop only sends the Firebase JWT.
-
-Implementation:
-
-- `zylch/llm/proxy_client.py` — `MrCallProxyClient`, a drop-in for the subset of `anthropic.Anthropic().messages.create` the engine uses (sync + async + streaming context manager). Httpx-based; parses Anthropic SSE; reconstructs Message/event objects with `.content`, `.usage`, `.stop_reason`. Typed exceptions: `MrCallInsufficientCredits(available, topup_url)`, `MrCallAuthError`, `MrCallProxyError`.
-- `zylch/llm/client.py` — `LLMClient.__init__` branches on `provider == "mrcall"`: requires a live Firebase session (raises if absent) and constructs `MrCallProxyClient(proxy_base_url=settings.mrcall_proxy_url, firebase_session=zylch.auth.session)`. Reuses the existing `_call_anthropic` codepath because the proxy returns Anthropic-format objects.
-- `zylch/llm/providers.py` — `"mrcall"` entry with `is_metered=True`; same flag (with `False`) added to `anthropic` and `openai` for consistent caller branching.
-- `zylch/rpc/account.py` — new JSON-RPC method `account.balance()` that calls `GET /api/desktop/llm/balance` on `mrcall-agent` with the cached Firebase ID token. Returns the server payload verbatim so a server-side schema change doesn't require an engine release.
-- `zylch/services/settings_schema.py` — `"mrcall"` added to `LLM_PROVIDER` choices.
+- `zylch/llm/client.py` — `make_llm_client` resolves the transport from the
+  profile key and Firebase session; `try_make_llm_client` lets workers skip
+  when neither is available.
+- `zylch/llm/proxy_client.py` — `MrCallProxyClient` sends Anthropic-shaped
+  requests to `POST /api/desktop/llm/proxy`, billed to the user's MrCall credits.
+- `zylch/rpc/account.py` — `account.balance` reads the proxy's
+  `GET /api/desktop/llm/balance` response using the active Firebase session.
 
 Config (in `zylch/config.py`):
 
@@ -101,7 +101,7 @@ Config (in `zylch/config.py`):
 
 Tests: `engine/tests/llm/test_proxy_client.py` (8 cases — happy SSE, 401, 402, auth header shape, body forwarding, streaming reconstruction).
 
-Top-up flow lives on `dashboard.mrcall.ai/plan`; the desktop client just opens the URL via `shell.openExternal` (renderer-side concern, see `app/CLAUDE.md`). The engine never logs the JWT — only `len()` / first 8 chars at most, per the secret-logging rule.
+Top-up flow lives on `dashboard.mrcall.ai/plan`; the desktop client just opens the URL via `shell.openExternal` (renderer-side concern, see `app/CLAUDE.md`). The engine must never log the JWT or its prefixes.
 
 ## Critical Rules
 
@@ -109,7 +109,7 @@ Top-up flow lives on `dashboard.mrcall.ai/plan`; the desktop client just opens t
 - **DEBUG LOGGING MANDATORY**: `logger.debug(f"[/cmd] func(param={param}) -> result={result}")`
 - **NEVER log secrets**: Only "present"/"absent"
 - **FILES < 500 LINES**: Keep modules small and focused
-- **SQLITE STORAGE**: All data in SQLite — the profile `zylch.db` plus one memory store per company key (`~/.zylch/memory/<MEMORY_KEY>.db`); memory rows are reached only through the `memory/scope.py` predicates, never by `owner_id` alone. Embeddings in BLOB, search in-memory
+- **SQLITE STORAGE**: All data in SQLite — the profile `zylch.db` plus one memory store per company key (`~/.zylch/memory/<MEMORY_KEY>.db`); entity-blob rows use the `memory/scope.py` predicates, never `owner_id` alone; authored project documents use the bound company store and space identity. Embeddings in BLOB, search in-memory
 - **NO HARDCODED SECRETS**: Pydantic Settings from profile `.env`
 - **NO ROOT FILES**: Use `/zylch`, `/tests`, `/docs`, `/scripts`
 - **PROFILE MATCH**: Exact match only, no substring/fuzzy

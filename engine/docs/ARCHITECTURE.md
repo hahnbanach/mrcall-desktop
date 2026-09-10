@@ -183,7 +183,7 @@ User
 
 ## Profile System
 
-- Profiles stored in `~/.zylch/profiles/{email}/`
+- Firebase profiles stored in `~/.zylch/profiles/{firebase_uid}/`
 - Each profile has `.env`, `zylch.db`, `profile.lock`; the `.env` carries `MEMORY_KEY` (+ `MEMORY_KEY_SOURCE`: `mint` | `provision` | `join`), which selects the company memory store
 - CLI `-p/--profile` option for explicit selection
 - Auto-selects if only one profile exists

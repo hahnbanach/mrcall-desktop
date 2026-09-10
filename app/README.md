@@ -59,7 +59,7 @@ instead of the normal interface. Fill in:
   **Settings → Company memory**, with a copy button.
 
 On **Create profile and continue**, the wizard writes
-`~/.zylch/profiles/<email>/.env` (file perms 600, dir perms 700) and
+`~/.zylch/profiles/<firebase_uid>/.env` (file perms 600, dir perms 700) and
 opens the main window. You're done.
 
 Everything else (personal data, MrCall credentials, notes…) can be

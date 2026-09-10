@@ -68,11 +68,11 @@ The workflow builds the sidecar in `engine/` via PyInstaller in the same run and
 
 ## Settings — LLM billing mode (since 2026-05)
 
-`views/Settings.tsx` carries an `LLMProviderCard` at the top of the LLM
-group: a radio toggle between **BYOK** (`anthropic` / `openai`) and **Use
-MrCall credits** (`mrcall`). Picking MrCall credits requires a live
-Firebase signin; the card is disabled with an explanatory hint
-otherwise.
+`views/Settings.tsx` carries an `LLMProviderCard` showing the saved billing
+mode separately from pending edits. A saved Anthropic API key selects BYOK;
+without it, a signed-in session uses MrCall credits. Personal key entry is
+optional. Switching to credits clears the key only when Settings is saved;
+top-up opens the dashboard without requiring an API key.
 
 When MrCall credits is selected, the card calls `window.zylch.account.balance()`
 on mount and on every `window` focus event (so a top-up done in another

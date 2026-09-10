@@ -182,6 +182,8 @@ split indexes.**
 | docs/execution-plans/proactive-task-open.md | 575 | keep whole — one workstream's argument, read end to end | 2026-08-26 |
 | docs/execution-plans/cross-machine-transport.md | 428 | keep whole — one workstream's argument, read end to end | 2026-08-26 |
 
+| docs/briefs/2026-09-08-shared-company-memory-implementation.md | 598 | keep whole — one company-memory design argument, read by section | 2026-09-10 |
+
 ## Resolved
 
 (none yet)

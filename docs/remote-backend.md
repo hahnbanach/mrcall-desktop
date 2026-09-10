@@ -294,11 +294,13 @@ curl -s -o /dev/null -w 'gate %{http_code}\n' https://<host>/ws/$PROF   # expect
 
 ## Shared company memory on the host (since 2026-09)
 
-The six memory tables no longer live in a profile's `zylch.db`: each
+The six original entity-memory tables no longer live in a profile's `zylch.db`: each
 company has one SQLite store, `~mrcalld/.zylch/memory/<MEMORY_KEY>.db`,
 and every profile holding that key shares it. The key is a 128-bit
 capability in the profile `.env` (`MEMORY_KEY`, with `MEMORY_KEY_SOURCE`
-saying how it was obtained: `mint`, `provision`, `join`).
+saying how it was obtained: `mint`, `provision`, `join`). The company store
+also owns its metadata/history tables and the three authored-project tables;
+see [written project memory](../engine/docs/features/project-memory.md).
 
 **First boot after the deploy that ships it.** Each daemon runs two
 migration steps under its own lock: `0001_company_key` mints a key (the
