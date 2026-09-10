@@ -32,6 +32,12 @@ incomplete. This does not certify reply quality or successful task detection.
 The desktop handoff exposes selected identity, endpoint, path and command only;
 refresh credentials remain in the existing private descriptor.
 
+Setup reports the engine's current key-or-Firebase billing policy. Settings
+separates saved billing from unsaved choices and keeps personal API-key entry
+optional. Check connection verifies the selected transport without a restart.
+The [acceptance recovery plan](execution-plans/2026-09-10-setup-billing-recovery.md)
+tracks these UI corrections and their verification.
+
 Settings remains reachable when the engine is down. Reconnection invalidates
 stale snapshots; unsaved settings must be explicitly discarded before loading
 a different backend. Preparation actions remain user-triggered.

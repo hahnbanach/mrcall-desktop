@@ -62,11 +62,33 @@ export default function Setup({ onNavigate, active = true, refreshSession = asyn
   const connected = !!(remote && snapshot?.identity?.signed_in && snapshot.handoff.available && snapshot.identity.uid === snapshot.handoff.uid)
   const settings = snapshot?.settings
   const mailbox = !!(settings?.IMAP_HOST && settings.EMAIL_PASSWORD)
-  const provider = settings?.LLM_PROVIDER
-  const billing = provider === 'mrcall' || (provider === 'anthropic' && !!settings?.ANTHROPIC_API_KEY) || (provider === 'openai' && !!settings?.OPENAI_API_KEY)
+  // Match the engine factory: a profile key selects Anthropic; otherwise Firebase selects MrCall.
+  const byok = !!settings?.ANTHROPIC_API_KEY?.trim()
+  const billing = !!settings && (byok || !!snapshot?.identity?.signed_in)
+  const billingLabel = byok ? 'AI billing: your Anthropic account' : billing ? 'AI billing: MrCall credits' : 'Sign in to use MrCall credits'
   const configured = mailbox && billing && !!snapshot?.memory?.available
   const preparation = preparationSummary(snapshot?.preparation ?? null)
   const ready = connected && configured && preparation.complete
+  const checkConnection = async () => {
+    if (!snapshot?.handoff.available) return
+    const expectedUid = snapshot.handoff.uid
+    const id = ++generation.current
+    setBusy(true); setError(''); setNotice('Checking the current connection…')
+    try {
+      // Probe the selected transport; a second socket or restart would interrupt it.
+      const identity = await window.zylch.account.whoAmI()
+      if (id !== generation.current) return
+      if (!identity.signed_in || identity.uid !== expectedUid) {
+        throw new Error('The engine identity could not be verified for this profile. Sign in again and retry.')
+      }
+      setSnapshot(current => current ? { ...current, identity } : current)
+      setNotice(`Connection verified as ${identity.email || 'your profile'}.`)
+    } catch (e) {
+      if (id !== generation.current) return
+      setSnapshot(null); setNotice('')
+      setError(e instanceof Error ? e.message : 'Connection check failed. Retry or open Settings.')
+    } finally { if (id === generation.current) setBusy(false) }
+  }
   const connect = async () => {
     const id = ++generation.current
     setBusy(true); setError(''); setNotice('Checking the remote engine…'); setSnapshot(null)
@@ -115,8 +137,8 @@ export default function Setup({ onNavigate, active = true, refreshSession = asyn
   const primary = !snapshot ? 'Check setup' : !connected ? 'Connect remote engine' : !configured ? 'Configure account' : !preparation.complete ? 'Prepare data' : 'Copy workspace command'
   const act = () => { if (ready) void copyCommand(); else if (!snapshot) void refresh(); else if (!connected) void connect(); else onNavigate(!configured ? 'settings' : 'update') }
   const cards = [
-    { title: 'Configure your account', done: configured, text: settings ? `${settings.EMAIL_ADDRESS || 'Mailbox not selected'} · ${mailbox ? 'Mail connection configured' : 'Mail connection needed'} · ${billing ? 'Engine AI billing configured' : 'Engine AI billing needed'} · ${snapshot?.memory?.available ? 'Company memory connected' : 'Company memory needs attention'}` : 'Connect your mailbox, choose how to pay for engine AI, and create or join company memory.', action: 'Open settings', run: () => onNavigate('settings') },
-    { title: 'Connect the remote engine', done: connected, text: connected ? `Connected as ${snapshot?.identity?.email || 'your profile'}. The engine runs independently of this computer.` : 'Activate your hosted engine, verify its identity, and select it. Company activation may require MrCall support. Local mode remains available in Settings.', action: connected ? 'Check connection' : 'Connect remote engine', run: () => void connect() },
+    { title: 'Configure your account', done: configured, text: settings ? `${settings.EMAIL_ADDRESS || 'Mailbox not selected'} · ${mailbox ? 'Mail connection configured' : 'Mail connection needed'} · ${billingLabel} · ${snapshot?.memory?.available ? 'Company memory connected' : 'Company memory needs attention'}` : 'Connect your mailbox, choose how to pay for engine AI, and create or join company memory.', action: 'Open settings', run: () => onNavigate('settings') },
+    { title: 'Connect the remote engine', done: connected, text: connected ? `Connected as ${snapshot?.identity?.email || 'your profile'}. The engine runs independently of this computer.` : 'Activate your hosted engine, verify its identity, and select it. Company activation may require MrCall support. Local mode remains available in Settings.', action: connected ? 'Check connection' : 'Connect remote engine', run: () => { if (connected) void checkConnection(); else void connect() } },
     { title: 'Prepare your mailbox', done: connected && preparation.complete, text: preparation.text + ' Review suggested answers before sending.', action: 'Prepare data', run: () => onNavigate('update') },
     { title: 'Create your operator workspace', done: false, text: 'On this same computer, use cs-kernel to create a workspace. Then open Codex or Claude Code there. Your agent subscription is separate from MrCall engine credits.', action: '', run: () => {} }
   ]

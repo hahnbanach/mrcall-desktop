@@ -47,6 +47,7 @@ export default function Settings(): JSX.Element {
   const [edits, setEdits] = useState<Record<string, string>>({})
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
+  const [showOptionalKey, setShowOptionalKey] = useState(false)
   const [status, setStatus] = useState<{
     kind: 'idle' | 'success' | 'error' | 'progress'
     text: string
@@ -295,13 +296,16 @@ export default function Settings(): JSX.Element {
                 // picking credits clears it.
                 hasAnthropicKey={
                   ('ANTHROPIC_API_KEY' in edits
-                    ? !!edits.ANTHROPIC_API_KEY
-                    : !!loaded.ANTHROPIC_API_KEY)
+                    ? !!edits.ANTHROPIC_API_KEY.trim()
+                    : !!loaded.ANTHROPIC_API_KEY?.trim())
                 }
+                savedHasAnthropicKey={!!loaded.ANTHROPIC_API_KEY?.trim()}
+                pendingKeyChange={'ANTHROPIC_API_KEY' in changes}
                 onClearKey={() => handleChange('ANTHROPIC_API_KEY', '')}
               />
             )}
-            {items.map((f) => (
+            {group === 'LLM' && !(edits.ANTHROPIC_API_KEY ?? loaded.ANTHROPIC_API_KEY ?? '').trim() && <button type="button" className="text-sm underline" onClick={() => setShowOptionalKey(value => !value)}>{showOptionalKey ? 'Hide optional API key' : 'Use my own Anthropic API key (optional)'}</button>}
+            {items.filter(f => f.key !== 'ANTHROPIC_API_KEY' || !!(edits.ANTHROPIC_API_KEY ?? loaded.ANTHROPIC_API_KEY ?? '').trim() || showOptionalKey).map((f) => (
               <FieldRow
                 key={f.key}
                 field={f}
@@ -767,13 +771,18 @@ function BackendLocationCard(): JSX.Element {
 
 function LLMProviderCard({
   hasAnthropicKey,
+  savedHasAnthropicKey,
+  pendingKeyChange,
   onClearKey
 }: {
   hasAnthropicKey: boolean
+  savedHasAnthropicKey: boolean
+  pendingKeyChange: boolean
   onClearKey: () => void
 }): JSX.Element {
   const signedIn = !!auth.currentUser
-  const isCredits = !hasAnthropicKey
+  const isCredits = !savedHasAnthropicKey
+  const [topupError, setTopupError] = useState<string | null>(null)
 
   const [balance, setBalance] = useState<BalancePayload | null>(null)
   const [balanceErr, setBalanceErr] = useState<string | null>(null)
@@ -839,13 +848,15 @@ function LLMProviderCard({
 
   return (
     <div className="bg-white border border-brand-mid-grey rounded-lg p-4 space-y-3">
-      <div className="text-xs font-medium text-brand-grey-80">LLM billing mode</div>
+      <div className="text-xs font-medium text-brand-grey-80">Saved billing mode</div>
+      {pendingKeyChange && <div role="status" className="rounded border border-brand-orange/40 bg-brand-orange/10 p-3 text-sm">
+        Unsaved billing change: {hasAnthropicKey ? 'your Anthropic API key' : 'MrCall credits'}. Click Save below to apply it. Until then, the engine continues using {savedHasAnthropicKey ? 'your saved Anthropic API key' : 'MrCall credits'}.
+      </div>}
       {isCredits ? (
         <div className="text-sm text-brand-black">
           <strong>MrCall credits</strong> (Firebase signin)
           <div className="text-xs text-brand-grey-80 mt-0.5">
-            Claude calls are routed through <code className="text-[11px]">mrcall-agent</code>{' '}
-            and billed against your MrCall credit balance.
+            Engine AI calls use your MrCall credit balance. Your Codex or Claude Code subscription is separate.
           </div>
           {!signedIn && (
             <div className="text-xs text-brand-danger mt-1">
@@ -862,6 +873,7 @@ function LLMProviderCard({
           <button
             type="button"
             onClick={onClearKey}
+            disabled={pendingKeyChange && !hasAnthropicKey}
             className="mt-2 text-xs text-brand-grey-80 underline hover:text-brand-black"
             title="Clear ANTHROPIC_API_KEY and switch back to MrCall credits"
           >
@@ -870,6 +882,7 @@ function LLMProviderCard({
         </div>
       )}
 
+      {topupError && <p role="alert" className="text-sm text-brand-danger">{topupError}</p>}
       {isCredits && signedIn && (
         <div className="mt-2 border-t pt-3 space-y-2">
           {balanceLoading && <div className="text-xs text-brand-grey-80">Loading balance…</div>}
@@ -897,7 +910,13 @@ function LLMProviderCard({
           <div className="flex items-center gap-3 text-xs">
             <button
               type="button"
-              onClick={() => void window.zylch.shell.openExternal(TOPUP_URL)}
+              onClick={async () => {
+                setTopupError(null)
+                try {
+                  const result = await window.zylch.shell.openExternal(TOPUP_URL)
+                  if (!result.ok) setTopupError('Could not open the top-up page. Please try again.')
+                } catch { setTopupError('Could not open the top-up page. Please try again.') }
+              }}
               className="text-brand-blue underline hover:no-underline"
             >
               Top up credits

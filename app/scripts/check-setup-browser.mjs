@@ -82,6 +82,32 @@ try {
   await page.getByText('This engine does not yet provide mailbox analysis evidence.', {exact: false}).waitFor()
   assert.equal(await page.getByRole('button', {name: 'Copy workspace command'}).count(), 0)
 
+  await open('byok')
+  assert.match(await page.locator('body').innerText(), /AI billing: your Anthropic account/)
+  await open('unsigned')
+  assert.match(await page.locator('body').innerText(), /Sign in to use MrCall credits/)
+  assert.equal(await page.getByRole('button', {name: 'Copy workspace command'}).count(), 0)
+
+  await open('ready')
+  assert.match(await page.locator('body').innerText(), /AI billing: MrCall credits/)
+  await page.evaluate(() => {
+    window.setupFixture.calls.length = 0
+    window.fixtureAlerts = []
+    new MutationObserver(() => {
+      const alert = document.querySelector('[role="alert"]')
+      if (alert) window.fixtureAlerts.push(alert.textContent)
+    }).observe(document.body, {childList: true, subtree: true})
+  })
+  await page.getByRole('button', {name: 'Check connection', exact: true}).click()
+  await page.getByRole('status').filter({hasText: 'Connection verified as production@example.test.'}).waitFor()
+  assert.deepEqual(await page.evaluate(() => window.setupFixture.calls), ['connection.currentIdentity'])
+  assert.deepEqual(await page.evaluate(() => window.fixtureAlerts), [], 'no transient connection error')
+  await page.evaluate(() => window.setupFixture.changeIdentity())
+  await page.getByRole('button', {name: 'Check connection', exact: true}).click()
+  await page.getByRole('alert').filter({hasText: 'identity could not be verified'}).waitFor()
+  assert.equal(await page.getByRole('button', {name: 'Copy workspace command'}).count(), 0)
+  assert.deepEqual(await page.evaluate(() => window.setupFixture.calls), ['connection.currentIdentity', 'connection.currentIdentity'])
+
   for (const width of [1200, 390]) {
     await open('ready', width)
     await page.getByRole('button', {name: 'Copy workspace command'}).click()
@@ -90,7 +116,7 @@ try {
     await page.screenshot({ path: join(artifacts, `setup-ready-${width}.png`), fullPage: true })
   }
   assert.deepEqual(errors, [], 'no unhandled browser exceptions')
-  console.log(`Setup browser acceptance passed: 8 scenarios, recovery, identity refusal, clipboard, 2 widths. Screenshots: ${artifacts}`)
+  console.log(`Setup browser acceptance passed: readiness, saved billing, non-mutating connection proof, recovery, identity refusal, clipboard, 2 widths. Screenshots: ${artifacts}`)
 } finally {
   await browser.close()
   await new Promise(resolve => server.close(resolve))

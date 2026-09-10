@@ -10,7 +10,10 @@ fields live in ipc-contract.md. This is not a production deployment runbook.
 
 1. Sign in to Desktop and open **Setup**. Configure the mailbox and engine LLM
    billing in Settings. MrCall credits pay for engine model calls; Codex or
-   Claude Code is currently paid separately.
+   Claude Code is currently paid separately. The engine uses a saved Anthropic
+   API key for direct billing; without that key, the signed-in session uses
+   MrCall credits. After changing the billing choice, click **Save** before
+   preparing data. A pending choice does not change the engine's billing.
 2. Activate or check the remote engine. Existing activation is checked rather
    than started again. Select the verified remote engine explicitly. A host
    company-membership refusal needs host-side account activation; changing the
@@ -28,7 +31,9 @@ fields live in ipc-contract.md. This is not a production deployment runbook.
 
 Setup and Settings remain accessible during engine failures. After switching
 engines, discard unsaved settings explicitly before loading the new backend.
-Opening Setup does not start paid preparation work.
+Opening Setup does not start paid preparation work. **Check connection** verifies
+the already selected connection without restarting it. **Top up credits** opens
+the MrCall dashboard; it does not require an Anthropic API key.
 
 ## Source workspaces
 
