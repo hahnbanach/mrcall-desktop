@@ -195,3 +195,18 @@ explicitly retain the development-kernel installation prerequisite.
 
 Release: https://github.com/hahnbanach/mrcall-desktop/releases/tag/v0.1.47.
 The production identity read also confirms signed_in=true after deployment.
+
+
+## Kernel release guide transition — v0.43.0
+
+The operator guide now targets the kernel v0.43.0 public-tag bootstrap and the
+normal wizard installation/login offers. It preserves the
+`#kernel-macos-or-linux` anchor used by Desktop v0.1.47. The Desktop binary's
+existing development-kernel banner is cosmetic stale wording; no installer or
+app-code change accompanies this documentation transition.
+
+Guide preparation is complete; kernel publication and FULL clone verification
+are owned by the kernel release procedure. The tag-install instructions become
+available when v0.43.0 is published. This entry does not itself claim publication
+or a successful public bootstrap. Earlier source-acceptance and Desktop-release
+observations above remain historical evidence.
