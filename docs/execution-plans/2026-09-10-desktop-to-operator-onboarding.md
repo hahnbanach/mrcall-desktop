@@ -152,3 +152,24 @@ No provisioning mapping bypass, personal delegation, or new payment integration.
 - Documentation semantic review: approved; both snapshots and 24 load-bearing
   claims verified across repositories. Mechanical gates clean.
 - Delivery complete for the bounded source slice. No deployment or live validation.
+
+## Desktop production rollout — v0.1.47
+
+The CTO accepted the macOS Desktop test and authorized production on 2026-09-10.
+Scope is Desktop plus its packaged/hosted engine, not a kernel release or clone
+upgrade. Independent release review accepts this scope with synchronized version
+metadata, an explicit development-kernel prerequisite and installation guide,
+and verification of the workflow's actual notarization result.
+
+Preflight: hosted checkout clean at `9ea3dae` on main; seven profile daemons,
+provisiond and Caddy active. One pre-existing failed escaped-comma orphan unit
+is outside the discovered profile set; the updater must run without pruning.
+Latest public release is v0.1.46 (macOS arm64, signed and notarized).
+
+Sequence: verify candidate; fast-forward main; update hosted engine with existing
+update-daemons.sh; verify daemon status and expected source; tag v0.1.47; watch
+installer workflow and confirm release asset and signing/notarization outcome.
+Rollback keeps v0.1.46 available; revert the additive source change on main and
+re-run the updater if runtime verification fails. Never force-rewrite main.
+
+Rollout status: preparing; no completion claim until runtime and release checks.

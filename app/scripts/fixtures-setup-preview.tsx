@@ -12,6 +12,7 @@ const listeners = new Set<(value: any) => void>()
 const calls: string[] = []
 const emit = (value: any) => listeners.forEach(listener => listener(value))
 const fake = {
+  shell: {openExternal: async (url: string) => {calls.push(url); return {ok: true}}},
   settings: {
     getBackendLocation: async () => ({location: remote ? 'remote' : 'local', url: 'wss://desktop.mrcall.ai'}),
     get: async () => { if (failed) throw Error('offline'); return {values: {EMAIL_ADDRESS: 'production@example.test', IMAP_HOST: 'imap.example.test', EMAIL_PASSWORD: '********', ...(scenario === 'byok' ? {ANTHROPIC_API_KEY: '<set>'} : {})}} },

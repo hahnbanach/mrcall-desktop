@@ -127,6 +127,12 @@ export default function Setup({ onNavigate, active = true, refreshSession = asyn
     } catch (e) { if (id === generation.current) setError(e instanceof Error ? e.message : 'Connection failed. Retry or check Settings.') }
     finally { if (id === generation.current) setBusy(false) }
   }
+  const openSetupGuide = async () => {
+    try {
+      const result = await window.zylch.shell.openExternal('https://github.com/hahnbanach/mrcall-desktop/blob/main/docs/operator-setup.md#kernel-macos-or-linux')
+      if (!result.ok) throw new Error('Could not open the guide')
+    } catch { setError('Could not open the setup guide. Open docs/operator-setup.md in the MrCall Desktop repository.') }
+  }
   const copyCommand = async () => {
     if (!ready || !snapshot?.handoff.available) return
     try {
@@ -156,7 +162,7 @@ export default function Setup({ onNavigate, active = true, refreshSession = asyn
       <div className="min-w-0 flex-1"><h2 className="font-semibold">{card.title}</h2><p className="text-sm text-brand-grey-80 mt-2 leading-relaxed">{card.text}</p>
         {card.action && <button onClick={card.run} disabled={busy && i === 1} className="mt-3 text-sm underline disabled:opacity-50">{card.action}</button>}
         {i === 3 && <div className="mt-3 space-y-3">
-          {ready && snapshot?.handoff.available ? <><p className="text-xs text-brand-grey-80">Install a cs-kernel version that supports desktop setup before running this command.</p><code className="block rounded-lg bg-brand-light-grey p-3 text-xs break-all select-all">{snapshot.handoff.command}</code><button className="text-sm underline" onClick={() => void copyCommand()}>{copied ? 'Copied' : 'Copy command'}</button><p className="text-xs text-brand-grey-80">After creation and login, run <code>cs setup</code> inside the workspace. It verifies prerequisites; installed agent software alone does not prove agent sign-in.</p></> : <p className="text-sm">{snapshot?.handoff.available === false ? snapshot.handoff.reason : 'Verify this remote engine, its configuration, and mailbox processing to unlock the handoff.'}</p>}
+          {ready && snapshot?.handoff.available ? <><p className="text-xs text-brand-grey-80">Workspace setup currently requires cs-kernel branch <code>feat/operator-setup-ux</code>; released kernel versions do not support these commands yet.</p><button className="text-sm underline" onClick={() => void openSetupGuide()}>Open kernel installation guide</button><code className="block rounded-lg bg-brand-light-grey p-3 text-xs break-all select-all">{snapshot.handoff.command}</code><button className="text-sm underline" onClick={() => void copyCommand()}>{copied ? 'Copied' : 'Copy command'}</button><p className="text-xs text-brand-grey-80">After creation and login, run <code>cs setup</code> inside the workspace. It verifies prerequisites; installed agent software alone does not prove agent sign-in.</p></> : <p className="text-sm">{snapshot?.handoff.available === false ? snapshot.handoff.reason : 'Verify this remote engine, its configuration, and mailbox processing to unlock the handoff.'}</p>}
         </div>}
       </div>
     </section>)}</div>

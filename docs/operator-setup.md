@@ -1,7 +1,7 @@
-# Desktop to operator: development acceptance guide
+# Desktop to operator: setup guide
 
 <!-- doc-scope:start -->
-Scope: the current source-only setup journey, reproducible developer entry points,
+Scope: the Desktop setup journey, development-kernel installation, developer entry points,
 and verification limits. Product intent lives in the paired brief; protocol
 fields live in ipc-contract.md. This is not a production deployment runbook.
 <!-- doc-scope:end -->
@@ -38,8 +38,19 @@ the MrCall dashboard; it does not require an Anthropic API key.
 ## Source workspaces
 
 Use your local `mrcall-desktop` and `cs-kernel` checkouts on the Mac (or Linux).
-Their directory names and locations do not matter. In each repository, select
-and update the development branch:
+Their directory names and locations do not matter. Desktop v0.1.47 includes the
+Setup interface; use the packaged release or `main` for Desktop source. The
+workspace commands still require the development kernel branch.
+
+In your Desktop checkout (source users only):
+
+```bash
+git fetch origin
+git switch main
+git pull --ff-only
+```
+
+In your kernel checkout:
 
 ```bash
 git fetch origin
@@ -47,8 +58,8 @@ git switch feat/operator-setup-ux
 git pull --ff-only
 ```
 
-The changes are unreleased. The generated `requirements.txt`
-still pins the existing release, which lacks the new commands. For this
+The kernel additions are unreleased. The generated `requirements.txt`
+still pins the existing kernel release, which lacks the new commands. For this
 acceptance pass, install the source explicitly; do not accept the wizard's
 pinned-install offer. No existing operational clone needs to change.
 
@@ -141,4 +152,5 @@ The browser scripts print the screenshot directory on your own machine.
 
 These checks do not prove live Firebase refresh, production company activation,
 mailbox credentials, public-tag installation, model billing, or packaged
-macOS/Windows behavior. No production deployment or account mutation was used.
+macOS/Windows behavior. These development tests used no production account mutations. Release and
+hosted-engine rollout status is recorded in the delivery plan.

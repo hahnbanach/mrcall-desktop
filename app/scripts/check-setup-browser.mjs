@@ -90,6 +90,8 @@ try {
 
   await open('ready')
   assert.match(await page.locator('body').innerText(), /AI billing: MrCall credits/)
+  await page.getByRole('button', {name: 'Open kernel installation guide'}).click()
+  assert.ok((await page.evaluate(() => window.setupFixture.calls)).includes('https://github.com/hahnbanach/mrcall-desktop/blob/main/docs/operator-setup.md#kernel-macos-or-linux'))
   await page.evaluate(() => {
     window.setupFixture.calls.length = 0
     window.fixtureAlerts = []
