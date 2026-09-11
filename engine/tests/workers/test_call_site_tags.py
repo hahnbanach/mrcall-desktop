@@ -37,16 +37,17 @@ class _Rec:
 
     model = "rec-model"
 
-    def __init__(self):
+    def __init__(self, text="INSERT"):
         self.sites = []
+        self.text = text
 
     async def create_message(self, **kwargs):
         self.sites.append(current_call_site())
-        return _text_resp()
+        return _text_resp(self.text)
 
     def create_message_sync(self, **kwargs):
         self.sites.append(current_call_site())
-        return _text_resp()
+        return _text_resp(self.text)
 
     def merge(self, existing, new):
         self.sites.append(current_call_site())
@@ -76,7 +77,7 @@ def test_memory_extract_tag_email():
     w = MemoryWorker.__new__(MemoryWorker)
     w._custom_prompt = "Extract entities. #IDENTIFIERS/#ABOUT/#HISTORY. No placeholders."
     w._custom_prompt_loaded = True
-    rec = _Rec()
+    rec = _Rec("SKIP")
     w.client = rec
 
     w._extract_entities(

@@ -12,6 +12,7 @@ import re
 from typing import Any, Dict, List, Optional, Tuple
 
 from zylch.llm import LLMClient, make_llm_client, routed_model
+from zylch.llm.budget import BudgetError
 from zylch.llm.usage import call_site
 from zylch.storage import Storage
 from zylch.memory import (
@@ -444,6 +445,8 @@ class MemoryWorker:
             self.storage.mark_email_processed(self.owner_id, email_id)
             return True
 
+        except BudgetError:
+            raise
         except Exception as e:
             logger.error(f"Error processing email {email_id}: {e}", exc_info=True)
             return False
@@ -529,39 +532,12 @@ class MemoryWorker:
         # after the upsert (Phase 1a).
         identifiers = _parse_identifiers_block(entity_content)
 
-        # Inject the source identifier if the LLM didn't include it
-        # (memory-entity-keys.md, item 1 — never rely on the LLM to
-        # re-extract a key the channel row already carries). Normalise
-        # to match _parse_identifiers_block's output so the dedup check
-        # catches duplicates the LLM already emitted and we don't write
-        # redundant person_identifiers rows.
-        if contact_identifier:
-            if "@" in contact_identifier:
-                contact_kind = "email"
-                norm_value = contact_identifier.strip().strip("<>").lower()
-            else:
-                contact_kind = "phone"
-                norm_value = _normalise_phone(contact_identifier) or ""
-            if norm_value and not any(
-                k == contact_kind and v == norm_value for k, v in identifiers
-            ):
-                identifiers.append((contact_kind, norm_value))
-                logger.debug(
-                    f"[memory] injected contact_identifier {contact_kind}={norm_value} "
-                    f"for entity {entity_num}/{total_entities}"
-                )
-
-        # Guardrail: no identifier at all → cannot link this entity to any
-        # real-world contact. Warn and discard (memory-entity-keys.md,
-        # item 3). The source identifier is always available upstream
-        # (emails.from_email, whatsapp_messages.sender_jid); reaching
-        # this point with none means something upstream is wrong.
-        if not identifiers:
-            logger.warning(
-                f"[memory] entity {entity_num}/{total_entities} from {email_id} "
-                f"has no identifiers — discarding (no blob created)"
-            )
-            return
+        # A message sender is provenance, not the identity of every entity
+        # mentioned in the message. Only the LLM-authored entity identifiers
+        # may enter the identity index. Keep contact_identifier in the method
+        # signature for compatibility, but never infer entity identity from it.
+        # A valid name-only entity can still use semantic candidate search;
+        # it must never acquire an invented source identity to satisfy an index.
 
         # Phase 1b — identifier-first lookup.
         # Returns blob ids that share at least one (kind, value) tuple
@@ -626,50 +602,17 @@ class MemoryWorker:
             owner_id=self.owner_id, content=query, namespace=self.namespace, limit=3
         )
 
-        # Compose the merge-candidate list: identifier-matched first
-        # (priority), then cosine-matched not already in the identifier
-        # set. Each entry is a (blob_id, content, source) triple where
-        # `source` is just for logging — the LLM-merge gate is shared.
-        cosine_blob_ids = {str(c.blob_id) for c in cosine_candidates}
-        merge_candidates: List[Dict[str, str]] = []
-        seen_ids = set()
+        # Corroborate legacy index hits against authored entity identities,
+        # then bound the entire shortlist (not just the cosine fallback).
+        from zylch.workers.memory_candidates import merge_shortlist
 
-        for bid in id_matched_blob_ids:
-            if bid in seen_ids:
-                continue
-            blob_dict = self.blob_storage.get_blob(bid, self.owner_id)
-            if not blob_dict or not blob_dict.get("content"):
-                # Stale identifier row (blob was deleted or moved owner).
-                # Skip silently — the LLM can't merge with a missing blob.
-                continue
-            seen_ids.add(bid)
-            merge_candidates.append(
-                {
-                    "blob_id": bid,
-                    "content": blob_dict["content"],
-                    "updated_at": blob_dict.get("updated_at"),
-                    "source": (
-                        "identifier+cosine" if bid in cosine_blob_ids else "identifier-only"
-                    ),
-                }
-            )
-
-        for cand in cosine_candidates:
-            bid = str(cand.blob_id)
-            if bid in seen_ids:
-                continue
-            seen_ids.add(bid)
-            # the search result has no updated_at; one cheap read gives the
-            # compare-and-swap something to key on
-            current = self.blob_storage.get_blob(bid, self.owner_id) or {}
-            merge_candidates.append(
-                {
-                    "blob_id": bid,
-                    "content": current.get("content") or cand.content,
-                    "updated_at": current.get("updated_at"),
-                    "source": f"cosine={cand.hybrid_score:.3f}",
-                }
-            )
+        merge_candidates = merge_shortlist(
+            identifiers,
+            id_matched_blob_ids,
+            cosine_candidates,
+            lambda bid: self.blob_storage.get_blob(bid, self.owner_id),
+            _parse_identifiers_block,
+        )
 
         upserted = False
         # Track which blob this email contributed to. Either an
@@ -845,7 +788,11 @@ class MemoryWorker:
             async with sem:
                 if stop:
                     return
-                success = await self.process_email(email)
+                try:
+                    success = await self.process_email(email)
+                except BudgetError:
+                    stop = True
+                    raise
                 if success:
                     processed += 1
                     failures = 0
@@ -857,10 +804,13 @@ class MemoryWorker:
                         )
                         stop = True
 
-        await asyncio.gather(
+        results = await asyncio.gather(
             *[_process_one(e) for e in emails],
             return_exceptions=True,
         )
+        for result in results:
+            if isinstance(result, BaseException):
+                raise result
         logger.info(
             f"Batch complete:" f" {processed}/{len(emails)} processed",
         )
@@ -910,10 +860,7 @@ class MemoryWorker:
         try:
             prompt_template = self._get_extraction_prompt()
             if not prompt_template:
-                logger.warning(
-                    "Skipping extraction - no custom prompt",
-                )
-                return []
+                raise RuntimeError("Memory extraction prompt is not configured")
 
             email_data = self._format_email_data(
                 email,
@@ -1002,11 +949,7 @@ class MemoryWorker:
 
         except Exception as e:
             logger.error(f"Failed to extract entities: {e}")
-            # Re-raise auth errors so batch can fail-fast
-            err_str = str(e).lower()
-            if "401" in err_str or "authentication" in err_str:
-                raise
-            return []
+            raise
 
     def _parse_entities(self, raw_output: str) -> List[str]:
         """Parse LLM output into separate entity blobs.
@@ -1026,8 +969,7 @@ class MemoryWorker:
             logging.debug(f"Entities delimiter found: {parts}")
         elif raw_output.count("#IDENTIFIER") > 1:
             parts = [raw_output]
-            logging.warning(f"More than 1 #IDENTIFIER without delimiter, skipping: {parts}")
-            return entities
+            raise ValueError("Multiple extracted identities without an entity delimiter")
         else:
             # Single entity
             parts = [raw_output]
@@ -1038,8 +980,10 @@ class MemoryWorker:
             # Validate
             if part and "#IDENTIFIERS" in part.upper():
                 entities.append(part)
-            else:
-                logging.warning("ENTITIES NOT ADDED: empty or no #IDENTIFIER")
+            elif part:
+                raise ValueError("Extracted entity is missing its structured identity block")
+        if not entities:
+            raise ValueError("Empty extraction response; expected entities or SKIP")
         return entities
 
     # =========================================================
@@ -1097,14 +1041,6 @@ class MemoryWorker:
             sender_label = message.get("sender_name") or message.get("sender_jid") or "unknown"
             event_desc = f"Extracted from WhatsApp message {wa_id} ({ts}) from {sender_label}"
 
-            # Resolve the sender's phone once (memory-entity-keys.md,
-            # item 1) so _upsert_entity can inject it as the
-            # contact_identifier even when the LLM omits it from the
-            # #IDENTIFIERS block. '' for LIDs we can't resolve — the
-            # guardrail in _upsert_entity then decides whether the
-            # entity is still linkable.
-            wa_phone = self._resolve_whatsapp_phone(message.get("sender_jid") or "")
-
             for i, entity_content in enumerate(entities):
                 await self._upsert_entity(
                     entity_content=entity_content,
@@ -1113,12 +1049,13 @@ class MemoryWorker:
                     entity_num=i + 1,
                     total_entities=len(entities),
                     source_kind="whatsapp",
-                    contact_identifier=wa_phone,
                 )
 
             self.storage.mark_whatsapp_memory_processed(self.owner_id, wa_id)
             return True
 
+        except BudgetError:
+            raise
         except Exception as e:
             logger.error(f"Error processing WhatsApp message {wa_id}: {e}", exc_info=True)
             return False
@@ -1151,7 +1088,11 @@ class MemoryWorker:
             async with sem:
                 if stop:
                     return
-                ok = await self.process_whatsapp_message(msg)
+                try:
+                    ok = await self.process_whatsapp_message(msg)
+                except BudgetError:
+                    stop = True
+                    raise
                 if ok:
                     processed += 1
                     failures = 0
@@ -1161,10 +1102,13 @@ class MemoryWorker:
                         logger.error("3 consecutive WA failures — stopping batch (check API key)")
                         stop = True
 
-        await asyncio.gather(
+        results = await asyncio.gather(
             *[_process_one(m) for m in messages],
             return_exceptions=True,
         )
+        for result in results:
+            if isinstance(result, BaseException):
+                raise result
         logger.info(f"WA batch complete: {processed}/{len(messages)} processed")
         return processed
 
@@ -1180,10 +1124,8 @@ class MemoryWorker:
         WhatsApp-shaped, or the LID has no known phone — callers treat
         '' as "no contact_identifier".
 
-        Single source of truth for LID→phone resolution: both
-        ``_format_whatsapp_data`` (envelope) and
-        ``process_whatsapp_message`` (contact_identifier injection)
-        call this so the two paths cannot drift.
+        Used by ``_format_whatsapp_data`` to supply the sender identity
+        to the LLM. The LLM decides which extracted entity owns that identity.
         """
         if not sender_jid:
             return ""
@@ -1301,8 +1243,7 @@ class MemoryWorker:
         try:
             prompt_template = self._get_extraction_prompt()
             if not prompt_template:
-                logger.warning(f"Skipping {channel_label} extraction — no custom prompt")
-                return []
+                raise RuntimeError("Memory extraction prompt is not configured")
 
             system = [
                 {
@@ -1324,10 +1265,7 @@ class MemoryWorker:
             return self._parse_entities(raw_output)
         except Exception as e:
             logger.error(f"Failed to extract entities ({channel_label}): {e}")
-            err_str = str(e).lower()
-            if "401" in err_str or "authentication" in err_str:
-                raise
-            return []
+            raise
 
     async def process_calendar_event(self, event: Dict) -> bool:
         """Process single calendar event to extract and store facts.
@@ -1394,6 +1332,8 @@ class MemoryWorker:
             self.storage.mark_calendar_event_processed(self.owner_id, event_id)
             return True
 
+        except BudgetError:
+            raise
         except Exception as e:
             logger.error(f"Error processing event {event_id}: {e}", exc_info=True)
             return False
@@ -1410,10 +1350,16 @@ class MemoryWorker:
         logger.info(f"Processing batch of {len(events)} calendar events")
         processed = 0
 
+        failures = 0
         for event in events:
             success = await self.process_calendar_event(event)
             if success:
                 processed += 1
+                failures = 0
+            else:
+                failures += 1
+                if failures >= 3:
+                    break
 
         logger.info(f"Calendar batch complete: {processed}/{len(events)} processed")
         return processed
@@ -1460,14 +1406,14 @@ Output ONLY the facts as natural language prose (2-5 sentences). If no meaningfu
                 response = self.client.create_message_sync(
                     messages=[{"role": "user", "content": prompt}], max_tokens=512
                 )
-            return response.content[0].text.strip()
+            facts = response.content[0].text.strip()
+            if not facts:
+                raise ValueError("Empty calendar extraction response")
+            return facts
 
         except Exception as e:
             logger.error(f"Failed to extract calendar facts: {e}")
-            err_str = str(e).lower()
-            if "401" in err_str or "authentication" in err_str:
-                raise
-            return ""
+            raise
 
     # ==========================================
     # MRCALL PHONE CALL PROCESSING
@@ -1529,6 +1475,8 @@ Output ONLY the facts as natural language prose (2-5 sentences). If no meaningfu
             self.storage.mark_mrcall_memory_processed(self.owner_id, conv_id)
             return True
 
+        except BudgetError:
+            raise
         except Exception as e:
             logger.error(f"Error processing conversation {conv_id}: {e}", exc_info=True)
             return False
@@ -1647,8 +1595,7 @@ Output ONLY the facts as natural language prose (2-5 sentences). If no meaningfu
             # Get the extraction prompt
             prompt_template = self._get_mrcall_extraction_prompt()
             if not prompt_template:
-                logger.warning("Skipping MrCall extraction - no custom prompt configured")
-                return []
+                raise RuntimeError("MrCall memory extraction prompt is not configured")
 
             # Extract conversation text from body
             conversation_text = self._extract_conversation_text(conversation.get("body"))
@@ -1692,10 +1639,7 @@ Output ONLY the facts as natural language prose (2-5 sentences). If no meaningfu
 
         except Exception as e:
             logger.error(f"Failed to extract MrCall entities: {e}")
-            err_str = str(e).lower()
-            if "401" in err_str or "authentication" in err_str:
-                raise
-            return []
+            raise
 
     def _extract_conversation_text(self, body: any) -> str:
         """Extract conversation text from MrCall body field.
