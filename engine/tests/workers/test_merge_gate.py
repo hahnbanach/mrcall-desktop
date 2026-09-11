@@ -34,7 +34,8 @@ def _svc_with_fake_client(monkeypatch, returns_text):
     def fake_create_message_sync(**kwargs):
         captured.update(kwargs)
         resp = MagicMock()
-        resp.content = [MagicMock(text=returns_text)]
+        resp.stop_reason = "end_turn"
+        resp.content = [MagicMock(type="text", text=returns_text)]
         return resp
 
     fake_client = MagicMock()

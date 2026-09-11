@@ -127,7 +127,7 @@ async def test_valid_semantic_skip_marks_email_processed(monkeypatch):
     monkeypatch.setattr("zylch.storage.database.memory_unavailable_reason", lambda: None)
     w = worker()
     w.client.create_message_sync.return_value = SimpleNamespace(
-        content=[SimpleNamespace(text="SKIP")]
+        stop_reason="end_turn", content=[SimpleNamespace(type="text", text="SKIP")]
     )
     assert await w.process_email({"id": "mail", "from_email": "sender@example.com"}) is True
     w.storage.mark_email_processed.assert_called_once_with("owner", "mail")
@@ -173,7 +173,7 @@ async def test_invalid_extraction_does_not_silently_complete(output, monkeypatch
     monkeypatch.setattr("zylch.storage.database.memory_unavailable_reason", lambda: None)
     w = worker()
     w.client.create_message_sync.return_value = SimpleNamespace(
-        content=[SimpleNamespace(text=output)]
+        stop_reason="end_turn", content=[SimpleNamespace(type="text", text=output)]
     )
     assert await w.process_email({"id": "mail", "from_email": "sender@example.com"}) is False
     w.storage.mark_email_processed.assert_not_called()
@@ -193,3 +193,74 @@ async def test_name_only_entity_does_not_inherit_sender_identity():
     w.storage.find_blobs_by_identifiers.assert_not_called()
     w.storage.add_person_identifiers.assert_not_called()
     w.blob_storage.store_blob.assert_called_once()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("channel", ["email", "whatsapp", "calendar", "mrcall"])
+async def test_truncated_valid_identity_never_writes_or_completes(channel, monkeypatch):
+    monkeypatch.setattr("zylch.storage.database.memory_unavailable_reason", lambda: None)
+    w = worker()
+    w.client.create_message_sync.return_value = SimpleNamespace(
+        stop_reason="max_tokens",
+        content=[SimpleNamespace(type="text", text=entity("person@example.com"))],
+    )
+    methods = {
+        "email": (
+            w.process_email,
+            {"id": "mail", "from_email": "sender@example.com"},
+            "mark_email_processed",
+        ),
+        "whatsapp": (
+            w.process_whatsapp_message,
+            {
+                "id": "wa",
+                "text": "A business message long enough to extract",
+                "sender_jid": "123@s.whatsapp.net",
+            },
+            "mark_whatsapp_memory_processed",
+        ),
+        "calendar": (w.process_calendar_event, {"id": "cal"}, "mark_calendar_event_processed"),
+        "mrcall": (
+            w.process_mrcall_conversation,
+            {"id": "call", "body": "A business conversation"},
+            "mark_mrcall_memory_processed",
+        ),
+    }
+    method, item, mark = methods[channel]
+    assert await method(item) is False
+    getattr(w.storage, mark).assert_not_called()
+    w.blob_storage.store_blob.assert_not_called()
+    w.blob_storage.update_blob.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_truncated_merge_never_overwrites_existing_or_marks_email(monkeypatch):
+    from zylch.memory.llm_merge import LLMMergeService
+
+    monkeypatch.setattr("zylch.storage.database.memory_unavailable_reason", lambda: None)
+    w = worker()
+    original = entity("person@example.com")
+    w._extract_entities = MagicMock(return_value=[original])
+    w.storage.find_blobs_by_identifiers.return_value = ["existing"]
+    w.blob_storage.get_blob.return_value = {"content": original}
+    svc = LLMMergeService.__new__(LLMMergeService)
+    svc.model = "model"
+    svc.client = MagicMock()
+    svc.client.create_message_sync.return_value = SimpleNamespace(
+        stop_reason="max_tokens", content=[SimpleNamespace(type="text", text=original)]
+    )
+    w.llm_merge = svc
+    assert await w.process_email({"id": "mail", "from_email": "sender@example.com"}) is False
+    w.blob_storage.update_blob.assert_not_called()
+    w.blob_storage.store_blob.assert_not_called()
+    w.storage.mark_email_processed.assert_not_called()
+
+
+@pytest.mark.parametrize("reason", ["max_tokens", "tool_use", "stop_sequence", None])
+def test_unfinished_or_unexpected_response_rejected(reason):
+    from zylch.memory.response_validation import MemoryResponseError, complete_memory_text
+
+    with pytest.raises(MemoryResponseError):
+        complete_memory_text(
+            SimpleNamespace(stop_reason=reason, content=[SimpleNamespace(type="text", text="SKIP")])
+        )

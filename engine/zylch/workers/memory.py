@@ -11,6 +11,7 @@ import logging
 import re
 from typing import Any, Dict, List, Optional, Tuple
 
+from zylch.memory.response_validation import complete_memory_text
 from zylch.llm import LLMClient, make_llm_client, routed_model
 from zylch.llm.budget import BudgetError
 from zylch.llm.usage import call_site
@@ -937,7 +938,7 @@ class MemoryWorker:
                         ],
                         max_tokens=1024,
                     )
-            raw_output = response.content[0].text.strip()
+            raw_output = complete_memory_text(response)
             logging.debug(f"RAW OUTPUT:\n{raw_output}")
             # Check for SKIP
             if raw_output.upper() == "SKIP":
@@ -1259,7 +1260,7 @@ class MemoryWorker:
                     messages=[{"role": "user", "content": user_text}],
                     max_tokens=1024,
                 )
-            raw_output = response.content[0].text.strip()
+            raw_output = complete_memory_text(response)
             if raw_output.upper() == "SKIP":
                 return []
             return self._parse_entities(raw_output)
@@ -1406,7 +1407,7 @@ Output ONLY the facts as natural language prose (2-5 sentences). If no meaningfu
                 response = self.client.create_message_sync(
                     messages=[{"role": "user", "content": prompt}], max_tokens=512
                 )
-            facts = response.content[0].text.strip()
+            facts = complete_memory_text(response)
             if not facts:
                 raise ValueError("Empty calendar extraction response")
             return facts
@@ -1628,7 +1629,7 @@ Output ONLY the facts as natural language prose (2-5 sentences). If no meaningfu
                 response = self.client.create_message_sync(
                     messages=[{"role": "user", "content": prompt}], max_tokens=1024
                 )
-            raw_output = response.content[0].text.strip()
+            raw_output = complete_memory_text(response)
             logger.debug(f"MrCall RAW OUTPUT:\n{raw_output}")
 
             if raw_output.upper() == "SKIP":

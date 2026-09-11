@@ -119,7 +119,7 @@ def test_merge_gate_uses_memory_merge_knob(monkeypatch):
         client = MagicMock()
         client.model = model or "default"
         client.create_message_sync.return_value = types.SimpleNamespace(
-            content=[types.SimpleNamespace(type="text", text="INSERT")]
+            stop_reason="end_turn", content=[types.SimpleNamespace(type="text", text="INSERT")]
         )
         return client
 

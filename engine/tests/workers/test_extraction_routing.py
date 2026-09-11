@@ -29,7 +29,8 @@ def _worker_with_prompt(prompt_text, returns="SKIP"):
     def fake_create(**kwargs):
         captured.update(kwargs)
         resp = MagicMock()
-        resp.content = [MagicMock(text=returns)]
+        resp.stop_reason = "end_turn"
+        resp.content = [MagicMock(type="text", text=returns)]
         return resp
 
     w.client = MagicMock()
