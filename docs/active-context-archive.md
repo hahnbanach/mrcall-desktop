@@ -198,3 +198,24 @@ second 124 owner sees all six shared projects.
 ## 2026-09-11 — Kernel installation evidence
 
 Public-tag installation and independent lock rebuilds were verified.
+
+## 2026-09-11 — Spending pre-rollout snapshot
+
+Predictable-spending source is implemented on `fix/daily-llm-budget` with
+independent M1–M4 and final user-path approvals. Compatible deployment is in progress.
+It adds bounded MrCall receipts, explicit OpenRouter/provider/role policy,
+persistent preparation batches/retries and spending controls. The billing-server
+MR is [!2](https://gitlab.com/hahnbanach/mrcall-agent/-/merge_requests/2).
+No paid acceptance calls have been made. Deployment statements below still refer
+to the earlier scoped containment until the compatible rollout is verified.
+See [current delivery plan](execution-plans/2026-09-11-predictable-ai-spending.md).
+
+
+Desktop v0.1.47 remains the signed/notarized published Apple Silicon installer.
+Four Café124 services run isolated guarded engine `da85537`; all auto-update is
+paused. Three direct-key accounts enforce the saved USD5 cap before each request.
+The fourth uses MrCall credits: paid AI refuses until a server debit-bound
+contract exists; read access works. Other hosted accounts retain their previous
+build and are not covered by this guard. The new spending UI is built/tested,
+not packaged. See the [spending plan](execution-plans/2026-09-11-daily-llm-budget.md).
+

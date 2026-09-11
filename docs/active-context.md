@@ -19,13 +19,12 @@ what is *current*, targeting ≤ ~120 lines.
 
 ## State now
 
-Predictable-spending source is implemented on `fix/daily-llm-budget` with
-independent M1–M4 and final user-path approvals. Compatible deployment is in progress.
-It adds bounded MrCall receipts, explicit OpenRouter/provider/role policy,
-persistent preparation batches/retries and spending controls. The billing-server
-MR is [!2](https://gitlab.com/hahnbanach/mrcall-agent/-/merge_requests/2).
-No paid acceptance calls have been made. Deployment statements below still refer
-to the earlier scoped containment until the compatible rollout is verified.
+Predictable spending is implemented with independent M1–M4 and final approvals.
+Billing server `prod-c238edf8` is deployed with the additive PostgreSQL ledger;
+authenticated free capabilities and quote return the bounded protocol. Four
+Café124 engines run isolated release `83075a0`. Each retains its USD5 daily cap,
+uses the explicit economy preset (Haiku), and has automatic processing disabled
+and preparation paused. No paid acceptance calls have been made.
 See [current delivery plan](execution-plans/2026-09-11-predictable-ai-spending.md).
 
 Desktop includes the V1 Desktop → engine → operator setup journey.
@@ -51,13 +50,11 @@ Settings remains reachable when the engine is down. Reconnection invalidates
 stale snapshots; unsaved settings must be explicitly discarded before loading
 a different backend. Preparation actions remain user-triggered.
 
-Desktop v0.1.47 remains the signed/notarized published Apple Silicon installer.
-Four Café124 services run isolated guarded engine `da85537`; all auto-update is
-paused. Three direct-key accounts enforce the saved USD5 cap before each request.
-The fourth uses MrCall credits: paid AI refuses until a server debit-bound
-contract exists; read access works. Other hosted accounts retain their previous
-build and are not covered by this guard. The new spending UI is built/tested,
-not packaged. See the [spending plan](execution-plans/2026-09-11-daily-llm-budget.md).
+Desktop v0.1.47 remains the published Apple Silicon installer; v0.1.48 is prepared
+for release with spending controls and shared project RPC. The new UI passes
+component journeys, typecheck and build; installation on the CTO's Mac is not
+verified. Other hosted accounts retain the previous checkout until the host's
+normal reconciliation; the four affected accounts use pinned guarded releases.
 
 Kernel v0.44.0 is publicly released and installed in both maintained operational
 clones. Desktop v0.1.47 still has cosmetic development-kernel wording; its linked guide
@@ -71,7 +68,7 @@ shared company memory through `memory.join`, headless descriptors, provisioning,
 BYOK and MrCall-credit LLM routing. Contracts live in [IPC](ipc-contract.md),
 [remote backend](remote-backend.md), and the per-tree documentation.
 Prior deployment/package observations remain historical in the archive;
-the budget containment above is verified on 2026-09-11; project-memory
+the spending rollout above is verified on 2026-09-11; project-memory
 deployment evidence is from 2026-09-10.
 
 Shared written projects are revisioned company-engine records, separate from
@@ -104,8 +101,8 @@ See the [brief](briefs/2026-09-10-shared-project-memory.md) and
 
 ## Next
 
-1. Complete bounded proxy billing before merging the spending guard to main.
-2. Include project-memory RPC in the next bundled-engine Desktop release.
+1. Publish Desktop v0.1.48 and verify the release artifacts.
+2. Evaluate economy/GLM task quality before enabling recurring backlogs.
 3. Continue the deferred product work from its existing briefs.
 
 ### Deferred (nice-to-have)

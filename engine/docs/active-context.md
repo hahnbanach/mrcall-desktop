@@ -8,26 +8,25 @@ are preserved in [active-context-archive.md](active-context-archive.md).
 
 ## State now
 
-Predictable-spending source is implemented and independently reviewed: bounded
-MrCall quote/debit receipts, explicit provider/role policy, OpenRouter GLM and
-persistent preparation/retry limits. Fake-provider journeys exercise actual HTTP
-adapters and PostgreSQL/SQLite accounting. New automatic processing defaults off;
-existing explicit settings remain. No paid semantic benchmark has been run.
-Source-to-production rollout is in progress after final approval; the deployment below is
-still the earlier containment release.
+Four Café124 engine units run reviewed isolated release `83075a0` behind
+`wss://desktop.mrcall.ai`. Bounded MrCall receipts, explicit provider/role policy,
+OpenRouter GLM and persistent preparation/retry limits are implemented. The
+compatible billing server runs `prod-c238edf8` with its additive accounting
+migration. Authenticated capabilities and free quote pass.
 
-Daily spending admission is deployed to four Café124 engine units from isolated
-`da85537`: three direct-key profiles have per-call reservations; the credits-mode
-profile refuses paid AI pending a debit-bound proxy contract. All four automatic
-pipelines are paused; RPC/read access is available. Confirmed failed extraction
-checkpoints (1,962 + 40) are restored to pending, with backups and task checkpoints
-preserved. New merge candidate selection and complete-response validation retain
-LLM judgement while preventing runaway comparisons and false completion.
-See [spending protection](features/daily-llm-budget.md) for scope and limitations.
+All four affected profiles retain USD5 daily caps, explicit economy Haiku,
+batch size 25, disabled automatic processing and durable preparation pause.
+Three use their existing direct Anthropic keys; one uses MrCall credits. RPC
+status verifies model policy and limits; no paid acceptance calls are made.
+Other hosted units retain the previous checkout until normal reconciliation.
+New automatic processing defaults off; existing explicit settings remain.
 
-The unchanged hosted engine units run `b875cb5` behind `wss://desktop.mrcall.ai`. Seven profile
-services, provisiond and Caddy are active. The companion Desktop installer is
-v0.1.47; its bundled sidecar predates shared project RPC.
+Failed extraction checkpoints (1,962 + 40) remain pending, with private backups
+and task checkpoints preserved. Three-candidate merge selection and complete-
+response validation retain LLM judgement without runaway comparisons or false
+completion. See [spending protection](features/daily-llm-budget.md).
+Desktop v0.1.48 source includes shared project RPC; its installer publication
+is pending. GLM semantic task quality is unmeasured.
 
 Shared written project memory is deployed. Dedicated project documents,
 immutable revisions and a space identity live in the company memory database,
@@ -54,7 +53,7 @@ the archive are not current deployment claims.
 
 ## Unresolved
 
-- Project RPC needs inclusion in the next bundled-engine Desktop release.
+- Desktop v0.1.48 installer publication and Mac installation remain to verify.
 - Existing engine backlog remains separate: Calendar token integration,
   phone-call memory parity, additional RPC error humanization, and multi-profile
   WhatsApp session isolation. See [harness backlog](harness-backlog.md) and
@@ -66,8 +65,7 @@ the archive are not current deployment claims.
 
 ## Next
 
-1. Establish bounded MrCall-credit debits before broader guard rollout; validate
-   cheaper models per memory/task role before resuming automatic backlogs.
+1. Validate cheaper models per memory/task role before resuming automatic backlogs.
 2. Ship the project RPC surface in the next Desktop bundled-engine release.
 3. Continue the existing Calendar, phone-memory and error-handling workstreams
    under their owning plans rather than merging them into project storage.

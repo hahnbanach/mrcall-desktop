@@ -127,3 +127,22 @@ customer credit debits or automatic backlog resumption during acceptance.
 - [ ] Compatible delivery, read-only verification and final report.
 
 Plan review requires account + resolved business quote binding, durable receipt metadata, one allowance across channels/stages, pause coverage for training/canaries/reconsolidation, and explicit legacy-client limits.
+
+## Deployment acceptance
+
+- Server production pipeline 2841302220 passed; image `prod-c238edf8` is ready.
+  Independent read-only SQL verifies Alembic `20260911_bounded_billing` and the
+  accounting table. Authenticated public capabilities and free Haiku quote
+  return 200; no execute or credit consumption is used for acceptance.
+- Four affected engine units run isolated `83075a0`, with private profile/override
+  backups. Saved provider matches previous billing; economy Haiku replaces the
+  previous default Opus for these profiles. Caps remain USD5, batch size 25,
+  automation off and durable preparation pause on. Two configured operator
+  accounts pass public authenticated RPC; two additional accounts pass local
+  production RPC handlers. All four services are active; read-only SQLite checks
+  find no usage since 12:25 UTC containment and no outstanding holds.
+- Root regression suite: 331 engine tests passed. Full server suite: 196 passed;
+  CI lint/format/test passed. App component journeys, typecheck and build pass.
+- Desktop v0.1.48 release artifact remains the final delivery step. Rollback keeps
+  the prior guarded engine override and all accounting data; never restore
+  automation or an unguarded build.

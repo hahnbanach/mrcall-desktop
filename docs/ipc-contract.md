@@ -1245,7 +1245,7 @@ Today's LLM spend for the active profile, since UTC midnight:
 }
 ```
 
-`billing_reason` explains a refused transport. `model_policy` reports the saved
+`billing_reason` may provide details when a transport is unavailable. `model_policy` reports the saved
 provider, preset and effective role models, including unmeasured GLM quality.
 `usage.reconcile(cursor?)` checks up to ten outstanding MrCall receipts without
 paid inference and returns `recovered`, `unresolved`, `message` and `next_cursor`.
