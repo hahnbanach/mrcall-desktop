@@ -14,6 +14,8 @@ The legacy module name and class name remain re-exported from
 ``memory_email.py`` for backward compatibility.
 """
 
+from zylch.services.preparation import bounded_operation
+
 import logging
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Tuple
@@ -657,6 +659,7 @@ Body: {body}
 
         return "\n\n".join(samples)
 
+    @bounded_operation(lambda self, *args, **kwargs: self.owner_id)
     async def _generate_prompt(
         self, user_profile: str, email_samples: str, whatsapp_samples: str
     ) -> str:

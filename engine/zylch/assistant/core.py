@@ -333,6 +333,8 @@ class ZylchAIAgent(BaseConversationalAgent):
         # Handle tool use loop
         step = 0
         while response.stop_reason == "tool_use":
+            if step >= 10:
+                raise RuntimeError("Chat stopped after 10 tool rounds. Review progress before continuing.")
             step += 1
             logger.debug(
                 f"[chat turn={turn_id} step={step}] tool_use stop_reason"

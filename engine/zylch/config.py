@@ -64,7 +64,7 @@ class Settings(BaseSettings):
     my_emails: str = Field(
         default="",
         description=(
-            "Comma-separated list of my email addresses" " (supports wildcards like *@domain.com)"
+            "Comma-separated list of my email addresses (supports wildcards like *@domain.com)"
         ),
     )
 
@@ -74,17 +74,25 @@ class Settings(BaseSettings):
         description="Enable prompt caching",
     )
 
-    # LLM credentials.
-    #
-    # The engine has one provider — Anthropic — over two transports
-    # (see `zylch.llm.client.make_llm_client`):
-    #
-    #   - "direct" (BYOK)   — uses anthropic_api_key below.
-    #   - "proxy"  (credits)— uses the Firebase JWT cached in
-    #                         zylch.auth.session; routes through
-    #                         mrcall-agent. No API key in .env.
-    #
-    # Selection is automatic: anthropic_api_key set → direct; else proxy.
+    # Explicit profile billing selection; unset preserves legacy key routing.
+    llm_provider: str = Field(
+        default="",
+        description="Explicit anthropic, mrcall or openrouter; blank preserves legacy billing",
+    )
+    llm_model_preset: str = Field(
+        default="custom", description="Economy, balanced or custom role policy"
+    )
+    openrouter_api_key: str = Field(
+        default="", description="OpenRouter API key for the selected provider"
+    )
+    openrouter_model: str = Field(default="z-ai/glm-5.2", description="Explicit OpenRouter model")
+    preparation_batch_size: int = Field(
+        default=25,
+        ge=1,
+        le=100,
+        description="Shared source-stage attempt limit per paid preparation run",
+    )
+
     anthropic_api_key: str = Field(
         default="",
         description="Anthropic API key (BYOK). Leave empty to use MrCall credits.",
@@ -113,7 +121,7 @@ class Settings(BaseSettings):
         ),
     )
     mrcall_credits_model: str = Field(
-        default="claude-sonnet-4-5",
+        default="claude-haiku-4-5",
         env="MRCALL_CREDITS_MODEL",
         description="Model used by the MrCall-credits proxy transport",
     )
@@ -140,11 +148,11 @@ class Settings(BaseSettings):
 
     # LLM models
     default_model: str = Field(
-        default="claude-opus-4-6",
+        default="claude-haiku-4-5",
         description="Default model for all AI operations",
     )
     anthropic_model: str = Field(
-        default="claude-opus-4-6",
+        default="claude-haiku-4-5",
         description="Anthropic model used for the BYOK transport",
     )
 
@@ -155,11 +163,11 @@ class Settings(BaseSettings):
     )
     email_password: str = Field(
         default="",
-        description=("App password for IMAP/SMTP" " (NOT account password)"),
+        description=("App password for IMAP/SMTP (NOT account password)"),
     )
     imap_host: str = Field(
         default="",
-        description=("IMAP server hostname" " (auto-detected from email domain)"),
+        description=("IMAP server hostname (auto-detected from email domain)"),
     )
     imap_port: int = Field(
         default=993,
@@ -167,7 +175,7 @@ class Settings(BaseSettings):
     )
     smtp_host: str = Field(
         default="",
-        description=("SMTP server hostname" " (auto-detected from email domain)"),
+        description=("SMTP server hostname (auto-detected from email domain)"),
     )
     smtp_port: int = Field(
         default=587,
@@ -188,13 +196,13 @@ class Settings(BaseSettings):
     # Email archive
     email_archive_batch_size: int = Field(
         default=10,
-        description=("Emails to fetch per batch" " during archive sync"),
+        description=("Emails to fetch per batch during archive sync"),
     )
 
     # WhatsApp (optional channel — neonize/whatsmeow)
     whatsapp_db_path: str = Field(
         default="~/.zylch/whatsapp.db",
-        description=("Path to neonize session database" " (WhatsApp Web multi-device)"),
+        description=("Path to neonize session database (WhatsApp Web multi-device)"),
     )
     whatsapp_enabled: bool = Field(
         default=False,

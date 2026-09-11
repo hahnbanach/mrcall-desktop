@@ -1,5 +1,5 @@
 ---
-doc_baseline_commit: 7a3956cf5810f6c284fe4e413eec7ed9d9ddbaff
+doc_baseline_commit: da85537b809ba278de66ced021fcab758f6c7655
 doc_baseline_date: 2026-09-11
 ---
 
@@ -19,6 +19,14 @@ what is *current*, targeting ≤ ~120 lines.
 
 ## State now
 
+Predictable spending is implemented with independent M1–M4 and final approvals.
+Billing server `prod-c238edf8` is deployed with the additive PostgreSQL ledger;
+authenticated free capabilities and quote return the bounded protocol. Four
+Café124 engines run isolated release `83075a0`. Each retains its USD5 daily cap,
+uses the explicit economy preset (Haiku), and has automatic processing disabled
+and preparation paused. No paid acceptance calls have been made.
+See [current delivery plan](execution-plans/2026-09-11-predictable-ai-spending.md).
+
 Desktop includes the V1 Desktop → engine → operator setup journey.
 Desktop opens Setup by default: configuration, authenticated remote connection,
 mailbox preparation, then a copyable descriptor-based workspace command.
@@ -32,7 +40,7 @@ incomplete. This does not certify reply quality or successful task detection.
 The desktop handoff exposes selected identity, endpoint, path and command only;
 refresh credentials remain in the existing private descriptor.
 
-Setup reports the engine's current key-or-Firebase billing policy. Settings
+Setup reports the engine's saved provider and credential availability. Settings
 separates saved billing from unsaved choices and keeps personal API-key entry
 optional. Check connection verifies the selected transport without a restart.
 The [acceptance recovery plan](execution-plans/2026-09-10-setup-billing-recovery.md)
@@ -42,17 +50,14 @@ Settings remains reachable when the engine is down. Reconnection invalidates
 stale snapshots; unsaved settings must be explicitly discarded before loading
 a different backend. Preparation actions remain user-triggered.
 
-Desktop changes are on main and tagged `v0.1.47` at `6f0b8f8`. The hosted engine
-runs `b875cb5`, including shared project memory: seven profile services,
-provisiond and Caddy are active;
-authenticated `setup.state` returns the new evidence fields. The CTO has accepted
-the macOS Desktop test. The macOS Apple Silicon installer is published as
-[v0.1.47](https://github.com/hahnbanach/mrcall-desktop/releases/tag/v0.1.47),
-Developer ID signed and Apple-notarized.
+Desktop v0.1.47 remains the published Apple Silicon installer; v0.1.48 is prepared
+for release with spending controls and shared project RPC. The new UI passes
+component journeys, typecheck and build; installation on the CTO's Mac is not
+verified. Other hosted accounts retain the previous checkout until the host's
+normal reconciliation; the four affected accounts use pinned guarded releases.
 
 Kernel v0.44.0 is publicly released and installed in both maintained operational
-clones. Public-tag installation and independent lock rebuilds were verified.
-Desktop v0.1.47 still has cosmetic development-kernel wording; its linked guide
+clones. Desktop v0.1.47 still has cosmetic development-kernel wording; its linked guide
 now installs the public kernel release.
 See [operator setup](operator-setup.md), the
 [brief](briefs/2026-09-10-desktop-to-operator-onboarding.md), and the
@@ -63,14 +68,14 @@ shared company memory through `memory.join`, headless descriptors, provisioning,
 BYOK and MrCall-credit LLM routing. Contracts live in [IPC](ipc-contract.md),
 [remote backend](remote-backend.md), and the per-tree documentation.
 Prior deployment/package observations remain historical in the archive;
-the production observation above is from the 2026-09-10 rollout.
+the spending rollout above is verified on 2026-09-11; project-memory
+deployment evidence is from 2026-09-10.
 
 Shared written projects are revisioned company-engine records, separate from
-entity blobs, accessed through `cs project` in kernel v0.44.0. Six 124 projects
-(28 documents) and four MrCall projects (23 documents) are imported and independently
-verified by downloaded hashes. Original folders are archived in the private clone
-Git histories (124 `abd48c8`, MrCall `3f53462`) and removed from working trees. A
-second 124 owner sees all six shared projects. This is deployed on the hosted
+entity blobs, accessed through `cs project` in kernel v0.44.0. The company store contains six 124 projects
+(28 documents) and four MrCall projects (23 documents), shared with other company
+members. Original folders remain in the private clone Git histories
+(124 `abd48c8`, MrCall `3f53462`) and are absent from working trees. This is deployed on the hosted
 engine; the bundled v0.1.47 sidecar does not include these RPC methods.
 See the [brief](briefs/2026-09-10-shared-project-memory.md) and
 [plan](execution-plans/2026-09-10-shared-project-memory.md).
@@ -96,8 +101,9 @@ See the [brief](briefs/2026-09-10-shared-project-memory.md) and
 
 ## Next
 
-1. Include project-memory RPC in the next bundled-engine Desktop release.
-2. Continue the deferred product work from its existing briefs.
+1. Publish Desktop v0.1.48 and verify the release artifacts.
+2. Evaluate economy/GLM task quality before enabling recurring backlogs.
+3. Continue the deferred product work from its existing briefs.
 
 ### Deferred (nice-to-have)
 

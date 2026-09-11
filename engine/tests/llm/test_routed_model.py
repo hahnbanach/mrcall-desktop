@@ -1,6 +1,6 @@
 """routed_model() + per-worker model-routing wiring (P4 / FIX 3).
 
-routed_model() reads a MODEL_* knob LIVE from os.environ (blank/unset →
+routed_model() reads a MODEL_* knob LIVE from saved profile settings (blank/unset →
 None = engine default). The wiring tests assert each worker passes the
 resolved value straight to its client factory, so flipping a knob in the
 profile .env re-routes exactly that worker on its next call — no restart.
@@ -9,33 +9,52 @@ profile .env re-routes exactly that worker on its next call — no restart.
 import types
 from unittest.mock import MagicMock
 
+import pytest
+
 from zylch.llm import routed_model
 
 
+@pytest.fixture
+def saved_model(tmp_path, monkeypatch):
+    monkeypatch.setenv("ZYLCH_PROFILE_DIR", str(tmp_path))
+    path = tmp_path / ".env"
+    values = {}
+    path.write_text("")
+
+    def save(key, value=None):
+        if value is None:
+            values.pop(key, None)
+        else:
+            values[key] = value
+        path.write_text("".join(f'{k}="{v}"\n' for k, v in values.items()))
+
+    return save
+
+
 # ── routed_model() unit behaviour ───────────────────────────────────────
-def test_routed_model_returns_value_when_set(monkeypatch):
-    monkeypatch.setenv("MODEL_UNIT_TEST", "claude-sonnet-4-5")
+def test_routed_model_returns_value_when_set(monkeypatch, saved_model):
+    saved_model("MODEL_UNIT_TEST", "claude-sonnet-4-5")
     assert routed_model("MODEL_UNIT_TEST") == "claude-sonnet-4-5"
 
 
-def test_routed_model_strips_whitespace(monkeypatch):
-    monkeypatch.setenv("MODEL_UNIT_TEST", "  claude-haiku-4-5  ")
+def test_routed_model_strips_whitespace(monkeypatch, saved_model):
+    saved_model("MODEL_UNIT_TEST", "  claude-haiku-4-5  ")
     assert routed_model("MODEL_UNIT_TEST") == "claude-haiku-4-5"
 
 
-def test_routed_model_blank_is_none(monkeypatch):
-    monkeypatch.setenv("MODEL_UNIT_TEST", "   ")
+def test_routed_model_blank_is_none(monkeypatch, saved_model):
+    saved_model("MODEL_UNIT_TEST", "   ")
     assert routed_model("MODEL_UNIT_TEST") is None
 
 
-def test_routed_model_unset_is_none(monkeypatch):
-    monkeypatch.delenv("MODEL_UNIT_TEST", raising=False)
+def test_routed_model_unset_is_none(monkeypatch, saved_model):
+    saved_model("MODEL_UNIT_TEST")
     assert routed_model("MODEL_UNIT_TEST") is None
 
 
-def test_routed_model_is_isolated_per_key(monkeypatch):
-    monkeypatch.setenv("MODEL_A", "model-a")
-    monkeypatch.delenv("MODEL_B", raising=False)
+def test_routed_model_is_isolated_per_key(monkeypatch, saved_model):
+    saved_model("MODEL_A", "model-a")
+    saved_model("MODEL_B")
     assert routed_model("MODEL_A") == "model-a"
     assert routed_model("MODEL_B") is None
 
@@ -49,7 +68,7 @@ def _neuter_heavy_worker_deps(monkeypatch, module):
         monkeypatch.setattr(module, "BlobStorage", lambda *a, **k: object())
 
 
-def test_task_detection_knob_wired(monkeypatch):
+def test_task_detection_knob_wired(monkeypatch, saved_model):
     import zylch.workers.task_creation as tc
 
     captured = {}
@@ -62,12 +81,12 @@ def test_task_detection_knob_wired(monkeypatch):
         lambda owner: [],
     )
 
-    monkeypatch.setenv("MODEL_TASK_DETECTION", "claude-detect-x")
+    saved_model("MODEL_TASK_DETECTION", "claude-detect-x")
     tc.TaskWorker(MagicMock(), "owner@x.io", "owner@x.io")
     assert captured["model"] == "claude-detect-x"
 
 
-def test_task_detection_knob_default_is_none(monkeypatch):
+def test_task_detection_knob_default_is_none(monkeypatch, saved_model):
     import zylch.workers.task_creation as tc
 
     captured = {}
@@ -80,13 +99,13 @@ def test_task_detection_knob_default_is_none(monkeypatch):
         lambda owner: [],
     )
 
-    monkeypatch.delenv("MODEL_TASK_DETECTION", raising=False)
+    saved_model("MODEL_TASK_DETECTION")
     tc.TaskWorker(MagicMock(), "owner@x.io", "owner@x.io")
     assert captured["model"] is None
 
 
 # ── wiring: MODEL_MEMORY_EXTRACT + MODEL_MEMORY_MERGE → MemoryWorker ─────
-def test_memory_extract_and_merge_knobs_wired(monkeypatch):
+def test_memory_extract_and_merge_knobs_wired(monkeypatch, saved_model):
     import zylch.workers.memory as mem
 
     captured = {}
@@ -101,15 +120,15 @@ def test_memory_extract_and_merge_knobs_wired(monkeypatch):
     monkeypatch.setattr(mem, "LLMMergeService", _FakeMerge)
     _neuter_heavy_worker_deps(monkeypatch, mem)
 
-    monkeypatch.setenv("MODEL_MEMORY_EXTRACT", "claude-extract-x")
-    monkeypatch.setenv("MODEL_MEMORY_MERGE", "claude-merge-x")
+    saved_model("MODEL_MEMORY_EXTRACT", "claude-extract-x")
+    saved_model("MODEL_MEMORY_MERGE", "claude-merge-x")
     mem.MemoryWorker(MagicMock(), "owner@x.io")
     assert captured["extract"] == "claude-extract-x"
     assert captured["merge"] == "claude-merge-x"
 
 
 # ── wiring: MODEL_MEMORY_MERGE → merge_gate_selfcheck's own service ─────
-def test_merge_gate_uses_memory_merge_knob(monkeypatch):
+def test_merge_gate_uses_memory_merge_knob(monkeypatch, saved_model):
     from zylch.memory.llm_merge import merge_gate_selfcheck
 
     captured = {}
@@ -119,12 +138,12 @@ def test_merge_gate_uses_memory_merge_knob(monkeypatch):
         client = MagicMock()
         client.model = model or "default"
         client.create_message_sync.return_value = types.SimpleNamespace(
-            content=[types.SimpleNamespace(type="text", text="INSERT")]
+            stop_reason="end_turn", content=[types.SimpleNamespace(type="text", text="INSERT")]
         )
         return client
 
     monkeypatch.setattr("zylch.memory.llm_merge.make_llm_client", _fake_factory)
-    monkeypatch.setenv("MODEL_MEMORY_MERGE", "claude-mergegate-x")
+    saved_model("MODEL_MEMORY_MERGE", "claude-mergegate-x")
 
     res = merge_gate_selfcheck()  # merge_service=None → builds its own
     assert captured["model"] == "claude-mergegate-x"

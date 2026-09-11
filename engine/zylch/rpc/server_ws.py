@@ -259,8 +259,8 @@ def _warmup() -> None:
 
 
 def _auto_update_enabled() -> bool:
-    """Headless auto-update on/off (AUTO_UPDATE_ENABLED, default yes)."""
-    val = (os.environ.get("AUTO_UPDATE_ENABLED") or "y").strip().lower()
+    """Headless auto-update on/off (AUTO_UPDATE_ENABLED, default no)."""
+    val = (os.environ.get("AUTO_UPDATE_ENABLED") or "n").strip().lower()
     return val not in ("n", "no", "false", "0", "off", "")
 
 

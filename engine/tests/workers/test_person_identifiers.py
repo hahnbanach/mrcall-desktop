@@ -471,7 +471,7 @@ async def test_upsert_entity_prefers_identifier_match_over_cosine(fresh_db):
     storage = Storage()
     owner = "owner@test.com"
 
-    blob_a = _make_blob(owner, content="A_OLD_CONTENT")
+    blob_a = _make_blob(owner, content="#IDENTIFIERS\nEmail: contact@example.com\n#ABOUT\nA_OLD_CONTENT")
     blob_b = _make_blob(owner, content="B_OLD_CONTENT")
 
     storage.add_person_identifiers(owner, blob_a, [("email", "contact@example.com")])
@@ -484,7 +484,7 @@ async def test_upsert_entity_prefers_identifier_match_over_cosine(fresh_db):
     )
     # blob_storage.get_blob lookup table
     worker.blob_storage._registry = {
-        blob_a: {"content": "A_OLD_CONTENT"},
+        blob_a: {"content": "#IDENTIFIERS\nEmail: contact@example.com\n#ABOUT\nA_OLD_CONTENT"},
         blob_b: {"content": "B_OLD_CONTENT"},
     }
     # Cosine returns blob B (the OTHER duplicate), not A.
@@ -509,7 +509,7 @@ Email: contact@example.com
     # accepted, no need to try B).
     assert worker.llm_merge.merge.call_count == 1
     first_call_args = worker.llm_merge.merge.call_args_list[0].args
-    assert first_call_args[0] == "A_OLD_CONTENT", (
+    assert first_call_args[0] == "#IDENTIFIERS\nEmail: contact@example.com\n#ABOUT\nA_OLD_CONTENT", (
         f"identifier-match A should be first merge candidate, "
         f"got first call against {first_call_args[0]!r}"
     )
@@ -530,7 +530,7 @@ async def test_upsert_entity_falls_back_to_cosine_on_identifier_reject(fresh_db)
     storage = Storage()
     owner = "owner@test.com"
 
-    blob_a = _make_blob(owner, content="A_SHARED_PHONE_BUT_DIFF_PERSON")
+    blob_a = _make_blob(owner, content="#IDENTIFIERS\nPhone: +390212345678\n#ABOUT\nA_SHARED_PHONE_BUT_DIFF_PERSON")
     blob_c = _make_blob(owner, content="C_RIGHT_PERSON")
 
     # blob_a is identifier-matched (shared switchboard)
@@ -542,7 +542,7 @@ async def test_upsert_entity_falls_back_to_cosine_on_identifier_reject(fresh_db)
         llm_merge_returns=["INSERT", "C_MERGED"],
     )
     worker.blob_storage._registry = {
-        blob_a: {"content": "A_SHARED_PHONE_BUT_DIFF_PERSON"},
+        blob_a: {"content": "#IDENTIFIERS\nPhone: +390212345678\n#ABOUT\nA_SHARED_PHONE_BUT_DIFF_PERSON"},
         blob_c: {"content": "C_RIGHT_PERSON"},
     }
     # Cosine returns C (the actual right person)
@@ -567,7 +567,7 @@ Phone: +390212345678
     assert worker.llm_merge.merge.call_count == 2
     first = worker.llm_merge.merge.call_args_list[0].args[0]
     second = worker.llm_merge.merge.call_args_list[1].args[0]
-    assert first == "A_SHARED_PHONE_BUT_DIFF_PERSON"
+    assert first == "#IDENTIFIERS\nPhone: +390212345678\n#ABOUT\nA_SHARED_PHONE_BUT_DIFF_PERSON"
     assert second == "C_RIGHT_PERSON"
     worker.blob_storage.update_blob.assert_called_once()
     assert worker.blob_storage.update_blob.call_args.kwargs["blob_id"] == blob_c

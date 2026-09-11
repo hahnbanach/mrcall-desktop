@@ -129,9 +129,6 @@ async def analyze_recent_calendar_events(worker: "TaskWorker") -> tuple[int, int
             )
             continue
 
-        # Analysis succeeded: this event is decided, don't re-analyze it.
-        worker.storage.mark_calendar_event_task_processed(worker.owner_id, event_id)
-
         # Bug B (2026-05-06): honour task_action on calendar events
         # the same way the email branch does. Without this, a
         # recurring event on a topic with an existing task always
@@ -225,5 +222,8 @@ async def analyze_recent_calendar_events(worker: "TaskWorker") -> tuple[int, int
                 worker.storage.store_task_item(worker.owner_id, result)
                 action_count += 1
                 logger.debug(f"[TASK] create new cal task event_id={event_id}")
+
+        # Commit the checkpoint only after the resulting task mutation.
+        worker.storage.mark_calendar_event_task_processed(worker.owner_id, event_id)
 
     return analyzed_count, action_count

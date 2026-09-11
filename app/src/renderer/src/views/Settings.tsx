@@ -2,6 +2,7 @@ import * as React from 'react'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { errorMessage, isProfileLockedError } from '../lib/errors'
 import Icon from '../components/Icon'
+import DailyBudget from '../components/DailyBudget'
 import ConnectGoogleCalendar from './ConnectGoogleCalendar'
 import ConnectWhatsApp from './ConnectWhatsApp'
 import { performSignOut } from '../App'
@@ -47,7 +48,6 @@ export default function Settings(): JSX.Element {
   const [edits, setEdits] = useState<Record<string, string>>({})
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
-  const [showOptionalKey, setShowOptionalKey] = useState(false)
   const [status, setStatus] = useState<{
     kind: 'idle' | 'success' | 'error' | 'progress'
     text: string
@@ -141,8 +141,14 @@ export default function Settings(): JSX.Element {
   savingRef.current = saving
 
   const handleChange = (key: string, value: string) => {
-    setEdits((prev) => ({ ...prev, [key]: value }))
+    setEdits((prev) => ({ ...prev, [key]: value,
+      ...(key === 'LLM_MODEL_PRESET' && value !== 'custom' ? {
+        MODEL_MEMORY_EXTRACT: '', MODEL_MEMORY_MERGE: '', MODEL_TASK_DETECTION: '',
+        MODEL_REANALYZE: '', MODEL_DEDUP: ''
+      } : {}) }))
   }
+  const savedProvider = loaded.LLM_PROVIDER || (loaded.ANTHROPIC_API_KEY?.trim() ? 'anthropic' : 'mrcall')
+  const selectedProvider = edits.LLM_PROVIDER || savedProvider
 
   const handleSave = async () => {
     if (!hasChanges || contextStale || loading) return
@@ -289,27 +295,19 @@ export default function Settings(): JSX.Element {
           <div className="space-y-4">
             {group === 'LLM' && (
               <LLMProviderCard
-                // The engine resolves transport from key presence: an
-                // ANTHROPIC_API_KEY in .env means BYOK, absence means
-                // MrCall credits. We mirror that here — picking the
-                // BYOK side reveals the key field in the schema below;
-                // picking credits clears it.
-                hasAnthropicKey={
-                  ('ANTHROPIC_API_KEY' in edits
-                    ? !!edits.ANTHROPIC_API_KEY.trim()
-                    : !!loaded.ANTHROPIC_API_KEY?.trim())
-                }
-                savedHasAnthropicKey={!!loaded.ANTHROPIC_API_KEY?.trim()}
-                pendingKeyChange={'ANTHROPIC_API_KEY' in changes}
-                onClearKey={() => handleChange('ANTHROPIC_API_KEY', '')}
+                selectedProvider={selectedProvider}
+                savedProvider={savedProvider}
+                pendingBillingChange={['LLM_PROVIDER', 'ANTHROPIC_API_KEY', 'OPENROUTER_API_KEY'].some(key => key in changes)}
+                onSelectCredits={() => handleChange('LLM_PROVIDER', 'mrcall')}
+                refreshKey={JSON.stringify(loaded)}
               />
             )}
-            {group === 'LLM' && !(edits.ANTHROPIC_API_KEY ?? loaded.ANTHROPIC_API_KEY ?? '').trim() && <button type="button" className="text-sm underline" onClick={() => setShowOptionalKey(value => !value)}>{showOptionalKey ? 'Hide optional API key' : 'Use my own Anthropic API key (optional)'}</button>}
-            {items.filter(f => f.key !== 'ANTHROPIC_API_KEY' || !!(edits.ANTHROPIC_API_KEY ?? loaded.ANTHROPIC_API_KEY ?? '').trim() || showOptionalKey).map((f) => (
+            {group === 'LLM' && edits.LLM_MODEL_PRESET && edits.LLM_MODEL_PRESET !== 'custom' && <p className="text-xs text-brand-grey-80">Saving this preset replaces individual job model overrides. The billing provider stays as selected.</p>}
+            {items.filter(f => f.key === 'ANTHROPIC_API_KEY' ? selectedProvider === 'anthropic' : f.key === 'OPENROUTER_API_KEY' ? selectedProvider === 'openrouter' : true).map((f) => (
               <FieldRow
                 key={f.key}
                 field={f}
-                value={f.key in edits ? edits[f.key] : (loaded[f.key] ?? '')}
+                value={f.key === 'LLM_PROVIDER' ? selectedProvider : f.key in edits ? edits[f.key] : (loaded[f.key] ?? '')}
                 onChange={(v) => handleChange(f.key, v)}
                 isDirty={f.key in edits && edits[f.key] !== (loaded[f.key] ?? '')}
               />
@@ -352,15 +350,8 @@ export default function Settings(): JSX.Element {
   )
 }
 
-// ─── LLM mode card (BYOK vs MrCall credits) ──────────────────────────
-//
-// The engine has one provider (Anthropic) over two transports: direct
-// (BYOK Anthropic key) and proxy (MrCall credits, billed via the
-// Firebase session). The runtime decides based on whether
-// ANTHROPIC_API_KEY is set in `.env`. This card mirrors that — it does
-// not write a separate "provider" setting. Picking BYOK reveals the
-// key field in the schema-driven section below; picking credits
-// clears the key (with optional sign-in check).
+// Saved billing is separate from pending provider edits. Provider changes
+// preserve keys; account/connection changes invalidate in-flight balance reads.
 
 interface BalancePayload {
   balance_credits: number
@@ -769,88 +760,66 @@ function BackendLocationCard(): JSX.Element {
   )
 }
 
-function LLMProviderCard({
-  hasAnthropicKey,
-  savedHasAnthropicKey,
-  pendingKeyChange,
-  onClearKey
-}: {
-  hasAnthropicKey: boolean
-  savedHasAnthropicKey: boolean
-  pendingKeyChange: boolean
-  onClearKey: () => void
+function LLMProviderCard({ selectedProvider, savedProvider, pendingBillingChange, onSelectCredits, refreshKey }: {
+  selectedProvider: string
+  savedProvider: string
+  pendingBillingChange: boolean
+  onSelectCredits: () => void
+  refreshKey: string
 }): JSX.Element {
   const signedIn = !!auth.currentUser
-  const isCredits = !savedHasAnthropicKey
+  const isCredits = savedProvider === 'mrcall'
+  const providerName = (provider: string): string => provider === 'mrcall' ? 'MrCall credits' : provider === 'openrouter' ? 'OpenRouter API key' : 'Anthropic API key'
   const [topupError, setTopupError] = useState<string | null>(null)
 
   const [balance, setBalance] = useState<BalancePayload | null>(null)
   const [balanceErr, setBalanceErr] = useState<string | null>(null)
   const [balanceLoading, setBalanceLoading] = useState(false)
 
+  const balanceGeneration = useRef(0)
+  const balanceRequest = useRef(0)
   const refreshBalance = async (): Promise<void> => {
-    if (!signedIn) return
-    setBalanceLoading(true)
-    setBalanceErr(null)
-    // Self-heal: the engine holds the Firebase token in memory only,
-    // so every sidecar restart starts session-less and the first
-    // account.balance call after one fails with NoActiveSession (code
-    // -32010) until the auth listener pushes the token. Re-push +
-    // verify via account.whoAmI BEFORE the balance call so the user
-    // sees real numbers, not a stale balance frozen at the last
-    // successful fetch — Mario flagged the suspiciously-static credit
-    // count on production@example.com, that was the underlying cause.
-    const sessionOk = await ensureEngineSession()
-    if (!sessionOk) {
-      setBalance(null)
-      setBalanceErr('Session not yet established — sign in again or wait a moment.')
-      setBalanceLoading(false)
-      return
-    }
+    if (!signedIn || !isCredits) return
+    const epoch = balanceGeneration.current
+    const request = ++balanceRequest.current
+    const current = (): boolean => epoch === balanceGeneration.current && request === balanceRequest.current
+    setBalanceLoading(true); setBalance(null); setBalanceErr(null)
     try {
-      const r = await window.zylch.account.balance()
-      if ('error' in r && r.error === 'auth_expired') {
-        // One retry: maybe the re-push just landed and a follow-up
-        // call now has a fresh session.
+      if (!await ensureEngineSession()) throw new Error('Session not yet established. Sign in again or wait a moment.')
+      if (!current()) return
+      let result = await window.zylch.account.balance()
+      if (!current()) return
+      if ('error' in result && result.error === 'auth_expired') {
         const recovered = await ensureEngineSession()
-        if (recovered) {
-          const r2 = await window.zylch.account.balance()
-          if ('balance_credits' in r2) {
-            setBalance(r2)
-            return
-          }
-        }
-        setBalance(null)
-        setBalanceErr('Session expired — please sign in again.')
-      } else if ('balance_credits' in r) {
-        setBalance(r)
+        if (!current()) return
+        if (!recovered) throw new Error('Session expired. Sign in again.')
+        result = await window.zylch.account.balance()
       }
-    } catch (e: unknown) {
-      setBalance(null)
-      setBalanceErr(errorMessage(e))
-    } finally {
-      setBalanceLoading(false)
-    }
+      if (!current()) return
+      if ('balance_credits' in result) setBalance(result)
+      else throw new Error('Balance could not be verified. Sign in again.')
+    } catch (cause) { if (current()) setBalanceErr(errorMessage(cause)) }
+    finally { if (current()) setBalanceLoading(false) }
   }
-
-  // Fetch balance on mount when on credits, and every time the window
-  // regains focus (user may have topped up in another tab).
   useEffect(() => {
-    if (!isCredits || !signedIn) return
-    void refreshBalance()
-    const onFocus = (): void => {
-      void refreshBalance()
-    }
-    window.addEventListener('focus', onFocus)
-    return () => window.removeEventListener('focus', onFocus)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isCredits, signedIn])
+    balanceGeneration.current++
+    setBalance(null); setBalanceErr(null); setTopupError(null)
+    if (isCredits && signedIn) void refreshBalance()
+    const focus = (): void => { void refreshBalance() }
+    window.addEventListener('focus', focus)
+    const off = window.zylch.onSidecarStatus(status => {
+      balanceGeneration.current++; balanceRequest.current++
+      setBalance(null); setBalanceErr(null); setBalanceLoading(false)
+      if (status.alive && status.ready) void refreshBalance()
+    })
+    return () => { balanceGeneration.current++; window.removeEventListener('focus', focus); off() }
+  }, [isCredits, signedIn, refreshKey])
 
   return (
     <div className="bg-white border border-brand-mid-grey rounded-lg p-4 space-y-3">
       <div className="text-xs font-medium text-brand-grey-80">Saved billing mode</div>
-      {pendingKeyChange && <div role="status" className="rounded border border-brand-orange/40 bg-brand-orange/10 p-3 text-sm">
-        Unsaved billing change: {hasAnthropicKey ? 'your Anthropic API key' : 'MrCall credits'}. Click Save below to apply it. Until then, the engine continues using {savedHasAnthropicKey ? 'your saved Anthropic API key' : 'MrCall credits'}.
+      {pendingBillingChange && <div role="status" className="rounded border border-brand-orange/40 bg-brand-orange/10 p-3 text-sm">
+        Unsaved billing change: {providerName(selectedProvider)}. Click Save below to apply it. Until then, the engine uses {providerName(savedProvider)}.
       </div>}
       {isCredits ? (
         <div className="text-sm text-brand-black">
@@ -866,22 +835,23 @@ function LLMProviderCard({
         </div>
       ) : (
         <div className="text-sm text-brand-black">
-          <strong>BYOK (Anthropic key)</strong>
+          <strong>{providerName(savedProvider)}</strong>
           <div className="text-xs text-brand-grey-80 mt-0.5">
-            Calls go directly to Anthropic. No MrCall credits consumed.
+            Calls use your selected provider account. No MrCall credits consumed.
           </div>
           <button
             type="button"
-            onClick={onClearKey}
-            disabled={pendingKeyChange && !hasAnthropicKey}
+            onClick={onSelectCredits}
+            disabled={selectedProvider === 'mrcall'}
             className="mt-2 text-xs text-brand-grey-80 underline hover:text-brand-black"
-            title="Clear ANTHROPIC_API_KEY and switch back to MrCall credits"
+            title="Select MrCall credits; applies when you save"
           >
             Switch to MrCall credits
           </button>
         </div>
       )}
 
+      <DailyBudget key={refreshKey} />
       {topupError && <p role="alert" className="text-sm text-brand-danger">{topupError}</p>}
       {isCredits && signedIn && (
         <div className="mt-2 border-t pt-3 space-y-2">

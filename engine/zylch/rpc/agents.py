@@ -20,6 +20,8 @@ Engine-side counterpart of the desktop's "Train assistant" card in
 
 from __future__ import annotations
 
+from zylch.services.preparation import bounded_operation
+
 import logging
 import os
 from typing import Any, Awaitable, Callable, Dict
@@ -60,6 +62,7 @@ def _emit_progress(
         logger.debug(f"[agents.train_all] notify failed (non-fatal): {e}")
 
 
+@bounded_operation(lambda *args, **kwargs: _owner_id())
 async def agents_train_all(params: Dict[str, Any], notify: NotifyFn) -> Any:
     """agents.train_all() -> {ok, results}.
 

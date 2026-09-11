@@ -1,23 +1,7 @@
-"""Unified LLM client for the engine.
+"""Guarded Anthropic-shaped client for direct, OpenRouter and MrCall billing.
 
-The engine uses a single provider — Anthropic — over one of two
-transports:
-
-- ``direct``: BYOK. The user's ``ANTHROPIC_API_KEY`` from the profile
-  ``.env`` is used to call Anthropic's SDK directly.
-- ``proxy``: MrCall credits. Calls are routed through ``mrcall-agent``'s
-  proxy and billed against the user's MrCall credit balance. The
-  credential is the in-memory Firebase ID token held by
-  :mod:`zylch.auth.session`.
-
-Both transports return Anthropic-shape ``Message`` objects, so the rest
-of the engine sees a uniform interface and never branches on the
-transport.
-
-Callers don't pick the transport. They call :func:`make_llm_client`,
-which inspects ``settings.anthropic_api_key`` and the Firebase session
-and returns a ready :class:`LLMClient`. Background workers that should
-silently skip when no LLM is configured use :func:`try_make_llm_client`.
+Saved profile policy chooses a provider explicitly; legacy profiles retain
+key-or-credits selection. Every paid dispatch uses the common durable budget.
 """
 
 from __future__ import annotations
@@ -25,9 +9,8 @@ from __future__ import annotations
 import asyncio
 import contextvars
 import logging
-import os
-from datetime import datetime
 from dataclasses import dataclass, field
+from datetime import datetime
 from typing import Any, Dict, List, Literal, Optional, Union
 
 logger = logging.getLogger(__name__)
@@ -112,7 +95,7 @@ class LLMResponse:
     def __init__(self, raw_response: Any):
         self._raw = raw_response
         self._content: List[Union[TextBlock, ToolUseBlock]] = []
-        self._stop_reason: str = "end_turn"
+        self._stop_reason: Optional[str] = None
         self._parse_response()
 
     def _parse_response(self) -> None:
@@ -134,14 +117,14 @@ class LLMResponse:
                         input=inp,
                     )
                 )
-        self._stop_reason = self._raw.stop_reason or "end_turn"
+        self._stop_reason = self._raw.stop_reason
 
     @property
     def content(self) -> List[Union[TextBlock, ToolUseBlock]]:
         return self._content
 
     @property
-    def stop_reason(self) -> str:
+    def stop_reason(self) -> Optional[str]:
         return self._stop_reason
 
     @property
@@ -158,11 +141,12 @@ class LLMResponse:
                 "cache_creation_input_tokens": 0,
                 "cache_read_input_tokens": 0,
             }
+        read = u.get if isinstance(u, dict) else lambda key, default=0: getattr(u, key, default)
         return {
-            "input_tokens": int(getattr(u, "input_tokens", 0) or 0),
-            "output_tokens": int(getattr(u, "output_tokens", 0) or 0),
-            "cache_creation_input_tokens": int(getattr(u, "cache_creation_input_tokens", 0) or 0),
-            "cache_read_input_tokens": int(getattr(u, "cache_read_input_tokens", 0) or 0),
+            "input_tokens": int(read("input_tokens", 0) or 0),
+            "output_tokens": int(read("output_tokens", 0) or 0),
+            "cache_creation_input_tokens": int(read("cache_creation_input_tokens", 0) or 0),
+            "cache_read_input_tokens": int(read("cache_read_input_tokens", 0) or 0),
         }
 
 
@@ -210,7 +194,7 @@ def _coerce_messages(messages: List[Any]) -> List[Any]:
 # ─── Client ───────────────────────────────────────────────────────────
 
 
-Transport = Literal["direct", "proxy"]
+Transport = Literal["direct", "proxy", "openrouter"]
 
 
 class LLMClient:
@@ -234,6 +218,7 @@ class LLMClient:
         *,
         api_key: Optional[str] = None,
         firebase_session: Optional[Any] = None,
+        proxy_base_url: Optional[str] = None,
         model: Optional[str] = None,
     ) -> None:
         from zylch.config import settings
@@ -243,38 +228,35 @@ class LLMClient:
                 raise ValueError("api_key is required for transport='direct'")
             import anthropic
 
-            # 2026-05-06: bump max_retries from the SDK default (2) to 5.
-            # The SDK retries on 408/409/429/≥500 with exponential
-            # backoff (0.5 → 16 s in this version). Default 2 = 3 total
-            # attempts spanning ~3 s, which is too short for an
-            # overloaded_error (529) cluster — the F4 sweep + F8 dedup
-            # together fire ~20 calls per /update, all of which fail
-            # in lockstep when Anthropic is briefly overloaded.
-            # 5 retries spans ~30 s, which covers transient capacity
-            # blips without making the user wait forever on a real
-            # outage.
-            #
-            # 2026-07-08: add an explicit per-request `timeout`. Without one
-            # the SDK default (~10 min) applies to EACH attempt, so a
-            # stalled/overloaded non-streaming call × max_retries=5 can hang
-            # a single LLM call for ~50 min. That is the root cause of the
-            # memory-write chat turns "failing" client-side with a
-            # TimeoutError while the write completed engine-side: the agent
-            # loop's follow-up call stalled and the cs client always gave up
-            # first. 120 s is generous for a non-streaming Messages call
-            # (max_tokens ≤ 8192) yet bounds a stall; with retries the worst
-            # case is a few minutes, not ~50.
-            self._client = anthropic.Anthropic(api_key=api_key, max_retries=5, timeout=120.0)
+            # Each transport attempt owns a durable budget reservation. Hidden
+            # retries can bill more than the admitted request after a timeout.
+            self._client = anthropic.Anthropic(
+                api_key=api_key,
+                base_url="https://api.anthropic.com",
+                max_retries=0,
+                timeout=120.0,
+            )
+            # An inherited shell gateway/token must not change the admitted
+            # billing transport or leak a second credential to the provider.
+            self._client.auth_token = None
             self.model = model or settings.anthropic_model
+        elif transport == "openrouter":
+            if not api_key:
+                raise ValueError("api_key is required for transport='openrouter'")
+            from .openrouter_client import OpenRouterClient
+            from .openrouter_pricing import MODEL
+
+            self._client = OpenRouterClient(api_key=api_key)
+            self.model = model or MODEL
         elif transport == "proxy":
             if firebase_session is None:
                 raise ValueError(
                     "firebase_session is required for transport='proxy' " "(no signed-in user)"
                 )
-            from .proxy_client import MrCallProxyClient
+            from .bounded_proxy import BoundedProxyClient
 
-            self._client = MrCallProxyClient(
-                proxy_base_url=settings.mrcall_proxy_url,
+            self._client = BoundedProxyClient(
+                proxy_base_url=proxy_base_url or settings.mrcall_proxy_url,
                 firebase_session=firebase_session,
             )
             self.model = model or settings.mrcall_credits_model
@@ -342,6 +324,11 @@ class LLMClient:
     ) -> LLMResponse:
         """Send a Messages-API request and return a unified
         :class:`LLMResponse`."""
+        if getattr(self, "_saved_policy_fingerprint", None) is not None:
+            from .model_policy import policy_fingerprint
+            from .budget_pricing import BudgetError
+            if policy_fingerprint() != self._saved_policy_fingerprint:
+                raise BudgetError("AI settings changed. Start a new run or conversation to use the saved provider and models.")
         model_name = model or self.model
         coerced = _coerce_messages(messages)
 
@@ -350,6 +337,7 @@ class LLMClient:
             "messages": coerced,
             "max_tokens": max_tokens,
             "temperature": temperature,
+            "service_tier": "standard_only",
         }
         # Always inject the current datetime (appended last → cache-safe).
         # Every LLM request carries the real moment; no exceptions.
@@ -366,18 +354,32 @@ class LLMClient:
             f"llm request: transport={self.transport} model={model_name} "
             f"messages={len(coerced)} tools={num_tools}"
         )
-        raw = self._client.messages.create(**request_kwargs)
+        from zylch.llm.budget import reserve, settle
+        from zylch.services.preparation import check_dispatch, record_dispatch
+
+        # Admission uses the final provider-visible payload, including kwargs.
+        # A cancellation/timeout never releases a possibly dispatched request.
+        check_dispatch()
+        quote = self._client.quote(request_kwargs) if self.transport == "proxy" else None
+        reservation = reserve(request_kwargs, self.transport, quote=quote)
+        record_dispatch()
+        receipt = None
+        if self.transport == "proxy":
+            raw, receipt = self._client.execute(request_kwargs, quote, reservation)
+        else:
+            raw = self._client.messages.create(**request_kwargs)
+        if self.transport == "direct":
+            from .budget_pricing import validate_response_model
+            validate_response_model(request_kwargs["model"], getattr(raw, "model", None))
         response = LLMResponse(raw)
-
-        # Meter the spend at the single chokepoint every LLM call flows
-        # through. record() never raises (its own catch-all), but guard
-        # the import/call too so metering can never break an LLM call.
-        try:
-            from zylch.llm import usage as _usage
-
-            _usage.record(model_name, self.transport, response.usage)
-        except Exception as e:  # noqa: BLE001
-            logger.warning(f"[llm-usage] recording skipped: {type(e).__name__}: {e}")
+        # Preserve missing/invalid usage as unknown; the display adapter's zero
+        # defaults must never release money reserved for an uncertain response.
+        raw_usage = getattr(raw, "usage", None)
+        if hasattr(raw_usage, "model_dump"):
+            raw_usage = raw_usage.model_dump()
+        elif raw_usage is not None and not isinstance(raw_usage, dict):
+            raw_usage = vars(raw_usage)
+        settle(reservation, raw_usage, receipt=receipt)
 
         return response
 
@@ -385,82 +387,33 @@ class LLMClient:
 # ─── Factory ──────────────────────────────────────────────────────────
 
 
-def _read_profile_anthropic_key() -> Optional[str]:
-    """Read ``ANTHROPIC_API_KEY`` directly from the active profile's
-    ``.env`` file, ignoring the global shell env.
-
-    Why bypass Pydantic Settings: ``settings.anthropic_api_key`` is the
-    MERGED value (env var > .env file > default), so a key exported in
-    the user's ``~/.bash_profile`` silently bleeds into the desktop
-    sidecar (Electron spawns the sidecar with the parent process env)
-    and routes every LLM call through BYOK ``direct`` transport. The
-    user thinks they're on MrCall credits (no key in the Settings UI,
-    `LLMProviderCard` shows "MrCall credits") but the credit balance
-    never decreases because no call ever reaches the proxy. Mario
-    chased this for days on ``production@example.com``.
-
-    The profile ``.env`` is the source of truth the Settings UI writes
-    to, so anchoring the BYOK decision there closes the leak. Returns
-    the key string when present (non-empty after stripping quotes) or
-    ``None`` when absent / file missing / unreadable.
-    """
-    profile_dir = os.environ.get("ZYLCH_PROFILE_DIR") or os.path.expanduser("~/.zylch")
-    env_path = os.path.join(profile_dir, ".env")
-    if not os.path.isfile(env_path):
-        return None
-    try:
-        with open(env_path, "r", encoding="utf-8") as fh:
-            for raw_line in fh:
-                line = raw_line.strip()
-                if not line or line.startswith("#"):
-                    continue
-                if not line.startswith("ANTHROPIC_API_KEY"):
-                    continue
-                # Match KEY=value, KEY = value, KEY="value", KEY='value'
-                _, _, value = line.partition("=")
-                value = value.strip().strip('"').strip("'")
-                return value or None
-    except Exception as e:
-        logger.warning(f"[llm] failed to read {env_path}: {e}")
-    return None
-
-
 def make_llm_client(model: Optional[str] = None) -> LLMClient:
-    """Build an :class:`LLMClient` for the active profile.
-
-    Resolution order:
-
-    1. ``ANTHROPIC_API_KEY`` present in the **profile** ``.env`` (NOT
-       the shell env — see :func:`_read_profile_anthropic_key`) → BYOK
-       (``transport='direct'``).
-    2. Otherwise → MrCall credits (``transport='proxy'``). Requires a
-       live Firebase session; raises :class:`RuntimeError` otherwise.
-
-    Callers that should silently skip when no LLM is available
-    (e.g. background workers) use :func:`try_make_llm_client` instead.
-    """
+    """Resolve saved billing and model policy without credential-driven fallback."""
     from zylch.auth import get_session
+    from .model_policy import profile_values, resolve_model, resolve_provider, policy_fingerprint
 
-    profile_key = _read_profile_anthropic_key()
-    if profile_key:
-        logger.debug("[llm] make_llm_client: profile has ANTHROPIC_API_KEY → direct")
-        return LLMClient(
-            transport="direct",
-            api_key=profile_key,
-            model=model,
+    values = profile_values()
+    provider = resolve_provider(values)
+    selected_model = resolve_model(model=model, values=values)
+    if provider in ("anthropic", "openrouter"):
+        key_name = "ANTHROPIC_API_KEY" if provider == "anthropic" else "OPENROUTER_API_KEY"
+        key = str(values.get(key_name) or "").strip()
+        if not key:
+            raise RuntimeError(f"Configure the API key for the selected {provider} provider in Settings.")
+        client = LLMClient(
+            transport="direct" if provider == "anthropic" else "openrouter",
+            api_key=key,
+            model=selected_model,
         )
+        client._saved_policy_fingerprint = policy_fingerprint(values)
+        return client
     session = get_session()
     if session is None:
-        raise RuntimeError(
-            "No LLM configured: set ANTHROPIC_API_KEY in the profile .env "
-            "(Settings → LLM) or sign in with Firebase to use MrCall credits."
-        )
-    logger.debug("[llm] make_llm_client: no profile key → proxy (MrCall credits)")
-    return LLMClient(
-        transport="proxy",
-        firebase_session=session,
-        model=model,
-    )
+        raise RuntimeError("Sign in to use the selected MrCall credits billing mode.")
+    client = LLMClient(transport="proxy", firebase_session=session, model=selected_model,
+                       proxy_base_url=str(values.get("MRCALL_PROXY_URL") or "https://zylch.mrcall.ai").strip())
+    client._saved_policy_fingerprint = policy_fingerprint(values)
+    return client
 
 
 def try_make_llm_client(model: Optional[str] = None) -> Optional[LLMClient]:

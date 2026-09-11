@@ -1,0 +1,269 @@
+[
+  {
+    "id": "extract-two-people",
+    "role": "extraction",
+    "input": {
+      "from": "anna@example.test",
+      "body": "I am Anna. Luca (luca@example.test) will prepare the menu; I will prepare the invitations."
+    },
+    "expected": {
+      "accept": true,
+      "identities": [
+        [
+          [
+            "email",
+            "anna@example.test"
+          ]
+        ],
+        [
+          [
+            "email",
+            "luca@example.test"
+          ]
+        ]
+      ]
+    },
+    "reference_response": {
+      "stop_reason": "end_turn",
+      "content": [
+        {
+          "type": "text",
+          "text": "#IDENTIFIERS\nType: PERSON\nName: Anna\nEmail: anna@example.test\n#ABOUT\nAnna is working on the event.\n---ENTITY---\n#IDENTIFIERS\nType: PERSON\nName: Luca\nEmail: luca@example.test\n#ABOUT\nLuca is working on the event."
+        }
+      ]
+    }
+  },
+  {
+    "id": "extract-no-invented-address",
+    "role": "extraction",
+    "input": {
+      "from": "relay@example.test",
+      "body": "Notification: Nora has asked about catering. Her email and phone are not provided. The relay is not Nora."
+    },
+    "expected": {
+      "accept": true,
+      "identities": [
+        []
+      ]
+    },
+    "reference_response": {
+      "stop_reason": "end_turn",
+      "content": [
+        {
+          "type": "text",
+          "text": "#IDENTIFIERS\nType: PERSON\nName: Nora\n#ABOUT\nNora is working on the event."
+        }
+      ]
+    }
+  },
+  {
+    "id": "extract-empty-semantic-skip",
+    "role": "extraction",
+    "input": {
+      "from": "anna@example.test",
+      "body": "OK, thanks."
+    },
+    "expected": {
+      "accept": true,
+      "identities": []
+    },
+    "reference_response": {
+      "stop_reason": "end_turn",
+      "content": [
+        {
+          "type": "text",
+          "text": "SKIP"
+        }
+      ]
+    }
+  },
+  {
+    "id": "extract-truncated-prefix",
+    "role": "extraction",
+    "input": {
+      "from": "anna@example.test",
+      "body": "Anna will organize the event.",
+      "capture_condition": "Generation ends at output limit."
+    },
+    "expected": {
+      "accept": false
+    },
+    "reference_response": {
+      "stop_reason": "max_tokens",
+      "content": [
+        {
+          "type": "text",
+          "text": "#IDENTIFIERS\nType: PERSON\nName: Anna\nEmail: anna@example.test\n#ABOUT\nAnna is working on the event."
+        }
+      ]
+    }
+  },
+  {
+    "id": "merge-same-person",
+    "role": "merge",
+    "input": {
+      "existing": "#IDENTIFIERS\nType: PERSON\nName: Anna\nEmail: anna@example.test\n#ABOUT\nAnna is working on the event.",
+      "new": "#IDENTIFIERS\nType: PERSON\nName: Anna\nEmail: anna@example.test\n#ABOUT\nAnna is working on the event.\nAnna confirms the event date."
+    },
+    "expected": {
+      "accept": true,
+      "insert": false,
+      "identities": [
+        [
+          [
+            "email",
+            "anna@example.test"
+          ]
+        ]
+      ]
+    },
+    "reference_response": {
+      "stop_reason": "end_turn",
+      "content": [
+        {
+          "type": "text",
+          "text": "#IDENTIFIERS\nType: PERSON\nName: Anna\nEmail: anna@example.test\n#ABOUT\nAnna is working on the event.\nAnna confirms the event date."
+        }
+      ]
+    }
+  },
+  {
+    "id": "merge-shared-topic-different-people",
+    "role": "merge",
+    "input": {
+      "existing": "#IDENTIFIERS\nType: PERSON\nName: Anna\nEmail: anna@example.test\n#ABOUT\nAnna is working on the event.",
+      "new": "#IDENTIFIERS\nType: PERSON\nName: Luca\nEmail: luca@example.test\n#ABOUT\nLuca is working on the event."
+    },
+    "expected": {
+      "accept": true,
+      "insert": true,
+      "identities": []
+    },
+    "reference_response": {
+      "stop_reason": "end_turn",
+      "content": [
+        {
+          "type": "text",
+          "text": "INSERT"
+        }
+      ]
+    }
+  },
+  {
+    "id": "merge-shared-name-different-company",
+    "role": "merge",
+    "input": {
+      "existing": "#IDENTIFIERS\nType: PERSON\nName: Alex\nEmail: alex@company-a.test\n#ABOUT\nAlex is working on the event.",
+      "new": "#IDENTIFIERS\nType: PERSON\nName: Alex\nEmail: alex@company-b.test\n#ABOUT\nAlex is working on the event."
+    },
+    "expected": {
+      "accept": true,
+      "insert": true,
+      "identities": []
+    },
+    "reference_response": {
+      "stop_reason": "end_turn",
+      "content": [
+        {
+          "type": "text",
+          "text": "INSERT"
+        }
+      ]
+    }
+  },
+  {
+    "id": "task-direct-request",
+    "role": "task",
+    "input": {
+      "body": "Please send me the catering quote tomorrow.",
+      "existing_tasks": []
+    },
+    "expected": {
+      "accept": true,
+      "decision": {
+        "task_action": "create",
+        "action_required": true
+      }
+    },
+    "reference_response": {
+      "stop_reason": "tool_use",
+      "content": [
+        {
+          "type": "tool_use",
+          "id": "fixture",
+          "name": "task_decision",
+          "input": {
+            "action_required": true,
+            "task_action": "create",
+            "urgency": "medium",
+            "reason": "The message explicitly describes the requested action.",
+            "suggested_action": "Review the message and take the stated action.",
+            "title": "Handle event request"
+          }
+        }
+      ]
+    }
+  },
+  {
+    "id": "task-informational",
+    "role": "task",
+    "input": {
+      "body": "For your records: the venue booking is confirmed. No reply or action needed.",
+      "existing_tasks": []
+    },
+    "expected": {
+      "accept": true,
+      "decision": {
+        "task_action": "none",
+        "action_required": false
+      }
+    },
+    "reference_response": {
+      "stop_reason": "tool_use",
+      "content": [
+        {
+          "type": "tool_use",
+          "id": "fixture",
+          "name": "task_decision",
+          "input": {
+            "action_required": false,
+            "task_action": "none",
+            "urgency": "medium",
+            "reason": "The message explicitly describes the requested action.",
+            "suggested_action": "Review the message and take the stated action.",
+            "title": "Handle event request"
+          }
+        }
+      ]
+    }
+  },
+  {
+    "id": "task-truncated-decision",
+    "role": "task",
+    "input": {
+      "body": "Please send the quote.",
+      "capture_condition": "Generation ends at output limit, even if tool prefix looks valid."
+    },
+    "expected": {
+      "accept": false
+    },
+    "reference_response": {
+      "stop_reason": "max_tokens",
+      "content": [
+        {
+          "type": "tool_use",
+          "id": "fixture",
+          "name": "task_decision",
+          "input": {
+            "action_required": true,
+            "task_action": "create",
+            "urgency": "medium",
+            "reason": "The message explicitly describes the requested action.",
+            "suggested_action": "Review the message and take the stated action.",
+            "title": "Handle event request"
+          }
+        }
+      ]
+    }
+  }
+]

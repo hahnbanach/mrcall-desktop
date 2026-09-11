@@ -62,10 +62,9 @@ export default function Setup({ onNavigate, active = true, refreshSession = asyn
   const connected = !!(remote && snapshot?.identity?.signed_in && snapshot.handoff.available && snapshot.identity.uid === snapshot.handoff.uid)
   const settings = snapshot?.settings
   const mailbox = !!(settings?.IMAP_HOST && settings.EMAIL_PASSWORD)
-  // Match the engine factory: a profile key selects Anthropic; otherwise Firebase selects MrCall.
-  const byok = !!settings?.ANTHROPIC_API_KEY?.trim()
-  const billing = !!settings && (byok || !!snapshot?.identity?.signed_in)
-  const billingLabel = byok ? 'AI billing: your Anthropic account' : billing ? 'AI billing: MrCall credits' : 'Sign in to use MrCall credits'
+  const provider = settings?.LLM_PROVIDER || (settings?.ANTHROPIC_API_KEY?.trim() ? 'anthropic' : 'mrcall')
+  const billing = !!settings && (provider === 'mrcall' ? !!snapshot?.identity?.signed_in : provider === 'openrouter' ? !!settings.OPENROUTER_API_KEY?.trim() : provider === 'anthropic' && !!settings.ANTHROPIC_API_KEY?.trim())
+  const billingLabel = billing ? `AI billing: ${provider === 'mrcall' ? 'MrCall credits' : provider === 'openrouter' ? 'your OpenRouter account' : 'your Anthropic account'}` : 'Configure your selected AI billing provider'
   const configured = mailbox && billing && !!snapshot?.memory?.available
   const preparation = preparationSummary(snapshot?.preparation ?? null)
   const ready = connected && configured && preparation.complete

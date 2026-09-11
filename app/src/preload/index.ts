@@ -134,6 +134,24 @@ const call = <T = unknown>(method: string, params: unknown = {}, timeout?: numbe
   ipcRenderer.invoke('rpc:call', method, params, timeout) as Promise<T>
 
 const api = {
+  usage: {
+    reconcile: (cursor?: string) => call<{ recovered: number; unresolved: number; message: string; next_cursor: string | null }>('usage.reconcile', cursor ? { cursor } : {}, 65_000),
+    today: () => call<{
+      spent_usd: number
+      budget_usd: number
+      reserved_usd: number
+      pricing_fault: boolean
+      billing_supported: boolean
+      billing_reason?: string
+      model_policy?: { provider: string; preset: string; model: string; roles: Record<string, string>; quality_status: string; credential_configured: boolean }
+      remaining_usd: number
+      exceeded: boolean
+      paused: boolean
+      resets_at: string
+      calls_today: number
+      by_site: Record<string, { calls: number; est_usd: number }>
+    }>('usage.today')
+  },
   tasks: {
     list: (params: { include_completed?: boolean; include_skipped?: boolean } = {}) =>
       call<any[]>('tasks.list', params),
@@ -295,6 +313,14 @@ const api = {
       }
       return call<{ ok: boolean }>('chat.approve', payload)
     }
+  },
+  preparation: {
+    status: () => call<any>('preparation.status', {}),
+    pause: () => call<any>('preparation.pause', {}),
+    // Bounded work may still take time; a transport timeout does not cancel it.
+    resume: () => call<any>('preparation.resume', {}, 60 * 60 * 1000),
+    resetFailures: (stage: string, source: string) =>
+      call<{ reset: boolean }>('preparation.reset_failures', { stage, source })
   },
   update: {
     // 12h ceiling — a first sync on a busy inbox can legitimately take

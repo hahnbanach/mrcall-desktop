@@ -4,6 +4,7 @@ import asyncio
 import logging
 from typing import Any, Dict, List, Optional
 
+from zylch.memory.response_validation import complete_memory_text
 from zylch.llm import LLMClient, make_llm_client, routed_model, try_make_llm_client
 from zylch.llm.usage import call_site
 
@@ -121,15 +122,19 @@ class LLMMergeService:
             },
         ]
         user_content = f"EXISTING_ENTITY:\n{existing}\n\nNEW_ENTITY:\n{new}"
-        response = self.client.create_message_sync(
-            model=self.model,
-            max_tokens=1024,
-            system=system,
-            messages=[
-                {"role": "user", "content": user_content},
-            ],
-        )
-        result = response.content[0].text.strip()
+        from zylch.llm.usage import call_site, current_call_site
+
+        site = current_call_site()
+        with call_site("memory.merge" if site == "untagged" else site):
+            response = self.client.create_message_sync(
+                model=self.model,
+                max_tokens=1024,
+                system=system,
+                messages=[
+                    {"role": "user", "content": user_content},
+                ],
+            )
+        result = complete_memory_text(response)
         # Log the DECISION at INFO so the INSERT rate is visible at a glance
         # in the logs — a sustained 0% INSERT rate is the fingerprint of a
         # broken-open gate (the 2026-06 silent regression).

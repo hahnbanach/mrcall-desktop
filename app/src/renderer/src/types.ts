@@ -209,7 +209,53 @@ export type SolveEvent = SolveEventBase &
     | { type: 'error'; message: string }
   )
 
+export interface PreparationStatus {
+  paused: boolean
+  running: boolean
+  attempted: number
+  completed: number
+  failed: number
+  limit: number
+  next_run_limit: number
+  pending: number
+  checkpoints_completed: number
+  suspended: number
+  retry_waiting: number
+  stop_reason: string
+  failed_items: Array<{ stage: string; source: string; attempts: number; retry_at: number }>
+}
+
+export interface PreparationResult extends PreparationStatus {
+  success: boolean
+  summary: string
+  errors: Array<{ stage: string; detail: string }>
+}
+
 export interface ZylchAPI {
+  preparation: {
+    status: () => Promise<PreparationStatus>
+    pause: () => Promise<PreparationStatus>
+    resume: () => Promise<PreparationResult>
+    resetFailures: (stage: string, source: string) => Promise<{ reset: boolean }>
+  }
+  usage: {
+    reconcile: (cursor?: string) => Promise<{ recovered: number; unresolved: number; message: string; next_cursor: string | null }>
+    today: () => Promise<{
+      spent_usd: number
+      budget_usd: number
+      reserved_usd: number
+      pricing_fault: boolean
+      billing_supported: boolean
+      billing_reason?: string
+      model_policy?: { provider: string; preset: string; model: string; roles: Record<string, string>; quality_status: string; credential_configured: boolean }
+      remaining_usd: number
+      exceeded: boolean
+      paused: boolean
+      resets_at: string
+      calls_today: number
+      by_site: Record<string, { calls: number; est_usd: number }>
+    }>
+  }
   tasks: {
     list: (p?: { include_completed?: boolean; include_skipped?: boolean }) => Promise<ZylchTask[]>
     complete: (task_id: string, note?: string | null) => Promise<{ ok: boolean }>

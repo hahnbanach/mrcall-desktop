@@ -2075,6 +2075,16 @@ async def profiles_create(params: Dict[str, Any], notify: NotifyFn) -> Any:
             continue
         if not isinstance(value, str):
             value = "" if value is None else str(value)
+        if key == "LLM_DAILY_BUDGET_USD" and value.strip():
+            import math
+            try:
+                amount = float(value)
+                if not math.isfinite(amount) or amount < 0:
+                    raise ValueError()
+            except (ValueError, OverflowError):
+                err = ValueError("Daily LLM budget must be a finite non-negative USD amount; 0 pauses AI")
+                err.code = -32602
+                raise err from None
         cleaned[key] = value
     if unknown:
         err = ValueError(f"unknown setting keys: {sorted(unknown)}")
@@ -2179,6 +2189,32 @@ async def settings_update(params: Dict[str, Any], notify: NotifyFn) -> Any:
             # UI sent the placeholder back unchanged — keep stored value.
             skipped.append(key)
             continue
+        enums = {
+            "LLM_PROVIDER": {"", "anthropic", "mrcall", "openrouter"},
+            "LLM_MODEL_PRESET": {"", "economy", "balanced", "custom"},
+        }
+        if key in enums and value.strip() not in enums[key]:
+            err = ValueError(f"Invalid choice for {key}")
+            err.code = -32602
+            raise err
+        if key == "PREPARATION_BATCH_SIZE" and value.strip():
+            try:
+                if not value.strip().isascii() or not value.strip().isdigit() or not 1 <= int(value) <= 100:
+                    raise ValueError()
+            except ValueError:
+                err = ValueError("Preparation batch size must be an integer from 1 to 100")
+                err.code = -32602
+                raise err from None
+        if key == "LLM_DAILY_BUDGET_USD" and value.strip():
+            import math
+            try:
+                amount = float(value)
+                if not math.isfinite(amount) or amount < 0:
+                    raise ValueError()
+            except (ValueError, OverflowError):
+                err = ValueError("Daily LLM budget must be a finite non-negative USD amount; 0 pauses AI")
+                err.code = -32602
+                raise err from None
         cleaned[key] = value
 
     if unknown:
@@ -2388,6 +2424,13 @@ for _name, _fn in _USAGE_METHODS.items():
 from zylch.rpc.projects import METHODS as _PROJECT_METHODS  # noqa: E402
 
 for _name, _fn in _PROJECT_METHODS.items():
+    if _name in METHODS:
+        raise RuntimeError(f"duplicate RPC method registration: {_name}")
+    METHODS[_name] = _fn
+
+from zylch.rpc.preparation import METHODS as _PREPARATION_METHODS  # noqa: E402
+
+for _name, _fn in _PREPARATION_METHODS.items():
     if _name in METHODS:
         raise RuntimeError(f"duplicate RPC method registration: {_name}")
     METHODS[_name] = _fn

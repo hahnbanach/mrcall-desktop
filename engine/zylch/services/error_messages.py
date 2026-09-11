@@ -100,6 +100,16 @@ def _classify(error: BaseException, stage: Optional[str]) -> Dict[str, Any]:
     sev = "warning" if stage == "whatsapp" else "error"
     label = _STAGE_LABEL.get(stage or "", "")
 
+    from zylch.llm.budget import BudgetError
+
+    if isinstance(error, BudgetError):
+        return _mk(
+            stage, "llm_budget", "error", "AI spending protection stopped this request",
+            str(error),
+            "Check Daily LLM budget in Settings and today's reserved spending. "
+            "Completed spending resets at 00:00 UTC; uncertain requests remain reserved.",
+        )
+
     # ── MrCall credits / auth (raised directly by proxy_client; only
     #    meaningful at the top of the error, not inside a generic wrap) ──
     try:

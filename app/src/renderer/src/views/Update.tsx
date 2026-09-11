@@ -1,58 +1,9 @@
-/**
- * Update view — onboarding hub for new profiles AND maintenance hub for
- * existing ones. Three ordered cards:
- *
- *   1. **Sync**   — IMAP + WhatsApp fetch. Always actionable.
- *   2. **Train**  — generate personalised agent prompts. Gated on ≥1
- *                   message of synced data being present.
- *   3. **Update** — memory extraction + task detection across the synced
- *                   data. Gated on at least one agent prompt having been
- *                   trained.
- *
- * The gating state is per-profile (it comes from ``setup.state``, which
- * reads the profile's SQLite DB). Once the user crosses a threshold,
- * the next card unlocks without needing a manual refresh: every
- * completed action refetches ``setup.state``.
- *
- * The full pipeline (``update.run``) still auto-trains internally if a
- * prompt is missing — so a user who insists on clicking "Update" first
- * isn't stuck. The card gating is guidance, not enforcement.
- */
+/** Fetch messages separately from bounded, paid analysis. */
 import { useEffect, useRef, useState } from 'react'
 import type { SidecarStatusEvent } from '../types'
 import { errorMessage, isProfileLockedError } from '../lib/errors'
 import { useTasks } from '../store/tasks'
-
-// Coarse ETA buckets returned by the engine map to an upper-bound
-// seconds value. We use this to detect when the run has overshot its
-// own estimate and to nudge the UI copy from "expected" to "running long".
-const ETA_UPPER_BOUND_SECONDS: Array<{ pattern: RegExp; upper: number }> = [
-  { pattern: /^under 1 minute$/i, upper: 60 },
-  { pattern: /^1-2 minutes$/i, upper: 2 * 60 },
-  { pattern: /^2-5 minutes$/i, upper: 5 * 60 },
-  { pattern: /^5-15 minutes$/i, upper: 15 * 60 },
-  { pattern: /^15-30 minutes$/i, upper: 30 * 60 },
-  { pattern: /^30-60 minutes$/i, upper: 60 * 60 },
-  { pattern: /^1-2 hours$/i, upper: 2 * 60 * 60 },
-  { pattern: /^2\+ hours/i, upper: Number.POSITIVE_INFINITY },
-]
-
-function etaUpperBoundSeconds(eta: string): number | null {
-  for (const { pattern, upper } of ETA_UPPER_BOUND_SECONDS) {
-    if (pattern.test(eta.trim())) return upper
-  }
-  return null
-}
-
-function formatElapsed(secs: number): string {
-  if (secs < 60) return `${secs}s`
-  const m = Math.floor(secs / 60)
-  const s = secs % 60
-  if (m < 60) return s === 0 ? `${m}m` : `${m}m${s.toString().padStart(2, '0')}s`
-  const h = Math.floor(m / 60)
-  const mm = m % 60
-  return `${h}h${mm.toString().padStart(2, '0')}m`
-}
+import PreparationPanel from '../components/PreparationPanel'
 
 type TrainResultEntry = {
   ok: boolean
@@ -99,50 +50,11 @@ const AGENT_LABELS: Record<string, string> = {
 }
 
 // Small reusable progress bar block shared between the three cards.
-function ProgressBlock({
-  pct,
-  message,
-  eta,
-  running,
-  elapsed,
-  overshot
-}: {
-  pct: number
-  message: string
-  eta?: string
-  running?: boolean
-  elapsed?: number
-  overshot?: boolean
-}): JSX.Element {
-  return (
-    <div className="mt-4">
-      <div className="h-2 bg-brand-mid-grey rounded overflow-hidden">
-        <div
-          className="h-full bg-brand-black transition-all"
-          style={{ width: `${Math.min(100, Math.max(0, pct))}%` }}
-        />
-      </div>
-      <div className="text-sm text-brand-grey-80 mt-2">
-        {pct}% — {message}
-        {eta && (
-          <span className="ml-2 text-brand-grey-80">
-            · ~{eta}
-            {running && elapsed != null && elapsed > 0 && ` · elapsed ${formatElapsed(elapsed)}`}
-          </span>
-        )}
-        {!eta && running && elapsed != null && elapsed > 0 && (
-          <span className="ml-2 text-brand-grey-80">· elapsed {formatElapsed(elapsed)}</span>
-        )}
-      </div>
-      {running && overshot && (
-        <div className="text-xs text-brand-orange mt-1">
-          Running longer than the initial estimate — large memory or task sweeps in
-          progress. Check the Logs tab if it stays here for more than a few extra
-          minutes.
-        </div>
-      )}
-    </div>
-  )
+function ProgressBlock({ pct, message }: { pct: number; message: string; running?: boolean }): JSX.Element {
+  return <div className="mt-4" role="status">
+    <progress className="w-full" value={pct} max={100} />
+    <p className="text-sm">{pct}% — {message}</p>
+  </div>
 }
 
 function StageErrors({
@@ -179,6 +91,7 @@ export default function Update(): JSX.Element {
   // until the first fetch resolves — while null we leave the buttons
   // gated (safer than enabling everything and then disabling).
   const setupGeneration = useRef(0)
+  const accountGeneration = useRef(0)
   const [setupError, setSetupError] = useState<string | null>(null)
   const [setup, setSetup] = useState<SetupState | null>(null)
 
@@ -201,18 +114,9 @@ export default function Update(): JSX.Element {
   const [trainResult, setTrainResult] = useState<TrainResult | null>(null)
   const [trainError, setTrainError] = useState<string | null>(null)
 
-  // ── Update state ────────────────────────────────────────────
-  const [running, setRunning] = useState(false)
-  const [pct, setPct] = useState(0)
-  const [message, setMessage] = useState<string>('')
-  const [eta, setEta] = useState<string>('')
-  const [elapsed, setElapsed] = useState<number>(0)
-  const [result, setResult] = useState<any>(null)
-  const [error, setError] = useState<string | null>(null)
-
-  const unsubRef = useRef<(() => void) | null>(null)
-  const startRef = useRef<number | null>(null)
-  const tickerRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const [preparationRunning, setPreparationRunning] = useState(false)
+  const [preparationSupported, setPreparationSupported] = useState(false)
+  const [preparationPaused, setPreparationPaused] = useState(true)
   const trainUnsubRef = useRef<(() => void) | null>(null)
   const syncUnsubRef = useRef<(() => void) | null>(null)
   const { refresh: refreshTasks } = useTasks()
@@ -244,6 +148,12 @@ export default function Update(): JSX.Element {
 
   useEffect(() => {
     const off = window.zylch.onSidecarStatus((s: SidecarStatusEvent) => {
+      accountGeneration.current++
+      setSyncRunning(false); setTrainRunning(false)
+      setSyncResult(null); setTrainResult(null)
+      setSyncError(null); setTrainError(null)
+      setSyncPct(0); setTrainPct(0)
+      syncUnsubRef.current?.(); trainUnsubRef.current?.()
       if (!s.alive || !s.ready) { setupGeneration.current++; setSetup(null) }
       const locked = !s.alive && s.code === 'profile_locked'
       setSidecarLocked(locked)
@@ -259,30 +169,33 @@ export default function Update(): JSX.Element {
   useEffect(() => {
     return () => {
       setupGeneration.current++
-      unsubRef.current?.()
+      accountGeneration.current++
       trainUnsubRef.current?.()
       syncUnsubRef.current?.()
-      if (tickerRef.current) clearInterval(tickerRef.current)
     }
   }, [])
 
   const runSync = async (): Promise<void> => {
+    const account = accountGeneration.current
     setSyncRunning(true)
     setSyncPct(0)
     setSyncMessage('Starting…')
     setSyncResult(null)
     setSyncError(null)
     const unsub = window.zylch.onNotification('sync.progress', (p: any) => {
+      if (account !== accountGeneration.current) return
       if (typeof p?.pct === 'number') setSyncPct(p.pct)
       if (typeof p?.message === 'string') setSyncMessage(p.message)
     })
     syncUnsubRef.current = unsub
     try {
       const r = await window.zylch.sync.run({})
+      if (account !== accountGeneration.current) return
       setSyncResult(r)
       setSyncPct(100)
       setSyncMessage(r.success ? 'Done' : 'Sync failed')
     } catch (e: unknown) {
+      if (account !== accountGeneration.current) return
       if (isProfileLockedError(e)) {
         setSyncError(null)
       } else {
@@ -290,6 +203,7 @@ export default function Update(): JSX.Element {
       }
     } finally {
       unsub()
+      if (account !== accountGeneration.current) return
       syncUnsubRef.current = null
       setSyncRunning(false)
       // A successful sync may have unlocked the Train card — refresh.
@@ -298,18 +212,21 @@ export default function Update(): JSX.Element {
   }
 
   const runTrain = async (): Promise<void> => {
+    const account = accountGeneration.current
     setTrainRunning(true)
     setTrainPct(0)
     setTrainMessage('Starting…')
     setTrainResult(null)
     setTrainError(null)
     const unsub = window.zylch.onNotification('agents.train.progress', (p: any) => {
+      if (account !== accountGeneration.current) return
       if (typeof p?.pct === 'number') setTrainPct(p.pct)
       if (typeof p?.message === 'string') setTrainMessage(p.message)
     })
     trainUnsubRef.current = unsub
     try {
       const r = await window.zylch.agents.trainAll()
+      if (account !== accountGeneration.current) return
       setTrainResult(r)
       setTrainPct(100)
       if (!r.ok) {
@@ -320,6 +237,7 @@ export default function Update(): JSX.Element {
         setTrainMessage('Done')
       }
     } catch (e: unknown) {
+      if (account !== accountGeneration.current) return
       if (isProfileLockedError(e)) {
         setTrainError(null)
       } else {
@@ -327,6 +245,7 @@ export default function Update(): JSX.Element {
       }
     } finally {
       unsub()
+      if (account !== accountGeneration.current) return
       trainUnsubRef.current = null
       setTrainRunning(false)
       // A successful train may have unlocked the Update card — refresh.
@@ -334,61 +253,12 @@ export default function Update(): JSX.Element {
     }
   }
 
-  const runUpdate = async (): Promise<void> => {
-    setRunning(true)
-    setPct(0)
-    setMessage('Starting…')
-    setEta('')
-    setElapsed(0)
-    setResult(null)
-    setError(null)
-    startRef.current = Date.now()
-    if (tickerRef.current) clearInterval(tickerRef.current)
-    tickerRef.current = setInterval(() => {
-      if (startRef.current == null) return
-      setElapsed(Math.floor((Date.now() - startRef.current) / 1000))
-    }, 1000)
-    const unsub = window.zylch.onNotification('update.progress', (p: any) => {
-      if (typeof p?.pct === 'number') setPct(p.pct)
-      if (typeof p?.message === 'string') setMessage(p.message)
-      if (typeof p?.eta === 'string' && p.eta) setEta(p.eta)
-    })
-    unsubRef.current = unsub
-    try {
-      const r = await window.zylch.update.run()
-      setResult(r)
-      setPct(100)
-      setMessage(r?.success === false ? 'Update failed' : 'Done')
-      void refreshTasks()
-    } catch (e: unknown) {
-      if (isProfileLockedError(e)) {
-        setError(null)
-      } else {
-        setError(errorMessage(e))
-      }
-    } finally {
-      unsub()
-      unsubRef.current = null
-      if (tickerRef.current) {
-        clearInterval(tickerRef.current)
-        tickerRef.current = null
-      }
-      setRunning(false)
-      // Update may have created agent prompts via the auto-train fallback
-      // path; refresh so the next pageload reflects it.
-      void refreshSetup()
-    }
-  }
-
-  const upper = eta ? etaUpperBoundSeconds(eta) : null
-  const overshot = upper != null && elapsed > upper
-  const anyRunning = syncRunning || trainRunning || running
+  const anyRunning = syncRunning || trainRunning || preparationRunning
 
   // Gating booleans. `setup === null` while the first fetch is in
   // flight; default to "gated" in that case rather than flashing the
   // buttons enabled and then disabled half a tick later.
   const trainEnabled = !!setup?.has_synced
-  const updateEnabled = !!setup?.has_trained
 
   const trainGateTitle = sidecarLocked
     ? 'Sidecar is locked — see banner above'
@@ -398,41 +268,16 @@ export default function Update(): JSX.Element {
         ? 'Run Sync first — Train needs at least one email or WhatsApp message to learn from.'
         : undefined
 
-  const updateGateTitle = sidecarLocked
-    ? 'Sidecar is locked — see banner above'
-    : anyRunning
-      ? 'Wait for the current action to finish'
-      : !updateEnabled
-        ? 'Train the assistant first — Update needs the trained prompts to process messages.'
-        : undefined
-
   return (
     <div className="p-6 max-w-3xl mx-auto">
       {setupError && <div role="alert" className="mb-4 p-3 border rounded text-sm">{setupError} <button className="underline" onClick={() => void refreshSetup()}>Retry checks</button></div>}
-      {/* Onboarding pointer — shown until the user has set everything up.
-          Disappears once both gates are open. */}
-      {setup && (!setup.has_synced || !setup.has_trained) && (
-        <div className="mb-5 p-3 bg-brand-blue/10 border border-brand-blue/40 text-brand-black rounded text-sm">
-          <div className="font-semibold mb-1">Quick start</div>
-          <ol className="list-decimal list-inside space-y-0.5">
-            <li className={setup.has_synced ? 'opacity-50 line-through' : ''}>
-              Click <strong>Sync</strong> to fetch your emails and WhatsApp messages.
-            </li>
-            <li className={setup.has_trained ? 'opacity-50 line-through' : ''}>
-              Click <strong>Train assistant</strong> so it learns your style and contacts.
-            </li>
-            <li>
-              Click <strong>Update</strong> to extract memory and detect action items.
-            </li>
-          </ol>
-        </div>
-      )}
-
+      <h1 className="text-2xl font-semibold mb-2">Prepare your data</h1>
+      <p className="text-sm text-brand-grey-80 mb-6">First download messages, then analyze a small batch. You choose when paid AI runs.</p>
       {/* ───── Sync card ─────────────────────────────────────── */}
-      <h1 className="text-2xl font-semibold mb-2">Sync</h1>
+      <h2 className="text-xl font-semibold mb-2">Download messages</h2>
       <p className="text-sm text-brand-grey-80 mb-3">
-        Fetch new emails (IMAP) and WhatsApp messages into the engine database. No AI
-        runs here. Always available.
+        Fetch new emails (IMAP) and WhatsApp messages into the engine database. No paid AI
+        runs here.
       </p>
       <button
         onClick={() => void runSync()}
@@ -480,20 +325,26 @@ export default function Update(): JSX.Element {
 
       <hr className="my-8 border-brand-mid-grey" />
 
+      <PreparationPanel disabled={syncRunning || trainRunning || sidecarLocked}
+        hasData={!!setup?.has_synced} onBusy={setPreparationRunning}
+        onFinished={() => { void refreshSetup(); void refreshTasks() }}
+        onAvailability={(supported, paused) => { setPreparationSupported(supported); setPreparationPaused(paused) }} />
+      <hr className="my-8 border-brand-mid-grey" />
       {/* ───── Train card ────────────────────────────────────── */}
       <h1 className="text-2xl font-semibold mb-2">Train assistant</h1>
       <p className="text-sm text-brand-grey-80 mb-3">
-        Teach the assistant who you are from your synced email + WhatsApp history.
-        Re-train when you want it to relearn your style and priorities.
+        Optional: regenerate assistant guidance from your synced history. This uses paid AI.
+        Missing guidance is created automatically by Analyze next batch.
       </p>
       <button
         onClick={() => void runTrain()}
-        disabled={!trainEnabled || anyRunning || sidecarLocked}
+        disabled={!trainEnabled || anyRunning || sidecarLocked || !preparationSupported || preparationPaused}
         title={trainGateTitle}
         className="px-4 py-2 bg-brand-black text-white rounded disabled:bg-brand-mid-grey"
       >
-        {trainRunning ? 'Training…' : 'Train now'}
+        {trainRunning ? 'Training…' : 'Regenerate guidance'}
       </button>
+      {preparationPaused && <p className="text-xs text-brand-grey-80 mt-2">Manual retraining is disabled while analysis is paused. Analyze next batch can create missing guidance.</p>}
       {!trainEnabled && !sidecarLocked && setup && (
         <div className="text-xs text-brand-grey-80 mt-2">
           Run <strong>Sync</strong> above first — Train needs at least one email or
@@ -552,72 +403,6 @@ export default function Update(): JSX.Element {
 
       <hr className="my-8 border-brand-mid-grey" />
 
-      {/* ───── Update card ───────────────────────────────────── */}
-      <h1 className="text-2xl font-semibold mb-2">Update</h1>
-      <p className="text-sm text-brand-grey-80 mb-3">
-        Extract memory and detect action items across your synced messages. Also runs
-        sync first, so this is the one-click "do everything" button.
-      </p>
-      <button
-        onClick={() => void runUpdate()}
-        disabled={!updateEnabled || anyRunning || sidecarLocked}
-        title={updateGateTitle}
-        className="px-4 py-2 bg-brand-black text-white rounded disabled:bg-brand-mid-grey"
-      >
-        {running ? 'Updating…' : 'Update now'}
-      </button>
-      {!updateEnabled && !sidecarLocked && setup && (
-        <div className="text-xs text-brand-grey-80 mt-2">
-          {setup.has_synced
-            ? 'Run Train above first — Update uses the trained prompts to process messages.'
-            : 'Run Sync and Train above first.'}
-        </div>
-      )}
-
-      {(running || pct > 0) && (
-        <ProgressBlock
-          pct={pct}
-          message={message}
-          eta={eta}
-          running={running}
-          elapsed={elapsed}
-          overshot={overshot}
-        />
-      )}
-      {running && (
-        <div className="text-xs text-brand-grey-80 mt-1">
-          Keep this window open to follow this run. Completed processing is saved; after a disconnect, check status before starting again.
-        </div>
-      )}
-
-      {error && (
-        <div className="mt-4 p-3 bg-brand-danger/10 border border-brand-danger/30 text-brand-danger rounded whitespace-pre-wrap">
-          {error}
-        </div>
-      )}
-
-      {result && (
-        <div className="mt-6">
-          <h2 className="text-sm font-semibold uppercase text-brand-grey-80 mb-2">Result</h2>
-          {/* Structured errors / warnings from the pipeline — one per stage
-              that failed. Red = fatal (run blocked), amber = non-fatal
-              (e.g. WhatsApp). Replaces the old false-green "No changes". */}
-          {Array.isArray(result.errors) && <StageErrors errors={result.errors} />}
-          {/* Diff summary box — only on a clean / partial-success run. On a
-              fatal failure the error block above already carries the message. */}
-          {result.success !== false &&
-          typeof result?.summary === 'string' &&
-          result.summary.length > 0 ? (
-            <div className="p-3 bg-white border rounded text-sm whitespace-pre-wrap">
-              {result.summary}
-            </div>
-          ) : result.success === false ? null : (
-            <pre className="p-3 bg-white border rounded text-xs whitespace-pre-wrap overflow-auto">
-              {JSON.stringify(result, null, 2)}
-            </pre>
-          )}
-        </div>
-      )}
     </div>
   )
 }

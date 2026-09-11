@@ -9,6 +9,9 @@ plus the chat-compaction summarizer that bypasses LLMClient.
 
 import asyncio
 import datetime as _dt
+from types import SimpleNamespace
+
+import pytest
 
 from zylch.llm.client import LLMClient, _with_datetime, current_datetime_line
 
@@ -19,8 +22,8 @@ class _FakeRaw:
     def __init__(self):
         self.stop_reason = "end_turn"
         self.content = []
-        self.model = "test"
-        self.usage = None
+        self.model = "claude-haiku-4-5-20251001"
+        self.usage = SimpleNamespace(input_tokens=5, output_tokens=1)
 
 
 class _FakeMessages:
@@ -38,7 +41,7 @@ class _FakeClient:
 
 
 def _client():
-    c = LLMClient(transport="direct", api_key="x")
+    c = LLMClient(transport="direct", api_key="x", model="claude-haiku-4-5")
     fake = _FakeClient()
     c._client = fake
     return c, fake
@@ -140,31 +143,31 @@ class _Blk:
         self.text = text
 
 
-class _FakeAsyncMessages:
-    def __init__(self):
-        self.captured = None
-
-    async def create(self, **kwargs):
-        self.captured = kwargs
-        return type("R", (), {"content": [_Blk("summary ok")]})()
-
-
-class _FakeAsyncClient:
-    instances = []
-
-    def __init__(self, *a, **k):
-        self.messages = _FakeAsyncMessages()
-        _FakeAsyncClient.instances.append(self)
-
-
 def test_chat_compaction_injects_datetime(monkeypatch):
-    import anthropic
-
-    monkeypatch.setattr(anthropic, "AsyncAnthropic", _FakeAsyncClient)
+    from zylch import llm
     from zylch.services.chat_compaction import _summarize
-
+    c, fake = _client()
+    original_create = fake.messages.create
+    def create(**kwargs):
+        r = original_create(**kwargs)
+        r.content = [_Blk("summary ok")]
+        return r
+    fake.messages.create = create
+    monkeypatch.setattr(llm, "make_llm_client", lambda **kwargs: c)
     out = asyncio.run(_summarize("USER: ciao\n\nASSISTANT: hello"))
     assert out == "summary ok"
-    cap = _FakeAsyncClient.instances[-1].messages.captured
+    cap = fake.messages.captured
     assert "Datetime=" in cap["system"]
     assert _dt.date.today().isoformat() in cap["system"]
+
+
+@pytest.fixture(autouse=True)
+def isolated_budget(tmp_path, monkeypatch):
+    from zylch.storage import database
+    monkeypatch.setenv("ZYLCH_DB_PATH", str(tmp_path / "budget.db"))
+    monkeypatch.setenv("OWNER_ID", "test-uid")
+    monkeypatch.setenv("LLM_DAILY_BUDGET_USD", "5")
+    database.dispose_engine()
+    database.init_db()
+    yield
+    database.dispose_engine()

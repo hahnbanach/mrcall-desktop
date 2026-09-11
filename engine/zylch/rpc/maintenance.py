@@ -7,6 +7,8 @@ for the next /update. Same workers as the scheduled paths.
 
 from __future__ import annotations
 
+from zylch.services.preparation import bounded_operation
+
 import logging
 from typing import Any, Awaitable, Callable, Dict
 
@@ -24,6 +26,7 @@ def _owner_id() -> str:
     return get_owner_id()
 
 
+@bounded_operation(lambda *args, **kwargs: _owner_id())
 async def tasks_dedup_now(params: Dict[str, Any], notify: NotifyFn) -> Any:
     """tasks.dedup_now() -> summary dict.
 
@@ -41,6 +44,7 @@ async def tasks_dedup_now(params: Dict[str, Any], notify: NotifyFn) -> Any:
     return summary
 
 
+@bounded_operation(lambda *args, **kwargs: _owner_id())
 async def tasks_topic_dedup_now(params: Dict[str, Any], notify: NotifyFn) -> Any:
     """tasks.topic_dedup_now() -> summary dict.
 
@@ -58,6 +62,7 @@ async def tasks_topic_dedup_now(params: Dict[str, Any], notify: NotifyFn) -> Any
     return summary
 
 
+@bounded_operation(lambda *args, **kwargs: _owner_id())
 async def memory_reconsolidate_now(params: Dict[str, Any], notify: NotifyFn) -> Any:
     """memory.reconsolidate_now() -> summary dict.
 

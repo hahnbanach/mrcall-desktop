@@ -26,11 +26,13 @@ def fresh_db(tmp_path, monkeypatch):
     """Per-test SQLite DB with the llm_usage table. Disposes on teardown."""
     db_path = tmp_path / "usage_test.db"
     monkeypatch.setenv("ZYLCH_DB_PATH", str(db_path))
+    monkeypatch.setenv("OWNER_ID", "test-uid")
 
     from zylch.storage import database as db_mod
 
     db_mod.dispose_engine()
     db_mod.init_db()
+    monkeypatch.delenv("ZYLCH_PROFILE_DIR", raising=False)
     yield db_path
     db_mod.dispose_engine()
 
@@ -242,20 +244,20 @@ def test_budget_exactly_at_cap_is_exceeded(fresh_db, monkeypatch):
     assert usage.budget_state(owner)["exceeded"] is True
 
 
-def test_budget_zero_means_uncapped(fresh_db, monkeypatch):
+def test_budget_zero_pauses_ai(fresh_db, monkeypatch):
     owner = "bud-zero@example.com"
     monkeypatch.setenv("LLM_DAILY_BUDGET_USD", "0")
     _seed(owner, 1000.0)  # miles over any sane cap
     state = usage.budget_state(owner)
     assert state["budget_usd"] == pytest.approx(0.0)
-    assert state["exceeded"] is False
+    assert state["exceeded"] is True
 
 
-def test_budget_negative_means_uncapped(fresh_db, monkeypatch):
-    owner = "bud-neg@example.com"
+def test_budget_negative_is_invalid(fresh_db, monkeypatch):
+    from zylch.llm.budget import BudgetError
     monkeypatch.setenv("LLM_DAILY_BUDGET_USD", "-1")
-    _seed(owner, 1000.0)
-    assert usage.budget_state(owner)["exceeded"] is False
+    with pytest.raises(BudgetError):
+        usage.budget_state("test-uid")
 
 
 def test_budget_default_when_unset(fresh_db, monkeypatch):
@@ -266,21 +268,13 @@ def test_budget_default_when_unset(fresh_db, monkeypatch):
     assert usage.budget_state(owner)["exceeded"] is True
 
 
-def test_budget_invalid_value_falls_back_to_default(fresh_db, monkeypatch):
-    monkeypatch.setenv("LLM_DAILY_BUDGET_USD", "not-a-number")
-    assert usage.daily_budget_usd() == pytest.approx(usage.DEFAULT_DAILY_BUDGET_USD)
-
-
-@pytest.mark.parametrize("raw", ["nan", "NaN", "inf", "-inf"])
-def test_budget_non_finite_falls_back_to_default(fresh_db, monkeypatch, raw):
-    """float() accepts 'nan'/'inf'; nan would make `budget > 0` False and
-    silently DISABLE the cap (T5 review, finding e). Non-finite values
-    must degrade to the default — the capped direction, never uncapped."""
-    owner = "bud-nan@example.com"
+@pytest.mark.parametrize("raw", ["not-a-number", "nan", "inf", "-inf"])
+def test_budget_invalid_value_refuses(monkeypatch, raw):
+    monkeypatch.delenv("ZYLCH_PROFILE_DIR", raising=False)
+    from zylch.llm.budget import BudgetError
     monkeypatch.setenv("LLM_DAILY_BUDGET_USD", raw)
-    assert usage.daily_budget_usd() == pytest.approx(usage.DEFAULT_DAILY_BUDGET_USD)
-    _seed(owner, usage.DEFAULT_DAILY_BUDGET_USD + 1.0)
-    assert usage.budget_state(owner)["exceeded"] is True  # cap still bites
+    with pytest.raises(BudgetError):
+        usage.daily_budget_usd()
 
 
 def test_budget_reads_env_live_mid_test(fresh_db, monkeypatch):

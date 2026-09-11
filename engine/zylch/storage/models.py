@@ -973,3 +973,26 @@ class ProjectRevision(Base):
     size = Column(Integer, nullable=False)
     author_uid = Column(String, nullable=False)
     created_at = Column(String, nullable=False)
+
+
+class LlmReservation(Base):
+    """Durable admission holds; unresolved requests never expire automatically."""
+
+    __tablename__ = "llm_reservations"
+    id = Column(String(36), primary_key=True)
+    owner_id = Column(Text, nullable=False, index=True)
+    created_at = Column(DateTime, nullable=False)
+    model = Column(Text, nullable=False)
+    transport = Column(Text, nullable=False)
+    call_site = Column(Text, nullable=False)
+    reserved_micro_usd = Column(Integer, nullable=False)
+    settled_at = Column(DateTime, nullable=True)
+
+
+class LlmBillingAuthorization(Base):
+    """Durable credit quote/receipt metadata, never prompts or credentials."""
+
+    __tablename__ = "llm_billing_authorizations"
+    reservation_id = Column(String(36), primary_key=True)
+    quote = Column(JSON, nullable=False)
+    receipt = Column(JSON, nullable=True)

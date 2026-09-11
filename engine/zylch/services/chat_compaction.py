@@ -140,11 +140,9 @@ async def _summarize(middle_text: str) -> str:
     Returns the summary string on success, raises on failure — callers
     handle the exception.
     """
-    import anthropic
+    from zylch.llm import make_llm_client
 
-    from zylch.llm.client import current_datetime_line
-
-    client = anthropic.AsyncAnthropic()
+    client = make_llm_client(model=_COMPACTION_MODEL)
     system = (
         "You are a conversation summarizer. Produce a concise, faithful "
         "summary of the CHAT HISTORY below. Keep the same language as the "
@@ -154,10 +152,7 @@ async def _summarize(middle_text: str) -> str:
         "must remember. Do NOT invent facts. Output prose only — no "
         "headings, no lists unless the original had lists."
     )
-    # This summarizer bypasses LLMClient, so inject the current moment
-    # here too — every LLM request must carry the datetime.
-    system = f"{system}\n\n{current_datetime_line()}"
-    resp = await client.messages.create(
+    resp = await client.create_message(
         model=_COMPACTION_MODEL,
         max_tokens=4096,
         system=system,

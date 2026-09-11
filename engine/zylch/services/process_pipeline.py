@@ -6,7 +6,6 @@ before the next starts. Does NOT use the background job system.
 
 import logging
 import os
-
 import sys
 import threading
 import time
@@ -138,7 +137,14 @@ async def handle_process(
     caller = f"{threading.current_thread().name}"
     try:
         with pipeline_single_flight(caller):
-            return await _run_pipeline(args, config, owner_id, progress, errors_out)
+            from zylch.services.preparation import preparation_run, PreparationStopped
+            try:
+                with preparation_run(owner_id, explicit="--resume" in args):
+                    return await _run_pipeline(args, config, owner_id, progress, errors_out)
+            except PreparationStopped as error:
+                if errors_out is not None:
+                    errors_out.append({"stage": "preparation", "error": error})
+                return str(error)
     except PipelineBusy as e:
         logger.warning(f"[/process] {e}")
         console.print(f"[yellow]{PIPELINE_BUSY_MESSAGE}[/yellow]")
@@ -240,7 +246,7 @@ async def _run_pipeline(
     console.print("\n[bold cyan][1/5] Syncing emails...[/bold cyan]")
     _p(5, "Syncing emails…", None)
     try:
-        sync_result = await _run_sync(owner_id, store, days_back)
+        sync_result = ({"new_messages": 0} if "--analyze-only" in args else await _run_sync(owner_id, store, days_back))
         new = sync_result.get("new_messages", 0)
         summary_stats["sync_new"] = int(new or 0)
         total = store.get_email_stats(owner_id).get("total_emails", 0)
@@ -257,7 +263,7 @@ async def _run_pipeline(
     console.print("\n[bold cyan][2/5] Syncing WhatsApp...[/bold cyan]")
     _p(20, "Syncing WhatsApp…", None)
     try:
-        wa_result = _run_whatsapp_sync(owner_id, store)
+        wa_result = ({"skipped": True, "reason": "Analyze only"} if "--analyze-only" in args else _run_whatsapp_sync(owner_id, store))
         if wa_result.get("skipped"):
             console.print(f"  Skipped: {wa_result.get('reason', 'not configured')}")
         else:
@@ -276,45 +282,12 @@ async def _run_pipeline(
         if errors_out is not None:
             errors_out.append({"stage": "whatsapp", "error": e})
 
-    # --- Backlog hygiene (no LLM, support-llm-cost-fix / P2) ───────────
-    # Runs AFTER the email/WhatsApp sync and BEFORE the budget gate +
-    # preflight ping below, so it executes even when the key is dead or
-    # the daily budget is exhausted — that is the point: the unprocessed
-    # task backlog must stop growing silently in exactly those states.
-    # Two rules, no LLM: (1) mark user-authored auto-replies
-    # task-processed — they can never become a task; leaving them unmarked
-    # is the structural sink that stranded support@'s own auto-acks
-    # forever; (2) mark any row older than TASK_BACKLOG_MAX_AGE_DAYS with a
-    # WARN so a permanently-failing analysis can't be re-fetched every tick
-    # without bound. Best-effort: a hygiene failure must not break the run.
-    try:
-        from zylch.workers.task_hygiene import run_task_backlog_hygiene
-
-        hygiene = run_task_backlog_hygiene(owner_id, store)
-        summary_stats["auto_ack_marked"] = int(hygiene.get("auto_ack_marked", 0) or 0)
-        summary_stats["expired_marked"] = int(hygiene.get("expired_marked", 0) or 0)
-        summary_stats["expired_whatsapp"] = int(hygiene.get("expired_whatsapp", 0) or 0)
-        summary_stats["expired_calendar"] = int(hygiene.get("expired_calendar", 0) or 0)
-        expired_total = (
-            summary_stats["expired_marked"]
-            + summary_stats["expired_whatsapp"]
-            + summary_stats["expired_calendar"]
-        )
-        if summary_stats["auto_ack_marked"] or expired_total:
-            console.print(
-                f"  [dim]Backlog hygiene: "
-                f"{summary_stats['auto_ack_marked']} auto-ack, "
-                f"{summary_stats['expired_marked']} expired (email), "
-                f"{summary_stats['expired_whatsapp']} expired (whatsapp), "
-                f"{summary_stats['expired_calendar']} expired (calendar)[/dim]"
-            )
-    except Exception as e:
-        logger.error(f"[/process] backlog hygiene failed: {e}", exc_info=True)
-        if errors_out is not None:
-            errors_out.append({"stage": "hygiene", "error": e})
+    # Pending checkpoints are evidence of unfinished work. Age alone must not
+    # turn a failed analysis into a completed one; durable preparation attempts
+    # now bound retries without retiring old messages.
 
     # --- Event-gating work plan (support-llm-cost-fix / P3) ────────────
-    # Computed AFTER hygiene (which may drain pending rows) and BEFORE
+    # Computed from pending checkpoints BEFORE
     # any budget / preflight / LLM code. Pure SQL; logs one [gating]
     # line per concern on EVERY tick. This is what makes cost scale
     # with information change: a tick with no new information makes
@@ -345,30 +318,27 @@ async def _run_pipeline(
         logger.info("[update] idle tick — zero LLM calls")
         console.print("[dim]  idle tick — zero LLM calls[/dim]")
     else:
-        # --- Daily spend hard cap (checked BEFORE any LLM attempt) ─────
-        # LLM_DAILY_BUDGET_USD is the structural guarantee against runaway
-        # spend (support-llm-cost-fix / P1): once today's estimated spend
-        # reaches the per-profile cap, the background pipeline does NOT even
-        # send the 1-token preflight ping below — an over-budget tick makes
-        # ZERO call attempts. Only THIS background pipeline is gated;
-        # interactive chat.send / tasks.solve (a human at the keyboard,
-        # approval-gated) are metered but never blocked. budget_state reads
-        # the cap live from os.environ, so a settings.update takes effect
-        # with no daemon restart.
+        # This early check avoids entering known-paused AI stages. The
+        # authoritative reservation gate runs before EVERY transport request.
+        from zylch.llm.budget import BudgetError
         from zylch.llm.usage import budget_state, call_site
 
-        budget = budget_state(owner_id)
-        if budget["exceeded"]:
+        try:
+            budget = budget_state(owner_id)
+            if budget.get("pricing_fault"):
+                raise BudgetError("AI paused: provider usage exceeded its estimate; pricing reconciliation is required.")
+            if budget["exceeded"]:
+                raise BudgetError(
+                    f"Daily AI budget unavailable: spent=${budget['spent_usd']:.2f}, "
+                    f"reserved=${budget['reserved_usd']:.2f}, limit=${budget['budget_usd']:.2f}. "
+                    "Completed spending resets at 00:00 UTC."
+                )
+        except BudgetError as error:
             llm_ok = False
-            budget_msg = (
-                f"[llm-budget] daily budget exceeded: "
-                f"spent=${budget['spent_usd']:.2f} budget=${budget['budget_usd']:.2f} "
-                f"— AI stages skipped"
-            )
-            logger.error(budget_msg)
-            console.print(f"[red]  {budget_msg}[/red]")
+            logger.warning("[llm-budget] %s", error)
+            console.print(f"[red]  {error}[/red]")
             if errors_out is not None:
-                errors_out.append({"stage": "llm_budget", "error": RuntimeError(budget_msg)})
+                errors_out.append({"stage": "llm_budget", "error": error})
 
         # --- Pre-flight LLM health check ───────────────────────────────
         # Memory + task detection (and the F4/F8/F9 sweeps) are LLM-bound, and

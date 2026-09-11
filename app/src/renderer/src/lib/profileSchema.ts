@@ -24,6 +24,14 @@ export interface SchemaField {
 
 export const PROFILE_SCHEMA: SchemaField[] = [
   // ─── LLM ─────────────────────────────────────────────────
+  { key: 'LLM_PROVIDER', label: 'AI billing provider', type: 'select', group: 'LLM', optional: true,
+    options: ['mrcall', 'anthropic', 'openrouter'], help: 'MrCall credits need no API key. Select a provider explicitly when supplying your own key.' },
+  { key: 'LLM_MODEL_PRESET', label: 'Model preset', type: 'select', group: 'LLM', optional: true,
+    options: ['economy', 'balanced', 'custom'], help: 'Economy uses Haiku or GLM with OpenRouter. Model quality for your work must still be evaluated.' },
+  { key: 'LLM_DAILY_BUDGET_USD', label: 'Daily AI limit (USD)', type: 'number', group: 'LLM', optional: true,
+    help: '0 pauses AI. Default $10 per engine account, resetting at 00:00 UTC; uncertain requests stay reserved.' },
+  { key: 'OPENROUTER_API_KEY', label: 'OpenRouter API key', type: 'password', group: 'LLM', optional: true, secret: true,
+    help: 'Used only when OpenRouter is selected. No automatic provider fallback.' },
   {
     key: 'ANTHROPIC_API_KEY',
     label: 'Anthropic API key (BYOK)',
