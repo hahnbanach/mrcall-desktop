@@ -210,6 +210,20 @@ export type SolveEvent = SolveEventBase &
   )
 
 export interface ZylchAPI {
+  usage: {
+    today: () => Promise<{
+      spent_usd: number
+      budget_usd: number
+      reserved_usd: number
+      pricing_fault: boolean
+      remaining_usd: number
+      exceeded: boolean
+      paused: boolean
+      resets_at: string
+      calls_today: number
+      by_site: Record<string, { calls: number; est_usd: number }>
+    }>
+  }
   tasks: {
     list: (p?: { include_completed?: boolean; include_skipped?: boolean }) => Promise<ZylchTask[]>
     complete: (task_id: string, note?: string | null) => Promise<{ ok: boolean }>

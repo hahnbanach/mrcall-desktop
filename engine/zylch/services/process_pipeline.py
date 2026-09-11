@@ -6,7 +6,6 @@ before the next starts. Does NOT use the background job system.
 
 import logging
 import os
-
 import sys
 import threading
 import time
@@ -345,30 +344,27 @@ async def _run_pipeline(
         logger.info("[update] idle tick — zero LLM calls")
         console.print("[dim]  idle tick — zero LLM calls[/dim]")
     else:
-        # --- Daily spend hard cap (checked BEFORE any LLM attempt) ─────
-        # LLM_DAILY_BUDGET_USD is the structural guarantee against runaway
-        # spend (support-llm-cost-fix / P1): once today's estimated spend
-        # reaches the per-profile cap, the background pipeline does NOT even
-        # send the 1-token preflight ping below — an over-budget tick makes
-        # ZERO call attempts. Only THIS background pipeline is gated;
-        # interactive chat.send / tasks.solve (a human at the keyboard,
-        # approval-gated) are metered but never blocked. budget_state reads
-        # the cap live from os.environ, so a settings.update takes effect
-        # with no daemon restart.
+        # This early check avoids entering known-paused AI stages. The
+        # authoritative reservation gate runs before EVERY transport request.
+        from zylch.llm.budget import BudgetError
         from zylch.llm.usage import budget_state, call_site
 
-        budget = budget_state(owner_id)
-        if budget["exceeded"]:
+        try:
+            budget = budget_state(owner_id)
+            if budget.get("pricing_fault"):
+                raise BudgetError("AI paused: provider usage exceeded its estimate; pricing reconciliation is required.")
+            if budget["exceeded"]:
+                raise BudgetError(
+                    f"Daily AI budget unavailable: spent=${budget['spent_usd']:.2f}, "
+                    f"reserved=${budget['reserved_usd']:.2f}, limit=${budget['budget_usd']:.2f}. "
+                    "Completed spending resets at 00:00 UTC."
+                )
+        except BudgetError as error:
             llm_ok = False
-            budget_msg = (
-                f"[llm-budget] daily budget exceeded: "
-                f"spent=${budget['spent_usd']:.2f} budget=${budget['budget_usd']:.2f} "
-                f"— AI stages skipped"
-            )
-            logger.error(budget_msg)
-            console.print(f"[red]  {budget_msg}[/red]")
+            logger.warning("[llm-budget] %s", error)
+            console.print(f"[red]  {error}[/red]")
             if errors_out is not None:
-                errors_out.append({"stage": "llm_budget", "error": RuntimeError(budget_msg)})
+                errors_out.append({"stage": "llm_budget", "error": error})
 
         # --- Pre-flight LLM health check ───────────────────────────────
         # Memory + task detection (and the F4/F8/F9 sweeps) are LLM-bound, and

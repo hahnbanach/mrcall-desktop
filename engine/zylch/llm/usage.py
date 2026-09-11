@@ -1,24 +1,9 @@
-"""LLM spend metering + the daily hard cap.
+"""Historical usage helpers and call-site tags.
 
-Every SUCCESSFUL call at the single :class:`~zylch.llm.client.LLMClient`
-chokepoint records one ``llm_usage`` row here — model, transport, token
-counts, and an estimated USD cost — and logs a one-line ``[llm-usage]``
-summary. :func:`spent_today_usd` / :func:`budget_state` back the
-per-profile daily cap (``LLM_DAILY_BUDGET_USD``) that the background
-pipeline consults before doing any AI work.
-
-Design rules baked in here:
-
-- **Recording MUST NEVER break an LLM call.** :func:`record` wraps
-  everything in a catch-all that degrades to ``logger.warning``.
-- **The budget is read from ``os.environ`` at call time**, NOT from the
-  frozen pydantic ``settings`` snapshot — that snapshot is captured at
-  daemon start, so a live ``settings.update`` (which hot-reloads
-  ``os.environ`` via ``settings_io.update_env``) would be invisible until
-  a restart. Same precedent as engine commit 06fb766 (SMS_BUSINESS_ID).
-- **An UNKNOWN model id bills at Opus prices.** The cap must overestimate,
-  never undercount, so a mislabelled/renamed model can't sneak spend
-  past the gate.
+New engine dispatch uses budget.reserve/settle for durable admission and atomic
+accounting. record() remains a best-effort compatibility telemetry helper only;
+its fail-open behavior never authorizes an LLM call. Daily snapshots delegate to
+the fail-closed reservation ledger.
 """
 
 from __future__ import annotations
@@ -26,15 +11,12 @@ from __future__ import annotations
 import contextlib
 import contextvars
 import logging
-import math
-import os
 from datetime import datetime
 from typing import Any, Dict, Tuple
 
 logger = logging.getLogger(__name__)
 
-# Default daily cap when LLM_DAILY_BUDGET_USD is unset. A value <= 0
-# means "no cap" (see daily_budget_usd).
+# Default daily cap when LLM_DAILY_BUDGET_USD is unset; zero pauses AI.
 DEFAULT_DAILY_BUDGET_USD = 10.0
 
 # Price table, $ per million tokens, (input, output). Matched by
@@ -193,9 +175,7 @@ def record(model: str, transport: str, usage_dict: Dict[str, Any]) -> None:
 def spent_today_usd(owner_id: str) -> float:
     """SUM(``est_cost_usd``) for ``owner_id`` since today's UTC midnight.
 
-    Fail-open: on a DB error this returns 0.0 (logged) rather than
-    raising, so a metering-store hiccup can't brick the pipeline. In the
-    over-budget case the store is healthy and the real sum is returned.
+    A database failure refuses the read. It must never look like zero spend.
     """
     try:
         from sqlalchemy import func
@@ -212,54 +192,21 @@ def spent_today_usd(owner_id: str) -> float:
                 .scalar()
             )
         return float(total or 0.0)
-    except Exception as e:  # noqa: BLE001
-        logger.warning(
-            f"[llm-usage] spent_today_usd failed (treating as $0): " f"{type(e).__name__}: {e}"
-        )
-        return 0.0
+    except Exception:
+        from zylch.llm.budget import BudgetError
+
+        raise BudgetError("AI spending cannot be read; no new paid call is authorized.") from None
 
 
 def daily_budget_usd() -> float:
-    """Daily USD cap, read LIVE from ``os.environ`` at call time.
+    """Configured daily USD limit; zero pauses AI and invalid values refuse."""
+    from zylch.llm.budget import _budget
 
-    Default :data:`DEFAULT_DAILY_BUDGET_USD` (10.0) when unset/blank. A
-    value <= 0 means "no cap". Deliberately NOT read from the pydantic
-    ``settings`` object — that snapshot is frozen at daemon start, so a
-    ``settings.update`` to the profile ``.env`` would not be seen without
-    a restart (see module docstring / engine commit 06fb766).
-    """
-    raw = os.environ.get("LLM_DAILY_BUDGET_USD")
-    if raw is None or str(raw).strip() == "":
-        return DEFAULT_DAILY_BUDGET_USD
-    try:
-        value = float(raw)
-    except (TypeError, ValueError):
-        logger.warning(
-            f"[llm-usage] invalid LLM_DAILY_BUDGET_USD={raw!r} — using default "
-            f"${DEFAULT_DAILY_BUDGET_USD}"
-        )
-        return DEFAULT_DAILY_BUDGET_USD
-    # float() accepts "nan"/"inf": nan would make `budget > 0` False and
-    # silently DISABLE the cap (T5 review, finding e). Non-finite values
-    # degrade to the default — the capped direction, never uncapped.
-    if not math.isfinite(value):
-        logger.warning(
-            f"[llm-usage] non-finite LLM_DAILY_BUDGET_USD={raw!r} — using "
-            f"default ${DEFAULT_DAILY_BUDGET_USD}"
-        )
-        return DEFAULT_DAILY_BUDGET_USD
-    return value
+    return _budget() / 1_000_000
 
 
 def budget_state(owner_id: str) -> Dict[str, Any]:
-    """Snapshot of today's spend vs the cap for ``owner_id``.
+    """Fail-closed daily snapshot including durable outstanding reservations."""
+    from zylch.llm.budget import budget_snapshot
 
-    Returns ``{"spent_usd": float, "budget_usd": float, "exceeded":
-    bool}``. ``exceeded`` is True only when a POSITIVE cap is set and
-    today's estimated spend has reached it (``spent >= budget``). A cap
-    <= 0 disables the gate (``exceeded`` always False).
-    """
-    budget = daily_budget_usd()
-    spent = spent_today_usd(owner_id)
-    exceeded = budget > 0 and spent >= budget
-    return {"spent_usd": spent, "budget_usd": budget, "exceeded": exceeded}
+    return budget_snapshot(owner_id)

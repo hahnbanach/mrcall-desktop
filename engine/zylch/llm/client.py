@@ -26,8 +26,8 @@ import asyncio
 import contextvars
 import logging
 import os
-from datetime import datetime
 from dataclasses import dataclass, field
+from datetime import datetime
 from typing import Any, Dict, List, Literal, Optional, Union
 
 logger = logging.getLogger(__name__)
@@ -112,7 +112,7 @@ class LLMResponse:
     def __init__(self, raw_response: Any):
         self._raw = raw_response
         self._content: List[Union[TextBlock, ToolUseBlock]] = []
-        self._stop_reason: str = "end_turn"
+        self._stop_reason: Optional[str] = None
         self._parse_response()
 
     def _parse_response(self) -> None:
@@ -134,14 +134,14 @@ class LLMResponse:
                         input=inp,
                     )
                 )
-        self._stop_reason = self._raw.stop_reason or "end_turn"
+        self._stop_reason = self._raw.stop_reason
 
     @property
     def content(self) -> List[Union[TextBlock, ToolUseBlock]]:
         return self._content
 
     @property
-    def stop_reason(self) -> str:
+    def stop_reason(self) -> Optional[str]:
         return self._stop_reason
 
     @property
@@ -243,28 +243,9 @@ class LLMClient:
                 raise ValueError("api_key is required for transport='direct'")
             import anthropic
 
-            # 2026-05-06: bump max_retries from the SDK default (2) to 5.
-            # The SDK retries on 408/409/429/≥500 with exponential
-            # backoff (0.5 → 16 s in this version). Default 2 = 3 total
-            # attempts spanning ~3 s, which is too short for an
-            # overloaded_error (529) cluster — the F4 sweep + F8 dedup
-            # together fire ~20 calls per /update, all of which fail
-            # in lockstep when Anthropic is briefly overloaded.
-            # 5 retries spans ~30 s, which covers transient capacity
-            # blips without making the user wait forever on a real
-            # outage.
-            #
-            # 2026-07-08: add an explicit per-request `timeout`. Without one
-            # the SDK default (~10 min) applies to EACH attempt, so a
-            # stalled/overloaded non-streaming call × max_retries=5 can hang
-            # a single LLM call for ~50 min. That is the root cause of the
-            # memory-write chat turns "failing" client-side with a
-            # TimeoutError while the write completed engine-side: the agent
-            # loop's follow-up call stalled and the cs client always gave up
-            # first. 120 s is generous for a non-streaming Messages call
-            # (max_tokens ≤ 8192) yet bounds a stall; with retries the worst
-            # case is a few minutes, not ~50.
-            self._client = anthropic.Anthropic(api_key=api_key, max_retries=5, timeout=120.0)
+            # Each transport attempt owns a durable budget reservation. Hidden
+            # retries can bill more than the admitted request after a timeout.
+            self._client = anthropic.Anthropic(api_key=api_key, max_retries=0, timeout=120.0)
             self.model = model or settings.anthropic_model
         elif transport == "proxy":
             if firebase_session is None:
@@ -350,6 +331,7 @@ class LLMClient:
             "messages": coerced,
             "max_tokens": max_tokens,
             "temperature": temperature,
+            "service_tier": "standard_only",
         }
         # Always inject the current datetime (appended last → cache-safe).
         # Every LLM request carries the real moment; no exceptions.
@@ -366,18 +348,21 @@ class LLMClient:
             f"llm request: transport={self.transport} model={model_name} "
             f"messages={len(coerced)} tools={num_tools}"
         )
+        from zylch.llm.budget import reserve, settle
+
+        # Admission uses the final provider-visible payload, including kwargs.
+        # A cancellation/timeout never releases a possibly dispatched request.
+        reservation = reserve(request_kwargs, self.transport)
         raw = self._client.messages.create(**request_kwargs)
         response = LLMResponse(raw)
-
-        # Meter the spend at the single chokepoint every LLM call flows
-        # through. record() never raises (its own catch-all), but guard
-        # the import/call too so metering can never break an LLM call.
-        try:
-            from zylch.llm import usage as _usage
-
-            _usage.record(model_name, self.transport, response.usage)
-        except Exception as e:  # noqa: BLE001
-            logger.warning(f"[llm-usage] recording skipped: {type(e).__name__}: {e}")
+        # Preserve missing/invalid usage as unknown; the display adapter's zero
+        # defaults must never release money reserved for an uncertain response.
+        raw_usage = getattr(raw, "usage", None)
+        if hasattr(raw_usage, "model_dump"):
+            raw_usage = raw_usage.model_dump()
+        elif raw_usage is not None and not isinstance(raw_usage, dict):
+            raw_usage = vars(raw_usage)
+        settle(reservation, raw_usage)
 
         return response
 

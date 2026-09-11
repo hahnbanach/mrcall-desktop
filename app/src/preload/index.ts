@@ -134,6 +134,20 @@ const call = <T = unknown>(method: string, params: unknown = {}, timeout?: numbe
   ipcRenderer.invoke('rpc:call', method, params, timeout) as Promise<T>
 
 const api = {
+  usage: {
+    today: () => call<{
+      spent_usd: number
+      budget_usd: number
+      reserved_usd: number
+      pricing_fault: boolean
+      remaining_usd: number
+      exceeded: boolean
+      paused: boolean
+      resets_at: string
+      calls_today: number
+      by_site: Record<string, { calls: number; est_usd: number }>
+    }>('usage.today')
+  },
   tasks: {
     list: (params: { include_completed?: boolean; include_skipped?: boolean } = {}) =>
       call<any[]>('tasks.list', params),

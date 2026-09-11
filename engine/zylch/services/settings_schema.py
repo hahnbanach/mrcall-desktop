@@ -96,11 +96,10 @@ SETTINGS_SCHEMA: List[SettingsField] = [
         "optional": True,
         "default": "10",
         "help": (
-            "Daily USD cap on background AI work (task detection, memory "
-            "extraction, the dedup sweeps). When the day's estimated spend "
-            "reaches this, the background pipeline skips its AI stages until "
-            "tomorrow; interactive chat is never blocked. Default 10; "
-            "0 = uncapped."
+            "Daily USD limit for all engine AI, including chat and memory. "
+            "Each request reserves its maximum estimated cost before sending. "
+            "Completed spending resets at 00:00 UTC; uncertain requests stay reserved. "
+            "Default 10; 0 pauses AI. Other apps and hosts sharing your key are separate."
         ),
     },
     # Per-worker model overrides. Each pins ONE background job to a specific

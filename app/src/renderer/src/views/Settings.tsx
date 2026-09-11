@@ -2,6 +2,7 @@ import * as React from 'react'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { errorMessage, isProfileLockedError } from '../lib/errors'
 import Icon from '../components/Icon'
+import DailyBudget from '../components/DailyBudget'
 import ConnectGoogleCalendar from './ConnectGoogleCalendar'
 import ConnectWhatsApp from './ConnectWhatsApp'
 import { performSignOut } from '../App'
@@ -882,6 +883,7 @@ function LLMProviderCard({
         </div>
       )}
 
+      <DailyBudget />
       {topupError && <p role="alert" className="text-sm text-brand-danger">{topupError}</p>}
       {isCredits && signedIn && (
         <div className="mt-2 border-t pt-3 space-y-2">

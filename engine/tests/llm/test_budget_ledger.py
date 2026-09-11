@@ -98,7 +98,7 @@ def test_invalid_or_zero_budget_blocks(ledger, monkeypatch, raw):
 
 
 def test_missing_ledger_refuses(tmp_path, monkeypatch):
-    empty = create_engine(f'sqlite:///{tmp_path / "empty.db"}')
+    empty = create_engine(f"sqlite:///{tmp_path / 'empty.db'}")
     monkeypatch.setattr(database, "get_engine", lambda: empty)
     monkeypatch.setenv("OWNER_ID", "uid")
     with pytest.raises(BudgetError, match="ledger"):
@@ -287,3 +287,39 @@ def test_other_process_stale_cap_cannot_override_saved_pause(ledger, monkeypatch
     assert queue.get(timeout=30) is False
     child.join(timeout=30)
     assert child.exitcode == 0
+
+
+def test_malformed_saved_budget_does_not_default_open(tmp_path, monkeypatch):
+    from zylch.llm.budget import _budget
+
+    profile = tmp_path / "malformed-profile"
+    profile.mkdir()
+    (profile / ".env").write_text('LLM_DAILY_BUDGET_USD="0\n')
+    monkeypatch.setenv("ZYLCH_PROFILE_DIR", str(profile))
+    with pytest.raises(BudgetError, match="malformed"):
+        _budget()
+
+
+def test_bound_breach_persists_across_midnight_and_restart(ledger, monkeypatch):
+    from datetime import timedelta
+
+    from zylch.llm import budget
+    from zylch.storage import database
+
+    request = {
+        "model": "claude-haiku-4-5",
+        "messages": [{"role": "user", "content": "hi"}],
+        "max_tokens": 1,
+    }
+    reservation = budget.reserve(request, "direct")
+    with pytest.raises(BudgetError, match="exceeded"):
+        budget.settle(reservation, {"input_tokens": 100000, "output_tokens": 1})
+    assert budget.budget_snapshot("uid")["pricing_fault"] is True
+    tomorrow = budget._now() + timedelta(days=1)
+    monkeypatch.setattr(budget, "_now", lambda: tomorrow)
+    ledger.dispose()
+    reopened = create_engine(ledger.url)
+    monkeypatch.setattr(database, "get_engine", lambda: reopened)
+    with pytest.raises(BudgetError, match="reconciliation"):
+        budget.reserve(request, "direct")
+    assert budget.budget_snapshot("uid")["remaining_usd"] == 0

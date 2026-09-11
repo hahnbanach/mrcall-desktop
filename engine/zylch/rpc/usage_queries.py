@@ -32,7 +32,7 @@ async def usage_today(params: Dict[str, Any], notify: NotifyFn) -> Any:
 
         {
           "spent_usd": float,     # SUM(est_cost_usd) since UTC midnight
-          "budget_usd": float,    # live LLM_DAILY_BUDGET_USD (0 = uncapped)
+          "budget_usd": float,    # live LLM_DAILY_BUDGET_USD (0 pauses AI)
           "exceeded": bool,       # cap set AND reached
           "calls_today": int,     # rows recorded since UTC midnight
           "by_site": {            # per call_site aggregation
@@ -60,7 +60,6 @@ async def usage_today(params: Dict[str, Any], notify: NotifyFn) -> Any:
                     func.count(LlmUsage.id),
                     func.coalesce(func.sum(LlmUsage.est_cost_usd), 0.0),
                 )
-                .filter(LlmUsage.owner_id == owner_id)
                 .filter(LlmUsage.ts >= midnight)
                 .group_by(LlmUsage.call_site)
                 .all()
@@ -74,9 +73,7 @@ async def usage_today(params: Dict[str, Any], notify: NotifyFn) -> Any:
         logger.warning(f"[rpc:usage.today] breakdown failed: {type(e).__name__}: {e}")
 
     result = {
-        "spent_usd": state["spent_usd"],
-        "budget_usd": state["budget_usd"],
-        "exceeded": state["exceeded"],
+        **state,
         "calls_today": calls_today,
         "by_site": by_site,
     }

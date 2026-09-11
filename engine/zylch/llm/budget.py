@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from uuid import uuid4
 
-from sqlalchemy import inspect, select
+from sqlalchemy import func, inspect, select
 
 from .budget_pricing import BudgetError, micro_usd, request_bound, usage_cost
 
@@ -32,9 +32,12 @@ def _budget():
         from pathlib import Path
 
         from dotenv import dotenv_values
+        from dotenv.parser import parse_stream
 
         try:
             content = (Path(profile_dir) / ".env").read_text(encoding="utf-8")
+            if any(binding.error for binding in parse_stream(StringIO(content))):
+                raise BudgetError("AI paused: saved profile settings are malformed.")
             values = dotenv_values(stream=StringIO(content), interpolate=False)
         except (OSError, UnicodeError):
             raise BudgetError("AI paused: the saved budget setting is unavailable.") from None
@@ -92,6 +95,23 @@ def _totals(conn, owner_id, now):
     return spent, reserved, midnight + timedelta(days=1)
 
 
+def _pricing_fault(conn):
+    """A persisted bound breach invalidates further automatic admission."""
+    from zylch.storage.models import LlmReservation, LlmUsage
+
+    return (
+        conn.execute(
+            select(LlmReservation.id)
+            .join(LlmUsage, LlmUsage.id == LlmReservation.id)
+            .where(
+                func.round(LlmUsage.est_cost_usd * 1_000_000) > LlmReservation.reserved_micro_usd
+            )
+            .limit(1)
+        ).first()
+        is not None
+    )
+
+
 def reserve(request_kwargs, transport):
     from zylch.llm.usage import current_call_site
     from zylch.storage.models import LlmReservation
@@ -107,6 +127,10 @@ def reserve(request_kwargs, transport):
         cap = _budget()
         now = _now()
         spent, held, reset = _totals(conn, owner_id, now)
+        if _pricing_fault(conn):
+            raise BudgetError(
+                "AI paused: recorded provider usage exceeded its bound; pricing reconciliation is required."
+            )
         if cap == 0 or spent + held + amount > cap:
             raise BudgetError(
                 f"AI paused: daily budget ${cap / 1e6:.2f}; "
@@ -177,13 +201,15 @@ def budget_snapshot(owner_id):
     with _transaction() as conn:
         cap = _budget()
         spent, held, reset = _totals(conn, owner_id, _now())
-    exceeded = spent + held >= cap
+        fault = _pricing_fault(conn)
+    exceeded = spent + held >= cap or fault
     return {
         "spent_usd": spent / 1e6,
         "budget_usd": cap / 1e6,
         "exceeded": exceeded,
         "reserved_usd": held / 1e6,
-        "remaining_usd": max(0, cap - spent - held) / 1e6,
+        "remaining_usd": 0.0 if fault else max(0, cap - spent - held) / 1e6,
+        "pricing_fault": fault,
         "resets_at": reset.isoformat() + "Z",
         "paused": exceeded,
     }

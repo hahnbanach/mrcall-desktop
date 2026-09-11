@@ -2075,6 +2075,16 @@ async def profiles_create(params: Dict[str, Any], notify: NotifyFn) -> Any:
             continue
         if not isinstance(value, str):
             value = "" if value is None else str(value)
+        if key == "LLM_DAILY_BUDGET_USD" and value.strip():
+            import math
+            try:
+                amount = float(value)
+                if not math.isfinite(amount) or amount < 0:
+                    raise ValueError()
+            except (ValueError, OverflowError):
+                err = ValueError("Daily LLM budget must be a finite non-negative USD amount; 0 pauses AI")
+                err.code = -32602
+                raise err from None
         cleaned[key] = value
     if unknown:
         err = ValueError(f"unknown setting keys: {sorted(unknown)}")
@@ -2179,6 +2189,16 @@ async def settings_update(params: Dict[str, Any], notify: NotifyFn) -> Any:
             # UI sent the placeholder back unchanged — keep stored value.
             skipped.append(key)
             continue
+        if key == "LLM_DAILY_BUDGET_USD" and value.strip():
+            import math
+            try:
+                amount = float(value)
+                if not math.isfinite(amount) or amount < 0:
+                    raise ValueError()
+            except (ValueError, OverflowError):
+                err = ValueError("Daily LLM budget must be a finite non-negative USD amount; 0 pauses AI")
+                err.code = -32602
+                raise err from None
         cleaned[key] = value
 
     if unknown:
