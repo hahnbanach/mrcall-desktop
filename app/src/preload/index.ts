@@ -140,6 +140,7 @@ const api = {
       budget_usd: number
       reserved_usd: number
       pricing_fault: boolean
+      billing_supported: boolean
       remaining_usd: number
       exceeded: boolean
       paused: boolean

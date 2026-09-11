@@ -107,3 +107,13 @@ def test_compaction_cannot_bypass_paused_account(monkeypatch):
     with pytest.raises(BudgetError):
         asyncio.run(_summarize("conversation"))
     c._client.messages.create.assert_not_called()
+
+
+def test_usage_rpc_explains_unpriced_credit_mode(monkeypatch):
+    from zylch.llm import client as client_module
+    from zylch.rpc.usage_queries import usage_today
+    monkeypatch.setattr(client_module, "_read_profile_anthropic_key", lambda: None)
+    snapshot = asyncio.run(usage_today({}, lambda *args: None))
+    assert snapshot["billing_supported"] is False
+    assert snapshot["paused"] is True
+    assert snapshot["remaining_usd"] == 5

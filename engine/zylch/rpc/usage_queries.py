@@ -72,8 +72,13 @@ async def usage_today(params: Dict[str, Any], notify: NotifyFn) -> Any:
     except Exception as e:  # noqa: BLE001
         logger.warning(f"[rpc:usage.today] breakdown failed: {type(e).__name__}: {e}")
 
+    from zylch.llm.client import _read_profile_anthropic_key
+
+    direct_billing = bool(_read_profile_anthropic_key())
     result = {
         **state,
+        "billing_supported": direct_billing,
+        "paused": state["paused"] or not direct_billing,
         "calls_today": calls_today,
         "by_site": by_site,
     }
