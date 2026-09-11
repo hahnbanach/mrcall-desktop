@@ -87,6 +87,10 @@ def _content(content):
 
 def request_bound(request, transport):
     """Return micro-USD hold; bytes + protocol allowance bound text input."""
+    if transport == "openrouter":
+        from .openrouter_pricing import request_bound as router_bound
+
+        return router_bound(request)
     if transport != "direct":
         raise BudgetError(
             "AI paused: MrCall credit pricing must include its markup before budgeted calls can resume."
@@ -166,10 +170,40 @@ def usage_cost(model, usage):
     if usage.get("server_tool_use"):
         raise BudgetError("AI paused: unexpected paid tool usage; its budget reservation remains.")
     i, o = PRICES[model]
+    # Anthropic reports the TTL split when cache creation is used. Reserve
+    # the worst case, but settle the reported split rather than charging all
+    # five-minute writes at the one-hour price. Missing split stays conservative.
+    cache_cost = Decimal(counts["cache_creation_input_tokens"]) * i * 2
+    split = usage.get("cache_creation")
+    if split is not None:
+        if not isinstance(split, dict) or set(split) - {
+            "ephemeral_5m_input_tokens", "ephemeral_1h_input_tokens"
+        }:
+            raise BudgetError("AI paused: invalid cache usage; reservation remains.")
+        short = split.get("ephemeral_5m_input_tokens", 0)
+        long = split.get("ephemeral_1h_input_tokens", 0)
+        if (
+            type(short) is not int or type(long) is not int
+            or short < 0 or long < 0
+            or short + long != counts["cache_creation_input_tokens"]
+        ):
+            raise BudgetError("AI paused: inconsistent cache usage; reservation remains.")
+        cache_cost = Decimal(short) * i * Decimal("1.25") + Decimal(long) * i * 2
     cost = (
         Decimal(counts["input_tokens"]) * i
         + Decimal(counts["output_tokens"]) * o
-        + Decimal(counts["cache_creation_input_tokens"]) * i * 2
+        + cache_cost
         + Decimal(counts["cache_read_input_tokens"]) * Decimal(str(i)) / 10
     )
     return int(cost.to_integral_value(rounding=ROUND_CEILING)), counts
+
+
+def validate_response_model(requested, returned):
+    """Only the admitted model or a vetted same-price snapshot can settle."""
+    snapshots = {
+        "claude-haiku-4-5": "claude-haiku-4-5-20251001",
+        "claude-sonnet-4-5": "claude-sonnet-4-5-20250929",
+        "claude-opus-4-5": "claude-opus-4-5-20251101",
+    }
+    if returned != requested and returned != snapshots.get(requested, requested):
+        raise BudgetError("AI paused: response model differs from the authorized model; reservation retained.")

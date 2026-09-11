@@ -7,6 +7,8 @@ All trainers (EmailerAgentTrainer, EmailMemoryAgentTrainer, EmailTaskAgentTraine
 should inherit from this base class.
 """
 
+from zylch.services.preparation import bounded_operation
+
 import logging
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Tuple
@@ -92,6 +94,7 @@ class BaseAgentTrainer:
             rows = query.order_by(Blob.updated_at.desc()).limit(limit).all()
             return [r.to_dict() for r in rows]
 
+    @bounded_operation(lambda self, *args, **kwargs: self.owner_id)
     async def _generate_prompt(self, meta_prompt: str, max_tokens: int = 4000) -> str:
         """Generate a prompt by calling the LLM with a meta-prompt.
 

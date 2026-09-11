@@ -19,6 +19,15 @@ what is *current*, targeting ≤ ~120 lines.
 
 ## State now
 
+Predictable-spending source is implemented on `fix/daily-llm-budget` with
+independent M1–M4 and final user-path approvals. Compatible deployment is in progress.
+It adds bounded MrCall receipts, explicit OpenRouter/provider/role policy,
+persistent preparation batches/retries and spending controls. The billing-server
+MR is [!2](https://gitlab.com/hahnbanach/mrcall-agent/-/merge_requests/2).
+No paid acceptance calls have been made. Deployment statements below still refer
+to the earlier scoped containment until the compatible rollout is verified.
+See [current delivery plan](execution-plans/2026-09-11-predictable-ai-spending.md).
+
 Desktop includes the V1 Desktop → engine → operator setup journey.
 Desktop opens Setup by default: configuration, authenticated remote connection,
 mailbox preparation, then a copyable descriptor-based workspace command.
@@ -32,7 +41,7 @@ incomplete. This does not certify reply quality or successful task detection.
 The desktop handoff exposes selected identity, endpoint, path and command only;
 refresh credentials remain in the existing private descriptor.
 
-Setup reports the engine's current key-or-Firebase billing policy. Settings
+Setup reports the engine's saved provider and credential availability. Settings
 separates saved billing from unsaved choices and keeps personal API-key entry
 optional. Check connection verifies the selected transport without a restart.
 The [acceptance recovery plan](execution-plans/2026-09-10-setup-billing-recovery.md)
@@ -51,8 +60,7 @@ build and are not covered by this guard. The new spending UI is built/tested,
 not packaged. See the [spending plan](execution-plans/2026-09-11-daily-llm-budget.md).
 
 Kernel v0.44.0 is publicly released and installed in both maintained operational
-clones. Public-tag installation and independent lock rebuilds were verified.
-Desktop v0.1.47 still has cosmetic development-kernel wording; its linked guide
+clones. Desktop v0.1.47 still has cosmetic development-kernel wording; its linked guide
 now installs the public kernel release.
 See [operator setup](operator-setup.md), the
 [brief](briefs/2026-09-10-desktop-to-operator-onboarding.md), and the
@@ -67,11 +75,10 @@ the budget containment above is verified on 2026-09-11; project-memory
 deployment evidence is from 2026-09-10.
 
 Shared written projects are revisioned company-engine records, separate from
-entity blobs, accessed through `cs project` in kernel v0.44.0. Six 124 projects
-(28 documents) and four MrCall projects (23 documents) are imported and independently
-verified by downloaded hashes. Original folders are archived in the private clone
-Git histories (124 `abd48c8`, MrCall `3f53462`) and removed from working trees. A
-second 124 owner sees all six shared projects. This is deployed on the hosted
+entity blobs, accessed through `cs project` in kernel v0.44.0. The company store contains six 124 projects
+(28 documents) and four MrCall projects (23 documents), shared with other company
+members. Original folders remain in the private clone Git histories
+(124 `abd48c8`, MrCall `3f53462`) and are absent from working trees. This is deployed on the hosted
 engine; the bundled v0.1.47 sidecar does not include these RPC methods.
 See the [brief](briefs/2026-09-10-shared-project-memory.md) and
 [plan](execution-plans/2026-09-10-shared-project-memory.md).

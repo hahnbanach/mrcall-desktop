@@ -9,6 +9,8 @@ Analyzes the user's email threads and memory blobs to understand:
 Then generates a self-contained agent prompt for identifying actionable items.
 """
 
+from zylch.services.preparation import bounded_operation
+
 import logging
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Tuple
@@ -403,6 +405,7 @@ Body: {body}
 
         return "\n".join(formatted)
 
+    @bounded_operation(lambda self, *args, **kwargs: self.owner_id)
     async def _generate_prompt(self, threads_text: str, blobs_text: str) -> str:
         """Generate the final task detection prompt using LLM.
 

@@ -44,23 +44,67 @@ class SettingsField(TypedDict, total=False):
 MODEL_CHOICES: List[ModelChoice] = [
     {"value": "claude-haiku-4-5", "label": "Haiku", "note": "Fastest & cheapest"},
     {"value": "claude-sonnet-5", "label": "Sonnet", "note": "Balanced"},
-    {"value": "claude-opus-4-8", "label": "Opus", "note": "Strongest everyday"},
-    {"value": "claude-fable-5", "label": "Fable", "note": "Top tier (priciest)"},
+    {"value": "claude-opus-5", "label": "Opus", "note": "Strongest everyday"},
+    {"value": "z-ai/glm-5.2", "label": "GLM 5.2", "note": "OpenRouter only; task quality unmeasured"},
 ]
 
 # Convenience ids for per-knob `suggested` values (never suggest Fable).
 _HAIKU = "claude-haiku-4-5"
 _SONNET = "claude-sonnet-5"
-_OPUS = "claude-opus-4-8"
+_OPUS = "claude-opus-5"
 
 
 # Order = display order. Groups are also rendered in this order.
 SETTINGS_SCHEMA: List[SettingsField] = [
+    {
+        "key": "LLM_PROVIDER",
+        "label": "AI billing provider",
+        "type": "select",
+        "group": "LLM",
+        "optional": True,
+        "options": ["anthropic", "mrcall", "openrouter"],
+        "help": "Choose billing explicitly. Blank preserves existing profile routing; switching models never switches billing.",
+    },
+    {
+        "key": "LLM_MODEL_PRESET",
+        "label": "Model policy",
+        "type": "select",
+        "group": "LLM",
+        "optional": True,
+        "options": ["economy", "balanced", "custom"],
+        "default": "custom",
+        "help": "Economy: Haiku or GLM. Balanced: Sonnet or GLM. Explicit role overrides remain active. OpenRouter task quality is unmeasured.",
+    },
+    {
+        "key": "OPENROUTER_API_KEY",
+        "label": "OpenRouter API key",
+        "type": "password",
+        "group": "LLM",
+        "optional": True,
+        "secret": True,
+        "help": "Used only when OpenRouter is explicitly selected.",
+    },
+    {
+        "key": "OPENROUTER_MODEL",
+        "label": "OpenRouter custom model",
+        "type": "text",
+        "group": "LLM",
+        "optional": True,
+        "default": "z-ai/glm-5.2",
+        "help": "Only models with a verified price ceiling can run. GLM memory quality is unmeasured.",
+    },
+    {
+        "key": "PREPARATION_BATCH_SIZE",
+        "label": "Preparation items per run",
+        "type": "number",
+        "group": "LLM",
+        "optional": True,
+        "default": "25",
+        "help": "1–100 source-stage attempts per paid preparation run, shared across memory and tasks. The daily USD allowance still applies.",
+    },
     # ─── LLM ─────────────────────────────────────────────────
     #
-    # Single field: the user's Anthropic key. Presence of the key flips
-    # the engine into BYOK ("direct" transport); absence means MrCall
-    # credits (Firebase JWT routed through mrcall-agent's proxy).
+    # Credentials do not override explicit provider selection.
     {
         "key": "ANTHROPIC_API_KEY",
         "label": "Anthropic API key (BYOK)",
@@ -69,9 +113,8 @@ SETTINGS_SCHEMA: List[SettingsField] = [
         "optional": True,
         "secret": True,
         "help": (
-            "Set this to use your own Anthropic billing. Leave blank to "
-            "use MrCall credits — requires Firebase signin in the desktop "
-            "app."
+            "Used when Anthropic is selected. Legacy profiles without explicit "
+            "provider selection use this key if present, otherwise MrCall credits."
         ),
     },
     {
@@ -247,14 +290,14 @@ SETTINGS_SCHEMA: List[SettingsField] = [
     # is a separate, future workstream (see docs/active-context.md).
     {
         "key": "AUTO_UPDATE_ENABLED",
-        "label": "Auto-Update while app is open",
+        "label": "Automatically synchronize and analyze",
         "type": "select",
         "group": "Sync",
         "optional": True,
         "options": ["Yes", "No"],
-        "default": "Yes",
+        "default": "No",
         "help": (
-            "When enabled, the app re-runs Update every "
+            "Off by default. Enabling allows paid bounded preparation every "
             "AUTO_UPDATE_INTERVAL_MINUTES while it is open. The "
             "manual Update button is always available."
         ),

@@ -987,3 +987,12 @@ class LlmReservation(Base):
     call_site = Column(Text, nullable=False)
     reserved_micro_usd = Column(Integer, nullable=False)
     settled_at = Column(DateTime, nullable=True)
+
+
+class LlmBillingAuthorization(Base):
+    """Durable credit quote/receipt metadata, never prompts or credentials."""
+
+    __tablename__ = "llm_billing_authorizations"
+    reservation_id = Column(String(36), primary_key=True)
+    quote = Column(JSON, nullable=False)
+    receipt = Column(JSON, nullable=True)

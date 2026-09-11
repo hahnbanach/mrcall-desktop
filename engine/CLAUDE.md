@@ -82,27 +82,24 @@ ruff check zylch/
 
 ## MrCall credits mode (since 2026-05)
 
-The engine uses Anthropic through two transports. A saved `ANTHROPIC_API_KEY`
-in the active profile selects direct BYOK calls. Without that key, a live
-Firebase session selects MrCall credits; without either, no LLM is configured.
-`SYSTEM_LLM_PROVIDER` does not select this transport.
+Saved `LLM_PROVIDER` selects Anthropic BYOK, OpenRouter BYOK or MrCall credits.
+An unset selector preserves legacy saved-key routing. All paid calls go through
+`zylch/llm/client.py` and the durable daily reservation ledger. Default models
+are inexpensive; saved explicit models remain until changed deliberately.
 
-- `zylch/llm/client.py` — `make_llm_client` resolves the transport from the
-  profile key and Firebase session; `try_make_llm_client` lets workers skip
-  when neither is available.
-- `zylch/llm/proxy_client.py` — `MrCallProxyClient` sends Anthropic-shaped
-  requests to `POST /api/desktop/llm/proxy`, billed to the user's MrCall credits.
-- `zylch/rpc/account.py` — `account.balance` reads the proxy's
-  `GET /api/desktop/llm/balance` response using the active Firebase session.
+- `llm/model_policy.py`: saved provider, economy/balanced/custom role defaults.
+- `llm/bounded_proxy.py`: quoted maximum debit and actual receipt protocol;
+  old unbounded proxy servers refuse. Firebase JWT remains in memory.
+- `llm/openrouter_client.py`: GLM Messages adapter with provider price caps.
+- `rpc/usage_queries.py`: spending, effective models and paged receipt recovery.
+- `MRCALL_PROXY_URL`: default `https://zylch.mrcall.ai`.
+- `MRCALL_CREDITS_MODEL`: explicit custom model; unset defaults to Haiku.
 
-Config (in `zylch/config.py`):
-
-- `MRCALL_PROXY_URL` — default `https://zylch.mrcall.ai` (production deployment of `mrcall-agent`). Override via env to point at the test deployment (`https://zylch-test.mrcall.ai`) for development against the test StarChat realm.
-- `MRCALL_CREDITS_MODEL` — default `claude-sonnet-4-5`. The model the engine asks the proxy to run; controls what we charge for, independent of any BYOK env.
-
-Tests: `engine/tests/llm/test_proxy_client.py` (8 cases — happy SSE, 401, 402, auth header shape, body forwarding, streaming reconstruction).
-
-Top-up flow lives on `dashboard.mrcall.ai/plan`; the desktop client just opens the URL via `shell.openExternal` (renderer-side concern, see `app/CLAUDE.md`). The engine must never log the JWT or its prefixes.
+[Spending protection](docs/features/daily-llm-budget.md) specifies scope,
+pricing, uncertainty and recovery. [Bounded preparation](docs/features/bounded-preparation.md)
+specifies source-stage limits, pause and retry checkpoints. Automatic processing
+is off by default; enabling it permits bounded paid runs. Top-up remains on
+`https://dashboard.mrcall.ai/plan`, without API-key entry.
 
 ## Critical Rules
 

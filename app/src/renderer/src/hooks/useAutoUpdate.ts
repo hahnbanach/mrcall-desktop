@@ -14,13 +14,8 @@ function parseIntervalMinutes(raw: string | undefined | null): number {
 }
 
 function isEnabled(raw: string | undefined | null): boolean {
-  // Default ON. Anything that isn't a clear "n" / "no" / "false" / "0"
-  // is treated as enabled — keeps the toggle robust to capitalisation
-  // and old `y`/`n` style choices.
-  if (raw == null) return true
-  const v = String(raw).trim().toLowerCase()
-  if (!v) return true
-  return !(v === 'n' || v === 'no' || v === 'false' || v === '0' || v === 'off')
+  // Recurring paid work is opt-in. Preserve explicit saved enable values.
+  return ['y', 'yes', 'true', '1', 'on'].includes(String(raw ?? '').trim().toLowerCase())
 }
 
 /**
@@ -29,7 +24,7 @@ function isEnabled(raw: string | undefined | null): boolean {
  * to a profile.
  *
  * Driven by two settings in the active profile's `.env`:
- *   - AUTO_UPDATE_ENABLED          (y / n, default y)
+ *   - AUTO_UPDATE_ENABLED          (y / n, default n)
  *   - AUTO_UPDATE_INTERVAL_MINUTES (5–360, default 30)
  *
  * Behaviour:
@@ -93,7 +88,11 @@ export function useAutoUpdate(): void {
       }
       inFlight.current = true
       try {
-        console.log('[useAutoUpdate] tick — running update.run')
+        // Older engines do not provide bounded preparation. Never fall back
+        // to their unbounded update when the capability check fails.
+        const preparation = await window.zylch.preparation.status()
+        if (cancelled || preparation.paused || preparation.running) return
+        console.log('[useAutoUpdate] tick — running bounded update.run')
         await window.zylch.update.run()
         if (!cancelled) {
           void refreshTasks()

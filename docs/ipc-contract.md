@@ -1237,13 +1237,30 @@ Today's LLM spend for the active profile, since UTC midnight:
   "reserved_usd": 0.10,  // includes uncertain calls from prior days
   "remaining_usd": 4.48,
   "paused": false,
-  "billing_supported": true, // false: credit-mode AI paused pending debit bounds
+  "billing_supported": true, // selected credentials and bounded transport are available
   "pricing_fault": false,
   "resets_at": "2026-09-12T00:00:00Z",
   "calls_today": 137,
   "by_site": { "<call_site>": { "calls": 12, "est_usd": 0.08 } }
 }
 ```
+
+`billing_reason` explains a refused transport. `model_policy` reports the saved
+provider, preset and effective role models, including unmeasured GLM quality.
+`usage.reconcile(cursor?)` checks up to ten outstanding MrCall receipts without
+paid inference and returns `recovered`, `unresolved`, `message` and `next_cursor`.
+See [daily spending contract](../engine/docs/features/daily-llm-budget.md).
+
+### `preparation.status()` / `pause()` / `resume()` / `reset_failures(stage, source)`
+
+Persistent preparation status reports the saved batch limit, channel checkpoint
+counts, current progress, failed items and an actionable stop reason. Pause
+prevents new paid dispatch; resume runs one explicit bounded batch and does not
+enable recurring automation. Reset is an explicit per-source retry reset.
+Method names all carry the `preparation.` prefix. See the
+[preparation contract](../engine/docs/features/bounded-preparation.md) for exact
+fields, concurrency, retry limits and checkpoint semantics. Sync-only remains
+separate and free of LLM inference.
 
 ### `memory.reconsolidate_now()` / `tasks.dedup_now()`
 

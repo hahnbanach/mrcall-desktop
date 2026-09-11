@@ -11,6 +11,8 @@ from typing import Any, Dict, List, Optional
 from sqlalchemy import and_, func, or_
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 
+from zylch.services.preparation import task_checkpoint
+
 from .database import get_session
 from .models import (
     Email,
@@ -3564,6 +3566,7 @@ class Storage:
                 for r in rows
             ]
 
+    @task_checkpoint("task:email")
     def mark_email_task_processed(self, owner_id: str, email_id: str) -> None:
         """Mark an email as processed by Task Agent."""
         with get_session() as session:
@@ -3571,6 +3574,7 @@ class Storage:
                 {"task_processed_at": datetime.now(timezone.utc)}
             )
 
+    @task_checkpoint("task:email")
     def mark_emails_task_processed(self, owner_id: str, email_ids: List[str]) -> None:
         """Mark multiple emails as processed by Task Agent."""
         if not email_ids:
@@ -3633,6 +3637,7 @@ class Storage:
                 for r in rows
             ]
 
+    @task_checkpoint("task:whatsapp")
     def mark_whatsapp_task_processed(self, owner_id: str, message_id: str) -> None:
         """Mark a single WhatsApp message as processed by the Task Agent.
 
@@ -3648,6 +3653,7 @@ class Storage:
                 WhatsAppMessage.id == message_id,
             ).update({"task_processed_at": datetime.now(timezone.utc)})
 
+    @task_checkpoint("task:whatsapp")
     def mark_whatsapp_messages_task_processed(self, owner_id: str, message_ids: List[str]) -> None:
         """Bulk variant of ``mark_whatsapp_task_processed``."""
         if not message_ids:
@@ -3696,6 +3702,7 @@ class Storage:
                 for r in rows
             ]
 
+    @task_checkpoint("task:calendar")
     def mark_calendar_event_task_processed(self, owner_id: str, event_id: str) -> None:
         """Mark a calendar event as processed by Task Agent."""
         with get_session() as session:
@@ -3703,6 +3710,7 @@ class Storage:
                 CalendarEvent.owner_id == owner_id, CalendarEvent.id == event_id
             ).update({"task_processed_at": datetime.now(timezone.utc)})
 
+    @task_checkpoint("task:calendar")
     def mark_calendar_events_task_processed(self, owner_id: str, event_ids: List[str]) -> None:
         """Mark multiple calendar events as processed by Task Agent."""
         if not event_ids:

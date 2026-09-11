@@ -122,14 +122,18 @@ class LLMMergeService:
             },
         ]
         user_content = f"EXISTING_ENTITY:\n{existing}\n\nNEW_ENTITY:\n{new}"
-        response = self.client.create_message_sync(
-            model=self.model,
-            max_tokens=1024,
-            system=system,
-            messages=[
-                {"role": "user", "content": user_content},
-            ],
-        )
+        from zylch.llm.usage import call_site, current_call_site
+
+        site = current_call_site()
+        with call_site("memory.merge" if site == "untagged" else site):
+            response = self.client.create_message_sync(
+                model=self.model,
+                max_tokens=1024,
+                system=system,
+                messages=[
+                    {"role": "user", "content": user_content},
+                ],
+            )
         result = complete_memory_text(response)
         # Log the DECISION at INFO so the INSERT rate is visible at a glance
         # in the logs — a sustained 0% INSERT rate is the fingerprint of a

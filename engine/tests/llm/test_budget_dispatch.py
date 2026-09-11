@@ -35,6 +35,7 @@ def client(result=None, error=None):
         return_value=result
         or SimpleNamespace(
             content=[],
+            model="claude-haiku-4-5",
             stop_reason="end_turn",
             usage=SimpleNamespace(input_tokens=20, output_tokens=3),
         ),
@@ -58,12 +59,23 @@ def test_sdk_automatic_retries_disabled():
     assert c._client.max_retries == 0
 
 
+def test_direct_transport_ignores_ambient_gateway_credentials(monkeypatch):
+    monkeypatch.setenv("ANTHROPIC_BASE_URL", "https://unpriced.example.test")
+    monkeypatch.setenv("ANTHROPIC_AUTH_TOKEN", "unrelated-shell-token")
+    c = client()
+    assert str(c._client.base_url) == "https://api.anthropic.com"
+    assert c._client.auth_token is None
+    assert c._client.api_key == "fake"
+
+
 def test_async_dispatch_carries_tag_and_atomic_accounting():
     from zylch.llm.usage import call_site
     from zylch.rpc.usage_queries import usage_today
 
     c = client()
-    with call_site("memory.test"):
+    from zylch.services.preparation import preparation_run
+
+    with preparation_run("uid-test"), call_site("memory.test"):
         asyncio.run(c.create_message(**ARGS))
     assert c._client.messages.create.call_count == 1
     assert c._client.messages.create.call_args.kwargs["service_tier"] == "standard_only"
@@ -110,9 +122,8 @@ def test_compaction_cannot_bypass_paused_account(monkeypatch):
 
 
 def test_usage_rpc_explains_unpriced_credit_mode(monkeypatch):
-    from zylch.llm import client as client_module
     from zylch.rpc.usage_queries import usage_today
-    monkeypatch.setattr(client_module, "_read_profile_anthropic_key", lambda: None)
+    monkeypatch.setenv("LLM_PROVIDER", "mrcall")
     snapshot = asyncio.run(usage_today({}, lambda *args: None))
     assert snapshot["billing_supported"] is False
     assert snapshot["paused"] is True

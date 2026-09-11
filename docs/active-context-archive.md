@@ -186,3 +186,15 @@ harness v3 bootstrap. It was the "Recent landings (last ~2 weeks)" table.*
 | 2026-05-22 | Current datetime injected into EVERY LLM request (single LLMClient chokepoint + chat_compaction bypass). | engine | `5f5c73e8` |
 | 2026-05-20 | MrCall channel: delegated/PKCE OAuth + `/mrcall` removed (Firebase-JWT only); MrCall tab lists + searches businesses; onboarding unblocked for MrCall-only users; in-wizard Calendar session fix. | engine + app + IPC | `770522e8..2b0a54ce` |
 | 2026-05-20 | WhatsApp voice-note transcription — event-time download + deferred faster-whisper `small`/int8 pass; archived chats excluded from memory/task analysis. Live download + packaged bundling still pending. | engine + app + IPC | [`../engine/docs/execution-plans/whatsapp-voice-transcription.md`](../engine/docs/execution-plans/whatsapp-voice-transcription.md) |
+
+## 2026-09-11 — Project import verification snapshot
+
+Six 124 projects
+(28 documents) and four MrCall projects (23 documents) are imported and independently
+verified by downloaded hashes. Original folders are archived in the private clone
+Git histories (124 `abd48c8`, MrCall `3f53462`) and removed from working trees. A
+second 124 owner sees all six shared projects.
+
+## 2026-09-11 — Kernel installation evidence
+
+Public-tag installation and independent lock rebuilds were verified.

@@ -87,28 +87,28 @@ engine detail in [`engine/docs/features/entity-memory-system.md`](engine/docs/fe
 ("Scope"); host operations in [`docs/remote-backend.md`](docs/remote-backend.md)
 ("Shared company memory on the host"); app surface in [`app/CLAUDE.md`](app/CLAUDE.md).
 
-## LLM billing modes — BYOK vs MrCall credits (since 2026-05)
+## LLM billing and spending controls
 
-The desktop has two LLM billing modes, picked from the Settings card:
+Saved `LLM_PROVIDER` explicitly selects `anthropic`, `mrcall`, or `openrouter`.
+Anthropic and OpenRouter use the corresponding personal API key. MrCall credits
+use Firebase authentication and the shared StarChat `CALLCREDIT` pool; top-up
+opens `https://dashboard.mrcall.ai/plan`. Switching providers preserves keys
+and never falls back to another provider. Legacy profiles without a provider
+use their saved Anthropic key when present, otherwise MrCall credits.
 
-- **BYOK** — a saved `ANTHROPIC_API_KEY` in the profile `.env` selects
-  direct Anthropic SDK calls. Without that key, a signed-in Firebase session
-  uses MrCall credits; without either credential the LLM is unavailable.
-- **Use MrCall credits** (`mrcall`) — calls route through `mrcall-agent`'s
-  `POST /api/desktop/llm/proxy` and bill the user's `CALLCREDIT` balance
-  on StarChat. Same unified pool that funds phone calls and the
-  configurator chat — there is no separate LLM-only category. The
-  Anthropic API key lives server-side; the desktop only sends the
-  Firebase JWT. Top-up happens on `https://dashboard.mrcall.ai/plan`.
+The engine reserves each request's maximum cost against the saved daily USD
+budget before dispatch. Uncertain requests retain their holds across restarts
+and UTC midnight. MrCall calls use the versioned bounded quote/execute/status
+contract; an older server without that contract refuses paid work. OpenRouter
+supports the explicitly priced GLM model with provider price caps. Economy,
+balanced and custom presets expose effective role models; GLM semantic quality
+is unmeasured. Automatic preparation is off by default and explicit runs have
+a saved batch limit (default 25 steps).
 
-Engine pieces: `engine/zylch/llm/proxy_client.py` (`MrCallProxyClient`),
-`engine/zylch/rpc/account.py` (`account.balance` JSON-RPC),
-`MRCALL_PROXY_URL` env var (default `https://zylch.mrcall.ai`, the production `mrcall-agent` deployment).
-See [`engine/CLAUDE.md`](engine/CLAUDE.md) for full details.
-
-App pieces: new `LLMProviderCard` in `app/src/renderer/src/views/Settings.tsx`
-(saved billing mode, optional Anthropic key, balance display and "Top up" via
-`shell.openExternal`). See [`app/CLAUDE.md`](app/CLAUDE.md).
+Engine contracts: [`engine/docs/features/daily-llm-budget.md`](engine/docs/features/daily-llm-budget.md)
+and [`engine/docs/features/bounded-preparation.md`](engine/docs/features/bounded-preparation.md).
+`MRCALL_PROXY_URL` selects the billing server (default `https://zylch.mrcall.ai`).
+App behavior: [`app/docs/bounded-preparation.md`](app/docs/bounded-preparation.md).
 
 ## Naming and identifiers — the rename in flight
 

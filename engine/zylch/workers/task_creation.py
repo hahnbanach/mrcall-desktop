@@ -5,6 +5,9 @@ to analyze each event and determine if user action is needed.
 """
 
 import json
+from zylch.services.preparation import bounded_item, bounded_operation
+from zylch.llm.budget import BudgetError
+
 import logging
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
@@ -263,6 +266,7 @@ class TaskWorker:
         tasks = self.storage.get_task_items(self.owner_id, action_required=True)
         return tasks, None
 
+    @bounded_operation(lambda self, *args, **kwargs: self.owner_id)
     async def _analyze_recent_events(
         self,
         concurrency: int = 5,
@@ -329,6 +333,7 @@ class TaskWorker:
 
         await analyze_recent_whatsapp_events(self, concurrency=concurrency)
 
+    @bounded_item()
     async def _analyze_event(
         self,
         event_type: str,
@@ -450,10 +455,25 @@ class TaskWorker:
                     },
                 )
 
+            if response.stop_reason != "tool_use":
+                logger.warning("[TASK] Incomplete task decision; checkpoint remains pending")
+                return None
             # Extract result from tool use response
             for block in response.content:
                 if block.type == "tool_use" and block.name == "task_decision":
                     result = block.input
+                    if not isinstance(result, dict) or not all(
+                        key in result for key in TASK_DECISION_TOOL["input_schema"]["required"]
+                    ):
+                        return None
+                    if (
+                        type(result["action_required"]) is not bool
+                        or result["task_action"] not in ("create", "update", "close", "none")
+                        or result["urgency"] not in ("critical", "high", "medium", "low")
+                        or not isinstance(result["reason"], str)
+                        or not isinstance(result["suggested_action"], str)
+                    ):
+                        return None
                     logger.debug(f"[TASK] Tool response: {result}")
 
                     task_action = result.get("task_action", "none")
@@ -510,6 +530,8 @@ class TaskWorker:
             logger.warning(f"[TASK] No tool_use block in response for {event_type}")
             return None
 
+        except BudgetError:
+            raise
         except Exception as e:
             logger.error(f"LLM call failed for {event_type} event: {e}")
             err_str = str(e).lower()

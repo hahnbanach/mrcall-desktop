@@ -150,8 +150,8 @@ def test_unpriced_shapes_refused(ledger, kwargs):
         budget.reserve(request(**kwargs), "direct")
 
 
-def test_proxy_requires_markup_pricing(ledger):
-    with pytest.raises(BudgetError, match="markup"):
+def test_proxy_requires_valid_customer_debit_quote(ledger):
+    with pytest.raises(BudgetError, match="debit quote"):
         budget.reserve(request(), "proxy")
 
 

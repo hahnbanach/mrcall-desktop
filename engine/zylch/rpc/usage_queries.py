@@ -11,6 +11,7 @@ reconstruction (support-llm-cost-fix / P1).
 from __future__ import annotations
 
 import logging
+import asyncio
 from typing import Any, Awaitable, Callable, Dict
 
 logger = logging.getLogger(__name__)
@@ -72,13 +73,23 @@ async def usage_today(params: Dict[str, Any], notify: NotifyFn) -> Any:
     except Exception as e:  # noqa: BLE001
         logger.warning(f"[rpc:usage.today] breakdown failed: {type(e).__name__}: {e}")
 
-    from zylch.llm.client import _read_profile_anthropic_key
+    from zylch.llm.model_policy import policy_snapshot
 
-    direct_billing = bool(_read_profile_anthropic_key())
+    policy = policy_snapshot()
+    supported = policy["provider"] in {"anthropic", "openrouter"} and policy["credential_configured"]
+    reason = ""
+    if policy["provider"] == "mrcall":
+        try:
+            await asyncio.to_thread(_credit_client().capabilities)
+            supported = True
+        except Exception as exc:
+            reason = str(exc) if isinstance(exc, RuntimeError) else "MrCall billing availability could not be verified."
     result = {
         **state,
-        "billing_supported": direct_billing,
-        "paused": state["paused"] or not direct_billing,
+        "billing_reason": reason,
+        "billing_supported": supported,
+        "model_policy": policy,
+        "paused": state["paused"] or not supported,
         "calls_today": calls_today,
         "by_site": by_site,
     }
@@ -86,6 +97,24 @@ async def usage_today(params: Dict[str, Any], notify: NotifyFn) -> Any:
     return result
 
 
+
+def _credit_client():
+    from zylch.auth import get_session
+    from zylch.llm.bounded_proxy import BoundedProxyClient
+    from zylch.llm.model_policy import profile_value
+    return BoundedProxyClient(profile_value("MRCALL_PROXY_URL") or "https://zylch.mrcall.ai", get_session())
+
+
+async def usage_reconcile(params, notify):
+    """usage.reconcile(cursor?) -> recovered and unresolved credit reservations."""
+    from zylch.llm.billing_reconciliation import reconcile
+    cursor = params.get("cursor")
+    if cursor is not None and not isinstance(cursor, str):
+        raise ValueError("cursor must be a string")
+    return await asyncio.to_thread(reconcile, _credit_client(), cursor=cursor)
+
+
 METHODS: Dict[str, Callable[[Dict[str, Any], NotifyFn], Awaitable[Any]]] = {
     "usage.today": usage_today,
+    "usage.reconcile": usage_reconcile,
 }

@@ -7,6 +7,8 @@ Uses hybrid search (FTS + semantic) to find existing blobs about the same entity
 then LLM-merges new information with existing knowledge.
 """
 
+from zylch.services.preparation import bounded_item, bounded_operation
+
 import logging
 import re
 from typing import Any, Dict, List, Optional, Tuple
@@ -378,6 +380,7 @@ class MemoryWorker:
             self._get_extraction_prompt()
         return self._custom_prompt is not None
 
+    @bounded_item("memory:email")
     async def process_email(self, email: Dict) -> bool:
         """Process single email to extract and store entities.
 
@@ -755,6 +758,7 @@ class MemoryWorker:
             except Exception as e:
                 logger.warning(f"[memory] add_person_identifiers({linked_blob_id}) failed: {e}")
 
+    @bounded_operation(lambda self, *args, **kwargs: self.owner_id)
     async def process_batch(
         self,
         emails: List[Dict],
@@ -794,6 +798,8 @@ class MemoryWorker:
                 except BudgetError:
                     stop = True
                     raise
+                if success is None:
+                    return
                 if success:
                     processed += 1
                     failures = 0
@@ -997,6 +1003,7 @@ class MemoryWorker:
     # re-evaluate every Update.
     _WA_MIN_TEXT_LEN = 20
 
+    @bounded_item("memory:whatsapp")
     async def process_whatsapp_message(self, message: Dict) -> bool:
         """Process one WhatsApp message: extract entities, upsert blobs,
         write whatsapp_blobs link, mark processed.
@@ -1061,6 +1068,7 @@ class MemoryWorker:
             logger.error(f"Error processing WhatsApp message {wa_id}: {e}", exc_info=True)
             return False
 
+    @bounded_operation(lambda self, *args, **kwargs: self.owner_id)
     async def process_whatsapp_batch(
         self,
         messages: List[Dict],
@@ -1094,6 +1102,8 @@ class MemoryWorker:
                 except BudgetError:
                     stop = True
                     raise
+                if ok is None:
+                    return
                 if ok:
                     processed += 1
                     failures = 0
@@ -1268,6 +1278,7 @@ class MemoryWorker:
             logger.error(f"Failed to extract entities ({channel_label}): {e}")
             raise
 
+    @bounded_item("memory:calendar")
     async def process_calendar_event(self, event: Dict) -> bool:
         """Process single calendar event to extract and store facts.
 
@@ -1339,6 +1350,7 @@ class MemoryWorker:
             logger.error(f"Error processing event {event_id}: {e}", exc_info=True)
             return False
 
+    @bounded_operation(lambda self, *args, **kwargs: self.owner_id)
     async def process_calendar_batch(self, events: List[Dict]) -> int:
         """Process batch of calendar events.
 
@@ -1354,6 +1366,8 @@ class MemoryWorker:
         failures = 0
         for event in events:
             success = await self.process_calendar_event(event)
+            if success is None:
+                continue
             if success:
                 processed += 1
                 failures = 0
@@ -1437,6 +1451,7 @@ Output ONLY the facts as natural language prose (2-5 sentences). If no meaningfu
             )
         return prompt
 
+    @bounded_item("memory:mrcall")
     async def process_mrcall_conversation(self, conversation: Dict) -> bool:
         """Process single MrCall conversation to extract and store entities.
 
@@ -1553,6 +1568,7 @@ Output ONLY the facts as natural language prose (2-5 sentences). If no meaningfu
                 f"Created new blob {blob['id']} from conversation {conv_id} (entity {entity_num}/{total_entities})"
             )
 
+    @bounded_operation(lambda self, *args, **kwargs: self.owner_id)
     async def process_mrcall_batch(self, conversations: List[Dict]) -> int:
         """Process batch of MrCall conversations.
 
@@ -1568,6 +1584,8 @@ Output ONLY the facts as natural language prose (2-5 sentences). If no meaningfu
 
         for conversation in conversations:
             success = await self.process_mrcall_conversation(conversation)
+            if success is None:
+                continue
             if success:
                 processed += 1
                 consecutive_failures = 0

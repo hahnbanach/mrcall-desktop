@@ -8,6 +8,14 @@ are preserved in [active-context-archive.md](active-context-archive.md).
 
 ## State now
 
+Predictable-spending source is implemented and independently reviewed: bounded
+MrCall quote/debit receipts, explicit provider/role policy, OpenRouter GLM and
+persistent preparation/retry limits. Fake-provider journeys exercise actual HTTP
+adapters and PostgreSQL/SQLite accounting. New automatic processing defaults off;
+existing explicit settings remain. No paid semantic benchmark has been run.
+Source-to-production rollout is in progress after final approval; the deployment below is
+still the earlier containment release.
+
 Daily spending admission is deployed to four Café124 engine units from isolated
 `da85537`: three direct-key profiles have per-call reservations; the credits-mode
 profile refuses paid AI pending a debit-bound proxy contract. All four automatic
@@ -24,7 +32,7 @@ v0.1.47; its bundled sidecar predates shared project RPC.
 Shared written project memory is deployed. Dedicated project documents,
 immutable revisions and a space identity live in the company memory database,
 separate from entity blobs. `projects.*` supports selective reads and revision-
-checked writes through cs-kernel v0.44.0. Import and independent downloads verify
+checked writes through cs-kernel v0.44.0. The company store contains
 six 124 projects (28 documents) and four MrCall projects (23 documents), including
 binary attachments. Original clone folders are archived byte-exactly in private Git histories
 (124 `abd48c8`, MrCall `3f53462`) and removed from working trees. A second 124 owner
@@ -43,11 +51,6 @@ mailbox preparation evidence without claiming reply quality. Firebase ID tokens
 remain memory-only. The hosted source includes the earlier chat-context budget,
 IMAP transport deadlines and processing cost controls; their dated delivery notes in
 the archive are not current deployment claims.
-
-Project storage, joins, RPC contracts and the installed kernel journey were
-verified with isolated SQLite stores and a real local WebSocket. Production
-project import used authenticated remote RPC and byte-exact downloaded checks.
-No sending, draft creation or paid agent tick was used as project acceptance.
 
 ## Unresolved
 

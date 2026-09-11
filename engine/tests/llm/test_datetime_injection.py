@@ -22,7 +22,7 @@ class _FakeRaw:
     def __init__(self):
         self.stop_reason = "end_turn"
         self.content = []
-        self.model = "test"
+        self.model = "claude-haiku-4-5-20251001"
         self.usage = SimpleNamespace(input_tokens=5, output_tokens=1)
 
 

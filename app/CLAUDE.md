@@ -69,10 +69,14 @@ The workflow builds the sidecar in `engine/` via PyInstaller in the same run and
 ## Settings — LLM billing mode (since 2026-05)
 
 `views/Settings.tsx` carries an `LLMProviderCard` showing the saved billing
-mode separately from pending edits. A saved Anthropic API key selects BYOK;
-without it, a signed-in session uses MrCall credits. Personal key entry is
-optional. Switching to credits clears the key only when Settings is saved;
-top-up opens the dashboard without requiring an API key.
+mode separately from pending edits. Saved `LLM_PROVIDER` selects Anthropic,
+MrCall credits or OpenRouter; legacy profiles infer Anthropic from their saved
+key, otherwise credits. Personal key entry is optional for credit users.
+Switching provider preserves keys and requires Save. Top-up opens the dashboard
+without requiring an API key. Economy/balanced presets replace individual role
+overrides on Save; custom preserves them. DailyBudget shows settled spending,
+uncertain holds, remaining daily capacity and effective role models, with free
+receipt recovery. See [bounded preparation](docs/bounded-preparation.md).
 
 When MrCall credits is selected, the card calls `window.zylch.account.balance()`
 on mount and on every `window` focus event (so a top-up done in another

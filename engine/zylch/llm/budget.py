@@ -112,14 +112,18 @@ def _pricing_fault(conn):
     )
 
 
-def reserve(request_kwargs, transport):
+def reserve(request_kwargs, transport, *, quote=None):
     from zylch.llm.usage import current_call_site
     from zylch.storage.models import LlmReservation
 
-    amount = request_bound(request_kwargs, transport)
     owner_id = os.environ.get("OWNER_ID", "").strip()
     if not isinstance(owner_id, str) or not owner_id.strip():
         raise BudgetError("AI paused: account identity is unavailable.")
+    if transport == "proxy":
+        from .bounded_proxy import validate_quote
+        amount = validate_quote(request_kwargs, quote, owner_id)
+    else:
+        amount = request_bound(request_kwargs, transport)
     reservation = Reservation(
         str(uuid4()), owner_id, request_kwargs["model"], transport, amount, current_call_site()
     )
@@ -138,6 +142,11 @@ def reserve(request_kwargs, transport):
                 f"This request needs up to ${amount / 1e6:.2f}. "
                 f"Daily usage resets at {reset.isoformat()}Z; unresolved calls remain reserved."
             )
+        if transport == "proxy":
+            from zylch.storage.models import LlmBillingAuthorization
+            conn.execute(LlmBillingAuthorization.__table__.insert().values(
+                reservation_id=reservation.id, quote=quote,
+            ))
         conn.execute(
             LlmReservation.__table__.insert().values(
                 id=reservation.id,
@@ -152,10 +161,17 @@ def reserve(request_kwargs, transport):
     return reservation
 
 
-def settle(reservation, response_usage):
+def settle(reservation, response_usage, *, receipt=None):
     from zylch.storage.models import LlmReservation, LlmUsage
 
-    amount, counts = usage_cost(reservation.model, response_usage)
+    if reservation.transport == "proxy":
+        amount, counts = None, {}
+    elif reservation.transport == "openrouter":
+        from .openrouter_pricing import usage_cost as router_cost
+
+        amount, counts = router_cost(reservation.model, response_usage)
+    else:
+        amount, counts = usage_cost(reservation.model, response_usage)
     with _transaction() as conn:
         row = (
             conn.execute(
@@ -171,6 +187,24 @@ def settle(reservation, response_usage):
             raise BudgetError("AI paused: budget reservation does not match this request.")
         if row["settled_at"] is not None:
             return
+        if reservation.transport == "proxy":
+            from zylch.storage.models import LlmBillingAuthorization
+            from .bounded_proxy import validate_receipt
+            authorization = conn.execute(select(LlmBillingAuthorization.__table__).where(
+                LlmBillingAuthorization.reservation_id == reservation.id
+            )).mappings().one_or_none()
+            if authorization is None:
+                raise BudgetError("MrCall authorization missing; reservation retained.")
+            amount = validate_receipt(reservation, authorization["quote"], receipt)
+            # The verified debit receipt is authoritative even if token usage
+            # was lost with a response. Reconciliation never fabricates tokens.
+            counts = {}
+            for key in ("input_tokens", "output_tokens", "cache_creation_input_tokens", "cache_read_input_tokens"):
+                value = response_usage.get(key, 0) if isinstance(response_usage, dict) else 0
+                counts[key] = value if type(value) is int and value >= 0 else 0
+            conn.execute(LlmBillingAuthorization.__table__.update().where(
+                LlmBillingAuthorization.reservation_id == reservation.id
+            ).values(receipt=receipt))
         now = _now()
         conn.execute(
             LlmUsage.__table__.insert().values(

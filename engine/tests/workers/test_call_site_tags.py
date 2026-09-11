@@ -8,9 +8,11 @@ covered by tests/llm/test_usage.py.)
 """
 
 import asyncio
+import os
 import types
 import uuid
 from datetime import datetime, timezone
+from pathlib import Path
 from unittest.mock import MagicMock
 
 import pytest
@@ -55,7 +57,7 @@ class _Rec:
 
 
 # ── task.detect ─────────────────────────────────────────────────────────
-def test_task_detect_tag():
+def test_task_detect_tag(fresh_db):
     from zylch.workers.task_creation import TaskWorker
 
     w = TaskWorker.__new__(TaskWorker)
@@ -66,7 +68,10 @@ def test_task_detect_tag():
     rec = _Rec()
     w.client = rec
 
-    asyncio.run(w._analyze_event("email", {"body": "hello"}, "blob-context"))
+    from zylch.services.preparation import preparation_run
+
+    with preparation_run(w.owner_id):
+        asyncio.run(w._analyze_event("email", {"id": "email-tag-1", "body": "hello"}, "blob-context"))
     assert rec.sites == ["task.detect"]
 
 
@@ -133,6 +138,7 @@ def test_canary_tag():
 @pytest.fixture
 def fresh_db(tmp_path, monkeypatch):
     monkeypatch.setenv("ZYLCH_DB_PATH", str(tmp_path / "tags.db"))
+    monkeypatch.setenv("OWNER_ID", "owner@x.io")
     from zylch.storage import database as db_mod
 
     db_mod.dispose_engine()
@@ -177,13 +183,21 @@ def _patch_client(monkeypatch, rec):
     return captured
 
 
+def _save_role_model(monkeypatch, key, model):
+    """Role policy reads saved profile values; shell settings cannot override it."""
+    from dotenv import set_key
+
+    set_key(str(Path(os.environ["ZYLCH_PROFILE_DIR"]) / ".env"), key, model)
+    monkeypatch.setenv(key, "conflicting-shell-model")
+
+
 # ── f4.reanalyze (+ MODEL_REANALYZE wiring) ─────────────────────────────
 def test_f4_reanalyze_tag(fresh_db, monkeypatch):
     from zylch.workers.task_reanalyze import reanalyze_task
 
     owner = "owner@x.io"
     monkeypatch.setenv("EMAIL_ADDRESS", owner)
-    monkeypatch.setenv("MODEL_REANALYZE", "claude-reanalyze-x")
+    _save_role_model(monkeypatch, "MODEL_REANALYZE", "claude-reanalyze-x")
     tid = _insert_task(owner, sources={"thread_id": "T1"})
     rec = _Rec()
     captured = _patch_client(monkeypatch, rec)
@@ -198,7 +212,7 @@ def test_dedup_f8_tag(fresh_db, monkeypatch):
     from zylch.workers.task_dedup_sweep import run_dedup_sweep
 
     owner = "owner@x.io"
-    monkeypatch.setenv("MODEL_DEDUP", "claude-dedup-x")
+    _save_role_model(monkeypatch, "MODEL_DEDUP", "claude-dedup-x")
     # Two open tasks sharing a contact → one cluster → arbiter call fires.
     _insert_task(owner, contact_email="dup@acme.io")
     _insert_task(owner, contact_email="dup@acme.io")
@@ -215,7 +229,7 @@ def test_dedup_f9_tag(fresh_db, monkeypatch):
     from zylch.workers.task_topic_dedup import run_topic_dedup
 
     owner = "owner@x.io"
-    monkeypatch.setenv("MODEL_DEDUP", "claude-dedup-x")
+    _save_role_model(monkeypatch, "MODEL_DEDUP", "claude-dedup-x")
     for _ in range(4):  # >= MIN_TASKS_FOR_TOPIC_DEDUP
         _insert_task(owner)
     rec = _Rec()

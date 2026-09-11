@@ -133,3 +133,10 @@ description: |
 | Cross-cutting recent state | [`../../docs/active-context.md`](../../docs/active-context.md) |
 | App-side recent state | [`../../app/docs/active-context.md`](../../app/docs/active-context.md) |
 | Firebase auth, BYOK vs MrCall credits, transport model | [`../CLAUDE.md`](../CLAUDE.md) |
+
+## 2026-09-11 — Project acceptance evidence
+
+Project storage, joins, RPC contracts and the installed kernel journey were
+verified with isolated SQLite stores and a real local WebSocket. Production
+project import used authenticated remote RPC and byte-exact downloaded checks.
+No sending, draft creation or paid agent tick was used as project acceptance.
