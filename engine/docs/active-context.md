@@ -25,8 +25,7 @@ Failed extraction checkpoints (1,962 + 40) remain pending, with private backups
 and task checkpoints preserved. Three-candidate merge selection and complete-
 response validation retain LLM judgement without runaway comparisons or false
 completion. See [spending protection](features/daily-llm-budget.md).
-Desktop v0.1.48 source includes shared project RPC; its installer publication
-is pending. GLM semantic task quality is unmeasured.
+Published Desktop v0.1.48 includes shared project RPC. GLM semantic task quality is unmeasured.
 
 Shared written project memory is deployed. Dedicated project documents,
 immutable revisions and a space identity live in the company memory database,
@@ -53,7 +52,7 @@ the archive are not current deployment claims.
 
 ## Unresolved
 
-- Desktop v0.1.48 installer publication and Mac installation remain to verify.
+- Desktop v0.1.48 installation on the CTO's Mac remains unverified.
 - Existing engine backlog remains separate: Calendar token integration,
   phone-call memory parity, additional RPC error humanization, and multi-profile
   WhatsApp session isolation. See [harness backlog](harness-backlog.md) and
@@ -66,6 +65,6 @@ the archive are not current deployment claims.
 ## Next
 
 1. Validate cheaper models per memory/task role before resuming automatic backlogs.
-2. Ship the project RPC surface in the next Desktop bundled-engine release.
+2. Verify the published Desktop v0.1.48 installation on the CTO's Mac.
 3. Continue the existing Calendar, phone-memory and error-handling workstreams
    under their owning plans rather than merging them into project storage.

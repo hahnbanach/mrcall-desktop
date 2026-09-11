@@ -1,5 +1,5 @@
 ---
-status: active
+status: completed
 ---
 # Predictable AI spending — delivery plan
 
@@ -123,8 +123,8 @@ customer credit debits or automatic backlog resumption during acceptance.
 - [x] M3 implementation and review (bounded_billing_review APPROVED; 17 independent cases).
 - [x] M4 implementation and review (spending_ux_review APPROVED; real React/RPC simulations and evaluator checks).
 - [x] Fresh final end-to-end implementation review (54 engine, 45 PostgreSQL endpoint, 4 cross-repository journeys and both React scripts).
-- [ ] Final documentation review.
-- [ ] Compatible delivery, read-only verification and final report.
+- [x] Final documentation review (doc-critic clean; mechanical gate clean, four existing size and seven undated-trace advisories).
+- [x] Compatible delivery, read-only verification and final report.
 
 Plan review requires account + resolved business quote binding, durable receipt metadata, one allowance across channels/stages, pause coverage for training/canaries/reconsolidation, and explicit legacy-client limits.
 
@@ -142,7 +142,17 @@ Plan review requires account + resolved business quote binding, durable receipt 
   production RPC handlers. All four services are active; read-only SQLite checks
   find no usage since 12:25 UTC containment and no outstanding holds.
 - Root regression suite: 331 engine tests passed. Full server suite: 196 passed;
-  CI lint/format/test passed. App component journeys, typecheck and build pass.
-- Desktop v0.1.48 release artifact remains the final delivery step. Rollback keeps
+  CI lint/format/test passed. App preparation/spending component journeys, existing onboarding regression,
+  typecheck and build pass.
+- Desktop v0.1.48 release workflow 34616071046 succeeded from main merge
+  `aebc7fc`. Distribution signing and the awaited custom notarization hook
+  completed; the published Apple Silicon DMG is 237,059,563 bytes, SHA256
+  `fb870d72046645a11d630705000193baa13de2c80fd6a80433d25bb989d504db`.
+  Installation/fresh-device acceptance on the CTO's Mac remains unverified. Rollback keeps
   the prior guarded engine override and all accounting data; never restore
   automation or an unguarded build.
+
+The desktop documentation baseline is the reviewed main merge `aebc7fc`.
+The billing-server documentation is reconciled manually; its older harness
+version remains unchanged and its baseline is not advanced with v8 commands.
+No automatic processing, sending, paid evaluation or customer debit was started.

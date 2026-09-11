@@ -5,6 +5,39 @@ That file is a living snapshot and carries only `State now` / `Unresolved` /
 `Next`; anything chronological lands here instead. Newest section first.
 Nothing is discarded — only relocated, verbatim.
 
+
+## 2026-09-11 — Project import verification snapshot
+
+Six 124 projects
+(28 documents) and four MrCall projects (23 documents) are imported and independently
+verified by downloaded hashes. Original folders are archived in the private clone
+Git histories (124 `abd48c8`, MrCall `3f53462`) and removed from working trees. A
+second 124 owner sees all six shared projects.
+
+## 2026-09-11 — Kernel installation evidence
+
+Public-tag installation and independent lock rebuilds were verified.
+
+## 2026-09-11 — Spending pre-rollout snapshot
+
+Predictable-spending source is implemented on `fix/daily-llm-budget` with
+independent M1–M4 and final user-path approvals. Compatible deployment is in progress.
+It adds bounded MrCall receipts, explicit OpenRouter/provider/role policy,
+persistent preparation batches/retries and spending controls. The billing-server
+MR is [!2](https://gitlab.com/hahnbanach/mrcall-agent/-/merge_requests/2).
+No paid acceptance calls have been made. Deployment statements below still refer
+to the earlier scoped containment until the compatible rollout is verified.
+See [current delivery plan](execution-plans/2026-09-11-predictable-ai-spending.md).
+
+
+Desktop v0.1.47 remains the signed/notarized published Apple Silicon installer.
+Four Café124 services run isolated guarded engine `da85537`; all auto-update is
+paused. Three direct-key accounts enforce the saved USD5 cap before each request.
+The fourth uses MrCall credits: paid AI refuses until a server debit-bound
+contract exists; read access works. Other hosted accounts retain their previous
+build and are not covered by this guard. The new spending UI is built/tested,
+not packaged. See the [spending plan](execution-plans/2026-09-11-daily-llm-budget.md).
+
 ## 2026-09-10 — Hosted engine before spending containment
 
 Desktop changes are on main and tagged `v0.1.47` at `6f0b8f8`. The hosted engine
@@ -186,36 +219,3 @@ harness v3 bootstrap. It was the "Recent landings (last ~2 weeks)" table.*
 | 2026-05-22 | Current datetime injected into EVERY LLM request (single LLMClient chokepoint + chat_compaction bypass). | engine | `5f5c73e8` |
 | 2026-05-20 | MrCall channel: delegated/PKCE OAuth + `/mrcall` removed (Firebase-JWT only); MrCall tab lists + searches businesses; onboarding unblocked for MrCall-only users; in-wizard Calendar session fix. | engine + app + IPC | `770522e8..2b0a54ce` |
 | 2026-05-20 | WhatsApp voice-note transcription — event-time download + deferred faster-whisper `small`/int8 pass; archived chats excluded from memory/task analysis. Live download + packaged bundling still pending. | engine + app + IPC | [`../engine/docs/execution-plans/whatsapp-voice-transcription.md`](../engine/docs/execution-plans/whatsapp-voice-transcription.md) |
-
-## 2026-09-11 — Project import verification snapshot
-
-Six 124 projects
-(28 documents) and four MrCall projects (23 documents) are imported and independently
-verified by downloaded hashes. Original folders are archived in the private clone
-Git histories (124 `abd48c8`, MrCall `3f53462`) and removed from working trees. A
-second 124 owner sees all six shared projects.
-
-## 2026-09-11 — Kernel installation evidence
-
-Public-tag installation and independent lock rebuilds were verified.
-
-## 2026-09-11 — Spending pre-rollout snapshot
-
-Predictable-spending source is implemented on `fix/daily-llm-budget` with
-independent M1–M4 and final user-path approvals. Compatible deployment is in progress.
-It adds bounded MrCall receipts, explicit OpenRouter/provider/role policy,
-persistent preparation batches/retries and spending controls. The billing-server
-MR is [!2](https://gitlab.com/hahnbanach/mrcall-agent/-/merge_requests/2).
-No paid acceptance calls have been made. Deployment statements below still refer
-to the earlier scoped containment until the compatible rollout is verified.
-See [current delivery plan](execution-plans/2026-09-11-predictable-ai-spending.md).
-
-
-Desktop v0.1.47 remains the signed/notarized published Apple Silicon installer.
-Four Café124 services run isolated guarded engine `da85537`; all auto-update is
-paused. Three direct-key accounts enforce the saved USD5 cap before each request.
-The fourth uses MrCall credits: paid AI refuses until a server debit-bound
-contract exists; read access works. Other hosted accounts retain their previous
-build and are not covered by this guard. The new spending UI is built/tested,
-not packaged. See the [spending plan](execution-plans/2026-09-11-daily-llm-budget.md).
-

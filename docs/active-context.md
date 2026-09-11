@@ -1,5 +1,5 @@
 ---
-doc_baseline_commit: da85537b809ba278de66ced021fcab758f6c7655
+doc_baseline_commit: aebc7fc54a36594ee846ebf9dc53d134ce1c36c5
 doc_baseline_date: 2026-09-11
 ---
 
@@ -50,15 +50,13 @@ Settings remains reachable when the engine is down. Reconnection invalidates
 stale snapshots; unsaved settings must be explicitly discarded before loading
 a different backend. Preparation actions remain user-triggered.
 
-Desktop v0.1.47 remains the published Apple Silicon installer; v0.1.48 is prepared
-for release with spending controls and shared project RPC. The new UI passes
-component journeys, typecheck and build; installation on the CTO's Mac is not
-verified. Other hosted accounts retain the previous checkout until the host's
+Desktop v0.1.48 is the published signed/notarized Apple Silicon installer,
+including spending controls and shared project RPC. Component journeys, typecheck,
+build and release pipeline pass; installation on the CTO's Mac is not verified. Other hosted accounts retain the previous checkout until the host's
 normal reconciliation; the four affected accounts use pinned guarded releases.
 
 Kernel v0.44.0 is publicly released and installed in both maintained operational
-clones. Desktop v0.1.47 still has cosmetic development-kernel wording; its linked guide
-now installs the public kernel release.
+clones. The linked operator guide installs the public kernel release.
 See [operator setup](operator-setup.md), the
 [brief](briefs/2026-09-10-desktop-to-operator-onboarding.md), and the
 [delivery plan](execution-plans/2026-09-10-desktop-to-operator-onboarding.md).
@@ -76,7 +74,7 @@ entity blobs, accessed through `cs project` in kernel v0.44.0. The company store
 (28 documents) and four MrCall projects (23 documents), shared with other company
 members. Original folders remain in the private clone Git histories
 (124 `abd48c8`, MrCall `3f53462`) and are absent from working trees. This is deployed on the hosted
-engine; the bundled v0.1.47 sidecar does not include these RPC methods.
+engine; the bundled v0.1.48 sidecar includes these RPC methods.
 See the [brief](briefs/2026-09-10-shared-project-memory.md) and
 [plan](execution-plans/2026-09-10-shared-project-memory.md).
 
@@ -101,7 +99,7 @@ See the [brief](briefs/2026-09-10-shared-project-memory.md) and
 
 ## Next
 
-1. Publish Desktop v0.1.48 and verify the release artifacts.
+1. Verify Desktop v0.1.48 installation on the CTO's Mac.
 2. Evaluate economy/GLM task quality before enabling recurring backlogs.
 3. Continue the deferred product work from its existing briefs.
 

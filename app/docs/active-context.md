@@ -8,9 +8,9 @@ state lives in ../../docs/active-context.md. Historical snapshots are archived.
 
 ## State now
 
-Desktop v0.1.47 is the currently published signed/notarized Apple Silicon
-installer. Predictable-spending UI is implemented and independently reviewed
-on the daily-budget branch, but is not yet packaged or installed on the CTO's Mac.
+Desktop v0.1.48 is the published signed/notarized Apple Silicon installer.
+Predictable-spending UI is implemented, independently reviewed and packaged.
+Installation on the CTO's Mac remains unverified.
 
 Settings exposes explicit MrCall/Anthropic/OpenRouter billing, saved models,
 daily allowance, uncertain holds and paged receipt reconciliation. Top-up opens
@@ -30,14 +30,13 @@ module/chunk advisories remain. No paid provider call was made for acceptance.
 
 ## Unresolved
 
-A new Mac installer requires the compatible server/engine rollout and release
-pipeline. Source verification does not establish installation or a fresh-device
+The compatible server and four affected engines are deployed; Desktop v0.1.48
+installer is published. Source verification does not establish installation or a fresh-device
 signin test on the CTO's Mac. OpenRouter task quality remains unmeasured.
 
 ## Next
 
-Deploy compatible reviewed backend services,
-then publish the signed Apple Silicon installer. Keep affected automatic work
+Verify Desktop v0.1.48 installation on the CTO's Mac. Keep affected automatic work
 paused. References: [preparation](bounded-preparation.md),
 [cross-cutting state](../../docs/active-context.md),
 [archive](active-context-archive.md).

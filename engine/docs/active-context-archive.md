@@ -4,6 +4,37 @@ Historical snapshots preserved verbatim when the living context is consolidated.
 Dated deployment claims and incident counts below are historical observations,
 not current operational state; use [active-context.md](active-context.md).
 
+
+## 2026-09-11 — Project acceptance evidence
+
+Project storage, joins, RPC contracts and the installed kernel journey were
+verified with isolated SQLite stores and a real local WebSocket. Production
+project import used authenticated remote RPC and byte-exact downloaded checks.
+No sending, draft creation or paid agent tick was used as project acceptance.
+
+## 2026-09-11 — Earlier containment snapshot
+
+Predictable-spending source is implemented and independently reviewed: bounded
+MrCall quote/debit receipts, explicit provider/role policy, OpenRouter GLM and
+persistent preparation/retry limits. Fake-provider journeys exercise actual HTTP
+adapters and PostgreSQL/SQLite accounting. New automatic processing defaults off;
+existing explicit settings remain. No paid semantic benchmark has been run.
+Source-to-production rollout is in progress after final approval; the deployment below is
+still the earlier containment release.
+
+Daily spending admission is deployed to four Café124 engine units from isolated
+`da85537`: three direct-key profiles have per-call reservations; the credits-mode
+profile refuses paid AI pending a debit-bound proxy contract. All four automatic
+pipelines are paused; RPC/read access is available. Confirmed failed extraction
+checkpoints (1,962 + 40) are restored to pending, with backups and task checkpoints
+preserved. New merge candidate selection and complete-response validation retain
+LLM judgement while preventing runaway comparisons and false completion.
+See [spending protection](features/daily-llm-budget.md) for scope and limitations.
+
+The unchanged hosted engine units run `b875cb5` behind `wss://desktop.mrcall.ai`. Seven profile
+services, provisiond and Caddy are active. The companion Desktop installer is
+v0.1.47; its bundled sidecar predates shared project RPC.
+
 ## 2026-09-10 — Previous engine snapshot
 
 ---
@@ -133,34 +164,3 @@ description: |
 | Cross-cutting recent state | [`../../docs/active-context.md`](../../docs/active-context.md) |
 | App-side recent state | [`../../app/docs/active-context.md`](../../app/docs/active-context.md) |
 | Firebase auth, BYOK vs MrCall credits, transport model | [`../CLAUDE.md`](../CLAUDE.md) |
-
-## 2026-09-11 — Project acceptance evidence
-
-Project storage, joins, RPC contracts and the installed kernel journey were
-verified with isolated SQLite stores and a real local WebSocket. Production
-project import used authenticated remote RPC and byte-exact downloaded checks.
-No sending, draft creation or paid agent tick was used as project acceptance.
-
-## 2026-09-11 — Earlier containment snapshot
-
-Predictable-spending source is implemented and independently reviewed: bounded
-MrCall quote/debit receipts, explicit provider/role policy, OpenRouter GLM and
-persistent preparation/retry limits. Fake-provider journeys exercise actual HTTP
-adapters and PostgreSQL/SQLite accounting. New automatic processing defaults off;
-existing explicit settings remain. No paid semantic benchmark has been run.
-Source-to-production rollout is in progress after final approval; the deployment below is
-still the earlier containment release.
-
-Daily spending admission is deployed to four Café124 engine units from isolated
-`da85537`: three direct-key profiles have per-call reservations; the credits-mode
-profile refuses paid AI pending a debit-bound proxy contract. All four automatic
-pipelines are paused; RPC/read access is available. Confirmed failed extraction
-checkpoints (1,962 + 40) are restored to pending, with backups and task checkpoints
-preserved. New merge candidate selection and complete-response validation retain
-LLM judgement while preventing runaway comparisons and false completion.
-See [spending protection](features/daily-llm-budget.md) for scope and limitations.
-
-The unchanged hosted engine units run `b875cb5` behind `wss://desktop.mrcall.ai`. Seven profile
-services, provisiond and Caddy are active. The companion Desktop installer is
-v0.1.47; its bundled sidecar predates shared project RPC.
-
