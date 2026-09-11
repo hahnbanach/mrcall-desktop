@@ -3,7 +3,7 @@
 import os
 from contextlib import contextmanager
 from dataclasses import dataclass
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from uuid import uuid4
 
 from sqlalchemy import inspect, select
@@ -22,7 +22,7 @@ class Reservation:
 
 
 def _now():
-    return datetime.now(timezone.utc).replace(tzinfo=None)
+    return datetime.now(UTC).replace(tzinfo=None)
 
 
 def _budget():
@@ -53,7 +53,7 @@ def _transaction():
                 raise
     except BudgetError:
         raise
-    except Exception:
+    except Exception:  # noqa: BLE001 — fail closed without leaking database details
         raise BudgetError(
             "AI paused: budget ledger is unavailable; no new paid call was authorized."
         ) from None
