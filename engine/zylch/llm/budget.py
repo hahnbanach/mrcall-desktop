@@ -26,8 +26,22 @@ def _now():
 
 
 def _budget():
-    raw = os.environ.get("LLM_DAILY_BUDGET_USD", "").strip()
-    return micro_usd(raw or "10")
+    profile_dir = os.environ.get("ZYLCH_PROFILE_DIR")
+    if profile_dir:
+        from io import StringIO
+        from pathlib import Path
+
+        from dotenv import dotenv_values
+
+        try:
+            content = (Path(profile_dir) / ".env").read_text(encoding="utf-8")
+            values = dotenv_values(stream=StringIO(content), interpolate=False)
+        except (OSError, UnicodeError):
+            raise BudgetError("AI paused: the saved budget setting is unavailable.") from None
+        raw = values.get("LLM_DAILY_BUDGET_USD", "")
+    else:
+        raw = os.environ.get("LLM_DAILY_BUDGET_USD", "")
+    return micro_usd(str(raw or "").strip() or "10")
 
 
 @contextmanager
@@ -86,11 +100,11 @@ def reserve(request_kwargs, transport):
     owner_id = os.environ.get("OWNER_ID", "").strip()
     if not isinstance(owner_id, str) or not owner_id.strip():
         raise BudgetError("AI paused: account identity is unavailable.")
-    cap = _budget()
     reservation = Reservation(
         str(uuid4()), owner_id, request_kwargs["model"], transport, amount, current_call_site()
     )
     with _transaction() as conn:
+        cap = _budget()
         now = _now()
         spent, held, reset = _totals(conn, owner_id, now)
         if cap == 0 or spent + held + amount > cap:
@@ -160,8 +174,8 @@ def settle(reservation, response_usage):
 
 
 def budget_snapshot(owner_id):
-    cap = _budget()
     with _transaction() as conn:
+        cap = _budget()
         spent, held, reset = _totals(conn, owner_id, _now())
     exceeded = spent + held >= cap
     return {

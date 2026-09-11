@@ -19,6 +19,7 @@ def ledger(tmp_path, monkeypatch):
     LlmUsage.__table__.create(engine)
     LlmReservation.__table__.create(engine)
     monkeypatch.setattr(database, "get_engine", lambda: engine)
+    monkeypatch.delenv("ZYLCH_PROFILE_DIR", raising=False)
     monkeypatch.setenv("OWNER_ID", "immutable-uid")
     monkeypatch.setenv("LLM_DAILY_BUDGET_USD", "5")
     yield engine
@@ -155,7 +156,7 @@ def test_proxy_requires_markup_pricing(ledger):
 
 
 def test_large_request_refused(ledger):
-    with pytest.raises(BudgetError, match="needs up to"):
+    with pytest.raises(BudgetError, match="200000-token"):
         budget.reserve(request(messages=[{"role": "user", "content": "x" * 3_000_000}]), "direct")
 
 
@@ -228,3 +229,61 @@ def test_cache_writes_settle_conservatively(ledger):
         },
     )
     assert budget.budget_snapshot("uid")["spent_usd"] == 0.000206
+
+
+def test_live_profile_budget_beats_stale_environment(ledger, monkeypatch, tmp_path):
+    monkeypatch.setenv("ZYLCH_PROFILE_DIR", str(tmp_path))
+    monkeypatch.setenv("LLM_DAILY_BUDGET_USD", "5")
+    settings = tmp_path / ".env"
+    settings.write_text("LLM_DAILY_BUDGET_USD=5\n")
+    budget.reserve(request(), "direct")
+    settings.write_text("LLM_DAILY_BUDGET_USD=0\n")
+    with pytest.raises(BudgetError):
+        budget.reserve(request(), "direct")
+    assert budget.budget_snapshot("uid")["budget_usd"] == 0
+
+
+def test_profile_missing_setting_uses_default_not_ambient(ledger, monkeypatch, tmp_path):
+    monkeypatch.setenv("ZYLCH_PROFILE_DIR", str(tmp_path))
+    monkeypatch.setenv("LLM_DAILY_BUDGET_USD", "999")
+    (tmp_path / ".env").write_text("OWNER_ID=uid\n")
+    assert budget.budget_snapshot("uid")["budget_usd"] == 10
+
+
+def test_unreadable_profile_refuses(ledger, monkeypatch, tmp_path):
+    monkeypatch.setenv("ZYLCH_PROFILE_DIR", str(tmp_path / "missing"))
+    with pytest.raises(BudgetError, match="saved budget"):
+        budget.reserve(request(), "direct")
+
+
+def test_standard_tier_admitted_priority_retains_hold(ledger):
+    hold = budget.reserve(request(service_tier="standard_only"), "direct")
+    with pytest.raises(BudgetError, match="service-tier"):
+        budget.settle(hold, {"input_tokens": 1, "output_tokens": 1, "service_tier": "priority"})
+    assert budget.budget_snapshot("uid")["reserved_usd"] > 0
+
+
+def test_output_included_in_context_bound(ledger):
+    with pytest.raises(BudgetError, match="200000-token"):
+        budget.reserve(
+            request(
+                model="claude-sonnet-4-5",
+                max_tokens=100000,
+                messages=[{"role": "user", "content": "x" * 100000}],
+            ),
+            "direct",
+        )
+
+
+def test_other_process_stale_cap_cannot_override_saved_pause(ledger, monkeypatch, tmp_path):
+    import multiprocessing
+
+    monkeypatch.setenv("ZYLCH_PROFILE_DIR", str(tmp_path))
+    (tmp_path / ".env").write_text("LLM_DAILY_BUDGET_USD=0\n")
+    ctx = multiprocessing.get_context("spawn")
+    queue = ctx.Queue()
+    child = ctx.Process(target=_process_attempt, args=(str(ledger.url), "5", queue))
+    child.start()
+    assert queue.get(timeout=30) is False
+    child.join(timeout=30)
+    assert child.exitcode == 0

@@ -37,6 +37,7 @@ _ALLOWED = {
     "top_k",
     "stop_sequences",
     "metadata",
+    "service_tier",
 }
 
 
@@ -92,6 +93,8 @@ def request_bound(request, transport):
         )
     if set(request) - _ALLOWED:
         raise BudgetError("AI paused: request includes an unpriced option.")
+    if request.get("service_tier", "standard_only") != "standard_only":
+        raise BudgetError("AI paused: only standard service-tier pricing is supported.")
     model = request.get("model")
     if model not in PRICES:
         raise BudgetError("AI paused: model pricing is not configured for this model.")
@@ -127,6 +130,8 @@ def request_bound(request, transport):
     except (TypeError, ValueError):
         raise BudgetError("AI paused: request cannot be priced safely.") from None
     input_bound = payload_bytes + 4096 + 1024 * (len(messages) + len(tools))
+    if input_bound + output > 200000:
+        raise BudgetError("AI paused: request exceeds the supported 200000-token cost bound.")
     in_rate, out_rate = PRICES[model]
     # All input at one-hour cache-write rate: no assumed cache hit savings.
     return input_bound * in_rate * 2 + output * out_rate
@@ -136,6 +141,10 @@ def usage_cost(model, usage):
     """Conservative settled micro-USD; absent/invalid usage retains the hold."""
     if model not in PRICES or not isinstance(usage, dict):
         raise BudgetError("AI paused: response usage cannot be reconciled.")
+    if usage.get("service_tier") not in (None, "standard"):
+        raise BudgetError(
+            "AI paused: unexpected service-tier usage; its budget reservation remains."
+        )
     for key in ("input_tokens", "output_tokens"):
         if key not in usage:
             raise BudgetError(
