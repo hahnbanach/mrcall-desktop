@@ -1,5 +1,5 @@
 ---
-status: active
+status: completed
 ---
 # Daily LLM budget execution plan
 
@@ -66,8 +66,8 @@ requires keeping automatic processing paused, never restoring the unsafe loop.
 - [x] Plan independently approved.
 - [x] M1 implementation and integration review.
 - [x] M2 failure/cost fixes and integration review.
-- [ ] M3 user-path acceptance, final review and documentation.
-- [ ] Safe hosted-engine rollout and final status report.
+- [x] M3 user-path acceptance, final review and documentation.
+- [x] Safe hosted-engine rollout and final status report.
 
 ## Verification and recovery evidence
 
@@ -88,6 +88,32 @@ checkpoints unchanged; no existing source/blob links and no paid replay.
 Private metadata and backups: /tmp/mrcall-incident-recovery-20260911.
 
 Scoped rollout uses an isolated source release and per-unit PYTHONPATH override
-for the four affected direct-key accounts only. The three other engine units
+for the four affected company accounts only. Three use direct keys; production
+uses MrCall credits and remains paid-AI-paused until bounded debit support. The three other engine units
 and original release checkout stay unchanged because their billing coverage
 requires separate work. No packaged Desktop release is part of this fix.
+
+## Deployed state
+
+Guarded engine source `da85537` is extracted under
+`/home/mrcalld/releases/mrcall-desktop-budget-da85537`; four per-unit overrides
+select its engine directory via PYTHONPATH. All four services are active with
+AUTO_UPDATE_ENABLED=n. Three existing USD5 limits are preserved; production's
+previously unset/defaultUSD10 allowance is explicitly lowered to USD5.
+
+Actual cs-kernel RPC from the operational clone verifies usage.today on the
+production and Mario accounts. Mario's pre-fix USD15.03889 is visible with zero
+remaining budget; production read access works, but paid credit-mode calls are
+intentionally refused. Profile ledger tables and running-process source paths
+are verified for all four. No paid acceptance call or automatic replay.
+
+Final combined engine suite: 259 passed; TypeScript checks and production app
+build passed. New guard/helper lint and critical Python checks pass. Broad
+legacy module lint still reports pre-existing typing/style debt; it is not
+claimed clean. App build emits existing module/chunk advisories.
+
+Code is published on fix/daily-llm-budget, not main: the host reconciler pulls
+main automatically, so merging before proxy support would affect additional
+accounts. A new Desktop installer is likewise deferred until that compatibility
+boundary is resolved. The incident fix and scoped rollout are complete; broader
+billing/provider enablement is follow-up work, not a claim of this delivery.

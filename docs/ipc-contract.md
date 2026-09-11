@@ -1233,10 +1233,12 @@ Today's LLM spend for the active profile, since UTC midnight:
 {
   "spent_usd": 0.42,      // SUM(est_cost_usd)
   "budget_usd": 5.0,      // saved LLM_DAILY_BUDGET_USD (0 pauses AI)
-  "exceeded": false,      // settled plus reserved >= cap
+  "exceeded": false,      // settled plus reserved >= cap, or a recorded pricing fault
   "reserved_usd": 0.10,  // includes uncertain calls from prior days
   "remaining_usd": 4.48,
   "paused": false,
+  "billing_supported": true, // false: credit-mode AI paused pending debit bounds
+  "pricing_fault": false,
   "resets_at": "2026-09-12T00:00:00Z",
   "calls_today": 137,
   "by_site": { "<call_site>": { "calls": 12, "est_usd": 0.08 } }

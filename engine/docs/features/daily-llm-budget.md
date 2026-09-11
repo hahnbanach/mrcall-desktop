@@ -43,8 +43,9 @@ tools remain supported and each subsequent LLM request gets its own reservation.
 MrCall-credit proxy calls currently refuse because its dynamic marked-up debit
 is not covered by this direct-provider price contract. A proxy quote/billing
 contract is required before upgrading credit-mode production accounts. This
-release's hosted rollout is scoped to the four affected direct-key accounts;
-other hosted accounts and the published Desktop installer retain their previous
+release's hosted rollout is scoped to four affected company accounts: three
+direct-key accounts can use the guard; production's credit-mode AI is paused.
+Other hosted accounts and the published Desktop installer retain their previous
 build and are not claimed protected by this implementation.
 
 The limit covers this engine/profile store. Other hosts, copied databases,

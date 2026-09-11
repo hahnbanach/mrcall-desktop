@@ -8,7 +8,16 @@ are preserved in [active-context-archive.md](active-context-archive.md).
 
 ## State now
 
-The hosted engine runs `b875cb5` behind `wss://desktop.mrcall.ai`. Seven profile
+Daily spending admission is deployed to four Café124 engine units from isolated
+`da85537`: three direct-key profiles have per-call reservations; the credits-mode
+profile refuses paid AI pending a debit-bound proxy contract. All four automatic
+pipelines are paused; RPC/read access is available. Confirmed failed extraction
+checkpoints (1,962 + 40) are restored to pending, with backups and task checkpoints
+preserved. New merge candidate selection and complete-response validation retain
+LLM judgement while preventing runaway comparisons and false completion.
+See [spending protection](features/daily-llm-budget.md) for scope and limitations.
+
+The unchanged hosted engine units run `b875cb5` behind `wss://desktop.mrcall.ai`. Seven profile
 services, provisiond and Caddy are active. The companion Desktop installer is
 v0.1.47; its bundled sidecar predates shared project RPC.
 
@@ -54,6 +63,8 @@ No sending, draft creation or paid agent tick was used as project acceptance.
 
 ## Next
 
-1. Ship the project RPC surface in the next Desktop bundled-engine release.
-2. Continue the existing Calendar, phone-memory and error-handling workstreams
+1. Establish bounded MrCall-credit debits before broader guard rollout; validate
+   cheaper models per memory/task role before resuming automatic backlogs.
+2. Ship the project RPC surface in the next Desktop bundled-engine release.
+3. Continue the existing Calendar, phone-memory and error-handling workstreams
    under their owning plans rather than merging them into project storage.

@@ -1,5 +1,5 @@
 ---
-doc_baseline_commit: 7a3956cf5810f6c284fe4e413eec7ed9d9ddbaff
+doc_baseline_commit: da85537b809ba278de66ced021fcab758f6c7655
 doc_baseline_date: 2026-09-11
 ---
 
@@ -42,13 +42,13 @@ Settings remains reachable when the engine is down. Reconnection invalidates
 stale snapshots; unsaved settings must be explicitly discarded before loading
 a different backend. Preparation actions remain user-triggered.
 
-Desktop changes are on main and tagged `v0.1.47` at `6f0b8f8`. The hosted engine
-runs `b875cb5`, including shared project memory: seven profile services,
-provisiond and Caddy are active;
-authenticated `setup.state` returns the new evidence fields. The CTO has accepted
-the macOS Desktop test. The macOS Apple Silicon installer is published as
-[v0.1.47](https://github.com/hahnbanach/mrcall-desktop/releases/tag/v0.1.47),
-Developer ID signed and Apple-notarized.
+Desktop v0.1.47 remains the signed/notarized published Apple Silicon installer.
+Four Café124 services run isolated guarded engine `da85537`; all auto-update is
+paused. Three direct-key accounts enforce the saved USD5 cap before each request.
+The fourth uses MrCall credits: paid AI refuses until a server debit-bound
+contract exists; read access works. Other hosted accounts retain their previous
+build and are not covered by this guard. The new spending UI is built/tested,
+not packaged. See the [spending plan](execution-plans/2026-09-11-daily-llm-budget.md).
 
 Kernel v0.44.0 is publicly released and installed in both maintained operational
 clones. Public-tag installation and independent lock rebuilds were verified.
@@ -63,7 +63,8 @@ shared company memory through `memory.join`, headless descriptors, provisioning,
 BYOK and MrCall-credit LLM routing. Contracts live in [IPC](ipc-contract.md),
 [remote backend](remote-backend.md), and the per-tree documentation.
 Prior deployment/package observations remain historical in the archive;
-the production observation above is from the 2026-09-10 rollout.
+the budget containment above is verified on 2026-09-11; project-memory
+deployment evidence is from 2026-09-10.
 
 Shared written projects are revisioned company-engine records, separate from
 entity blobs, accessed through `cs project` in kernel v0.44.0. Six 124 projects
@@ -96,8 +97,9 @@ See the [brief](briefs/2026-09-10-shared-project-memory.md) and
 
 ## Next
 
-1. Include project-memory RPC in the next bundled-engine Desktop release.
-2. Continue the deferred product work from its existing briefs.
+1. Complete bounded proxy billing before merging the spending guard to main.
+2. Include project-memory RPC in the next bundled-engine Desktop release.
+3. Continue the deferred product work from its existing briefs.
 
 ### Deferred (nice-to-have)
 

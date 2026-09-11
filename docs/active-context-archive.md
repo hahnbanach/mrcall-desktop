@@ -5,6 +5,16 @@ That file is a living snapshot and carries only `State now` / `Unresolved` /
 `Next`; anything chronological lands here instead. Newest section first.
 Nothing is discarded — only relocated, verbatim.
 
+## 2026-09-10 — Hosted engine before spending containment
+
+Desktop changes are on main and tagged `v0.1.47` at `6f0b8f8`. The hosted engine
+runs `b875cb5`, including shared project memory: seven profile services,
+provisiond and Caddy are active;
+authenticated `setup.state` returns the new evidence fields. The CTO has accepted
+the macOS Desktop test. The macOS Apple Silicon installer is published as
+[v0.1.47](https://github.com/hahnbanach/mrcall-desktop/releases/tag/v0.1.47),
+Developer ID signed and Apple-notarized.
+
 ## 2026-09-09 — Prior cross-cutting snapshot (historical, deployment claims not reverified)
 
 
