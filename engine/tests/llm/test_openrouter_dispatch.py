@@ -116,3 +116,49 @@ def test_saved_policy_change_refuses_existing_client(ledger, tmp_path, monkeypat
     with pytest.raises(BudgetError, match='settings changed'):
         c.create_message_sync(**ARGS)
     assert budget_snapshot('uid')['reserved_usd'] == 0
+
+
+def test_fractional_money_literal_is_exact_and_public_response_is_json_safe(ledger):
+    from dataclasses import asdict
+
+    def upstream(req):
+        return httpx.Response(200, text='''{"id":"precise","model":"z-ai/glm-5.2",
+          "content":[{"type":"tool_use","id":"call","name":"save","input":{"quantity":1.25}}],
+          "stop_reason":"tool_use","usage":{"input_tokens":10,"output_tokens":2,
+          "cost":0.000020000000000000001}}''')
+
+    result = client(upstream).create_message_sync(**ARGS)
+    assert budget_snapshot('uid')['spent_usd'] == 0.000021
+    assert result.content[0].input['quantity'] == 1.25
+    json.dumps({'content': [asdict(block) for block in result.content], 'usage': result.usage})
+
+
+def test_sonnet_wire_omits_default_sampling_without_weakening_price_policy(ledger):
+    seen = []
+    def upstream(req):
+        body = json.loads(req.content)
+        assert 'temperature' not in body
+        assert body['provider']['require_parameters'] is True
+        assert body['provider']['allow_fallbacks'] is False
+        assert body['provider']['max_price'] == {'prompt': '2', 'completion': '10', 'request': '0'}
+        seen.append(body)
+        data = response().json()
+        data['model'] = 'anthropic/claude-sonnet-5'
+        return httpx.Response(200, json=data)
+    c = client(upstream)
+    c.model = 'anthropic/claude-sonnet-5'
+    c.create_message_sync(**ARGS)
+    assert len(seen) == 1
+
+
+@pytest.mark.parametrize('sampling', [{'temperature': 0.2}, {'temperature': True}, {'top_p': 1}, {'top_k': 1}])
+def test_unsupported_sonnet_sampling_refuses_before_reservation_and_network(ledger, sampling):
+    def forbidden(req):
+        pytest.fail('unsupported sampling reached network')
+    c = client(forbidden)
+    c.model = 'anthropic/claude-sonnet-5'
+    with pytest.raises(BudgetError, match='default sampling'):
+        c.create_message_sync(**ARGS, **sampling)
+    with database.get_session() as session:
+        assert session.query(LlmReservation).count() == 0
+        assert session.query(LlmUsage).count() == 0

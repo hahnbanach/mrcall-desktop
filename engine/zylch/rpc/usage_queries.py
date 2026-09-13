@@ -114,7 +114,37 @@ async def usage_reconcile(params, notify):
     return await asyncio.to_thread(reconcile, _credit_client(), cursor=cursor)
 
 
+async def llm_models(params, notify):
+    """Free catalog for a proposed billing selection; never changes saved policy."""
+    from zylch.llm.model_policy import resolve_provider
+    from zylch.llm.openrouter_pricing import LABELS
+    provider = params.get("provider") or resolve_provider()
+    if provider not in ("anthropic", "openrouter", "mrcall"):
+        raise ValueError("Unsupported billing provider")
+    if provider == "mrcall":
+        try:
+            capabilities = await asyncio.to_thread(_credit_client().capabilities)
+            models = capabilities.get("models")
+            if not isinstance(models, list) or not models:
+                raise ValueError("Billing server does not publish a model catalog; update it.")
+            if any(not isinstance(m, dict) or not all(isinstance(m.get(k), str) and m[k]
+                   for k in ("id", "label", "provider")) for m in models):
+                raise ValueError("Billing server returned an invalid model catalog.")
+            models = [{k: m[k] for k in ("id", "label", "provider")} for m in models]
+        except Exception as exc:
+            reason = str(exc) if isinstance(exc, (RuntimeError, ValueError)) else "Billing catalog unavailable."
+            return {"provider": provider, "models": [], "available": False, "reason": reason}
+    elif provider == "openrouter":
+        models = [{"id": key, "label": label, "provider": "openrouter"} for key, label in LABELS.items()]
+    else:
+        models = [{"id": key, "label": label, "provider": "anthropic"} for key, label in (
+            ("claude-opus-5", "Claude Opus 5"), ("claude-sonnet-5", "Claude Sonnet 5"),
+            ("claude-haiku-4-5", "Claude Haiku 4.5"))]
+    return {"provider": provider, "models": models, "available": True, "reason": ""}
+
+
 METHODS: Dict[str, Callable[[Dict[str, Any], NotifyFn], Awaitable[Any]]] = {
     "usage.today": usage_today,
+    "llm.models": llm_models,
     "usage.reconcile": usage_reconcile,
 }

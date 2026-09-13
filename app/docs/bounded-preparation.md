@@ -37,3 +37,21 @@ TypeScript dependency. `MRCALL_UI_TEST_DEPS` can select another directory for
 test-only React packages. Tests cover unsupported engines, bounded action,
 persistent errors, pause during a run, and late replies after account changes.
 They invoke neither customer analysis nor paid providers.
+
+## Payment and model selection
+
+Settings separates the billing provider from the model controls. MrCall credit
+users see models discovered from their billing server and need no personal key.
+Anthropic/OpenRouter BYOK users enter a key saved through the engine settings RPC,
+so a remote engine receives its own profile `.env` update. Switching billing
+preserves both keys. The UI only shows the key field for the selected BYOK provider.
+
+The default and five job model selectors use the chosen billing catalog. Saved
+values unavailable in that catalog remain visible and are never replaced silently.
+When a preset controls the default, the UI names its effective model and labels
+the stored custom model inactive. Choosing a default changes policy to custom;
+saved job overrides remain active. Overrides live under a collapsed Advanced
+section, with a visible warning whenever saved overrides take priority.
+The daily spending card continues to show the currently saved effective models.
+Pending model selections take effect only on Save. Disconnect/account changes
+invalidate in-flight catalog responses; reload settings before selecting again.

@@ -35,12 +35,7 @@ class SettingsField(TypedDict, total=False):
     default: str  # placeholder / first-option hint shown when the value is unset
 
 
-# The friendly model tiers offered by every "model" field. Values are the
-# canonical DATELESS Anthropic model ids (web-verified 2026-07-07 against the
-# official model-ids catalogue — dateless aliases are canonical for the 4.6+
-# generation). Ordered cheapest→strongest so the dropdown reads as a value
-# ladder. Update the ids HERE when a tier ships a new version — single source,
-# consumed verbatim by the desktop Settings dropdown.
+# Legacy schema choices; Desktop uses the billing-specific llm.models catalog.
 MODEL_CHOICES: List[ModelChoice] = [
     {"value": "claude-haiku-4-5", "label": "Haiku", "note": "Fastest & cheapest"},
     {"value": "claude-sonnet-5", "label": "Sonnet", "note": "Balanced"},
@@ -56,6 +51,10 @@ _OPUS = "claude-opus-5"
 
 # Order = display order. Groups are also rendered in this order.
 SETTINGS_SCHEMA: List[SettingsField] = [
+    {"key": "ANTHROPIC_MODEL", "label": "Personal Anthropic model", "type": "text",
+     "group": "LLM", "optional": True, "help": "Used by custom policy; role overrides remain active."},
+    {"key": "MRCALL_CREDITS_MODEL", "label": "MrCall credits model", "type": "text",
+     "group": "LLM", "optional": True, "help": "Select an available billing-server model; no personal key required."},
     {
         "key": "LLM_PROVIDER",
         "label": "AI billing provider",

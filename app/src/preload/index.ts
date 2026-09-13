@@ -134,6 +134,7 @@ const call = <T = unknown>(method: string, params: unknown = {}, timeout?: numbe
   ipcRenderer.invoke('rpc:call', method, params, timeout) as Promise<T>
 
 const api = {
+  llm: { models: (provider?: string) => call<{ provider: string; models: { id: string; label: string; provider: string }[]; available: boolean; reason: string }>('llm.models', provider ? { provider } : {}, 15_000) },
   usage: {
     reconcile: (cursor?: string) => call<{ recovered: number; unresolved: number; message: string; next_cursor: string | null }>('usage.reconcile', cursor ? { cursor } : {}, 65_000),
     today: () => call<{

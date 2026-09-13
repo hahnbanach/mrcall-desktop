@@ -1,4 +1,4 @@
-"""Bounded OpenRouter Messages pricing, checked 2026-09-11.
+"""Bounded OpenRouter Messages pricing, checked 2026-09-13.
 
 Sources: https://openrouter.ai/api/v1/models and
 https://openrouter.ai/docs/guides/routing/provider-selection .
@@ -12,13 +12,31 @@ from .budget_pricing import BudgetError, micro_usd
 from .budget_pricing import request_bound as validate_direct
 
 MODEL = "z-ai/glm-5.2"
-RATES = {MODEL: (Decimal("0.966"), Decimal("3.036"))}
+RATES = {
+    MODEL: (Decimal("0.6"), Decimal("2")),
+    "moonshotai/kimi-k3": (Decimal("2.648138063"), Decimal("13.28272425")),
+    "anthropic/claude-opus-5": (Decimal("5"), Decimal("25")),
+    "anthropic/claude-sonnet-5": (Decimal("2"), Decimal("10")),
+    "anthropic/claude-haiku-4.5": (Decimal("1"), Decimal("5")),
+}
+LABELS = {
+    MODEL: "GLM 5.2",
+    "moonshotai/kimi-k3": "Kimi K3",
+    "anthropic/claude-opus-5": "Claude Opus 5",
+    "anthropic/claude-sonnet-5": "Claude Sonnet 5",
+    "anthropic/claude-haiku-4.5": "Claude Haiku 4.5",
+}
 
 
 def request_bound(request):
     model = request.get("model")
     if model not in RATES:
         raise BudgetError("AI paused: OpenRouter model has no verified price ceiling.")
+    if model == "anthropic/claude-sonnet-5":
+        temperature = request.get("temperature", 1)
+        if (type(temperature) not in (int, float) or temperature != 1
+                or "top_p" in request or "top_k" in request):
+            raise BudgetError("AI paused: OpenRouter Sonnet 5 supports only default sampling (temperature 1, no top_p/top_k).")
     # Reuse the central text/function feature validation, never its model price.
     validate_direct({**request, "model": "claude-haiku-4-5"}, "direct")
     payload = len(json.dumps(request, ensure_ascii=False, allow_nan=False).encode())
@@ -26,6 +44,10 @@ def request_bound(request):
     if tokens + request["max_tokens"] > 200000:
         raise BudgetError("AI paused: OpenRouter request exceeds the supported context bound.")
     i, o = RATES[model]
+    # Anthropic cache writes may be introduced upstream even after dropping
+    # caller cache hints. Reserve the documented one-hour write ceiling (2x).
+    if model.startswith("anthropic/"):
+        i *= 2
     return int((tokens * i + request["max_tokens"] * o).to_integral_value(rounding=ROUND_CEILING))
 
 
