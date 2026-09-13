@@ -8,24 +8,27 @@ are preserved in [active-context-archive.md](active-context-archive.md).
 
 ## State now
 
-Four Café124 engine units run reviewed isolated release `83075a0` behind
-`wss://desktop.mrcall.ai`. Bounded MrCall receipts, explicit provider/role policy,
-OpenRouter GLM and persistent preparation/retry limits are implemented. The
-compatible billing server runs `prod-c238edf8` with its additive accounting
-migration. Authenticated capabilities and free quote pass.
+Four Café124 units run reviewed isolated release `10477fd` behind
+`wss://desktop.mrcall.ai`. Billing server `prod-a522596c` provides bounded
+OpenRouter calls charged from actual decimal costs and a configured model
+catalog. Personal-key routing supports Claude, GLM and K3 with provider caps.
+Authenticated `llm.models` checks pass for personal and MrCall-credit catalogs.
 
-All four affected profiles retain USD5 daily caps, explicit economy Haiku,
-batch size 25, disabled automatic processing and durable preparation pause.
-Three use their existing direct Anthropic keys; one uses MrCall credits. RPC
-status verifies model policy and limits; no paid acceptance calls are made.
-Other hosted units retain the previous checkout until normal reconciliation.
-New automatic processing defaults off; existing explicit settings remain.
+All four affected profile files are unchanged byte-for-byte: USD5 daily caps,
+saved economy Haiku, batch size 25, automatic processing off and preparation
+paused. Three retain personal Anthropic keys; one retains MrCall credits.
+Services are active and no mailbox processing was resumed. Other hosted units
+follow normal source reconciliation. New automatic processing defaults off.
+A synthetic production GLM credit call returned OK with a verified one-credit
+debit. The isolated comparison budget includes that debit and prior holds.
 
 Failed extraction checkpoints (1,962 + 40) remain pending, with private backups
 and task checkpoints preserved. Three-candidate merge selection and complete-
 response validation retain LLM judgement without runaway comparisons or false
 completion. See [spending protection](features/daily-llm-budget.md).
-Published Desktop v0.1.48 includes shared project RPC. GLM semantic task quality is unmeasured.
+Published Desktop v0.1.49 includes shared project RPC and the new model catalog. GLM production task quality is unmeasured. The small blinded Claude/K3
+[comparison](../../docs/evaluations/2026-09-13-openrouter-models.md) found
+consequential Haiku errors; saved presets were not changed during rollout.
 
 Shared written project memory is deployed. Dedicated project documents,
 immutable revisions and a space identity live in the company memory database,
@@ -52,19 +55,19 @@ the archive are not current deployment claims.
 
 ## Unresolved
 
-- Desktop v0.1.48 installation on the CTO's Mac remains unverified.
+- Desktop v0.1.49 installation on the CTO's Mac remains unverified.
 - Existing engine backlog remains separate: Calendar token integration,
   phone-call memory parity, additional RPC error humanization, and multi-profile
   WhatsApp session isolation. See [harness backlog](harness-backlog.md) and
   [remote backend](../../docs/remote-backend.md).
 - Earlier incident counts, memory cleanup observations and packaged-platform
   acceptance gaps are retained in the archive. They were not re-measured during
-  this project-memory rollout and must be rechecked before acting on them.
+  this OpenRouter rollout and must be rechecked before acting on them.
 - A comprehensive security review and product chat remain deferred by the CTO.
 
 ## Next
 
 1. Validate cheaper models per memory/task role before resuming automatic backlogs.
-2. Verify the published Desktop v0.1.48 installation on the CTO's Mac.
+2. Verify Desktop v0.1.49 installation on the CTO's Mac.
 3. Continue the existing Calendar, phone-memory and error-handling workstreams
    under their owning plans rather than merging them into project storage.

@@ -100,9 +100,11 @@ The engine reserves each request's maximum cost against the saved daily USD
 budget before dispatch. Uncertain requests retain their holds across restarts
 and UTC midnight. MrCall calls use the versioned bounded quote/execute/status
 contract; an older server without that contract refuses paid work. OpenRouter
-supports the explicitly priced GLM model with provider price caps. Economy,
-balanced and custom presets expose effective role models; GLM semantic quality
-is unmeasured. Automatic preparation is off by default and explicit runs have
+supports an explicitly priced Claude/GLM/K3 catalog with provider price caps,
+through either personal keys or MrCall credits. Payment and model selection
+are separate; `llm.models` discovers available models. Economy, balanced and
+custom presets expose effective role models; a small synthetic comparison
+does not certify production quality. Automatic preparation is off by default and explicit runs have
 a saved batch limit (default 25 steps).
 
 Engine contracts: [`engine/docs/features/daily-llm-budget.md`](engine/docs/features/daily-llm-budget.md)

@@ -187,3 +187,11 @@ split indexes.**
 ## Resolved
 
 (none yet)
+
+## OpenRouter catalog recovery
+
+- **OPEN (2026-09-13):** ModelPolicy invalidates its catalog on a connection event,
+  but an in-place Settings reload with identical values does not retrigger its
+  fetch effect. Reopening Settings recovers. Add an explicit reload generation
+  and a component regression for identical-value refresh; retain stale-catalog
+  rejection during disconnect/account changes.

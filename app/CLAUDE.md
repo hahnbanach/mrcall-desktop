@@ -89,8 +89,10 @@ timeout; it returns the proxy's payload verbatim
 
 The "Top up" button uses `shell.openExternal('https://dashboard.mrcall.ai/plan')` —
 no business_id in the URL; the dashboard resolves the active business
-from the user's Firebase auth state. The Anthropic key lives server-side
-on `mrcall-agent`; the desktop never holds it. Cross-cutting context in
+from the user's Firebase auth state. Company Anthropic/OpenRouter keys live server-side
+on `mrcall-agent`; personal BYOK keys are saved on the active engine profile.
+`ModelPolicy` discovers models through `llm.models` independently of payment,
+shows the active preset, and preserves explicit advanced role overrides. Cross-cutting context in
 [`../AGENTS.md`](../AGENTS.md), engine plumbing in
 [`../engine/CLAUDE.md`](../engine/CLAUDE.md).
 

@@ -101,7 +101,8 @@ saved settings change; start a new run or conversation to create fresh clients.
 
 See [bounded preparation](bounded-preparation.md) for batch/retry controls and
 [model evaluation](../qa/preparation-model-evaluation.md) for offline comparisons.
-No new paid semantic-quality benchmark has been run; GLM's prior classifier
+A small blinded Claude/K3 [comparison](../../../docs/evaluations/2026-09-13-openrouter-models.md)
+found consequential Haiku errors; it does not certify production replacements. GLM's prior classifier
 results do not establish extraction or merge quality for these workloads.
 
 ## Model catalog and payment selection

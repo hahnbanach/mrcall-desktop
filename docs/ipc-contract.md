@@ -642,6 +642,17 @@ reason}` with `reason` one of:
 success the answer echoes the discarded draft's `to` and `subject` so the
 caller can log what it retired. Missing `draft_id` is a `-32602`.
 
+### `llm.models(provider?)`
+
+Free model discovery for the requested or saved billing provider. Returns
+`{provider, available, models: [{id, label, provider}], reason}`. MrCall mode
+uses authenticated server capabilities; personal OpenRouter mode uses the
+locally priced allowlist. Missing/older server catalogs return unavailable,
+without altering saved model choices or falling back to another provider.
+The renderer fetches on provider/settings reload changes and invalidates stale
+catalogs on account or connection changes; reopen Settings to fetch again.
+Reloading identical saved values in place does not remount the catalog.
+
 ### `account.balance()`
 
 Forwards to `mrcall-agent`'s `GET /api/desktop/llm/balance` with the

@@ -1,6 +1,6 @@
 ---
-doc_baseline_commit: aebc7fc54a36594ee846ebf9dc53d134ce1c36c5
-doc_baseline_date: 2026-09-11
+doc_baseline_commit: 225f455f0a4c725c7459e776cfdf5167b7022240
+doc_baseline_date: 2026-09-13
 ---
 
 # Active Context — Cross-cutting
@@ -19,13 +19,20 @@ what is *current*, targeting ≤ ~120 lines.
 
 ## State now
 
-Predictable spending is implemented with independent M1–M4 and final approvals.
-Billing server `prod-c238edf8` is deployed with the additive PostgreSQL ledger;
-authenticated free capabilities and quote return the bounded protocol. Four
-Café124 engines run isolated release `83075a0`. Each retains its USD5 daily cap,
-uses the explicit economy preset (Haiku), and has automatic processing disabled
-and preparation paused. No paid acceptance calls have been made.
-See [current delivery plan](execution-plans/2026-09-11-predictable-ai-spending.md).
+OpenRouter models are available with personal keys or MrCall credits; payment
+selection is independent of model selection. Billing server `prod-a522596c` is
+live. The authenticated catalog and five OpenRouter quotes pass. One synthetic
+GLM request returned OK, billed verified cost × markup rounded to one StarChat
+credit, and changed the account balance from four to three.
+Four Café124 engines run isolated release `10477fd`; their profile files are
+byte-identical to before rollout: USD5 caps, saved economy Haiku, automatic
+processing off and preparation paused. No mailbox backlog was resumed.
+See [delivery plan](execution-plans/2026-09-13-openrouter-credits.md).
+
+A blinded three-case synthetic comparison found consequential Haiku errors;
+Sonnet, K3 and Opus preserved operative decisions with minor caveats. This
+rejects an unvalidated downgrade, without certifying any replacement model.
+See [quality evidence](evaluations/2026-09-13-openrouter-models.md).
 
 Desktop includes the V1 Desktop → engine → operator setup journey.
 Desktop opens Setup by default: configuration, authenticated remote connection,
@@ -34,25 +41,19 @@ The engine owns mailbox processing and company memory; the cs-kernel workspace
 owns operator procedures. Codex/Claude Code subscriptions remain separate from
 engine LLM billing. A product chat and personal delegated sending are future work.
 
-`setup.state` includes nullable owner-scoped mailbox memory-processing evidence.
-Unknown evidence is not readiness; empty and partially processed mailboxes remain
-incomplete. This does not certify reply quality or successful task detection.
-The desktop handoff exposes selected identity, endpoint, path and command only;
-refresh credentials remain in the existing private descriptor.
-
-Setup reports the engine's saved provider and credential availability. Settings
-separates saved billing from unsaved choices and keeps personal API-key entry
-optional. Check connection verifies the selected transport without a restart.
-The [acceptance recovery plan](execution-plans/2026-09-10-setup-billing-recovery.md)
-tracks these UI corrections and their verification.
+Setup reports owner-scoped preparation evidence, saved billing and credential
+availability; unknown evidence is not readiness. The workspace handoff exposes
+identity, endpoint and command without refresh credentials. Check connection
+verifies the selected transport without restarting it.
 
 Settings remains reachable when the engine is down. Reconnection invalidates
 stale snapshots; unsaved settings must be explicitly discarded before loading
 a different backend. Preparation actions remain user-triggered.
 
-Desktop v0.1.48 is the published signed/notarized Apple Silicon installer,
-including spending controls and shared project RPC. Component journeys, typecheck,
-build and release pipeline pass; installation on the CTO's Mac is not verified. Other hosted accounts retain the previous checkout until the host's
+Desktop v0.1.49 is published for Apple Silicon from reviewed source `225f455`.
+Component journeys, typecheck, build, signing and custom notarization pass in
+workflow34759876569. Installation and personal-key GUI entry on the CTO's Mac
+remain unverified. Other hosted accounts retain the previous checkout until the host's
 normal reconciliation; the four affected accounts use pinned guarded releases.
 
 Kernel v0.44.0 is publicly released and installed in both maintained operational
@@ -66,7 +67,7 @@ shared company memory through `memory.join`, headless descriptors, provisioning,
 BYOK and MrCall-credit LLM routing. Contracts live in [IPC](ipc-contract.md),
 [remote backend](remote-backend.md), and the per-tree documentation.
 Prior deployment/package observations remain historical in the archive;
-the spending rollout above is verified on 2026-09-11; project-memory
+the OpenRouter rollout above is verified on 2026-09-13; project-memory
 deployment evidence is from 2026-09-10.
 
 Shared written projects are revisioned company-engine records, separate from
@@ -99,8 +100,8 @@ See the [brief](briefs/2026-09-10-shared-project-memory.md) and
 
 ## Next
 
-1. Verify Desktop v0.1.48 installation on the CTO's Mac.
-2. Evaluate economy/GLM task quality before enabling recurring backlogs.
+1. Verify v0.1.49 installation and personal-key entry on the CTO's Mac.
+2. Evaluate full production prompts and choose models before enabling backlogs.
 3. Continue the deferred product work from its existing briefs.
 
 ### Deferred (nice-to-have)
