@@ -104,3 +104,31 @@ unmount()
 assert.equal(sidecar.size, 0)
 assert.equal(focus.size, 0)
 console.log('Spending UI: saved billing, top-up URL, stale balances, saved models, receipt pagination, account invalidation and old engine refusal passed.')
+
+const Models = load('components/ModelPolicy.tsx').default
+let catalogs = [], modelEdits = []
+window.zylch.llm = { models: provider => new Promise(resolve => catalogs.push({ provider, resolve })) }
+const modelProps = { provider: 'mrcall', values: { LLM_MODEL_PRESET: 'balanced', MRCALL_CREDITS_MODEL: 'claude-opus-5', MODEL_MEMORY_MERGE: 'claude-opus-5' }, refreshKey: 'A', onChange: (key, value) => modelEdits.push([key, value]) }
+await render(React.createElement(Models, modelProps))
+assert.match(text(), /no personal API key is needed/)
+assert.match(text(), /preset controls the default:/)
+assert.match(text(), /Claude Sonnet 5/)
+assert.match(text(), /saved custom model below is inactive/)
+assert.match(text(), /saved job override\(s\) remain active/)
+assert.equal(view.root.findByType('details').props.open, undefined)
+await act(async () => catalogs[0].resolve({ available: true, models: [{ id: 'moonshotai/kimi-k3', label: 'Kimi K3', provider: 'openrouter' }], reason: '' }))
+assert.match(text(), /saved; unavailable/)
+await act(async () => view.update(React.createElement(Models, { ...modelProps, values: { ...modelProps.values, LLM_MODEL_PRESET: 'economy' } })))
+assert.match(text(), /Claude Haiku 4.5/)
+assert.match(text(), /Saved custom model — inactive while preset is selected/)
+await act(async () => view.root.findAllByType('select')[0].props.onChange({ target: { value: 'moonshotai/kimi-k3' } }))
+assert.deepEqual(modelEdits, [['LLM_MODEL_PRESET', 'custom'], ['MRCALL_CREDITS_MODEL', 'moonshotai/kimi-k3']])
+// Choosing a model does not clear role overrides or alter credentials/payment.
+await act(async () => view.update(React.createElement(Models, { ...modelProps, provider: 'openrouter' })))
+assert.equal(catalogs[1].provider, 'openrouter')
+await reconnect()
+await act(async () => catalogs[1].resolve({ available: true, models: [{ id: 'stale-model', label: 'Wrong account model', provider: 'openrouter' }] }))
+assert.doesNotMatch(text(), /Wrong account model/)
+assert.match(text(), /Connection changed/)
+unmount()
+console.log('Model selection: payment separation, explicit custom policy, role/key preservation and stale catalog rejection passed.')

@@ -1,10 +1,11 @@
 """Single-attempt Anthropic-wire adapter with server-enforced price ceilings.
 
 Protocol: https://openrouter.ai/docs/api/api-reference/anthropic-messages/create-a-message.md
-Only GLM text/functions are enabled; quality on memory tasks is not benchmarked.
+Only explicitly priced text/function models are enabled; task quality is unmeasured.
 """
 
 from copy import deepcopy
+from decimal import Decimal
 from types import SimpleNamespace
 
 import httpx
@@ -66,7 +67,14 @@ class OpenRouterClient:
             raise BudgetError(
                 f"OpenRouter request failed (HTTP {response.status_code}); no automatic retry."
             )
+        # Keep normal JSON types in tool arguments/public responses, but never
+        # pass monetary literals through binary float before micro-USD rounding.
+        exact = response.json(parse_float=Decimal)
         data = response.json()
+        if isinstance(data, dict) and isinstance(data.get("usage"), dict):
+            exact_cost = exact["usage"].get("cost")
+            if isinstance(exact_cost, Decimal):
+                data["usage"]["cost"] = str(exact_cost)
         if not isinstance(data, dict) or not isinstance(data.get("content"), list):
             raise BudgetError("OpenRouter returned an incomplete response; reservation retained.")
         if data.get("model") != request["model"]:

@@ -116,3 +116,18 @@ def test_saved_policy_change_refuses_existing_client(ledger, tmp_path, monkeypat
     with pytest.raises(BudgetError, match='settings changed'):
         c.create_message_sync(**ARGS)
     assert budget_snapshot('uid')['reserved_usd'] == 0
+
+
+def test_fractional_money_literal_is_exact_and_public_response_is_json_safe(ledger):
+    from dataclasses import asdict
+
+    def upstream(req):
+        return httpx.Response(200, text='''{"id":"precise","model":"z-ai/glm-5.2",
+          "content":[{"type":"tool_use","id":"call","name":"save","input":{"quantity":1.25}}],
+          "stop_reason":"tool_use","usage":{"input_tokens":10,"output_tokens":2,
+          "cost":0.000020000000000000001}}''')
+
+    result = client(upstream).create_message_sync(**ARGS)
+    assert budget_snapshot('uid')['spent_usd'] == 0.000021
+    assert result.content[0].input['quantity'] == 1.25
+    json.dumps({'content': [asdict(block) for block in result.content], 'usage': result.usage})

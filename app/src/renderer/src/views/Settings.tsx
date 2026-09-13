@@ -3,6 +3,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { errorMessage, isProfileLockedError } from '../lib/errors'
 import Icon from '../components/Icon'
 import DailyBudget from '../components/DailyBudget'
+import ModelPolicy, { MODEL_FIELDS } from '../components/ModelPolicy'
 import ConnectGoogleCalendar from './ConnectGoogleCalendar'
 import ConnectWhatsApp from './ConnectWhatsApp'
 import { performSignOut } from '../App'
@@ -302,8 +303,9 @@ export default function Settings(): JSX.Element {
                 refreshKey={JSON.stringify(loaded)}
               />
             )}
+            {group === 'LLM' && <ModelPolicy provider={selectedProvider} values={{ ...loaded, ...edits }} refreshKey={JSON.stringify(loaded)} onChange={handleChange} />}
             {group === 'LLM' && edits.LLM_MODEL_PRESET && edits.LLM_MODEL_PRESET !== 'custom' && <p className="text-xs text-brand-grey-80">Saving this preset replaces individual job model overrides. The billing provider stays as selected.</p>}
-            {items.filter(f => f.key === 'ANTHROPIC_API_KEY' ? selectedProvider === 'anthropic' : f.key === 'OPENROUTER_API_KEY' ? selectedProvider === 'openrouter' : true).map((f) => (
+            {items.filter(f => !MODEL_FIELDS.has(f.key)).filter(f => f.key === 'ANTHROPIC_API_KEY' ? selectedProvider === 'anthropic' : f.key === 'OPENROUTER_API_KEY' ? selectedProvider === 'openrouter' : true).map((f) => (
               <FieldRow
                 key={f.key}
                 field={f}
@@ -1701,7 +1703,7 @@ function FieldRow({ field, value, onChange, isDirty }: FieldRowProps): JSX.Eleme
       >
         {field.options.map((opt) => (
           <option key={opt} value={opt}>
-            {opt}
+            {field.key === 'LLM_PROVIDER' ? ({ mrcall: 'MrCall credits — no personal key', anthropic: 'Personal Anthropic key', openrouter: 'Personal OpenRouter key' }[opt] || opt) : opt}
           </option>
         ))}
       </select>

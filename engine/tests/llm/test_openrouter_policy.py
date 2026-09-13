@@ -57,7 +57,7 @@ def test_http_controls_and_no_ambient_credentials(monkeypatch):
     response = client.create(**r)
     assert response.content[0].text == "ok"
     body = json.loads(seen[0].content)
-    assert body["provider"]["max_price"] == {"prompt": "0.966", "completion": "3.036", "request": "0"}
+    assert body["provider"]["max_price"] == {"prompt": "0.6", "completion": "2", "request": "0"}
     assert body["provider"]["allow_fallbacks"] is False
     assert body["provider"]["require_parameters"] is True
     assert body["thinking"] == {"type": "disabled"}
@@ -189,3 +189,40 @@ def test_routed_model_presets_and_saved_values_override_ambient(tmp_path, monkey
     assert routed_model("MODEL_MEMORY_MERGE") == "claude-haiku-4-5"
     path.write_text("MODEL_MEMORY_MERGE=claude-sonnet-5\n")
     assert routed_model("MODEL_MEMORY_MERGE") == "claude-sonnet-5"
+
+
+@pytest.mark.parametrize('model', [
+    'moonshotai/kimi-k3', 'anthropic/claude-opus-5',
+    'anthropic/claude-sonnet-5', 'anthropic/claude-haiku-4.5', 'z-ai/glm-5.2'])
+def test_explicit_catalog_models_single_dispatch_exact_response_and_cost(model):
+    from zylch.llm.openrouter_pricing import provider_policy
+    calls = []
+    def handler(req):
+        body = json.loads(req.content)
+        assert body['model'] == model
+        assert body['provider'] == provider_policy(model)
+        calls.append(body)
+        return httpx.Response(200, json={'model': model, 'content': [{'type': 'text', 'text': 'OK'}],
+            'stop_reason': 'end_turn', 'usage': {'input_tokens': 1, 'output_tokens': 1, 'cost': '0.00004321'}})
+    client = OpenRouterClient('personal', http_client=httpx.Client(transport=httpx.MockTransport(handler)))
+    response = client.create(**{**request(), 'model': model})
+    assert usage_cost(model, response.usage)[0] == 44
+    assert len(calls) == 1
+    assert resolve_model(values={'LLM_PROVIDER': 'openrouter', 'OPENROUTER_MODEL': model}) == model
+
+
+def test_anthropic_router_reserves_cache_write_upper_bound():
+    from decimal import Decimal, ROUND_CEILING
+    payload = {**request(), 'model': 'anthropic/claude-sonnet-5'}
+    tokens = len(json.dumps(payload, ensure_ascii=False, allow_nan=False).encode()) + 4096 + 1024
+    assert request_bound(payload) == int((Decimal(tokens) * 4 + 64 * 10).to_integral_value(rounding=ROUND_CEILING))
+
+
+def test_wire_cost_decimal_boundary_never_rounds_down():
+    def handler(req):
+        return httpx.Response(200, text='''{"model":"z-ai/glm-5.2","content":[],
+          "usage":{"input_tokens":1,"output_tokens":1,"cost":0.0220000000000000001}}''')
+    adapter = OpenRouterClient('synthetic', http_client=httpx.Client(transport=httpx.MockTransport(handler)))
+    result = adapter.create(**request())
+    assert usage_cost(MODEL, result.usage)[0] == 22001
+    assert isinstance(result.usage['cost'], str)

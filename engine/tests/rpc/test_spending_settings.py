@@ -27,3 +27,30 @@ def test_explicit_billing_does_not_clear_other_credentials(monkeypatch):
     result = asyncio.run(settings_update({"updates": {"LLM_PROVIDER": "mrcall"}}, lambda *a: None))
     assert result["ok"]
     write.assert_called_once_with({"LLM_PROVIDER": "mrcall"})
+
+
+def test_credit_model_and_personal_key_save_are_independent(monkeypatch):
+    write = Mock(return_value=['MRCALL_CREDITS_MODEL', 'OPENROUTER_API_KEY'])
+    monkeypatch.setattr(settings_io, 'update_env', write)
+    changes = {'MRCALL_CREDITS_MODEL': 'moonshotai/kimi-k3', 'OPENROUTER_API_KEY': 'synthetic-key'}
+    result = asyncio.run(settings_update({'updates': changes}, lambda *a: None))
+    assert result['ok']
+    write.assert_called_once_with(changes)
+
+
+def test_real_profile_save_preserves_other_payment_key_and_role(tmp_path, monkeypatch):
+    from dotenv import dotenv_values
+    from zylch.llm.model_policy import resolve_model
+    path = tmp_path / '.env'
+    path.write_text('OWNER_ID=test-uid\nANTHROPIC_API_KEY=synthetic-existing\nMODEL_MEMORY_MERGE=claude-opus-5\n')
+    monkeypatch.setattr(settings_io, '_env_path', lambda: str(path))
+    monkeypatch.setattr(settings_io, 'get_active_profile', lambda: 'test-uid')
+    changes = {'LLM_PROVIDER': 'openrouter', 'OPENROUTER_API_KEY': 'synthetic-new',
+               'OPENROUTER_MODEL': 'moonshotai/kimi-k3', 'LLM_MODEL_PRESET': 'custom'}
+    assert asyncio.run(settings_update({'updates': changes}, lambda *a: None))['ok']
+    saved = dotenv_values(path)
+    assert saved['ANTHROPIC_API_KEY'] == 'synthetic-existing'
+    assert saved['OPENROUTER_API_KEY'] == 'synthetic-new'
+    assert saved['MODEL_MEMORY_MERGE'] == 'claude-opus-5'
+    assert resolve_model(values=saved) == 'moonshotai/kimi-k3'
+    assert path.stat().st_mode & 0o777 == 0o600

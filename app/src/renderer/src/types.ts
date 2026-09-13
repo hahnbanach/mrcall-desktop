@@ -238,6 +238,7 @@ export interface ZylchAPI {
     resume: () => Promise<PreparationResult>
     resetFailures: (stage: string, source: string) => Promise<{ reset: boolean }>
   }
+  llm: { models: (provider?: string) => Promise<{ provider: string; models: { id: string; label: string; provider: string }[]; available: boolean; reason: string }> }
   usage: {
     reconcile: (cursor?: string) => Promise<{ recovered: number; unresolved: number; message: string; next_cursor: string | null }>
     today: () => Promise<{

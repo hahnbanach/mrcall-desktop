@@ -48,7 +48,8 @@ committed credit consumption can settle the reservation. Legacy proxy servers
 refuse with upgrade guidance. Lost answers can recover their billing receipt
 through read-only status without repeating inference or consumption.
 
-OpenRouter currently supports `z-ai/glm-5.2` through its Messages API. The adapter
+OpenRouter supports GLM 5.2, Kimi K3 and namespaced Claude Opus 5, Sonnet 5
+and Haiku 4.5 through its Messages API. The adapter
 sends decimal price caps, disables fallbacks and thinking, and validates the
 actual charge returned in `usage.cost`. Missing or invalid receipts keep holds.
 Explicit model/feature allowlists apply; this is not unlimited model routing.
@@ -102,3 +103,22 @@ See [bounded preparation](bounded-preparation.md) for batch/retry controls and
 [model evaluation](../qa/preparation-model-evaluation.md) for offline comparisons.
 No new paid semantic-quality benchmark has been run; GLM's prior classifier
 results do not establish extraction or merge quality for these workloads.
+
+## Model catalog and payment selection
+
+`llm.models(provider?)` is read-only and free. For `mrcall` it returns the
+billing server's authenticated capability catalog; absent or malformed catalogs
+return `available=false`, never a fabricated local credit-model list. For BYOK
+it returns the engine's supported provider models, without needing a personal
+key or contacting a paid endpoint. Entries contain `id`, `label`, `provider`.
+The OpenRouter rates frozen on 2026-09-13 are GLM 0.6/2, Kimi K3
+2.648138063/13.28272425, Opus 5/25, Sonnet 2/10 and Haiku 1/5 USD per
+million input/output tokens. Each request enforces these provider ceilings;
+actual accounting still uses `usage.cost`. Anthropic models reserve twice the
+input ceiling to cover possible upstream one-hour cache writes.
+
+Settings exposes `ANTHROPIC_MODEL`, `OPENROUTER_MODEL` and
+`MRCALL_CREDITS_MODEL` separately. Selecting a default model explicitly sets
+custom policy while preserving job overrides and other providers' keys/models.
+No migration changes existing models. The existing preset selector remains an
+explicit action which can replace job overrides as indicated before Save.
