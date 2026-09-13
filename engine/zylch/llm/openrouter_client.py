@@ -47,6 +47,10 @@ class OpenRouterClient:
         request_bound(request)
         body = _without_cache(deepcopy(request))
         body.pop("service_tier", None)
+        if body["model"] == "anthropic/claude-sonnet-5":
+            # Validated default-only above. Current Sonnet endpoints do not
+            # accept sampling controls when require_parameters is enabled.
+            body.pop("temperature", None)
         body.update(
             provider=provider_policy(body["model"]), thinking={"type": "disabled"}, stream=False
         )

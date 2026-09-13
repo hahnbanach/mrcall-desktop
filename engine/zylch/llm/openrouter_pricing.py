@@ -32,6 +32,11 @@ def request_bound(request):
     model = request.get("model")
     if model not in RATES:
         raise BudgetError("AI paused: OpenRouter model has no verified price ceiling.")
+    if model == "anthropic/claude-sonnet-5":
+        temperature = request.get("temperature", 1)
+        if (type(temperature) not in (int, float) or temperature != 1
+                or "top_p" in request or "top_k" in request):
+            raise BudgetError("AI paused: OpenRouter Sonnet 5 supports only default sampling (temperature 1, no top_p/top_k).")
     # Reuse the central text/function feature validation, never its model price.
     validate_direct({**request, "model": "claude-haiku-4-5"}, "direct")
     payload = len(json.dumps(request, ensure_ascii=False, allow_nan=False).encode())
