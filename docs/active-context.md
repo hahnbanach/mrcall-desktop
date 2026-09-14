@@ -19,6 +19,9 @@ what is *current*, targeting ≤ ~120 lines.
 
 ## State now
 
+Engine API spending controls are independent of Claude Code operator ticks and
+direct kernel classifiers. See [execution/control boundaries](operator-setup.md#ai-execution-and-controls).
+
 OpenRouter models are available with personal keys or MrCall credits; payment
 selection is independent of model selection. Billing server `prod-a522596c` is
 live. The authenticated catalog and five OpenRouter quotes pass. One synthetic

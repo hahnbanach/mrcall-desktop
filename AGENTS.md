@@ -20,6 +20,14 @@ is a **monorepo**: a Python sidecar (the engine) and an Electron + React
 frontend (the app), shipped together as a single desktop application
 for macOS and Windows.
 
+## Operator versus engine AI
+
+Claude Code headless (`claude -p "/cs-operator"`) runs in a cs-kernel clone,
+not in this engine. Desktop Settings selects **engine API** models and billing;
+its daily budget does not cover Claude Code reasoning or kernel direct API
+classifiers. Engine preparation pause and clone `CS_PAUSE` are different.
+See [execution, billing and pause boundaries](docs/operator-setup.md#ai-execution-and-controls).
+
 ## Layout
 
 | Path | What | Owns |

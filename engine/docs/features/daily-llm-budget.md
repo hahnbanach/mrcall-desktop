@@ -1,5 +1,11 @@
 # Daily engine AI spending protection
 
+This is an **engine-profile budget**, not a cap on all AI used by a company or
+operator. Claude Code headless reasoning and direct cs-kernel classifiers use
+separate clients outside this ledger. An operator-triggered engine request is
+inside the cap. Preparation pause does not disable clone cron ticks; see
+[execution and controls](../../../docs/operator-setup.md#ai-execution-and-controls).
+
 The saved `LLM_DAILY_BUDGET_USD` applies to every engine LLM request, including
 chat, compaction, extraction, merge, task judgement and maintenance. Default USD10;
 zero pauses paid AI. Negative, non-finite or unreadable settings refuse calls.

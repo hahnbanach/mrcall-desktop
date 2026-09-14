@@ -6,13 +6,35 @@ and verification limits. Product intent lives in the paired brief; protocol
 fields live in ipc-contract.md. This is not a production deployment runbook.
 <!-- doc-scope:end -->
 
+## AI execution and controls
+
+There are three AI paths, even when the user sees one workspace:
+
+| Path | Runs where | Model and payment | Scope of stop/cap |
+|---|---|---|---|
+| Interactive or headless operator | Coding-agent process in the cs-kernel clone; cron wrapper launches `claude -p "/cs-operator"` | Agent runtime settings/auth, independent of Desktop | Clone `CS_PAUSE` prevents subsequent guarded ticks, not an already-running process |
+| Engine API work | Local sidecar or remote engine daemon | Desktop Settings / active engine profile; personal Anthropic/OpenRouter key or MrCall credits | `LLM_DAILY_BUDGET_USD` caps that profile's engine requests; preparation pause stops its processing flow |
+| Direct kernel classifier | `cs` provider client in the clone, e.g. send guard | Clone/provider environment and role models | Outside engine budget; `CS_LLM_ROUTE=engine` does not disable the direct send guard |
+
+Claude headless is the operator, not the engine's inference transport. A tick
+can use Claude for reasoning and still incur separate engine API charges when
+it requests generation. Draft-only work may spend tokens. An unattended engine
+(`serve`) is also called headless, but does not mean a Claude Code subprocess.
+Engine settings neither choose Claude's model nor determine its billing mode;
+check the Claude process login/environment rather than assuming subscription.
+
+The engine pause and the clone pause must be checked separately. Neither says
+that all AI work or every running process is stopped. The kernel owns the
+wrapper and direct classifier controls; see its
+[operator runtime guide](https://github.com/malemi/cs-kernel/blob/main/docs/operator-runtime.md).
+
 ## What the user does
 
 1. Sign in to Desktop and open **Setup**. Configure the mailbox and engine LLM
-   billing in Settings. MrCall credits pay for engine model calls; Codex or
-   Claude Code is currently paid separately. The engine uses a saved Anthropic
-   API key for direct billing; without that key, the signed-in session uses
-   MrCall credits. After changing the billing choice, click **Save** before
+   billing in Settings. Explicit `LLM_PROVIDER` selects Anthropic/OpenRouter
+   personal-key billing or MrCall credits for engine calls. Agent-host usage
+   and direct kernel classifiers are separate. Only legacy profiles without
+   an explicit provider infer billing from the saved Anthropic key. After changing the billing choice, click **Save** before
    preparing data. A pending choice does not change the engine's billing.
 2. Activate or check the remote engine. Existing activation is checked rather
    than started again. Select the verified remote engine explicitly. A host

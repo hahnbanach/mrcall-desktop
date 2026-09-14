@@ -80,6 +80,13 @@ ruff check zylch/
 | Telegram | python-telegram-bot | Bot interface |
 | Calendar | CalDAV | Planned |
 
+## Engine versus operator
+
+The engine makes API calls; a clone's Claude Code headless process orchestrates
+`cs-*` commands independently. Engine models/budgets do not configure or cap
+that process or the kernel's direct classifiers. See
+[execution controls](../docs/operator-setup.md#ai-execution-and-controls).
+
 ## MrCall credits mode (since 2026-05)
 
 Saved `LLM_PROVIDER` selects Anthropic BYOK, OpenRouter BYOK or MrCall credits.

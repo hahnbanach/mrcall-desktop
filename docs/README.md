@@ -55,3 +55,5 @@ anywhere in the repo):
 - [Shared written project memory](briefs/2026-09-10-shared-project-memory.md) — engine-owned project records and kernel workflows; [execution plan](execution-plans/2026-09-10-shared-project-memory.md).
 
 - [Daily LLM budget and spend incident](briefs/2026-09-11-daily-llm-budget.md) — [implementation plan](execution-plans/2026-09-11-daily-llm-budget.md) and [engine spending contract](../engine/docs/features/daily-llm-budget.md).
+
+- [Operator versus engine AI: models, costs and pauses](operator-setup.md#ai-execution-and-controls).
