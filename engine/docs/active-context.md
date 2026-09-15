@@ -26,13 +26,22 @@ Failed extraction checkpoints (1,962 + 40) remain pending, with private backups
 and task checkpoints preserved. Three-candidate merge selection and complete-
 response validation retain LLM judgement without runaway comparisons or false
 completion. See [spending protection](features/daily-llm-budget.md).
-Published Desktop v0.1.49 includes shared project RPC and the new model catalog. GLM task quality remains unmeasured: all three real-prompt task attempts returned HTTP429. The small blinded Claude/K3
-[comparison](../../docs/evaluations/2026-09-13-openrouter-models.md) found
-consequential Haiku errors; saved presets were not changed during rollout.
-The [actual-prompt evaluation](../../docs/evaluations/2026-09-15-real-engine-prompts.md)
-found consequential memory errors with both K3 and GLM. Generic trainer FACT
-instructions and FACT value parsing are corrected in source, not in the pinned
-hosted release; saved trained prompts and model selections remain unchanged.
+Published Desktop v0.1.49 includes shared project RPC and the new model catalog.
+The [controlled comparison](../../docs/evaluations/2026-09-15-controlled-model-quality.md)
+is complete for all 360 main responses. Neither K3 nor GLM meets the no-new-
+consequential-loss gate for automatic replacement of Opus. K3 is the stronger
+memory candidate; Opus has the strongest observed positive-task quality.
+Optional prompt-candidate coverage is incomplete and no candidate is promoted.
+Evaluation provider pins are not production configuration.
+
+Source email extraction and task detection ceilings are 4096 and 2048 output
+tokens, with completion guards and spending admission preserved. Complete tool
+responses labelled `end_turn` are normalized by the shared compatible-response
+wrapper; malformed, refused or truncated responses remain rejected. Generic
+trainer FACT instructions and FACT value parsing are corrected in source.
+These changes are absent from the pinned hosted release; saved trained prompts
+and model selections remain unchanged. The earlier three-case evaluation is
+superseded by the controlled comparison for model-selection decisions.
 
 Shared written project memory is deployed. Dedicated project documents,
 immutable revisions and a space identity live in the company memory database,
@@ -71,7 +80,8 @@ the archive are not current deployment claims.
 
 ## Next
 
-1. Validate cheaper models per memory/task role before resuming automatic backlogs.
+1. Keep automatic backlogs paused; apply the controlled comparison's role-specific
+   quality findings before any model or hosted-release change.
 2. Verify Desktop v0.1.49 installation on the CTO's Mac.
 3. Continue the existing Calendar, phone-memory and error-handling workstreams
    under their owning plans rather than merging them into project storage.

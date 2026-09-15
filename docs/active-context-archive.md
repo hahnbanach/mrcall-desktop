@@ -7,6 +7,17 @@ Nothing is discarded — only relocated, verbatim.
 
 
 
+## 2026-09-15 — Superseded small-model evidence
+
+A blinded three-case synthetic comparison found consequential Haiku errors;
+Sonnet, K3 and Opus preserved operative decisions with minor caveats. This
+rejects an unvalidated downgrade, without certifying any replacement model.
+See [quality evidence](evaluations/2026-09-13-openrouter-models.md).
+
+One synthetic
+GLM request returned OK, billed verified cost × markup rounded to one StarChat
+credit, and changed the account balance from four to three.
+
 ## 2026-09-13 — Snapshot before OpenRouter model delivery
 
 ---

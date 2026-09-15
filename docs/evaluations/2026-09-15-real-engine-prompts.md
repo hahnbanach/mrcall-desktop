@@ -1,5 +1,10 @@
 # K3 and GLM with actual engine prompts
 
+Model-selection conclusions are superseded by the
+[controlled 360-response comparison](2026-09-15-controlled-model-quality.md).
+This three-case record remains historical diagnostic evidence.
+
+
 This evaluation does not justify a production model switch. K3 produced two
 acceptable task decisions but one request failed; GLM produced no task decisions
 because all three requests returned HTTP429. Both models made consequential
@@ -18,7 +23,7 @@ Requests were captured from actual memory/task worker construction at source
 retrieval and existing tasks. Memory receives the individual message (including
 its quoted content); task detection receives the chronological thread. Both
 models receive identical requests and the same engine-generated current-date
-line. Actual caps remain 1024 output tokens for memory and 500 for tasks, with
+line. Captured runtime caps were 1024 output tokens for memory and 500 for tasks, with
 real task tools and forced `task_decision`. No context was shortened. This differs
 from the [earlier synthetic test](2026-09-13-openrouter-models.md), whose extraction
 and task prompts were simplified and whose output allowance was 4096 tokens.

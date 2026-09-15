@@ -24,18 +24,17 @@ direct kernel classifiers. See [execution/control boundaries](operator-setup.md#
 
 OpenRouter models are available with personal keys or MrCall credits; payment
 selection is independent of model selection. Billing server `prod-a522596c` is
-live. The authenticated catalog and five OpenRouter quotes pass. One synthetic
-GLM request returned OK, billed verified cost × markup rounded to one StarChat
-credit, and changed the account balance from four to three.
+live. The authenticated catalog and five OpenRouter quotes pass.
 Four Café124 engines run isolated release `10477fd`; their profile files are
 byte-identical to before rollout: USD5 caps, saved economy Haiku, automatic
 processing off and preparation paused. No mailbox backlog was resumed.
 See [delivery plan](execution-plans/2026-09-13-openrouter-credits.md).
 
-A blinded three-case synthetic comparison found consequential Haiku errors;
-Sonnet, K3 and Opus preserved operative decisions with minor caveats. This
-rejects an unvalidated downgrade, without certifying any replacement model.
-See [quality evidence](evaluations/2026-09-13-openrouter-models.md).
+The [controlled comparison](evaluations/2026-09-15-controlled-model-quality.md)
+covers 360 main responses with source-grounded grading. Neither K3 nor GLM meets
+the preregistered replacement gate. Model selection remains separate from billing
+configuration; automatic backlogs stay paused. Engine source includes completion
+and compatibility fixes absent from the pinned hosted release.
 
 Desktop includes the V1 Desktop → engine → operator setup journey.
 Desktop opens Setup by default: configuration, authenticated remote connection,
@@ -104,7 +103,8 @@ See the [brief](briefs/2026-09-10-shared-project-memory.md) and
 ## Next
 
 1. Verify v0.1.49 installation and personal-key entry on the CTO's Mac.
-2. Evaluate full production prompts and choose models before enabling backlogs.
+2. Apply the controlled comparison's quality gates before any model change or
+   backlog activation.
 3. Continue the deferred product work from its existing briefs.
 
 ### Deferred (nice-to-have)

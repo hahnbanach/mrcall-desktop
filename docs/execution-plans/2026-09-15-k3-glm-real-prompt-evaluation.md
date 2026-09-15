@@ -1,5 +1,5 @@
 ---
-status: complete
+status: completed
 ---
 # K3 / GLM real-prompt comparison
 

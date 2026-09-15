@@ -264,3 +264,30 @@ def test_unfinished_or_unexpected_response_rejected(reason):
         complete_memory_text(
             SimpleNamespace(stop_reason=reason, content=[SimpleNamespace(type="text", text="SKIP")])
         )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("legacy", [False, True])
+@pytest.mark.parametrize("stop_reason", ["end_turn", "max_tokens"])
+async def test_email_capacity_keeps_complete_entities_and_rejects_truncation(legacy, stop_reason, monkeypatch):
+    monkeypatch.setattr("zylch.storage.database.memory_unavailable_reason", lambda: None)
+    w = worker()
+    if legacy:
+        w._get_extraction_prompt.return_value = "Extract the email: {body}"
+    # More output tokens than the historical ceiling, still below the new bound.
+    output = entity("person@example.com") + "\n" + "Documented detail. " * 1100
+    w.client.create_message_sync.return_value = SimpleNamespace(
+        stop_reason=stop_reason, content=[SimpleNamespace(type="text", text=output)],
+        usage={"input_tokens": 100, "output_tokens": 1800})
+    ok = await w.process_email({"id": "mail", "from_email": "sender@example.com", "body_plain": "Message"})
+    kwargs = w.client.create_message_sync.call_args.kwargs
+    assert kwargs["max_tokens"] == 4096
+    assert ("system" in kwargs) is not legacy
+    if stop_reason == "end_turn":
+        assert ok is True
+        w.storage.mark_email_processed.assert_called_once()
+        w.blob_storage.store_blob.assert_called_once()
+    else:
+        assert ok is False
+        w.storage.mark_email_processed.assert_not_called()
+        w.blob_storage.store_blob.assert_not_called()

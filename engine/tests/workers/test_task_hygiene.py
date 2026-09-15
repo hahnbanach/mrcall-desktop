@@ -353,3 +353,29 @@ async def test_llm_success_marks_thread_processed(fresh_db):
 
     assert _task_processed_at(owner, eid) is not None
     worker._analyze_event.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("stop_reason", ["tool_use", "max_tokens"])
+async def test_long_task_decision_capacity_preserves_tool_and_checkpoint(fresh_db, monkeypatch, stop_reason):
+    from types import SimpleNamespace
+    from zylch.workers.task_creation import TaskWorker, TASK_DECISION_TOOL
+
+    monkeypatch.setattr("zylch.services.solve_constants.get_personal_data_section", lambda **kwargs: "")
+    owner = "owner-output-capacity"
+    eid = _insert_email(owner, from_email="customer@example.test", age_days=1)
+    worker = _make_email_worker(owner, user_email="alice@example.com", analyze_returns=[])
+    # Restore the real builder, LLM response parser and checkpoint path.
+    worker._analyze_event = TaskWorker._analyze_event.__get__(worker, TaskWorker)
+    decision = {"action_required": False, "task_action": "none", "urgency": "low",
+                "reason": "Documented context. " * 600, "suggested_action": "No action required."}
+    worker.client.create_message = AsyncMock(return_value=SimpleNamespace(
+        stop_reason=stop_reason,
+        content=[SimpleNamespace(type="tool_use", name="task_decision", input=decision)],
+        usage={"input_tokens": 100, "output_tokens": 1000}))
+    await analyze_recent_email_events(worker)
+    kwargs = worker.client.create_message.call_args.kwargs
+    assert kwargs["max_tokens"] == 2048
+    assert kwargs["tools"] == [TASK_DECISION_TOOL]
+    assert kwargs["tool_choice"] == {"type": "tool", "name": "task_decision"}
+    assert (_task_processed_at(owner, eid) is not None) == (stop_reason == "tool_use")

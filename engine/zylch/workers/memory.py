@@ -33,6 +33,10 @@ logger = logging.getLogger(__name__)
 # read and our write (compare-and-swap on updated_at).
 _CAS_ATTEMPTS = 3
 
+# Measured email extraction needs room for complete multi-entity output.
+# Admission reserves this ceiling; billing still follows actual token usage.
+EMAIL_EXTRACTION_MAX_TOKENS = 4096
+
 
 # ---------------------------------------------------------------------
 # Identifier parsing (Phase 1a, whatsapp-pipeline-parity)
@@ -919,7 +923,7 @@ class MemoryWorker:
                         messages=[
                             {"role": "user", "content": prompt},
                         ],
-                        max_tokens=1024,
+                        max_tokens=EMAIL_EXTRACTION_MAX_TOKENS,
                     )
             else:
                 # Modern cached-system prompt → instructions cached as the
@@ -942,7 +946,7 @@ class MemoryWorker:
                                 "content": ("Analyze this email:\n\n" + email_data),
                             },
                         ],
-                        max_tokens=1024,
+                        max_tokens=EMAIL_EXTRACTION_MAX_TOKENS,
                     )
             raw_output = complete_memory_text(response)
             logging.debug(f"RAW OUTPUT:\n{raw_output}")

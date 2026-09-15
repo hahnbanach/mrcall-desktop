@@ -92,7 +92,8 @@ class LLMResponse:
     Anthropic branch.
     """
 
-    def __init__(self, raw_response: Any):
+    def __init__(self, raw_response: Any, *, normalize_tool_completion: bool = True):
+        self._normalize_tool_completion = normalize_tool_completion
         self._raw = raw_response
         self._content: List[Union[TextBlock, ToolUseBlock]] = []
         self._stop_reason: Optional[str] = None
@@ -118,6 +119,36 @@ class LLMResponse:
                     )
                 )
         self._stop_reason = self._raw.stop_reason
+        if self._normalize_tool_completion and self._complete_tool_turn():
+            self._stop_reason = "tool_use"
+
+    def _complete_tool_turn(self) -> bool:
+        """Recognize complete tool turns without repairing malformed provider data."""
+        if self._raw.stop_reason != "end_turn" or getattr(self._raw, "refusal", None):
+            return False
+        has_tool = False
+        for block in self._raw.content:
+            if getattr(block, "refusal", None):
+                return False
+            kind = getattr(block, "type", None)
+            if kind == "text":
+                if not isinstance(getattr(block, "text", None), str):
+                    return False
+            elif kind == "tool_use":
+                if not all(
+                    isinstance(getattr(block, field, None), str)
+                    and getattr(block, field).strip()
+                    for field in ("id", "name")
+                ) or not isinstance(getattr(block, "input", None), dict):
+                    return False
+                has_tool = True
+            else:
+                return False
+        return has_tool
+
+    @property
+    def original_stop_reason(self) -> Optional[str]:
+        return getattr(self._raw, "stop_reason", None)
 
     @property
     def content(self) -> List[Union[TextBlock, ToolUseBlock]]:

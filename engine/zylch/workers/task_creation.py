@@ -20,6 +20,10 @@ from zylch.workers.thread_presenter import strip_quoted
 
 logger = logging.getLogger(__name__)
 
+# Complete structured decisions exceeded the former 500-token ceiling.
+# The spending guard reserves the larger ceiling before dispatch.
+TASK_DETECTION_MAX_TOKENS = 2048
+
 # Tool definition for structured task decision output
 TASK_DECISION_TOOL = {
     "name": "task_decision",
@@ -447,7 +451,7 @@ class TaskWorker:
                     messages=[
                         {"role": "user", "content": user_content},
                     ],
-                    max_tokens=500,
+                    max_tokens=TASK_DETECTION_MAX_TOKENS,
                     tools=[TASK_DECISION_TOOL],
                     tool_choice={
                         "type": "tool",

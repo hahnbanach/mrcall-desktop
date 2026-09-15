@@ -22,6 +22,8 @@ The repo has three parallel doc trees, mirroring the three index files. Each tre
 
 ## Index
 
+- [Controlled model comparison](evaluations/2026-09-15-controlled-model-quality.md) — 360-response role-specific quality, costs, compatibility and deployment decision.
+
 - [OpenRouter credits](briefs/2026-09-13-openrouter-credits.md) — payment/model boundaries and [delivery plan](execution-plans/2026-09-13-openrouter-credits.md).
 - [Model comparison](evaluations/2026-09-13-openrouter-models.md) — blinded synthetic evidence and limitations.
 - [Actual-prompt comparison](evaluations/2026-09-15-real-engine-prompts.md) — K3/GLM source-grounded checks, availability and prompt corrections.

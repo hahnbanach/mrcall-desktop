@@ -56,6 +56,9 @@ dependencies = [
     "faster-whisper>=1.0",
 ]
 
+[project.optional-dependencies]
+evaluation = ["jsonschema>=4.23,<5"]
+
 [project.scripts]
 zylch = "zylch.cli.main:main"
 
