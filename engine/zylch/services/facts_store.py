@@ -51,12 +51,17 @@ def parse_key(content: str) -> str:
 
 
 def parse_value(content: str) -> str:
-    """Return the text after a ``Value:`` marker (may span lines)."""
+    """Read a multiline value from legacy flat or sectioned FACT output."""
     lines = (content or "").splitlines()
     for i, line in enumerate(lines):
         if line.strip().lower().startswith("value:"):
             first = line.split(":", 1)[1].strip()
-            tail = "\n".join(lines[i + 1 :]).strip()
+            value_lines = []
+            for following in lines[i + 1 :]:
+                if following.strip().upper() in {"#IDENTIFIERS", "#ABOUT", "#HISTORY"}:
+                    break
+                value_lines.append(following)
+            tail = "\n".join(value_lines).strip()
             return (first + ("\n" + tail if tail else "")).strip()
     return ""
 

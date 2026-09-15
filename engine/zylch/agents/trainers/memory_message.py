@@ -72,7 +72,7 @@ Entity can only be of 4 types:
    #HISTORY: Very short description of what happened in this email regarding the style. Eg. 2025-12-22 "The user sent a revised offer for..."
 
 4. **FACT** - A FACT is a single volatile business value the assistant must quote EXACTLY in offers/replies: a price, rate, minimum order, lead time, SLA, opening hours, a deliverable. Each FACT belongs to a CATEGORY so the assistant can load all and only the facts for a given kind of request (e.g. a business may offer "white-label", "private-label" and "own-brand" production with different prices — these are different categories and must never be mixed).
-   Output FACTs in this FLAT format (no #IDENTIFIERS/#ABOUT/#HISTORY):
+   Output FACTs in the same sectioned envelope: #IDENTIFIERS containing Entity type: FACT and the fields below, followed by empty #ABOUT and #HISTORY sections:
    - `Category:` the kind of offer/topic this fact belongs to (reuse an existing category name when one fits; keep names stable, e.g. "white-label")
    - `Key:` a short stable name for the value (e.g. "Minimum order quantity")
    - `Value:` the value itself, with units (e.g. "500 units; lead time 6 weeks")
@@ -88,7 +88,7 @@ Entity can only be of 4 types:
 
 ---
 
-Generate a COMPLETE, SELF-CONTAINED prompt that will extract entities (any number!). Entities MUST be of these 3 entity types
+Generate a COMPLETE, SELF-CONTAINED prompt that will extract entities (any number!). Entities MUST be of these 4 entity types
 
 The prompt must include:
 
@@ -196,10 +196,15 @@ Record each instance where this response pattern was used:
 - 2025-01-07: Sent to customer B regarding same issue
 - (Count: used 7 times in analyzed period)
 ---ENTITY---
+#IDENTIFIERS
 Entity type: FACT
 Category: white-label
 Key: Minimum order quantity
 Value: 500 units; lead time 6 weeks
+
+#ABOUT
+
+#HISTORY
 ```
 
 5. **IMPORTANCE ASSESSMENT**
@@ -286,60 +291,21 @@ class MessageMemoryAgentTrainer:
         self.search_limit = 20  # Reduced to avoid context window overflow
 
     def _get_entity_format_suffix(self) -> str:
-        """Return the entity format suffix with user_email interpolated."""
-        return f"""
+        """Return the shared format and source-grounding contract."""
+        return """
 
 ---
 
 CRITICAL OUTPUT FORMAT:
 - You can extract any amount of entities, and they MUST be one of these 4 types: `PERSON`, `COMPANY`, `STYLE`, `FACT`
-- PERSON / COMPANY / STYLE use the 3-section format (#IDENTIFIERS, #ABOUT, #HISTORY). FACT uses the flat Category/Key/Value format (no sections).
+- All entity types use the 3-section format (#IDENTIFIERS, #ABOUT, #HISTORY). For FACT, put Entity type: FACT and Category/Key/Value under #IDENTIFIERS; leave #ABOUT and #HISTORY empty.
 - In case a single email contains more entities, you must create different sections.
 - Each entity is separated by ---ENTITY--- on its own line
 - If email is noise/marketing, output only: SKIP
 - The output should NOT contain sensitive data like password, account numbers, credit cards
 
-Example: The email is from john@acme.com to {self.user_email} about asking for a meeting because he finds our IT Consulting Offer too expansive. He also says he is using password 123908kjhkjhHjkh to enter his account, but it does not work. {self.user_email} is the user.
+Extract facts only from the provided message. Illustrative examples in these instructions are format guidance, never evidence about a real person, company or business value.
 
-In this case you have 2 `person` (John and the user), 1 `company` (Acme). But because {self.user_email} is the user, they must not be considered as entity to be created/updated.
-
-#IDENTIFIERS
-Entity type: PERSON
-Name: John Doe
-Email: john@acme.com
-Company: Acme Corp
-
-#ABOUT
-John Doe is the sales director at Acme Corp.
-
-#HISTORY
-In December 2025 John reached out to {self.user_email} asking for a meeting about the offer we sent. He also wrote his password does not work. [DOO NOT substitute sensitive data with strings, just do not report them]
----ENTITY---
-#IDENTIFIERS
-Entity type: COMPANY
-Name: Acme Corp
-Website: acme.com
-
-#ABOUT
-Acme Corp is a B2B software company specializing in CRM solutions.
-
-#HISTORY
-Acme Corp contacted MrCall in December 2025 about a possible IT Consulting Offer
----ENTITY---
-#IDENTIFIERS
-Entity type: STYLE
-Name: IT Consulting Offer reply
-
-#ABOUT
-Trigger: a prospect asks for our IT consulting offer. Tone: warm but concise, Italian, signed with first name, 1-2 short paragraphs. (The actual prices and deliverables are FACTs, not part of this STYLE.)
-
-#HISTORY
-In December 2025 John Doe from Acme Corp initiated discussions about the offer...
----ENTITY---
-Entity type: FACT
-Category: IT consulting
-Key: Day rate
-Value: 800 EUR/day; minimum engagement 5 days
 """
 
     async def build_memory_message_prompt(self) -> Tuple[str, Dict[str, Any]]:

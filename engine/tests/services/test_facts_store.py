@@ -104,3 +104,14 @@ def test_fact_entity_routes_to_upsert(monkeypatch):
         "Entity type: FACT\nCategory: white-label\nKey: MOQ\nValue: 500 units",
     )
     assert calls == [("o1", "white-label", "MOQ", "500 units")]
+
+
+def test_sectioned_fact_value_excludes_later_sections_but_keeps_multiline_terms():
+    content = ('#IDENTIFIERS\nEntity type: FACT\nCategory: delivery\nKey: terms\n'
+               'Value: EUR 15\nPayment before dispatch\n\n#ABOUT\nnot a price\n#HISTORY\nold terms')
+    assert fs.parse_value(content) == 'EUR 15\nPayment before dispatch'
+
+
+def test_value_only_stops_at_exact_protocol_headers():
+    content = 'Value: Ticket #123\n#ABOUT our terms is ordinary value text\n #history \nignored'
+    assert fs.parse_value(content) == 'Ticket #123\n#ABOUT our terms is ordinary value text'

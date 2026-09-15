@@ -26,9 +26,13 @@ Failed extraction checkpoints (1,962 + 40) remain pending, with private backups
 and task checkpoints preserved. Three-candidate merge selection and complete-
 response validation retain LLM judgement without runaway comparisons or false
 completion. See [spending protection](features/daily-llm-budget.md).
-Published Desktop v0.1.49 includes shared project RPC and the new model catalog. GLM production task quality is unmeasured. The small blinded Claude/K3
+Published Desktop v0.1.49 includes shared project RPC and the new model catalog. GLM task quality remains unmeasured: all three real-prompt task attempts returned HTTP429. The small blinded Claude/K3
 [comparison](../../docs/evaluations/2026-09-13-openrouter-models.md) found
 consequential Haiku errors; saved presets were not changed during rollout.
+The [actual-prompt evaluation](../../docs/evaluations/2026-09-15-real-engine-prompts.md)
+found consequential memory errors with both K3 and GLM. Generic trainer FACT
+instructions and FACT value parsing are corrected in source, not in the pinned
+hosted release; saved trained prompts and model selections remain unchanged.
 
 Shared written project memory is deployed. Dedicated project documents,
 immutable revisions and a space identity live in the company memory database,

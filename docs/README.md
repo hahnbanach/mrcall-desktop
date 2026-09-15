@@ -24,6 +24,7 @@ The repo has three parallel doc trees, mirroring the three index files. Each tre
 
 - [OpenRouter credits](briefs/2026-09-13-openrouter-credits.md) — payment/model boundaries and [delivery plan](execution-plans/2026-09-13-openrouter-credits.md).
 - [Model comparison](evaluations/2026-09-13-openrouter-models.md) — blinded synthetic evidence and limitations.
+- [Actual-prompt comparison](evaluations/2026-09-15-real-engine-prompts.md) — K3/GLM source-grounded checks, availability and prompt corrections.
 
 - [Desktop setup to operator workspace](briefs/2026-09-10-desktop-to-operator-onboarding.md) — proposed end-to-end setup journey, current evidence, and future delegation boundary.
 - [Chat approval isolation](briefs/2026-09-10-chat-approval-isolation.md) — scoped existing cross-client approval defect and acceptance criteria.

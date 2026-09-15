@@ -104,3 +104,34 @@ def test_meta_prompt_keeps_three_user_template_variables_for_meta_call():
     text = MESSAGE_AGENT_META_PROMPT
     assert "{user_profile}" in text
     assert "{email_samples}" in text
+
+
+def test_trainer_fact_example_passes_real_extraction_parser():
+    """The illustrative FACT must obey the same parser as real extraction."""
+    from zylch.memory.response_validation import complete_memory_text
+    from zylch.workers.memory import MemoryWorker, _entity_type
+    from zylch.services.facts_store import parse_category, parse_key, parse_value
+    from types import SimpleNamespace
+
+    marker = '#IDENTIFIERS\nEntity type: FACT\n'
+    example = marker + MESSAGE_AGENT_META_PROMPT.split(marker, 1)[1].split('```', 1)[0].strip()
+    response = SimpleNamespace(stop_reason='end_turn', content=[SimpleNamespace(type='text', text=example)])
+    entities = MemoryWorker._parse_entities(None, complete_memory_text(response))
+    assert len(entities) == 1
+    assert _entity_type(entities[0]) == 'FACT'
+    assert parse_category(entities[0]) == 'white-label'
+    assert parse_key(entities[0]) == 'Minimum order quantity'
+    assert parse_value(entities[0]) == '500 units; lead time 6 weeks'
+
+
+def test_shared_suffix_has_no_fabricated_example_evidence_or_flat_fact_instruction():
+    trainer = MessageMemoryAgentTrainer.__new__(MessageMemoryAgentTrainer)
+    suffix = trainer._get_entity_format_suffix()
+    assert 'Illustrative examples' in suffix
+    assert 'never evidence' in suffix
+    assert 'john@acme.com' not in suffix
+    assert 'IT Consulting Offer' not in suffix
+    assert '800 EUR/day' not in suffix
+    assert 'no sections' not in suffix
+    assert 'FLAT format' not in MESSAGE_AGENT_META_PROMPT
+    assert '3 entity types' not in MESSAGE_AGENT_META_PROMPT
