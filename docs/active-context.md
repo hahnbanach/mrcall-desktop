@@ -20,15 +20,17 @@ what is *current*, targeting ≤ ~120 lines.
 ## State now
 
 The CTO selected K3 max. Billing server `prod-99091c35` and four pinned
-Café124 engines `8d83193` are deployed. Production uses K3/custom through MrCall
-credits; the other three retain their billing/model settings pending a choice
+Café124 engines `8d83193` are deployed. Production uses K3/custom through its personal OpenRouter
+key; the other three retain their billing/model settings pending a choice
 between credits and personal OpenRouter keys. See the [adoption plan](execution-plans/2026-09-16-k3-production.md)
 and [runtime contract](../engine/docs/features/k3-reasoning.md).
 
 Authenticated production identity, model catalog and preparation status checks
-pass. A real K3 max quote passes; the synthetic execute was refused before
-provider dispatch with HTTP402 insufficient credits. No paid response/receipt
-was obtained. The isolated test ledger retains its USD0.209 reservation.
+pass. A personal-key K3 max smoke returned OK with 68 reasoning tokens and
+USD0.00137515 provider cost, settled with no remaining hold in its USD0.20 test
+ledger. The earlier credit-path execute was refused with HTTP402 before provider
+dispatch; its separate test ledger retains USD0.209. Funded credit acceptance
+remains outstanding.
 Production keeps its current USD20/day cap; the other three keep USD5/day.
 Automatic processing remains off and preparation remains paused for all four.
 

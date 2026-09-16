@@ -43,3 +43,20 @@ Brief: [K3 adoption](../briefs/2026-09-16-k3-production.md).
   preflight rejected an uninitialized test ledger before dispatch.
 - Remaining: a funded credit response/receipt smoke, and the billing preference
   for the other three profiles. No backlog resumption is authorized by this plan.
+
+## Personal-key acceptance
+
+The CTO added a personal OpenRouter key to production. Corrected its misspelled
+variable name (OPENROUTER_APY_KEY) to OPENROUTER_API_KEY, selected provider
+openrouter and OPENROUTER_MODEL=moonshotai/kimi-k3, preserving every other setting.
+A private pre-change backup exists on the host. Restarted only production.
+The actual configured client factory resolves OpenRouter/K3; service is active
+and preparation remains paused/not running.
+
+A single synthetic personal-key call returned OK/end_turn with 68 reasoning
+tokens and exact provider cost USD0.00137515. The isolated USD0.20 test ledger
+settled USD0.001376 with no remaining reservation. Evidence is at
+`/home/mrcalld/k3-personal-smoke-20260916/result.json`, without credentials.
+This verifies transport/reasoning/accounting, not business-answer quality.
+Production now uses the personal key, superseding the credit selection recorded
+above. Funded credit acceptance and other profiles' billing choices remain open.

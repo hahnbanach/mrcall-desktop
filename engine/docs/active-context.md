@@ -11,15 +11,18 @@ are preserved in [active-context-archive.md](active-context-archive.md).
 [K3 max adoption](features/k3-reasoning.md) is deployed on four Café124 units
 in isolated release `8d83193`. The credit server is `prod-99091c35`. Both payment
 paths bind maximum reasoning and an 8192-token combined cap before admission.
-Production is configured as custom K3 through MrCall credits, including all five
+Production is configured as custom K3 through its personal OpenRouter key, including all five
 worker roles and reply classification. The other three profiles retain their
 previous billing/model settings pending the CTO's billing preference.
 
 Authenticated production identity, credit model catalog and paused preparation
 checks pass. The production K3 quote passes. A synthetic execute returned HTTP402
-before provider dispatch because MrCall credits were insufficient; no paid K3
-response was verified. Its isolated USD0.30 test ledger retains a USD0.209 hold,
-separate from hosted profile budgets. No inference retry was attempted.
+before provider dispatch because MrCall credits were insufficient. Its isolated
+USD0.30 test ledger retains a USD0.209 hold, separate from hosted profile budgets.
+A subsequent personal-key K3 max smoke returned OK with 68 reasoning tokens and
+USD0.00137515 provider cost. Its separate USD0.20 test ledger settled at
+USD0.001376 with no remaining hold. The configured factory resolves OpenRouter/K3;
+production service is active and preparation remains paused/not running.
 
 Production retains its current USD20/day cap; the other three retain USD5/day.
 All four retain automatic processing off and preparation paused/not running.
