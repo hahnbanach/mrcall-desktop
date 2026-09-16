@@ -50,7 +50,12 @@ class EmailSelection:
 
 class PilotEmailRoute:
     def __init__(
-        self, artifact: ProcedureArtifact, service: ScopedCapabilities, selection: EmailSelection
+        self,
+        artifact: ProcedureArtifact,
+        service: ScopedCapabilities,
+        selection: EmailSelection,
+        *,
+        workers: BoundedReads | None = None,
     ):
         if (
             artifact.revision != service.binding.procedure_revision
@@ -68,15 +73,18 @@ class PilotEmailRoute:
                 raise ValueError("pilot email contact is not granted")
         self.artifact, self.service, self.selection = artifact, service, selection
         self._binding = service.binding
-        # Owned by this route, not one executor per request. A timed-out model or
-        # provider call keeps its slot until the underlying thread really exits.
-        self._workers = BoundedReads()
+        # Direct construction retains pool ownership. An installation supplies one
+        # shared pool across selections: closing a route must not free the slots
+        # of abandoned model/provider calls that are still running in its threads.
+        self._owns_workers = workers is None
+        self._workers = workers if workers is not None else BoundedReads()
         self._busy = False
         self._closed = False
 
     def close(self):
         self._closed = True
-        self._workers.close()
+        if self._owns_workers:
+            self._workers.close()
 
     def _source(self, storage, owner):
         if self.service.binding != self._binding:
@@ -92,6 +100,11 @@ class PilotEmailRoute:
             or source_revision(source) != self.selection.source_revision
         ):
             raise PermissionError("pilot email source changed")
+        # Source storage can block or call back into installation shutdown. The
+        # returned row is not evidence that authorization survived that read.
+        self.service.check_scope()
+        if self._closed or self.service.binding != self._binding:
+            raise PermissionError("pilot email scope denied")
         return source
 
     async def process(self, storage, user_id, context):

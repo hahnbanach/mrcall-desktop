@@ -35,10 +35,16 @@ and persists only controlled replies through the actual draft tool. Normal RPC
 construction installs no route. Source/scope rechecks, cancellation and the
 existing LLM spending ledger remain in path; no sender is added. See
 [shared assistant procedures](features/shared-assistant-procedures.md).
+Trusted installation composition binds the shared pinned metadata to one scoped
+service/endpoint and shared email executor. It prepares one explicitly selected
+email at a time, with caller-owned close and post-storage revocation checks.
+Local readiness performs no provider/model/token work and never reports live
+readiness. No installation loader or automatic owner-chat routing is installed.
 Real service identity, contact/content grants, provider packaging, owner
 configuration and activation remain unimplemented. Cross-repo work traces are
 in hb's `docs/execution-plans/2026-09-15-mrcall-scoped-engine-capabilities.md`
-and `docs/execution-plans/2026-09-16-mrcall-shared-procedure.md`.
+and `docs/execution-plans/2026-09-16-mrcall-shared-procedure.md`, with current
+preparation work in `docs/execution-plans/2026-09-16-mrcall-pilot-installation.md`.
 
 [K3 max](features/k3-reasoning.md) uses Chat completions pinned to DigitalOcean.
 The adapter promotes worker limits to a combined 8192-token reasoning/final cap
