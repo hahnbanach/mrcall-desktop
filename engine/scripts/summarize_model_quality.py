@@ -9,6 +9,7 @@ import collections
 import hashlib
 import json
 import random
+import runpy
 from pathlib import Path
 
 
@@ -26,8 +27,43 @@ def interval(values, seed=2174):
     return [samples[249], samples[9749]]
 
 
+def usable_response(packed, grade):
+    """Require observed parser acceptance; completion alone is insufficient."""
+    return bool(
+        grade
+        and packed["completion"]
+        and packed.get("production_parser_accepted") is True
+        and grade["semantic_verdict"] == "acceptable"
+        and grade["contract_verdict"] == "acceptable"
+    )
+
+
+GRADE_DIMENSIONS = {
+    "task_decision": {"acceptable", "unacceptable", "indeterminate", "not_applicable"},
+    "explanation_grounding": {"supported", "contradicted", "unsupported", "not_applicable"},
+    "claim_truth": {"supported_true", "supported_false", "unknown", "not_applicable"},
+    "operational_impact": {"decision_changed", "explanation_only", "unknown", "not_applicable"},
+}
+
+
+def count_grade_dimensions(counter, grade):
+    """Describe reviewed dimensions, never reconstruct them from legacy semantics.
+
+    summarize validates grade-v2 evidence before calling this counter. Legacy
+    semantic verdicts never imply an operational decision or business truth.
+    """
+    for field, allowed in GRADE_DIMENSIONS.items():
+        value = grade.get(field, "unassessed")
+        if field in grade and (not isinstance(value, str) or value not in allowed):
+            raise ValueError("Invalid grade dimension " + field)
+        counter[field + "_" + value] += 1
+
+
 def summarize(packdir, gradepaths, cohort, baseline):
     mapping = read(packdir / "blind-map.json")
+    evidence_path = packdir / "evidence-by-label.json"
+    evidence = read(evidence_path) if evidence_path.exists() else {}
+    evidence_module = None
     models = sorted({row["model"] for row in mapping.values()})
     if baseline not in models:
         raise ValueError("Baseline model absent from planned cells")
@@ -65,6 +101,24 @@ def summarize(packdir, gradepaths, cohort, baseline):
             raise ValueError("Case identity mismatch")
         if g and b["content"] is None:
             raise ValueError("Grade without model response")
+        if g and (g.get("version") == 2 or any(field in g for field in GRADE_DIMENSIONS)):
+            if label not in evidence:
+                raise ValueError("Grade-v2 requires matching evidence bundle")
+            if evidence_module is None:
+                evidence_module = runpy.run_path(
+                    str(Path(__file__).resolve().with_name("model_quality_evidence.py"))
+                )
+            bundle = evidence[label]
+            if bundle.get("case_id") != b["case_id"] or bundle.get("stage") != b["stage"]:
+                raise ValueError("Evidence case/stage differs from packed output")
+            expected = evidence_module["build_evidence"](
+                {"id": b["case_id"], "stage": b["stage"], "request": {}},
+                "output-binding-only",
+                b["content"],
+            )
+            if bundle.get("output_sha256") != expected["output_sha256"]:
+                raise ValueError("Evidence output differs from packed output")
+            evidence_module["validate_review"](bundle, g)
         if (m["case_id"], m["model"]) in bycell:
             raise ValueError("Duplicate case/model cell")
         key = (m["model"], b["stage"])
@@ -73,15 +127,16 @@ def summarize(packdir, gradepaths, cohort, baseline):
         returned = b["content"] is not None
         s["model_response"] += int(returned)
         s["completed"] += int(bool(b["completion"]))
+        s["production_parser_accepted"] += int(b.get("production_parser_accepted") is True)
+        s["production_parser_unassessed"] += int(
+            not isinstance(b.get("production_parser_accepted"), bool)
+        )
         s["graded"] += int(g is not None)
         if g:
+            count_grade_dimensions(s, g)
             s["semantic_" + g["semantic_verdict"]] += 1
             s["contract_" + g["contract_verdict"]] += 1
-            s["usable_response_acceptable"] += int(
-                b["completion"]
-                and g["semantic_verdict"] == "acceptable"
-                and g["contract_verdict"] == "acceptable"
-            )
+            s["usable_response_acceptable"] += int(usable_response(b, g))
         elif returned:
             s["ungraded_responses"] += 1
         bycell[(m["case_id"], m["model"])] = (b, g)
@@ -96,12 +151,9 @@ def summarize(packdir, gradepaths, cohort, baseline):
             sub["model_response"] += int(returned)
             sub["graded"] += int(g is not None)
             if g:
+                count_grade_dimensions(sub, g)
                 sub["semantic_" + g["semantic_verdict"]] += 1
-                sub["usable_response_acceptable"] += int(
-                    b["completion"]
-                    and g["semantic_verdict"] == "acceptable"
-                    and g["contract_verdict"] == "acceptable"
-                )
+                sub["usable_response_acceptable"] += int(usable_response(b, g))
     pairs = []
     for stage in sorted({k[1] for k in counts}):
         for model in (m for m in models if m != baseline):
@@ -142,9 +194,14 @@ def summarize(packdir, gradepaths, cohort, baseline):
                 if "indeterminate" in (g["contract_verdict"], og["contract_verdict"]):
                     c["usable_response_indeterminate_contract_pairs"] += 1
                     continue
+                if not all(
+                    isinstance(row.get("production_parser_accepted"), bool) for row in (b, ob)
+                ):
+                    c["usable_response_unassessed_parser_pairs"] += 1
+                    continue
                 c["usable_response_determinate_pairs"] += 1
-                ep = passed and b["completion"] and g["contract_verdict"] == "acceptable"
-                oe = opassed and ob["completion"] and og["contract_verdict"] == "acceptable"
+                ep = usable_response(b, g)
+                oe = usable_response(ob, og)
                 c[
                     "usable_response_"
                     + (
@@ -178,7 +235,7 @@ def summarize(packdir, gradepaths, cohort, baseline):
             for k, v in sorted(subgroups.items())
         ],
         "unmatched_grades": sorted(set(grades) - set(packed)),
-        "notes": "Intervals resample observed determinate thread pairs and are conditional descriptive sensitivity, not population/equivalence guarantees. Missing and indeterminate pairs remain explicit. Usable response includes explicitly reviewed gateway recovery; it is not first-attempt availability.",
+        "notes": "Intervals resample observed determinate thread pairs and are conditional descriptive sensitivity, not population/equivalence guarantees. Missing and indeterminate pairs remain explicit. Usable response requires completion, actual production parser acceptance and acceptable semantic/contract verdicts. Missing parser evidence never implies acceptance. Usable response includes explicitly reviewed gateway recovery; it is not first-attempt availability.",
     }
 
 
@@ -200,6 +257,8 @@ def main():
     )
     if (args.pack_dir / "rubrics.json").exists():
         inputs.append(args.pack_dir / "rubrics.json")
+    if (args.pack_dir / "evidence-by-label.json").exists():
+        inputs.append(args.pack_dir / "evidence-by-label.json")
     result["input_sha256"] = [
         {"file": p.name, "sha256": hashlib.sha256(p.read_bytes()).hexdigest()} for p in inputs
     ]

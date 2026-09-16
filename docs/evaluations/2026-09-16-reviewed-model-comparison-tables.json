@@ -1,0 +1,200 @@
+{
+  "scope": "Complete post-hoc source review of selected60cases/240outputs, disclosedarmidentities; notfreshholdout, truthcertification or populationerrorrates. Originalnumericgradesnotmodified.",
+  "cases": 60,
+  "outputs": 240,
+  "business_clusters": 37,
+  "counts": [
+    {
+      "group": "memory",
+      "arm": "historical-opus",
+      "n": 20,
+      "source_policy": {
+        "indeterminate": 4,
+        "acceptable": 9,
+        "unacceptable": 7
+      },
+      "task_decision": {
+        "not_applicable": 20
+      },
+      "parser_accepted": 20,
+      "schema_without_recorded_violations": 20
+    },
+    {
+      "group": "memory",
+      "arm": "off-original",
+      "n": 20,
+      "source_policy": {
+        "indeterminate": 5,
+        "acceptable": 11,
+        "unacceptable": 4
+      },
+      "task_decision": {
+        "not_applicable": 20
+      },
+      "parser_accepted": 17,
+      "schema_without_recorded_violations": 20
+    },
+    {
+      "group": "memory",
+      "arm": "off-8192",
+      "n": 20,
+      "source_policy": {
+        "unacceptable": 7,
+        "acceptable": 8,
+        "indeterminate": 5
+      },
+      "task_decision": {
+        "not_applicable": 20
+      },
+      "parser_accepted": 18,
+      "schema_without_recorded_violations": 20
+    },
+    {
+      "group": "memory",
+      "arm": "max-8192",
+      "n": 20,
+      "source_policy": {
+        "indeterminate": 5,
+        "acceptable": 14,
+        "unacceptable": 1
+      },
+      "task_decision": {
+        "not_applicable": 20
+      },
+      "parser_accepted": 16,
+      "schema_without_recorded_violations": 20
+    },
+    {
+      "group": "current-task",
+      "arm": "historical-opus",
+      "n": 20,
+      "source_policy": {
+        "acceptable": 14,
+        "unacceptable": 3,
+        "indeterminate": 3
+      },
+      "task_decision": {
+        "acceptable": 15,
+        "unacceptable": 3,
+        "indeterminate": 2
+      },
+      "parser_accepted": 20,
+      "schema_without_recorded_violations": 20
+    },
+    {
+      "group": "current-task",
+      "arm": "off-original",
+      "n": 20,
+      "source_policy": {
+        "acceptable": 16,
+        "unacceptable": 2,
+        "indeterminate": 2
+      },
+      "task_decision": {
+        "acceptable": 17,
+        "unacceptable": 2,
+        "indeterminate": 1
+      },
+      "parser_accepted": 20,
+      "schema_without_recorded_violations": 20
+    },
+    {
+      "group": "current-task",
+      "arm": "off-8192",
+      "n": 20,
+      "source_policy": {
+        "acceptable": 13,
+        "unacceptable": 2,
+        "indeterminate": 5
+      },
+      "task_decision": {
+        "acceptable": 15,
+        "unacceptable": 2,
+        "indeterminate": 3
+      },
+      "parser_accepted": 20,
+      "schema_without_recorded_violations": 17
+    },
+    {
+      "group": "current-task",
+      "arm": "max-8192",
+      "n": 20,
+      "source_policy": {
+        "acceptable": 18,
+        "indeterminate": 2
+      },
+      "task_decision": {
+        "acceptable": 19,
+        "indeterminate": 1
+      },
+      "parser_accepted": 20,
+      "schema_without_recorded_violations": 20
+    },
+    {
+      "group": "arrival",
+      "arm": "historical-opus",
+      "n": 20,
+      "source_policy": {
+        "acceptable": 17,
+        "unacceptable": 1,
+        "indeterminate": 2
+      },
+      "task_decision": {
+        "acceptable": 19,
+        "indeterminate": 1
+      },
+      "parser_accepted": 20,
+      "schema_without_recorded_violations": 20
+    },
+    {
+      "group": "arrival",
+      "arm": "off-original",
+      "n": 20,
+      "source_policy": {
+        "indeterminate": 8,
+        "acceptable": 10,
+        "unacceptable": 2
+      },
+      "task_decision": {
+        "acceptable": 17,
+        "unacceptable": 2,
+        "indeterminate": 1
+      },
+      "parser_accepted": 20,
+      "schema_without_recorded_violations": 20
+    },
+    {
+      "group": "arrival",
+      "arm": "off-8192",
+      "n": 20,
+      "source_policy": {
+        "indeterminate": 4,
+        "acceptable": 14,
+        "unacceptable": 2
+      },
+      "task_decision": {
+        "acceptable": 17,
+        "unacceptable": 2,
+        "indeterminate": 1
+      },
+      "parser_accepted": 20,
+      "schema_without_recorded_violations": 19
+    },
+    {
+      "group": "arrival",
+      "arm": "max-8192",
+      "n": 20,
+      "source_policy": {
+        "acceptable": 14,
+        "indeterminate": 6
+      },
+      "task_decision": {
+        "acceptable": 19,
+        "indeterminate": 1
+      },
+      "parser_accepted": 20,
+      "schema_without_recorded_violations": 20
+    }
+  ],
+  "status": "Post-hoc selected-case review; see accompanying Markdown for scope and adjudications."
+}

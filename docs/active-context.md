@@ -32,9 +32,15 @@ See [delivery plan](execution-plans/2026-09-13-openrouter-credits.md).
 
 The 360-output [model comparison](evaluations/2026-09-15-controlled-model-quality.md)
 and 180-output [reasoning comparison](evaluations/2026-09-16-k3-reasoning-quality.md)
-have revised grades after confirmed reviewer errors. Their original model-quality
-recommendations are withdrawn; repaired counts are calibration, not independent
-business-quality validation. See [grading correction](evaluations/2026-09-16-grading-correction.md).
+have superseded semantic scores after confirmed reviewer errors. Neither original
+nor intermediate counts establish business-decision error rates or model rankings.
+The [disputed cases](evaluations/2026-09-16-disputed-case-review.md) separate task
+decisions, unsupported explanations and unknown facts. Offline grading now binds
+each output to complete per-label evidence and validates exact source quotations;
+legacy judgments remain unassessed under that protocol. The
+[complete selected review](evaluations/2026-09-16-reviewed-model-comparison.md)
+covers all 60 selected cases and 240 outputs, with explicit peer adjudications;
+it is post-hoc evidence, not a fresh holdout or a production error-rate estimate.
 Automatic backlogs stay paused. Evaluation-only reasoning transport and completion
 fixes exist in source; pinned releases and saved models remain unchanged.
 

@@ -221,6 +221,15 @@ def prepare(
     masked = []
     blindmap = {}
     inputs_by_label = {}
+    evidence_by_label = {}
+    evidence_module = runpy.run_path(
+        str(Path(__file__).resolve().with_name("model_quality_evidence.py"))
+    )
+    authorities = (
+        json.loads(Path(config["review_authorities"]).read_text())
+        if config.get("review_authorities")
+        else []
+    )
     for key, meta in cells.items():
         case = meta["case"]
         rubric = rubrics.get(case["id"])
@@ -287,6 +296,13 @@ def prepare(
                 "content": mask_content(raw, identifiers) if raw is not None else None,
             }
         )
+        if raw is not None:
+            # Use this cell's input and resolved clock, never the last variant
+            # stored under a shared case ID. Later facts are reviewer evidence,
+            # not additions to the request the model actually received.
+            evidence_by_label[label] = evidence_module["build_evidence"](
+                case, meta["identity"][3], masked[-1]["content"], authorities=authorities
+            )
     # Balance within strata, keeping all roles/models/repeats for a thread together.
     rng = random.Random(config.get("seed", 20260915))
     strata = collections.defaultdict(set)
@@ -311,6 +327,7 @@ def prepare(
         write(output / f"blind-group-{i + 1}.json", rows)
     if config.get("paired_variants"):
         write(output / "case-inputs-by-label.json", inputs_by_label)
+    write(output / "evidence-by-label.json", evidence_by_label)
     write(output / "blind-map.json", blindmap)
     write(output / "operational-audit.json", audit)
     write(
@@ -334,6 +351,11 @@ def prepare(
         "operational_events": len(audit),
         "source_hashes": source_hashes,
         "parser_provenance": provenance or {},
+        "evidence_version": 2,
+        "evidence_bundle_count": len(evidence_by_label),
+        "evidence_module_sha256": hashlib.sha256(
+            Path(evidence_module["__file__"]).read_bytes()
+        ).hexdigest(),
         "candidate_freeze_sha256": hashlib.sha256(freeze_record.read_bytes()).hexdigest(),
         "selection_rule": "First actual response per original cell, including malformed/truncated; all attempts preserved in private operational audit.",
     }

@@ -32,6 +32,7 @@ def fixture(tmp_path, scenarios):
                     "stratum": "a" if i % 2 else "b",
                     "content": [] if present else None,
                     "completion": complete,
+                    "production_parser_accepted": complete,
                 }
             )
             mapping[label] = {"model": model, "case_id": cid}
@@ -153,7 +154,8 @@ def test_cli_custom_baseline_and_input_hashes(tmp_path, monkeypatch, capsys):
     import hashlib
     import sys
 
-    _, _, _, run = fixture(tmp_path, [(FAIL, PASS)])
+    packed, grades, _, run = fixture(tmp_path, [(FAIL, PASS)])
+    attach_evidence(tmp_path, packed[1], grades[1])
     run()
     output = tmp_path / "summary.json"
     monkeypatch.setattr(
@@ -179,6 +181,7 @@ def test_cli_custom_baseline_and_input_hashes(tmp_path, monkeypatch, capsys):
     assert result["pairs"][0]["model"] == OPUS
     assert result["pairs"][0]["counts"]["semantic_loss"] == 1
     assert result["pairs"][0]["observed_paired_pass_difference"] == -1
+    assert "evidence-by-label.json" in {source["file"] for source in result["input_sha256"]}
     for source in result["input_sha256"]:
         assert (
             source["sha256"] == hashlib.sha256((tmp_path / source["file"]).read_bytes()).hexdigest()
@@ -230,4 +233,137 @@ def test_pack_mapping_must_be_bijective(tmp_path, missing_side):
     else:
         del mapping[label]
     with pytest.raises(ValueError, match="[Bb]ijection|[Ll]abel.*match|[Mm]ap.*pack|[Pp]ack.*map"):
+        run()
+
+
+def test_complete_valid_semantics_still_requires_actual_parser_acceptance(tmp_path):
+    packed, _, _, run = fixture(tmp_path, [(PASS, PASS)])
+    packed[1]["production_parser_accepted"] = False
+    result = run()
+    row = next(r for r in result["counts"] if r["model"] == K3)
+    assert row["completed"] == row["semantic_acceptable"] == 1
+    assert row["production_parser_accepted"] == row["usable_response_acceptable"] == 0
+    assert result["pairs"][0]["counts"]["semantic_tie_pass"] == 1
+    assert result["pairs"][0]["counts"]["usable_response_loss"] == 1
+    assert all(
+        r["usable_response_acceptable"] == 0 for r in result["subgroups"] if r["model"] == K3
+    )
+
+
+def test_legacy_dimensions_and_missing_parser_are_explicitly_unassessed(tmp_path):
+    packed, _, _, run = fixture(tmp_path, [(PASS, PASS)])
+    del packed[1]["production_parser_accepted"]
+    result = run()
+    row = next(r for r in result["counts"] if r["model"] == K3)
+    assert row["production_parser_unassessed"] == 1
+    assert row["usable_response_acceptable"] == 0
+    for field in M.GRADE_DIMENSIONS:
+        assert row[field + "_unassessed"] == 1
+    assert "task_decision_acceptable" not in row
+
+
+def test_acceptable_decision_is_separate_from_unknown_explanatory_claim(tmp_path):
+    packed, grades, _, run = fixture(
+        tmp_path, [(PASS, ("indeterminate", "acceptable", True, True, True))]
+    )
+    attach_evidence(tmp_path, packed[1], grades[1])
+    grades[1].update(
+        version=2,
+        task_decision="acceptable",
+        explanation_grounding="unsupported",
+        claim_truth="unknown",
+        operational_impact="explanation_only",
+    )
+    result = run()
+    row = next(r for r in result["counts"] if r["model"] == K3)
+    assert row["semantic_indeterminate"] == row["task_decision_acceptable"] == 1
+    assert row["explanation_grounding_unsupported"] == row["claim_truth_unknown"] == 1
+    assert row["operational_impact_explanation_only"] == 1
+    assert row["usable_response_acceptable"] == 0
+    for subgroup in result["subgroups"]:
+        if subgroup["model"] == K3:
+            assert subgroup["task_decision_acceptable"] == subgroup["claim_truth_unknown"] == 1
+
+
+@pytest.mark.parametrize("field", list(M.GRADE_DIMENSIONS))
+def test_invalid_optional_dimension_refused(tmp_path, field):
+    packed, grades, _, run = fixture(tmp_path, [(PASS, PASS)])
+    attach_evidence(tmp_path, packed[0], grades[0])
+    grades[0][field] = "invented"
+    with pytest.raises(ValueError, match="Invalid dimension"):
+        run()
+
+
+def attach_evidence(tmp_path, packed, grade):
+    import runpy
+
+    module = runpy.run_path(str(Path(M.__file__).with_name("model_quality_evidence.py")))
+    bundle = module["build_evidence"](
+        {
+            "id": packed["case_id"],
+            "stage": packed["stage"],
+            "request": {"system": "Use confirmed payment status only."},
+        },
+        "2026-09-16T00:00:00+00:00",
+        packed["content"],
+    )
+    source = bundle["sections"][0]
+    grade.update(
+        version=2,
+        bundle_sha256=bundle["bundle_sha256"],
+        coverage=[b["id"] for b in bundle["sections"]],
+        task_decision="acceptable",
+        explanation_grounding="unsupported",
+        claim_truth="unknown",
+        operational_impact="explanation_only",
+        claims=[
+            {
+                "rationale": "Correct no-action; explanation unverified.",
+                "output_quote": "[]",
+                "source_refs": [
+                    {"id": source["id"], "sha256": source["sha256"], "quote": source["text"]}
+                ],
+            }
+        ],
+    )
+    (tmp_path / "evidence-by-label.json").write_text(json.dumps({packed["label"]: bundle}))
+    return bundle
+
+
+@pytest.mark.parametrize("mutation", ["missing", "metadata", "quote", "output", "case", "stage"])
+def test_grade_v2_requires_complete_bound_evidence(tmp_path, mutation):
+    packed, grades, _, run = fixture(tmp_path, [(PASS, PASS)])
+    bundle = attach_evidence(tmp_path, packed[0], grades[0])
+    evidence = tmp_path / "evidence-by-label.json"
+    if mutation == "missing":
+        evidence.unlink()
+    elif mutation == "metadata":
+        del grades[0]["coverage"]
+    elif mutation == "quote":
+        grades[0]["claims"][0]["source_refs"][0]["quote"] = "not present"
+    elif mutation == "output":
+        packed[0]["content"] = [{"type": "text", "text": "different output"}]
+    else:
+        bundle["case_id" if mutation == "case" else "stage"] = "different"
+        evidence.write_text(json.dumps({packed[0]["label"]: bundle}))
+    with pytest.raises(ValueError):
+        run()
+
+
+@pytest.mark.parametrize("value", [None, "true", 1, []])
+def test_unknown_parser_excludes_usable_pair_but_keeps_semantics(tmp_path, value):
+    packed, _, _, run = fixture(tmp_path, [(PASS, PASS)])
+    packed[1]["production_parser_accepted"] = value
+    result = run()
+    pair = result["pairs"][0]["counts"]
+    assert pair["semantic_tie_pass"] == 1
+    assert pair["usable_response_unassessed_parser_pairs"] == 1
+    assert pair.get("usable_response_determinate_pairs", 0) == 0
+    assert pair.get("usable_response_loss", 0) == 0
+
+
+def test_partial_dimensions_cannot_bypass_v2_validation(tmp_path):
+    _, grades, _, run = fixture(tmp_path, [(PASS, PASS)])
+    grades[0]["task_decision"] = "acceptable"
+    with pytest.raises(ValueError, match="requires matching evidence"):
         run()

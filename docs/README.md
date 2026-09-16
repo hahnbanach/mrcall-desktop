@@ -22,6 +22,8 @@ The repo has three parallel doc trees, mirroring the three index files. Each tre
 
 ## Index
 
+- [Complete selected-case review](evaluations/2026-09-16-reviewed-model-comparison.md) — all 60 selected cases / 240 outputs, concrete errors, separate uncertainty and measured costs.
+- [Disputed case evidence](evaluations/2026-09-16-disputed-case-review.md) — exact source/model excerpts, equal Opus/K3 criteria and withdrawn operational-error claims.
 - [Grading correction](evaluations/2026-09-16-grading-correction.md) — corrected company facts, concrete payment evidence, revised labels and withdrawn quality recommendations.
 - [K3 reasoning comparison](evaluations/2026-09-16-k3-reasoning-quality.md) — controlled disabled/max reasoning quality, observed costs and deployment boundary.
 - [Controlled model comparison](evaluations/2026-09-15-controlled-model-quality.md) — 360-response role-specific quality, costs, compatibility and deployment decision.

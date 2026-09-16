@@ -1,5 +1,15 @@
 # Correction: business truth, input support and task decisions
 
+Current selected-case interpretation: [complete 60-case / 240-output source review](2026-09-16-reviewed-model-comparison.md).
+Historical tables in the linked original reports remain unchanged. Unselected
+historical outputs and GLM are not newly regraded.
+
+Status: this intermediate correction is superseded by the
+[disputed-case review](2026-09-16-disputed-case-review.md). Its previous claims of
+two proven arrival errors and one paired loss are withdrawn. The linked selected
+review covers all 180 reasoning outputs and 60 matching historical Opus outputs.
+The entire earlier 360-output study is not newly regraded.
+
 The failure examples and model-selection recommendation published with the
 [reasoning comparison](2026-09-16-k3-reasoning-quality.md) were overstated. Two
 claimed inventions are correct company facts confirmed by the CTO, and the
@@ -19,7 +29,8 @@ three arms and the [earlier model comparison](2026-09-15-controlled-model-qualit
    company facts. A reply stating that scope is not a fabricated limitation.
    Known product scope and the validity of a particular recipe remain separate.
 3. **Payment.** In the private order case `t-6f4f1b16445f-task`, the source says
-   `Metodo di elaborazione dei pagamenti: shopify_payments`. Maximum K3 adds
+   the field `Metodo di` / `elaborazione dei pagamenti`, followed by
+   a blank line and `shopify_payments`. Maximum K3 adds
    `Payment confirmed via shopify_payments`. The source does not establish
    completed payment, but it also does not establish nonpayment. Both variants
    correctly choose `action_required: false`, `task_action: none`. Neither asks
@@ -71,23 +82,11 @@ were no new model calls. All affected arms/models receive the same treatment:
   workflow instructions and independent output-contract failures remain findings.
   Durable memory extraction has a separate requirement to ground stored facts.
 
-The corrected maximum-reasoning arrival cohort has **15 acceptable, 2 unacceptable
-and 3 indeterminate** responses out of 20; the equal-ceiling disabled arm has
-**16 / 3 / 1**. Among pairs determinate on both sides, maximum reasoning corrects
-2 failures and introduces 1, with 12 joint passes, 1 joint failure and 4 excluded
-indeterminate pairs. The original claim of five newly introduced consequential
-arrival errors is withdrawn. Subtracting marginal pass counts gives a different
-answer because the indeterminate cases are not identical across arms.
-
-The two remaining maximum-arm arrival failures concern suppressing explicitly
-pending founder review under an inapplicable generic-spam rule, and reversing
-an explicit source statement about which labeling route avoids delays. Neither
-finding requires declaring an unverified product capability false.
-
-Both reports contain revised main tables. Costs, token counts, parser outcomes
-and tool-call coverage are unchanged. Historical positive-task counts are now
-Opus **17 / 1 / 2**, K3 **15 / 4 / 1**, GLM **11 / 7 / 2**, under the same revised
-rules. These are calibrated judgments, not a company-certified gold standard.
+The intermediate numerical revision is retained in the reports' archived tables,
+not asserted here as a validated count of business errors. Subsequent full-thread
+review withdraws the claimed SCASO and label-route operational failures, and the
+one-loss conclusion derived from the latter. Costs, token counts, parser outcomes
+and tool-call coverage are unchanged. No replacement semantic scores are claimed.
 
 The original categorical quality recommendation is withdrawn. No model is
 promoted or rejected solely on the repaired scores. Independent confirmation
@@ -99,9 +98,9 @@ fresh confirmation of the grading rules developed after inspecting them.
 ## Evidence and verification
 
 The private evidence roots retain original/revised grades and sequential
-adjudications under `cto-correction-20260916/`. Review covered all 180 new and
-360 earlier main grades for the affected criteria, with full-input review of
-the disputed cases and consistent treatment across arms/models. The optional
+adjudications under `cto-correction-20260916/`. Earlier targeted audits scanned all 180 new and 360 earlier main grades for
+specific affected criteria. That is not an exhaustive full-input business-truth
+regrading of every response; subsequent case review exposed further mistakes. The optional
 older candidate/repetition judgments remain exploratory historical evidence.
 
 Independent arithmetic review reproduces revised main tables and paired

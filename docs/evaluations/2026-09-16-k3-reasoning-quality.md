@@ -1,9 +1,18 @@
 # K3 reasoning and output-budget comparison
 
-Status: inference complete; grades revised after confirmed reviewer errors.
-The original quality recommendation and failure examples are withdrawn. Revised
-labels below are post-hoc calibration, not independent business-quality validation.
-See the [correction and concrete evidence](2026-09-16-grading-correction.md).
+Current selected-case interpretation: [complete 60-case / 240-output source review](2026-09-16-reviewed-model-comparison.md).
+The historical tables below remain unchanged; unselected historical outputs and GLM
+are not newly regraded.
+
+Status: inference complete; categorical semantic scores and their interpretation
+are superseded by the complete selected-case review linked above. The numerical tables below
+are preserved historical grading snapshots, **not counts of proven decision errors**.
+The claimed two remaining maximum-arm arrival errors and one loss against Opus
+are withdrawn. All 180 outputs in the reasoning study are covered by the linked selected review;
+the entire earlier 360-output study, including GLM and unselected cases, is not
+newly regraded. See the
+[disputed-case review](2026-09-16-disputed-case-review.md) and
+[earlier correction](2026-09-16-grading-correction.md).
 
 ## Question and controlled conditions
 
@@ -101,12 +110,11 @@ Official protocol references: [reasoning controls](https://openrouter.ai/docs/gu
 
 ## Revised results and interpretation
 
-All 180 Chat generations returned and were graded exactly once. Subsequent review
-corrected business-fact penalties, overlooked supplied instructions, and the
-conflation of unverified explanations with operational failures. The original
-claim that maximum reasoning introduced five consequential arrival errors is
-withdrawn: the revised equal-ceiling comparison has two corrections, one new
-source-contradicted workflow error and four indeterminate pairs.
+All 180 Chat generations returned and were initially graded exactly once.
+Later review found false-fact penalties, overlooked instructions and a failure
+to distinguish uncertain business answers from proven operational errors.
+The archived semantic labels and paired comparisons below are superseded for
+quality conclusions; no replacement totals are asserted here.
 
 The CTO confirms 12-month ambient shelf life and cans-only cold-brew production.
 These are accurate company facts. The model's Brazil/private-label distinction
@@ -141,34 +149,21 @@ Counts can therefore differ from subtraction of marginal acceptable totals.
 | Current-state tasks | 5 | 0 | 13 | 1 | 1 |
 | Positive arrival tasks | 2 | 1 | 12 | 1 | 4 |
 
-Memory remains 14/20 semantically acceptable at maximum effort, but only 11/20
-passes semantics, contract and parser together; either disabled arm has 9/20
-usable. Current-state tasks have 18/20 acceptable at maximum effort versus 17/20
-with original disabled ceilings. Correct no-action decisions with uncertain
-payment explanations are disclosed separately, not described as financial or
-task failures.
+The archived whole-response and `Usable` counts depend on disputed semantic
+labels. Parser outcomes remain separately reproducible, but combining them with
+those labels does not yield a validated decision-accuracy measure.
 
-Two defensible arrival-task problems remain in the maximum arm:
+The Dominique label-route case does not prove a wrong operational decision:
+both models create a high-priority reply task, and the customer's latest message
+changes the relevant constraints. The SCASO sender's authenticity is unresolved;
+both models choose no action, and a prior AI reply does not prove a legitimate
+lead. Neither case establishes the previously asserted maximum-K3 loss. Exact
+source and output excerpts are in the [case review](2026-09-16-disputed-case-review.md).
 
-- A concrete follow-up supplies named products after the owner explicitly offers
-  founder review of payment terms. The output dismisses it as a scam and returns
-  no action, contrary to the operative thread and the narrow generic-spam rule.
-  Whether the correspondent actually is fraudulent is unknown.
-- The owner says applying labels in Paris avoids delays from supplier-side label
-  production/application. The output calls supplier-side printing/application
-  the fastest route, reversing the supplied workflow comparison. Who should add
-  mandatory artwork text is a separate unknown, not a proven false assertion.
-
-Maximum effort also fixes genuine errors: it creates the pending NDA-review task
-and creates a new meeting-invitation task instead of updating a nonexistent task.
-The earlier shelf-life, glass and payment examples are not evidence of new
-operational failures; the correction note preserves their exact distinctions.
-
-These revised labels do not establish that K3 is commercially unreliable or that
-maximum effort is generally worse. They also do not establish equivalence or an
-automatic replacement. Model selection needs a company-validated fact reference,
-explicit instruction precedence and a representative memory-enabled evaluation
-before another independent confirmation. No production configuration changes.
+This withdraws those conclusions, not every possible output error. Full review
+must apply the same business-truth, source-grounding and action criteria to all
+models. No model is promoted, rejected or declared equivalent on these scores.
+No production configuration changes.
 
 ## Observed cost, latency and reasoning
 
@@ -209,13 +204,12 @@ the USD10 cap. No hold was released to make the experiment fit.
 
 ## Revised historical reference and uncertainty
 
-The historical comparator is corrected under the same business-fact and
-uncertainty rules. On the exact selected 20 inputs per cohort, Opus is8 acceptable /
-9 unacceptable / 3 indeterminate for memory, 15/4/1 for current-state tasks and
-17/1/2 for arrivals. Maximum K3 versus historical Opus on arrivals has zero wins,
-one loss, 15 joint passes,one joint failure and 3 indeterminate pairs. This is a
-historical comparison under different transport/cache conditions, not a fresh
-control or human-certified ground truth.
+Historical Opus labels are subject to the same unresolved grading defects.
+The earlier aggregate claim of one maximum-K3 arrival loss against Opus is
+withdrawn: its cited label-route case does not prove an incorrect business
+answer or a different task decision. The historical comparator remains useful
+for inspecting exact outputs, not as a human-certified truth reference or a
+fresh contemporaneous control. No revised semantic totals are asserted.
 
 The [correction note](2026-09-16-grading-correction.md) distinguishes initial
 reviewer mistakes from new authoritative CTO evidence. Old labels, revised
@@ -246,7 +240,7 @@ evaluation itself. The later full-input and CTO-evidence correction is explicit;
 passing code tests and arithmetic review does not validate business judgments.
 
 The [sanitized table snapshot](2026-09-16-k3-reasoning-quality-tables.json)
-contains the revised aggregate counts. Private `summary.json`, canonical grades,
+preserves the earlier aggregate grading snapshot; its semantic counts are superseded. Private `summary.json`, canonical grades,
 adjudication, manifests, wire requests,
 raw responses, source mappings, execution code and reproduction helpers preserve
 the evidence outside Git. The public report contains no mailbox credentials or

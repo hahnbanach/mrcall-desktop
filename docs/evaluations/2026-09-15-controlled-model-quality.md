@@ -1,10 +1,16 @@
 # Controlled engine model comparison
 
-Status: all 360 main responses present; main grades revised following reviewer
-errors and authoritative CTO evidence. The original model-selection recommendation
-is withdrawn. Optional candidate/repetition material is historical exploratory
-evidence, not a business-quality validation. See the
-[grading correction](2026-09-16-grading-correction.md).
+Current selected-case interpretation: [complete 60-case / 240-output source review](2026-09-16-reviewed-model-comparison.md).
+The historical tables below remain unchanged; unselected historical outputs and GLM
+are not newly regraded.
+
+Status: all 360 main responses present. Categorical semantic scores and paired
+quality conclusions are superseded pending full evidence-based regrading.
+Tables remain historical snapshots, **not counts of proven decision errors**.
+Exhaustive regrading is not complete; no replacement scores are asserted.
+The original model-selection recommendation is withdrawn. See the
+[disputed-case review](2026-09-16-disputed-case-review.md) and
+[earlier grading correction](2026-09-16-grading-correction.md).
 
 This study concerns engine API calls for email memory extraction and task
 detection. It does not evaluate the separately authenticated headless operator.
@@ -13,10 +19,9 @@ detection. It does not evaluate the separately authenticated headless operator.
 
 The original recommendation to retain Opus for task quality overstates what this
 experiment establishes. Initial graders penalized correct company facts and
-misapplied supplied instructions. Revised tables retain actual task/contract
-failures and distinguish unresolved business truth from demonstrated errors.
-They are post-hoc calibrated evidence, not a reliable production error-rate or
-model-equivalence estimate. No production model is promoted or rejected solely
+misapplied supplied instructions. The earlier revisions did not resolve all grading defects. Tables preserve
+whole-response labels whose factual and operational interpretation is disputed;
+they are not a validated production error-rate or model-equivalence estimate. No production model is promoted or rejected solely
 on these counts; company-validated reference facts and representative retrieval
 must precede an independent confirmation.
 
@@ -41,7 +46,8 @@ judgments, not the fraction of individual facts that are wrong.
 | GLM 5.2 | 23 / 13 / 4 | 32 / 5 / 3 | 11 / 7 / 2 |
 
 The current-state task cohort often legitimately requires no new action. Judging
-only that cohort would obscure the cheaper models' missed or incorrect actions.
+only that cohort would omit arrival-time behavior; the archived labels do not
+establish how many cheaper-model actions were actually incorrect.
 The separate positive cohort is deliberately enriched and must not be pooled
 with current-state tasks to estimate a natural mailbox error rate.
 
@@ -57,7 +63,7 @@ indeterminate:
 | Positive arrival tasks | Kimi K3 | 0 | 3 | 14 | 1 | 2 |
 | Positive arrival tasks | GLM 5.2 | 0 | 6 | 9 | 1 | 4 |
 
-Retained failures include violating explicit owner/contact exclusions, converting
+The archived failure categories include allegations of violating explicit owner/contact exclusions, converting
 one-off quantities into minimum quantities, assigning prices to different products,
 learning STYLE from insufficient examples, and missing a pending action or
 contradicting the source workflow. A correct no-action with an unverified payment
@@ -181,7 +187,7 @@ attempt only, excluding time lost to outages and recovery scheduling.
 | Tasks, positive arrivals | GLM | 0.045626 | 0.002281 | 18.78 / 57.58 |
 
 K3 costs about 79% less for held-out memory and 76–78% less for tasks in these
-serving conditions. GLM costs about 94–97% less, with fewer acceptable positive-task labels in the revised sample. These labels
+serving conditions. GLM costs about 94–97% less. The historical positive-task labels are superseded. These labels
 are not independently validated business-quality estimates. None of these percentages includes the cost of human
 correction or downstream mistakes.
 
@@ -240,8 +246,8 @@ control grades are retained, not overwritten.
 | GLM, 10 | 5 / 4 / 1 | 1 / 0 | 8 |
 | K3, 10 planned | No responses | Not measurable | Not measurable |
 
-No new consequential loss appears against either the observed fresh controls or
-the frozen original development grades. Nevertheless, K3 coverage is absent and
+The archived grading recorded no new consequential loss against its controls;
+that judgment has not received exhaustive evidence-based regrading. Nevertheless, K3 coverage is absent and
 GLM still has consequential and schema errors. The complete candidate gate is
 not met; **no candidate held-out calls were made and no saved prompt was changed**.
 Opus's development improvement is promising, not held-out evidence of a general
@@ -351,7 +357,8 @@ ambient 12-month shelf life is a correct company fact, confirmed by the CTO.
 That downgrade is reversed consistently with the corresponding K3 judgment.
 Further uniform review corrects no-glass/cold-brew scope penalties, missed FAQ
 instructions and unknown payment/capability claims. The original quality
-recommendation is withdrawn. Updated main tables and JSON use the revised
-canonical grades; original snapshots and every adjudication are preserved.
+recommendation is withdrawn. Main tables and JSON preserve an intermediate revision of the
+canonical grades; their semantic interpretation is now superseded. Original
+snapshots and adjudications are preserved, and exhaustive regrading is pending.
 See the [correction note](2026-09-16-grading-correction.md) for exact distinctions,
 context limitations and the post-hoc status of the revised evaluation.

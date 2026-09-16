@@ -191,6 +191,60 @@ def test_paired_variants_require_explicit_mode(rig, tmp_path):
     assert all("arm" not in row and "model" not in row for row in rows)
 
 
+def test_evidence_binds_each_variant_full_context_and_resolved_clock(rig, tmp_path):
+    _, config, original, journal, run = rig
+    original["cases"][0]["datetime_line"] = "Datetime=2026-09-01T10:00Z"
+    original["cases"][0]["request"].update(
+        model="vendor/model-one",
+        thinking={"type": "disabled"},
+        messages=[{"role": "user", "content": "Latest reply: artwork ready. Memory: source A."}],
+        tools=[{"name": "decision", "input_schema": {"type": "object"}}],
+    )
+    Path(config["sources"][0]["manifest"]).write_text(json.dumps(original))
+    journal([response("original result")])
+    candidate = copy.deepcopy(original)
+    candidate["arm"] = "candidate"
+    candidate["cases"][0]["datetime_line"] = "Datetime=2026-09-02T10:00Z"
+    candidate["cases"][0]["request"].update(
+        system="Alternative synthetic policy",
+        messages=[{"role": "user", "content": "Latest reply: artwork changed. Memory: source B."}],
+        max_tokens=8192,
+        thinking={"type": "adaptive"},
+        output_config={"effort": "max"},
+    )
+    path = tmp_path / "candidate.json"
+    path.write_text(json.dumps(candidate))
+    directory = tmp_path / "candidate-results"
+    journal([response("candidate result")], directory)
+    config["sources"].append({"manifest": str(path), "results": str(directory)})
+    config["paired_variants"] = True
+    summary, rows = run()
+    bundles = json.loads((Path(config["output"]) / "evidence-by-label.json").read_text())
+    assert set(bundles) == {row["label"] for row in rows if row["content"] is not None}
+    assert summary["evidence_bundle_count"] == 2
+    assert summary["evidence_version"] == 2
+    for row in rows:
+        if row["content"] is None:
+            continue
+        bundle = bundles[row["label"]]
+        text = "\n".join(section["text"] for section in bundle["sections"])
+        if row["content"][0]["text"] == "original result":
+            assert "Synthetic source policy" in text
+            assert "artwork ready. Memory: source A." in text
+            assert "2026-09-01T10:00Z" in text
+            assert "Alternative synthetic policy" not in text
+        else:
+            assert "Alternative synthetic policy" in text
+            assert "artwork changed. Memory: source B." in text
+            assert "2026-09-02T10:00Z" in text
+            assert "Synthetic source policy" not in text
+        assert "decision" in text
+        assert "clock-one" not in text  # Case-specific injected clock wins over manifest fallback.
+        serialized = json.dumps(bundle)
+        for control in ("vendor/model-one", "max_tokens", "output_config", "thinking", "effort"):
+            assert control not in serialized
+
+
 def test_source_drift_propagates_instead_of_failing_a_model(rig):
     module, config, _, journal, _ = rig
     journal([response()])

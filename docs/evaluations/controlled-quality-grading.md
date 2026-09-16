@@ -132,3 +132,49 @@ where Opus itself is unacceptable. Stratified purposeful selection does not
 estimate mailbox-wide prevalence, and 50 threads cannot certify rare-error safety.
 If intervals are reported, describe the sampling assumption and retain clustering
 by thread; do not present calls or roles as independent binomial observations.
+
+## Version 2 evidence and separate judgments
+
+`engine/scripts/prepare_model_quality_grading.py` writes private
+`evidence-by-label.json` beside the blinded packs. Each returned output binds to
+its own captured system instructions, every message block, tool schema, tool
+choice and resolved clock. Paired variants cannot borrow another variant's
+context. Model/provider/effort/output-ceiling controls are excluded from these
+semantic sections. Section, input, output and bundle hashes preserve the binding.
+Missing responses do not receive evidence bundles.
+
+Optional configuration `review_authorities` names a JSON array of later review
+facts. Every record requires an `authority:` ID, exact text, timezone-aware ISO
+`timestamp`, `source` and `scope`. These facts remain separate from captured
+inputs and cannot change the original input hash. A sent message or generated
+memory is not automatically verified company policy; record its authorship,
+date, conflicts and authority limitations.
+
+A version 2 review includes `version`, `case_id`, `bundle_sha256`, `coverage`
+(the complete set of original section IDs), substantive `claims`, and four
+independent dimensions:
+
+| Dimension | Allowed judgments |
+|---|---|
+| `task_decision` | acceptable, unacceptable, indeterminate, not_applicable |
+| `explanation_grounding` | supported, contradicted, unsupported, not_applicable |
+| `claim_truth` | supported_true, supported_false, unknown, not_applicable |
+| `operational_impact` | decision_changed, explanation_only, unknown, not_applicable |
+
+Each claim gives a rationale, exact `output_quote`, and `source_refs` containing
+section ID, hash and exact source quotation. `model_quality_evidence.py` validates
+these bindings, declared coverage and category consistency. The summarizer invokes
+that validator before counting any version 2 review or separate dimension and
+checks that the bundle contains the actual packed output. An unacceptable task
+requires a grounded changed-decision judgment. Unsupported payment confirmation
+can coexist with a correct no-action decision; its real-world truth remains
+unknown. Grounding refers to cited review evidence, including separately recorded
+later authority, and does not claim that the model received that authority.
+
+This is a traceability check, not a truth detector: a reviewer can still overlook
+context or draw a wrong conclusion from a genuine quotation. Independent source
+review remains necessary. Legacy semantic scores are not automatically translated
+into these dimensions; they remain unassessed until explicitly reviewed. Usable
+response counts require actual recorded production-parser acceptance as well as
+completion and acceptable semantic/contract grades. An absent parser assessment
+is unassessed rather than a demonstrated paired loss.

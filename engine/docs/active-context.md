@@ -29,10 +29,16 @@ completion. See [spending protection](features/daily-llm-budget.md).
 Published Desktop v0.1.49 includes shared project RPC and the new model catalog.
 The [model comparison](../../docs/evaluations/2026-09-15-controlled-model-quality.md)
 and [reasoning comparison](../../docs/evaluations/2026-09-16-k3-reasoning-quality.md)
-have revised source/CTO-adjudicated grades. Initial grading penalized true company
-facts and misapplied supplied instructions; original quality recommendations are
-withdrawn. See [grading correction](../../docs/evaluations/2026-09-16-grading-correction.md).
-Repaired labels are calibration, not independent confirmation of business quality.
+have superseded semantic grades and withdrawn quality recommendations. Neither
+original nor intermediate counts establish business-decision error rates. The
+[disputed cases](../../docs/evaluations/2026-09-16-disputed-case-review.md) distinguish
+wrong tasks from unverified explanations. The offline preparer emits complete
+per-label evidence; version 2 reviews require exact quotations and separately
+assess decision, grounding, truth and impact. Legacy grades remain unassessed
+under that protocol. The [selected source review](../../docs/evaluations/2026-09-16-reviewed-model-comparison.md)
+covers all 240 selected outputs with separate action and explanation judgments.
+The captured saved memory prompt has contradictory FACT-format instructions;
+source review does not repair its runtime integration or change production.
 Reasoning transport, evaluation provider pins and increased experiment ceilings
 are not production configuration. Saved profiles remain paused.
 
