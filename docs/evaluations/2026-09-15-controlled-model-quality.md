@@ -13,9 +13,9 @@ Do not automatically replace Opus with either cheaper model across engine roles.
 K3 is the stronger memory candidate in this sample and costs substantially less,
 but it still introduces a consequential error on a case where Opus succeeds.
 For action-bearing task creation, Opus has the strongest observed quality; K3
-loses five paired cases and wins two, while GLM loses nine and wins none.
+loses four paired cases and wins two, while GLM loses eight and wins none.
 No alternative passes the preregistered gate of no new consequential losses.
-This is not evidence that Opus is error-free: it fails three positive-task cases.
+This is not evidence that Opus is error-free: it fails four positive-task cases.
 
 For current supervised work, retain Opus for tasks where a missed or incorrect
 action matters. K3 is a candidate for further supervised memory evaluation; it does not meet
@@ -38,7 +38,7 @@ judgments, not the fraction of individual facts that are wrong.
 
 | Model | Held-out memory, 40 | Held-out current-state tasks, 40 | Historical positive tasks, 20 |
 |---|---:|---:|---:|
-| Opus 5 | 20 / 17 / 3 | 29 / 9 / 2 | 17 / 3 / 0 |
+| Opus 5 | 20 / 17 / 3 | 29 / 9 / 2 | 16 / 4 / 0 |
 | Kimi K3 | 26 / 10 / 4 | 30 / 9 / 1 | 14 / 6 / 0 |
 | GLM 5.2 | 23 / 13 / 4 | 32 / 7 / 1 | 8 / 12 / 0 |
 
@@ -56,8 +56,8 @@ indeterminate:
 | Memory, held-out | GLM | 5 | 3 | 17 | 10 | 5 |
 | Tasks, current state | K3 | 3 | 3 | 26 | 6 | 2 |
 | Tasks, current state | GLM | 4 | 2 | 27 | 5 | 2 |
-| Tasks, positive arrivals | K3 | 2 | 5 | 12 | 1 | 0 |
-| Tasks, positive arrivals | GLM | 0 | 9 | 8 | 3 | 0 |
+| Tasks, positive arrivals | K3 | 2 | 4 | 12 | 2 | 0 |
+| Tasks, positive arrivals | GLM | 0 | 8 | 8 | 4 | 0 |
 
 Consequential errors include extracting an owner's colleague as an external
 contact; treating a shipping address or payment method as proof of shipment or
@@ -198,7 +198,7 @@ transport recoveries, not first-attempt availability statistics.
 | Tasks, current state (40) | Opus | 40 | 29 | 29 |
 | Tasks, current state (40) | K3 | 30 | 24 | 29 |
 | Tasks, current state (40) | GLM | 32 | 24 | 24 |
-| Tasks, positive arrivals (20) | Opus | 20 | 17 | 17 |
+| Tasks, positive arrivals (20) | Opus | 20 | 16 | 16 |
 | Tasks, positive arrivals (20) | K3 | 0 | 0 | 14 |
 | Tasks, positive arrivals (20) | GLM | 20 | 8 | 8 |
 
@@ -328,3 +328,18 @@ reviewed additional attempt, never a way to bypass an intent or uncertain hold.
 across models. Role-specific completion and service availability are separate
 from parser, contract and semantic grades. Dry-run reservation bounds are not
 predicted bills: actual token usage/provider cost determines settlement.
+
+## 2026-09-16 grading correction
+
+Direct inspection of paired outputs exposed an inconsistent source-grounding
+judgment in `arrival-bcf4ad4ed600-task`: both Opus and K3 assert shelf stability,
+although the source asks whether refrigeration is required and the supplied
+policy establishes only pasteurization and a 12-month shelf life. Opus was
+incorrectly accepted. Independent review confirms it must also fail.
+
+The canonical grade retains the original judgment in adjudication history and a
+byte-exact pre-correction file. The tables above and aggregate JSON are corrected:
+Opus positive-task acceptance is 16/20, not 17/20; K3 loses four paired cases to
+Opus, not five, and GLM loses eight, not nine. Costs, inputs, raw outputs,
+completion, contract grades and held-out results are unchanged. This correction
+narrows the observed task gap; it does not establish replacement equivalence.
