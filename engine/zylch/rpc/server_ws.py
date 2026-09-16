@@ -338,6 +338,7 @@ async def serve_ws(
     port: Optional[int] = None,
     warmup: bool = True,
     unix_path: Optional[str] = None,
+    capability_endpoint=None,
 ) -> None:
     """Run the WebSocket JSON-RPC server until cancelled.
 
@@ -352,6 +353,11 @@ async def serve_ws(
     auth path (no DB needed).
     """
     from websockets.asyncio.server import serve, unix_serve
+    from zylch.rpc.capability_ws import scoped_routes
+
+    # Trusted startup injection only; the CLI never supplies a pilot endpoint.
+    # Separate routing keeps service credentials out of owner RPC/FirebaseSession.
+    handshake, handler = scoped_routes(capability_endpoint, _process_request, _handle_connection)
 
     if warmup:
         _warmup()
@@ -370,9 +376,9 @@ async def serve_ws(
             os.unlink(unix_path)
         logger.info(f"[ws] serving JSON-RPC on unix:{unix_path}")
         server_cm = unix_serve(
-            _handle_connection,
+            handler,
             unix_path,
-            process_request=_process_request,
+            process_request=handshake,
             max_size=16 * 1024 * 1024,
             ping_interval=WS_PING_INTERVAL_SECONDS,
             ping_timeout=WS_PING_TIMEOUT_SECONDS,
@@ -380,10 +386,10 @@ async def serve_ws(
     else:
         logger.info(f"[ws] serving JSON-RPC on ws://{host}:{port}")
         server_cm = serve(
-            _handle_connection,
+            handler,
             host,
             port,
-            process_request=_process_request,
+            process_request=handshake,
             max_size=16 * 1024 * 1024,
             ping_interval=WS_PING_INTERVAL_SECONDS,
             ping_timeout=WS_PING_TIMEOUT_SECONDS,
@@ -409,6 +415,8 @@ async def serve_ws(
         try:
             await server.serve_forever()
         finally:
+            if capability_endpoint is not None:
+                capability_endpoint.close()
             auto_task.cancel()
             reaper_task.cancel()
             await asyncio.gather(auto_task, reaper_task, return_exceptions=True)

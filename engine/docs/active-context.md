@@ -15,6 +15,24 @@ retain their previous billing/model settings. Production's daily cap is USD20;
 the other three caps are USD5. Automatic processing is off and preparation is
 paused/not running in all four. Other hosted units retain their own release pins.
 
+The local `feat/mrcall-evolution-pilot` worktree contains inactive scoped reads
+for order existence and approved sentences from existing company memory.
+`ScopedCapabilities` fixes business/profile/company/contact grants at trusted
+startup; it never interprets a caller ID or spoken email as authorization.
+`CapabilityEndpoint` reserves `/assistant-capabilities/v1` on the existing
+WebSocket listener, accepts a dedicated Firebase service UID, and never enters
+owner RPC or replaces the owner session. Both TCP and Unix paths refuse when
+the endpoint is absent, as it is in normal CLI startup. Worker, replay, frame,
+request and connection limits are covered by offline tests with signed fixture
+JWTs and synthetic memory tables. Connection admission covers authentication
+through actual transport close; busy peers receive HTTP 429 before upgrade.
+Raw-peer regressions cover missing CLOSE acknowledgements, failed handshakes and
+admission recovery. No schema, memory store or daemon is added.
+The existing four-outcome order projection is unchanged. Real service identity,
+content/contact grants, provider packaging, channel wiring and activation remain
+unimplemented. The cross-repo work trace is in hb's
+`docs/execution-plans/2026-09-15-mrcall-scoped-engine-capabilities.md`.
+
 [K3 max](features/k3-reasoning.md) uses Chat completions pinned to DigitalOcean.
 The adapter promotes worker limits to a combined 8192-token reasoning/final cap
 before quote and budget admission. Synthetic live BYOK acceptance verifies a
