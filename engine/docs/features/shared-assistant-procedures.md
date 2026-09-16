@@ -81,17 +81,20 @@ The two-slot executor retains admission until abandoned blocking work actually
 finishes; no per-invocation executor or unlimited pending queue is created.
 
 Limits: 15 seconds per invocation, four model requests, six tool calls, four
-reads, at most 1,024 output tokens per model request and 4,000 reply characters.
+reads and 4,000 reply characters. The loop requests 1,024 output tokens per model
+request; the shared guarded client's model-specific reasoning policy applies.
 Each scoped read keeps its existing three-second horizon. The route owner must
 call `close()` at shutdown; closure refuses further output/admission.
 
-For K3 over OpenRouter or MrCall credits, the restricted policy supplies explicit
-adaptive/max reasoning controls and keeps the same 1,024-token **combined
-reasoning/final-output** cap. Ordinary engine workers retain their upstream
-8,192-token promotion. Quotation and reservation see the final restricted cap;
-truncation does not authorize tools or trigger a larger retry. This compatibility
-is checked through the actual guarded client with synthetic HTTP/quote edges,
-not certified as live K3 quality or latency for the pilot.
+For K3 over OpenRouter or MrCall credits, the shared client promotes the request
+to adaptive/max reasoning with an 8,192-token **combined reasoning/final-output**
+ceiling, exactly as for ordinary engine workers. The restricted policy supplies
+no model-specific override. Quotation and reservation see this final ceiling;
+settlement uses actual receipt cost. Truncation does not authorize tools or
+trigger a larger retry. This compatibility is checked through the actual guarded
+client with synthetic HTTP/quote edges, not certified as live K3 quality or
+latency within the unchanged 15-second invocation deadline.
+See the [budget correction record](../../../docs/execution-plans/2026-09-16-pilot-k3-upstream-budget.md).
 
 Only an accepted controlled completion reaches the existing `CreateDraftTool`.
 The adapter rereads source and scope, checks deadline and delivers cancellation

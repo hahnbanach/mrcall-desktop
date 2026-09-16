@@ -63,18 +63,10 @@ class ProcedurePolicy:
         if self._model_calls >= 4:
             raise TimeoutError("procedure model budget exhausted")
         self._model_calls += 1
-        if (
-            kwargs.get("model") or getattr(client, "model", None)
-        ) == "moonshotai/kimi-k3" and getattr(client, "transport", None) in ("openrouter", "proxy"):
-            # Ordinary K3 workers promote implicit controls to an 8192-token
-            # combined reasoning/output cap. This restricted host deliberately
-            # keeps its 1024-token cap: explicit supported controls suppress that
-            # promotion without bypassing quote, reservation or settlement.
-            # Invalid explicit controls still fail the guarded client's validator.
-            kwargs.setdefault("thinking", {"type": "adaptive"})
-            kwargs.setdefault("output_config", {"effort": "max"})
         # Keep the SAME guarded client: create_message_sync owns provider choice,
-        # reservations and settlement. Only scheduling changes: abandoned SDK work
+        # model-specific reasoning budgets, reservations and settlement. Do not
+        # override its K3 promotion: reasoning shares the final-output budget.
+        # Only scheduling changes: abandoned SDK work
         # retains a bounded slot rather than accumulating on the default executor.
         context = contextvars.copy_context()
         logger.debug(
