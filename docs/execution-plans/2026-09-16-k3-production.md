@@ -1,5 +1,5 @@
 ---
-status: active
+status: blocked
 ---
 # K3 production delivery
 
@@ -26,5 +26,20 @@ Brief: [K3 adoption](../briefs/2026-09-16-k3-production.md).
 - Server billing suite: 108 passing tests against disposable PostgreSQL.
 - Current four 124 profiles verified with automatic update disabled and
   preparation paused/not running. Their caps are preserved (20/5/5/5 USD).
-- Server implementation is 99091c3; test CI pipeline 2854291723 is running.
-  Deployment and profile activation are not yet complete.
+- Server implementation 99091c3 is deployed to test and production; pipelines
+  2854291723 and 2854312079 succeeded. Scoped ingress timeout changes preserve
+  the running configuration; infrastructure commit 295eb8e is local (no remote).
+- Engine release 8d83193 is pinned on the four units. Production uses custom K3
+  for its base model, five worker roles and reply classification. Other profile
+  values are unchanged. Protected rollback copies are under
+  `/root/mrcall-k3-rollout-20260916` on the engine host.
+- Production authenticated identity, available K3 credit catalog and paused/not
+  running preparation assertions pass. BYOK and credit translated payloads match
+  on a system-block/function-history fixture.
+- Paid acceptance is blocked by HTTP402 insufficient MrCall credits before
+  server admission/provider dispatch. No credit debit or live K3 answer was
+  obtained. The isolated USD0.30 test ledger retains USD0.209 as a conservative
+  reservation; it does not affect hosted profile budgets. An earlier local
+  preflight rejected an uninitialized test ledger before dispatch.
+- Remaining: a funded credit response/receipt smoke, and the billing preference
+  for the other three profiles. No backlog resumption is authorized by this plan.

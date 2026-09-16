@@ -8,23 +8,22 @@ are preserved in [active-context-archive.md](active-context-archive.md).
 
 ## State now
 
-[K3 max adoption](features/k3-reasoning.md) is implemented in source and under
-rollout: explicit Chat reasoning controls are bound before budget admission for
-both BYOK and credits. The live model selection below has not yet changed.
+[K3 max adoption](features/k3-reasoning.md) is deployed on four Café124 units
+in isolated release `8d83193`. The credit server is `prod-99091c35`. Both payment
+paths bind maximum reasoning and an 8192-token combined cap before admission.
+Production is configured as custom K3 through MrCall credits, including all five
+worker roles and reply classification. The other three profiles retain their
+previous billing/model settings pending the CTO's billing preference.
 
-Four Café124 units run reviewed isolated release `10477fd` behind
-`wss://desktop.mrcall.ai`. Billing server `prod-a522596c` provides bounded
-OpenRouter calls charged from actual decimal costs and a configured model
-catalog. Personal-key routing supports Claude, GLM and K3 with provider caps.
-Authenticated `llm.models` checks pass for personal and MrCall-credit catalogs.
+Authenticated production identity, credit model catalog and paused preparation
+checks pass. The production K3 quote passes. A synthetic execute returned HTTP402
+before provider dispatch because MrCall credits were insufficient; no paid K3
+response was verified. Its isolated USD0.30 test ledger retains a USD0.209 hold,
+separate from hosted profile budgets. No inference retry was attempted.
 
-Rechecked 2026-09-16: production has a USD20 daily cap and the other three
-have USD5 caps. Saved economy models, automatic processing off and preparation
-paused remain in place. Three retain personal Anthropic keys; one retains MrCall credits.
-Services are active and no mailbox processing was resumed. Other hosted units
-follow normal source reconciliation. New automatic processing defaults off.
-A synthetic production GLM credit call returned OK with a verified one-credit
-debit. The isolated comparison budget includes that debit and prior holds.
+Production retains its current USD20/day cap; the other three retain USD5/day.
+All four retain automatic processing off and preparation paused/not running.
+No mailbox backlog was resumed. Other hosted units were not restarted.
 
 Failed extraction checkpoints (1,962 + 40) remain pending, with private backups
 and task checkpoints preserved. Three-candidate merge selection and complete-
@@ -44,15 +43,16 @@ covers all 240 selected outputs with separate action and explanation judgments.
 Captured saved memory prompts have contradictory FACT-format instructions.
 Source now appends a serialization-only contract without retraining or changing
 business rules. This has not been re-evaluated for model quality. K3 max runtime
-support is under rollout; saved profiles remain paused.
+support is deployed; saved profiles remain paused.
 
-Source email extraction and task detection ceilings are 4096 and 2048 output
-tokens, with completion guards and spending admission preserved. Complete tool
+Email extraction and task detection request 4096 and 2048 output tokens; the
+K3 adapter promotes both to its combined 8192-token reasoning/final ceiling.
+Completion guards and spending admission are preserved. Complete tool
 responses labelled `end_turn` are normalized by the shared compatible-response
 wrapper; malformed, refused or truncated responses remain rejected. Generic
 trainer FACT instructions and FACT value parsing are corrected in source.
-These changes are absent from the pinned hosted release; saved trained prompts
-and model selections remain unchanged. The earlier three-case evaluation is
+These changes are included in the pinned hosted release. Saved prompt records
+are unchanged; the serialization instruction is appended at runtime. The earlier three-case evaluation is
 superseded by the controlled comparison for model-selection decisions.
 
 Shared written project memory is deployed. Dedicated project documents,
