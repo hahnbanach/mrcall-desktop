@@ -22,6 +22,7 @@ The repo has three parallel doc trees, mirroring the three index files. Each tre
 
 ## Index
 
+- [K3 reasoning comparison](evaluations/2026-09-16-k3-reasoning-quality.md) — controlled disabled/max reasoning quality, observed costs and deployment boundary.
 - [Controlled model comparison](evaluations/2026-09-15-controlled-model-quality.md) — 360-response role-specific quality, costs, compatibility and deployment decision.
 
 - [OpenRouter credits](briefs/2026-09-13-openrouter-credits.md) — payment/model boundaries and [delivery plan](execution-plans/2026-09-13-openrouter-credits.md).

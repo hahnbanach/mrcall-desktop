@@ -109,6 +109,17 @@ patterns, not an IID sample of all customers. Repeated outputs do not increase
 the number of independent episodes. No observed result proves zero errors or
 model equivalence.
 
+## Reasoning configuration clarification (2026-09-16)
+
+The original OpenRouter adapter explicitly sends `thinking: disabled` for all
+models. K3's advertised default effort therefore did not apply. Reconstruction
+of all 20 arrival wire hashes confirms this setting, and their reported thinking
+token counts are zero. These results compare the engine's non-thinking request
+configuration, not maximum-effort K3. The
+[explicit reasoning experiment](../execution-plans/2026-09-16-k3-reasoning-quality.md)
+is a separate controlled comparison; its results must not be inferred from this
+report's quality or cost figures.
+
 ## Serving conditions and diagnosed failures
 
 Historical equal-input Opus controls retained the actual 1024-token memory and

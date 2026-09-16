@@ -31,10 +31,12 @@ processing off and preparation paused. No mailbox backlog was resumed.
 See [delivery plan](execution-plans/2026-09-13-openrouter-credits.md).
 
 The [controlled comparison](evaluations/2026-09-15-controlled-model-quality.md)
-covers 360 main responses with source-grounded grading. Neither K3 nor GLM meets
-the preregistered replacement gate. Model selection remains separate from billing
-configuration; automatic backlogs stay paused. Engine source includes completion
-and compatibility fixes absent from the pinned hosted release.
+covers 360 main responses with thinking disabled. The subsequent
+[reasoning experiment](evaluations/2026-09-16-k3-reasoning-quality.md) covers 180
+outputs: maximum K3 reasoning improves memory semantics, but positive-arrival
+tasks retain consequential losses. No configuration is promoted and automatic
+backlogs stay paused. Completion fixes and evaluation-only reasoning transport
+exist in source; the pinned hosted release and saved models remain unchanged.
 
 Desktop includes the V1 Desktop → engine → operator setup journey.
 Desktop opens Setup by default: configuration, authenticated remote connection,

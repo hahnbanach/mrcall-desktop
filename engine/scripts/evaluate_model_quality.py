@@ -10,6 +10,7 @@ from __future__ import annotations
 import argparse
 import fcntl
 import hashlib
+import importlib.util
 import json
 import logging
 import os
@@ -20,6 +21,7 @@ import threading
 import time
 from collections import Counter
 from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, wait
+from contextlib import ExitStack
 from contextvars import ContextVar
 from datetime import datetime
 from decimal import Decimal
@@ -73,7 +75,40 @@ def validate_scratch(root):
     return marker
 
 
+def reasoning_support(manifest, marker):
+    """Enable reviewed reasoning only inside this isolated evaluation process."""
+    config = manifest.get('reasoning_experiment')
+    if config is None:
+        return None
+    expected = {'version': 1, 'model': 'moonshotai/kimi-k3',
+                'provider': 'digitalocean', 'effort': 'max',
+                'allowed_caps': [2048, 4096, 8192]}
+    if config.get('version') == 2:
+        expected.update(version=2, wire_protocol='chat-completions-v1')
+    if config != expected or marker.get('reasoning_experiment') != expected:
+        raise ValueError('Reasoning experiment lacks exact ledger authorization')
+    if any(c['model'] != expected['model'] for c in manifest['cells']):
+        raise ValueError('Reasoning experiment supports K3 only')
+    route = manifest.get('routing', {}).get(expected['model'], {})
+    if route.get('only') != [expected['provider']]:
+        raise ValueError('Reasoning comparison requires the frozen provider')
+    path = Path(__file__).with_name('evaluation_reasoning_transport.py')
+    spec = importlib.util.spec_from_file_location('evaluation_reasoning_transport', path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
 def main():
+    with ExitStack() as cleanup:
+        run(cleanup)
+
+
+def write_wire(path, body):
+    path.write_text(json.dumps(body, ensure_ascii=False))
+
+
+def run(cleanup):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--manifest', type=Path, required=True)
     parser.add_argument('--ledger', type=Path, required=True)
@@ -100,6 +135,11 @@ def main():
         raise ValueError('Wrong database binding')
     import zylch.llm.client as llm
     from zylch.llm import budget
+    reasoning = reasoning_support(manifest, marker)
+    if reasoning is not None:
+        cleanup.enter_context(reasoning.pricing_override(
+            reviewed_experiment=True,
+            protocol=manifest['reasoning_experiment'].get('wire_protocol', 'messages-v1')))
     from zylch.llm.openrouter_pricing import RATES, request_bound
     from zylch.llm.usage import call_site
     # Fixed accounting day retains prior experiment liabilities across midnight.
@@ -180,7 +220,12 @@ def main():
                'model': cell['model'], 'stage': case['stage']}
         try:
             client = llm.LLMClient('openrouter', api_key=key, model=cell['model'])
-            with httpx.Client(timeout=180, follow_redirects=False,
+            if reasoning is not None:
+                cls = (reasoning.ChatReasoningEvaluationClient
+                       if manifest['reasoning_experiment'].get('wire_protocol') == 'chat-completions-v1'
+                       else reasoning.ReasoningEvaluationClient)
+                client._client = cls(key)
+            with httpx.Client(timeout=600 if reasoning is not None else 180, follow_redirects=False,
                               event_hooks={'request': [observe_request], 'response': [observe]}) as http:
                 class RoutedHTTP:
                     def post(self, url, *, json, headers):
@@ -188,6 +233,9 @@ def main():
                         if override:
                             json['provider']['only'] = override['only']
                         response_meta['wire_sha256'] = digest(json)
+                        if reasoning is not None:
+                            response_meta['reasoning_controls'] = {k: json.get(k) for k in ('thinking', 'output_config', 'reasoning', 'max_tokens')}
+                            write_wire(args.output / (cell['id'] + '.request.json'), json)
                         response_meta['provider_policy'] = json['provider']
                         return http.post(url, json=json, headers={**headers, 'X-OpenRouter-Metadata': 'enabled'})
                 client._client._http = RoutedHTTP()
@@ -195,7 +243,8 @@ def main():
                     response = client.create_message_sync(**case['request'])
             row.update(status='returned', response=json.loads(json.dumps(response._raw, default=vars)))
             expected_stop = 'tool_use' if case['stage'] == 'task.detect' else 'end_turn'
-            row['completion_ok'] = row['response'].get('stop_reason') == expected_stop
+            row['completion_ok'] = (row['response'].get('stop_reason') == expected_stop
+                                    and not row['response'].get('validation_error'))
             # Completed text in place of a mandatory tool is a contract failure,
             # not an outage. Preserve it for grading; do not retry it.
             row['availability_ok'] = row['response'].get('stop_reason') in ('end_turn', 'tool_use')

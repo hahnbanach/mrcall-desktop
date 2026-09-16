@@ -28,11 +28,13 @@ response validation retain LLM judgement without runaway comparisons or false
 completion. See [spending protection](features/daily-llm-budget.md).
 Published Desktop v0.1.49 includes shared project RPC and the new model catalog.
 The [controlled comparison](../../docs/evaluations/2026-09-15-controlled-model-quality.md)
-is complete for all 360 main responses. Neither K3 nor GLM meets the no-new-
-consequential-loss gate for automatic replacement of Opus. K3 is the stronger
-memory candidate; Opus has the strongest observed positive-task quality.
-Optional prompt-candidate coverage is incomplete and no candidate is promoted.
-Evaluation provider pins are not production configuration.
+covers 360 main outputs with thinking disabled. The subsequent
+[reasoning experiment](../../docs/evaluations/2026-09-16-k3-reasoning-quality.md)
+covers 180 outputs across three K3 configurations. Maximum reasoning improves
+memory semantics but retains format failures and new consequential arrival-task
+errors. No model or prompt candidate meets the general replacement gate.
+The reasoning transport is evaluation-only; provider pins, increased ceilings
+and effort controls are not production configuration. Saved profiles stay paused.
 
 Source email extraction and task detection ceilings are 4096 and 2048 output
 tokens, with completion guards and spending admission preserved. Complete tool

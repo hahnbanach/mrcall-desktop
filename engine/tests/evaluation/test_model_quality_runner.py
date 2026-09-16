@@ -332,3 +332,123 @@ def test_completed_wrong_contract_is_graded_without_availability_circuit(rig):
     assert not any(r["event"] == "not_dispatched" for r in rows)
     # Reconstructed streaks on resume obey the same distinction.
     run(lambda request: pytest.fail("completed contract failures replayed"))
+
+
+def reasoning_fixture(root, manifest):
+    config = {'version': 1, 'model': 'moonshotai/kimi-k3',
+              'provider': 'digitalocean', 'effort': 'max',
+              'allowed_caps': [2048, 4096, 8192]}
+    route = {'input_rate': '2.648138063', 'output_rate': '13.28272425',
+             'only': ['digitalocean']}
+    manifest['reasoning_experiment'] = config
+    manifest['routing'] = {config['model']: route}
+    manifest['cells'][0]['model'] = config['model']
+    manifest['cases'][0]['request'].update(max_tokens=8192,
+        thinking={'type': 'adaptive'}, output_config={'effort': 'max'})
+    marker_path = root / 'evaluation-ledger.json'
+    marker = json.loads(marker_path.read_text())
+    marker.update(reasoning_experiment=config, reviewed_routing=manifest['routing'])
+    marker_path.write_text(json.dumps(marker))
+
+
+def test_reasoning_wire_is_explicit_reserved_recorded_and_pricing_restored(rig):
+    _, root, out, manifest, run = rig
+    reasoning_fixture(root, manifest)
+    original = pricing.request_bound
+
+    def respond(request):
+        assert budget.budget_snapshot('synthetic')['reserved_usd'] > 0
+        body = json.loads(request.content)
+        assert body['thinking'] == {'type': 'adaptive'}
+        assert body['output_config'] == {'effort': 'max'}
+        assert body['provider']['only'] == ['digitalocean']
+        return httpx.Response(200, json={'model': 'moonshotai/kimi-k3',
+            'content': [{'type': 'thinking', 'thinking': 'private synthetic reasoning'},
+                        {'type': 'text', 'text': 'SKIP'}], 'stop_reason': 'end_turn',
+            'usage': {'input_tokens': 20, 'output_tokens': 40, 'cost': .0005,
+                      'output_tokens_details': {'thinking_tokens': 35}}})
+
+    rows = run(respond)
+    result = rows[-1]
+    assert result['status'] == 'returned'
+    assert result['response']['content'] == [{'type': 'text', 'text': 'SKIP'}]
+    assert result['response']['raw_content'][0]['type'] == 'thinking'
+    assert result['http']['reasoning_controls']['max_tokens'] == 8192
+    assert 'Authorization' not in (out / 'cell-one.request.json').read_text()
+    assert budget.budget_snapshot('synthetic')['reserved_usd'] == 0
+    assert pricing.request_bound is original
+
+
+def test_reasoning_without_matching_marker_never_dispatches(rig):
+    _, root, _, manifest, run = rig
+    reasoning_fixture(root, manifest)
+    marker = root / 'evaluation-ledger.json'
+    data = json.loads(marker.read_text())
+    del data['reasoning_experiment']
+    marker.write_text(json.dumps(data))
+    with pytest.raises(ValueError, match='authorization'):
+        run(lambda request: pytest.fail('Unauthorized reasoning dispatched'))
+
+
+def test_reasoning_invalid_controls_restore_pricing_before_dispatch(rig):
+    _, root, _, manifest, run = rig
+    reasoning_fixture(root, manifest)
+    manifest['cases'][0]['request']['output_config']['effort'] = 'high'
+    original = pricing.request_bound
+    with pytest.raises(Exception, match='exact max effort'):
+        run(lambda request: pytest.fail('Unreviewed effort dispatched'))
+    assert pricing.request_bound is original
+
+
+def test_reasoning_bad_content_is_settled_but_not_complete(rig):
+    _, root, _, manifest, run = rig
+    reasoning_fixture(root, manifest)
+    rows = run(lambda request: httpx.Response(200, json={
+        'model': 'moonshotai/kimi-k3', 'stop_reason': 'end_turn',
+        'content': [{'type': 'unknown', 'data': 'not final answer'}],
+        'usage': {'input_tokens': 10, 'output_tokens': 20, 'cost': .0003}}))
+    result = rows[-1]
+    assert result['status'] == 'returned'
+    assert result['response']['validation_error']
+    assert not result['completion_ok']
+    assert budget.budget_snapshot('synthetic')['reserved_usd'] == 0
+
+
+def test_chat_reasoning_runner_preserves_forced_tool_and_wire_receipt(rig):
+    _, root, out, manifest, run = rig
+    reasoning_fixture(root, manifest)
+    manifest['reasoning_experiment'].update(version=2, wire_protocol='chat-completions-v1')
+    marker_path = root / 'evaluation-ledger.json'
+    marker = json.loads(marker_path.read_text())
+    marker['reasoning_experiment'] = manifest['reasoning_experiment']
+    marker_path.write_text(json.dumps(marker))
+    manifest['cases'][0]['stage'] = 'task.detect'
+    request = manifest['cases'][0]['request']
+    request['system'] = [{'type': 'text', 'text': 'Frozen owner instructions'}]
+    request['tools'] = [{'name': 'task_decision', 'description': 'Decide',
+                         'input_schema': {'type': 'object'}}]
+    request['tool_choice'] = {'type': 'tool', 'name': 'task_decision'}
+
+    def respond(req):
+        assert str(req.url).endswith('/chat/completions')
+        body = json.loads(req.content)
+        assert body['reasoning'] == {'effort': 'max'}
+        assert body['tool_choice'] == {'type': 'function', 'function': {'name': 'task_decision'}}
+        assert body['tools'][0]['function']['parameters'] == {'type': 'object'}
+        assert body['provider']['only'] == ['digitalocean']
+        assert budget.budget_snapshot('synthetic')['reserved_usd'] > 0
+        return httpx.Response(200, json={'id': 'gen-test', 'model': 'moonshotai/kimi-k3',
+            'provider': 'DigitalOcean', 'choices': [{'finish_reason': 'tool_calls',
+              'message': {'role': 'assistant', 'content': None, 'reasoning': 'private',
+                'tool_calls': [{'id': 'call1', 'type': 'function',
+                               'function': {'name': 'task_decision', 'arguments': '{}'}}]}}],
+            'usage': {'prompt_tokens': 40, 'completion_tokens': 60, 'cost': .0008,
+                      'completion_tokens_details': {'reasoning_tokens': 50}}})
+
+    result = run(respond)[-1]
+    assert result['status'] == 'returned'
+    assert result['completion_ok']
+    assert result['http']['reasoning_controls']['reasoning'] == {'effort': 'max'}
+    assert result['response']['usage']['output_tokens_details']['thinking_tokens'] == 50
+    assert budget.budget_snapshot('synthetic')['reserved_usd'] == 0
+    assert (out / 'cell-one.request.json').exists()
