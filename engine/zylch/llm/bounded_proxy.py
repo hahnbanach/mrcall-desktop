@@ -89,7 +89,7 @@ class BoundedProxyClient:
             timeout = 5 if method == 'GET' else 180
             request = (body or {}).get('request', {})
             if path == '/execute' and request.get('model') == 'moonshotai/kimi-k3' and request.get('thinking') == {'type': 'adaptive'}:
-                timeout = 600
+                timeout = 660
             with httpx.Client(timeout=timeout, follow_redirects=False) as client:
                 return send(client)
         except (httpx.HTTPError, ValueError):
