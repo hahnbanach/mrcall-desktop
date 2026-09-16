@@ -44,12 +44,15 @@ class ChatService:
     # re-triggering on every message.
     _auto_sync_triggered: set = set()
 
-    def __init__(self):
+    def __init__(self, *, pilot_email_route=None):
         """Initialize chat service.
 
         The service uses lazy initialization - the agent is only created
         when the first message is processed.
         """
+        # Optional trusted startup selection; normal RPC construction passes none.
+        # The request/context itself can never install a pilot route or its grants.
+        self._pilot_email_route = pilot_email_route
         self.agent = None  # Lazy initialization
         self._initialized = False
         self.storage = Storage.get_instance()
@@ -175,6 +178,11 @@ class ChatService:
                 "session_id": str  # Echo back session_id if provided
             }
         """
+        # This must precede notifications, auto-sync, task/command routing and
+        # owner tool construction. A failed selected reply is NOT ordinary chat.
+        route = getattr(self, "_pilot_email_route", None)
+        if route is not None:
+            return await route.process(self.storage, user_id, context)
         start_time = time.time()
         logger.info(f"process_message: user_message={repr(user_message)}, user_id={user_id}")
 

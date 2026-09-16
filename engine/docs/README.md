@@ -47,6 +47,7 @@ Complete documentation for Zylch standalone (local CLI sales intelligence tool).
 | File | Content |
 |------|---------|
 | [features/entity-memory-system.md](features/entity-memory-system.md) | Entity-centric memory with hybrid search |
+| [features/shared-assistant-procedures.md](features/shared-assistant-procedures.md) | Inactive shared phone/email procedure contract and restricted email path |
 | [features/email-archive.md](features/email-archive.md) | Email archive with IMAP sync |
 | [features/email-triage.md](features/email-triage.md) | Email triage and auto-reply detection |
 | [features/task-management.md](features/task-management.md) | Task system (4-level urgency) |

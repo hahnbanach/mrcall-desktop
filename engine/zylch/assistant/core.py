@@ -136,6 +136,7 @@ class ZylchAIAgent(BaseConversationalAgent):
         model_selector: Optional[ModelSelector] = None,
         max_tokens: int = 4096,
         triggered_instructions: Optional[List[str]] = None,
+        procedure_policy=None,
     ):
         """Initialize Zylch AI agent.
 
@@ -144,7 +145,14 @@ class ZylchAIAgent(BaseConversationalAgent):
             model_selector: Model selection logic (optional)
             max_tokens: Maximum tokens for response
             triggered_instructions: List of triggered instructions (optional, for prompt injection)
+            procedure_policy: Trusted restricted invocation policy; incompatible with
+                owner tools/instructions and never selected by model or chat input.
         """
+        # This is trusted constructor injection, never a chat/context flag. A
+        # restricted invocation must not accidentally retain the owner tool set.
+        if procedure_policy is not None and (tools or triggered_instructions):
+            raise ValueError("procedure invocation cannot contain owner tools/instructions")
+        self.procedure_policy = procedure_policy
         self.client: LLMClient = make_llm_client()
         self.tools = tools
         self.tool_map = {tool.name: tool for tool in tools}
@@ -170,6 +178,9 @@ class ZylchAIAgent(BaseConversationalAgent):
         Returns:
             List of tool schemas
         """
+        policy = getattr(self, "procedure_policy", None)
+        if policy is not None:
+            return policy.schemas()
         schemas = [tool.get_schema() for tool in self.tools]
         tool_names = [s["name"] for s in schemas]
         logger.info(f"Tools available to Claude: {tool_names}")
@@ -263,8 +274,9 @@ class ZylchAIAgent(BaseConversationalAgent):
         # same day/hour. The current date/time is injected into the user
         # message below, AFTER the cache breakpoint, so minute-granular
         # time updates don't invalidate the cached history.
-        system_prompt = get_system_prompt_base()
-        if context and context.get("current_business_id"):
+        policy = getattr(self, "procedure_policy", None)
+        system_prompt = policy.prompt if policy is not None else get_system_prompt_base()
+        if policy is None and context and context.get("current_business_id"):
             system_prompt += f"\n\n**CURRENT SESSION:**\n✅ Selected MrCall Assistant: {context['current_business_id']}\nYou CAN save contacts directly to this assistant."
 
         # Inject user personal data / notes / secret instructions into the
@@ -273,14 +285,16 @@ class ZylchAIAgent(BaseConversationalAgent):
         # keeps the cache valid across turns while still letting them
         # steer every chat response.
         owner_id_for_prefs = context.get("user_id") if context else None
-        personal_section = get_personal_data_section(owner_id=owner_id_for_prefs)
+        personal_section = (
+            get_personal_data_section(owner_id=owner_id_for_prefs) if policy is None else ""
+        )
         if personal_section:
             system_prompt += f"\n\n**USER CONTEXT:**{personal_section}"
 
         # Inject triggered instructions (for prompt awareness - NOT for execution)
         # Note: Trigger execution happens elsewhere (e.g., ChatService.execute_session_start_triggers)
         # This just makes the AI aware of the triggers in case they're relevant during conversation
-        if self.triggered_instructions:
+        if policy is None and self.triggered_instructions:
             instructions_text = "\n".join(f"- {instr}" for instr in self.triggered_instructions)
             system_prompt += f"\n\n**TRIGGERED INSTRUCTIONS (event-driven, for reference):**\n{instructions_text}"
             logger.info(
@@ -306,7 +320,7 @@ class ZylchAIAgent(BaseConversationalAgent):
             "\n\n[CURRENT DATE/TIME — "
             f"{now.strftime('%A, %B %d, %Y')}, {now.strftime('%H:%M')}]"
             "\n\n"
-            f"{get_channel_status_block()}"
+            f"{get_channel_status_block() if policy is None else ''}"
         )
 
         # Create message with tool support (with current date/time)
@@ -416,6 +430,11 @@ class ZylchAIAgent(BaseConversationalAgent):
             if hasattr(block, "text"):
                 assistant_message += block.text
 
+        # A model that skips the completion tool has produced no releasable
+        # evidence-backed reply. Never let its prose escape through this exit.
+        if policy is not None:
+            assistant_message = policy.final_text()
+
         # Add final response to history
         self.conversation_history.append({"role": "assistant", "content": assistant_message})
 
@@ -452,7 +471,11 @@ class ZylchAIAgent(BaseConversationalAgent):
             f"[chat turn={turn_id} step={step}] prompt estimate={estimated} tokens"
             f" budget={PROMPT_TOKEN_BUDGET}"
         )
-        return await self.client.create_message(
+        policy = getattr(self, "procedure_policy", None)
+        dispatch = self.client.create_message if policy is None else (
+            lambda **kwargs: policy.create_message(self.client, **kwargs)
+        )
+        return await dispatch(
             messages=messages,
             system=system_blocks,
             tools=tools,
@@ -481,6 +504,11 @@ class ZylchAIAgent(BaseConversationalAgent):
             Tuple of (tool_results for Anthropic API, direct_response if applicable)
             If direct_response is not None, skip the second LLM call and return it directly.
         """
+        # The restricted branch bypasses both the owner registry and its verbose
+        # argument/result logging. The ordinary approval flow below is unchanged.
+        policy = getattr(self, "procedure_policy", None)
+        if policy is not None:
+            return await policy.execute_tools(content)
         results = []
         direct_response = None
         tid = turn_id or get_turn_id()
