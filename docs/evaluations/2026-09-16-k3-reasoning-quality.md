@@ -1,8 +1,9 @@
 # K3 reasoning and output-budget comparison
 
-Status: complete. All 180 outputs graded; no production promotion. Maximum
-reasoning improves memory semantics on this corpus but does not improve positive-
-arrival task quality enough to justify a general switch.
+Status: inference complete; grades revised after confirmed reviewer errors.
+The original quality recommendation and failure examples are withdrawn. Revised
+labels below are post-hoc calibration, not independent business-quality validation.
+See the [correction and concrete evidence](2026-09-16-grading-correction.md).
 
 ## Question and controlled conditions
 
@@ -33,7 +34,7 @@ not increase independent sample size.
 
 These inputs are exposed diagnostic cases from one company, not a new held-out
 confirmation set or an IID mailbox sample. Historical Opus grades are a semantic
-reference, including the corrected 16/20 positive-task count; they are not a
+reference, using the revised labels and explicit indeterminate cases; they are not a
 contemporaneous Chat-protocol control. Each cell has one intended generation;
 there is no retry to replace an incorrect model answer.
 
@@ -76,9 +77,10 @@ determines whether remaining cells can run.
 Three blinded AI-agent grading partitions see only final outputs, common source requests
 and frozen source-based rubrics. Arm identities, provider metadata, reasoning
 text, costs and per-arm control fields are withheld. Existing policy ambiguities
-remain indeterminate where appropriate. Unsupported claims, internal-entity
-exclusion violations, invented completion and missed operative actions are
-consequential failures regardless of which arm produced them.
+remain indeterminate where appropriate. Source-contradicted actions, internal-entity exclusion violations and missed
+operative actions are task failures. An unverified business fact is not thereby
+false. Later CTO evidence and full-input review revise initial judgments uniformly
+across arms; the correction is recorded separately from the frozen model inputs.
 
 Semantic quality, independent tool/schema contract, raw completion and current
 parser acceptance are separate. Shared business clusters stay within one grading
@@ -97,67 +99,76 @@ Official protocol references: [reasoning controls](https://openrouter.ai/docs/gu
 [Messages API](https://openrouter.ai/docs/api/api-reference/anthropic-messages/create-a-message),
 [K3 endpoint metadata](https://openrouter.ai/api/v1/models/moonshotai/kimi-k3/endpoints).
 
-## Results and decision
+## Revised results and interpretation
 
-All 180 Chat generations returned from the pinned provider and were graded
-exactly once. Maximum reasoning is a promising memory configuration, but it is
-**not an acceptable blanket replacement** for disabled reasoning or historical
-Opus. On positive arrival tasks, maximum reasoning corrects four determinate
-errors and introduces five relative to the equal-ceiling disabled control.
-No production default is promoted.
+All 180 Chat generations returned and were graded exactly once. Subsequent review
+corrected business-fact penalties, overlooked supplied instructions, and the
+conflation of unverified explanations with operational failures. The original
+claim that maximum reasoning introduced five consequential arrival errors is
+withdrawn: the revised equal-ceiling comparison has two corrections, one new
+source-contradicted workflow error and four indeterminate pairs.
 
-Counts below retain all 20 planned requests per cohort. `Usable` requires an
-acceptable semantic judgment, acceptable independent contract judgment and parser
-acceptance. An indeterminate answer is not counted as successful.
+The CTO confirms 12-month ambient shelf life and cans-only cold-brew production.
+These are accurate company facts. The model's Brazil/private-label distinction
+also follows the FAQ already present in its input. Neither should have been
+presented as an invented business fact. These grading errors affect multiple
+arms and historical models, not only maximum K3.
+
+All 20 planned requests remain in each cohort. `Usable` is the conservative
+conjunction of acceptable whole-response judgment, acceptable independent
+contract and parser acceptance. It is not the number of correct task decisions:
+a correct no-action with an unverified payment explanation remains indeterminate
+as a whole response, even though its operational decision is acceptable.
 
 | Cohort | Arm | Acceptable | Unacceptable | Indeterminate | Parser accepted | Usable |
 |---|---|---:|---:|---:|---:|---:|
 | Memory | off-original | 10 | 7 | 3 | 17 | 9 |
 | Memory | off-8192 | 9 | 8 | 3 | 18 | 9 |
 | Memory | max-8192 | 14 | 2 | 4 | 16 | 11 |
-| Current-state tasks | off-original | 17 | 3 | 0 | 20 | 17 |
+| Current-state tasks | off-original | 17 | 2 | 1 | 20 | 17 |
 | Current-state tasks | off-8192 | 14 | 6 | 0 | 20 | 11 |
-| Current-state tasks | max-8192 | 18 | 2 | 0 | 20 | 18 |
-| Positive arrival tasks | off-original | 9 | 10 | 1 | 20 | 9 |
-| Positive arrival tasks | off-8192 | 13 | 6 | 1 | 20 | 13 |
-| Positive arrival tasks | max-8192 | 12 | 7 | 1 | 20 | 12 |
+| Current-state tasks | max-8192 | 18 | 1 | 1 | 20 | 18 |
+| Positive arrival tasks | off-original | 10 | 8 | 2 | 20 | 10 |
+| Positive arrival tasks | off-8192 | 16 | 3 | 1 | 20 | 16 |
+| Positive arrival tasks | max-8192 | 15 | 2 | 3 | 20 | 15 |
 
-The equal-ceiling paired comparison is more informative than aggregate totals:
+Paired outcomes exclude a pair if either whole-response judgment is indeterminate.
+Counts can therefore differ from subtraction of marginal acceptable totals.
 
-| max-8192 versus off-8192 | Corrected errors | New errors | Both acceptable | Both unacceptable | Indeterminate pairs |
+| max-8192 versus off-8192 | Corrected failures | New failures | Both acceptable | Both unacceptable | Indeterminate pairs |
 |---|---:|---:|---:|---:|---:|
 | Memory | 6 | 1 | 8 | 1 | 4 |
-| Current-state tasks | 5 | 1 | 13 | 1 | 0 |
-| Positive arrival tasks | 4 | 5 | 7 | 2 | 2 |
+| Current-state tasks | 5 | 0 | 13 | 1 | 1 |
+| Positive arrival tasks | 2 | 1 | 12 | 1 | 4 |
 
-Memory's semantic improvement is reduced by output-shape failures: only 11/20
-maximum-reasoning outputs are directly usable versus 9/20 for either disabled
-arm. Bare FACT values instead of the required envelope remain a contract/parser
-problem. Current-state tasks improve to 18/20, but the original-ceiling disabled
-arm already reaches 17/20. The large-ceiling disabled arm has three additional
-contract failures despite parser acceptance; parser success is not proof that the
-whole required contract is satisfied.
+Memory remains 14/20 semantically acceptable at maximum effort, but only 11/20
+passes semantics, contract and parser together; either disabled arm has 9/20
+usable. Current-state tasks have 18/20 acceptable at maximum effort versus 17/20
+with original disabled ceilings. Correct no-action decisions with uncertain
+payment explanations are disclosed separately, not described as financial or
+task failures.
 
-Concrete equal-ceiling transitions, traced to private source and output IDs:
+Two defensible arrival-task problems remain in the maximum arm:
 
-- Maximum reasoning correctly excludes an internal colleague from external
-  memory and avoids inventing a company legal identity. It also preserves quoted
-  quantities as feasible quantities rather than incorrectly calling them minima.
-- It correctly creates a task for an incoming NDA-addendum review that the
-  disabled control dismisses. It also avoids updating a nonexistent task when
-  captured task context is empty.
-- It introduces an unsupported ambient-storage assurance, a categorical
-  no-glass/exclusive-coffee refusal, and an unsupported private-label product
-  assignment in arrival replies where the disabled control remains grounded.
-- It invents payment confirmation in a current-state task from a payment-method
-  field without evidence that payment completed.
+- A concrete follow-up supplies named products after the owner explicitly offers
+  founder review of payment terms. The output dismisses it as a scam and returns
+  no action, contrary to the operative thread and the narrow generic-spam rule.
+  Whether the correspondent actually is fraudulent is unknown.
+- The owner says applying labels in Paris avoids delays from supplier-side label
+  production/application. The output calls supplier-side printing/application
+  the fastest route, reversing the supplied workflow comparison. Who should add
+  mandatory artwork text is a separate unknown, not a proven false assertion.
 
-These examples explain the decision: additional reasoning does not reliably
-prevent invented business facts. Maximum memory reasoning merits confirmation
-with a corrected output contract on fresh cases; current-state task gains need
-repeatability checks. Positive-arrival task generation still needs grounded
-capability/policy handling and validation before any promotion. A model's own
-confidence would not resolve the observed unsupported assertions.
+Maximum effort also fixes genuine errors: it creates the pending NDA-review task
+and creates a new meeting-invitation task instead of updating a nonexistent task.
+The earlier shelf-life, glass and payment examples are not evidence of new
+operational failures; the correction note preserves their exact distinctions.
+
+These revised labels do not establish that K3 is commercially unreliable or that
+maximum effort is generally worse. They also do not establish equivalence or an
+automatic replacement. Model selection needs a company-validated fact reference,
+explicit instruction precedence and a representative memory-enabled evaluation
+before another independent confirmation. No production configuration changes.
 
 ## Observed cost, latency and reasoning
 
@@ -196,32 +207,32 @@ produces **USD3.219159** settled in the ledger. The two unresolved initial404
 attempts retain **USD0.358544**, giving **USD3.577703** accounted exposure against
 the USD10 cap. No hold was released to make the experiment fit.
 
-## Historical reference and uncertainty
+## Revised historical reference and uncertainty
 
-On these exact selected inputs, canonical historical Opus semantic counts are
-8 acceptable / 9 unacceptable / 3 indeterminate for memory, 15/5/0 for current-
-state tasks and 16/4/0 for arrivals. These are reference labels, not truth or a
-contemporaneous control. On determinate arrival pairs, maximum K3 has zero wins,
-three losses, twelve joint passes and four joint failures versus that reference;
-one pair is excluded as indeterminate.
+The historical comparator is corrected under the same business-fact and
+uncertainty rules. On the exact selected 20 inputs per cohort, Opus is8 acceptable /
+9 unacceptable / 3 indeterminate for memory, 15/4/1 for current-state tasks and
+17/1/2 for arrivals. Maximum K3 versus historical Opus on arrivals has zero wins,
+one loss, 15 joint passes,one joint failure and 3 indeterminate pairs. This is a
+historical comparison under different transport/cache conditions, not a fresh
+control or human-certified ground truth.
 
-An independent blinded cross-group consistency review changed one new maximum-
-reasoning arrival answer from acceptable to indeterminate: the source requests
-cappuccino flavour but never establishes milk ingredients, so an unconditional
-milk-policy refusal rests on an unresolved premise. The initial judgment and
-adjudication are both archived; all three new variants were reviewed under the
-same rule, without revealing their arm identities. The historical Opus answer
-shares that uncertain premise. Leaving its canonical archive intact, applying
-the same sensitivity gives **15 acceptable / 4 unacceptable / 1 indeterminate**.
-The determinate paired result above is unchanged. Other ambiguities include
-conflicting automated-order instructions and an unclear sample/shipping price.
+The [correction note](2026-09-16-grading-correction.md) distinguishes initial
+reviewer mistakes from new authoritative CTO evidence. Old labels, revised
+labels, captured input hashes and rationales are retained. Inputs, responses,
+prices and clocks are unchanged; no answer was regenerated to improve a score.
+
+The 20 arrival replays deliberately contain no retrieved company-memory snippets,
+existing tasks or calendar context. They do include the saved trained task prompt
+and owner instructions, including learned product facts. All 40 original heldout
+task requests contain retrieved memory snippets. A cold-start arrival replay is
+not a measurement of the complete live memory-enabled product.
 
 Every arm has one generation per input, on exposed cases from one company.
-No disabled output hits its ceiling, so differences between the two disabled
-arms do not demonstrate that a larger output allowance improves reasoning;
-sampling and serving variability remain explanations. There are 37 business
-clusters, not 180 independent examples. These results justify rejecting a global
-promotion, not estimating production error rates or proving equivalence.
+No disabled output hits its ceiling, so differences between disabled arms do
+not demonstrate an output-budget effect. Sampling, serving and grader variability
+remain explanations. There are 37 business clusters, not 180 independent examples.
+Post-hoc repaired labels are calibration evidence, not production error rates.
 
 ## Validation and evidence
 
@@ -230,10 +241,13 @@ Ruff. Independent review verifies all 180 unique Chat generations, exact source
 bindings and arm controls, provider identity, receipts and reservations. Final
 aggregation verifies coverage, canonical grades, contract/parser distinctions,
 paired denominators and exact historical subsets. The two compatibility answers
-appear once in the 180-cell total. Source-based grading includes a separate blind
-cross-group consistency review; it is not a human-certified gold standard.
+appear once in the 180-cell total. Initial blind grading and cross-group review missed substantive errors in the
+evaluation itself. The later full-input and CTO-evidence correction is explicit;
+passing code tests and arithmetic review does not validate business judgments.
 
-Private `summary.json`, canonical grades, adjudication, manifests, wire requests,
+The [sanitized table snapshot](2026-09-16-k3-reasoning-quality-tables.json)
+contains the revised aggregate counts. Private `summary.json`, canonical grades,
+adjudication, manifests, wire requests,
 raw responses, source mappings, execution code and reproduction helpers preserve
 the evidence outside Git. The public report contains no mailbox credentials or
 raw customer correspondence.

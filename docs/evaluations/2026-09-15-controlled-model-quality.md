@@ -1,32 +1,30 @@
 # Controlled engine model comparison
 
-Status: main comparison complete: 360/360 responses graded. Optional candidate
-and repetition arms are partially observed, with missing cells reported below.
-No production model, provider, prompt or processing setting was changed.
+Status: all 360 main responses present; main grades revised following reviewer
+errors and authoritative CTO evidence. The original model-selection recommendation
+is withdrawn. Optional candidate/repetition material is historical exploratory
+evidence, not a business-quality validation. See the
+[grading correction](2026-09-16-grading-correction.md).
 
 This study concerns engine API calls for email memory extraction and task
 detection. It does not evaluate the separately authenticated headless operator.
 
-## Decision
+## Interpretation after grading correction
 
-Do not automatically replace Opus with either cheaper model across engine roles.
-K3 is the stronger memory candidate in this sample and costs substantially less,
-but it still introduces a consequential error on a case where Opus succeeds.
-For action-bearing task creation, Opus has the strongest observed quality; K3
-loses four paired cases and wins two, while GLM loses eight and wins none.
-No alternative passes the preregistered gate of no new consequential losses.
-This is not evidence that Opus is error-free: it fails four positive-task cases.
+The original recommendation to retain Opus for task quality overstates what this
+experiment establishes. Initial graders penalized correct company facts and
+misapplied supplied instructions. Revised tables retain actual task/contract
+failures and distinguish unresolved business truth from demonstrated errors.
+They are post-hoc calibrated evidence, not a reliable production error-rate or
+model-equivalence estimate. No production model is promoted or rejected solely
+on these counts; company-validated reference facts and representative retrieval
+must precede an independent confirmation.
 
-For current supervised work, retain Opus for tasks where a missed or incorrect
-action matters. K3 is a candidate for further supervised memory evaluation; it does not meet
-the preregistered pilot gate and is not validated for unattended ingestion. GLM is not justified
-as the general task replacement by these results. A quality-preserving automatic
-model cascade is not implemented or validated here; comparing agreement between
-models alone would not establish truth. Haiku and Sonnet are not evaluated here.
-
-The concrete source improvements are larger completion ceilings, strict
-compatibility handling for complete tool responses, and reproducible bounded
-evaluation tooling. The tested memory-prompt candidate is not promoted.
+K3 and GLM are cheaper in the recorded serving conditions. Memory extraction,
+positive task creation, output contracts and retrieval need separate assessment.
+The supplied source improvements (completion ceilings, guarded normalization and
+bounded evaluation tooling) remain independently tested. Haiku and Sonnet were
+not evaluated in this comparison. The memory-prompt candidate is not promoted.
 
 ## Main quality results
 
@@ -38,9 +36,9 @@ judgments, not the fraction of individual facts that are wrong.
 
 | Model | Held-out memory, 40 | Held-out current-state tasks, 40 | Historical positive tasks, 20 |
 |---|---:|---:|---:|
-| Opus 5 | 20 / 17 / 3 | 29 / 9 / 2 | 16 / 4 / 0 |
-| Kimi K3 | 26 / 10 / 4 | 30 / 9 / 1 | 14 / 6 / 0 |
-| GLM 5.2 | 23 / 13 / 4 | 32 / 7 / 1 | 8 / 12 / 0 |
+| Opus 5 | 20 / 17 / 3 | 29 / 8 / 3 | 17 / 1 / 2 |
+| Kimi K3 | 26 / 10 / 4 | 30 / 7 / 3 | 15 / 4 / 1 |
+| GLM 5.2 | 23 / 13 / 4 | 32 / 5 / 3 | 11 / 7 / 2 |
 
 The current-state task cohort often legitimately requires no new action. Judging
 only that cohort would obscure the cheaper models' missed or incorrect actions.
@@ -52,20 +50,21 @@ indeterminate:
 
 | Role/cohort | Model | Wins | Losses | Both pass | Both fail | Indeterminate pairs |
 |---|---|---:|---:|---:|---:|---:|
-| Memory, held-out | K3 | 6 | 1 | 19 | 9 | 5 |
-| Memory, held-out | GLM | 5 | 3 | 17 | 10 | 5 |
-| Tasks, current state | K3 | 3 | 3 | 26 | 6 | 2 |
-| Tasks, current state | GLM | 4 | 2 | 27 | 5 | 2 |
-| Tasks, positive arrivals | K3 | 2 | 4 | 12 | 2 | 0 |
-| Tasks, positive arrivals | GLM | 0 | 8 | 8 | 4 | 0 |
+| Memory | Kimi K3 | 6 | 1 | 19 | 9 | 5 |
+| Memory | GLM 5.2 | 5 | 3 | 17 | 10 | 5 |
+| Current-state tasks | Kimi K3 | 3 | 2 | 26 | 5 | 4 |
+| Current-state tasks | GLM 5.2 | 3 | 0 | 27 | 5 | 5 |
+| Positive arrival tasks | Kimi K3 | 0 | 3 | 14 | 1 | 2 |
+| Positive arrival tasks | GLM 5.2 | 0 | 6 | 9 | 1 | 4 |
 
-Consequential errors include extracting an owner's colleague as an external
-contact; treating a shipping address or payment method as proof of shipment or
-payment; turning a one-off quantity into a company's minimum; assigning one
-product's price to another; learning a writing style from one reply despite a
-three-example requirement; promising an unverified capability; and assigning a
-meeting the wrong relative day. Useful surrounding prose does not neutralize a
-wrong fact stored in durable memory or a wrong suggested action.
+Retained failures include violating explicit owner/contact exclusions, converting
+one-off quantities into minimum quantities, assigning prices to different products,
+learning STYLE from insufficient examples, and missing a pending action or
+contradicting the source workflow. A correct no-action with an unverified payment
+or shipment explanation is indeterminate as a whole response, not demonstrated
+nonpayment, nonshipment or wrong task handling. Unsupported durable memory writes
+remain a separate extraction-contract concern; factual truth and source grounding
+must not be conflated.
 
 ## Design and limits
 
@@ -83,7 +82,8 @@ Frozen requests, case selection and candidate prompts were not changed.
 A separate blinded policy adjudication identified a conflict between ignoring
 automated notifications and retaining substantive customer/order information.
 Abstentions on automated customer-order memory are therefore indeterminate,
-uniformly across platforms and models; unsupported payment claims remain errors.
+uniformly across platforms and models. Later payment/task adjudication separates
+unverified explanatory claims from operationally correct no-action decisions.
 Initial grades and the exact conflicting instructions are retained privately.
 
 The current-state base contains only three clear positive task cases. Therefore
@@ -181,8 +181,8 @@ attempt only, excluding time lost to outages and recovery scheduling.
 | Tasks, positive arrivals | GLM | 0.045626 | 0.002281 | 18.78 / 57.58 |
 
 K3 costs about 79% less for held-out memory and 76–78% less for tasks in these
-serving conditions. GLM costs about 94–97% less, with substantially worse
-positive-task quality. None of these percentages includes the cost of human
+serving conditions. GLM costs about 94–97% less, with fewer acceptable positive-task labels in the revised sample. These labels
+are not independently validated business-quality estimates. None of these percentages includes the cost of human
 correction or downstream mistakes.
 
 The cumulative isolated experiment ledger, including earlier tests, controls,
@@ -203,15 +203,15 @@ transport recoveries, not first-attempt availability statistics.
 
 | Role/cohort | Model | Raw parser accepts | Usable, frozen adapter | Usable, compatibility replay |
 |---|---|---:|---:|---:|
-| Memory, held-out (40) | Opus | 37 | 20 | 20 |
-| Memory, held-out (40) | K3 | 40 | 26 | 26 |
-| Memory, held-out (40) | GLM | 39 | 22 | 22 |
-| Tasks, current state (40) | Opus | 40 | 29 | 29 |
-| Tasks, current state (40) | K3 | 30 | 24 | 29 |
-| Tasks, current state (40) | GLM | 32 | 24 | 24 |
-| Tasks, positive arrivals (20) | Opus | 20 | 16 | 16 |
-| Tasks, positive arrivals (20) | K3 | 0 | 0 | 14 |
-| Tasks, positive arrivals (20) | GLM | 20 | 8 | 8 |
+| Memory (40) | Opus 5 | 37 | 20 | 20 |
+| Memory (40) | Kimi K3 | 40 | 26 | 26 |
+| Memory (40) | GLM 5.2 | 39 | 22 | 22 |
+| Current-state tasks (40) | Opus 5 | 40 | 29 | 29 |
+| Current-state tasks (40) | Kimi K3 | 30 | 24 | 29 |
+| Current-state tasks (40) | GLM 5.2 | 32 | 24 | 24 |
+| Positive arrival tasks (20) | Opus 5 | 20 | 17 | 17 |
+| Positive arrival tasks (20) | Kimi K3 | 0 | 0 | 15 |
+| Positive arrival tasks (20) | GLM 5.2 | 20 | 11 | 11 |
 
 K3 returned complete tool payloads labelled `end_turn` on ten held-out tasks and
 nineteen arrival tasks. The frozen adapter rejects them; compatibility replay
@@ -223,6 +223,10 @@ tool on eight held-out tasks; these remain failures even when the decision is
 semantically appropriate. Parsing alone is therefore an inadequate quality test.
 
 ## Prompt candidate and repeatability
+
+The optional-arm judgments below retain their historical exploratory status.
+They were not a new company-fact-validated confirmation after the grading repair
+and must not be used to restore the withdrawn quality recommendation.
 
 The single frozen development candidate produces 20 of 30 planned responses:
 Opus 10, GLM 10, K3 zero. K3 has three provider HTTP429 errors followed by seven
@@ -342,15 +346,12 @@ predicted bills: actual token usage/provider cost determines settlement.
 
 ## 2026-09-16 grading correction
 
-Direct inspection of paired outputs exposed an inconsistent source-grounding
-judgment in `arrival-bcf4ad4ed600-task`: both Opus and K3 assert shelf stability,
-although the source asks whether refrigeration is required and the supplied
-policy establishes only pasteurization and a 12-month shelf life. Opus was
-incorrectly accepted. Independent review confirms it must also fail.
-
-The canonical grade retains the original judgment in adjudication history and a
-byte-exact pre-correction file. The tables above and aggregate JSON are corrected:
-Opus positive-task acceptance is 16/20, not 17/20; K3 loses four paired cases to
-Opus, not five, and GLM loses eight, not nine. Costs, inputs, raw outputs,
-completion, contract grades and held-out results are unchanged. This correction
-narrows the observed task gap; it does not establish replacement equivalence.
+The earlier downgrade of Opus for an ambient-storage statement was itself wrong:
+ambient 12-month shelf life is a correct company fact, confirmed by the CTO.
+That downgrade is reversed consistently with the corresponding K3 judgment.
+Further uniform review corrects no-glass/cold-brew scope penalties, missed FAQ
+instructions and unknown payment/capability claims. The original quality
+recommendation is withdrawn. Updated main tables and JSON use the revised
+canonical grades; original snapshots and every adjudication are preserved.
+See the [correction note](2026-09-16-grading-correction.md) for exact distinctions,
+context limitations and the post-hoc status of the revised evaluation.

@@ -30,13 +30,13 @@ byte-identical to before rollout: USD5 caps, saved economy Haiku, automatic
 processing off and preparation paused. No mailbox backlog was resumed.
 See [delivery plan](execution-plans/2026-09-13-openrouter-credits.md).
 
-The [controlled comparison](evaluations/2026-09-15-controlled-model-quality.md)
-covers 360 main responses with thinking disabled. The subsequent
-[reasoning experiment](evaluations/2026-09-16-k3-reasoning-quality.md) covers 180
-outputs: maximum K3 reasoning improves memory semantics, but positive-arrival
-tasks retain consequential losses. No configuration is promoted and automatic
-backlogs stay paused. Completion fixes and evaluation-only reasoning transport
-exist in source; the pinned hosted release and saved models remain unchanged.
+The 360-output [model comparison](evaluations/2026-09-15-controlled-model-quality.md)
+and 180-output [reasoning comparison](evaluations/2026-09-16-k3-reasoning-quality.md)
+have revised grades after confirmed reviewer errors. Their original model-quality
+recommendations are withdrawn; repaired counts are calibration, not independent
+business-quality validation. See [grading correction](evaluations/2026-09-16-grading-correction.md).
+Automatic backlogs stay paused. Evaluation-only reasoning transport and completion
+fixes exist in source; pinned releases and saved models remain unchanged.
 
 Desktop includes the V1 Desktop → engine → operator setup journey.
 Desktop opens Setup by default: configuration, authenticated remote connection,

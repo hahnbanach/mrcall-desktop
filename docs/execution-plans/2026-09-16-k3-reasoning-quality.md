@@ -134,3 +134,31 @@ code and archived evidence. Production profiles, services and prompts are unchan
 Evidence and reproduction scripts are archived privately under
 `~/.local/share/mrcall/evaluations/2026-09-16-k3-reasoning/`; the sanitized
 [result report](../evaluations/2026-09-16-k3-reasoning-quality.md) is versioned.
+
+## CTO fact correction and grading repair
+
+The CTO confirms 12-month ambient shelf life and cans-only cold-brew production
+as true company facts. The report incorrectly described these as inventions.
+Re-audit every affected grade across all three arms and the historical comparator,
+using full captured system instructions, source threads and supplied memory.
+Preserve original grades and record the new authoritative evidence separately;
+do not rewrite frozen inputs or imply the model accessed memory it was not given.
+Distinguish business correctness, input support and actual task consequences.
+The Shopify1977 payment example has identical no-action decisions: its unsupported
+payment explanation does not demonstrate an operational failure or nonpayment.
+Publish corrected counts or withdraw claims whose revised truth cannot be
+established; do not repeat paid inference or change production configuration.
+
+## Grading repair completion
+
+All 180 current and 360 earlier main grades were audited for the affected criteria.
+Full-input review also corrected missed FAQ evidence and unwarranted exclusive
+format assumptions. Original snapshots, sequential before/after adjudications and
+new CTO evidence are retained; frozen inputs and model outputs are unchanged.
+Independent arithmetic review reproduces revised main tables, paired contrasts
+and historical subsets, with unchanged financial accounting. The original
+quality recommendations are withdrawn, and revised labels are post-hoc
+calibration rather than independent business-quality confirmation. No new paid
+calls or production changes were made. The dedicated
+[correction note](../evaluations/2026-09-16-grading-correction.md) gives concrete
+examples and the distinction between factual truth, support and task decisions.

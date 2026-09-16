@@ -284,8 +284,8 @@ outages in repeats remain operational failures, not semantic stability evidence.
 All 360 main responses are collected and graded with source-bound, blinded
 rubrics. Candidate coverage is 20/30 (plus 30 regraded original controls), and
 repeat coverage is 50/60; missing outputs and operational failures remain explicit.
-No candidate held-out promotion or automatic model replacement passes the full
-gate. The [final report](../evaluations/2026-09-15-controlled-model-quality.md)
+No candidate held-out promotion or automatic model replacement was performed.
+Initial quality recommendations are withdrawn after the grading correction below. The [final report](../evaluations/2026-09-15-controlled-model-quality.md)
 contains paired quality, cost, compatibility replay and repeatability outcomes.
 
 Source changes comprise named email/task ceilings, guarded complete-tool response
@@ -295,3 +295,13 @@ final spending reconciliation. The combined affected suites pass 281 tests.
 Settled cost is USD13.473667, with USD3.963280 retained in uncertain holds against
 the same cumulative USD20 cap. No additional paid inference remains necessary.
 No hosted release, model, saved prompt or processing state changes are included.
+
+## Subsequent grading correction
+
+The CTO-confirmed business facts and full-input review invalidate several initial
+labels and the original categorical quality recommendation. Revised main grades,
+source/uncertainty distinctions and exact before/after history are preserved in
+the durable private archive. No input, response or cost is changed and no new paid
+inference is performed. Main report tables and aggregate JSON are regenerated;
+optional candidate/repeat grades remain historical exploratory evidence.
+See the [grading correction](../evaluations/2026-09-16-grading-correction.md).

@@ -30,3 +30,16 @@ remain untouched; do not reset or spend its allowance. Account funding is an
 independent prerequisite: initial OpenRouter balance was below USD1; the CTO replenished it to approximately
 USD20.88 before compatibility checks. No automatic credit purchase. The protocol
 repair and its bounded diagnostic attempts are documented in the execution plan.
+
+## Grading correction
+
+The CTO confirms ambient12-month shelf life and cans-only cold-brew production.
+These were wrongly presented as invented business facts. This correction does
+not change captured prompts, model responses, costs or the experimental matrix.
+It changes the grading evidence and invalidates the original quality conclusion.
+Re-adjudication must cover every model/arm affected, preserve initial labels and
+separate actual business truth, supplied-input support and operational decisions.
+A correct no-action decision with an unverified payment explanation is not proof
+of either nonpayment or operational failure. Full learned FAQ and overriding
+owner instructions must be read before declaring a model's inference unsupported.
+Revised labels are post-hoc calibration, not an independent confirmation set.
