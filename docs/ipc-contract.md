@@ -4,7 +4,7 @@ description: |
   Python sidecar (server): method names, accepted parameters, payload
   shapes, notification streams, and the dispatch-boundary rules that
   decide what gets refused. The engine's registry is the authority; this
-  file mirrors it in full and must be re-checked against it whenever a
+  file describes its principal contracts and must be re-checked against it whenever a
   method or a parameter changes.
 ---
 
@@ -36,18 +36,14 @@ read/write of bytes is the adapter's job). Two adapters:
 The method surface, payload shapes, and notification streams below are
 **identical across both transports** — only the framing differs.
 
-- **Server**: `engine/zylch/rpc/methods.py` — the `METHODS` dispatch table (line 2061) plus the per-domain modules merged into it (`email_actions.py`, `task_queries.py`, `account.py`, `mrcall_actions.py`, `campaign_actions.py`, `draft_queries.py`, `maintenance.py`, `google_actions.py`, `whatsapp_actions.py`, `agents.py`, `setup.py`, `sms_actions.py`, `usage_queries.py`). A duplicate method name raises at import.
+- **Server**: `engine/zylch/rpc/methods.py` assembles the `METHODS` dispatch table from its local and per-domain registrations. A duplicate method name raises at import.
 - **Client**: `app/src/preload/index.ts` exposes `window.zylch.*` to the renderer; `app/src/main/` brokers stdio or WebSocket.
 - **Owner identity**: every call resolves `owner_id` server-side from the active profile — the client never sends it.
 
-**Completeness.** The method index below covers the **whole** registry —
-all 66 methods and all 10 notification streams as of 2026-08-26 — and its
-parameter column is transcribed from each handler's own declared
-signature, which is also what the dispatcher enforces at runtime (see
-"Parameter contract" below). The prose sections that follow the index go
-deeper on the methods with non-obvious semantics; a method that appears
-only in the index is one whose signature and return shape say everything
-there is to say about it.
+**Coverage.** The assembled `METHODS` registry is authoritative. The index below
+is a dated reference, with later additions described in their owning sections;
+it does not claim exhaustive coverage of the current registry. Re-derive live
+signatures with the verification procedure below before changing a caller.
 
 ## Conventions
 
@@ -89,7 +85,10 @@ registered method. A bare name is **required**; a name with `?` or a
 `=default` is optional. If a signature cannot be parsed (a placeholder
 like `…fields` rather than identifiers) the method is marked *open* and
 no unknown-key check runs for it — a visible gap rather than a guess.
-The registry currently has **zero** open methods.
+The current registry has one open method, `llm.models`: its handler docstring
+lacks the signature declaration used by `param_spec`. Its handler still validates
+the provider; undeclared-parameter rejection is not enforced for that method.
+This gap is tracked in [the harness backlog](harness-backlog.md).
 
 **The required mark carries an obligation.** A parameter may be declared
 required only where the handler genuinely cannot proceed — where it
@@ -138,9 +137,9 @@ not a secret, and stays readable at top level only.
 > | `account.who_am_i` | `{ signed_in, uid?, email?, expires_at_ms? }` |
 > | mutations (`tasks.complete/reopen/pin/skip`, `emails.pin/mark_read`, `chat.approve`) | `{ ok: boolean, … }` |
 
-### Complete method index
+### Historical method index
 
-Every registered method, with the parameters it declares and the shape it
+Methods recorded in this index, with the parameters it declares and the shape it
 returns. `?` and `=default` mark optional parameters; everything else is
 required and its absence is a `-32602`. Transcribed from the engine
 registry on 2026-08-15 (65 methods), plus `emails.needs_reply` added
@@ -1232,7 +1231,7 @@ Two cosmetic helpers for the "what is the assistant doing right now"
 line while a `chat.send` is in flight. `predict` guesses the upcoming
 action from the user's message (the immediate placeholder, before
 stderr-driven narration kicks in); `summarize` condenses recent sidecar
-stderr lines with Haiku. Both **never raise** — any failure, including
+stderr lines with the configured engine model. Both **never raise** — any failure, including
 the no-argument call, returns `{"text": ""}`, which is why both
 parameters are optional. Output is first-person Italian.
 
@@ -1387,5 +1386,6 @@ contract and live only in `app/src/preload/index.ts` /
     `account.who_am_i`. Diagnostic only (the Settings "Test connection"
     button); never touches the saved config or the live client.
 
-Don't document them here — add new entries to `app/docs/active-context.md`
-under "IPC client (preload)" instead.
+Document renderer IPC details in `app/CLAUDE.md` or a dedicated app contract
+document. `app/docs/active-context.md` carries current state and unresolved work,
+not a growing IPC method index.

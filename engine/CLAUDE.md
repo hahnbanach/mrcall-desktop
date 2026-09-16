@@ -97,7 +97,8 @@ are inexpensive; saved explicit models remain until changed deliberately.
 - `llm/model_policy.py`: saved provider, economy/balanced/custom role defaults.
 - `llm/bounded_proxy.py`: quoted maximum debit and actual receipt protocol;
   old unbounded proxy servers refuse. Firebase JWT remains in memory.
-- `llm/openrouter_client.py`: Claude/GLM/K3 Messages adapter with provider price caps.
+- `llm/openrouter_client.py`: Claude/GLM Messages and K3 max Chat adapters with provider price caps; see
+  [K3 reasoning](docs/features/k3-reasoning.md).
 - `rpc/usage_queries.py`: spending, effective models, `llm.models` catalog and paged receipt recovery.
 - `MRCALL_PROXY_URL`: default `https://zylch.mrcall.ai`.
 - `MRCALL_CREDITS_MODEL`: explicit custom model; unset defaults to Haiku.

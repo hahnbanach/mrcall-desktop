@@ -8,95 +8,63 @@ are preserved in [active-context-archive.md](active-context-archive.md).
 
 ## State now
 
-[K3 max adoption](features/k3-reasoning.md) is deployed on four Café124 units
-in isolated release `8d83193`. The credit server is `prod-99091c35`. Both payment
-paths bind maximum reasoning and an 8192-token combined cap before admission.
-Production is configured as custom K3 through its personal OpenRouter key, including all five
-worker roles and reply classification. The other three profiles retain their
-previous billing/model settings pending the CTO's billing preference.
+Four Café124 units run isolated release `8d83193`; the billing server runs
+`prod-99091c35`. Production selects personal OpenRouter/custom K3 for its base
+model, five worker roles and reply classification. The other three profiles
+retain their previous billing/model settings. Production's daily cap is USD20;
+the other three caps are USD5. Automatic processing is off and preparation is
+paused/not running in all four. Other hosted units retain their own release pins.
 
-Authenticated production identity, credit model catalog and paused preparation
-checks pass. The production K3 quote passes. A synthetic execute returned HTTP402
-before provider dispatch because MrCall credits were insufficient. Its isolated
-USD0.30 test ledger retains a USD0.209 hold, separate from hosted profile budgets.
-A subsequent personal-key K3 max smoke returned OK with 68 reasoning tokens and
-USD0.00137515 provider cost. Its separate USD0.20 test ledger settled at
-USD0.001376 with no remaining hold. The configured factory resolves OpenRouter/K3;
-production service is active and preparation remains paused/not running.
+[K3 max](features/k3-reasoning.md) uses Chat completions pinned to DigitalOcean.
+The adapter promotes worker limits to a combined 8192-token reasoning/final cap
+before quote and budget admission. Synthetic live BYOK acceptance verifies a
+complete response, positive reasoning usage and actual-cost settlement. The
+configured client factory resolves OpenRouter/K3. A saved Anthropic key is
+inactive while OpenRouter is selected.
 
-Production retains its current USD20/day cap; the other three retain USD5/day.
-All four retain automatic processing off and preparation paused/not running.
-No mailbox backlog was resumed. Other hosted units were not restarted.
+The credit path passes authenticated quotation and offline HTTP/ledger tests;
+a funded live K3 response is unverified. Its isolated test ledger retains a
+USD0.209 hold after the server refused insufficient credits before dispatch.
+The separate successful BYOK test ledger has no remaining hold. Neither test
+ledger changes the hosted production allowance.
 
-Failed extraction checkpoints (1,962 + 40) remain pending, with private backups
-and task checkpoints preserved. Three-candidate merge selection and complete-
-response validation retain LLM judgement without runaway comparisons or false
-completion. See [spending protection](features/daily-llm-budget.md).
-Published Desktop v0.1.49 includes shared project RPC and the new model catalog.
-The [model comparison](../../docs/evaluations/2026-09-15-controlled-model-quality.md)
-and [reasoning comparison](../../docs/evaluations/2026-09-16-k3-reasoning-quality.md)
-have superseded semantic grades and withdrawn quality recommendations. Neither
-original nor intermediate counts establish business-decision error rates. The
-[disputed cases](../../docs/evaluations/2026-09-16-disputed-case-review.md) distinguish
-wrong tasks from unverified explanations. The offline preparer emits complete
-per-label evidence; version 2 reviews require exact quotations and separately
-assess decision, grounding, truth and impact. Legacy grades remain unassessed
-under that protocol. The [selected source review](../../docs/evaluations/2026-09-16-reviewed-model-comparison.md)
-covers all 240 selected outputs with separate action and explanation judgments.
-Captured saved memory prompts have contradictory FACT-format instructions.
-Source now appends a serialization-only contract without retraining or changing
-business rules. This has not been re-evaluated for model quality. K3 max runtime
-support is deployed; saved profiles remain paused.
+Memory extraction and task detection retain completion guards and budget
+admission. Merge selection limits expensive candidates. Saved extraction prompts
+receive a serialization-only contract for structured FACT output without
+retraining or changing business rules; its quality effect remains unmeasured.
+See [spending protection](features/daily-llm-budget.md) and the
+[reviewed comparison](../../docs/evaluations/2026-09-16-reviewed-model-comparison.md).
+The comparison separates decisions, explanations and uncertain claims; it does
+not certify production error rates. Older semantic scores are superseded.
 
-Email extraction and task detection request 4096 and 2048 output tokens; the
-K3 adapter promotes both to its combined 8192-token reasoning/final ceiling.
-Completion guards and spending admission are preserved. Complete tool
-responses labelled `end_turn` are normalized by the shared compatible-response
-wrapper; malformed, refused or truncated responses remain rejected. Generic
-trainer FACT instructions and FACT value parsing are corrected in source.
-These changes are included in the pinned hosted release. Saved prompt records
-are unchanged; the serialization instruction is appended at runtime. The earlier three-case evaluation is
-superseded by the controlled comparison for model-selection decisions.
+Shared written projects use company-store documents, immutable revisions and
+revision-checked `projects.*` writes, separate from entity blobs. Company
+membership is a capability changed only by `memory.join`; owner rules remain
+private. Profile databases retain mailbox data, tokens and cursors. See
+[project memory](features/project-memory.md) and `MEMORY_TABLE_NAMES` in
+`zylch/storage/database.py` for the storage binding.
 
-Shared written project memory is deployed. Dedicated project documents,
-immutable revisions and a space identity live in the company memory database,
-separate from entity blobs. `projects.*` supports selective reads and revision-
-checked writes through cs-kernel v0.44.0. The company store contains
-six 124 projects (28 documents) and four MrCall projects (23 documents), including
-binary attachments. Original clone folders are archived byte-exactly in private Git histories
-(124 `abd48c8`, MrCall `3f53462`) and removed from working trees. A second 124 owner
-sees the same six projects. See [project memory](features/project-memory.md).
-
-Company membership is a capability held in the profile; `memory.join` is its
-only write path. Company records share visibility while owner-scoped rules stay
-private. Project joins retain compatible revision histories and refuse divergent
-histories before membership changes. Profile databases retain mailbox data,
-tokens and cursors; the company store owns shared memory. The binding inventory
-is `zylch/storage/database.py:MEMORY_TABLE_NAMES`.
-
-Setup evidence, Firebase identity and billing policy are served to Desktop and
-kernel through the existing authenticated RPC transports. `setup.state` reports
-mailbox preparation evidence without claiming reply quality. Firebase ID tokens
-remain memory-only. The hosted source includes the earlier chat-context budget,
-IMAP transport deadlines and processing cost controls; their dated delivery notes in
-the archive are not current deployment claims.
+Authenticated RPC serves setup evidence, identity, catalogs and billing policy.
+`setup.state` describes preparation evidence, not reply quality. Firebase ID
+tokens stay in memory. Claude Code headless runs in a clone and is outside engine
+API budgets; see [control boundaries](../../docs/operator-setup.md#ai-execution-and-controls).
 
 ## Unresolved
 
-- Desktop v0.1.49 installation on the CTO's Mac remains unverified.
-- Existing engine backlog remains separate: Calendar token integration,
-  phone-call memory parity, additional RPC error humanization, and multi-profile
-  WhatsApp session isolation. See [harness backlog](harness-backlog.md) and
-  [remote backend](../../docs/remote-backend.md).
-- Earlier incident counts, memory cleanup observations and packaged-platform
-  acceptance gaps are retained in the archive. They were not re-measured during
-  this OpenRouter rollout and must be rechecked before acting on them.
-- A comprehensive security review and product chat remain deferred by the CTO.
+- The remaining three profiles await a billing choice; funded credit acceptance
+  remains open. No backlog resumption is part of model configuration.
+- Incident checkpoint counts and project inventories in dated records are
+  historical; re-read current state before a cleanup or backlog operation.
+- Desktop v0.1.49 installation and personal-key entry on the CTO's Mac remain
+  unverified. Saved-prompt format repairs have no new business-quality result.
+- Calendar token integration, phone memory parity, RPC error humanization and
+  WhatsApp multi-profile isolation remain separate [backlog](harness-backlog.md)
+  work. Product chat and comprehensive security review remain deferred.
 
 ## Next
 
-1. Keep automatic backlogs paused; apply the controlled comparison's role-specific
-   quality findings before any model or hosted-release change.
-2. Verify Desktop v0.1.49 installation on the CTO's Mac.
-3. Continue the existing Calendar, phone-memory and error-handling workstreams
-   under their owning plans rather than merging them into project storage.
+1. Resolve billing choices and finish funded credit acceptance without replaying
+   uncertain requests. Keep automatic processing and preparation paused.
+2. Verify the Mac application through its GUI; start a bounded batch only when
+   requested and review its role-specific outputs.
+3. Continue other workstreams under their existing plans.

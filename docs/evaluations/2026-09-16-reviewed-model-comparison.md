@@ -15,8 +15,8 @@ blinded holdout. Original responses, numerical snapshots and costs are preserved
   explicit instructions and known business constraints. An unverified explanation
   can make this indeterminate while its task decision is acceptable.
 - **Integration:** captured parser acceptance and independent task-schema checks.
-  These do not establish truth; parser acceptance can still discard malformed
-  entity blocks.
+  These do not establish truth. The current extraction parser rejects a response
+  containing a nonempty entity block without its structured identity.
 
 A/U/I below means acceptable / unacceptable / indeterminate. These are review
 judgments, not observed real-world error probabilities. An explicit policy breach
@@ -91,13 +91,14 @@ off-8192 responses have too-short `suggested_action` values despite adequate
 semantic decisions. These are additional integration failures, not rewritten
 semantic labels.
 
-The saved memory prompt simultaneously asks for flat FACT records without
+The saved memory prompt captured for this study simultaneously asks for flat FACT records without
 sections and shows a header-based FACT format. The engine extraction parser
 requires `#IDENTIFIERS`. Following one of our contradictory instructions can
 therefore lose facts or fail integration. The model must not be blamed for an
 invented business fact merely because this serialization contract is broken.
-The recorded parser results above are unchanged; this review does not repair or
-deploy that runtime path.
+The recorded parser results above are unchanged. The subsequent
+[K3 adoption](../execution-plans/2026-09-16-k3-production.md) appends a runtime
+serialization contract; these recorded outputs were not rerun against that change.
 
 ## Observed costs for the same selected inputs
 
@@ -138,4 +139,6 @@ not independent business outcomes or a population error estimate. No Haiku
 comparison is made. GLM and unselected historical cases are not newly regraded.
 Maximum K3 is promising for task disposition in this sample; uncertainty in
 draft assertions and the memory integration defect still prevent a claim of
-equivalence or a general unattended-rollout guarantee. Production remains unchanged.
+equivalence or a general unattended-rollout guarantee. This report records the
+pre-adoption evaluation; current deployment is tracked in the
+[K3 adoption plan](../execution-plans/2026-09-16-k3-production.md).

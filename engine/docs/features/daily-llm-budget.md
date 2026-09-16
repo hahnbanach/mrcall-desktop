@@ -55,8 +55,9 @@ refuse with upgrade guidance. Lost answers can recover their billing receipt
 through read-only status without repeating inference or consumption.
 
 OpenRouter supports GLM 5.2, Kimi K3 and namespaced Claude Opus 5, Sonnet 5
-and Haiku 4.5 through its Messages API. The adapter
-sends decimal price caps, disables fallbacks and thinking, and validates the
+and Haiku 4.5. Legacy requests use the Messages API with thinking disabled;
+[K3 max](k3-reasoning.md) uses Chat completions with maximum reasoning. Both
+adapters send decimal price caps, disable fallbacks and validate the
 actual charge returned in `usage.cost`. Missing or invalid receipts keep holds.
 Explicit model/feature allowlists apply; this is not unlimited model routing.
 

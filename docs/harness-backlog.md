@@ -195,3 +195,11 @@ split indexes.**
   fetch effect. Reopening Settings recovers. Add an explicit reload generation
   and a component regression for identical-value refresh; retain stale-catalog
   rejection during disconnect/account changes.
+
+## RPC catalog parameter declaration
+
+- **OPEN (2026-09-16):** `llm.models` has no parseable signature declaration in
+  `usage_queries.py`; `param_spec` therefore leaves that handler open to unknown
+  parameter names. Add its provider signature and run the registry contract
+  regression before asserting complete undeclared-parameter enforcement. Other
+  registered handlers have declarations.
