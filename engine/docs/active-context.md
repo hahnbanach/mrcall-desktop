@@ -47,8 +47,11 @@ and `docs/execution-plans/2026-09-16-mrcall-shared-procedure.md`, with current
 preparation work in `docs/execution-plans/2026-09-16-mrcall-pilot-installation.md`.
 
 [K3 max](features/k3-reasoning.md) uses Chat completions pinned to DigitalOcean.
-The adapter promotes worker limits to a combined 8192-token reasoning/final cap
-before quote and budget admission. Synthetic live BYOK acceptance verifies a
+The adapter promotes ordinary workers' implicit limits to a combined 8192-token
+reasoning/final cap before quote and budget admission. The inactive restricted
+pilot uses explicit controls to retain its 1024-token combined cap; its K3
+compatibility is verified offline, not as live pilot quality or latency.
+Synthetic live BYOK acceptance verifies a
 complete response, positive reasoning usage and actual-cost settlement. The
 configured client factory resolves OpenRouter/K3. A saved Anthropic key is
 inactive while OpenRouter is selected.

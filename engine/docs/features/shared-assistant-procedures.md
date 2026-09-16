@@ -85,6 +85,14 @@ reads, at most 1,024 output tokens per model request and 4,000 reply characters.
 Each scoped read keeps its existing three-second horizon. The route owner must
 call `close()` at shutdown; closure refuses further output/admission.
 
+For K3 over OpenRouter or MrCall credits, the restricted policy supplies explicit
+adaptive/max reasoning controls and keeps the same 1,024-token **combined
+reasoning/final-output** cap. Ordinary engine workers retain their upstream
+8,192-token promotion. Quotation and reservation see the final restricted cap;
+truncation does not authorize tools or trigger a larger retry. This compatibility
+is checked through the actual guarded client with synthetic HTTP/quote edges,
+not certified as live K3 quality or latency for the pilot.
+
 Only an accepted controlled completion reaches the existing `CreateDraftTool`.
 The adapter rereads source and scope, checks deadline and delivers cancellation
 before persistence. Recipient, subject and threading come from the pinned source,
