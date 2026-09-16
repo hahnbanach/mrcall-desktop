@@ -1,7 +1,7 @@
 """Automatic compaction of ChatService conversation history.
 
 When a chat conversation grows past ``SOFT_LIMIT`` tokens we summarize
-the middle portion via Haiku and splice the summary into the history,
+the middle portion via the configured model and splice the summary into the history,
 keeping the first turn intact (for rapport / task context) and the last
 ``KEEP_RECENT`` turns intact (for precise short-term memory).
 
@@ -23,12 +23,8 @@ from typing import Any, Dict, List
 
 logger = logging.getLogger(__name__)
 
-# Haiku is cheap and fast. Model ID is pinned to the one the user named
-# in the task — if it drifts we fall back to the env override.
-_COMPACTION_MODEL = os.environ.get(
-    "ZYLCH_COMPACTION_MODEL",
-    "claude-haiku-4-5-20251001",
-)
+# Respect an explicit override; otherwise follow the profile model policy.
+_COMPACTION_MODEL = os.environ.get("ZYLCH_COMPACTION_MODEL")
 
 # Trigger threshold in tokens. Anthropic 1M context is the hard ceiling;
 # 80K keeps plenty of headroom for the system prompt, tools, and the
@@ -135,7 +131,7 @@ def _render_middle_for_summary(middle: List[Dict[str, Any]]) -> str:
 
 
 async def _summarize(middle_text: str) -> str:
-    """Call Haiku to summarize ``middle_text`` into a single block.
+    """Call the configured model to summarize ``middle_text`` into a single block.
 
     Returns the summary string on success, raises on failure — callers
     handle the exception.
@@ -170,7 +166,7 @@ async def _summarize(middle_text: str) -> str:
             parts.append(getattr(block, "text", ""))
     summary = "".join(parts).strip()
     if not summary:
-        raise RuntimeError("Haiku returned empty summary")
+        raise RuntimeError("Compaction returned empty summary")
     return summary
 
 

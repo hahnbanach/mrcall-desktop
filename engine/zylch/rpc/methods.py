@@ -1537,7 +1537,7 @@ async def narration_summarize(
 
         # Narration is a "nice to have" — silently skip if no LLM is
         # configured rather than surfacing an error toast.
-        client = try_make_llm_client(model="claude-haiku-4-5-20251001")
+        client = try_make_llm_client()
         if client is None:
             return {"text": ""}
 
@@ -1873,7 +1873,7 @@ async def narration_predict(
     try:
         from zylch.llm import try_make_llm_client
 
-        client = try_make_llm_client(model="claude-haiku-4-5-20251001")
+        client = try_make_llm_client()
         if client is None:
             return {"text": ""}
 
@@ -1882,7 +1882,6 @@ async def narration_predict(
             messages=[{"role": "user", "content": user}],
             system=system,
             max_tokens=40,
-            stop_sequences=["---"],
         )
         text = ""
         if resp.content:

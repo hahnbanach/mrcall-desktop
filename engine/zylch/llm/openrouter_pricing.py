@@ -29,6 +29,9 @@ LABELS = {
 
 
 def request_bound(request):
+    if request.get("model") == "moonshotai/kimi-k3" and ("thinking" in request or "output_config" in request):
+        from .k3_reasoning import request_bound as reasoning_bound
+        return reasoning_bound(request)
     model = request.get("model")
     if model not in RATES:
         raise BudgetError("AI paused: OpenRouter model has no verified price ceiling.")

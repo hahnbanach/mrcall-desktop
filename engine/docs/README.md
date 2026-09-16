@@ -60,3 +60,5 @@ Complete documentation for Zylch standalone (local CLI sales intelligence tool).
 |------|---------|
 | [plans/standalone-transformation.md](plans/standalone-transformation.md) | Transformation plan (completed, reference) |
 | [harness-backlog.md](harness-backlog.md) | Claude Code harness gaps |
+
+- [K3 max reasoning](features/k3-reasoning.md) — transport, billing bounds and profile selection.

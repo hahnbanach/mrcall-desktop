@@ -29,7 +29,6 @@ _MESSAGE_TOOLS = {"send_email", "send_whatsapp", "send_sms"}
 # Fields, per tool, that hold the message text the user may have edited.
 _TEXT_FIELDS = ("body", "message", "text")
 
-_JUDGE_MODEL = "claude-haiku-4-5-20251001"
 
 _RECORD_RULE_TOOL = {
     "name": "record_rule",
@@ -340,7 +339,7 @@ def learn_from_corrections(
         try:
             from zylch.llm import try_make_llm_client
 
-            client = try_make_llm_client(model=_JUDGE_MODEL)
+            client = try_make_llm_client()
         except Exception as e:
             logger.warning(f"[learn] cannot make judge client: {e}")
             client = None

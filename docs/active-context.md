@@ -19,6 +19,10 @@ what is *current*, targeting ≤ ~120 lines.
 
 ## State now
 
+The CTO selected K3 max. The [adoption plan](execution-plans/2026-09-16-k3-production.md)
+is active: engine and credit-server adapters pass offline checks; rollout is
+in progress. See [runtime contract](../engine/docs/features/k3-reasoning.md).
+
 Engine API spending controls are independent of Claude Code operator ticks and
 direct kernel classifiers. See [execution/control boundaries](operator-setup.md#ai-execution-and-controls).
 
@@ -26,8 +30,9 @@ OpenRouter models are available with personal keys or MrCall credits; payment
 selection is independent of model selection. Billing server `prod-a522596c` is
 live. The authenticated catalog and five OpenRouter quotes pass.
 Four Café124 engines run isolated release `10477fd`; their profile files are
-byte-identical to before rollout: USD5 caps, saved economy Haiku, automatic
-processing off and preparation paused. No mailbox backlog was resumed.
+currently retain saved economy models, automatic processing off and preparation
+paused. Rechecked 2026-09-16: production has a USD20 daily cap; the other three
+have USD5 caps. No mailbox backlog was resumed.
 See [delivery plan](execution-plans/2026-09-13-openrouter-credits.md).
 
 The 360-output [model comparison](evaluations/2026-09-15-controlled-model-quality.md)
@@ -41,8 +46,8 @@ legacy judgments remain unassessed under that protocol. The
 [complete selected review](evaluations/2026-09-16-reviewed-model-comparison.md)
 covers all 60 selected cases and 240 outputs, with explicit peer adjudications;
 it is post-hoc evidence, not a fresh holdout or a production error-rate estimate.
-Automatic backlogs stay paused. Evaluation-only reasoning transport and completion
-fixes exist in source; pinned releases and saved models remain unchanged.
+Automatic backlogs stay paused. K3 max runtime support and completion fixes exist in source; pinned releases
+and saved models remain unchanged pending the active rollout.
 
 Desktop includes the V1 Desktop → engine → operator setup journey.
 Desktop opens Setup by default: configuration, authenticated remote connection,

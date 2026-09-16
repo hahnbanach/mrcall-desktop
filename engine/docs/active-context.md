@@ -8,15 +8,19 @@ are preserved in [active-context-archive.md](active-context-archive.md).
 
 ## State now
 
+[K3 max adoption](features/k3-reasoning.md) is implemented in source and under
+rollout: explicit Chat reasoning controls are bound before budget admission for
+both BYOK and credits. The live model selection below has not yet changed.
+
 Four Café124 units run reviewed isolated release `10477fd` behind
 `wss://desktop.mrcall.ai`. Billing server `prod-a522596c` provides bounded
 OpenRouter calls charged from actual decimal costs and a configured model
 catalog. Personal-key routing supports Claude, GLM and K3 with provider caps.
 Authenticated `llm.models` checks pass for personal and MrCall-credit catalogs.
 
-All four affected profile files are unchanged byte-for-byte: USD5 daily caps,
-saved economy Haiku, batch size 25, automatic processing off and preparation
-paused. Three retain personal Anthropic keys; one retains MrCall credits.
+Rechecked 2026-09-16: production has a USD20 daily cap and the other three
+have USD5 caps. Saved economy models, automatic processing off and preparation
+paused remain in place. Three retain personal Anthropic keys; one retains MrCall credits.
 Services are active and no mailbox processing was resumed. Other hosted units
 follow normal source reconciliation. New automatic processing defaults off.
 A synthetic production GLM credit call returned OK with a verified one-credit
@@ -37,10 +41,10 @@ per-label evidence; version 2 reviews require exact quotations and separately
 assess decision, grounding, truth and impact. Legacy grades remain unassessed
 under that protocol. The [selected source review](../../docs/evaluations/2026-09-16-reviewed-model-comparison.md)
 covers all 240 selected outputs with separate action and explanation judgments.
-The captured saved memory prompt has contradictory FACT-format instructions;
-source review does not repair its runtime integration or change production.
-Reasoning transport, evaluation provider pins and increased experiment ceilings
-are not production configuration. Saved profiles remain paused.
+Captured saved memory prompts have contradictory FACT-format instructions.
+Source now appends a serialization-only contract without retraining or changing
+business rules. This has not been re-evaluated for model quality. K3 max runtime
+support is under rollout; saved profiles remain paused.
 
 Source email extraction and task detection ceilings are 4096 and 2048 output
 tokens, with completion guards and spending admission preserved. Complete tool

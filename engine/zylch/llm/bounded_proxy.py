@@ -86,7 +86,11 @@ class BoundedProxyClient:
         try:
             if self.http is not None:
                 return send(self.http)
-            with httpx.Client(timeout=5 if method == 'GET' else 180, follow_redirects=False) as client:
+            timeout = 5 if method == 'GET' else 180
+            request = (body or {}).get('request', {})
+            if path == '/execute' and request.get('model') == 'moonshotai/kimi-k3' and request.get('thinking') == {'type': 'adaptive'}:
+                timeout = 600
+            with httpx.Client(timeout=timeout, follow_redirects=False) as client:
                 return send(client)
         except (httpx.HTTPError, ValueError):
             raise BudgetError('MrCall request unconfirmed; any existing reservation remains.') from None
@@ -115,6 +119,8 @@ class BoundedProxyClient:
             raise BudgetError('MrCall response incomplete; reservation retained.')
         return SimpleNamespace(content=[SimpleNamespace(**b) for b in blocks],
                                model=message.get('model'), stop_reason=message.get('stop_reason'),
+                               original_stop_reason=message.get('original_stop_reason', message.get('stop_reason')),
+                               validation_error=message.get('validation_error'),
                                usage=message.get('usage')), result.get('receipt')
 
     def status(self, request_id):

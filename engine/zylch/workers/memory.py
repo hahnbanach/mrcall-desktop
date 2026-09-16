@@ -372,6 +372,9 @@ class MemoryWorker:
                     )
 
             if self._custom_prompt:
+                from zylch.memory.extraction_format import SERIALIZATION_CONTRACT
+
+                self._custom_prompt += SERIALIZATION_CONTRACT
                 logger.info(f"Using user's custom {source_key} prompt")
             else:
                 logger.debug("No custom prompt found — will auto-train")

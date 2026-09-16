@@ -380,6 +380,17 @@ class LLMClient:
         for key, value in kwargs.items():
             request_kwargs[key] = value
 
+        if model_name == "moonshotai/kimi-k3" and self.transport in ("openrouter", "proxy") and not ({"thinking", "output_config"} & request_kwargs.keys()):
+            # The combined cap includes reasoning: worker-specific final-output
+            # limits would starve the tested max-effort configuration. Apply
+            # before quote/hash/admission so every reserved byte is dispatched.
+            request_kwargs.update(
+                thinking={"type": "adaptive"}, output_config={"effort": "max"}, max_tokens=8192
+            )
+        if model_name == "moonshotai/kimi-k3" and self.transport in ("openrouter", "proxy"):
+            from .k3_reasoning import request_bound as validate_k3
+            validate_k3(request_kwargs)
+
         num_tools = len(tools) if tools else 0
         logger.debug(
             f"llm request: transport={self.transport} model={model_name} "

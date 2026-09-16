@@ -45,6 +45,8 @@ class OpenRouterClient:
 
     def create(self, **request):
         request_bound(request)
+        if request.get("model") == "moonshotai/kimi-k3" and "thinking" in request:
+            return self._create_k3(request)
         body = _without_cache(deepcopy(request))
         body.pop("service_tier", None)
         if body["model"] == "anthropic/claude-sonnet-5":
@@ -95,3 +97,26 @@ class OpenRouterClient:
             model=data.get("model"),
             id=data.get("id"),
         )
+
+    def _create_k3(self, request):
+        from .k3_reasoning import chat_request, decode_chat_response
+
+        body = chat_request(request)
+
+        def dispatch(client):
+            return client.post(
+                "https://openrouter.ai/api/v1/chat/completions",
+                json=body,
+                headers={"Authorization": f"Bearer {self._key}"},
+            )
+
+        if self._http is not None:
+            response = dispatch(self._http)
+        else:
+            with httpx.Client(timeout=600, follow_redirects=False) as client:
+                response = dispatch(client)
+        if response.status_code != 200:
+            raise BudgetError(
+                f"K3 request failed (HTTP {response.status_code}); no automatic retry."
+            )
+        return decode_chat_response(response)

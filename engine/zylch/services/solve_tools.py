@@ -708,9 +708,7 @@ def _web_search(args: Dict) -> str:
     try:
         from zylch.llm import try_make_llm_client
 
-        # Use Sonnet for web search (cheaper, fast enough). Both
-        # transports forward the prompt to Anthropic.
-        client = try_make_llm_client(model="claude-sonnet-4-20250514")
+        client = try_make_llm_client()
         if client is None:
             return (
                 "No LLM configured for web search. Set ANTHROPIC_API_KEY "

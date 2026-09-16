@@ -291,3 +291,25 @@ async def test_email_capacity_keeps_complete_entities_and_rejects_truncation(leg
         assert ok is False
         w.storage.mark_email_processed.assert_not_called()
         w.blob_storage.store_blob.assert_not_called()
+
+
+def test_saved_flat_fact_prompt_gets_format_contract_without_retraining(monkeypatch):
+    from zylch.memory.extraction_format import SERIALIZATION_CONTRACT
+    from zylch.services.facts_store import parse_category, parse_key, parse_value
+
+    w = MemoryWorker.__new__(MemoryWorker)
+    w.owner_id = "owner"
+    w.storage = MagicMock()
+    original = "Only extract supported facts. Skip internal contacts. FACT: Category/Key/Value"
+    w.storage.get_agent_prompt.return_value = original
+    w._custom_prompt_loaded = False
+    monkeypatch.setattr("zylch.workers.memory._shared_self_notion", lambda: "Our company")
+    prompt = w._get_extraction_prompt()
+    assert prompt.startswith(original)
+    assert "DO NOT extract its people as external contacts" in prompt
+    assert prompt.endswith(SERIALIZATION_CONTRACT)
+    assert w._get_extraction_prompt() == prompt
+    w.storage.set_agent_prompt.assert_not_called()
+    fact = "#IDENTIFIERS\nEntity type: FACT\nCategory: pricing\nKey: sample\n#ABOUT\nValue: EUR 12\n#HISTORY\nSource: email"
+    assert w._parse_entities(fact) == [fact]
+    assert (parse_category(fact), parse_key(fact), parse_value(fact)) == ("pricing", "sample", "EUR 12")
