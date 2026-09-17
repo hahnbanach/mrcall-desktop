@@ -1,8 +1,8 @@
 """Private startup authority and the small public read-request contract.
 
 Bindings/grants are installed by trusted code, never decoded from wire requests.
-No production loader installs them yet. In particular, an identifier observed in
-a call or email does not grant access to a contact's facts by itself.
+The opt-in live loader installs explicit operator rehearsal grants. An identifier
+observed in a call or email does not grant access to a contact's facts by itself.
 """
 
 from dataclasses import asdict, dataclass, field

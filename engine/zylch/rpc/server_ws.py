@@ -109,8 +109,7 @@ def _authenticate_blocking(request) -> Tuple[Dict[str, Any], str]:
     expected = _expected_owner_uid()
     if not expected:
         raise PermissionError(
-            "this profile has no OWNER_ID — cross-machine serving requires a "
-            "Firebase-keyed profile"
+            "this profile has no OWNER_ID — cross-machine serving requires a Firebase-keyed profile"
         )
     if uid != expected:
         raise PermissionError("token uid does not own this profile")
@@ -143,7 +142,7 @@ async def _process_request(connection, request):
     return None
 
 
-async def _handle_connection(connection) -> None:
+async def _handle_connection(connection, *, live_pilot=None) -> None:
     """Per-connection loop: install the session, then dispatch frames.
 
     Each inbound frame is dispatched as its own task (matching the stdio
@@ -192,11 +191,16 @@ async def _handle_connection(connection) -> None:
                 return
 
     async def _handle_one(raw: str) -> None:
+        from zylch.rpc.pilot_email import pilot_invocation
+
+        authority = pilot_invocation.set((live_pilot, claims) if live_pilot else None)
         try:
             resp = await dispatch_raw(raw, notify)
         except Exception:
             logger.exception("[ws] dispatch crashed")
             return
+        finally:
+            pilot_invocation.reset(authority)
         if resp is not None:
             out_q.put_nowait(json.dumps(resp, ensure_ascii=False, default=str))
 
@@ -340,6 +344,35 @@ async def serve_ws(
     unix_path: Optional[str] = None,
     capability_endpoint=None,
 ) -> None:
+    """Serve owner RPC and, when explicitly configured, the bounded live pilot."""
+    from zylch.services.live_pilot import load_live_pilot
+
+    pilot = load_live_pilot()
+    try:
+        if pilot is not None and capability_endpoint is not None:
+            raise ValueError("pilot endpoint already supplied")
+        await _serve_ws(
+            host,
+            port,
+            warmup,
+            unix_path,
+            pilot.installation.endpoint if pilot else capability_endpoint,
+            live_pilot=pilot,
+        )
+    finally:
+        if pilot is not None:
+            pilot.close()
+
+
+async def _serve_ws(
+    host: Optional[str] = None,
+    port: Optional[int] = None,
+    warmup: bool = True,
+    unix_path: Optional[str] = None,
+    capability_endpoint=None,
+    *,
+    live_pilot=None,
+) -> None:
     """Run the WebSocket JSON-RPC server until cancelled.
 
     Listens on a TCP ``host:port`` OR a Unix domain socket (``unix_path``).
@@ -355,9 +388,10 @@ async def serve_ws(
     from websockets.asyncio.server import serve, unix_serve
     from zylch.rpc.capability_ws import scoped_routes
 
-    # Trusted startup injection only; the CLI never supplies a pilot endpoint.
-    # Separate routing keeps service credentials out of owner RPC/FirebaseSession.
-    handshake, handler = scoped_routes(capability_endpoint, _process_request, _handle_connection)
+    async def owner_handler(connection):
+        await _handle_connection(connection, live_pilot=live_pilot)
+
+    handshake, handler = scoped_routes(capability_endpoint, _process_request, owner_handler)
 
     if warmup:
         _warmup()

@@ -1,8 +1,8 @@
-# Shared assistant procedures — inactive pilot integration
+# Shared assistant procedures — opt-in pilot integration
 
 The pilot can load the same immutable instruction artifact into StarChat's
 phone model and the engine's existing conversational email loop. **Normal
-startup does not install a pilot route.** This is branch integration, not a
+startup without private operator configuration does not install a pilot route.** This is branch integration, not a
 deployed customer feature or an automatic inbox classifier.
 
 ## Content, authority and execution
@@ -62,8 +62,9 @@ Installation close retires the active handle and denies new preparation and
 pending scoped results, including those on the retained remote endpoint.
 Selections and contact evidence are never carried into a later handle.
 
-The preparation API is not installed into ordinary owner chat or CLI startup.
-It does not search a mailbox, identify a customer or create disclosure grants.
+The preparation API is not installed into ordinary owner chat. The opt-in
+WebSocket startup below exposes one manual owner RPC. It does not search a
+mailbox, identify a customer or create disclosure grants.
 
 `ChatService(pilot_email_route=...)` intercepts at the beginning of
 `process_message`, before owner commands, notifications, auto-sync and tools.
@@ -104,6 +105,75 @@ Raw model prose becomes a controlled inability-to-verify draft, never an order
 assertion. Expired/cancelled/rebound invocations create no draft. No send tool is
 exposed, and existing later send approval remains unchanged.
 
+## Private startup and manual invocation
+
+`zylch serve` (TCP or Unix WebSocket mode) reads `MRCALL_PILOT_CONFIG` only when
+explicitly set. The value must be an absolute path to a private regular JSON file
+(no group/other permissions, owned by the service UID or root). An absent variable
+preserves ordinary startup. An empty value, missing file, malformed configuration,
+expired grant or mismatched profile aborts startup before listening.
+
+The strict object has exactly these fields; identifiers and paths below are
+placeholders, never deployment values:
+
+```json
+{
+  "version": 1,
+  "installation_path": "/private/installation.json",
+  "installation_revision": "<sha256 of exact installation bytes>",
+  "procedure_path": "/private/order-existence.json",
+  "procedure_revision": "<sha256 of exact canonical procedure bytes>",
+  "profile_uid": "<actual owner Firebase UID>",
+  "company_key": "<actual profile MEMORY_KEY>",
+  "service_uid": "<dedicated Firebase service UID, different from owner>",
+  "contact_ref": "<bounded rehearsal contact reference>",
+  "contact_email": "customer@example.com",
+  "owner_email": "operator@example.com",
+  "issued_at_ms": 0,
+  "expires_at_ms": 0,
+  "clone_dir": "/private/selected-clone"
+}
+```
+
+Replace both timestamps with epoch milliseconds: issuance must be at or before
+now, expiry after now, and the activation window at most 24 hours. The pinned
+installation supplies the business ID and connection/authority reference names;
+its canonical schema and the canonical procedure are unchanged. Runtime grants
+permit only `order.exists`; memory interfaces remain available to other trusted
+compositions, but this activation supplies no memory grant.
+
+The actual daemon profile must match `OWNER_ID`, `MEMORY_KEY` and `EMAIL_ADDRESS`.
+The selected clone's `manifest.toml` is loaded through the installed cs-kernel
+config resolver, and its resolved `engine_owner_uid` and `email_address` must
+match, including raw manifest declarations before environment overrides.
+Startup passes an explicit manifest path without changing process environment or
+working directory. Kernel environment layers use the service user's home and
+the selected manifest's sibling `.env`; prepare those layers or its private environment rather
+than copying another owner's engine profile/session. The kernel must include
+`cs.shopify_client`. Each read resolves the existing cached/renewable Shopify
+token and uses the existing customer fetch; no provider secret belongs in this
+JSON, a request, a model argument or logs.
+
+The reserved `/assistant-capabilities/v1` WebSocket endpoint verifies the
+dedicated service bearer independently from owner RPC. For email, authenticate
+as the real profile owner and explicitly select one stored inbound email:
+
+```bash
+cs rpc pilot.email.draft '{"source_id":"<stored inbound email ID>"}'
+```
+
+Run from the configured clone using its existing authenticated owner RPC client.
+Only `source_id` is accepted. Sender must equal the granted contact; recipient
+must equal the configured owner mailbox. Owner, source ID and addressing/content
+are pinned and rechecked throughout. No arbitrary recipient or caller email can
+grant access. Connection token expiry and activation expiry are checked during
+reads/output; the normal owner-connection expiry grace is not used for this RPC.
+It returns the controlled response and draft ID, and never sends or starts inbox
+processing. Other `chat.send` requests retain their normal path. Shutdown and
+failed socket startup close the installation; remove the activation environment
+variable and restart to retire it (leaving it pointed at a missing file fails
+closed).
+
 ## Verification and remaining work
 
 `tests/services/test_procedure_email.py` exercises the actual ChatService/core,
@@ -129,10 +199,17 @@ resource ownership. To use the canonical installation fixture too, set
 `src/test/resources/assistant-procedures/installation-example.json` alongside
 `MRCALL_PROCEDURE_SOURCE`. Neither environment variable activates runtime code.
 
-Still required before a live pilot: owner-authorized publication/configuration,
-actual business/profile/service/contact bindings, source selection/identity policy,
-provider installation, supported phone bridge construction, billing readiness,
-controlled live call/email rehearsal and normal StarChat PR/team release.
+`tests/services/test_live_pilot.py` reaches actual `serve_ws`, authenticated owner
+RPC, reserved capability transport and the existing restricted ChatService/draft
+tool against temporary SQLite. It checks opt-out, invalid grants, connection
+authority, recipient/sender mismatch, expiry during model work, shutdown, and the
+kernel credential/fetch boundary with synthetic external edges.
+
+Still required before live acceptance: private deployment bindings and service
+credentials, provider packaging/connectivity, billing readiness and controlled
+live call/email rehearsal. Offline tests do not claim any deployment or live
+acceptance. The current activation work trace is hb's
+`docs/execution-plans/2026-09-17-mrcall-live-pilot.md`.
 The cross-repo scope and review ledger live in hb's
 `docs/execution-plans/2026-09-16-mrcall-shared-procedure.md` and
 `docs/execution-plans/2026-09-16-mrcall-pilot-installation.md`.

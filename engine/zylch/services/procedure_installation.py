@@ -1,4 +1,4 @@
-"""Trusted, inactive composition of a pinned procedure and scoped capabilities.
+"""Trusted composition of a pinned procedure and scoped capabilities.
 
 This is not a loader or an identity verifier. Startup must supply already trusted
 dependencies, and every email selection requires its own explicit authorization.
@@ -135,6 +135,7 @@ class PilotProcedureInstallation:
         session_factory: Callable,
         profile_scope: Callable,
         verify_token: Callable | None = None,
+        allowed_operations: frozenset[str] = OPERATIONS,
     ):
         readiness = self.preflight(
             spec,
@@ -155,7 +156,13 @@ class PilotProcedureInstallation:
         self._closed = False
         self._active: PreparedEmail | None = None
         self._preparing = False
-        self.service = ScopedCapabilities(binding, read_customers, session_factory, self._scope)
+        self.service = ScopedCapabilities(
+            binding,
+            read_customers,
+            session_factory,
+            self._scope,
+            allowed_operations=allowed_operations,
+        )
         # Validation precedes resource allocation. A failed second allocation
         # cannot leave the first pool alive. Constructors perform no paid work.
         self._workers = BoundedReads()
@@ -187,7 +194,9 @@ class PilotProcedureInstallation:
             return InstallationReadiness("scope_unavailable")
         return InstallationReadiness("ready_for_local_construction")
 
-    def prepare_email(self, selection: EmailSelection, storage, owner_id: str) -> PreparedEmail:
+    def prepare_email(
+        self, selection: EmailSelection, storage, owner_id: str, *, check_authority=None
+    ) -> PreparedEmail:
         """Freeze an explicitly selected source; no mailbox search or recognition.
 
         The owner-scoped source digest and granted recipient are validated before
@@ -204,7 +213,13 @@ class PilotProcedureInstallation:
         try:
             # Storage/scope callbacks run outside admission locks. A pending
             # preparation reserves the single slot but close can still revoke it.
-            route = PilotEmailRoute(self.artifact, self.service, selection, workers=self._workers)
+            route = PilotEmailRoute(
+                self.artifact,
+                self.service,
+                selection,
+                workers=self._workers,
+                check_authority=check_authority,
+            )
             route._source(storage, owner_id)
             with self._lock:
                 if self._closed:

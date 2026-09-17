@@ -15,14 +15,14 @@ retain their previous billing/model settings. Production's daily cap is USD20;
 the other three caps are USD5. Automatic processing is off and preparation is
 paused/not running in all four. Other hosted units retain their own release pins.
 
-The local `feat/mrcall-evolution-pilot` worktree contains inactive scoped reads
+The local `feat/mrcall-evolution-pilot` worktree contains opt-in scoped reads
 for order existence and approved sentences from existing company memory.
 `ScopedCapabilities` fixes business/profile/company/contact grants at trusted
 startup; it never interprets a caller ID or spoken email as authorization.
 `CapabilityEndpoint` reserves `/assistant-capabilities/v1` on the existing
 WebSocket listener, accepts a dedicated Firebase service UID, and never enters
 owner RPC or replaces the owner session. Both TCP and Unix paths refuse when
-the endpoint is absent, as it is in normal CLI startup. Worker, replay, frame,
+the endpoint is absent, as it is without private activation configuration. Worker, replay, frame,
 request and connection limits are covered by offline tests with signed fixture
 JWTs and synthetic memory tables. Connection admission covers authentication
 through actual transport close; busy peers receive HTTP 429 before upgrade.
@@ -39,15 +39,23 @@ Trusted installation composition binds the shared pinned metadata to one scoped
 service/endpoint and shared email executor. It prepares one explicitly selected
 email at a time, with caller-owned close and post-storage revocation checks.
 Local readiness performs no provider/model/token work and never reports live
-readiness. No installation loader or automatic owner-chat routing is installed.
-Real service identity, contact/content grants, provider packaging, owner
-configuration and activation remain unimplemented. Cross-repo work traces are
+readiness. WebSocket startup now accepts a strict private `MRCALL_PILOT_CONFIG`
+file binding the actual owner/company, dedicated service UID, pinned procedure,
+one rehearsal contact and an expiry within 24 hours. Malformed enabled config
+fails before serving; expiry/scope are rechecked throughout. Only `order.exists`
+is granted. `pilot.email.draft` accepts one source ID from an authenticated owner,
+checks stored inbound addressing/content, and uses the restricted ChatService.
+The selected clone's existing kernel resolver supplies renewable Shopify reads;
+no owner session is copied. Automatic owner-chat routing remains absent.
+Actual deployment and live acceptance remain separate from the offline startup/
+RPC tests. Activation trace: hb's
+`docs/execution-plans/2026-09-17-mrcall-live-pilot.md`. Earlier work traces are
 in hb's `docs/execution-plans/2026-09-15-mrcall-scoped-engine-capabilities.md`
 and `docs/execution-plans/2026-09-16-mrcall-shared-procedure.md`, with current
 preparation work in `docs/execution-plans/2026-09-16-mrcall-pilot-installation.md`.
 
 [K3 max](features/k3-reasoning.md) uses Chat completions pinned to DigitalOcean.
-The shared client promotes implicit limits, including the inactive restricted
+The shared client promotes implicit limits, including the restricted
 pilot's request, to a combined 8192-token reasoning/final cap before quote and
 budget admission. The pilot adds no model-specific override; its K3 compatibility
 is verified offline, not as live pilot quality or latency within its unchanged

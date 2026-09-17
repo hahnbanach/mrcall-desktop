@@ -10,7 +10,12 @@ import os
 import time
 from collections.abc import Callable
 
-from zylch.services.capability_contract import CapabilityBinding, CapabilityRequest, ContactGrant
+from zylch.services.capability_contract import (
+    OPERATIONS,
+    CapabilityBinding,
+    CapabilityRequest,
+    ContactGrant,
+)
 from zylch.services.order_existence import lookup_order_existence
 
 
@@ -26,12 +31,16 @@ class ScopedCapabilities:
         session_factory: Callable,
         profile_scope: Callable = current_profile_scope,
         now_ms: Callable = lambda: time.time_ns() // 1_000_000,
+        allowed_operations: frozenset[str] = OPERATIONS,
     ):
         self.binding = binding
         self._read_customers = read_customers
         self._session_factory = session_factory
         self._profile_scope = profile_scope
         self._now_ms = now_ms
+        if not allowed_operations or not allowed_operations.issubset(OPERATIONS):
+            raise ValueError("invalid operation grant")
+        self._allowed_operations = frozenset(allowed_operations)
 
     def check_scope(self) -> None:
         if self._profile_scope() != (self.binding.profile_uid, self.binding.company_key):
@@ -46,6 +55,8 @@ class ScopedCapabilities:
         """
         CapabilityRequest.parse(request.public_dict(), self.binding, self._now_ms())
         self.check_scope()
+        if request.operation not in self._allowed_operations:
+            raise PermissionError("operation not granted")
         grant = next(g for g in self.binding.contacts if g.contact_ref == request.contact_ref)
         if request.operation == "order.exists":
             result = {"status": lookup_order_existence(grant.email, self._read_customers).value}

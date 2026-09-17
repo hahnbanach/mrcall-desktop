@@ -1,6 +1,6 @@
-"""Inactive, trusted source-email binding into the existing ChatService path.
+"""Trusted source-email binding into the existing ChatService path.
 
-Normal ChatService construction installs no route. A future owner-controlled
+Normal ChatService construction installs no route. The owner-controlled
 pilot loader must supply the selected source/contact and exact artifact revision;
 chat context can only match that selection, never create or widen it.
 """
@@ -56,6 +56,7 @@ class PilotEmailRoute:
         selection: EmailSelection,
         *,
         workers: BoundedReads | None = None,
+        check_authority=None,
     ):
         if (
             artifact.revision != service.binding.procedure_revision
@@ -73,6 +74,7 @@ class PilotEmailRoute:
                 raise ValueError("pilot email contact is not granted")
         self.artifact, self.service, self.selection = artifact, service, selection
         self._binding = service.binding
+        self._check_authority = check_authority
         # Direct construction retains pool ownership. An installation supplies one
         # shared pool across selections: closing a route must not free the slots
         # of abandoned model/provider calls that are still running in its threads.
@@ -87,6 +89,8 @@ class PilotEmailRoute:
             self._workers.close()
 
     def _source(self, storage, owner):
+        if self._check_authority is not None:
+            self._check_authority()
         if self.service.binding != self._binding:
             raise PermissionError("pilot email binding changed")
         self.service.check_scope()
@@ -105,6 +109,8 @@ class PilotEmailRoute:
         self.service.check_scope()
         if self._closed or self.service.binding != self._binding:
             raise PermissionError("pilot email scope denied")
+        if self._check_authority is not None:
+            self._check_authority()
         return source
 
     async def process(self, storage, user_id, context):
