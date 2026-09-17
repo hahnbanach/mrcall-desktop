@@ -4,6 +4,15 @@ Historical snapshots preserved verbatim when the living context is consolidated.
 Dated deployment claims and incident counts below are historical observations,
 not current operational state; use [active-context.md](active-context.md).
 
+## 2026-09-17 — Before isolated pilot engine installation
+
+Four Café124 units run isolated release `8d83193`; the billing server runs
+`prod-99091c35`. Production selects personal OpenRouter/custom K3 for its base
+model, five worker roles and reply classification. The other three profiles
+retain their previous billing/model settings. Production's daily cap is USD20;
+the other three caps are USD5. Automatic processing is off and preparation is
+paused/not running in all four. Other hosted units retain their own release pins.
+
 
 
 

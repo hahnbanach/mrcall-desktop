@@ -1,6 +1,6 @@
 ---
-doc_baseline_commit: 5cb3294d94e2b44ef1de74ac70d47463d0dd716a
-doc_baseline_date: 2026-09-16
+doc_baseline_commit: 4fcbe985f3878e6a282138af6068083f4e099296
+doc_baseline_date: 2026-09-17
 ---
 
 # Active Context — Cross-cutting
@@ -19,13 +19,14 @@ what is *current*, targeting ≤ ~120 lines.
 
 ## State now
 
-Four Café124 engines run pinned release `8d83193`; the billing server is
-`prod-99091c35`. Production uses K3 max through its personal OpenRouter key,
-with a USD20/day limit. The other three profiles retain their previous billing
-and model choices and USD5/day limits. All four have automatic processing off
-and preparation paused. Adding a saved Anthropic key does not change the selected
-provider or enable fallback. See [K3 adoption](execution-plans/2026-09-16-k3-production.md)
-and [runtime contract](../engine/docs/features/k3-reasoning.md).
+The Café124 production-mailbox hosted engine runs isolated pilot source
+`4fcbe98` with kernel `2c6fa5a`, still default-off. Owner RPC and disabled-pilot
+refusal are verified; other hosted engines keep their existing releases.
+Production retains personal OpenRouter/K3 and its USD20/day limit. Preparation
+and automatic-work settings are unchanged. Adding a saved Anthropic key does not
+change the selected provider or enable fallback. See the
+[engine state](../engine/docs/active-context.md) and
+[runtime contract](../engine/docs/features/k3-reasoning.md).
 
 Personal-key K3 transport, reasoning and accounting have a successful synthetic
 live acceptance; production identity, catalog and paused preparation checks pass.

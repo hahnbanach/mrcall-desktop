@@ -205,10 +205,13 @@ tool against temporary SQLite. It checks opt-out, invalid grants, connection
 authority, recipient/sender mismatch, expiry during model work, shutdown, and the
 kernel credential/fetch boundary with synthetic external edges.
 
-Still required before live acceptance: private deployment bindings and service
-credentials, provider packaging/connectivity, billing readiness and controlled
-live call/email rehearsal. Offline tests do not claim any deployment or live
-acceptance. The current activation work trace is hb's
+The isolated hosted engine includes the pilot kernel package. A real read through
+the clone's existing credentials confirms the authorized rehearsal contact has
+an order; that is provider preparation, not an activated engine capability.
+Still required before live acceptance: private deployment and provider credential
+bindings, service authentication, hosted capability connectivity, billing
+readiness and controlled live call/email rehearsal. Offline tests do not certify
+those outcomes. The current activation work trace is hb's
 `docs/execution-plans/2026-09-17-mrcall-live-pilot.md`.
 The cross-repo scope and review ledger live in hb's
 `docs/execution-plans/2026-09-16-mrcall-shared-procedure.md` and

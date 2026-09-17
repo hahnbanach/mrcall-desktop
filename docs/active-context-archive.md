@@ -5,6 +5,16 @@ That file is a living snapshot and carries only `State now` / `Unresolved` /
 `Next`; anything chronological lands here instead. Newest section first.
 Nothing is discarded — only relocated, verbatim.
 
+## 2026-09-17 — Before isolated pilot engine installation
+
+Four Café124 engines run pinned release `8d83193`; the billing server is
+`prod-99091c35`. Production uses K3 max through its personal OpenRouter key,
+with a USD20/day limit. The other three profiles retain their previous billing
+and model choices and USD5/day limits. All four have automatic processing off
+and preparation paused. Adding a saved Anthropic key does not change the selected
+provider or enable fallback. See [K3 adoption](execution-plans/2026-09-16-k3-production.md)
+and [runtime contract](../engine/docs/features/k3-reasoning.md).
+
 
 
 

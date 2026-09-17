@@ -8,12 +8,12 @@ are preserved in [active-context-archive.md](active-context-archive.md).
 
 ## State now
 
-Four Café124 units run isolated release `8d83193`; the billing server runs
-`prod-99091c35`. Production selects personal OpenRouter/custom K3 for its base
-model, five worker roles and reply classification. The other three profiles
-retain their previous billing/model settings. Production's daily cap is USD20;
-the other three caps are USD5. Automatic processing is off and preparation is
-paused/not running in all four. Other hosted units retain their own release pins.
+The Café124 production-mailbox engine runs isolated pilot source `4fcbe98` with
+kernel source `2c6fa5a`, default-off until private activation is installed. Live
+owner RPC and disabled-pilot refusal pass. Its personal OpenRouter/K3 selection
+and USD20/day budget are unchanged; preparation and automatic-work settings were
+not modified. The other engines retain their existing release and settings.
+This is a hosted-engine update, not an Electron release or StarChat activation.
 
 The local `feat/mrcall-evolution-pilot` worktree contains opt-in scoped reads
 for order existence and approved sentences from existing company memory.
