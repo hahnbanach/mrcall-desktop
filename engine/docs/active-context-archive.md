@@ -4,6 +4,15 @@ Historical snapshots preserved verbatim when the living context is consolidated.
 Dated deployment claims and incident counts below are historical observations,
 not current operational state; use [active-context.md](active-context.md).
 
+## 2026-09-18 — Before live pilot activation
+
+The Café124 production-mailbox engine runs isolated pilot source `4fcbe98` with
+kernel source `2c6fa5a`, default-off until private activation is installed. Live
+owner RPC and disabled-pilot refusal pass. Its personal OpenRouter/K3 selection
+and USD20/day budget are unchanged; preparation and automatic-work settings were
+not modified. The other engines retain their existing release and settings.
+This is a hosted-engine update, not an Electron release or StarChat activation.
+
 ## 2026-09-17 — Before isolated pilot engine installation
 
 Four Café124 units run isolated release `8d83193`; the billing server runs

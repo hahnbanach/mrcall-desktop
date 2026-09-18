@@ -5,6 +5,17 @@ That file is a living snapshot and carries only `State now` / `Unresolved` /
 `Next`; anything chronological lands here instead. Newest section first.
 Nothing is discarded — only relocated, verbatim.
 
+## 2026-09-18 — Before live pilot activation
+
+The Café124 production-mailbox hosted engine runs isolated pilot source
+`4fcbe98` with kernel `2c6fa5a`, still default-off. Owner RPC and disabled-pilot
+refusal are verified; other hosted engines keep their existing releases.
+Production retains personal OpenRouter/K3 and its USD20/day limit. Preparation
+and automatic-work settings are unchanged. Adding a saved Anthropic key does not
+change the selected provider or enable fallback. See the
+[engine state](../engine/docs/active-context.md) and
+[runtime contract](../engine/docs/features/k3-reasoning.md).
+
 ## 2026-09-17 — Before isolated pilot engine installation
 
 Four Café124 engines run pinned release `8d83193`; the billing server is

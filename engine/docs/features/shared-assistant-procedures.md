@@ -222,13 +222,15 @@ tool against temporary SQLite. It checks opt-out, invalid grants, connection
 authority, recipient/sender mismatch, expiry during model work, shutdown, and the
 kernel credential/fetch boundary with synthetic external edges.
 
-The isolated hosted engine includes the pilot kernel package. A real read through
-the clone's existing credentials confirms the authorized rehearsal contact has
-an order; that is provider preparation, not an activated engine capability.
-Still required before live acceptance: private deployment and provider credential
-bindings, service authentication, hosted capability connectivity, billing
-readiness and controlled live call/email rehearsal. Offline tests do not certify
-those outcomes. The current activation work trace is hb's
+The isolated Cafe124 hosted engine has a private, expiring pilot activation.
+Dedicated service authentication, hosted capability connectivity and scoped
+Shopify reads pass live probes. The selected real email produces an unsent
+`order_exists` engine draft in 12.02 seconds through the configured K3 client.
+The kernel can mirror that draft into the mailbox for review; this is an explicit
+operator step, not an automatic effect of `pilot.email.draft`. Desktop's Drafts
+tab is a placeholder and does not display engine draft rows.
+Controlled phone acceptance, general latency and broader quality remain open;
+one email rehearsal does not certify them. The current activation work trace is hb's
 `docs/execution-plans/2026-09-17-mrcall-live-pilot.md`.
 The cross-repo scope and review ledger live in hb's
 `docs/execution-plans/2026-09-16-mrcall-shared-procedure.md` and

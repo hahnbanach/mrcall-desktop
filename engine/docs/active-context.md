@@ -8,12 +8,13 @@ are preserved in [active-context-archive.md](active-context-archive.md).
 
 ## State now
 
-The Café124 production-mailbox engine runs isolated pilot source `4fcbe98` with
-kernel source `2c6fa5a`, default-off until private activation is installed. Live
-owner RPC and disabled-pilot refusal pass. Its personal OpenRouter/K3 selection
-and USD20/day budget are unchanged; preparation and automatic-work settings were
-not modified. The other engines retain their existing release and settings.
-This is a hosted-engine update, not an Electron release or StarChat activation.
+The Café124 production-mailbox engine runs isolated pilot source `340a99d` with
+kernel source `2c6fa5a` and a private order-existence grant. Real selected-email
+acceptance returns `order_exists` and an unsent draft in 12.02 seconds. Mailbox
+storage ownership and authenticated Firebase UID remain separate bindings.
+The grant retires at 2026-09-19 09:00 UTC. Personal OpenRouter/K3, the USD20/day
+budget and paused automatic work are unchanged. Other engines retain their
+releases and settings. This is a hosted update, not an Electron release.
 
 The local `feat/mrcall-evolution-pilot` worktree contains opt-in scoped reads
 for order existence and approved sentences from existing company memory.
@@ -61,8 +62,8 @@ preparation work in `docs/execution-plans/2026-09-16-mrcall-pilot-installation.m
 The shared client promotes implicit limits, including the restricted
 pilot's request, to a combined 8192-token reasoning/final cap before quote and
 budget admission. The pilot adds no model-specific override; its K3 compatibility
-is verified offline, not as live pilot quality or latency within its unchanged
-15-second invocation deadline.
+has one successful real email within the unchanged 15-second invocation deadline.
+This single rehearsal does not establish general quality or a latency percentile.
 Synthetic live BYOK acceptance verifies a
 complete response, positive reasoning usage and actual-cost settlement. The
 configured client factory resolves OpenRouter/K3. A saved Anthropic key is

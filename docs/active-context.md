@@ -1,6 +1,6 @@
 ---
-doc_baseline_commit: 4fcbe985f3878e6a282138af6068083f4e099296
-doc_baseline_date: 2026-09-17
+doc_baseline_commit: 340a99d14ee40fc0b30b2d67ace83d63170cc7fb
+doc_baseline_date: 2026-09-18
 ---
 
 # Active Context — Cross-cutting
@@ -20,11 +20,13 @@ what is *current*, targeting ≤ ~120 lines.
 ## State now
 
 The Café124 production-mailbox hosted engine runs isolated pilot source
-`4fcbe98` with kernel `2c6fa5a`, still default-off. Owner RPC and disabled-pilot
-refusal are verified; other hosted engines keep their existing releases.
-Production retains personal OpenRouter/K3 and its USD20/day limit. Preparation
-and automatic-work settings are unchanged. Adding a saved Anthropic key does not
-change the selected provider or enable fallback. See the
+`340a99d` with kernel `2c6fa5a` and a private, expiring order-existence grant.
+The selected real email passes Shopify lookup and unsent engine draft creation.
+Its review copy is in the mailbox's Drafts through an explicit kernel mirror;
+Desktop's Drafts tab remains a placeholder, not a working list of engine drafts.
+The grant retires at 2026-09-19 09:00 UTC. Other hosted engines keep their releases.
+Personal OpenRouter/K3, the USD20/day cap and paused automatic work are unchanged.
+A saved Anthropic key does not change the provider or enable fallback. See the
 [engine state](../engine/docs/active-context.md) and
 [runtime contract](../engine/docs/features/k3-reasoning.md).
 
