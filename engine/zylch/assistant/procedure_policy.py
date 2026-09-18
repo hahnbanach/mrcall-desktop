@@ -47,7 +47,19 @@ class ProcedurePolicy:
 
     @property
     def prompt(self):
-        return self.artifact.prompt
+        # Admission state comes from trusted composition, not message text. Keep
+        # contact identifiers and credentials out of the model-facing context.
+        state = (
+            "Trusted host contact state: authorized contact bound. "
+            "Use the advertised capability_read operations for this contact without requesting "
+            "an email or phone number. "
+            "need_identification is permitted only if the latest order.exists result "
+            "requires identification."
+            if self.identified
+            else "Trusted host contact state: no authorized contact bound. "
+            "No read is authorized; finish with need_identification."
+        )
+        return self.artifact.prompt + "\n\n" + state
 
     def schemas(self):
         grant = frozenset(self.artifact.operations) if self.identified else frozenset()
@@ -182,7 +194,12 @@ class ProcedurePolicy:
         ):
             return
         status, include = arguments["status"], arguments["include_memory"]
-        safe = status in ("need_identification", "unavailable")
+        # A bound contact must not be treated as unidentified merely because the
+        # model skipped the read. A current provider result may still be ambiguous.
+        identification = status == "need_identification" and (
+            not self.identified or self._order == "need_identification"
+        )
+        safe = status == "unavailable" or identification
         order = (
             self.artifact.completion == "order"
             and status in ("order_exists", "no_order")

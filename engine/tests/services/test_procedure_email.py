@@ -262,13 +262,25 @@ def test_plain_model_prose_never_becomes_draft(setup):
 
 def test_finish_stops_following_tools_in_same_response(setup):
     setup.messages.return_value = reply(
-        tool("procedure_finish", {"status": "need_identification", "include_memory": False}),
+        tool("procedure_finish", {"status": "unavailable", "include_memory": False}),
         tool("capability_read", {"operation": "order.exists"}, "late"),
     )
     run(setup)
     assert len(drafts()) == 1
     assert setup.provider.call_count == 0
     assert setup.messages.call_count == 1
+
+
+def test_bound_contact_premature_clarification_is_refused_before_order_read(setup):
+    setup.messages.side_effect = [
+        finish("need_identification"), read(), finish(call_id="verified-finish")
+    ]
+    run(setup)
+    assert setup.messages.call_count == 3
+    assert setup.provider.call_count == 1
+    assert drafts()[0]["body"] == setup.artifact.message("order_exists")
+    system = setup.messages.call_args_list[0].kwargs["system"]
+    assert "Trusted host contact state: authorized contact bound." in str(system)
 
 
 @pytest.mark.parametrize("change", ["owner", "source", "context", "scope"])

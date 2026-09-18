@@ -27,6 +27,13 @@ Neither accepts an endpoint, company, contact, recipient, receipt or answer body
 The model chooses reads and clarification; deterministic code checks the result.
 Current order existence requires the latest matching read from this invocation.
 Approved memory is optional context, never evidence of a current order.
+The runtime prompt also states whether trusted admission bound an authorized
+contact, without disclosing its identifiers. A bound contact may finish with
+`need_identification` only after the latest accepted `order.exists` result reports
+that status. An unbound contact may clarify without a read and receives no read
+tool. A new read retires prior evidence before provider IO, including when the
+refresh fails. `unavailable` remains a legal safe completion. These host checks
+do not change the canonical artifact bytes, revision or invocation budgets.
 
 The initial response renderer is intentionally finite: reviewed artifact messages
 plus explicitly approved memory sentences. This does not implement unrestricted
