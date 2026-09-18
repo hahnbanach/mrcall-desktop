@@ -169,7 +169,17 @@ are pinned and rechecked throughout. No arbitrary recipient or caller email can
 grant access. Connection token expiry and activation expiry are checked during
 reads/output; the normal owner-connection expiry grace is not used for this RPC.
 It returns the controlled response and draft ID, and never sends or starts inbox
-processing. Other `chat.send` requests retain their normal path. Shutdown and
+processing. Firebase UID remains the invocation identity, while the frozen
+selection separately binds storage ownership to the configured mailbox, matching
+the engine's existing `get_owner_id()` and ordinary email/draft RPC. The mailbox
+binding is checked again throughout the invocation; a changed active mailbox
+refuses pending output. Trusted offline compositions that omit this storage
+binding retain UID ownership.
+
+The result is an engine SQLite draft, visible through ordinary `drafts.list`.
+`CreateDraftTool` does not append it to IMAP/Gmail Drafts. Such publication is a
+separate mailbox operation, not part of this pilot RPC.
+Other `chat.send` requests retain their normal path. Shutdown and
 failed socket startup close the installation; remove the activation environment
 variable and restart to retire it (leaving it pointed at a missing file fails
 closed).

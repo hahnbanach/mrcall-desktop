@@ -46,6 +46,9 @@ class EmailSelection:
     source_revision: str
     recipient: str
     contact_ref: str | None
+    # Storage provenance is distinct from the authenticated Firebase profile UID.
+    # Only trusted composition supplies this; wire/model arguments never do.
+    storage_owner_id: str | None = None
 
 
 class PilotEmailRoute:
@@ -63,6 +66,13 @@ class PilotEmailRoute:
             or _mailbox(selection.recipient) != selection.recipient
             or not selection.source_id
             or len(selection.source_revision) != 64
+            or (
+                selection.storage_owner_id is not None
+                and (
+                    not isinstance(selection.storage_owner_id, str)
+                    or not selection.storage_owner_id
+                )
+            )
         ):
             raise ValueError("invalid pilot email binding")
         if selection.contact_ref is not None:
@@ -96,10 +106,11 @@ class PilotEmailRoute:
         self.service.check_scope()
         if self._closed or owner != self.service.binding.profile_uid:
             raise PermissionError("pilot email scope denied")
-        source = storage.get_email_by_supabase_id(owner, self.selection.source_id)
+        storage_owner = self.selection.storage_owner_id or self._binding.profile_uid
+        source = storage.get_email_by_supabase_id(storage_owner, self.selection.source_id)
         if (
             not source
-            or source.get("owner_id") != owner
+            or source.get("owner_id") != storage_owner
             or _mailbox(source.get("from_email")) != self.selection.recipient
             or source_revision(source) != self.selection.source_revision
         ):
@@ -196,7 +207,8 @@ class PilotEmailRoute:
                 references = " ".join(part for part in (references, message_id) if part)
                 # No asynchronous work separates the last scope/source/deadline
                 # checks and CreateDraftTool's synchronous persistence section.
-                result = await CreateDraftTool(storage, user_id).execute(
+                storage_owner = self.selection.storage_owner_id or self._binding.profile_uid
+                result = await CreateDraftTool(storage, storage_owner).execute(
                     to=self.selection.recipient,
                     subject=subject,
                     body=text,

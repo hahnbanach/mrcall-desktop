@@ -102,11 +102,18 @@ class LivePilot:
 
     async def draft(self, source_id, claims):
         """Use connection-verified owner claims, never process-global auth state."""
+        from zylch.cli.utils import get_owner_id
         from zylch.services.chat_service import ChatService
         from zylch.storage import Storage
 
+        # Existing mail/draft RPC uses EMAIL_ADDRESS for storage ownership even
+        # though the profile and connection are authenticated by Firebase UID.
+        storage_owner = self.config["owner_email"]
+
         def authorized():
             self.installation.service.check_scope()
+            if get_owner_id() != storage_owner:
+                raise PermissionError("pilot storage owner changed")
             if (
                 claims.get("sub") != self.config["profile_uid"]
                 or type(claims.get("exp")) is not int
@@ -119,10 +126,10 @@ class LivePilot:
             raise ValueError("invalid source selection")
         storage = Storage.get_instance()
         owner = self.config["profile_uid"]
-        source = storage.get_email_by_supabase_id(owner, source_id)
+        source = storage.get_email_by_supabase_id(storage_owner, source_id)
         if (
             not source
-            or source.get("owner_id") != owner
+            or source.get("owner_id") != storage_owner
             or source.get("id") != source_id
             or _mailbox(source.get("from_email")) != self.config["contact_email"]
             or _mailbox(source.get("to_email")) != self.config["owner_email"]
@@ -133,6 +140,7 @@ class LivePilot:
             source_revision(source),
             self.config["contact_email"],
             self.config["contact_ref"],
+            storage_owner_id=storage_owner,
         )
         with self.installation.prepare_email(
             selection, storage, owner, check_authority=authorized

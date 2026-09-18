@@ -45,6 +45,9 @@ one rehearsal contact and an expiry within 24 hours. Malformed enabled config
 fails before serving; expiry/scope are rechecked throughout. Only `order.exists`
 is granted. `pilot.email.draft` accepts one source ID from an authenticated owner,
 checks stored inbound addressing/content, and uses the restricted ChatService.
+Email storage ownership follows the configured mailbox, separately from the
+authenticated Firebase UID; both remain bound throughout an invocation. Returned
+drafts live in engine SQLite and ordinary `drafts.list`, not IMAP/Gmail Drafts.
 The selected clone's existing kernel resolver supplies renewable Shopify reads;
 no owner session is copied. Automatic owner-chat routing remains absent.
 Actual deployment and live acceptance remain separate from the offline startup/

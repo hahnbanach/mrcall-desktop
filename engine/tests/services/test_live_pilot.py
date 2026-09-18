@@ -25,6 +25,12 @@ from zylch.storage import Storage
 @pytest.fixture
 def configured(base_setup, tmp_path, monkeypatch):  # noqa: F811
     state = base_setup
+    # Live engine mail/draft RPC stores rows under the mailbox, not Firebase UID.
+    from zylch.storage import database
+    from zylch.storage.models import Email
+
+    with database.get_session() as session:
+        session.get(Email, "source").owner_id = "owner@example.com"
     procedure = tmp_path / "procedure.json"
     procedure.write_bytes(state.raw)
     installation = tmp_path / "installation.json"
@@ -122,16 +128,18 @@ def test_expiry_and_only_order_grant(configured):
         pilot.close()
 
 
-@pytest.mark.parametrize("revoke", ["activation", "owner_token"])
-def test_expiry_during_model_work_prevents_draft(configured, revoke):
+@pytest.mark.parametrize("revoke", ["activation", "owner_token", "storage_owner"])
+def test_expiry_during_model_work_prevents_draft(configured, revoke, monkeypatch):
     pilot = live_pilot.load_live_pilot()
     claims = {"sub": OWNER, "exp": int(time.time()) + 60}
 
     def response(**kwargs):
         if revoke == "activation":
             pilot.config["expires_at_ms"] = 1
-        else:
+        elif revoke == "owner_token":
             claims["exp"] = 1
+        else:
+            monkeypatch.setenv("EMAIL_ADDRESS", "other@example.com")
         return read()
 
     configured.messages.side_effect = response
@@ -140,6 +148,28 @@ def test_expiry_during_model_work_prevents_draft(configured, revoke):
             asyncio.run(pilot.draft("source", claims))
         assert drafts() == []
         assert pilot.installation._active is None
+    finally:
+        pilot.close()
+
+
+def test_storage_owner_does_not_replace_authenticated_uid(configured):
+    from dataclasses import replace
+
+    from zylch.services.procedure_email import EmailSelection, source_revision
+
+    pilot = live_pilot.load_live_pilot()
+    mailbox = configured.config["owner_email"]
+    source = configured.storage.get_email_by_supabase_id(mailbox, "source")
+    selection = EmailSelection("source", source_revision(source), RECIPIENT, "customer", mailbox)
+    try:
+        with pytest.raises(PermissionError):
+            pilot.installation.prepare_email(selection, configured.storage, mailbox)
+        with pytest.raises(PermissionError):
+            pilot.installation.prepare_email(
+                replace(selection, storage_owner_id="other@example.com"), configured.storage, OWNER
+            )
+        assert drafts() == []
+        configured.provider.assert_not_called()
     finally:
         pilot.close()
 
@@ -250,6 +280,16 @@ def test_real_startup_and_authenticated_manual_rpc(configured, monkeypatch, enab
                 if enabled:
                     assert result["result"]["metadata"]["draft_id"]
                     assert len(drafts()) == 1
+                    assert drafts()[0]["owner_id"] == "owner@example.com"
+                    await ws.send(
+                        json.dumps(
+                            {"jsonrpc": "2.0", "id": 4, "method": "drafts.list", "params": {}}
+                        )
+                    )
+                    listed = json.loads(await ws.recv())
+                    assert result["result"]["metadata"]["draft_id"] in {
+                        row["id"] for row in listed["result"]
+                    }
                 else:
                     assert "error" in result
                     assert drafts() == []
