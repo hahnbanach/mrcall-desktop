@@ -71,10 +71,13 @@ class _FakeIMAPConnection:
 
 
 class _FakeUsage:
-    input_tokens = 1
-    output_tokens = 1
-    cache_creation_input_tokens = 0
-    cache_read_input_tokens = 0
+    def __init__(self):
+        # The production adapter normalizes SDK objects through vars(); keep
+        # these as instance fields so the fixture supplies real usage data.
+        self.input_tokens = 1
+        self.output_tokens = 1
+        self.cache_creation_input_tokens = 0
+        self.cache_read_input_tokens = 0
 
 
 class _Step:
@@ -109,7 +112,11 @@ class _ScriptedMessages:
         return types.SimpleNamespace(
             content=step.blocks,
             stop_reason=step.stop_reason,
-            model="fake-model",
+            # Paid-dispatch validation now verifies that the provider answered
+            # with the exact model reserved for this request.  Echo the model
+            # the real SDK call received so this cancellation fixture reaches
+            # the boundary it is meant to exercise.
+            model=_kwargs["model"],
             usage=_FakeUsage(),
         )
 

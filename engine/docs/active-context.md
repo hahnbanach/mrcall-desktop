@@ -8,6 +8,16 @@ are preserved in [active-context-archive.md](active-context-archive.md).
 
 ## State now
 
+Engine chat now supports negotiated read-only policy version 1. The policy is
+enforced before slash/semantic/task routing and again at assistant and task
+executor tools; read-only turns do not acknowledge notifications or enqueue
+auto-sync work. Kernel `cs ask` requires this capability. The focused M1 suite
+proves that explicit mutation refusal leaves complete persisted table values
+unchanged and never initializes the agent, creates a background job or requests
+an LLM budget reservation. It also covers a real kernel-client → RPC →
+dispatcher refusal, while help and search tools remain available. This is
+implemented and tested locally, not deployed.
+
 Four Café124 units run isolated release `8d83193`; the billing server runs
 `prod-99091c35`. Production selects personal OpenRouter/custom K3 for its base
 model, five worker roles and reply classification. The other three profiles

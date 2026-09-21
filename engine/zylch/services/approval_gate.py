@@ -39,19 +39,23 @@ UNGATED = "ungated"
 # alone: `/email` also lists, reads and deletes drafts, and a gate on the whole
 # verb would put a confirmation card in front of `/email list`.
 #
-# `/email send` is the only entry, from reading every handler in
-# COMMAND_HANDLERS: it holds the only calls to a `.send_message()` transport in
-# `command_handlers.py`. `/agent email run` composes but stops at a draft
-# (`EmailerAgent`'s single tool is `write_email`), `/tasks` reads and analyses,
-# and the rest — `/echo /help /tutorial /sync /update /memory /connect /share
-# /revoke /stats /calendar /jobs /reset` — touch local storage, OAuth state or
-# the LLM only. Memory and calendar writes are mutations but not sends, and are
-# deliberately out of this gate's remit.
+# `/email send` is the transport entry. Memory writes, memory-agent execution,
+# job resume, update and hard reset are also gated below because an old client
+# that never sends the read-only policy must still fail closed on mutations.
 #
 # The name is `send_draft`, the tool the LLM path already uses for the same act,
 # so a client's allow-list cannot grant one route and refuse the other.
 _SEND_CAPABLE_SUBCOMMANDS: Dict[Tuple[str, str], str] = {
     ("/email", "send"): "send_draft",
+}
+
+_MUTATING_SUBCOMMANDS: Dict[Tuple[str, str], str] = {
+    ("/memory", "store"): "create_memory",
+    ("/memory", "force"): "create_memory",
+    ("/memory", "delete"): "delete_memory",
+    ("/memory", "reset"): "reset_memory",
+    ("/agent", "memory"): "run_memory_agent",
+    ("/jobs", "resume"): "resume_jobs",
 }
 
 
@@ -74,6 +78,26 @@ def send_gate_for_command(cmd: str, args: Sequence[str]) -> Optional[str]:
         return None
     subcommand = args[0].lower() if args else ""
     return _SEND_CAPABLE_SUBCOMMANDS.get((cmd.lower(), subcommand))
+
+
+def mutation_gate_for_command(cmd: str, args: Sequence[str]) -> Optional[str]:
+    """Return the approval tool name for any normalized write command."""
+    words = [str(arg).lower() for arg in args]
+    selectors = [word.lstrip("-") for word in words]
+    if "--help" in words:
+        return None
+    subcommand = selectors[0] if selectors else ""
+    key = (cmd.lower(), subcommand)
+    tool = _SEND_CAPABLE_SUBCOMMANDS.get(key) or _MUTATING_SUBCOMMANDS.get(key)
+    if tool == "run_memory_agent" and not any(
+        word in {"run", "process"} for word in selectors[1:]
+    ):
+        return None
+    if cmd.lower() == "/update":
+        return "run_update"
+    if cmd.lower() == "/reset" and ("hard" in selectors or subcommand == "all"):
+        return "hard_reset"
+    return tool
 
 
 def draft_approval_card(
@@ -202,11 +226,12 @@ async def gate_slash_command(
     running it. Any edits the human made in the card are written to the draft
     first, so the handler that follows reads the corrected version.
     """
-    tool_name = send_gate_for_command(cmd, args)
+    tool_name = mutation_gate_for_command(cmd, args)
     if tool_name is None:
         return None
 
-    draft_id = args[1] if len(args) > 1 and not args[1].startswith("--") else None
+    is_send = tool_name == "send_draft"
+    draft_id = args[1] if is_send and len(args) > 1 and not args[1].startswith("--") else None
 
     if storage is None:
         from zylch.storage import Storage
@@ -220,14 +245,23 @@ async def gate_slash_command(
         except Exception as e:  # storage hiccup — gate on the bare id
             logger.warning(f"[approval] could not load draft {draft_id} for the card: {e}")
 
-    card = draft_approval_card(draft, draft_id)
+    card = (
+        draft_approval_card(draft, draft_id)
+        if is_send
+        else {"command": cmd, "args": list(args)}
+    )
     decision, edited = await request_approval(approval_callback, tool_name, card)
     if decision != APPROVED:
         logger.info(f"[approval] {cmd} {subcommand_of(args)} refused: {decision}")
-        return refusal_text(decision, f"`{cmd} {subcommand_of(args)}`", tool_name)
+        if is_send:
+            return refusal_text(decision, f"`{cmd} {subcommand_of(args)}`", tool_name)
+        return (
+            f"❌ **`{cmd} {subcommand_of(args)}` needs approval and was refused.**\n\n"
+            "Nothing was changed."
+        )
 
     updates = draft_updates_from_card(edited)
-    if updates and draft_id:
+    if is_send and updates and draft_id:
         try:
             storage.update_draft(owner_id, draft_id, updates)
         except Exception as e:

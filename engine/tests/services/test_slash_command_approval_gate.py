@@ -71,7 +71,6 @@ def _approver(approved, edited=None):
         ("/email", ["delete", "some-id"]),
         ("/email", ["send", "--help"]),
         ("/tasks", ["status"]),
-        ("/memory", ["store", "a fact"]),
         ("/agent", ["email", "run", "write to mario"]),
         ("/sync", []),
         ("/stats", []),
@@ -90,11 +89,36 @@ def test_email_send_is_gated_as_send_draft():
     assert send_gate_for_command("/EMAIL", ["SEND", "abc123"]) == "send_draft"
 
 
+@pytest.mark.parametrize(
+    "cmd,args,tool",
+    [
+        ("/memory", ["store", "a fact"], "create_memory"),
+        ("/memory", ["--store", "a fact"], "create_memory"),
+        ("/memory", ["--force", "a fact"], "create_memory"),
+        ("/memory", ["delete", "id"], "delete_memory"),
+        ("/memory", ["reset"], "reset_memory"),
+        ("/agent", ["memory", "run"], "run_memory_agent"),
+        ("/agent", ["memory", "process"], "run_memory_agent"),
+        ("/jobs", ["--resume"], "resume_jobs"),
+        ("/update", [], "run_update"),
+        ("/reset", ["--hard"], "hard_reset"),
+    ],
+)
+def test_write_commands_are_approval_gated(cmd, args, tool):
+    from zylch.services.approval_gate import mutation_gate_for_command
+
+    assert mutation_gate_for_command(cmd, args) == tool
+
+
 def test_every_gated_tool_name_is_one_the_llm_path_already_gates():
-    from zylch.services.approval_gate import _SEND_CAPABLE_SUBCOMMANDS
+    from zylch.services.approval_gate import (
+        _MUTATING_SUBCOMMANDS,
+        _SEND_CAPABLE_SUBCOMMANDS,
+    )
     from zylch.services.task_executor import APPROVAL_TOOLS
 
     assert set(_SEND_CAPABLE_SUBCOMMANDS.values()) <= APPROVAL_TOOLS
+    assert set(_MUTATING_SUBCOMMANDS.values()) <= APPROVAL_TOOLS
 
 
 def test_bare_email_send_is_gated_too():

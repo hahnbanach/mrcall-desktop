@@ -502,6 +502,23 @@ class ZylchAIAgent(BaseConversationalAgent):
                     f"[chat turn={tid} step={step}] tool={tool_name}" f" full_input={tool_input}"
                 )
 
+                # Origin policy wins before an approval request. A previous
+                # approval, or a client willing to approve now, cannot widen a
+                # read-only turn.
+                from ..services.request_policy import ReadOnlyViolation, assert_tool_allowed
+
+                try:
+                    assert_tool_allowed(tool_name)
+                except ReadOnlyViolation as exc:
+                    results.append(
+                        {
+                            "type": "tool_result",
+                            "tool_use_id": block.id,
+                            "content": str(exc),
+                        }
+                    )
+                    continue
+
                 # Approval gate for destructive tools.
                 #
                 # The condition is on the TOOL, not on whether a gate happens
@@ -643,6 +660,14 @@ class ZylchAIAgent(BaseConversationalAgent):
         Returns:
             Tool execution result
         """
+        from ..services.request_policy import ReadOnlyViolation, assert_tool_allowed
+
+        try:
+            assert_tool_allowed(name)
+        except ReadOnlyViolation as exc:
+            logger.warning(f"[tools] tool={name} status=refused reason=read_only_origin")
+            return ToolResult(status=ToolStatus.ERROR, data=None, error=str(exc))
+
         if name not in self.tool_map:
             return ToolResult(status=ToolStatus.ERROR, data=None, error=f"Unknown tool: {name}")
 

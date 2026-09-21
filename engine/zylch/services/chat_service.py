@@ -16,6 +16,12 @@ from zylch.tools import ToolFactory, ToolConfig
 from zylch.assistant.core import ZylchAIAgent
 from zylch.config import settings
 from zylch.services.approval_gate import gate_slash_command
+from zylch.services.request_policy import (
+    command_effect,
+    is_read_only,
+    natural_mutation_effect,
+    refusal_text as read_only_refusal_text,
+)
 from sqlalchemy import Text as SAText, cast as sa_cast
 from zylch.storage import Storage
 from zylch.storage.database import get_session
@@ -178,19 +184,51 @@ class ChatService:
         start_time = time.time()
         logger.info(f"process_message: user_message={repr(user_message)}, user_id={user_id}")
 
+        def read_only_refusal(effect: str) -> Dict[str, Any]:
+            return {
+                "response": read_only_refusal_text(effect),
+                "tool_calls": [],
+                "metadata": {
+                    "execution_time_ms": round((time.time() - start_time) * 1000, 2),
+                    "blocked_by_read_only_policy": True,
+                    "effect": effect,
+                    "instant": True,
+                },
+                "session_id": session_id,
+            }
+
+        # Refuse explicit write intent before notification acknowledgement,
+        # auto-sync, semantic routing, model dispatch, or deferred job creation.
+        if is_read_only():
+            stripped = user_message.strip()
+            if stripped.startswith("/"):
+                try:
+                    policy_parts = shlex.split(stripped)
+                except ValueError:
+                    policy_parts = []
+                if policy_parts:
+                    effect = command_effect(policy_parts[0], policy_parts[1:])
+                    if effect:
+                        return read_only_refusal(effect)
+            else:
+                effect = natural_mutation_effect(stripped)
+                if effect:
+                    return read_only_refusal(effect)
+
         # Check for unread notifications FIRST
         notification_banner = None
         try:
             notifications = self.storage.get_unread_notifications(user_id)
             if notifications:
                 notification_banner = self._format_notifications(notifications)
-                self.storage.mark_notifications_read(user_id, [n["id"] for n in notifications])
+                if not is_read_only():
+                    self.storage.mark_notifications_read(user_id, [n["id"] for n in notifications])
         except Exception as e:
             logger.warning(f"Failed to check notifications: {e}")
 
         # Auto-sync: if last email sync was >24h ago, trigger background
         try:
-            if user_id not in ChatService._auto_sync_triggered:
+            if not is_read_only() and user_id not in ChatService._auto_sync_triggered:
                 notification_banner = self._check_auto_sync(user_id, notification_banner)
         except Exception as e:
             logger.warning(f"[AUTO-SYNC] Check failed: {e}")
@@ -239,6 +277,11 @@ class ChatService:
                 if matched_command:
                     logger.info(f"Semantic match: '{user_message}' -> {matched_command}")
                     user_message = matched_command  # Rewrite as slash command
+                    if is_read_only():
+                        matched_parts = shlex.split(user_message.strip())
+                        effect = command_effect(matched_parts[0], matched_parts[1:])
+                        if effect:
+                            return read_only_refusal(effect)
             else:
                 logger.debug(
                     f"[TaskMode] Skipping semantic match for: '{user_message}' "

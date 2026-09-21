@@ -28,6 +28,7 @@ not emit a pending event.
 from __future__ import annotations
 
 import asyncio
+import contextvars
 import json
 import logging
 from typing import Any, AsyncIterator, Dict, List, Optional
@@ -55,6 +56,13 @@ APPROVAL_TOOLS = {
     # Shared
     "send_sms",
     "update_memory",
+    "create_memory",
+    "delete_memory",
+    "reset_memory",
+    "run_memory_agent",
+    "resume_jobs",
+    "run_update",
+    "hard_reset",
     "run_python",
 }
 
@@ -245,6 +253,31 @@ class TaskExecutor:
                             }
                         )
 
+                        from zylch.services.request_policy import (
+                            ReadOnlyViolation,
+                            assert_tool_allowed,
+                        )
+
+                        try:
+                            assert_tool_allowed(tool_name)
+                        except ReadOnlyViolation as exc:
+                            output = str(exc)
+                            tool_results.append(
+                                {
+                                    "type": "tool_result",
+                                    "tool_use_id": tool_id,
+                                    "content": output,
+                                }
+                            )
+                            yield {
+                                "type": "tool_result",
+                                "tool_use_id": tool_id,
+                                "name": tool_name,
+                                "output": output,
+                                "approved": False,
+                            }
+                            continue
+
                         approved = True
                         if tool_name in APPROVAL_TOOLS:
                             # Pause for approval.
@@ -297,13 +330,16 @@ class TaskExecutor:
                                 "name": tool_name,
                             }
                             try:
+                                ctx = contextvars.copy_context()
                                 output = await loop.run_in_executor(
                                     None,
-                                    execute_tool,
-                                    tool_name,
-                                    tool_input,
-                                    self._store,
-                                    self._owner_id,
+                                    lambda: ctx.run(
+                                        execute_tool,
+                                        tool_name,
+                                        tool_input,
+                                        self._store,
+                                        self._owner_id,
+                                    ),
                                 )
                                 # Track only mutating successes —
                                 # APPROVAL_TOOLS is the canonical list

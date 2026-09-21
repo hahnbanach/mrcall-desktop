@@ -833,12 +833,17 @@ async def tasks_solve_cancel(
 
 async def chat_send(params: Dict[str, Any], notify: NotifyFn) -> Any:
     """chat.send(message, conversation_history=[], conversation_id="general",
-    context={}) -> ChatService result dict.
+    context={}, mutation_policy?, policy_version?) -> ChatService result dict.
 
     Destructive tools trigger `chat.pending_approval` notifications; the
     client must respond via `chat.approve` to resume.
     """
     from zylch.services.chat_service import ChatService
+    from zylch.services.request_policy import (
+        READ_ONLY_POLICY,
+        READ_ONLY_POLICY_VERSION,
+        policy_scope,
+    )
 
     message = params.get("message")
     if not message:
@@ -848,6 +853,14 @@ async def chat_send(params: Dict[str, Any], notify: NotifyFn) -> Any:
     req_context = params.get("context") or {}
     if not isinstance(req_context, dict):
         req_context = {}
+    mutation_policy = params.get("mutation_policy")
+    policy_version = params.get("policy_version")
+    if mutation_policy is not None and mutation_policy != READ_ONLY_POLICY:
+        raise ValueError(f"unsupported mutation_policy: {mutation_policy!r}")
+    if mutation_policy == READ_ONLY_POLICY and policy_version != READ_ONLY_POLICY_VERSION:
+        raise ValueError(
+            f"read-only policy version {READ_ONLY_POLICY_VERSION} is required"
+        )
 
     # This turn belongs to the client that asked for it: if that client
     # goes away, the turn goes with it rather than composing and
@@ -965,13 +978,14 @@ async def chat_send(params: Dict[str, Any], notify: NotifyFn) -> Any:
     service = ChatService()
 
     async def _run():
-        return await service.process_message(
-            user_message=message,
-            user_id=owner_id,
-            conversation_history=conversation_history,
-            context=req_context,
-            approval_callback=approval_callback,
-        )
+        with policy_scope(mutation_policy):
+            return await service.process_message(
+                user_message=message,
+                user_id=owner_id,
+                conversation_history=conversation_history,
+                context=req_context,
+                approval_callback=approval_callback,
+            )
 
     task = asyncio.create_task(_run())
     _active_chats[conversation_id] = task
@@ -983,6 +997,13 @@ async def chat_send(params: Dict[str, Any], notify: NotifyFn) -> Any:
 
     logger.debug("[rpc] chat.send -> result keys=%s", list(result.keys()))
     return result
+
+
+async def system_capabilities(params: Dict[str, Any], notify: NotifyFn) -> Any:
+    """system.capabilities() -> protocol capabilities supported by this engine."""
+    from zylch.services.request_policy import READ_ONLY_POLICY_VERSION
+
+    return {"chat_read_only_policy": READ_ONLY_POLICY_VERSION}
 
 
 async def chat_approve(params: Dict[str, Any], notify: NotifyFn) -> Any:
@@ -2243,6 +2264,7 @@ METHODS: Dict[str, Callable[[Dict[str, Any], NotifyFn], Awaitable[Any]]] = {
     "tasks.solve.approve": tasks_solve_approve,
     "tasks.solve.cancel": tasks_solve_cancel,
     "chat.send": chat_send,
+    "system.capabilities": system_capabilities,
     "chat.approve": chat_approve,
     "update.run": update_run,
     "narration.summarize": narration_summarize,

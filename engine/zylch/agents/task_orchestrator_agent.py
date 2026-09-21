@@ -19,7 +19,11 @@ from typing import Any, Dict, Optional
 
 from zylch.agents.base import BaseConversationalAgent
 from zylch.agents.emailer_agent import EmailerAgent, EMAIL_AGENT_TOOLS
-from zylch.agents.mrcall_agent import MrCallAgent, MRCALL_AGENT_TOOLS
+try:
+    from zylch.agents.mrcall_agent import MrCallAgent, MRCALL_AGENT_TOOLS
+except ModuleNotFoundError:  # legacy optional agent was removed from this tree
+    MrCallAgent = None  # type: ignore[assignment,misc]
+    MRCALL_AGENT_TOOLS = []
 from zylch.llm import make_llm_client
 from zylch.services.approval_gate import (
     APPROVED,
@@ -28,6 +32,7 @@ from zylch.services.approval_gate import (
     refusal_text,
     request_approval,
 )
+from zylch.services.request_policy import is_read_only, refusal_text as read_only_refusal_text
 from zylch.storage import Storage
 from zylch.storage.database import get_session
 from zylch.storage.models import Draft
@@ -177,6 +182,8 @@ class TaskOrchestratorAgent(BaseConversationalAgent):
 
     def _get_mrcall_agent(self) -> MrCallAgent:
         """Lazy-load MrCallAgent."""
+        if MrCallAgent is None:
+            raise RuntimeError("MrCall task agent is unavailable in this engine build")
         if self._mrcall_agent is None:
             self._mrcall_agent = MrCallAgent(
                 storage=self.storage,
@@ -329,10 +336,14 @@ The sub-agents can handle multi-step workflows. Give them the full picture.
             for block in response.content:
                 if hasattr(block, "input"):  # ToolUseBlock
                     if block.name == "call_agent":
+                        if is_read_only():
+                            return read_only_refusal_text("task_agent_write")
                         return await self._handle_call_agent(block.input)
                     elif block.name == "respond":
                         return block.input.get("message", "")
                     elif block.name == "send_email":
+                        if is_read_only():
+                            return read_only_refusal_text("send_email")
                         return await self._handle_send_email()
 
         # Text response fallback
@@ -351,6 +362,9 @@ The sub-agents can handle multi-step workflows. Give them the full picture.
         Returns:
             Formatted response with agent result
         """
+        if is_read_only():
+            return read_only_refusal_text("task_agent_write")
+
         agent_name = tool_input.get("agent_name")
         instructions = tool_input.get("instructions", "")
 
@@ -409,6 +423,9 @@ The sub-agents can handle multi-step workflows. Give them the full picture.
         Returns:
             Success/error message for the user
         """
+        if is_read_only():
+            return read_only_refusal_text("send_email")
+
         from zylch.api.token_storage import get_provider, get_email, get_graph_token
 
         # 1. Get draft_id from session state.

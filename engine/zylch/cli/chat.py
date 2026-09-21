@@ -689,6 +689,16 @@ def _handle_slash_command(
     args = parts[1:] if len(parts) > 1 else []
     logger.debug(f"[chat] slash cmd={cmd}, args={args}")
 
+    # Share the same normalized effect classifier as RPC chat. The ordinary
+    # REPL is write-capable and continues through the approval gate below;
+    # any future read-only REPL origin fails before its direct dispatcher.
+    from zylch.services.request_policy import command_effect, is_read_only, refusal_text
+
+    effect = command_effect(cmd, args)
+    if effect and is_read_only():
+        _print_response(refusal_text(effect))
+        return
+
     from zylch.services.command_handlers import (
         COMMAND_HANDLERS,
     )
