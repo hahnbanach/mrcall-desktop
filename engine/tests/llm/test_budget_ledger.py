@@ -323,3 +323,49 @@ def test_bound_breach_persists_across_midnight_and_restart(ledger, monkeypatch):
     with pytest.raises(BudgetError, match="reconciliation"):
         budget.reserve(request, "direct")
     assert budget.budget_snapshot("uid")["remaining_usd"] == 0
+
+
+def test_a_hold_older_than_the_in_flight_horizon_stops_gating_but_is_reported(
+    ledger, monkeypatch
+):
+    """The leak that emptied a $20 cap with $4.82 of real spending.
+
+    A direct-provider hold has no receipt path, so a call that dies between
+    reserve and settle leaves a reservation nothing can close. Summed without
+    a horizon, those corpses gated every later day: on 2026-09-21 support@
+    carried 95 of them, $14.33, the oldest from 09-19, and a $1.09 customer
+    reply was refused against a cap with $15.18 genuinely unspent.
+    """
+    clock = datetime(2026, 9, 19, 3, 0)  # noqa: DTZ001 — database stores naive UTC
+    monkeypatch.setattr(budget, "_now", lambda: clock)
+    abandoned = budget.reserve(request(), "direct")
+
+    # Two days later. Nothing settled it, and nothing ever will.
+    clock = datetime(2026, 9, 21, 20, 40)  # noqa: DTZ001
+    state = budget.budget_snapshot("immutable-uid")
+
+    assert state["reserved_usd"] == 0.0, "a two-day-old hold is not live exposure"
+    assert state["stale_holds"] == 1
+    assert state["stale_holds_usd"] == abandoned.reserved_micro_usd / 1e6
+    assert state["remaining_usd"] == state["budget_usd"], "the day starts whole"
+    assert not state["paused"]
+
+    # The row is still there: reported, never deleted.
+    with ledger.connect() as conn:
+        rows = conn.execute(
+            select(LlmReservation.id).where(LlmReservation.settled_at.is_(None))
+        ).all()
+    assert len(rows) == 1
+
+
+def test_a_hold_inside_the_horizon_still_gates(ledger, monkeypatch):
+    """The case the old rule existed for: a call that is genuinely running."""
+    clock = datetime(2026, 9, 21, 23, 59)  # noqa: DTZ001
+    monkeypatch.setattr(budget, "_now", lambda: clock)
+    live = budget.reserve(request(), "direct")
+
+    clock = datetime(2026, 9, 22, 0, 1)  # noqa: DTZ001 — two minutes later, past midnight
+    state = budget.budget_snapshot("immutable-uid")
+
+    assert state["reserved_usd"] == live.reserved_micro_usd / 1e6
+    assert state["stale_holds"] == 0

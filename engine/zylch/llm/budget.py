@@ -21,6 +21,14 @@ class Reservation:
     call_site: str
 
 
+# How long a reservation can still be covering a call that is actually running.
+# Generous on purpose: a single long-context or maximum-reasoning request is
+# minutes, never an hour, so nothing in flight is ever dropped from the gate.
+# Past it, a hold is unresolved liability rather than live exposure — see
+# `_totals`.
+IN_FLIGHT_HORIZON = timedelta(hours=1)
+
+
 def _now():
     return datetime.now(UTC).replace(tzinfo=None)
 
@@ -84,15 +92,45 @@ def _totals(conn, owner_id, now):
     # The profile database is the allowance boundary. Legacy rows carry email
     # owners, which can change; partitioning by owner would reopen allowance.
     spent = sum(micro_usd(cost) for cost in costs)
+    # A reservation is taken immediately before the spend and exists to cover
+    # ONE call while it is in flight: an unknown cost that a concurrent call
+    # must not be allowed to overshoot. That is the whole of its job, and it
+    # ends when the call does.
+    #
+    # Summing every unsettled hold ever made — which this did — gave it a
+    # second job it cannot do. A hold that outlives its call is not protecting
+    # a spend in progress; it is an unresolved liability from a call that is
+    # long over, and counting it against the CURRENT allowance shrinks every
+    # following day forever. Observed 2026-09-21 on support@mrcall.ai: $4.82
+    # actually spent against a $20 cap, blocked by $14.33 of holds going back
+    # to 09-19 — 72% of the day's allowance consumed by calls that had ended
+    # two days earlier. Nothing released them: a direct-provider hold has no
+    # receipt path, so `usage.reconcile` cannot settle it.
+    #
+    # So the gate is the in-flight horizon, not the calendar. A hold younger
+    # than IN_FLIGHT_HORIZON may still be covering a live call and gates in
+    # full — including one taken minutes before midnight, which is the case
+    # the old "holds survive midnight" rule existed for. An older one cannot
+    # be covering anything and is reported instead of gating; it is never
+    # deleted, and `budget_snapshot` surfaces it so the liability stays
+    # visible rather than silently eating tomorrow.
+    horizon = now - IN_FLIGHT_HORIZON
     holds = conn.execute(
-        select(LlmReservation.reserved_micro_usd).where(LlmReservation.settled_at.is_(None))
+        select(LlmReservation.reserved_micro_usd).where(
+            LlmReservation.settled_at.is_(None), LlmReservation.created_at >= horizon
+        )
     ).scalars()
     reserved = 0
     for value in holds:
         if type(value) is not int or value < 0:
             raise BudgetError("AI paused: budget ledger contains an invalid reservation.")
         reserved += value
-    return spent, reserved, midnight + timedelta(days=1)
+    stale = conn.execute(
+        select(func.count(), func.coalesce(func.sum(LlmReservation.reserved_micro_usd), 0)).where(
+            LlmReservation.settled_at.is_(None), LlmReservation.created_at < horizon
+        )
+    ).one()
+    return spent, reserved, midnight + timedelta(days=1), (int(stale[0]), int(stale[1]))
 
 
 def _pricing_fault(conn):
@@ -130,7 +168,7 @@ def reserve(request_kwargs, transport, *, quote=None):
     with _transaction() as conn:
         cap = _budget()
         now = _now()
-        spent, held, reset = _totals(conn, owner_id, now)
+        spent, held, reset, _stale = _totals(conn, owner_id, now)
         if _pricing_fault(conn):
             raise BudgetError(
                 "AI paused: recorded provider usage exceeded its bound; pricing reconciliation is required."
@@ -234,7 +272,7 @@ def settle(reservation, response_usage, *, receipt=None):
 def budget_snapshot(owner_id):
     with _transaction() as conn:
         cap = _budget()
-        spent, held, reset = _totals(conn, owner_id, _now())
+        spent, held, reset, stale = _totals(conn, owner_id, _now())
         fault = _pricing_fault(conn)
     exceeded = spent + held >= cap or fault
     return {
@@ -246,4 +284,9 @@ def budget_snapshot(owner_id):
         "pricing_fault": fault,
         "resets_at": reset.isoformat() + "Z",
         "paused": exceeded,
+        # Unsettled holds from earlier days. They no longer gate today — see
+        # `_totals` — but they are real unresolved liability and are reported
+        # so nobody has to read the ledger by hand to find them.
+        "stale_holds": stale[0],
+        "stale_holds_usd": stale[1] / 1e6,
     }

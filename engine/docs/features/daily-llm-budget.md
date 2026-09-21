@@ -26,9 +26,19 @@ email therefore cannot reset the allowance. SDK automatic retries are disabled.
 
 Successful validated usage is recorded and the hold closed atomically. Failed,
 missing-usage or uncertain responses retain their reservation; no timeout or
-restart releases possibly incurred liability. Settled spending resets at UTC
-midnight. Unsettled holds survive midnight; a late result settles on its completion
+restart releases possibly incurred liability, and no hold is ever deleted.
+Settled spending resets at UTC midnight; a late result settles on its completion
 day. Existing in-flight charges remain committed if the limit is reduced.
+
+A reservation is taken immediately before dispatch and covers one call while it
+is in flight. It therefore gates admission only while that call could still be
+running: holds younger than `IN_FLIGHT_HORIZON` (one hour) count in full,
+including one taken minutes before midnight. An older unsettled hold is
+unresolved liability, not live exposure — it is reported as `stale_holds` /
+`stale_holds_usd` in `usage.today` and no longer consumes the current
+allowance. Without that horizon a hold nothing can settle — a direct-provider
+call has no receipt path, so `usage.reconcile` cannot close one — shrank every
+following day permanently.
 An observed actual-cost bound breach is recorded in full and blocks future
 admission across midnight/restarts until explicit pricing reconciliation.
 
