@@ -12,6 +12,7 @@ from sqlalchemy import and_, func, or_
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 
 from zylch.services.preparation import task_checkpoint
+from zylch.utils.msgid import clean_message_id, clean_references
 
 from .database import get_session
 from .models import (
@@ -2007,6 +2008,14 @@ class Storage:
         cc_list = list(cc) if cc else []
         bcc_list = list(bcc) if bcc else []
         attach_list = list(attachment_paths) if attachment_paths else []
+        # Threading ids arrive as free strings (the model types them into
+        # `create_draft`), and an invalid one is worse than none: it breaks
+        # threading for the recipient AND makes the sent mirror miss its
+        # parent, so the conversation reads as unanswered forever. Normalise
+        # before the identity is computed, so a repaired draft still dedups
+        # against its twin. See `zylch/utils/msgid.py`.
+        in_reply_to = clean_message_id(in_reply_to)
+        references = clean_references(references)
         wanted = _draft_identity(
             to=to_list,
             subject=subject,

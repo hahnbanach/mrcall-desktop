@@ -21,6 +21,8 @@ from email.utils import formatdate, make_msgid, parseaddr
 from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple
 from datetime import datetime
 
+from zylch.utils.msgid import clean_message_id, clean_references
+
 logger = logging.getLogger(__name__)
 
 
@@ -1570,6 +1572,11 @@ class IMAPClient:
         """
         cc_list = [a.strip() for a in (cc or []) if a and a.strip()]
         bcc_list = [a.strip() for a in (bcc or []) if a and a.strip()]
+        # Last gate before the wire: a draft persisted before this check
+        # existed, or written by any other path, must still not put a
+        # non-`msg-id` on the header. See `zylch/utils/msgid.py`.
+        in_reply_to = clean_message_id(in_reply_to)
+        references = clean_references(references)
 
         logger.debug(
             f"[SMTP] send(to={to}, subject={subject},"
