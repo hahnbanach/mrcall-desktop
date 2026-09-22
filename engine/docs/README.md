@@ -50,6 +50,7 @@ Complete documentation for Zylch standalone (local CLI sales intelligence tool).
 | [features/email-archive.md](features/email-archive.md) | Email archive with IMAP sync |
 | [features/email-triage.md](features/email-triage.md) | Email triage and auto-reply detection |
 | [features/read-only-chat-policy.md](features/read-only-chat-policy.md) | Negotiated server-enforced read-only chat origin policy |
+| [features/outbound-calls.md](features/outbound-calls.md) | MrCall outbound calls: Firebase, approval, submission semantics |
 | [features/task-management.md](features/task-management.md) | Task system (4-level urgency) |
 | [features/relationship-intelligence.md](features/relationship-intelligence.md) | Relationship intelligence and gap detection |
 | [features/calendar-integration.md](features/calendar-integration.md) | Calendar integration (planned: CalDAV) |

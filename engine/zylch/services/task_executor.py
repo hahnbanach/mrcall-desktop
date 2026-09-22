@@ -55,6 +55,7 @@ APPROVAL_TOOLS = {
     "send_whatsapp",
     # Shared
     "send_sms",
+    "initiate_call",
     "update_memory",
     "create_memory",
     "delete_memory",
@@ -88,6 +89,12 @@ def format_approval_preview(tool_name: str, args: Dict) -> str:
         )
     if tool_name == "send_sms":
         return f"**Send SMS**\nTo: {args.get('phone_number', '')}\n\n" f"{args.get('message', '')}"
+    if tool_name == "initiate_call":
+        return (
+            f"**Call via MrCall**\nTo: {args.get('phone_number', '')}\n"
+            f"Calling assistant: {args.get('business_id', '')}\n"
+            "Uses the calling assistant's saved configuration."
+        )
     if tool_name == "run_python":
         return (
             f"**Run Python**\n_{args.get('description', '')}_\n\n"

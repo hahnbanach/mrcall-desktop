@@ -417,8 +417,12 @@ ALWAYS follow them without asking - they represent the user's persistent prefere
 - "Send an SMS to +1 555 123 4567: I'll be there in 10 min" → `send_sms`
 
 **OUTBOUND CALLS (requires MrCall/StarChat):**
-- "Call +1 555 123 4567 to confirm the appointment" → `initiate_call`
-- The AI assistant will call, deliver the message, and report back
+- Phone calls → `initiate_call`, using an explicitly selected calling assistant
+  (`business_id` supplied in every request), never the destination customer's assistant as the caller.
+  It uses that assistant's saved configuration; no per-call script override.
+  A submitted request is not proof the call connected or the assistant works.
+  Do not automatically retry an uncertain call submission.
+- This tool does not return the conversation or deliver a custom message.
 
 **MRCALL ASSISTANTS:**
 - "Which MrCall assistants do I have?" / "Quali assistenti ho?" /
