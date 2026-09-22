@@ -165,6 +165,20 @@ jobs:
       - name: Build sidecar (PyInstaller)
         shell: bash
         run: |
+          # Windows only: trim PATH before the analysis. PyInstaller's binary
+          # dependency walk resolves every imported DLL name by searching the
+          # directories on PATH, and a GitHub Windows runner carries a very
+          # long one (Chocolatey, several SDKs, three language toolchains).
+          # Every miss costs a directory scan on a filesystem where that is
+          # expensive, and there are thousands of names to resolve. Keeping
+          # the system directories and Python is enough to build: the package
+          # DLLs are found through the collected binaries, not through PATH.
+          if [[ "$RUNNER_OS" == "Windows" ]]; then
+            echo "PATH entries before: $(echo "$PATH" | tr ':' '\n' | wc -l)"
+            PYDIR="$(python -c 'import sys,os;print(os.path.dirname(sys.executable))')"
+            export PATH="$PYDIR:$PYDIR/Scripts:/c/Windows/System32:/c/Windows:/c/Windows/System32/Wbem:/usr/bin"
+            echo "PATH entries after:  $(echo "$PATH" | tr ':' '\n' | wc -l)"
+          fi
           pyinstaller --noconfirm zylch.spec
           ls -la dist/
 
