@@ -62,7 +62,11 @@ if sys.platform == 'win32':
                 binaries.append((_src, _rel))
             elif not _f.endswith(('.pyc',)):
                 datas.append((_src, _rel))
-    hiddenimports += ['neonize.client', 'neonize.events', 'neonize.utils']
+    # NOT hiddenimports: naming them would put neonize back in the module
+    # graph, and `get_collected_packages()` feeds every Package node to the
+    # isolated importer above. The files shipped by the walk land next to the
+    # executable, where PyInstaller puts sys._MEIPASS on sys.path, so
+    # `import neonize` resolves at run time from those files.
 else:
     tmp_ret = collect_all('neonize')
     datas += tmp_ret[0]; binaries += tmp_ret[1]; hiddenimports += tmp_ret[2]
@@ -190,7 +194,19 @@ a = Analysis(
     # magic.mgc so libmagic doesn't try a build-time path that doesn't
     # exist on the user's machine.
     runtime_hooks=['pyinstaller_runtime_hook.py'],
-    excludes=[],
+    # Windows only. `find_binary_dependencies` imports EVERY collected package
+    # into ONE isolated child process, in sequence, to harvest the DLL
+    # directories each registers. By the time that child reaches neonize it is
+    # already carrying numpy, onnxruntime, cryptography, lxml and tokenizers,
+    # and loading the Go runtime on top of that is what kills it — the three
+    # observed signatures (0xC0000005, 0xC0000409, Cygwin TP_NUM_C_BUFS) are
+    # resource exhaustion in that child, not a defect in neonize. So: shrink
+    # what the child has to carry, and keep neonize out of the list entirely.
+    #
+    # faster_whisper/ctranslate2/av are droppable on Windows — they serve only
+    # WhatsApp voice-note transcription, imported lazily, and the caller
+    # already treats ImportError as "skip transcription".
+    excludes=(['faster_whisper', 'ctranslate2', 'av', 'neonize'] if sys.platform == 'win32' else []),
     noarchive=False,
     optimize=0,
 )
