@@ -1,0 +1,116 @@
+{
+  "schema_version": 1,
+  "cases": [
+    {
+      "id": "unrelated_same_name_people",
+      "caller_class": "automatic_observation",
+      "original_observation": "Email from luca.bianchi@alpha.example: I manage purchasing for Alpha.",
+      "subject_hint": {"entity_type": "PERSON", "email": "luca.bianchi@alpha.example"},
+      "candidates": [
+        {"id": "person-luca-beta", "entity_type": "PERSON", "scope": "entity", "identifiers": {"name": "Luca Bianchi", "email": "luca.bianchi@beta.example"}}
+      ],
+      "expected": {"allowed_actions": ["CREATE"], "entity_type": "PERSON", "scope": "entity", "forbidden_targets": ["person-luca-beta"], "must_preserve": ["luca.bianchi@alpha.example", "Alpha"]}
+    },
+    {
+      "id": "shared_switchboard",
+      "caller_class": "automatic_observation",
+      "original_observation": "The caller says she is Sara Conti from Delta and gives the shared reception number +39 02 555500.",
+      "subject_hint": {"entity_type": "PERSON", "name": "Sara Conti", "company": "Delta"},
+      "candidates": [
+        {"id": "person-marco-delta", "entity_type": "PERSON", "scope": "entity", "identifiers": {"name": "Marco Blu", "phone": "+39 02 555500", "company": "Delta"}}
+      ],
+      "expected": {"allowed_actions": ["CREATE", "REVIEW"], "entity_type": "PERSON", "scope": "entity", "forbidden_targets": ["person-marco-delta"], "must_preserve": ["Sara Conti", "shared reception"]}
+    },
+    {
+      "id": "corroborated_same_person",
+      "caller_class": "automatic_observation",
+      "original_observation": "Luca Bianchi <luca@alpha.example> confirms his direct number is +39 333 1200000.",
+      "subject_hint": {"entity_type": "PERSON", "email": "luca@alpha.example"},
+      "candidates": [
+        {"id": "person-luca-alpha", "entity_type": "PERSON", "scope": "entity", "identifiers": {"name": "Luca Bianchi", "email": "luca@alpha.example", "phone": "+39 333 1200000"}}
+      ],
+      "expected": {"allowed_actions": ["UPDATE", "SKIP"], "entity_type": "PERSON", "scope": "entity", "required_target": "person-luca-alpha", "must_preserve": ["luca@alpha.example", "+39 333 1200000"]}
+    },
+    {
+      "id": "customer_forwarding_number_correction",
+      "caller_class": "verified_human_correction",
+      "original_observation": "Ricordati che per Acme il forwarding corretto è +39 02 123456, non +39 02 999999.",
+      "subject_hint": {"entity_type": "COMPANY", "name": "Acme"},
+      "candidates": [
+        {"id": "company-acme", "entity_type": "COMPANY", "scope": "entity", "content": "Acme forwards calls to +39 02 999999."}
+      ],
+      "expected": {"allowed_actions": ["UPDATE"], "entity_type": "COMPANY", "scope": "entity", "required_target": "company-acme", "must_preserve": ["+39 02 123456", "+39 02 999999", "correction"], "forbidden_types": ["FACT"]}
+    },
+    {
+      "id": "customer_price_correction",
+      "caller_class": "verified_human_correction",
+      "original_observation": "Per Boreale il prezzo concordato è 74 euro al mese dal rinnovo di ottobre, non il listino generale.",
+      "subject_hint": {"entity_type": "COMPANY", "name": "Boreale"},
+      "candidates": [
+        {"id": "company-boreale", "entity_type": "COMPANY", "scope": "entity", "content": "Boreale is renewing in October."}
+      ],
+      "expected": {"allowed_actions": ["UPDATE"], "entity_type": "COMPANY", "scope": "entity", "required_target": "company-boreale", "must_preserve": ["74 euro", "ottobre", "concordato"], "forbidden_types": ["FACT"]}
+    },
+    {
+      "id": "global_opening_hours",
+      "caller_class": "verified_human_correction",
+      "original_observation": "Siamo chiusi ogni sabato.",
+      "subject_hint": null,
+      "candidates": [],
+      "expected": {"allowed_actions": ["CREATE", "UPDATE"], "entity_type": "FACT", "scope": "company", "must_preserve": ["chiusi", "sabato"]}
+    },
+    {
+      "id": "account_feedback",
+      "caller_class": "verified_human_correction",
+      "original_observation": "Nelle mie risposte evita i punti esclamativi e proponi sempre il prossimo passo in una riga separata.",
+      "subject_hint": null,
+      "candidates": [],
+      "expected": {"allowed_actions": ["CREATE", "UPDATE"], "entity_type": "STYLE", "scope": "account", "must_preserve": ["punti esclamativi", "prossimo passo"], "forbidden_types": ["PERSON", "COMPANY", "FACT"]}
+    },
+    {
+      "id": "planned_not_completed",
+      "caller_class": "automatic_observation",
+      "original_observation": "We plan to migrate Delta's trunk next Tuesday after their written approval.",
+      "subject_hint": {"entity_type": "COMPANY", "name": "Delta"},
+      "candidates": [
+        {"id": "company-delta", "entity_type": "COMPANY", "scope": "entity", "content": "Delta is evaluating a trunk migration."}
+      ],
+      "expected": {"allowed_actions": ["UPDATE", "SKIP"], "entity_type": "COMPANY", "scope": "entity", "required_target": "company-delta", "must_preserve": ["plan", "written approval", "next Tuesday"], "must_not_assert": ["migration completed", "approval received"]}
+    },
+    {
+      "id": "contradictory_legacy_fact_rule",
+      "caller_class": "automatic_observation",
+      "original_observation": "For customer Edera, use the negotiated 12-month minimum term.",
+      "subject_hint": {"entity_type": "COMPANY", "name": "Edera"},
+      "candidates": [
+        {"id": "legacy-fact-edera", "entity_type": "FACT", "scope": "company", "content": "Category: pricing\nKey: edera-term\nEdera has a 6-month minimum."},
+        {"id": "legacy-rule-edera", "entity_type": "STYLE", "scope": "account", "content": "#IDENTIFIERS\nEntity type: COMPANY\nName: Edera\n#ABOUT\nAlways quote a 6-month minimum."}
+      ],
+      "expected": {"allowed_actions": ["REVIEW"], "entity_type": "COMPANY", "scope": "entity", "must_preserve": ["12-month", "Edera"], "forbidden_targets": ["legacy-fact-edera", "legacy-rule-edera"]}
+    },
+    {
+      "id": "malformed_output",
+      "caller_class": "automatic_observation",
+      "original_observation": "Acme changed its support contact to Marta.",
+      "subject_hint": {"entity_type": "COMPANY", "name": "Acme"},
+      "candidates": [],
+      "model_response": "I will update it now. {\"action\":\"UPDATE\"",
+      "transport_stop_reason": "max_tokens",
+      "expected": {"allowed_actions": ["REVIEW"], "validator_result": "reject", "must_not_commit": true}
+    },
+    {
+      "id": "multi_entity_source",
+      "caller_class": "automatic_observation",
+      "original_observation": "Email: Marta Riva joined Acme as finance lead. Acme will move its forwarding number to +39 02 777777 next month, after testing.",
+      "subject_hint": null,
+      "candidates": [],
+      "expected": {
+        "children": [
+          {"stable_key": "person:marta-riva@acme.example", "entity_type": "PERSON", "scope": "entity", "must_preserve": ["finance lead", "Acme"]},
+          {"stable_key": "company:acme", "entity_type": "COMPANY", "scope": "entity", "must_preserve": ["+39 02 777777", "next month", "after testing"]}
+        ],
+        "must_not_truncate_children": true
+      }
+    }
+  ]
+}

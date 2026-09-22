@@ -1,0 +1,177 @@
+{
+  "schema_version": 2,
+  "scope": ["zylch", "scripts"],
+  "tracked_calls": [
+    "store_blob",
+    "update_blob",
+    "delete_blob",
+    "delete_all_blobs",
+    "upsert_fact",
+    "store_rule",
+    "_create_blob",
+    "_update_blob",
+    "add_person_identifiers",
+    "add_email_blob_link",
+    "add_calendar_blob_link",
+    "add_whatsapp_blob_link",
+    "migrate_blob_references",
+    "_record_alias",
+    "merge_store_into",
+    "copy_if_absent"
+  ],
+  "tracked_models": [
+    "Blob",
+    "BlobSentence",
+    "EmailBlob",
+    "CalendarBlob",
+    "WhatsAppBlob",
+    "PersonIdentifier",
+    "BlobAlias",
+    "FactHistory",
+    "MemoryMeta"
+  ],
+  "call_sites": [
+    {"path":"zylch/memory/join.py","symbol":"join","call":"merge_store_into","count":1,"mode":"sync","milestone":8},
+    {"path":"zylch/memory/llm_merge.py","symbol":"_reconsolidate_locked","call":"_record_alias","count":1,"mode":"async","milestone":7},
+    {"path":"zylch/memory/llm_merge.py","symbol":"_reconsolidate_locked","call":"delete_blob","count":1,"mode":"async","milestone":7},
+    {"path":"zylch/memory/llm_merge.py","symbol":"_reconsolidate_locked","call":"migrate_blob_references","count":1,"mode":"async","milestone":7},
+    {"path":"zylch/memory/llm_merge.py","symbol":"_reconsolidate_locked","call":"update_blob","count":1,"mode":"async","milestone":7},
+    {"path":"zylch/services/command_handlers.py","symbol":"handle_memory","call":"delete_all_blobs","count":1,"mode":"async","milestone":5},
+    {"path":"zylch/services/command_handlers.py","symbol":"handle_memory","call":"delete_blob","count":1,"mode":"async","milestone":5},
+    {"path":"zylch/services/command_handlers.py","symbol":"handle_memory","call":"store_blob","count":2,"mode":"async","milestone":5},
+    {"path":"zylch/services/command_handlers.py","symbol":"handle_memory","call":"update_blob","count":1,"mode":"async","milestone":5},
+    {"path":"zylch/services/command_handlers.py","symbol":"handle_reset._reset_all_data","call":"delete_all_blobs","count":1,"mode":"sync","milestone":1},
+    {"path":"zylch/services/correction_learning.py","symbol":"_write_rule","call":"store_rule","count":1,"mode":"sync","milestone":5},
+    {"path":"zylch/services/correction_learning.py","symbol":"learn_from_corrections","call":"upsert_fact","count":1,"mode":"sync","milestone":5},
+    {"path":"zylch/services/facts_store.py","symbol":"upsert_fact","call":"store_blob","count":1,"mode":"sync","milestone":5},
+    {"path":"zylch/services/facts_store.py","symbol":"upsert_fact","call":"update_blob","count":1,"mode":"sync","milestone":5},
+    {"path":"zylch/services/job_executor.py","symbol":"_process_calendar_event_sync","call":"store_blob","count":1,"mode":"sync","milestone":6},
+    {"path":"zylch/services/job_executor.py","symbol":"_process_calendar_event_sync","call":"update_blob","count":1,"mode":"sync","milestone":6},
+    {"path":"zylch/services/job_executor.py","symbol":"_upsert_entity_sync","call":"add_email_blob_link","count":1,"mode":"sync","milestone":6},
+    {"path":"zylch/services/job_executor.py","symbol":"_upsert_entity_sync","call":"add_person_identifiers","count":1,"mode":"sync","milestone":6},
+    {"path":"zylch/services/job_executor.py","symbol":"_upsert_entity_sync","call":"store_blob","count":1,"mode":"sync","milestone":6},
+    {"path":"zylch/services/job_executor.py","symbol":"_upsert_entity_sync","call":"update_blob","count":1,"mode":"sync","milestone":6},
+    {"path":"zylch/services/job_executor.py","symbol":"_upsert_mrcall_entity_sync","call":"store_blob","count":1,"mode":"sync","milestone":6},
+    {"path":"zylch/services/job_executor.py","symbol":"_upsert_mrcall_entity_sync","call":"update_blob","count":1,"mode":"sync","milestone":6},
+    {"path":"zylch/services/prefs_store.py","symbol":"_create_blob","call":"store_blob","count":1,"mode":"sync","milestone":5},
+    {"path":"zylch/services/prefs_store.py","symbol":"_update_blob","call":"update_blob","count":1,"mode":"sync","milestone":5},
+    {"path":"zylch/services/prefs_store.py","symbol":"store_rule","call":"_create_blob","count":1,"mode":"sync","milestone":5},
+    {"path":"zylch/services/prefs_store.py","symbol":"store_rule","call":"_update_blob","count":1,"mode":"sync","milestone":5},
+    {"path":"zylch/services/solve_tools.py","symbol":"_update_memory","call":"update_blob","count":1,"mode":"sync","milestone":4},
+    {"path":"zylch/storage/step_memory_split.py","symbol":"apply","call":"copy_if_absent","count":1,"mode":"sync","milestone":8},
+    {"path":"zylch/tools/create_memory_tool.py","symbol":"CreateMemoryTool.execute","call":"store_blob","count":1,"mode":"async","milestone":4},
+    {"path":"zylch/tools/create_memory_tool.py","symbol":"CreateMemoryTool.execute","call":"store_rule","count":1,"mode":"async","milestone":4},
+    {"path":"zylch/tools/update_memory_tool.py","symbol":"UpdateMemoryTool.execute","call":"update_blob","count":1,"mode":"async","milestone":4},
+    {"path":"zylch/workers/memory.py","symbol":"MemoryWorker._upsert_entity","call":"add_email_blob_link","count":1,"mode":"async","milestone":6},
+    {"path":"zylch/workers/memory.py","symbol":"MemoryWorker._upsert_entity","call":"add_person_identifiers","count":1,"mode":"async","milestone":6},
+    {"path":"zylch/workers/memory.py","symbol":"MemoryWorker._upsert_entity","call":"add_whatsapp_blob_link","count":1,"mode":"async","milestone":6},
+    {"path":"zylch/workers/memory.py","symbol":"MemoryWorker._upsert_entity","call":"store_blob","count":1,"mode":"async","milestone":6},
+    {"path":"zylch/workers/memory.py","symbol":"MemoryWorker._upsert_entity","call":"update_blob","count":1,"mode":"async","milestone":6},
+    {"path":"zylch/workers/memory.py","symbol":"MemoryWorker._upsert_fact_entity","call":"upsert_fact","count":1,"mode":"sync","milestone":6},
+    {"path":"zylch/workers/memory.py","symbol":"MemoryWorker._upsert_mrcall_entity","call":"store_blob","count":1,"mode":"async","milestone":6},
+    {"path":"zylch/workers/memory.py","symbol":"MemoryWorker._upsert_mrcall_entity","call":"update_blob","count":1,"mode":"async","milestone":6},
+    {"path":"zylch/workers/memory.py","symbol":"MemoryWorker.process_calendar_event","call":"add_calendar_blob_link","count":1,"mode":"async","milestone":6},
+    {"path":"zylch/workers/memory.py","symbol":"MemoryWorker.process_calendar_event","call":"store_blob","count":1,"mode":"async","milestone":6},
+    {"path":"zylch/workers/memory.py","symbol":"MemoryWorker.process_calendar_event","call":"update_blob","count":1,"mode":"async","milestone":6}
+  ],
+  "orm_sinks": [
+    {"path":"zylch/memory/blob_storage.py","symbol":"BlobStorage.store_blob","call":"construct:Blob","count":1,"milestone":3},
+    {"path":"zylch/memory/blob_storage.py","symbol":"BlobStorage.store_blob","call":"construct:BlobSentence","count":1,"milestone":3},
+    {"path":"zylch/memory/blob_storage.py","symbol":"BlobStorage.update_blob","call":"construct:BlobSentence","count":1,"milestone":3},
+    {"path":"zylch/memory/llm_merge.py","symbol":"_record_alias","call":"construct:BlobAlias","count":1,"milestone":7},
+    {"path":"zylch/storage/database.py","symbol":"_backfill_email_blobs_index","call":"construct:CalendarBlob","count":1,"milestone":8},
+    {"path":"zylch/storage/database.py","symbol":"_backfill_email_blobs_index","call":"construct:EmailBlob","count":1,"milestone":8},
+    {"path":"zylch/storage/storage.py","symbol":"Storage.add_calendar_blob_link","call":"construct:CalendarBlob","count":1,"milestone":6},
+    {"path":"zylch/storage/storage.py","symbol":"Storage.add_email_blob_link","call":"construct:EmailBlob","count":1,"milestone":6},
+    {"path":"zylch/storage/storage.py","symbol":"Storage.add_person_identifiers","call":"construct:PersonIdentifier","count":1,"milestone":6},
+    {"path":"zylch/storage/storage.py","symbol":"Storage.add_whatsapp_blob_link","call":"construct:WhatsAppBlob","count":1,"milestone":6},
+    {"path":"zylch/storage/storage.py","symbol":"Storage.migrate_blob_references","call":"construct:CalendarBlob","count":1,"milestone":7},
+    {"path":"zylch/storage/storage.py","symbol":"Storage.migrate_blob_references","call":"construct:EmailBlob","count":1,"milestone":7},
+    {"path":"zylch/storage/storage.py","symbol":"Storage.migrate_blob_references","call":"construct:PersonIdentifier","count":1,"milestone":7},
+    {"path":"zylch/storage/storage.py","symbol":"Storage.migrate_blob_references","call":"construct:WhatsAppBlob","count":1,"milestone":7}
+  ],
+  "orm_mutations": [
+    {"path":"zylch/memory/blob_storage.py","symbol":"BlobStorage.update_blob","call":"orm:delete:BlobSentence","count":1,"milestone":3},
+    {"path":"zylch/memory/blob_storage.py","symbol":"BlobStorage.delete_blob","call":"orm:delete:Blob","count":1,"milestone":5},
+    {"path":"zylch/memory/blob_storage.py","symbol":"BlobStorage.delete_all_blobs","call":"orm:delete:Blob","count":1,"milestone":5},
+    {"path":"zylch/storage/storage.py","symbol":"Storage.delete_whatsapp_message_by_message_id","call":"orm:delete:WhatsAppBlob","count":1,"milestone":8}
+  ],
+  "orm_assignments": [
+    {"path":"zylch/memory/blob_storage.py","symbol":"BlobStorage.update_blob","call":"assign:Blob.content","count":1,"milestone":3},
+    {"path":"zylch/memory/blob_storage.py","symbol":"BlobStorage.update_blob","call":"assign:Blob.embedding","count":1,"milestone":3},
+    {"path":"zylch/memory/blob_storage.py","symbol":"BlobStorage.update_blob","call":"assign:Blob.events","count":1,"milestone":3},
+    {"path":"zylch/memory/blob_storage.py","symbol":"BlobStorage.update_blob","call":"assign:Blob.updated_at","count":1,"milestone":3}
+  ],
+  "orm_core_mutations": [
+    {"path":"zylch/memory/store.py","symbol":"bump_mutation_seq","call":"orm-core:update:MemoryMeta","count":1,"milestone":3},
+    {"path":"zylch/memory/store.py","symbol":"take_write_lock","call":"orm-core:update:MemoryMeta","count":1,"milestone":3}
+  ],
+  "raw_sql_sinks": [
+    {"path":"zylch/memory/join.py","symbol":"merge_store_into","call":"sql:INSERT:blobs","count":1,"milestone":8},
+    {"path":"zylch/memory/join.py","symbol":"merge_store_into","call":"sql:INSERT:fact_history","count":1,"milestone":8},
+    {"path":"zylch/memory/join.py","symbol":"merge_store_into","call":"sql:UPDATE:memory_meta","count":2,"milestone":8},
+    {"path":"zylch/memory/store.py","symbol":"ensure_meta_row","call":"sql:INSERT:memory_meta","count":1,"milestone":3},
+    {"path":"zylch/memory/store.py","symbol":"set_self_notion","call":"sql:UPDATE:memory_meta","count":1,"milestone":3},
+    {"path":"zylch/memory/store.py","symbol":"record_sweep_started","call":"sql:UPDATE:memory_meta","count":1,"milestone":7},
+    {"path":"zylch/storage/step_company_key.py","symbol":"apply","call":"sql:UPDATE:blobs","count":1,"milestone":8},
+    {"path":"zylch/storage/step_company_key.py","symbol":"reverse","call":"sql:UPDATE:blobs","count":1,"milestone":8},
+    {"path":"scripts/backfill_email_blobs.py","symbol":"_backfill","call":"sql:INSERT:email_blobs","count":1,"milestone":8},
+    {"path":"scripts/backfill_email_blobs.py","symbol":"_backfill","call":"sql:INSERT:calendar_blobs","count":1,"milestone":8},
+    {"path":"scripts/backfill_person_identifiers.py","symbol":"_backfill","call":"sql:INSERT:person_identifiers","count":1,"milestone":8},
+    {"path":"scripts/compact_learned_prefs.py","symbol":"run","call":"sql:UPDATE:blobs","count":1,"milestone":8},
+    {"path":"scripts/compact_learned_prefs.py","symbol":"run","call":"sql:DELETE:blobs","count":1,"milestone":8}
+  ],
+  "known_dynamic_sql_sinks": [
+    {"path":"zylch/memory/join.py","symbol":"_copy","tables":["blob_sentences","email_blobs","calendar_blobs","whatsapp_blobs","person_identifiers","blob_aliases"],"milestone":8,"reason":"join copies the fixed association/index/alias tables through a nested table-parameterized INSERT OR IGNORE helper"},
+    {"path":"zylch/storage/step_company_key.py","symbol":"apply","tables":["blobs","blob_sentences","email_blobs","calendar_blobs","whatsapp_blobs","person_identifiers"],"milestone":8,"reason":"company-key migration stamps every fixed MEMORY_TABLES entry through a table-parameterized UPDATE"},
+    {"path":"zylch/storage/step_identifiers_company_unique.py","symbol":"apply","tables":["person_identifiers","person_identifiers_new"],"milestone":8,"reason":"fixed table rebuild assembled from adjacent string literals and index-name formatting"},
+    {"path":"zylch/storage/step_memory_split.py","symbol":"copy_if_absent","tables":["blobs","blob_sentences","email_blobs","calendar_blobs","whatsapp_blobs","person_identifiers"],"milestone":8,"reason":"byte-preserving forward copy over the fixed MEMORY_TABLES tuple"},
+    {"path":"zylch/storage/step_memory_split.py","symbol":"apply","tables":["blobs","blob_sentences","email_blobs","calendar_blobs","whatsapp_blobs","person_identifiers"],"milestone":8,"reason":"after the copy, the split migration drops each fixed profile-side memory table through dynamic SQL"},
+    {"path":"zylch/storage/step_memory_split.py","symbol":"reverse_into_profile","tables":["blobs","blob_sentences","email_blobs","calendar_blobs","whatsapp_blobs","person_identifiers"],"milestone":8,"reason":"rollback restores owner-scoped rows through a table-parameterized INSERT OR IGNORE loop"}
+  ],
+  "kernel_chat_callers": [
+    {"path":"cs/cli.py","symbol":"cmd_ask","count":1,"allow_tools":"empty_set","approval_predicate":null,"milestone":1},
+    {"path":"cs/cli.py","symbol":"cmd_chat","count":1,"allow_tools":"variable:allow","approval_predicate":null,"milestone":4},
+    {"path":"cs/cli.py","symbol":"cmd_draft_send","count":1,"allow_tools":"set:send_draft","approval_predicate":"exact_send","milestone":1},
+    {"path":"cs/cli.py","symbol":"cmd_draft_reply","count":1,"allow_tools":"empty_set","approval_predicate":null,"milestone":1}
+  ],
+  "kernel_chat_transport": {
+    "path": "cs/rpc.py",
+    "symbol": "chat",
+    "milestone": 1,
+    "allow_normalization": "allow_tools or set()",
+    "pending_notification": "chat.pending_approval",
+    "rpc_calls": [
+      {"method":"chat.approve","payload_keys":["mode","tool_use_id"],"count":1,"milestone":1},
+      {"method":"chat.send","payload_keys":["conversation_id","message"],"count":1,"milestone":1}
+    ]
+  },
+  "kernel_scheduled_rpc_callers": [
+    {"path":"cs/cli.py","symbol":"cmd_catchup","method":"sync.run","count":1,"milestone":1},
+    {"path":"cs/cli.py","symbol":"cmd_catchup","method":"update.run","count":1,"milestone":1}
+  ],
+  "kernel_template_effects": [
+    {"path":"cs/templates/project/.claude/settings.json.j2","section":"allow","command":"cs memory","count":4,"milestone":1},
+    {"path":"cs/templates/project/.claude/settings.json.j2","section":"allow","command":"cs catchup --check","count":4,"milestone":1},
+    {"path":"cs/templates/project/.claude/settings.json.j2","section":"allow","command":"cs ask","count":4,"milestone":1},
+    {"path":"cs/templates/project/.claude/settings.json.j2","section":"allow","command":"cs draft-reply","count":4,"milestone":1},
+    {"path":"cs/templates/project/.claude/settings.json.j2","section":"allow","command":"cs rpc","count":4,"milestone":1},
+    {"path":"cs/templates/project/bin/cs_operator_cron.sh.j2","section":"deny","command":"cs draft-send","count":6,"milestone":1},
+    {"path":"cs/templates/project/bin/cs_operator_cron.sh.j2","section":"deny","command":"cs chat","count":6,"milestone":1},
+    {"path":"cs/templates/project/bin/cs_operator_cron.sh.j2","section":"deny","command":"cs rpc chat","count":6,"milestone":1}
+  ],
+  "kernel_raw_rpc_effects": [
+    {"method":"update.run","engine_path":"zylch/rpc/methods.py","cron_explicit_deny_count":0,"milestone":1},
+    {"method":"memory.reconsolidate_now","engine_path":"zylch/rpc/maintenance.py","cron_explicit_deny_count":0,"milestone":1},
+    {"method":"memory.join","engine_path":"zylch/rpc/memory_join.py","cron_explicit_deny_count":0,"milestone":1},
+    {"method":"preparation.resume","engine_path":"zylch/rpc/preparation.py","cron_explicit_deny_count":0,"milestone":1}
+  ],
+  "kernel_chat_command_effects": [
+    {"effect":"memory_store","route":"/memory","engine_path":"zylch/services/command_handlers.py","symbol":"handle_memory","selectors":["store","--force"],"commands":["/memory store","/memory store --force"],"milestone":1},
+    {"effect":"memory_delete_reset","route":"/memory","engine_path":"zylch/services/command_handlers.py","symbol":"handle_memory","selectors":["delete","reset"],"commands":["/memory delete","/memory reset"],"milestone":1},
+    {"effect":"agent_memory_process","route":"/agent","engine_path":"zylch/services/command_handlers.py","symbol":"handle_agent","selectors":["memory","run","process"],"commands":["/agent memory run","/agent memory process"],"milestone":1},
+    {"effect":"jobs_resume","route":"/jobs","engine_path":"zylch/services/command_handlers.py","symbol":"handle_jobs","selectors":["resume"],"commands":["/jobs resume"],"milestone":1},
+    {"effect":"update","route":"/update","engine_path":"zylch/services/process_pipeline.py","symbol":"handle_process","selectors":[],"commands":["/update"],"milestone":1},
+    {"effect":"hard_reset","route":"/reset","engine_path":"zylch/services/command_handlers.py","symbol":"handle_reset","selectors":["--hard"],"commands":["/reset --hard"],"milestone":1}
+  ]
+}

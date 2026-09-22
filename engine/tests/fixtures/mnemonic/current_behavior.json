@@ -1,0 +1,35 @@
+{
+  "schema_version": 1,
+  "owners": ["owner-a", "owner-b"],
+  "blobs": [
+    {
+      "fixture_id": "shared-company",
+      "owner": "owner-a",
+      "family": "user",
+      "content": "#IDENTIFIERS\nEntity type: COMPANY\nName: Acme\n#ABOUT\nAcme uses the Milan support desk.",
+      "visible_to": ["owner-a", "owner-b"]
+    },
+    {
+      "fixture_id": "legacy-customer-fact",
+      "owner": "owner-a",
+      "family": "facts",
+      "content": "Category: pricing\nKey: acme-special\nAcme pays 74 euro per month.",
+      "visible_to": ["owner-a", "owner-b"],
+      "ordinary_fact_category": "pricing"
+    },
+    {
+      "fixture_id": "owner-a-style",
+      "owner": "owner-a",
+      "family": "template",
+      "content": "Avoid exclamation marks in replies.",
+      "visible_to": ["owner-a"]
+    }
+  ],
+  "checkpoint": {
+    "source_id": "mail-multi-entity-1",
+    "owner": "owner-a",
+    "initially_pending": true,
+    "wrong_owner_cannot_advance": true,
+    "current_granularity": "source"
+  }
+}
