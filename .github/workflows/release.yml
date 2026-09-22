@@ -127,7 +127,7 @@ jobs:
     # silence was never evidence of no progress. With the MKL set gone this
     # should finish well inside either number; the headroom is here so the
     # next stall is diagnosed by a log rather than inferred from a timeout.
-    timeout-minutes: 90
+    timeout-minutes: 25
     strategy:
       fail-fast: false
       matrix: ${{ fromJSON(needs.setup.outputs.engine_matrix) }}
@@ -165,7 +165,7 @@ jobs:
       - name: Build sidecar (PyInstaller)
         shell: bash
         run: |
-          pyinstaller --noconfirm zylch.spec
+          pyinstaller --noconfirm --log-level DEBUG zylch.spec
           ls -la dist/
 
       - name: Upload sidecar artifact
