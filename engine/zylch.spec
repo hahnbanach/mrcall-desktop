@@ -8,9 +8,6 @@ binaries = []
 hiddenimports = ['zylch.cli.main']
 tmp_ret = collect_all('zylch')
 datas += tmp_ret[0]; binaries += tmp_ret[1]; hiddenimports += tmp_ret[2]
-tmp_ret = collect_all('fastembed')
-datas += tmp_ret[0]; binaries += tmp_ret[1]; hiddenimports += tmp_ret[2]
-
 # ─── neonize (WhatsApp / whatsmeow bindings) — Windows needs a special path ──
 # `collect_all('neonize')` calls collect_submodules(), which IMPORTS every
 # submodule it finds inside an isolated PyInstaller subprocess to enumerate
@@ -42,8 +39,16 @@ else:
     tmp_ret = collect_all('neonize')
     datas += tmp_ret[0]; binaries += tmp_ret[1]; hiddenimports += tmp_ret[2]
 
-tmp_ret = collect_all('onnxruntime')
-datas += tmp_ret[0]; binaries += tmp_ret[1]; hiddenimports += tmp_ret[2]
+# DIAGNOSTIC BISECT, NOT SHIPPABLE: drop the two largest binary producers on
+# Windows to learn whether `Looking for dynamic libraries` scales with the
+# collected binary set or stalls on one specific library. If this build
+# completes, the stall is in what was removed and can be bisected further.
+# If it still hangs, the cause is elsewhere and this whole line of attack dies.
+if sys.platform != 'win32':
+    tmp_ret = collect_all('onnxruntime')
+    datas += tmp_ret[0]; binaries += tmp_ret[1]; hiddenimports += tmp_ret[2]
+    tmp_ret = collect_all('fastembed')
+    datas += tmp_ret[0]; binaries += tmp_ret[1]; hiddenimports += tmp_ret[2]
 
 # ─── faster-whisper voice-note transcription ─────────────────────────
 # On-device speech-to-text for WhatsApp voice notes. PyInstaller does NOT
