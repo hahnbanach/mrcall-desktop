@@ -107,19 +107,27 @@ jobs:
   build-engine:
     name: Sidecar ${{ matrix.platform }}-${{ matrix.arch }}
     needs: setup
-    # Windows is BUILT BUT NOT BLOCKING: we ship macOS today. The Windows
-    # sidecar currently dies inside PyInstaller — `collect_all('neonize')`
-    # walks every submodule in an isolated subprocess, and importing
-    # neonize's compiled Go binding kills that child with an access
-    # violation (exit 3221225477 = 0xC0000005). That is a packaging problem
-    # in one line of zylch.spec, not a product regression, and it must not
-    # redden a macOS release. Keep the job so the day it is fixed we get
-    # artifacts again without touching this file; the release step already
-    # tolerates missing files (`fail_on_unmatched_files: false`).
+    # Windows is BUILT BUT NOT BLOCKING: we ship macOS today, and a Windows
+    # leg must never redden a macOS release. Keep the job so a green Windows
+    # build produces artifacts without touching this file; the release step
+    # already tolerates missing files (`fail_on_unmatched_files: false`).
+    #
+    # The neonize access violation this comment used to describe was fixed in
+    # e251c4d (zylch.spec takes a Windows path that skips collect_submodules).
+    # What killed v0.1.51-win was different: PyInstaller's `Looking for
+    # dynamic libraries` phase stalled 41 minutes on the Intel oneAPI/MKL DLLs
+    # that ctranslate2's Windows wheel bundles. zylch.spec now drops the
+    # faster_whisper/ctranslate2/av stack on Windows, which removes that DLL
+    # set from the scan.
     continue-on-error: ${{ matrix.platform == 'win' }}
     # Backstop: a leg that hangs blocks every downstream job until GitHub's
-    # 6h default kills it. The mac sidecar builds in minutes.
-    timeout-minutes: 45
+    # 6h default kills it. The mac sidecar builds in minutes. 90 rather than
+    # 45 because the old value could not distinguish "hung" from "slow": that
+    # phase prints one line when it starts and nothing while it runs, so its
+    # silence was never evidence of no progress. With the MKL set gone this
+    # should finish well inside either number; the headroom is here so the
+    # next stall is diagnosed by a log rather than inferred from a timeout.
+    timeout-minutes: 90
     strategy:
       fail-fast: false
       matrix: ${{ fromJSON(needs.setup.outputs.engine_matrix) }}

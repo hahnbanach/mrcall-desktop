@@ -57,12 +57,33 @@ datas += tmp_ret[0]; binaries += tmp_ret[1]; hiddenimports += tmp_ret[2]
 #     libswresample/...) used to decode ogg/opus voice notes.
 # The whisper MODEL (~250MB) is NOT bundled — it downloads to the HF cache
 # at first transcription. Only code + native libs ship in the installer.
-tmp_ret = collect_all('faster_whisper')
-datas += tmp_ret[0]; binaries += tmp_ret[1]; hiddenimports += tmp_ret[2]
-tmp_ret = collect_all('ctranslate2')
-datas += tmp_ret[0]; binaries += tmp_ret[1]; hiddenimports += tmp_ret[2]
-tmp_ret = collect_all('av')
-datas += tmp_ret[0]; binaries += tmp_ret[1]; hiddenimports += tmp_ret[2]
+#
+# NOT ON WINDOWS. ctranslate2's Windows wheel bundles the Intel oneAPI/MKL
+# runtime — a very large, densely cross-linked set of DLLs. PyInstaller's
+# `Looking for dynamic libraries` phase walks every collected binary with
+# pefile to resolve its imports, and on that DLL set the walk does not
+# finish inside any CI budget we are willing to pay: the v0.1.51-win run
+# sat silent in that phase for 41 minutes until the job backstop killed it,
+# and the interrupt was reported by `forrtl`, the Intel Fortran runtime.
+# Dropping these three removes the MKL mountain from the scan.
+#
+# What Windows loses: WhatsApp voice notes are not transcribed. Nothing
+# else — `zylch/whatsapp/transcription.py` imports faster_whisper lazily
+# inside `_get_model()` and its caller already treats ImportError as
+# "skip transcription" (line 102), so the feature degrades instead of
+# breaking. `av` has no direct importer in zylch; it comes in only as
+# faster_whisper's audio decoder, so it leaves with it.
+#
+# fastembed and onnxruntime above deliberately STAY on Windows: they are
+# the semantic memory (`zylch/memory/embeddings.py`), not an optional
+# feature, and onnxruntime ships its own small BLAS rather than MKL.
+if sys.platform != 'win32':
+    tmp_ret = collect_all('faster_whisper')
+    datas += tmp_ret[0]; binaries += tmp_ret[1]; hiddenimports += tmp_ret[2]
+    tmp_ret = collect_all('ctranslate2')
+    datas += tmp_ret[0]; binaries += tmp_ret[1]; hiddenimports += tmp_ret[2]
+    tmp_ret = collect_all('av')
+    datas += tmp_ret[0]; binaries += tmp_ret[1]; hiddenimports += tmp_ret[2]
 
 
 # ─── libmagic bundling ───────────────────────────────────────────────
