@@ -439,24 +439,110 @@ class LLMClient:
             self._release_unused_reservation(reservation, settle)
             raise
         receipt = None
-        if self.transport == "proxy":
-            raw, receipt = self._client.execute(request_kwargs, quote, reservation)
-        else:
-            raw = self._client.messages.create(**request_kwargs)
-        if self.transport == "direct":
-            from .budget_pricing import validate_response_model
-            validate_response_model(request_kwargs["model"], getattr(raw, "model", None))
-        response = LLMResponse(raw)
-        # Preserve missing/invalid usage as unknown; the display adapter's zero
-        # defaults must never release money reserved for an uncertain response.
-        raw_usage = getattr(raw, "usage", None)
-        if hasattr(raw_usage, "model_dump"):
-            raw_usage = raw_usage.model_dump()
-        elif raw_usage is not None and not isinstance(raw_usage, dict):
-            raw_usage = vars(raw_usage)
+        try:
+            if self.transport == "proxy":
+                raw, receipt = self._client.execute(request_kwargs, quote, reservation)
+            else:
+                raw = self._client.messages.create(**request_kwargs)
+        except BaseException as exc:
+            # A dispatch that raises leaves the hold open, and on the direct
+            # transport nothing can ever close it: there is no receipt, so
+            # `usage.reconcile` has nothing to reconcile. Callers that swallow
+            # the exception — `utils/reply_need.py` swallows every one of them,
+            # by contract — turn that into a permanent leak. Measured on
+            # support@mrcall.ai: 113 abandoned holds worth $17.08.
+            #
+            # Release ONLY what the provider provably refused before doing any
+            # work. Everything ambiguous — timeouts, 5xx, anything unrecognised
+            # — keeps its hold, because a possibly incurred charge must not be
+            # given back.
+            if _rejected_before_inference(exc):
+                _release_hold(reservation, settle)
+            raise
+        try:
+            if self.transport == "direct":
+                from .budget_pricing import validate_response_model
+                validate_response_model(request_kwargs["model"], getattr(raw, "model", None))
+            response = LLMResponse(raw)
+            # Preserve missing/invalid usage as unknown; the display adapter's zero
+            # defaults must never release money reserved for an uncertain response.
+            raw_usage = getattr(raw, "usage", None)
+            if hasattr(raw_usage, "model_dump"):
+                raw_usage = raw_usage.model_dump()
+            elif raw_usage is not None and not isinstance(raw_usage, dict):
+                raw_usage = vars(raw_usage)
+        except BaseException:
+            # The provider answered and charged us; only our handling of the
+            # answer failed. Record what it actually cost rather than leaving
+            # a hold for a call that is demonstrably over.
+            _settle_from_raw(reservation, raw, receipt, settle)
+            raise
         settle(reservation, raw_usage, receipt=receipt)
 
         return response
+
+
+# Statuses a provider returns without running inference: the request was
+# rejected on its way in, so no token was ever produced and nothing was
+# charged. 5xx is deliberately absent — a server error can follow work that
+# was already done — and so is every timeout, where the request may well have
+# been processed after we stopped listening.
+_NO_WORK_STATUSES = frozenset({400, 401, 403, 404, 413, 422, 429})
+
+
+def _rejected_before_inference(exc: BaseException) -> bool:
+    """True only when the provider demonstrably did no billable work."""
+    try:
+        import anthropic
+    except Exception:  # noqa: BLE001 — the predicate must never mask the real error
+        anthropic = None
+    if anthropic is not None:
+        # A timeout is a subclass of APIConnectionError and is NOT safe: the
+        # request may have been served after we gave up waiting.
+        if isinstance(exc, anthropic.APITimeoutError):
+            return False
+        if isinstance(exc, anthropic.APIConnectionError):
+            return True
+    status = getattr(exc, "status_code", None)
+    return isinstance(status, int) and status in _NO_WORK_STATUSES
+
+
+def _release_hold(reservation, settle) -> None:
+    """Give back a hold for a call that was refused before it cost anything.
+
+    Never on the metered transport: there `settle` is receipt-gated on purpose,
+    because only the receipt says whether the upstream debit happened, and
+    calling it without one raises instead of releasing. A failure to release is
+    reported and swallowed — the caller must still see why the dispatch failed,
+    not why the refund did.
+    """
+    if reservation.transport == "proxy":
+        return
+    try:
+        settle(reservation, {"input_tokens": 0, "output_tokens": 0})
+    except Exception as release_error:  # noqa: BLE001
+        logger.warning(
+            "[budget] could not release the hold for a refused dispatch (%s: %s)",
+            type(release_error).__name__,
+            release_error,
+        )
+
+
+def _settle_from_raw(reservation, raw, receipt, settle) -> None:
+    """Settle from a response we received but failed to handle."""
+    usage = getattr(raw, "usage", None)
+    if hasattr(usage, "model_dump"):
+        usage = usage.model_dump()
+    elif usage is not None and not isinstance(usage, dict):
+        usage = vars(usage)
+    try:
+        settle(reservation, usage, receipt=receipt)
+    except Exception as settle_error:  # noqa: BLE001
+        logger.warning(
+            "[budget] could not settle the hold for an unhandled response (%s: %s)",
+            type(settle_error).__name__,
+            settle_error,
+        )
 
 
 # ─── Factory ──────────────────────────────────────────────────────────

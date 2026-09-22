@@ -232,15 +232,10 @@ class ToolFactory:
         tools.append(SendSMSTool(session_state=session_state))
         logger.info("SMS tool initialized (MrCall credits proxy)")
 
-        # Call tools (1 tool)
-        if starchat:
-            tools.append(
-                InitiateCallTool(
-                    starchat_client=starchat,
-                    session_state=session_state,
-                )
-            )
-            logger.info("Call tool initialized" " (StarChat/MrCall)")
+        # Acquire current Firebase credentials at execution, not the disabled
+        # legacy OAuth client. Dispatch is gated by APPROVAL_TOOLS.
+        tools.append(InitiateCallTool(session_state=session_state))
+        logger.info("MrCall outbound tool initialized (Firebase, approval required)")
 
         # List MrCall assistants (read-only). Self-authenticates from the
         # Firebase session at execute() time and degrades gracefully when

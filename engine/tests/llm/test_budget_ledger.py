@@ -263,16 +263,45 @@ def test_standard_tier_admitted_priority_retains_hold(ledger):
     assert budget.budget_snapshot("uid")["reserved_usd"] > 0
 
 
-def test_output_included_in_context_bound(ledger):
+def test_output_included_in_context_bound(ledger, monkeypatch):
+    monkeypatch.setenv("LLM_DAILY_BUDGET_USD", "20")
+    prompt = [{"role": "user", "content": "x" * 250_000}]
+    # The same input is admitted on its own and refused once the requested
+    # output has to fit beside it in the window.
+    assert budget.reserve(
+        request(model="claude-sonnet-4-5", max_tokens=100, messages=prompt), "direct"
+    )
     with pytest.raises(BudgetError, match="200000-token"):
         budget.reserve(
-            request(
-                model="claude-sonnet-4-5",
-                max_tokens=100000,
-                messages=[{"role": "user", "content": "x" * 100000}],
-            ),
+            request(model="claude-sonnet-4-5", max_tokens=100000, messages=prompt),
             "direct",
         )
+
+
+def test_grounding_prompt_inside_the_window_is_admitted(ledger, monkeypatch):
+    """A prompt that fits the window is admitted whatever its byte count.
+
+    The shape is the support@mrcall.ai grounding turn of 2026-09-22 that
+    `cs ask` could not run: 9 messages, 30 tool schemas and 201,615
+    payload characters, which the provider counts as roughly 84,000 input
+    tokens. Pricing may read a byte as a token; admission may not.
+    """
+    monkeypatch.setenv("LLM_DAILY_BUDGET_USD", "20")
+    assert budget.reserve(
+        request(
+            model="claude-opus-5",
+            max_tokens=4096,
+            messages=[
+                {"role": "user" if i % 2 == 0 else "assistant", "content": "x" * 22_400}
+                for i in range(9)
+            ],
+            tools=[
+                {"name": f"tool_{i}", "description": "d", "input_schema": {"type": "object"}}
+                for i in range(30)
+            ],
+        ),
+        "direct",
+    )
 
 
 def test_other_process_stale_cap_cannot_override_saved_pause(ledger, monkeypatch, tmp_path):
@@ -369,3 +398,71 @@ def test_a_hold_inside_the_horizon_still_gates(ledger, monkeypatch):
 
     assert state["reserved_usd"] == live.reserved_micro_usd / 1e6
     assert state["stale_holds"] == 0
+
+
+class _Raise:
+    """A provider client whose dispatch fails the way the wild one does."""
+
+    def __init__(self, exc):
+        self._exc = exc
+        self.messages = self
+
+    def create(self, **_kwargs):
+        raise self._exc
+
+
+def _dispatch(monkeypatch, exc):
+    from zylch.llm import client as llm_client
+
+    c = llm_client.LLMClient.__new__(llm_client.LLMClient)
+    c.transport = "direct"
+    c.model = "claude-haiku-4-5"
+    c._client = _Raise(exc)
+    return c
+
+
+def test_a_rejected_request_gives_its_hold_back(ledger, monkeypatch):
+    """A 400 never ran inference, so its reservation is not a liability.
+
+    `reply_need` swallows the exception, so a hold kept here is kept forever:
+    the direct transport has no receipt and `usage.reconcile` cannot close it.
+    """
+    import anthropic
+    from zylch.llm import client as llm_client
+
+    response = type("R", (), {"status_code": 400, "headers": {}, "request": None})()
+    exc = anthropic.BadRequestError("bad", response=response, body=None)
+    assert llm_client._rejected_before_inference(exc)
+
+    held = budget.reserve(request(), "direct")
+    llm_client._release_hold(held, budget.settle)
+    assert budget.budget_snapshot("immutable-uid")["reserved_usd"] == 0.0
+
+
+def test_an_ambiguous_failure_keeps_its_hold(ledger):
+    """A timeout may have been served after we stopped listening."""
+    import anthropic
+    from zylch.llm import client as llm_client
+
+    assert not llm_client._rejected_before_inference(
+        anthropic.APITimeoutError(request=None)
+    )
+    assert not llm_client._rejected_before_inference(RuntimeError("who knows"))
+
+    held = budget.reserve(request(), "direct")
+    assert budget.budget_snapshot("immutable-uid")["reserved_usd"] == (
+        held.reserved_micro_usd / 1e6
+    )
+
+
+def test_a_response_we_could_not_handle_is_still_settled(ledger):
+    """The provider answered and charged; only our parsing failed."""
+    from zylch.llm import client as llm_client
+
+    held = budget.reserve(request(), "direct")
+    raw = type("Raw", (), {"usage": {"input_tokens": 50, "output_tokens": 10}})()
+    llm_client._settle_from_raw(held, raw, None, budget.settle)
+
+    state = budget.budget_snapshot("immutable-uid")
+    assert state["reserved_usd"] == 0.0
+    assert state["spent_usd"] == 0.0001
