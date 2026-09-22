@@ -127,7 +127,7 @@ jobs:
     # silence was never evidence of no progress. With the MKL set gone this
     # should finish well inside either number; the headroom is here so the
     # next stall is diagnosed by a log rather than inferred from a timeout.
-    timeout-minutes: 90
+    timeout-minutes: 25
     strategy:
       fail-fast: false
       matrix: ${{ fromJSON(needs.setup.outputs.engine_matrix) }}
@@ -161,6 +161,12 @@ jobs:
           # If a future release of PyInstaller fixes the regression, raise
           # the pin or remove it; do not just bump unpinned again.
           pip install "pyinstaller==6.13.0"
+          # pefile is what PyInstaller uses to resolve every collected DLL's
+          # imports during `Looking for dynamic libraries`. Some releases of it
+          # are pathologically slow on large binaries, and that phase is exactly
+          # where the Windows build stops. Pin a known-good one rather than take
+          # whatever the resolver picked.
+          pip install "pefile==2023.2.7"
 
       - name: Build sidecar (PyInstaller)
         shell: bash
