@@ -342,6 +342,28 @@ class LLMClient:
             ),
         )
 
+    def _release_unused_reservation(self, reservation, settle) -> None:
+        """Give back a hold for a call that provably never left this process.
+
+        Only on the unmetered transports. A metered reservation is
+        receipt-gated on purpose — ``settle`` looks for the billing
+        authorization and refuses without a receipt, because only the receipt
+        says whether the upstream debit happened. Calling it here would not
+        release anything, and its ``BudgetError`` would replace the real
+        refusal with "MrCall charge is unconfirmed" for a user who simply
+        cancelled. On that transport the hold stands until the in-flight
+        horizon resolves it.
+
+        A failure to release is reported and swallowed: the caller must still
+        see why the dispatch was refused, not why the refund failed.
+        """
+        if self.transport == "proxy":
+            return
+        try:
+            settle(reservation, {"input_tokens": 0, "output_tokens": 0})
+        except Exception as exc:  # noqa: BLE001 - never mask the real refusal
+            logger.warning(f"[llm] could not release an undispatched reservation: {exc}")
+
     def create_message_sync(
         self,
         messages: List[Dict[str, Any]],
@@ -397,14 +419,25 @@ class LLMClient:
             f"messages={len(coerced)} tools={num_tools}"
         )
         from zylch.llm.budget import reserve, settle
+        from zylch.memory.mnemonic.authorization import MnemonicAuthorizationError, assert_no_tools
         from zylch.services.preparation import check_dispatch, record_dispatch
 
+        # The mnemonic role returns a proposal, never a write. Refusing tools
+        # here — at the one boundary every dispatch passes — means no future
+        # adapter can hand that role a generic database writer.
+        assert_no_tools(request_kwargs)
         # Admission uses the final provider-visible payload, including kwargs.
         # A cancellation/timeout never releases a possibly dispatched request.
         check_dispatch()
         quote = self._client.quote(request_kwargs) if self.transport == "proxy" else None
         reservation = reserve(request_kwargs, self.transport, quote=quote)
-        record_dispatch()
+        try:
+            record_dispatch()
+        except MnemonicAuthorizationError:
+            # Revoked between admission and dispatch: nothing reached a
+            # provider, so the hold can go back.
+            self._release_unused_reservation(reservation, settle)
+            raise
         receipt = None
         if self.transport == "proxy":
             raw, receipt = self._client.execute(request_kwargs, quote, reservation)

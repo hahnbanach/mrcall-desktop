@@ -18,6 +18,18 @@ an LLM budget reservation. It also covers a real kernel-client → RPC →
 dispatcher refusal, while help and search tools remain available. This is
 implemented and tested locally, not deployed.
 
+The mnemonic decision boundary exists in `zylch/memory/mnemonic/`: frozen memory
+events whose observation, source revision and authority a model cannot reach; a
+bounded three-round role whose complete identity/refusal prompt sits in the
+cached system block; a small symbolic validator; and origin-bound paid
+admission enforced in `check_dispatch` by the dispatch scope rather than the
+usage label. Interactive grants leave bounded preparation untouched; automatic
+grants must match the admitted item. There is no commit capability, no
+operation journal and no converted legacy writer, so a validated mutation
+proposal ends as `retryable_failure` with `commit capability not installed`.
+Contract and bounds: [mnemonic decisions](features/mnemonic-decisions.md).
+Tested locally against the frozen milestone 0 incident corpus; not deployed.
+
 Four Café124 units run isolated release `8d83193`; the billing server runs
 `prod-99091c35`. Production selects personal OpenRouter/custom K3 for its base
 model, five worker roles and reply classification. The other three profiles

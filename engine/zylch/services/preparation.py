@@ -167,8 +167,31 @@ def pause(owner):
         )
 
 
+def current_item():
+    """The admitted ``(owner, stage, source, run_id)`` item, or ``None``.
+
+    An automatic mnemonic grant is checked against this: background semantic
+    work may only spend inside the preparation item it was actually admitted
+    for, never by constructing an event of its own.
+    """
+    item = _in_item.get()
+    return item if item else None
+
+
 def check_dispatch(*, count_auxiliary=True):
-    """Called immediately before central LLM reservation, including ancillary work."""
+    """Called immediately before central LLM reservation, including ancillary work.
+
+    A mnemonic dispatch scope is admitted by its origin-bound grant, not by its
+    usage label, and the two origins get different contracts. An interactive
+    grant rides the caller's own turn and returns here without touching
+    preparation at all — its pause, busy flag, item allowance and per-source
+    processed state are left exactly as they were. An automatic grant must
+    match the admitted item and then faces every ordinary check below.
+    """
+    from zylch.memory.mnemonic.authorization import authorize_active_dispatch
+
+    if authorize_active_dispatch() == "interactive":
+        return
     active = _current.get()
     if not active:
         from zylch.llm.usage import current_call_site
@@ -392,6 +415,12 @@ def bounded_operation(owner_from):
 
 def record_dispatch():
     """Durably mark incurred/ambiguous work before the upstream HTTP dispatch."""
+    from zylch.memory.mnemonic.authorization import note_dispatch
+
+    if note_dispatch() == "interactive":
+        # The interactive contract never marks an automatic source dispatched;
+        # the grant itself records that this event has now incurred cost.
+        return
     active = _current.get()
     if not active:
         return

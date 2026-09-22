@@ -1,0 +1,246 @@
+{
+  "schema_version": 1,
+  "about": "One deterministic mnemonic decision per milestone 0 incident. Stored structurally and serialized to the model's wire text by tests/memory/mnemonic_cases.py; a case whose point is a broken response carries its literal text. Blob ids and versions come from the frozen corpus and from mnemonic_cases.version_of.",
+  "decisions": {
+    "unrelated_same_name_people": {
+      "decision": {
+        "action": "CREATE",
+        "entity_type": "PERSON",
+        "scope": "entity",
+        "content_lines": [
+          "#IDENTIFIERS",
+          "Entity type: PERSON",
+          "Scope: entity",
+          "Name: Luca Bianchi",
+          "Email: luca.bianchi@alpha.example",
+          "Company: Alpha",
+          "#ABOUT",
+          "Luca Bianchi manages purchasing for Alpha.",
+          "#HISTORY",
+          "Stated by him in an email from luca.bianchi@alpha.example."
+        ],
+        "confidence": 0.8,
+        "reason": "The existing Luca Bianchi has a different address at Beta; a shared name is not identity evidence."
+      }
+    },
+    "shared_switchboard": {
+      "decision": {
+        "action": "CREATE",
+        "entity_type": "PERSON",
+        "scope": "entity",
+        "content_lines": [
+          "#IDENTIFIERS",
+          "Entity type: PERSON",
+          "Scope: entity",
+          "Name: Sara Conti",
+          "Company: Delta",
+          "Phone: +39 02 555500",
+          "#ABOUT",
+          "Sara Conti works at Delta. The number she gave is Delta's shared reception line, not a direct number.",
+          "#HISTORY",
+          "Self-identified on an inbound call."
+        ],
+        "confidence": 0.7,
+        "reason": "The only overlap with Marco Blu is a shared reception number, which several people use."
+      }
+    },
+    "corroborated_same_person": {
+      "decision": {
+        "action": "UPDATE",
+        "entity_type": "PERSON",
+        "scope": "entity",
+        "write_set": [
+          {
+            "blob_id": "person-luca-alpha",
+            "expected_version": "2026-09-20T10:00:00-person-luca-alpha",
+            "role": "target"
+          }
+        ],
+        "content_lines": [
+          "#IDENTIFIERS",
+          "Entity type: PERSON",
+          "Scope: entity",
+          "Name: Luca Bianchi",
+          "Email: luca@alpha.example",
+          "Phone: +39 333 1200000",
+          "#ABOUT",
+          "Luca Bianchi confirms +39 333 1200000 is his direct number.",
+          "#HISTORY",
+          "The same direct number was already recorded; he confirmed it himself."
+        ],
+        "confidence": 0.95,
+        "reason": "Same email address and same direct number: corroborated identity."
+      }
+    },
+    "customer_forwarding_number_correction": {
+      "decision": {
+        "action": "UPDATE",
+        "entity_type": "COMPANY",
+        "scope": "entity",
+        "write_set": [
+          {
+            "blob_id": "company-acme",
+            "expected_version": "2026-09-20T10:00:00-company-acme",
+            "role": "target"
+          }
+        ],
+        "content_lines": [
+          "#IDENTIFIERS",
+          "Entity type: COMPANY",
+          "Scope: entity",
+          "Name: Acme",
+          "#ABOUT",
+          "Acme forwards calls to +39 02 123456.",
+          "#HISTORY",
+          "Until this correction the stored number was +39 02 999999."
+        ],
+        "confidence": 0.99,
+        "reason": "Explicit human correction of one customer's forwarding number; it belongs to Acme, not to company-wide knowledge."
+      }
+    },
+    "customer_price_correction": {
+      "decision": {
+        "action": "UPDATE",
+        "entity_type": "COMPANY",
+        "scope": "entity",
+        "write_set": [
+          {
+            "blob_id": "company-boreale",
+            "expected_version": "2026-09-20T10:00:00-company-boreale",
+            "role": "target"
+          }
+        ],
+        "content_lines": [
+          "#IDENTIFIERS",
+          "Entity type: COMPANY",
+          "Scope: entity",
+          "Name: Boreale",
+          "#ABOUT",
+          "Boreale is renewing in October. The agreed price is 74 euro al mese from the October renewal, not the general list price.",
+          "#HISTORY",
+          "Prezzo concordato confirmed by the owner; ottobre renewal already recorded."
+        ],
+        "confidence": 0.97,
+        "reason": "A negotiated price for one customer stays in that customer's memory."
+      }
+    },
+    "global_opening_hours": {
+      "decision": {
+        "action": "CREATE",
+        "entity_type": "FACT",
+        "scope": "company",
+        "content_lines": [
+          "#IDENTIFIERS",
+          "Entity type: FACT",
+          "Scope: company",
+          "Category: hours",
+          "Key: saturday-closed",
+          "#ABOUT",
+          "Siamo chiusi ogni sabato.",
+          "#HISTORY",
+          "Stated by the owner as a standing rule."
+        ],
+        "confidence": 0.9,
+        "reason": "A policy about our own business that holds regardless of who is asking."
+      }
+    },
+    "account_feedback": {
+      "decision": {
+        "action": "CREATE",
+        "entity_type": "STYLE",
+        "scope": "account",
+        "content_lines": [
+          "#IDENTIFIERS",
+          "Entity type: STYLE",
+          "Scope: account",
+          "#ABOUT",
+          "Evita i punti esclamativi nelle risposte e proponi sempre il prossimo passo in una riga separata.",
+          "#HISTORY",
+          "Requested by this account."
+        ],
+        "confidence": 0.93,
+        "reason": "Behavioural feedback about how replies are written is this account's operating rule."
+      }
+    },
+    "planned_not_completed": {
+      "decision": {
+        "action": "UPDATE",
+        "entity_type": "COMPANY",
+        "scope": "entity",
+        "write_set": [
+          {
+            "blob_id": "company-delta",
+            "expected_version": "2026-09-20T10:00:00-company-delta",
+            "role": "target"
+          }
+        ],
+        "content_lines": [
+          "#IDENTIFIERS",
+          "Entity type: COMPANY",
+          "Scope: entity",
+          "Name: Delta",
+          "#ABOUT",
+          "Delta is evaluating a trunk migration. We plan to migrate their trunk next Tuesday, and only after their written approval.",
+          "#HISTORY",
+          "No approval has been received and no migration has been performed."
+        ],
+        "confidence": 0.88,
+        "reason": "Planned work stays planned; the approval is a precondition, not an event."
+      }
+    },
+    "contradictory_legacy_fact_rule": {
+      "decision": {
+        "action": "REVIEW",
+        "reason": "Edera's 12-month minimum term contradicts a legacy company FACT and an entity-shaped account rule that both say 6 months. Resolving which representation survives is a reclassification, not an update."
+      }
+    },
+    "multi_entity_source__person": {
+      "decision": {
+        "action": "CREATE",
+        "entity_type": "PERSON",
+        "scope": "entity",
+        "content_lines": [
+          "#IDENTIFIERS",
+          "Entity type: PERSON",
+          "Scope: entity",
+          "Name: Marta Riva",
+          "Company: Acme",
+          "#ABOUT",
+          "Marta Riva joined Acme as finance lead.",
+          "#HISTORY",
+          "Announced in an email from Acme."
+        ],
+        "confidence": 0.85,
+        "reason": "A new person at a known company."
+      }
+    },
+    "multi_entity_source__company": {
+      "decision": {
+        "action": "CREATE",
+        "entity_type": "COMPANY",
+        "scope": "entity",
+        "content_lines": [
+          "#IDENTIFIERS",
+          "Entity type: COMPANY",
+          "Scope: entity",
+          "Name: Acme",
+          "#ABOUT",
+          "Acme plans to move its forwarding number to +39 02 777777 next month, after testing.",
+          "#HISTORY",
+          "Announced by Acme; the move has not happened yet."
+        ],
+        "confidence": 0.84,
+        "reason": "A planned change to this customer's forwarding number, stated as planned."
+      }
+    },
+    "trailing_mixed_response": {
+      "model_response": "{\"action\": \"SKIP\", \"reason\": \"nothing durable here\"}\n\nActually, on reflection I will update the Acme blob instead."
+    },
+    "empty_json_object": {
+      "model_response": "{}"
+    },
+    "fenced_but_valid": {
+      "model_response": "```json\n{\"action\": \"REVIEW\", \"reason\": \"the subject cannot be resolved from this input\"}\n```"
+    }
+  }
+}
