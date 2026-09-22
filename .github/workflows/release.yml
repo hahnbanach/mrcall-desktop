@@ -175,13 +175,18 @@ jobs:
           # DLLs are found through the collected binaries, not through PATH.
           if [[ "$RUNNER_OS" == "Windows" ]]; then
             echo "PATH entries before: $(echo "$PATH" | tr ':' '\n' | wc -l)"
-            PYDIR="$(python -c 'import sys,os;print(os.path.dirname(sys.executable))')"
+            # Resolve the interpreter to a POSIX path BEFORE trimming, and
+            # call it by absolute path afterwards: sys.executable is a
+            # Windows path that bash cannot put on PATH, which is what made
+            # the first two attempts die with "command not found".
+            PYEXE="$(cygpath -u "$(python -c 'import sys;print(sys.executable)')")"
+            PYDIR="$(dirname "$PYEXE")"
             export PATH="$PYDIR:$PYDIR/Scripts:/c/Windows/System32:/c/Windows:/c/Windows/System32/Wbem:/usr/bin"
             echo "PATH entries after:  $(echo "$PATH" | tr ':' '\n' | wc -l)"
           fi
           # `python -m PyInstaller`, not the console script: the trim above
           # drops the Scripts directory the `pyinstaller` shim lives in.
-          python -m PyInstaller --noconfirm zylch.spec
+          "${PYEXE:-python}" -m PyInstaller --noconfirm zylch.spec
           ls -la dist/
 
       - name: Upload sidecar artifact
