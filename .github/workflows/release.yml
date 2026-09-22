@@ -107,18 +107,28 @@ jobs:
   build-engine:
     name: Sidecar ${{ matrix.platform }}-${{ matrix.arch }}
     needs: setup
-    # Windows is BUILT BUT NOT BLOCKING: we ship macOS today. The Windows
-    # sidecar currently dies inside PyInstaller — `collect_all('neonize')`
-    # walks every submodule in an isolated subprocess, and importing
-    # neonize's compiled Go binding kills that child with an access
-    # violation (exit 3221225477 = 0xC0000005). That is a packaging problem
-    # in one line of zylch.spec, not a product regression, and it must not
-    # redden a macOS release. Keep the job so the day it is fixed we get
-    # artifacts again without touching this file; the release step already
-    # tolerates missing files (`fail_on_unmatched_files: false`).
+    # Windows is BUILT BUT NOT BLOCKING: a Windows leg must never redden a
+    # macOS release. The release step tolerates missing files
+    # (`fail_on_unmatched_files: false`). Revisit this once Windows has shipped
+    # a few times without incident — while it stays non-blocking, a regression
+    # publishes a release with no Windows installer and says nothing.
+    #
+    # What used to fail here, for the next reader: `find_binary_dependencies`
+    # imports EVERY collected package into ONE isolated child process, in
+    # sequence, to harvest the DLL directories each registers. That child
+    # reached neonize already carrying numpy, onnxruntime, cryptography, lxml
+    # and tokenizers, and the Go runtime loading on top of that pile died —
+    # sometimes 0xC0000005, sometimes 0xC0000409, sometimes a Cygwin
+    # TP_NUM_C_BUFS abort, and sometimes it just stopped responding inside
+    # `Looking for dynamic libraries` until the backstop killed the job. The
+    # neonize access violation the old comment blamed was the symptom seen from
+    # the wrong side; e251c4d dropped `collect_submodules` but left
+    # `collect_data_files`/`collect_dynamic_libs`, which import the package too.
+    # zylch.spec now keeps neonize and the unused transcription stack out of
+    # the Windows module graph, and ships neonize's files without importing it.
     continue-on-error: ${{ matrix.platform == 'win' }}
     # Backstop: a leg that hangs blocks every downstream job until GitHub's
-    # 6h default kills it. The mac sidecar builds in minutes.
+    # 6h default kills it. Both sidecars now build in about three minutes.
     timeout-minutes: 45
     strategy:
       fail-fast: false
