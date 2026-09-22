@@ -165,8 +165,22 @@ jobs:
       - name: Build sidecar (PyInstaller)
         shell: bash
         run: |
-          pyinstaller --noconfirm --log-level DEBUG zylch.spec
-          ls -la dist/
+          set +e
+          pyinstaller --noconfirm --log-level DEBUG zylch.spec 2>&1 | tee pyinstaller.log
+          rc=${PIPESTATUS[0]}
+          echo "=== pyinstaller exit code: $rc ==="
+          echo "=== last 5 lines ==="; tail -5 pyinstaller.log
+          echo "=== disk ==="; df -h . || true
+          ls -la dist/ || true
+          exit $rc
+
+      - name: Upload PyInstaller log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pyinstaller-log-${{ matrix.platform }}-${{ matrix.arch }}
+          path: engine/pyinstaller.log
+          if-no-files-found: warn
 
       - name: Upload sidecar artifact
         uses: actions/upload-artifact@v4
