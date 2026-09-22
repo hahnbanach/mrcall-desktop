@@ -1,6 +1,6 @@
 ---
-doc_baseline_commit: a046f520821f9f3cdc08fd05d850ec08d01b0680
-doc_baseline_date: 2026-09-21
+doc_baseline_commit: b2866badfee488a6b1bea2e18613c39cdf646d26
+doc_baseline_date: 2026-09-22
 ---
 
 # Active Context — Cross-cutting
@@ -51,16 +51,28 @@ refresh credentials remain in the private descriptor outside the workspace.
 Shared written projects are revisioned company-engine records separate from
 entity blobs; see [project memory](../engine/docs/features/project-memory.md).
 
-Desktop v0.1.49 is the recorded Apple Silicon release. Current installation and
-personal-key GUI entry on the CTO's Mac remain unverified. Runtime contracts are
-in [IPC](ipc-contract.md), [remote backend](remote-backend.md) and per-tree docs.
+Desktop `v0.1.51-win` is the recorded release and carries a **Windows x64
+installer alongside the Apple Silicon dmg**. The previous one was `v0.1.29`,
+so a Windows user upgrading arrives from a build that old; `v0.1.40` through
+`v0.1.51` ship the dmg alone. Neither application has been exercised: Mac
+installation with personal-key GUI entry is unverified, and the `.exe` has not
+been
+downloaded from the release, let alone run. The Windows risk is specific —
+neonize loads from loose files via `sys._MEIPASS` rather than as a collected
+package, and a green build cannot prove that import resolves at run time.
+Runtime contracts are in [IPC](ipc-contract.md),
+[remote backend](remote-backend.md) and per-tree docs.
 
 ## Unresolved
 
 - The three other Café124 profiles await a choice between MrCall credits and
   personal OpenRouter keys. Funded K3 credit acceptance remains open.
 - Packaged-app/fresh-account acceptance remains separate from source and hosted
-  API checks. Windows and Intel are outside the recorded default release matrix.
+  API checks. Windows now builds (~3 minutes) and ships an installer, but stays
+  opt-in and `continue-on-error`, so a regression would publish a release with
+  no Windows installer and say nothing. Intel remains outside the matrix.
+  Windows has no WhatsApp voice-note transcription: the transcription stack is
+  excluded there to keep it out of the module graph.
 - Remote provisioning needs host UID-to-company membership; an endpoint alone
   does not establish membership. Settings catalog refresh has a known same-value
   reload gap; reopen Settings after connection changes. See [backlog](harness-backlog.md).
@@ -74,7 +86,9 @@ in [IPC](ipc-contract.md), [remote backend](remote-backend.md) and per-tree docs
 
 1. Resolve the remaining billing choices and funded credit acceptance. Keep
    preparation paused until the CTO explicitly requests a bounded run.
-2. Verify the installed Mac application and personal-key entry through its GUI.
+2. Verify the installed applications through their GUI: the Mac one with
+   personal-key entry, and the Windows one at all — install, open, scan the
+   WhatsApp QR. Until that runs, support@ keeps telling customers macOS only.
 3. Resume deferred product work from its existing briefs when requested.
    The [thin web/mobile client brief](execution-plans/cross-machine-thin-clients.md)
    is a parked nice-to-have, not scheduled work; remind the CTO that it already
