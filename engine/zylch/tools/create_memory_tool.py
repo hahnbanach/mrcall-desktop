@@ -6,6 +6,23 @@ actually matches the entity the user wants to save, it calls this
 tool instead of update_memory. No fuzzy matching happens here — the
 decision "update vs. create" belongs to the LLM, not to the tool.
 See memory/feedback_no_hardcoded_rules.md for the principle.
+
+Two write paths live behind this one tool name, selected by
+``MNEMONIC_WRITE_PATH`` (see :mod:`zylch.tools.memory_events`):
+
+- **off** (the shipped default) — the direct blob write this tool has always
+  done. One of the legacy writers the mnemonic harness is converting.
+- **create** — the harness's first real path. The tool submits an event and the
+  mnemonic role decides; a CREATE is committed atomically, and a proposal to
+  change *existing* memory returns for review instead, because the approval
+  that must guard such a change is milestone 4's and does not exist yet. It
+  never falls back to the direct write: a harness that writes around itself
+  when it disagrees is not a boundary.
+
+The tool's name, arguments and successful response shape are unchanged in both
+modes. ``entry_type='behavioral_rule'`` still goes to ``prefs_store.store_rule``
+in both: account rules keep their own dedup and supersession logic, and
+converting that helper belongs to the milestone that owns it.
 """
 
 import logging
@@ -122,37 +139,39 @@ class CreateMemoryTool(Tool):
                 data=None,
                 error=outcome["reason"],
             )
-        else:
-            # The engine decides the namespace; the model only names a
-            # FAMILY. A bare "user" / "facts" / "template" / "prefs" — or a
-            # full "family:anything" — is re-scoped to the one correct
-            # namespace for this owner and company; whatever followed the
-            # colon is discarded, never stored. An unknown family is
-            # refused: a namespace nothing reads is knowledge lost.
-            from zylch.memory.company_key import (
-                family_of,
-                require_company_key,
-                scoped_namespace,
-            )
+        from .memory_events import semantic_create_enabled
 
-            family = (
-                family_of(namespace) if namespace and ":" in namespace else (namespace or "user")
+        if semantic_create_enabled():
+            return self._submit_event(owner_id, content, namespace)
+
+        # The engine decides the namespace; the model only names a
+        # FAMILY. A bare "user" / "facts" / "template" / "prefs" — or a
+        # full "family:anything" — is re-scoped to the one correct
+        # namespace for this owner and company; whatever followed the
+        # colon is discarded, never stored. An unknown family is
+        # refused: a namespace nothing reads is knowledge lost.
+        from zylch.memory.company_key import (
+            family_of,
+            require_company_key,
+            scoped_namespace,
+        )
+
+        family = family_of(namespace) if namespace and ":" in namespace else (namespace or "user")
+        try:
+            namespace = scoped_namespace(family, owner_id, require_company_key())
+        except ValueError as e:
+            return ToolResult(status=ToolStatus.ERROR, data=None, error=str(e))
+        if et == "entity_fact" and namespace.split(":", 1)[0] in ("template", "prefs"):
+            return ToolResult(
+                status=ToolStatus.ERROR,
+                data=None,
+                error=(
+                    f"entry_type='entity_fact' cannot be saved to the "
+                    f"'{namespace.split(':', 1)[0]}' rule namespace. Facts about a "
+                    "contact use the default 'user' namespace; a general "
+                    "behavioral rule uses entry_type='behavioral_rule'."
+                ),
             )
-            try:
-                namespace = scoped_namespace(family, owner_id, require_company_key())
-            except ValueError as e:
-                return ToolResult(status=ToolStatus.ERROR, data=None, error=str(e))
-            if et == "entity_fact" and namespace.split(":", 1)[0] in ("template", "prefs"):
-                return ToolResult(
-                    status=ToolStatus.ERROR,
-                    data=None,
-                    error=(
-                        f"entry_type='entity_fact' cannot be saved to the "
-                        f"'{namespace.split(':', 1)[0]}' rule namespace. Facts about a "
-                        "contact use the default 'user' namespace; a general "
-                        "behavioral rule uses entry_type='behavioral_rule'."
-                    ),
-                )
 
         try:
             from zylch.memory import EmbeddingEngine, MemoryConfig
@@ -182,6 +201,91 @@ class CreateMemoryTool(Tool):
                 data=None,
                 error=f"Create failed: {e}",
             )
+
+    def _submit_event(
+        self,
+        owner_id: str,
+        content: str,
+        namespace_hint: Optional[str],
+    ) -> ToolResult:
+        """Submit the turn as a memory event and report only what happened.
+
+        Success means a committed receipt and a blob that reads back — not a
+        proposal that looked fine. Every other outcome is reported as itself:
+        a review says why and writes nothing, a failure says it can be retried.
+        The tool never reports a decision as a save.
+        """
+        from zylch.assistant.turn_context import get_turn_id, get_turn_observation
+        from zylch.memory.company_key import require_company_key
+        from zylch.memory.mnemonic import submit
+        from zylch.memory.mnemonic.contracts import CREATE
+
+        from .memory_events import NO_OBSERVATION, create_event
+
+        observation = get_turn_observation()
+        if not observation:
+            # No turn behind this call: the task executor and the other
+            # non-chat callers are milestone 4's to convert, and until they
+            # are, the semantic path has nothing it may treat as what was said.
+            logger.warning("[create_memory] semantic path reached with no turn observation")
+            return ToolResult(status=ToolStatus.ERROR, data=None, error=NO_OBSERVATION)
+
+        try:
+            company_key = require_company_key()
+        except RuntimeError as e:
+            return ToolResult(status=ToolStatus.ERROR, data=None, error=str(e))
+
+        event = create_event(
+            owner_id=owner_id,
+            company_key=company_key,
+            content=content,
+            namespace_hint=namespace_hint,
+            observation=observation,
+            source_id=f"turn:{get_turn_id()}",
+        )
+        result = submit(event, allow_actions=(CREATE,))
+        logger.debug(f"[create_memory] submit(event={event.event_id}) -> outcome={result.outcome}")
+
+        if result.outcome == "committed":
+            blob_id, _version = result.committed_ids[0]
+            stored = self._read_back(blob_id, owner_id)
+            if stored is None:
+                return ToolResult(
+                    status=ToolStatus.ERROR,
+                    data=None,
+                    error="the memory was committed but cannot be read back; nothing is confirmed",
+                )
+            return ToolResult(
+                status=ToolStatus.SUCCESS,
+                data={
+                    "blob_id": blob_id,
+                    "namespace": stored.get("namespace"),
+                    "action": "created",
+                    "event_id": result.event_id,
+                },
+                message=f"Memory created (blob_id={blob_id}).\n{stored.get('content') or ''}",
+            )
+        if result.outcome == "skipped":
+            return ToolResult(
+                status=ToolStatus.SUCCESS,
+                data={"action": "skipped", "event_id": result.event_id},
+                message=f"Nothing new to store: {result.reason}",
+            )
+        return ToolResult(
+            status=ToolStatus.ERROR,
+            data={"action": result.outcome, "event_id": result.event_id},
+            error=result.reason,
+        )
+
+    @staticmethod
+    def _read_back(blob_id: str, owner_id: str) -> Optional[Dict[str, Any]]:
+        """Read the committed blob through the ordinary scoped read path."""
+        from zylch.memory import EmbeddingEngine, MemoryConfig
+        from zylch.memory.blob_storage import BlobStorage
+        from zylch.storage.database import get_session
+
+        storage = BlobStorage(get_session, EmbeddingEngine(MemoryConfig()))
+        return storage.get_blob(blob_id, owner_id)
 
     def get_schema(self) -> Dict[str, Any]:
         return {

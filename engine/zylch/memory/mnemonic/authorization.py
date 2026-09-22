@@ -10,8 +10,9 @@ Three separate questions, deliberately not collapsed into one:
    interactive grant rides the caller's own turn; an automatic grant must match
    an admitted preparation item. They are different contracts.
 3. **Commit approval** — may the resulting mutation be written? Not here.
-   Milestone 3 owns it and it stays separate: authorizing the *request* never
-   authorizes the *write*.
+   ``mnemonic/commit.py`` re-checks authorization under the company write lock
+   and refuses without a :class:`~zylch.memory.commit_permit.CommitPermit`.
+   Authorizing the *request* never authorizes the *write*.
 
 The authority is the **dispatch scope**, never the usage label. ``call_site``
 tags remain what they always were — diagnostics for spend attribution. A call
@@ -85,6 +86,11 @@ class DispatchGrant:
         return int(_ALLOWANCE.get(self.event_id, 0))
 
     @property
+    def permits_commit(self) -> bool:
+        """A commit may proceed only while the grant is live and uncancelled."""
+        return _registered(self) and not self.cancellation.cancelled
+
+    @property
     def is_interactive(self) -> bool:
         return self.origin == INTERACTIVE
 
@@ -101,12 +107,18 @@ _ISSUED: Dict[str, DispatchGrant] = {}
 # what is left, so an event that keeps failing cannot keep buying itself a
 # fresh budget.
 #
-# The table is bounded, so the guarantee is bounded with it: it holds for the
-# _ALLOWANCE_TRACKED most recent events of this process, and eviction prefers
-# entries that have spent nothing — forgetting an untouched event costs
-# nothing, forgetting a spent one would hand it a fresh budget. Beyond that
-# bound, and across a restart, what makes this durable is milestone 3's
-# operation journal, not this table.
+# This table is a **cache**. The record is the operation journal's ``allowance``
+# column in the company store: an event opened as an operation reads its
+# remaining allowance from there when a grant is issued and decrements it there
+# before every dispatch, so a crash loop resumes with what is left instead of
+# starting the event over with a full budget.
+#
+# The cache is bounded and its own guarantee is bounded with it: it holds for
+# the _ALLOWANCE_TRACKED most recent events of this process, and eviction
+# prefers entries that have spent nothing — forgetting an untouched event costs
+# nothing, forgetting a spent one would hand it a fresh budget. For an event
+# with no operation row (a decision taken outside a commit-capable path) this
+# table is the only bound there is.
 _ALLOWANCE: "OrderedDict[str, int]" = OrderedDict()
 _ALLOWANCE_TRACKED = 1024
 
@@ -182,8 +194,8 @@ def issue_grant(event: MemoryEvent) -> DispatchGrant:
     The allowance is finite, derived from the candidate/decision bounds, and
     **per event, not per grant**. Re-issuing for the same event continues from
     what is left, so resubmitting a stuck event cannot buy it a fresh budget.
-    It lives in this process; milestone 3's operation journal is what makes it
-    survive a restart, and until then a restart starts the event over.
+    When the event has an operation in the journal, "what is left" is read from
+    there, so a restart resumes the event rather than restarting it.
     """
     authorize_request(event)
     grant = DispatchGrant(
@@ -197,12 +209,40 @@ def issue_grant(event: MemoryEvent) -> DispatchGrant:
         stage=event.stage,
         cancellation=event.cancellation,
     )
-    if event.event_id not in _ALLOWANCE:
-        if len(_ALLOWANCE) >= _ALLOWANCE_TRACKED:
-            _evict_one()
-        _ALLOWANCE[event.event_id] = EVENT_DISPATCH_ALLOWANCE
+    durable = _durable_allowance(event.event_id)
+    if durable is not None:
+        _remember(event.event_id, durable)
+    elif event.event_id not in _ALLOWANCE:
+        _remember(event.event_id, EVENT_DISPATCH_ALLOWANCE)
     _ISSUED[grant.grant_id] = grant
     return grant
+
+
+def _remember(event_id: str, remaining: int) -> None:
+    if event_id not in _ALLOWANCE and len(_ALLOWANCE) >= _ALLOWANCE_TRACKED:
+        _evict_one()
+    _ALLOWANCE[event_id] = remaining
+
+
+def _durable_allowance(event_id: str) -> Optional[int]:
+    """What the operation journal says this event may still spend.
+
+    ``None`` means nothing durable governs it — no company store attached, or
+    no operation row — and the in-process cache is the whole bound. A journal
+    that exists but cannot answer raises, because reporting "no durable limit"
+    for a merely broken store would silently restore the fresh budget this
+    column exists to deny.
+    """
+    from . import journal
+
+    return journal.allowance_for(event_id)
+
+
+def _spend_durable(event_id: str) -> Optional[int]:
+    """Consume one paid call in the journal; returns what is left, or ``None``."""
+    from . import journal
+
+    return journal.spend_allowance(event_id)
 
 
 def _evict_one() -> None:
@@ -370,7 +410,16 @@ def note_dispatch() -> Optional[str]:
     # Consumed here, not at the admission check: a call the budget or
     # preparation refuses after that check never reaches a provider, and must
     # not cost the event one of its bounded attempts.
-    _ALLOWANCE[grant.event_id] = remaining - 1
+    #
+    # The durable decrement lands BEFORE the request goes out, so a crash
+    # mid-dispatch leaves the call counted rather than free. That is the
+    # deliberate direction of the error: an uncertain call costs the event one
+    # attempt, and a crash loop converges instead of spending forever.
+    durable = _spend_durable(grant.event_id)
+    # The journal's answer wins where there is one, so the cache cannot drift
+    # from the record it is a cache of — an evicted entry that later reappeared
+    # with a stale count would otherwise decide the next admission.
+    _ALLOWANCE[grant.event_id] = remaining - 1 if durable is None else durable
     grant.cancellation.note_dispatch()
     return grant.origin
 

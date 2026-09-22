@@ -253,12 +253,18 @@ def _extract_canonical_name(content: str) -> Optional[str]:
 
 
 def _record_alias(merged_id: str, keeper_id: str) -> None:
+    """The sweep's own alias write, in its own session.
+
+    The rule lives in :mod:`zylch.memory.associations`; the semantic MERGE
+    commit writes it inside the keeper's transaction instead. This standalone
+    form stays until milestone 7 routes the sweep through that commit.
+    """
+    from zylch.memory.associations import record_alias
     from zylch.storage.database import get_session
-    from zylch.storage.models import BlobAlias
 
     try:
         with get_session() as sess:
-            sess.merge(BlobAlias(merged_id=merged_id, keeper_id=keeper_id))
+            record_alias(sess, merged_id=merged_id, keeper_id=keeper_id)
     except Exception as e:
         logger.warning(f"[reconsolidate] alias {merged_id}->{keeper_id} not recorded: {e}")
 

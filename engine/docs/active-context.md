@@ -24,11 +24,24 @@ bounded three-round role whose complete identity/refusal prompt sits in the
 cached system block; a small symbolic validator; and origin-bound paid
 admission enforced in `check_dispatch` by the dispatch scope rather than the
 usage label. Interactive grants leave bounded preparation untouched; automatic
-grants must match the admitted item. There is no commit capability, no
-operation journal and no converted legacy writer, so a validated mutation
-proposal ends as `retryable_failure` with `commit capability not installed`.
+grants must match the admitted item.
 Contract and bounds: [mnemonic decisions](features/mnemonic-decisions.md).
-Tested locally against the frozen milestone 0 incident corpus; not deployed.
+
+The boundary now commits. `mnemonic/commit.py` writes a validated CREATE or
+UPDATE — blob, sentences, identifier index, source link, mutation sequence and
+the operation receipt — in one transaction on the company store, under a
+single-use `CommitPermit` checked at the storage boundary and a CAS against the
+version re-read inside that transaction. A `memory_operations` table in the
+same store makes an event idempotent, fences concurrent attempts and carries
+the per-event dispatch allowance across a restart. MERGE and reclassification
+return `review_needed`. Supervised `create_memory`'s entity path is routed
+through it only when `MNEMONIC_WRITE_PATH=create`; the default `off` keeps the
+legacy direct write, because the approval that must guard a change to existing
+memory is not built yet. Every other writer in the inventory is still direct —
+no single-writer claim. Contract:
+[mnemonic commit](features/mnemonic-commit.md).
+Tested locally against the frozen milestone 0 incident corpus and real split
+profile/company databases; not deployed.
 
 Four Café124 units run isolated release `8d83193`; the billing server runs
 `prod-99091c35`. Production selects personal OpenRouter/custom K3 for its base

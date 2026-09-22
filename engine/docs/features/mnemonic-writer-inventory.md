@@ -46,10 +46,13 @@ and task solve also reach persistence independently. Correction learning can
 write through both `prefs_store.store_rule` and `facts_store.upsert_fact`.
 
 `BlobStorage.store_blob` and `update_blob` are the common low-level blob
-writers, but they are not yet capability protected. Associations and identity
+writers and are not capability protected; the same primitives now also back
+`semantic_create` / `semantic_update`, which are. Associations and identity
 meaning can also change through `Storage.add_*_blob_link`,
 `add_person_identifiers`, `migrate_blob_references` and the reconsolidation
-alias writer. Join, company-key/split/identifier migrations and three repair
+alias writer; those four now delegate to the transaction-scoped forms in
+`memory/associations.py`, so one implementation serves both the legacy
+standalone sessions and the semantic commit's single transaction. Join, company-key/split/identifier migrations and three repair
 scripts contain direct SQL or fixed ORM writes outside those methods. The
 manifest distinguishes these mechanical or migration candidates from runtime
 semantic adapters so Milestone 8 can review each one rather than granting a
@@ -66,9 +69,10 @@ The JSON inventory freezes six independently scanned sets:
 - ORM `update`/`delete` operations on those models;
 - direct assignments to a queried or constructed ORM row, independent of the
   local variable name (the current four are `Blob.content`, `embedding`,
-  `events` and `updated_at` in `BlobStorage.update_blob`); `setattr` on a bound
-  row, imported model aliases and inline query-result assignments are treated
-  as the same write;
+  `events` and `updated_at` in `BlobStorage._rewrite`); `setattr` on a bound
+  row, imported model aliases, inline query-result assignments and a row handed
+  in as a parameter annotated with a tracked model are treated as the same
+  write;
 - SQLAlchemy Core `insert`/`update`/`delete` operations on tracked models,
   including the two `MemoryMeta` lock/mutation-sequence updates;
 - literal `INSERT`, `UPDATE` and `DELETE` statements against mnemonic tables.
@@ -97,7 +101,7 @@ The ownership sequence is:
 | Milestone | Temporary owners |
 |---|---|
 | 1 | mutation authorization before slash/reset routing and kernel request policy |
-| 3 | guarded `BlobStorage` commit primitives and transaction-scoped sinks |
+| 3 | guarded `BlobStorage` commit primitives and transaction-scoped sinks (installed: `semantic_create`/`semantic_update` under a permit, `memory/associations.py`) |
 | 4 | interactive create/update and task-solve adapters |
 | 5 | facts, rules, correction learning and memory command writers |
 | 6 | async workers, synchronous job facades, associations and identifiers |

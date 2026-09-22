@@ -14,6 +14,7 @@ from zylch.llm.exceptions import (
 
 from zylch.tools import ToolFactory, ToolConfig
 from zylch.assistant.core import ZylchAIAgent
+from zylch.assistant.turn_context import set_turn_observation
 from zylch.config import settings
 from zylch.services.approval_gate import gate_slash_command
 from zylch.services.request_policy import (
@@ -183,6 +184,12 @@ class ChatService:
         """
         start_time = time.time()
         logger.info(f"process_message: user_message={repr(user_message)}, user_id={user_id}")
+        # The human's words, before anything in this method rewrites them: the
+        # semantic command matcher replaces the message with a slash command,
+        # and a task conversation prefixes it with a TASK CONTEXT block. Both
+        # are useful to the agent and neither is what was said, so the semantic
+        # memory boundary binds its observation here and not downstream.
+        set_turn_observation(user_message)
 
         def read_only_refusal(effect: str) -> Dict[str, Any]:
             return {

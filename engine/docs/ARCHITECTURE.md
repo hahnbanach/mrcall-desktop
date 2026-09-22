@@ -185,6 +185,7 @@ User
 
 - Firebase profiles stored in `~/.zylch/profiles/{firebase_uid}/`
 - Each profile has `.env`, `zylch.db`, `profile.lock`; the `.env` carries `MEMORY_KEY` (+ `MEMORY_KEY_SOURCE`: `mint` | `provision` | `join`), which selects the company memory store
+- `MNEMONIC_WRITE_PATH` selects which writer serves supervised `create_memory`: `off` (default, the legacy direct write) or `create` (the semantic commit, CREATE only). See [mnemonic commit](features/mnemonic-commit.md)
 - CLI `-p/--profile` option for explicit selection
 - Auto-selects if only one profile exists
 - Exclusive locking via `flock` (write commands)

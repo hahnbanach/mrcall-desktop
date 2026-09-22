@@ -114,6 +114,32 @@ def orm_query_mutations(path: Path, models: set[str]) -> Counter:
     return mutations
 
 
+def annotated_parameters(node, aliases: dict[str, str], models: set[str]) -> dict[str, str]:
+    """Parameters whose annotation names a tracked model.
+
+    A helper that receives an already-loaded row — ``def _rewrite(self, blob:
+    Blob, ...)`` — writes to it exactly like one that queried it itself, and a
+    scanner that only followed ``session.query(Model)`` would not see it. Since
+    a converted writer naturally grows such helpers, the annotation is treated
+    as the binding it is.
+    """
+    bound: dict[str, str] = {}
+    args = node.args
+    for arg in (*args.posonlyargs, *args.args, *args.kwonlyargs):
+        annotation = arg.annotation
+        if annotation is None:
+            continue
+        if isinstance(annotation, ast.Constant) and isinstance(annotation.value, str):
+            candidate = aliases.get(annotation.value, annotation.value)
+            if candidate in models:
+                bound[arg.arg] = candidate
+            continue
+        model = model_reference(annotation, aliases, models)
+        if model:
+            bound[arg.arg] = model
+    return bound
+
+
 def orm_assignments(path: Path, models: set[str]) -> Counter:
     """Bind ORM results to local names and freeze direct persistent field writes."""
     tree = ast.parse(path.read_text(), filename=str(path))
@@ -181,7 +207,7 @@ def orm_assignments(path: Path, models: set[str]) -> Counter:
 
         def _visit_function(self, node: ast.FunctionDef | ast.AsyncFunctionDef) -> None:
             stack.append(node.name)
-            bindings.append({})
+            bindings.append(annotated_parameters(node, aliases, models))
             self.generic_visit(node)
             bindings.pop()
             stack.pop()

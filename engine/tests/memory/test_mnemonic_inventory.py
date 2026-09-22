@@ -108,6 +108,36 @@ def write(session):
     assert orm_core_mutations(source, models) == Counter({("write", "orm-core:update:Blob"): 1})
 
 
+def test_assignment_scanner_follows_a_row_handed_in_as_an_annotated_parameter(tmp_path: Path):
+    """A converted writer splits into helpers that receive the row already loaded.
+
+    ``_rewrite(self, blob: Blob, ...)`` writes exactly like the method that
+    queried it, and a scanner blind to the annotation would report a clean
+    inventory for a module that still mutates blobs directly.
+    """
+    source = tmp_path / "helper.py"
+    source.write_text("""\
+from zylch.storage.models import Blob
+
+def rewrite(session, blob: Blob, text: str):
+    blob.content = text
+    blob.updated_at = None
+
+def quoted(row: "Blob"):
+    row.embedding = b""
+
+def untyped(row):
+    row.content = "invisible on purpose"
+""")
+    assert orm_assignments(source, {"Blob"}) == Counter(
+        {
+            ("rewrite", "assign:Blob.content"): 1,
+            ("rewrite", "assign:Blob.updated_at"): 1,
+            ("quoted", "assign:Blob.embedding"): 1,
+        }
+    )
+
+
 def test_every_literal_sql_sink_is_owned_by_a_later_milestone():
     manifest = _manifest()
     table_names = {

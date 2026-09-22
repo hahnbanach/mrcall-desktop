@@ -19,6 +19,16 @@ import uuid
 
 _turn_id: ContextVar[str] = ContextVar("zylch_turn_id", default="-")
 
+# What the human actually wrote this turn. Set by
+# ``ChatService.process_message`` as its first statement — upstream of the
+# semantic command matcher, which replaces the message with a slash command,
+# and of the TASK CONTEXT prefix a task conversation adds. The semantic memory
+# boundary needs it: an outer agent's ``create_memory(content=...)`` is a
+# rewrite of the turn and is useful, but it is a *suggestion*, and the
+# observation a memory decision is authorized against has to be the words that
+# were really said.
+_turn_observation: ContextVar[str] = ContextVar("zylch_turn_observation", default="")
+
 
 def new_turn_id() -> str:
     """Generate and install a fresh 8-char turn id for the current context.
@@ -39,3 +49,18 @@ def set_turn_id(turn_id: str) -> None:
 def get_turn_id() -> str:
     """Return the current turn id, or ``"-"`` if none has been set."""
     return _turn_id.get()
+
+
+def set_turn_observation(message: str) -> None:
+    """Record the human's original words for this turn."""
+    _turn_observation.set(message or "")
+
+
+def get_turn_observation() -> str:
+    """The human's original words this turn, or ``""`` outside a chat turn.
+
+    Empty is meaningful: a caller with no turn behind it has no observation to
+    authorize a memory decision against, and the semantic path refuses rather
+    than promoting a model's rewrite to the status of something that was said.
+    """
+    return _turn_observation.get()

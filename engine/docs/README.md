@@ -51,6 +51,7 @@ Complete documentation for Zylch standalone (local CLI sales intelligence tool).
 | [features/email-triage.md](features/email-triage.md) | Email triage and auto-reply detection |
 | [features/mnemonic-writer-inventory.md](features/mnemonic-writer-inventory.md) | Executable legacy memory writer/call graph freeze |
 | [features/mnemonic-decisions.md](features/mnemonic-decisions.md) | Mnemonic memory events, validator and origin-bound paid admission |
+| [features/mnemonic-commit.md](features/mnemonic-commit.md) | Atomic semantic commit, commit permit and the operation journal |
 | [features/read-only-chat-policy.md](features/read-only-chat-policy.md) | Negotiated server-enforced read-only chat origin policy |
 | [features/task-management.md](features/task-management.md) | Task system (4-level urgency) |
 | [features/relationship-intelligence.md](features/relationship-intelligence.md) | Relationship intelligence and gap detection |

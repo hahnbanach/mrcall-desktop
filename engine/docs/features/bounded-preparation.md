@@ -47,6 +47,14 @@ Legacy private paid preparation paths without an admitted scope are refused
 with guidance to use bounded preparation. Interactive chat is separate and has
 a maximum of ten tool rounds per user turn, in addition to the daily budget.
 
+Semantic memory work is admitted by its own origin-bound grant rather than by
+its usage label, and the two origins are different contracts: an automatic
+grant must match an item admitted to a real run and then faces every check
+above, while an interactive one rides the caller's own turn and leaves this
+ledger untouched — pause, busy flag, batch allowance and per-source retry state
+are the same before and after. The daily dollar budget and company fencing
+still apply to both. See [mnemonic decisions](mnemonic-decisions.md).
+
 ## Validation
 
 `tests/services/test_preparation.py` exercises real SQLite transactions,

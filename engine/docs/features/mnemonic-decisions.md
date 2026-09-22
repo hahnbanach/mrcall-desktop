@@ -3,19 +3,22 @@
 <!-- doc-scope:start -->
 Scope: the decision half of the mnemonic harness — what a memory event is, what
 the role may propose, what the validator refuses, and who may pay for the call.
-The commit capability, the operation journal and the legacy writer conversions
-are not part of this and do not exist yet; the writer inventory they will
-convert is [mnemonic-writer-inventory.md](mnemonic-writer-inventory.md).
+The commit, the operation journal and the supervised write slice are
+[mnemonic-commit.md](mnemonic-commit.md); the writers still writing directly
+are [mnemonic-writer-inventory.md](mnemonic-writer-inventory.md).
 <!-- doc-scope:end -->
 
 `zylch/memory/mnemonic/` is the semantic write boundary for company memory.
 `contracts.py` holds the event side, the vocabularies and the bounds;
 `proposals.py` holds the answer side.
 Callers submit an event and receive a decision; they never receive a database
-writer, a permit factory or a commit function. There is no commit module: a
-validated mutation proposal ends as `retryable_failure` with the reason
-`commit capability not installed`, carried on `MnemonicDecision.accepted` for
-the commit step to consume.
+writer, a permit factory or a commit function.
+
+`agent.decide()` stops at the decision and never writes. An accepted mutation
+proposal comes back with **no result of its own** — `MnemonicDecision.result`
+is `None` exactly when `accepted` is true — because deciding is not an outcome
+and only `commit.py` can say what happened to the memory. A SKIP, a REVIEW or a
+failed round does carry a result, since for those nothing further will happen.
 
 ## The event
 
@@ -112,8 +115,10 @@ validation time and never backfilled on read.
 Three separate questions. **Request authorization** (`authorize_request`)
 refuses a read-only origin and a cross-account submission before a grant
 exists, so a refusal costs zero reservations and zero provider calls. **Paid
-admission** is the `DispatchGrant`. **Commit approval** is neither and does not
-exist yet.
+admission** is the `DispatchGrant`. **Commit approval** is neither: `commit.py`
+re-checks authorization under the company write lock and refuses without a
+`CommitPermit`, and the explicit human acceptance that must guard a change to
+existing memory is a later milestone's.
 
 The authority is the dispatch scope, not the usage label. `call_site` tags stay
 what they were — diagnostics for spend attribution — and a call relabelled
@@ -138,10 +143,13 @@ reservation and the dispatch gives the hold back on the unmetered transports;
 on MrCall credits the reservation is receipt-gated by design and stands until
 the in-flight horizon resolves it.
 
-That ledger is a bounded, in-process table: the guarantee holds for its most
-recent 1024 events, and eviction prefers entries that have spent nothing.
-Beyond that bound, and across a restart, what makes it durable is the operation
-journal — which does not exist yet.
+That in-process table is a **cache** over the operation journal's `allowance`
+column: a grant reads what is left from the journal, and every dispatch
+decrements it there before the request goes out, so a restart resumes the event
+instead of handing it a fresh budget. For an event with no operation row — a
+decision taken outside a commit-capable path — the cache is the only bound
+there is, and it holds for its most recent 1024 events, evicting entries that
+have spent nothing first.
 
 - **Interactive** grants ride the caller's own turn. They leave bounded
   preparation untouched: its pause, its busy flag, its batch allowance and its
@@ -160,14 +168,19 @@ far as `bounded_item` does — the engine's synchronous job paths
 They are unconverted legacy writers listed for milestone 6; until they are
 converted, nothing routes them through here at all.
 
+Both limits stand as stated. An UPDATE whose *prose* absorbs another entity
+also remains the role's judgment, measured by semantic evaluation rather than
+by the validator; the structural disguised-MERGE check above compares blob ids
+and says nothing about wording.
+
 `llm/client.py` refuses `tools`/`tool_choice` inside a mnemonic dispatch scope:
 the role returns a proposal, so it never receives a write tool.
 
 ## Results
 
 One result type, four outcomes: `committed`, `skipped`, `review_needed`,
-`retryable_failure`. Only a committed result names committed ids; every other
-outcome must carry a reason. Non-semantic follow-up work is listed in
+`retryable_failure`, produced by `commit.submit`. Only a committed result names
+committed ids; every other outcome must carry a reason. Non-semantic follow-up work is listed in
 `pending_effects` rather than demoting a real commit to a failure. Automatic
 workers advance a processed checkpoint only on `committed` or a deliberate
 `skipped`.
@@ -175,7 +188,8 @@ workers advance a processed checkpoint only on `committed` or a deliberate
 ## Tests
 
 `tests/memory/test_mnemonic_contracts.py`, `test_mnemonic_validator.py`,
-`test_mnemonic_agent.py` and `tests/llm/test_mnemonic_admission.py`. The
+`test_mnemonic_agent.py` and `tests/llm/test_mnemonic_admission.py`; the commit
+half has its own, listed in [mnemonic-commit.md](mnemonic-commit.md). The
 validator and agent tests replay the frozen milestone 0 incident corpus
 (`tests/fixtures/mnemonic/incidents.json`) through the deterministic decisions
 in `tests/fixtures/mnemonic/decisions.json`. Budget, truncation and admission

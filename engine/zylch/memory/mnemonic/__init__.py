@@ -4,11 +4,11 @@ Callers submit a **memory event** — the original observation plus its bounded
 authorization — and receive a decision. They never receive a database writer,
 a permit factory or a commit function.
 
-Milestone 2 installs the event/proposal/validator/authorization seam and the
-origin-bound paid admission that guards it. No commit capability exists yet:
-an accepted mutation proposal is carried on :class:`MnemonicDecision` and its
-result is ``retryable_failure`` until milestone 3 installs
-``mnemonic/commit.py``.
+``submit`` is the entry point: it opens the event's durable operation, decides
+through the mnemonic role, and commits the result in one company transaction —
+exactly once, whatever the caller replays. The legacy writers are converted to
+it milestone by milestone; ``mnemonic-writer-inventory.md`` lists the ones that
+still write directly.
 """
 
 from .contracts import (
@@ -22,6 +22,7 @@ from .contracts import (
     MemoryEvent,
     SubjectHint,
 )
+from .commit import submit
 from .proposals import (
     MnemonicResult,
     PendingEffect,
@@ -45,4 +46,5 @@ __all__ = [
     "Reclassification",
     "SubjectHint",
     "WriteTarget",
+    "submit",
 ]

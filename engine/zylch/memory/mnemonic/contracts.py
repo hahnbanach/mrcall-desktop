@@ -39,8 +39,8 @@ MNEMONIC_MAX_TOKENS = 2048
 
 # One bounded extraction plus at most MAX_DECISION_ATTEMPTS decision/CAS
 # redecisions. Derived from the limits above so an event can never dispatch an
-# unbounded number of paid calls. Milestone 3 persists the remaining allowance
-# in the operation journal so a restart cannot reset it.
+# unbounded number of paid calls. The operation journal persists what is left
+# of it, so a restart resumes the event instead of restarting its budget.
 EVENT_DISPATCH_ALLOWANCE = MAX_DECISION_ATTEMPTS + 1
 
 
@@ -103,11 +103,6 @@ SKIPPED = "skipped"
 REVIEW_NEEDED = "review_needed"
 RETRYABLE_FAILURE = "retryable_failure"
 OUTCOMES: Tuple[str, ...] = (COMMITTED, SKIPPED, REVIEW_NEEDED, RETRYABLE_FAILURE)
-
-# Milestone 2 has no commit module. An accepted mutation proposal stops here
-# with this reason rather than pretending a mutation happened or that the
-# proposal was refused.
-NO_COMMIT_CAPABILITY = "commit capability not installed"
 
 
 class MnemonicContractError(ValueError):

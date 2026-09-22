@@ -15,6 +15,7 @@ from sqlalchemy import (
     DateTime,
     Float,
     ForeignKey,
+    Index,
     Integer,
     JSON,
     LargeBinary,
@@ -419,6 +420,86 @@ class BlobAlias(DictMixin, Base):
     keeper_id = Column(String(36), nullable=False, index=True)
     company_key = Column(Text, nullable=False, index=True, default=_current_company_key)
     created_at = Column(DateTime, default=_utcnow)
+
+
+# -------------------------------------------------------------------
+# MEMORY OPERATIONS — the semantic write path's durable state
+# -------------------------------------------------------------------
+#
+# 2026-09 (mnemonic harness, M3): one row per submitted memory event, in
+# the COMPANY store beside the blobs it writes — so the commit and its
+# receipt land in one transaction on one file, and so a second process on
+# the same company sees what the first already did.
+#
+# `WorkerState` cannot do this job: it is profile-local, so two profiles
+# sharing a company store would each keep their own idea of what was
+# committed. `Blob.events` cannot either: a donor's receipts vanish with
+# the donor. Preparation keeps owning admission, retry and backoff; this
+# table owns idempotency, the durable dispatch allowance and the payload a
+# resumable operation needs.
+
+
+class MemoryOperation(DictMixin, Base):
+    """One semantic memory operation, from submitted event to final result.
+
+    ``event_id`` is the idempotency key: a replayed event returns its
+    recorded terminal result, and the same id arriving with a different
+    ``input_digest`` is refused rather than silently re-decided.
+
+    ``target_family`` is what keeps an account rule's payload private on a
+    shared store. A company-family operation is readable by every account
+    holding the key; a ``template:`` / ``prefs:`` one only by its owner —
+    the same wall :func:`zylch.memory.scope.blob_visible` puts around the
+    rule blob itself. Without it the rule text would be world-readable
+    inside this table while being private one table over.
+    """
+
+    __tablename__ = "memory_operations"
+
+    event_id = Column(String(64), primary_key=True)
+    company_key = Column(Text, nullable=False, index=True, default=_current_company_key)
+    owner_id = Column(Text, nullable=False, index=True)
+    # Set when an extraction fans one source out into several child events.
+    parent_event_id = Column(String(64), nullable=True, index=True)
+    protocol_version = Column(Integer, nullable=False, default=1)
+    # Digest of the event's model-sealed fields. Same id + different digest
+    # is a refusal: an id may be replayed, never re-pointed.
+    input_digest = Column(Text, nullable=False)
+    proposal_digest = Column(Text, nullable=True)
+    source_ref = Column(Text, nullable=False)  # kind:id@revision
+    origin = Column(Text, nullable=False)  # interactive | automatic
+    caller_class = Column(Text, nullable=False)
+    target_family = Column(Text, nullable=True)  # user | facts | template | prefs
+    state = Column(Text, nullable=False, default="pending", index=True)
+    # Paid calls still owed to this EVENT. The in-process table in
+    # mnemonic/authorization.py is a cache over this column; this is what
+    # survives a restart, so a crashed event resumes with what is left
+    # instead of buying itself a fresh budget.
+    allowance = Column(Integer, nullable=False, default=0)
+    attempts = Column(Integer, nullable=False, default=0)
+    # Fenced hand-off between concurrent attempts. A claim takes the lease;
+    # the commit re-checks that it still holds it inside its own transaction,
+    # so a superseded attempt finds out instead of overwriting the winner.
+    lease = Column(Text, nullable=True)
+    # Bounded: the proposal, its write set and the original instruction when
+    # no durable source can be referenced. Pruned on terminal completion.
+    payload = Column(JSON, nullable=True)
+    # Milestone 4 binds an accepted final proposal here (digest + versions).
+    approval = Column(JSON, nullable=True)
+    result = Column(JSON, nullable=True)
+    pending_effects = Column(JSON, default=list)
+    # Read restrictions recorded against an exact blob identity/version.
+    # Written by the milestone that owns legacy FACT read eligibility;
+    # nothing writes or reads it yet, and it stays through a rollback
+    # because dropping it would make quarantined memory globally usable.
+    restrictions = Column(JSON, default=list)
+    created_at = Column(DateTime, default=_utcnow)
+    updated_at = Column(DateTime, default=_utcnow, onupdate=_utcnow)
+
+    __table_args__ = (
+        Index("ix_memory_operations_company_state", "company_key", "state"),
+        Index("ix_memory_operations_company_source", "company_key", "source_ref"),
+    )
 
 
 # -------------------------------------------------------------------

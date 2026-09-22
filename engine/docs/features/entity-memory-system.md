@@ -47,6 +47,19 @@ the store's `mutation_seq`, and the reconsolidation sweep runs after each
 update only when the store changed since the last sweep, once per company
 (`<store>.sweep.lock`).
 
+## The semantic write path
+
+Memory is changed through two kinds of writer today. `store_blob` and
+`update_blob` are the direct ones every unconverted caller still uses. Beside
+them the **mnemonic harness** now commits: a caller submits an observation, a
+bounded role decides what the memory should become, a small validator refuses
+what it can hold honestly, and one transaction on the company store writes the
+blob, its sentences, its identifier index, its source link, the mutation
+sequence and an operation receipt together. Which callers are converted is
+[mnemonic-writer-inventory.md](mnemonic-writer-inventory.md); the decision
+contract is [mnemonic-decisions.md](mnemonic-decisions.md) and the commit
+contract [mnemonic-commit.md](mnemonic-commit.md).
+
 ## Key Concepts
 
 ### Memory Reconsolidation
@@ -136,7 +149,10 @@ Rules:
 | `zylch/memory/scope.py` | `blob_visible` and the other scope predicates |
 | `zylch/memory/store.py` | The per-company store file, `memory_meta`, sweep gating |
 | `zylch/memory/join.py` | Joining a company memory (merge + rebind) |
-| `zylch/memory/blob_storage.py` | Blob CRUD (embeddings as BLOB in SQLite), compare-and-swap updates |
+| `zylch/memory/blob_storage.py` | Blob CRUD (embeddings as BLOB in SQLite), compare-and-swap updates; the permit-guarded `semantic_create`/`semantic_update` |
+| `zylch/memory/commit_permit.py` | The single-use authority for one semantic write |
+| `zylch/memory/associations.py` | Identifier, source-link and alias writes, inside the caller's transaction |
+| `zylch/memory/mnemonic/` | The semantic write boundary: events, role, validator, admission, journal, commit |
 | `zylch/memory/embeddings.py` | fastembed wrapper (ONNX, 384-dim) |
 | `zylch/memory/hybrid_search.py` | InMemoryVectorIndex + text search |
 | `zylch/memory/llm_merge.py` | LLM-assisted reconsolidation |

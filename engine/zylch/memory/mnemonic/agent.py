@@ -4,11 +4,11 @@ The role is the only place a canonical memory decision is made. The outer chat
 agent, the task solver and the fact/rule helpers propose observations; what the
 memory should become is decided here and checked by the validator.
 
-Milestone 2 stops at the decision. There is no commit module yet, so an
-accepted mutation proposal is carried on :class:`MnemonicDecision` and its
-result is ``retryable_failure`` — no mutation happened and the event can be
-submitted again once milestone 3 installs ``mnemonic/commit.py``. It is not
-reported as a refusal: the proposal was safe, the capability is simply absent.
+This module stops at the decision and never writes. An accepted mutation
+proposal is carried on :class:`MnemonicDecision` with **no result of its own**:
+deciding is not an outcome, and only ``mnemonic/commit.py`` can say what
+happened to the memory. A SKIP, a REVIEW or a failed round does produce a
+result here, because for those nothing further will happen.
 """
 
 from __future__ import annotations
@@ -36,7 +36,6 @@ from .authorization import (
 from .contracts import (
     MAX_DECISION_ATTEMPTS,
     MNEMONIC_MAX_TOKENS,
-    NO_COMMIT_CAPABILITY,
     REVIEW,
     SKIP,
     Candidate,
@@ -53,17 +52,22 @@ CALL_SITE = "memory.mnemonic"
 
 @dataclass(frozen=True)
 class MnemonicDecision:
-    """What one event's decision round produced, and what it cost."""
+    """What one event's decision round produced, and what it cost.
+
+    ``result`` is ``None`` exactly when :attr:`accepted` is true — the proposal
+    is safe and the commit step owns what becomes of it. Every other path ends
+    here and carries its own result.
+    """
 
     event_id: str
-    result: MnemonicResult
+    result: Optional[MnemonicResult] = None
     proposal: Optional[Proposal] = None
     validation: Optional[Validation] = None
     attempts: int = 0
 
     @property
     def accepted(self) -> bool:
-        """A validated mutation proposal, waiting only for a commit capability."""
+        """A validated mutation proposal, ready for the commit step."""
         return (
             self.proposal is not None
             and self.proposal.mutates
@@ -282,10 +286,9 @@ def _accepted(
             attempts=attempts,
         )
     else:
-        # Validated, safe, and nothing wrote it: milestone 3 owns the commit.
-        result = MnemonicResult.retryable_failure(
-            event.event_id, NO_COMMIT_CAPABILITY, proposal=proposal, attempts=attempts
-        )
+        # Validated and safe. What becomes of it is the commit step's answer,
+        # not this one's — a decision is not an outcome.
+        result = None
     return MnemonicDecision(
         event_id=event.event_id,
         result=result,

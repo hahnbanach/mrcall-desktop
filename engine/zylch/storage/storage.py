@@ -870,6 +870,35 @@ class Storage:
     # worker reads them in _collect to find which existing blobs were
     # extracted from a new email/event without similarity search.
 
+    def _link_source(
+        self,
+        source_kind: str,
+        source_id: str,
+        blob_id: str,
+        owner_id: str,
+    ) -> bool:
+        """One standalone-session link, for the writers not yet converted.
+
+        The rule itself lives in :mod:`zylch.memory.associations`, which the
+        semantic commit calls inside its own transaction. These legacy callers
+        keep their own session and their own swallow-and-log behavior; what
+        they must not keep is a second copy of the rule.
+        """
+        from zylch.memory.associations import link_source
+
+        try:
+            with get_session() as session:
+                return link_source(
+                    session,
+                    source_kind=source_kind,
+                    source_id=source_id,
+                    blob_id=blob_id,
+                    owner_id=owner_id,
+                )
+        except Exception as e:
+            logger.error(f"add_{source_kind}_blob_link({source_id}, {blob_id}) failed: {e}")
+            return False
+
     def add_email_blob_link(
         self,
         owner_id: str,
@@ -877,33 +906,7 @@ class Storage:
         blob_id: str,
     ) -> bool:
         """Idempotent (email_id, blob_id) link. Returns True when inserted."""
-        if not (owner_id and email_id and blob_id):
-            return False
-        from zylch.storage.models import EmailBlob
-
-        try:
-            with get_session() as session:
-                existing = (
-                    session.query(EmailBlob)
-                    .filter(
-                        EmailBlob.email_id == email_id,
-                        EmailBlob.blob_id == blob_id,
-                    )
-                    .one_or_none()
-                )
-                if existing:
-                    return False
-                row = EmailBlob(
-                    email_id=email_id,
-                    blob_id=blob_id,
-                    owner_id=owner_id,
-                )
-                session.add(row)
-                session.flush()
-                return True
-        except Exception as e:
-            logger.error(f"add_email_blob_link({email_id}, {blob_id}) failed: {e}")
-            return False
+        return self._link_source("email", email_id, blob_id, owner_id)
 
     def get_blobs_for_email(
         self,
@@ -937,33 +940,7 @@ class Storage:
         blob_id: str,
     ) -> bool:
         """Idempotent (event_id, blob_id) link. Returns True when inserted."""
-        if not (owner_id and event_id and blob_id):
-            return False
-        from zylch.storage.models import CalendarBlob
-
-        try:
-            with get_session() as session:
-                existing = (
-                    session.query(CalendarBlob)
-                    .filter(
-                        CalendarBlob.event_id == event_id,
-                        CalendarBlob.blob_id == blob_id,
-                    )
-                    .one_or_none()
-                )
-                if existing:
-                    return False
-                row = CalendarBlob(
-                    event_id=event_id,
-                    blob_id=blob_id,
-                    owner_id=owner_id,
-                )
-                session.add(row)
-                session.flush()
-                return True
-        except Exception as e:
-            logger.error(f"add_calendar_blob_link({event_id}, {blob_id}) failed: {e}")
-            return False
+        return self._link_source("calendar", event_id, blob_id, owner_id)
 
     def get_blobs_for_event(
         self,
@@ -997,33 +974,7 @@ class Storage:
         blob_id: str,
     ) -> bool:
         """Idempotent (whatsapp_message_id, blob_id) link. Returns True when inserted."""
-        if not (owner_id and whatsapp_message_id and blob_id):
-            return False
-        from zylch.storage.models import WhatsAppBlob
-
-        try:
-            with get_session() as session:
-                existing = (
-                    session.query(WhatsAppBlob)
-                    .filter(
-                        WhatsAppBlob.whatsapp_message_id == whatsapp_message_id,
-                        WhatsAppBlob.blob_id == blob_id,
-                    )
-                    .one_or_none()
-                )
-                if existing:
-                    return False
-                row = WhatsAppBlob(
-                    whatsapp_message_id=whatsapp_message_id,
-                    blob_id=blob_id,
-                    owner_id=owner_id,
-                )
-                session.add(row)
-                session.flush()
-                return True
-        except Exception as e:
-            logger.error(f"add_whatsapp_blob_link({whatsapp_message_id}, {blob_id}) failed: {e}")
-            return False
+        return self._link_source("whatsapp", whatsapp_message_id, blob_id, owner_id)
 
     def get_blobs_for_whatsapp_message(
         self,
@@ -1084,42 +1035,17 @@ class Storage:
         """
         if not (owner_id and blob_id and identifiers):
             return 0
-        from zylch.storage.models import PersonIdentifier
+        from zylch.memory.associations import add_identifiers
 
-        inserted = 0
         try:
             with get_session() as session:
-                # Pre-fetch existing rows so we know what to skip without
-                # round-tripping per insert. Bound the query to this blob.
-                existing_rows = (
-                    session.query(PersonIdentifier.kind, PersonIdentifier.value)
-                    .filter(
-                        PersonIdentifier.company_key == _company_key(),
-                        PersonIdentifier.blob_id == blob_id,
-                    )
-                    .all()
+                inserted = add_identifiers(
+                    session,
+                    owner_id=owner_id,
+                    blob_id=blob_id,
+                    identifiers=identifiers,
+                    company_key=_company_key(),
                 )
-                existing = {(str(k), str(v)) for k, v in existing_rows}
-
-                for kind, value in identifiers:
-                    if not kind or not value:
-                        continue
-                    k = str(kind).strip().lower()
-                    v = str(value).strip()
-                    if not k or not v:
-                        continue
-                    if (k, v) in existing:
-                        continue
-                    session.add(
-                        PersonIdentifier(
-                            owner_id=owner_id,
-                            blob_id=blob_id,
-                            kind=k,
-                            value=v,
-                        )
-                    )
-                    existing.add((k, v))
-                    inserted += 1
                 if inserted:
                     # identifiers are what the reconsolidation sweep clusters
                     # on: a new one can make two blobs a merge candidate, so
@@ -1130,10 +1056,10 @@ class Storage:
                         bump_mutation_seq(session)
                     except Exception as e:  # a store without the meta row (legacy tests)
                         logger.debug(f"add_person_identifiers: mutation_seq bump skipped: {e}")
+                return inserted
         except Exception as e:
             logger.warning(f"add_person_identifiers(blob={blob_id}) failed: {e}")
             return 0
-        return inserted
 
     def find_blobs_by_identifiers(
         self,

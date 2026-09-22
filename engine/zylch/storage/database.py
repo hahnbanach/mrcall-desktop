@@ -226,6 +226,13 @@ MEMORY_TABLE_NAMES = (
     "memory_meta",
     "fact_history",
     "blob_aliases",
+    # the semantic write path's operation journal (mnemonic harness M3).
+    # Registering it here is what installs it: the name puts the table on
+    # the memory bind, so every statement naming it reaches the company
+    # store, and inside `memory.store.prepare_store`'s ensure pass, so
+    # `create_all` adds it and its indexes to every store under the file's
+    # migration lock. Additive: no existing row is read or rewritten.
+    "memory_operations",
 )
 
 

@@ -75,32 +75,32 @@
     {"path":"zylch/workers/memory.py","symbol":"MemoryWorker.process_calendar_event","call":"update_blob","count":1,"mode":"async","milestone":6}
   ],
   "orm_sinks": [
-    {"path":"zylch/memory/blob_storage.py","symbol":"BlobStorage.store_blob","call":"construct:Blob","count":1,"milestone":3},
-    {"path":"zylch/memory/blob_storage.py","symbol":"BlobStorage.store_blob","call":"construct:BlobSentence","count":1,"milestone":3},
-    {"path":"zylch/memory/blob_storage.py","symbol":"BlobStorage.update_blob","call":"construct:BlobSentence","count":1,"milestone":3},
-    {"path":"zylch/memory/llm_merge.py","symbol":"_record_alias","call":"construct:BlobAlias","count":1,"milestone":7},
+    {"path":"zylch/memory/associations.py","symbol":"add_identifiers","call":"construct:PersonIdentifier","count":1,"milestone":3},
+    {"path":"zylch/memory/associations.py","symbol":"link_source","call":"construct:CalendarBlob","count":1,"milestone":3},
+    {"path":"zylch/memory/associations.py","symbol":"link_source","call":"construct:EmailBlob","count":1,"milestone":3},
+    {"path":"zylch/memory/associations.py","symbol":"link_source","call":"construct:WhatsAppBlob","count":1,"milestone":3},
+    {"path":"zylch/memory/associations.py","symbol":"record_alias","call":"construct:BlobAlias","count":1,"milestone":3},
+    {"path":"zylch/memory/blob_storage.py","symbol":"BlobStorage._add_sentences","call":"construct:BlobSentence","count":1,"milestone":3},
+    {"path":"zylch/memory/blob_storage.py","symbol":"BlobStorage._insert","call":"construct:Blob","count":1,"milestone":3},
     {"path":"zylch/storage/database.py","symbol":"_backfill_email_blobs_index","call":"construct:CalendarBlob","count":1,"milestone":8},
     {"path":"zylch/storage/database.py","symbol":"_backfill_email_blobs_index","call":"construct:EmailBlob","count":1,"milestone":8},
-    {"path":"zylch/storage/storage.py","symbol":"Storage.add_calendar_blob_link","call":"construct:CalendarBlob","count":1,"milestone":6},
-    {"path":"zylch/storage/storage.py","symbol":"Storage.add_email_blob_link","call":"construct:EmailBlob","count":1,"milestone":6},
-    {"path":"zylch/storage/storage.py","symbol":"Storage.add_person_identifiers","call":"construct:PersonIdentifier","count":1,"milestone":6},
-    {"path":"zylch/storage/storage.py","symbol":"Storage.add_whatsapp_blob_link","call":"construct:WhatsAppBlob","count":1,"milestone":6},
     {"path":"zylch/storage/storage.py","symbol":"Storage.migrate_blob_references","call":"construct:CalendarBlob","count":1,"milestone":7},
     {"path":"zylch/storage/storage.py","symbol":"Storage.migrate_blob_references","call":"construct:EmailBlob","count":1,"milestone":7},
     {"path":"zylch/storage/storage.py","symbol":"Storage.migrate_blob_references","call":"construct:PersonIdentifier","count":1,"milestone":7},
     {"path":"zylch/storage/storage.py","symbol":"Storage.migrate_blob_references","call":"construct:WhatsAppBlob","count":1,"milestone":7}
   ],
   "orm_mutations": [
-    {"path":"zylch/memory/blob_storage.py","symbol":"BlobStorage.update_blob","call":"orm:delete:BlobSentence","count":1,"milestone":3},
-    {"path":"zylch/memory/blob_storage.py","symbol":"BlobStorage.delete_blob","call":"orm:delete:Blob","count":1,"milestone":5},
+    {"path":"zylch/memory/associations.py","symbol":"drop_identifiers","call":"orm:delete:PersonIdentifier","count":1,"milestone":3},
+    {"path":"zylch/memory/blob_storage.py","symbol":"BlobStorage._rewrite","call":"orm:delete:BlobSentence","count":1,"milestone":3},
     {"path":"zylch/memory/blob_storage.py","symbol":"BlobStorage.delete_all_blobs","call":"orm:delete:Blob","count":1,"milestone":5},
+    {"path":"zylch/memory/blob_storage.py","symbol":"BlobStorage.delete_blob","call":"orm:delete:Blob","count":1,"milestone":5},
     {"path":"zylch/storage/storage.py","symbol":"Storage.delete_whatsapp_message_by_message_id","call":"orm:delete:WhatsAppBlob","count":1,"milestone":8}
   ],
   "orm_assignments": [
-    {"path":"zylch/memory/blob_storage.py","symbol":"BlobStorage.update_blob","call":"assign:Blob.content","count":1,"milestone":3},
-    {"path":"zylch/memory/blob_storage.py","symbol":"BlobStorage.update_blob","call":"assign:Blob.embedding","count":1,"milestone":3},
-    {"path":"zylch/memory/blob_storage.py","symbol":"BlobStorage.update_blob","call":"assign:Blob.events","count":1,"milestone":3},
-    {"path":"zylch/memory/blob_storage.py","symbol":"BlobStorage.update_blob","call":"assign:Blob.updated_at","count":1,"milestone":3}
+    {"path":"zylch/memory/blob_storage.py","symbol":"BlobStorage._rewrite","call":"assign:Blob.content","count":1,"milestone":3},
+    {"path":"zylch/memory/blob_storage.py","symbol":"BlobStorage._rewrite","call":"assign:Blob.embedding","count":1,"milestone":3},
+    {"path":"zylch/memory/blob_storage.py","symbol":"BlobStorage._rewrite","call":"assign:Blob.events","count":1,"milestone":3},
+    {"path":"zylch/memory/blob_storage.py","symbol":"BlobStorage._rewrite","call":"assign:Blob.updated_at","count":1,"milestone":3}
   ],
   "orm_core_mutations": [
     {"path":"zylch/memory/store.py","symbol":"bump_mutation_seq","call":"orm-core:update:MemoryMeta","count":1,"milestone":3},

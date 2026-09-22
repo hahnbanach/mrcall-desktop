@@ -207,7 +207,7 @@ def test_an_out_of_contract_field_is_refused_not_coerced():
 # ─── The decision round, through the real client ──────────────────────
 
 
-def test_an_accepted_mutation_waits_for_a_commit_capability_and_keeps_its_proposal():
+def test_an_accepted_mutation_carries_its_proposal_and_no_outcome_of_its_own():
     event, candidates = build("customer_forwarding_number_correction")
     llm = client(text_response(decision_text("customer_forwarding_number_correction")))
 
@@ -216,10 +216,9 @@ def test_an_accepted_mutation_waits_for_a_commit_capability_and_keeps_its_propos
     assert decision.accepted is True
     assert decision.proposal.action == c.UPDATE
     assert decision.proposal.target.blob_id == "company-acme"
-    # No commit module exists yet: nothing was written and nothing claims it was.
-    assert decision.result.outcome == c.RETRYABLE_FAILURE
-    assert decision.result.reason == c.NO_COMMIT_CAPABILITY
-    assert decision.result.committed_ids == ()
+    # Deciding is not an outcome. This module never writes, so it never says
+    # what happened to the memory — `mnemonic/commit.py` does.
+    assert decision.result is None
     assert llm._client.messages.create.call_count == 1
 
 

@@ -1,20 +1,55 @@
-"""Blob storage with sentence-level embeddings using SQLAlchemy."""
+"""Blob storage with sentence-level embeddings using SQLAlchemy.
+
+Two ways in, deliberately unequal.
+
+``store_blob`` and ``update_blob`` are the **legacy** writers: they open their
+own session, decide their own transaction boundary, and trust whoever called
+them. Every unconverted writer in the engine still uses them, and the mnemonic
+harness converts those callers milestone by milestone.
+
+``semantic_create`` and ``semantic_update`` are the **committed** writers. They
+write into a transaction the caller already owns — so a blob, its sentences,
+its identifiers, its source link and the operation receipt land together or not
+at all — and they refuse to run without a :class:`CommitPermit` bound to the
+exact company, owner, event, proposal, write set and expected versions. The
+permit lives in :mod:`zylch.memory.commit_permit`; a missing, forged or
+already-spent one is refused *here*, at the storage boundary.
+"""
 
 import logging
-from typing import Any, Callable, Dict, List, Optional
-from datetime import datetime, timezone
 import uuid
+from dataclasses import dataclass
+from datetime import datetime, timezone
+from typing import Any, Callable, Dict, List, Optional, Tuple
 
 import numpy as np
 from sqlalchemy import func
+from sqlalchemy.orm import Session
 
 from .text_processing import split_sentences
 from .embeddings import EmbeddingEngine
+from .commit_permit import CREATE, UPDATE, ConflictError, check_permit, spend_permit
 from .company_key import require_company_key
 from .scope import blob_contributed, blob_owned_rules, blob_visible, sentences_in_scope
 from zylch.storage.models import Blob, BlobSentence
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass(frozen=True)
+class PreparedContent:
+    """Embeddings computed OUTSIDE any transaction.
+
+    Encoding is seconds of CPU and can fail; doing it under the company write
+    lock would hold every other writer behind it, and doing it inside the
+    transaction would make an embedding failure a rolled-back commit rather
+    than a refusal that never started one.
+    """
+
+    content: str
+    blob_embedding: bytes
+    sentences: Tuple[str, ...]
+    sentence_embeddings: Tuple[bytes, ...]
 
 
 def _iso(value) -> str:
@@ -65,23 +100,72 @@ class BlobStorage:
             logger.debug("[BlobStorage] notifying mutation callback")
             self._on_mutation()
 
-    def store_blob(
-        self, owner_id: str, namespace: str, content: str, event_description: Optional[str] = None
-    ) -> Dict[str, Any]:
-        """Store new blob with sentence embeddings.
+    def mark_mutated(self, session) -> None:
+        """Bump the mutation sequence inside a caller-owned transaction.
 
-        Returns the created blob record.
+        Bumped ONCE for a whole semantic commit, not once per table touched —
+        and, unlike :meth:`_notify_mutation`, a failure is **not** swallowed.
+        The sequence is how every other engine on this store learns its vector
+        index is stale, so a commit whose bump quietly failed would leave them
+        answering from memory that no longer exists while looking like a clean
+        success. Inside a transaction that is a rollback, not a debug line.
         """
-        blob_id = str(uuid.uuid4())
+        from .store import bump_mutation_seq
 
-        # Generate blob-level embedding
+        bump_mutation_seq(session)
+        if self._on_mutation:
+            self._on_mutation()
+
+    # ─── Content preparation (outside any transaction) ────────────────
+
+    def prepare(self, content: str) -> PreparedContent:
+        """Encode the content and its sentences. Raises on an embedding failure.
+
+        Called before the write lock is taken. A failure here means no
+        transaction was ever opened, which is why an embedding outage is a
+        refusal and never a half-written memory.
+        """
         blob_embedding = self.embeddings.encode(content)
-
-        # Split into sentences and embed each
         sentences = split_sentences(content)
-        sentence_embeddings = self.embeddings.encode(sentences) if sentences else []
+        raw = self.embeddings.encode(sentences) if sentences else []
+        encoded = []
+        for index, sentence in enumerate(sentences):
+            emb = raw[index] if len(raw) > index else self.embeddings.encode(sentence)
+            encoded.append(
+                emb.tobytes()
+                if hasattr(emb, "tobytes")
+                else np.array(emb, dtype=np.float32).tobytes()
+            )
+        return PreparedContent(
+            content=content,
+            blob_embedding=blob_embedding.tobytes(),
+            sentences=tuple(sentences),
+            sentence_embeddings=tuple(encoded),
+        )
 
-        # Build events array
+    # ─── Transaction-scoped internals, shared by both ways in ─────────
+
+    def _add_sentences(self, session, blob_id: str, owner_id: str, prepared) -> None:
+        for sentence, embedding in zip(prepared.sentences, prepared.sentence_embeddings):
+            session.add(
+                BlobSentence(
+                    blob_id=str(blob_id),
+                    owner_id=owner_id,
+                    sentence_text=sentence,
+                    embedding=embedding,
+                )
+            )
+
+    def _insert(
+        self,
+        session,
+        *,
+        owner_id: str,
+        namespace: str,
+        prepared: PreparedContent,
+        event_description: Optional[str],
+    ) -> Blob:
+        blob_id = str(uuid.uuid4())
         events = []
         if event_description:
             events.append(
@@ -90,41 +174,152 @@ class BlobStorage:
                     "description": event_description,
                 }
             )
+        blob = Blob(
+            id=blob_id,
+            owner_id=owner_id,
+            namespace=namespace,
+            content=prepared.content,
+            embedding=prepared.blob_embedding,
+            events=events,
+        )
+        session.add(blob)
+        session.flush()
+        self._add_sentences(session, blob_id, owner_id, prepared)
+        session.flush()
+        return blob
 
+    def _rewrite(
+        self,
+        session,
+        blob: Blob,
+        *,
+        owner_id: str,
+        prepared: PreparedContent,
+        event_description: Optional[str],
+    ) -> Blob:
+        events = list(blob.events or [])
+        if event_description:
+            events.append(
+                {
+                    "timestamp": datetime.now(timezone.utc).isoformat(),
+                    "description": event_description,
+                }
+            )
+        blob.content = prepared.content
+        blob.embedding = prepared.blob_embedding
+        blob.events = events
+        # updated_at is what the compare-and-swap keys on, so it must move on
+        # every write.
+        blob.updated_at = datetime.now(timezone.utc).replace(tzinfo=None)
+        session.query(BlobSentence).filter(BlobSentence.blob_id == blob.id).delete(
+            synchronize_session=False
+        )
+        self._add_sentences(session, blob.id, owner_id, prepared)
+        session.flush()
+        return blob
+
+    # ─── The committed writers ────────────────────────────────────────
+
+    def visible_target(self, session: Session, blob_id: str, owner_id: str) -> Optional[Blob]:
+        """The live ORM row for a visible blob, inside the caller's transaction.
+
+        The semantic commit re-reads its target here AFTER taking the write
+        lock, so the version it compares against is the version it writes over
+        — not the one it read seconds ago while a model was thinking.
+        """
+        key = require_company_key()
+        return (
+            session.query(Blob)
+            .filter(Blob.id == blob_id, blob_visible(owner_id, key))
+            .one_or_none()
+        )
+
+    def semantic_create(
+        self,
+        session: Session,
+        permit: Any,
+        *,
+        owner_id: str,
+        namespace: str,
+        prepared: PreparedContent,
+        event_description: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """Create a blob inside the caller's transaction, under a spent permit."""
+        checked = check_permit(
+            permit,
+            action=CREATE,
+            owner_id=owner_id,
+            content=prepared.content,
+            namespace=namespace,
+        )
+        blob = self._insert(
+            session,
+            owner_id=owner_id,
+            namespace=namespace,
+            prepared=prepared,
+            event_description=event_description,
+        )
+        spend_permit(checked)
+        return blob.to_dict()
+
+    def semantic_update(
+        self,
+        session: Session,
+        permit: Any,
+        *,
+        blob: Blob,
+        owner_id: str,
+        prepared: PreparedContent,
+        expected_version: str,
+        event_description: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """Rewrite a re-read, version-checked blob under a spent permit.
+
+        ``blob`` must be the row :meth:`visible_target` returned inside this
+        same transaction, and ``expected_version`` the version the proposal was
+        decided against. The comparison happens here rather than in the caller
+        so the storage boundary — not a caller's good intentions — is what
+        refuses a write over someone else's change.
+        """
+        checked = check_permit(
+            permit,
+            action=UPDATE,
+            owner_id=owner_id,
+            content=prepared.content,
+            namespace=blob.namespace,
+            target=(str(blob.id), str(expected_version)),
+        )
+        if _iso(blob.updated_at) != _iso(expected_version):
+            raise ConflictError(
+                f"blob {blob.id} changed since it was read "
+                f"(expected {expected_version}, now {_iso(blob.updated_at)})"
+            )
+        self._rewrite(
+            session,
+            blob,
+            owner_id=owner_id,
+            prepared=prepared,
+            event_description=event_description,
+        )
+        spend_permit(checked)
+        return blob.to_dict()
+
+    def store_blob(
+        self, owner_id: str, namespace: str, content: str, event_description: Optional[str] = None
+    ) -> Dict[str, Any]:
+        """Store new blob with sentence embeddings.
+
+        Returns the created blob record.
+        """
+        prepared = self.prepare(content)
         with self._get_session() as session:
-            # Insert blob (embedding as bytes for SQLite BLOB)
-            blob = Blob(
-                id=blob_id,
+            blob = self._insert(
+                session,
                 owner_id=owner_id,
                 namespace=namespace,
-                content=content,
-                embedding=blob_embedding.tobytes(),
-                events=events,
+                prepared=prepared,
+                event_description=event_description,
             )
-            session.add(blob)
-            session.flush()
-
-            # Insert sentences (embeddings as bytes)
-            for i, sent in enumerate(sentences):
-                emb = (
-                    sentence_embeddings[i]
-                    if len(sentence_embeddings) > i
-                    else self.embeddings.encode(sent)
-                )
-                emb_bytes = (
-                    emb.tobytes()
-                    if hasattr(emb, "tobytes")
-                    else np.array(emb, dtype=np.float32).tobytes()
-                )
-                sentence = BlobSentence(
-                    blob_id=blob_id,
-                    owner_id=owner_id,
-                    sentence_text=sent,
-                    embedding=emb_bytes,
-                )
-                session.add(sentence)
-
-            session.flush()
             self._notify_mutation(session)
             return blob.to_dict()
 
@@ -150,9 +345,7 @@ class BlobStorage:
         Returns ``{}`` when the blob is not visible to this owner.
         """
         # Generate new embeddings before entering transaction
-        blob_embedding = self.embeddings.encode(content)
-        sentences = split_sentences(content)
-        sentence_embeddings = self.embeddings.encode(sentences) if sentences else []
+        prepared = self.prepare(content)
 
         key = require_company_key()
         with self._get_session() as session:
@@ -187,50 +380,13 @@ class BlobStorage:
                 current["conflict"] = True
                 return current
 
-            # Append event
-            events = list(blob.events or [])
-            if event_description:
-                events.append(
-                    {
-                        "timestamp": datetime.now(timezone.utc).isoformat(),
-                        "description": event_description,
-                    }
-                )
-
-            # Update blob fields (embedding as bytes). updated_at is what the
-            # compare-and-swap keys on, so it must move on every write.
-            blob.content = content
-            blob.embedding = blob_embedding.tobytes()
-            blob.events = events
-            blob.updated_at = datetime.now(timezone.utc).replace(tzinfo=None)
-
-            # Delete old sentences
-            session.query(BlobSentence).filter(BlobSentence.blob_id == blob_id).delete(
-                synchronize_session=False
+            self._rewrite(
+                session,
+                blob,
+                owner_id=owner_id,
+                prepared=prepared,
+                event_description=event_description,
             )
-
-            # Insert new sentences (embeddings as bytes)
-            for i, sent in enumerate(sentences):
-                emb = (
-                    sentence_embeddings[i]
-                    if len(sentence_embeddings) > i
-                    else self.embeddings.encode(sent)
-                )
-                emb_bytes = (
-                    emb.tobytes()
-                    if hasattr(emb, "tobytes")
-                    else np.array(emb, dtype=np.float32).tobytes()
-                )
-                bid = str(blob_id) if not isinstance(blob_id, str) else blob_id
-                sentence = BlobSentence(
-                    blob_id=bid,
-                    owner_id=owner_id,
-                    sentence_text=sent,
-                    embedding=emb_bytes,
-                )
-                session.add(sentence)
-
-            session.flush()
             self._notify_mutation(session)
             return blob.to_dict()
 
