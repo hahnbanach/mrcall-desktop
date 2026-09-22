@@ -165,7 +165,16 @@ a = Analysis(
     # magic.mgc so libmagic doesn't try a build-time path that doesn't
     # exist on the user's machine.
     runtime_hooks=['pyinstaller_runtime_hook.py'],
-    excludes=[],
+    # Windows: actually keep the transcription stack OUT of the graph.
+    # Skipping collect_all() was not enough — `zylch/whatsapp/transcription.py`
+    # does `from faster_whisper import WhisperModel` inside `_get_model()`,
+    # and modulegraph follows that import anyway, pulling faster_whisper,
+    # ctranslate2 and its Intel oneAPI/MKL DLLs back in. The v0.1.51-win
+    # DEBUG log shows it plainly: "Scanning ctranslate2 for ctypes-based
+    # references" long after the collect_all calls were removed. `excludes`
+    # is what prunes the graph; the caller already treats the resulting
+    # ImportError as "skip transcription".
+    excludes=(['faster_whisper', 'ctranslate2', 'av'] if sys.platform == 'win32' else []),
     noarchive=False,
     optimize=0,
 )
