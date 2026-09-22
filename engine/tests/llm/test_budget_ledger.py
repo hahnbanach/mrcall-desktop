@@ -263,16 +263,45 @@ def test_standard_tier_admitted_priority_retains_hold(ledger):
     assert budget.budget_snapshot("uid")["reserved_usd"] > 0
 
 
-def test_output_included_in_context_bound(ledger):
+def test_output_included_in_context_bound(ledger, monkeypatch):
+    monkeypatch.setenv("LLM_DAILY_BUDGET_USD", "20")
+    prompt = [{"role": "user", "content": "x" * 250_000}]
+    # The same input is admitted on its own and refused once the requested
+    # output has to fit beside it in the window.
+    assert budget.reserve(
+        request(model="claude-sonnet-4-5", max_tokens=100, messages=prompt), "direct"
+    )
     with pytest.raises(BudgetError, match="200000-token"):
         budget.reserve(
-            request(
-                model="claude-sonnet-4-5",
-                max_tokens=100000,
-                messages=[{"role": "user", "content": "x" * 100000}],
-            ),
+            request(model="claude-sonnet-4-5", max_tokens=100000, messages=prompt),
             "direct",
         )
+
+
+def test_grounding_prompt_inside_the_window_is_admitted(ledger, monkeypatch):
+    """A prompt that fits the window is admitted whatever its byte count.
+
+    The shape is the support@mrcall.ai grounding turn of 2026-09-22 that
+    `cs ask` could not run: 9 messages, 30 tool schemas and 201,615
+    payload characters, which the provider counts as roughly 84,000 input
+    tokens. Pricing may read a byte as a token; admission may not.
+    """
+    monkeypatch.setenv("LLM_DAILY_BUDGET_USD", "20")
+    assert budget.reserve(
+        request(
+            model="claude-opus-5",
+            max_tokens=4096,
+            messages=[
+                {"role": "user" if i % 2 == 0 else "assistant", "content": "x" * 22_400}
+                for i in range(9)
+            ],
+            tools=[
+                {"name": f"tool_{i}", "description": "d", "input_schema": {"type": "object"}}
+                for i in range(30)
+            ],
+        ),
+        "direct",
+    )
 
 
 def test_other_process_stale_cap_cannot_override_saved_pause(ledger, monkeypatch, tmp_path):

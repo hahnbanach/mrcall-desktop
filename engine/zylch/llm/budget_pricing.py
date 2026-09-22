@@ -25,6 +25,15 @@ PRICES = {
     "claude-haiku-4-5": (1, 5),
     "claude-haiku-4-5-20251001": (1, 5),
 }
+# Input plus output tokens one request may occupy. This is the smallest
+# window among the priced models — exact for Haiku 4.5, Sonnet 4.5 and
+# Opus 4.5, and well inside the 1M the Opus 4.6+ and Sonnet 4.6+ families
+# serve at standard rates — so it holds whichever of them a caller names.
+CONTEXT_WINDOW_TOKENS = 200000
+# Payload bytes per input token, and the provider's injected overhead in
+# tokens. Both are admission figures; `_context_tokens` states their basis.
+ADMISSION_BYTES_PER_TOKEN = 2
+ADMISSION_PROTOCOL_TOKENS = 4096
 _ALLOWED = {
     "model",
     "messages",
@@ -85,6 +94,29 @@ def _content(content):
             raise BudgetError("AI paused: unsupported cache pricing.")
 
 
+def _context_tokens(payload_bytes):
+    """Conservative input-token count of a payload, for admission only.
+
+    Admission and pricing measure different things and must not share one
+    number. The hold prices one token per payload byte, a figure no
+    tokenizer can exceed; read as a token count the same figure is about
+    three times the truth and refuses questions that fit the window.
+
+    The divisor is the densest bytes-per-token ratio measured against
+    Anthropic's own reported usage on the support@mrcall.ai grounding
+    corpus — JSON tool results, UUIDs and Italian mail — which is 2.40: a
+    prompt of about 106,000 characters came back counted as 44,134 input
+    tokens. Two keeps a margin under it. Being wrong here costs no money:
+    an admitted request that still overflows is refused by the provider
+    before it is billed, while the reservation below stays byte-based.
+    Evidence: `~/hb/docs/briefs/2026-09-22-support-operator-open-defects.md`.
+
+    The flat allowance covers the wrappers and the tool-use preamble the
+    provider injects, which the payload does not carry.
+    """
+    return -(-payload_bytes // ADMISSION_BYTES_PER_TOKEN) + ADMISSION_PROTOCOL_TOKENS
+
+
 def request_bound(request, transport):
     """Return micro-USD hold; bytes + protocol allowance bound text input."""
     if transport == "openrouter":
@@ -134,8 +166,8 @@ def request_bound(request, transport):
     except (TypeError, ValueError):
         raise BudgetError("AI paused: request cannot be priced safely.") from None
     input_bound = payload_bytes + 4096 + 1024 * (len(messages) + len(tools))
-    if input_bound + output > 200000:
-        raise BudgetError("AI paused: request exceeds the supported 200000-token cost bound.")
+    if _context_tokens(payload_bytes) + output > CONTEXT_WINDOW_TOKENS:
+        raise BudgetError("AI paused: request exceeds the supported 200000-token context window.")
     in_rate, out_rate = PRICES[model]
     # All input at one-hour cache-write rate: no assumed cache hit savings.
     return input_bound * in_rate * 2 + output * out_rate

@@ -51,8 +51,11 @@ its previously recorded estimates. Neither value should be described as an invoi
 
 The guard uses an exact Anthropic standard-tier model-price allowlist, UTF-8
 text size plus protocol allowance, full maximum output, and conservative cache
-creation costs. Combined input/output bounds over 200,000 tokens refuse to avoid
-unpriced long-context premiums. Unknown models, premium options, multimodal and
+creation costs. Admission and pricing read that size differently: the hold
+prices one token per payload byte, which no tokenizer exceeds, while the
+context check converts bytes to tokens at the densest measured ratio and
+refuses a combined input and output above 200,000 tokens — the smallest
+window among the priced models. Unknown models, premium options, multimodal and
 provider-side tools refuse before dispatch. Ordinary client-executed function
 tools remain supported and each subsequent LLM request gets its own reservation.
 
