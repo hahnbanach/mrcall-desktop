@@ -179,7 +179,9 @@ jobs:
             export PATH="$PYDIR:$PYDIR/Scripts:/c/Windows/System32:/c/Windows:/c/Windows/System32/Wbem:/usr/bin"
             echo "PATH entries after:  $(echo "$PATH" | tr ':' '\n' | wc -l)"
           fi
-          pyinstaller --noconfirm zylch.spec
+          # `python -m PyInstaller`, not the console script: the trim above
+          # drops the Scripts directory the `pyinstaller` shim lives in.
+          python -m PyInstaller --noconfirm zylch.spec
           ls -la dist/
 
       - name: Upload sidecar artifact
