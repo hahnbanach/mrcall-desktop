@@ -15,7 +15,26 @@ Brief: [telephone customer service](../brief/2026-09-23-gpt-live-engine-integrat
 Its adversarial review returned APPROVED after the caller-context and spoken
 correction clarifications. A separate fresh plan review returned APPROVED;
 an additional adversarial review also approved after the cold-start correction.
-No implementation or live call has run under this plan.
+M1 has a local prototype; no live call has run under this plan. The first
+implementation's approval was withdrawn by the subsequent failure-path review.
+
+## M1 rewrite — 2026-09-23
+
+The operator requested a rewrite after review reproduced credential logging,
+untracked acceptance after timeout, missing hangup on sideband EOF, volatile
+spending limits, blocked event processing during delegation and an ambient-only
+test-profile gate. Commit `b9d4075` remains the recovery point, not an approved
+live-test candidate. Replace its smoke runtime and tests within this worktree.
+
+Keep the existing brief and milestone boundaries. Use a small durable SQLite
+ledger: reserve before accepting, deduplicate by session across restarts, retain
+uncertain attempts and refuse new calls until closure is known. Keep the event
+reader running while the fixed result waits. Verify signatures using the real
+SDK and fake signed requests, and test transport logging with fake credentials.
+Read isolation/routing configuration from the explicitly selected profile file.
+Prove all reproduced failure paths locally, then obtain a fresh integration
+review. SIP remains a candidate until real Vonage/project compatibility passes;
+local tests cannot approve live acceptance or authorize M2.
 
 ## Delivery shape
 
@@ -222,45 +241,53 @@ commits unless explicitly requested.
   session. Added cold-start acceptance and explicit headless credential handling;
   also clarified post-hangup LLM accounting and added duplex to the M1 smoke.
   Re-review: APPROVED after those changes; no further requirements.
-- M1 local implementation (2026-09-23): `zylch voice-smoke` is an opt-in,
-  test-profile-only signed OpenAI webhook listener. It uses the direct GPT-Live
-  SIP + sideband shape, admits one call, retries a failed accept only on a
-  repeated signed delivery, deduplicates successful delivery, refuses a second
-  call, applies a 180-second watchdog, attempts hangup after a broken control
-  connection or process shutdown, and returns one fixed non-customer fact on
-  client delegation with a unique event ID. It requires an explicit selected
-  profile whose `VOICE_SMOKE_TEST_PROFILE` exactly names that profile, and a
-  conservative per-call reservation which cannot exceed USD5 over six calls.
-  It is not started by the normal daemon, has no outbound path, does not read
-  Vonage credentials, and changes no routing. Sanitized event shapes retain
-  only event type and whether final usage was present. Offline controller tests
-  pass (7); the SDK wheel check confirms `openai==3.19.0` contains the
-  Live connection/types required by the implementation. The dependency now
-  requires that version or newer.
-- M1 live demonstration: **blocked**. This host has no `OPENAI_API_KEY` or
-  `OPENAI_WEBHOOK_SECRET`, no confirmed GPT-Live project/SIP entitlement, no
-  isolated Vonage application/private key or test-number routing, and no
-  reachable HTTPS webhook endpoint. Existing ambient Vonage API credentials
-  were only checked for presence and deliberately not read or used. Therefore
-  no call, carrier/voice/engine charge, number change, transcript, event shape
-  or usage measurement has occurred. To unblock: provide an isolated profile
-  marked `VOICE_SMOKE_TEST_PROFILE=1`, the two OpenAI secret references, a
-  public HTTPS route to `/openai/live`, an enabled GPT-Live project, and a
-  Vonage test trunk/number confirmed to support TLS/SRTP routing to that
-  project. Then pre-reserve within the plan's six-call/180-second/USD5 limit
-  before placing the first test call.
-- Pre-existing local verification limits (2026-09-23): repository-wide Black
-  would reformat 42 unrelated engine files; focused existing memory/chat tests
-  cannot collect because this environment lacks `numpy`; even the new test file
-  hits the shared `tests/conftest.py` storage fixture, which references removed
-  `Settings.supabase_*` fields. The M1 tests pass with that stale fixture
-  excluded (`PYTHONPATH=. pytest --noconftest -q tests/voice/test_live_sip_smoke.py`).
-- M1 integration review: APPROVED on 2026-09-23 by the fresh M1 reviewer after
-  a revision. The review confirmed the GPT-Live (not Realtime) direct-SIP
-  contract, safe accept retry/deduplication, event ID, admission/reservation
-  limits, shutdown/watchdog closure, explicit isolated-profile gate and
-  sanitized evidence. M2 must not begin until the documented live M1 blocker
-  is cleared and the real-call demonstration is reviewed.
+- First M1 prototype (`b9d4075`): its initial APPROVED verdict is **withdrawn**.
+  The subsequent review reproduced critical failures despite seven passing
+  tests: DEBUG logging exposed the fake authorization key; lost accept responses
+  left no hold/watchdog; sideband EOF skipped hangup; restarts reset budgets;
+  delayed delegation blocked event reads; the test marker was only ambient.
+  Neither the prototype nor that review is evidence of readiness for live use.
+- M1 rewrite: CLI runner, profile-file validation, durable SQLite ledger and
+  asynchronous call lifecycle replace the first implementation. Admission
+  reserves before dispatch and deduplicates sessions across restarts. An
+  uncertain accept is never automatically retried. Failed/uncertain hangup
+  blocks new calls; all reservations persist. A private WebSocket logger
+  suppresses headers/frames. The reader runs during delayed delegation and
+  finalization. The optional `voice-smoke` extra isolates SDK 3.19.0 and aiohttp
+  from the normal engine. See the [smoke guide](../../engine/docs/features/gpt-live-smoke.md).
+- Rewrite verification: **39 local tests passed**, using real temporary SQLite, real SDK webhook
+  verification with synthetic signatures, a real localhost WebSocket handshake,
+  and mocked paid control operations. They cover lost accept responses, EOF,
+  restart limits, caller-route mismatch, transcript/hangup during delayed work,
+  ledger-write failures, explicit CLI profile selection/lock cleanup and shutdown
+  during accept/attach/hangup/socket closure, including repeated shutdown.
+  No provider calls. The documentation mechanical gate is clean.
+- Adjacent regressions: **136 passed** for identifier, memory-spend, chat reuse
+  and budget dispatch/ledger tests, using the existing complete engine venv.
+  The earlier `numpy` blocker concerned the shell's unrelated Python environment,
+  not an engine failure. Voice tests override only the obsolete Supabase cleanup
+  fixture locally, matching other engine test directories; `--noconftest` is
+  no longer needed. Repository-wide Black still has pre-existing unrelated
+  formatting failures; changed-file Black/Ruff checks pass.
+- Rewrite integration review: initial **REVISE** found cleanup could be skipped
+  by a ledger error and shutdown did not interrupt accept/attach. A second
+  **REVISE** found shutdown could cancel cleanup already in progress. All three
+  paths have focused regression scenarios; cleanup is no longer interruptible
+  by repeated shutdown. Final re-review: **APPROVED for the local M1 rewrite
+  only**, 2026-09-23. The reviewer independently ran all 39 voice tests and an
+  aiohttp subprocess with actual SIGTERM and mocked provider transport: exit 0,
+  one hangup, final usage retained, ledger closed, no remaining tasks. No blocking
+  local findings remain; this verdict does not approve live acceptance or M2.
+- M1 live demonstration: **blocked, not completed**. An isolated profile,
+  verified GPT-Live project/SIP entitlement, test Vonage routing/number,
+  reachable HTTPS endpoint, dedicated secrets and current carrier rates have
+  not been supplied/verified for this run. The earlier shell check found no
+  OpenAI key/webhook secret; it does not establish that no credentials exist
+  elsewhere on the host. Existing ambient Vonage credentials were not used.
+  Follow the guide's explicit preflight and profile configuration before a paid
+  test. No real call, production change or measured provider cost has occurred.
+  SIP is provisional until real compatibility is confirmed. M2 remains gated
+  on the real M1 demonstration and its integration review.
 
 API basis: [OpenAI telephony](https://developers.openai.com/api/docs/guides/voice-sip)
 and [client delegation](https://developers.openai.com/api/docs/guides/live-delegation),

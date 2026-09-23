@@ -8,6 +8,12 @@ are preserved in [active-context-archive.md](active-context-archive.md).
 
 ## State now
 
+GPT-Live has an isolated, opt-in M1 smoke runner with durable test reservations
+and a fixed client-delegation result. Local failure-path tests cover admission,
+closure, restart and secret logging. Vonage SIP audio and live acceptance remain
+unverified; no production number is connected. See the
+[smoke guide](features/gpt-live-smoke.md) and its linked milestone plan.
+
 Engine chat now supports negotiated read-only policy version 1. The policy is
 enforced before slash/semantic/task routing and again at assistant and task
 executor tools; read-only turns do not acknowledge notifications or enqueue

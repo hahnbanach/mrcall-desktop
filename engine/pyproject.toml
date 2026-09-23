@@ -18,10 +18,7 @@ dependencies = [
     "fastembed>=0.4.0",
     "httpx>=0.28.1",
     "anthropic>=0.39.0",
-    # GPT-Live SIP webhook verification and sideband connections are exposed
-    # by the current official SDK.  The original >=1 declaration did not
-    # guarantee either surface.
-    "openai>=3.19.0",
+    "openai>=1.0.0",
     "cryptography>=41.0.0",
     # Cross-machine transport: WebSocket server inside the sidecar
     # (`zylch serve --ws`) + server-side Firebase ID-token verification.
@@ -67,6 +64,8 @@ dependencies = [
 
 [project.optional-dependencies]
 evaluation = ["jsonschema>=4.23,<5"]
+# Isolated M1 runner only; do not upgrade the packaged engine's SDK for a smoke.
+voice-smoke = ["openai==3.19.0", "aiohttp>=3.12,<4", "websockets>=14,<18"]
 
 [project.scripts]
 zylch = "zylch.cli.main:main"
