@@ -15,8 +15,7 @@
     "dist": "npm run build && electron-builder --publish never",
     "dist:mac": "npm run build && electron-builder --mac --publish never",
     "dist:win": "npm run build && electron-builder --win --publish never",
-    "test:onboarding": "node scripts/test-onboarding.mjs",
-    "test:memory-approval": "node scripts/test-memory-approval.mjs"
+    "test:onboarding": "node scripts/test-onboarding.mjs"
   },
   "dependencies": {
     "@radix-ui/react-slot": "^1.1.0",

@@ -224,6 +224,7 @@ registry on 2026-08-15 (65 methods), plus `emails.needs_reply` added
 | `memory.join_preview` | `key?` | {well_formed, exists, reason, self_notion?, blob_count?, fact_count?, contributors?} — the echo before a join; creates nothing, an unknown key answers `exists: false` |
 | `memory.join` | `key?` | {ok, reason?, already?, merged?, …summary} — merge this profile's memory into the store the key names, write the key, rebind the running engine. The ONLY write path for `MEMORY_KEY` (`settings.update` refuses it) |
 | `memory.reconsolidate_now` | — | summary dict; `skipped: true, reason: "another engine is sweeping"` when another daemon holds the company's sweep lock |
+| `memory.restore_version` | `blob_id?, version_id?` | {ok, blob?, version_id?, reason?} — bring one memory blob back to a version `blob_versions` retained for it; mechanical, no model, the text it replaces is retained first. `{ok: false, reason}` for a missing id, a version of another blob, or a blob this profile cannot see |
 
 **`mrcall.*`**
 
@@ -813,13 +814,6 @@ Event union (see `app/src/renderer/src/types.ts:SolveEvent`):
 // Approval-gated tool reached, executor paused on
 // _pending[tool_use_id] future. UI must render an approval card
 // and respond via tasks.solve.approve OR tasks.solve.cancel.
-//
-// `name: "confirm_memory_write"` is the exception: it is not a pending
-// tool but a memory change awaiting a human acceptance, its `input` is
-// the change, its `preview` comes from approval.describe(), and it must
-// be answered with tasks.solve.approve — declining it with
-// tasks.solve.cancel kills the whole solve and discards the reason the
-// engine answers a decline with. See "confirm_memory_write" below.
 {
   "type": "tool_call_pending",
   "tool_use_id": string,
@@ -1146,7 +1140,7 @@ to **600 s**; a timeout counts as a deny. The client answers with
 | `mode` | Effect |
 |---|---|
 | `"once"` (default) | Approve this single tool call. |
-| `"session"` | Approve it *and* auto-approve later calls to the same tool in the same conversation. Send tools never get a session grant — the renderer's `ApprovalCard` withholds the option — and neither does `confirm_memory_write`, which the engine refuses to register (see below). |
+| `"session"` | Approve it *and* auto-approve later calls to the same tool in the same conversation. Send tools never get a session grant — the renderer's `ApprovalCard` withholds the option. |
 | `"deny"` | Reject this call. |
 
 `edited_input` carries the user's corrections from the approval card (a
@@ -1154,48 +1148,6 @@ fixed recipient, a rewritten body) and is applied before the tool runs;
 a non-dict is ignored. Back-compat: with `mode` absent the legacy
 `approved: bool` is honoured (`true` → `"once"`, `false` → `"deny"`). An
 unknown `tool_use_id` or an invalid `mode` is `-32602`.
-
-### `confirm_memory_write` — a card that is not a tool call
-
-One `name` on that notification is not a pending tool. **`confirm_memory_write`**
-is the engine asking a human to accept a change to company memory that differs
-from what the tool call asked for: the mnemonic role has already decided, and the
-decision writes to a different memory, performs a different action, files it
-under a different scope, or absorbs another memory. Both surfaces raise it — chat
-through `chat.pending_approval`, a task solve through `tasks.solve.event`'s
-`tool_call_pending`.
-
-Three things about it differ from every other card, and a client that treats it
-like the others collects a click that changes nothing:
-
-- **`input` is the change, not tool arguments.** `{event_id, proposal_digest,
-  acceptance_nonce, action, entity_type, scope, content, reason, write_set:
-  [{blob_id, expected_version, role}], declared_effects, requested_action,
-  requested_blob_id, flags, why, observation, source, preview}`. `content` is the
-  **complete** text that will be stored, not an excerpt — the human is accepting
-  those words. `why` is the engine's own sentences for why the card appeared, and
-  `preview` here comes from `approval.describe()`, not
-  `format_approval_preview()`.
-- **`edited_input` is the acceptance, not a correction.** Accepting means echoing
-  `{acceptance_nonce, proposal_digest}` back exactly as received. A `mode:"once"`
-  with no `edited_input` is read as a standing grant and **refused** — the engine
-  writes nothing and reports a review. Nothing in `edited_input` is stored: the
-  card is read-only, and an `edited: true` flag is itself a refusal, because a
-  revised text is no longer the decided one.
-- **There is no session grant.** `mode:"session"` is honoured as `"once"` and
-  registers nothing, because a standing yes cannot be an answer to "is this
-  particular change right".
-
-A decline (`mode:"deny"`, or `tasks.solve.approve` with `approved:false`) is
-answered with a review carrying a reason the model reads, so the turn continues.
-For a solve, **decline it rather than calling `tasks.solve.cancel`** — cancelling
-throws that answer away. The engine-side contract is
-[mnemonic commit](../engine/docs/features/mnemonic-commit.md#the-acceptance); the
-renderer's half is `app/src/renderer/src/lib/memoryApproval.ts`, driven end to end
-against a fixture sidecar by `app/scripts/test-memory-approval.mjs`.
-
-The whole path is behind `MNEMONIC_WRITE_PATH`, whose default `off` raises this
-card never.
 
 **A `chat.send` turn does not outlive its connection.** When the socket
 closes, the engine **cancels** the `chat.send` handlers that were in
@@ -1335,6 +1287,22 @@ another engine holds the company's sweep lock. `tasks.dedup_now` runs the F8 ded
 immediately and returns counts the renderer can phrase as "Closed N tasks
 across M cluster(s)"; it tolerates a profile with no LLM configured,
 answering `no_llm=True` instead of failing.
+
+### `memory.restore_version(blob_id?, version_id?)`
+
+Brings one memory blob back to a version the engine retained for it — every
+rewrite and every consolidation keeps the text it replaces in
+`blob_versions` — and retains the current text first, so a restore is itself
+reversible. Mechanical: the version's text comes back exactly and no model is
+asked. Both ids are optional in the declaration because the handler answers
+`{ok: false, reason}` instead of raising: a missing id, a version that
+belongs to another blob, or a blob this profile cannot see. The same
+operation is `/memory restore <blob_id> <version_id>` in chat, with
+`/memory versions <blob_id>` listing the ids; the slash verb is gated as
+`restore_memory` like every other memory mutation and a read-only turn
+refuses it, and the scheduled operator's cron template denies the RPC by
+name. Engine detail: [mnemonic commit](../engine/docs/features/mnemonic-commit.md)
+("Retention").
 
 ### `profiles.create(email, values)`
 

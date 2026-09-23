@@ -26,14 +26,14 @@ submit(event, requested=…)
   └─ journal.open_operation  → a recorded terminal result replays here
      journal.claim           → a fenced lease, not an in-process mutex
      agent.decide            → the bounded, paid decision round
-     authorize_mutation      → a human accepts a CHANGED final mutation
+     departure_for           → how the proposal differs from what was asked
      _commit                 → one transaction on the company store
 ```
 
-`requested` is what the calling tool's own arguments asked for. An adapter that
-supplies none is treated as having changed everything: the harness cannot tell a
-faithful proposal from a rewritten one without being told what was asked, and it
-resolves that in the direction that asks a human.
+`requested` is what the calling tool's own arguments asked for. The proposal is
+measured against it and the difference is recorded; the write itself is never
+conditioned on it ([the departure](#the-departure)). An adapter that supplies
+none records nothing: there is no baseline to differ from.
 
 ## One transaction
 
@@ -73,51 +73,80 @@ An UPDATE **replaces** its blob's identifier rows. The old writer only
 appended, so correcting an email address left the wrong one in the index and
 the next cross-channel lookup still matched it.
 
-## The acceptance
+## The departure
 
-A validated proposal is not yet an authorized one. Between `agent.decide` and
-the transaction, `mnemonic/approval.py` compares the proposal against the
-`RequestedWrite` the adapter declared. A proposal that does what was asked
-proceeds on the approval the caller's own tool call already needed
-(`APPROVAL_TOOLS` gates every memory tool, and `assistant/core.py` refuses with
-no approval channel). A proposal that **changed** something is presented in full
-and written only on an acceptance naming it:
+A validated proposal is written. Nobody is asked: the caller's tool call already
+carried the one permission a memory write needs (`APPROVAL_TOOLS` gates every
+memory tool, and `assistant/core.py` refuses with no approval channel), and the
+role's decision is the point of routing the write through it. What the harness
+owes the caller instead is the difference between what was asked and what was
+decided. `mnemonic/approval.py` compares the proposal against the
+`RequestedWrite` the adapter declared and names each way it departs:
 
-- a different action (`CREATE` where an overwrite was asked for, or the reverse);
-- a different subject — a blob other than the one the call named, or, when the
-  call named none, any target at all, since nothing the caller said picked it;
-- a different entity type or scope;
-- an effect that absorbs, re-points or removes another memory, a
-  reclassification, or a donor.
+- `changed_action` — `CREATE` where an overwrite was asked for, or the reverse;
+- `changed_subject` — a blob other than the one the call named;
+- `unnamed_subject` — the call named no blob, so nothing the caller said picked
+  the target;
+- `changed_scope` — a different entity type or scope;
+- `destructive_effects` — an effect that absorbs, re-points or removes another
+  memory, a reclassification, or a donor.
 
-**What makes an acceptance exact.** Three name-keyed shortcuts auto-approve in
-production: `cs --allow` answers every notification for an allowed tool name,
-the engine remembers `chat.approve(mode="session")` per conversation and tool
-name, and the Desktop card offers "Allow for session". A new tool name defeats
-none of them, because all three key on whatever name is used. So an acceptance
-is not a boolean: the card carries a single-use nonce and the digest of the
-proposal, and the accepting surface must echo both back in `edited_input`. Every
-standing grant answers `(True, None)` and therefore fails structurally, with no
-list of trusted surfaces to maintain.
+`departure_for` returns `None` for a faithful proposal and otherwise the flags,
+one sentence per flag, the requested baseline and the proposed action, entity
+type, scope and targets. It is computed per decision round against that round's
+proposal, and it rides three places: the `departure` column of the operation
+row, written by `journal.receipt` inside the commit's transaction, so a
+departing rewrite and the record that it departed cannot disagree; the
+`MnemonicResult`, so `create_memory` and `update_memory` return it in
+`data["departure"]`; and the solve's text answer, as one `Note:` line the model
+reads. A human who sees that the role chose differently corrects it as a new
+observation — a correction is an append, not a permission — and the text the
+departing write replaced is retained ([retention](#retention)).
 
-`proposal_digest` covers the write set's expected versions, so a CAS re-read
-that lands on a different version — or a re-decision that revises the prose — no
-longer matches the acceptance a human gave, and the next round asks again. The
-gate is inside the decision loop for exactly that reason. A denial, a timeout, a
-cancelled turn and an edited card are all refusals; an edit means the accepted
-text is no longer the decided one, and the revision has to be submitted as its
-own instruction.
+The three standing grants in the estate — `cs --allow`, the engine's
+`chat.approve(mode="session")` and the Desktop "Allow for session" button —
+grant the tool. That is the whole of what they grant, and it is enough.
 
-A caller with no channel — a headless run, a scheduled operator, an RPC client
-offering no approval route — gets `review_needed` and no write.
+The commit runs on a worker thread (`asyncio.to_thread` in both tools) so the
+paid decision round does not block the event loop, and under a `revocable_turn`:
+`chat.send`, `tasks.solve` and the interactive CLI solve each open one, so
+cancelling the turn revokes a dispatch grant already copied into that thread.
 
-**Where the channel comes from.** `zylch/services/mnemonic_approval.py` is the
-one bridge from the engine's async `approval_callback` to this synchronous path,
-and the driver that owns the turn installs it: `chat.send` and `tasks.solve` do,
-each also opening a `revocable_turn` so cancelling the turn revokes a dispatch
-grant already copied into a worker thread. The commit runs on a worker thread
-precisely so the bridge can reach the loop; asked from the loop thread it
-refuses rather than deadlocking the loop that would deliver the answer.
+## Retention
+
+Nothing an append does is destructive. Every rewrite of a blob's content goes
+through `BlobStorage._rewrite`, and the first thing `_rewrite` does is copy the
+row it is about to replace into `blob_versions` (`memory/blob_versions.py`,
+`retain_version`) in the same session, stamped with a `reason` — `append` for
+an update, `consolidate` for the sweep's keeper rewrite — and, for a semantic
+write, the `operation_id` of the event that caused it. The sweep's donor delete
+is `delete_blob(retain=True)`: the donor's final text is retained with reason
+`consolidate` before the row goes. The owner's own `/memory delete` and
+`/memory reset` retain nothing and prune the versions of exactly the blobs they
+remove — consolidation is the only *semantic* operation that removes memory,
+and it keeps what it removes. The one raw delete in the estate,
+`scripts/compact_learned_prefs.py`'s `DELETE FROM blobs`, is a maintenance
+script the frozen inventory names (`sql:DELETE:blobs`, milestone 8); it
+retains nothing and stays until milestone 8 converts it.
+
+`blob_versions.blob_id` is indexed and deliberately **not** a foreign key: a
+cascade would delete a retained donor inside the very transaction that retains
+it. Pruning is explicit, by blob id, and never by `owner_id` — on a shared
+store a version's `owner_id` is the writer's provenance, and filtering on it
+would let one key holder's reset erase the history of another's rows.
+`list_versions` and `get_version` read versions back.
+
+A version is restorable, mechanically, by any key holder who can see the
+blob. `restore_version` rewrites the blob from the version's text through
+`_rewrite` — so the restore retains the text it replaces and is itself
+reversible — and asks no model. It is reachable as
+`memory.restore_version(blob_id, version_id)` (`rpc/maintenance.py`) and as
+`/memory restore <blob_id> <version_id>` in chat, with `/memory versions
+<blob_id>` listing the ids, and it is gated on every route a mutation has:
+`restore_memory` in `APPROVAL_TOOLS` and in the slash gate, `memory_write`
+under a read-only turn, and `memory.restore_version` in the scheduled
+operator's raw-RPC deny list. A headless operator cannot roll a shared memory
+back by any door.
 
 ## The permit
 
@@ -190,33 +219,30 @@ something nobody submitted.
 
 ## Migration
 
-`memory_operations` is registered in `MEMORY_TABLE_NAMES`
+`memory_operations` and `blob_versions` are registered in `MEMORY_TABLE_NAMES`
 (`zylch/storage/database.py`). That single registration is the install: the
 name puts the table on the memory bind, so every statement naming it reaches
 the company store, and inside `memory.store.prepare_store`'s ensure pass, so
-`create_all` adds it and its two indexes to every store under that file's
-migration lock. Additive: no existing row is read or rewritten, and
-`tests/storage/test_mnemonic_journal_migration.py` hashes every durable column
-of every blob row before and after to prove it.
+`create_all` adds it and its indexes to every store under that file's
+migration lock. `memory_operations.departure` is added by
+`_apply_column_migrations` in the same pass, which can only add a column and
+skips a store that lacks the table. Additive: no existing row is read or
+rewritten, and `tests/storage/test_mnemonic_journal_migration.py` and
+`tests/storage/test_blob_versions_migration.py` hash every durable column of
+every blob row before and after to prove it.
 
 ## What this does not do yet
 
 - **MERGE and reclassification return `review_needed`.** The proposal is
   recorded, nothing is written. Approximating a merge with an update is the
   failure this harness exists to remove.
-- **Only the interactive chat tools and the task solve are routed here.**
-  `MNEMONIC_WRITE_PATH` is a ladder: `off` (the shipped default) is the legacy
-  direct writes, `create` is `create_memory`'s entity path alone, and
-  `supervised` adds `update_memory` and the solve — which is what the acceptance
-  above exists to guard. Widening the slice past a test or an explicitly
-  selected cohort is a separate decision; nothing about the acceptance existing
-  makes it the default.
-- **A proposal this mode does not admit is refused, never written the old
-  way.** Under `create`, a proposal to change existing memory returns for
-  review. A harness that writes around itself when it disagrees is not a
-  boundary.
-- **`entry_type='behavioral_rule'` still goes to `prefs_store.store_rule`**, in
-  both modes. Account rules keep their own dedup and supersession logic.
+- **Only `create_memory`, `update_memory` and the task solve are routed here.**
+  They have no other path: no setting selects a writer, and the direct writes
+  they replaced are gone rather than parked behind configuration. What guards
+  the change is the tests below and the priced corpus of milestone 9. A
+  proposal the harness cannot admit is refused, never written another way.
+- **`entry_type='behavioral_rule'` still goes to `prefs_store.store_rule`.**
+  Account rules keep their own dedup and supersession logic.
 - **No adapter populates a `SubjectHint`'s `name`, `email`, `phone` or
   `company`.** `create_memory` passes at most a bare `FACT` hint, `update_memory`
   passes a `target_blob_id`, and the solve passes none. Three rules in
@@ -232,7 +258,7 @@ of every blob row before and after to prove it.
 - **Every other writer in the inventory is still direct.** There is no
   single-writer claim.
 
-## The supervised slice
+## The adapters
 
 `zylch/tools/memory_events.py` turns a `create_memory` or `update_memory` call
 into an authenticated event, and `zylch/services/solve_memory.py` does the same
@@ -254,10 +280,9 @@ rewrite to the status of something that was said. The caller class is
 the human's behalf, not an authenticated human instruction.
 
 `update_memory`'s `blob_id` is a **hint**, not a target. It pins that row first
-among the candidates and it is the `RequestedWrite` baseline the acceptance gate
-measures the proposal against — so a proposal that writes elsewhere is a changed
-subject and needs a human. It never becomes the write target by having been
-named.
+among the candidates and it is the `RequestedWrite` baseline the departure is
+measured against — so a proposal that writes elsewhere is recorded as a changed
+subject. It never becomes the write target by having been named.
 
 The **solve** has no chat turn, and `zylch/services/solve_context.py` carries
 what it has instead: the instruction the human typed into the solve box this
@@ -267,21 +292,21 @@ the task's text is the observation and the class is `automatic_observation`.
 Extracted content cannot acquire an instruction's authority by being passed to
 the tool a human also uses, and nothing a model writes changes either — the
 authority fields are `MODEL_SEALED`. The solve's `query` reaches the decision as
-nothing at all — it is what the model searched with, and it was briefly passed as
-a `SubjectHint(name=…)` on the theory that a name hint widens retrieval, which it
-does not: `candidates.gather` searches the observation and the identifier index
-stores no names. What it did do is make `names_entity_subject` true, which forbids
-a company FACT outright, so a solve could not store "from Monday we open at 8".
-There is no retrieval-only field to put it in, so it is passed nowhere. Because
-the caller therefore names no blob, every solve proposal writes to a subject it
-did not choose and is always shown before anything is written. The origin
-stays `interactive` in both cases: a human pressed Solve, so the dispatch rides
-their turn and leaves bounded preparation untouched.
+nothing at all: it is what the model searched with. It is not a `SubjectHint`
+either — a name hint does not widen retrieval (`candidates.gather` searches the
+observation, and the identifier index stores no names) and it makes
+`names_entity_subject` true, which forbids a company FACT outright, so a solve
+could not store "from Monday we open at 8". Because the caller names no blob,
+every solve proposal writes to a subject it did not choose, and the departure
+says so (`unnamed_subject`). The origin stays `interactive` in both cases: a
+human pressed Solve, so the dispatch rides their turn and leaves bounded
+preparation untouched. The interactive CLI solve (`services/task_interactive.py`)
+installs the same solve context, built from the task row and whatever the
+operator typed, around each of its three executor runs.
 
 The tool reports success only after a committed receipt **and** an actual
 read-back through the ordinary scoped read path. A decision is never reported
-as a save — including a change the human was shown and declined, which is a
-review with a reason.
+as a save.
 
 ## Tests
 
@@ -293,13 +318,16 @@ runs the real tool, the real role, the real `LLMClient` and the real
 reservation ledger with only the provider transport replaced: no test-supplied
 preparation context, no stubbed `check_dispatch`, no faked reservation.
 
-The acceptance and the adapters have their own:
-`tests/services/test_mnemonic_approval.py` (what counts as a change, what counts
-as an acceptance, and the gate end to end against real rows),
-`tests/tools/test_mnemonic_adapters.py` (the observation/suggestion split, the
-sealed authority fields, the mode ladder) and
-`tests/services/test_mnemonic_solve.py` (the query's lost authority, the two
-caller classes, and the real `TaskExecutor` driven across both of its thread
-boundaries). The Desktop card's half of the contract is
-`app/scripts/test-memory-approval.mjs`, which drives the real `StdioRpcClient`
-against a fixture sidecar and asserts the `chat.approve` frame that arrives.
+Retention, the departure and the adapters have their own:
+`tests/memory/test_blob_versions.py` and
+`tests/storage/test_blob_versions_migration.py` (every rewrite and consolidation
+path retains, the owner's delete prunes by blob and never by owner, foreign
+keys on), `tests/memory/test_mnemonic_departures.py` (what counts as a
+departure, that a departing proposal is written and recorded in the row and in
+the response, that a faithful one records nothing, and that a headless caller
+writes), `tests/tools/test_mnemonic_adapters.py` (the observation/suggestion
+split and the sealed authority fields), `tests/services/test_mnemonic_solve.py`
+(the query's lost authority, the two caller classes, the read-back, and the
+real `TaskExecutor` driven across both of its thread boundaries and through
+its cancellation handler) and `tests/services/test_task_interactive_memory.py`
+(the CLI solve carries its context).

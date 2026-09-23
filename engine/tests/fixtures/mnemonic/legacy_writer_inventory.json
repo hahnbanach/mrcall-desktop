@@ -31,7 +31,8 @@
     "PersonIdentifier",
     "BlobAlias",
     "FactHistory",
-    "MemoryMeta"
+    "MemoryMeta",
+    "BlobVersion"
   ],
   "call_sites": [
     {
@@ -80,7 +81,7 @@
       "call": "delete_all_blobs",
       "count": 1,
       "mode": "async",
-      "milestone": 5
+      "milestone": 6
     },
     {
       "path": "zylch/services/command_handlers.py",
@@ -88,7 +89,7 @@
       "call": "delete_blob",
       "count": 1,
       "mode": "async",
-      "milestone": 5
+      "milestone": 6
     },
     {
       "path": "zylch/services/command_handlers.py",
@@ -96,7 +97,7 @@
       "call": "store_blob",
       "count": 2,
       "mode": "async",
-      "milestone": 5
+      "milestone": 6
     },
     {
       "path": "zylch/services/command_handlers.py",
@@ -104,7 +105,7 @@
       "call": "update_blob",
       "count": 1,
       "mode": "async",
-      "milestone": 5
+      "milestone": 6
     },
     {
       "path": "zylch/services/command_handlers.py",
@@ -120,7 +121,7 @@
       "call": "store_rule",
       "count": 1,
       "mode": "sync",
-      "milestone": 5
+      "milestone": 6
     },
     {
       "path": "zylch/services/correction_learning.py",
@@ -128,7 +129,7 @@
       "call": "upsert_fact",
       "count": 1,
       "mode": "sync",
-      "milestone": 5
+      "milestone": 6
     },
     {
       "path": "zylch/services/facts_store.py",
@@ -136,7 +137,7 @@
       "call": "store_blob",
       "count": 1,
       "mode": "sync",
-      "milestone": 5
+      "milestone": 6
     },
     {
       "path": "zylch/services/facts_store.py",
@@ -144,7 +145,7 @@
       "call": "update_blob",
       "count": 1,
       "mode": "sync",
-      "milestone": 5
+      "milestone": 6
     },
     {
       "path": "zylch/services/job_executor.py",
@@ -216,7 +217,7 @@
       "call": "store_blob",
       "count": 1,
       "mode": "sync",
-      "milestone": 5
+      "milestone": 6
     },
     {
       "path": "zylch/services/prefs_store.py",
@@ -224,7 +225,7 @@
       "call": "update_blob",
       "count": 1,
       "mode": "sync",
-      "milestone": 5
+      "milestone": 6
     },
     {
       "path": "zylch/services/prefs_store.py",
@@ -232,7 +233,7 @@
       "call": "_create_blob",
       "count": 1,
       "mode": "sync",
-      "milestone": 5
+      "milestone": 6
     },
     {
       "path": "zylch/services/prefs_store.py",
@@ -240,16 +241,15 @@
       "call": "_update_blob",
       "count": 1,
       "mode": "sync",
-      "milestone": 5
+      "milestone": 6
     },
     {
-      "path": "zylch/services/solve_memory.py",
-      "symbol": "_direct_write",
-      "call": "update_blob",
+      "path": "zylch/services/prefs_store.py",
+      "symbol": "refine_rule",
+      "call": "_update_blob",
       "count": 1,
       "mode": "sync",
-      "milestone": 4,
-      "note": "milestone 4 moved the solve's memory write here and removed its limit=1 top-hit authority from the semantic path; this entry is the legacy direct write that MNEMONIC_WRITE_PATH=off still serves"
+      "milestone": 6
     },
     {
       "path": "zylch/storage/step_memory_split.py",
@@ -262,27 +262,10 @@
     {
       "path": "zylch/tools/create_memory_tool.py",
       "symbol": "CreateMemoryTool.execute",
-      "call": "store_blob",
-      "count": 1,
-      "mode": "async",
-      "milestone": 4
-    },
-    {
-      "path": "zylch/tools/create_memory_tool.py",
-      "symbol": "CreateMemoryTool.execute",
       "call": "store_rule",
       "count": 1,
       "mode": "async",
-      "milestone": 4
-    },
-    {
-      "path": "zylch/tools/update_memory_tool.py",
-      "symbol": "UpdateMemoryTool._direct_write",
-      "call": "update_blob",
-      "count": 1,
-      "mode": "sync",
-      "milestone": 4,
-      "note": "milestone 4 split the semantic path out of execute(); this entry is the legacy direct write that MNEMONIC_WRITE_PATH=off still serves"
+      "milestone": 6
     },
     {
       "path": "zylch/workers/memory.py",
@@ -464,6 +447,14 @@
       "call": "construct:WhatsAppBlob",
       "count": 1,
       "milestone": 7
+    },
+    {
+      "path": "zylch/memory/blob_versions.py",
+      "symbol": "retain_version",
+      "call": "construct:BlobVersion",
+      "count": 1,
+      "milestone": 5,
+      "note": "milestone 5 retention: the text a rewrite replaces or a consolidation removes, written before the write it precedes; the boundary's own mechanism, not a legacy writer"
     }
   ],
   "orm_mutations": [
@@ -501,6 +492,14 @@
       "call": "orm:delete:WhatsAppBlob",
       "count": 1,
       "milestone": 8
+    },
+    {
+      "path": "zylch/memory/blob_versions.py",
+      "symbol": "prune_versions",
+      "call": "orm:delete:BlobVersion",
+      "count": 1,
+      "milestone": 5,
+      "note": "the owner's delete and reset prune a blob's versions with the blob; never filtered on owner_id, which is the writer's provenance"
     }
   ],
   "orm_assignments": [
@@ -771,9 +770,8 @@
           "mode",
           "tool_use_id"
         ],
-        "count": 2,
-        "milestone": 4,
-        "note": "two sites: the allow-list answer, and the unconditional deny for confirm_memory_write \u2014 a headless clone has no human to accept a changed memory write, whatever is in --allow"
+        "count": 1,
+        "milestone": 1
       },
       {
         "method": "chat.send",
@@ -872,6 +870,12 @@
       "engine_path": "zylch/rpc/maintenance.py",
       "cron_explicit_deny_count": 0,
       "milestone": 1
+    },
+    {
+      "method": "memory.restore_version",
+      "engine_path": "zylch/rpc/maintenance.py",
+      "cron_explicit_deny_count": 0,
+      "milestone": 5
     },
     {
       "method": "memory.join",

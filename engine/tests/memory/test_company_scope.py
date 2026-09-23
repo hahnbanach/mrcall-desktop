@@ -159,17 +159,47 @@ def test_memory_reset_on_a_single_owner_store_still_wipes_everything(store):
 
 @pytest.mark.asyncio
 async def test_model_supplied_namespace_is_rescoped_never_stored(company_db, embedder, monkeypatch):
-    from zylch.tools.create_memory_tool import CreateMemoryTool
+    """The model names a family; the engine decides the namespace.
+
+    An entity goes through the mnemonic role (its answer is scripted here; the
+    validator, journal and commit are real) and lands in the company's entity
+    namespace whatever followed the colon. A rule-family hint goes to this
+    owner's own rule bucket without asking the role. An unknown family is
+    refused before anything is decided.
+    """
+    import json
+
+    from tests.memory.mnemonic_env import client, with_client
+    from zylch.assistant.turn_context import set_turn_observation
     from zylch.tools.base import ToolStatus
+    from zylch.tools.create_memory_tool import CreateMemoryTool
 
     tool = CreateMemoryTool.__new__(CreateMemoryTool)
     tool._get_owner_id = lambda: A
     key = current_company_key()
+    monkeypatch.setenv("LLM_DAILY_BUDGET_USD", "5")
+    monkeypatch.setenv("OWNER_ID", A)  # the submitting account, which the event owner must match
+    set_turn_observation("Ricorda che X è un nostro contatto.")
+    with_client(
+        monkeypatch,
+        client(
+            json.dumps(
+                {
+                    "action": "CREATE",
+                    "entity_type": "PERSON",
+                    "scope": "entity",
+                    "content": "#IDENTIFIERS\nEntity type: PERSON\nScope: entity\nName: X\n#ABOUT\ny",
+                    "reason": "no visible candidate describes this person",
+                }
+            )
+        ),
+    )
 
     r = await tool.execute(
         content="#IDENTIFIERS\nName: X\n#ABOUT\ny", namespace="user:someone-else"
     )
-    assert r.status == ToolStatus.SUCCESS and r.data["namespace"] == f"user:{key}"
+    assert r.status == ToolStatus.SUCCESS, r.error
+    assert r.data["namespace"] == f"user:{key}"
     r = await tool.execute(content="be terse", namespace="template:someone-else")
     assert r.status == ToolStatus.SUCCESS and r.data["namespace"] == f"template:{A}"
     r = await tool.execute(content="x", namespace="attic:whatever")

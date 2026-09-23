@@ -1,14 +1,18 @@
-"""Maintenance RPCs — manual triggers for the dedup + reconsolidation sweeps.
+"""Maintenance RPCs — manual triggers for the dedup + reconsolidation sweeps,
+and the mechanical restore of a memory version.
 
-These are the "Clean up tasks" / "Reconsolidate memory" buttons in
-Settings: the user can ask for a sweep on demand, instead of waiting
-for the next /update. Same workers as the scheduled paths.
+The sweeps are the "Clean up tasks" / "Reconsolidate memory" buttons in
+Settings: the user can ask for a sweep on demand, instead of waiting for the
+next /update. Same workers as the scheduled paths. The restore brings one
+memory blob back to a version ``blob_versions`` retained for it; it asks no
+model and pays nothing, so it is not a bounded operation.
 """
 
 from __future__ import annotations
 
 from zylch.services.preparation import bounded_operation
 
+import asyncio
 import logging
 from typing import Any, Awaitable, Callable, Dict
 
@@ -87,8 +91,44 @@ async def memory_reconsolidate_now(params: Dict[str, Any], notify: NotifyFn) -> 
     return {"ok": True, **summary}
 
 
+async def memory_restore_version(params: Dict[str, Any], notify: NotifyFn) -> Any:
+    """memory.restore_version(blob_id?, version_id?) -> {ok, blob?, version_id?, reason?}.
+
+    Restores one memory blob to a version ``blob_versions`` retained for it.
+    Mechanical: no model is asked, the version's text comes back exactly, and
+    the text it replaces is retained first, so a restore is itself reversible.
+    Both ids are declared optional because the handler answers
+    ``{ok: false, reason}`` rather than raising when one is missing, when the
+    version belongs to another blob, or when the blob is not visible to this
+    profile.
+
+    Denied to the scheduled operator by name in the kernel's cron template,
+    like every other memory mutation reachable as a raw RPC.
+    """
+    blob_id = str(params.get("blob_id") or "").strip()
+    version_id = str(params.get("version_id") or "").strip()
+    if not blob_id or not version_id:
+        return {"ok": False, "reason": "blob_id and version_id are required"}
+    owner_id = _owner_id()
+    logger.debug(
+        f"[rpc] memory.restore_version owner_id={owner_id} blob={blob_id} version={version_id}"
+    )
+    try:
+        from zylch.memory import BlobStorage, EmbeddingEngine, MemoryConfig
+        from zylch.storage.database import get_session
+
+        storage = BlobStorage(get_session, EmbeddingEngine(MemoryConfig()))
+        result = await asyncio.to_thread(storage.restore_version, blob_id, owner_id, version_id)
+    except Exception as e:
+        logger.exception(f"[rpc] memory.restore_version failed: {e}")
+        return {"ok": False, "reason": str(e)}
+    logger.debug(f"[rpc] memory.restore_version -> ok={result.get('ok')}")
+    return result
+
+
 METHODS: Dict[str, Callable[[Dict[str, Any], NotifyFn], Awaitable[Any]]] = {
     "tasks.dedup_now": tasks_dedup_now,
     "tasks.topic_dedup_now": tasks_topic_dedup_now,
     "memory.reconsolidate_now": memory_reconsolidate_now,
+    "memory.restore_version": memory_restore_version,
 }

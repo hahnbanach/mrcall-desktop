@@ -36,28 +36,27 @@ same store makes an event idempotent, fences concurrent attempts and carries
 the per-event dispatch allowance across a restart. MERGE and reclassification
 return `review_needed`.
 
-A changed final mutation now needs a human. Between the validated proposal and
-the transaction, a proposal that differs from what the calling tool asked for — a
-different action, a different subject, a different scope, or an effect that
-absorbs another memory — is shown in full and written only on an acceptance that
-echoes the card's single-use nonce and the proposal digest. That defeats the three
-standing grants in the estate structurally rather than by policy: `cs --allow`,
-the engine's session grant and the Desktop session button can each answer only
-"yes", and "yes" is not an acceptance. A caller with no approval channel gets
-`review_needed` and writes nothing.
+No write asks a human. A validated proposal is written, and the difference
+between what the calling tool asked for and what the role decided — a different
+action, subject, scope, or an effect that absorbs another memory — is recorded
+as a `departure` on the operation row, in the tool's response and in the solve's
+answer. The three standing grants in the estate (`cs --allow`, the engine's
+session grant, the Desktop session button) grant the tool, which is the one
+permission a memory write needs. Every rewrite first retains the replaced text
+in `blob_versions` (`append`); the sweep's consolidation retains the donor's
+text and the keeper's replaced text (`consolidate`); the owner's delete and
+reset are the only paths that leave no version behind. A retained version is
+restorable through `memory.restore_version` and `/memory restore`, mechanically
+and gated like every other memory mutation.
 
-`MNEMONIC_WRITE_PATH` is a ladder: `off` (the shipped default) keeps the legacy
-direct writes, `create` routes supervised `create_memory`'s entity path alone, and
-`supervised` adds `update_memory` and the task solve — where the solve's
-`limit=1` top-hit authority is gone and a human sees every change before it
-lands. Every other writer in the inventory is still direct — no single-writer
-claim. Contracts: [mnemonic commit](features/mnemonic-commit.md),
-[mnemonic decisions](features/mnemonic-decisions.md).
-Tested locally against the frozen milestone 0 incident corpus and real split
-profile/company databases; **not deployed, and the slice is off outside a test**.
-The interactive CLI solve (`services/task_interactive.py`) installs no approval
-channel, so under `supervised` its memory writes return review; converting it
-belongs to whichever milestone owns the CLI surfaces.
+`create_memory`, `update_memory` and the task solve — chat, RPC and the
+interactive CLI solve, which carries its solve context — go through the
+semantic commit and nothing else: the direct writes they had are deleted, and
+no setting selects a writer. Every other writer in the inventory is still
+direct. Contracts: [mnemonic commit](features/mnemonic-commit.md),
+[mnemonic decisions](features/mnemonic-decisions.md). Tested locally against
+the frozen milestone 0 incident corpus and real split profile/company
+databases; **not deployed**.
 
 Support's engine exposes approval-gated `initiate_call` through the dashboard's
 Firebase atom API, with an explicit calling assistant ID. A live request on

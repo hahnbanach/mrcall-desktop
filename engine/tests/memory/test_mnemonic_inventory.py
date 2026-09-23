@@ -138,6 +138,62 @@ def untyped(row):
     )
 
 
+_UPDATE_BLOBS = re.compile(
+    r"\bUPDATE\s+blobs\s+SET\s+(?P<set>.*?)(?:\s+WHERE\b|;|$)", re.IGNORECASE | re.DOTALL
+)
+
+
+def rewritten_blob_columns(sql: str) -> set[str]:
+    """The columns a literal ``UPDATE blobs`` statement assigns, or an empty set."""
+    columns: set[str] = set()
+    for match in _UPDATE_BLOBS.finditer(sql):
+        for assignment in match.group("set").split(","):
+            name = assignment.split("=", 1)[0].strip().strip('"`[]').lower()
+            if name:
+                columns.add(name)
+    return columns
+
+
+def test_the_column_scanner_reads_the_set_clause_not_the_table_name():
+    assert rewritten_blob_columns("UPDATE blobs SET namespace = ? WHERE id = ?") == {"namespace"}
+    assert rewritten_blob_columns("UPDATE blobs SET namespace = ?, content = '' WHERE id = ?") == {
+        "namespace",
+        "content",
+    }
+    assert rewritten_blob_columns("update blobs set content=:c, updated_at=:u") == {
+        "content",
+        "updated_at",
+    }
+    assert rewritten_blob_columns("UPDATE blob_sentences SET content = ? WHERE id = ?") == set()
+    assert rewritten_blob_columns("DELETE FROM blobs WHERE id = ?") == set()
+
+
+def test_no_literal_sql_statement_rewrites_a_blobs_content_column():
+    """Brief criterion 11, at the width of its own sentence.
+
+    The table-level sink freeze above knows that a function issues an
+    ``UPDATE blobs``; it does not know which columns. A raw statement that sets
+    ``content`` is a rewrite with no retention behind it — nothing puts the old
+    text in ``blob_versions`` — so the expected count is zero, in every
+    function, including the ones whose table-level edge is already frozen. A
+    statement assembled at run time cannot be read here; those are the frozen
+    ``known_dynamic_sql_sinks`` rows, which name their function and tables and
+    are read statement by statement at review. The parser expects the bare
+    spelling every raw statement in the estate uses — ``UPDATE blobs SET`` —
+    not a quoted, schema-qualified or aliased table.
+    """
+    manifest = _manifest()
+    offenders: list[str] = []
+    for path in _source_files(manifest):
+        rel = path.relative_to(ENGINE_ROOT).as_posix()
+        tree = ast.parse(path.read_text(), filename=str(path))
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Constant) and isinstance(node.value, str):
+                if "content" in rewritten_blob_columns(node.value):
+                    offenders.append(f"{rel}:{node.lineno}")
+    assert offenders == [], offenders
+
+
 def test_every_literal_sql_sink_is_owned_by_a_later_milestone():
     manifest = _manifest()
     table_names = {

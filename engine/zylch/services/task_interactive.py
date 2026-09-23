@@ -27,6 +27,7 @@ from zylch.services.solve_constants import (
     build_task_context,
     get_personal_data_section,
 )
+from zylch.services.solve_memory import solve_context_from_task
 from zylch.services.task_executor import TaskExecutor
 
 logger = logging.getLogger(__name__)
@@ -119,8 +120,19 @@ def _prompt_choice() -> str:
         console.print("  [red]Invalid choice[/red]")
 
 
-def _cli_run_executor(executor: TaskExecutor) -> List[Dict]:
-    """Consume executor events synchronously with click.confirm approvals."""
+def _cli_run_executor(executor: TaskExecutor, solve_context=None) -> List[Dict]:
+    """Consume executor events synchronously with click.confirm approvals.
+
+    ``solve_context`` is what this run is working on — the human's typed
+    instruction kept apart from the task's own text — installed here, around
+    the loop, exactly as ``tasks.solve`` installs it over RPC. Without it a
+    memory correction from this surface has nothing it may treat as what was
+    asked and refuses; with it the CLI solve and the RPC solve are one path.
+    ``asyncio.run`` copies the current context into its task, so a scope
+    entered here reaches the executor and the worker thread it hops to.
+    """
+    from zylch.memory.mnemonic.turn import revocable_turn
+    from zylch.services.solve_context import solve_scope
 
     async def _drive() -> List[Dict]:
         agen = executor.run()
@@ -162,7 +174,8 @@ def _cli_run_executor(executor: TaskExecutor) -> List[Dict]:
                 return executor.messages
         return executor.messages
 
-    return asyncio.run(_drive())
+    with revocable_turn(), solve_scope(solve_context):
+        return asyncio.run(_drive())
 
 
 def _solve_task(
@@ -201,7 +214,7 @@ def _solve_task(
         owner_id,
         SOLVE_TOOLS,
     )
-    messages = _cli_run_executor(executor)
+    messages = _cli_run_executor(executor, solve_context_from_task(task))
 
     console.print()
     _post_solve_menu(task, store, owner_id, client, system, messages)
@@ -260,7 +273,7 @@ def _instruct_task(
         owner_id,
         SOLVE_TOOLS,
     )
-    messages = _cli_run_executor(executor)
+    messages = _cli_run_executor(executor, solve_context_from_task(task, instructions))
 
     console.print()
     _post_solve_menu(task, store, owner_id, client, system, messages)
@@ -319,4 +332,4 @@ def _post_solve_menu(
                 owner_id,
                 SOLVE_TOOLS,
             )
-            messages = _cli_run_executor(executor)
+            messages = _cli_run_executor(executor, solve_context_from_task(task, choice))

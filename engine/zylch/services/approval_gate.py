@@ -54,6 +54,7 @@ _MUTATING_SUBCOMMANDS: Dict[Tuple[str, str], str] = {
     ("/memory", "force"): "create_memory",
     ("/memory", "delete"): "delete_memory",
     ("/memory", "reset"): "reset_memory",
+    ("/memory", "restore"): "restore_memory",
     ("/agent", "memory"): "run_memory_agent",
     ("/jobs", "resume"): "resume_jobs",
 }
@@ -89,9 +90,7 @@ def mutation_gate_for_command(cmd: str, args: Sequence[str]) -> Optional[str]:
     subcommand = selectors[0] if selectors else ""
     key = (cmd.lower(), subcommand)
     tool = _SEND_CAPABLE_SUBCOMMANDS.get(key) or _MUTATING_SUBCOMMANDS.get(key)
-    if tool == "run_memory_agent" and not any(
-        word in {"run", "process"} for word in selectors[1:]
-    ):
+    if tool == "run_memory_agent" and not any(word in {"run", "process"} for word in selectors[1:]):
         return None
     if cmd.lower() == "/update":
         return "run_update"
@@ -245,11 +244,7 @@ async def gate_slash_command(
         except Exception as e:  # storage hiccup — gate on the bare id
             logger.warning(f"[approval] could not load draft {draft_id} for the card: {e}")
 
-    card = (
-        draft_approval_card(draft, draft_id)
-        if is_send
-        else {"command": cmd, "args": list(args)}
-    )
+    card = draft_approval_card(draft, draft_id) if is_send else {"command": cmd, "args": list(args)}
     decision, edited = await request_approval(approval_callback, tool_name, card)
     if decision != APPROVED:
         logger.info(f"[approval] {cmd} {subcommand_of(args)} refused: {decision}")

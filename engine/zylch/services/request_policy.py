@@ -24,6 +24,7 @@ MUTATING_TOOLS = frozenset(
         "create_memory",
         "delete_draft",
         "initiate_call",
+        "restore_memory",
         "run_python",
         "send_draft",
         "send_email",
@@ -73,7 +74,9 @@ def command_effect(cmd: str, args: Sequence[str]) -> str | None:
     first = selectors[0] if selectors else ""
     if "--help" in words:
         return None
-    if cmd == "/memory" and (first in {"store", "delete", "reset"} or "force" in selectors):
+    if cmd == "/memory" and (
+        first in {"store", "delete", "reset", "restore"} or "force" in selectors
+    ):
         return "memory_write"
     if cmd == "/agent" and (
         first == "run"

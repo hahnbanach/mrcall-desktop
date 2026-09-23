@@ -13,26 +13,20 @@ The tool-level contract is unchanged:
   3. if none matches, it calls `create_memory(...)` instead.
 The tool itself does NOT guess.
 
-Two write paths live behind that one name, selected by ``MNEMONIC_WRITE_PATH``
-(see :mod:`zylch.tools.memory_events`):
+The tool submits a memory *event*. The named blob becomes a subject hint, not
+an instruction: it is shown to the mnemonic role first and the role decides
+what the human's turn actually asks for. A proposal that keeps the caller's
+subject, action and scope is committed as asked; one that changes any of them —
+a different row, a CREATE instead of an overwrite, a different family — is
+committed too, with the departure recorded in the operation journal and
+returned in ``data["departure"]``, so a human can see the role chose
+differently and correct it later as a new observation. Nothing asks a human at
+write time: the text a rewrite replaces is retained, so a wrong write is a
+recoverable wrong belief rather than a lost fact.
 
-- **off** / **create** (the shipped default is ``off``) — the direct blob write
-  this tool has always done: verify the id, refuse a rule onto a contact,
-  replace the content.
-- **supervised** — the tool submits a memory *event*. The named blob becomes a
-  subject hint, not an instruction: it is shown to the mnemonic role first and
-  the role decides what the human's turn actually asks for. A proposal that
-  keeps the caller's subject, action and scope rides the approval this tool call
-  already needed. One that changes any of them — a different row, a CREATE
-  instead of an overwrite, a different family, an effect that absorbs another
-  memory — is presented in full and written only on a fresh acceptance naming
-  that exact change. With no acceptance channel it returns a review and writes
-  nothing.
-
-``new_content`` is a **suggestion** in that mode, not the bytes to store. What
-authorizes the decision is the human's own turn, so a call with no turn behind
-it is refused rather than promoting the model's rewrite to something that was
-said.
+``new_content`` is a **suggestion**, not the bytes to store. What authorizes the
+decision is the human's own turn, so a call with no turn behind it is refused
+rather than promoting the model's rewrite to something that was said.
 """
 
 import logging
@@ -61,8 +55,8 @@ class UpdateMemoryTool(Tool):
                 " call create_memory instead — do NOT invent an id and do NOT"
                 " update a blob you're unsure about. What you pass is a"
                 " proposed correction, not a literal overwrite: the engine"
-                " decides the final change from the user's own words and asks"
-                " the user to confirm it if it differs from what you asked for."
+                " decides the final change from the user's own words and"
+                " reports how it differs from what you asked for."
             ),
         )
         self.session_state = session_state
@@ -102,91 +96,41 @@ class UpdateMemoryTool(Tool):
                 error="No owner_id available",
             )
 
-        from .memory_events import semantic_update_enabled
-
-        if semantic_update_enabled():
-            import asyncio
-
-            # A worker thread: the decision costs up to three bounded model
-            # rounds, and the acceptance that may guard it is delivered by the
-            # event loop, which cannot deliver anything while a coroutine
-            # blocks it.
-            return await asyncio.to_thread(self._submit_event, owner_id, blob_id, new_content)
-
-        return self._direct_write(owner_id, blob_id, new_content, entry_type)
-
-    # ─── The legacy direct write ──────────────────────────────────────
-
-    def _direct_write(
-        self,
-        owner_id: str,
-        blob_id: str,
-        new_content: str,
-        entry_type: Optional[str],
-    ) -> ToolResult:
-        """Replace the named blob's content, exactly as this tool always has."""
-        try:
-            from zylch.memory import EmbeddingEngine, MemoryConfig
-            from zylch.memory.blob_storage import BlobStorage
-            from zylch.storage.database import get_session
-
-            config = MemoryConfig()
-            engine = EmbeddingEngine(config)
-            blob_store = BlobStorage(get_session, engine)
-
-            # Verify the id exists for this owner — no silent no-ops.
-            existing = blob_store.get_blob(blob_id=blob_id, owner_id=owner_id)
-            if not existing:
-                return ToolResult(
-                    status=ToolStatus.ERROR,
-                    data=None,
-                    error=(
-                        f"No blob with id={blob_id!r} for this owner. Did you"
-                        " call search_local_memory first to obtain a real id?"
-                        " If the entity doesn't exist yet, use create_memory."
-                    ),
-                )
-            old_content = existing.get("content", "")
-
-            # Routing guard (structural — model-declared entry_type + the
-            # target blob's own namespace; never content parsing). A
+        if (entry_type or "").strip().lower() == "behavioral_rule":
+            # Structural, and before anything else: the model-declared kind
+            # plus the target row's own family, never content parsing. A
             # behavioral rule must NEVER overwrite a contact blob — that is
-            # exactly the general-feedback-into-Pautasso mis-routing. Refining
-            # an existing rule (template:/prefs:) stays allowed.
-            existing_ns = existing.get("namespace") or ""
-            if (entry_type or "").strip().lower() == "behavioral_rule" and existing_ns.startswith(
-                "user:"
-            ):
-                return ToolResult(
-                    status=ToolStatus.ERROR,
-                    data=None,
-                    error=(
-                        "A behavioral rule must not be written onto a contact "
-                        f"blob (namespace {existing_ns}). Save it with "
-                        "create_memory(entry_type='behavioral_rule') — it goes "
-                        "to the always-on rules, never a contact."
-                    ),
-                )
+            # exactly the general-feedback-into-a-contact mis-routing — and a
+            # rule is refined through the rule store's own door, which keeps
+            # its shape check. A rule declared as one is not the role's to
+            # decide; an `entity_fact` naming a rule row still is, and the
+            # validator admits an account STYLE proposal there.
+            from zylch.services.prefs_store import refine_rule
 
-            blob_store.update_blob(
-                blob_id=blob_id,
-                owner_id=owner_id,
-                content=new_content,
+            outcome = refine_rule(
+                owner_id,
+                blob_id,
+                new_content,
                 event_description="Manual correction via chat",
+                writer="update_memory",
             )
+            if outcome["action"] == "refined":
+                return ToolResult(
+                    status=ToolStatus.SUCCESS,
+                    data={
+                        "blob_id": blob_id,
+                        "namespace": outcome["namespace"],
+                        "action": "updated",
+                    },
+                    message=f"Memory updated (blob_id={blob_id}).\n{new_content}",
+                )
+            return ToolResult(status=ToolStatus.ERROR, data=None, error=outcome["reason"])
 
-            return ToolResult(
-                status=ToolStatus.SUCCESS,
-                data={"blob_id": str(blob_id), "action": "updated"},
-                message=("Memory updated.\n" f"Was: {old_content}\n" f"Now: {new_content}"),
-            )
-        except Exception as e:
-            logger.error(f"[update_memory] failed: {e}")
-            return ToolResult(
-                status=ToolStatus.ERROR,
-                data=None,
-                error=f"Update failed: {e}",
-            )
+        import asyncio
+
+        # A worker thread: the decision costs up to three bounded model rounds
+        # and must not block the event loop that serves every other turn.
+        return await asyncio.to_thread(self._submit_event, owner_id, blob_id, new_content)
 
     # ─── The semantic path ────────────────────────────────────────────
 
@@ -195,20 +139,14 @@ class UpdateMemoryTool(Tool):
 
         Success means a committed receipt and a blob that reads back. Every
         other outcome is reported as itself: a review says why and writes
-        nothing — including a changed final mutation the human declined — and a
-        failure says it can be retried. The tool never reports a decision as a
-        save.
+        nothing, and a failure says it can be retried. The tool never reports
+        a decision as a save.
         """
         from zylch.assistant.turn_context import get_turn_id, get_turn_observation
         from zylch.memory.company_key import require_company_key
         from zylch.memory.mnemonic import submit
 
-        from .memory_events import (
-            NO_OBSERVATION,
-            allowed_actions,
-            update_event,
-            update_request,
-        )
+        from .memory_events import NO_OBSERVATION, update_event, update_request
 
         observation = get_turn_observation()
         if not observation:
@@ -228,11 +166,7 @@ class UpdateMemoryTool(Tool):
             observation=observation,
             source_id=f"turn:{get_turn_id()}",
         )
-        result = submit(
-            event,
-            allow_actions=allowed_actions(),
-            requested=update_request(blob_id),
-        )
+        result = submit(event, requested=update_request(blob_id))
         logger.debug(f"[update_memory] submit(event={event.event_id}) -> outcome={result.outcome}")
         return self._report(result, owner_id)
 
@@ -258,6 +192,7 @@ class UpdateMemoryTool(Tool):
                     "action": "updated",
                     "event_id": result.event_id,
                     "written": written,
+                    "departure": result.departure,
                 },
                 message=(f"Memory updated (blob_id={first}).\n" f"{stored.get('content') or ''}"),
             )
@@ -296,8 +231,8 @@ class UpdateMemoryTool(Tool):
                             "The EXACT blob id returned by search_local_memory."
                             " Not a name, not a query — the UUID string. It is"
                             " the memory you believe the user means; the engine"
-                            " confirms with the user before writing anywhere"
-                            " else."
+                            " may decide the user's words belong to a different"
+                            " row, and says so in the result."
                         ),
                     },
                     "new_content": {

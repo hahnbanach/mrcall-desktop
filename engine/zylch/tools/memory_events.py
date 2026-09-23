@@ -23,19 +23,19 @@ not: a subject the *caller* chose. That id is passed as a ``SubjectHint``, which
 pins the row first among the candidates and never makes it authoritative — and
 as a :class:`~zylch.memory.mnemonic.approval.RequestedWrite`, which is the
 baseline the final mutation is compared against. A proposal that writes
-somewhere else is a changed subject, and a changed subject needs a human.
+somewhere else is a changed subject, and the departure is recorded with the
+operation — it is not a permission the write waits for.
 
-The slice is **off unless ``MNEMONIC_WRITE_PATH`` says otherwise**. Widening it
-past a test or an explicitly selected cohort is its own decision, not a
-consequence of the approval existing.
+There is one path and no switch. A flag is where a second implementation
+hides, and with no external users there is no exposure for one to limit; what
+guards the change is the tests (brief amendment, 2026-09-23).
 """
 
 from __future__ import annotations
 
 import hashlib
 import logging
-import os
-from typing import Optional, Tuple
+from typing import Optional
 
 from zylch.memory.mnemonic.approval import RequestedWrite
 from zylch.memory.mnemonic.contracts import (
@@ -51,54 +51,10 @@ from zylch.memory.mnemonic.turn import turn_cancellation
 
 logger = logging.getLogger(__name__)
 
-SETTING = "MNEMONIC_WRITE_PATH"
-
-# The values this setting takes, narrowest first. `off` is the shipped default:
-# the legacy direct writers stay in charge. `create` is the milestone 3 slice —
-# supervised CREATE through the semantic boundary, and nothing else. `supervised`
-# is milestone 4's: the interactive create AND update adapters, with a changed
-# final mutation gated on a fresh human acceptance. Both non-default values
-# belong in a test or an explicitly selected cohort.
-OFF = "off"
-CREATE_ONLY = "create"
-SUPERVISED = "supervised"
-MODES: Tuple[str, ...] = (OFF, CREATE_ONLY, SUPERVISED)
-
 NO_OBSERVATION = (
     "the semantic memory path needs the turn it was asked in; this caller has "
     "none, so nothing was written"
 )
-
-
-def write_path() -> str:
-    """Which memory write path this engine is running. Unknown values are ``off``."""
-    value = (os.environ.get(SETTING) or "").strip().lower()
-    if value not in MODES:
-        if value:
-            logger.warning(f"[mnemonic] unknown {SETTING}={value!r}; using {OFF}")
-        return OFF
-    return value
-
-
-def semantic_create_enabled() -> bool:
-    """Does supervised ``create_memory`` go through the semantic boundary?"""
-    return write_path() in (CREATE_ONLY, SUPERVISED)
-
-
-def semantic_update_enabled() -> bool:
-    """Does supervised ``update_memory`` go through it?
-
-    Only under ``supervised``: an update is a change to existing memory, and it
-    may not reach the boundary before the acceptance that has to guard it.
-    """
-    return write_path() == SUPERVISED
-
-
-def allowed_actions() -> Tuple[str, ...]:
-    """The proposal actions the current mode is prepared to commit."""
-    if write_path() == SUPERVISED:
-        return (CREATE, UPDATE)
-    return (CREATE,)
 
 
 def create_event(
@@ -161,8 +117,7 @@ def update_event(
     The ``blob_id`` the caller named becomes a ``SubjectHint``, so the row is
     shown to the role first and counted inside the candidate bound. It does not
     become the write target by being named: if the role decides the observation
-    belongs somewhere else, that is a changed subject, and the acceptance gate —
-    not this adapter — is what settles it.
+    belongs somewhere else, that is a changed subject, recorded as a departure.
     """
     event = MemoryEvent(
         owner_id=owner_id,
@@ -201,18 +156,9 @@ def _revision(observation: str) -> str:
 
 
 __all__ = [
-    "CREATE_ONLY",
-    "MODES",
     "NO_OBSERVATION",
-    "OFF",
-    "SETTING",
-    "SUPERVISED",
-    "allowed_actions",
     "create_event",
     "create_request",
-    "semantic_create_enabled",
-    "semantic_update_enabled",
     "update_event",
     "update_request",
-    "write_path",
 ]

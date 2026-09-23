@@ -7,28 +7,17 @@ tool instead of update_memory. No fuzzy matching happens here — the
 decision "update vs. create" belongs to the LLM, not to the tool.
 See memory/feedback_no_hardcoded_rules.md for the principle.
 
-Two write paths live behind this one tool name, selected by
-``MNEMONIC_WRITE_PATH`` (see :mod:`zylch.tools.memory_events`):
+The tool submits a memory *event* and the mnemonic role decides: a CREATE is
+committed atomically, and a create the role reads as a correction to an
+existing memory is committed as an UPDATE, with that departure recorded in the
+operation journal and returned in ``data["departure"]``. Nothing asks a human at
+write time — the text a rewrite replaces is retained, so a wrong decision is
+recoverable — and nothing falls back to a direct write: a harness that writes
+around itself when it disagrees is not a boundary.
 
-- **off** (the shipped default) — the direct blob write this tool has always
-  done. One of the legacy writers the mnemonic harness is converting.
-- **create** — the tool submits an event and the mnemonic role decides; a CREATE
-  is committed atomically, and a proposal to change *existing* memory returns
-  for review. It never falls back to the direct write: a harness that writes
-  around itself when it disagrees is not a boundary.
-- **supervised** — the same, plus UPDATE. A create whose observation the role
-  reads as a correction to an existing memory can then be committed, but only
-  after the human accepts that changed final mutation for what it does; with no
-  acceptance channel it is still a review and still writes nothing.
-
-The submit runs on a worker thread. The decision costs up to three bounded model
-rounds, and the acceptance that may guard it is delivered by the event loop —
-which cannot deliver anything while a coroutine blocks it.
-
-The tool's name, arguments and successful response shape are unchanged in both
-modes. ``entry_type='behavioral_rule'`` still goes to ``prefs_store.store_rule``
-in both: account rules keep their own dedup and supersession logic, and
-converting that helper belongs to the milestone that owns it.
+``entry_type='behavioral_rule'`` still goes to ``prefs_store.store_rule``:
+account rules keep their own dedup and supersession logic, and converting that
+helper belongs to the milestone that owns it.
 """
 
 import logging
@@ -94,15 +83,43 @@ class CreateMemoryTool(Tool):
                 error="No owner_id available",
             )
 
-        # Routing guard (structural — keyed on the model-declared
-        # `entry_type`, NEVER on parsing the free-text content). A
-        # behavioral rule / feedback about how the assistant should act is
-        # NOT a fact about a contact: it always lands in the
-        # always-injected `template:` bucket, never in a `user:` contact
-        # blob. An entity fact may not be saved into a rule namespace.
-        # See "SAVING a RULE" in the system prompt.
+        # Routing, structural and free: keyed on the model-declared
+        # `entry_type` and on the FAMILY of the model-declared `namespace`,
+        # NEVER on parsing the free-text content. A behavioral rule / feedback
+        # about how the assistant should act is NOT a fact about a contact: it
+        # lands in the always-injected rule namespaces, never in a `user:`
+        # contact blob, and an entity fact may not be saved into a rule
+        # namespace. The engine decides namespaces; the model only ever names a
+        # family, and an unknown family is refused rather than stored — a
+        # namespace nothing reads is knowledge lost. See "SAVING a RULE" in
+        # the system prompt.
+        from zylch.memory.company_key import FAMILIES, RULE_FAMILIES, family_of
+
         et = (entry_type or "").strip().lower()
-        if et == "behavioral_rule":
+        family = (
+            family_of(namespace)
+            if namespace and ":" in namespace
+            else (namespace or "").strip().lower()
+        )
+        if family and family not in FAMILIES:
+            return ToolResult(
+                status=ToolStatus.ERROR,
+                data=None,
+                error=(
+                    f"unknown memory namespace family {family!r}; " f"known: {', '.join(FAMILIES)}"
+                ),
+            )
+        if et == "entity_fact" and family in RULE_FAMILIES:
+            return ToolResult(
+                status=ToolStatus.ERROR,
+                data=None,
+                error=(
+                    f"entry_type='entity_fact' cannot be saved to the '{family}' rule "
+                    "namespace. Facts about a contact use the default 'user' namespace; "
+                    "a general behavioral rule uses entry_type='behavioral_rule'."
+                ),
+            )
+        if et == "behavioral_rule" or (not et and family in RULE_FAMILIES):
             # Guarded door: the rule namespaces are injected verbatim
             # into every prompt, so they refuse entity-shaped content,
             # skip duplicates and supersede near-copies rather than
@@ -145,70 +162,11 @@ class CreateMemoryTool(Tool):
                 data=None,
                 error=outcome["reason"],
             )
-        from .memory_events import semantic_create_enabled
+        import asyncio
 
-        if semantic_create_enabled():
-            import asyncio
-
-            return await asyncio.to_thread(self._submit_event, owner_id, content, namespace)
-
-        # The engine decides the namespace; the model only names a
-        # FAMILY. A bare "user" / "facts" / "template" / "prefs" — or a
-        # full "family:anything" — is re-scoped to the one correct
-        # namespace for this owner and company; whatever followed the
-        # colon is discarded, never stored. An unknown family is
-        # refused: a namespace nothing reads is knowledge lost.
-        from zylch.memory.company_key import (
-            family_of,
-            require_company_key,
-            scoped_namespace,
-        )
-
-        family = family_of(namespace) if namespace and ":" in namespace else (namespace or "user")
-        try:
-            namespace = scoped_namespace(family, owner_id, require_company_key())
-        except ValueError as e:
-            return ToolResult(status=ToolStatus.ERROR, data=None, error=str(e))
-        if et == "entity_fact" and namespace.split(":", 1)[0] in ("template", "prefs"):
-            return ToolResult(
-                status=ToolStatus.ERROR,
-                data=None,
-                error=(
-                    f"entry_type='entity_fact' cannot be saved to the "
-                    f"'{namespace.split(':', 1)[0]}' rule namespace. Facts about a "
-                    "contact use the default 'user' namespace; a general "
-                    "behavioral rule uses entry_type='behavioral_rule'."
-                ),
-            )
-
-        try:
-            from zylch.memory import EmbeddingEngine, MemoryConfig
-            from zylch.memory.blob_storage import BlobStorage
-            from zylch.storage.database import get_session
-
-            config = MemoryConfig()
-            engine = EmbeddingEngine(config)
-            blob_store = BlobStorage(get_session, engine)
-
-            blob = blob_store.store_blob(
-                owner_id=owner_id,
-                namespace=namespace,
-                content=content,
-                event_description="Manual creation via chat",
-            )
-
-            return ToolResult(
-                status=ToolStatus.SUCCESS,
-                data={"blob_id": str(blob["id"]), "namespace": namespace, "action": "created"},
-                message=(f"Memory created (blob_id={blob['id']}).\n{content}"),
-            )
-        except Exception as e:
-            logger.error(f"[create_memory] failed: {e}")
-            return ToolResult(
-                status=ToolStatus.ERROR,
-                data=None,
-                error=f"Create failed: {e}",
-            )
+        # A worker thread: the decision costs up to three bounded model rounds
+        # and must not block the event loop that serves every other turn.
+        return await asyncio.to_thread(self._submit_event, owner_id, content, namespace)
 
     def _submit_event(
         self,
@@ -221,28 +179,20 @@ class CreateMemoryTool(Tool):
         Success means a committed receipt and a blob that reads back — not a
         proposal that looked fine. Every other outcome is reported as itself:
         a review says why and writes nothing, a failure says it can be retried.
-        The tool never reports a decision as a save — including a change the
-        human was shown and did not accept, which is a review with a reason.
+        The tool never reports a decision as a save.
 
-        Runs on a worker thread (see the module docstring), which is also what
-        lets the acceptance gate inside ``submit`` reach the event loop.
+        Runs on a worker thread (see the module docstring).
         """
         from zylch.assistant.turn_context import get_turn_id, get_turn_observation
         from zylch.memory.company_key import require_company_key
         from zylch.memory.mnemonic import submit
 
-        from .memory_events import (
-            NO_OBSERVATION,
-            allowed_actions,
-            create_event,
-            create_request,
-        )
+        from .memory_events import NO_OBSERVATION, create_event, create_request
 
         observation = get_turn_observation()
         if not observation:
-            # No turn behind this call: the task executor and the other
-            # non-chat callers are milestone 4's to convert, and until they
-            # are, the semantic path has nothing it may treat as what was said.
+            # No turn behind this call: nothing may be treated as what was
+            # said, so nothing is written.
             logger.warning("[create_memory] semantic path reached with no turn observation")
             return ToolResult(status=ToolStatus.ERROR, data=None, error=NO_OBSERVATION)
 
@@ -259,15 +209,12 @@ class CreateMemoryTool(Tool):
             observation=observation,
             source_id=f"turn:{get_turn_id()}",
         )
-        result = submit(
-            event,
-            allow_actions=allowed_actions(),
-            requested=create_request(namespace_hint),
-        )
+        result = submit(event, requested=create_request(namespace_hint))
         logger.debug(f"[create_memory] submit(event={event.event_id}) -> outcome={result.outcome}")
 
         if result.outcome == "committed":
             blob_id, _version = result.committed_ids[0]
+            action = result.proposal.action.lower() if result.proposal else "created"
             stored = self._read_back(blob_id, owner_id)
             if stored is None:
                 return ToolResult(
@@ -280,10 +227,14 @@ class CreateMemoryTool(Tool):
                 data={
                     "blob_id": blob_id,
                     "namespace": stored.get("namespace"),
-                    "action": "created",
+                    "action": "updated" if action == "update" else "created",
                     "event_id": result.event_id,
+                    "departure": result.departure,
                 },
-                message=f"Memory created (blob_id={blob_id}).\n{stored.get('content') or ''}",
+                message=(
+                    f"Memory {'updated' if action == 'update' else 'created'} "
+                    f"(blob_id={blob_id}).\n{stored.get('content') or ''}"
+                ),
             )
         if result.outcome == "skipped":
             return ToolResult(

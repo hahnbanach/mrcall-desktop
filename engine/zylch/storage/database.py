@@ -226,6 +226,10 @@ MEMORY_TABLE_NAMES = (
     "memory_meta",
     "fact_history",
     "blob_aliases",
+    # the text a rewrite replaced or a consolidation removed (mnemonic harness
+    # M5). Same install path as the journal below: the name puts the table on
+    # the memory bind and inside `prepare_store`'s ensure pass, additive.
+    "blob_versions",
     # the semantic write path's operation journal (mnemonic harness M3).
     # Registering it here is what installs it: the name puts the table on
     # the memory bind, so every statement naming it reaches the company
@@ -339,6 +343,10 @@ def _apply_column_migrations(engine: Engine) -> None:
         # 2026-04-17: chat attachments — absolute local paths attached to a
         # draft and transported to MIME at send time.
         ("drafts", "attachment_paths", "JSON DEFAULT '[]'"),
+        # 2026-09-23 (mnemonic harness M5): the departure a committed proposal
+        # made from what the caller asked for. On the company store — this
+        # pass runs on both files and skips a table the file does not hold.
+        ("memory_operations", "departure", "JSON"),
         # 2026-04-17: CC/BCC recipients on drafts. Allows "reply-to-all" and
         # adding additional recipients from chat. The columns exist in the
         # ORM model from the start but legacy DBs created before this
