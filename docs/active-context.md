@@ -79,7 +79,9 @@ flag, so it is buildable and unsendable from Python. Reaching it is a neonize
 change, not ours.
 `_whatsapp_refresh_loop` in `serve_ws` reattaches and re-syncs every
 `WHATSAPP_REFRESH_MINUTES` (default 15), skipping silently with no session on
-disk. Written, **not deployed**: `desktop.mrcall.ai` runs a separate checkout
+disk, and is its only caller — the app's Refresh button still calls
+`whatsapp.list_threads`, and `whatsapp.sync` has no preload binding, so the
+renderer cannot reach it yet. Written, **not deployed**: `desktop.mrcall.ai` runs a separate checkout
 under `mrcalld`, where only the neonize upgrade was applied by hand.
 
 ## Unresolved
