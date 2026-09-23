@@ -18,7 +18,10 @@ dependencies = [
     "fastembed>=0.4.0",
     "httpx>=0.28.1",
     "anthropic>=0.39.0",
-    "openai>=1.0.0",
+    # GPT-Live SIP webhook verification and sideband connections are exposed
+    # by the current official SDK.  The original >=1 declaration did not
+    # guarantee either surface.
+    "openai>=3.19.0",
     "cryptography>=41.0.0",
     # Cross-machine transport: WebSocket server inside the sidecar
     # (`zylch serve --ws`) + server-side Firebase ID-token verification.

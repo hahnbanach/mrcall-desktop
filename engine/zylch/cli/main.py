@@ -611,6 +611,26 @@ def serve(ctx, ws_addr, unix_path):
         logger.info("[CLI] serve interrupted, shutting down")
 
 
+@cli.command(name="voice-smoke")
+@click.option("--host", default="127.0.0.1", show_default=True)
+@click.option("--port", default=8787, show_default=True, type=click.IntRange(1, 65535))
+@click.pass_context
+def voice_smoke(ctx, host, port):
+    """Run the bounded GPT-Live SIP test webhook (never production routing)."""
+    from zylch.services.voice.live_sip_smoke import SmokeConfigurationError, run_smoke_server
+
+    try:
+        profile = ctx.obj.get("profile") if ctx.obj else None
+        if not profile:
+            raise click.UsageError("pass -p <isolated-test-profile>; auto-selection is refused")
+        # The profile must carry the explicit test-only gate.  This command
+        # starts no normal daemon and changes no provider routing.
+        selected_profile = _setup_profile(profile)
+        run_smoke_server(host, port, selected_profile)
+    except SmokeConfigurationError as exc:
+        raise click.UsageError(str(exc)) from exc
+
+
 @cli.command()
 def telegram():
     """Start Telegram bot interface."""
