@@ -431,6 +431,8 @@ async def handle_memory(args: List[str], config: ToolConfig, owner_id: str) -> s
 • `/memory store <content>` - Store new memory (with auto-reconsolidation)
 • `/memory store --force <content>` - Force create new blob (skip merge)
 • `/memory delete <blob_id>` - Delete a specific memory blob
+• `/memory versions <blob_id>` - List the retained versions of a memory
+• `/memory restore <blob_id> <version_id>` - Bring a memory back to a retained version (the current text is retained first)
 • `/memory stats` - Show memory statistics
 • `/memory list [limit]` - List recent memories
 • `/memory reset` - Delete ALL memories AND reset processing timestamps
@@ -605,6 +607,56 @@ Memory will be searchable via hybrid search."""
             except Exception as e:
                 logger.error(f"Failed to delete blob {blob_id}: {e}")
                 return f"❌ Failed to delete: {str(e)}"
+
+        elif cmd == "versions":
+            # The retained versions of one memory, oldest first — what a
+            # restore needs an id from. A read: no gate, no model.
+            if len(args) < 2:
+                return "❌ Missing blob ID\n\nUsage: `/memory versions <blob_id>`"
+
+            blob_id = args[1]
+            if blob_storage.get_blob(blob_id, owner_id) is None:
+                return f"❌ Blob not found: `{blob_id}`"
+
+            from zylch.memory.blob_versions import list_versions
+
+            with get_session() as session:
+                rows = [
+                    (v.id, v.reason, v.superseded_at, v.content)
+                    for v in list_versions(session, blob_id)
+                ]
+            if not rows:
+                return f"**No retained versions** for `{blob_id}` — it has never been rewritten."
+
+            output = f"**🕘 Retained versions of `{blob_id}`** ({len(rows)}, oldest first)\n\n"
+            for version_id, reason, superseded_at, content in rows:
+                output += f"**{version_id}** _{reason}, superseded {superseded_at}_\n{content}\n\n"
+            output += "Bring one back with `/memory restore <blob_id> <version_id>`."
+            return output
+
+        elif cmd == "restore":
+            # Mechanical: the version's text comes back exactly, no model is
+            # asked, and the text it replaces is retained first.
+            if len(args) < 3:
+                return "❌ Missing ids\n\nUsage: `/memory restore <blob_id> <version_id>`"
+
+            blob_id, version_id = args[1], args[2]
+            try:
+                result = blob_storage.restore_version(blob_id, owner_id, version_id)
+            except Exception as e:
+                logger.error(f"Failed to restore blob {blob_id}: {e}")
+                return f"❌ Failed to restore: {str(e)}"
+            if not result.get("ok"):
+                return (
+                    f"❌ Not restored: {result.get('reason', 'unknown')} "
+                    f"(`{blob_id}` / `{version_id}`)\n\n"
+                    "Use `/memory versions <blob_id>` to see the retained versions."
+                )
+            return f"""✅ **Memory restored** (ID: `{blob_id}`, version `{version_id}`)
+
+**Content:** {result["blob"]["content"]}
+
+The text this replaced is retained too."""
 
         elif cmd == "stats":
             # Memory statistics

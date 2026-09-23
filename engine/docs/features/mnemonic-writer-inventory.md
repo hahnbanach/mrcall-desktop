@@ -126,16 +126,18 @@ edges are nevertheless part of the freeze:
   `chat.approve`; the method names and payload keys are frozen by AST.
 - the scheduled/headless `cmd_catchup` path calls `sync.run` followed by
   `update.run`, so the paid memory/task pipeline remains an explicit effect.
-- the scheduled template broadly allows `cs rpc`; the cron deny set includes
-  raw `rpc chat`, but does not enumerate all memory, update, reconsolidation,
-  join/reset and preparation-resume RPC effects identified by the plan.
+- the scheduled template broadly allows `cs rpc`; the cron template denies
+  raw `rpc chat` literally, and the update, reconsolidation, join, reset,
+  restore and preparation-resume RPCs through its rendered raw-RPC list.
 
 The template audit counts every current spelling for `cs memory`, `catchup
 --check`, `ask`, `draft-reply`, broad `rpc`, and the cron denials for
 `draft-send`, `chat` and `rpc chat`. It also verifies that the engine really
-registers `update.run`, `memory.reconsolidate_now`, `memory.join` and
-`preparation.resume`, while recording that none has an explicit raw-RPC cron
-denial today. The normalized chat-effect inventory covers memory store/force,
+registers `update.run`, `memory.reconsolidate_now`, `memory.join`,
+`memory.restore_version` and `preparation.resume`, and that the cron template
+carries no literal denial line for them: they are denied through its rendered
+raw-RPC list, which the kernel's own gate 17 checks against the verbs it
+expects. The normalized chat-effect inventory covers memory store/force,
 delete/reset, agent memory run/process, jobs resume, update and hard reset;
 each entry is tied to its current slash-command route and engine handler.
 

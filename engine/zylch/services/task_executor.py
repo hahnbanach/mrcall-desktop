@@ -62,6 +62,7 @@ APPROVAL_TOOLS = {
     "create_memory",
     "delete_memory",
     "reset_memory",
+    "restore_memory",
     "run_memory_agent",
     "resume_jobs",
     "run_update",

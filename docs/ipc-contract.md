@@ -224,6 +224,7 @@ registry on 2026-08-15 (65 methods), plus `emails.needs_reply` added
 | `memory.join_preview` | `key?` | {well_formed, exists, reason, self_notion?, blob_count?, fact_count?, contributors?} — the echo before a join; creates nothing, an unknown key answers `exists: false` |
 | `memory.join` | `key?` | {ok, reason?, already?, merged?, …summary} — merge this profile's memory into the store the key names, write the key, rebind the running engine. The ONLY write path for `MEMORY_KEY` (`settings.update` refuses it) |
 | `memory.reconsolidate_now` | — | summary dict; `skipped: true, reason: "another engine is sweeping"` when another daemon holds the company's sweep lock |
+| `memory.restore_version` | `blob_id?, version_id?` | {ok, blob?, version_id?, reason?} — bring one memory blob back to a version `blob_versions` retained for it; mechanical, no model, the text it replaces is retained first. `{ok: false, reason}` for a missing id, a version of another blob, or a blob this profile cannot see |
 
 **`mrcall.*`**
 
@@ -1285,6 +1286,22 @@ another engine holds the company's sweep lock. `tasks.dedup_now` runs the F8 ded
 immediately and returns counts the renderer can phrase as "Closed N tasks
 across M cluster(s)"; it tolerates a profile with no LLM configured,
 answering `no_llm=True` instead of failing.
+
+### `memory.restore_version(blob_id?, version_id?)`
+
+Brings one memory blob back to a version the engine retained for it — every
+rewrite and every consolidation keeps the text it replaces in
+`blob_versions` — and retains the current text first, so a restore is itself
+reversible. Mechanical: the version's text comes back exactly and no model is
+asked. Both ids are optional in the declaration because the handler answers
+`{ok: false, reason}` instead of raising: a missing id, a version that
+belongs to another blob, or a blob this profile cannot see. The same
+operation is `/memory restore <blob_id> <version_id>` in chat, with
+`/memory versions <blob_id>` listing the ids; the slash verb is gated as
+`restore_memory` like every other memory mutation and a read-only turn
+refuses it, and the scheduled operator's cron template denies the RPC by
+name. Engine detail: [mnemonic commit](../engine/docs/features/mnemonic-commit.md)
+("Retention").
 
 ### `profiles.create(email, values)`
 

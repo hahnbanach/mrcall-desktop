@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+from pathlib import Path
 
 import pytest
 
@@ -248,3 +249,121 @@ def test_submit_without_a_baseline_commits_and_records_nothing(profile, monkeypa
     assert result.departure is None
     (row,) = journal_rows()
     assert row["departure"] is None
+
+
+# ─── Restore: mechanical, retained, gated on every route ─────────────────
+
+
+def versions_of(blob_id):
+    from zylch.memory.blob_versions import list_versions
+
+    with get_session() as session:
+        return [(v.id, v.reason, v.content) for v in list_versions(session, blob_id)]
+
+
+def test_a_restore_brings_back_the_named_version_and_retains_what_it_replaced(profile, embedder):
+    from zylch.memory.blob_storage import BlobStorage
+
+    storage = BlobStorage(get_session, embedder)
+    target, _ = seed(BETA, embedder)
+    storage.update_blob(target, OWNER_A, BETA_CORRECTED, event_description="correction")
+    ((first_id, _, first_text),) = versions_of(target)
+    assert first_text == BETA
+
+    out = storage.restore_version(target, OWNER_A, first_id)
+
+    assert out["ok"] is True, out
+    assert out["blob"]["content"] == BETA
+    assert blobs()[target] == BETA
+    # The restore retained the text it replaced: history only grows.
+    assert [(r, c) for _, r, c in versions_of(target)] == [
+        ("append", BETA),
+        ("append", BETA_CORRECTED),
+    ]
+
+
+def test_a_version_of_another_blob_cannot_be_restored_into_this_one(profile, embedder):
+    from zylch.memory.blob_storage import BlobStorage
+
+    storage = BlobStorage(get_session, embedder)
+    acme, _ = seed(ACME, embedder)
+    beta, _ = seed(BETA, embedder)
+    storage.update_blob(beta, OWNER_A, BETA_CORRECTED, event_description="correction")
+    ((beta_version, _, _),) = versions_of(beta)
+
+    out = storage.restore_version(acme, OWNER_A, beta_version)
+
+    assert out["ok"] is False and "no such version" in out["reason"]
+    assert blobs()[acme] == ACME
+    assert versions_of(acme) == []
+    assert storage.restore_version("no-such-blob", OWNER_A, beta_version)["ok"] is False
+
+
+def test_the_rpc_and_the_slash_verb_drive_the_same_restore(profile, embedder, monkeypatch):
+    """Both doors answer; neither raises; the listing gives a human the id."""
+    from zylch.memory.blob_storage import BlobStorage
+    from zylch.rpc import maintenance
+    from zylch.services.command_handlers import handle_memory
+
+    storage = BlobStorage(get_session, embedder)
+    target, _ = seed(BETA, embedder)
+    storage.update_blob(target, OWNER_A, BETA_CORRECTED, event_description="correction")
+    ((v1, _, _),) = versions_of(target)
+    monkeypatch.setattr(maintenance, "_owner_id", lambda: OWNER_A)
+
+    out = asyncio.run(
+        maintenance.memory_restore_version({"blob_id": target, "version_id": v1}, lambda *_: None)
+    )
+    assert out["ok"] is True, out
+    assert blobs()[target] == BETA
+
+    listing = asyncio.run(handle_memory(["versions", target], None, OWNER_A))
+    ids = [i for i, _, _ in versions_of(target)]
+    assert len(ids) == 2 and all(i in listing for i in ids), listing
+    answer = asyncio.run(handle_memory(["restore", target, ids[1]], None, OWNER_A))
+    assert "Memory restored" in answer, answer
+    assert blobs()[target] == BETA_CORRECTED
+    assert len(versions_of(target)) == 3
+
+    # A caller can render every refusal; nothing raises.
+    assert asyncio.run(maintenance.memory_restore_version({}, lambda *_: None))["ok"] is False
+    assert "Missing ids" in asyncio.run(handle_memory(["restore", target], None, OWNER_A))
+    assert "Not restored" in asyncio.run(handle_memory(["restore", target, "x"], None, OWNER_A))
+
+
+def kernel_root() -> Path:
+    root = Path(__file__).resolve().parents[2].parent.parent / "cs-kernel"
+    if not (root / "cs/templates/project/bin/cs_operator_cron.sh.j2").exists():
+        pytest.skip("cs-kernel sibling checkout is required for the cross-repository check")
+    return root
+
+
+def test_the_restore_is_gated_on_every_route_a_mutation_has():
+    """Slash verb, tool permission, read-only turn, scheduled operator."""
+    from zylch.services.approval_gate import _MUTATING_SUBCOMMANDS, mutation_gate_for_command
+    from zylch.services.request_policy import MUTATING_TOOLS, command_effect
+    from zylch.services.task_executor import APPROVAL_TOOLS
+
+    assert mutation_gate_for_command("/memory", ["restore", "b", "v"]) == "restore_memory"
+    assert _MUTATING_SUBCOMMANDS[("/memory", "restore")] == "restore_memory"
+    assert "restore_memory" in APPROVAL_TOOLS
+    assert "restore_memory" in MUTATING_TOOLS
+    # A read-only turn (`cs ask`) refuses it before routing, like store/delete/reset;
+    # the listing is a read and stays available.
+    assert command_effect("/memory", ["restore", "b", "v"]) == "memory_write"
+    assert command_effect("/memory", ["versions", "b"]) is None
+
+    # The scheduled operator cannot reach the RPC: denied by name in the cron
+    # template's raw-RPC list, at the same position the kernel's gate 17 checks.
+    kernel = kernel_root()
+    cron = (kernel / "cs/templates/project/bin/cs_operator_cron.sh.j2").read_text()
+    block = cron.split("{% for method in [", 1)[1].split("] %}", 1)[0]
+    denied = [line.strip().strip(",").strip("'") for line in block.splitlines() if line.strip()]
+    assert "memory.restore_version" in denied, denied
+    gate = (kernel / "tests/run.sh").read_text()
+    verbs_block = gate.split("VERBS = [", 1)[1].split("]", 1)[0]
+    verbs = [v.strip().strip('"') for v in verbs_block.replace("\n", " ").split(",") if v.strip()]
+    assert "rpc memory.restore_version" in verbs, verbs
+    assert verbs.index("rpc memory.restore_version") - verbs.index(
+        "rpc memory.reset"
+    ) == denied.index("memory.restore_version") - denied.index("memory.reset")

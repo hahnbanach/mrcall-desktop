@@ -74,6 +74,7 @@ def _run(coro):
         "/memory delete abc",
         "/memory --delete abc",
         "/memory reset",
+        "/memory restore abc v1",
         "/agent memory run",
         "/agent memory --run",
         "/agent memory process",
@@ -184,7 +185,7 @@ def test_rpc_to_dispatcher_refusal_creates_no_rows(engine_db, monkeypatch):
     assert _database_snapshot(engine_db) == before
 
 
-@pytest.mark.parametrize("tool_name", ["create_memory", "update_memory"])
+@pytest.mark.parametrize("tool_name", ["create_memory", "update_memory", "restore_memory"])
 def test_prior_approval_cannot_widen_a_read_only_tool_call(tool_name):
     from zylch.assistant.core import ZylchAIAgent
     from zylch.tools.base import ToolResult, ToolStatus

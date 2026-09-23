@@ -872,6 +872,12 @@
       "milestone": 1
     },
     {
+      "method": "memory.restore_version",
+      "engine_path": "zylch/rpc/maintenance.py",
+      "cron_explicit_deny_count": 0,
+      "milestone": 5
+    },
+    {
       "method": "memory.join",
       "engine_path": "zylch/rpc/memory_join.py",
       "cron_explicit_deny_count": 0,

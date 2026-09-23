@@ -45,7 +45,9 @@ session grant, the Desktop session button) grant the tool, which is the one
 permission a memory write needs. Every rewrite first retains the replaced text
 in `blob_versions` (`append`); the sweep's consolidation retains the donor's
 text and the keeper's replaced text (`consolidate`); the owner's delete and
-reset are the only paths that leave no version behind.
+reset are the only paths that leave no version behind. A retained version is
+restorable through `memory.restore_version` and `/memory restore`, mechanically
+and gated like every other memory mutation.
 
 `create_memory`, `update_memory` and the task solve — chat, RPC and the
 interactive CLI solve, which carries its solve context — go through the

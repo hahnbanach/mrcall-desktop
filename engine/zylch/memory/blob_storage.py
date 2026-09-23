@@ -33,7 +33,7 @@ from .scope import blob_contributed, blob_owned_rules, blob_visible
 from zylch.storage.models import Blob, BlobSentence
 
 from .blob_reads import BlobReads
-from .blob_versions import APPEND, CONSOLIDATE, prune_versions, retain_version
+from .blob_versions import APPEND, CONSOLIDATE, prune_versions, restore_version, retain_version
 
 logger = logging.getLogger(__name__)
 
@@ -422,6 +422,14 @@ class BlobStorage(BlobReads):
             if count > 0:
                 self._notify_mutation(session)
             return count > 0
+
+    def restore_version(self, blob_id: str, owner_id: str, version_id: str) -> Dict[str, Any]:
+        """Bring a visible blob back to one of its retained versions.
+
+        Mechanical and reversible — the text it replaces is retained first.
+        See :func:`~zylch.memory.blob_versions.restore_version`.
+        """
+        return restore_version(self, blob_id, version_id, owner_id=owner_id)
 
     def delete_all_blobs(self, owner_id: str) -> int:
         """Per-account memory reset. Returns the number of blobs removed.

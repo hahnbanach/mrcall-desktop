@@ -133,6 +133,18 @@ store a version's `owner_id` is the writer's provenance, and filtering on it
 would let one key holder's reset erase the history of another's rows.
 `list_versions` and `get_version` read versions back.
 
+A version is restorable, mechanically, by any key holder who can see the
+blob. `restore_version` rewrites the blob from the version's text through
+`_rewrite` — so the restore retains the text it replaces and is itself
+reversible — and asks no model. It is reachable as
+`memory.restore_version(blob_id, version_id)` (`rpc/maintenance.py`) and as
+`/memory restore <blob_id> <version_id>` in chat, with `/memory versions
+<blob_id>` listing the ids, and it is gated on every route a mutation has:
+`restore_memory` in `APPROVAL_TOOLS` and in the slash gate, `memory_write`
+under a read-only turn, and `memory.restore_version` in the scheduled
+operator's raw-RPC deny list. A headless operator cannot roll a shared memory
+back by any door.
+
 ## The permit
 
 `zylch/memory/commit_permit.py` holds the single-use authority for one

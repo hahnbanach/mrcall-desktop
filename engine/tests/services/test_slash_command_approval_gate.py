@@ -97,6 +97,7 @@ def test_email_send_is_gated_as_send_draft():
         ("/memory", ["--force", "a fact"], "create_memory"),
         ("/memory", ["delete", "id"], "delete_memory"),
         ("/memory", ["reset"], "reset_memory"),
+        ("/memory", ["restore", "id", "vid"], "restore_memory"),
         ("/agent", ["memory", "run"], "run_memory_agent"),
         ("/agent", ["memory", "process"], "run_memory_agent"),
         ("/jobs", ["--resume"], "resume_jobs"),
