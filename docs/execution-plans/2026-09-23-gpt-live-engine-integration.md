@@ -314,8 +314,8 @@ commits unless explicitly requested.
   this verdict does not approve live acceptance or M2.
 - M1 live demonstration: **blocked, not completed**. Provisioning progressed
   as recorded below, but no real call or measured provider cost has occurred.
-  Remaining preflight: Vonage signing-secret availability, a fully configured
-  isolated UID profile with explicit engine payment mode/headless credentials,
+  Remaining preflight: a fully configured isolated UID profile with explicit
+  engine payment mode/headless credentials,
   confirmed carrier leg/setup rates, and actual SIP entitlement/interoperability.
   A model listing and synthetic webhook delivery do not prove a live call.
   M2 remains gated on the real M1 demonstration and its integration review.
@@ -335,6 +335,19 @@ commits unless explicitly requested.
   mapping. The existing shared test and production applications were not edited.
 - Dedicated app private-key reference:
   `/home/mal/.config/mrcall/gpt-live-vonage.key` (mode 600, outside Git).
+- The operator supplied `VONAGE_SIGNATURE_SECRET` in the same private test env
+  file; presence and mode 600 were verified without printing the value. Local
+  synthetic signature/tampering checks with that configured secret pass; this
+  does not verify an actual Vonage-originated callback. No marked voice-smoke
+  profile exists under the local profile root; select a dedicated test identity
+  and its explicit engine billing/credential source before enabling the runner.
+- Carrier rate discovery: the documented [Pricing API v1](https://developer.vonage.com/en/api/pricing)
+  and [v2](https://developer.vonage.com/en/api/pricing.v2) expose outbound pricing,
+  not a verified quote for this Italian inbound number plus the NCCO SIP leg.
+  [Account-specific pricing](https://developer.vonage.com/en/dashboard/control/pricing)
+  is exported from Dashboard → Billing → Pricing. Obtain the relevant inbound
+  and SIP rows, currency and billing increments there; public headline prices
+  are not substituted for the account's rates. No carrier price is assumed zero.
 - Temporary public base:
   `https://briefing-lab-care-delicious.trycloudflare.com`. No production DNS,
   Caddy, firewall or daemon configuration was changed. User-level transient
