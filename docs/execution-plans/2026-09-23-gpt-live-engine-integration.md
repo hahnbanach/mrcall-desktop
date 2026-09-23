@@ -38,6 +38,21 @@ local tests cannot approve live acceptance or authorize M2.
 
 ## Delivery shape
 
+### M1 carrier provisioning follow-through — 2026-09-23
+
+The user explicitly released and authorized `+390289047081` for this experiment.
+Create a dedicated Vonage application rather than change the shared test app.
+Its answer webhook needs a small authenticated NCCO adapter: verify the Vonage
+HS256 callback and body hash, match only the selected number, and return the
+fixed OpenAI project SIP destination with TLS/SRTP and a carrier duration limit.
+Reserve the attempt before returning the NCCO, deduplicate carrier UUIDs, and
+bind the subsequent OpenAI session to that same hold through a one-use SIP
+correlation nonce. Missing ingress must retain the reservation and block retry.
+The event endpoint verifies and discards metadata; accounting still requires
+provider receipts, not untrusted callback text. This is M1 carrier plumbing,
+not outbound calling or M2 operator configuration. Keep routing disabled until
+the remaining live preflight passes and review this addition before a paid test.
+
 Four sequential milestones, each ending in a demonstration and an integration
 review before dependent work. The lead implements and integrates; a fresh
 reviewer checks each milestone, and a separate reviewer checks final acceptance.
@@ -278,16 +293,71 @@ commits unless explicitly requested.
   aiohttp subprocess with actual SIGTERM and mocked provider transport: exit 0,
   one hangup, final usage retained, ledger closed, no remaining tasks. No blocking
   local findings remain; this verdict does not approve live acceptance or M2.
-- M1 live demonstration: **blocked, not completed**. An isolated profile,
-  verified GPT-Live project/SIP entitlement, test Vonage routing/number,
-  reachable HTTPS endpoint, dedicated secrets and current carrier rates have
-  not been supplied/verified for this run. The earlier shell check found no
-  OpenAI key/webhook secret; it does not establish that no credentials exist
-  elsewhere on the host. Existing ambient Vonage credentials were not used.
-  Follow the guide's explicit preflight and profile configuration before a paid
-  test. No real call, production change or measured provider cost has occurred.
-  SIP is provisional until real compatibility is confirmed. M2 remains gated
-  on the real M1 demonstration and its integration review.
+- Carrier follow-through integration review: **REVISE** found the first adapter
+  could emit repeated connection NCCOs without a hold when OpenAI ingress was
+  absent, and could configure an incompatible OpenAI `To` route. Fixed with
+  transactional pre-NCCO reservation, carrier UUID deduplication, a one-use nonce
+  (only its hash is retained), atomic binding to the original hold, and compatible
+  route validation with narrow secure-parameter normalization. Missing ingress
+  blocks further attempts across restart. A second **REVISE** found binding
+  could proceed after a different session's rejection became uncertain; binding
+  now checks other unresolved rows in the same transaction. The reservation also
+  includes the 15-second carrier ringing timeout before billing rounding.
+  Local verification: **65 voice tests
+  passed**, including NCCO through real SDK-signed OpenAI ingress without double
+  reservation, nonce replay/refusal, uncertain-rejection interleaving and
+  missing-ingress recovery. Black/Ruff pass.
+  Final re-review: **APPROVED for local carrier integration only**, 2026-09-23;
+  reviewer independently ran all 65 voice tests and found no remaining blocking
+  local findings. The mechanical documentation gate is clean (existing size/date
+  advisories unchanged). The adapter is not activated on the public listener;
+  this verdict does not approve live acceptance or M2.
+- M1 live demonstration: **blocked, not completed**. Provisioning progressed
+  as recorded below, but no real call or measured provider cost has occurred.
+  Remaining preflight: Vonage signing-secret availability, a fully configured
+  isolated UID profile with explicit engine payment mode/headless credentials,
+  confirmed carrier leg/setup rates, and actual SIP entitlement/interoperability.
+  A model listing and synthetic webhook delivery do not prove a live call.
+  M2 remains gated on the real M1 demonstration and its integration review.
+
+## Isolated provisioning record — 2026-09-23
+
+- OpenAI credential reference: `/home/mal/.config/mrcall/gpt-live-test.env`
+  (mode 600, outside Git). Read-only models request returned 200 and included
+  `gpt-live-1`. [Published GPT-Live price](https://developers.openai.com/api/docs/models/gpt-live-1)
+  checked at USD0.05/minute, per-second billing; carrier rates remain to be
+  confirmed separately.
+- User explicitly authorized number `+390289047081`. Read-only checks found its
+  test service-number row unassigned and no matching production row. Created
+  Vonage app `GPT-Live M1 isolated test`, ID
+  `38a9213c-296d-464d-9f94-77b53134a924`, Voice/eu-west, signed callbacks on,
+  AI data improvement off. Linked only that number and verified the resulting
+  mapping. The existing shared test and production applications were not edited.
+- Dedicated app private-key reference:
+  `/home/mal/.config/mrcall/gpt-live-vonage.key` (mode 600, outside Git).
+- Temporary public base:
+  `https://briefing-lab-care-delicious.trycloudflare.com`. No production DNS,
+  Caddy, firewall or daemon configuration was changed. User-level transient
+  services `mrcall-gpt-live-tunnel` and `mrcall-gpt-live-preflight` have a
+  24-hour maximum runtime, started around 21:10–21:13 UTC. Cloudflared 2026.9.1
+  ARM64 was checked against the release SHA-256 before execution.
+- OpenAI webhook `whe_6ab4409d166c81908de19b21fa244a2b`, subscribed only to
+  `live.transport.incoming`, points at `/openai/live`. Its signing secret was
+  saved directly in the private env file, never printed. The provider's sample
+  delivery returned 200 through HTTPS and real SDK signature verification;
+  an unsigned request returned 400. This is a webhook test, not a call.
+- The temporary receiver is
+  `/tmp/mrcall-gpt-live-preflight-rynivv/receiver.py`, on loopback 8787. It verifies
+  and acknowledges OpenAI events but **cannot accept a call**. `/vonage/answer`
+  returns 503; `/vonage/event` discards all data with 204. It stores no callback
+  bodies, call state or usage. `/healthz` reports `calls_enabled: false`.
+  The reviewed paid-call runner has not been started and no live ledger exists.
+- Teardown: stop only these two user services; remove the dedicated OpenAI
+  webhook and unlink the authorized number from the dedicated Vonage app after
+  confirming no call is active. Do not restore production routing or delete the
+  number. Keep credentials private and retain any future paid-call ledger.
+  Restarting the temporary tunnel changes its URL; update only this test app's
+  webhook URLs and the dedicated OpenAI webhook before further testing.
 
 API basis: [OpenAI telephony](https://developers.openai.com/api/docs/guides/voice-sip)
 and [client delegation](https://developers.openai.com/api/docs/guides/live-delegation),

@@ -11,6 +11,7 @@ import httpx
 from websockets.asyncio.client import connect
 
 from .smoke_config import SmokeConfig
+from .smoke_sip import route_uri
 
 WIRE_LOGGER = logging.Logger("mrcall.voice.wire.disabled", level=logging.CRITICAL + 1)
 WIRE_LOGGER.addHandler(logging.NullHandler())
@@ -37,7 +38,35 @@ def incoming_session(event: dict, expected_to: str) -> tuple[str, bool] | None:
             if isinstance(value, str):
                 match = re.search(r"<([^<>]+)>", value)
                 destinations.append(match.group(1) if match else value.strip())
-    return session_id, destinations == [expected_to]
+    return session_id, len(destinations) == 1 and (
+        destinations[0] == expected_to
+        or (
+            route_uri(expected_to) is not None
+            and route_uri(destinations[0]) == route_uri(expected_to)
+        )
+    )
+
+
+def carrier_token_hash(event: dict) -> str | None:
+    """A one-use carrier correlation nonce; raw SIP headers are never retained."""
+    import hashlib
+
+    headers = event.get("data", {}).get("sip_headers", [])
+    values = (
+        [
+            header.get("value")
+            for header in headers
+            if isinstance(header, dict)
+            and str(header.get("name", "")).lower() == "x-mrcall-smoke-attempt"
+        ]
+        if isinstance(headers, list)
+        else []
+    )
+    if len(values) != 1 or not isinstance(values[0], str):
+        return None
+    if not re.fullmatch(r"[A-Za-z0-9_-]{43}", values[0]):
+        return None
+    return hashlib.sha256(values[0].encode()).hexdigest()
 
 
 class LiveTransport:

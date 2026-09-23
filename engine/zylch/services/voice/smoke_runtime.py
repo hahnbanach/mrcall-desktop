@@ -13,7 +13,7 @@ from dataclasses import dataclass, field
 from zylch.storage.voice_smoke import SmokeLedger
 
 from .smoke_config import SmokeConfig
-from .smoke_transport import command, incoming_session
+from .smoke_transport import carrier_token_hash, command, incoming_session
 
 logger = logging.getLogger(__name__)
 FIXED_FACT = "The isolated test case is ready for the demonstration."
@@ -68,7 +68,13 @@ class SmokeRuntime:
         session_id, route_matches = parsed
         if self.stopping:
             raise RuntimeError("smoke is stopping")
-        decision = self.ledger.admit(session_id, allowed=route_matches and self.call is None)
+        allowed = route_matches and self.call is None
+        if self.config.vonage_application_id:
+            decision = self.ledger.bind_carrier(
+                session_id, carrier_token_hash(event), allowed=allowed
+            )
+        else:
+            decision = self.ledger.admit(session_id, allowed=allowed)
         logger.debug("[voice-smoke] admission=%s", decision)
         if decision == "duplicate":
             return
@@ -112,6 +118,11 @@ class SmokeRuntime:
     async def recover(self) -> None:
         """Restart never re-accepts; attempt cleanup only, retaining every reservation."""
         for session_id in self.ledger.unresolved():
+            if session_id.startswith("vonage:"):
+                # No OpenAI session exists to hang up. Keep the carrier hold and
+                # require supervised reconciliation; never accept after restart.
+                self.ledger.finish(session_id, "uncertain")
+                continue
             confirmed = await self._control(session_id, "hangup")
             self.ledger.finish(
                 session_id,

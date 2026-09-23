@@ -47,7 +47,7 @@ The smoke reads that file directly without shell fallback or interpolation:
 | `OPENAI_PROJECT_ID` | Dedicated project ID beginning with `proj_` |
 | `OPENAI_API_KEY`, `OPENAI_WEBHOOK_SECRET` | Private test credentials |
 | `VOICE_SMOKE_TEST_NUMBER` | Isolated number in E.164 format |
-| `VOICE_SMOKE_SIP_TO_URI` | Exact expected SIP destination URI; no display name/tag |
+| `VOICE_SMOKE_SIP_TO_URI` | Expected SIP destination URI; with Vonage, `sip:<project>@sip.api.openai.com` (optional TLS/SRTP hints) |
 | `VOICE_SMOKE_PUBLIC_ENDPOINT` | Verified `https://…/openai/live` endpoint |
 | `LLM_PROVIDER` | Explicit `anthropic`, `openrouter` or `mrcall`; no provider change |
 | `VOICE_SMOKE_RESERVATION_MICROUSD` | Conservative per-call allowance, integer microdollars |
@@ -57,10 +57,15 @@ The smoke reads that file directly without shell fallback or interpolation:
 | `VOICE_SMOKE_DURATION_SECONDS` | Optional 1–180; default 180 |
 | `VOICE_SMOKE_MAX_CALLS` | Optional 1–6; default 6 |
 | `VOICE_SMOKE_RESULT_DELAY_SECONDS` | Optional 0–30; default 5 |
+| `VONAGE_APPLICATION_ID` | Optional dedicated Voice app UUID; requires both following fields |
+| `VONAGE_API_KEY` | Account identifier checked against signed Vonage callbacks |
+| `VONAGE_SIGNATURE_SECRET` | Existing account signing secret, **not** its API secret |
 
 USD1 = 1,000,000 microdollars. No price is supplied by default. The minimum
 reservation rounds up `(duration + 20 seconds)` to whole minutes, multiplies
-by combined declared rates and adds setup charges. Twenty seconds covers the
+by combined declared rates and adds setup charges. With Vonage enabled, another
+15 seconds is included before rounding, covering the carrier ringing timeout.
+Twenty seconds covers the
 bounded hangup/finalization grace; it is not a guarantee against provider
 failure. Choose a larger reservation when the actual carrier contract requires
 it, and leave allowance for carrier charges from refused calls.
@@ -68,6 +73,32 @@ it, and leave allowance for carrier charges from refused calls.
 The signed OpenAI webhook authenticates the project event. Matching `To` checks
 routing only; SIP caller metadata does not prove caller identity. Use a dedicated
 project/secret and inspect the actual test trunk metadata before live acceptance.
+
+With the three Vonage fields present, the same listener provides POST
+`/vonage/answer` and `/vonage/event`. Configure the dedicated Voice application's
+answer/event webhooks accordingly, enable signed callbacks, and link only the
+explicitly authorized test number. The answer verifies HS256, issuer, account,
+body SHA-256, and a five-minute timestamp window (30 seconds future skew). An
+application claim, when present, must also match. Only the configured destination
+number is accepted. It returns one fixed NCCO `connect` to the selected OpenAI
+project with `transport=tls;media=srtp`, a 15-second ringing timeout and the saved
+call-duration limit. Caller-supplied routing and caller metadata are not copied
+into the NCCO. Before returning it, the ledger reserves the complete allowance
+and deduplicates the carrier call UUID. A generated one-use correlation nonce
+travels in the SIP `X-Mrcall-Smoke-Attempt` header; only its hash is stored.
+The signed OpenAI incoming callback must match that pending reservation and
+the configured destination; it binds the same hold to the OpenAI session, without
+reserving twice. Only the optional `transport=tls` and `media=srtp` URI hints
+may be normalized away. Caller identity is still not established by this check.
+Retries, busy/stopping states and exhausted capacity receive an empty NCCO.
+Missing OpenAI ingress retains its hold and blocks further connections, including
+after restart, until supervised reconciliation. Refused calls may still incur
+carrier charges. Verified event callbacks are acknowledged and discarded, not
+used as billing evidence. No outbound dial API is implemented.
+
+Do not rotate the shared Vonage signing secret or change account-wide signing
+settings for this experiment. Retrieve the existing secret through the account's
+API Settings; it is distinct from the credential used by the CLI.
 
 ## Install and start
 
@@ -78,8 +109,9 @@ engine dependency is unchanged. Start the command shown above after preflight;
 it takes the selected profile lock without starting or activating other channels.
 
 The run ledger is `<test-profile>/voice-smoke.db`, a separate SQLite store.
-Each unique session is committed with a reservation **before** accept dispatch.
-The ledger permits at most six attempted accepts and USD5 reserved in total,
+Each carrier attempt is reserved **before** returning a connection NCCO; without
+the optional carrier adapter, each session is reserved before accept dispatch.
+The ledger permits at most six funded attempts and USD5 reserved in total,
 persists through restarts/midnight, and has no automatic refund/reset. All holds
 remain reserved even after final usage arrives. Changing the public configuration
 against an existing ledger is refused; secret rotation alone is permitted.
@@ -90,6 +122,8 @@ attempt. It is never accepted again. A confirmed hangup permits later admission
 but leaves usage unconfirmed without `session.closed`. A failed/uncertain hangup
 blocks new calls. Resolve such cases through the isolated provider controls and
 record the outcome before a separate supervised recovery change.
+An unresolved carrier-only attempt has no OpenAI session to hang up: restart
+marks it uncertain, retains the hold and disables its old correlation nonce.
 
 ## Exercise and collect evidence
 
@@ -109,6 +143,8 @@ and explicitly unverified carrier cost. No audio, transcript text, credentials,
 SIP headers or final session configuration is retained. Reflected first-audio
 timing is not handset playback latency. Carrier receipts, listening observations
 and actual combined cost must be added to the plan's live acceptance record.
+The companion `smoke_carrier` table contains carrier UUID, nonce hash and its
+session mapping; pending calls use a `vonage:` placeholder in `smoke_calls`.
 
 The WebSocket uses a private silent wire logger; HTTP/SDK logs are suppressed
 for the smoke process. Application logs contain decisions and closure state only.
@@ -130,3 +166,5 @@ approval was withdrawn; use the current
 API basis checked 2026-09-23: [GPT-Live SIP](https://developers.openai.com/api/docs/guides/voice-sip),
 [delegation](https://developers.openai.com/api/docs/guides/live-delegation) and
 [finalization](https://developers.openai.com/api/docs/guides/live-conversations).
+Carrier contracts: [Vonage NCCO](https://developer.vonage.com/en/voice/voice-api/ncco-reference)
+and [Voice webhooks](https://developer.vonage.com/en/voice/voice-api/webhook-reference).

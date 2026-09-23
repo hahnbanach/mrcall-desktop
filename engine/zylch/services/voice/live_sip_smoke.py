@@ -13,6 +13,7 @@ from zylch.storage.voice_smoke import SmokeLedger
 from .smoke_config import SmokeConfig
 from .smoke_runtime import SmokeRuntime
 from .smoke_transport import LiveTransport
+from .smoke_vonage import add_vonage_routes
 
 
 def create_app(runtime: SmokeRuntime, verify) -> web.Application:
@@ -40,6 +41,7 @@ def create_app(runtime: SmokeRuntime, verify) -> web.Application:
 
     app = web.Application(client_max_size=65536)
     app.router.add_post("/openai/live", webhook)
+    add_vonage_routes(app, runtime)
     app.on_shutdown.append(cleanup)
     return app
 

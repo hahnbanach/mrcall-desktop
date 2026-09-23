@@ -10,6 +10,8 @@ from pathlib import Path
 from dotenv import dotenv_values
 from pydantic import BaseModel, ConfigDict, Field, SecretStr, ValidationError, model_validator
 
+from .smoke_sip import route_uri
+
 
 class SmokeConfigurationError(ValueError):
     """A safe, non-secret configuration diagnostic."""
@@ -36,6 +38,9 @@ class SmokeConfig(BaseModel):
     carrier_per_minute_microusd: int = Field(ge=0)
     carrier_setup_microusd: int = Field(ge=0)
     result_delay_seconds: int = Field(default=5, ge=0, le=30)
+    vonage_application_id: str | None = None
+    vonage_api_key: SecretStr | None = None
+    vonage_signature_secret: SecretStr | None = None
 
     @model_validator(mode="after")
     def boundaries(self) -> "SmokeConfig":
@@ -57,9 +62,23 @@ class SmokeConfig(BaseModel):
             raise ValueError("missing credentials")
         if not self.readiness_reference.strip():
             raise ValueError("supervised test preflight reference required")
+        carrier = (self.vonage_application_id, self.vonage_api_key, self.vonage_signature_secret)
+        if any(value is not None for value in carrier):
+            if not all(carrier):
+                raise ValueError("Vonage callback configuration must be complete")
+            if not re.fullmatch(
+                r"[0-9a-fA-F]{8}(?:-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12}",
+                self.vonage_application_id,
+            ):
+                raise ValueError("invalid Vonage application ID")
+            if not all(value.get_secret_value() for value in carrier[1:]):
+                raise ValueError("missing Vonage callback credentials")
+            if route_uri(self.sip_to_uri) != f"sip:{self.project_id}@sip.api.openai.com":
+                raise ValueError("Vonage destination and OpenAI SIP route must agree")
         # Reserve rounded-up minutes including bounded control/finalization grace.
         # M1 makes no engine reasoning request; the fixed result costs no tokens.
-        minutes = (self.duration_seconds + 20 + 59) // 60
+        carrier_ring_seconds = 15 if self.vonage_application_id else 0
+        minutes = (self.duration_seconds + carrier_ring_seconds + 20 + 59) // 60
         minimum = self.carrier_setup_microusd + minutes * (
             self.voice_per_minute_microusd + self.carrier_per_minute_microusd
         )
@@ -70,7 +89,10 @@ class SmokeConfig(BaseModel):
     @property
     def policy_id(self) -> str:
         """Pin the run to its public configuration, allowing secret rotation only."""
-        public = self.model_dump(mode="json", exclude={"api_key", "webhook_secret"})
+        public = self.model_dump(
+            mode="json",
+            exclude={"api_key", "webhook_secret", "vonage_api_key", "vonage_signature_secret"},
+        )
         return hashlib.sha256(json.dumps(public, sort_keys=True).encode()).hexdigest()
 
 
@@ -101,6 +123,9 @@ def load_smoke_config(profile: Path) -> SmokeConfig:
         "duration_seconds": "VOICE_SMOKE_DURATION_SECONDS",
         "max_calls": "VOICE_SMOKE_MAX_CALLS",
         "result_delay_seconds": "VOICE_SMOKE_RESULT_DELAY_SECONDS",
+        "vonage_application_id": "VONAGE_APPLICATION_ID",
+        "vonage_api_key": "VONAGE_API_KEY",
+        "vonage_signature_secret": "VONAGE_SIGNATURE_SECRET",
     }
     data = {field: values.get(key) for field, key in fields.items()}
     data.update({field: values[key] for field, key in optional.items() if key in values})

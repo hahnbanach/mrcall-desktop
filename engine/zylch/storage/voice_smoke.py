@@ -1,6 +1,6 @@
 """Small durable M1 test ledger, separate from customer/profile business data.
 
-No reset/refund API: at most six attempted accepts and USD5 reserved for this
+No reset/refund API: at most six funded attempts and USD5 reserved for this
 supervised experiment, across restarts and UTC midnight. Uncertain calls block
 further admission. Use one profile lock for the process and an immediate SQLite
 transaction for admission. Store no secrets, caller numbers, audio or transcripts.
@@ -33,6 +33,13 @@ class SmokeCall(Base):
     evidence = Column(Text, nullable=False, default="{}")
 
 
+class SmokeCarrier(Base):
+    __tablename__ = "smoke_carrier"
+    carrier_id = Column(String, primary_key=True)
+    token_hash = Column(String, nullable=True, unique=True)
+    session_id = Column(String, nullable=False)
+
+
 class SmokeLedger:
     """Calls are keyed by session, not delivery ID, so redelivery never accepts twice."""
 
@@ -61,18 +68,7 @@ class SmokeLedger:
                 select(SmokeCall.session_id).where(SmokeCall.session_id == session_id)
             ).first():
                 return "duplicate"
-            held, count = db.execute(
-                select(func.coalesce(func.sum(SmokeCall.reserved_microusd), 0), func.count())
-                .select_from(SmokeCall)
-                .where(SmokeCall.reserved_microusd > 0)
-            ).one()
-            unresolved = db.execute(
-                select(SmokeCall.session_id).where(
-                    SmokeCall.state.in_(["accepting", "active", "uncertain"])
-                )
-            ).first()
-            accept = allowed and not unresolved and count < self.max_calls
-            accept = accept and held + self.reservation <= 5_000_000
+            accept = allowed and self._available(db)
             db.execute(
                 SmokeCall.__table__.insert().values(
                     session_id=session_id,
@@ -83,6 +79,102 @@ class SmokeLedger:
                 )
             )
             return "accept" if accept else "reject"
+
+    def _available(self, db) -> bool:
+        held, count = db.execute(
+            select(func.coalesce(func.sum(SmokeCall.reserved_microusd), 0), func.count())
+            .select_from(SmokeCall)
+            .where(SmokeCall.reserved_microusd > 0)
+        ).one()
+        unresolved = db.execute(
+            select(SmokeCall.session_id).where(
+                SmokeCall.state.in_(["carrier_waiting", "accepting", "active", "uncertain"])
+            )
+        ).first()
+        return not unresolved and count < self.max_calls and held + self.reservation <= 5_000_000
+
+    def reserve_carrier(self, carrier_id: str, token_hash: str, *, allowed: bool) -> bool:
+        """Commit before emitting any NCCO; retries never issue another connect."""
+        with self.engine.begin() as db:
+            db.exec_driver_sql("BEGIN IMMEDIATE")
+            if db.execute(
+                select(SmokeCarrier.carrier_id).where(SmokeCarrier.carrier_id == carrier_id)
+            ).first():
+                return False
+            accept = allowed and self._available(db)
+            placeholder = "vonage:" + carrier_id
+            db.execute(
+                SmokeCall.__table__.insert().values(
+                    session_id=placeholder,
+                    state="carrier_waiting" if accept else "rejected",
+                    reserved_microusd=self.reservation if accept else 0,
+                    started_at=int(time.time()),
+                    evidence="{}",
+                )
+            )
+            db.execute(
+                SmokeCarrier.__table__.insert().values(
+                    carrier_id=carrier_id,
+                    token_hash=token_hash if accept else None,
+                    session_id=placeholder,
+                )
+            )
+            return accept
+
+    def bind_carrier(self, session_id: str, token_hash: str | None, *, allowed: bool) -> str:
+        """Consume one pending correlation nonce; reuse its hold, never reserve twice."""
+        with self.engine.begin() as db:
+            db.exec_driver_sql("BEGIN IMMEDIATE")
+            if db.execute(
+                select(SmokeCall.session_id).where(SmokeCall.session_id == session_id)
+            ).first():
+                return "duplicate"
+            pending = (
+                db.execute(
+                    select(SmokeCarrier.session_id)
+                    .join(SmokeCall, SmokeCall.session_id == SmokeCarrier.session_id)
+                    .where(
+                        SmokeCarrier.token_hash == token_hash,
+                        SmokeCall.state == "carrier_waiting",
+                    )
+                ).scalar_one_or_none()
+                if token_hash and allowed
+                else None
+            )
+            if (
+                pending
+                and db.execute(
+                    select(SmokeCall.session_id).where(
+                        SmokeCall.session_id != pending,
+                        SmokeCall.state.in_(
+                            ["carrier_waiting", "accepting", "active", "uncertain"]
+                        ),
+                    )
+                ).first()
+            ):
+                pending = None
+            if pending:
+                db.execute(
+                    SmokeCall.__table__.update()
+                    .where(SmokeCall.session_id == pending)
+                    .values(session_id=session_id, state="accepting")
+                )
+                db.execute(
+                    SmokeCarrier.__table__.update()
+                    .where(SmokeCarrier.session_id == pending)
+                    .values(session_id=session_id)
+                )
+                return "accept"
+            db.execute(
+                SmokeCall.__table__.insert().values(
+                    session_id=session_id,
+                    state="rejecting",
+                    reserved_microusd=0,
+                    started_at=int(time.time()),
+                    evidence="{}",
+                )
+            )
+            return "reject"
 
     def finish(self, session_id: str, state: str, evidence: dict | None = None) -> None:
         if state not in {"active", "closed", "stopped", "uncertain", "rejected"}:
@@ -102,7 +194,7 @@ class SmokeLedger:
             return list(
                 db.execute(
                     select(SmokeCall.session_id).where(
-                        SmokeCall.state.in_(["accepting", "active", "uncertain"])
+                        SmokeCall.state.in_(["carrier_waiting", "accepting", "active", "uncertain"])
                     )
                 ).scalars()
             )
