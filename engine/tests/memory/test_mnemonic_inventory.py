@@ -177,7 +177,10 @@ def test_no_literal_sql_statement_rewrites_a_blobs_content_column():
     text in ``blob_versions`` — so the expected count is zero, in every
     function, including the ones whose table-level edge is already frozen. A
     statement assembled at run time cannot be read here; those are the frozen
-    ``known_dynamic_sql_sinks`` rows, each of which names its columns.
+    ``known_dynamic_sql_sinks`` rows, which name their function and tables and
+    are read statement by statement at review. The parser expects the bare
+    spelling every raw statement in the estate uses — ``UPDATE blobs SET`` —
+    not a quoted, schema-qualified or aliased table.
     """
     manifest = _manifest()
     offenders: list[str] = []
