@@ -314,9 +314,11 @@ commits unless explicitly requested.
   this verdict does not approve live acceptance or M2.
 - M1 live demonstration: **blocked, not completed**. Provisioning progressed
   as recorded below, but no real call or measured provider cost has occurred.
-  Remaining preflight: a fully configured isolated UID profile with explicit
-  engine payment mode/headless credentials,
-  confirmed carrier leg/setup rates, and actual SIP entitlement/interoperability.
+  The operator selected their own Firebase identity and MrCall engine billing;
+  an isolated disabled configuration and a working headless credential source
+  are recorded below. Remaining preflight: confirmed carrier leg/setup rates,
+  completed isolated configuration/path-bound launch, and actual SIP
+  entitlement/interoperability.
   A model listing and synthetic webhook delivery do not prove a live call.
   M2 remains gated on the real M1 demonstration and its integration review.
 
@@ -338,9 +340,24 @@ commits unless explicitly requested.
 - The operator supplied `VONAGE_SIGNATURE_SECRET` in the same private test env
   file; presence and mode 600 were verified without printing the value. Local
   synthetic signature/tampering checks with that configured secret pass; this
-  does not verify an actual Vonage-originated callback. No marked voice-smoke
-  profile exists under the local profile root; select a dedicated test identity
-  and its explicit engine billing/credential source before enabling the runner.
+  does not verify an actual Vonage-originated callback.
+- The operator subsequently selected their personal Firebase identity and
+  explicitly chose `mrcall`. Email/UID and enabled status were verified against
+  Firebase; both matching business records returned `FREE`. No business binding,
+  account billing settings or existing profile was modified. A fresh headless
+  sign-in using the documented operator service-account/Web-API-key references
+  succeeded; cryptographic ID-token verification matched the chosen UID, and
+  read-only MrCall bounded capabilities returned 200 with the expected protocol.
+  No ID or refresh token was persisted, and no inference/debit was requested.
+- Private operational note: `/home/mal/.config/mrcall/gpt-live-m1/PREFLIGHT.md`.
+  The UID-keyed configuration skeleton is under that directory's `profiles/`,
+  outside the normal profile root, with no customer DB/mail/memory or copied
+  tokens. Engine billing is explicitly MrCall, engine daily budget zero,
+  readiness remains zero; initial test limits are reduced to two 120-second
+  calls. Complete rates, reservations and an explicitly path-bound launch with
+  exclusive test-profile locking before activation. Do not run the normal CLI
+  against the selected UID and inadvertently load the existing populated profile.
+  The MrCall `FREE` plan is not a waiver of separate OpenAI/carrier charges.
 - Carrier rate discovery: the documented [Pricing API v1](https://developer.vonage.com/en/api/pricing)
   and [v2](https://developer.vonage.com/en/api/pricing.v2) expose outbound pricing,
   not a verified quote for this Italian inbound number plus the NCCO SIP leg.
