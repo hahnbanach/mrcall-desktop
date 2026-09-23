@@ -28,7 +28,13 @@ dependencies = [
     "apscheduler>=3.10.0",
     "pydantic-settings>=2.0.0",
     "beautifulsoup4>=4.12.0",
-    "neonize>=0.3.15",
+    # Unconstrained ON PURPOSE, and the build installs it with --upgrade.
+    # whatsmeow's protocol version is compiled into neonize; when it falls
+    # behind, WhatsApp answers <failure reason="405"/> and closes the socket,
+    # and the channel dies with no alarm anywhere — that is what killed the
+    # hosted engine from 2026-09-11 to 2026-09-23 on 0.3.18. Every release
+    # must ship the newest neonize, so never add a ceiling here.
+    "neonize",
     "python-telegram-bot>=22.0",
     "rich>=13.0.0",
     "segno>=1.5.0",

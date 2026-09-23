@@ -333,6 +333,71 @@ async def _auto_update_loop() -> None:
         await asyncio.sleep(_auto_update_interval_seconds())
 
 
+def _whatsapp_refresh_interval_seconds() -> int:
+    """How often the headless engine re-attaches and re-pulls WhatsApp."""
+    raw = os.environ.get("WHATSAPP_REFRESH_MINUTES", "15").strip()
+    try:
+        minutes = int(raw)
+    except ValueError:
+        minutes = 15
+    return max(60, minutes * 60)
+
+
+async def _whatsapp_refresh_loop() -> None:
+    """Keep WhatsApp attached and its askable data fresh, with no GUI.
+
+    Two jobs the desktop app does for a local engine and nobody did here:
+    reconnect after a restart, and re-pull what a linked device is allowed
+    to pull. WhatsApp answers an outdated or absent connection with silence,
+    and a dead socket looks exactly like a quiet chat, so this loop is what
+    stops the channel dying unnoticed — between 2026-09-11 and 2026-09-23 it
+    did exactly that on the hosted engine.
+
+    It never pulls message history: WhatsApp Web pushes that from the phone
+    on its own schedule and neonize exposes no request for it. Contacts,
+    groups and LID contacts are what "refresh everything" can mean here.
+
+    Skips silently when no session is on disk, so an unpaired profile pays
+    nothing and never sees a QR it did not ask for.
+    """
+    from zylch.rpc.whatsapp_actions import (
+        _wa_db_path,
+        whatsapp_connect,
+        whatsapp_status,
+        whatsapp_sync,
+    )
+
+    interval = _whatsapp_refresh_interval_seconds()
+    while True:
+        try:
+            if not os.path.exists(_wa_db_path()):
+                await asyncio.sleep(interval)
+                continue
+
+            status = await whatsapp_status({}, notify=lambda *a, **k: None)
+            if not (isinstance(status, dict) and status.get("connected")):
+                logger.info("[ws] whatsapp refresh: not connected, reattaching")
+                res = await whatsapp_connect({}, notify=lambda *a, **k: None)
+                if not (isinstance(res, dict) and res.get("ok")):
+                    logger.warning(f"[ws] whatsapp refresh: connect returned {res}")
+                    await asyncio.sleep(interval)
+                    continue
+
+            out = await whatsapp_sync({}, notify=lambda *a, **k: None)
+            if isinstance(out, dict) and out.get("ok"):
+                logger.info(
+                    f"[ws] whatsapp refresh: contacts={out.get('contacts')} "
+                    f"groups={out.get('groups')} lid={out.get('lid')}"
+                )
+            else:
+                logger.warning(f"[ws] whatsapp refresh: sync returned {out}")
+        except asyncio.CancelledError:
+            raise
+        except Exception as e:
+            logger.error(f"[ws] whatsapp refresh raised {type(e).__name__}: {e}")
+        await asyncio.sleep(interval)
+
+
 async def serve_ws(
     host: Optional[str] = None,
     port: Optional[int] = None,
@@ -403,6 +468,14 @@ async def serve_ws(
             f"(every {_auto_update_interval_seconds() // 60} min, "
             f"enabled={_auto_update_enabled()})"
         )
+        # Keep WhatsApp attached and its askable data fresh (reconnect +
+        # contacts/groups/LID). The desktop app does this for a local engine;
+        # nothing did it here, which is how the channel died unnoticed.
+        wa_task = asyncio.create_task(_whatsapp_refresh_loop())
+        logger.info(
+            f"[ws] whatsapp refresh started "
+            f"(every {_whatsapp_refresh_interval_seconds() // 60} min)"
+        )
         # Reap zombie children leaked by the whatsmeow Go c-shared lib.
         reaper_task = asyncio.create_task(reap_orphans_loop())
         logger.info("[ws] zombie reaper started (reaps leaked c-shared children)")
@@ -410,5 +483,6 @@ async def serve_ws(
             await server.serve_forever()
         finally:
             auto_task.cancel()
+            wa_task.cancel()
             reaper_task.cancel()
             await asyncio.gather(auto_task, reaper_task, return_exceptions=True)

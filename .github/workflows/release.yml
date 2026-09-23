@@ -44,6 +44,8 @@ jobs:
       app_matrix: ${{ steps.compute.outputs.app_matrix }}
       include_intel: ${{ steps.compute.outputs.include_intel }}
     steps:
+      - uses: actions/checkout@v4
+
       - id: compute
         shell: bash
         env:
@@ -156,6 +158,20 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -e .
+          # WhatsApp rejects an outdated client with <failure reason="405"/>
+          # and closes the socket — the channel dies with no alarm. neonize
+          # carries whatsmeow's protocol version, so take the newest every
+          # build and refuse to ship if it is not.
+          pip install --upgrade neonize
+          python - <<'EOF'
+          import json, urllib.request
+          from importlib.metadata import version
+          have = version("neonize")
+          latest = json.load(urllib.request.urlopen("https://pypi.org/pypi/neonize/json"))["info"]["version"]
+          print(f"neonize installed={have} latest={latest}")
+          if have != latest:
+              raise SystemExit(f"::error::neonize {have} installed but {latest} is out; refusing to ship an outdated WhatsApp client")
+          EOF
           # PyInstaller is pinned because 6.20.0 segfaults (0xC0000005)
           # inside the isolated subprocess while enumerating neonize's
           # submodules on Windows — broke Win-x64 builds from v0.1.31

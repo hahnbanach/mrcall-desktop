@@ -771,6 +771,60 @@ async def whatsapp_send_message(params: Dict[str, Any], notify: NotifyFn) -> Any
     }
 
 
+async def whatsapp_sync(params: Dict[str, Any], notify: NotifyFn) -> Any:
+    """whatsapp.sync() -> {ok, contacts?, groups?, lid?, error?}.
+
+    Re-pull everything WhatsApp lets a linked device pull on demand:
+    contacts, groups and LID contacts. It does NOT fetch message history —
+    neonize exposes no history-sync request, because WhatsApp Web pushes
+    history from the phone in `HistorySyncEv` blobs on its own schedule.
+    A caller that wants "everything" gets everything that is askable.
+
+    Runs the blocking neonize calls in a thread executor so the JSON-RPC
+    loop stays responsive, and answers a missing connection with
+    ``{ok: false, error: …}`` rather than raising.
+    """
+    with _state_lock:
+        client = _active_client
+        sync = _active_sync
+
+    if client is None or sync is None:
+        return {"ok": False, "error": "WhatsApp not connected"}
+    try:
+        usable = bool(client.is_connected()) and bool(client.is_logged_in())
+    except Exception:
+        usable = False
+    if not usable:
+        return {"ok": False, "error": "WhatsApp not connected"}
+
+    loop = asyncio.get_running_loop()
+    out: Dict[str, Any] = {"ok": True}
+
+    def _run(name: str, fn):
+        try:
+            return fn(client)
+        except Exception as e:
+            logger.warning(f"[rpc:whatsapp.sync] {name} failed: {e}")
+            return None
+
+    for name, fn in (
+        ("contacts", sync.sync_contacts),
+        ("groups", sync.sync_groups),
+        ("lid", sync.sync_lid_contacts),
+    ):
+        out[name] = await loop.run_in_executor(None, _run, name, fn)
+
+    logger.info(
+        f"[rpc:whatsapp.sync] contacts={out.get('contacts')} "
+        f"groups={out.get('groups')} lid={out.get('lid')}"
+    )
+    try:
+        notify("whatsapp.threads.changed", {})
+    except Exception:
+        pass
+    return out
+
+
 METHODS: Dict[str, Callable[[Dict[str, Any], NotifyFn], Awaitable[Any]]] = {
     "whatsapp.connect": whatsapp_connect,
     "whatsapp.disconnect": whatsapp_disconnect,
@@ -780,4 +834,5 @@ METHODS: Dict[str, Callable[[Dict[str, Any], NotifyFn], Awaitable[Any]]] = {
     "whatsapp.list_messages": whatsapp_list_messages,
     "whatsapp.search_messages": whatsapp_search_messages,
     "whatsapp.send_message": whatsapp_send_message,
+    "whatsapp.sync": whatsapp_sync,
 }
