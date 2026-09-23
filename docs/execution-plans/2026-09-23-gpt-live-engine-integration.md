@@ -1,5 +1,5 @@
 ---
-status: blocked
+status: active
 date: 2026-09-23
 ---
 
@@ -310,15 +310,19 @@ commits unless explicitly requested.
   Final re-review: **APPROVED for local carrier integration only**, 2026-09-23;
   reviewer independently ran all 65 voice tests and found no remaining blocking
   local findings. The mechanical documentation gate is clean (existing size/date
-  advisories unchanged). The adapter is not activated on the public listener;
+  advisories unchanged). The adapter was not yet active at that review;
   this verdict does not approve live acceptance or M2.
-- M1 live demonstration: **blocked, not completed**. Provisioning progressed
-  as recorded below, but no real call or measured provider cost has occurred.
+- Isolated-launch review: **APPROVED for the local launch delta**, 2026-09-23.
+  The explicit-path bootstrap refuses populated profiles and symlink locks,
+  holds the test lock through cleanup, and never activates a normal profile.
+  The reviewer independently ran all **68 voice tests**, with no blocking local
+  findings. This does not certify provider interoperability or M2.
+- M1 live demonstration: **ready for the supervised first attempt, not completed**.
+  No real call or measured provider cost had occurred at activation.
   The operator selected their own Firebase identity and MrCall engine billing;
-  an isolated disabled configuration and a working headless credential source
-  are recorded below. Remaining preflight: confirmed carrier leg/setup rates,
-  completed isolated configuration/path-bound launch, and actual SIP
-  entitlement/interoperability.
+  isolated configuration and a working headless credential source are recorded
+  below. Pricing/reservations and isolated launch are checked. SIP entitlement,
+  interoperability, audio, delegation and closure still need the actual call.
   A model listing and synthetic webhook delivery do not prove a live call.
   M2 remains gated on the real M1 demonstration and its integration review.
 
@@ -327,8 +331,7 @@ commits unless explicitly requested.
 - OpenAI credential reference: `/home/mal/.config/mrcall/gpt-live-test.env`
   (mode 600, outside Git). Read-only models request returned 200 and included
   `gpt-live-1`. [Published GPT-Live price](https://developers.openai.com/api/docs/models/gpt-live-1)
-  checked at USD0.05/minute, per-second billing; carrier rates remain to be
-  confirmed separately.
+  checked at USD0.05/minute, per-second billing; carrier rates are recorded below.
 - User explicitly authorized number `+390289047081`. Read-only checks found its
   test service-number row unassigned and no matching production row. Created
   Vonage app `GPT-Live M1 isolated test`, ID
@@ -350,21 +353,34 @@ commits unless explicitly requested.
   read-only MrCall bounded capabilities returned 200 with the expected protocol.
   No ID or refresh token was persisted, and no inference/debit was requested.
 - Private operational note: `/home/mal/.config/mrcall/gpt-live-m1/PREFLIGHT.md`.
-  The UID-keyed configuration skeleton is under that directory's `profiles/`,
+  The UID-keyed configuration is under that directory's `profiles/`,
   outside the normal profile root, with no customer DB/mail/memory or copied
   tokens. Engine billing is explicitly MrCall, engine daily budget zero,
-  readiness remains zero; initial test limits are reduced to two 120-second
-  calls. Complete rates, reservations and an explicitly path-bound launch with
-  exclusive test-profile locking before activation. Do not run the normal CLI
+  readiness was initially zero and is now one for the supervised experiment.
+  Initial limits are two 120-second calls, with exclusive test-profile locking.
+  Do not run the normal CLI
   against the selected UID and inadvertently load the existing populated profile.
   The MrCall `FREE` plan is not a waiver of separate OpenAI/carrier charges.
 - Carrier rate discovery: the documented [Pricing API v1](https://developer.vonage.com/en/api/pricing)
   and [v2](https://developer.vonage.com/en/api/pricing.v2) expose outbound pricing,
   not a verified quote for this Italian inbound number plus the NCCO SIP leg.
   [Account-specific pricing](https://developer.vonage.com/en/dashboard/control/pricing)
-  is exported from Dashboard → Billing → Pricing. Obtain the relevant inbound
-  and SIP rows, currency and billing increments there; public headline prices
-  are not substituted for the account's rates. No carrier price is assumed zero.
+  is exported from Dashboard → Billing → Pricing. The operator supplied
+  `Voice Inbound / IT / LVN / 0s/1s / EUR / 0.00450` and confirmed no discounts.
+- Rate basis: inbound EUR0.00450/minute from the operator; standard
+  [Vonage SIP listing](https://www.vonage.com/communications-apis/voice/pricing/)
+  USD0.00492/minute. [Vonage billing guidance](https://api.support.vonage.com/hc/en-us/articles/204015203-How-does-voice-pricing-work-for-inbound-and-outbound-calls)
+  confirms second-based charging and no ringing/connection charge.
+  [ECB 2026-09-23](https://www.ecb.europa.eu/stats/policy_and_exchange_rates/euro_reference_exchange_rates/html/index.en.html)
+  quotes EUR1 = USD1.1411; reservation uses a padded 1.25 conversion and rounds
+  the combined carrier allowance up to USD0.02/minute. This is not the account's
+  settlement exchange rate. Setup allowance is zero under the published rule;
+  no number was purchased.
+- Actual limits: two 120-second attempts, USD1 hold each, no refund or paid retry.
+  The calculated minimum is USD0.21 per attempt (three rounded minutes including
+  ringing/cleanup at USD0.07 combined/minute). Maximum admitted holds USD2 leave
+  USD3 within the original ceiling for carrier variance/refused-call uncertainty.
+  Final receipts remain required.
 - Temporary public base:
   `https://briefing-lab-care-delicious.trycloudflare.com`. No production DNS,
   Caddy, firewall or daemon configuration was changed. User-level transient
@@ -376,13 +392,22 @@ commits unless explicitly requested.
   saved directly in the private env file, never printed. The provider's sample
   delivery returned 200 through HTTPS and real SDK signature verification;
   an unsigned request returned 400. This is a webhook test, not a call.
-- The temporary receiver is
+- The initial temporary receiver was
   `/tmp/mrcall-gpt-live-preflight-rynivv/receiver.py`, on loopback 8787. It verifies
   and acknowledges OpenAI events but **cannot accept a call**. `/vonage/answer`
   returns 503; `/vonage/event` discards all data with 204. It stores no callback
   bodies, call state or usage. `/healthz` reports `calls_enabled: false`.
-  The reviewed paid-call runner has not been started and no live ledger exists.
-- Teardown: stop only these two user services; remove the dedicated OpenAI
+  Its service was stopped when the reviewed runner was activated.
+- Activated user service `mrcall-gpt-live-smoke` at **22:07:58 UTC**, with
+  `RuntimeMaxSec=1800`, no restart, and `TimeoutStopSec=30`, using
+  `engine/scripts/voice_smoke_isolated.py` and the explicit private UID directory.
+  The existing tunnel still forwards only loopback 8787. Automatic test-window
+  expiry is approximately **22:37:58 UTC**.
+- Public activation checks: unsigned OpenAI POST 400, unsigned Vonage answer
+  POST 401, locally signed synthetic Vonage event POST 204. The last check proves
+  verification wiring, not a real Vonage signature. Exclusive lock contention was
+  confirmed; the new smoke ledger had zero rows/holds. No outbound call was placed.
+- Teardown: stop only the smoke/preflight/tunnel test services; remove the dedicated OpenAI
   webhook and unlink the authorized number from the dedicated Vonage app after
   confirming no call is active. Do not restore production routing or delete the
   number. Keep credentials private and retain any future paid-call ledger.

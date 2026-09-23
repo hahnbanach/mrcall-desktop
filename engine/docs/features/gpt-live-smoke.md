@@ -108,6 +108,16 @@ includes OpenAI SDK 3.19.0, aiohttp and the required WebSocket client. The norma
 engine dependency is unchanged. Start the command shown above after preflight;
 it takes the selected profile lock without starting or activating other channels.
 
+If reusing an existing Firebase identity for M1, keep the test configuration
+in a separate UID-named directory rather than modifying its populated profile.
+On the Linux test host, run from the repository root:
+`PYTHONPATH=engine python engine/scripts/voice_smoke_isolated.py --profile-dir <absolute-test-directory> --port 8787`.
+This bootstrap uses the same file-only readiness validation, refuses a directory
+containing `zylch.db`, and holds that directory's `.lock` across recovery,
+serving and shutdown. It never changes HOME, selects a normal profile or invokes
+profile activation. Provider secrets must be staged privately in that directory's
+`.env`; do not copy the existing customer profile or company-memory capability.
+
 The run ledger is `<test-profile>/voice-smoke.db`, a separate SQLite store.
 Each carrier attempt is reserved **before** returning a connection NCCO; without
 the optional carrier adapter, each session is reserved before accept dispatch.
