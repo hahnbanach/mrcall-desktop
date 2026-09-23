@@ -356,6 +356,7 @@ def receipt(
         "committed_ids": [list(pair) for pair in result.committed_ids],
     }
     row.pending_effects = [{"kind": e.kind, "detail": e.detail} for e in result.pending_effects]
+    row.departure = result.departure
     if proposal is not None:
         row.proposal_digest = proposal_digest(proposal)
     if state in TERMINAL:

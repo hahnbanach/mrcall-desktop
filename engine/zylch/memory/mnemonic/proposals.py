@@ -16,7 +16,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass, field
-from typing import Optional, Tuple
+from typing import Any, Dict, Optional, Tuple
 
 from .contracts import (
     COMMITTED,
@@ -252,6 +252,10 @@ class MnemonicResult:
     committed_ids: Tuple[Tuple[str, str], ...] = ()
     pending_effects: Tuple[PendingEffect, ...] = ()
     attempts: int = 0
+    # How a committed proposal departed from what the caller asked for, or
+    # None. Diagnostics the journal row and the tool response both carry; it
+    # gates nothing (see mnemonic/approval.py).
+    departure: Optional[Dict[str, Any]] = None
 
     def __post_init__(self) -> None:
         _choice(self.outcome, OUTCOMES, "outcome")
@@ -265,7 +269,9 @@ class MnemonicResult:
             raise MnemonicContractError(f"a {self.outcome} result must carry a reason")
 
     @classmethod
-    def committed(cls, event_id, ids, *, proposal=None, pending=(), attempts=0) -> "MnemonicResult":
+    def committed(
+        cls, event_id, ids, *, proposal=None, pending=(), attempts=0, departure=None
+    ) -> "MnemonicResult":
         return cls(
             outcome=COMMITTED,
             event_id=event_id,
@@ -273,6 +279,7 @@ class MnemonicResult:
             committed_ids=tuple(ids),
             pending_effects=tuple(pending),
             attempts=attempts,
+            departure=departure,
         )
 
     @classmethod

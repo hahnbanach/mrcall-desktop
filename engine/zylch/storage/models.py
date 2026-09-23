@@ -520,7 +520,16 @@ class MemoryOperation(DictMixin, Base):
     # no durable source can be referenced. Pruned on terminal completion.
     payload = Column(JSON, nullable=True)
     # Milestone 4 binds an accepted final proposal here (digest + versions).
+    # Inert since 2026-09-23: milestone 4's acceptance bound here and was
+    # withdrawn. Left in place because a rename is not additive and every
+    # journal read maps this column; milestone 8 rebuilds the table without it.
     approval = Column(JSON, nullable=True)
+    # How a committed proposal departed from what the caller asked for —
+    # flags, the requested baseline, the proposed shape — or NULL when it did
+    # what was asked. Written by `journal.receipt` inside the commit
+    # transaction, so the rewrite and the record of its departure cannot
+    # disagree.
+    departure = Column(JSON, nullable=True)
     result = Column(JSON, nullable=True)
     pending_effects = Column(JSON, default=list)
     # Read restrictions recorded against an exact blob identity/version.

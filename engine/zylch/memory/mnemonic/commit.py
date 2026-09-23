@@ -20,12 +20,12 @@ What one commit is:
   statement has nowhere to go instead of quietly committing a second
   transaction inside an operation that calls itself atomic.
 
-Between the validated proposal and that transaction stands one more gate. A
-proposal that changed what the caller asked for — a different action, a
-different subject, a different scope, or an effect that absorbs another memory —
-is shown to a human in full and proceeds only on an acceptance that names that
-exact proposal and its versions (:mod:`zylch.memory.mnemonic.approval`). A
-faithful proposal rides the approval the caller's own tool call already got.
+A proposal that departed from what the caller asked for — a different action,
+a different subject, a different scope, or an effect that absorbs another memory
+— is committed like any other, with the departure **recorded** in the operation
+receipt and returned to the caller (:mod:`zylch.memory.mnemonic.approval`).
+Nothing asks a human at write time: what protects the memory is that the
+rewrite retained the text it replaced, and that the record says who chose what.
 
 What it is not yet: MERGE and reclassification return ``review_needed`` until
 the milestones that own them arrive. They are refused here rather than
@@ -48,7 +48,7 @@ from zylch.memory.company_key import scoped_namespace
 
 from . import journal
 from .agent import decide
-from .approval import RequestedWrite, authorize_mutation
+from .approval import RequestedWrite, departure_for
 from .authorization import MnemonicRefusal, authorize_request
 from .contracts import CREATE, MAX_DECISION_ATTEMPTS, MERGE, UPDATE, MemoryEvent
 from .wiring import (
@@ -90,11 +90,11 @@ def submit(
     rather than falling back to a legacy direct write — that would be the
     harness writing around itself.
 
-    ``requested`` is what the calling tool's own arguments asked for, and it is
-    the baseline a changed final mutation is measured against. An adapter that
-    supplies none is treated as having changed everything: the harness cannot
-    tell a faithful proposal from a rewritten one without being told what was
-    asked, and it resolves that in the direction that asks a human.
+    ``requested`` is what the calling tool's own arguments asked for, the
+    baseline a committed proposal's departure is recorded against. An adapter
+    that supplies none records no departure: with nothing to compare against
+    there is none to name, and a false flag in the journal is worse than an
+    absent one.
 
     It **returns a result; it does not raise.** Callers are tools that owe
     their own caller an answer, and an exception escaping here would say
@@ -198,22 +198,14 @@ def _decide_and_commit(
                 proposal,
             )
 
-        # The human acceptance, inside the loop rather than before it: a CAS
-        # conflict re-decides, and the proposal digest covers the versions the
-        # new round read, so the next round asks again instead of writing on an
-        # acceptance given for a target that has since moved.
-        refusal = authorize_mutation(event, proposal, requested)
-        if refusal:
-            return _settle(
-                event,
-                MnemonicResult.review_needed(
-                    event.event_id, refusal, proposal=proposal, attempts=decision.attempts
-                ),
-                proposal,
-            )
+        # Recorded per round, because a CAS conflict re-decides and the new
+        # proposal may depart differently from the request than the last one.
+        departure = departure_for(requested, proposal)
 
         try:
-            return _commit(event, proposal, lease, context, attempts=decision.attempts)
+            return _commit(
+                event, proposal, lease, context, attempts=decision.attempts, departure=departure
+            )
         except ConflictError as exc:
             logger.info(f"[mnemonic] CAS conflict event={event.event_id} round={attempt + 1}")
             result = MnemonicResult.review_needed(
@@ -317,6 +309,7 @@ def _commit(
     context: CommitContext,
     *,
     attempts: int,
+    departure=None,
 ) -> MnemonicResult:
     """Write one validated proposal, or write nothing at all."""
     namespace = scoped_namespace(proposal.family or "", event.owner_id, event.company_key)
@@ -367,7 +360,11 @@ def _commit(
                 session,
                 row,
                 result=MnemonicResult.committed(
-                    event.event_id, committed_ids, proposal=proposal, attempts=attempts
+                    event.event_id,
+                    committed_ids,
+                    proposal=proposal,
+                    attempts=attempts,
+                    departure=departure,
                 ),
                 state=journal.COMMITTED,
                 proposal=proposal,
@@ -383,7 +380,7 @@ def _commit(
     # The invalidation callback is a same-process fast path; the mutation
     # sequence written above is what every OTHER engine on this store reads.
     return MnemonicResult.committed(
-        event.event_id, committed_ids, proposal=proposal, attempts=attempts
+        event.event_id, committed_ids, proposal=proposal, attempts=attempts, departure=departure
     )
 
 

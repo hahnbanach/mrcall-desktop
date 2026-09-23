@@ -3,7 +3,7 @@
 <!-- doc-scope:start -->
 Scope: the decision half of the mnemonic harness — what a memory event is, what
 the role may propose, what the validator refuses, and who may pay for the call.
-The commit, the operation journal and the supervised write slice are
+The commit, the operation journal, retention and the tool adapters are
 [mnemonic-commit.md](mnemonic-commit.md); the writers still writing directly
 are [mnemonic-writer-inventory.md](mnemonic-writer-inventory.md).
 <!-- doc-scope:end -->
@@ -115,12 +115,11 @@ validation time and never backfilled on read.
 Three separate questions. **Request authorization** (`authorize_request`)
 refuses a read-only origin and a cross-account submission before a grant
 exists, so a refusal costs zero reservations and zero provider calls. **Paid
-admission** is the `DispatchGrant`. **Commit approval** is neither: `commit.py`
-re-checks authorization under the company write lock, refuses without a
-`CommitPermit`, and — for a proposal that changed the action, subject, scope or
-destructive effects the caller asked for — requires a fresh human acceptance
-bound to that exact proposal and its versions
-([the acceptance](mnemonic-commit.md#the-acceptance)).
+admission** is the `DispatchGrant`. **Commit authority** is neither: `commit.py`
+re-checks authorization under the company write lock and refuses without a
+`CommitPermit`. A proposal that changed the action, subject, scope or
+destructive effects the caller asked for is written, and the difference is
+recorded with the operation ([the departure](mnemonic-commit.md#the-departure)).
 
 The authority is the dispatch scope, not the usage label. `call_site` tags stay
 what they were — diagnostics for spend attribution — and a call relabelled

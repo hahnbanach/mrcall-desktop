@@ -92,15 +92,8 @@ _approval_meta: Dict[str, tuple] = {}
 _abandoned_approvals: "OrderedDict[str, str]" = OrderedDict()
 _MAX_ABANDONED_APPROVALS = 64
 
-# The approval name a changed final memory mutation is announced under. Imported
-# rather than spelled, so the two guards below and the bridge that sends the
-# card cannot drift apart.
 from zylch.memory.mnemonic.contracts import Cancellation  # noqa: E402
 from zylch.memory.mnemonic.turn import revocable_turn  # noqa: E402
-from zylch.services.mnemonic_approval import (  # noqa: E402
-    CONFIRM_MEMORY_WRITE,
-    installed_for,
-)
 
 # The asyncio Tasks that must not outlive the connection that asked for
 # them. A `chat.send` composes and writes on behalf of a client that is
@@ -137,16 +130,7 @@ def _note_abandoned_approval(tool_use_id: str, tool_name: str) -> None:
 def _should_auto_approve(conversation_id: str, tool_name: str) -> bool:
     """Return True if `tool_name` was whitelisted for `conversation_id`
     via a prior `chat.approve(mode="session")`.
-
-    Never for a final memory mutation. That card is not a permission to run a
-    tool, it is an acceptance of one specific change to one specific memory at
-    one specific version, and a grant remembered from an earlier change cannot
-    be an acceptance of this one. The harness also refuses such an answer on its
-    own — a standing grant carries no nonce — but sending the card anyway is
-    what puts the change in front of the human instead of silently declining it.
     """
-    if tool_name == CONFIRM_MEMORY_WRITE:
-        return False
     allowed = _session_auto_approvals.get(conversation_id)
     return bool(allowed and tool_name in allowed)
 
@@ -706,9 +690,6 @@ async def tasks_solve(params: Dict[str, Any], notify: NotifyFn) -> Any:
                 store,
                 owner_id,
                 SOLVE_TOOLS,
-                # The final-mutation card rides the same solve event stream the
-                # tool-call gate uses, so one `tasks.solve.cancel` aborts either.
-                notify=_notify,
             )
             _active_executor = executor
             # What this solve is working on, kept apart: the instruction the
@@ -719,11 +700,7 @@ async def tasks_solve(params: Dict[str, Any], notify: NotifyFn) -> Any:
             try:
                 final: Dict[str, Any] = {}
                 done_event: Dict[str, Any] = {}
-                with (
-                    revocable_turn(),
-                    solve_scope(solve_context),
-                    installed_for(executor.request_final_mutation),
-                ):
+                with revocable_turn(), solve_scope(solve_context):
                     async for event in executor.run():
                         if event["type"] == "done":
                             # Hold the done event back — we may decorate it
@@ -1011,10 +988,7 @@ async def chat_send(params: Dict[str, Any], notify: NotifyFn) -> Any:
     service = ChatService()
 
     # The turn scope, installed by the driver that owns the turn — the same
-    # arrangement `tasks.solve` uses. `installed_for` makes this client's
-    # approval callback the route a changed final memory mutation must be
-    # accepted through; a driver that installs none fails closed, because the
-    # harness then finds no channel and reports a review instead of writing.
+    # arrangement `tasks.solve` uses.
     #
     # The cancellation handle is built HERE rather than inside `_run`, because
     # `_run` is a Task with its own copied context: a handle installed in there
@@ -1024,7 +998,7 @@ async def chat_send(params: Dict[str, Any], notify: NotifyFn) -> Any:
     turn = Cancellation()
 
     async def _run():
-        with policy_scope(mutation_policy), revocable_turn(turn), installed_for(approval_callback):
+        with policy_scope(mutation_policy), revocable_turn(turn):
             return await service.process_message(
                 user_message=message,
                 user_id=owner_id,
@@ -1123,15 +1097,9 @@ async def chat_approve(params: Dict[str, Any], notify: NotifyFn) -> Any:
 
     if mode == "session" and meta is not None:
         conv_id, tool_name = meta
-        if tool_name == CONFIRM_MEMORY_WRITE:
-            # Accepting one memory change never grants the next one. Honoured as
-            # a plain "once" — which the harness then judges on the nonce this
-            # answer carries, exactly as it judges any other acceptance.
-            logger.info("[approval] refusing a session grant for a final memory mutation")
-        else:
-            allowed = _session_auto_approvals.setdefault(conv_id, set())
-            allowed.add(tool_name)
-            logger.debug(f"[approval] session-approval added: conv={conv_id} " f"tool={tool_name}")
+        allowed = _session_auto_approvals.setdefault(conv_id, set())
+        allowed.add(tool_name)
+        logger.debug(f"[approval] session-approval added: conv={conv_id} " f"tool={tool_name}")
 
     if not fut.done():
         # Only forward edits when actually approving — a deny carries no

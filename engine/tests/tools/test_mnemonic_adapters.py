@@ -12,16 +12,13 @@ that is in what the event separates, so that is what is tested here:
 - no argument a model writes can claim human authority, because
   ``with_model_arguments`` can set nothing but the suggestion.
 
-The mode ladder is tested too, because the default is what a running engine
-does: ``off`` is the legacy direct write, ``create`` is milestone 3's slice, and
-``supervised`` is the one that admits an update.
+There is one path and no mode: the tools refuse when no turn stands behind
+the call, and otherwise submit.
 """
 
 from __future__ import annotations
 
 import asyncio
-
-import pytest
 
 from zylch.memory.mnemonic.contracts import (
     AUTOMATIC_OBSERVATION,
@@ -196,45 +193,6 @@ def test_outside_a_turn_an_event_still_gets_a_usable_private_handle():
     assert revoke("nothing to revoke") is False
 
 
-# ─── The mode ladder ──────────────────────────────────────────────────
-
-
-@pytest.mark.parametrize(
-    "value,create,update,actions",
-    [
-        (None, False, False, (CREATE,)),
-        ("", False, False, (CREATE,)),
-        ("off", False, False, (CREATE,)),
-        ("create", True, False, (CREATE,)),
-        ("supervised", True, True, (CREATE, UPDATE)),
-        ("nonsense", False, False, (CREATE,)),
-        ("SUPERVISED", True, True, (CREATE, UPDATE)),
-    ],
-)
-def test_the_mode_decides_which_adapters_are_live(monkeypatch, value, create, update, actions):
-    if value is None:
-        monkeypatch.delenv(memory_events.SETTING, raising=False)
-    else:
-        monkeypatch.setenv(memory_events.SETTING, value)
-    assert memory_events.semantic_create_enabled() is create
-    assert memory_events.semantic_update_enabled() is update
-    assert memory_events.allowed_actions() == actions
-
-
-def test_an_update_is_not_admitted_by_the_milestone_3_slice(monkeypatch):
-    """``create`` predates the acceptance, so it may not change existing memory."""
-    monkeypatch.setenv(memory_events.SETTING, "create")
-    assert memory_events.semantic_update_enabled() is False
-    assert UPDATE not in memory_events.allowed_actions()
-
-
-def test_the_shipped_default_leaves_both_tools_on_their_legacy_writers(monkeypatch):
-    monkeypatch.delenv(memory_events.SETTING, raising=False)
-    assert memory_events.write_path() == memory_events.OFF
-    assert memory_events.semantic_create_enabled() is False
-    assert memory_events.semantic_update_enabled() is False
-
-
 # ─── The tools refuse rather than inventing a turn ─────────────────────
 
 
@@ -243,7 +201,6 @@ def test_update_memory_refuses_when_no_turn_stands_behind_the_call(monkeypatch):
     from zylch.assistant.turn_context import set_turn_observation
     from zylch.tools.update_memory_tool import UpdateMemoryTool
 
-    monkeypatch.setenv(memory_events.SETTING, "supervised")
     set_turn_observation("")
     result = asyncio.run(
         UpdateMemoryTool(owner_id="uid-a").execute(blob_id="blob-7", new_content=REWRITTEN)
@@ -255,7 +212,6 @@ def test_update_memory_refuses_when_no_turn_stands_behind_the_call(monkeypatch):
 def test_update_memory_still_refuses_its_own_missing_arguments(monkeypatch):
     from zylch.tools.update_memory_tool import UpdateMemoryTool
 
-    monkeypatch.setenv(memory_events.SETTING, "supervised")
     result = asyncio.run(UpdateMemoryTool(owner_id="uid-a").execute(blob_id="", new_content=""))
     assert result.status.value == "error"
     assert "Missing blob_id or new_content" in result.error
@@ -264,7 +220,6 @@ def test_update_memory_still_refuses_its_own_missing_arguments(monkeypatch):
 def test_update_memory_refuses_without_an_owner(monkeypatch):
     from zylch.tools.update_memory_tool import UpdateMemoryTool
 
-    monkeypatch.setenv(memory_events.SETTING, "supervised")
     result = asyncio.run(UpdateMemoryTool().execute(blob_id="blob-7", new_content=REWRITTEN))
     assert result.status.value == "error"
     assert "No owner_id" in result.error
@@ -316,18 +271,6 @@ def test_the_solve_definition_and_the_executors_gate_still_agree_on_the_name():
     # The four the read-only milestone added, still there.
     for name in ("create_memory", "delete_memory", "reset_memory", "run_memory_agent"):
         assert name in APPROVAL_TOOLS
-
-
-def test_the_final_mutation_name_is_not_one_of_the_tool_names():
-    """Accepting a change and granting a tool are different decisions.
-
-    A client's allow-list for ``update_memory`` must not also be an allow-list
-    for whatever the role decided to do.
-    """
-    from zylch.services.mnemonic_approval import CONFIRM_MEMORY_WRITE
-    from zylch.services.task_executor import APPROVAL_TOOLS
-
-    assert CONFIRM_MEMORY_WRITE not in APPROVAL_TOOLS
 
 
 def test_the_solve_caller_class_is_decided_by_which_field_held_the_words():

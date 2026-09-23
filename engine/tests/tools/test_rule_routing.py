@@ -6,16 +6,28 @@ Locks the fix for the "general feedback written into a contact blob" bug:
 - a behavioral rule can NEVER overwrite a `user:` contact blob,
 - `_get_learned_preferences` injects both `template:` and legacy `prefs:`.
 
-Runs against a real temp SQLite DB (embeddings included) — no mocks.
+The routing is structural — the model-declared `entry_type` and the family of
+the model-declared `namespace`, never the content — and it runs before the
+mnemonic role is asked anything. Rules never reach the role: they go through
+the rule store. Entity facts do reach it, so the entity cases here run the
+real semantic path with the role's answer scripted (`decided`), against a
+real temp SQLite store.
 """
 
 import asyncio
+import json
 import uuid
 from datetime import datetime, timezone
 
 import pytest
 
 OWNER = "owner-rules-test"
+
+ACME = (
+    "#IDENTIFIERS\nEntity type: COMPANY\nScope: entity\nName: Acme Srl\n"
+    "Email: info@acme.test\n#ABOUT\nPrefers email over phone."
+)
+LUIGI = "#IDENTIFIERS\nEntity type: PERSON\nScope: entity\nName: Luigi Bianchi\nPhone: 111"
 
 
 @pytest.fixture
@@ -32,6 +44,58 @@ def fresh_db(tmp_path, monkeypatch):
 
 def _run(coro):
     return asyncio.run(coro)
+
+
+@pytest.fixture
+def harness(tmp_path, monkeypatch):
+    """The semantic path with a real store: company key, stubbed embedder, a turn."""
+    from tests.memory.mnemonic_env import (
+        COMPANY_A,
+        BagOfWordsEmbedder,
+        boot,
+        clear_process_state,
+        stub_embedder,
+    )
+    from zylch.assistant.turn_context import set_turn_observation
+    from zylch.storage import database as db_mod
+
+    embedder = BagOfWordsEmbedder()
+    stub_embedder(monkeypatch, embedder)
+    boot(monkeypatch, tmp_path, OWNER, COMPANY_A)
+    set_turn_observation("Acme Srl preferisce essere contattata via email.")
+    yield embedder
+    db_mod.dispose_engine()
+    clear_process_state()
+
+
+def decided(monkeypatch, *decisions):
+    """Script the role's answers; everything else — validator, journal, commit — is real."""
+    from tests.memory.mnemonic_env import client, with_client
+
+    with_client(monkeypatch, client(*decisions))
+
+
+def create_decision(content=ACME, entity_type="COMPANY"):
+    return json.dumps(
+        {
+            "action": "CREATE",
+            "entity_type": entity_type,
+            "scope": "entity",
+            "content": content,
+            "reason": "no visible candidate describes this entity",
+        }
+    )
+
+
+def seed_entity(embedder, content):
+    """A contact written the way ingestion writes one; returns (id, version)."""
+    from zylch.memory.blob_storage import BlobStorage
+    from zylch.memory.company_key import current_company_key, entity_namespace
+    from zylch.storage.database import get_session
+
+    storage = BlobStorage(get_session, embedder)
+    blob = storage.store_blob(OWNER, entity_namespace(current_company_key()), content, "seed")
+    return blob["id"], storage.get_blob(blob["id"], OWNER)["updated_at"]
 
 
 def _blob(blob_id):
@@ -73,6 +137,7 @@ def test_behavioral_rule_overrides_wrong_user_namespace(fresh_db):
 
 
 def test_entity_fact_rejected_in_rule_namespace(fresh_db):
+    """Declared kind beats declared family, before anything is decided or paid."""
     from zylch.tools.base import ToolStatus
     from zylch.tools.create_memory_tool import CreateMemoryTool
 
@@ -82,47 +147,74 @@ def test_entity_fact_rejected_in_rule_namespace(fresh_db):
     assert "entity_fact" in (res.error or "")
 
 
-def test_entity_fact_defaults_to_user(fresh_db):
+def test_an_unknown_family_is_refused_not_stored(fresh_db):
+    from zylch.tools.base import ToolStatus
     from zylch.tools.create_memory_tool import CreateMemoryTool
 
+    res = _run(CreateMemoryTool(owner_id=OWNER).execute(content="x", namespace="attic:whatever"))
+    assert res.status == ToolStatus.ERROR
+    assert "unknown memory namespace family" in (res.error or "")
+
+
+def test_entity_fact_defaults_to_user(harness, monkeypatch):
+    from zylch.tools.base import ToolStatus
+    from zylch.tools.create_memory_tool import CreateMemoryTool
+
+    decided(monkeypatch, create_decision())
     t = CreateMemoryTool(owner_id=OWNER)
     res = _run(t.execute(content="Acme prefers email", entry_type="entity_fact"))
+    assert res.status == ToolStatus.SUCCESS, res.error
     ns, _ = _blob(res.data["blob_id"])
     from zylch.memory.company_key import current_company_key, entity_namespace
 
     assert ns == entity_namespace(current_company_key())  # company family: keyed, not owner
 
 
-def test_no_entry_type_keeps_legacy_default(fresh_db):
+def test_no_entry_type_means_an_entity_fact(harness, monkeypatch):
     # No entry_type → the default family is still `user`; since 2026-09 that
     # namespace is the company's, not the owner's.
+    from zylch.tools.base import ToolStatus
     from zylch.tools.create_memory_tool import CreateMemoryTool
 
+    decided(monkeypatch, create_decision())
     t = CreateMemoryTool(owner_id=OWNER)
     res = _run(t.execute(content="some contact note"))
+    assert res.status == ToolStatus.SUCCESS, res.error
     ns, _ = _blob(res.data["blob_id"])
     from zylch.memory.company_key import current_company_key, entity_namespace
 
     assert ns == entity_namespace(current_company_key())  # company family: keyed, not owner
+
+
+def test_a_rule_family_hint_without_an_entry_type_is_still_a_rule(fresh_db):
+    """The model names a family, never a namespace: `template:anyone` is this
+    owner's rule bucket, and the rule store — not the role — takes it."""
+    from zylch.tools.base import ToolStatus
+    from zylch.tools.create_memory_tool import CreateMemoryTool
+
+    res = _run(
+        CreateMemoryTool(owner_id=OWNER).execute(
+            content="be terse in every reply", namespace="template:someone-else"
+        )
+    )
+    assert res.status == ToolStatus.SUCCESS, res.error
+    ns, _ = _blob(res.data["blob_id"])
+    assert ns == f"template:{OWNER}"
 
 
 # ── update_memory guard ────────────────────────────────────────────────
 
 
-def test_rule_cannot_overwrite_contact_blob(fresh_db):
-    # THE Pautasso bug: a behavioral rule must never land on a contact.
+def test_rule_cannot_overwrite_contact_blob(harness, monkeypatch):
+    # THE Pautasso bug: a behavioral rule must never land on a contact. The
+    # refusal is structural — the target row's own family — and happens before
+    # the role is asked anything: no decision is scripted here, and none is needed.
     from zylch.tools.base import ToolStatus
-    from zylch.tools.create_memory_tool import CreateMemoryTool
     from zylch.tools.update_memory_tool import UpdateMemoryTool
 
-    contact = _run(
-        CreateMemoryTool(owner_id=OWNER).execute(
-            content="#IDENTIFIERS\nEntity type: PERSON\nName: Simona Pautasso",
-            entry_type="entity_fact",
-        )
+    contact_id, _ = seed_entity(
+        harness, "#IDENTIFIERS\nEntity type: PERSON\nScope: entity\nName: Simona Pautasso"
     )
-    contact_id = contact.data["blob_id"]
-
     res = _run(
         UpdateMemoryTool(owner_id=OWNER).execute(
             blob_id=contact_id,
@@ -153,28 +245,57 @@ def test_refining_an_existing_rule_is_allowed(fresh_db):
         )
     )
     assert res.status == ToolStatus.SUCCESS, res.error
-    _, content = _blob(rid)
+    ns, content = _blob(rid)
+    assert ns == f"template:{OWNER}"
     assert "v2 refined" in content
 
 
-def test_entity_fact_update_on_contact_still_works(fresh_db):
-    # Normal use of update_memory (an entity fact on a contact) is unaffected.
+def test_an_entity_cannot_be_written_over_a_rule(fresh_db):
+    """The refinement door keeps the rule store's shape rule."""
     from zylch.tools.base import ToolStatus
     from zylch.tools.create_memory_tool import CreateMemoryTool
     from zylch.tools.update_memory_tool import UpdateMemoryTool
 
-    contact = _run(
-        CreateMemoryTool(owner_id=OWNER).execute(
-            content="#IDENTIFIERS\nEntity type: PERSON\nName: Luigi\nPhone: 111",
-            entry_type="entity_fact",
-        )
-    )
-    cid = contact.data["blob_id"]
+    rid = _run(
+        CreateMemoryTool(owner_id=OWNER).execute(content="RULE: v1", entry_type="behavioral_rule")
+    ).data["blob_id"]
     res = _run(
         UpdateMemoryTool(owner_id=OWNER).execute(
-            blob_id=cid,
-            new_content="#IDENTIFIERS\nEntity type: PERSON\nName: Luigi\nPhone: 222",
-            entry_type="entity_fact",
+            blob_id=rid, new_content=ACME, entry_type="behavioral_rule"
+        )
+    )
+    assert res.status == ToolStatus.ERROR
+    assert "entity-shaped" in (res.error or "")
+    _, content = _blob(rid)
+    assert content == "RULE: v1"
+
+
+def test_entity_fact_update_on_contact_still_works(harness, monkeypatch):
+    # Normal use of update_memory (an entity fact on a contact) goes through
+    # the role, with the named row pinned first among the candidates.
+    from zylch.assistant.turn_context import set_turn_observation
+    from zylch.tools.base import ToolStatus
+    from zylch.tools.update_memory_tool import UpdateMemoryTool
+
+    cid, version = seed_entity(harness, LUIGI)
+    set_turn_observation("Il numero di Luigi Bianchi ora è 222.")
+    corrected = LUIGI.replace("Phone: 111", "Phone: 222")
+    decided(
+        monkeypatch,
+        json.dumps(
+            {
+                "action": "UPDATE",
+                "entity_type": "PERSON",
+                "scope": "entity",
+                "content": corrected,
+                "write_set": [{"blob_id": cid, "expected_version": version, "role": "target"}],
+                "reason": "the phone number replaces the old one",
+            }
+        ),
+    )
+    res = _run(
+        UpdateMemoryTool(owner_id=OWNER).execute(
+            blob_id=cid, new_content=corrected, entry_type="entity_fact"
         )
     )
     assert res.status == ToolStatus.SUCCESS, res.error

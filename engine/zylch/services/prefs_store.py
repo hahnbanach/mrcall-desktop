@@ -310,6 +310,77 @@ def store_rule(
     return {"action": "created", "blob_id": blob_id, "reason": "new rule"}
 
 
+def refine_rule(
+    owner_id: str,
+    blob_id: str,
+    content: str,
+    event_description: str,
+    *,
+    writer: str,
+) -> Dict[str, Any]:
+    """Rewrite one of this owner's rules in place — the only door for a refinement.
+
+    ``{"action": …, "blob_id": …, "namespace": …, "reason": …}`` where
+    ``action`` is ``refined`` / ``refused`` / ``error``. The target must be one
+    of the caller's own rule blobs: a behavioral rule must never be written
+    onto a contact, so a company-family row is refused with its namespace
+    named, and so is a row this owner cannot see. The text is held to the same
+    shape rule as ``store_rule`` — an entity does not become a rule by being
+    written over one.
+    """
+    content = (content or "").strip()
+    if not content:
+        return {"action": "refused", "blob_id": blob_id, "reason": "empty content"}
+    if is_entity_shaped(content):
+        logger.warning(
+            f"[prefs] REFUSED entity-shaped refinement of blob_id={blob_id} from "
+            f"writer={writer}: the rule namespaces hold operating rules, not entities."
+        )
+        return {
+            "action": "refused",
+            "blob_id": blob_id,
+            "reason": (
+                "entity-shaped content (#IDENTIFIERS / Entity type:) cannot be "
+                "stored as an operating rule — use the user: namespace"
+            ),
+        }
+    existing = _blob_storage().get_blob(blob_id=blob_id, owner_id=owner_id)
+    if not existing:
+        return {
+            "action": "refused",
+            "blob_id": blob_id,
+            "reason": (
+                f"No blob with id={blob_id!r} for this owner. Did you call "
+                "search_local_memory first to obtain a real id?"
+            ),
+        }
+    namespace = existing.get("namespace") or ""
+    if namespace not in rule_namespaces(owner_id):
+        logger.warning(
+            f"[prefs] REFUSED rule from writer={writer} onto blob_id={blob_id} "
+            f"(namespace {namespace}): a rule never overwrites a contact."
+        )
+        return {
+            "action": "refused",
+            "blob_id": blob_id,
+            "reason": (
+                "A behavioral rule must not be written onto a contact blob "
+                f"(namespace {namespace}). Save it with "
+                "create_memory(entry_type='behavioral_rule') — it goes to the "
+                "always-on rules, never a contact."
+            ),
+        }
+    if not _update_blob(owner_id, blob_id, content, event_description):
+        return {"action": "error", "blob_id": blob_id, "reason": "blob write failed"}
+    logger.info(f"[prefs] rule blob_id={blob_id} refined in place by writer={writer}")
+    return {
+        "action": "refined",
+        "blob_id": blob_id,
+        "namespace": namespace,
+        "reason": "rule refined in place",
+    }
+
+
 def _blob_storage():
     from zylch.memory import EmbeddingEngine, MemoryConfig
     from zylch.memory.blob_storage import BlobStorage

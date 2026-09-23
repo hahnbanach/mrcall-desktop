@@ -11,20 +11,16 @@ things were wrong with that, and only one of them was the search:
 - the text the model passed became the stored bytes, so a task's own extracted
   content could rewrite company memory in the words the model chose for it.
 
-Under ``MNEMONIC_WRITE_PATH=supervised`` the query stops being authority
-altogether: it is what the model searched with, it selects nothing, and it is not
-passed into the decision at all (see the comment at the event below for why a
-"retrieval hint" has nowhere to live). The decision goes to the mnemonic role
-against the solve's real observation (:mod:`zylch.services.solve_context`).
-Because the caller names no blob, every such proposal writes to a subject the
-caller did not choose, so it is always presented to the human in full before
-anything is written; with no acceptance channel it returns a review. That is the
-point of the conversion: a solve can no longer overwrite a memory nobody was
-shown.
-
-Under the default ``off`` the legacy behaviour stands, unchanged, so the
-conversion is a cohort decision rather than a silent change of what a running
-engine does.
+The query stops being authority altogether: it is what the model searched
+with, it selects nothing, and it is not passed into the decision at all (see the
+comment at the event below for why a "retrieval hint" has nowhere to live). The
+decision goes to the mnemonic role against the solve's real observation
+(:mod:`zylch.services.solve_context`). Because the caller names no blob, every
+such proposal writes to a subject the caller did not choose, and that is
+recorded as a departure in the journal and in the answer the model reads. No
+human is asked: the text a rewrite replaces is retained. Success is reported
+only after the committed row reads back through the scoped read path, as the
+chat tools do.
 """
 
 from __future__ import annotations
@@ -46,16 +42,11 @@ NO_OBSERVATION = (
 
 def update_memory(args: Dict, store, owner_id: str) -> str:
     """The ``update_memory`` solve tool. Returns the text the model reads back."""
-    from zylch.tools.memory_events import semantic_update_enabled
-
     query = args.get("query", "")
     new_content = args.get("new_content", "")
     if not query or not new_content:
         return "Missing query or new_content"
-
-    if semantic_update_enabled():
-        return _submit_event(query, new_content, owner_id)
-    return _direct_write(query, new_content, owner_id)
+    return _submit_event(query, new_content, owner_id)
 
 
 # ─── The semantic path ────────────────────────────────────────────────
@@ -74,7 +65,6 @@ def _submit_event(query: str, new_content: str, owner_id: str) -> str:
         MemoryEvent,
     )
     from zylch.memory.mnemonic.turn import turn_cancellation
-    from zylch.tools.memory_events import allowed_actions
 
     from .solve_context import current_solve
 
@@ -131,10 +121,9 @@ def _submit_event(query: str, new_content: str, owner_id: str) -> str:
 
     result = submit(
         event,
-        allow_actions=allowed_actions(),
         # No blob was named, so the subject is not authoritative. Every
         # proposal therefore reads as "a memory the caller did not choose",
-        # which is what puts the final change in front of a human.
+        # and is recorded as such.
         requested=RequestedWrite(action=UPDATE, subject_is_authoritative=False),
     )
     logger.debug(
@@ -142,46 +131,27 @@ def _submit_event(query: str, new_content: str, owner_id: str) -> str:
     )
 
     if result.outcome == "committed":
-        written = ", ".join(f"{bid} (version {version})" for bid, version in result.committed_ids)
-        return f"Memory updated: {written}."
-    if result.outcome == "skipped":
-        return f"Nothing to change: {result.reason}"
-    return f"Not written — {result.reason}"
-
-
-# ─── The legacy direct write ──────────────────────────────────────────
-
-
-def _direct_write(query: str, new_content: str, owner_id: str) -> str:
-    """Search and replace the top hit, exactly as the solve tool always has."""
-    try:
-        from zylch.memory import EmbeddingEngine, HybridSearchEngine, MemoryConfig
+        from zylch.memory import EmbeddingEngine, MemoryConfig
         from zylch.memory.blob_storage import BlobStorage
         from zylch.storage.database import get_session
 
-        config = MemoryConfig()
-        engine = EmbeddingEngine(config)
-        search = HybridSearchEngine(get_session, engine)
-        blob_store = BlobStorage(get_session, engine)
-
-        results = search.search(owner_id=owner_id, query=query, limit=1)
-        if not results:
-            return f"No memory entry found for '{query}'"
-
-        r = results[0]
-        blob_id = r.blob_id if hasattr(r, "blob_id") else r.get("blob_id", "")
-        old_content = r.content if hasattr(r, "content") else r.get("content", "")
-
-        blob_store.update_blob(
-            blob_id=blob_id,
-            owner_id=owner_id,
-            content=new_content,
-            event_description="Manual correction via CLI",
-        )
-
-        return f"Memory updated.\nWas: {old_content[:100]}...\nNow: {new_content[:100]}..."
-    except Exception as e:
-        return f"Update failed: {e}"
+        # Success only once the committed row reads back through the ordinary
+        # scoped read path — a receipt is not a save the model may report.
+        reader = BlobStorage(get_session, EmbeddingEngine(MemoryConfig()))
+        for blob_id, _version in result.committed_ids:
+            if reader.get_blob(blob_id, owner_id) is None:
+                return (
+                    f"Not written — the memory was committed but cannot be read back "
+                    f"(blob {blob_id}); nothing is confirmed"
+                )
+        written = ", ".join(f"{bid} (version {version})" for bid, version in result.committed_ids)
+        note = ""
+        if result.departure:
+            note = " Note: " + "; ".join(result.departure.get("why", [])) + "."
+        return f"Memory updated: {written}.{note}"
+    if result.outcome == "skipped":
+        return f"Nothing to change: {result.reason}"
+    return f"Not written — {result.reason}"
 
 
 def solve_context_from_task(

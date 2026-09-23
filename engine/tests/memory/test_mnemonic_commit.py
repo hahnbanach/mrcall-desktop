@@ -77,7 +77,6 @@ def profile_a(tmp_path, monkeypatch, embedder):
     from .mnemonic_env import stub_embedder
 
     stub_embedder(monkeypatch, embedder)
-    monkeypatch.setenv("MNEMONIC_WRITE_PATH", "create")
     yield boot(monkeypatch, tmp_path, OWNER_A, COMPANY_A)
     dbm.dispose_engine()
     clear_process_state()
@@ -1006,7 +1005,6 @@ def test_a_second_company_shares_neither_the_memory_nor_the_journal(
     from .mnemonic_env import stub_embedder
 
     stub_embedder(monkeypatch, embedder)
-    monkeypatch.setenv("MNEMONIC_WRITE_PATH", "create")
 
     boot(monkeypatch, tmp_path, OWNER_A, COMPANY_A)
     first = submit(
@@ -1035,7 +1033,6 @@ def test_two_owners_sharing_a_key_see_one_memory_and_one_operation_history(
     from .mnemonic_env import stub_embedder
 
     stub_embedder(monkeypatch, embedder)
-    monkeypatch.setenv("MNEMONIC_WRITE_PATH", "create")
 
     boot(monkeypatch, tmp_path, OWNER_A, COMPANY_A)
     committed = submit(
@@ -1061,7 +1058,6 @@ def test_two_independent_processes_commit_one_event_once(tmp_path, monkeypatch, 
     from .mnemonic_env import stub_embedder
 
     stub_embedder(monkeypatch, embedder)
-    monkeypatch.setenv("MNEMONIC_WRITE_PATH", "create")
     boot(monkeypatch, tmp_path, OWNER_A, COMPANY_A)
     dbm.dispose_engine()
 
@@ -1259,32 +1255,23 @@ def test_the_tool_refuses_when_no_turn_stands_behind_the_call(profile_a, monkeyp
     assert stored_blobs() == []
 
 
-def test_the_slice_is_off_by_default_and_the_legacy_writer_still_serves(
-    tmp_path, monkeypatch, embedder
-):
-    """Unreleased means unreleased: without the setting nothing changed."""
+def test_there_is_one_path_and_it_goes_through_the_journal(tmp_path, monkeypatch, embedder):
+    """No setting selects a writer: `create_memory` submits, always.
+
+    A create opens an operation, decides through the role and commits — the
+    journal row is the proof that the harness served the call. There is no
+    direct writer to fall back to (brief amendment, 2026-09-23).
+    """
     from .mnemonic_env import stub_embedder
-    from zylch.tools.create_memory_tool import CreateMemoryTool
 
     stub_embedder(monkeypatch, embedder)
-    monkeypatch.delenv("MNEMONIC_WRITE_PATH", raising=False)
     boot(monkeypatch, tmp_path, OWNER_A, COMPANY_A)
     try:
-        result = run_tool(
-            CreateMemoryTool(owner_id=OWNER_A), content=ACME, entry_type="entity_fact"
-        )
-        assert result.status.value == "success"
+        tool = tool_with(client(create_decision()), monkeypatch)
+        result = run_tool(tool, content=ACME, entry_type="entity_fact")
+        assert result.status.value == "success", result.error
         assert len(stored_blobs()) == 1
-        # No operation was opened: the legacy path does not know about them.
         with get_session() as session:
-            assert session.query(MemoryOperation).count() == 0
+            assert session.query(MemoryOperation).count() == 1
     finally:
         dbm.dispose_engine()
-
-
-def test_an_unknown_write_path_value_falls_back_to_the_legacy_writer(monkeypatch):
-    from zylch.tools import memory_events
-
-    monkeypatch.setenv("MNEMONIC_WRITE_PATH", "everything")
-    assert memory_events.write_path() == memory_events.OFF
-    assert memory_events.semantic_create_enabled() is False

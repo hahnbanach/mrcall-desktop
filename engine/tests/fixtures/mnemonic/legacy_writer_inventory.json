@@ -244,13 +244,12 @@
       "milestone": 5
     },
     {
-      "path": "zylch/services/solve_memory.py",
-      "symbol": "_direct_write",
-      "call": "update_blob",
+      "path": "zylch/services/prefs_store.py",
+      "symbol": "refine_rule",
+      "call": "_update_blob",
       "count": 1,
       "mode": "sync",
-      "milestone": 4,
-      "note": "milestone 4 moved the solve's memory write here and removed its limit=1 top-hit authority from the semantic path; this entry is the legacy direct write that MNEMONIC_WRITE_PATH=off still serves"
+      "milestone": 5
     },
     {
       "path": "zylch/storage/step_memory_split.py",
@@ -263,27 +262,10 @@
     {
       "path": "zylch/tools/create_memory_tool.py",
       "symbol": "CreateMemoryTool.execute",
-      "call": "store_blob",
-      "count": 1,
-      "mode": "async",
-      "milestone": 4
-    },
-    {
-      "path": "zylch/tools/create_memory_tool.py",
-      "symbol": "CreateMemoryTool.execute",
       "call": "store_rule",
       "count": 1,
       "mode": "async",
       "milestone": 4
-    },
-    {
-      "path": "zylch/tools/update_memory_tool.py",
-      "symbol": "UpdateMemoryTool._direct_write",
-      "call": "update_blob",
-      "count": 1,
-      "mode": "sync",
-      "milestone": 4,
-      "note": "milestone 4 split the semantic path out of execute(); this entry is the legacy direct write that MNEMONIC_WRITE_PATH=off still serves"
     },
     {
       "path": "zylch/workers/memory.py",
@@ -788,9 +770,8 @@
           "mode",
           "tool_use_id"
         ],
-        "count": 2,
-        "milestone": 4,
-        "note": "two sites: the allow-list answer, and the unconditional deny for confirm_memory_write \u2014 a headless clone has no human to accept a changed memory write, whatever is in --allow"
+        "count": 1,
+        "milestone": 1
       },
       {
         "method": "chat.send",
