@@ -226,6 +226,10 @@ MEMORY_TABLE_NAMES = (
     "memory_meta",
     "fact_history",
     "blob_aliases",
+    # the text a rewrite replaced or a consolidation removed (mnemonic harness
+    # M5). Same install path as the journal below: the name puts the table on
+    # the memory bind and inside `prepare_store`'s ensure pass, additive.
+    "blob_versions",
     # the semantic write path's operation journal (mnemonic harness M3).
     # Registering it here is what installs it: the name puts the table on
     # the memory bind, so every statement naming it reaches the company

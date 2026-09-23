@@ -422,6 +422,41 @@ class BlobAlias(DictMixin, Base):
     created_at = Column(DateTime, default=_utcnow)
 
 
+class BlobVersion(DictMixin, Base):
+    """The text a blob held before a rewrite replaced it, or before a removal.
+
+    Written by `BlobStorage._rewrite` before it touches `blobs.content`, and by
+    the consolidation sweep before it drops a donor — in the same transaction
+    as the write it precedes, so the version exists exactly when the text it
+    preserves is gone. A wrong write is therefore a recoverable wrong belief,
+    not a lost fact; `reason` says which kind of write produced it (`append`
+    for an ordinary rewrite, `consolidate` for the sweep's own), so the count
+    of `append` versions on one blob is a signal — the June 2026 sink absorbed
+    hundreds of contacts into one row, and every one of those absorptions
+    would have left a version here.
+
+    `blob_id` is indexed and deliberately NOT a foreign key with a cascade:
+    foreign keys are enforced on this store, and a cascade would delete a
+    dropped donor's retained text in the very transaction that retains it.
+    The consequence is owned where it arises — `delete_blob(retain=False)`
+    and `delete_all_blobs` prune a blob's versions explicitly, so an owner's
+    delete and reset stay authoritative over retained prose. `owner_id` is
+    the writer's provenance, not the blob's owner: on a shared store the two
+    often differ, which is why no prune may ever filter on it."""
+
+    __tablename__ = "blob_versions"
+
+    id = Column(String(36), primary_key=True, default=_new_uuid)
+    blob_id = Column(String(36), nullable=False, index=True)
+    company_key = Column(Text, nullable=False, index=True, default=_current_company_key)
+    owner_id = Column(Text, nullable=False)
+    namespace = Column(Text, nullable=False)
+    content = Column(Text, nullable=False)
+    reason = Column(Text, nullable=False)  # append | consolidate
+    operation_id = Column(String(64), nullable=True)  # the journal event, when there is one
+    superseded_at = Column(DateTime, default=_utcnow, index=True)
+
+
 # -------------------------------------------------------------------
 # MEMORY OPERATIONS — the semantic write path's durable state
 # -------------------------------------------------------------------

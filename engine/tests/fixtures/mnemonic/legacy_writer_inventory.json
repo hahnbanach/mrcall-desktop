@@ -31,7 +31,8 @@
     "PersonIdentifier",
     "BlobAlias",
     "FactHistory",
-    "MemoryMeta"
+    "MemoryMeta",
+    "BlobVersion"
   ],
   "call_sites": [
     {
@@ -464,6 +465,14 @@
       "call": "construct:WhatsAppBlob",
       "count": 1,
       "milestone": 7
+    },
+    {
+      "path": "zylch/memory/blob_versions.py",
+      "symbol": "retain_version",
+      "call": "construct:BlobVersion",
+      "count": 1,
+      "milestone": 5,
+      "note": "milestone 5 retention: the text a rewrite replaces or a consolidation removes, written before the write it precedes; the boundary's own mechanism, not a legacy writer"
     }
   ],
   "orm_mutations": [
@@ -501,6 +510,14 @@
       "call": "orm:delete:WhatsAppBlob",
       "count": 1,
       "milestone": 8
+    },
+    {
+      "path": "zylch/memory/blob_versions.py",
+      "symbol": "prune_versions",
+      "call": "orm:delete:BlobVersion",
+      "count": 1,
+      "milestone": 5,
+      "note": "the owner's delete and reset prune a blob's versions with the blob; never filtered on owner_id, which is the writer's provenance"
     }
   ],
   "orm_assignments": [

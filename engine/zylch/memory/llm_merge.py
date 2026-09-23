@@ -565,13 +565,19 @@ async def _reconsolidate_locked(owner_id: str, company_key: str, namespace: str)
                 for k, v in migrated.items():
                     if k in migrate_totals:
                         migrate_totals[k] += int(v)
+                # Both halves of a merge are retained before they change: the
+                # keeper's text as a `consolidate` version (so the sweep's own
+                # rewrites never read as a sink's growth), the donor's final
+                # text likewise before its row goes. A bad merge is then
+                # reversed by restoring a version, not by forensics.
                 blob_storage.update_blob(
                     blob_id=keeper["id"],
                     owner_id=owner_id,
                     content=merged,
                     event_description=(f"Reconsolidated with {other['id'][:8]}… via manual sweep"),
+                    reason="consolidate",
                 )
-                deleted = blob_storage.delete_blob(other["id"], owner_id)
+                deleted = blob_storage.delete_blob(other["id"], owner_id, retain=True)
                 if deleted:
                     # The merged-away id may still sit in OTHER profiles'
                     # task ledgers, in files this sweep cannot open; the

@@ -20,18 +20,20 @@ import logging
 import uuid
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import Any, Callable, Dict, List, Optional, Tuple
+from typing import Any, Callable, Dict, Optional, Tuple
 
 import numpy as np
-from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from .text_processing import split_sentences
 from .embeddings import EmbeddingEngine
 from .commit_permit import CREATE, UPDATE, ConflictError, check_permit, spend_permit
 from .company_key import require_company_key
-from .scope import blob_contributed, blob_owned_rules, blob_visible, sentences_in_scope
+from .scope import blob_contributed, blob_owned_rules, blob_visible
 from zylch.storage.models import Blob, BlobSentence
+
+from .blob_reads import BlobReads
+from .blob_versions import APPEND, CONSOLIDATE, prune_versions, retain_version
 
 logger = logging.getLogger(__name__)
 
@@ -62,7 +64,7 @@ def _iso(value) -> str:
     return str(value).replace("+00:00", "").replace("Z", "")
 
 
-class BlobStorage:
+class BlobStorage(BlobReads):
     """Storage for entity blobs with sentence-level embeddings.
 
     Every read, write, update, delete and list is scoped by
@@ -196,7 +198,16 @@ class BlobStorage:
         owner_id: str,
         prepared: PreparedContent,
         event_description: Optional[str],
+        reason: str = APPEND,
+        operation_id: Optional[str] = None,
     ) -> Blob:
+        # The text this rewrite replaces is kept BEFORE anything changes, in
+        # this same session: a rewrite that fails after this point rolls the
+        # version back with it, and one that succeeds leaves the old text
+        # exactly when the new one lands. `reason` is a parameter because
+        # this method cannot know its caller, and the sweep's own rewrites
+        # must not count as a sink's growth.
+        retain_version(session, blob, reason=reason, owner_id=owner_id, operation_id=operation_id)
         events = list(blob.events or [])
         if event_description:
             events.append(
@@ -219,20 +230,6 @@ class BlobStorage:
         return blob
 
     # ─── The committed writers ────────────────────────────────────────
-
-    def visible_target(self, session: Session, blob_id: str, owner_id: str) -> Optional[Blob]:
-        """The live ORM row for a visible blob, inside the caller's transaction.
-
-        The semantic commit re-reads its target here AFTER taking the write
-        lock, so the version it compares against is the version it writes over
-        — not the one it read seconds ago while a model was thinking.
-        """
-        key = require_company_key()
-        return (
-            session.query(Blob)
-            .filter(Blob.id == blob_id, blob_visible(owner_id, key))
-            .one_or_none()
-        )
 
     def semantic_create(
         self,
@@ -272,6 +269,7 @@ class BlobStorage:
         prepared: PreparedContent,
         expected_version: str,
         event_description: Optional[str] = None,
+        reason: str = APPEND,
     ) -> Dict[str, Any]:
         """Rewrite a re-read, version-checked blob under a spent permit.
 
@@ -300,6 +298,8 @@ class BlobStorage:
             owner_id=owner_id,
             prepared=prepared,
             event_description=event_description,
+            reason=reason,
+            operation_id=getattr(checked, "event_id", None),
         )
         spend_permit(checked)
         return blob.to_dict()
@@ -330,6 +330,7 @@ class BlobStorage:
         content: str,
         event_description: Optional[str] = None,
         expected_updated_at: Optional[str] = None,
+        reason: str = APPEND,
     ) -> Dict[str, Any]:
         """Update blob content and regenerate sentence embeddings.
 
@@ -386,12 +387,20 @@ class BlobStorage:
                 owner_id=owner_id,
                 prepared=prepared,
                 event_description=event_description,
+                reason=reason,
             )
             self._notify_mutation(session)
             return blob.to_dict()
 
-    def get_blob(self, blob_id: str, owner_id: str) -> Optional[Dict[str, Any]]:
-        """Get a blob by id, if this owner may see it."""
+    def delete_blob(self, blob_id: str, owner_id: str, *, retain: bool = False) -> bool:
+        """Delete a visible blob (sentences cascade via FK).
+
+        ``retain=True`` is the consolidation sweep dropping a donor: the row's
+        final text is kept as a version first, so a bad merge is reversible.
+        The default is the owner's delete, and an owner who deletes means it —
+        the blob's versions go with it, explicitly, because ``blob_versions``
+        carries no cascade on purpose.
+        """
         key = require_company_key()
         with self._get_session() as session:
             blob = (
@@ -399,54 +408,20 @@ class BlobStorage:
                 .filter(Blob.id == blob_id, blob_visible(owner_id, key))
                 .one_or_none()
             )
-            return blob.to_dict() if blob else None
-
-    def delete_blob(self, blob_id: str, owner_id: str) -> bool:
-        """Delete a visible blob (sentences cascade via FK)."""
-        key = require_company_key()
-        with self._get_session() as session:
-            count = (
-                session.query(Blob)
-                .filter(Blob.id == blob_id, blob_visible(owner_id, key))
-                .delete(synchronize_session=False)
-            )
+            if blob is None:
+                return False
+            if retain:
+                retain_version(session, blob, reason=CONSOLIDATE, owner_id=owner_id)
+            else:
+                prune_versions(session, [blob.id])
+            # The bulk form, by id, on purpose: the frozen writer inventory
+            # recognises `query(Blob)…delete()` as a Blob deletion and would
+            # not see `session.delete(blob)`, and a deletion the guard cannot
+            # see is the kind of bypass the guard exists to catch.
+            count = session.query(Blob).filter(Blob.id == blob.id).delete(synchronize_session=False)
             if count > 0:
                 self._notify_mutation(session)
             return count > 0
-
-    def list_blobs(
-        self,
-        owner_id: str,
-        limit: int = 10,
-    ) -> List[Dict[str, Any]]:
-        """Recent blobs visible to this owner, newest update first."""
-        key = require_company_key()
-        with self._get_session() as session:
-            rows = (
-                session.query(Blob)
-                .filter(blob_visible(owner_id, key))
-                .order_by(Blob.updated_at.desc())
-                .limit(limit)
-                .all()
-            )
-            return [r.to_dict() for r in rows]
-
-    def other_owners_present(self, owner_id: str) -> bool:
-        """Has any OTHER account contributed to this company's memory?
-
-        Decides what a per-account reset may remove: a store with a single
-        contributor is that account's own company, and the account is its
-        key holder.
-        """
-        key = require_company_key()
-        with self._get_session() as session:
-            other = (
-                session.query(Blob.owner_id)
-                .filter(Blob.company_key == key, Blob.owner_id != owner_id)
-                .limit(1)
-                .first()
-            )
-            return other is not None
 
     def delete_all_blobs(self, owner_id: str) -> int:
         """Per-account memory reset. Returns the number of blobs removed.
@@ -462,38 +437,18 @@ class BlobStorage:
         shared = self.other_owners_present(owner_id)
         predicate = blob_owned_rules(owner_id, key) if shared else blob_contributed(owner_id, key)
         with self._get_session() as session:
+            # Ids first, then the bulk delete, then the versions of exactly
+            # those ids. Never a prune by owner: a version's owner is the
+            # writer's provenance, and on a shared store that is often another
+            # account — filtering on it would leave this account's deleted
+            # blobs' versions behind and take other accounts' living ones.
+            ids = [row.id for row in session.query(Blob.id).filter(predicate).all()]
             count = session.query(Blob).filter(predicate).delete(synchronize_session=False)
+            pruned = prune_versions(session, ids)
             if count > 0:
                 self._notify_mutation(session)
             logger.info(
-                f"delete_all_blobs owner={owner_id} shared_store={shared} -> {count} blob(s)"
+                f"delete_all_blobs owner={owner_id} shared_store={shared} -> {count} blob(s), "
+                f"{pruned} retained version(s)"
             )
             return count
-
-    def get_stats(self, owner_id: str) -> Dict[str, Any]:
-        """Memory statistics over what this owner may see."""
-        key = require_company_key()
-        with self._get_session() as session:
-            blobs = (
-                session.query(Blob.id, Blob.namespace, Blob.content)
-                .filter(blob_visible(owner_id, key))
-                .all()
-            )
-            visible_ids = [str(b.id) for b in blobs]
-            sentence_count = (
-                session.query(func.count(BlobSentence.id))
-                .filter(sentences_in_scope(key), BlobSentence.blob_id.in_(visible_ids))
-                .scalar()
-                if visible_ids
-                else 0
-            ) or 0
-
-            namespaces = list(set(b.namespace for b in blobs))
-            avg_sentences = sentence_count / len(blobs) if blobs else 0
-
-            return {
-                "total_blobs": len(blobs),
-                "total_sentences": sentence_count,
-                "namespaces": namespaces,
-                "avg_blob_size": round(avg_sentences, 2),
-            }
