@@ -43,6 +43,16 @@ no single-writer claim. Contract:
 Tested locally against the frozen milestone 0 incident corpus and real split
 profile/company databases; not deployed.
 
+Support's engine exposes approval-gated `initiate_call` through the dashboard's
+Firebase atom API, with an explicit calling assistant ID. A live request on
+2026-09-17 returned HTTP 200 / provider `started`; the matching notification at
+15:30:16 UTC confirms a conversation with Litio's assistant. The caller's saved
+voice configuration initially refused a robot interlocutor, then conversed;
+automatic diagnostic scripting is not configured. The restoration is committed as
+`4cd23b7`, and the engine running on support (`f12ae60`) descends from it. See
+[outbound contract](features/outbound-calls.md) and
+[verification/rollback](../../docs/execution-plans/2026-09-17-mrcall-outbound.md).
+
 Four Café124 units run isolated release `8d83193`; the billing server runs
 `prod-99091c35`. Production selects personal OpenRouter/custom K3 for its base
 model, five worker roles and reply classification. The other three profiles
@@ -103,13 +113,3 @@ API budgets; see [control boundaries](../../docs/operator-setup.md#ai-execution-
 2. Verify the Mac application through its GUI; start a bounded batch only when
    requested and review its role-specific outputs.
 3. Continue other workstreams under their existing plans.
-
-Support's engine now exposes approval-gated `initiate_call` through the dashboard's
-Firebase atom API, with an explicit calling assistant ID. A live request on
-2026-09-17 returned HTTP 200 / provider `started`; the matching notification at
-15:30:16 UTC confirms a conversation with Litio's assistant. The caller's saved
-voice configuration initially refused a robot interlocutor, then conversed;
-automatic diagnostic scripting is not configured.
-The seven-file patch is deployed uncommitted over `855f650`; only support was
-restarted. See [outbound contract](features/outbound-calls.md) and
-[verification/rollback](../../docs/execution-plans/2026-09-17-mrcall-outbound.md).
