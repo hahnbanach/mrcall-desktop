@@ -1,5 +1,5 @@
 ---
-doc_baseline_commit: ca91ed2470ead3c37f4cd8665832b1c8214fe0ee
+doc_baseline_commit: 59ddaad77c0c08fb0e81805d601b0a521db55d4c
 doc_baseline_date: 2026-09-23
 ---
 
@@ -81,8 +81,11 @@ change, not ours.
 `WHATSAPP_REFRESH_MINUTES` (default 15), skipping silently with no session on
 disk, and is its only caller — the app's Refresh button still calls
 `whatsapp.list_threads`, and `whatsapp.sync` has no preload binding, so the
-renderer cannot reach it yet. Written, **not deployed**: `desktop.mrcall.ai` runs a separate checkout
-under `mrcalld`, where only the neonize upgrade was applied by hand.
+renderer cannot reach it yet. Deployed 2026-09-23 (`a2b0e66`), with all seven daemons restarted onto it;
+a real restart reattached in one second and synced 169 contacts, 83 groups and
+662 LID contacts. What remains is the operator's view: nothing outside this repo
+reads `whatsapp.status`, so a headless caller still cannot tell a dead channel
+from a quiet one.
 
 ## Unresolved
 
@@ -110,8 +113,9 @@ under `mrcalld`, where only the neonize upgrade was applied by hand.
 2. Verify the installed applications through their GUI: the Mac one with
    personal-key entry, and the Windows one at all — install, open, scan the
    WhatsApp QR. Until that runs, support@ keeps telling customers macOS only.
-3. Deploy the WhatsApp refresh work to `desktop.mrcall.ai`, which still runs
-   the previous engine with only a hand-applied neonize upgrade.
+3. Give a headless caller a way to see the WhatsApp channel's state —
+   `whatsapp.status` has no reader outside this repo, which is what let an
+   eleven-day outage pass unnoticed.
 4. Resume deferred product work from its existing briefs when requested.
    The [thin web/mobile client brief](execution-plans/cross-machine-thin-clients.md)
    is a parked nice-to-have, not scheduled work; remind the CTO that it already
