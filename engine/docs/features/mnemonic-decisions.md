@@ -116,9 +116,11 @@ Three separate questions. **Request authorization** (`authorize_request`)
 refuses a read-only origin and a cross-account submission before a grant
 exists, so a refusal costs zero reservations and zero provider calls. **Paid
 admission** is the `DispatchGrant`. **Commit approval** is neither: `commit.py`
-re-checks authorization under the company write lock and refuses without a
-`CommitPermit`, and the explicit human acceptance that must guard a change to
-existing memory is a later milestone's.
+re-checks authorization under the company write lock, refuses without a
+`CommitPermit`, and — for a proposal that changed the action, subject, scope or
+destructive effects the caller asked for — requires a fresh human acceptance
+bound to that exact proposal and its versions
+([the acceptance](mnemonic-commit.md#the-acceptance)).
 
 The authority is the dispatch scope, not the usage label. `call_site` tags stay
 what they were — diagnostics for spend attribution — and a call relabelled
@@ -129,6 +131,13 @@ A grant is bound to owner, company, event, source revision, origin and a shared
 cancellation handle, and is verified by object identity against the issuing
 registry, so a value-identical copy is refused. `issue_grant` performs the
 request authorization itself, so a grant cannot exist without it.
+
+That handle has an owner outside the event: `mnemonic/turn.py` holds one per
+turn, and the adapters build their events with it, so revoking the turn revokes
+every decision it raised. The drivers that own a turn — `chat.send` and
+`tasks.solve` — open it and revoke on cancellation, which is what reaches a
+grant a worker thread already holds by reference. Without that owner the handle
+was unreachable and a cancelled turn left its decision running.
 
 At each dispatch the grant is re-checked against the process: a changed acting
 account, or a profile that has since joined another company memory, refuses it.

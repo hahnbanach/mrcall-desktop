@@ -12,12 +12,18 @@ Two write paths live behind this one tool name, selected by
 
 - **off** (the shipped default) — the direct blob write this tool has always
   done. One of the legacy writers the mnemonic harness is converting.
-- **create** — the harness's first real path. The tool submits an event and the
-  mnemonic role decides; a CREATE is committed atomically, and a proposal to
-  change *existing* memory returns for review instead, because the approval
-  that must guard such a change is milestone 4's and does not exist yet. It
-  never falls back to the direct write: a harness that writes around itself
-  when it disagrees is not a boundary.
+- **create** — the tool submits an event and the mnemonic role decides; a CREATE
+  is committed atomically, and a proposal to change *existing* memory returns
+  for review. It never falls back to the direct write: a harness that writes
+  around itself when it disagrees is not a boundary.
+- **supervised** — the same, plus UPDATE. A create whose observation the role
+  reads as a correction to an existing memory can then be committed, but only
+  after the human accepts that changed final mutation for what it does; with no
+  acceptance channel it is still a review and still writes nothing.
+
+The submit runs on a worker thread. The decision costs up to three bounded model
+rounds, and the acceptance that may guard it is delivered by the event loop —
+which cannot deliver anything while a coroutine blocks it.
 
 The tool's name, arguments and successful response shape are unchanged in both
 modes. ``entry_type='behavioral_rule'`` still goes to ``prefs_store.store_rule``
@@ -142,7 +148,9 @@ class CreateMemoryTool(Tool):
         from .memory_events import semantic_create_enabled
 
         if semantic_create_enabled():
-            return self._submit_event(owner_id, content, namespace)
+            import asyncio
+
+            return await asyncio.to_thread(self._submit_event, owner_id, content, namespace)
 
         # The engine decides the namespace; the model only names a
         # FAMILY. A bare "user" / "facts" / "template" / "prefs" — or a
@@ -213,14 +221,22 @@ class CreateMemoryTool(Tool):
         Success means a committed receipt and a blob that reads back — not a
         proposal that looked fine. Every other outcome is reported as itself:
         a review says why and writes nothing, a failure says it can be retried.
-        The tool never reports a decision as a save.
+        The tool never reports a decision as a save — including a change the
+        human was shown and did not accept, which is a review with a reason.
+
+        Runs on a worker thread (see the module docstring), which is also what
+        lets the acceptance gate inside ``submit`` reach the event loop.
         """
         from zylch.assistant.turn_context import get_turn_id, get_turn_observation
         from zylch.memory.company_key import require_company_key
         from zylch.memory.mnemonic import submit
-        from zylch.memory.mnemonic.contracts import CREATE
 
-        from .memory_events import NO_OBSERVATION, create_event
+        from .memory_events import (
+            NO_OBSERVATION,
+            allowed_actions,
+            create_event,
+            create_request,
+        )
 
         observation = get_turn_observation()
         if not observation:
@@ -243,7 +259,11 @@ class CreateMemoryTool(Tool):
             observation=observation,
             source_id=f"turn:{get_turn_id()}",
         )
-        result = submit(event, allow_actions=(CREATE,))
+        result = submit(
+            event,
+            allow_actions=allowed_actions(),
+            requested=create_request(namespace_hint),
+        )
         logger.debug(f"[create_memory] submit(event={event.event_id}) -> outcome={result.outcome}")
 
         if result.outcome == "committed":

@@ -33,6 +33,9 @@ import json
 import logging
 from typing import Any, AsyncIterator, Dict, List, Optional
 
+from zylch.memory.mnemonic.turn import revoke
+from zylch.services.mnemonic_approval import CONFIRM_MEMORY_WRITE
+
 logger = logging.getLogger(__name__)
 
 
@@ -101,10 +104,19 @@ def format_approval_preview(tool_name: str, args: Dict) -> str:
             f"```python\n{args.get('code', '')}\n```"
         )
     if tool_name == "update_memory":
-        return (
-            f"**Update Memory**\nblob_id: {args.get('blob_id', '')}\n\n"
-            f"New content:\n{args.get('new_content', '')}"
-        )
+        # Two surfaces, two argument names: the chat tool names a `blob_id`, the
+        # solve tool passes a `query` it searched with. Printing "blob_id:" over
+        # an empty value told a solve user the tool had named a row when it had
+        # named nothing — which is the misreading the conversion exists to end.
+        target = args.get("blob_id")
+        named = f"blob_id: {target}" if target else f"about: {args.get('query', '')}"
+        return f"**Update Memory**\n{named}\n\n" f"Proposed content:\n{args.get('new_content', '')}"
+    if tool_name == CONFIRM_MEMORY_WRITE:
+        # Not a tool call: `args` is the memory change, and it already carries the
+        # rendered card. Falling through to the json dump below put a truncated
+        # blob of JSON in the notification a human first sees — including the
+        # nonce — where the point is to show them what will change.
+        return str(args.get("preview") or "")
     return json.dumps(args, indent=2, default=str)
 
 
@@ -127,6 +139,7 @@ class TaskExecutor:
         owner_id: str,
         tools: List[Dict],
         max_turns: int = 10,
+        notify=None,
     ):
         self._client = client
         self._system = system
@@ -135,6 +148,12 @@ class TaskExecutor:
         self._owner_id = owner_id
         self._tools = tools
         self._max_turns = max_turns
+        # How to put a card in front of the human outside the event stream.
+        # The tool-call gate can yield its own `tool_call_pending` because it
+        # runs in the generator; a final memory mutation is decided inside the
+        # tool, on a worker thread, and a generator cannot yield from there.
+        # Same event shape, same `approve()` mechanism, same cancellation.
+        self._notify = notify
         # Map tool_use_id -> Future set by approve()
         self._pending: Dict[str, asyncio.Future] = {}
         # How many mutating tool calls (i.e. APPROVAL_TOOLS items) the
@@ -176,6 +195,54 @@ class TaskExecutor:
             }
         )
         return True
+
+    def _fail_pending(self) -> None:
+        """Cancel every approval still waiting for an answer nobody will give."""
+        for tool_use_id, fut in list(self._pending.items()):
+            if not fut.done():
+                fut.cancel()
+            self._pending.pop(tool_use_id, None)
+
+    async def request_final_mutation(
+        self,
+        tool_use_id: str,
+        tool_name: str,
+        card: Dict[str, Any],
+    ) -> tuple:
+        """Ask the human to accept one changed memory mutation.
+
+        An ``ApprovalCallback``, so the mnemonic bridge treats this surface like
+        any other. It reuses `_pending` and `approve()` rather than inventing a
+        second waiting mechanism, which is what makes `tasks.solve.cancel` abort
+        a memory acceptance exactly as it aborts a send.
+
+        No notifier means no way to show the card, so it declines — the harness
+        then reports a review and writes nothing.
+        """
+        if self._notify is None:
+            logger.warning("[executor] final mutation needs a card and this driver has no notifier")
+            return (False, None)
+
+        loop = asyncio.get_event_loop()
+        fut: asyncio.Future = loop.create_future()
+        self._pending[tool_use_id] = fut
+        try:
+            self._notify(
+                {
+                    "type": "tool_call_pending",
+                    "tool_use_id": tool_use_id,
+                    "name": tool_name,
+                    "input": card,
+                    "preview": card.get("preview", ""),
+                }
+            )
+            decision = await fut
+        except asyncio.CancelledError:
+            logger.info(f"[executor] final mutation cancelled tool_use_id={tool_use_id}")
+            raise
+        finally:
+            self._pending.pop(tool_use_id, None)
+        return (bool(decision.get("approved")), decision.get("edited_input"))
 
     async def run(self) -> AsyncIterator[Dict[str, Any]]:
         """Drive the loop, yielding events."""
@@ -396,6 +463,19 @@ class TaskExecutor:
             # calls tasks.solve.cancel which set_exception's pending
             # futures). Not an error — clean exit so the renderer
             # doesn't show a ⚠ bubble.
+            #
+            # Revoke before yielding: a memory decision may still be running on
+            # a worker thread with a dispatch grant this turn issued, and that
+            # grant holds the cancellation handle by reference. Revoking here,
+            # on the loop, is what stops the thread's next paid call.
+            revoke("the solve was cancelled")
+            # And fail every approval still waiting. A cancelled solve leaves
+            # `run()` immediately, but a memory decision asked for an acceptance
+            # from a worker thread that is parked on one of these futures — with
+            # nobody left to answer it, it would sit there for the whole
+            # acceptance timeout holding an executor thread. Cancelling the
+            # future is what turns that wait into a refusal.
+            self._fail_pending()
             logger.info("[executor] cancelled by user")
             yield {
                 "type": "done",

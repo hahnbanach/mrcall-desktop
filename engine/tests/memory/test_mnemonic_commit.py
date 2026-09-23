@@ -147,6 +147,21 @@ def update_decision(blob_id, version, content=ACME_CORRECTED):
     )
 
 
+def asked_to_update(blob_id):
+    """The baseline a caller declares when it asked to change exactly this blob.
+
+    Milestone 4 measures the final proposal against what the calling tool asked
+    for, and treats "nothing declared" as "everything changed" — so a direct
+    `submit` in a test has to say what it asked for, or the acceptance gate fires
+    before the transaction these tests are about. Declaring a faithful baseline
+    keeps each test exercising its own subject: the CAS, the allowance, the
+    cancellation.
+    """
+    from zylch.memory.mnemonic.approval import RequestedWrite
+
+    return RequestedWrite(action=UPDATE, blob_id=blob_id, subject_is_authoritative=True)
+
+
 def event(
     *,
     event_id="evt-1",
@@ -587,6 +602,7 @@ def test_an_update_at_the_read_version_rewrites_the_blob_and_its_index(profile_a
         event(event_id="evt-upd"),
         client=client(update_decision(blob["id"], blob["updated_at"])),
         context=context,
+        requested=asked_to_update(blob["id"]),
     )
 
     assert result.outcome == "committed"
@@ -621,6 +637,7 @@ def test_a_second_writer_changing_the_blob_first_wins_and_the_stale_one_refuses(
             update_decision(blob["id"], stale_version),
         ),
         context=context,
+        requested=asked_to_update(blob["id"]),
     )
 
     assert result.outcome == "review_needed"
@@ -651,7 +668,12 @@ def test_a_cas_redecision_pays_exactly_one_reservation_per_round(profile_a, cont
 
     before = mnemonic_reservations()
     llm = client(*[update_decision(blob["id"], stale) for _ in range(EVENT_DISPATCH_ALLOWANCE)])
-    result = submit(event(event_id="evt-cas2"), client=llm, context=context)
+    result = submit(
+        event(event_id="evt-cas2"),
+        client=llm,
+        context=context,
+        requested=asked_to_update(blob["id"]),
+    )
 
     assert result.outcome == "review_needed"
     calls = llm._client.messages.create.call_count
@@ -670,6 +692,7 @@ def test_a_target_that_vanished_is_a_conflict_not_a_new_entity(profile_a, contex
         event(event_id="evt-gone"),
         client=client(*[update_decision(blob["id"], version) for _ in range(3)]),
         context=context,
+        requested=asked_to_update(blob["id"]),
     )
 
     assert result.outcome == "review_needed"
@@ -723,6 +746,7 @@ def test_a_create_slice_refuses_an_update_instead_of_writing_it_the_old_way(prof
         client=client(update_decision(blob["id"], blob["updated_at"])),
         context=context,
         allow_actions=(CREATE,),
+        requested=asked_to_update(blob["id"]),
     )
 
     assert result.outcome == "review_needed"

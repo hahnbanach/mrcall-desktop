@@ -92,6 +92,15 @@ _approval_meta: Dict[str, tuple] = {}
 _abandoned_approvals: "OrderedDict[str, str]" = OrderedDict()
 _MAX_ABANDONED_APPROVALS = 64
 
+# The approval name a changed final memory mutation is announced under. Imported
+# rather than spelled, so the two guards below and the bridge that sends the
+# card cannot drift apart.
+from zylch.memory.mnemonic.contracts import Cancellation  # noqa: E402
+from zylch.memory.mnemonic.turn import revocable_turn  # noqa: E402
+from zylch.services.mnemonic_approval import (  # noqa: E402
+    CONFIRM_MEMORY_WRITE,
+    installed_for,
+)
 
 # The asyncio Tasks that must not outlive the connection that asked for
 # them. A `chat.send` composes and writes on behalf of a client that is
@@ -128,7 +137,16 @@ def _note_abandoned_approval(tool_use_id: str, tool_name: str) -> None:
 def _should_auto_approve(conversation_id: str, tool_name: str) -> bool:
     """Return True if `tool_name` was whitelisted for `conversation_id`
     via a prior `chat.approve(mode="session")`.
+
+    Never for a final memory mutation. That card is not a permission to run a
+    tool, it is an acceptance of one specific change to one specific memory at
+    one specific version, and a grant remembered from an earlier change cannot
+    be an acceptance of this one. The harness also refuses such an answer on its
+    own — a standing grant carries no nonce — but sending the card anyway is
+    what puts the change in front of the human instead of silently declining it.
     """
+    if tool_name == CONFIRM_MEMORY_WRITE:
+        return False
     allowed = _session_auto_approvals.get(conversation_id)
     return bool(allowed and tool_name in allowed)
 
@@ -590,6 +608,8 @@ async def tasks_solve(params: Dict[str, Any], notify: NotifyFn) -> Any:
         get_personal_data_section,
         get_user_language_directive,
     )
+    from zylch.services.solve_context import solve_scope
+    from zylch.services.solve_memory import solve_context_from_task
     from zylch.services.task_executor import TaskExecutor
     from zylch.storage.storage import Storage
 
@@ -686,24 +706,37 @@ async def tasks_solve(params: Dict[str, Any], notify: NotifyFn) -> Any:
                 store,
                 owner_id,
                 SOLVE_TOOLS,
+                # The final-mutation card rides the same solve event stream the
+                # tool-call gate uses, so one `tasks.solve.cancel` aborts either.
+                notify=_notify,
             )
             _active_executor = executor
+            # What this solve is working on, kept apart: the instruction the
+            # human typed is theirs, the task's own text is an observation. A
+            # memory write decided later in the loop needs that distinction and
+            # cannot recover it from the concatenated prompt above.
+            solve_context = solve_context_from_task(task, instructions)
             try:
                 final: Dict[str, Any] = {}
                 done_event: Dict[str, Any] = {}
-                async for event in executor.run():
-                    if event["type"] == "done":
-                        # Hold the done event back — we may decorate it
-                        # with auto-reanalyze fields below before
-                        # emitting, so the renderer can flip the task
-                        # from open to closed in a single beat.
-                        done_event = event
-                        break
-                    if event["type"] == "error":
+                with (
+                    revocable_turn(),
+                    solve_scope(solve_context),
+                    installed_for(executor.request_final_mutation),
+                ):
+                    async for event in executor.run():
+                        if event["type"] == "done":
+                            # Hold the done event back — we may decorate it
+                            # with auto-reanalyze fields below before
+                            # emitting, so the renderer can flip the task
+                            # from open to closed in a single beat.
+                            done_event = event
+                            break
+                        if event["type"] == "error":
+                            _notify(event)
+                            final = {"ok": False, "error": event["message"]}
+                            break
                         _notify(event)
-                        final = {"ok": False, "error": event["message"]}
-                        break
-                    _notify(event)
 
                 if done_event:
                     # Auto-reanalyze after a solve that mutated state
@@ -977,8 +1010,21 @@ async def chat_send(params: Dict[str, Any], notify: NotifyFn) -> Any:
 
     service = ChatService()
 
+    # The turn scope, installed by the driver that owns the turn — the same
+    # arrangement `tasks.solve` uses. `installed_for` makes this client's
+    # approval callback the route a changed final memory mutation must be
+    # accepted through; a driver that installs none fails closed, because the
+    # harness then finds no channel and reports a review instead of writing.
+    #
+    # The cancellation handle is built HERE rather than inside `_run`, because
+    # `_run` is a Task with its own copied context: a handle installed in there
+    # is invisible to the `except` below, which is the one place that learns the
+    # turn was cancelled. The handle itself is shared by reference, so revoking
+    # it from this frame reaches the decision wherever it is running.
+    turn = Cancellation()
+
     async def _run():
-        with policy_scope(mutation_policy):
+        with policy_scope(mutation_policy), revocable_turn(turn), installed_for(approval_callback):
             return await service.process_message(
                 user_message=message,
                 user_id=owner_id,
@@ -991,6 +1037,13 @@ async def chat_send(params: Dict[str, Any], notify: NotifyFn) -> Any:
     _active_chats[conversation_id] = task
     try:
         result = await task
+    except asyncio.CancelledError:
+        # The socket died, or the client aborted. A memory decision may still be
+        # on a worker thread holding this turn's grant, and that grant holds this
+        # handle by reference — so revoking it here stops the thread's next paid
+        # call even though `_run`'s context is already gone.
+        turn.cancel("the chat turn was cancelled")
+        raise
     finally:
         if _active_chats.get(conversation_id) is task:
             _active_chats.pop(conversation_id, None)
@@ -1070,9 +1123,15 @@ async def chat_approve(params: Dict[str, Any], notify: NotifyFn) -> Any:
 
     if mode == "session" and meta is not None:
         conv_id, tool_name = meta
-        allowed = _session_auto_approvals.setdefault(conv_id, set())
-        allowed.add(tool_name)
-        logger.debug(f"[approval] session-approval added: conv={conv_id} " f"tool={tool_name}")
+        if tool_name == CONFIRM_MEMORY_WRITE:
+            # Accepting one memory change never grants the next one. Honoured as
+            # a plain "once" — which the harness then judges on the nonce this
+            # answer carries, exactly as it judges any other acceptance.
+            logger.info("[approval] refusing a session grant for a final memory mutation")
+        else:
+            allowed = _session_auto_approvals.setdefault(conv_id, set())
+            allowed.add(tool_name)
+            logger.debug(f"[approval] session-approval added: conv={conv_id} " f"tool={tool_name}")
 
     if not fut.done():
         # Only forward edits when actually approving — a deny carries no

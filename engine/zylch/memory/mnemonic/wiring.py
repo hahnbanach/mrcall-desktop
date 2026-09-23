@@ -78,9 +78,11 @@ def typed_identifiers(event: MemoryEvent) -> list:
     """The event's identifiers as ``(kind, value)``, for the identity index.
 
     Only the two shapes the index actually stores get a kind. A name or a
-    company name is a real identifier for *retrieval* and no identifier at all
-    for ``person_identifiers``, which deliberately excludes names — two people
-    called Mario Rossi are two people.
+    company name is no identifier at all for ``person_identifiers``, which
+    deliberately excludes names — two people called Mario Rossi are two people.
+    A name does reach ``event_identifiers``, so the role is told how many
+    identifiers a candidate shares; it does not reach this index and it does not
+    reach the search, so it never surfaces a candidate on its own.
     """
     pairs = []
     for token in event_identifiers(event):

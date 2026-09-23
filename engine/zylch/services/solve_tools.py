@@ -192,48 +192,18 @@ def _update_memory(
     store,
     owner_id: str,
 ) -> str:
-    """Update a memory blob by searching and replacing content."""
-    query = args.get("query", "")
-    new_content = args.get("new_content", "")
-    if not query or not new_content:
-        return "Missing query or new_content"
+    """Propose a memory correction from this solve's own observation.
 
-    try:
-        from zylch.memory import (
-            EmbeddingEngine,
-            HybridSearchEngine,
-            MemoryConfig,
-        )
-        from zylch.memory.blob_storage import BlobStorage
-        from zylch.storage.database import get_session
+    The implementation is :mod:`zylch.services.solve_memory`, which holds both
+    paths: the semantic one, where the ``query`` selects nothing and a human
+    confirms the final change, and the legacy top-hit replace this tool shipped
+    with. Kept there rather than here because the semantic
+    path needs the solve's task and instruction context, and this module is a
+    flat dispatch table of self-contained executors.
+    """
+    from .solve_memory import update_memory
 
-        config = MemoryConfig()
-        engine = EmbeddingEngine(config)
-        search = HybridSearchEngine(get_session, engine)
-        blob_store = BlobStorage(get_session, engine)
-
-        results = search.search(
-            owner_id=owner_id,
-            query=query,
-            limit=1,
-        )
-        if not results:
-            return f"No memory entry found for '{query}'"
-
-        r = results[0]
-        blob_id = r.blob_id if hasattr(r, "blob_id") else r.get("blob_id", "")
-        old_content = r.content if hasattr(r, "content") else r.get("content", "")
-
-        blob_store.update_blob(
-            blob_id=blob_id,
-            owner_id=owner_id,
-            content=new_content,
-            event_description="Manual correction via CLI",
-        )
-
-        return f"Memory updated.\n" f"Was: {old_content[:100]}...\n" f"Now: {new_content[:100]}..."
-    except Exception as e:
-        return f"Update failed: {e}"
+    return update_memory(args, store, owner_id)
 
 
 def _download_attachment(

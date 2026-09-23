@@ -7,7 +7,9 @@ import { useNarration } from '../hooks/useNarration'
 import ChatComposer, { type ChatComposerTaskContext } from '../components/ChatComposer'
 import ThreadPanel from '../components/ThreadPanel'
 import Icon from '../components/Icon'
+import MemoryChangeCard from '../components/MemoryChangeCard'
 import { errorMessage, isProfileLockedError, showError } from '../lib/errors'
+import { declineActionFor, isMemoryChange, offersSessionGrant } from '../lib/memoryApproval'
 import type { SolveEvent } from '../types'
 
 interface Props {
@@ -389,7 +391,18 @@ export default function Workspace({ onGoToTasks }: Props = {}) {
     setPendingApproval(active.id, null)
     try {
       if (pending.mode === 'solve') {
-        if (decision === 'deny') {
+        if (decision === 'deny' && declineActionFor(pending.mode, pending.name) === 'decline') {
+          // Declining a memory change declines THAT change, not the solve. The
+          // engine answers it with a review carrying a reason the model reads
+          // and can act on ("not accepted, nothing written"), so the
+          // conversation continues. Cancelling the solve here would throw that
+          // feedback away and leave the engine's worker thread waiting on an
+          // approval nobody is going to answer.
+          await window.zylch.tasks.solveApprove(pending.toolUseId, {
+            approved: false,
+            edited_input: null
+          })
+        } else if (decision === 'deny') {
           // Cancel THIS conversation's solve specifically (engine
           // accepts task_id since the queued-solve refactor — other
           // queued conversations stay alive). Without a task_id arg
@@ -667,6 +680,20 @@ function ApprovalCard({
   // session grant. Non-send gated tools in chat (run_python,
   // update_memory) keep the permission triad.
   const isSend = SEND_TOOLS.has(approval.name)
+  // A memory change is a third kind. It is not a permission to grant and not a
+  // message to send: the engine has already decided, and this asks whether THAT
+  // change is right. It renders its own card below and returns before any of
+  // the permission machinery — including the session grant, which the engine
+  // refuses for this name anyway.
+  if (isMemoryChange(approval.name)) {
+    return (
+      <MemoryChangeCard
+        approval={approval}
+        onAccept={onApproveOnce}
+        onDecline={onDecline}
+      />
+    )
+  }
   const sendCardUx = isSolve || isSend
   const sendLabel = sendCardUx ? labelForSolve(approval.name) : 'Allow once'
   const denyLabel = sendCardUx ? 'Annulla' : 'Deny'
@@ -754,7 +781,7 @@ function ApprovalCard({
         >
           {sendLabel}
         </button>
-        {!sendCardUx && (
+        {!sendCardUx && offersSessionGrant(approval.name) && (
           <button
             onClick={onApproveSession}
             className="px-3 py-1.5 text-sm bg-brand-grey-80 text-white rounded hover:bg-brand-grey-80"

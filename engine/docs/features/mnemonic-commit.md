@@ -22,12 +22,18 @@ retrieval — and `session.py` the one company transaction both the commit and
 the journal open.
 
 ```
-submit(event)
+submit(event, requested=…)
   └─ journal.open_operation  → a recorded terminal result replays here
      journal.claim           → a fenced lease, not an in-process mutex
      agent.decide            → the bounded, paid decision round
+     authorize_mutation      → a human accepts a CHANGED final mutation
      _commit                 → one transaction on the company store
 ```
+
+`requested` is what the calling tool's own arguments asked for. An adapter that
+supplies none is treated as having changed everything: the harness cannot tell a
+faithful proposal from a rewritten one without being told what was asked, and it
+resolves that in the direction that asks a human.
 
 ## One transaction
 
@@ -66,6 +72,52 @@ fail and neither writes.
 An UPDATE **replaces** its blob's identifier rows. The old writer only
 appended, so correcting an email address left the wrong one in the index and
 the next cross-channel lookup still matched it.
+
+## The acceptance
+
+A validated proposal is not yet an authorized one. Between `agent.decide` and
+the transaction, `mnemonic/approval.py` compares the proposal against the
+`RequestedWrite` the adapter declared. A proposal that does what was asked
+proceeds on the approval the caller's own tool call already needed
+(`APPROVAL_TOOLS` gates every memory tool, and `assistant/core.py` refuses with
+no approval channel). A proposal that **changed** something is presented in full
+and written only on an acceptance naming it:
+
+- a different action (`CREATE` where an overwrite was asked for, or the reverse);
+- a different subject — a blob other than the one the call named, or, when the
+  call named none, any target at all, since nothing the caller said picked it;
+- a different entity type or scope;
+- an effect that absorbs, re-points or removes another memory, a
+  reclassification, or a donor.
+
+**What makes an acceptance exact.** Three name-keyed shortcuts auto-approve in
+production: `cs --allow` answers every notification for an allowed tool name,
+the engine remembers `chat.approve(mode="session")` per conversation and tool
+name, and the Desktop card offers "Allow for session". A new tool name defeats
+none of them, because all three key on whatever name is used. So an acceptance
+is not a boolean: the card carries a single-use nonce and the digest of the
+proposal, and the accepting surface must echo both back in `edited_input`. Every
+standing grant answers `(True, None)` and therefore fails structurally, with no
+list of trusted surfaces to maintain.
+
+`proposal_digest` covers the write set's expected versions, so a CAS re-read
+that lands on a different version — or a re-decision that revises the prose — no
+longer matches the acceptance a human gave, and the next round asks again. The
+gate is inside the decision loop for exactly that reason. A denial, a timeout, a
+cancelled turn and an edited card are all refusals; an edit means the accepted
+text is no longer the decided one, and the revision has to be submitted as its
+own instruction.
+
+A caller with no channel — a headless run, a scheduled operator, an RPC client
+offering no approval route — gets `review_needed` and no write.
+
+**Where the channel comes from.** `zylch/services/mnemonic_approval.py` is the
+one bridge from the engine's async `approval_callback` to this synchronous path,
+and the driver that owns the turn installs it: `chat.send` and `tasks.solve` do,
+each also opening a `revocable_turn` so cancelling the turn revokes a dispatch
+grant already copied into a worker thread. The commit runs on a worker thread
+precisely so the bridge can reach the loop; asked from the loop thread it
+refuses rather than deadlocking the loop that would deliver the answer.
 
 ## The permit
 
@@ -152,23 +204,39 @@ of every blob row before and after to prove it.
 - **MERGE and reclassification return `review_needed`.** The proposal is
   recorded, nothing is written. Approximating a merge with an update is the
   failure this harness exists to remove.
-- **Only `create_memory`'s entity path is routed here**, and only when
-  `MNEMONIC_WRITE_PATH=create`. The default is `off`, which is the direct write
-  the tool has always done — the approval that must guard a change to existing
-  memory does not exist yet, so the slice stays unreleased outside a test or an
-  explicitly selected cohort.
-- **A proposal to change existing memory is refused, never written the old
-  way.** A harness that writes around itself when it disagrees is not a
+- **Only the interactive chat tools and the task solve are routed here.**
+  `MNEMONIC_WRITE_PATH` is a ladder: `off` (the shipped default) is the legacy
+  direct writes, `create` is `create_memory`'s entity path alone, and
+  `supervised` adds `update_memory` and the solve — which is what the acceptance
+  above exists to guard. Widening the slice past a test or an explicitly
+  selected cohort is a separate decision; nothing about the acceptance existing
+  makes it the default.
+- **A proposal this mode does not admit is refused, never written the old
+  way.** Under `create`, a proposal to change existing memory returns for
+  review. A harness that writes around itself when it disagrees is not a
   boundary.
 - **`entry_type='behavioral_rule'` still goes to `prefs_store.store_rule`**, in
   both modes. Account rules keep their own dedup and supersession logic.
+- **No adapter populates a `SubjectHint`'s `name`, `email`, `phone` or
+  `company`.** `create_memory` passes at most a bare `FACT` hint, `update_memory`
+  passes a `target_blob_id`, and the solve passes none. Three rules in
+  [mnemonic-decisions.md](mnemonic-decisions.md) therefore describe branches
+  nothing currently reaches: the caller-named-subject anchor an UPDATE falls back
+  to for a legacy row stating neither `Name` nor `Key` (so such a row cannot be
+  updated through the harness at all — it returns review), and the PERSON
+  corroboration arm that needs "a shared identifier plus the same stated name",
+  which leaves PERSON corroboration effectively email-only for
+  `_check_duplicate_create`. Both fail visibly rather than silently, and a
+  populated hint is what a converting adapter supplies when it has one — the
+  rules are not dead, they are unused.
 - **Every other writer in the inventory is still direct.** There is no
   single-writer claim.
 
 ## The supervised slice
 
-`zylch/tools/memory_events.py` turns one `create_memory` call into an
-authenticated event. Two things are kept apart:
+`zylch/tools/memory_events.py` turns a `create_memory` or `update_memory` call
+into an authenticated event, and `zylch/services/solve_memory.py` does the same
+for the task solve's `update_memory`. Two things are kept apart:
 
 - **what the human said** — captured into `assistant/turn_context` by
   `ChatService.process_message` as its first statement, upstream of the
@@ -185,9 +253,35 @@ rewrite to the status of something that was said. The caller class is
 `operator_delegated`: a tool call during a human's turn is the model acting on
 the human's behalf, not an authenticated human instruction.
 
+`update_memory`'s `blob_id` is a **hint**, not a target. It pins that row first
+among the candidates and it is the `RequestedWrite` baseline the acceptance gate
+measures the proposal against — so a proposal that writes elsewhere is a changed
+subject and needs a human. It never becomes the write target by having been
+named.
+
+The **solve** has no chat turn, and `zylch/services/solve_context.py` carries
+what it has instead: the instruction the human typed into the solve box this
+run, and the task's own text, kept separate. A typed instruction is the
+observation and the caller class is `operator_delegated`; with nothing typed,
+the task's text is the observation and the class is `automatic_observation`.
+Extracted content cannot acquire an instruction's authority by being passed to
+the tool a human also uses, and nothing a model writes changes either — the
+authority fields are `MODEL_SEALED`. The solve's `query` reaches the decision as
+nothing at all — it is what the model searched with, and it was briefly passed as
+a `SubjectHint(name=…)` on the theory that a name hint widens retrieval, which it
+does not: `candidates.gather` searches the observation and the identifier index
+stores no names. What it did do is make `names_entity_subject` true, which forbids
+a company FACT outright, so a solve could not store "from Monday we open at 8".
+There is no retrieval-only field to put it in, so it is passed nowhere. Because
+the caller therefore names no blob, every solve proposal writes to a subject it
+did not choose and is always shown before anything is written. The origin
+stays `interactive` in both cases: a human pressed Solve, so the dispatch rides
+their turn and leaves bounded preparation untouched.
+
 The tool reports success only after a committed receipt **and** an actual
 read-back through the ordinary scoped read path. A decision is never reported
-as a save.
+as a save — including a change the human was shown and declined, which is a
+review with a reason.
 
 ## Tests
 
@@ -198,3 +292,14 @@ two independent OS processes committing one event id once. The vertical slice
 runs the real tool, the real role, the real `LLMClient` and the real
 reservation ledger with only the provider transport replaced: no test-supplied
 preparation context, no stubbed `check_dispatch`, no faked reservation.
+
+The acceptance and the adapters have their own:
+`tests/services/test_mnemonic_approval.py` (what counts as a change, what counts
+as an acceptance, and the gate end to end against real rows),
+`tests/tools/test_mnemonic_adapters.py` (the observation/suggestion split, the
+sealed authority fields, the mode ladder) and
+`tests/services/test_mnemonic_solve.py` (the query's lost authority, the two
+caller classes, and the real `TaskExecutor` driven across both of its thread
+boundaries). The Desktop card's half of the contract is
+`app/scripts/test-memory-approval.mjs`, which drives the real `StdioRpcClient`
+against a fixture sidecar and asserts the `chat.approve` frame that arrives.

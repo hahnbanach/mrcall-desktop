@@ -20,6 +20,13 @@ What one commit is:
   statement has nowhere to go instead of quietly committing a second
   transaction inside an operation that calls itself atomic.
 
+Between the validated proposal and that transaction stands one more gate. A
+proposal that changed what the caller asked for — a different action, a
+different subject, a different scope, or an effect that absorbs another memory —
+is shown to a human in full and proceeds only on an acceptance that names that
+exact proposal and its versions (:mod:`zylch.memory.mnemonic.approval`). A
+faithful proposal rides the approval the caller's own tool call already got.
+
 What it is not yet: MERGE and reclassification return ``review_needed`` until
 the milestones that own them arrive. They are refused here rather than
 approximated, because an UPDATE standing in for a merge is precisely the
@@ -41,6 +48,7 @@ from zylch.memory.company_key import scoped_namespace
 
 from . import journal
 from .agent import decide
+from .approval import RequestedWrite, authorize_mutation
 from .authorization import MnemonicRefusal, authorize_request
 from .contracts import CREATE, MAX_DECISION_ATTEMPTS, MERGE, UPDATE, MemoryEvent
 from .wiring import (
@@ -73,14 +81,20 @@ def submit(
     context: Optional[CommitContext] = None,
     allow_actions: Sequence[str] = (CREATE, UPDATE),
     parent_event_id: Optional[str] = None,
+    requested: Optional[RequestedWrite] = None,
 ) -> MnemonicResult:
     """Decide and commit one memory event, exactly once.
 
-    ``allow_actions`` narrows the slice a caller is ready for. The milestone 3
-    ``create_memory`` path passes ``(CREATE,)``: a proposal to modify existing
-    memory then returns ``review_needed`` and waits for milestone 4's approval.
-    It never falls back to the legacy direct write, which would be the harness
-    writing around itself.
+    ``allow_actions`` narrows the slice a caller is ready for. A path that
+    passes ``(CREATE,)`` refuses a proposal to modify existing memory outright,
+    rather than falling back to a legacy direct write — that would be the
+    harness writing around itself.
+
+    ``requested`` is what the calling tool's own arguments asked for, and it is
+    the baseline a changed final mutation is measured against. An adapter that
+    supplies none is treated as having changed everything: the harness cannot
+    tell a faithful proposal from a rewritten one without being told what was
+    asked, and it resolves that in the direction that asks a human.
 
     It **returns a result; it does not raise.** Callers are tools that owe
     their own caller an answer, and an exception escaping here would say
@@ -88,9 +102,9 @@ def submit(
     propagates: that is the process going away, not an outcome.
     """
     try:
-        return _submit(event, client, context, allow_actions, parent_event_id)
+        return _submit(event, client, context, allow_actions, parent_event_id, requested)
     except Exception as exc:  # noqa: BLE001 - the public surface owes an answer
-        logger.error(f"[mnemonic] submit failed event={event.event_id}: {exc}")
+        logger.exception(f"[mnemonic] submit failed event={event.event_id}: {exc!r}")
         return MnemonicResult.retryable_failure(
             event.event_id, f"the semantic write path failed: {exc}"
         )
@@ -102,6 +116,7 @@ def _submit(
     context: Optional[CommitContext],
     allow_actions: Sequence[str],
     parent_event_id: Optional[str],
+    requested: Optional[RequestedWrite],
 ) -> MnemonicResult:
     try:
         opened = journal.open_operation(event, parent_event_id=parent_event_id)
@@ -130,7 +145,7 @@ def _submit(
             event.event_id, "another attempt already settled this event"
         )
 
-    return _decide_and_commit(event, lease, client, context, allow_actions)
+    return _decide_and_commit(event, lease, client, context, allow_actions, requested)
 
 
 def _decide_and_commit(
@@ -139,6 +154,7 @@ def _decide_and_commit(
     client: Any,
     context: CommitContext,
     allow_actions: Sequence[str],
+    requested: Optional[RequestedWrite] = None,
 ) -> MnemonicResult:
     """At most :data:`MAX_DECISION_ATTEMPTS` decide → commit rounds.
 
@@ -173,6 +189,20 @@ def _decide_and_commit(
             return _settle(event, settled, proposal)
 
         refusal = _unsupported(proposal, allow_actions)
+        if refusal:
+            return _settle(
+                event,
+                MnemonicResult.review_needed(
+                    event.event_id, refusal, proposal=proposal, attempts=decision.attempts
+                ),
+                proposal,
+            )
+
+        # The human acceptance, inside the loop rather than before it: a CAS
+        # conflict re-decides, and the proposal digest covers the versions the
+        # new round read, so the next round asks again instead of writing on an
+        # acceptance given for a target that has since moved.
+        refusal = authorize_mutation(event, proposal, requested)
         if refusal:
             return _settle(
                 event,

@@ -67,8 +67,11 @@ the wrong category's numbers produces a wrong offer.
 contact details).
 - send_email / send_whatsapp / send_sms: Send a message. User approves \
 the payload via an inline approval card.
-- update_memory: Correct or update a contact memory entry. User \
-approves.
+- update_memory: PROPOSE a correction to memory. The query is what you \
+searched with; it does not pick what gets overwritten, and what you pass is \
+your reading of the correction, not the bytes to store. The engine decides \
+the final change and shows it to the user, who confirms which memory \
+actually changes.
 - run_python: Execute Python in a sandbox (PDF parsing, calculations). \
 User approves the code.
 """
@@ -161,21 +164,30 @@ SOLVE_TOOLS = [
     {
         "name": "update_memory",
         "description": (
-            "Update a contact's memory entry."
-            " Use to correct errors, add info, or rename."
-            " First search_memory to find the entry,"
-            " then update with corrected content."
+            "Propose a correction to a contact's memory entry — an error to fix,"
+            " information to add, a rename. Search_memory first so you know what"
+            " exists. This does NOT overwrite the best-matching entry: the"
+            " engine decides the final change from what was actually asked, and"
+            " the user confirms which memory changes before anything is written."
         ),
         "input_schema": {
             "type": "object",
             "properties": {
                 "query": {
                     "type": "string",
-                    "description": ("Name or keyword to find the memory entry to update"),
+                    "description": (
+                        "Name or keyword identifying what the correction is"
+                        " about — what you searched with. It selects nothing:"
+                        " the engine decides which memory changes from what was"
+                        " actually asked, and confirms it with the user."
+                    ),
                 },
                 "new_content": {
                     "type": "string",
-                    "description": ("The corrected full content (replaces existing)"),
+                    "description": (
+                        "The corrected content as you understand the request."
+                        " A proposal, not the literal replacement text."
+                    ),
                 },
             },
             "required": ["query", "new_content"],
