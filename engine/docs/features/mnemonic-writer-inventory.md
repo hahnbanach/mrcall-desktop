@@ -103,8 +103,8 @@ The ownership sequence is:
 | 1 | mutation authorization before slash/reset routing and kernel request policy |
 | 3 | guarded `BlobStorage` commit primitives and transaction-scoped sinks (installed: `semantic_create`/`semantic_update` under a permit, `memory/associations.py`) |
 | 4 | interactive create/update and task-solve adapters |
-| 5 | facts, rules, correction learning and memory command writers |
-| 6 | async workers, synchronous job facades, associations and identifiers |
+| 5 | no writer conversion: retention under every rewrite, the departure record and the mechanical restore |
+| 6 | async workers, synchronous job facades, associations and identifiers; facts, rules, correction learning and memory command writers |
 | 7 | reconsolidation, reference migration, donor deletion and aliases |
 | 8 | join, storage migrations, backfills and semantic repair scripts |
 

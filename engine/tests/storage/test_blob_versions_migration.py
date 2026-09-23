@@ -159,3 +159,33 @@ def test_blob_id_is_indexed_and_carries_no_cascading_foreign_key(store_dir):
     _migrate(path)
     assert _foreign_keys(path, VERSIONS) == []
     assert any("blob_id" in name for name in _indexes(path, VERSIONS))
+
+
+def test_an_upgraded_store_gains_the_departure_column(store_dir):
+    """`memory_operations.departure` is added by the column pass, not by `create_all`.
+
+    A store that already holds the journal never goes through `create_all` for
+    that table again, so the column can only arrive through
+    `_apply_column_migrations` inside `prepare_store`'s ensure pass. Built by
+    dropping the column from a current store, because every store this test
+    can construct from the ORM already has it.
+    """
+    path = memory_db_path(COMPANY)
+    _pre_versions_store(path)
+    conn = sqlite3.connect(path)
+    conn.execute("ALTER TABLE memory_operations DROP COLUMN departure")
+    conn.commit()
+    conn.close()
+    before = blob_table_digest(path)
+
+    engine = open_memory_engine(COMPANY, create=False)
+    try:
+        prepare_store(engine, COMPANY, created_by="mint")
+    finally:
+        engine.dispose()
+
+    conn = sqlite3.connect(path)
+    columns = {row[1] for row in conn.execute("PRAGMA table_info(memory_operations)")}
+    conn.close()
+    assert "departure" in columns
+    assert blob_table_digest(path) == before

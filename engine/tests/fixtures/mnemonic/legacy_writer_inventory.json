@@ -81,7 +81,7 @@
       "call": "delete_all_blobs",
       "count": 1,
       "mode": "async",
-      "milestone": 5
+      "milestone": 6
     },
     {
       "path": "zylch/services/command_handlers.py",
@@ -89,7 +89,7 @@
       "call": "delete_blob",
       "count": 1,
       "mode": "async",
-      "milestone": 5
+      "milestone": 6
     },
     {
       "path": "zylch/services/command_handlers.py",
@@ -97,7 +97,7 @@
       "call": "store_blob",
       "count": 2,
       "mode": "async",
-      "milestone": 5
+      "milestone": 6
     },
     {
       "path": "zylch/services/command_handlers.py",
@@ -105,7 +105,7 @@
       "call": "update_blob",
       "count": 1,
       "mode": "async",
-      "milestone": 5
+      "milestone": 6
     },
     {
       "path": "zylch/services/command_handlers.py",
@@ -121,7 +121,7 @@
       "call": "store_rule",
       "count": 1,
       "mode": "sync",
-      "milestone": 5
+      "milestone": 6
     },
     {
       "path": "zylch/services/correction_learning.py",
@@ -129,7 +129,7 @@
       "call": "upsert_fact",
       "count": 1,
       "mode": "sync",
-      "milestone": 5
+      "milestone": 6
     },
     {
       "path": "zylch/services/facts_store.py",
@@ -137,7 +137,7 @@
       "call": "store_blob",
       "count": 1,
       "mode": "sync",
-      "milestone": 5
+      "milestone": 6
     },
     {
       "path": "zylch/services/facts_store.py",
@@ -145,7 +145,7 @@
       "call": "update_blob",
       "count": 1,
       "mode": "sync",
-      "milestone": 5
+      "milestone": 6
     },
     {
       "path": "zylch/services/job_executor.py",
@@ -217,7 +217,7 @@
       "call": "store_blob",
       "count": 1,
       "mode": "sync",
-      "milestone": 5
+      "milestone": 6
     },
     {
       "path": "zylch/services/prefs_store.py",
@@ -225,7 +225,7 @@
       "call": "update_blob",
       "count": 1,
       "mode": "sync",
-      "milestone": 5
+      "milestone": 6
     },
     {
       "path": "zylch/services/prefs_store.py",
@@ -233,7 +233,7 @@
       "call": "_create_blob",
       "count": 1,
       "mode": "sync",
-      "milestone": 5
+      "milestone": 6
     },
     {
       "path": "zylch/services/prefs_store.py",
@@ -241,7 +241,7 @@
       "call": "_update_blob",
       "count": 1,
       "mode": "sync",
-      "milestone": 5
+      "milestone": 6
     },
     {
       "path": "zylch/services/prefs_store.py",
@@ -249,7 +249,7 @@
       "call": "_update_blob",
       "count": 1,
       "mode": "sync",
-      "milestone": 5
+      "milestone": 6
     },
     {
       "path": "zylch/storage/step_memory_split.py",
@@ -265,7 +265,7 @@
       "call": "store_rule",
       "count": 1,
       "mode": "async",
-      "milestone": 4
+      "milestone": 6
     },
     {
       "path": "zylch/workers/memory.py",

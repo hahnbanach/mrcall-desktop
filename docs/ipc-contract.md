@@ -1148,6 +1148,7 @@ fixed recipient, a rewritten body) and is applied before the tool runs;
 a non-dict is ignored. Back-compat: with `mode` absent the legacy
 `approved: bool` is honoured (`true` → `"once"`, `false` → `"deny"`). An
 unknown `tool_use_id` or an invalid `mode` is `-32602`.
+
 **A `chat.send` turn does not outlive its connection.** When the socket
 closes, the engine **cancels** the `chat.send` handlers that were in
 flight on it rather than letting them run to completion. The cancel is

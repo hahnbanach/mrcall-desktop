@@ -102,8 +102,9 @@ class UpdateMemoryTool(Tool):
             # behavioral rule must NEVER overwrite a contact blob — that is
             # exactly the general-feedback-into-a-contact mis-routing — and a
             # rule is refined through the rule store's own door, which keeps
-            # its shape check. Rules are not company memory: the mnemonic
-            # role never decides them.
+            # its shape check. A rule declared as one is not the role's to
+            # decide; an `entity_fact` naming a rule row still is, and the
+            # validator admits an account STYLE proposal there.
             from zylch.services.prefs_store import refine_rule
 
             outcome = refine_rule(

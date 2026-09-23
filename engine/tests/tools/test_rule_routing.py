@@ -8,10 +8,12 @@ Locks the fix for the "general feedback written into a contact blob" bug:
 
 The routing is structural — the model-declared `entry_type` and the family of
 the model-declared `namespace`, never the content — and it runs before the
-mnemonic role is asked anything. Rules never reach the role: they go through
-the rule store. Entity facts do reach it, so the entity cases here run the
-real semantic path with the role's answer scripted (`decided`), against a
-real temp SQLite store.
+mnemonic role is asked anything. A rule declared as one (`behavioral_rule`, or
+a rule-family namespace with no `entry_type`) goes through the rule store and
+the role is not asked. Entity facts reach the role — including one whose named
+`blob_id` is a rule row, which the role may answer with an account STYLE
+proposal — so the entity cases here run the real semantic path with the role's
+answer scripted (`decided`), against a real temp SQLite store.
 """
 
 import asyncio
@@ -268,6 +270,21 @@ def test_an_entity_cannot_be_written_over_a_rule(fresh_db):
     assert "entity-shaped" in (res.error or "")
     _, content = _blob(rid)
     assert content == "RULE: v1"
+
+
+def test_a_refinement_with_nothing_to_say_or_no_row_is_refused(fresh_db):
+    from zylch.services.prefs_store import refine_rule
+    from zylch.tools.base import ToolStatus
+    from zylch.tools.update_memory_tool import UpdateMemoryTool
+
+    assert refine_rule(OWNER, "b1", "   ", "x", writer="test")["action"] == "refused"
+    res = _run(
+        UpdateMemoryTool(owner_id=OWNER).execute(
+            blob_id="no-such-blob", new_content="RULE: v2", entry_type="behavioral_rule"
+        )
+    )
+    assert res.status == ToolStatus.ERROR
+    assert "No blob with id" in (res.error or "")
 
 
 def test_entity_fact_update_on_contact_still_works(harness, monkeypatch):

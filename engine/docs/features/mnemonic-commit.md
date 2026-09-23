@@ -123,8 +123,11 @@ write, the `operation_id` of the event that caused it. The sweep's donor delete
 is `delete_blob(retain=True)`: the donor's final text is retained with reason
 `consolidate` before the row goes. The owner's own `/memory delete` and
 `/memory reset` retain nothing and prune the versions of exactly the blobs they
-remove — consolidation is the only remover of memory, and it keeps what it
-removes.
+remove — consolidation is the only *semantic* operation that removes memory,
+and it keeps what it removes. The one raw delete in the estate,
+`scripts/compact_learned_prefs.py`'s `DELETE FROM blobs`, is a maintenance
+script the frozen inventory names (`sql:DELETE:blobs`, milestone 8); it
+retains nothing and stays until milestone 8 converts it.
 
 `blob_versions.blob_id` is indexed and deliberately **not** a foreign key: a
 cascade would delete a retained donor inside the very transaction that retains

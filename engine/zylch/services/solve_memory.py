@@ -159,14 +159,12 @@ def solve_context_from_task(
 ) -> "object":
     """Build the solve context for one run, from the task row the caller loaded.
 
-    Kept here rather than inside the RPC handler so a second driver constructs it
-    the same way instead of re-deriving which task column is the change marker.
-    ``tasks.solve`` over RPC is the only caller today: the interactive CLI
-    (``services/task_interactive.py``) builds its executors without this context,
-    without an approval channel and without a notifier, so under ``supervised``
-    its ``update_memory`` returns :data:`NO_SOLVE_CONTEXT` and writes nothing.
-    That is fail-closed and it is a real gap — converting the CLI surfaces is
-    their own milestone's work, not something this function pretends to cover.
+    Kept here rather than inside either driver so both construct it the same
+    way instead of re-deriving which task column is the change marker:
+    ``tasks.solve`` over RPC and the interactive CLI
+    (``services/task_interactive.py``), which installs the context around each
+    of its executor runs. A driver that installs none gets
+    :data:`NO_SOLVE_CONTEXT` from ``update_memory`` and writes nothing.
     """
     from .solve_context import SolveContext
 
