@@ -317,6 +317,7 @@ registry on 2026-08-15 (65 methods), plus `emails.needs_reply` added
 | `whatsapp.search_messages` | `query?, limit=200` | {threads, query} |
 | `whatsapp.send_message` | `chat_jid?, text?` | {ok, message?, error?} |
 | `whatsapp.status` | — | {connected, has_session, jid?} |
+| `whatsapp.sync` | — | {ok, contacts?, groups?, lid?, error?} — re-pulls what a linked device may ask for; never message history |
 
 ### Notification streams
 

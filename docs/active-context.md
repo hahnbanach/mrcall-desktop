@@ -1,6 +1,6 @@
 ---
-doc_baseline_commit: b2866badfee488a6b1bea2e18613c39cdf646d26
-doc_baseline_date: 2026-09-22
+doc_baseline_commit: ca91ed2470ead3c37f4cd8665832b1c8214fe0ee
+doc_baseline_date: 2026-09-23
 ---
 
 # Active Context — Cross-cutting
@@ -56,12 +56,31 @@ installer alongside the Apple Silicon dmg**. The previous one was `v0.1.29`,
 so a Windows user upgrading arrives from a build that old; `v0.1.40` through
 `v0.1.51` ship the dmg alone. Neither application has been exercised: Mac
 installation with personal-key GUI entry is unverified, and the `.exe` has not
-been
-downloaded from the release, let alone run. The Windows risk is specific —
+been downloaded from the release, let alone run. The Windows risk is specific —
 neonize loads from loose files via `sys._MEIPASS` rather than as a collected
 package, and a green build cannot prove that import resolves at run time.
 Runtime contracts are in [IPC](ipc-contract.md),
 [remote backend](remote-backend.md) and per-tree docs.
+
+**WhatsApp is a linked device, and it expires.** whatsmeow's protocol version
+is compiled into neonize; when it falls behind, WhatsApp answers
+`<failure reason="405"/>` and closes the socket, and nothing in the product
+says so. `neonize` is therefore unconstrained in `engine/pyproject.toml`, the
+build installs it with `--upgrade`, and the build fails when what it installed
+is not the newest on PyPI — blocking on macOS, while on Windows
+`continue-on-error` turns it into a release with no Windows installer and no
+red run. Messages themselves arrive by push on
+that socket (`MessageEv`), exactly as they do in WhatsApp Web — nothing polls
+for them. `whatsapp.sync` re-pulls what a linked device may ask for (contacts,
+groups, LID) and does not fetch message history. The protocol has a request for
+it — neonize builds `HISTORY_SYNC_ON_DEMAND` — but whatsmeow sends that as a
+PEER message to your own JID and neonize's `send_message()` exposes no peer
+flag, so it is buildable and unsendable from Python. Reaching it is a neonize
+change, not ours.
+`_whatsapp_refresh_loop` in `serve_ws` reattaches and re-syncs every
+`WHATSAPP_REFRESH_MINUTES` (default 15), skipping silently with no session on
+disk. Written, **not deployed**: `desktop.mrcall.ai` runs a separate checkout
+under `mrcalld`, where only the neonize upgrade was applied by hand.
 
 ## Unresolved
 
@@ -89,7 +108,9 @@ Runtime contracts are in [IPC](ipc-contract.md),
 2. Verify the installed applications through their GUI: the Mac one with
    personal-key entry, and the Windows one at all — install, open, scan the
    WhatsApp QR. Until that runs, support@ keeps telling customers macOS only.
-3. Resume deferred product work from its existing briefs when requested.
+3. Deploy the WhatsApp refresh work to `desktop.mrcall.ai`, which still runs
+   the previous engine with only a hand-applied neonize upgrade.
+4. Resume deferred product work from its existing briefs when requested.
    The [thin web/mobile client brief](execution-plans/cross-machine-thin-clients.md)
    is a parked nice-to-have, not scheduled work; remind the CTO that it already
    exists rather than analysing it again. Electron remains the primary client.

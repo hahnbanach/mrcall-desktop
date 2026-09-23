@@ -485,4 +485,4 @@ async def serve_ws(
             auto_task.cancel()
             wa_task.cancel()
             reaper_task.cancel()
-            await asyncio.gather(auto_task, reaper_task, return_exceptions=True)
+            await asyncio.gather(auto_task, wa_task, reaper_task, return_exceptions=True)

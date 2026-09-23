@@ -775,10 +775,16 @@ async def whatsapp_sync(params: Dict[str, Any], notify: NotifyFn) -> Any:
     """whatsapp.sync() -> {ok, contacts?, groups?, lid?, error?}.
 
     Re-pull everything WhatsApp lets a linked device pull on demand:
-    contacts, groups and LID contacts. It does NOT fetch message history —
-    neonize exposes no history-sync request, because WhatsApp Web pushes
-    history from the phone in `HistorySyncEv` blobs on its own schedule.
-    A caller that wants "everything" gets everything that is askable.
+    contacts, groups and LID contacts. It does NOT fetch message history.
+
+    Not because the protocol lacks a request: neonize 0.5.2 ships
+    `neonize.builder.build_history_sync_request(message_info, count)`, which
+    builds the PEER_DATA_OPERATION_REQUEST carrying
+    `HISTORY_SYNC_ON_DEMAND`. whatsmeow delivers that to your own JID as a
+    PEER message, and neonize's `send_message()` exposes no peer flag — its
+    signature ends at `add_msg_secret`, and `NewClient` has no peer-sending
+    method at all. So the request is buildable and unsendable from Python
+    today. Reaching it means a neonize change, not a change here.
 
     Runs the blocking neonize calls in a thread executor so the JSON-RPC
     loop stays responsive, and answers a missing connection with
