@@ -32,7 +32,9 @@ already answered. Independent activation review passes 25 focused tests; four
 real GPT-6 replay scenarios and 220 voice/kernel/budget tests pass. The correction
 is active after an isolated cold restart. A third call confirms smooth spoken
 interruptions without repetition, but makes no delegation: the backend race and
-silent-decision path still need a phone demonstration. Calls remain
+silent-decision path still need a phone demonstration. Saved revision 3 explicitly
+requests backend verification for business questions; the idle service has restarted
+and is ready for that cold-start test. Caller availability is pending. Calls remain
 isolated with all local experiment ceilings removed; ledger history, accounting
 and provider constraints are preserved. Service and tunnel have no expiry. See
 [configuration and diagnostics](features/voice-agent-configuration.md),

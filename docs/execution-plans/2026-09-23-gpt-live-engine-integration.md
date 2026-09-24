@@ -481,6 +481,24 @@ APPROVED; fresh plan amendment review also APPROVED. Existing M1–M3 approvals 
   no newly demonstrated defect. Activation remains APPROVED; M4 remains REVISE
   because this call does not exercise delegation or the outstanding live scenarios.
 
+
+- Prepared the next backend-focused call through the actual authenticated kernel
+  `cs rpc`: configuration revision 2→3 changes instructions only. Voice is told
+  explicitly to delegate order/delivery/color/tracking verification before giving
+  business answers and to avoid announcing historical context during the greeting.
+  The backend is told to consult the selected-memory tool for that verification.
+  This is a test configuration, not evidence that delegation will occur. Revision-2
+  backup is private; Firebase ID token stays in memory/pipes, temporary client
+  workspace removed without a token cache. No company fixture, limit or ledger
+  is changed.
+- Restarted only the idle smoke service to prepare the strict cold-start scenario:
+  PID 2261401, available/unlimited health before any new RPC; tunnel PID 1903954
+  unchanged, both runtime limits infinite. All six closed call rows hash-match
+  `M4-revision3-prestart.json`. The caller is unavailable for another phone test
+  now. Leave this configuration ready; the next call should ask for tracking,
+  correct the request while verification runs, then allow the response to finish.
+  No additional call occurred and all remaining M4 criteria stay open.
+
 ### M3 — 2026-09-24
 
 **Integrated GPT-6 telephone retest — 2026-09-24 12:05 UTC:** the caller reports
