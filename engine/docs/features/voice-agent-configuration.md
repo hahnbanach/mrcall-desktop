@@ -3,7 +3,8 @@
 <!-- doc-scope:start -->
 Scope: authenticated operator configuration, immutable snapshots and read-only
 selected-fact retrieval from M2, the opt-in M3 engine listener and M4 private
-diagnostic capture. The isolated listener reuses M1's durable admission and
+diagnostic capture, the optional clock capability and autonomous diagnostic caller.
+The isolated listener reuses M1's durable admission and
 closure ledger. The milestone plan owns live acceptance evidence and open criteria.
 <!-- doc-scope:end -->
 
@@ -176,7 +177,8 @@ ledger's policy identity and does **not** choose this voice backend.
 
 `openai_voice` translates the existing agent/tool loop to Responses with
 `model=gpt-6-sol`, `reasoning.effort=none`, `store=false`, standard processing and
-only `caller_memory` function calls. GPT-Live remains `gpt-live-1`. This short
+only the approved `caller_memory` and `get_current_time` function names.
+Each call exposes only its configured subset; unknown tools cannot execute. GPT-Live remains `gpt-live-1`. This short
 selected-fact workload uses no hidden reasoning state or provider conversation
 storage. Unknown models/options/response shapes fail closed, without fallback.
 The common LLM ledger reserves before dispatch and settles actual input, cache
@@ -220,45 +222,68 @@ an immediate greeting in the configured language/wording, without waiting for
 lookup or caller speech. The command asks not to repeat an already-spoken greeting;
 acknowledgement is not proof of speech or playback. This explicit start instruction
 follows the [official greeting flow](https://developers.openai.com/api/docs/guides/live-conversations#greet-before-the-caller-speaks).
-The task is canceled on close. Selected late context uses
-quiet `session.thinking.append`; delegated answers use `session.commentary.append`.
+The task is canceled on close. Selected caller context is supplied to GPT-6;
+delegated answers use `session.commentary.append`.
 Append content is split without loss within a conservative 480-byte bound, below
 the provider's 500-token limit. Official contracts:
 [delegation](https://developers.openai.com/api/docs/guides/live-delegation) and
 [transcripts](https://developers.openai.com/api/docs/guides/live-conversations).
 
 At attachment, initial lookup loads all selected, still-authorized facts for the
-recognized caller asynchronously, independently of the greeting. The voice may
-answer directly from that verified context; it delegates missing information or
-additional work. It must distinguish stored history from a current external check,
-avoid technical handoff narration and never announce loaded facts unsolicited.
-This does not expand caller permissions or load unselected/internal facts.
+recognized caller asynchronously, independently of the greeting. GPT-6 receives
+these facts with the accumulated transcript before its first semantic run. The
+three-second read timeout or a lookup failure produces empty facts plus missing
+information; it does not prevent an answer. Diagnostic delays are explicit test
+controls and normally zero. Full facts are no longer independently forwarded as
+quiet voice context. GPT-Live is instructed to delegate substantive questions,
+follow-ups and every correction, then present the new backend result.
+GPT-6 chooses whether the preloaded facts suffice or an enabled tool is needed.
+Role-specific rules follow shared configuration in both model instruction paths.
+GPT-6 is instructed not to greet; greeting configuration belongs to GPT-Live. Before backend
+commentary, GPT-Live may only remain quiet or give a neutral acknowledgement,
+except for its initial greeting; it must not claim access, facts or operations.
+Backend instructions attribute caller statements and preserve weekday granularity;
+a clock alone cannot establish an order date. These are model instructions, not
+a deterministic output validator. The latest carrier retest delegates a spoken
+correction correctly, but obsolete speech continues during the interruption.
+There is no live shipment/tracking lookup; absent tracking is stated specifically,
+without promising a check that an order number would supposedly enable.
 
-Each call owns one customer-service agent using the existing LLM/tool loop and
-budget admission. It gets only configured instructions and `CallerMemory`; owner
-persona, preferences, channel status, triggers, slash routing and general tools
-are excluded. Transcript fragments accumulate without dispatch. Delegation starts
-one request. Each run snapshots transcript text and both caller/voice revision
-counters before awaiting work. New input or voice output while it runs triggers
-reconciliation before delivery. A voice-specific subclass checks the caller revision before
-each tool execution and model dispatch. Voice progress alone does not abort a
-lookup or discard its result; both caller and voice revisions still fence final
-answers and every delegated-answer append. In-flight paid requests finish through
-normal accounting; at the next boundary an obsolete caller task stops, its incomplete
-history is removed and the latest transcript is processed serially. Previously
-completed history is retained. No backend request is dispatched in parallel.
-The backend returns exactly
-`[NO_FURTHER_RESPONSE]` when the voice has already fully answered the latest
-request correctly; the controller consumes this decision without a commentary
-append. Partial, incorrect answers and new questions still require useful replies.
-Every delegated-answer append fragment checks both revisions and closure. New speech
-can postpone delivery while reconciliation runs; live latency remains an M4
-acceptance criterion. Transcript events describe provider output, not proof of
-handset playback. Live listening confirms spoken correction and one reconciled
-backend/tool answer delivered through voice, but a later day follow-up remains
-unanswered. The latest caller-only intermediate checks and direct-context policy
-still need a phone retest for useful continuity. Final voice-aware reconciliation
-can still require another agent run; it must preserve completed lookup work.
+Each call owns one GPT-6 customer-service agent using the existing LLM/tool loop
+and budget admission. Only configured tools are supplied: `caller_memory` and,
+optionally, `get_current_time`. Owner persona, preferences, channel status,
+triggers, slash routing and general tools are excluded. No intent keyword router
+selects tools. Clock calls require an explicit valid IANA `timezone` and return
+`datetime` (ISO timestamp), `timezone`, `utc_offset_seconds` and
+`source: "system_clock"`. Invalid arguments return a fixed error without echoing
+them. The tool uses Python's system clock/ZoneInfo, executes no shell and reads no
+customer/profile data. Configuration may set a default timezone; otherwise GPT-6
+asks when the location is unclear. Prompt timestamps and earlier clock results
+are not a current reading. Existing configurations remain memory-only unless
+explicitly updated; duplicate/unknown capability names are refused.
+
+Transcript fragments accumulate without dispatch. Delegation starts one semantic
+run. Each run snapshots transcript text and caller/voice counters before awaiting
+work; counters remain diagnostic evidence. Only caller changes invalidate tools,
+model dispatch and final answer delivery. Voice acknowledgement alone never
+restarts GPT-6 or discards its answer. Every answer fragment checks caller revision
+and closure; binding is revalidated before delivery. In-flight paid requests
+finish normal accounting; at the next boundary an obsolete caller task stops,
+incomplete history is removed and the latest transcript is processed serially.
+Completed history is retained. No backend requests run in parallel. After a
+superseded run or interrupted answer append, the controller waits for a fresh
+delegation at the latest caller revision or 1.2 seconds of input quiet. Further
+caller fragments reset that interval; voice output does not. This coalescing is a
+cancellable scheduling heuristic, not a provider turn-complete event or a local
+conversation ceiling; initial dispatch stays immediate. Diagnostics record the
+wait and whether delegation or quiet released it.
+
+The backend can return `[NO_FURTHER_RESPONSE]` when the actual transcript already
+fully answers the latest request correctly; this decision is consumed without
+commentary. It requires no extra voice-only reconciliation run. GPT-Live must
+preserve material missing-information clauses and avoid repeating already-spoken
+content. These model behaviors still require telephone evidence: a successful
+append is not proof of exact wording or handset playback. M4 remains open.
 
 Hangup, deadline and daemon shutdown cancel asynchronous work and suppress late
 results. A dispatched blocking LLM request may finish and settle in its original
@@ -301,7 +326,7 @@ contains only its basename and capture status. The trace records UTC/local recei
 times, provider timeline offsets, call/config revision, backend run/input revision
 and delegation IDs. Separate records hold selected memory results, final backend
 answers, superseded answers, attempted/sent append content, server acknowledgements,
-caller/voice transcript deltas, audio timing ranges and closure. Audio bytes,
+caller/voice transcript deltas, clock arguments/results, audio timing ranges and closure. Audio bytes,
 hidden reasoning, provider payloads, credential configuration and unselected memory
 are never supplied to the sink. Known saved secret values and recognizable token
 strings are redacted defensively. Raw traces remain outside Git; retain them until
@@ -336,3 +361,24 @@ Read a trace without activating any profile:
 Its output includes private dialogue: keep reports outside Git. The renderer
 preserves complete transcript text; the underlying SQLite events retain every
 original fragment and timing for overlap/repetition analysis.
+
+
+### Autonomous diagnostic caller
+
+`scripts/voice_m4_auto_call.py` originates scripted carrier TTS calls exclusively
+from and to `+390289047081`, with an explicitly marked isolated profile and a
+private Vonage application-key path. Scenarios use NCCO `wait`/`talk`; they do not
+record audio, modify routing or call an operator handset. The standalone driver
+is not registered as an engine/model tool. Its private `M4-autocaller.db` records
+intent and a retained reservation before POST, then carrier UUID/status/price.
+An uncertain create/closure blocks another origination across restarts; no request
+is automatically retried. Known UUIDs receive cleanup and receipt reconciliation.
+Currency absent from carrier receipts stays unknown. Incoming voice/model ledgers
+continue independently; do not merge provider units into a fictitious USD total.
+
+Automated caller identity is whatever the signed carrier callback supplies. The
+test number is not substituted for the frozen customer's phone; unknown caller
+handling does not certify known-customer recognition. Exact scripted utterances,
+incoming transcripts, tools and commentary establish reproducible provider-path
+evidence, not human handset listening. Driver lifecycle tests use mocked HTTP.
+Official carrier actions: [NCCO reference](https://developer.vonage.com/en/voice/voice-api/ncco-reference).

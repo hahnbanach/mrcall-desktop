@@ -1,8 +1,9 @@
 # GPT-Live M1 telephone smoke
 
 <!-- doc-scope:start -->
-Scope: local M1 runner, isolated test prerequisites, limits, evidence and teardown.
-This is an opt-in experiment, not a deployed customer-service voice channel.
+Scope: local M1 runner and integrated isolated listener prerequisites, evidence,
+teardown and transient-service recovery. This is an opt-in experiment, not a
+deployed customer-service voice channel.
 <!-- doc-scope:end -->
 
 The source command is `zylch -p <test-firebase-uid> voice-smoke --port 8787`.
@@ -220,3 +221,17 @@ choice without changing the original smoke policy hash or ledger. GPT-6 uses
 Responses and the existing paid engine dispatch; real inference/tool verification
 is recorded in the plan. Health/model discovery alone does not certify inference.
 See [direct backend configuration](voice-agent-configuration.md#dedicated-gpt-6-backend-for-this-experiment).
+
+
+## Restoring the isolated transient service
+
+The current isolated `mrcall-gpt-live-smoke` unit is transient and uses
+`--collect`. Once explicitly stopped it can disappear: `systemctl start` then
+reports that the unit does not exist. Recreate the same smoke unit from its saved
+launcher with the voice interpreter, explicit isolated profile, engine working
+directory and `PYTHONPATH=<worktree>/engine`, ports 8787/8788 and
+`RuntimeMaxSec=infinity`. A working directory alone does not make the package
+importable when running the script by absolute path. Preserve all profile ledgers.
+Restart an existing idle smoke unit normally; do not restart the tunnel, whose
+URL would change. Verify `/healthz` readiness and both infinite lifetimes before
+another call. This recovery was exercised after the M4 paid-work shutdown test.

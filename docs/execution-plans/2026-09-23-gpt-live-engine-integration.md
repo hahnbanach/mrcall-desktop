@@ -6,9 +6,9 @@ date: 2026-09-23
 # GPT-Live: incoming calls backed by company memory
 
 <!-- doc-scope:start -->
-Scope: execution plan for the first telephone customer-service prototype: one
-incoming call at a time, asynchronous caller recognition and read-only memory.
-Owns milestones, verification and rollback; product intent lives in the brief.
+Scope: execution plan for the isolated telephone customer-service prototype:
+caller recognition, GPT-6 answers, selected-memory/clock tools and autonomous
+carrier verification. Owns milestones, evidence and rollback; intent is in the brief.
 <!-- doc-scope:end -->
 
 Brief: [telephone customer service](../brief/2026-09-23-gpt-live-engine-integration.md).
@@ -103,27 +103,48 @@ no unresolved OpenAI reservations; two old proxy holds total USD0.110 unchanged.
 The first autonomous correction trace (`call-ff6c480d2d02447e84a8062bd247815c.db`)
 proves stale New York/tracking answers are suppressed and corrected Rome/time/date
 answers reach voice. It also exposes seven semantic runs/five invalidations caused
-by immediately re-dispatching incomplete caller fragments. The lead will coalesce
-only superseded work: wait for a new delegation at the current caller revision,
+by immediately re-dispatching incomplete caller fragments. Commit 98e5d8d coalesces
+only superseded work: it waits for a new delegation at the current caller revision,
 or 1.2 seconds of input quiet if no new delegation arrives. Initial dispatch is
 unchanged; this is cancellable scheduling, not a conversation/duration/attempt
 ceiling or an assertion of a provider turn-complete event. Voice progress does
-not affect the wait. Verify complete correction dispatch, no-new-delegation
-fallback and close cancellation; repeat the same real carrier scenario after
-independent integration review and idle smoke-only activation. Preserve every
-reservation and inspect the new trace before claiming improved latency.
+not affect the wait. Tests cover complete correction dispatch, no-new-delegation fallback and close
+cancellation. The identical carrier retest after independent integration review
+used four semantic runs/two invalidations rather than seven/five; caller correction
+end to first final voice transcript fell from 6.602/7.365 s to 3.303/3.675 s. These
+are service-observed receipt times, not instrumented handset audio latency.
 
 The autonomous lookup-failure trace (`call-3f15e1ef4f894d5483ed568542d097b2.db`)
 FAILED greeting/voice grounding: the greeting instruction was sent and acknowledged,
 but no greeting transcript preceded caller speech. With no facts supplied to voice,
 GPT-Live independently claimed to see a filter order before GPT-6's safe unavailable
 answer. GPT-6 corrected that claim on the next turn, which is insufficient acceptance.
-Shared configuration also made GPT-6 include a late greeting. Tighten role-specific
-instruction precedence after shared configuration: backend never greets; before a
-backend answer voice uses only silence/neutral acknowledgement, no claimed facts,
-access or operations. Keep actual facts backend-only. Test prompt wiring, review,
-and repeat lookup-failure call. Do not claim the cause of the provider's ignored
+Shared configuration also made GPT-6 include a late greeting. Commit 98e5d8d puts
+role-specific instructions after shared configuration: backend never greets; before
+a backend answer voice uses only silence/neutral acknowledgement, no claimed facts,
+access or operations. Actual facts remain backend-only. Two real fault repeats
+greeted before caller speech and produced safe unavailable answers, privacy
+refusals and fresh clock results, without an invented order. Do not claim the cause of the provider's ignored
 greeting is known, or a prompt can guarantee against every unsupported generation.
+
+### Spoken-correction follow-through
+
+Autonomous trace `call-c1113311959f4eaea4cd54dbd0cd390e.db` exposes another
+failure: the caller corrects red/Friday to blue/Thursday during voice output;
+GPT-Live repeats the corrected facts without another delegation to GPT-6. The
+content matches the caller but violates the agreed semantic ownership. GPT-6
+also expanded Friday into September 25 without evidence of the intended date. Retain
+this failed trace. The reviewed prompt refinement removes the ambiguous voice
+instruction to rectify facts itself: all corrections, even obvious restatements, must be
+re-delegated and only GPT-6's new result may supply the substantive correction.
+Backend rules attribute caller-provided facts and preserve relative weekdays
+without adding dates unless an explicit dated fact establishes the intended date;
+a clock result alone cannot establish which Friday an order meant. Independent plan
+and integration reviews APPROVED this refinement (26 independent tests; 27 lead
+focused tests). The identical tenth call now delegates the correction to a second
+GPT-6 run and speaks its attributed blue/Thursday answer, with no added date.
+However, the preceding obsolete answer continues during caller correction. Prompt
+compliance is empirical; immediate interruption remains unresolved.
 
 ### Autonomous phone tests authorized — 2026-09-24
 
@@ -470,16 +491,59 @@ APPROVED; fresh plan amendment review also APPROVED. Existing M1–M3 approvals 
 
 | M4 criterion | Evidence/state |
 | --- | --- |
-| Cold start without operator/Desktop | Fifth call after cold restart delivers a corrected GPT-6/tool answer through voice; later day follow-up remains unanswered |
-| Configuration changes from next call | Actual authenticated kernel client changed revision 1→2; second call speaks the new greeting |
-| Greeting before delayed lookup | Fifth call greeting starts at provider 1,000 ms with zero diagnostic delay; greeting under deliberately delayed lookup still needs retest |
-| Blue filters / Thursday / follow-up / missing facts | Both historical facts recalled in early calls; fifth call delivers corrected backend blue-filter answer with new lookup, but day follow-up is unanswered |
-| Unknown / ambiguous identity | Pending explicit scenario evidence |
-| Correction during backend work / speech | Calls 2/3 handle spoken corrections. Fifth call delivers a corrected backend answer, but voice-progress invalidations stall the day follow-up. Retest of b89c052/natural configuration remains pending |
-| Internal / other-customer exclusion | Existing local boundary tests; M4 call pending |
-| Lookup failure / forced close / no late output | Local failure/closure/suppression tests pass; real backend lookup-error passes; live phone scenarios pending |
-| Latency / costs / continuity | Fifth call has one backend answer but day-follow-up continuity fails; voice-progress fix/natural-context retest and exceptional scenarios pending |
-| Independent final end-to-end review | REVISE: diagnostic implementation has no new blocker; full live criteria remain open |
+| Cold start without operator/Desktop | Config-6 autonomous calls use real GPT-6 tools after cold restart; no RPC client connected. |
+| Configuration changes from next call | Authenticated client changed greeting 1→2 and capabilities/instructions 4→5→6; later calls snapshot revision 6 and execute the clock. |
+| Greeting before delayed lookup | Delayed lookup greets around 2 s before context at 15 s. One later fault call misses greeting; two strict-role fault repeats greet before the caller. Provider reliability is not certified by these samples. |
+| Blue filters / Thursday / follow-up / missing facts | Real backend replay uses both preloaded facts without another lookup; automated telephone tracking states absent tracking/status. Latest known-customer handset retest remains open; spoken-correction tests use caller assertions, not recognized memory. |
+| Unknown / ambiguous identity | Real autonomous caller is unknown with no selected facts/invented identity. Ambiguous case has local/backend evidence only; live ambiguous scenario remains open. |
+| Correction during backend work / speech | Backend correction retest suppresses stale results and improves 7→4 runs. Spoken retest now delegates the correction and voices GPT-6's answer, but continues obsolete speech during overlap: immediate interruption remains OPEN. |
+| Internal / other-customer exclusion | Real unknown caller requests internal notes and other customers' orders; backend/voice refuse without selected-fact disclosure. Complements local scope tests. |
+| Lookup failure / forced close / no late output | First fault call FAILED with an invented order. Two strict-role repeats pass. Actual paid-request shutdown closes the call without commentary; the dispatched request settles USD0.002926 with no unresolved OpenAI hold. |
+| Latency / costs / continuity | Ten automated calls retain correlated text/tool/receipt evidence. Corrected-request receipt latency improves 6.602/7.365→3.303/3.675 s in the repeated backend scenario. Last spoken correction takes 7.082 s after caller transcript end; no general latency guarantee. |
+| Independent final end-to-end review | Final independent review: APPROVED for isolated implementation/retests, REVISE for full M4. Interruption, final known-caller handset/follow-up, ambiguous-caller and human continuity evidence remain open. |
+
+### Autonomous evidence — 2026-09-24
+
+All trace names below have prefix `call-` and suffix `.db`; full private dialogue
+stays in the isolated profile. No historical M3 transcript has been reconstructed.
+All ten originator attempts and corresponding incoming calls are closed.
+
+| Test | Trace identifier | Observed result |
+| --- | --- | --- |
+| Rome/New York clock, tracking | `8587b02f460d435badce563367ceccc5` | Fresh clock tools and spoken results; one semantic run per question. |
+| Privacy, 15 s initial lookup | `509ef0e9e38b4cd9a98ce2d0a171c1e4` | Greeting precedes context; unknown identity and privacy refusal. |
+| Backend corrections before scheduling fix | `ff6c480d2d02447e84a8062bd247815c` | Correct final answers but seven runs/five invalidations. |
+| Lookup failure before role fix | `3f15e1ef4f894d5483ed568542d097b2` | FAILED: late greeting and unsupported order claim; retained. |
+| Lookup failure after role fix | `96d2d9cebcfc4579a2b10ed9fd15f53f` | Timely greeting, safe unavailable answer, privacy refusal and clock. |
+| Same lookup-failure repeat | `86265a9fbe604f5089602cf7241df121` | Same safe outcome. |
+| Backend corrections after scheduling fix | `11a26f75d04f4dde9f69e89d4d968379` | Four runs/two invalidations, corrected Rome/date spoken. |
+| Shutdown during dispatched inference | `5406606caefb40cf81f9f272a876c73f` | No late answer; settled request and confirmed closure. |
+| Spoken correction before explicit re-delegation | `c1113311959f4eaea4cd54dbd0cd390e` | FAILED ownership/date grounding; voice answers correction alone. |
+| Identical spoken-correction repeat | `b8103bdaeb6641449de0d21124e31ad1` | New delegation/backend answer, caller attribution and weekday granularity; obsolete speech overlap persists. |
+
+Verification: 248 voice/kernel/budget tests passed, then 41 focused adapter/clock/
+scheduling tests and 27 focused conversation/driver tests after the final prompt
+change. Independent reviews ran 51 initial, 30 follow-through, four driver and
+26 final prompt/conversation tests; final end-to-end reviewer ran 33 modified-path
+and 12 runtime/scheduling tests. These overlapping sets are not summed.
+The real backend-only preload replay `5904bc592c9c418bbbe88fdd0838f0bf` returns
+blue filters then Thursday with two GPT-6 requests and no additional memory lookup;
+it does not replace a recognized-caller phone test.
+
+Final accounting snapshot: 19 closed incoming calls with USD19 retained holds;
+all nine pre-activation rows compare byte-for-byte unchanged. The separate
+originator ledger has ten closed attempts and USD10 retained holds. GPT-6 has
+103 settled usage rows, estimated USD0.307244; no unresolved OpenAI reservations.
+Two old proxy holds totaling USD0.110 remain. Holds are not expenditure. Carrier
+receipts omit currency, so their prices are retained without a fabricated USD
+aggregate. Private summaries and receipts remain outside Git.
+
+The paid-shutdown test stopped a transient `--collect` smoke unit, so a plain
+start failed after collection. One recreation lacking PYTHONPATH failed before
+paid work. Correct recreation restored the service with its explicit engine
+PYTHONPATH. Final smoke PID 2982956 and unchanged tunnel PID 1903954 are active,
+both lifetimes infinite; health is ready/unlimited with no operator RPC client.
+Config revision 6, capture/unlimited 1, both delays and lookup-failure injection 0.
 
 ## Verification and review record
 

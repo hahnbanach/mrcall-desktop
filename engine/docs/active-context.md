@@ -17,30 +17,38 @@ Calls run without cs-operator or an operator RPC session. MrCall CALLCREDIT is
 not a dependency of this explicitly selected test backend.
 
 M4 is active with private correlated traces and no raw audio/hidden reasoning.
-Three calls have positive listening feedback. The fourth exposes late greeting
-and no useful backend answer; the fifth confirms greeting at provider 1 second
-and a corrected backend answer about blue filters, but its day follow-up remains
-unanswered. Both facts were already loaded in 145 ms. Forced verification and
-voice-progress invalidations caused unnecessary work. The old M3 cause remains
-unknowable without its missing transcript/audio.
+The configured architecture assigns substantive answers/tool selection to GPT-6
+and speech/listening to GPT-Live; provider compliance is still under live review.
+Initial caller facts are preloaded into
+GPT-6's prompt, with no mandatory repeat lookup or parallel business answer from
+voice quiet context. The engine executes only configured selected-memory and
+current-time tools. No live shipment lookup exists.
 
 Greeting is explicitly requested at session start. Caller corrections stop obsolete
-tool/model rounds; voice progress preserves useful lookup work, while both caller
-and voice revisions fence final delivery. A labeled lexical-miss fallback remains
-limited to pinned selected facts. Real backend replay returns Thursday in 6.656
-seconds with three serial requests; independent activation review passes 48 tests.
-The user requests immediate use of available caller information: initial loading
-already supplies all authorized selected facts, and voice instructions now allow
-direct answers with no repeated check or technical handoff narration. Configuration
-revision 4 and correction `b89c052` are active; 225 voice/kernel/budget tests pass.
-Natural-context phone verification remains pending. Diagnostic delays are zero;
-capture stays on. Full continuity, exceptional scenarios and delayed-lookup greeting
-remain open. Calls remain
-isolated with all local experiment ceilings removed; ledger history, accounting
-and provider constraints are preserved. Service and tunnel have no expiry. See
-[configuration and diagnostics](features/voice-agent-configuration.md),
+tool/model work and final delivery; voice acknowledgements do not invalidate an
+answer or cause another semantic run. A lexical-miss fallback remains limited to
+pinned selected facts. Clock results contain an ISO time, IANA timezone and UTC
+offset; the tool executes no shell. Configuration revision 6 is active, with
+Europe/Rome as explicit test default. The voice/kernel/budget regression passes
+248 tests; subsequent adapter/prompt checks pass 41 and 27 focused tests. Real
+carrier calls confirm fresh Rome/New York clock tools and missing-tracking answers.
+Superseded corrections wait for a new delegation or 1.2 seconds of input quiet;
+the repeated scenario improves from seven to four semantic runs. Two injected
+lookup-failure repeats pass after one unsupported voice claim exposed inadequate
+role instructions. Shutdown during a paid request suppresses late output while
+the original request settles. A later spoken-correction call bypassed GPT-6; an
+explicit re-delegation prompt passes the identical retest, but obsolete speech
+continues during caller interruption. This remains an open M4 defect.
+
+Autonomous calls to the authorized test number use a separate diagnostic TTS
+caller with a private attempt/receipt ledger; uncertain attempts prevent another
+origination. Human handset listening remains distinct. Full M4 continuity and
+exceptional-scenario acceptance remains open. Diagnostic capture is on; ordinary
+delays are zero. Calls remain isolated with all local experiment ceilings removed;
+ledger history, accounting and provider constraints are preserved. Service and
+tunnel have no expiry. See [configuration and diagnostics](features/voice-agent-configuration.md),
 [smoke guide](features/gpt-live-smoke.md) and the milestone plan for evidence and
-the remaining listening matrix. No production number is connected.
+remaining criteria. No production number is connected.
 
 Engine chat now supports negotiated read-only policy version 1. The policy is
 enforced before slash/semantic/task routing and again at assistant and task

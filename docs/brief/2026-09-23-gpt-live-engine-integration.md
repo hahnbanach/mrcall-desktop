@@ -150,13 +150,14 @@ is outside this first delivery.
 | Component | Responsibility |
 |-----------|----------------|
 | cs-operator | Configure the agent and enabled capabilities; create integrations through the meta-skill during setup. |
-| GPT-Live | Listen, speak, clarify and communicate verified backend results. |
-| Engine customer-service agent | Interpret requests and corrections, retrieve memory, apply business rules and use permitted tools. |
+| GPT-Live | Greet, listen, interrupt, delegate substantive requests and present GPT-6 answers. |
+| GPT-6 | Interpret requests/corrections, use permitted context, choose tools and author substantive answers. |
+| Engine | Supply permitted context, execute enabled tools and maintain storage/accounting. |
 | Python call adapter | Connect Vonage and GPT-Live, maintain per-call context and schedule delegated work. |
 
 Use GPT-Live client delegation to connect the engine. The adapter retains the
 transcript, caller context and pending work: delegation events identify work but
-do not contain the complete request. The engine interprets this accumulated
+do not contain the complete request. GPT-6 interprets this accumulated
 context. The adapter needs no additional general-purpose LLM.
 
 Initially run one business request at a time per call, alongside the asynchronous

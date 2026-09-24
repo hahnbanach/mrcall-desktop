@@ -21,6 +21,14 @@ from dotenv import dotenv_values
 NUMBER = "390289047081"
 TERMINAL = {"completed", "failed", "rejected", "cancelled", "busy", "timeout", "unanswered"}
 SCENARIOS = {
+    "spoken_correction": [
+        (
+            6,
+            "Ti confermo che ho ordinato filtri rossi, con consegna concordata per venerdì. "
+            "Puoi ripetere questi dettagli?",
+        ),
+        (3, "Mi correggo: filtri blu, con consegna giovedì. Non rossi e non venerdì."),
+    ],
     "clock": [
         (6, "Che ore sono adesso a Roma, con i secondi?"),
         (18, "E a New York che ore sono, sempre con i secondi?"),
