@@ -95,14 +95,9 @@ def seed_email(email_id="mail-1", body="Luca Bianchi will call; Acme confirms.",
                 body_plain=body,
             )
         )
-    return {
-        "id": email_id,
-        "from_email": sender,
-        "to_email": ["support@company.test"],
-        "subject": "order",
-        "date": "2026-09-24",
-        "body_plain": body,
-    }
+    # The dict the storage hands the worker and the job alike, so a source
+    # renders to one revision whichever entry takes it.
+    return next(row for row in Storage().get_unprocessed_emails(OWNER_A) if row["id"] == email_id)
 
 
 def extraction(*entities: str) -> str:

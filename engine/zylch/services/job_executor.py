@@ -8,19 +8,15 @@ Configuration:
 """
 
 import asyncio
+import contextvars
 import logging
 import os
 import re
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
-from typing import TYPE_CHECKING, Any, Dict, List, Optional
+from typing import TYPE_CHECKING, Any, Dict, Optional
 
-from zylch.memory import is_no_merge_response
-from zylch.workers.memory import (
-    _extract_identifier_query,
-    _normalise_phone,
-    _parse_identifiers_block,
-)
+from zylch.llm.budget import BudgetError
 
 if TYPE_CHECKING:
     from zylch.storage import Storage
@@ -53,6 +49,33 @@ def _normalize_error(raw: str) -> str:
 
 
 logger.info(f"Background job executor initialized with {MAX_WORKERS} workers")
+
+
+MEMORY_SOURCE_METHODS = {
+    "email": "process_email",
+    "calendar": "process_calendar_event",
+    "mrcall": "process_mrcall_conversation",
+    "whatsapp": "process_whatsapp_message",
+}
+
+
+def run_source_sync(worker: "MemoryWorker", channel: str, item: Dict[str, Any]) -> Optional[bool]:
+    """One source through the worker's own admitted coroutine, on this thread.
+
+    The facade over the memory worker for the background-job path: there is
+    one implementation of each channel, the worker's, and the job runs it in
+    a private event loop rather than repeating it synchronously. The
+    coroutine is the admitted one (``bounded_item`` around it), so the job's
+    sources are admitted, retried and backed off exactly as the pipeline's
+    are, and take the same path through the harness. ``None`` means the item
+    was not admitted this run; ``True`` that the source is settled.
+    """
+    method = getattr(worker, MEMORY_SOURCE_METHODS[channel])
+    loop = asyncio.new_event_loop()
+    try:
+        return loop.run_until_complete(method(item))
+    finally:
+        loop.close()
 
 
 def _should_stop_job(storage: "Storage", job_id: str, owner_id: str) -> bool:
@@ -207,7 +230,21 @@ class JobExecutor:
         storage = self.storage  # Capture for closure
 
         def _sync_process() -> Dict[str, Any]:
-            """Sync code that runs in thread pool."""
+            """Sync code that runs in thread pool.
+
+            The job's authority is a bounded preparation run, as the pipeline's
+            is: ``preparation_run`` admits it across processes (a paused or
+            already-running preparation refuses it, and the job fails visibly
+            with that reason), every source is one admitted item through the
+            worker's own coroutine, and the job opens one revocable turn that a
+            user's stop revokes, so a source's remaining children are refused
+            before dispatch. A refusal a source meets — a pause, a budget
+            refusal, a ``BudgetError`` of any kind — leaves this loop instead
+            of being swallowed per item: the job fails with that reason and the
+            remaining sources are left untouched for the next run.
+            """
+            from zylch.memory.mnemonic.turn import revocable_turn, revoke
+            from zylch.services.preparation import preparation_run
             from zylch.workers import MemoryWorker
 
             worker = MemoryWorker(storage=storage, owner_id=owner_id)
@@ -233,86 +270,111 @@ class JobExecutor:
             else:
                 channels = [channel]
 
-            for ch in channels:
-                # Get unprocessed items
-                if ch == "email":
-                    items = storage.get_unprocessed_emails(owner_id)
-                elif ch == "calendar":
-                    items = storage.get_unprocessed_calendar_events(owner_id)
-                elif ch == "mrcall":
-                    try:
-                        items = storage.get_unprocessed_mrcall_conversations(owner_id)
-                    except Exception as e:
-                        logger.warning(
-                            f"[memory_process] mrcall channel unavailable (table may not exist): {e}"
-                        )
-                        continue
-                else:
-                    continue
+            def stopped() -> bool:
+                return _should_stop_job(storage, job_id, owner_id)
 
-                total = len(items)
-                logger.info(
-                    f"[memory_process] job={job_id} channel={ch} "
-                    f"unprocessed_items={total} owner={owner_id} "
-                    f"(items with memory_processed_at IS NULL)"
-                )
-                if total == 0:
-                    logger.info(f"No unprocessed {ch} items for {owner_id}")
-                    continue
-
-                try:
-                    storage.update_background_job_progress(
-                        job_id, 0, 0, total, f"Processing {ch}: 0/{total}"
-                    )
-                except Exception as e:
-                    logger.warning(
-                        f"[memory_process] Failed to set initial progress: {e} — continuing"
-                    )
-
-                for i, item in enumerate(items):
-                    # Check if user stopped the job BEFORE processing
-                    if _should_stop_job(storage, job_id, owner_id):
-                        logger.info(
-                            f"Job {job_id} was stopped by user at item {i}/{total}, exiting"
-                        )
-                        return {
-                            "email_count": email_count,
-                            "calendar_count": calendar_count,
-                            "mrcall_count": mrcall_count,
-                            "channels": channels,
-                            "stopped": True,
-                        }
-
-                    # Process item (sync, blocking - OK in thread)
-                    try:
-                        if ch == "email":
-                            _process_email_sync(worker, item)
-                            email_count += 1
-                        elif ch == "calendar":
-                            _process_calendar_event_sync(worker, item)
-                            calendar_count += 1
-                        elif ch == "mrcall":
-                            _process_mrcall_sync(worker, item)
-                            mrcall_count += 1
-                    except Exception as e:
-                        err_str = str(e).lower()
-                        if "401" in err_str or "authentication" in err_str:
-                            logger.error(
-                                f"Auth error processing {ch}" f" — stopping (check API key): {e}"
+            with preparation_run(owner_id), revocable_turn():
+                # The worker consults this between a source's children, so a
+                # stop lands before the next paid decision, not after the
+                # whole source.
+                worker.stop_requested = stopped
+                for ch in channels:
+                    # Get unprocessed items
+                    if ch == "email":
+                        items = storage.get_unprocessed_emails(owner_id)
+                    elif ch == "calendar":
+                        items = storage.get_unprocessed_calendar_events(owner_id)
+                    elif ch == "mrcall":
+                        try:
+                            items = storage.get_unprocessed_mrcall_conversations(owner_id)
+                        except Exception as e:
+                            logger.warning(
+                                f"[memory_process] mrcall channel unavailable (table may not exist): {e}"
                             )
-                            raise
-                        logger.error(f"Failed to process {ch} item: {e}")
+                            continue
+                    else:
+                        continue
 
-                    # Update progress after each item
-                    pct = int((i + 1) / total * 100) if total > 0 else 100
+                    total = len(items)
+                    logger.info(
+                        f"[memory_process] job={job_id} channel={ch} "
+                        f"unprocessed_items={total} owner={owner_id} "
+                        f"(items with memory_processed_at IS NULL)"
+                    )
+                    if total == 0:
+                        logger.info(f"No unprocessed {ch} items for {owner_id}")
+                        continue
+
                     try:
                         storage.update_background_job_progress(
-                            job_id, pct, i + 1, total, f"Processing {ch}: {i + 1}/{total}"
+                            job_id, 0, 0, total, f"Processing {ch}: 0/{total}"
                         )
                     except Exception as e:
                         logger.warning(
-                            f"[memory_process] Failed to update progress: {e} — continuing"
+                            f"[memory_process] Failed to set initial progress: {e} — continuing"
                         )
+
+                    for i, item in enumerate(items):
+                        # Check if user stopped the job BEFORE processing
+                        if stopped():
+                            revoke("job stopped by user")
+                            logger.info(
+                                f"Job {job_id} was stopped by user at item {i}/{total}, exiting"
+                            )
+                            return {
+                                "email_count": email_count,
+                                "calendar_count": calendar_count,
+                                "mrcall_count": mrcall_count,
+                                "channels": channels,
+                                "stopped": True,
+                            }
+
+                        # One source through the worker's admitted coroutine.
+                        # A settled source counts; an unsettled or unadmitted
+                        # one is retried by preparation's own controls.
+                        try:
+                            settled = run_source_sync(worker, ch, item) is True
+                        except BudgetError:
+                            raise
+                        except Exception as e:
+                            err_str = str(e).lower()
+                            if "401" in err_str or "authentication" in err_str:
+                                logger.error(
+                                    f"Auth error processing {ch} — stopping (check API key): {e}"
+                                )
+                                raise
+                            logger.error(f"Failed to process {ch} item: {e}")
+                            settled = False
+                        if settled and ch == "email":
+                            email_count += 1
+                        elif settled and ch == "calendar":
+                            calendar_count += 1
+                        elif settled and ch == "mrcall":
+                            mrcall_count += 1
+                        if stopped():
+                            # The stop landed while this source was running:
+                            # its remaining children were refused before
+                            # dispatch, and the job must not report completion.
+                            revoke("job stopped by user")
+                            logger.info(f"Job {job_id} was stopped by user during item {i + 1}/{total}")
+                            return {
+                                "email_count": email_count,
+                                "calendar_count": calendar_count,
+                                "mrcall_count": mrcall_count,
+                                "channels": channels,
+                                "stopped": True,
+                            }
+
+                        # Update progress after each item
+                        pct = int((i + 1) / total * 100) if total > 0 else 100
+                        try:
+                            storage.update_background_job_progress(
+                                job_id, pct, i + 1, total, f"Processing {ch}: {i + 1}/{total}"
+                            )
+                        except Exception as e:
+                            logger.warning(
+                                f"[memory_process] Failed to update progress: {e} — continuing"
+                            )
 
             return {
                 "email_count": email_count,
@@ -321,9 +383,13 @@ class JobExecutor:
                 "channels": channels,
             }
 
-        # Execute in thread pool
+        # Execute in thread pool, in a copy of this context: the call-site tag
+        # and the turn the caller holds carry across the hop, as they do for
+        # every other executor hop the engine makes.
         loop = asyncio.get_event_loop()
-        result = await loop.run_in_executor(_executor, _sync_process)
+        result = await loop.run_in_executor(
+            _executor, contextvars.copy_context().run, _sync_process
+        )
 
         # Don't complete if job was stopped (user will cancel it)
         if result.get("stopped"):
@@ -1104,376 +1170,3 @@ class JobExecutor:
                 logger.info(f"[SYNC-CHAIN] task_process job already {job['status']}")
         else:
             logger.info("[SYNC-CHAIN] No unprocessed emails for tasks, skipping")
-
-
-# =============================================================================
-# Sync wrapper functions (called from thread pool)
-# =============================================================================
-
-
-def _process_email_sync(worker: "MemoryWorker", email: Dict) -> bool:
-    """Sync version of MemoryWorker.process_email.
-
-    Runs the same logic but without async/await.
-    The LLM calls are already sync (create_message_sync).
-
-    Args:
-        worker: MemoryWorker instance
-        email: Email dict
-
-    Returns:
-        True if processed successfully
-    """
-
-    email_id = email.get("id", "unknown")
-    logger.info(f"[memory_process] START email {email_id} from={email.get('from_email', '?')}")
-    try:
-        # Get contact email
-        from_email = email.get("from_email", "")
-        if not from_email:
-            logger.warning(f"[memory_process] No contact email for {email_id}, marking processed")
-            worker.storage.mark_email_processed(worker.owner_id, email_id)
-            return True
-
-        contact_email = from_email
-
-        # Extract entities (sync LLM call inside)
-        logger.info(f"[memory_process] Extracting entities from {email_id}...")
-        entities = worker._extract_entities(email, contact_email)
-        if not entities:
-            logger.info(f"[memory_process] No entities from {email_id}, marking processed")
-            worker.storage.mark_email_processed(worker.owner_id, email_id)
-            return True
-
-        logger.info(f"[memory_process] Got {len(entities)} entities from {email_id}, upserting...")
-
-        # Process each entity
-        event_desc = f"Extracted from email {email_id} ({email.get('date', 'unknown date')})"
-
-        for i, entity_content in enumerate(entities):
-            _upsert_entity_sync(worker, entity_content, event_desc, email_id, i + 1, len(entities), contact_email)
-
-        # Mark as processed - this is the checkpoint that enables resume
-        worker.storage.mark_email_processed(worker.owner_id, email_id)
-        logger.info(f"[memory_process] DONE email {email_id} - marked as processed")
-        return True
-
-    except Exception as e:
-        logger.error(
-            f"[memory_process] FAILED email {email_id} - NOT marked as processed, "
-            f"will be retried on resume: {e}",
-            exc_info=True,
-        )
-        return False
-
-
-def _upsert_entity_sync(
-    worker: "MemoryWorker",
-    entity_content: str,
-    event_desc: str,
-    email_id: str,
-    entity_num: int,
-    total_entities: int,
-    contact_identifier: str = ""
-) -> None:
-    """Sync version of MemoryWorker._upsert_entity.
-
-    Args:
-        worker: MemoryWorker instance
-        entity_content: Entity blob content
-        event_desc: Event description
-        email_id: Source email ID
-        entity_num: Entity number (1-indexed)
-        total_entities: Total entities from this email
-        contact_identifier: Optional contact identifier (email/phone) to inject into #IDENTIFIERS
-    """
-    logger.debug(f"Upserting entity {entity_num}/{total_entities}")
-
-    # Parse identifiers from the entity content
-    identifiers = _parse_identifiers_block(entity_content)
-
-    # Inject contact_identifier if provided and not already present
-    if contact_identifier:
-        if "@" in contact_identifier:
-            contact_kind = "email"
-            norm_value = contact_identifier.strip().strip("<>").lower()
-        else:
-            contact_kind = "phone"
-            norm_value = _normalise_phone(contact_identifier) or ""
-        if norm_value and not any(
-            k == contact_kind and v == norm_value for k, v in identifiers
-        ):
-            identifiers.append((contact_kind, norm_value))
-
-    # If no identifiers, log warning and skip
-    if not identifiers:
-        logger.warning(f"No identifiers found for entity {entity_num}/{total_entities}, skipping blob creation")
-        return
-
-    # Identifier-first lookup
-    id_matched_blob_ids = worker.storage.find_blobs_by_identifiers(
-        owner_id=worker.owner_id,
-        identifiers=identifiers,
-    )
-
-    # Use identifier block as search query, fall back to full content
-    query = _extract_identifier_query(entity_content) or entity_content
-
-    # Get cosine candidates above threshold
-    cosine_candidates = worker.hybrid_search.find_candidates_for_reconsolidation(
-        owner_id=worker.owner_id, content=query, namespace=worker.namespace, limit=3
-    )
-
-    # Compose merge candidates: identifier matches first, then cosine matches not already in set
-    merge_candidates: List[Dict[str, str]] = []
-    seen_ids = set()
-
-    # Add identifier-matched candidates
-    for bid in id_matched_blob_ids:
-        if bid in seen_ids:
-            continue
-        blob_dict = worker.blob_storage.get_blob(bid, worker.owner_id)
-        if not blob_dict or not blob_dict.get("content"):
-            continue
-        seen_ids.add(bid)
-        merge_candidates.append({
-            "blob_id": bid,
-            "content": blob_dict["content"],
-            "source": "identifier-only"
-        })
-
-    # Add cosine-matched candidates not already in identifier set
-    for cand in cosine_candidates:
-        bid = str(cand.blob_id)
-        if bid in seen_ids:
-            continue
-        seen_ids.add(bid)
-        merge_candidates.append({
-            "blob_id": bid,
-            "content": cand.content,
-            "source": f"cosine={cand.hybrid_score:.3f}"
-        })
-
-    # Try to merge with each candidate
-    upserted = False
-    linked_blob_id: Optional[str] = None
-
-    # Skip reconsolidation if merge gate is unhealthy
-    if not worker.merge_enabled:
-        merge_candidates = []
-
-    for cand in merge_candidates:
-        bid = cand["blob_id"]
-        existing_content = cand["content"]
-        source = cand["source"]
-        logger.debug(f"Trying to merge with blob {bid} (source={source})")
-        merged_content = worker.llm_merge.merge(existing_content, entity_content)
-
-        # If the gate returned the INSERT/SKIP sentinel, try next candidate
-        if is_no_merge_response(merged_content):
-            logger.debug(f"Skipping blob {bid} - entities don't match (source={source})")
-            continue
-
-        # Successful merge
-        worker.blob_storage.update_blob(
-            blob_id=bid,
-            owner_id=worker.owner_id,
-            content=merged_content,
-            event_description=event_desc,
-        )
-        logger.info(f"Reconsolidated blob {bid} with email {email_id} (source={source})")
-        linked_blob_id = bid
-        upserted = True
-        break
-
-    if not upserted:
-        # Create new blob
-        blob = worker.blob_storage.store_blob(
-            owner_id=worker.owner_id,
-            namespace=worker.namespace,
-            content=entity_content,
-            event_description=event_desc,
-        )
-        logger.info(f"Created new blob {blob['id']} from email {email_id}")
-        linked_blob_id = str(blob["id"])
-
-    # Write email_blobs link
-    if linked_blob_id and email_id:
-        try:
-            worker.storage.add_email_blob_link(
-                owner_id=worker.owner_id,
-                email_id=email_id,
-                blob_id=linked_blob_id
-            )
-        except Exception as e:
-            logger.warning(f"add_email_blob_link({email_id}, {linked_blob_id}) failed: {e}")
-
-    # Write person_identifiers
-    if linked_blob_id and identifiers:
-        try:
-            inserted = worker.storage.add_person_identifiers(
-                owner_id=worker.owner_id,
-                blob_id=linked_blob_id,
-                identifiers=identifiers
-            )
-            if inserted:
-                logger.debug(f"add_person_identifiers blob={linked_blob_id} new_rows={inserted} kinds={[k for k, _ in identifiers]}")
-        except Exception as e:
-            logger.warning(f"add_person_identifiers({linked_blob_id}) failed: {e}")
-
-
-def _process_calendar_event_sync(worker: "MemoryWorker", event: Dict) -> bool:
-    """Sync version of MemoryWorker.process_calendar_event.
-
-    Args:
-        worker: MemoryWorker instance
-        event: Calendar event dict
-
-    Returns:
-        True if processed successfully
-    """
-    event_id = event.get("id", "unknown")
-    try:
-        logger.debug(f"Processing calendar event {event_id}")
-
-        # Extract facts (sync LLM call inside)
-        facts = worker._extract_calendar_facts(event)
-        if not facts or facts == "No significant facts.":
-            logger.debug(f"No facts extracted from event {event_id}")
-            worker.storage.mark_calendar_event_processed(worker.owner_id, event_id)
-            return True
-
-        # Search for existing blob
-        existing = worker.hybrid_search.find_for_reconsolidation(
-            owner_id=worker.owner_id, content=facts, namespace=worker.namespace
-        )
-
-        event_desc = f"Extracted from calendar event '{event.get('summary', '')}' ({event.get('start_time', '')})"
-
-        if existing:
-            # Merge (sync LLM call)
-            merged_content = worker.llm_merge.merge(existing.content, facts)
-            worker.blob_storage.update_blob(
-                blob_id=existing.blob_id,
-                owner_id=worker.owner_id,
-                content=merged_content,
-                event_description=event_desc,
-            )
-            logger.info(f"Reconsolidated blob {existing.blob_id} with event {event_id}")
-        else:
-            # Create new blob
-            blob = worker.blob_storage.store_blob(
-                owner_id=worker.owner_id,
-                namespace=worker.namespace,
-                content=facts,
-                event_description=event_desc,
-            )
-            logger.info(f"Created new blob {blob['id']} from event {event_id}")
-
-        worker.storage.mark_calendar_event_processed(worker.owner_id, event_id)
-        return True
-
-    except Exception as e:
-        logger.error(f"Error processing event {event_id}: {e}", exc_info=True)
-        return False
-
-
-def _process_mrcall_sync(worker: "MemoryWorker", conversation: Dict) -> bool:
-    """Sync version of MemoryWorker.process_mrcall_conversation.
-
-    Args:
-        worker: MemoryWorker instance
-        conversation: MrCall conversation dict
-
-    Returns:
-        True if processed successfully
-    """
-    conv_id = conversation.get("id", "unknown")
-    try:
-        logger.debug(f"Processing MrCall conversation {conv_id}")
-
-        # Extract entities (sync LLM call inside)
-        entities = worker._extract_mrcall_entities(conversation)
-        if not entities:
-            logger.debug(f"No entities extracted from conversation {conv_id}")
-            worker.storage.mark_mrcall_memory_processed(worker.owner_id, conv_id)
-            return True
-
-        # Process each entity
-        contact_phone = conversation.get("contact_phone", "unknown")
-        contact_name = conversation.get("contact_name", "unknown")
-        call_date = conversation.get("call_started_at", "unknown")
-        event_desc = (
-            f"Extracted from phone call with {contact_name} ({contact_phone}) on {call_date}"
-        )
-
-        for i, entity_content in enumerate(entities):
-            _upsert_mrcall_entity_sync(
-                worker, entity_content, event_desc, conv_id, i + 1, len(entities)
-            )
-
-        # Mark as processed
-        worker.storage.mark_mrcall_memory_processed(worker.owner_id, conv_id)
-        return True
-
-    except Exception as e:
-        logger.error(f"Error processing conversation {conv_id}: {e}", exc_info=True)
-        return False
-
-
-def _upsert_mrcall_entity_sync(
-    worker: "MemoryWorker",
-    entity_content: str,
-    event_desc: str,
-    conv_id: str,
-    entity_num: int,
-    total_entities: int,
-) -> None:
-    """Sync version of MemoryWorker._upsert_mrcall_entity.
-
-    Args:
-        worker: MemoryWorker instance
-        entity_content: Entity blob content
-        event_desc: Event description
-        conv_id: Source conversation ID
-        entity_num: Entity number (1-indexed)
-        total_entities: Total entities from this conversation
-    """
-    logger.debug(f"Upserting MrCall entity {entity_num}/{total_entities}")
-
-    # Get top 3 candidates above threshold
-    existing_blobs = worker.hybrid_search.find_candidates_for_reconsolidation(
-        owner_id=worker.owner_id, content=entity_content, namespace=worker.namespace, limit=3
-    )
-
-    upserted = False
-
-    for existing in existing_blobs:
-        # Try to merge with this candidate (sync LLM call)
-        merged_content = worker.llm_merge.merge(existing.content, entity_content)
-
-        # If the gate returned the INSERT/SKIP sentinel, try next candidate
-        if is_no_merge_response(merged_content):
-            logger.debug(f"Skipping blob {existing.blob_id} - entities don't match")
-            continue
-
-        # Successful merge
-        worker.blob_storage.update_blob(
-            blob_id=existing.blob_id,
-            owner_id=worker.owner_id,
-            content=merged_content,
-            event_description=event_desc,
-        )
-        logger.info(f"Reconsolidated blob {existing.blob_id} with conversation {conv_id}")
-        upserted = True
-        break
-
-    if not upserted:
-        # Create new blob
-        blob = worker.blob_storage.store_blob(
-            owner_id=worker.owner_id,
-            namespace=worker.namespace,
-            content=entity_content,
-            event_description=event_desc,
-        )
-        logger.info(f"Created new blob {blob['id']} from conversation {conv_id}")

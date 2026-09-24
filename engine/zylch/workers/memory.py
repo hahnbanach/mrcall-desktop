@@ -486,6 +486,9 @@ class MemoryWorker:
             extract=extract,
             client=self.decision_client,
             context=self._commit_context(retrieval=self.merge_enabled),
+            # A background job sets this so a user's stop lands between a
+            # source's children; the pipeline sets nothing.
+            stop_requested=getattr(self, "stop_requested", None),
         )
 
     def _commit_context(self, *, retrieval: bool = True):

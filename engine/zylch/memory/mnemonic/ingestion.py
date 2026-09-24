@@ -256,12 +256,18 @@ def ingest(
     extract: Callable[[], Sequence[str]],
     client: Any = None,
     context: Optional[CommitContext] = None,
+    stop_requested: Optional[Callable[[], bool]] = None,
 ) -> Ingestion:
     """Take one source through the harness. Returns an answer; raises only a refusal.
 
     ``context`` is the worker's own retrieval and storage wiring — or, under
     an unhealthy merge gate, one whose search and identity lookups answer
     nothing, so the role sees no candidate and can only create or skip.
+
+    ``stop_requested`` is a background job's stop probe, consulted between a
+    source's children: a stop revokes the turn every child shares, so the next
+    child is refused before its dispatch and the source is left pending for
+    the next run.
     """
     if source.kind not in SOURCE_KINDS:
         raise ValueError(f"unknown source kind {source.kind!r}; known: {', '.join(SOURCE_KINDS)}")
@@ -333,7 +339,7 @@ def ingest(
     else:
         children = [_child(parent, entry["index"], entry["content"]) for entry in stored]
 
-    return _decide_children(parent, children, client, context)
+    return _decide_children(parent, children, client, context, stop_requested)
 
 
 def _oversized(entities: Sequence[str]) -> str:
@@ -352,10 +358,20 @@ def _oversized(entities: Sequence[str]) -> str:
 
 
 def _decide_children(
-    parent: MemoryEvent, children: Sequence[MemoryEvent], client: Any, context: Optional[CommitContext]
+    parent: MemoryEvent,
+    children: Sequence[MemoryEvent],
+    client: Any,
+    context: Optional[CommitContext],
+    stop_requested: Optional[Callable[[], bool]] = None,
 ) -> Ingestion:
+    from .turn import revoke
+
     results: List[MnemonicResult] = []
     for child in children:
+        if stop_requested is not None and stop_requested():
+            # The turn's handle is the parent's and every child's, so revoking
+            # it refuses a dispatch already in flight on a worker thread too.
+            revoke("job stopped by user")
         if parent.cancellation.cancelled:
             return Ingestion(
                 RETRYABLE_FAILURE,
