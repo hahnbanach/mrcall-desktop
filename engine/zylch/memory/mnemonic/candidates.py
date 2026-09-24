@@ -16,12 +16,14 @@ finding a memory and being allowed to touch it:
   two people called Mario Rossi are two people, and a shared company is not a
   shared identity.
 
-Both come from the caller's hint when it states them, and from the observation
-only when it does not. An ingestion child's observation is the whole message
-it came from, and mining it would make the sender's address corroborate every
-entity the message mentions — the sender-injection defect under another name.
-The chat and solve adapters state no identifiers, so for them the observation
-is mined exactly as before.
+Both come from the caller's hint when it states them. The observation is
+mined only for an **interactive** event whose hint states no identity — the
+chat and solve adapters, for which the observation is the human's own words
+and is mined exactly as before. An automatic event's observation is the whole
+channel message it came from, and its identity is what its hint states and
+nothing else: mining the message would make the sender's address corroborate
+every entity it mentions — the sender-injection defect under another name —
+and a name-only entity is exactly the child whose hint states no address.
 
 Corroboration counts are carried through ``workers/memory_candidates``: how
 many retrieval tokens a candidate actually shares with the event. That is
@@ -38,7 +40,7 @@ from typing import Any, Callable, Iterable, Optional, Sequence, Set, Tuple
 
 from zylch.workers.memory_candidates import merge_shortlist
 
-from .contracts import MAX_CANDIDATES, Candidate, MemoryEvent
+from .contracts import AUTOMATIC, MAX_CANDIDATES, Candidate, MemoryEvent
 
 _IDENTIFIER_LINE = re.compile(
     r"^(?:name|email|e-mail|phone|mobile|tel|telephone|company|domain|vat|id)\s*:\s*(.+)$",
@@ -119,6 +121,29 @@ def identity_tokens_of(content: str) -> set:
     return {token for token in parse_identifiers(content) if _is_identity_token(token)}
 
 
+def identity_pairs_of(text: str) -> list:
+    """The ``(kind, value)`` pairs a text states, in the identity index's own form.
+
+    Comparison tokens (:func:`_normalize`) strip an email's dots; the index
+    stores the address as written, lowercased, so a lookup built from tokens
+    missed every dotted domain. This is the form the index is asked in: emails
+    as written and lowercased, phones canonical.
+    """
+    pairs = []
+    seen = set()
+    for match in _EMAIL.findall(text or ""):
+        value = match.strip().lower()
+        if value and ("email", value) not in seen:
+            seen.add(("email", value))
+            pairs.append(("email", value))
+    for match in _PHONE.findall(text or ""):
+        value = _normalize(match)
+        if _is_identity_token(value) and ("phone", value) not in seen:
+            seen.add(("phone", value))
+            pairs.append(("phone", value))
+    return pairs
+
+
 def _hint_identity(event: MemoryEvent) -> Set[str]:
     hint = event.subject_hint
     if hint is None:
@@ -140,14 +165,26 @@ def _hint_names(event: MemoryEvent) -> Set[str]:
     return found
 
 
+def _mines_observation(event: MemoryEvent) -> bool:
+    """May this event's observation be read for identity at all?
+
+    Only an interactive event whose hint states no identity: a chat turn or a
+    solve, where the observation is what the human said. An automatic event's
+    observation is a whole channel message and is never mined — its identity is
+    its hint's, and a hint that states no address states no identity.
+    """
+    return event.origin != AUTOMATIC and not _hint_identity(event)
+
+
 def identity_tokens(event: MemoryEvent) -> set:
     """The evidence side: the event's emails, phones and lids, and nothing else.
 
-    The hint's identifiers when it states any; otherwise the identity-shaped
-    tokens of the observation, which is the chat and solve case.
+    The hint's identifiers when it states any; otherwise, for an interactive
+    event, the identity-shaped tokens of the observation — the chat and solve
+    case. An automatic event with no stated identity has none.
     """
     stated = _hint_identity(event)
-    if stated:
+    if stated or not _mines_observation(event):
         return stated
     return identity_tokens_of(event.observation)
 
@@ -155,13 +192,13 @@ def identity_tokens(event: MemoryEvent) -> set:
 def event_identifiers(event: MemoryEvent) -> set:
     """The retrieval side: every identifier the event asserts, names included.
 
-    When the hint states nothing, this is the observation's structured
-    identifiers exactly as before. When it states anything, it is the hint's
-    names and companies plus the identity tokens — which for an ingestion child
-    are the entity's own, never the message's sender.
+    For an interactive event that states nothing, this is the observation's
+    structured identifiers exactly as before. Otherwise it is the hint's names
+    and companies plus the identity tokens — which for an ingestion child are
+    the entity's own, never the message's sender.
     """
     stated = _hint_names(event) | _hint_identity(event)
-    if not stated:
+    if not stated and _mines_observation(event):
         return parse_identifiers(event.observation)
     return stated | identity_tokens(event)
 

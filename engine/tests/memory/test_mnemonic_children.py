@@ -86,6 +86,22 @@ ENTITIES = [
 ]
 
 
+def restrictions():
+    """Every restriction a review recorded, read the way the eligibility predicate reads it."""
+    from zylch.memory.eligibility import restricted_ids
+
+    with get_session() as session:
+        return sorted(restricted_ids(session, COMPANY_A))
+
+
+def states_of(parent_id: str):
+    with get_session() as session:
+        return {
+            r.event_id: r.state
+            for r in session.query(MemoryOperation).filter(MemoryOperation.parent_event_id == parent_id).all()
+        }
+
+
 def rows():
     with get_session() as session:
         return {r.event_id: r.to_dict() for r in session.query(MemoryOperation).all()}
@@ -128,7 +144,7 @@ def test_the_manifest_and_the_pending_children_land_together(profile_a):
         assert row["allowance"] == journal.EVENT_DISPATCH_ALLOWANCE
         assert row["payload"]["suggestion"] == ENTITIES[index]
     assert manifest.read_manifest("src-1")[0]["content"] == ENTITIES[0]
-    assert manifest.child_states("src-1") == {"src-1:0": "pending", "src-1:1": "pending"}
+    assert states_of("src-1") == {"src-1:0": "pending", "src-1:1": "pending"}
 
 
 def test_a_fault_while_opening_a_child_leaves_no_manifest_and_no_child(profile_a, monkeypatch):
@@ -154,14 +170,14 @@ def test_a_fault_while_opening_a_child_leaves_no_manifest_and_no_child(profile_a
     assert set(stored) == {"src-1"}
     assert "manifest" not in (stored["src-1"]["payload"] or {})
     assert manifest.read_manifest("src-1") is None
-    assert manifest.child_states("src-1") == {}
+    assert states_of("src-1") == {}
 
 
 def test_a_manifest_needs_the_parents_lease(profile_a):
     source, _lease = opened_parent()
     with pytest.raises(journal.JournalError):
         manifest.record_manifest(source, "not-the-lease", ENTITIES, [child(0, ENTITIES[0]), child(1, ENTITIES[1])])
-    assert manifest.child_states("src-1") == {}
+    assert states_of("src-1") == {}
 
 
 def test_a_resume_leaves_existing_children_alone_and_refuses_a_re_pointed_one(profile_a):
@@ -175,7 +191,7 @@ def test_a_resume_leaves_existing_children_alone_and_refuses_a_re_pointed_one(pr
     )
 
     manifest.record_manifest(source, lease, ENTITIES, children)  # the resume
-    assert manifest.child_states("src-1") == {"src-1:0": "skipped", "src-1:1": "pending"}
+    assert states_of("src-1") == {"src-1:0": "skipped", "src-1:1": "pending"}
 
     repointed = [child(0, ENTITIES[0]), child(1, ENTITIES[1])]
     repointed[0] = MemoryEvent(**{**repointed[0].__dict__, "observation": "something else"})
@@ -213,7 +229,7 @@ def test_a_review_records_a_restriction_and_bumps_the_sequence(profile_a):
 
     assert rows()["src-1"]["restrictions"] == [{"blob_id": "fact-1", "version": "v1"}]
     assert mutation_seq() == before + 1
-    assert journal.restrictions_for() == [{"blob_id": "fact-1", "version": "v1"}]
+    assert restrictions() == ["fact-1"]
 
 
 def test_a_review_without_restrictions_leaves_the_sequence_alone(profile_a):
@@ -223,7 +239,7 @@ def test_a_review_without_restrictions_leaves_the_sequence_alone(profile_a):
         "src-1", MnemonicResult.review_needed("src-1", "unclear"), state=journal.REVIEW
     )
     assert mutation_seq() == before
-    assert journal.restrictions_for() == []
+    assert restrictions() == []
 
 
 def seed_fact(embedder, content):
@@ -276,7 +292,7 @@ def test_a_review_naming_a_row_it_was_not_shown_records_nothing(profile_a, embed
 
     assert result.outcome == "review_needed"
     assert rows()["evt-fact"]["restrictions"] == []
-    assert journal.restrictions_for() == []
+    assert restrictions() == []
 
 
 def test_a_review_naming_an_entity_row_records_nothing_either(profile_a, embedder):

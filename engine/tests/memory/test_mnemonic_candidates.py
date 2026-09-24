@@ -76,8 +76,8 @@ def test_a_lids_digits_are_never_read_as_a_phone():
 # ─── Retrieval tokens versus identity tokens ──────────────────────────
 
 
-def test_with_no_hint_the_observation_is_mined_as_before():
-    mined = event(None)
+def test_with_no_hint_an_interactive_observation_is_mined_as_before():
+    mined = event(None, caller_class=c.OPERATOR_DELEGATED, origin=c.INTERACTIVE, source_kind="chat", stage=None)
     assert event_identifiers(mined) == parse_identifiers(MAIL)
     assert identity_tokens(mined) == identity_tokens_of(MAIL)
     assert "mario@acmetest" in identity_tokens(mined)
@@ -97,12 +97,28 @@ def test_a_hint_that_states_identifiers_keeps_the_sender_out():
     assert "mario@acmetest" not in event_identifiers(child)
 
 
-def test_a_name_only_hint_still_mines_the_observation_for_evidence():
-    """The corpus's shared-switchboard shape: the hint names Sara and Delta, the
-    reception number is in the text, and the count the role sees keeps it."""
+def test_an_automatic_event_never_mines_its_observation():
+    """A name-only extracted entity states no address, and the message it came
+    from carries the sender's: that address must not become its identity."""
+    hinted = event(SubjectHint(entity_type=c.PERSON, name="Luca Bianchi", company="Acme"))
+    assert identity_tokens(hinted) == set()
+    assert event_identifiers(hinted) == {"lucabianchi", "acme"}
+    unhinted = event(None)
+    assert identity_tokens(unhinted) == set()
+    assert event_identifiers(unhinted) == set()
+
+
+def test_an_interactive_event_with_a_name_only_hint_still_mines_what_was_said():
+    """The corpus's shared-switchboard shape, as an interactive turn: the hint
+    names Sara and Delta, the reception number is in the text, and the count
+    the role sees keeps it."""
     hinted = event(
         SubjectHint(entity_type=c.PERSON, name="Sara Conti", company="Delta"),
         observation="She gives the shared reception number +39 02 555500.",
+        caller_class=c.OPERATOR_DELEGATED,
+        origin=c.INTERACTIVE,
+        source_kind="chat",
+        stage=None,
     )
     assert identity_tokens(hinted) == {"+3902555500"}
     assert event_identifiers(hinted) == {"saraconti", "delta", "+3902555500"}
@@ -179,15 +195,17 @@ def test_typed_identifiers_fall_back_to_the_observation_for_chat_and_solve():
         stage=None,
         observation="Acme ordina da info@acme.test e risponde al +39 02 1234567.",
     )
-    assert set(typed_identifiers(turn)) == {("email", "info@acmetest"), ("phone", "+39021234567")}
+    # The index's own form: the address as written, lowercased, dots kept.
+    assert set(typed_identifiers(turn)) == {("email", "info@acme.test"), ("phone", "+39021234567")}
 
 
-def test_a_name_never_reaches_the_identity_index():
-    """A hint that states only a name adds no pair; the observation is mined as
-    the fallback, and here it holds no identifier either."""
-    child = event(SubjectHint(entity_type=c.COMPANY, name="Acme Srl"), observation="Acme Srl confirms.")
+def test_a_name_never_reaches_the_identity_index_and_neither_does_the_envelope():
+    """A name-only child adds no pair, and its message's From/To/CC/Date lines
+    are never read as its identity — with the module's own mail as the source."""
+    child = event(SubjectHint(entity_type=c.COMPANY, name="Acme Srl"))
     assert typed_identifiers(child) == []
     assert "acmesrl" in event_identifiers(child)
+    assert "mario@acmetest" not in event_identifiers(child)
 
 
 # ─── The merge-gate brake shows the role nothing ──────────────────────

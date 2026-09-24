@@ -16,25 +16,18 @@ from datetime import datetime, timezone
 from types import SimpleNamespace
 from unittest.mock import MagicMock, Mock, patch
 
-import pytest
 
-from zylch.llm.budget import BudgetError
-from zylch.memory.blob_storage import BlobStorage
-from zylch.memory.mnemonic import ingestion, journal, manifest
 from zylch.services import preparation
-from zylch.services.preparation import PreparationStopped, preparation_run
+from zylch.services.preparation import preparation_run
 from zylch.storage import database as dbm
 from zylch.storage.database import get_session
 from zylch.storage.models import (
     Blob,
-    CalendarBlob,
     CalendarEvent,
     Email,
-    EmailBlob,
     MemoryOperation,
     MrcallConversation,
     PersonIdentifier,
-    WhatsAppBlob,
     WhatsAppMessage,
 )
 from zylch.storage.storage import Storage
@@ -43,7 +36,6 @@ from zylch.workers import memory as mem_mod
 from tests.memory.mnemonic_env import (
     COMPANY_A,
     OWNER_A,
-    BagOfWordsEmbedder,
     boot,
     clear_process_state,
     client,

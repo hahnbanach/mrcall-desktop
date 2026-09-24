@@ -16,7 +16,7 @@ terminal. That invariant is what keeps the manifest from being overwritten by
 
 from __future__ import annotations
 
-from typing import Dict, Optional, Sequence
+from typing import Optional, Sequence
 
 from zylch.storage.models import MemoryOperation
 
@@ -117,19 +117,4 @@ def read_manifest(parent_event_id: str) -> Optional[list]:
         raise JournalError(f"operation journal unavailable: {exc}") from exc
 
 
-def child_states(parent_event_id: str) -> Dict[str, str]:
-    """Each child's current state, by event id — what a resume decides from."""
-    try:
-        with company_transaction() as session:
-            rows = (
-                session.query(MemoryOperation.event_id, MemoryOperation.state)
-                .filter(MemoryOperation.parent_event_id == parent_event_id)
-                .all()
-            )
-            return {str(event_id): str(state) for event_id, state in rows}
-    except Exception as exc:  # noqa: BLE001
-        raise JournalError(f"operation journal unavailable: {exc}") from exc
-
-
-
-__all__ = ["child_states", "read_manifest", "record_manifest"]
+__all__ = ["read_manifest", "record_manifest"]

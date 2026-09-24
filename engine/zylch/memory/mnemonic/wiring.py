@@ -11,12 +11,11 @@ is shown, and the read-only callables that produce it.
 from __future__ import annotations
 
 import logging
-import re
 from dataclasses import dataclass
 from typing import Any, Callable, Optional, Sequence, Tuple
 
-from .candidates import gather, identity_tokens
-from .contracts import MAX_CANDIDATES, Candidate, MemoryEvent
+from .candidates import gather, identity_pairs_of
+from .contracts import AUTOMATIC, MAX_CANDIDATES, Candidate, MemoryEvent
 
 logger = logging.getLogger(__name__)
 
@@ -83,18 +82,17 @@ def parse_identifiers_block(content: str) -> list:
     return _parse_identifiers_block(content or "")
 
 
-_PHONE_SHAPED = re.compile(r"^\+?\d{7,}$")
-
-
 def typed_identifiers(event: MemoryEvent) -> list:
     """The event's identity tokens as ``(kind, value)``, for the identity index.
 
     The hint's own ``(kind, value)`` pairs when it states them — an ingestion
     child's, in the canonical form the index stores, so a lid keeps the kind
     the parser gave it instead of being dropped by a shape guess — otherwise
-    the identity tokens mined from the observation, classified by shape as
-    before: the chat and solve adapters state no identifiers, and their turns
-    reach the index exactly as they did.
+    the identity tokens ``candidates.identity_tokens`` yields: for the chat and
+    solve adapters, which state no identifiers, the observation's shapes, so
+    their turns reach the index exactly as they did; for an automatic child
+    with no stated address, nothing, because its observation is the whole
+    message and the sender's address must never select a candidate for it.
 
     Names never reach this index, in either branch. ``person_identifiers``
     deliberately excludes them — two people called Mario Rossi are two people —
@@ -110,13 +108,9 @@ def typed_identifiers(event: MemoryEvent) -> list:
         if hint.phone:
             pairs.append(("phone", hint.phone.strip()))
         return pairs
-    pairs = []
-    for token in sorted(identity_tokens(event)):
-        if "@" in token:
-            pairs.append(("email", token))
-        elif _PHONE_SHAPED.match(token):
-            pairs.append(("phone", token))
-    return pairs
+    if event.origin == AUTOMATIC:
+        return []
+    return identity_pairs_of(event.observation)
 
 
 def candidates_for(event: MemoryEvent, context: CommitContext) -> Tuple[Candidate, ...]:

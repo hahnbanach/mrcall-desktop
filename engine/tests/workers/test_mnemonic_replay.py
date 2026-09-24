@@ -108,6 +108,46 @@ def test_a_name_only_entity_gets_a_blob_and_no_identifier(profile):
     assert role_messages(worker)[0]["subject_hint"] == {"entity_type": "COMPANY", "name": "Example Ltd"}
 
 
+NAME_ONLY_PERSON = (
+    "#IDENTIFIERS\nEntity type: PERSON\nScope: entity\nName: Luca Bianchi\nCompany: Acme\n"
+    "#ABOUT\nColleague of the sender; will call about the order."
+)
+
+
+def test_a_name_only_person_never_inherits_the_senders_identity(profile):
+    """The sender has a blob whose address is in the identity index. A person
+    the mail merely mentions, with a name and no address of their own, must not
+    be judged by that address: the index is not asked with it, the sender's
+    blob is not evidence, and the person is created."""
+    storage = BlobStorage(get_session, profile.embedder)
+    sender = storage.store_blob(
+        OWNER_A,
+        f"user:{COMPANY_A}",
+        "#IDENTIFIERS\nEntity type: PERSON\nScope: entity\nName: Mario Verdi\nEmail: mario@acme.test\n#ABOUT\nBuyer.",
+        "seed",
+    )
+    Storage().add_person_identifiers(OWNER_A, sender["id"], [("email", "mario@acme.test")])
+    mail = seed_email(body="Luca Bianchi, my colleague at Acme, will call you about the order.")
+    worker = make_worker([extraction(NAME_ONLY_PERSON)], [create_decision(NAME_ONLY_PERSON, "PERSON")])
+    asked = []
+    real = worker.storage.find_blobs_by_identifiers
+
+    def spying(owner_id, identifiers):
+        asked.append(list(identifiers))
+        return real(owner_id, identifiers)
+
+    worker.storage.find_blobs_by_identifiers = spying
+
+    assert run(worker, "process_email", mail) is True
+
+    assert asked == []  # a name states no identity, so the index is never asked
+    shown = role_messages(worker)[0]
+    assert shown["subject_hint"] == {"entity_type": "PERSON", "name": "Luca Bianchi", "company": "Acme"}
+    assert all(c["shared_identifiers"] == 0 for c in shown["candidates"])
+    assert len(blobs()) == 2
+    assert {v for _, _, v in identifiers()} == {"mario@acme.test"}
+
+
 def test_the_candidates_the_role_is_shown_are_identifier_first_then_cosine(profile):
     """The ``test_person_identifiers`` incident, on the harness: blob A is in
     the identity index, blob B is only a cosine match, and A is shown first."""
@@ -305,6 +345,40 @@ def test_a_budget_refusal_in_a_child_costs_no_allowance_and_stops_the_batch(prof
     assert worker.decision_client._client.messages.create.call_count == 0
     assert worker.client._client.messages.create.call_count == 1  # the batch stopped before mail-2
     assert blobs() == {} and not email_processed("mail-1") and not email_processed("mail-2")
+
+
+def test_an_extraction_refused_by_the_budget_leaves_the_parent_pending_and_resumes(profile, monkeypatch):
+    """The refusal happens before the parent's dispatch: the exception reaches
+    the batch untouched, the parent keeps its row and its lease with no manifest,
+    and the next run re-extracts under a fresh claim."""
+    mail = seed_email()
+    worker = make_worker([extraction(LUCA)], [create_decision(LUCA, "PERSON")])
+    from zylch.llm import budget
+
+    real_reserve = budget.reserve
+    refusing = {"on": True}
+
+    def maybe_refuse(request_kwargs, transport, **kwargs):
+        from zylch.llm.usage import current_call_site
+
+        if refusing["on"] and current_call_site() == "memory.extract":
+            raise BudgetError("Daily AI budget unavailable")
+        return real_reserve(request_kwargs, transport, **kwargs)
+
+    monkeypatch.setattr(budget, "reserve", maybe_refuse)
+    with pytest.raises(BudgetError):
+        run(worker, "process_email", mail)
+    parent = parent_of("mail-1")
+    assert parent["state"] == "pending" and parent["lease"]
+    assert manifest.read_manifest(parent["event_id"]) is None
+    assert worker.client._client.messages.create.call_count == 0
+    assert parent["allowance"] == journal.EVENT_DISPATCH_ALLOWANCE
+
+    refusing["on"] = False
+    resume(profile)
+    assert run(worker, "process_email", mail) is True
+    assert worker.client._client.messages.create.call_count == 1
+    assert len(blobs()) == 1 and email_processed("mail-1")
 
 
 def test_a_source_edit_is_a_new_parent_and_never_an_old_digest_reused(profile):

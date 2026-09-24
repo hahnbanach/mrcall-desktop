@@ -69,6 +69,14 @@ def seed(embedder, content, *, namespace=FACTS, blob_id=None):
         return str(blob.id)
 
 
+def restrictions():
+    """Every restriction a review recorded, read the way the eligibility predicate reads it."""
+    from zylch.memory.eligibility import restricted_ids
+
+    with get_session() as session:
+        return sorted(restricted_ids(session, COMPANY_A))
+
+
 def fact_ids(owner=OWNER_A):
     return {row["blob_id"] for row in facts_store._all_fact_blobs(owner)}
 
@@ -194,7 +202,10 @@ def test_the_corpus_review_restricts_the_legacy_fact_it_declined(profile_a, embe
     result = admitted(event)(client(decision_text("contradictory_legacy_fact_rule")))
 
     assert result.outcome == "review_needed", result.reason
-    assert journal.restrictions_for() == [{"blob_id": "legacy-fact-edera", "version": shown_version}]
+    assert restrictions() == ["legacy-fact-edera"]
+    assert journal.read("evt-edera", owner_id=OWNER_A, company_key=COMPANY_A)["restrictions"] == [
+        {"blob_id": "legacy-fact-edera", "version": shown_version}
+    ]
     assert "legacy-fact-edera" not in fact_ids()
     assert facts_store.exact_fact(OWNER_A, "pricing", "edera-term") is None
     # The same engine instance, its index loaded before the review: the bump
@@ -213,7 +224,7 @@ def test_a_rewrite_of_a_restricted_fact_does_not_restore_its_eligibility(profile
         "legacy-fact-edera", OWNER_A, "Category: pricing\nKey: edera-term\nEdera has a 12-month minimum."
     )
     assert rewritten and rewritten["content"].endswith("12-month minimum.")
-    recorded = journal.restrictions_for()[0]["version"]
+    recorded = journal.read("evt-edera", owner_id=OWNER_A, company_key=COMPANY_A)["restrictions"][0]["version"]
     assert storage.get_blob("legacy-fact-edera", OWNER_A)["updated_at"] != recorded
 
     assert "legacy-fact-edera" not in fact_ids()

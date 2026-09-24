@@ -202,7 +202,17 @@ def test_email_capacity_keeps_complete_entities_and_rejects_truncation(profile, 
     ok = run(worker, "process_email", mail)
     kwargs = worker.client._client.messages.create.call_args.kwargs
     assert kwargs["max_tokens"] == 4096
-    assert ("system" in kwargs) is not legacy or legacy  # the legacy path sends no cached system block
+    # The modern path sends the trained prompt as a cached system block and the
+    # mail as the user turn; the legacy path interpolates the mail into the
+    # prompt and sends it as the user turn, with no cached block.
+    cached = [b for b in kwargs["system"] if isinstance(b, dict) and b.get("cache_control")]
+    user_turn = kwargs["messages"][0]["content"]
+    if legacy:
+        assert cached == []
+        assert user_turn.startswith("Extract the email: ")
+    else:
+        assert len(cached) == 1 and cached[0]["text"].startswith(worker._custom_prompt)
+        assert user_turn.startswith("Analyze this email:")
     if stop_reason == "end_turn":
         assert ok is True
         assert processed(model_of(CHANNELS["email"][2]), "mail-1")

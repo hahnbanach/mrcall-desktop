@@ -25,13 +25,11 @@ from .evidence import corroborates, duplicate_candidates
 from .contracts import (
     ACCOUNT_SCOPE,
     AUTOMATIC_OBSERVATION,
-    COMPANY,
     COMPANY_SCOPE,
     CREATE,
     FACT,
     MAX_CONTENT_CHARS,
     MERGE,
-    PERSON,
     REQUIRED_FAMILY,
     REQUIRED_SCOPE,
     REVIEW,

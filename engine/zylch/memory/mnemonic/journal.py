@@ -406,33 +406,6 @@ def record_result(
         raise JournalError(f"operation journal unavailable: {exc}") from exc
 
 
-# ─── Read restrictions recorded by reviews ────────────────────────────
-
-
-def restrictions_for() -> list:
-    """Every read restriction recorded by a review in this company store.
-
-    Read by the eligibility predicate, which is why it lives here beside the
-    rows that carry it: a restriction is journal state, and the read paths
-    consult it rather than a marker written onto the blob.
-    """
-    try:
-        with company_transaction() as session:
-            rows = (
-                session.query(MemoryOperation.restrictions)
-                .filter(MemoryOperation.state == REVIEW)
-                .all()
-            )
-            found = []
-            for (entries,) in rows:
-                for entry in entries or []:
-                    if isinstance(entry, dict) and entry.get("blob_id"):
-                        found.append(dict(entry))
-            return found
-    except Exception as exc:  # noqa: BLE001
-        raise JournalError(f"operation journal unavailable: {exc}") from exc
-
-
 # ─── Reading, scoped like the memory it describes ─────────────────────
 
 
@@ -490,7 +463,6 @@ __all__ = [
     "receipt",
     "record_attempt",
     "record_result",
-    "restrictions_for",
     "session_factory",
     "spend_allowance",
     "visible",
