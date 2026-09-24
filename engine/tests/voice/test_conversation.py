@@ -240,3 +240,136 @@ def test_append_limit_preserves_multibyte_content():
     parts = list(chunks(text))
     assert "".join(parts) == text
     assert all(len(part.encode()) <= 480 for part in parts)
+
+
+def test_voice_answer_during_backend_is_reconciled_without_repetition(fixture_db, monkeypatch):
+    """Voice may answer from quiet context while the backend is in flight."""
+    entered, release = threading.Event(), threading.Event()
+    requests = []
+
+    def model(**kwargs):
+        requests.append(json.dumps(kwargs["messages"]))
+        if len(requests) == 1:
+            entered.set()
+            assert release.wait(3)
+            return response("The filters are blue.")
+        return response("[NO_FURTHER_RESPONSE]")
+
+    conv, _, sent = make_conversation(monkeypatch, model)
+
+    async def scenario():
+        conv.start()
+        conv.event(
+            {"type": "session.input_transcript.delta", "delta": "What colour are my filters?"}
+        )
+        conv.event(delegation("colour"))
+        await until(entered.is_set)
+        conv.event(
+            {
+                "type": "session.output_transcript.delta",
+                "delta": "The stored request is for blue replacement filters.",
+            }
+        )
+        release.set()
+        await until(lambda: conv.worker.done())
+        assert len(requests) == 2, "Backend did not see voice's answer before delivery"
+        assert "stored request is for blue" in requests[-1]
+        assert conv.evidence["results_sent"] == 0
+        assert not any(row["type"] == "session.commentary.append" for row in sent)
+        assert conv.evidence["answers_already_addressed"] == 1
+        await conv.close()
+
+    try:
+        asyncio.run(scenario())
+    finally:
+        release.set()
+
+
+def test_diagnostic_delay_preserves_the_request_revision_snapshot(fixture_db, monkeypatch):
+    requests = []
+
+    def model(**kwargs):
+        requests.append(json.dumps(kwargs["messages"]))
+        return response("Stored delivery is Thursday.")
+
+    conv, _, sent = make_conversation(monkeypatch, model)
+    conv.backend_delay = 0.05
+
+    async def scenario():
+        conv.start()
+        conv.event({"type": "session.input_transcript.delta", "delta": "Which filters?"})
+        conv.event(delegation("first"))
+        await until(lambda: conv.run_number == 1)
+        conv.event(
+            {"type": "session.input_transcript.delta", "delta": " CORRECTION: delivery day?"}
+        )
+        await until(lambda: conv.evidence["results_sent"] == 1)
+        assert "CORRECTION" not in requests[0], "Run labeled with old revision saw newer input"
+        assert "CORRECTION" in requests[-1]
+        assert len([row for row in sent if row["type"] == "session.commentary.append"]) == 1
+        await conv.close()
+
+    asyncio.run(scenario())
+
+
+@pytest.mark.parametrize(
+    "spoken,latest_caller,answer",
+    [
+        ("One moment, I am checking.", None, "Stored delivery is Thursday."),
+        (
+            "The agreed delivery is Friday.",
+            None,
+            "Correction: the prior email agreed Thursday, not Friday.",
+        ),
+        (
+            "The stored request is for blue filters.",
+            "And the tracking number?",
+            "There is no tracking number in the selected history.",
+        ),
+    ],
+)
+def test_voice_reconciliation_still_delivers_missing_or_corrected_answer(
+    fixture_db, monkeypatch, spoken, latest_caller, answer
+):
+    entered, release = threading.Event(), threading.Event()
+    requests = []
+
+    def model(**kwargs):
+        requests.append(json.dumps(kwargs["messages"]))
+        if len(requests) == 1:
+            entered.set()
+            assert release.wait(3)
+            return response("OUTDATED BACKEND DRAFT")
+        return response(answer)
+
+    conv, _, sent = make_conversation(monkeypatch, model)
+
+    async def scenario():
+        conv.start()
+        conv.event(
+            {
+                "type": "session.input_transcript.delta",
+                "delta": "Check my prior request and delivery.",
+            }
+        )
+        conv.event(delegation("request"))
+        await until(entered.is_set)
+        conv.event({"type": "session.output_transcript.delta", "delta": spoken})
+        if latest_caller:
+            conv.event({"type": "session.input_transcript.delta", "delta": latest_caller})
+            conv.event(delegation("followup"))
+        release.set()
+        await until(lambda: conv.worker.done())
+        assert len(requests) == 2 and spoken in requests[-1]
+        if latest_caller:
+            assert latest_caller in requests[-1]
+        delivered = [row for row in sent if row["type"] == "session.commentary.append"]
+        assert len(delivered) == 1 and delivered[0]["content"] == answer
+        assert "OUTDATED" not in str(sent)
+        assert conv.evidence.get("answers_already_addressed", 0) == 0
+        await conv.close()
+
+    try:
+        asyncio.run(scenario())
+    finally:
+        release.set()
