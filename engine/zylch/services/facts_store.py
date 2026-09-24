@@ -165,10 +165,25 @@ def upsert_fact(
     key: str,
     value: str,
     event_description: Optional[str] = None,
+    *,
+    entry=None,
 ) -> Optional[str]:
-    """Create or update a fact, deduped by exact (Category, Key).
+    """Submit one business fact to the harness, deduped by exact (Category, Key).
 
-    Returns the blob_id, or None on failure. Never raises.
+    The exact row with this category and key, when one exists, is pinned as the
+    event's target and named as the requested write; the mnemonic role decides
+    the final text and whether the value is company knowledge at all — a
+    customer's price is that customer's memory, and the role may say so, in
+    which case the departure is recorded. There is no fallback create and no
+    caller-owned classification: a proposal the harness cannot admit is
+    refused, never written another way.
+
+    ``entry`` is the admission and source the caller runs under
+    (``zylch.memory.mnemonic.entry``); a caller that passes none gets the
+    current turn's, or a refusal when it is inside a preparation run with no
+    admitted item.
+
+    Returns the committed blob id, or ``None``. Never raises.
     """
     category = (category or "").strip()
     key = (key or "").strip()
@@ -182,45 +197,58 @@ def upsert_fact(
 
     content = format_fact(category, key, value)
     try:
-        from zylch.memory import EmbeddingEngine, MemoryConfig
-        from zylch.memory.blob_storage import BlobStorage
-        from zylch.storage.database import get_session
-
-        blob_store = BlobStorage(get_session, EmbeddingEngine(MemoryConfig()))
-
-        want_cat, want_key = category.lower(), key.lower()
-        for blob in _all_fact_blobs(owner_id):
-            if (
-                parse_category(blob["content"]).lower() == want_cat
-                and parse_key(blob["content"]).lower() == want_key
-            ):
-                updated = blob_store.update_blob(
-                    blob_id=blob["blob_id"],
-                    owner_id=owner_id,
-                    content=content,
-                    event_description=event_description or "Fact updated",
-                )
-                if not updated:
-                    # An empty result is a refusal, never a success: fall
-                    # through and create rather than report an update that
-                    # did not happen (the cross-owner lost-update class).
-                    logger.warning(
-                        f"[facts] update of {blob['blob_id']} refused for owner "
-                        f"{owner_id}; creating a fresh fact row instead"
-                    )
-                    break
-                logger.debug(f"[facts] updated {category}/{key} -> {blob['blob_id']}")
-                return blob["blob_id"]
-
-        blob = blob_store.store_blob(
-            owner_id=owner_id,
-            namespace=facts_namespace(owner_id),
-            content=content,
-            event_description=event_description or "Fact created",
+        from zylch.memory.company_key import require_company_key
+        from zylch.memory.mnemonic import submit
+        from zylch.memory.mnemonic.approval import RequestedWrite
+        from zylch.memory.mnemonic.contracts import (
+            COMPANY_SCOPE,
+            CREATE,
+            FACT,
+            OPERATOR_DELEGATED,
+            UPDATE,
+            MemoryEvent,
+            SubjectHint,
         )
-        blob_id = str(blob["id"])
-        logger.debug(f"[facts] created {category}/{key} -> {blob_id}")
-        return blob_id
+        from zylch.memory.mnemonic.entry import EntryRefused, entry_for
+
+        try:
+            entry = entry or entry_for(fallback=content)
+        except EntryRefused as exc:
+            logger.warning(f"[facts] {category}/{key} refused: {exc}")
+            return None
+        row = exact_fact(owner_id, category, key)
+        event = MemoryEvent(
+            owner_id=owner_id,
+            company_key=require_company_key(),
+            caller_class=OPERATOR_DELEGATED,
+            origin=entry.origin,
+            source_kind=entry.source_kind,
+            source_id=entry.source_id,
+            source_revision=entry.source_revision,
+            observation=entry.observation,
+            subject_hint=SubjectHint(entity_type=FACT, target_blob_id=row["blob_id"] if row else None),
+            explicit_request=False,
+            stage=entry.stage,
+            cancellation=entry.cancellation,
+        ).with_model_arguments({"content": content})
+        requested = (
+            RequestedWrite(
+                action=UPDATE,
+                blob_id=row["blob_id"],
+                entity_type=FACT,
+                scope=COMPANY_SCOPE,
+                subject_is_authoritative=True,
+            )
+            if row
+            else RequestedWrite(action=CREATE, entity_type=FACT, scope=COMPANY_SCOPE)
+        )
+        result = submit(event, requested=requested)
+        if result.outcome == "committed":
+            blob_id = result.committed_ids[0][0]
+            logger.info(f"[facts] {category}/{key} -> {blob_id} (event {event.event_id})")
+            return blob_id
+        logger.info(f"[facts] {category}/{key} not written: {result.outcome} {result.reason}")
+        return None
     except Exception as e:
         logger.warning(f"[facts] upsert failed for {category}/{key}: {e}")
         return None

@@ -96,41 +96,46 @@ class UpdateMemoryTool(Tool):
                 error="No owner_id available",
             )
 
+        import asyncio
+
         if (entry_type or "").strip().lower() == "behavioral_rule":
             # Structural, and before anything else: the model-declared kind
             # plus the target row's own family, never content parsing. A
             # behavioral rule must NEVER overwrite a contact blob — that is
             # exactly the general-feedback-into-a-contact mis-routing — and a
             # rule is refined through the rule store's own door, which keeps
-            # its shape check. A rule declared as one is not the role's to
-            # decide; an `entity_fact` naming a rule row still is, and the
-            # validator admits an account STYLE proposal there.
-            from zylch.services.prefs_store import refine_rule
-
-            outcome = refine_rule(
-                owner_id,
-                blob_id,
-                new_content,
-                event_description="Manual correction via chat",
-                writer="update_memory",
-            )
-            if outcome["action"] == "refined":
-                return ToolResult(
-                    status=ToolStatus.SUCCESS,
-                    data={
-                        "blob_id": blob_id,
-                        "namespace": outcome["namespace"],
-                        "action": "updated",
-                    },
-                    message=f"Memory updated (blob_id={blob_id}).\n{new_content}",
-                )
-            return ToolResult(status=ToolStatus.ERROR, data=None, error=outcome["reason"])
-
-        import asyncio
+            # its shape check and pins the row as the requested target of the
+            # mnemonic role's decision. An `entity_fact` naming a rule row
+            # goes to the role directly, and the validator admits an account
+            # STYLE proposal there.
+            return await asyncio.to_thread(self._refine_rule, owner_id, blob_id, new_content)
 
         # A worker thread: the decision costs up to three bounded model rounds
         # and must not block the event loop that serves every other turn.
         return await asyncio.to_thread(self._submit_event, owner_id, blob_id, new_content)
+
+    def _refine_rule(self, owner_id: str, blob_id: str, new_content: str) -> ToolResult:
+        """One refinement through the rule store's door, reported as the tool's result."""
+        from zylch.services.prefs_store import refine_rule
+
+        outcome = refine_rule(
+            owner_id,
+            blob_id,
+            new_content,
+            event_description="Manual correction via chat",
+            writer="update_memory",
+        )
+        if outcome["action"] == "refined":
+            return ToolResult(
+                status=ToolStatus.SUCCESS,
+                data={
+                    "blob_id": outcome["blob_id"],
+                    "namespace": outcome["namespace"],
+                    "action": "updated",
+                },
+                message=f"Memory updated (blob_id={outcome['blob_id']}).\n{new_content}",
+            )
+        return ToolResult(status=ToolStatus.ERROR, data=None, error=outcome["reason"])
 
     # ─── The semantic path ────────────────────────────────────────────
 

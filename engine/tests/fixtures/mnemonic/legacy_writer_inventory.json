@@ -11,6 +11,7 @@
     "delete_all_blobs",
     "upsert_fact",
     "store_rule",
+    "refine_rule",
     "_create_blob",
     "_update_blob",
     "add_person_identifiers",
@@ -121,7 +122,8 @@
       "call": "store_rule",
       "count": 1,
       "mode": "sync",
-      "milestone": 6
+      "milestone": 6,
+      "note": "adapter door: the helper submits to the harness (milestone 6); the row records the door, not a direct write"
     },
     {
       "path": "zylch/services/correction_learning.py",
@@ -129,63 +131,8 @@
       "call": "upsert_fact",
       "count": 1,
       "mode": "sync",
-      "milestone": 6
-    },
-    {
-      "path": "zylch/services/facts_store.py",
-      "symbol": "upsert_fact",
-      "call": "store_blob",
-      "count": 1,
-      "mode": "sync",
-      "milestone": 6
-    },
-    {
-      "path": "zylch/services/facts_store.py",
-      "symbol": "upsert_fact",
-      "call": "update_blob",
-      "count": 1,
-      "mode": "sync",
-      "milestone": 6
-    },
-    {
-      "path": "zylch/services/prefs_store.py",
-      "symbol": "_create_blob",
-      "call": "store_blob",
-      "count": 1,
-      "mode": "sync",
-      "milestone": 6
-    },
-    {
-      "path": "zylch/services/prefs_store.py",
-      "symbol": "_update_blob",
-      "call": "update_blob",
-      "count": 1,
-      "mode": "sync",
-      "milestone": 6
-    },
-    {
-      "path": "zylch/services/prefs_store.py",
-      "symbol": "store_rule",
-      "call": "_create_blob",
-      "count": 1,
-      "mode": "sync",
-      "milestone": 6
-    },
-    {
-      "path": "zylch/services/prefs_store.py",
-      "symbol": "store_rule",
-      "call": "_update_blob",
-      "count": 1,
-      "mode": "sync",
-      "milestone": 6
-    },
-    {
-      "path": "zylch/services/prefs_store.py",
-      "symbol": "refine_rule",
-      "call": "_update_blob",
-      "count": 1,
-      "mode": "sync",
-      "milestone": 6
+      "milestone": 6,
+      "note": "adapter door: the helper submits to the harness (milestone 6); the row records the door, not a direct write"
     },
     {
       "path": "zylch/storage/step_memory_split.py",
@@ -197,11 +144,21 @@
     },
     {
       "path": "zylch/tools/create_memory_tool.py",
-      "symbol": "CreateMemoryTool.execute",
+      "symbol": "CreateMemoryTool._store_rule",
       "call": "store_rule",
       "count": 1,
-      "mode": "async",
-      "milestone": 6
+      "mode": "sync",
+      "milestone": 6,
+      "note": "adapter door: the helper submits to the harness (milestone 6); the row records the door, not a direct write"
+    },
+    {
+      "path": "zylch/tools/update_memory_tool.py",
+      "symbol": "UpdateMemoryTool._refine_rule",
+      "call": "refine_rule",
+      "count": 1,
+      "mode": "sync",
+      "milestone": 6,
+      "note": "adapter door: the helper submits to the harness (milestone 6); the row records the door, not a direct write"
     }
   ],
   "orm_sinks": [

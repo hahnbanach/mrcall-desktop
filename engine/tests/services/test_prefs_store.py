@@ -14,6 +14,7 @@ existing one updates it in place. Read-side truncation stays as the
 emergency valve but now selects by priority and recency.
 """
 
+import json
 from datetime import datetime, timedelta, timezone
 
 import pytest
@@ -24,6 +25,8 @@ from zylch.services.prefs_store import (
     select_within_cap,
     store_rule,
 )
+
+from tests.memory.mnemonic_env import COMPANY_A, OWNER_A, BagOfWordsEmbedder, boot, clear_process_state, client, stub_embedder, with_client
 
 ENTITY = (
     "#IDENTIFIERS\nEntity type: STYLE\nName: Win-back email\n\n"
@@ -47,6 +50,40 @@ def fresh_db(tmp_path, monkeypatch):
 
 
 OWNER = "owner-prefs-store"
+STYLE_HEADER = "#IDENTIFIERS\nEntity type: STYLE\nScope: account\n#ABOUT\n"
+
+
+@pytest.fixture
+def profile(tmp_path, monkeypatch):
+    """A real profile on real files: the semantic writes need the harness."""
+    from zylch.storage import database as db_mod
+
+    stub_embedder(monkeypatch, BagOfWordsEmbedder())
+    boot(monkeypatch, tmp_path, OWNER_A, COMPANY_A)
+    yield OWNER_A
+    db_mod.dispose_engine()
+    clear_process_state()
+
+
+def _create(content):
+    return json.dumps({"action": "CREATE", "entity_type": "STYLE", "scope": "account", "content": STYLE_HEADER + content, "reason": "new rule"})
+
+
+def _update(blob_id, content):
+    from zylch.memory.blob_storage import BlobStorage
+    from zylch.storage.database import get_session
+
+    version = BlobStorage(get_session, BagOfWordsEmbedder()).get_blob(blob_id, OWNER_A)["updated_at"]
+    return json.dumps(
+        {
+            "action": "UPDATE",
+            "entity_type": "STYLE",
+            "scope": "account",
+            "content": STYLE_HEADER + content,
+            "write_set": [{"blob_id": blob_id, "expected_version": version, "role": "target"}],
+            "reason": "extends the rule",
+        }
+    )
 
 
 def _rows(*specs):
@@ -84,39 +121,62 @@ def test_entity_content_is_refused(fresh_db):
 # ── dedup + supersession ───────────────────────────────────────────
 
 
-def test_identical_rule_is_stored_once(fresh_db):
+def test_identical_rule_is_stored_once(profile, monkeypatch):
+    """A new rule is the role's decision; the exact duplicate is refused unpaid."""
     from zylch.services.prefs_store import load_rules
 
-    assert store_rule(OWNER, RULE, "test", writer="unit")["action"] == "created"
-    second = store_rule(OWNER, f"  {RULE.upper()}  ", "test", writer="unit")
+    with_client(monkeypatch, client(_create(RULE)))
+    assert store_rule(OWNER_A, RULE, "test", writer="unit")["action"] == "created"
+    second = store_rule(OWNER_A, f"  {RULE.upper()}  ", "test", writer="unit")
     assert second["action"] == "duplicate"
-    assert len(load_rules(OWNER)) == 1
+    assert len(load_rules(OWNER_A)) == 1
 
 
-def test_an_extended_rule_supersedes_in_place(fresh_db):
+def test_an_extended_rule_supersedes_in_place(profile, monkeypatch):
+    """The superseding candidate is pinned and the role updates it in place."""
     from zylch.services.prefs_store import load_rules
 
-    store_rule(OWNER, RULE, "test", writer="unit")
+    with_client(monkeypatch, client(_create(RULE)))
+    first = store_rule(OWNER_A, RULE, "test", writer="unit")
     extended = RULE + " Always sign as the team, never with an invented first name."
-    outcome = store_rule(OWNER, extended, "test", writer="unit")
+    with_client(monkeypatch, client(_update(first["blob_id"], extended)))
+    outcome = store_rule(OWNER_A, extended, "test", writer="unit")
     assert outcome["action"] == "superseded"
 
-    rules = load_rules(OWNER)
+    rules = load_rules(OWNER_A)
     assert len(rules) == 1
-    assert rules[0]["content"] == extended
+    assert rules[0]["content"] == STYLE_HEADER + extended
 
 
-def test_a_rule_contained_in_an_existing_one_is_not_stored(fresh_db):
+def test_a_rule_contained_in_an_existing_one_is_not_stored(profile, monkeypatch):
     from zylch.services.prefs_store import load_rules
 
     extended = RULE + " Always sign as the team."
-    store_rule(OWNER, extended, "test", writer="unit")
-    assert store_rule(OWNER, RULE, "test", writer="unit")["action"] == "duplicate"
-    assert len(load_rules(OWNER)) == 1
+    with_client(monkeypatch, client(_create(extended)))
+    store_rule(OWNER_A, extended, "test", writer="unit")
+    assert store_rule(OWNER_A, RULE, "test", writer="unit")["action"] == "duplicate"
+    assert len(load_rules(OWNER_A)) == 1
 
 
 def test_normalise_ignores_whitespace_and_case():
     assert normalise("  A  RULE\n\nhere ") == normalise("a rule here")
+
+
+def test_a_rule_written_under_its_control_header_renders_and_compares_as_its_text():
+    """The harness writes every memory under the minimal header; for a rule the
+    header is control metadata. Rendering strips it, duplicate detection
+    compares the text, and the rule is not ranked as an entity stray."""
+    from zylch.services.prefs_store import render, rule_body
+
+    headed = STYLE_HEADER + RULE + "\n#HISTORY\nRequested by this account."
+    assert rule_body(headed) == RULE + "\nRequested by this account."
+    assert normalise(STYLE_HEADER + RULE) == normalise(RULE)
+    assert rule_body(RULE) == RULE
+    assert rule_body(ENTITY) == ENTITY.strip()  # a STYLE stray with a Name keeps its header: the guard sees it
+    assert render([{"content": headed}]) == RULE + "\nRequested by this account."
+    kept, dropped = select_within_cap([{"id": "h", "content": headed, "created_at": None}, {"id": "e", "content": ENTITY, "created_at": None}], cap=10000)
+    assert [r["id"] for r in kept] == ["e", "h"] or [r["id"] for r in kept] == ["h", "e"]
+    assert dropped == []
 
 
 # ── read-side selection ────────────────────────────────────────────

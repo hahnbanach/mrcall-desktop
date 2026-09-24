@@ -84,7 +84,9 @@ REQUIRED_SCOPE = {
 
 # The namespace family the engine derives for a proposal. A caller — least of
 # all a model — never hands in a namespace; see company_key.scoped_namespace.
-REQUIRED_FAMILY = {PERSON: "user", COMPANY: "user", FACT: "facts", STYLE: "prefs"}
+# STYLE files in ``template``, the rule store's canonical namespace; ``prefs``
+# is the legacy rule namespace, still read and still a valid target.
+REQUIRED_FAMILY = {PERSON: "user", COMPANY: "user", FACT: "facts", STYLE: "template"}
 
 # Caller classes, narrowest authority last. "Verified human correction" is set
 # only for an authenticated human instruction: a token, a callback, `--allow`

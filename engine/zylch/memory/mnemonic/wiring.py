@@ -14,8 +14,8 @@ import logging
 from dataclasses import dataclass
 from typing import Any, Callable, Optional, Sequence, Tuple
 
-from .candidates import gather, identity_pairs_of
-from .contracts import AUTOMATIC, MAX_CANDIDATES, Candidate, MemoryEvent
+from .candidates import gather, identity_pairs_of, mines_observation
+from .contracts import MAX_CANDIDATES, Candidate, MemoryEvent
 
 logger = logging.getLogger(__name__)
 
@@ -108,7 +108,7 @@ def typed_identifiers(event: MemoryEvent) -> list:
         if hint.phone:
             pairs.append(("phone", hint.phone.strip()))
         return pairs
-    if event.origin == AUTOMATIC:
+    if not mines_observation(event):
         return []
     return identity_pairs_of(event.observation)
 

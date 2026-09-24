@@ -165,15 +165,31 @@ def _hint_names(event: MemoryEvent) -> Set[str]:
     return found
 
 
-def _mines_observation(event: MemoryEvent) -> bool:
+# The source kinds whose observation is what a human said or pointed at — a
+# chat turn, a CLI or RPC instruction, a task and its typed instruction. Only
+# these may be mined for identity. A channel message (email, whatsapp,
+# calendar, mrcall) is an envelope with a sender; a correction's observation
+# is the drafted and sent texts with their recipients. Neither is the subject's
+# own statement of who it is, and neither is ever mined.
+MINED_SOURCE_KINDS = ("chat", "cli", "rpc", "task", "task_instruction")
+
+
+def mines_observation(event: MemoryEvent) -> bool:
     """May this event's observation be read for identity at all?
 
-    Only an interactive event whose hint states no identity: a chat turn or a
-    solve, where the observation is what the human said. An automatic event's
-    observation is a whole channel message and is never mined — its identity is
-    its hint's, and a hint that states no address states no identity.
+    Only an event from a mined source kind whose hint states no identity. An
+    automatic event's observation is a whole channel message and is never
+    mined — its identity is its hint's, and a hint that states no address
+    states no identity; a correction's envelope is not mined either.
     """
-    return event.origin != AUTOMATIC and not _hint_identity(event)
+    return (
+        event.origin != AUTOMATIC
+        and event.source_kind in MINED_SOURCE_KINDS
+        and not _hint_identity(event)
+    )
+
+
+_mines_observation = mines_observation
 
 
 def identity_tokens(event: MemoryEvent) -> set:

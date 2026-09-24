@@ -119,54 +119,59 @@ class CreateMemoryTool(Tool):
                     "a general behavioral rule uses entry_type='behavioral_rule'."
                 ),
             )
+        import asyncio
+
         if et == "behavioral_rule" or (not et and family in RULE_FAMILIES):
             # Guarded door: the rule namespaces are injected verbatim
             # into every prompt, so they refuse entity-shaped content,
             # skip duplicates and supersede near-copies rather than
-            # accumulating them (see zylch.services.prefs_store).
-            from zylch.services.prefs_store import store_rule
-
-            outcome = store_rule(
-                owner_id,
-                content,
-                event_description="Manual creation via chat",
-                writer="create_memory",
-            )
-            if outcome["action"] in ("created", "superseded"):
-                return ToolResult(
-                    status=ToolStatus.SUCCESS,
-                    data={
-                        "blob_id": outcome["blob_id"],
-                        "namespace": f"template:{owner_id}",
-                        "action": outcome["action"],
-                    },
-                    message=(
-                        f"Memory {outcome['action']} (blob_id={outcome['blob_id']}).\n{content}"
-                    ),
-                )
-            if outcome["action"] == "duplicate":
-                return ToolResult(
-                    status=ToolStatus.SUCCESS,
-                    data={
-                        "blob_id": outcome["blob_id"],
-                        "namespace": f"template:{owner_id}",
-                        "action": "duplicate",
-                    },
-                    message=(
-                        f"That rule is already stored (blob_id={outcome['blob_id']}) — "
-                        f"nothing was added."
-                    ),
-                )
-            return ToolResult(
-                status=ToolStatus.ERROR,
-                data=None,
-                error=outcome["reason"],
-            )
-        import asyncio
+            # accumulating them (see zylch.services.prefs_store). On a
+            # worker thread like the entity path: the supersession and the
+            # new rule are decisions of the mnemonic role now.
+            return await asyncio.to_thread(self._store_rule, owner_id, content)
 
         # A worker thread: the decision costs up to three bounded model rounds
         # and must not block the event loop that serves every other turn.
         return await asyncio.to_thread(self._submit_event, owner_id, content, namespace)
+
+    def _store_rule(self, owner_id: str, content: str) -> ToolResult:
+        """One rule through the rule store's door, reported as the tool's result."""
+        from zylch.services.prefs_store import store_rule
+
+        outcome = store_rule(
+            owner_id,
+            content,
+            event_description="Manual creation via chat",
+            writer="create_memory",
+        )
+        if outcome["action"] in ("created", "superseded"):
+            return ToolResult(
+                status=ToolStatus.SUCCESS,
+                data={
+                    "blob_id": outcome["blob_id"],
+                    "namespace": f"template:{owner_id}",
+                    "action": outcome["action"],
+                },
+                message=(f"Memory {outcome['action']} (blob_id={outcome['blob_id']}).\n{content}"),
+            )
+        if outcome["action"] == "duplicate":
+            return ToolResult(
+                status=ToolStatus.SUCCESS,
+                data={
+                    "blob_id": outcome["blob_id"],
+                    "namespace": f"template:{owner_id}",
+                    "action": "duplicate",
+                },
+                message=(
+                    f"That rule is already stored (blob_id={outcome['blob_id']}) — "
+                    f"nothing was added."
+                ),
+            )
+        return ToolResult(
+            status=ToolStatus.ERROR,
+            data=None,
+            error=outcome["reason"],
+        )
 
     def _submit_event(
         self,
