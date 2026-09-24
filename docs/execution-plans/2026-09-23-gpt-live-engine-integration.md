@@ -430,9 +430,14 @@ commits unless explicitly requested.
   expiry is approximately **22:37:58 UTC**.
 - The first window expired cleanly without calls. At the operator's request,
   the same service restarted **2026-09-24 09:20:29 UTC**, preserving its ledger
-  and limits; this supervised window expires approximately **09:50:29 UTC**.
-  The authorized number remains linked to the dedicated app; expiry stops the
-  temporary listener, not the number subscription or its application mapping.
+  and limits. The operator subsequently removed the wall-clock test window:
+  both smoke and tunnel now have `RuntimeMaxSec=infinity`, verified active
+  without restarting either service or changing the tunnel URL. Runtime-only
+  `no-window.conf` drop-ins live under `/run/user/1001/systemd/user/` for these
+  two units; these transient services are not a reboot-persistent deployment.
+  Per-call duration, attempt allowance and ledger remain unchanged. The authorized
+  number remains linked to the dedicated app. Do not reintroduce an arbitrary
+  service-expiry window; stop the test services explicitly when teardown is wanted.
 - Public activation checks: unsigned OpenAI POST 400, unsigned Vonage answer
   POST 401, locally signed synthetic Vonage event POST 204. The last check proves
   verification wiring, not a real Vonage signature. Exclusive lock contention was
