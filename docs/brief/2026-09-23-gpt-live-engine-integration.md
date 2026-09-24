@@ -163,6 +163,15 @@ customer history. The first delivery passes when:
    work stopped on closure. Trace lookup, delegation, results and closure;
    record conversational continuity, response latency and test cost.
 
+For M4, capture an opt-in private transcript of the isolated test, correlated
+with selected-memory retrieval, backend answers and voice delivery/interruptions.
+This is required diagnostic evidence after the caller reported possible failure
+to recall the blue filters despite a successful lookup. Verify actual use of the
+facts in the answer; retrieval counts alone do not pass conversational acceptance.
+Keep credentials and unselected facts out of the trace, retain real listening
+checks, and keep raw audio retention off by default. Capture is not implemented
+or activated by this planning amendment.
+
 Verify one audio transport first: prefer direct Vonage-to-OpenAI SIP if project
 access and compatibility are confirmed; otherwise use a Python audio bridge.
 There is no need to implement both. Electron need not carry audio or remain open.

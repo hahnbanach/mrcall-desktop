@@ -239,8 +239,11 @@ executor to drain; forced termination still retains unresolved reservations.
 M3 isolated integration acceptance is **approved**: the telephone demonstration
 confirms selected caller recognition, a real GPT-6 tool/result turn and clean
 closure. The caller reports timely interruption and correct acknowledgement of
-missing tracking, with a repeated answer after interruption. Audible delivery of
-both historical facts is not explicitly confirmed. Deterministic tests cover
+missing tracking, with a repeated answer after interruption. The caller later
+reports that the agent seemed not to recall the blue filters; Thursday recall is
+unconfirmed. Retrieval success is not evidence that the voice used those facts.
+M4 requires private correlated test transcripts to diagnose this gap; transcript
+persistence is not yet implemented or enabled. Deterministic tests cover
 follow-ups and corrections arriving during backend execution. Real backend-only
 demonstrations cover sequential follow-up/correction content; this one live call
 does not certify M4's complete audio matrix. M4

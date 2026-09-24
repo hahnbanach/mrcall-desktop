@@ -258,6 +258,24 @@ Restore prior engine code if the focused regression fails.
 
 ## M4 — Verify the complete customer experience
 
+**Required diagnostic addition (operator request, 2026-09-24):** before the M4
+calls, implement opt-in transcript capture for the isolated test. Record caller
+and voice transcript events with timestamps and call/delegation/revision IDs;
+correlate them with selected-memory tool results, the backend's final answer and
+the commentary actually sent to GPT-Live. Keep retrieved facts, backend answers
+and voice output distinct, including interruptions and repeated or superseded
+answers. Do not capture hidden model reasoning. Store this diagnostic privately
+outside Git, excluding credentials, tokens, MEMORY_KEY and unselected facts.
+Ordinary profiles keep transcript persistence off; no raw audio is retained by
+default. This is planned M4 work, not enabled by this documentation change.
+
+Use the correlated trace to locate failures between retrieval, backend reasoning,
+voice delivery and interruption handling. Specifically verify that blue filters
+and the prior-email Thursday agreement are used correctly when asked, and explain
+the reported repetition after interruption. A retrieved-fact count is insufficient
+acceptance evidence. Transcript output also does not prove what reached the
+handset: retain the real listening check alongside the trace.
+
 Use a short call script with the controlled history: known customer and follow-up;
 unknown/ambiguous caller; correction during delayed lookup; correction during
 speech; failed lookup and forced closure. Combine scenarios within the remaining
@@ -291,10 +309,13 @@ missing access or a failed live scenario remains explicit unfinished work.
 that interruption happens at the right time. The agent correctly said it had no
 tracking number, was interrupted, then repeated that answer; the caller judged
 the exchange acceptable. The repetition is an observed quality limitation, not
-proof of flawless correction handling. Audible delivery of the blue-filter and
-Thursday facts is not explicitly confirmed by the caller; transcript/audio is not retained. Retrieval is verified,
-but no claim is made that both facts were spoken. This distinction remains in
-the evidence rather than being inferred from the caller's overall acceptance.
+proof of flawless correction handling. In a later clarification, the caller says
+it seemed the agent did not remember the blue filters and requests transcripts
+in M4. Thursday recall is not explicitly confirmed either. No transcript/audio
+was retained, so the failure stage cannot be reconstructed. Retrieval is verified;
+audible recall is not. The earlier M3 integration approval is not acceptance of
+memory-grounded spoken answers. M4 must investigate this reported gap using the
+correlated transcript requirement above.
 
 **Final independent M3 integration review: APPROVED.** The fresh reviewer
 inspected the integrated boundaries and independently passed **43 focused tests**

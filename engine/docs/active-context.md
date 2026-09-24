@@ -18,9 +18,10 @@ not a dependency of this explicitly selected test backend.
 
 The integrated phone demonstration confirms selected-fact retrieval, a GPT-6
 tool/result turn, caller-observed timely interruption and clean closure. A repeated
-answer after interruption is an observed quality limitation. Audible delivery of
-both historical facts is not explicitly confirmed; the full M4 audio scenario
-matrix is unstarted. Deterministic follow-up/correction/lifecycle coverage, real
+answer after interruption is an observed quality limitation. The caller reports
+possible failure to recall the blue filters; Thursday recall is unconfirmed.
+Retrieval does not certify use in speech. M4 requires correlated private test
+transcripts to diagnose this gap; capture and the full audio matrix are unstarted. Deterministic follow-up/correction/lifecycle coverage, real
 backend-only demonstrations and independent M3 review pass. No production number
 is connected. Local experiment ceilings are removed only in the isolated profile;
 ledger history, accounting and provider constraints remain. The service and tunnel
