@@ -5,6 +5,15 @@ That file is a living snapshot and carries only `State now` / `Unresolved` /
 `Next`; anything chronological lands here instead. Newest section first.
 Nothing is discarded — only relocated, verbatim.
 
+## 2026-09-23 — WhatsApp refresh deployment observations
+
+Deployed 2026-09-23 (`a2b0e66`), with all seven daemons restarted onto it;
+a real restart reattached in one second and synced 169 contacts, 83 groups and
+662 LID contacts.
+
+`whatsapp.status` has no reader outside this repo, which is what let an
+eleven-day outage pass unnoticed.
+
 
 
 

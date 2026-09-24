@@ -16,7 +16,7 @@ All knowledge lives in `./docs/`. This file is the index.
 | [guides/cli-commands.md](docs/guides/cli-commands.md) | CLI and slash command reference |
 | [guides/quick-start.md](docs/guides/quick-start.md) | Install, setup, first use |
 | [features/daily-llm-budget.md](docs/features/daily-llm-budget.md) | Per-request spending admission, supported billing and recovery |
-| [features/gpt-live-smoke.md](docs/features/gpt-live-smoke.md) | Isolated GPT-Live M1 runner; real-call acceptance pending |
+| [features/gpt-live-smoke.md](docs/features/gpt-live-smoke.md) | Isolated GPT-Live M1 runner; live smoke and integration review passed |
 | [features/project-memory.md](docs/features/project-memory.md) | Shared authored project documents, revisions and RPC contract |
 | [agents/README.md](docs/agents/README.md) | Agent system (memory, tasks, emailer) |
 | [qa/testing-live.md](docs/qa/testing-live.md) | Live testing: use Zylch, compare against Gmail |

@@ -15,7 +15,7 @@ Brief: [telephone customer service](../brief/2026-09-23-gpt-live-engine-integrat
 Its adversarial review returned APPROVED after the caller-context and spoken
 correction clarifications. A separate fresh plan review returned APPROVED;
 an additional adversarial review also approved after the cold-start correction.
-M1 has a local prototype; no live call has run under this plan. The first
+M1 is complete: live demonstration and final integration review passed. The first
 implementation's approval was withdrawn by the subsequent failure-path review.
 
 ## M1 rewrite — 2026-09-23
@@ -81,9 +81,9 @@ memory tool contract so later integrations do not require new telephone plumbing
   currently installs the owner's prompt and personal context. Add an explicit
   customer-service mode with its own prompt/context and tool list; preserve the
   existing defaults and verify ordinary chat still receives its original inputs.
-- New implementation belongs in a small `engine/zylch/services/voice/` package
-  and a `rpc/voice_actions.py` handler module, with focused tests under
-  `engine/tests/voice/`. These are proposed paths, not existing capabilities.
+- The M1 runtime exists in `engine/zylch/services/voice/`, with focused tests in
+  `engine/tests/voice/`. The `rpc/voice_actions.py` configuration handler remains
+  proposed M2 work, not an existing capability.
 - Register configuration methods in the existing RPC table. Use the authenticated
   profile WebSocket transport for operator access; provider webhooks use their
   own verified route and never expose the owner RPC surface to callers.
@@ -317,14 +317,39 @@ commits unless explicitly requested.
   holds the test lock through cleanup, and never activates a normal profile.
   The reviewer independently ran all **68 voice tests**, with no blocking local
   findings. This does not certify provider interoperability or M2.
-- M1 live demonstration: **ready for the supervised first attempt, not completed**.
-  No real call or measured provider cost had occurred at activation.
-  The operator selected their own Firebase identity and MrCall engine billing;
-  isolated configuration and a working headless credential source are recorded
-  below. Pricing/reservations and isolated launch are checked. SIP entitlement,
-  interoperability, audio, delegation and closure still need the actual call.
-  A model listing and synthetic webhook delivery do not prove a live call.
-  M2 remains gated on the real M1 demonstration and its integration review.
+- M1 live demonstration: **PASSED on 2026-09-24** with the isolated runner,
+  OpenAI SDK **3.19.0**, and direct Vonage SIP → GPT-Live → Python sideband.
+  The caller confirmed intelligible conversation, interruption during assistant
+  speech, and continued speech during the five-second fixed-result delay.
+  No cs-operator process conducts this call. The durable ledger has one funded
+  call, closed with confirmed `session.closed`, and no unresolved sessions.
+  Sanitized event counts: `session.started=1`, `session.input_audio.append=249`,
+  `session.output_audio.delta=243`, `session.input_transcript.delta=15`,
+  `session.output_transcript.delta=68`, `session.delegation.created=1`,
+  `session.closed=1`; Python sent one fixed result. No explicit hangup was needed
+  after finalization: `hangup_confirmed=false` is expected here; the default
+  `closure_trigger=sideband_eof` is not evidence of an unclosed session.
+  Reflected first-audio timing was 4,248 ms, not measured handset latency.
+  No raw audio or transcript text is retained. The live watchdog fault scenario
+  was not exercised; its failure paths remain locally tested.
+- Measured usage: OpenAI finalization reported **49 voice seconds**, yielding
+  **USD0.040834 estimated voice cost** at the recorded rate; engine cost is zero.
+  Read-only regional Vonage Voice API receipts for the same conversation show
+  exactly two completed legs, both **50 seconds**, 09:21:26–09:22:16 UTC:
+  inbound phone rate `0.00450000`, price `0.00375000`; NCCO SIP leg rate
+  `0.00420000`, price `0.00350000`. Total carrier price is `0.00725000` account
+  currency units. The API omits currency; EUR is inferred from the operator's
+  matching account rate, not independently supplied in the receipts. At the
+  recorded ECB reference, combined cost is approximately **USD0.0491**, not a
+  settled cross-provider invoice. The SIP leg's API direction `outbound` is the
+  incoming call's bridge, not an outbound-calling feature. Receipts were fetched
+  without originating another call. One of the two existing attempts remains;
+  all holds and the ledger are preserved.
+- Final M1 live integration review: **APPROVED on 2026-09-24**. The independent
+  reviewer reran all 68 voice tests and checked the implementation and live
+  acceptance evidence; no blocking findings remain. M1 is complete. M2 is the
+  next milestone, not implemented; this approval does not certify M2, M4 or
+  production readiness.
 
 ## Isolated provisioning record — 2026-09-23
 
@@ -380,7 +405,7 @@ commits unless explicitly requested.
   The calculated minimum is USD0.21 per attempt (three rounded minutes including
   ringing/cleanup at USD0.07 combined/minute). Maximum admitted holds USD2 leave
   USD3 within the original ceiling for carrier variance/refused-call uncertainty.
-  Final receipts remain required.
+  The first-call receipts and remaining settlement uncertainty are recorded above.
 - Temporary public base:
   `https://briefing-lab-care-delicious.trycloudflare.com`. No production DNS,
   Caddy, firewall or daemon configuration was changed. User-level transient
@@ -403,6 +428,11 @@ commits unless explicitly requested.
   `engine/scripts/voice_smoke_isolated.py` and the explicit private UID directory.
   The existing tunnel still forwards only loopback 8787. Automatic test-window
   expiry is approximately **22:37:58 UTC**.
+- The first window expired cleanly without calls. At the operator's request,
+  the same service restarted **2026-09-24 09:20:29 UTC**, preserving its ledger
+  and limits; this supervised window expires approximately **09:50:29 UTC**.
+  The authorized number remains linked to the dedicated app; expiry stops the
+  temporary listener, not the number subscription or its application mapping.
 - Public activation checks: unsigned OpenAI POST 400, unsigned Vonage answer
   POST 401, locally signed synthetic Vonage event POST 204. The last check proves
   verification wiring, not a real Vonage signature. Exclusive lock contention was

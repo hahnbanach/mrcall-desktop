@@ -11,8 +11,9 @@ the engine RPC daemon. It returns a fixed test fact on client delegation and
 does no company-memory or paid engine reasoning work. cs-operator is not used
 during calls. M2 configuration and M3 memory/agent integration are not implemented.
 
-The candidate path is Vonage SIP → GPT-Live audio, with Python attached to the
-Live sideband. TLS/SRTP interoperability and project access remain **unverified**.
+The selected path is Vonage SIP → GPT-Live audio, with Python attached to the
+Live sideband. The isolated real-call demonstration verifies project access and
+the configured TLS/SRTP route; it is not a production certification.
 No fallback to Realtime or another carrier is implemented.
 
 ## Before enabling
@@ -167,10 +168,15 @@ Leave production daemons and numbers untouched.
 
 ## Verification status
 
-The rebuilt runtime has local SQLite, mocked-provider, real signed-webhook and
-localhost WebSocket tests. Real Vonage audio, live project entitlement, carrier
-metadata and measured combined charges remain unverified. The first prototype's
-approval was withdrawn; use the current
+The rebuilt runtime has 68 passing local SQLite, mocked-provider, real
+signed-webhook, isolated-bootstrap and localhost WebSocket tests. One real
+isolated call on 2026-09-24 passed bidirectional audio, caller-confirmed
+interruption and speech during the delayed Python fixed result, client delegation
+and confirmed session closure. Both carrier legs have completed receipts;
+voice cost uses reported seconds and the recorded rate, not a settled invoice.
+Live watchdog failure testing, memory and production operation are not certified.
+The final M1 live integration review is approved. The first prototype's approval
+was withdrawn; use the current
 [M1 review record](../../../docs/execution-plans/2026-09-23-gpt-live-engine-integration.md).
 
 API basis checked 2026-09-23: [GPT-Live SIP](https://developers.openai.com/api/docs/guides/voice-sip),
