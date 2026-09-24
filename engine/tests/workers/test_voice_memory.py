@@ -3,15 +3,18 @@
 A transcribed voice note is signal even when short, so
 ``process_whatsapp_message`` must NOT drop it via the <20-char text gate
 that still applies to plain text. These tests lock both halves of that
-contract with the LLM client + extractor mocked (storage is real against
-an in-memory SQLite via ``fresh_db``).
+contract on the ingestion bench (a real worker on real split databases, the
+extractor stubbed); the envelope case keeps the plain ``fresh_db`` store.
 """
 
 import uuid
 from datetime import datetime, timezone
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 import pytest
+
+from tests.memory.mnemonic_env import OWNER_A, BagOfWordsEmbedder
+from tests.workers.ingestion_env import booted, make_worker, run
 
 
 @pytest.fixture
@@ -59,19 +62,19 @@ def _make_wa_row(
     return row_id
 
 
-def _make_worker(owner: str):
-    """MemoryWorker with LLM client + merge + extractor mocked."""
-    from zylch.workers import memory as mem_mod
+@pytest.fixture
+def embedder():
+    return BagOfWordsEmbedder()
 
-    fake_client = MagicMock()
-    with patch.object(mem_mod, "make_llm_client", return_value=fake_client):
-        worker = mem_mod.MemoryWorker(
-            storage=__import__("zylch.storage", fromlist=["Storage"]).Storage(),
-            owner_id=owner,
-        )
-    worker.llm_merge = MagicMock()
-    worker._custom_prompt = "FAKE PROMPT"
-    worker._custom_prompt_loaded = True
+
+@pytest.fixture
+def profile(tmp_path, monkeypatch, embedder):
+    yield from booted(tmp_path, monkeypatch, embedder)
+
+
+def _make_worker():
+    """The real worker on the bench with the extractor stubbed."""
+    worker = make_worker([], [])
     worker._extract_entities_for_message = MagicMock()
     return worker
 
@@ -81,9 +84,8 @@ def _make_worker(owner: str):
 # ---------------------------------------------------------------------
 
 
-@pytest.mark.asyncio
-async def test_short_voice_transcription_is_not_dropped(fresh_db):
-    owner = "alice@example.com"
+def test_short_voice_transcription_is_not_dropped(profile):
+    owner = OWNER_A
     wa_id = _make_wa_row(
         owner,
         text="[voice]",
@@ -92,12 +94,14 @@ async def test_short_voice_transcription_is_not_dropped(fresh_db):
         transcription="Richiamami",
     )
 
-    worker = _make_worker(owner)
-    # Extractor returns empty so we don't need the full upsert chain; what
-    # matters is that the short-text gate did NOT short-circuit before it.
+    worker = _make_worker()
+    # Extractor returns empty so the harness records a skip; what matters is
+    # that the short-text gate did NOT short-circuit before it.
     worker._extract_entities_for_message.return_value = []
 
-    ok = await worker.process_whatsapp_message(
+    ok = run(
+        worker,
+        "process_whatsapp_message",
         {
             "id": wa_id,
             "text": "[voice]",
@@ -108,7 +112,7 @@ async def test_short_voice_transcription_is_not_dropped(fresh_db):
             "timestamp": "2026-05-20T10:00:00+00:00",
             "is_from_me": False,
             "is_group": False,
-        }
+        },
     )
     assert ok is True
     # The gate let it through to extraction (a deliberate voice note is signal).
@@ -120,15 +124,16 @@ async def test_short_voice_transcription_is_not_dropped(fresh_db):
 # ---------------------------------------------------------------------
 
 
-@pytest.mark.asyncio
-async def test_short_plain_text_still_skipped(fresh_db):
-    owner = "alice@example.com"
+def test_short_plain_text_still_skipped(profile):
+    owner = OWNER_A
     wa_id = _make_wa_row(owner, text="ok")
 
-    worker = _make_worker(owner)
+    worker = _make_worker()
     worker._extract_entities_for_message.return_value = []
 
-    ok = await worker.process_whatsapp_message(
+    ok = run(
+        worker,
+        "process_whatsapp_message",
         {
             "id": wa_id,
             "text": "ok",
@@ -137,7 +142,7 @@ async def test_short_plain_text_still_skipped(fresh_db):
             "timestamp": "2026-05-20T10:00:00+00:00",
             "is_from_me": False,
             "is_group": False,
-        }
+        },
     )
     assert ok is True
     # Plain short text keeps the <20 skip — extractor never called.

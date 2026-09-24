@@ -1,17 +1,21 @@
-"""Memory Agent - Extract facts from emails and store in entity-centric blobs.
+"""Memory worker: collect each channel's sources and hand them to the harness.
 
-Processes emails to extract relationship information about contacts,
-storing in blobs with reconsolidation (merging with existing knowledge).
-
-Uses hybrid search (FTS + semantic) to find existing blobs about the same entity,
-then LLM-merges new information with existing knowledge.
+The worker owns what only it can know — how to fetch a mail, a WhatsApp
+message, a calendar event or a MrCall conversation, how to render it, and the
+owner's trained extraction prompts. Everything that decides meaning is behind
+``zylch.memory.mnemonic.ingestion.ingest``: when extraction is paid and how it
+is bounded and persisted, which candidates the mnemonic role is shown, what
+each extracted entity's subject is, and what is written — through the
+retaining rewrite, in one company transaction, with one replay contract per
+source. The worker marks a source processed only when that answer says every
+child is terminal.
 """
 
 from zylch.services.preparation import bounded_item, bounded_operation
 
 import logging
 import re
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple
 
 from zylch.memory.response_validation import complete_memory_text
 from zylch.llm import LLMClient, make_llm_client, routed_model
@@ -24,14 +28,22 @@ from zylch.memory import (
     LLMMergeService,
     EmbeddingEngine,
     MemoryConfig,
-    is_no_merge_response,
 )
 
 logger = logging.getLogger(__name__)
 
-# Re-merge attempts when another writer changed the entity between our
-# read and our write (compare-and-swap on updated_at).
-_CAS_ATTEMPTS = 3
+
+def _harness():
+    """The harness surfaces, imported at call time.
+
+    The mnemonic package imports this module's identifier parser, so a
+    module-level import here would be a cycle; ``wiring.parse_identifiers_block``
+    defers for the same reason from the other side.
+    """
+    from zylch.memory.mnemonic.ingestion import Source, ingest
+    from zylch.memory.mnemonic.wiring import CommitContext
+
+    return Source, ingest, CommitContext
 
 # Measured email extraction needs room for complete multi-entity output.
 # Admission reserves this ceiling; billing still follows actual token usage.
@@ -128,7 +140,7 @@ def _parse_identifiers_block(entity_content: str) -> List[Tuple[str, str]]:
     ``Phone: +39 339 ..., +39 392 ...``) split on commas. Returns an
     empty list when the block is missing — callers fall back to no-op
     (a blob without structured identifiers cannot be cross-channel
-    matched in v1; the cosine fallback in `_upsert_entity` still runs).
+    matched in v1; the harness's cosine candidates still run).
     """
     if not entity_content:
         return []
@@ -256,14 +268,16 @@ def _extract_identifier_query(entity_content: str) -> Optional[str]:
 
 
 class MemoryWorker:
-    """Worker for extracting facts from emails and storing in entity-centric blobs.
+    """Collects each channel's sources and takes them through the harness.
 
-    Flow:
-    1. Extract facts from email about the contact
-    2. Search for existing blob about this entity (hybrid search)
-    3. If found: LLM-merge new facts with existing knowledge
-    4. If not found: create new blob
-    5. Mark email as processed
+    Flow, for every channel:
+    1. Fetch the source and render it (envelope and body, or the call's text)
+    2. Hand the rendered text, the admitted stage and the extraction closure to
+       ``ingestion.ingest``, which pays for extraction under the source's own
+       grant, persists the manifest and decides every extracted entity through
+       the mnemonic role and the retaining commit
+    3. Mark the source processed only when the answer says every child is
+       terminal — committed, or deliberately skipped
     """
 
     @property
@@ -304,7 +318,9 @@ class MemoryWorker:
 
         self.blob_storage = BlobStorage(get_session, self.embedding_engine)
         self.hybrid_search = HybridSearchEngine(get_session, self.embedding_engine)
-        # MODEL_MEMORY_MERGE per-worker knob (empty → engine default).
+        # MODEL_MEMORY_MERGE per-worker knob (empty → engine default). The
+        # merge service itself is kept for the merge-gate canary the pipeline
+        # runs; the worker's own writes no longer call it.
         self.llm_merge = LLMMergeService(model=routed_model("MODEL_MEMORY_MERGE"))
 
         # LLM client for fact extraction. Raises RuntimeError if no
@@ -312,6 +328,10 @@ class MemoryWorker:
         # rather than silently producing no memories. MODEL_MEMORY_EXTRACT
         # per-worker knob (empty → engine default).
         self.client: LLMClient = make_llm_client(model=routed_model("MODEL_MEMORY_EXTRACT"))
+        # The client the mnemonic role decides each extracted entity with,
+        # routed by the same knob the merge used to be: deciding what an
+        # entity becomes is the merge, so the per-worker choice keeps meaning.
+        self.decision_client: LLMClient = make_llm_client(model=routed_model("MODEL_MEMORY_MERGE"))
 
         # Cache for user's custom prompt (lazy loaded)
         self._custom_prompt: Optional[str] = None
@@ -320,9 +340,12 @@ class MemoryWorker:
         # Merge-gate guard. When the build pipeline's merge_gate_selfcheck
         # finds the gate broken-open (the model merges unrelated entities
         # instead of refusing — the 2026-06 universal-"John"-sink
-        # regression), it flips this to False so reconsolidation is skipped
-        # and every entity becomes a fresh blob. Duplicates are recoverable
-        # via the reconsolidate sweep; a silent universal merge is not.
+        # regression), it flips this to False and the mnemonic role is shown
+        # no candidate for any entity, so it can only create or skip: every
+        # entity becomes a fresh blob, exactly as before. Duplicates are
+        # recoverable via the reconsolidate sweep; a silent universal merge
+        # is not. A FACT's exact-row pin survives the brake: it is mechanical
+        # dedup, not the merge model's judgment.
         self.merge_enabled: bool = True
 
         logger.info(f"MemoryWorker initialized for owner={owner_id}")
@@ -389,16 +412,18 @@ class MemoryWorker:
 
     @bounded_item("memory:email")
     async def process_email(self, email: Dict) -> bool:
-        """Process single email to extract and store entities.
+        """Take one mail through the harness; mark it processed only when it is settled.
 
-        Each email may contain multiple entities (people, companies, etc.).
-        Each entity is stored as a separate blob with reconsolidation.
+        Each mail may contain several entities. Extraction, candidate
+        selection, the semantic decision and the write happen behind
+        ``ingestion.ingest``; the mail's ``memory_processed_at`` moves only
+        when every extracted entity is committed or deliberately skipped.
 
         Args:
             email: Email dict with id, from_email, to_email, subject, body_plain, date
 
         Returns:
-            True if processed successfully, False otherwise
+            True if the source is settled, False otherwise
         """
         email_id = email.get("id", "unknown")
         # Memory unavailable (no key, an unknown typed key, no store): the
@@ -414,47 +439,24 @@ class MemoryWorker:
         try:
             logger.info(f"Processing email {email_id}")
 
-            # Determine the contact (the other party, not the user)
-            from_email = email.get("from_email", "")
-            to_emails = email.get("to_email", [])
-            if isinstance(to_emails, str):
-                to_emails = [to_emails]
-
-            # Contact is whoever is not the user
-            # For now, use from_email as the contact (most common case: incoming email)
-            contact_email = from_email
+            # The contact is the other party. A mail with no sender address
+            # is a mechanical skip, as it always was: nothing to extract from,
+            # nothing paid, the source marked so it is not retried.
+            contact_email = email.get("from_email", "")
             if not contact_email:
                 logger.warning(f"No contact email for {email_id}")
-                # Still mark as processed so we don't retry
                 self.storage.mark_email_processed(self.owner_id, email_id)
                 return True
 
-            # Step 1: Extract entities from email (may be multiple)
-            entities = self._extract_entities(email, contact_email)
-            if not entities:
-                logger.debug(f"No entities extracted from {email_id}")
-                # Still mark as processed so we don't retry
+            source = self._source(
+                "email", email_id, self._format_email_data(email, contact_email), "memory:email"
+            )
+            outcome = self._ingest(source, lambda: self._extract_entities(email, contact_email))
+            if outcome.advances_checkpoint:
                 self.storage.mark_email_processed(self.owner_id, email_id)
                 return True
-
-            logger.debug(f"Extracted {len(entities)} entities from email {email_id}")
-
-            # Step 2: Process each entity separately
-            event_desc = f"Extracted from email {email_id} ({email.get('date', 'unknown date')})"
-
-            for i, entity_content in enumerate(entities):
-                await self._upsert_entity(
-                    entity_content,
-                    event_desc,
-                    email_id,
-                    i + 1,
-                    len(entities),
-                    contact_identifier=contact_email,
-                )
-
-            # Step 3: Mark email as processed
-            self.storage.mark_email_processed(self.owner_id, email_id)
-            return True
+            logger.info(f"[memory] email {email_id} not settled: {outcome.outcome} {outcome.reason}")
+            return False
 
         except BudgetError:
             raise
@@ -462,308 +464,53 @@ class MemoryWorker:
             logger.error(f"Error processing email {email_id}: {e}", exc_info=True)
             return False
 
-    def _upsert_fact_entity(self, entity_content: str) -> None:
-        """Store a FACT entity in the owner's `facts:` namespace.
+    def _source(self, kind: str, source_id: str, text: str, stage: str):
+        """One rendered source, as the harness takes it."""
+        Source, _ingest, _context = _harness()
+        return Source(kind=kind, source_id=source_id, text=text, stage=stage)
 
-        Deduped by exact (Category, Key); no fuzzy reconsolidation.
-        """
-        from zylch.services.facts_store import (
-            parse_category,
-            parse_key,
-            parse_value,
-            upsert_fact,
-        )
+    def _ingest(self, source, extract: Callable[[], Sequence[str]]):
+        """One source through the harness, with this worker's wiring."""
+        from zylch.memory.company_key import require_company_key
 
-        category = parse_category(entity_content)
-        key = parse_key(entity_content)
-        value = parse_value(entity_content)
-        blob_id = upsert_fact(self.owner_id, category, key, value)
-        logger.info(f"[memory] FACT upsert category={category!r} key={key!r} -> blob_id={blob_id}")
-
-    async def _upsert_entity(
-        self,
-        entity_content: str,
-        event_desc: str,
-        email_id: str,
-        entity_num: int,
-        total_entities: int,
-        source_kind: str = "email",
-        contact_identifier: str = "",
-    ) -> None:
-        """Upsert a single entity blob with reconsolidation.
-
-        Match strategy (Phase 1b, whatsapp-pipeline-parity, 2026-05-07):
-        identifier-first, cosine fallback. Candidates are tried in this
-        order:
-
-          1. Blobs returned by ``find_blobs_by_identifiers`` — exact
-             match on the new entity's email / phone / lid identifiers
-             against the ``person_identifiers`` index. Catches the
-             "8 distinct John Smith PERSON blobs" case where two
-             records of the same person share `Email: contact@example.com`
-             but their #ABOUT / #HISTORY paragraphs have drifted enough
-             that the cosine score on the full block dropped below the
-             0.65 reconsolidation threshold.
-
-          2. Blobs returned by the legacy cosine-on-`#IDENTIFIERS`
-             search — fallback for blobs that pre-date the identifier
-             index OR for entities whose `#IDENTIFIERS` block has no
-             email/phone/lid (anonymised contacts, name-only entities).
-
-        The LLM merge gate is unchanged: every candidate is shown to
-        the merge model, which returns "INSERT" when the entities don't
-        in fact match. So a stale identifier (e.g. a shared company
-        switchboard number that ends up in two distinct PERSON blobs)
-        cannot force an incorrect merge.
-
-        Bug G (2026-05-06) baseline still applies: when the cosine
-        fallback runs, the search query is the structured #IDENTIFIERS
-        block, not the full content.
-
-        Args:
-            entity_content: The entity blob content
-            event_desc: Event description for the blob
-            email_id: Source email ID (for logging)
-            entity_num: Which entity this is (1-indexed)
-            total_entities: Total entities from this email
-        """
-        # FACT entities are volatile business values, not relationship
-        # memory. They live in their own `facts:` namespace, keyed by
-        # exact (Category, Key), and must NOT go through the fuzzy 0.65
-        # reconsolidation path — that would merge distinct facts (two
-        # prices) or bleed white-label terms into private-label.
-        if _entity_type(entity_content) == "FACT":
-            self._upsert_fact_entity(entity_content)
-            return
-
-        logger.info(f"Upserting entity, searching with:\n{entity_content}\n\n")
-
-        # Parse identifiers ONCE: used for the new identifier-first
-        # match (below) AND for writing rows into person_identifiers
-        # after the upsert (Phase 1a).
-        identifiers = _parse_identifiers_block(entity_content)
-
-        # A message sender is provenance, not the identity of every entity
-        # mentioned in the message. Only the LLM-authored entity identifiers
-        # may enter the identity index. Keep contact_identifier in the method
-        # signature for compatibility, but never infer entity identity from it.
-        # A valid name-only entity can still use semantic candidate search;
-        # it must never acquire an invented source identity to satisfy an index.
-
-        # Phase 1b — identifier-first lookup.
-        # Returns blob ids that share at least one (kind, value) tuple
-        # with the new entity. Empty when the new entity has no
-        # email/phone/lid identifiers OR when none of its identifiers
-        # is in the index.
-        id_matched_blob_ids: List[str] = []
-        if identifiers:
-            try:
-                id_matched_blob_ids = self.storage.find_blobs_by_identifiers(
-                    owner_id=self.owner_id,
-                    identifiers=identifiers,
-                )
-            except Exception as e:
-                logger.warning(f"[memory] find_blobs_by_identifiers failed: {e}")
-                id_matched_blob_ids = []
-            if id_matched_blob_ids:
-                logger.info(
-                    f"[memory] identifier match: {len(id_matched_blob_ids)} blob(s) "
-                    f"on kinds={[k for k, _ in identifiers]} "
-                    f"hits={id_matched_blob_ids}"
-                )
-
-        # Identifier-based search query (Bug G fix). Falls back to the
-        # full content when the LLM didn't produce a parseable
-        # IDENTIFIERS block (legacy / malformed extraction).
-        query = _extract_identifier_query(entity_content) or entity_content
-        if query is not entity_content:
-            logger.debug(f"[memory] using identifier-query for reconsolidation lookup: {query!r}")
-
-        # Diagnostic: log top-3 candidates with their scores BEFORE
-        # the threshold filter, so investigation of "why didn't it
-        # merge?" doesn't require re-running the search by hand. Pulls
-        # the same alpha=0.5 hybrid_search the threshold method uses.
-        debug_results = self.hybrid_search.search(
-            owner_id=self.owner_id,
-            query=query,
-            namespace=self.namespace,
-            limit=3,
-            alpha=0.5,
-        )
-        if debug_results:
-            for i, r in enumerate(debug_results, 1):
-                first_id_line = ""
-                for line in (r.content or "").splitlines():
-                    if line.strip().lower().startswith("name:"):
-                        first_id_line = line.strip()
-                        break
-                logger.info(
-                    f"[memory] reconsolidation candidate {i}/{len(debug_results)}: "
-                    f"blob_id={r.blob_id} hybrid={r.hybrid_score:.3f} "
-                    f"identifier={first_id_line!r}"
-                )
-        else:
-            logger.info(
-                f"[memory] reconsolidation candidate search returned 0 results "
-                f"for query={query!r}"
-            )
-
-        # Threshold-gated cosine candidates (existing path).
-        cosine_candidates = self.hybrid_search.find_candidates_for_reconsolidation(
-            owner_id=self.owner_id, content=query, namespace=self.namespace, limit=3
-        )
-
-        # Corroborate legacy index hits against authored entity identities,
-        # then bound the entire shortlist (not just the cosine fallback).
-        from zylch.workers.memory_candidates import merge_shortlist
-
-        merge_candidates = merge_shortlist(
-            identifiers,
-            id_matched_blob_ids,
-            cosine_candidates,
-            lambda bid: self.blob_storage.get_blob(bid, self.owner_id),
-            _parse_identifiers_block,
-        )
-
-        upserted = False
-        # Track which blob this email contributed to. Either an
-        # existing one (merge) or a freshly created one (no match).
-        # Written to email_blobs at the end so the F7 task worker can
-        # later look up "blobs from this email" without similarity
-        # search (Fase 3.1).
-        linked_blob_id: Optional[str] = None
-
-        # Merge-gate guard: when the gate is known-broken (selfcheck found
-        # it merging unrelated entities), do NOT reconsolidate — fall
-        # through to create a fresh blob so we never feed the universal
-        # sink. See MemoryWorker.merge_enabled.
-        if not self.merge_enabled and merge_candidates:
+        _source, ingest, _context = _harness()
+        if not self.merge_enabled:
             logger.warning(
-                "[memory] merge gate unhealthy — skipping reconsolidation for "
-                "this entity, creating a new blob to avoid corruption"
+                f"[memory] merge gate unhealthy — the role is shown no candidate for "
+                f"{source.kind} {source.source_id}; every entity becomes a fresh blob"
             )
-            merge_candidates = []
+        return ingest(
+            source,
+            owner_id=self.owner_id,
+            company_key=require_company_key(),
+            extract=extract,
+            client=self.decision_client,
+            context=self._commit_context(retrieval=self.merge_enabled),
+        )
 
-        for cand in merge_candidates:
-            bid = cand["blob_id"]
-            existing_content = cand["content"]
-            expected_updated_at = cand.get("updated_at")
-            source = cand["source"]
-            logger.debug(f"[memory] merge attempt blob_id={bid} source={source}")
+    def _commit_context(self, *, retrieval: bool = True):
+        """This worker's own storage and retrieval, as the harness expects them.
 
-            # Compare-and-swap loop. The LLM merge runs OUTSIDE any
-            # transaction (seconds); the write then checks the blob is
-            # still the one it read. Another daemon writing the same
-            # entity in between is a conflict, not a lost update: re-merge
-            # onto the current text, a bounded number of times.
-            written: Dict[str, Any] = {}
-            for attempt in range(1, _CAS_ATTEMPTS + 1):
-                with call_site("memory.merge"):
-                    merged_content = self.llm_merge.merge(existing_content, entity_content)
+        ``retrieval=False`` is the merge-gate brake: search and the identity
+        index answer nothing, exact reads stay.
+        """
+        _source, _ingest, CommitContext = _harness()
 
-                # If the gate returned the INSERT/SKIP sentinel (entities
-                # don't match), try the next candidate.
-                if is_no_merge_response(merged_content):
-                    logger.debug(f"[memory] LLM merge rejected blob_id={bid} source={source}")
-                    written = {}
-                    break
+        def get_blob(blob_id):
+            return self.blob_storage.get_blob(blob_id, self.owner_id)
 
-                written = self.blob_storage.update_blob(
-                    blob_id=bid,
-                    owner_id=self.owner_id,
-                    content=merged_content,
-                    event_description=event_desc,
-                    expected_updated_at=expected_updated_at,
-                )
-                if isinstance(written, dict) and written.get("conflict") is True:
-                    logger.info(
-                        f"[memory] blob {bid} changed under us (attempt {attempt}/"
-                        f"{_CAS_ATTEMPTS}); re-merging onto the current content"
-                    )
-                    existing_content = written.get("content") or existing_content
-                    expected_updated_at = written.get("updated_at")
-                    written = {}
-                    continue
-                break
-
-            if not written:
-                # Refused (not visible), rejected by the gate, or still
-                # conflicting after every attempt: never silently dropped.
-                logger.warning(
-                    f"[memory] merge into blob {bid} did not land for owner "
-                    f"{self.owner_id} (source={source}); trying the next candidate"
-                )
-                continue
-            logger.info(
-                f"Reconsolidated blob {bid} with email {email_id} "
-                f"(entity {entity_num}/{total_entities}, source={source})"
-            )
-            linked_blob_id = bid
-            upserted = True
-            break
-
-        if not upserted:
-            # No suitable blob found, create new
-            blob = self.blob_storage.store_blob(
-                owner_id=self.owner_id,
-                namespace=self.namespace,
-                content=entity_content,
-                event_description=event_desc,
-            )
-            logger.info(
-                f"Created new blob {blob['id']} from email {email_id} (entity {entity_num}/{total_entities})"
-            )
-            linked_blob_id = str(blob["id"])
-
-        # Write the channel-specific (source_id, blob_id) join row.
-        # Idempotent — a re-run on the same source is a no-op. Failures
-        # are logged but never raise: the blob already exists, the
-        # index is a denorm hint and not load-bearing.
-        # `source_kind` controls which join table receives the row:
-        # `"email"` → email_blobs (Fase 3.1, default for backward compat),
-        # `"whatsapp"` → whatsapp_blobs (Phase 2c, whatsapp-pipeline-parity).
-        if linked_blob_id and email_id:
-            try:
-                if source_kind == "whatsapp":
-                    self.storage.add_whatsapp_blob_link(
-                        owner_id=self.owner_id,
-                        whatsapp_message_id=email_id,
-                        blob_id=linked_blob_id,
-                    )
-                else:
-                    self.storage.add_email_blob_link(
-                        owner_id=self.owner_id,
-                        email_id=email_id,
-                        blob_id=linked_blob_id,
-                    )
-            except Exception as e:
-                logger.warning(
-                    f"[memory] add_{source_kind}_blob_link({email_id}, {linked_blob_id}) failed: {e}"
-                )
-
-        # Write person_identifiers rows (whatsapp-pipeline-parity, Phase 1a).
-        # The `identifiers` list was already parsed at the top of this
-        # method for the identifier-first lookup (Phase 1b); reuse it
-        # here so we parse the block exactly once per upsert. The merge
-        # case is load-bearing: when an existing blob's content gets
-        # richer because we just merged a new email that exposed the
-        # contact's phone for the first time, this picks up those new
-        # identifiers without requiring the blob to be re-extracted.
-        if linked_blob_id and identifiers:
-            try:
-                inserted = self.storage.add_person_identifiers(
-                    owner_id=self.owner_id,
-                    blob_id=linked_blob_id,
-                    identifiers=identifiers,
-                )
-                if inserted:
-                    logger.debug(
-                        f"[memory] add_person_identifiers blob={linked_blob_id} "
-                        f"new_rows={inserted} kinds="
-                        f"{[k for k, _ in identifiers]}"
-                    )
-            except Exception as e:
-                logger.warning(f"[memory] add_person_identifiers({linked_blob_id}) failed: {e}")
+        if not retrieval:
+            return CommitContext(storage=self.blob_storage, get_blob=get_blob)
+        return CommitContext(
+            storage=self.blob_storage,
+            get_blob=get_blob,
+            search=lambda query, limit: self.hybrid_search.search(
+                owner_id=self.owner_id, query=query, limit=limit
+            ),
+            identifier_blob_ids=lambda ids: self.storage.find_blobs_by_identifiers(
+                owner_id=self.owner_id, identifiers=list(ids)
+            ),
+        )
 
     @bounded_operation(lambda self, *args, **kwargs: self.owner_id)
     async def process_batch(
@@ -1012,13 +759,14 @@ class MemoryWorker:
 
     @bounded_item("memory:whatsapp")
     async def process_whatsapp_message(self, message: Dict) -> bool:
-        """Process one WhatsApp message: extract entities, upsert blobs,
-        write whatsapp_blobs link, mark processed.
+        """Take one WhatsApp message through the harness.
 
         Mirror of ``process_email``. The per-message LLM prompt is the
         same channel-aware ``memory_message`` prompt the email path uses
         (Phase 2b); only the envelope shape passed as the user message
-        differs.
+        differs, and that envelope is the rendered source whose digest is
+        the revision — a voice note transcribed after a first pass is a new
+        revision, never an old digest reused.
 
         v1: 1-on-1 messages only (the storage helper already filters
         ``is_group=False``).
@@ -1033,7 +781,8 @@ class MemoryWorker:
             )
             # A deliberate voice note is signal even when short ("Richiamami"),
             # so the <20 gate does not apply to transcribed audio; plain text
-            # still gets the short-text skip.
+            # still gets the short-text skip — mechanical, unpaid, and marked
+            # so the message is not re-evaluated every tick.
             too_short = len(effective) < (1 if is_voice else self._WA_MIN_TEXT_LEN)
             if too_short:
                 logger.debug(
@@ -1043,31 +792,17 @@ class MemoryWorker:
                 self.storage.mark_whatsapp_memory_processed(self.owner_id, wa_id)
                 return True
 
-            entities = self._extract_entities_for_message(
-                envelope=self._format_whatsapp_data(message),
-                channel_label="WhatsApp",
+            envelope = self._format_whatsapp_data(message)
+            source = self._source("whatsapp", wa_id, envelope, "memory:whatsapp")
+            outcome = self._ingest(
+                source,
+                lambda: self._extract_entities_for_message(envelope=envelope, channel_label="WhatsApp"),
             )
-            if not entities:
-                logger.debug(f"[memory] WA {wa_id} produced 0 entities — marking processed")
+            if outcome.advances_checkpoint:
                 self.storage.mark_whatsapp_memory_processed(self.owner_id, wa_id)
                 return True
-
-            ts = message.get("timestamp", "unknown")
-            sender_label = message.get("sender_name") or message.get("sender_jid") or "unknown"
-            event_desc = f"Extracted from WhatsApp message {wa_id} ({ts}) from {sender_label}"
-
-            for i, entity_content in enumerate(entities):
-                await self._upsert_entity(
-                    entity_content=entity_content,
-                    event_desc=event_desc,
-                    email_id=wa_id,
-                    entity_num=i + 1,
-                    total_entities=len(entities),
-                    source_kind="whatsapp",
-                )
-
-            self.storage.mark_whatsapp_memory_processed(self.owner_id, wa_id)
-            return True
+            logger.info(f"[memory] WA {wa_id} not settled: {outcome.outcome} {outcome.reason}")
+            return False
 
         except BudgetError:
             raise
@@ -1287,69 +1022,38 @@ class MemoryWorker:
 
     @bounded_item("memory:calendar")
     async def process_calendar_event(self, event: Dict) -> bool:
-        """Process single calendar event to extract and store facts.
+        """Take one calendar event through the harness.
+
+        The calendar extraction yields prose, not a structured entity; the
+        role reads it as the suggestion and decides what memory it is, with
+        the rendered event as the observation. "No significant facts." is an
+        empty extraction: a recorded skip that marks the event.
 
         Args:
             event: Event dict with id, summary, description, location, start_time, end_time, attendees
 
         Returns:
-            True if processed successfully, False otherwise
+            True if the source is settled, False otherwise
         """
         event_id = event.get("id", "unknown")
         try:
             logger.debug(f"Processing calendar event {event_id}")
-
-            # Extract facts from event
-            facts = self._extract_calendar_facts(event)
-            if not facts or facts == "No significant facts.":
-                logger.debug(f"No facts extracted from event {event_id}")
-                self.storage.mark_calendar_event_processed(self.owner_id, event_id)
-                return True
-
-            # Search for existing blob about this meeting/attendees
-            existing = self.hybrid_search.find_for_reconsolidation(
-                owner_id=self.owner_id, content=facts, namespace=self.namespace
+            source = self._source(
+                "calendar", event_id, self._format_calendar_data(event), "memory:calendar"
             )
 
-            event_desc = f"Extracted from calendar event '{event.get('summary', '')}' ({event.get('start_time', '')})"
+            def extract() -> List[str]:
+                facts = self._extract_calendar_facts(event)
+                if not facts or facts == "No significant facts.":
+                    return []
+                return [facts]
 
-            linked_blob_id: Optional[str] = None
-            if existing:
-                with call_site("memory.merge"):
-                    merged_content = self.llm_merge.merge(existing.content, facts)
-                self.blob_storage.update_blob(
-                    blob_id=existing.blob_id,
-                    owner_id=self.owner_id,
-                    content=merged_content,
-                    event_description=event_desc,
-                )
-                logger.info(f"Reconsolidated blob {existing.blob_id} with event {event_id}")
-                linked_blob_id = str(existing.blob_id)
-            else:
-                blob = self.blob_storage.store_blob(
-                    owner_id=self.owner_id,
-                    namespace=self.namespace,
-                    content=facts,
-                    event_description=event_desc,
-                )
-                logger.info(f"Created new blob {blob['id']} from event {event_id}")
-                linked_blob_id = str(blob["id"])
-
-            # Fase 3.1: same association table pattern as email_blobs.
-            if linked_blob_id and event_id:
-                try:
-                    self.storage.add_calendar_blob_link(
-                        owner_id=self.owner_id,
-                        event_id=event_id,
-                        blob_id=linked_blob_id,
-                    )
-                except Exception as e:
-                    logger.warning(
-                        f"[memory] add_calendar_blob_link({event_id}, {linked_blob_id}) failed: {e}"
-                    )
-
-            self.storage.mark_calendar_event_processed(self.owner_id, event_id)
-            return True
+            outcome = self._ingest(source, extract)
+            if outcome.advances_checkpoint:
+                self.storage.mark_calendar_event_processed(self.owner_id, event_id)
+                return True
+            logger.info(f"[memory] event {event_id} not settled: {outcome.outcome} {outcome.reason}")
+            return False
 
         except BudgetError:
             raise
@@ -1386,6 +1090,28 @@ class MemoryWorker:
         logger.info(f"Calendar batch complete: {processed}/{len(events)} processed")
         return processed
 
+    def _format_calendar_data(self, event: Dict) -> str:
+        """Render a calendar event as the block the extraction prompt carries.
+
+        The same text is the source the harness digests as the revision, so
+        an edited event (a changed description, a new attendee) is a new
+        revision.
+        """
+        attendees = event.get("attendees", [])
+        if isinstance(attendees, list):
+            attendees_str = ", ".join(
+                a.get("email", "") if isinstance(a, dict) else str(a) for a in attendees
+            )
+        else:
+            attendees_str = str(attendees)
+        return (
+            f"TITLE: {event.get('summary', '(no title)')}\n"
+            f"DATE/TIME: {event.get('start_time', '')} - {event.get('end_time', '')}\n"
+            f"LOCATION: {event.get('location', '(no location)')}\n"
+            f"ATTENDEES: {attendees_str}\n"
+            f"DESCRIPTION: {event.get('description', '(no description)')}"
+        )
+
     def _extract_calendar_facts(self, event: Dict) -> str:
         """Extract facts from calendar event using LLM.
 
@@ -1396,21 +1122,9 @@ class MemoryWorker:
             Extracted facts as natural language string
         """
         try:
-            attendees = event.get("attendees", [])
-            if isinstance(attendees, list):
-                attendees_str = ", ".join(
-                    a.get("email", "") if isinstance(a, dict) else str(a) for a in attendees
-                )
-            else:
-                attendees_str = str(attendees)
-
             prompt = f"""Extract key facts about attendees from this calendar event.
 
-TITLE: {event.get('summary', '(no title)')}
-DATE/TIME: {event.get('start_time', '')} - {event.get('end_time', '')}
-LOCATION: {event.get('location', '(no location)')}
-ATTENDEES: {attendees_str}
-DESCRIPTION: {event.get('description', '(no description)')}
+{self._format_calendar_data(event)}
 
 ---
 
@@ -1460,43 +1174,26 @@ Output ONLY the facts as natural language prose (2-5 sentences). If no meaningfu
 
     @bounded_item("memory:mrcall")
     async def process_mrcall_conversation(self, conversation: Dict) -> bool:
-        """Process single MrCall conversation to extract and store entities.
+        """Take one MrCall conversation through the harness.
 
         Args:
             conversation: Conversation dict from mrcall_conversations table
 
         Returns:
-            True if processed successfully, False otherwise
+            True if the source is settled, False otherwise
         """
         conv_id = conversation.get("id", "unknown")
         try:
             logger.info(f"Processing MrCall conversation {conv_id}")
-
-            # Step 1: Extract entities from conversation
-            entities = self._extract_mrcall_entities(conversation)
-            if not entities:
-                logger.debug(f"No entities extracted from conversation {conv_id}")
+            source = self._source(
+                "mrcall", conv_id, self._format_mrcall_data(conversation), "memory:mrcall"
+            )
+            outcome = self._ingest(source, lambda: self._extract_mrcall_entities(conversation))
+            if outcome.advances_checkpoint:
                 self.storage.mark_mrcall_memory_processed(self.owner_id, conv_id)
                 return True
-
-            logger.debug(f"Extracted {len(entities)} entities from conversation {conv_id}")
-
-            # Step 2: Process each entity
-            contact_phone = conversation.get("contact_phone", "unknown")
-            contact_name = conversation.get("contact_name", "unknown")
-            call_date = conversation.get("call_started_at", "unknown")
-            event_desc = (
-                f"Extracted from phone call with {contact_name} ({contact_phone}) on {call_date}"
-            )
-
-            for i, entity_content in enumerate(entities):
-                await self._upsert_mrcall_entity(
-                    entity_content, event_desc, conv_id, i + 1, len(entities)
-                )
-
-            # Step 3: Mark as processed
-            self.storage.mark_mrcall_memory_processed(self.owner_id, conv_id)
-            return True
+            logger.info(f"[memory] conversation {conv_id} not settled: {outcome.outcome} {outcome.reason}")
+            return False
 
         except BudgetError:
             raise
@@ -1504,76 +1201,18 @@ Output ONLY the facts as natural language prose (2-5 sentences). If no meaningfu
             logger.error(f"Error processing conversation {conv_id}: {e}", exc_info=True)
             return False
 
-    async def _upsert_mrcall_entity(
-        self,
-        entity_content: str,
-        event_desc: str,
-        conv_id: str,
-        entity_num: int,
-        total_entities: int,
-    ) -> None:
-        """Upsert a single entity blob from MrCall with reconsolidation.
-
-        Same identifier-query treatment as ``_upsert_entity`` (Bug G):
-        the structured #IDENTIFIERS block is the stable signal across
-        records of the same caller.
-
-        Args:
-            entity_content: The entity blob content
-            event_desc: Event description for the blob
-            conv_id: Source conversation ID (for logging)
-            entity_num: Which entity this is (1-indexed)
-            total_entities: Total entities from this conversation
-        """
-        logger.debug(f"Upserting MrCall entity {entity_num}/{total_entities}")
-
-        query = _extract_identifier_query(entity_content) or entity_content
-
-        # Get top 3 candidates above threshold
-        existing_blobs = self.hybrid_search.find_candidates_for_reconsolidation(
-            owner_id=self.owner_id, content=query, namespace=self.namespace, limit=3
+    def _format_mrcall_data(self, conversation: Dict) -> str:
+        """Render a MrCall conversation as the source the harness digests."""
+        duration_ms = conversation.get("call_duration_ms", 0)
+        duration_seconds = duration_ms / 1000 if duration_ms else 0
+        return (
+            f"Channel: MrCall\n"
+            f"Contact: {conversation.get('contact_name', 'unknown')} "
+            f"({conversation.get('contact_phone', 'unknown')})\n"
+            f"At: {conversation.get('call_started_at', 'unknown')}\n"
+            f"Duration: {int(duration_seconds)} seconds\n\n"
+            f"{self._extract_conversation_text(conversation.get('body'))}"
         )
-
-        # Merge-gate guard (see MemoryWorker.merge_enabled): a known-broken
-        # gate must not reconsolidate — create a fresh blob instead.
-        if not self.merge_enabled:
-            existing_blobs = []
-
-        upserted = False
-
-        for existing in existing_blobs:
-            logger.debug(
-                f"Trying to merge with blob {existing.blob_id} (score={existing.hybrid_score:.2f})"
-            )
-            with call_site("memory.merge"):
-                merged_content = self.llm_merge.merge(existing.content, entity_content)
-
-            if is_no_merge_response(merged_content):
-                logger.debug(f"Skipping blob {existing.blob_id} - entities don't match")
-                continue
-
-            self.blob_storage.update_blob(
-                blob_id=existing.blob_id,
-                owner_id=self.owner_id,
-                content=merged_content,
-                event_description=event_desc,
-            )
-            logger.info(
-                f"Reconsolidated blob {existing.blob_id} with conversation {conv_id} (entity {entity_num}/{total_entities})"
-            )
-            upserted = True
-            break
-
-        if not upserted:
-            blob = self.blob_storage.store_blob(
-                owner_id=self.owner_id,
-                namespace=self.namespace,
-                content=entity_content,
-                event_description=event_desc,
-            )
-            logger.info(
-                f"Created new blob {blob['id']} from conversation {conv_id} (entity {entity_num}/{total_entities})"
-            )
 
     @bounded_operation(lambda self, *args, **kwargs: self.owner_id)
     async def process_mrcall_batch(self, conversations: List[Dict]) -> int:

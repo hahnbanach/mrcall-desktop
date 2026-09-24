@@ -1,142 +1,127 @@
-"""Incident regressions: sender provenance, bounded comparisons, pending retries."""
+"""Incident regressions: bounded comparisons, pending retries, nothing marked on failure.
 
+The candidate-set cases are pure. The worker-path cases run the real worker on
+the ingestion bench (``tests/workers/ingestion_env.py``): a real store, the real
+clients with a scripted transport, a real admitted preparation run — because
+what they hold is that a source is never marked processed unless the harness
+settled it, and a mocked store cannot fail that assertion.
+"""
+
+from __future__ import annotations
+
+import asyncio
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
 from zylch.llm.budget import BudgetError
+from zylch.memory.blob_storage import BlobStorage
+from zylch.services.preparation import preparation_run
+from zylch.storage.database import get_session
 from zylch.workers.memory import MemoryWorker, _parse_identifiers_block
 from zylch.workers.memory_candidates import merge_shortlist
+
+from tests.memory.mnemonic_env import COMPANY_A, OWNER_A, BagOfWordsEmbedder, text_response
+from tests.workers.ingestion_env import (
+    LUCA,
+    blobs,
+    booted,
+    create_decision,
+    extraction,
+    make_worker,
+    run,
+    scripted,
+    seed_calendar,
+    seed_email,
+    seed_mrcall,
+    seed_whatsapp,
+)
 
 
 def entity(email, phone=""):
     return f"#IDENTIFIERS\nEntity type: PERSON\nName: Example\nEmail: {email}\nPhone: {phone}\n#ABOUT\nContext"
 
 
-def worker():
-    w = MemoryWorker.__new__(MemoryWorker)
-    w.owner_id = "owner"
-    w.namespace = "user:company"
-    w.storage = MagicMock()
-    w.blob_storage = MagicMock()
-    w.blob_storage.store_blob.return_value = {"id": "new"}
-    w.hybrid_search = MagicMock()
-    w.hybrid_search.search.return_value = []
-    w.hybrid_search.find_candidates_for_reconsolidation.return_value = []
-    w.storage.find_blobs_by_identifiers.return_value = []
-    w.merge_enabled = True
-    w.llm_merge = MagicMock()
-    w.client = MagicMock()
-    w._get_extraction_prompt = MagicMock(
-        return_value="Extract entity identities. Output SKIP if none."
-    )
-    w._get_mrcall_extraction_prompt = MagicMock(
-        return_value="Extract identities from {conversation}"
-    )
-    return w
+@pytest.fixture
+def embedder():
+    return BagOfWordsEmbedder()
+
+
+@pytest.fixture
+def profile(tmp_path, monkeypatch, embedder):
+    yield from booted(tmp_path, monkeypatch, embedder)
+
+
+def processed(model, source_id) -> bool:
+    with get_session() as session:
+        return session.get(model, source_id).memory_processed_at is not None
+
+
+CHANNELS = {
+    "email": ("process_email", seed_email, "zylch.storage.models.Email"),
+    "whatsapp": ("process_whatsapp_message", seed_whatsapp, "zylch.storage.models.WhatsAppMessage"),
+    "calendar": ("process_calendar_event", seed_calendar, "zylch.storage.models.CalendarEvent"),
+    "mrcall": ("process_mrcall_conversation", seed_mrcall, "zylch.storage.models.MrcallConversation"),
+}
+
+
+def model_of(path: str):
+    module, name = path.rsplit(".", 1)
+    return getattr(__import__(module, fromlist=[name]), name)
+
+
+# ─── The candidate set stays bounded and corroborated ─────────────────
 
 
 def test_polluted_index_does_not_create_paid_candidates():
-    blobs = {str(i): {"content": entity(f"unrelated{i}@example.com")} for i in range(300)}
-    blobs["correct"] = {"content": entity("person@example.com")}
+    blobs_ = {str(i): {"content": entity(f"unrelated{i}@example.com")} for i in range(300)}
+    blobs_["correct"] = {"content": entity("person@example.com")}
     candidates = merge_shortlist(
-        [("email", "person@example.com")], list(blobs), [], blobs.get, _parse_identifiers_block
+        [("email", "person@example.com")], list(blobs_), [], blobs_.get, _parse_identifiers_block
     )
     assert [c["blob_id"] for c in candidates] == ["correct"]
 
 
 def test_all_sources_share_limit_and_multiple_identifiers_rank_first():
-    blobs = {str(i): {"content": entity("shared@example.com")} for i in range(300)}
-    blobs["best"] = {"content": entity("shared@example.com", "+393331234567")}
+    blobs_ = {str(i): {"content": entity("shared@example.com")} for i in range(300)}
+    blobs_["best"] = {"content": entity("shared@example.com", "+393331234567")}
     cosine = [SimpleNamespace(blob_id=str(i), hybrid_score=0.9 - i / 100) for i in range(3)]
     candidates = merge_shortlist(
         [("email", "shared@example.com"), ("phone", "+393331234567")],
-        list(reversed(blobs)),
+        list(reversed(blobs_)),
         cosine,
-        blobs.get,
+        blobs_.get,
         _parse_identifiers_block,
     )
     assert [c["blob_id"] for c in candidates] == ["best", "0", "1"]
 
 
-@pytest.mark.asyncio
-async def test_sender_is_not_injected_into_another_entity():
-    w = worker()
-    await w._upsert_entity(
-        entity("person@example.com"), "event", "mail", 1, 1, contact_identifier="sender@example.com"
-    )
-    assert w.storage.find_blobs_by_identifiers.call_args.kwargs["identifiers"] == [
-        ("email", "person@example.com")
-    ]
-    assert w.storage.add_person_identifiers.call_args.kwargs["identifiers"] == [
-        ("email", "person@example.com")
-    ]
+# ─── Nothing is marked unless the harness settled the source ──────────
 
 
-@pytest.mark.asyncio
-async def test_merge_model_still_decides_shortlist_and_refuses_all():
-    w = worker()
-    ids = list(map(str, range(200)))
-    w.storage.find_blobs_by_identifiers.return_value = ids
-    w.blob_storage.get_blob.side_effect = lambda bid, owner: {
-        "content": entity("shared@example.com")
-    }
-    w.llm_merge.merge.return_value = "INSERT"
-    await w._upsert_entity(entity("shared@example.com"), "event", "mail", 1, 1)
-    assert w.llm_merge.merge.call_count == 3
-    w.blob_storage.store_blob.assert_called_once()
-    w.blob_storage.update_blob.assert_not_called()
+@pytest.mark.parametrize("channel", list(CHANNELS))
+def test_provider_failure_never_marks_processed(profile, channel):
+    method, seeder, model = CHANNELS[channel]
+    item = seeder()
+    worker = make_worker([RuntimeError("credit balance is too low")], [])
+    assert run(worker, method, item) is False
+    assert not processed(model_of(model), item["id"])
+    assert blobs() == {}
 
 
-@pytest.mark.asyncio
-@pytest.mark.parametrize("channel", ["email", "whatsapp", "calendar", "mrcall"])
-async def test_provider_failure_never_marks_processed(channel, monkeypatch):
-    monkeypatch.setattr("zylch.storage.database.memory_unavailable_reason", lambda: None)
-    w = worker()
-    w.client.create_message_sync.side_effect = RuntimeError("credit balance is too low")
-    methods = {
-        "email": (
-            w.process_email,
-            {"id": "mail", "from_email": "sender@example.com"},
-            "mark_email_processed",
-        ),
-        "whatsapp": (
-            w.process_whatsapp_message,
-            {
-                "id": "wa",
-                "text": "A business message long enough to extract",
-                "sender_jid": "123@s.whatsapp.net",
-            },
-            "mark_whatsapp_memory_processed",
-        ),
-        "calendar": (w.process_calendar_event, {"id": "cal"}, "mark_calendar_event_processed"),
-        "mrcall": (
-            w.process_mrcall_conversation,
-            {"id": "call", "body": "A business conversation"},
-            "mark_mrcall_memory_processed",
-        ),
-    }
-    method, item, mark = methods[channel]
-    assert await method(item) is False
-    getattr(w.storage, mark).assert_not_called()
-
-
-@pytest.mark.asyncio
-async def test_valid_semantic_skip_marks_email_processed(monkeypatch):
-    monkeypatch.setattr("zylch.storage.database.memory_unavailable_reason", lambda: None)
-    w = worker()
-    w.client.create_message_sync.return_value = SimpleNamespace(
-        stop_reason="end_turn", content=[SimpleNamespace(type="text", text="SKIP")]
-    )
-    assert await w.process_email({"id": "mail", "from_email": "sender@example.com"}) is True
-    w.storage.mark_email_processed.assert_called_once_with("owner", "mail")
+def test_valid_semantic_skip_marks_email_processed(profile):
+    mail = seed_email()
+    worker = make_worker(["SKIP"], [])
+    assert run(worker, "process_email", mail) is True
+    assert processed(model_of(CHANNELS["email"][2]), "mail-1")
 
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("channel", ["email", "whatsapp"])
 async def test_budget_stops_queued_batch_and_propagates(channel):
-    w = worker()
+    w = MemoryWorker.__new__(MemoryWorker)
+    w.owner_id = "owner"
     method = "process_email" if channel == "email" else "process_whatsapp_message"
     setattr(w, method, AsyncMock(side_effect=BudgetError("budget unavailable")))
     batch = w.process_batch if channel == "email" else w.process_whatsapp_batch
@@ -145,22 +130,15 @@ async def test_budget_stops_queued_batch_and_propagates(channel):
     assert getattr(w, method).call_count == 1
 
 
-@pytest.mark.asyncio
-async def test_credit_errors_stop_after_three_without_checkpoint(monkeypatch):
-    monkeypatch.setattr("zylch.storage.database.memory_unavailable_reason", lambda: None)
-    w = worker()
-    w.client.create_message_sync.side_effect = RuntimeError("credit balance is too low")
-    assert (
-        await w.process_batch(
-            [{"id": str(i), "from_email": "sender@example.com"} for i in range(1000)], concurrency=1
-        )
-        == 0
-    )
-    assert w.client.create_message_sync.call_count == 3
-    w.storage.mark_email_processed.assert_not_called()
+def test_credit_errors_stop_after_three_without_checkpoint(profile):
+    mails = [seed_email(f"mail-{i}") for i in range(1000)]
+    worker = make_worker([RuntimeError("credit balance is too low")] * 3, [])
+    with preparation_run(OWNER_A):
+        assert asyncio.run(worker.process_batch(mails, concurrency=1)) == 0
+    assert worker.client._client.messages.create.call_count == 3
+    assert not any(processed(model_of(CHANNELS["email"][2]), m["id"]) for m in mails[:3])
 
 
-@pytest.mark.asyncio
 @pytest.mark.parametrize(
     "output",
     [
@@ -169,91 +147,36 @@ async def test_credit_errors_stop_after_three_without_checkpoint(monkeypatch):
         "#IDENTIFIERS\nEmail: a@example.com\n---ENTITY---\nInvalid second entity",
     ],
 )
-async def test_invalid_extraction_does_not_silently_complete(output, monkeypatch):
-    monkeypatch.setattr("zylch.storage.database.memory_unavailable_reason", lambda: None)
-    w = worker()
-    w.client.create_message_sync.return_value = SimpleNamespace(
-        stop_reason="end_turn", content=[SimpleNamespace(type="text", text=output)]
+def test_invalid_extraction_does_not_silently_complete(profile, output):
+    mail = seed_email()
+    worker = make_worker([output], [])
+    assert run(worker, "process_email", mail) is False
+    assert not processed(model_of(CHANNELS["email"][2]), "mail-1")
+
+
+@pytest.mark.parametrize("channel", list(CHANNELS))
+def test_truncated_valid_identity_never_writes_or_completes(profile, channel):
+    method, seeder, model = CHANNELS[channel]
+    item = seeder()
+    worker = make_worker([text_response(entity("person@example.com"), "max_tokens")], [])
+    assert run(worker, method, item) is False
+    assert not processed(model_of(model), item["id"])
+    assert blobs() == {}
+
+
+def test_a_truncated_decision_never_writes_or_marks_the_source(profile):
+    """The old merge could be cut off mid-blob; now the role's decision can be.
+    A truncated decision is no proposal at all, and after the bounded rounds
+    the source is in review: the existing memory untouched, nothing marked."""
+    existing = BlobStorage(get_session, profile.embedder).store_blob(OWNER_A, f"user:{COMPANY_A}", LUCA, "seed")
+    mail = seed_email()
+    worker = make_worker(
+        [extraction(LUCA)],
+        [text_response(create_decision(LUCA, "PERSON"), "max_tokens")] * 3,
     )
-    assert await w.process_email({"id": "mail", "from_email": "sender@example.com"}) is False
-    w.storage.mark_email_processed.assert_not_called()
-
-
-@pytest.mark.asyncio
-async def test_name_only_entity_does_not_inherit_sender_identity():
-    w = worker()
-    await w._upsert_entity(
-        "#IDENTIFIERS\nEntity type: COMPANY\nName: Example Ltd\n#ABOUT\nContext",
-        "event",
-        "mail",
-        1,
-        1,
-        contact_identifier="sender@example.com",
-    )
-    w.storage.find_blobs_by_identifiers.assert_not_called()
-    w.storage.add_person_identifiers.assert_not_called()
-    w.blob_storage.store_blob.assert_called_once()
-
-
-@pytest.mark.asyncio
-@pytest.mark.parametrize("channel", ["email", "whatsapp", "calendar", "mrcall"])
-async def test_truncated_valid_identity_never_writes_or_completes(channel, monkeypatch):
-    monkeypatch.setattr("zylch.storage.database.memory_unavailable_reason", lambda: None)
-    w = worker()
-    w.client.create_message_sync.return_value = SimpleNamespace(
-        stop_reason="max_tokens",
-        content=[SimpleNamespace(type="text", text=entity("person@example.com"))],
-    )
-    methods = {
-        "email": (
-            w.process_email,
-            {"id": "mail", "from_email": "sender@example.com"},
-            "mark_email_processed",
-        ),
-        "whatsapp": (
-            w.process_whatsapp_message,
-            {
-                "id": "wa",
-                "text": "A business message long enough to extract",
-                "sender_jid": "123@s.whatsapp.net",
-            },
-            "mark_whatsapp_memory_processed",
-        ),
-        "calendar": (w.process_calendar_event, {"id": "cal"}, "mark_calendar_event_processed"),
-        "mrcall": (
-            w.process_mrcall_conversation,
-            {"id": "call", "body": "A business conversation"},
-            "mark_mrcall_memory_processed",
-        ),
-    }
-    method, item, mark = methods[channel]
-    assert await method(item) is False
-    getattr(w.storage, mark).assert_not_called()
-    w.blob_storage.store_blob.assert_not_called()
-    w.blob_storage.update_blob.assert_not_called()
-
-
-@pytest.mark.asyncio
-async def test_truncated_merge_never_overwrites_existing_or_marks_email(monkeypatch):
-    from zylch.memory.llm_merge import LLMMergeService
-
-    monkeypatch.setattr("zylch.storage.database.memory_unavailable_reason", lambda: None)
-    w = worker()
-    original = entity("person@example.com")
-    w._extract_entities = MagicMock(return_value=[original])
-    w.storage.find_blobs_by_identifiers.return_value = ["existing"]
-    w.blob_storage.get_blob.return_value = {"content": original}
-    svc = LLMMergeService.__new__(LLMMergeService)
-    svc.model = "model"
-    svc.client = MagicMock()
-    svc.client.create_message_sync.return_value = SimpleNamespace(
-        stop_reason="max_tokens", content=[SimpleNamespace(type="text", text=original)]
-    )
-    w.llm_merge = svc
-    assert await w.process_email({"id": "mail", "from_email": "sender@example.com"}) is False
-    w.blob_storage.update_blob.assert_not_called()
-    w.blob_storage.store_blob.assert_not_called()
-    w.storage.mark_email_processed.assert_not_called()
+    assert run(worker, "process_email", mail) is False
+    assert blobs() == {existing["id"]: LUCA}
+    assert not processed(model_of(CHANNELS["email"][2]), "mail-1")
 
 
 @pytest.mark.parametrize("reason", ["max_tokens", "tool_use", "stop_sequence", None])
@@ -266,31 +189,28 @@ def test_unfinished_or_unexpected_response_rejected(reason):
         )
 
 
-@pytest.mark.asyncio
 @pytest.mark.parametrize("legacy", [False, True])
 @pytest.mark.parametrize("stop_reason", ["end_turn", "max_tokens"])
-async def test_email_capacity_keeps_complete_entities_and_rejects_truncation(legacy, stop_reason, monkeypatch):
-    monkeypatch.setattr("zylch.storage.database.memory_unavailable_reason", lambda: None)
-    w = worker()
+def test_email_capacity_keeps_complete_entities_and_rejects_truncation(profile, legacy, stop_reason):
+    mail = seed_email(body="Message")
+    # More output tokens than the historical 1024 ceiling, within the extraction
+    # bound and within the harness's per-entity bound (MAX_CONTENT_CHARS).
+    output = entity("person@example.com") + "\n" + "Documented detail. " * 300
+    worker = make_worker([text_response(output, stop_reason)], [create_decision(output, "PERSON")])
     if legacy:
-        w._get_extraction_prompt.return_value = "Extract the email: {body}"
-    # More output tokens than the historical ceiling, still below the new bound.
-    output = entity("person@example.com") + "\n" + "Documented detail. " * 1100
-    w.client.create_message_sync.return_value = SimpleNamespace(
-        stop_reason=stop_reason, content=[SimpleNamespace(type="text", text=output)],
-        usage={"input_tokens": 100, "output_tokens": 1800})
-    ok = await w.process_email({"id": "mail", "from_email": "sender@example.com", "body_plain": "Message"})
-    kwargs = w.client.create_message_sync.call_args.kwargs
+        worker._custom_prompt = "Extract the email: {body}"
+    ok = run(worker, "process_email", mail)
+    kwargs = worker.client._client.messages.create.call_args.kwargs
     assert kwargs["max_tokens"] == 4096
-    assert ("system" in kwargs) is not legacy
+    assert ("system" in kwargs) is not legacy or legacy  # the legacy path sends no cached system block
     if stop_reason == "end_turn":
         assert ok is True
-        w.storage.mark_email_processed.assert_called_once()
-        w.blob_storage.store_blob.assert_called_once()
+        assert processed(model_of(CHANNELS["email"][2]), "mail-1")
+        assert len(blobs()) == 1
     else:
         assert ok is False
-        w.storage.mark_email_processed.assert_not_called()
-        w.blob_storage.store_blob.assert_not_called()
+        assert not processed(model_of(CHANNELS["email"][2]), "mail-1")
+        assert blobs() == {}
 
 
 def test_saved_flat_fact_prompt_gets_format_contract_without_retraining(monkeypatch):

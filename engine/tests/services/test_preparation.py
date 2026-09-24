@@ -185,53 +185,39 @@ def test_dispatched_budget_error_counts_uncertain_failure(ledger):
         ).one() == (1, 0, 1)
 
 
-def test_actual_memory_worker_preserves_failed_checkpoint_and_accepts_skip(ledger, monkeypatch):
-    from datetime import datetime
-
-    from sqlalchemy.orm import sessionmaker
-
-    from zylch.storage import database
+def test_actual_memory_worker_preserves_failed_checkpoint_and_accepts_skip(tmp_path, monkeypatch):
+    """The real worker on real files: a failed extraction leaves the mail's
+    checkpoint alone and counts a failure; an explicit empty extraction is a
+    recorded skip that marks it and counts a completion."""
+    from zylch.storage.database import get_session
     from zylch.storage.models import Email
-    from zylch.storage.storage import Storage
-    from zylch.workers.memory import MemoryWorker
 
-    Email.__table__.create(ledger)
-    factory = sessionmaker(bind=ledger)
-    monkeypatch.setattr(database, "get_session_factory", lambda: factory)
-    monkeypatch.setattr(database, "memory_unavailable_reason", lambda: None)
-    with factory.begin() as session:
-        for source in ("bad", "skip"):
-            session.add(
-                Email(
-                    id=source,
-                    owner_id="owner",
-                    gmail_id=source,
-                    thread_id=source,
-                    date=datetime.now(UTC),
-                )
-            )
-    worker = MemoryWorker.__new__(MemoryWorker)
-    worker.owner_id = "owner"
-    worker.storage = Storage.__new__(Storage)
+    from tests.memory.mnemonic_env import OWNER_A, BagOfWordsEmbedder
+    from tests.workers.ingestion_env import booted, make_worker, seed_email
 
-    def extract(email, contact):
-        if email["id"] == "bad":
-            raise RuntimeError("Provider unavailable")
-        return []  # parsed explicit semantic SKIP
+    bench = booted(tmp_path, monkeypatch, BagOfWordsEmbedder())
+    next(bench)
+    try:
+        bad = seed_email("bad")
+        skip = seed_email("skip")
+        worker = make_worker([], [])
 
-    worker._extract_entities = extract
-    with p.preparation_run("owner"):
-        assert not asyncio.run(
-            worker.process_email({"id": "bad", "from_email": "example@example.test"})
-        )
-        assert asyncio.run(
-            worker.process_email({"id": "skip", "from_email": "example@example.test"})
-        )
-    with factory() as session:
-        assert session.get(Email, "bad").memory_processed_at is None
-        assert session.get(Email, "skip").memory_processed_at is not None
-    assert p.status("owner")["failed"] == 1
-    assert p.status("owner")["completed"] == 1
+        def extract(email, contact):
+            if email["id"] == "bad":
+                raise RuntimeError("Provider unavailable")
+            return []  # parsed explicit semantic SKIP
+
+        worker._extract_entities = extract
+        with p.preparation_run(OWNER_A):
+            assert not asyncio.run(worker.process_email(bad))
+            assert asyncio.run(worker.process_email(skip))
+        with get_session() as session:
+            assert session.get(Email, "bad").memory_processed_at is None
+            assert session.get(Email, "skip").memory_processed_at is not None
+        assert p.status(OWNER_A)["failed"] == 1
+        assert p.status(OWNER_A)["completed"] == 1
+    finally:
+        next(bench, None)
 
 
 def test_outside_legacy_private_calls_are_refused_before_dispatch(ledger):

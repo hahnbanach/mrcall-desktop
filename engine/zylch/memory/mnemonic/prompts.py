@@ -215,6 +215,7 @@ def user_message(event: MemoryEvent, candidates: Sequence[Candidate]) -> str:
                     "phone": event.subject_hint.phone,
                     "company": event.subject_hint.company,
                     "target_blob_id": event.subject_hint.target_blob_id,
+                    "identifiers": [list(pair) for pair in event.subject_hint.identifiers],
                 }.items()
                 if value
             }
