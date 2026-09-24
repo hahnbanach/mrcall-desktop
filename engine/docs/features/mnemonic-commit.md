@@ -352,8 +352,8 @@ the decision client the merge-routed model. The merge-gate brake
 (`merge_enabled` off) keeps its meaning as an empty candidate set: search and
 identifier lookups return nothing, exact reads stay, and every entity becomes a
 fresh blob. `process_pipeline.py` reaches the mail and WhatsApp batches
-only; the calendar and MrCall batches stay callable through the worker and
-the job facade, and both are tested there.
+only; a calendar event and a MrCall conversation are ingested per item through
+the worker's own coroutines and the job facade, and both are tested there.
 
 **Background jobs** (`services/job_executor.py`). `memory_process` is a facade
 over the worker's own admitted path: `run_source_sync` runs the worker's
@@ -418,10 +418,13 @@ its cancellation handler) and `tests/services/test_task_interactive_memory.py`
 
 Ingestion, the jobs, the helper writers and the verb have their own, on real
 split databases with the role scripted at the transport:
-`tests/workers/test_mnemonic_replay.py` (the replay contract — real fault
-injection before the manifest, between children, after the company commit and
-before the checkpoint, on a resume; the sender never inherited; a source edit
-as a new revision; a budget refusal that consumes no retry),
+`tests/workers/test_mnemonic_ingestion.py` (what one source commits, links
+and indexes; the sender never inherited; the candidates the role is shown; an
+empty extraction as a recorded skip), `tests/workers/test_mnemonic_replay.py`
+(the replay contract — real fault injection before the manifest, between
+children, after the company commit and before the checkpoint, on a resume; a
+source edit as a new revision; a budget refusal that consumes no retry; a
+refusal a later run can satisfy kept retryable),
 `tests/services/test_mnemonic_jobs.py` (one source, one operation through
 either entry; the restart; the stop; the read-only origin; the tag and the turn
 read inside the thread), `tests/memory/test_mnemonic_children.py` (the
