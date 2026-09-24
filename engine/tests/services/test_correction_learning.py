@@ -158,7 +158,7 @@ def test_learn_writes_fact(monkeypatch):
     monkeypatch.setattr(
         fs,
         "upsert_fact",
-        lambda owner_id, c, k, v, event_description=None, entry=None: (upserts.append((c, k, v)) or "fact-1"),
+        lambda owner_id, c, k, v, entry=None: (upserts.append((c, k, v)) or "fact-1"),
     )
     # Fact-only response: rule judge sees no is_durable_rule -> no rule.
     client = _FakeClient(
@@ -186,7 +186,7 @@ def test_learn_one_diff_yields_both_rule_and_fact(monkeypatch):
     monkeypatch.setattr(cl, "_existing_fact_categories", lambda owner_id: [])
     monkeypatch.setattr(cl, "_write_rule", lambda owner_id, content, entry=None: "rule-1")
     monkeypatch.setattr(
-        fs, "upsert_fact", lambda owner_id, c, k, v, event_description=None, entry=None: "fact-1"
+        fs, "upsert_fact", lambda owner_id, c, k, v, entry=None: "fact-1"
     )
     # One response carries BOTH a durable rule and a fact change.
     client = _FakeClient(

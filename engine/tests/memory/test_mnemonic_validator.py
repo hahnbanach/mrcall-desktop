@@ -824,4 +824,3 @@ def test_a_fact_in_the_retrieval_set_does_not_block_creating_a_person():
         shared_identifiers=1,
     )
     assert validate(event, proposal_for("unrelated_same_name_people"), (unrelated_fact,)).ok
-

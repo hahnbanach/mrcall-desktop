@@ -164,7 +164,6 @@ def upsert_fact(
     category: str,
     key: str,
     value: str,
-    event_description: Optional[str] = None,
     *,
     entry=None,
 ) -> Optional[str]:

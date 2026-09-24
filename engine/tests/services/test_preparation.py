@@ -1,7 +1,6 @@
 """Durable preparation behavior with real SQLite and fake semantic work."""
 
 import asyncio
-from datetime import UTC
 
 import pytest
 from sqlalchemy import create_engine

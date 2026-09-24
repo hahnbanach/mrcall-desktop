@@ -122,7 +122,6 @@ class UpdateMemoryTool(Tool):
             owner_id,
             blob_id,
             new_content,
-            event_description="Manual correction via chat",
             writer="update_memory",
         )
         if outcome["action"] == "refined":

@@ -18,7 +18,6 @@ import pytest
 
 from zylch.llm.budget import BudgetError, budget_snapshot
 from zylch.llm.usage import call_site, current_call_site
-from zylch.memory.mnemonic import journal
 from zylch.memory.mnemonic.turn import turn_cancellation
 from zylch.services import job_executor, preparation
 from zylch.services.job_executor import JobExecutor
@@ -275,4 +274,3 @@ def test_a_paused_preparation_fails_the_job_visibly(executor, monkeypatch):
     assert blobs() == {} and not email_processed("mail-1")
     with get_session() as session:
         assert session.query(MemoryOperation).count() == 0
-    assert journal is not None

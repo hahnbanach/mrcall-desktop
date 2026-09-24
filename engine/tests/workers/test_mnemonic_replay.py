@@ -18,6 +18,7 @@ import pytest
 from zylch.llm.budget import BudgetError
 from zylch.memory.blob_storage import BlobStorage
 from zylch.memory.mnemonic import ingestion, journal, manifest
+from zylch.memory.mnemonic.turn import revocable_turn
 from zylch.services import preparation
 from zylch.services.preparation import PreparationStopped, preparation_run
 from zylch.storage.database import get_session
@@ -459,3 +460,42 @@ def test_whatsapp_calendar_and_mrcall_run_the_same_path(profile, kind, seeder, m
         assert links(model, column, item["id"]) == set(blobs())
     with get_session() as session:
         assert session.get(marker, item["id"]).memory_processed_at is not None
+
+
+# ─── A refusal a later run can satisfy is not a review ────────────────
+
+
+def test_extraction_outside_an_admitted_item_keeps_the_source_retryable(profile):
+    """Reached with no preparation run behind it, the worker gets no grant:
+    nothing is asked of a provider, the parent stays pending, and the same
+    source commits on the next admitted run with the extraction still to spend."""
+    mail = seed_email()
+    worker = make_worker([extraction(LUCA)], [create_decision(LUCA, "PERSON")])
+
+    asyncio.run(worker.process_email(mail))
+
+    parent = parent_of("mail-1")
+    assert parent["state"] == "pending" and children_of(parent["event_id"]) == {}
+    assert blobs() == {} and not email_processed("mail-1")
+
+    run(worker, "process_email", mail)
+
+    assert parent_of("mail-1")["state"] == "committed" and email_processed("mail-1")
+    assert len(blobs()) == 1
+
+
+def test_a_turn_cancelled_before_extraction_keeps_the_source_retryable(profile):
+    mail = seed_email()
+    worker = make_worker([extraction(LUCA)], [create_decision(LUCA, "PERSON")])
+
+    with revocable_turn() as handle:
+        handle.cancel("stopped before extraction")
+        run(worker, "process_email", mail)
+
+    parent = parent_of("mail-1")
+    assert parent["state"] == "pending" and blobs() == {} and not email_processed("mail-1")
+    resume(profile)  # the scheduler's own backoff, elapsed
+
+    run(worker, "process_email", mail)
+
+    assert parent_of("mail-1")["state"] == "committed" and email_processed("mail-1")

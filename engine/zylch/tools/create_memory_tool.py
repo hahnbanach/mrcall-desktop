@@ -141,7 +141,6 @@ class CreateMemoryTool(Tool):
         outcome = store_rule(
             owner_id,
             content,
-            event_description="Manual creation via chat",
             writer="create_memory",
         )
         if outcome["action"] in ("created", "superseded"):

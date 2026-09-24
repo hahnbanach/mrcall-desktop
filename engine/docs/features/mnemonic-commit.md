@@ -351,7 +351,9 @@ role with no identity at all rather than with the sender's. The caller class is
 the decision client the merge-routed model. The merge-gate brake
 (`merge_enabled` off) keeps its meaning as an empty candidate set: search and
 identifier lookups return nothing, exact reads stay, and every entity becomes a
-fresh blob. Disabled channels stay disabled, their paths tested.
+fresh blob. `process_pipeline.py` reaches the mail and WhatsApp batches
+only; the calendar and MrCall batches stay callable through the worker and
+the job facade, and both are tested there.
 
 **Background jobs** (`services/job_executor.py`). `memory_process` is a facade
 over the worker's own admitted path: `run_source_sync` runs the worker's
@@ -370,8 +372,8 @@ exact `(Category, Key)` row; a rule pins its supersession candidate; a shape
 refusal and an exact duplicate are decided without a paid call; the outcome is
 reported as itself (`created`, `superseded`, `refined`, `duplicate`, `review`,
 `refused`, `error`). STYLE files in the canonical `template` namespace, and the
-rule body — the pure STYLE control header stripped — is what rendering, dedup
-and ranking read. Where a helper is called decides its contract
+rule body — the pure STYLE control header stripped — is what rendering, dedup,
+ranking and the read-side cap measure. Where a helper is called decides its contract
 (`mnemonic/entry.py`): inside an admitted preparation item it is automatic with
 that item's stage and source; inside a run but outside an item it is refused,
 so a trainer or a maintenance RPC cannot buy the interactive contract by

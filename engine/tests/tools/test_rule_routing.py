@@ -317,7 +317,7 @@ def test_a_refinement_with_nothing_to_say_or_no_row_is_refused(fresh_db):
     from zylch.tools.base import ToolStatus
     from zylch.tools.update_memory_tool import UpdateMemoryTool
 
-    assert refine_rule(OWNER, "b1", "   ", "x", writer="test")["action"] == "refused"
+    assert refine_rule(OWNER, "b1", "   ", writer="test")["action"] == "refused"
     res = _run(
         UpdateMemoryTool(owner_id=OWNER).execute(
             blob_id="no-such-blob", new_content="RULE: v2", entry_type="behavioral_rule"

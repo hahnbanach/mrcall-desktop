@@ -46,6 +46,8 @@ import os
 import re
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 
+from zylch.services.prefs_events import not_written, submit_rule
+
 logger = logging.getLogger(__name__)
 
 #: Soft cap (characters) on what the read side injects into a prompt.
@@ -219,6 +221,10 @@ def select_within_cap(
 
     ``kept`` comes back in stable ``created_at`` order so the rendered
     block is byte-identical between turns and the prompt cache re-hits.
+
+    A rule is charged at the size it renders: the STYLE control header a
+    harness-written rule carries is stripped before the cost is counted, as
+    it is before the text is rendered, so the cap measures the block it bounds.
     """
     if cap is None:
         cap = learned_prefs_max_chars()
@@ -243,7 +249,7 @@ def select_within_cap(
     dropped: List[Dict[str, Any]] = []
     total = 0
     for r in ordered:
-        size = len(r.get("content") or "")
+        size = len(rule_body(r.get("content") or ""))
         # +2 for the "\n\n" separator each additional entry costs.
         cost = size + (2 if kept else 0)
         if total + cost > cap:
@@ -263,7 +269,6 @@ def render(rules: Sequence[Dict[str, Any]]) -> str:
 def store_rule(
     owner_id: str,
     content: str,
-    event_description: str,
     *,
     writer: str,
     entry=None,
@@ -347,7 +352,7 @@ def store_rule(
                 "reason": "contained in an existing rule",
             }
 
-    result = _submit_rule(owner_id, content, entry, target=candidate, explicit=False)
+    result = submit_rule(owner_id, content, entry, target=candidate, explicit=False)
     if isinstance(result, dict):
         return result
     if result.outcome == "committed":
@@ -359,7 +364,7 @@ def store_rule(
                 f"place instead of storing a near-copy"
             )
             return {"action": "superseded", "blob_id": blob_id, "reason": "extends an existing rule"}
-        total = sum(len(rule_body(r["content"])) for r in existing) + len(content)
+        total = sum(len(rule_body(r["content"])) for r in existing) + len(rule_body(content))
         cap = learned_prefs_max_chars()
         if total > cap:
             logger.error(
@@ -371,14 +376,13 @@ def store_rule(
         else:
             logger.debug(f"[prefs] rule stored by writer={writer}: {total}/{cap} chars used")
         return {"action": "created", "blob_id": blob_id, "reason": "new rule"}
-    return _not_written(result, candidate["id"] if candidate else None, writer)
+    return not_written(result, candidate["id"] if candidate else None, writer)
 
 
 def refine_rule(
     owner_id: str,
     blob_id: str,
     content: str,
-    event_description: str,
     *,
     writer: str,
     entry=None,
@@ -438,7 +442,7 @@ def refine_rule(
             ),
         }
     target = {"id": str(existing["id"]), "content": existing.get("content") or ""}
-    result = _submit_rule(owner_id, content, entry, target=target, explicit=True)
+    result = submit_rule(owner_id, content, entry, target=target, explicit=True)
     if isinstance(result, dict):
         return result
     if result.outcome == "committed":
@@ -452,76 +456,7 @@ def refine_rule(
             "namespace": namespace,
             "reason": "rule refined in place",
         }
-    return _not_written(result, blob_id, writer)
-
-
-def _submit_rule(owner_id: str, content: str, entry, *, target: Optional[Dict[str, Any]], explicit: bool):
-    """One STYLE event through the harness. Returns the result, or a refusal dict."""
-    from zylch.memory.company_key import require_company_key
-    from zylch.memory.mnemonic import submit
-    from zylch.memory.mnemonic.approval import RequestedWrite
-    from zylch.memory.mnemonic.contracts import (
-        ACCOUNT_SCOPE,
-        CREATE,
-        OPERATOR_DELEGATED,
-        STYLE,
-        UPDATE,
-        MemoryEvent,
-        SubjectHint,
-    )
-    from zylch.memory.mnemonic.entry import EntryRefused, entry_for
-
-    try:
-        entry = entry or entry_for(fallback=content)
-    except EntryRefused as exc:
-        return {"action": "refused", "blob_id": target["id"] if target else None, "reason": str(exc)}
-    try:
-        company_key = require_company_key()
-    except RuntimeError as exc:
-        return {"action": "error", "blob_id": target["id"] if target else None, "reason": str(exc)}
-    event = MemoryEvent(
-        owner_id=owner_id,
-        company_key=company_key,
-        caller_class=OPERATOR_DELEGATED,
-        origin=entry.origin,
-        source_kind=entry.source_kind,
-        source_id=entry.source_id,
-        source_revision=entry.source_revision,
-        observation=entry.observation,
-        subject_hint=SubjectHint(entity_type=STYLE, target_blob_id=target["id"] if target else None),
-        explicit_request=explicit,
-        stage=entry.stage,
-        cancellation=entry.cancellation,
-    ).with_model_arguments({"content": content})
-    requested = (
-        RequestedWrite(
-            action=UPDATE,
-            blob_id=target["id"],
-            entity_type=STYLE,
-            scope=ACCOUNT_SCOPE,
-            subject_is_authoritative=True,
-        )
-        if target
-        else RequestedWrite(action=CREATE, entity_type=STYLE, scope=ACCOUNT_SCOPE)
-    )
-    return submit(event, requested=requested)
-
-
-def _not_written(result, blob_id: Optional[str], writer: str) -> Dict[str, Any]:
-    """The outcome dict for a submission that wrote nothing."""
-    if result.outcome == "skipped":
-        target = result.proposal.no_op_target if result.proposal else None
-        logger.info(f"[prefs] rule from writer={writer} already recorded: {result.reason}")
-        return {
-            "action": "duplicate",
-            "blob_id": target.blob_id if target else blob_id,
-            "reason": result.reason,
-        }
-    if result.outcome == "review_needed":
-        logger.info(f"[prefs] rule from writer={writer} needs review: {result.reason}")
-        return {"action": "review", "blob_id": blob_id, "reason": result.reason}
-    logger.warning(f"[prefs] rule from writer={writer} not written: {result.reason}")
-    return {"action": "error", "blob_id": blob_id, "reason": result.reason}
+    return not_written(result, blob_id, writer)
 
 
 def _blob_storage():

@@ -26,7 +26,7 @@ from zylch.services import correction_learning as cl
 from zylch.services import facts_store, preparation, prefs_store
 from zylch.storage import database as dbm
 from zylch.storage.database import get_session
-from zylch.storage.models import Blob, MemoryOperation
+from zylch.storage.models import Blob
 
 from tests.memory.mnemonic_env import (
     COMPANY_A,
@@ -150,23 +150,23 @@ def test_a_fact_the_role_declines_is_not_written_and_returns_none(profile, monke
 
 def test_an_entity_shaped_rule_and_an_exact_duplicate_never_reach_the_role(profile, monkeypatch):
     with_client(monkeypatch, client(create("STYLE", STYLE_HEADER + RULE, "account")))
-    assert prefs_store.store_rule(OWNER_A, RULE, "t", writer="test")["action"] == "created"
+    assert prefs_store.store_rule(OWNER_A, RULE, writer="test")["action"] == "created"
     seen = submitted(monkeypatch)
 
-    assert prefs_store.store_rule(OWNER_A, f"  {RULE.upper()}  ", "t", writer="test")["action"] == "duplicate"
+    assert prefs_store.store_rule(OWNER_A, f"  {RULE.upper()}  ", writer="test")["action"] == "duplicate"
     entity = "#IDENTIFIERS\nEntity type: STYLE\nName: Win-back\n#ABOUT\nx"
-    assert prefs_store.store_rule(OWNER_A, entity, "t", writer="test")["action"] == "refused"
+    assert prefs_store.store_rule(OWNER_A, entity, writer="test")["action"] == "refused"
     assert seen == []
 
 
 def test_a_superseding_rule_pins_the_candidate_and_names_an_update(profile, monkeypatch, embedder):
     with_client(monkeypatch, client(create("STYLE", STYLE_HEADER + RULE, "account")))
-    first = prefs_store.store_rule(OWNER_A, RULE, "t", writer="test")
+    first = prefs_store.store_rule(OWNER_A, RULE, writer="test")
     assert first["action"] == "created"
     seen = submitted(monkeypatch)
     extended = RULE + " Always sign as the team, never with an invented first name."
 
-    outcome = prefs_store.store_rule(OWNER_A, extended, "t", writer="test")
+    outcome = prefs_store.store_rule(OWNER_A, extended, writer="test")
 
     assert outcome["action"] == "review"  # captured, not decided
     (event, requested), = seen
@@ -183,14 +183,14 @@ def test_a_superseding_rule_pins_the_candidate_and_names_an_update(profile, monk
 
 def test_a_superseding_rule_the_role_accepts_is_superseded_in_place(profile, monkeypatch, embedder):
     with_client(monkeypatch, client(create("STYLE", STYLE_HEADER + RULE, "account")))
-    first = prefs_store.store_rule(OWNER_A, RULE, "t", writer="test")
+    first = prefs_store.store_rule(OWNER_A, RULE, writer="test")
     extended = RULE + " Always sign as the team, never with an invented first name."
     with_client(
         monkeypatch,
         client(update("STYLE", STYLE_HEADER + extended, "account", first["blob_id"], version_of(first["blob_id"], embedder))),
     )
 
-    outcome = prefs_store.store_rule(OWNER_A, extended, "t", writer="test")
+    outcome = prefs_store.store_rule(OWNER_A, extended, writer="test")
 
     assert outcome == {"action": "superseded", "blob_id": first["blob_id"], "reason": "extends an existing rule"}
     assert blobs()[first["blob_id"]] == (f"template:{OWNER_A}", STYLE_HEADER + extended)
@@ -199,10 +199,10 @@ def test_a_superseding_rule_the_role_accepts_is_superseded_in_place(profile, mon
 
 def test_a_refinement_pins_the_row_with_an_authoritative_baseline(profile, monkeypatch):
     with_client(monkeypatch, client(create("STYLE", STYLE_HEADER + "RULE: v1", "account")))
-    rid = prefs_store.store_rule(OWNER_A, "RULE: v1", "t", writer="test")["blob_id"]
+    rid = prefs_store.store_rule(OWNER_A, "RULE: v1", writer="test")["blob_id"]
     seen = submitted(monkeypatch)
 
-    outcome = prefs_store.refine_rule(OWNER_A, rid, "RULE: v2 refined", "t", writer="test")
+    outcome = prefs_store.refine_rule(OWNER_A, rid, "RULE: v2 refined", writer="test")
 
     assert outcome["action"] == "review"
     (event, requested), = seen
@@ -240,7 +240,7 @@ def test_inside_a_run_but_outside_an_item_the_helpers_refuse_and_write_nothing(p
         with pytest.raises(EntryRefused):
             entry_for(fallback="x")
         assert facts_store.upsert_fact(OWNER_A, "pricing", "list", "EUR 1") is None
-        assert prefs_store.store_rule(OWNER_A, RULE, "t", writer="test")["action"] == "refused"
+        assert prefs_store.store_rule(OWNER_A, RULE, writer="test")["action"] == "refused"
     assert seen == [] and blobs() == {}
 
 
@@ -281,6 +281,18 @@ class _Judge:
         return SimpleNamespace(stop_reason="tool_use", content=[SimpleNamespace(input=data)])
 
 
+def preparation_rows():
+    """Every preparation row in the profile database, as stored."""
+    import os
+    import sqlite3
+
+    with sqlite3.connect(os.environ["ZYLCH_DB_PATH"]) as conn:
+        return {
+            table: conn.execute(f'SELECT * FROM "{table}" ORDER BY rowid').fetchall()
+            for table in ("preparation_state", "preparation_attempts")
+        }
+
+
 CORRECTION = {
     "tool_name": "send_email",
     "proposed": {"to": "buyer@acme.test", "body": "Our rate is 700 EUR/day."},
@@ -292,7 +304,7 @@ def test_correction_learning_submits_a_rule_and_a_fact_on_the_turns_handle(profi
     monkeypatch.setattr(cl, "_existing_rules", lambda owner_id: [])
     monkeypatch.setattr(cl, "_existing_fact_categories", lambda owner_id: [])
     seen = submitted(monkeypatch)
-    before = preparation.status(OWNER_A)
+    before = preparation.status(OWNER_A), preparation_rows()
 
     with revocable_turn() as handle:
         ids = cl.learn_from_corrections([CORRECTION], OWNER_A, client=_Judge())
@@ -308,7 +320,7 @@ def test_correction_learning_submits_a_rule_and_a_fact_on_the_turns_handle(profi
         assert "TO: buyer@acme.test" in event.observation
         assert "USER ACTUALLY SENT:\nOur rate is 800 EUR/day." in event.observation
     assert rule_event.source_id == fact_event.source_id and rule_event.event_id != fact_event.event_id
-    assert preparation.status(OWNER_A) == before
+    assert (preparation.status(OWNER_A), preparation_rows()) == before  # the rows, byte for byte
 
 
 def test_a_corrections_envelope_is_never_mined_for_identity(profile, monkeypatch):

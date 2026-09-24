@@ -358,7 +358,6 @@ def _write_rule(owner_id: str, content: str, entry=None) -> Optional[str]:
     outcome = store_rule(
         owner_id,
         content,
-        event_description="Learned from a message correction",
         writer="correction_learning",
         entry=entry,
     )
@@ -435,7 +434,6 @@ def learn_from_corrections(
                 category,
                 key,
                 value,
-                event_description="Learned from a message correction",
                 entry=entry,
             )
             if blob_id:

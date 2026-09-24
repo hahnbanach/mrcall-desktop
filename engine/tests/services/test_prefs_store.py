@@ -22,6 +22,7 @@ import pytest
 from zylch.services.prefs_store import (
     is_entity_shaped,
     normalise,
+    render,
     select_within_cap,
     store_rule,
 )
@@ -113,7 +114,7 @@ def test_entity_blobs_are_recognised():
 def test_entity_content_is_refused(fresh_db):
     from zylch.services.prefs_store import load_rules
 
-    outcome = store_rule(OWNER, ENTITY, "test", writer="unit")
+    outcome = store_rule(OWNER, ENTITY, writer="unit")
     assert outcome["action"] == "refused"
     assert load_rules(OWNER) == []
 
@@ -126,8 +127,8 @@ def test_identical_rule_is_stored_once(profile, monkeypatch):
     from zylch.services.prefs_store import load_rules
 
     with_client(monkeypatch, client(_create(RULE)))
-    assert store_rule(OWNER_A, RULE, "test", writer="unit")["action"] == "created"
-    second = store_rule(OWNER_A, f"  {RULE.upper()}  ", "test", writer="unit")
+    assert store_rule(OWNER_A, RULE, writer="unit")["action"] == "created"
+    second = store_rule(OWNER_A, f"  {RULE.upper()}  ", writer="unit")
     assert second["action"] == "duplicate"
     assert len(load_rules(OWNER_A)) == 1
 
@@ -137,10 +138,10 @@ def test_an_extended_rule_supersedes_in_place(profile, monkeypatch):
     from zylch.services.prefs_store import load_rules
 
     with_client(monkeypatch, client(_create(RULE)))
-    first = store_rule(OWNER_A, RULE, "test", writer="unit")
+    first = store_rule(OWNER_A, RULE, writer="unit")
     extended = RULE + " Always sign as the team, never with an invented first name."
     with_client(monkeypatch, client(_update(first["blob_id"], extended)))
-    outcome = store_rule(OWNER_A, extended, "test", writer="unit")
+    outcome = store_rule(OWNER_A, extended, writer="unit")
     assert outcome["action"] == "superseded"
 
     rules = load_rules(OWNER_A)
@@ -153,8 +154,8 @@ def test_a_rule_contained_in_an_existing_one_is_not_stored(profile, monkeypatch)
 
     extended = RULE + " Always sign as the team."
     with_client(monkeypatch, client(_create(extended)))
-    store_rule(OWNER_A, extended, "test", writer="unit")
-    assert store_rule(OWNER_A, RULE, "test", writer="unit")["action"] == "duplicate"
+    store_rule(OWNER_A, extended, writer="unit")
+    assert store_rule(OWNER_A, RULE, writer="unit")["action"] == "duplicate"
     assert len(load_rules(OWNER_A)) == 1
 
 
@@ -180,6 +181,18 @@ def test_a_rule_written_under_its_control_header_renders_and_compares_as_its_tex
 
 
 # ── read-side selection ────────────────────────────────────────────
+
+
+def test_the_cap_charges_a_rule_at_the_size_it_renders():
+    """Two headed rules whose bodies fit the cap are both kept, although
+    their raw contents — headers included — would not fit it."""
+    bodies = ["Rule one: " + "a" * 60, "Rule two: " + "b" * 60]
+    rows = [{"id": str(i), "content": STYLE_HEADER + body, "created_at": None} for i, body in enumerate(bodies)]
+    cap = len(bodies[0]) + 2 + len(bodies[1])
+    assert sum(len(r["content"]) for r in rows) > cap
+    kept, dropped = select_within_cap(rows, cap=cap)
+    assert [r["id"] for r in kept] == ["0", "1"] and dropped == []
+    assert len(render(kept)) == cap
 
 
 def test_a_big_stray_does_not_hide_the_rules_behind_it():

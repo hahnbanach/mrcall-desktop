@@ -306,15 +306,18 @@ def ingest(
         try:
             entities = _extract(parent, extract)
         except MnemonicRefusal as exc:
+            if parent.cancellation.cancelled:
+                # A stop before the grant: the source is untouched and retried.
+                return Ingestion(RETRYABLE_FAILURE, parent.event_id, f"extraction cancelled: {exc}")
             return _settle_parent(
                 parent, MnemonicResult.review_needed(parent.event_id, str(exc)), journal.REVIEW
             )
         except MnemonicAuthorizationError as exc:
-            return _settle_parent(
-                parent,
-                MnemonicResult.review_needed(parent.event_id, f"extraction refused: {exc}"),
-                journal.REVIEW,
-            )
+            # No admitted item, or a process since bound to another company
+            # memory: a later run can satisfy either, so the source stays
+            # retryable instead of parked in review.
+            logger.warning(f"[ingestion] extraction refused source={parent.source_ref}: {exc}")
+            return Ingestion(RETRYABLE_FAILURE, parent.event_id, f"extraction refused: {exc}")
         except BudgetError:
             raise
         except Exception as exc:  # noqa: BLE001 - extraction failed; the source is retried

@@ -320,6 +320,7 @@ def _get_learned_preferences(owner_id: str) -> str:
         learned_prefs_max_chars,
         load_rules,
         render,
+        rule_body,
         select_within_cap,
     )
 
@@ -329,7 +330,7 @@ def _get_learned_preferences(owner_id: str) -> str:
     if not rules:
         return ""
 
-    total = sum(len(r["content"]) for r in rules) + 2 * (len(rules) - 1)
+    total = sum(len(rule_body(r["content"])) for r in rules) + 2 * (len(rules) - 1)
     cap = learned_prefs_max_chars()
     if total <= cap:
         return render(rules)
