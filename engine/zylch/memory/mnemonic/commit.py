@@ -44,13 +44,13 @@ from zylch.memory.commit_permit import (
     abandon_permit,
     issue_commit_permit,
 )
-from zylch.memory.company_key import scoped_namespace
+from zylch.memory.company_key import family_of, scoped_namespace
 
 from . import journal
 from .agent import decide
 from .approval import RequestedWrite, departure_for
 from .authorization import MnemonicRefusal, authorize_request
-from .contracts import CREATE, MAX_DECISION_ATTEMPTS, MERGE, UPDATE, MemoryEvent
+from .contracts import CREATE, FACT, MAX_DECISION_ATTEMPTS, MERGE, UPDATE, MemoryEvent
 from .wiring import (
     CommitContext,
     candidates_for,
@@ -186,7 +186,7 @@ def _decide_and_commit(
             settled = decision.result or MnemonicResult.review_needed(
                 event.event_id, "the decision round produced no usable answer"
             )
-            return _settle(event, settled, proposal)
+            return _settle(event, settled, proposal, candidates)
 
         refusal = _unsupported(proposal, allow_actions)
         if refusal:
@@ -196,6 +196,7 @@ def _decide_and_commit(
                     event.event_id, refusal, proposal=proposal, attempts=decision.attempts
                 ),
                 proposal,
+                candidates,
             )
 
         # Recorded per round, because a CAS conflict re-decides and the new
@@ -277,19 +278,60 @@ def _unsupported(proposal: Proposal, allow_actions: Sequence[str]) -> str:
 
 
 def _settle(
-    event: MemoryEvent, result: MnemonicResult, proposal: Optional[Proposal]
+    event: MemoryEvent,
+    result: MnemonicResult,
+    proposal: Optional[Proposal],
+    candidates: Sequence[Any] = (),
 ) -> MnemonicResult:
-    """Record a non-committing outcome, keeping the journal authoritative."""
+    """Record a non-committing outcome, keeping the journal authoritative.
+
+    A review that declined a shown FACT candidate as company knowledge records
+    a read restriction against it (:func:`restrictions_from`), which is why the
+    round's candidates travel here: a restriction is recorded only against a
+    row the role was actually shown, at the version it was shown.
+    """
     state = {
         "skipped": journal.SKIPPED,
         "review_needed": journal.REVIEW,
         "retryable_failure": journal.FAILED,
     }.get(result.outcome, journal.FAILED)
+    restrictions = (
+        restrictions_from(proposal, candidates) if state == journal.REVIEW and proposal else []
+    )
     try:
-        journal.record_result(event.event_id, result, state=state, proposal=proposal)
+        journal.record_result(
+            event.event_id, result, state=state, proposal=proposal, restrictions=restrictions
+        )
     except journal.JournalError as exc:
         return MnemonicResult.retryable_failure(event.event_id, str(exc))
     return result
+
+
+def restrictions_from(proposal: Proposal, candidates: Sequence[Any]) -> list:
+    """The read restrictions a review records: shown facts-family rows it named.
+
+    Two ways a review names a FACT it will not treat as company knowledge — its
+    own ``ineligible`` list, and the origin of a reclassification away from
+    FACT on a mutating proposal the commit turned into a review. Either way the
+    row must be among the candidates the role was shown and live in the facts
+    family; anything else is ignored, never recorded.
+    """
+    shown = {c.blob_id: c for c in candidates}
+    named = list(proposal.ineligible)
+    move = proposal.reclassification
+    if move is not None and move.from_entity_type == FACT and proposal.target is not None:
+        named.append(proposal.target.blob_id)
+    found = []
+    seen = set()
+    for blob_id in named:
+        candidate = shown.get(blob_id)
+        if candidate is None or blob_id in seen:
+            continue
+        if family_of(candidate.namespace) != "facts":
+            continue
+        seen.add(blob_id)
+        found.append({"blob_id": blob_id, "version": candidate.updated_at})
+    return found
 
 
 def _record_failure(
