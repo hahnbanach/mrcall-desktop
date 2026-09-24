@@ -13,9 +13,13 @@ from zylch.services.voice.current_time import CurrentTime
 from zylch.services.voice.smoke_transport import command
 
 logger = logging.getLogger(__name__)
+CORRECTION_QUIET_SECONDS = 1.2  # Scheduling heuristic, not a provider turn-complete signal.
 NO_FURTHER_RESPONSE = "[NO_FURTHER_RESPONSE]"
 BACKEND_RULES = """You are the engine's customer-service assistant for one telephone call.
 You own substantive answers and choose tools; the engine only executes them.
+These backend role rules override any shared configuration about voice behavior.
+Greeting instructions in configuration apply only to GPT-Live. Never greet, restart
+the call or ask how you can help: answer the latest substantive request directly.
 Use the preloaded caller_context facts directly when sufficient; do not repeat a
 lookup just to confirm identical facts. Use only explicitly enabled tools and
 provided facts. For current time use get_current_time with an explicit IANA zone;
@@ -48,7 +52,13 @@ backend, including business facts, follow-ups and current time. GPT-6 interprets
 the request, chooses tools and authors the answer using permitted caller context.
 Do not independently answer substantive questions or invent identity, facts,
 progress or completed operations. Do not promise to check an unavailable system.
-A short natural acknowledgement is optional, never a substitute for the answer.
+These voice role rules override shared configuration about substantive answers.
+You have no independent access to orders, identity, memory, tools or the clock.
+The caller mentioning an order is not evidence that you can see such an order.
+Before receiving backend commentary for a request, either stay quiet or give only
+a neutral acknowledgement such as "Un attimo." Never say you see, found, know,
+checked or are checking information; never anticipate results or promise actions.
+The initial greeting is the only exception to waiting for substantive answers.
 Present backend commentary promptly in the caller's language, preserving material
 facts, uncertainty and missing information; do not repeat content already spoken.
 If the caller corrects a request, stop the obsolete answer and delegate the latest
@@ -110,6 +120,9 @@ class Conversation:
         self.run_number = 0
         self.memory.trace = trace
         self.active_revisions = None
+        self.input_changed = asyncio.Event()
+        self.last_input_at = 0
+        self.delegated_revision = -1
         self.agent = VoiceAgent(
             check_current=self._check_current,
             tools=[
@@ -118,7 +131,7 @@ class Conversation:
                 if tool.name in snapshot.config.tools
             ],
             client=client,
-            customer_service_instructions=BACKEND_RULES + "\n" + snapshot.config.instructions,
+            customer_service_instructions=snapshot.config.instructions + "\n" + BACKEND_RULES,
             max_tokens=(128000 if unlimited and client.transport == "openai_voice" else 512),
         )
         self.transcript = []
@@ -149,6 +162,27 @@ class Conversation:
             self.active_revisions is not None and self.active_revisions[0] != self.revision
         ):
             raise SupersededRun()
+
+    async def _settle_correction(self):
+        """Coalesce unfinished corrections; a fresh delegation can release early."""
+        self.record("correction_wait_started")
+        while not self.closed and self.delegated_revision != self.revision:
+            self.input_changed.clear()
+            remaining = CORRECTION_QUIET_SECONDS - (time.monotonic() - self.last_input_at)
+            if remaining <= 0:
+                break
+            try:
+                await asyncio.wait_for(self.input_changed.wait(), remaining)
+            except TimeoutError:
+                break
+        self.record(
+            "correction_wait_finished",
+            trigger=(
+                "closed"
+                if self.closed
+                else "delegation" if self.delegated_revision == self.revision else "input_quiet"
+            ),
+        )
 
     async def _greet(self):
         try:
@@ -226,6 +260,8 @@ class Conversation:
                 raise ValueError("Voice transcript limit exceeded")
             if role == "caller":
                 self.revision += 1
+                self.last_input_at = time.monotonic()
+                self.input_changed.set()
             else:
                 self.voice_revision += 1
                 self.evidence.setdefault(
@@ -243,6 +279,8 @@ class Conversation:
                 raise ValueError("Voice delegation limit exceeded")
             self.seen.add(identifier)
             self.pending.append(identifier)
+            self.delegated_revision = self.revision
+            self.input_changed.set()
             if self.worker is None or self.worker.done():
                 self.worker = asyncio.create_task(self._work())
 
@@ -252,7 +290,13 @@ class Conversation:
             # bounded lookup, while the socket reader continues accumulating input.
             if self.lookup:
                 await asyncio.shield(self.lookup)
+            reconcile = False
             while self.pending and not self.closed:
+                if reconcile:
+                    await self._settle_correction()
+                if self.closed:
+                    return
+                reconcile = False
                 revision = self.revision
                 voice_revision = self.voice_revision
                 self.active_revisions = (revision, voice_revision)
@@ -285,6 +329,7 @@ class Conversation:
                     self.agent.conversation_history[:] = history
                     self.record("backend_superseded_at_boundary")
                     self.evidence["reconciliations"] = self.evidence.get("reconciliations", 0) + 1
+                    reconcile = True
                     continue
                 self.record("backend_answer", answer=answer, answer_revision=revision)
                 if self.closed:
@@ -296,6 +341,7 @@ class Conversation:
                 if revision != self.revision:
                     self.record("answer_superseded", answer_revision=revision)
                     self.evidence["reconciliations"] = self.evidence.get("reconciliations", 0) + 1
+                    reconcile = True
                     continue
                 # New delegations during this run describe the same accumulated
                 # conversation; resolve them with one answer, never parallel agents.
@@ -311,6 +357,7 @@ class Conversation:
                     self.evidence["results_sent"] += 1
                 else:
                     self.pending = ids + self.pending
+                    reconcile = True
         except asyncio.CancelledError:
             raise
         except Exception as exc:

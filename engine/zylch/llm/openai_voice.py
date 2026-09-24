@@ -15,7 +15,7 @@ import httpx
 from .budget_pricing import BudgetError, _content
 
 MODEL = "gpt-6-sol"
-FUNCTIONS = frozenset({"caller_memory", "get_current_time"})
+FUNCTIONS = ("caller_memory", "get_current_time")
 MAX_OUTPUT_TOKENS = 128000  # Provider capacity, not a conversation limit.
 
 

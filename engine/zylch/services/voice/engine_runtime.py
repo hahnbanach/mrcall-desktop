@@ -125,7 +125,7 @@ class EngineVoiceRuntime(SmokeRuntime):
 
     async def accept_call(self, call):
         return await self.transport.accept(
-            call.session_id, VOICE_RULES + "\n" + call.prepared.snapshot.config.instructions
+            call.session_id, call.prepared.snapshot.config.instructions + "\n" + VOICE_RULES
         )
 
     def attached(self, call, ws):

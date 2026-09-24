@@ -98,6 +98,33 @@ integration APPROVED after four independently passing lifecycle tests.
 Before autonomous calls: 57 settled GPT-6 requests, estimated USD0.137293,
 no unresolved OpenAI reservations; two old proxy holds total USD0.110 unchanged.
 
+### Correction-fragment scheduling follow-through
+
+The first autonomous correction trace (`call-ff6c480d2d02447e84a8062bd247815c.db`)
+proves stale New York/tracking answers are suppressed and corrected Rome/time/date
+answers reach voice. It also exposes seven semantic runs/five invalidations caused
+by immediately re-dispatching incomplete caller fragments. The lead will coalesce
+only superseded work: wait for a new delegation at the current caller revision,
+or 1.2 seconds of input quiet if no new delegation arrives. Initial dispatch is
+unchanged; this is cancellable scheduling, not a conversation/duration/attempt
+ceiling or an assertion of a provider turn-complete event. Voice progress does
+not affect the wait. Verify complete correction dispatch, no-new-delegation
+fallback and close cancellation; repeat the same real carrier scenario after
+independent integration review and idle smoke-only activation. Preserve every
+reservation and inspect the new trace before claiming improved latency.
+
+The autonomous lookup-failure trace (`call-3f15e1ef4f894d5483ed568542d097b2.db`)
+FAILED greeting/voice grounding: the greeting instruction was sent and acknowledged,
+but no greeting transcript preceded caller speech. With no facts supplied to voice,
+GPT-Live independently claimed to see a filter order before GPT-6's safe unavailable
+answer. GPT-6 corrected that claim on the next turn, which is insufficient acceptance.
+Shared configuration also made GPT-6 include a late greeting. Tighten role-specific
+instruction precedence after shared configuration: backend never greets; before a
+backend answer voice uses only silence/neutral acknowledgement, no claimed facts,
+access or operations. Keep actual facts backend-only. Test prompt wiring, review,
+and repeat lookup-failure call. Do not claim the cause of the provider's ignored
+greeting is known, or a prompt can guarantee against every unsupported generation.
+
 ### Autonomous phone tests authorized — 2026-09-24
 
 The operator must leave and explicitly requests autonomous test calls. Use a

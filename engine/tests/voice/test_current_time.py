@@ -12,11 +12,26 @@ from tests.voice.m2_fixture import KNOWN, NUMBER, configuration
 from tests.voice.test_agent_config import save
 from tests.voice.test_openai_voice import client_with, reply
 from zylch.llm.budget import budget_snapshot
+from zylch.llm.budget_pricing import BudgetError
+from zylch.llm.openai_voice import MODEL, request_bound
 from zylch.services.voice import current_time
 from zylch.services.voice.agent_config import VoiceError, snapshot_for_call
 from zylch.services.voice.caller_memory import CallerMemory
 from zylch.services.voice.conversation import Conversation
 from zylch.services.voice.current_time import CurrentTime
+
+
+@pytest.mark.parametrize("name", ["shell", ["get_current_time"], {"tool": "get_current_time"}])
+def test_unknown_or_malformed_tool_name_fails_before_dispatch(name):
+    with pytest.raises(BudgetError):
+        request_bound(
+            {
+                "model": MODEL,
+                "max_tokens": 128,
+                "messages": [{"role": "user", "content": "time?"}],
+                "tools": [{"name": name, "input_schema": {"type": "object"}}],
+            }
+        )
 
 
 @pytest.mark.parametrize("month,offset", [(1, 3600), (7, 7200)])

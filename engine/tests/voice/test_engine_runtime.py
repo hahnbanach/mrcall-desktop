@@ -13,6 +13,7 @@ from tests.voice.test_agent_config import save
 from tests.voice.test_conversation import make_conversation, response, until
 from tests.voice.test_vonage import CARRIER, signed
 from zylch.services.voice import engine_runtime
+from zylch.services.voice.conversation import BACKEND_RULES, VOICE_RULES
 from zylch.services.voice.live_sip_smoke import create_app
 from zylch.storage.voice_smoke import SmokeLedger
 
@@ -81,6 +82,8 @@ def test_full_lifecycle_snapshot_and_followup(fixture_db, tmp_path, monkeypatch)
             assert first.conversation.context["recognition"] == "matched"
             assert len(first.conversation.context["facts"]) == 2
             assert "Greet immediately" in transport.instructions[0]
+            assert transport.instructions[0].endswith(VOICE_RULES)
+            assert first.conversation.agent.customer_service_instructions.endswith(BACKEND_RULES)
             save(configuration() | {"instructions": "NEXT CALL ONLY"})
             assert "NEXT CALL ONLY" not in first.conversation.agent.customer_service_instructions
             transport.socket.events.put_nowait(
