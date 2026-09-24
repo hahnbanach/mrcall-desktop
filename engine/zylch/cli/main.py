@@ -380,13 +380,13 @@ def memory_status(ctx):
 def memory_sweep(ctx):
     """Consolidate this company's memory now: retention, then duplicate entities.
 
-    Same operation the desktop Settings Maintenance card runs, and the one
-    the daemon runs after each update, inside one bounded preparation run
-    like theirs (a paused or running preparation answers skipped); once per
-    company (another engine holding the lock makes this a no-op that says
-    so). Pairs need an LLM: BYOK key in the profile, or a live MrCall
-    session — a profile in credits mode with no session answers no_llm,
-    after retention has run.
+    Same operation the desktop Settings Maintenance card runs and the daemon
+    runs after each update, inside one bounded preparation run like theirs (a
+    paused or running preparation answers skipped); once per company (another
+    engine holding the lock makes this a no-op that says so). Pairs need an
+    LLM: BYOK key in the profile, or a live MrCall session — a credits profile
+    with no session answers no_llm after retention and exits 2, as it does when
+    the company memory or its journal cannot answer.
     """
     import asyncio
 
@@ -395,7 +395,7 @@ def memory_sweep(ctx):
     profile = _setup_profile(profile_name, lock=False)
     logger.info(f"[CLI] memory-sweep profile={profile}")
     from zylch.cli.utils import get_owner_id
-    from zylch.memory.consolidation import consolidate, summary_lines
+    from zylch.memory.consolidation import consolidate, failed, summary_lines
     from zylch.services.preparation import PreparationStopped, preparation_run
     from zylch.storage.storage import Storage
 
@@ -409,7 +409,7 @@ def memory_sweep(ctx):
         return
     for line in summary_lines(summary):
         click.echo(line)
-    if summary.get("no_llm"):
+    if summary.get("no_llm") or failed(summary):
         raise SystemExit(2)
 
 

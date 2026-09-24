@@ -80,7 +80,7 @@ async def memory_reconsolidate_now(params: Dict[str, Any], notify: NotifyFn) -> 
     Implementation lives in zylch.memory.consolidation — this RPC is a
     thin wrapper for the Settings button.
     """
-    from zylch.memory.consolidation import consolidate
+    from zylch.memory.consolidation import consolidate, failed
 
     owner_id = _owner_id()
     logger.debug(f"[rpc] memory.reconsolidate_now owner_id={owner_id}")
@@ -90,6 +90,11 @@ async def memory_reconsolidate_now(params: Dict[str, Any], notify: NotifyFn) -> 
         logger.exception(f"[rpc] memory.reconsolidate_now failed: {e}")
         return {"ok": False, "error": str(e)}
     logger.debug(f"[rpc] memory.reconsolidate_now -> {summary}")
+    # The card reads `skipped` as another engine's lock; a run that could not
+    # happen because memory or its journal is broken is an error, not a rest.
+    failure = failed(summary)
+    if failure:
+        return {"ok": False, "error": failure, **summary}
     return {"ok": True, **summary}
 
 

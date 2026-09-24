@@ -1282,19 +1282,24 @@ summary dict. `memory.reconsolidate_now` runs consolidation
 task-reference follow-ups, applies the version-retention policy, then folds
 duplicate entities — the same "John Smith PERSON" spread across several
 blobs — each pair decided by the mnemonic role and committed as one MERGE. It
-answers `{ok: true, ...summary}`, or `{ok: false, error}`. It forces the run;
-the daemon's own post-update run is gated on the store's change counter. The
-summary always carries its whole shape:
+answers `{ok: true, ...summary}`; `{ok: false, error, ...summary}` when company
+memory is unavailable or the operation journal cannot answer (the run did not
+happen, and `error` says why); `{ok: false, error}` when it raised. It forces
+the run; the daemon's own post-update run is gated on the store's change
+counter. The summary always carries its whole shape:
 
-- `skipped`, `reason` — nothing changed since the last sweep, another engine
-  holds the company's sweep lock, company memory is unavailable, or the
-  operation journal cannot answer;
+- `skipped`, `reason` — the run did not happen: with `ok: true`, nothing
+  changed since the last sweep or another engine holds the company's sweep
+  lock; with `ok: false`, the failure above;
 - `no_llm` — no LLM transport for this profile; retention still ran;
 - `groups_examined`, `blobs_examined`, `blobs_merged`, `blobs_kept_distinct`,
-  `pair_cap_hit`, `aborted_overload` — what the Settings card shows;
+  `pair_cap_hit` — what the Settings card shows;
+- `aborted_overload` — two consecutive pairs failed on an overloaded provider,
+  and the run stopped;
 - `pairs_decided`, `pairs_settled_before`, `pairs_review`, `pairs_failed`,
-  `pairs_changed`, `pairs_without_evidence`, `pairs_deferred`, `stopped` (the
-  preparation or budget refusal that ended the loop);
+  `pairs_changed`, `pairs_without_evidence`, `pairs_deferred`, `stopped` (what
+  ended the loop early: a preparation or budget refusal, an exhausted batch,
+  no preparation run, or a journal that stopped answering mid-run);
 - `merge_suspended`, `pairs_pending_review` — the merge gate was unhealthy and
   no pair was decided;
 - `references_resolved`, `references_pending` — the task-reference follow-ups;

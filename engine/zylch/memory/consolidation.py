@@ -89,6 +89,21 @@ _PAIR_LABELS = (
 )
 
 
+def failed(summary: Dict[str, Any]) -> Optional[str]:
+    """Why a run did not happen because something is broken, or ``None``.
+
+    ``skipped`` also covers the two ordinary reasons a run rests — nothing
+    changed since the last sweep, another engine holds the lock — which are no
+    failure. Company memory that is unavailable, or an operation journal that
+    cannot answer, is one: the Settings button answers it as an error and
+    ``zylch memory-sweep`` exits 2, rather than letting a caller read it as a
+    rest.
+    """
+    if not summary.get("skipped") or summary.get("reason") in (NOTHING_CHANGED, ANOTHER_ENGINE):
+        return None
+    return str(summary.get("reason") or "consolidation could not run")
+
+
 def empty_summary(**values: Any) -> Dict[str, Any]:
     """The summary's whole shape, zeroed, with ``values`` set on it."""
     summary: Dict[str, Any] = {
@@ -259,6 +274,7 @@ async def _decide_pairs(
     from zylch.memory.llm_merge import LLMMergeService
     from zylch.memory.mnemonic.candidates import pinned
     from zylch.memory.mnemonic.pairs import PairItem, has_evidence, pair, settled
+    from zylch.memory.mnemonic.session import JournalError
     from zylch.services.preparation import current_run
     from zylch.storage.database import get_session
 
@@ -288,7 +304,15 @@ async def _decide_pairs(
             if len(members) != 2 or not has_evidence(event, *members):
                 summary["pairs_without_evidence"] += 1
                 continue
-            if settled(event) is not None:
+            try:
+                answered = settled(event)
+            except JournalError as exc:
+                # Retention and any merges before this pair are committed and
+                # counted; the run ends here and says why.
+                logger.warning(f"[consolidate] the journal cannot answer: {exc}")
+                summary["stopped"] = f"{JOURNAL_UNAVAILABLE}: {exc}"
+                return
+            if answered is not None:
                 summary["pairs_settled_before"] += 1
                 continue
             if gate is None:
@@ -418,5 +442,6 @@ __all__ = [
     "PAIR_CAP",
     "consolidate",
     "empty_summary",
+    "failed",
     "summary_lines",
 ]

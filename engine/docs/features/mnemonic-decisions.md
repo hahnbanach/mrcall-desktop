@@ -101,9 +101,9 @@ paired") without a paid call; the next run pairs the changed blobs afresh.
 Two checks need no model and run before a pair is admitted. `has_evidence` is
 the validator's own identity rule on the same inputs: members that state
 different types, or a type other than PERSON or COMPANY, or whose stated type's
-rule finds no evidence in the hint, can only end in a refused merge, so they
-cost nothing (`pairs_without_evidence`); an untyped pair is judged by the weaker
-COMPANY rule. `settled` finds a terminal row this store already recorded for
+rule finds no evidence in the hint, can only end in a refused merge or a
+reclassification review, so they cost nothing (`pairs_without_evidence`); an
+untyped pair is judged by the weaker COMPANY rule. `settled` finds a terminal row this store already recorded for
 the pair's `source_ref`, by any account, that carries the role's proposal; the
 answer stands until a member changes (`pairs_settled_before`). A review a
 refusal produced before the role answered carries no proposal and does not

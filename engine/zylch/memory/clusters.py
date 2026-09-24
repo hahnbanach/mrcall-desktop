@@ -65,10 +65,11 @@ def entity_family(
 def _extract_canonical_name(content: str) -> Optional[str]:
     """Pull a canonical entity name from a blob's structured-format body.
 
-    The merge prompt mandates an `#IDENTIFIERS\\nEntity type: ...\\nName: ...`
-    layout, so we can rely on a "Name:" line being present in any
-    well-formed blob. Falls back to None when the line is missing or
-    empty (e.g. legacy blobs with free-form content).
+    The mnemonic role's content template mandates an
+    `#IDENTIFIERS\\nEntity type: ...\\nName: ...` layout, so we can rely on a
+    "Name:" line being present in any well-formed blob. Falls back to None
+    when the line is missing or empty (e.g. legacy blobs with free-form
+    content).
 
     The line format is structured by us, not free-form prose, so a
     line-prefix check is allowed under the engine's parsing rules.

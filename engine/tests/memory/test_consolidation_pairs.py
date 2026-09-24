@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import pytest
 
+from zylch.memory import consolidation
 from zylch.memory.mnemonic import journal
 from zylch.memory.mnemonic.contracts import (
     AUTOMATIC,
@@ -212,6 +213,19 @@ def test_a_sink_is_neither_paired_nor_pruned_and_is_named(store, monkeypatch):
     assert summary["version_sinks"] == [{"blob_id": sink, "versions": 26}]
     assert summary["groups_examined"] == 0 and transport.call_count == 0
     assert live(store, sink, twin) == {sink, twin} and version_count(sink) == 26
+
+
+def test_the_sink_report_reaches_the_cli_and_the_console_lines():
+    summary = consolidation.empty_summary(
+        blobs_versions_max=31,
+        version_sinks_total=3,
+        version_sinks=[{"blob_id": "b-1", "versions": 31}, {"blob_id": "b-2", "versions": 27}],
+    )
+    lines = consolidation.summary_lines(summary)
+
+    assert "versions: 0 pruned; the most any memory holds is 31" in lines
+    assert "  b-1: 31 versions" in lines and "  b-2: 27 versions" in lines
+    assert any(line.startswith("  and 1 more") for line in lines)
 
 
 def test_a_row_a_review_restricted_is_never_clustered(store, monkeypatch):

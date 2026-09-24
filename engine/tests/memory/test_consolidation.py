@@ -121,6 +121,16 @@ def test_the_cli_runs_inside_its_own_preparation_run_and_says_why_not(store, tmp
     assert ran.exit_code == 0, ran.output
     assert "merged 1, kept distinct 0" in ran.output and transport.call_count == 1
 
+    def unavailable(*args, **kwargs):  # a journal that cannot answer: the run failed
+        raise references.journal.JournalError("database is locked")
+
+    with monkeypatch.context() as patched:
+        patched.setattr(references.journal, "company_transaction", unavailable)
+        dbm.dispose_engine()
+        Storage._instance = None
+        broken = CliRunner().invoke(cli, ["-p", f"profile-{OWNER_A}", "memory-sweep"])
+    assert broken.exit_code == 2 and consolidation.JOURNAL_UNAVAILABLE in broken.output
+
     preparation.pause(OWNER_A)
     dbm.dispose_engine()
     Storage._instance = None
@@ -226,6 +236,45 @@ def test_a_journal_that_cannot_answer_skips_the_run_and_says_why(store, monkeypa
     assert summary["reason"] == f"{consolidation.JOURNAL_UNAVAILABLE}: database is locked"
 
 
+@pytest.mark.parametrize("broken", ["journal", "memory"])
+def test_the_button_answers_a_run_that_could_not_happen_as_an_error(store, monkeypatch, broken):
+    """The card reads `skipped` as another engine's lock; a broken store is no rest."""
+    from zylch.rpc import maintenance
+    from zylch.storage import database as dbm
+
+    as_the_triggers_resolve_it(monkeypatch)
+    if broken == "journal":
+
+        def unavailable(*args, **kwargs):
+            raise references.journal.JournalError("database is locked")
+
+        monkeypatch.setattr(references.journal, "company_transaction", unavailable)
+    else:
+        monkeypatch.setattr(dbm, "_memory_reason", "the company store file is missing")
+
+    result = asyncio.run(maintenance.memory_reconsolidate_now({}, lambda *a: None))
+
+    assert result["ok"] is False and result["error"] == result["reason"]
+    assert result["skipped"] is True and consolidation.failed(result) == result["error"]
+
+
+def test_a_journal_that_stops_answering_mid_run_ends_it_with_the_reason(store, monkeypatch):
+    from zylch.memory.mnemonic import journal, pairs
+
+    pair_of(store)
+    healthy(monkeypatch)
+    transport = scripted(monkeypatch)
+
+    def broken(event):
+        raise journal.JournalError("database is locked")
+
+    monkeypatch.setattr(pairs, "settled", broken)
+    summary = sweep()
+
+    assert summary["stopped"] == f"{consolidation.JOURNAL_UNAVAILABLE}: database is locked"
+    assert summary["groups_examined"] == 1 and transport.call_count == 0
+
+
 # ─── What a run does without pairs ────────────────────────────────────
 
 
@@ -280,6 +329,20 @@ def test_an_unhealthy_canary_suspends_every_pair_and_says_so(store, monkeypatch)
     assert live(store, keeper, donor, other_a, other_b) == {keeper, donor, other_a, other_b}
 
 
+def test_a_run_with_nothing_to_decide_pays_no_canary(store, monkeypatch):
+    """No stored verdict, so the policy would run the canary — but the only pair
+    has no identity evidence, and the gate is consulted only for a pair that
+    needs a decision."""
+    seed(store, person(ids="Email: luca@alpha.example\n", about=LONG))
+    seed(store, person(ids="Email: luca@beta.example\n", about=SHORT))
+    transport = scripted(monkeypatch)
+
+    summary = sweep()
+
+    assert summary["groups_examined"] == 1 and summary["pairs_without_evidence"] == 1
+    assert transport.call_count == 0 and summary["merge_suspended"] is False
+
+
 def test_the_callers_gate_is_obeyed_without_a_canary(store, monkeypatch):
     pair_of(store)
     transport = scripted(monkeypatch)
@@ -326,6 +389,18 @@ def test_two_overloaded_pairs_in_a_row_stop_the_run(store, monkeypatch):
 
     assert summary["aborted_overload"] is True and summary["pairs_failed"] == 2
     assert transport.call_count == 2
+
+
+def test_a_decided_pair_between_two_overloads_keeps_the_run_going(store, monkeypatch):
+    for name in ("Luca Bianchi", "Anna Verdi", "Marco Neri"):
+        pair_of(store, name=name)
+    healthy(monkeypatch)
+    transport = scripted(monkeypatch, OVERLOADED, skip_answer(), OVERLOADED)
+
+    summary = sweep()
+
+    assert summary["aborted_overload"] is False and summary["pairs_failed"] == 2
+    assert summary["blobs_kept_distinct"] == 1 and transport.call_count == 3
 
 
 def test_a_refused_budget_stops_the_run(store, tmp_path, monkeypatch):
