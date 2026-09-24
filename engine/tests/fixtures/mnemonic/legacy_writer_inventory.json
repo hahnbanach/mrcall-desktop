@@ -291,6 +291,14 @@
       "count": 1,
       "milestone": 5,
       "note": "the owner's delete and reset prune a blob's versions with the blob; never filtered on owner_id, which is the writer's provenance"
+    },
+    {
+      "path": "zylch/memory/blob_versions.py",
+      "symbol": "expire_versions",
+      "call": "orm:delete:BlobVersion",
+      "count": 1,
+      "milestone": 7,
+      "note": "the retention policy consolidation applies: a version older than the window and beyond its blob's floor is removed, a sink's never; its callers are pinned by tests/memory/test_consolidation_retention.py"
     }
   ],
   "orm_assignments": [

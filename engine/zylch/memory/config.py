@@ -69,6 +69,21 @@ class MemoryConfig(BaseSettings):
         default=1.5, description="Score multiplier for user-specific patterns vs global"
     )
 
+    # Retention of retained blob versions — the policy the consolidation
+    # operation applies, and nothing else does (memory/blob_versions.py). A
+    # value below 1 is refused rather than applied: these settings come from
+    # one profile and act on a company store every account shares.
+    version_retention_days: int = Field(
+        default=90, description="Age past which a version beyond the floor is pruned"
+    )
+    version_floor: int = Field(
+        default=10, description="Newest versions of each blob that are never pruned"
+    )
+    version_sink_threshold: int = Field(
+        default=25,
+        description="Append versions after a blob's latest restore that make it a sink",
+    )
+
     class Config:
         env_prefix = "MEMORY_"
         case_sensitive = False
