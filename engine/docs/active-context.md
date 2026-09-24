@@ -18,7 +18,7 @@ not a dependency of this explicitly selected test backend.
 
 M4 is active. Private opt-in SQLite traces correlate selected retrieval, backend
 answers, voice appends/acknowledgements, transcript deltas and timing; raw audio
-and hidden reasoning are excluded. Two real calls have positive caller feedback:
+and hidden reasoning are excluded. Three real calls have positive caller feedback:
 blue filters/Thursday are used, greeting precedes delayed lookup, revision-2
 configuration is spoken and an interrupted subject is explicitly corrected.
 The second call runs GPT-6 but hangs up before reconciliation finishes. Full
@@ -30,7 +30,9 @@ backend work. The revised controller snapshots text/revisions consistently and
 reconciles both caller and voice changes, consuming a no-response decision when
 already answered. Independent activation review passes 25 focused tests; four
 real GPT-6 replay scenarios and 220 voice/kernel/budget tests pass. The correction
-is active after an isolated cold restart; phone retesting is still required. Calls remain
+is active after an isolated cold restart. A third call confirms smooth spoken
+interruptions without repetition, but makes no delegation: the backend race and
+silent-decision path still need a phone demonstration. Calls remain
 isolated with all local experiment ceilings removed; ledger history, accounting
 and provider constraints are preserved. Service and tunnel have no expiry. See
 [configuration and diagnostics](features/voice-agent-configuration.md),

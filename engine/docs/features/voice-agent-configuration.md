@@ -232,8 +232,9 @@ append. Partial, incorrect answers and new questions still require useful replie
 Every delegated-answer append fragment checks both revisions and closure. New speech
 can postpone delivery while reconciliation runs; live latency remains an M4
 acceptance criterion. Transcript events describe provider output, not proof of
-handset playback. M4 listening confirms spoken correction on the earlier controller;
-the revised reconciliation path still needs a phone retest.
+handset playback. M4 listening confirms spoken correction on both controller
+versions. The corrected-controller phone call makes no backend delegation, so its
+reconciliation and silent-decision paths still need a phone demonstration.
 
 Hangup, deadline and daemon shutdown cancel asynchronous work and suppress late
 results. A dispatched blocking LLM request may finish and settle in its original

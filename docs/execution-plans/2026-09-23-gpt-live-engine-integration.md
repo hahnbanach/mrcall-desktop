@@ -344,10 +344,10 @@ APPROVED; fresh plan amendment review also APPROVED. Existing M1–M3 approvals 
 | Greeting before delayed lookup | First M4 call: first reflected audio 2,455 ms from admission; lookup 5,145 ms from attach; caller positive |
 | Blue filters / Thursday / follow-up / missing facts | First M4 call recalls both historical facts, caller positive; backend follow-up/correction pending |
 | Unknown / ambiguous identity | Pending explicit scenario evidence |
-| Correction during backend work / speech | Second call explicitly rectifies spoken subject; real backend draft superseded, reconciliation canceled on hangup. Revised controller retest pending |
+| Correction during backend work / speech | Second call rectifies spoken subject; backend draft superseded, reconciliation canceled on hangup. Third call confirms spoken interruptions on revised controller without repetition; no delegation, so backend race remains untested by phone |
 | Internal / other-customer exclusion | Existing local boundary tests; M4 call pending |
 | Lookup failure / forced close / no late output | Local failure/closure/suppression tests pass; real backend lookup-error passes; live phone scenarios pending |
-| Latency / costs / continuity | Two calls measured with positive listening feedback; revised controller continuity and remaining scenarios pending |
+| Latency / costs / continuity | Three calls measured with positive listening feedback, including revised-controller voice continuity; backend delivery and exceptional scenarios pending |
 | Independent final end-to-end review | REVISE: diagnostic implementation has no new blocker; full live criteria remain open |
 
 ## Verification and review record
@@ -460,6 +460,26 @@ APPROVED; fresh plan amendment review also APPROVED. Existing M1–M3 approvals 
   start before any RPC; follow-up lookup and reconciled backend delivery; live
   unknown/ambiguous callers, internal/other-customer exclusion, lookup failure,
   forced close and late suppression; corresponding listening, timing and costs.
+
+- Third real M4 call, 14:41:51–14:42:37 UTC, after corrected-controller cold start
+  before any operator RPC: private trace `call-1141babd9e0743989e7bf361fbead472.db`,
+  574 events, complete. Caller feedback: again excellent. Revision-2 greeting and
+  blue/Thursday history are spoken; when the caller changes subject, voice stops
+  and follows the identity question. A second interruption is also handled without
+  returning to the old answer. This supports voice continuity and spoken
+  interruption on the corrected runtime. No client delegation or backend run
+  occurs: it does **not** exercise the backend race, reconciliation or silent
+  decision, nor prove autonomous GPT-6 execution after cold start.
+- Third-call first reflected audio is 3,101 ms from admission; lookup 5,141 ms
+  from attachment including the five-second delay. Voice reports 45 seconds,
+  estimated USD0.037500. Both carrier legs complete at 46 seconds, total price
+  0.00322000 + 0.00345000 = 0.00667000 account units (currency omitted).
+  Six closed voice calls retain USD6 holds; backend usage remains 31 settled
+  requests/USD0.055282, with no unresolved OpenAI hold. Historical proxy holds
+  remain USD0.110. No code or runtime change is made in response to this call.
+- Independent end-to-end review of the third trace confirms voice continuity and
+  no newly demonstrated defect. Activation remains APPROVED; M4 remains REVISE
+  because this call does not exercise delegation or the outstanding live scenarios.
 
 ### M3 — 2026-09-24
 
