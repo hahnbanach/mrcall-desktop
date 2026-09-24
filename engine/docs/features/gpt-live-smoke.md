@@ -191,10 +191,23 @@ and [Voice webhooks](https://developer.vonage.com/en/voice/voice-api/webhook-ref
 ## M3 handoff
 
 The authorized M3 runner uses the same private profile directory and
-`voice-smoke.db`, preserving the original policy digest, paid rows and limits.
+`voice-smoke.db`, preserving the original policy digest and paid rows.
 `scripts/voice_engine_isolated.py` adds a separate `voice-engine.db`, controlled
 company memory and authenticated operator RPC. Its listener uses the M1 carrier
 admission/closure path with customer-service configuration and memory instead of
 the fixed fact. The original smoke entry point remains available for rollback;
 see [integrated configuration](voice-agent-configuration.md#integrated-isolated-daemon-m3).
 Both the dedicated smoke-named service and tunnel remain without automatic expiry.
+
+The operator subsequently removed all local test ceilings for M3. The saved
+`VOICE_ENGINE_UNLIMITED=1` override applies only when `OWNER_ID`,
+`VOICE_SMOKE_TEST_PROFILE` and `VOICE_ENGINE_ISOLATED_PROFILE` match the explicit
+profile directory name and that directory contains no ordinary `zylch.db`.
+An environment variable alone cannot enable it. It removes the attempt count,
+aggregate spending, engine daily budget, call duration, transcript and delegation
+ceilings. The original bounded mode described above remains the default.
+Reservations, receipts, duplicate rejection and unresolved-call handling remain.
+Historical per-call reservations are accounting records, not maximum prices for
+unlimited calls. The carrier NCCO omits the local duration limit; Vonage still
+imposes its own default/maximum of 7,200 seconds (see the linked NCCO reference).
+External provider credits and service limits still apply. No ledger reset is needed.

@@ -1,7 +1,8 @@
 """Small durable M1 test ledger, separate from customer/profile business data.
 
-No reset/refund API: at most six funded attempts and USD5 reserved for this
-supervised experiment, across restarts and UTC midnight. Uncertain calls block
+No reset/refund API: bounded mode permits at most six funded attempts and USD5
+reserved across restarts and UTC midnight. The isolated M3 override removes
+numeric test ceilings while retaining every row. Uncertain calls block
 further admission. Use one profile lock for the process and an immediate SQLite
 transaction for admission. Store no secrets, caller numbers, audio or transcripts.
 """
@@ -43,11 +44,20 @@ class SmokeCarrier(Base):
 class SmokeLedger:
     """Calls are keyed by session, not delivery ID, so redelivery never accepts twice."""
 
-    def __init__(self, path: Path, policy_id: str, reservation: int, max_calls: int) -> None:
+    def __init__(
+        self,
+        path: Path,
+        policy_id: str,
+        reservation: int,
+        max_calls: int,
+        *,
+        unlimited: bool = False,
+    ) -> None:
         if not 0 < reservation <= 5_000_000 or not 1 <= max_calls <= 6:
             raise ValueError("invalid smoke limits")
         self.reservation = reservation
         self.max_calls = max_calls
+        self.unlimited = unlimited
         self.engine = create_engine(f"sqlite:///{path}", connect_args={"timeout": 2})
         Base.metadata.create_all(self.engine)
         with self.engine.begin() as db:
@@ -91,7 +101,9 @@ class SmokeLedger:
                 SmokeCall.state.in_(["carrier_waiting", "accepting", "active", "uncertain"])
             )
         ).first()
-        return not unresolved and count < self.max_calls and held + self.reservation <= 5_000_000
+        return not unresolved and (
+            self.unlimited or (count < self.max_calls and held + self.reservation <= 5_000_000)
+        )
 
     def reserve_carrier(self, carrier_id: str, token_hash: str, *, allowed: bool) -> bool:
         """Commit before emitting any NCCO; retries never issue another connect."""

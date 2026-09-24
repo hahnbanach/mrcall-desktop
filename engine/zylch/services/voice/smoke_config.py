@@ -37,6 +37,7 @@ class SmokeConfig(BaseModel):
     voice_per_minute_microusd: int = Field(gt=0)
     carrier_per_minute_microusd: int = Field(ge=0)
     carrier_setup_microusd: int = Field(ge=0)
+    unlimited: bool = False
     result_delay_seconds: int = Field(default=5, ge=0, le=30)
     vonage_application_id: str | None = None
     vonage_api_key: SecretStr | None = None
@@ -88,10 +89,16 @@ class SmokeConfig(BaseModel):
 
     @property
     def policy_id(self) -> str:
-        """Pin the run to its public configuration, allowing secret rotation only."""
+        """Pin the original policy; the isolated override retains its accounting history."""
         public = self.model_dump(
             mode="json",
-            exclude={"api_key", "webhook_secret", "vonage_api_key", "vonage_signature_secret"},
+            exclude={
+                "api_key",
+                "webhook_secret",
+                "vonage_api_key",
+                "vonage_signature_secret",
+                "unlimited",
+            },
         )
         return hashlib.sha256(json.dumps(public, sort_keys=True).encode()).hexdigest()
 
@@ -127,7 +134,10 @@ def load_smoke_config(profile: Path) -> SmokeConfig:
         "vonage_api_key": "VONAGE_API_KEY",
         "vonage_signature_secret": "VONAGE_SIGNATURE_SECRET",
     }
+    from zylch.llm.model_policy import isolated_voice_unlimited
+
     data = {field: values.get(key) for field, key in fields.items()}
+    data["unlimited"] = isolated_voice_unlimited(values, profile)
     data.update({field: values[key] for field, key in optional.items() if key in values})
     try:
         return SmokeConfig(profile=profile, **data)

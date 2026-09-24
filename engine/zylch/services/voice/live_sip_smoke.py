@@ -56,6 +56,7 @@ def run_smoke_server(config: SmokeConfig, port: int) -> None:
         config.policy_id,
         config.reservation_microusd,
         config.max_calls,
+        unlimited=config.unlimited,
     )
 
     async def application() -> web.Application:

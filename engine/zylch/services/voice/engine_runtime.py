@@ -34,6 +34,8 @@ class EngineVoiceRuntime(SmokeRuntime):
         self.preparation_lock = asyncio.Lock()
 
     def _within_limits(self, snapshot):
+        if self.config.unlimited:
+            return not self.ledger.unresolved()
         rows = self.ledger.rows()
         held = sum(row["reserved_microusd"] for row in rows)
         count = sum(row["reserved_microusd"] > 0 for row in rows)
@@ -52,7 +54,7 @@ class EngineVoiceRuntime(SmokeRuntime):
 
             snapshot = await asyncio.to_thread(snapshot_for_call, self.config.test_number)
             budget = await asyncio.to_thread(budget_snapshot, snapshot.binding.owner_uid)
-            return self._within_limits(snapshot) and budget["remaining_usd"] > 0
+            return self._within_limits(snapshot) and not budget["paused"]
         except Exception:
             return False
 
@@ -131,7 +133,12 @@ class EngineVoiceRuntime(SmokeRuntime):
                 await ws.send(raw)
 
         call.conversation = Conversation(
-            prepared.snapshot, memory, prepared.client, send, call.evidence
+            prepared.snapshot,
+            memory,
+            prepared.client,
+            send,
+            call.evidence,
+            unlimited=self.config.unlimited,
         )
         call.conversation.start()
 

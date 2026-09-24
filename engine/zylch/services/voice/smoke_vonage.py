@@ -99,7 +99,7 @@ def add_vonage_routes(app: web.Application, runtime) -> None:
                 {
                     "action": "connect",
                     "timeout": 15,
-                    "limit": duration,
+                    **({} if config.unlimited else {"limit": duration}),
                     "endpoint": [
                         {"type": "sip", "uri": uri, "headers": {"Mrcall-Smoke-Attempt": token}}
                     ],

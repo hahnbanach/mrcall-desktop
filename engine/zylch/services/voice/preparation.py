@@ -24,7 +24,7 @@ async def prepare_client(snapshot):
             if session is None or session.uid != owner or session.is_expired():
                 raise ValueError("Voice credentials unavailable")
         state = budget_snapshot(owner)
-        if state["remaining_usd"] <= 0:
+        if state["paused"]:
             raise ValueError("Voice engine budget unavailable")
         client = make_llm_client()
         if client.transport == "proxy":

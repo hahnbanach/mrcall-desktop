@@ -34,6 +34,7 @@ def setup_runtime(tmp_path, monkeypatch, client, **config_changes):
         config.policy_id,
         config.reservation_microusd,
         config.max_calls,
+        unlimited=config.unlimited,
     )
     transport = VoiceTransport()
     transport.ledger = ledger

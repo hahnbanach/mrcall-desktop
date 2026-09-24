@@ -32,6 +32,7 @@ async def voice_listener(config, port):
         config.policy_id,
         config.reservation_microusd,
         config.max_calls,
+        unlimited=config.unlimited,
     )
     transport = LiveTransport(config)
     runtime = EngineVoiceRuntime(config, ledger, transport)
@@ -44,7 +45,11 @@ async def voice_listener(config, port):
 
         async def health(_request):
             return web.json_response(
-                {"runtime": "engine_listener", "calls_available": await runtime.available()}
+                {
+                    "runtime": "engine_listener",
+                    "calls_available": await runtime.available(),
+                    "test_limits": "unlimited" if config.unlimited else "bounded",
+                }
             )
 
         app.router.add_get("/healthz", health)

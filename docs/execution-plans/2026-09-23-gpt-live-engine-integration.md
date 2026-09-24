@@ -248,7 +248,17 @@ missing access or a failed live scenario remains explicit unfinished work.
 
 ### M3 — 2026-09-24
 
-- Operator authorized only M3, including deterministic verification, integrated
+**Latest operator instruction — supersedes earlier test caps:** remove all local
+experiment limits. Unlimited incoming attempts, call duration and local engine/test
+spending are authorized in this isolated profile. Do not request another approval
+for a third call or test cost. Keep the accounting history and technical isolation;
+this does not create external MrCall credit or authorize production changes. M4
+remains excluded. The explicit saved `VOICE_ENGINE_UNLIMITED=1` mode removes local
+attempt, spend, duration, transcript and delegation ceilings while retaining all
+ledger history and receipts. Ordinary profiles remain bounded. Omitting the local
+carrier duration still leaves Vonage's provider maximum/default of 7,200 seconds.
+
+- Initial authorization (numeric limits superseded above): only M3, including deterministic verification, integrated
   demonstration and independent review. Preserve the existing ledger, limits and
   unlimited service/tunnel lifetime. Use isolated synthetic memory only.
 - Baseline: clean branch `gpt-live-m1`, accepted M2 `c6c1fcf`; whole-engine Ruff
@@ -257,7 +267,7 @@ missing access or a failed live scenario remains explicit unfinished work.
   Do not repeatedly ask for cost/budget confirmation or treat the inherited M1
   zero-engine budget as a product blocker. Configure the isolated test engine's
   allowance to perform M3 reasoning, keeping durable reservations and accounting.
-  Start with USD3 engine allowance within the existing USD5 combined experiment
+  Initially use USD3 engine allowance within the former USD5 combined experiment
   ceiling (USD2 retained voice/carrier holds). Do not reset the existing ledger,
   alter production budgets, or add automatic service/tunnel expiry.
 
@@ -324,13 +334,22 @@ missing access or a failed live scenario remains explicit unfinished work.
   complete M3 is **NOT APPROVED**, because integrated live acceptance has not passed.
   The reviewer checked the final code/tests and truthful documentation boundaries.
 - Live M3 remains incomplete. The original two voice attempts are both closed,
-  with USD2 retained, and the two-attempt admission ceiling is unchanged. The
-  user's spending authorization is recorded above; their separate instruction
-  to preserve existing limits remains in effect. A repeat needs a funded MrCall
-  account and explicit authorization for another attempt. Do not switch billing
+  with USD2 retained. The latest instruction above supersedes the two-attempt
+  admission ceiling and numeric spending ceilings. A repeat needs a funded MrCall
+  business; further cost/attempt approval is not required. Do not switch billing
   provider, create production credits, reset the ledger, or call this M3 accepted.
-  Services remain active without automatic expiry, and `/healthz` reports calls
-  unavailable while the allowance is exhausted. M4 is unstarted.
+  Services remain without automatic expiry. M4 is unstarted.
+- Isolated unlimited mode is now active after **207 passing voice/LLM tests**
+  and independent activation approval (**7 focused tests**). The original
+  unreadable-budget error contract and ordinary-profile ceilings are preserved.
+  Ambient-only flags, incorrect markers and populated profiles cannot enable it.
+  Restart preserved the original ledger contents exactly. Local `/healthz`
+  reports `calls_available: true`, `test_limits: "unlimited"`; both services
+  remain active with `RuntimeMaxUSec=infinity`. No extra call was placed.
+  Engine-package and changed voice/script Ruff checks, voice formatting and
+  the mechanical documentation gate pass. A broader Ruff scan including legacy
+  scripts/evaluation tests reports 11 unrelated existing findings; they were
+  left untouched.
 
 ### M2 — 2026-09-24
 

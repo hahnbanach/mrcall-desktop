@@ -97,11 +97,18 @@ controlled fixture permission, not a general caller authorization system.
 ## Limits and verification
 
 Settings default to 120 seconds, two calls and USD2, with validation ceilings of
-180 seconds, six calls and USD5. The integrated listener intersects these settings
+180 seconds, six calls and USD5. In bounded mode the listener intersects these settings
 with M1's saved duration, call count and retained reservations. Configuration can
 restrict but cannot increase or reset the original allowance. Engine requests use
 the existing profile LLM budget and selected provider; voice/carrier reservations
 remain separate. There is no service expiry.
+
+For the explicitly authorized isolated M3 test, saved `VOICE_ENGINE_UNLIMITED=1`
+overrides these numeric test ceilings and the engine daily budget. The mode is
+restricted to the marked isolated profile without an ordinary `zylch.db`; see
+[the smoke guide](gpt-live-smoke.md#m3-handoff). Budget/remaining values are `null`
+in this mode, while usage and reservations stay recorded. `/healthz` exposes
+`test_limits: "unlimited"`. Paid provider credit requirements still apply.
 
 From `engine/`, using the voice-extra test environment:
 
@@ -198,4 +205,5 @@ Current live acceptance is **failed/pending retest**, not complete: the first
 integrated call exposed carrier-number and billing-business defects now repaired.
 Corrected headless preparation and selected-fact reads succeed, but paid MrCall
 reasoning is refused for insufficient credits. See the plan for exact evidence,
-retained reservations and the unchanged exhausted call allowance.
+retained reservations. The operator has authorized unrestricted local retests;
+no further spending or attempt approval is required.

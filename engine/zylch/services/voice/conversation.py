@@ -48,8 +48,9 @@ def chunks(text: str):
 
 
 class Conversation:
-    def __init__(self, snapshot, memory, client, send, evidence):
+    def __init__(self, snapshot, memory, client, send, evidence, *, unlimited=False):
         self.snapshot, self.memory, self.send, self.evidence = snapshot, memory, send, evidence
+        self.unlimited = unlimited
         self.agent = ZylchAIAgent(
             tools=[memory] if "caller_memory" in snapshot.config.tools else [],
             client=client,
@@ -107,7 +108,7 @@ class Conversation:
                 self.transcript[-1]["text"] += delta
             else:
                 self.transcript.append({"role": role, "text": delta})
-            if sum(len(item["text"]) for item in self.transcript) > 40000:
+            if not self.unlimited and sum(len(item["text"]) for item in self.transcript) > 40000:
                 raise ValueError("Voice transcript limit exceeded")
             if role == "caller":
                 self.revision += 1
@@ -118,7 +119,7 @@ class Conversation:
                 return
             if identifier in self.seen:
                 return
-            if len(self.seen) >= 16:
+            if not self.unlimited and len(self.seen) >= 16:
                 raise ValueError("Voice delegation limit exceeded")
             self.seen.add(identifier)
             self.pending.append(identifier)

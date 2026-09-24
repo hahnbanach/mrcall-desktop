@@ -22,8 +22,10 @@ dedicated service has cold-started with its own encrypted Firebase refresh token
 The first integrated call failed (carrier-number normalization and missing billing
 business selection); both defects are repaired and independently reviewed locally.
 A corrected real diagnostic now reaches the selected MrCall business but receives
-HTTP402: both visible businesses have zero CALLCREDIT. The unchanged two-call
-allowance is exhausted; a funded, authorized retest is needed for M3 acceptance.
+HTTP402: both visible businesses had zero CALLCREDIT at the last check. The
+operator has removed local test ceilings via the isolated unlimited override;
+accounting history remains intact. A funded live retest is needed for M3 acceptance,
+with no further spending or attempt approval required.
 M4 is unstarted. No production number is connected. See the
 [smoke guide](features/gpt-live-smoke.md),
 [configuration contract](features/voice-agent-configuration.md) and milestone plan.

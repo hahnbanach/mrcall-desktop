@@ -109,3 +109,18 @@ def policy_fingerprint(values=None):
             "ANTHROPIC_API_KEY", "OPENROUTER_API_KEY", "MRCALL_PROXY_URL", "SMS_BUSINESS_ID")
     selected = {key: values.get(key) for key in keys}
     return hashlib.sha256(json.dumps(selected, sort_keys=True).encode()).digest()
+
+
+def isolated_voice_unlimited(values=None, directory=None):
+    """Explicit file-only operator override, restricted to the isolated voice profile."""
+    directory = directory or os.environ.get("ZYLCH_PROFILE_DIR")
+    if not directory:
+        return False
+    values = profile_values() if values is None else values
+    uid = Path(directory).name
+    return (
+        values.get("VOICE_ENGINE_UNLIMITED") == "1"
+        and all(values.get(key) == uid for key in (
+            "OWNER_ID", "VOICE_SMOKE_TEST_PROFILE", "VOICE_ENGINE_ISOLATED_PROFILE"))
+        and not (Path(directory) / "zylch.db").exists()
+    )

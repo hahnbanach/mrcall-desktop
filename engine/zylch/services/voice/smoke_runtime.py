@@ -156,7 +156,11 @@ class SmokeRuntime:
         reason = "sideband_eof"
         try:
             # Deadline starts before accept, not after the sideband handshake.
-            async with asyncio.timeout(call.duration_seconds or self.config.duration_seconds):
+            async with asyncio.timeout(
+                None
+                if self.config.unlimited
+                else (call.duration_seconds or self.config.duration_seconds)
+            ):
                 if call.stopped.is_set():
                     reason = "shutdown"
                     return
@@ -271,7 +275,7 @@ class SmokeRuntime:
                     continue
                 if identifier in call.seen_delegations:
                     continue
-                if len(call.seen_delegations) >= 16:
+                if not self.config.unlimited and len(call.seen_delegations) >= 16:
                     raise RuntimeError("smoke delegation limit exceeded")
                 call.seen_delegations.add(identifier)
                 # M1 needs one demonstrated delegation. Multiple requests while
