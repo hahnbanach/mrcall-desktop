@@ -56,9 +56,10 @@ Inside, in this order:
    policy flipped, while the model was thinking stops the write, not merely the
    next dispatch.
 4. The blob and its sentences, through `BlobStorage.semantic_create` /
-   `semantic_update` under a `CommitPermit`.
-5. The identifier index and the source link, through
-   `zylch/memory/associations.py`, in this same session.
+   `semantic_update` / `semantic_merge` under a `CommitPermit`.
+5. The identifier index and the source link — for a MERGE, every source link
+   of the donor, and the alias — through `zylch/memory/associations.py`, in
+   this same session.
 6. The mutation sequence, bumped once for the whole commit.
 7. The operation receipt.
 
@@ -77,6 +78,50 @@ fail and neither writes.
 An UPDATE **replaces** its blob's identifier rows. The old writer only
 appended, so correcting an email address left the wrong one in the index and
 the next cross-channel lookup still matched it.
+
+## A merge
+
+A MERGE drops a memory, and consolidation is the only operation that drops
+one: `commit.py` admits a MERGE only for a consolidation pair
+(`pairs.admits_merge`) — `allow_actions` includes it, the event's source kind is
+`consolidation`, the keeper and donor are exactly the two ids its `source_id`
+names, and the current preparation item is the admitted `memory:consolidate`
+item for that pair. Every other MERGE, and every reclassification, is
+`review_needed` with the proposal recorded.
+
+`mnemonic/writes.py` writes it, inside the one transaction:
+
+1. keeper and donor re-read visibly under the lock; either missing is a
+   conflict;
+2. the donor's source links read (email, calendar, WhatsApp);
+3. `BlobStorage.semantic_merge` (`memory/blob_commits.py`): the permit checked
+   for MERGE with both (id, version) pairs in its write set and both rows in
+   its namespace, each version compared with the row just re-read — a stale
+   keeper and a stale donor each raise a `ConflictError` naming which — then
+   the keeper rewritten through `_rewrite(reason="consolidate")` and the donor
+   dropped through `delete_blob(retain=True, session=…)`, both under the
+   operation's id; a drop that removes nothing is a conflict;
+4. every donor link re-created on the keeper, each with its own `owner_id`;
+5. the keeper's identifier rows replaced from the merged text's
+   `#IDENTIFIERS` block, so an index row neither text states does not spread;
+6. `associations.record_alias(donor → keeper)`.
+
+The receipt records one pending effect, `task_references` /
+`"<donor>-><keeper>"`: the committing profile's task ledger
+(`task_items.sources["blobs"]`) lives in another file and cannot join the
+company transaction. `mnemonic/references.py` applies it right after the
+commit — only for the committing account, only while this profile is bound to
+the merge's company, only in this process's own profile file, only the
+`sources["blobs"]` lists that name the donor, which is re-pointed to the
+keeper's survivor (a later merge may have folded the keeper too). The effect is
+removed from the receipt once applied. A follow-up that fails or cannot read
+its receipt leaves the effect recorded and the result `committed` with
+`pending_effects`; every consolidation run replays this account's recorded
+effects first (`replay_pending`), and a journal that cannot list them is an
+error, never "none pending". Other profiles sharing the store never have their
+file opened: they resolve the donor through the alias, and
+`scope.resolve_aliases` follows alias chains in both directions, bounded at 32
+hops.
 
 ## The departure
 
@@ -126,10 +171,12 @@ Nothing an append does is destructive. Every rewrite of a blob's content goes
 through `BlobStorage._rewrite`, and the first thing `_rewrite` does is copy the
 row it is about to replace into `blob_versions` (`memory/blob_versions.py`,
 `retain_version`) in the same session, stamped with a `reason` — `append` for
-an update, `consolidate` for the sweep's keeper rewrite — and, for a semantic
-write, the `operation_id` of the event that caused it. The sweep's donor delete
-is `delete_blob(retain=True)`: the donor's final text is retained with reason
-`consolidate` before the row goes. The owner's own `/memory delete` and
+an update, `consolidate` for consolidation's keeper rewrite, `restore` for the
+owner's restore — and, for a semantic write, the `operation_id` of the event
+that caused it. Consolidation's donor drop is `delete_blob(retain=True,
+session=…)` inside the MERGE's own transaction: the donor's final text is
+retained with reason `consolidate` before the row goes, and a retaining drop
+without the caller's session is refused. The owner's own `/memory delete` and
 `/memory reset` retain nothing and prune the versions of exactly the blobs they
 remove — consolidation is the only *semantic* operation that removes memory,
 and it keeps what it removes. The one raw delete in the estate,
@@ -143,6 +190,29 @@ it. Pruning is explicit, by blob id, and never by `owner_id` — on a shared
 store a version's `owner_id` is the writer's provenance, and filtering on it
 would let one key holder's reset erase the history of another's rows.
 `list_versions` and `get_version` read versions back.
+
+**How long a version is kept.** Consolidation applies the retention policy and
+nothing else does (`expire_versions`; a static test pins its only caller). The
+settings come from the sweeping engine's profile and act on the whole shared
+store: `MEMORY_VERSION_RETENTION_DAYS` (90), `MEMORY_VERSION_FLOOR` (10) and
+`MEMORY_VERSION_SINK_THRESHOLD` (25). A value below 1 is refused and named in
+the run's `retention_refused`: nothing is pruned, and a refused threshold also
+decides no pair.
+
+- A blob's **count** is its `append` versions superseded after its latest
+  `restore` version. `consolidate` and `restore` versions never count.
+- A **sink** is a live blob whose count exceeds the threshold. None of its
+  versions is pruned, consolidation never pairs it, and every run reports it
+  until its owner restores a version or deletes the blob.
+- Every other blob's version is pruned when it is older than the window
+  (`superseded_at`) and not among the blob's floor newest. A dropped donor has
+  no live blob and is never a sink: the window and the floor alone decide, and
+  the floor keeps its final text.
+
+Every run reports, before pruning, `blobs_versions_max` (the largest count of
+any live blob), `version_sinks_total` (every sink in the store) and
+`version_sinks` — the sinks this account can see, each with its count, largest
+first, at most 100.
 
 A version is restorable, mechanically, by any key holder who can see the
 blob. `restore_version` rewrites the blob from the version's text through
@@ -163,11 +233,14 @@ semantic write, bound to company, owner, event, proposal digest, namespace, the
 exact content digest, and the write set with its expected versions. It is
 opaque: no session, no engine, no callable.
 
-`BlobStorage.semantic_create` / `semantic_update` refuse a missing, forged or
+`BlobStorage.semantic_create` / `semantic_update` / `semantic_merge` (the
+committed writers, `memory/blob_commits.py`) refuse a missing, forged or
 already-spent permit **at the storage boundary** — forgery by object identity,
 so a value-identical copy is not the permit that was issued. The compare-and-
 swap lives there too: the version is compared against the row re-read inside
-the transaction, not against what a caller remembered.
+the transaction, not against what a caller remembered. A MERGE permit names
+both members with their versions; a donor it does not name, or one outside its
+namespace, is refused and nothing is dropped.
 
 `issue_commit_permit` is imported by `mnemonic/commit.py` and by nothing else.
 That is asserted statically in `tests/memory/test_mnemonic_commit.py`, because
@@ -249,6 +322,33 @@ content or write set. Refusal, never truncation — a trimmed observation is a
 different observation, and the operation would then be idempotent against
 something nobody submitted.
 
+## Runbook: sinks, restores and pending follow-ups
+
+**Reading a sink report.** `zylch memory-sweep` prints one line per sink
+(`<blob_id>: <n> versions`) and says how many more exist that this profile
+cannot see or the list leaves out; the Settings button's result carries the
+same `version_sinks`. A sink is most often a busy contact — rewritten more than
+25 times since its last restore — and occasionally the thing the report exists
+for: a memory that absorbed other subjects. Read its versions
+(`/memory versions <blob_id>`, oldest first) and decide which.
+
+**What a restore does to a sink.** A restore retains the text it replaces with
+reason `restore`, and the count starts again after it, so the blob is no longer
+a sink and, from the next run, its versions older than the window and beyond
+the floor are pruned like any other blob's — including the texts it absorbed.
+Copy out what an absorbed text holds before restoring. When the current text is
+already right (the busy contact), acknowledge the sink with two restores: the
+current text is not a version, so restore the newest version, then restore the
+version that first restore retained — the text is back and the count is zero.
+Deleting the blob ends a sink too, with its versions.
+
+**A pending task-reference follow-up.** A merge whose ledger follow-up could
+not run is `committed` with `pending_effects` (`task_references`,
+`<donor>-><keeper>`), and the operation row keeps the effect. The next
+consolidation run by the same account on the same company replays it first and
+reports `references_resolved` / `references_pending`. Until then the donor's id
+still resolves to the keeper through the alias for every reader.
+
 ## Migration
 
 `memory_operations` and `blob_versions` are registered in `MEMORY_TABLE_NAMES`
@@ -265,21 +365,24 @@ every blob row before and after to prove it.
 
 ## What this does not do yet
 
-- **MERGE and reclassification return `review_needed`.** The proposal is
-  recorded, nothing is written. Approximating a merge with an update is the
-  failure this harness exists to remove.
-- **Reconsolidation, its alias writer and the donor delete are still direct**
-  (`memory/llm_merge.py`, milestone 7), as are join, the storage migrations and
-  the repair scripts (milestone 8). The frozen inventory names every one; no
-  setting selects a writer anywhere, and a proposal the harness cannot admit is
-  refused, never written another way.
+- **Reclassification returns `review_needed`**, and so does a MERGE anywhere
+  but a consolidation pair's own admitted item. The proposal is recorded,
+  nothing is written. Approximating a merge with an update is the failure this
+  harness exists to remove.
+- **Join, the storage migrations and the repair scripts are still direct**
+  (milestone 8). The frozen inventory names every one; no setting selects a
+  writer anywhere, and a proposal the harness cannot admit is refused, never
+  written another way.
 - **A review parks its source.** A child in review leaves its parent pending
   and its source unprocessed, visibly; nothing resolves it yet (milestone 8's
   tooling).
 - **Calendar extraction is prose**, so a calendar child carries no typed
   identifiers and cannot corroborate: the duplicate-CREATE gate is off on that
-  path and the sweep recovers its duplicates. The gate comes back by making
-  that extraction structured, not by mining the message for identity.
+  path. Consolidation folds a calendar-born PERSON into its mail-born twin only
+  when both headers state the same email, or the same phone or lid and the same
+  name; one whose address sits only in its prose, or that states only a name,
+  stays a duplicate. The gate comes back by making that extraction structured,
+  not by mining the message for identity.
 - **A headerless legacy row anchors an UPDATE on the hint's name**, so an
   UPDATE against such a row commits without identity evidence; the replaced
   text is retained.
@@ -434,3 +537,16 @@ turn asserted structurally), `tests/services/test_memory_verb_events.py`
 (`/memory store`, `--force` and a read-only turn) and
 `tests/memory/test_fact_eligibility.py` (a customer-shaped FACT leaves every
 read). `tests/workers/ingestion_env.py` is the shared bench.
+
+The merge and consolidation have their own, on the same real split databases:
+`tests/memory/test_mnemonic_merge.py` (one transaction, the stale keeper and
+donor, an undeclared third memory, a failure at each company write, the door),
+`tests/memory/test_mnemonic_merge_boundary.py` (the permit at the storage
+boundary), `tests/memory/test_mnemonic_reference_recovery.py` (the follow-up:
+only this account's ledger, a crash after the commit, an unavailable second
+profile, a company switch, alias chains), `tests/memory/test_mnemonic_pairs.py`
+(the pair event, the hint, the pre-checks, admission),
+`tests/memory/test_consolidation_retention.py` (the policy, sinks, restores,
+the caller pins), `tests/memory/test_consolidation.py` (the three triggers,
+the order, the gates, the stops) and `tests/memory/test_consolidation_pairs.py`
+(what folds, what costs no call, what is left out).

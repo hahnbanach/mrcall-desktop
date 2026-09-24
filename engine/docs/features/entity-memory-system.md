@@ -39,13 +39,13 @@ scoped by the company key; an identifier is unique per
 
 Joining (`memory.join`, `zylch memory-join`, the Settings card) merges the
 profile's current store into the target key's store: entities are all kept
-and the sweep unites duplicates afterwards, facts converge to one row per
-key with the losing value in `fact_history`, rules keep their owner. The
-old store file stays on disk. Several daemons write one store: updates
-compare-and-swap on `updated_at`, the in-process vector index is keyed on
-the store's `mutation_seq`, and the reconsolidation sweep runs after each
-update only when the store changed since the last sweep, once per company
-(`<store>.sweep.lock`).
+and consolidation folds afterwards the duplicates whose headers prove one
+subject, facts converge to one row per key with the losing value in
+`fact_history`, rules keep their owner. The old store file stays on disk.
+Several daemons write one store: updates compare-and-swap on `updated_at`,
+the in-process vector index is keyed on the store's `mutation_seq`, and
+consolidation runs after each update only when the store changed since the
+last sweep started, once per company (`<store>.sweep.lock`).
 
 ## The semantic write path
 
@@ -103,35 +103,33 @@ Blobs contain free-form text, so pure vector search dilutes the signal. Solution
 ## Reconsolidation Flow
 
 ```
-New info arrives
+New info arrives (an ingested source, a chat or solve correction)
      │
      ▼
-Generate embedding (fastembed)
+Candidates: identity-index matches + hybrid search (text LIKE + cosine), at most 3
      │
      ▼
-Hybrid search: text LIKE + cosine similarity
+The mnemonic role decides; the validator checks the identity evidence
      │
-     ├── Score > threshold (0.65) ──► LLM merge with best match
-     │                                   │
-     │                                   ▼
-     │                              Update blob + re-embed sentences
+     ├── the same subject ──► UPDATE it: one transaction, sentences re-embedded
      │
-     └── No match ──► Create new blob + embed sentences
+     └── a new subject ──► CREATE a new blob + embed sentences
 ```
 
-### LLM Merge
+### Consolidation
 
-```
-Merge these memories into a single coherent blob:
-
-EXISTING: {old_blob}
-NEW INFO: {new_blob}
-
-Rules:
-1. Preserve ALL facts
-2. Resolve conflicts (new info wins)
-3. Keep concise, natural language
-```
+Duplicates that ingestion still creates — a calendar-born person beside its
+mail-born twin, two blobs a join brought together — are folded by
+consolidation (`zylch/memory/consolidation.py`), the one operation that
+removes memory. It runs from the Settings button (`memory.reconsolidate_now`),
+`zylch memory-sweep` and after every update. Each run replays this account's
+pending task-reference follow-ups, applies the version-retention policy and
+reports the sinks, then clusters the entity family by shared identity-index
+rows and the stated `Name:` (`zylch/memory/clusters.py`). Each pair is decided
+by the mnemonic role and committed as one MERGE through the harness, which
+keeps the replaced and the dropped text as versions
+([a merge](mnemonic-commit.md#a-merge), [retention](mnemonic-commit.md#retention),
+[consolidation pairs](mnemonic-decisions.md#consolidation-pairs)).
 
 ## Configuration
 
@@ -149,13 +147,17 @@ Rules:
 | `zylch/memory/scope.py` | `blob_visible` and the other scope predicates |
 | `zylch/memory/store.py` | The per-company store file, `memory_meta`, sweep gating |
 | `zylch/memory/join.py` | Joining a company memory (merge + rebind) |
-| `zylch/memory/blob_storage.py` | Blob CRUD (embeddings as BLOB in SQLite), compare-and-swap updates; the permit-guarded `semantic_create`/`semantic_update` |
+| `zylch/memory/blob_storage.py` | Blob CRUD (embeddings as BLOB in SQLite), compare-and-swap updates |
+| `zylch/memory/blob_commits.py` | The permit-guarded `semantic_create` / `semantic_update` / `semantic_merge` |
+| `zylch/memory/blob_versions.py` | Retained versions, the restore, the retention policy and the sink report |
+| `zylch/memory/consolidation.py` | Consolidation, the one removing operation, and its summary |
+| `zylch/memory/clusters.py` | The entity family clustered by identity, sinks and restricted rows left out |
 | `zylch/memory/commit_permit.py` | The single-use authority for one semantic write |
 | `zylch/memory/associations.py` | Identifier, source-link and alias writes, inside the caller's transaction |
 | `zylch/memory/mnemonic/` | The semantic write boundary: events, role, validator, admission, journal, commit |
 | `zylch/memory/embeddings.py` | fastembed wrapper (ONNX, 384-dim) |
 | `zylch/memory/hybrid_search.py` | InMemoryVectorIndex + text search |
-| `zylch/memory/llm_merge.py` | LLM-assisted reconsolidation |
+| `zylch/memory/llm_merge.py` | The merge-routed client consolidation decides pairs with, and the merge-gate canary |
 | `zylch/memory/text_processing.py` | Sentence splitting, text normalization |
 | `zylch/memory/pattern_detection.py` | Pattern extraction |
 | `zylch/memory/config.py` | Memory configuration |

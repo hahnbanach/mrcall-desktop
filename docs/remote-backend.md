@@ -336,13 +336,17 @@ fallback is how two tenants end up in one memory. A `MEMORY_KEY` in the
 provision request body is refused too.
 
 **Duplicates after a join.** Both memories' entities are kept, so a person
-both knew exists twice until the reconsolidation sweep unites them. The
-daemon runs that sweep after every update whenever the store changed since
-the last sweep (a join, a merge, a new entity, a new identifier on an
-entity), once per company (the
-other daemons see "another engine is sweeping"); the desktop Settings →
+both knew exists twice until consolidation folds the two — when both
+headers state the same identity. The daemon runs consolidation after every
+update whenever the store changed since the last sweep (a join, a merge, a
+new entity, a new identifier on an entity), once per company (the other
+daemons see "another engine is sweeping"); the desktop Settings →
 Maintenance → Reconsolidate button and `zylch -p <uid> memory-sweep` run it
-on demand. Each merge is one LLM call, capped per run (re-run to continue).
+on demand. Each pair decision is one to three LLM calls, each pair an
+admitted preparation item, at most 50 per run and never more than the
+preparation batch (re-run to continue). Every run also prunes old memory
+versions and reports the sinks — memories kept whole until their owner
+restores a version.
 
 **Memory unavailable** (no key, an unknown typed key, a missing store) is
 never a unit failure: the daemon serves mail sync, `memory.status` says why
@@ -357,7 +361,7 @@ profile `.env` carries a BYOK key (`SYSTEM_LLM_PROVIDER=anthropic` +
 `ANTHROPIC_API_KEY=…`), and the daemon reads `.env` only at start
 (`systemctl restart zylch-server@<uid>`). Spend is capped per profile and
 per UTC day by `LLM_DAILY_BUDGET_USD` (default 10, `0` = no cap; the
-`[llm-budget]` line of the tick names the numbers); the reconsolidation
-sweep spends from the budget of the profile whose tick runs it. A large
+`[llm-budget]` line of the tick names the numbers); consolidation spends
+from the budget of the profile whose tick runs it. A large
 backlog is analysed in daily instalments at the cap — raise it for a day
 with a line in `.env` and a restart.

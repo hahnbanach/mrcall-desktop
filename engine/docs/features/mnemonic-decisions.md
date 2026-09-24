@@ -74,6 +74,67 @@ target pinned first and counted inside that bound. It is shown how many
 structured identifiers each candidate shares with the observation, and never a
 similarity score.
 
+A consolidation observation shows two paired memories. The rule set tells the
+role to answer MERGE when the inputs prove they are one subject, SKIP with a
+reason when they are different subjects, REVIEW when identity cannot be
+decided, and never CREATE or UPDATE for it.
+
+## Consolidation pairs
+
+Consolidation (`memory/consolidation.py`) asks the role about two memories at a
+time, and `mnemonic/pairs.py` makes each pair an ordinary automatic event:
+stage `memory:consolidate`, source kind `consolidation`, the two ids sorted and
+joined with `|` as its source, a digest of both versions as its revision, and
+`pair-` plus 40 hex of a digest over owner, company, pair and revision as its
+id. Its `SubjectHint` states only what both members' own `#IDENTIFIERS` headers
+assert in common — the type when they agree or only one states it, the name when
+both state the same one (types and names compared without regard to case), the
+typed identifiers both list — never an index row, never prose, never a company
+line. The evidence is therefore the same whichever member the role keeps.
+
+The comparison set is exactly the pair, pinned at the versions it was paired
+at: `wiring.candidates_for` re-reads those two through the owner-scoped
+`get_blob` on every round and runs no search. A member that changed or vanished
+settles the event `skipped` ("a paired memory changed or vanished since it was
+paired") without a paid call; the next run pairs the changed blobs afresh.
+
+Two checks need no model and run before a pair is admitted. `has_evidence` is
+the validator's own identity rule on the same inputs: members that state
+different types, or a type other than PERSON or COMPANY, or whose stated type's
+rule finds no evidence in the hint, can only end in a refused merge, so they
+cost nothing (`pairs_without_evidence`); an untyped pair is judged by the weaker
+COMPANY rule. `settled` finds a terminal row this store already recorded for
+the pair's `source_ref`, by any account, that carries the role's proposal; the
+answer stands until a member changes (`pairs_settled_before`). A review a
+refusal produced before the role answered carries no proposal and does not
+count, so another account's run still decides the pair.
+
+Each admitted pair is one bounded preparation item (`PairItem`, stage
+`memory:consolidate`, source the pair key), so its paid decision faces the
+pause, busy, backoff and batch checks, and it is submitted with
+`allow_actions=(MERGE,)`. Outside an admitted item nothing is submitted.
+
+## The merge-gate canary
+
+`llm_merge.merge_gate_selfcheck` shows the role two unmistakably different
+memories — an individual and an unrelated company, sharing no identifier — as
+one consolidation pair, through the merge-routed client, with the role's cached
+rule set and data turn: one call, tagged `canary`, an auxiliary preparation
+dispatch that writes nothing. The verdict is `refused` (healthy) when the role
+does not propose to fold them, `merged` (unhealthy) when it answers MERGE or a
+proposal that absorbs the other memory — whatever the validator then says — and
+`error` (unknown, never disabling) when the call fails or the answer is
+unusable. `workers/merge_canary_gate.py` decides when it runs: with no stored
+verdict or an unhealthy one, on the first memory pass since the daemon started,
+and when the healthy stamp is a day old.
+
+An unhealthy verdict brakes both paths. Ingestion's role is shown no candidate,
+so every extracted entity becomes a fresh memory. Consolidation decides no pair
+for the run and says so (`merge_suspended`, `pairs_pending_review`); pruning
+still runs. The post-update run passes its worker's verdict; the Settings
+button and `zylch memory-sweep` consult the canary, under its policy, before
+the first pair that needs a decision.
+
 ## What the validator refuses
 
 Only rules that are stable, cheap and valuable. It does not decide whether a
@@ -104,8 +165,11 @@ conversation implies a changed relationship or how two histories reconcile.
   against the actual inputs (`mnemonic/evidence.py`). For a PERSON that means a
   shared email address, or a shared phone or lid plus the same stated name — a
   shared company or a shared switchboard is not evidence that two people are
-  one person. For a COMPANY or a FACT the shared retrieval tokens, names
-  included, are the evidence.
+  one person. Only an email corroborates alone. A lid is never a phone: a
+  `LID:` header line is read in every form the header parser reads and kept out
+  of the phone scan, and a lid's comparison token always carries `@lid`. For a
+  COMPANY or a FACT the shared retrieval tokens, names included, are the
+  evidence.
 - CREATE is the mirror of that gate: an entity that corroborates with a visible
   candidate of the same family may not be created a second time. Where the
   evidence is absent — a similar name, a shared company, a shared switchboard —
@@ -235,7 +299,9 @@ parks the source visibly, and a failed child keeps its retry evidence.
 
 `tests/memory/test_mnemonic_contracts.py`, `test_mnemonic_validator.py`,
 `test_mnemonic_evidence.py`, `test_mnemonic_candidates.py`,
-`test_mnemonic_agent.py` and `tests/llm/test_mnemonic_admission.py`; the commit
+`test_mnemonic_agent.py`, `test_mnemonic_pairs.py`,
+`tests/workers/test_merge_gate.py` (the canary) and
+`tests/llm/test_mnemonic_admission.py`; the commit
 half and the ingestion suites have their own, listed in
 [mnemonic-commit.md](mnemonic-commit.md). The
 validator and agent tests replay the frozen milestone 0 incident corpus
