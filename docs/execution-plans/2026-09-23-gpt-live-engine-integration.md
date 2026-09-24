@@ -339,15 +339,15 @@ APPROVED; fresh plan amendment review also APPROVED. Existing M1–M3 approvals 
 
 | M4 criterion | Evidence/state |
 | --- | --- |
-| Cold start without operator/Desktop | First call passes memory-backed cold start before RPC; second call has real GPT-6 after earlier configuration RPC. Strict GPT-6 cold-start-before-RPC retest pending |
+| Cold start without operator/Desktop | Fourth call performs autonomous GPT-6/tool work after cold start before RPC, but closes without useful answer; complete backend conversation remains open |
 | Configuration changes from next call | Actual authenticated kernel client changed revision 1→2; second call speaks the new greeting |
-| Greeting before delayed lookup | First M4 call: first reflected audio 2,455 ms from admission; lookup 5,145 ms from attach; caller positive |
+| Greeting before delayed lookup | First call positive. Fourth call reports delayed greeting; transcript starts at provider 6,200 ms after lookup. Explicit greeting fix needs retest |
 | Blue filters / Thursday / follow-up / missing facts | First M4 call recalls both historical facts, caller positive; backend follow-up/correction pending |
 | Unknown / ambiguous identity | Pending explicit scenario evidence |
-| Correction during backend work / speech | Second call rectifies spoken subject; backend draft superseded, reconciliation canceled on hangup. Third call confirms spoken interruptions on revised controller without repetition; no delegation, so backend race remains untested by phone |
+| Correction during backend work / speech | Spoken corrections pass in calls 2/3. Fourth call exercises correction during backend work but fails useful completion while obsolete work continues. Phone retest of boundary/greeting fix 293c524 remains pending |
 | Internal / other-customer exclusion | Existing local boundary tests; M4 call pending |
 | Lookup failure / forced close / no late output | Local failure/closure/suppression tests pass; real backend lookup-error passes; live phone scenarios pending |
-| Latency / costs / continuity | Three calls measured with positive listening feedback, including revised-controller voice continuity; backend delivery and exceptional scenarios pending |
+| Latency / costs / continuity | Three positive calls; fourth backend-focused call fails useful-response continuity. Normal-delay retest and exceptional scenarios pending |
 | Independent final end-to-end review | REVISE: diagnostic implementation has no new blocker; full live criteria remain open |
 
 ## Verification and review record
@@ -498,6 +498,58 @@ APPROVED; fresh plan amendment review also APPROVED. Existing M1–M3 approvals 
   now. Leave this configuration ready; the next call should ask for tracking,
   correct the request while verification runs, then allow the response to finish.
   No additional call occurred and all remaining M4 criteria stay open.
+
+
+- Fourth real M4 call, attached 15:27:06 UTC, revision 3, trace
+  `call-f896f200b6a043fca6e41a048a7aa8af.db`, 420 events, complete. Caller reports
+  greeting only when they started speaking and silence after the agent promised
+  to verify the corrected request. This is a failed experience, not acceptance.
+  First reflected audio is 2,324 ms from admission, but the greeting transcript
+  begins at provider offset 6,200 ms, after lookup at local 5,178 ms. Reflected
+  audio arrival cannot certify prompt speech. No audio recording is available
+  to establish exact handset onset.
+- Backend starts at 16,421 ms; caller correction/new delegation at 22,634 ms.
+  After the five-second backend fault delay and provider processing, the obsolete
+  tracking run calls memory at 31,724 ms. Its Italian query has no literal match
+  against English selected facts; after another five-second injected delay it
+  returns empty at 36,735 ms. Hangup at 36,799 ms cancels remaining work. No final
+  backend answer, commentary or silent decision occurs. This proves cold-start
+  autonomous dispatch and tool execution, but no useful completion. The silence
+  was not intentional suppression of an already-answered question.
+- Corrective regressions fail on the old code: an obsolete tool round causes an
+  unnecessary model dispatch; the Italian query falsely appears to have no facts.
+  The implementation now gates each tool/model dispatch by revision, preserving
+  settlement of the current paid request and prior completed history while
+  dropping only the incomplete obsolete turn. A labeled no-lexical-match fallback
+  returns only still-pinned selected facts. An explicit session-start instruction
+  requests the greeting independently of lookup; its task is idempotent and closed
+  with the conversation. Speech transcript timing is recorded separately from
+  reflected audio. No conversation/attempt/spend limits are introduced.
+- Real GPT-6 controller replay with the same correction returns blue filters and
+  historical Thursday delivery in 10,309 ms, three serial Responses requests,
+  maximum paid concurrency one, no failure. Private backend-only trace
+  `call-59e8d3e9140c436aa5137320302d4908.db`. It proves controller/tool delivery,
+  not telephone speech. Independent activation review is APPROVED with 47 focused
+  tests. Full voice/kernel/budget regression: **224 passed**; source/voice-test Ruff,
+  changed-file Black and diff checks pass. Commit `293c524` contains the correction.
+- Fourth call: voice 36 seconds, estimated USD0.030000; carrier legs both 37
+  seconds, price 0.00259000 + 0.00277500 = 0.00536500 account units, currency
+  omitted. After the call and replay: seven closed voice calls retain USD7 holds;
+  36 settled GPT-6 requests total USD0.067263, no unresolved OpenAI hold. The
+  historical two proxy holds remain USD0.110.
+- Activated the reviewed correction by restarting only idle smoke, PID 2319803.
+  Saved diagnostic lookup/backend delays are now zero; trace capture and unlimited
+  mode remain enabled. Cold-start health is available before any operator RPC.
+  All seven old call rows hash-match `M4-greeting-prestart.json`. Tunnel PID
+  1903954 and both infinite service lifetimes are unchanged. Normal phone retest
+  remains pending; neither the delayed-greeting nor useful-response failure is
+  accepted as resolved solely from local tests/replay.
+- Updated final independent end-to-end review: 40 focused tests pass; APPROVED
+  for isolated retest, REVISE for M4 completion, no new implementation blocker.
+  The normal phone test must demonstrate greeting and useful corrected answer.
+  Separately rerun greeting with deliberately delayed lookup: disabling that delay
+  cannot establish the delayed-lookup criterion. Exceptional phone scenarios and
+  delivery of the reconciled backend response remain open.
 
 ### M3 — 2026-09-24
 

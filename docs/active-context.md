@@ -1,5 +1,5 @@
 ---
-doc_baseline_commit: c19cd14bfb6c6ff7918d873c8a84a209b51126ca
+doc_baseline_commit: 293c52412be760863c01ce1176508bf6c751025a
 doc_baseline_date: 2026-09-24
 ---
 

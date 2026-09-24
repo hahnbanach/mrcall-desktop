@@ -16,25 +16,24 @@ sentences. M3 integrates these with a per-call customer-service agent using
 Calls run without cs-operator or an operator RPC session. MrCall CALLCREDIT is
 not a dependency of this explicitly selected test backend.
 
-M4 is active. Private opt-in SQLite traces correlate selected retrieval, backend
-answers, voice appends/acknowledgements, transcript deltas and timing; raw audio
-and hidden reasoning are excluded. Three real calls have positive caller feedback:
-blue filters/Thursday are used, greeting precedes delayed lookup, revision-2
-configuration is spoken and an interrupted subject is explicitly corrected.
-The second call runs GPT-6 but hangs up before reconciliation finishes. Full
-backend delivery, exceptional callers/failures and the complete audio matrix remain
-open. The earlier M3 cause is unknowable without its missing transcript/audio.
+M4 is active with private correlated traces and no raw audio/hidden reasoning.
+Three calls have positive listening feedback, including memory recall and natural
+interruptions. The fourth, backend-focused call exposes late greeting and silence
+after correction: no useful backend answer before hangup. It proves autonomous
+GPT-6 dispatch after cold start, not successful response delivery. The old M3 cause
+remains unknowable without its missing transcript/audio.
 
-A local regression reproduces possible repetition when voice output changes during
-backend work. The revised controller snapshots text/revisions consistently and
-reconciles both caller and voice changes, consuming a no-response decision when
-already answered. Independent activation review passes 25 focused tests; four
-real GPT-6 replay scenarios and 220 voice/kernel/budget tests pass. The correction
-is active after an isolated cold restart. A third call confirms smooth spoken
-interruptions without repetition, but makes no delegation: the backend race and
-silent-decision path still need a phone demonstration. Saved revision 3 explicitly
-requests backend verification for business questions; the idle service has restarted
-and is ready for that cold-start test. Caller availability is pending. Calls remain
+Corrections now request a greeting explicitly at session start, stop superseded
+agent loops before another tool/model dispatch, and return pinned selected facts
+with a labeled fallback when query language produces no lexical match. Prior
+completed history and financial accounting survive. A real GPT-6 replay returns
+the corrected blue/Thursday answer with serial requests; phone acceptance is still
+open. Saved revision 3 requests backend verification for business questions.
+Correction `293c524` is active after an idle restart; diagnostic delays are zero
+and trace capture stays on. Local independent review and 224 voice/kernel/budget
+tests pass. The normal phone retest remains pending.
+The existing no-response decision prevents repeating an already-completed answer;
+its live race demonstration and exceptional scenarios remain open. Calls remain
 isolated with all local experiment ceilings removed; ledger history, accounting
 and provider constraints are preserved. Service and tunnel have no expiry. See
 [configuration and diagnostics](features/voice-agent-configuration.md),

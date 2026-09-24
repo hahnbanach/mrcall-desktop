@@ -86,9 +86,12 @@ during demonstrations. A configuration update re-approves the selected sentences
 then-current content.
 
 Follow-ups rank word overlap **inside the permitted set**, without embeddings or
-paid inference. A query with no overlap (including a language mismatch) is not
-proof of absent knowledge: tool instructions require an empty-query read of all
-selected facts before claiming absence. `ToolResult.data` contains `recognition`, `facts` (text,
+paid inference. If no permitted fact overlaps the query (including a language
+mismatch), retrieval returns all still-pinned selected facts with
+`retrieval: "selected_facts_fallback_no_lexical_match"`. This avoids a false absence
+and another model/tool round; it does not claim that the returned facts answer the
+query. Exact lexical matches still filter/rank as before. Unknown, ambiguous and
+unselected callers still receive no facts. `ToolResult.data` contains `recognition`, `facts` (text,
 blob/sentence source IDs, `knowledge: "stored_history"`) and `missing`. Errors
 return no facts and fixed messages. History is not a fresh external-system check.
 Blocking reads/ranking run in a worker with a three-second default timeout.
@@ -212,7 +215,12 @@ allowing cold-start readiness checks before connecting an operator client.
 Only the signed Vonage callback supplies caller recognition metadata. International
 digits without a `+` are canonicalized at this carrier boundary. The number stays
 in memory behind the one-use carrier nonce; arbitrary SIP `From` metadata is ignored.
-The greeting can start before caller lookup completes. Selected late context uses
+After `session.started`, a tracked one-shot `session.instructions.append` requests
+an immediate greeting in the configured language/wording, without waiting for
+lookup or caller speech. The command asks not to repeat an already-spoken greeting;
+acknowledgement is not proof of speech or playback. This explicit start instruction
+follows the [official greeting flow](https://developers.openai.com/api/docs/guides/live-conversations#greet-before-the-caller-speaks).
+The task is canceled on close. Selected late context uses
 quiet `session.thinking.append`; delegated answers use `session.commentary.append`.
 Append content is split without loss within a conservative 480-byte bound, below
 the provider's 500-token limit. Official contracts:
@@ -225,7 +233,12 @@ persona, preferences, channel status, triggers, slash routing and general tools
 are excluded. Transcript fragments accumulate without dispatch. Delegation starts
 one request. Each run snapshots transcript text and both caller/voice revision
 counters before awaiting work. New input or voice output while it runs triggers
-reconciliation before delivery. The backend returns exactly
+reconciliation before delivery. A voice-specific subclass checks revisions before
+each tool execution and model dispatch. In-flight paid requests finish through
+normal accounting; at the next boundary an obsolete loop stops, its incomplete
+history is removed and the latest transcript is processed serially. Previously
+completed history is retained. No backend request is dispatched in parallel.
+The backend returns exactly
 `[NO_FURTHER_RESPONSE]` when the voice has already fully answered the latest
 request correctly; the controller consumes this decision without a commentary
 append. Partial, incorrect answers and new questions still require useful replies.
@@ -233,8 +246,10 @@ Every delegated-answer append fragment checks both revisions and closure. New sp
 can postpone delivery while reconciliation runs; live latency remains an M4
 acceptance criterion. Transcript events describe provider output, not proof of
 handset playback. M4 listening confirms spoken correction on both controller
-versions. The corrected-controller phone call makes no backend delegation, so its
-reconciliation and silent-decision paths still need a phone demonstration.
+versions. A subsequent backend-focused phone call exposes late greeting and no
+useful answer before hangup, with diagnostic delays and obsolete work still active.
+The greeting/boundary/fallback corrections require a new phone demonstration;
+local tests and real backend replay do not establish live acceptance.
 
 Hangup, deadline and daemon shutdown cancel asynchronous work and suppress late
 results. A dispatched blocking LLM request may finish and settle in its original
@@ -259,6 +274,11 @@ milestone plan. The operator authorizes unrestricted local retests; no further
 spending or attempt approval is required.
 
 ## M4 private diagnostics
+
+`first_voice_transcript_ms` measures arrival of the first nonempty voice transcript
+relative to attachment; `first_voice_provider_start_ms` preserves its provider
+speech offset. These are distinct from `first_audio_ms`, the first reflected audio
+packet, which may precede speech. None is instrumented handset latency.
 
 The isolated listener supports saved `VOICE_DIAGNOSTICS=1` in its explicit private
 profile `.env`. It requires matching OWNER/SMOKE/ISOLATED UID markers, no ordinary
