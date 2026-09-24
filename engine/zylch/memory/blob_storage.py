@@ -4,20 +4,24 @@ Two ways in, deliberately unequal.
 
 ``store_blob`` and ``update_blob`` are the **legacy** writers: they open their
 own session, decide their own transaction boundary, and trust whoever called
-them. Every unconverted writer in the engine still uses them, and the mnemonic
-harness converts those callers milestone by milestone.
+them. The writers the mnemonic harness has not converted yet still use them,
+and the harness converts those callers milestone by milestone.
 
-``semantic_create`` and ``semantic_update`` are the **committed** writers. They
-write into a transaction the caller already owns — so a blob, its sentences,
-its identifiers, its source link and the operation receipt land together or not
-at all — and they refuse to run without a :class:`CommitPermit` bound to the
-exact company, owner, event, proposal, write set and expected versions. The
-permit lives in :mod:`zylch.memory.commit_permit`; a missing, forged or
-already-spent one is refused *here*, at the storage boundary.
+``semantic_create``, ``semantic_update`` and ``semantic_merge`` are the
+**committed** writers, a mixin in :mod:`zylch.memory.blob_commits`. They write
+into a transaction the caller already owns — so a blob, its sentences, its
+identifiers, its source links, an alias and the operation receipt land
+together or not at all — and they refuse to run without a :class:`CommitPermit`
+bound to the exact company, owner, event, proposal, write set and expected
+versions. The permit lives in :mod:`zylch.memory.commit_permit`; a missing,
+forged or already-spent one is refused *here*, at the storage boundary. This
+module keeps the internals both ways share: preparing content, inserting,
+rewriting — the only assignment to ``Blob.content`` — and deleting.
 """
 
 import logging
 import uuid
+from contextlib import nullcontext
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any, Callable, Dict, Optional, Tuple
@@ -27,7 +31,7 @@ from sqlalchemy.orm import Session
 
 from .text_processing import split_sentences
 from .embeddings import EmbeddingEngine
-from .commit_permit import CREATE, UPDATE, ConflictError, check_permit, spend_permit
+from .blob_commits import CommittedWrites, _iso
 from .company_key import require_company_key
 from .scope import blob_contributed, blob_owned_rules, blob_visible
 from zylch.storage.models import Blob, BlobSentence
@@ -54,17 +58,7 @@ class PreparedContent:
     sentence_embeddings: Tuple[bytes, ...]
 
 
-def _iso(value) -> str:
-    """One comparable form for updated_at, whether it came from the ORM
-    (naive datetime) or from a to_dict() round-trip (isoformat string)."""
-    if value is None:
-        return ""
-    if isinstance(value, datetime):
-        return value.replace(tzinfo=None).isoformat()
-    return str(value).replace("+00:00", "").replace("Z", "")
-
-
-class BlobStorage(BlobReads):
+class BlobStorage(BlobReads, CommittedWrites):
     """Storage for entity blobs with sentence-level embeddings.
 
     Every read, write, update, delete and list is scoped by
@@ -229,81 +223,6 @@ class BlobStorage(BlobReads):
         session.flush()
         return blob
 
-    # ─── The committed writers ────────────────────────────────────────
-
-    def semantic_create(
-        self,
-        session: Session,
-        permit: Any,
-        *,
-        owner_id: str,
-        namespace: str,
-        prepared: PreparedContent,
-        event_description: Optional[str] = None,
-    ) -> Dict[str, Any]:
-        """Create a blob inside the caller's transaction, under a spent permit."""
-        checked = check_permit(
-            permit,
-            action=CREATE,
-            owner_id=owner_id,
-            content=prepared.content,
-            namespace=namespace,
-        )
-        blob = self._insert(
-            session,
-            owner_id=owner_id,
-            namespace=namespace,
-            prepared=prepared,
-            event_description=event_description,
-        )
-        spend_permit(checked)
-        return blob.to_dict()
-
-    def semantic_update(
-        self,
-        session: Session,
-        permit: Any,
-        *,
-        blob: Blob,
-        owner_id: str,
-        prepared: PreparedContent,
-        expected_version: str,
-        event_description: Optional[str] = None,
-        reason: str = APPEND,
-    ) -> Dict[str, Any]:
-        """Rewrite a re-read, version-checked blob under a spent permit.
-
-        ``blob`` must be the row :meth:`visible_target` returned inside this
-        same transaction, and ``expected_version`` the version the proposal was
-        decided against. The comparison happens here rather than in the caller
-        so the storage boundary — not a caller's good intentions — is what
-        refuses a write over someone else's change.
-        """
-        checked = check_permit(
-            permit,
-            action=UPDATE,
-            owner_id=owner_id,
-            content=prepared.content,
-            namespace=blob.namespace,
-            target=(str(blob.id), str(expected_version)),
-        )
-        if _iso(blob.updated_at) != _iso(expected_version):
-            raise ConflictError(
-                f"blob {blob.id} changed since it was read "
-                f"(expected {expected_version}, now {_iso(blob.updated_at)})"
-            )
-        self._rewrite(
-            session,
-            blob,
-            owner_id=owner_id,
-            prepared=prepared,
-            event_description=event_description,
-            reason=reason,
-            operation_id=getattr(checked, "event_id", None),
-        )
-        spend_permit(checked)
-        return blob.to_dict()
-
     def store_blob(
         self, owner_id: str, namespace: str, content: str, event_description: Optional[str] = None
     ) -> Dict[str, Any]:
@@ -392,36 +311,54 @@ class BlobStorage(BlobReads):
             self._notify_mutation(session)
             return blob.to_dict()
 
-    def delete_blob(self, blob_id: str, owner_id: str, *, retain: bool = False) -> bool:
-        """Delete a visible blob (sentences cascade via FK).
+    def delete_blob(
+        self,
+        blob_id: str,
+        owner_id: str,
+        *,
+        retain: bool = False,
+        session: Optional[Session] = None,
+        operation_id: Optional[str] = None,
+    ) -> bool:
+        """Delete a visible blob (sentences, links and identifiers cascade via FK).
 
-        ``retain=True`` is the consolidation sweep dropping a donor: the row's
-        final text is kept as a version first, so a bad merge is reversible.
-        The default is the owner's delete, and an owner who deletes means it —
-        the blob's versions go with it, explicitly, because ``blob_versions``
-        carries no cascade on purpose.
+        ``retain=True`` is consolidation dropping a donor: the row's final text
+        is kept as a ``consolidate`` version first, under the merge's
+        ``operation_id``, so a bad merge is reversible. The merge drops its
+        donor inside its own transaction — ``session`` is that transaction, and
+        then this method neither opens a session nor bumps the mutation
+        sequence, because the merge commits, and bumps once, for everything it
+        writes. The default is the owner's delete, and an owner who deletes
+        means it — the blob's versions go with it, explicitly, because
+        ``blob_versions`` carries no cascade on purpose.
         """
         key = require_company_key()
-        with self._get_session() as session:
+        with self._session_or(session) as active:
             blob = (
-                session.query(Blob)
+                active.query(Blob)
                 .filter(Blob.id == blob_id, blob_visible(owner_id, key))
                 .one_or_none()
             )
             if blob is None:
                 return False
             if retain:
-                retain_version(session, blob, reason=CONSOLIDATE, owner_id=owner_id)
+                retain_version(
+                    active, blob, reason=CONSOLIDATE, owner_id=owner_id, operation_id=operation_id
+                )
             else:
-                prune_versions(session, [blob.id])
+                prune_versions(active, [blob.id])
             # The bulk form, by id, on purpose: the frozen writer inventory
             # recognises `query(Blob)…delete()` as a Blob deletion and would
             # not see `session.delete(blob)`, and a deletion the guard cannot
             # see is the kind of bypass the guard exists to catch.
-            count = session.query(Blob).filter(Blob.id == blob.id).delete(synchronize_session=False)
-            if count > 0:
-                self._notify_mutation(session)
+            count = active.query(Blob).filter(Blob.id == blob.id).delete(synchronize_session=False)
+            if count > 0 and session is None:
+                self._notify_mutation(active)
             return count > 0
+
+    def _session_or(self, session: Optional[Session]):
+        """The caller's transaction when it hands one in, else a session of our own."""
+        return nullcontext(session) if session is not None else self._get_session()
 
     def restore_version(self, blob_id: str, owner_id: str, version_id: str) -> Dict[str, Any]:
         """Bring a visible blob back to one of its retained versions.

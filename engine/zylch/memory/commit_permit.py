@@ -28,6 +28,9 @@ from .company_key import require_company_key
 
 CREATE = "CREATE"
 UPDATE = "UPDATE"
+# A merge rewrites its keeper and drops its donor; one permit binds both
+# blobs at the versions the proposal read them at.
+MERGE = "MERGE"
 
 
 class PermitError(PermissionError):
@@ -90,8 +93,8 @@ def issue_commit_permit(
     would be a write capability handed to a caller that is only supposed to
     submit an observation.
     """
-    if action not in (CREATE, UPDATE):
-        raise PermitError(f"a commit permit covers CREATE or UPDATE, not {action!r}")
+    if action not in (CREATE, UPDATE, MERGE):
+        raise PermitError(f"a commit permit covers CREATE, UPDATE or MERGE, not {action!r}")
     permit = CommitPermit(
         permit_id=uuid.uuid4().hex + secrets.token_hex(8),
         action=action,
@@ -156,6 +159,7 @@ def check_permit(
 
 __all__ = [
     "CREATE",
+    "MERGE",
     "UPDATE",
     "CommitPermit",
     "ConflictError",

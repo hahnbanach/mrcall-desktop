@@ -298,9 +298,7 @@ def sink_report(
     report = {
         "blobs_versions_max": max((n for bid, n in counts.items() if bid in live), default=0),
         "version_sinks_total": len(found),
-        "version_sinks": [
-            {"blob_id": bid, "versions": n} for bid, n in listed[:SINK_REPORT_LIMIT]
-        ],
+        "version_sinks": [{"blob_id": bid, "versions": n} for bid, n in listed[:SINK_REPORT_LIMIT]],
     }
     return report, set(found)
 

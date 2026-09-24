@@ -68,7 +68,9 @@ def storage(embedder) -> BlobStorage:
 
 
 def seed_blob(embedder, name="Acme Srl", owner=OWNER_A, namespace=None) -> str:
-    content = f"#IDENTIFIERS\nEntity type: COMPANY\nScope: entity\nName: {name}\n#ABOUT\nA supplier."
+    content = (
+        f"#IDENTIFIERS\nEntity type: COMPANY\nScope: entity\nName: {name}\n#ABOUT\nA supplier."
+    )
     return storage(embedder).store_blob(
         owner_id=owner,
         namespace=namespace or f"user:{COMPANY_A}",

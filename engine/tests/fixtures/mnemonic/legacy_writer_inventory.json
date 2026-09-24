@@ -145,6 +145,15 @@
       "mode": "sync",
       "milestone": 6,
       "note": "adapter door: the helper submits to the harness (milestone 6); the row records the door, not a direct write"
+    },
+    {
+      "path": "zylch/memory/blob_commits.py",
+      "symbol": "CommittedWrites.semantic_merge",
+      "call": "delete_blob",
+      "count": 1,
+      "mode": "sync",
+      "milestone": 7,
+      "note": "consolidation's donor drop: inside the MERGE commit's one company transaction, under the MERGE permit, retaining the donor's final text first"
     }
   ],
   "orm_sinks": [

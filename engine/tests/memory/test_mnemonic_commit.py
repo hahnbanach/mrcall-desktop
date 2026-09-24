@@ -698,7 +698,7 @@ def test_a_target_that_vanished_is_a_conflict_not_a_new_entity(profile_a, contex
     assert stored_blobs() == []
 
 
-# ─── What this slice will not do yet ──────────────────────────────────
+# ─── A merge is consolidation's ───────────────────────────────────────
 
 
 def test_a_merge_proposal_is_recorded_for_review_and_writes_nothing(profile_a, context):
