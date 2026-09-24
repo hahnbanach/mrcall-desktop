@@ -12,8 +12,13 @@ GPT-Live has an isolated, opt-in M1 smoke runner with durable test reservations
 and a fixed client-delegation result. One real Vonage SIP call verifies duplex,
 delayed Python delegation and clean closure; final M1 integration review is
 approved. Local failure-path tests cover admission, closure, restart and secret
-logging. Memory integration is not implemented; no production number is connected. See the
-[smoke guide](features/gpt-live-smoke.md) and its linked milestone plan.
+logging. M2 adds authenticated operator configuration through `cs rpc`, immutable
+snapshots and read-only retrieval restricted to selected customer sentences.
+The isolated fixture and real Firebase/client demonstration pass; independent M2
+integration review is approved. Connection to the telephone runtime remains M3 and needs a
+new go-ahead; no production number is connected. See the
+[smoke guide](features/gpt-live-smoke.md),
+[configuration contract](features/voice-agent-configuration.md) and milestone plan.
 
 Engine chat now supports negotiated read-only policy version 1. The policy is
 enforced before slash/semantic/task routing and again at assistant and task

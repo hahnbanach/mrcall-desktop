@@ -197,6 +197,18 @@ def _current_company_key():
     return current_company_key()
 
 
+class VoiceAgentConfig(Base):
+    """One owner/company-bound voice configuration in the profile database."""
+
+    __tablename__ = "voice_agent_config"
+    id = Column(Integer, primary_key=True)
+    owner_uid = Column(Text, nullable=False)
+    space_id = Column(Text, nullable=False)
+    revision = Column(Integer, nullable=False)
+    config = Column(JSON, nullable=False)
+    sentence_pins = Column(JSON, nullable=False)
+
+
 class Blob(DictMixin, Base):
     __tablename__ = "blobs"
 

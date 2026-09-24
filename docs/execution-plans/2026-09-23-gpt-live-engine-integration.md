@@ -17,6 +17,8 @@ correction clarifications. A separate fresh plan review returned APPROVED;
 an additional adversarial review also approved after the cold-start correction.
 M1 is complete: live demonstration and final integration review passed. The first
 implementation's approval was withdrawn by the subsequent failure-path review.
+M2 is complete: authenticated client/fixture demonstration and independent
+integration review passed. M3 awaits a new operator go-ahead.
 
 ## M1 rewrite — 2026-09-23
 
@@ -82,8 +84,9 @@ memory tool contract so later integrations do not require new telephone plumbing
   customer-service mode with its own prompt/context and tool list; preserve the
   existing defaults and verify ordinary chat still receives its original inputs.
 - The M1 runtime exists in `engine/zylch/services/voice/`, with focused tests in
-  `engine/tests/voice/`. The `rpc/voice_actions.py` configuration handler remains
-  proposed M2 work, not an existing capability.
+  `engine/tests/voice/`. M2 adds `rpc/voice_actions.py` for operator configuration
+  and `services/voice/agent_config.py` / `caller_memory.py` for snapshots and
+  selected-fact retrieval. These components are not yet connected to live calls.
 - Register configuration methods in the existing RPC table. Use the authenticated
   profile WebSocket transport for operator access; provider webhooks use their
   own verified route and never expose the owner RPC surface to callers.
@@ -167,6 +170,9 @@ additive; do not modify company memory or existing chat behavior.
 
 ## M3 — Join the conversation to the engine
 
+Do not begin M3 until M2's independent integration review passes and the operator
+gives a new go-ahead. M2 evidence is recorded below.
+
 **Work.** Integrate the selected transport as an opt-in listener in the isolated
 engine daemon (`cli/main.py` / `rpc/server_ws.py` lifecycle). Share its bound
 profile and configuration, while keeping provider and operator routes separate.
@@ -237,6 +243,56 @@ actually delivered. Mark this plan completed only after real-call acceptance;
 missing access or a failed live scenario remains explicit unfinished work.
 
 ## Verification and review record
+
+### M2 — 2026-09-24
+
+- Implemented only configuration and selected-fact retrieval. Additive profile
+  table and `voice.config.get/update`, `voice.status` reuse RPC/auth. Owner/company
+  binding, revision checks and immutable snapshots prevent silent retargeting or
+  changing existing snapshots. Settings/tool output exclude server secrets.
+- Existing cs-kernel provides `cs rpc`; no kernel edits were needed. The actual
+  installed CLI reads/updates through the engine WebSocket. Status explicitly
+  reports that M2 is not integrated into the telephone runtime.
+- Temporary split SQLite fixture: two customers, shared number, prior request and
+  delivery facts, internal note, foreign-company rows. Existing normalization and
+  identifier lookup are reused. Only selected sentence columns enter `ToolResult`;
+  text/creation fingerprints reject replacements. Follow-up ranking is restricted
+  to permitted facts. Reads run off-loop with a timeout. No model/embedding call.
+- Final verification: **106 voice tests passed** (68 M1 plus 38 M2), including
+  actual cs CLI/WebSocket/dispatcher and RS256 with a synthetic signing key.
+  Adjacent regression results and independent review follow below.
+- Live M2 demonstration: **PASSED**, actual cs CLI and real Firebase RS256 owner
+  authentication against disposable synthetic databases. Read/update reaches
+  revision 2; invalid token and wrong profile fail; old snapshots retain their
+  instructions; retrieval after client exit returns only the approved delivery
+  fact. Kernel headless mint/exchange uses anonymous pipes/in-memory token supply,
+  never its disk ID-token cache. No personal profile, paid call/model, carrier
+  route change, service restart or ledger reset. Repeatable command and limits:
+  [M2 guide](../../engine/docs/features/voice-agent-configuration.md).
+- Smoke/tunnel remain active with `RuntimeMaxUSec=infinity`. M1's saved limits,
+  attempt allowance and ledger are untouched. M2 does not alter smoke admission.
+- Pre-change verification: 136 identifier/memory/chat/budget tests passed;
+  whole-engine Ruff passed. Whole-engine Black has 42 pre-existing failures.
+  No unrelated formatting repair is included.
+- Adjacent post-change verification: **152 passed**, one pre-existing RPC
+  contract test fails because `llm.models` has no parseable parameter signature.
+  Its handler, signature parser and test are byte-identical to accepted HEAD.
+  All three new voice RPC signatures are checked by the dispatcher. Whole-engine
+  Ruff and changed-file formatting checks pass (the pre-existing methods-module
+  formatting is preserved).
+- Independent M2 integration review: **APPROVED**, 2026-09-24. The fresh reviewer
+  independently ran the 105-test voice suite and the final 18-test caller-memory
+  suite, checked the actual kernel/authentication path, SQL permission boundary,
+  snapshots, cancellation and sanitized errors. No blocking findings remain.
+  The reviewer did not repeat real authentication or paid calls. M3 is unstarted
+  and this review does not authorize it.
+- Review correction: the final binding revalidation now shares the complete
+  lookup timeout. A slow final database read yields a safe timeout with no facts,
+  rather than delaying the tool after its original deadline. The focused memory
+  suite passes all 18 tests; the reviewer's separate 20 ms deadline probe also
+  confirms bounded completion. The stale proposed-handler reference was corrected.
+
+### Earlier milestone evidence
 
 Before code changes, run engine lint and the focused existing identifier, memory,
 chat and budget tests; record pre-existing failures without expanding this task

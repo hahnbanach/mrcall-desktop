@@ -1061,10 +1061,12 @@ class Storage:
             logger.warning(f"add_person_identifiers(blob={blob_id}) failed: {e}")
             return 0
 
+    @staticmethod
     def find_blobs_by_identifiers(
-        self,
         owner_id: str,
         identifiers: List[tuple],
+        *,
+        raise_errors: bool = False,
     ) -> List[str]:
         """Look up blob ids that share at least one identifier with the
         given set.
@@ -1121,6 +1123,8 @@ class Storage:
                 )
                 return [str(r[0]) for r in rows]
         except Exception as e:
+            if raise_errors:
+                raise
             logger.warning(f"find_blobs_by_identifiers(n={len(norm)}) failed: {e}")
             return []
 

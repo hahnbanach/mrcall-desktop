@@ -9,7 +9,8 @@ The source command is `zylch -p <test-firebase-uid> voice-smoke --port 8787`.
 Its webhook listens on **127.0.0.1 only**, at `/openai/live`, separately from
 the engine RPC daemon. It returns a fixed test fact on client delegation and
 does no company-memory or paid engine reasoning work. cs-operator is not used
-during calls. M2 configuration and M3 memory/agent integration are not implemented.
+during calls. [M2 configuration and selected-fact retrieval](voice-agent-configuration.md)
+are separate components; M3 integration into calls is not implemented.
 
 The selected path is Vonage SIP → GPT-Live audio, with Python attached to the
 Live sideband. The isolated real-call demonstration verifies project access and
