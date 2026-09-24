@@ -71,10 +71,18 @@ def format_fact(category: str, key: str, value: str) -> str:
 
 
 def _all_fact_blobs(owner_id: str) -> List[Dict[str, str]]:
+    """Every eligible fact row, oldest first — the one read behind every fact read.
+
+    A known customer-shaped FACT (its header states an entity scope or type,
+    or a review restricted it) is left out here, before any category filter or
+    count, so it can neither be enumerated nor crowd a valid fact out
+    (``zylch.memory.eligibility``).
+    """
     from zylch.storage.database import get_session
     from zylch.storage.models import Blob
 
     from zylch.memory.company_key import require_company_key
+    from zylch.memory.eligibility import ineligible_fact_ids
 
     ns = facts_namespace(owner_id)
     key = require_company_key()
@@ -85,7 +93,38 @@ def _all_fact_blobs(owner_id: str) -> List[Dict[str, str]]:
             .order_by(Blob.created_at.asc())
             .all()
         )
-        return [{"blob_id": str(r.id), "content": r.content or ""} for r in rows]
+        excluded = ineligible_fact_ids(session, key)
+        return [
+            {"blob_id": str(r.id), "content": r.content or "", "updated_at": _iso(r.updated_at)}
+            for r in rows
+            if str(r.id) not in excluded
+        ]
+
+
+def _iso(value) -> str:
+    """The version form the harness compares on: ``get_blob()["updated_at"]``."""
+    if value is None:
+        return ""
+    return value.isoformat() if hasattr(value, "isoformat") else str(value)
+
+
+def exact_fact(owner_id: str, category: str, key: str) -> Optional[Dict[str, str]]:
+    """The eligible fact row with exactly this (Category, Key), or ``None``.
+
+    The exact candidate lookup facts have always used, kept as a read API: the
+    ingestion pins a FACT child's row through it and the fact adapter names it
+    as the requested target. Case-insensitive on both fields, as dedup was.
+    """
+    want_cat, want_key = (category or "").strip().lower(), (key or "").strip().lower()
+    if not want_cat or not want_key:
+        return None
+    for blob in _all_fact_blobs(owner_id):
+        if (
+            parse_category(blob["content"]).lower() == want_cat
+            and parse_key(blob["content"]).lower() == want_key
+        ):
+            return blob
+    return None
 
 
 def list_categories(owner_id: str) -> List[Dict[str, object]]:
