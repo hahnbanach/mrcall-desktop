@@ -9,11 +9,13 @@ Locks the fix for the "general feedback written into a contact blob" bug:
 The routing is structural — the model-declared `entry_type` and the family of
 the model-declared `namespace`, never the content — and it runs before the
 mnemonic role is asked anything. A rule declared as one (`behavioral_rule`, or
-a rule-family namespace with no `entry_type`) goes through the rule store and
-the role is not asked. Entity facts reach the role — including one whose named
-`blob_id` is a rule row, which the role may answer with an account STYLE
-proposal — so the entity cases here run the real semantic path with the role's
-answer scripted (`decided`), against a real temp SQLite store.
+a rule-family namespace with no `entry_type`) goes through the rule store's
+door: its shape and exact-duplicate defences are unpaid, and the write itself
+is the role's decision with the candidate pinned. Entity facts reach the role
+directly — including one whose named `blob_id` is a rule row, which the role
+may answer with an account STYLE proposal. Every case that writes runs the
+real semantic path with the role's answer scripted (`decided`), against a real
+temp SQLite store.
 """
 
 import asyncio
@@ -77,6 +79,37 @@ def decided(monkeypatch, *decisions):
     with_client(monkeypatch, client(*decisions))
 
 
+def style_create(content):
+    return json.dumps(
+        {
+            "action": "CREATE",
+            "entity_type": "STYLE",
+            "scope": "account",
+            "content": "#IDENTIFIERS\nEntity type: STYLE\nScope: account\n#ABOUT\n" + content,
+            "reason": "this account's own operating rule",
+        }
+    )
+
+
+def style_update(blob_id, content):
+    from zylch.memory.blob_storage import BlobStorage
+    from zylch.storage.database import get_session
+
+    from tests.memory.mnemonic_env import BagOfWordsEmbedder
+
+    version = BlobStorage(get_session, BagOfWordsEmbedder()).get_blob(blob_id, OWNER)["updated_at"]
+    return json.dumps(
+        {
+            "action": "UPDATE",
+            "entity_type": "STYLE",
+            "scope": "account",
+            "content": "#IDENTIFIERS\nEntity type: STYLE\nScope: account\n#ABOUT\n" + content,
+            "write_set": [{"blob_id": blob_id, "expected_version": version, "role": "target"}],
+            "reason": "the rule, refined",
+        }
+    )
+
+
 def create_decision(content=ACME, entity_type="COMPANY"):
     return json.dumps(
         {
@@ -112,10 +145,11 @@ def _blob(blob_id):
 # ── create_memory routing ──────────────────────────────────────────────
 
 
-def test_behavioral_rule_routes_to_template(fresh_db):
+def test_behavioral_rule_routes_to_template(harness, monkeypatch):
     from zylch.tools.base import ToolStatus
     from zylch.tools.create_memory_tool import CreateMemoryTool
 
+    decided(monkeypatch, style_create("RULE: never invent MrCall settings.\nWhy: incident 2026-05-22."))
     t = CreateMemoryTool(owner_id=OWNER)
     res = _run(
         t.execute(
@@ -128,10 +162,11 @@ def test_behavioral_rule_routes_to_template(fresh_db):
     assert ns == f"template:{OWNER}"
 
 
-def test_behavioral_rule_overrides_wrong_user_namespace(fresh_db):
+def test_behavioral_rule_overrides_wrong_user_namespace(harness, monkeypatch):
     # Even if the model wrongly passes namespace="user", entry_type wins.
     from zylch.tools.create_memory_tool import CreateMemoryTool
 
+    decided(monkeypatch, style_create("RULE: x"))
     t = CreateMemoryTool(owner_id=OWNER)
     res = _run(t.execute(content="RULE: x", namespace="user", entry_type="behavioral_rule"))
     ns, _ = _blob(res.data["blob_id"])
@@ -188,12 +223,14 @@ def test_no_entry_type_means_an_entity_fact(harness, monkeypatch):
     assert ns == entity_namespace(current_company_key())  # company family: keyed, not owner
 
 
-def test_a_rule_family_hint_without_an_entry_type_is_still_a_rule(fresh_db):
+def test_a_rule_family_hint_without_an_entry_type_is_still_a_rule(harness, monkeypatch):
     """The model names a family, never a namespace: `template:anyone` is this
-    owner's rule bucket, and the rule store — not the role — takes it."""
+    owner's rule bucket, and the rule store's door — with the role deciding the
+    STYLE — takes it."""
     from zylch.tools.base import ToolStatus
     from zylch.tools.create_memory_tool import CreateMemoryTool
 
+    decided(monkeypatch, style_create("be terse in every reply"))
     res = _run(
         CreateMemoryTool(owner_id=OWNER).execute(
             content="be terse in every reply", namespace="template:someone-else"
@@ -232,15 +269,17 @@ def test_rule_cannot_overwrite_contact_blob(harness, monkeypatch):
     assert "never contradict" not in content
 
 
-def test_refining_an_existing_rule_is_allowed(fresh_db):
+def test_refining_an_existing_rule_is_allowed(harness, monkeypatch):
     from zylch.tools.base import ToolStatus
     from zylch.tools.create_memory_tool import CreateMemoryTool
     from zylch.tools.update_memory_tool import UpdateMemoryTool
 
+    decided(monkeypatch, style_create("RULE: v1"))
     rule = _run(
         CreateMemoryTool(owner_id=OWNER).execute(content="RULE: v1", entry_type="behavioral_rule")
     )
     rid = rule.data["blob_id"]
+    decided(monkeypatch, style_update(rid, "RULE: v2 refined"))
     res = _run(
         UpdateMemoryTool(owner_id=OWNER).execute(
             blob_id=rid, new_content="RULE: v2 refined", entry_type="behavioral_rule"
@@ -252,12 +291,13 @@ def test_refining_an_existing_rule_is_allowed(fresh_db):
     assert "v2 refined" in content
 
 
-def test_an_entity_cannot_be_written_over_a_rule(fresh_db):
-    """The refinement door keeps the rule store's shape rule."""
+def test_an_entity_cannot_be_written_over_a_rule(harness, monkeypatch):
+    """The refinement door keeps the rule store's shape rule, unpaid."""
     from zylch.tools.base import ToolStatus
     from zylch.tools.create_memory_tool import CreateMemoryTool
     from zylch.tools.update_memory_tool import UpdateMemoryTool
 
+    decided(monkeypatch, style_create("RULE: v1"))
     rid = _run(
         CreateMemoryTool(owner_id=OWNER).execute(content="RULE: v1", entry_type="behavioral_rule")
     ).data["blob_id"]
@@ -269,7 +309,7 @@ def test_an_entity_cannot_be_written_over_a_rule(fresh_db):
     assert res.status == ToolStatus.ERROR
     assert "entity-shaped" in (res.error or "")
     _, content = _blob(rid)
-    assert content == "RULE: v1"
+    assert content.endswith("RULE: v1")
 
 
 def test_a_refinement_with_nothing_to_say_or_no_row_is_refused(fresh_db):
@@ -277,7 +317,7 @@ def test_a_refinement_with_nothing_to_say_or_no_row_is_refused(fresh_db):
     from zylch.tools.base import ToolStatus
     from zylch.tools.update_memory_tool import UpdateMemoryTool
 
-    assert refine_rule(OWNER, "b1", "   ", "x", writer="test")["action"] == "refused"
+    assert refine_rule(OWNER, "b1", "   ", writer="test")["action"] == "refused"
     res = _run(
         UpdateMemoryTool(owner_id=OWNER).execute(
             blob_id="no-such-blob", new_content="RULE: v2", entry_type="behavioral_rule"

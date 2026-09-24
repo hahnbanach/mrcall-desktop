@@ -81,22 +81,20 @@ def _submit_event(query: str, new_content: str, owner_id: str) -> str:
     except RuntimeError as e:
         return str(e)
 
-    # No subject hint. The query used to be passed as `SubjectHint(name=...)`,
-    # on the theory that a name hint widens retrieval — and it does not:
-    # `candidates.gather` searches `event.observation`, and the identifier index
-    # deliberately stores no names, so the hint surfaced nothing. What it DID do
-    # is make `SubjectHint.names_entity_subject` true, which is the validator's
-    # signal that the caller already resolved a person or a company — and that
-    # forbids a company FACT outright. So a solve could never correct
-    # company-wide knowledge ("from Monday we open at 8"), which is one of the
-    # things a solve is most likely to be asked to do.
+    # No subject hint. The query used to be passed as `SubjectHint(name=...)`.
+    # A name hint drives the cosine query (`candidates.retrieval_query`),
+    # but it also makes `SubjectHint.names_entity_subject` true, which is the
+    # validator's signal that the caller already resolved a person or a company
+    # — and that forbids a company FACT outright. So a solve could never
+    # correct company-wide knowledge ("from Monday we open at 8"), which is one
+    # of the things a solve is most likely to be asked to do.
     #
     # There is no retrieval-only field to put it in: any populated `SubjectHint`
-    # field is read as an entity subject. So the query stays what the tool
-    # schema says it is — what the model searched with before calling — and
-    # carries no authority and no classification into the decision. Retrieval is
-    # driven by the observation, which for a solve is the very text the query
-    # was derived from.
+    # entity field is read as an entity subject. So the query stays what the
+    # tool schema says it is — what the model searched with before calling —
+    # and carries no authority and no classification into the decision.
+    # Retrieval is driven by the observation, which for a solve is the very
+    # text the query was derived from.
     event = MemoryEvent(
         owner_id=owner_id,
         company_key=company_key,

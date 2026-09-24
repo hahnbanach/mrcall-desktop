@@ -2,14 +2,15 @@
 
 import logging
 import re
-import time
 from dataclasses import dataclass, field
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional
 
 import numpy as np
 
+from .eligibility import ineligible_fact_ids
 from .embeddings import EmbeddingEngine
 from .pattern_detection import detect_pattern
+from .vector_index import InMemoryVectorIndex  # noqa: F401 - re-exported under its old name
 from .company_key import require_company_key
 from .scope import blob_visible, sentences_in_scope
 from zylch.storage.models import Blob, BlobSentence
@@ -47,104 +48,6 @@ class SearchResult:
     hybrid_score: float
     events: list
     matching_sentences: List[str] = field(default_factory=list)
-
-
-class InMemoryVectorIndex:
-    """Brute-force cosine similarity over numpy arrays.
-
-    For <10k blobs x 384 dims, search is <1ms after initial load.
-    Memory: ~750KB for 500 blobs.
-    """
-
-    def __init__(self):
-        self._matrix: Optional[np.ndarray] = None  # (N, 384)
-        self._ids: Optional[List[str]] = None
-        self._norms: Optional[np.ndarray] = None
-        # The scope this index was loaded for: "<owner_id>|<company_key>".
-        # Two owners under one key see different rule rows, so the owner
-        # stays part of the identity; two keys are two companies.
-        self._scope_id: Optional[str] = None
-        self._count: int = 0
-
-    @property
-    def is_loaded(self) -> bool:
-        return self._matrix is not None
-
-    def invalidate(self):
-        """Clear cached index (call after blob insert/update)."""
-        logger.debug("[VectorIndex] invalidate cache")
-        self._matrix = None
-        self._ids = None
-        self._norms = None
-        self._scope_id = None
-        self._count = 0
-
-    def load(
-        self,
-        blobs: List[Tuple[str, bytes]],
-        scope_id: str,
-    ):
-        """Load embeddings from (id, embedding_bytes) pairs.
-
-        Args:
-            blobs: list of (blob_id, embedding_bytes) tuples
-            scope_id: the (owner, key) scope these vectors were read for
-        """
-        t0 = time.perf_counter()
-        ids = []
-        vectors = []
-        for blob_id, emb_bytes in blobs:
-            if emb_bytes is None:
-                continue
-            vec = np.frombuffer(emb_bytes, dtype=np.float32)
-            if vec.size == 0:
-                continue
-            ids.append(blob_id)
-            vectors.append(vec)
-
-        if vectors:
-            self._matrix = np.vstack(vectors)
-            self._norms = np.linalg.norm(self._matrix, axis=1)
-            self._ids = ids
-        else:
-            self._matrix = None
-            self._ids = []
-            self._norms = None
-
-        self._scope_id = scope_id
-        self._count = len(ids)
-        elapsed_ms = (time.perf_counter() - t0) * 1000
-        logger.debug(f"[VectorIndex] load: {self._count} vectors " f"in {elapsed_ms:.1f}ms")
-
-    def search(
-        self,
-        query_vec: np.ndarray,
-        top_k: int = 10,
-    ) -> List[Tuple[str, float]]:
-        """Return top-K (blob_id, cosine_similarity) pairs.
-
-        Args:
-            query_vec: query embedding (384,)
-            top_k: max results
-
-        Returns:
-            List of (blob_id, score) sorted descending
-        """
-        if self._matrix is None or len(self._ids) == 0:
-            return []
-        query_norm = np.linalg.norm(query_vec)
-        if query_norm == 0:
-            return []
-
-        t0 = time.perf_counter()
-        scores = np.dot(self._matrix, query_vec) / (self._norms * query_norm)
-        top_idx = np.argsort(scores)[-top_k:][::-1]
-        results = [(self._ids[i], float(scores[i])) for i in top_idx if scores[i] > 0]
-        elapsed_ms = (time.perf_counter() - t0) * 1000
-        logger.debug(
-            f"[VectorIndex] search: top_k={top_k}, " f"found={len(results)} in {elapsed_ms:.2f}ms"
-        )
-        return results
 
 
 class HybridSearchEngine:
@@ -187,7 +90,10 @@ class HybridSearchEngine:
             rows = (
                 session.query(Blob.id, Blob.embedding).filter(blob_visible(owner_id, key)).all()
             )
-        blobs = [(str(r.id), r.embedding) for r in rows]
+            # A known customer-shaped FACT never enters the index, so it cannot
+            # crowd a valid row out of the top-K before ranking (memory/eligibility.py).
+            excluded = ineligible_fact_ids(session, key)
+        blobs = [(str(r.id), r.embedding) for r in rows if str(r.id) not in excluded]
         self._index.load(blobs, scope_id)
 
     def _text_search(
@@ -223,9 +129,12 @@ class HybridSearchEngine:
             if namespace:
                 q = q.filter(Blob.namespace == namespace)
             rows = q.all()
+            excluded = ineligible_fact_ids(session, key)
 
         scores: Dict[str, float] = {}
         for row in rows:
+            if str(row.id) in excluded:
+                continue
             identifiers = extract_identifiers_section(row.content or "").lower()
             matched = sum(1 for t in terms if t in identifiers)
             if matched > 0:
@@ -310,7 +219,8 @@ class HybridSearchEngine:
             )
             if namespace:
                 q = q.filter(Blob.namespace == namespace)
-            blobs = {str(b.id): b.to_dict() for b in q.all()}
+            excluded = ineligible_fact_ids(session, key)
+            blobs = {str(b.id): b.to_dict() for b in q.all() if str(b.id) not in excluded}
 
         # 6. Score and rank
         scored: List[SearchResult] = []

@@ -13,16 +13,21 @@ ALREADY in `person_identifiers` (from a previous email) merges into the
 existing blob instead of creating a duplicate. That's the load-bearing
 contract Phase 1+2 buys for cross-channel identity.
 
-The LLM client is mocked via `make_llm_client`; the merge service is
-mocked at the worker level. Storage is real (in-memory SQLite via the
-`fresh_db` fixture).
+The worker-path cases run on the ingestion bench (``tests/workers/ingestion_env.py``):
+the real worker on real split databases, the extraction stubbed, the mnemonic
+role's decisions scripted at the transport, inside an admitted preparation
+run. The storage-helper and envelope cases keep the plain ``fresh_db`` store.
 """
 
+import json
 import uuid
 from datetime import datetime, timezone
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 import pytest
+
+from tests.memory.mnemonic_env import COMPANY_A, OWNER_A, BagOfWordsEmbedder
+from tests.workers.ingestion_env import booted, make_worker, run
 
 
 # ---------------------------------------------------------------------
@@ -74,39 +79,51 @@ def _make_wa_message(
     return row_id
 
 
-def _make_worker(owner: str, *, llm_merge_returns: list):
-    """Build a MemoryWorker with the LLM client + merge service mocked.
+@pytest.fixture
+def embedder():
+    return BagOfWordsEmbedder()
 
-    Storage / hybrid_search / blob_storage / person_identifiers are all
-    real against the active fresh_db.
+
+@pytest.fixture
+def profile(tmp_path, monkeypatch, embedder):
+    yield from booted(tmp_path, monkeypatch, embedder)
+
+
+def _make_worker(decisions: list):
+    """The real worker with the extraction stubbed and the role's answers scripted.
+
+    ``_extract_entities_for_message`` is stubbed because the extraction is
+    well-tested elsewhere — what matters here is the pipeline AROUND it (the
+    whatsapp_blobs link, person_identifiers, the watermark), now the harness's.
     """
-    from zylch.workers import memory as mem_mod
-
-    fake_client = MagicMock()
-    with patch.object(mem_mod, "make_llm_client", return_value=fake_client):
-        worker = mem_mod.MemoryWorker(
-            storage=__import__("zylch.storage", fromlist=["Storage"]).Storage(),
-            owner_id=owner,
-        )
-
-    fake_merge = MagicMock()
-    fake_merge.merge.side_effect = list(llm_merge_returns)
-    worker.llm_merge = fake_merge
-
-    # ``has_custom_prompt`` is checked by the pipeline — we don't go via
-    # the pipeline here, but ``_extract_entities_for_message`` does call
-    # ``_get_extraction_prompt``. Stub a non-empty value so we don't take
-    # the "no prompt → return []" branch.
-    worker._custom_prompt = "FAKE PROMPT"
-    worker._custom_prompt_loaded = True
-
-    # Stub _extract_entities_for_message to avoid the real LLM call. The
-    # extraction is well-tested elsewhere — what we care about here is
-    # the pipeline AROUND it (whatsapp_blobs link, person_identifiers,
-    # watermark).
+    worker = make_worker([], decisions)
     worker._extract_entities_for_message = MagicMock()
-
     return worker
+
+
+def _create(content: str) -> str:
+    return json.dumps(
+        {
+            "action": "CREATE",
+            "entity_type": "PERSON",
+            "scope": "entity",
+            "content": content,
+            "reason": "no visible candidate describes this person",
+        }
+    )
+
+
+def _update(blob_id: str, version: str, content: str) -> str:
+    return json.dumps(
+        {
+            "action": "UPDATE",
+            "entity_type": "PERSON",
+            "scope": "entity",
+            "content": content,
+            "write_set": [{"blob_id": blob_id, "expected_version": version, "role": "target"}],
+            "reason": "the same person, reachable on WhatsApp too",
+        }
+    )
 
 
 # ---------------------------------------------------------------------
@@ -114,21 +131,19 @@ def _make_worker(owner: str, *, llm_merge_returns: list):
 # ---------------------------------------------------------------------
 
 
-@pytest.mark.asyncio
-async def test_process_whatsapp_message_creates_blob_and_writes_links(fresh_db):
+def test_process_whatsapp_message_creates_blob_and_writes_links(profile):
     from zylch.storage.database import get_session
     from zylch.storage.models import Blob, PersonIdentifier, WhatsAppBlob, WhatsAppMessage
     from zylch.storage.storage import Storage
 
-    owner = "alice@example.com"
+    owner = OWNER_A
     wa_id = _make_wa_message(owner=owner, text="Ciao Alex, sono John. Ti scrivo per organizzare il corso sicurezza.")
 
-    worker = _make_worker(owner, llm_merge_returns=[])
-
-    # Mock the entity extractor to return one synthetic entity with structured #IDENTIFIERS.
+    # Stub the entity extractor to return one synthetic entity with structured #IDENTIFIERS.
     extracted = (
         "#IDENTIFIERS\n"
         "Entity type: PERSON\n"
+        "Scope: entity\n"
         "Name: John Smith\n"
         "Phone: +393331234567\n"
         "\n"
@@ -138,9 +153,12 @@ async def test_process_whatsapp_message_creates_blob_and_writes_links(fresh_db):
         "#HISTORY\n"
         "First message via WhatsApp."
     )
+    worker = _make_worker([_create(extracted)])
     worker._extract_entities_for_message.return_value = [extracted]
 
-    ok = await worker.process_whatsapp_message(
+    ok = run(
+        worker,
+        "process_whatsapp_message",
         {
             "id": wa_id,
             "text": "Ciao Alex, sono John. Ti scrivo per organizzare il corso sicurezza.",
@@ -149,7 +167,7 @@ async def test_process_whatsapp_message_creates_blob_and_writes_links(fresh_db):
             "timestamp": "2026-05-08T10:11:12+00:00",
             "is_from_me": False,
             "is_group": False,
-        }
+        },
     )
     assert ok is True
 
@@ -197,40 +215,36 @@ async def test_process_whatsapp_message_creates_blob_and_writes_links(fresh_db):
 # ---------------------------------------------------------------------
 
 
-@pytest.mark.asyncio
-async def test_process_whatsapp_message_merges_into_existing_email_blob(fresh_db):
+def test_process_whatsapp_message_merges_into_existing_email_blob(profile):
     """Phase 1b + Phase 2c happy path: an existing PERSON blob with
     `Phone: +393331234567` in person_identifiers (created during email
-    extraction) should be picked up as the merge target when a WA
-    message from the same phone arrives — NO duplicate blob."""
+    extraction) is the candidate the role is shown first when a WA
+    message from the same phone arrives — it updates that row, NO duplicate."""
+    from zylch.memory.blob_storage import BlobStorage
     from zylch.storage.database import get_session
     from zylch.storage.models import Blob, WhatsAppBlob
     from zylch.storage.storage import Storage
 
-    owner = "alice@example.com"
+    owner = OWNER_A
     storage = Storage()
 
     # Pre-seed an "email-derived" blob with a Phone identifier already
     # indexed into person_identifiers. Mirrors what process_email would
     # leave behind after the user received an email signed by John.
-    pre_blob_id = str(uuid.uuid4())
-    with get_session() as s:
-        s.add(
-            Blob(
-                id=pre_blob_id,
-                owner_id=owner,
-                namespace=f"user:{owner}",
-                content=(
-                    "#IDENTIFIERS\n"
-                    "Entity type: PERSON\n"
-                    "Name: John Smith\n"
-                    "Email: contact@example.com\n"
-                    "Phone: +393331234567\n"
-                    "\n"
-                    "#ABOUT\nFrom email signature.\n"
-                ),
-            )
-        )
+    seeded = BlobStorage(get_session, profile.embedder).store_blob(
+        owner,
+        f"user:{COMPANY_A}",
+        "#IDENTIFIERS\n"
+        "Entity type: PERSON\n"
+        "Name: John Smith\n"
+        "Email: contact@example.com\n"
+        "Phone: +393331234567\n"
+        "\n"
+        "#ABOUT\nFrom email signature.\n",
+        "seed",
+    )
+    pre_blob_id = seeded["id"]
+    version = BlobStorage(get_session, profile.embedder).get_blob(pre_blob_id, owner)["updated_at"]
     storage.add_person_identifiers(
         owner,
         pre_blob_id,
@@ -240,12 +254,12 @@ async def test_process_whatsapp_message_merges_into_existing_email_blob(fresh_db
     # Now arrive a WhatsApp message from the same phone.
     wa_id = _make_wa_message(owner=owner, text="Alex, ricordi del corso? Aspetto risposta.")
 
-    # The LLM merge will be asked to merge the new WA-derived entity
-    # with the existing blob's content. Return a "merged" string so the
-    # worker takes the merge branch rather than insert.
+    # The role is asked to decide the WA-derived entity against the existing
+    # blob; it answers with the merged text as an UPDATE of that row.
     merged_content = (
         "#IDENTIFIERS\n"
         "Entity type: PERSON\n"
+        "Scope: entity\n"
         "Name: John Smith\n"
         "Email: contact@example.com\n"
         "Phone: +393331234567\n"
@@ -254,7 +268,7 @@ async def test_process_whatsapp_message_merges_into_existing_email_blob(fresh_db
         "\n"
         "#HISTORY\nNow also reachable via WhatsApp."
     )
-    worker = _make_worker(owner, llm_merge_returns=[merged_content])
+    worker = _make_worker([_update(pre_blob_id, version, merged_content)])
 
     extracted = (
         "#IDENTIFIERS\n"
@@ -268,7 +282,9 @@ async def test_process_whatsapp_message_merges_into_existing_email_blob(fresh_db
     )
     worker._extract_entities_for_message.return_value = [extracted]
 
-    ok = await worker.process_whatsapp_message(
+    ok = run(
+        worker,
+        "process_whatsapp_message",
         {
             "id": wa_id,
             "text": "Alex, ricordi del corso? Aspetto risposta.",
@@ -277,9 +293,11 @@ async def test_process_whatsapp_message_merges_into_existing_email_blob(fresh_db
             "timestamp": "2026-05-08T11:00:00+00:00",
             "is_from_me": False,
             "is_group": False,
-        }
+        },
     )
     assert ok is True
+    shown = json.loads(worker.decision_client._client.messages.create.call_args.kwargs["messages"][0]["content"])
+    assert shown["candidates"][0]["blob_id"] == pre_blob_id
 
     # Still exactly ONE blob — merged into the pre-existing email-derived blob.
     with get_session() as s:
@@ -303,18 +321,19 @@ async def test_process_whatsapp_message_merges_into_existing_email_blob(fresh_db
 # ---------------------------------------------------------------------
 
 
-@pytest.mark.asyncio
-async def test_process_whatsapp_skips_short_text_but_marks_processed(fresh_db):
+def test_process_whatsapp_skips_short_text_but_marks_processed(profile):
     from zylch.storage.database import get_session
     from zylch.storage.models import Blob, WhatsAppBlob, WhatsAppMessage
 
-    owner = "alice@example.com"
+    owner = OWNER_A
     wa_id = _make_wa_message(owner=owner, text="ok")
 
-    worker = _make_worker(owner, llm_merge_returns=[])
+    worker = _make_worker([])
     worker._extract_entities_for_message.return_value = []  # would never be called
 
-    ok = await worker.process_whatsapp_message(
+    ok = run(
+        worker,
+        "process_whatsapp_message",
         {
             "id": wa_id,
             "text": "ok",
@@ -323,7 +342,7 @@ async def test_process_whatsapp_skips_short_text_but_marks_processed(fresh_db):
             "timestamp": "2026-05-08T10:11:12+00:00",
             "is_from_me": False,
             "is_group": False,
-        }
+        },
     )
     assert ok is True
 
@@ -337,20 +356,22 @@ async def test_process_whatsapp_skips_short_text_but_marks_processed(fresh_db):
     worker._extract_entities_for_message.assert_not_called()
 
 
-@pytest.mark.asyncio
-async def test_process_whatsapp_marks_processed_when_extractor_returns_empty(fresh_db):
+def test_process_whatsapp_marks_processed_when_extractor_returns_empty(profile):
+    """An empty valid extraction is a recorded SKIP that marks the source."""
     from zylch.storage.database import get_session
-    from zylch.storage.models import Blob, WhatsAppMessage
+    from zylch.storage.models import Blob, MemoryOperation, WhatsAppMessage
 
-    owner = "alice@example.com"
+    owner = OWNER_A
     wa_id = _make_wa_message(
         owner=owner, text="Some long enough message that the worker will try to extract from."
     )
 
-    worker = _make_worker(owner, llm_merge_returns=[])
+    worker = _make_worker([])
     worker._extract_entities_for_message.return_value = []  # LLM said SKIP
 
-    ok = await worker.process_whatsapp_message(
+    ok = run(
+        worker,
+        "process_whatsapp_message",
         {
             "id": wa_id,
             "text": "Some long enough message that the worker will try to extract from.",
@@ -359,9 +380,11 @@ async def test_process_whatsapp_marks_processed_when_extractor_returns_empty(fre
             "timestamp": "2026-05-08T10:11:12+00:00",
             "is_from_me": False,
             "is_group": False,
-        }
+        },
     )
     assert ok is True
+    with get_session() as s:
+        assert [r.state for r in s.query(MemoryOperation).all()] == ["skipped"]
 
     with get_session() as s:
         assert s.query(Blob).filter(Blob.owner_id == owner).count() == 0

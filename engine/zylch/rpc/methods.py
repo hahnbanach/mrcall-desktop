@@ -715,6 +715,27 @@ async def tasks_solve(params: Dict[str, Any], notify: NotifyFn) -> Any:
                             break
                         _notify(event)
 
+                    # Learn durable rules from any edits the user made to
+                    # approval-gated sends. Fire-and-forget in a thread so it
+                    # never delays the response; the function never raises.
+                    # Spawned INSIDE the solve's turn on purpose: the task
+                    # copies this context, so the learning's memory writes
+                    # carry the turn's cancellation handle and ride this
+                    # solve's interactive contract (mnemonic/entry.py).
+                    corrections = list(getattr(executor, "corrections", []))
+                    if corrections:
+                        from zylch.services.correction_learning import (
+                            learn_from_corrections,
+                        )
+
+                        bg = asyncio.create_task(
+                            asyncio.to_thread(
+                                learn_from_corrections, corrections, owner_id
+                            )
+                        )
+                        _bg_tasks.add(bg)
+                        bg.add_done_callback(_bg_tasks.discard)
+
                 if done_event:
                     # Auto-reanalyze after a solve that mutated state
                     # (send_email, send_whatsapp, send_sms,
@@ -738,22 +759,6 @@ async def tasks_solve(params: Dict[str, Any], notify: NotifyFn) -> Any:
                     _notify(done_event)
                     final = {"ok": True, "result": done_event["result"]}
 
-                # Learn durable rules from any edits the user made to
-                # approval-gated sends. Fire-and-forget in a thread so it
-                # never delays the response; the function never raises.
-                corrections = list(getattr(executor, "corrections", []))
-                if corrections:
-                    from zylch.services.correction_learning import (
-                        learn_from_corrections,
-                    )
-
-                    bg = asyncio.create_task(
-                        asyncio.to_thread(
-                            learn_from_corrections, corrections, owner_id
-                        )
-                    )
-                    _bg_tasks.add(bg)
-                    bg.add_done_callback(_bg_tasks.discard)
                 return final or {"ok": False, "error": "stream ended"}
             finally:
                 _active_executor = None

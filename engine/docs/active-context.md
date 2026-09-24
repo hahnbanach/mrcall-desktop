@@ -49,14 +49,26 @@ reset are the only paths that leave no version behind. A retained version is
 restorable through `memory.restore_version` and `/memory restore`, mechanically
 and gated like every other memory mutation.
 
-`create_memory`, `update_memory` and the task solve — chat, RPC and the
-interactive CLI solve, which carries its solve context — go through the
-semantic commit and nothing else: the direct writes they had are deleted, and
-no setting selects a writer. Every other writer in the inventory is still
-direct. Contracts: [mnemonic commit](features/mnemonic-commit.md),
-[mnemonic decisions](features/mnemonic-decisions.md). Tested locally against
-the frozen milestone 0 incident corpus and real split profile/company
-databases; **not deployed**.
+`create_memory`, `update_memory`, the task solve — chat, RPC and the
+interactive CLI solve, which carries its solve context — `/memory store`, the
+four ingestion channels through the pipeline and through the background memory
+job, the fact and rule stores and correction learning go through the semantic
+commit and nothing else: the direct writes they had are deleted, and no setting
+selects a writer. An ingested source is one parent operation with one child per
+extracted entity, persisted as a manifest before any child is decided; the
+source is marked processed only when every child is committed or deliberately
+skipped, a review parks it visibly, a crash resumes the unfinished children,
+and an edited source is a new revision. An extracted entity carries its own
+identifiers and never the sender's. A known customer-shaped FACT — by its own
+header or by a review's restriction — is absent from every ordinary fact read
+and from hybrid search before ranking. Still direct: reconsolidation with its
+alias writer and donor delete (M7), the owner's delete and reset, and join,
+migrations and the repair scripts (M8). Contracts:
+[mnemonic commit](features/mnemonic-commit.md),
+[mnemonic decisions](features/mnemonic-decisions.md),
+[writer inventory](features/mnemonic-writer-inventory.md). Tested locally
+against the frozen milestone 0 incident corpus and real split profile/company
+databases, on the `mnemonic-m6` branch; **not merged, not deployed**.
 
 Support's engine exposes approval-gated `initiate_call` through the dashboard's
 Firebase atom API, with an explicit calling assistant ID. A live request on

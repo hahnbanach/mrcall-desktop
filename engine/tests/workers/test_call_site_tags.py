@@ -13,7 +13,6 @@ import types
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
-from unittest.mock import MagicMock
 
 import pytest
 
@@ -98,30 +97,36 @@ def test_memory_extract_tag_email():
     assert "memory.extract" in rec.sites
 
 
-# ── memory.extract (calendar) + memory.merge in one drive ───────────────
-def test_calendar_extract_and_merge_tags():
-    from zylch.workers.memory import MemoryWorker
+# ── memory.extract (calendar) + memory.mnemonic in one drive ────────────
+def test_calendar_extract_and_decision_tags(tmp_path, monkeypatch):
+    """The calendar source pays for its extraction under ``memory.extract`` and
+    for the role's decision under ``memory.mnemonic``; the merge tag is gone
+    with the merge call. The recorder answers with text the role cannot
+    parse, so the bounded rounds end in review and the source is not marked."""
+    from zylch.storage.models import CalendarEvent
+    from zylch.storage.database import get_session
 
-    w = MemoryWorker.__new__(MemoryWorker)
-    w.owner_id = "owner@x.io"
-    w.namespace = "user:owner@x.io"
-    rec = _Rec()
-    w.client = rec  # _extract_calendar_facts → create_message_sync → memory.extract
-    w.llm_merge = rec  # self.llm_merge.merge(...) → memory.merge
-    w.hybrid_search = MagicMock()
-    w.hybrid_search.find_for_reconsolidation.return_value = types.SimpleNamespace(
-        content="existing blob", blob_id="b1"
-    )
-    w.blob_storage = MagicMock()
-    w.storage = MagicMock()
+    from tests.memory.mnemonic_env import BagOfWordsEmbedder
+    from tests.workers.ingestion_env import booted, make_worker, run, seed_calendar
 
-    ok = asyncio.run(
-        w.process_calendar_event(
-            {"id": "evt1", "summary": "Sync", "start_time": "2026-07-05T10:00"}
-        )
-    )
-    assert ok is True
-    assert rec.sites == ["memory.extract", "memory.merge"]
+    bench = booted(tmp_path, monkeypatch, BagOfWordsEmbedder())
+    next(bench)
+    try:
+        item = seed_calendar()
+        w = make_worker([], [])
+        rec = _Rec("Marta Riva of Acme attended the sync.")
+        w.client = rec  # _extract_calendar_facts → create_message_sync → memory.extract
+        w.decision_client = rec  # the role's decision → memory.mnemonic
+
+        ok = run(w, "process_calendar_event", item)
+
+        assert ok is False
+        assert rec.sites[:2] == ["memory.extract", "memory.mnemonic"]
+        assert set(rec.sites) == {"memory.extract", "memory.mnemonic"}
+        with get_session() as s:
+            assert s.get(CalendarEvent, item["id"]).memory_processed_at is None
+    finally:
+        next(bench, None)
 
 
 # ── canary ──────────────────────────────────────────────────────────────

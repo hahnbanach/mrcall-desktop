@@ -82,28 +82,14 @@ def test_tool_get_facts_requires_category():
 
 
 # ─── worker FACT routing ──────────────────────────────
+# The FACT entity's route through the harness — the exact (Category, Key) row
+# pinned as the child's target — is tests/workers/test_mnemonic_replay.py's.
 
 
 def test_entity_type_detection():
     assert mw._entity_type("Entity type: FACT\nCategory: x") == "FACT"
     assert mw._entity_type("#IDENTIFIERS\nEntity type: PERSON\nName: A") == "PERSON"
     assert mw._entity_type("no type here") == ""
-
-
-def test_fact_entity_routes_to_upsert(monkeypatch):
-    calls = []
-    monkeypatch.setattr(
-        fs, "upsert_fact", lambda o, cat, k, v: calls.append((o, cat, k, v)) or "blob-x"
-    )
-
-    class _W:
-        owner_id = "o1"
-
-    mw.MemoryWorker._upsert_fact_entity(
-        _W(),
-        "Entity type: FACT\nCategory: white-label\nKey: MOQ\nValue: 500 units",
-    )
-    assert calls == [("o1", "white-label", "MOQ", "500 units")]
 
 
 def test_sectioned_fact_value_excludes_later_sections_but_keeps_multiline_terms():

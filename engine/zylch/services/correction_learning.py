@@ -12,8 +12,13 @@ No regex / hardcoded classification: the model decides what is durable.
 See memory/feedback_no_hardcoded_rules.md for the principle.
 
 This runs AFTER the message has already been sent, so it never blocks the
-user. Failures are swallowed — a missed rule is cheaper than a crash in
-the send path.
+user, on a thread spawned inside the solve's own turn: its judge calls and
+its writes ride that solve's interactive contract — the human's daily
+ledger is the bound, and the preparation pause does not cover this path,
+as it never covered the judge calls. Each correction is one source (the
+drafted and sent texts, with the recipients) whose rule and fact events go
+through the mnemonic harness separately. Failures are swallowed — a missed
+rule is cheaper than a crash in the send path.
 """
 
 import logging
@@ -293,22 +298,68 @@ def extract_fact(
     return None
 
 
-def _write_rule(owner_id: str, content: str) -> Optional[str]:
+# The fields of a message tool's input that name who the message went to.
+_RECIPIENT_FIELDS = ("to", "recipient", "recipients", "phone", "number")
+
+
+def _recipients(tool_input: Dict[str, Any]) -> str:
+    """Who the edited message was sent to, as the observation states it.
+
+    The recipients are what keeps a customer's figure from becoming everyone's:
+    the role reads them beside the edit and decides whether a corrected value
+    is company knowledge or that recipient's.
+    """
+    found = []
+    for field in _RECIPIENT_FIELDS:
+        value = tool_input.get(field)
+        if isinstance(value, (list, tuple)):
+            found.extend(str(v) for v in value if v)
+        elif isinstance(value, str) and value.strip():
+            found.append(value.strip())
+    return ", ".join(found)
+
+
+def _entry_for_correction(corr: Dict[str, Any], proposed: str, edited: str):
+    """The source one correction is: the drafted and sent texts, with the recipients.
+
+    Interactive, on the solve turn that produced the edit — the thread this
+    runs on is spawned inside that turn, so ``entry_for`` finds its handle.
+    The source id is the digest of the pair, so the rule event and the fact
+    event of one correction share a source and are tracked separately.
+    """
+    from zylch.memory.mnemonic.entry import digest, entry_for
+
+    recipients = _recipients(corr.get("edited") or {}) or _recipients(corr.get("proposed") or {})
+    observation = (
+        f"TO: {recipients or '(unknown)'}\n\n"
+        f"ASSISTANT DRAFTED:\n{proposed}\n\n"
+        f"USER ACTUALLY SENT:\n{edited}"
+    )
+    return entry_for(
+        fallback=observation,
+        kind="correction",
+        observation=observation,
+        source_id=f"correction:{digest(proposed + chr(0) + edited)}",
+    )
+
+
+def _write_rule(owner_id: str, content: str, entry=None) -> Optional[str]:
     """Store a learned rule through the guarded store.
 
     Was a bare INSERT into ``prefs:<owner>`` — always a new row, no
     duplicate check, no bound. That is half of why support@'s rule
     store reached 67k chars against an 8k cap. ``prefs_store.store_rule``
-    applies the shape guard, the duplicate check and substring
-    supersession, and writes to the canonical ``template:`` namespace.
+    applies the shape guard and the duplicate check, and submits the rule to
+    the harness under ``entry`` — this correction's own source, on the solve's
+    turn.
     """
     from zylch.services.prefs_store import store_rule
 
     outcome = store_rule(
         owner_id,
         content,
-        event_description="Learned from a message correction",
         writer="correction_learning",
+        entry=entry,
     )
     logger.debug(
         f"[learn] rule outcome action={outcome['action']} "
@@ -357,11 +408,13 @@ def learn_from_corrections(
             continue
         proposed = _message_text(corr.get("proposed") or {})
         edited = _message_text(corr.get("edited") or {})
+        entry = None
 
         # Path 1: durable rule (tone / policy).
         content = extract_rule(proposed, edited, existing, client)
         if content:
-            blob_id = _write_rule(owner_id, content)
+            entry = entry or _entry_for_correction(corr, proposed, edited)
+            blob_id = _write_rule(owner_id, content, entry)
             if blob_id:
                 created.append(blob_id)
                 n_rules += 1
@@ -375,12 +428,13 @@ def learn_from_corrections(
             category, key, value = fact
             from zylch.services.facts_store import upsert_fact
 
+            entry = entry or _entry_for_correction(corr, proposed, edited)
             blob_id = upsert_fact(
                 owner_id,
                 category,
                 key,
                 value,
-                event_description="Learned from a message correction",
+                entry=entry,
             )
             if blob_id:
                 created.append(blob_id)

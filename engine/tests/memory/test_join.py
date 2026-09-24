@@ -17,7 +17,7 @@ from zylch.memory.store import memory_db_path, set_self_notion
 from zylch.storage import database as dbm
 from zylch.storage.database import get_session
 
-from tests.memory.test_split_store import _boot  # noqa: E402  (shared boot helper)
+from tests.memory.test_split_store import _boot, _fact  # noqa: E402  (shared helpers)
 
 
 @pytest.fixture
@@ -45,7 +45,7 @@ def test_join_converges_facts_keeps_history_and_unites_the_rest(
 
     a = _boot(monkeypatch, tmp_path, "a", key=None, source=None)
     key_a = current_company_key()
-    facts_store.upsert_fact(a, "pricing", "MOQ", "500 units")
+    _fact(a, stub_embedder, "pricing", "MOQ", "500 units")
     BlobStorage(get_session, stub_embedder).store_blob(
         a, entity_namespace(key_a), "#IDENTIFIERS\nName: A-only\n#ABOUT\nx", "x"
     )
@@ -53,8 +53,8 @@ def test_join_converges_facts_keeps_history_and_unites_the_rest(
     b = _boot(monkeypatch, tmp_path, "b", key=None, source=None)  # its own memory
     key_b = current_company_key()
     assert key_b != key_a
-    facts_store.upsert_fact(b, "pricing", "MOQ", "300 units")  # same (category, key), other value
-    facts_store.upsert_fact(b, "pricing", "Lead time", "6 weeks")
+    _fact(b, stub_embedder, "pricing", "MOQ", "300 units")  # same (category, key), other value
+    _fact(b, stub_embedder, "pricing", "Lead time", "6 weeks")
     store_b = BlobStorage(get_session, stub_embedder)
     store_b.store_blob(b, entity_namespace(key_b), "#IDENTIFIERS\nName: B-only\n#ABOUT\ny", "x")
     store_b.store_blob(b, f"template:{b}", "B signs with the warehouse number", "x")

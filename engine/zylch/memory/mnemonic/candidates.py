@@ -5,33 +5,95 @@ the role never sees a wider comparison set than the code it replaces. An exact
 visible target named by the caller is pinned first and counts *inside* that
 bound rather than widening it.
 
-Corroboration is carried through from ``workers/memory_candidates``: how many
-structured identifiers a candidate actually shares with the observation. That
-is mechanical parsing of explicit identity fields, not a judgment about
-meaning. Index proximity travels as ordering only. Neither authorizes a
-mutation: the validator refuses an uncorroborated merge however similar the
-retrieval thought the rows were.
+Two token sets, and the difference between them is the difference between
+finding a memory and being allowed to touch it:
+
+- **retrieval tokens** (:func:`event_identifiers`) — every structured
+  identifier the event states, names and companies included. They select and
+  rank candidates and they are what the role is told a candidate shares.
+- **identity tokens** (:func:`identity_tokens`) — emails, phones and lids
+  only. They are the evidence the validator's PERSON corroboration accepts:
+  two people called Mario Rossi are two people, and a shared company is not a
+  shared identity.
+
+Both come from the caller's hint when it states them. The observation is
+mined only for an **interactive** event whose hint states no identity — the
+chat and solve adapters, for which the observation is the human's own words
+and is mined exactly as before. An automatic event's observation is the whole
+channel message it came from, and its identity is what its hint states and
+nothing else: mining the message would make the sender's address corroborate
+every entity it mentions — the sender-injection defect under another name —
+and a name-only entity is exactly the child whose hint states no address.
+
+Corroboration counts are carried through ``workers/memory_candidates``: how
+many retrieval tokens a candidate actually shares with the event. That is
+mechanical parsing of explicit identity fields, not a judgment about meaning.
+Index proximity travels as ordering only. Neither authorizes a mutation: the
+validator refuses an uncorroborated merge however similar the retrieval
+thought the rows were.
 """
 
 from __future__ import annotations
 
 import re
-from typing import Any, Callable, Iterable, Optional, Sequence, Tuple
+from typing import Any, Callable, Iterable, Optional, Sequence, Set, Tuple
 
 from zylch.workers.memory_candidates import merge_shortlist
 
-from .contracts import MAX_CANDIDATES, Candidate, MemoryEvent
+from .contracts import AUTOMATIC, MAX_CANDIDATES, Candidate, MemoryEvent
 
 _IDENTIFIER_LINE = re.compile(
     r"^(?:name|email|e-mail|phone|mobile|tel|telephone|company|domain|vat|id)\s*:\s*(.+)$",
     re.IGNORECASE | re.MULTILINE,
 )
 _EMAIL = re.compile(r"[\w.+-]+@[\w-]+\.[\w.-]+")
-_PHONE = re.compile(r"\+?\d[\d\s().-]{6,}\d")
+# A phone is a run of digits with separators. The lookarounds keep it from
+# reading the local part of an email or of a WhatsApp ``<digits>@lid`` as a
+# phone: that is the digit-strip ``_normalise_phone`` guards against, and a
+# lid's digits must never compare equal to somebody's number.
+_PHONE = re.compile(r"(?<![\w@])\+?\d[\d\s().-]{6,}\d(?![\w@])")
+
+# What a phone value may contain before its narrative tail ("(cell)", "home").
+_PHONE_CHARS = frozenset("+0123456789 .-()/")
+# A clipped run shorter than this is not a phone; the value is kept whole so a
+# company called "3M" does not become the token "3".
+_MIN_PHONE_DIGITS = 7
 
 
 def _normalize(value: str) -> str:
-    return re.sub(r"[\s().-]", "", value).strip().lower()
+    """The one comparison form, applied to both sides of every intersection.
+
+    A phone-shaped value — starting with ``+`` or a digit and carrying no
+    ``@`` — is clipped at its first non-phone character, exactly as
+    ``workers.memory._normalise_phone`` clips the values it indexes, so
+    ``Phone: +39 333 1200000 (cell)`` in a blob and ``+393331200000`` in a hint
+    compare equal. A value containing ``@`` is never clipped: an email keeps its
+    domain and a lid keeps its discriminator. Separators are then stripped and
+    a leading ``00`` becomes ``+``, again as the index does.
+    """
+    value = (value or "").strip()
+    if value and "@" not in value and (value[0] == "+" or value[0].isdigit()):
+        run = []
+        for ch in value:
+            if ch in _PHONE_CHARS:
+                run.append(ch)
+            else:
+                break
+        clipped = "".join(run)
+        if sum(ch.isdigit() for ch in clipped) >= _MIN_PHONE_DIGITS:
+            value = clipped
+    value = re.sub(r"[\s().\-/]", "", value).strip().lower()
+    if value.startswith("00") and value[2:].isdigit():
+        value = "+" + value[2:]
+    return value
+
+
+def _is_identity_token(token: str) -> bool:
+    """An email, a lid or a phone — never a name, a company or a category."""
+    if "@" in token:
+        return True
+    digits = token[1:] if token.startswith("+") else token
+    return digits.isdigit() and len(digits) >= _MIN_PHONE_DIGITS
 
 
 def parse_identifiers(content: str) -> set:
@@ -54,20 +116,132 @@ def parse_identifiers(content: str) -> set:
     return found
 
 
-def event_identifiers(event: MemoryEvent) -> set:
-    """Identifiers the event itself asserts — hint fields first, then the text.
+def identity_tokens_of(content: str) -> set:
+    """The identity tokens a blob's text states: its emails, phones and lids."""
+    return {token for token in parse_identifiers(content) if _is_identity_token(token)}
 
-    The caller's structured hint is authoritative about what it claims; the
-    observation is mined only for the unambiguous shapes above.
+
+def identity_pairs_of(text: str) -> list:
+    """The ``(kind, value)`` pairs a text states, in the identity index's own form.
+
+    Comparison tokens (:func:`_normalize`) strip an email's dots; the index
+    stores the address as written, lowercased, so a lookup built from tokens
+    missed every dotted domain. This is the form the index is asked in: emails
+    as written and lowercased, phones canonical.
     """
-    found = set()
+    pairs = []
+    seen = set()
+    for match in _EMAIL.findall(text or ""):
+        value = match.strip().lower()
+        if value and ("email", value) not in seen:
+            seen.add(("email", value))
+            pairs.append(("email", value))
+    for match in _PHONE.findall(text or ""):
+        value = _normalize(match)
+        if _is_identity_token(value) and ("phone", value) not in seen:
+            seen.add(("phone", value))
+            pairs.append(("phone", value))
+    return pairs
+
+
+def _hint_identity(event: MemoryEvent) -> Set[str]:
     hint = event.subject_hint
-    if hint:
-        for value in (hint.name, hint.email, hint.phone, hint.company):
-            if value:
-                found.add(_normalize(value))
-    found |= parse_identifiers(event.observation)
-    return {value for value in found if value}
+    if hint is None:
+        return set()
+    found = {_normalize(value) for _, value in hint.identifiers}
+    for value in (hint.email, hint.phone):
+        if value:
+            found.add(_normalize(value))
+    found.discard("")
+    return found
+
+
+def _hint_names(event: MemoryEvent) -> Set[str]:
+    hint = event.subject_hint
+    if hint is None:
+        return set()
+    found = {_normalize(value) for value in (hint.name, hint.company) if value}
+    found.discard("")
+    return found
+
+
+# The source kinds whose observation is what a human said or pointed at — a
+# chat turn, a CLI or RPC instruction, a task and its typed instruction. Only
+# these may be mined for identity. A channel message (email, whatsapp,
+# calendar, mrcall) is an envelope with a sender; a correction's observation
+# is the drafted and sent texts with their recipients. Neither is the subject's
+# own statement of who it is, and neither is ever mined.
+MINED_SOURCE_KINDS = ("chat", "cli", "rpc", "task", "task_instruction")
+
+
+def mines_observation(event: MemoryEvent) -> bool:
+    """May this event's observation be read for identity at all?
+
+    Only an event from a mined source kind whose hint states no identity. An
+    automatic event's observation is a whole channel message and is never
+    mined — its identity is its hint's, and a hint that states no address
+    states no identity; a correction's envelope is not mined either.
+    """
+    return (
+        event.origin != AUTOMATIC
+        and event.source_kind in MINED_SOURCE_KINDS
+        and not _hint_identity(event)
+    )
+
+
+_mines_observation = mines_observation
+
+
+def identity_tokens(event: MemoryEvent) -> set:
+    """The evidence side: the event's emails, phones and lids, and nothing else.
+
+    The hint's identifiers when it states any; otherwise, for an interactive
+    event, the identity-shaped tokens of the observation — the chat and solve
+    case. An automatic event with no stated identity has none.
+    """
+    stated = _hint_identity(event)
+    if stated or not _mines_observation(event):
+        return stated
+    return identity_tokens_of(event.observation)
+
+
+def event_identifiers(event: MemoryEvent) -> set:
+    """The retrieval side: every identifier the event asserts, names included.
+
+    For an interactive event that states nothing, this is the observation's
+    structured identifiers exactly as before. Otherwise it is the hint's names
+    and companies plus the identity tokens — which for an ingestion child are
+    the entity's own, never the message's sender.
+    """
+    stated = _hint_names(event) | _hint_identity(event)
+    if not stated and _mines_observation(event):
+        return parse_identifiers(event.observation)
+    return stated | identity_tokens(event)
+
+
+def retrieval_query(event: MemoryEvent) -> str:
+    """What the cosine search is asked: the hint's identifier lines, or the text.
+
+    A hint that names its subject widens retrieval by driving the query: the
+    header lines are the stable part of a record where ``#ABOUT`` and
+    ``#HISTORY`` drift, so searching on them is what finds an existing blob for
+    the same subject. With no hint the observation is the query, as before.
+    """
+    hint = event.subject_hint
+    if hint is None:
+        return event.observation
+    lines = []
+    if hint.name:
+        lines.append(f"Name: {hint.name}")
+    if hint.company:
+        lines.append(f"Company: {hint.company}")
+    if hint.email:
+        lines.append(f"Email: {hint.email}")
+    if hint.phone:
+        lines.append(f"Phone: {hint.phone}")
+    for kind, value in hint.identifiers:
+        lines.append(f"{kind.upper() if kind == 'lid' else kind.capitalize()}: {value}")
+    return "\n".join(lines) if lines else event.observation
 
 
 def gather(
@@ -83,7 +257,7 @@ def gather(
     widens visibility and never reads a row the caller could not read itself.
     """
     wanted = event_identifiers(event)
-    cosine = list(search(event.observation, MAX_CANDIDATES))
+    cosine = list(search(retrieval_query(event), MAX_CANDIDATES))
     shortlist = merge_shortlist(
         wanted,
         identifier_blob_ids,

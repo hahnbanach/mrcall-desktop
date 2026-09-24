@@ -11,6 +11,7 @@
     "delete_all_blobs",
     "upsert_fact",
     "store_rule",
+    "refine_rule",
     "_create_blob",
     "_update_blob",
     "add_person_identifiers",
@@ -81,7 +82,8 @@
       "call": "delete_all_blobs",
       "count": 1,
       "mode": "async",
-      "milestone": 6
+      "milestone": 1,
+      "note": "a human delete verb; constrained by the approval gate, never by the harness"
     },
     {
       "path": "zylch/services/command_handlers.py",
@@ -89,23 +91,8 @@
       "call": "delete_blob",
       "count": 1,
       "mode": "async",
-      "milestone": 6
-    },
-    {
-      "path": "zylch/services/command_handlers.py",
-      "symbol": "handle_memory",
-      "call": "store_blob",
-      "count": 2,
-      "mode": "async",
-      "milestone": 6
-    },
-    {
-      "path": "zylch/services/command_handlers.py",
-      "symbol": "handle_memory",
-      "call": "update_blob",
-      "count": 1,
-      "mode": "async",
-      "milestone": 6
+      "milestone": 1,
+      "note": "a human delete verb; constrained by the approval gate, never by the harness"
     },
     {
       "path": "zylch/services/command_handlers.py",
@@ -121,7 +108,8 @@
       "call": "store_rule",
       "count": 1,
       "mode": "sync",
-      "milestone": 6
+      "milestone": 6,
+      "note": "adapter door: the helper submits to the harness (milestone 6); the row records the door, not a direct write"
     },
     {
       "path": "zylch/services/correction_learning.py",
@@ -129,127 +117,8 @@
       "call": "upsert_fact",
       "count": 1,
       "mode": "sync",
-      "milestone": 6
-    },
-    {
-      "path": "zylch/services/facts_store.py",
-      "symbol": "upsert_fact",
-      "call": "store_blob",
-      "count": 1,
-      "mode": "sync",
-      "milestone": 6
-    },
-    {
-      "path": "zylch/services/facts_store.py",
-      "symbol": "upsert_fact",
-      "call": "update_blob",
-      "count": 1,
-      "mode": "sync",
-      "milestone": 6
-    },
-    {
-      "path": "zylch/services/job_executor.py",
-      "symbol": "_process_calendar_event_sync",
-      "call": "store_blob",
-      "count": 1,
-      "mode": "sync",
-      "milestone": 6
-    },
-    {
-      "path": "zylch/services/job_executor.py",
-      "symbol": "_process_calendar_event_sync",
-      "call": "update_blob",
-      "count": 1,
-      "mode": "sync",
-      "milestone": 6
-    },
-    {
-      "path": "zylch/services/job_executor.py",
-      "symbol": "_upsert_entity_sync",
-      "call": "add_email_blob_link",
-      "count": 1,
-      "mode": "sync",
-      "milestone": 6
-    },
-    {
-      "path": "zylch/services/job_executor.py",
-      "symbol": "_upsert_entity_sync",
-      "call": "add_person_identifiers",
-      "count": 1,
-      "mode": "sync",
-      "milestone": 6
-    },
-    {
-      "path": "zylch/services/job_executor.py",
-      "symbol": "_upsert_entity_sync",
-      "call": "store_blob",
-      "count": 1,
-      "mode": "sync",
-      "milestone": 6
-    },
-    {
-      "path": "zylch/services/job_executor.py",
-      "symbol": "_upsert_entity_sync",
-      "call": "update_blob",
-      "count": 1,
-      "mode": "sync",
-      "milestone": 6
-    },
-    {
-      "path": "zylch/services/job_executor.py",
-      "symbol": "_upsert_mrcall_entity_sync",
-      "call": "store_blob",
-      "count": 1,
-      "mode": "sync",
-      "milestone": 6
-    },
-    {
-      "path": "zylch/services/job_executor.py",
-      "symbol": "_upsert_mrcall_entity_sync",
-      "call": "update_blob",
-      "count": 1,
-      "mode": "sync",
-      "milestone": 6
-    },
-    {
-      "path": "zylch/services/prefs_store.py",
-      "symbol": "_create_blob",
-      "call": "store_blob",
-      "count": 1,
-      "mode": "sync",
-      "milestone": 6
-    },
-    {
-      "path": "zylch/services/prefs_store.py",
-      "symbol": "_update_blob",
-      "call": "update_blob",
-      "count": 1,
-      "mode": "sync",
-      "milestone": 6
-    },
-    {
-      "path": "zylch/services/prefs_store.py",
-      "symbol": "store_rule",
-      "call": "_create_blob",
-      "count": 1,
-      "mode": "sync",
-      "milestone": 6
-    },
-    {
-      "path": "zylch/services/prefs_store.py",
-      "symbol": "store_rule",
-      "call": "_update_blob",
-      "count": 1,
-      "mode": "sync",
-      "milestone": 6
-    },
-    {
-      "path": "zylch/services/prefs_store.py",
-      "symbol": "refine_rule",
-      "call": "_update_blob",
-      "count": 1,
-      "mode": "sync",
-      "milestone": 6
+      "milestone": 6,
+      "note": "adapter door: the helper submits to the harness (milestone 6); the row records the door, not a direct write"
     },
     {
       "path": "zylch/storage/step_memory_split.py",
@@ -261,99 +130,21 @@
     },
     {
       "path": "zylch/tools/create_memory_tool.py",
-      "symbol": "CreateMemoryTool.execute",
+      "symbol": "CreateMemoryTool._store_rule",
       "call": "store_rule",
       "count": 1,
-      "mode": "async",
-      "milestone": 6
+      "mode": "sync",
+      "milestone": 6,
+      "note": "adapter door: the helper submits to the harness (milestone 6); the row records the door, not a direct write"
     },
     {
-      "path": "zylch/workers/memory.py",
-      "symbol": "MemoryWorker._upsert_entity",
-      "call": "add_email_blob_link",
-      "count": 1,
-      "mode": "async",
-      "milestone": 6
-    },
-    {
-      "path": "zylch/workers/memory.py",
-      "symbol": "MemoryWorker._upsert_entity",
-      "call": "add_person_identifiers",
-      "count": 1,
-      "mode": "async",
-      "milestone": 6
-    },
-    {
-      "path": "zylch/workers/memory.py",
-      "symbol": "MemoryWorker._upsert_entity",
-      "call": "add_whatsapp_blob_link",
-      "count": 1,
-      "mode": "async",
-      "milestone": 6
-    },
-    {
-      "path": "zylch/workers/memory.py",
-      "symbol": "MemoryWorker._upsert_entity",
-      "call": "store_blob",
-      "count": 1,
-      "mode": "async",
-      "milestone": 6
-    },
-    {
-      "path": "zylch/workers/memory.py",
-      "symbol": "MemoryWorker._upsert_entity",
-      "call": "update_blob",
-      "count": 1,
-      "mode": "async",
-      "milestone": 6
-    },
-    {
-      "path": "zylch/workers/memory.py",
-      "symbol": "MemoryWorker._upsert_fact_entity",
-      "call": "upsert_fact",
+      "path": "zylch/tools/update_memory_tool.py",
+      "symbol": "UpdateMemoryTool._refine_rule",
+      "call": "refine_rule",
       "count": 1,
       "mode": "sync",
-      "milestone": 6
-    },
-    {
-      "path": "zylch/workers/memory.py",
-      "symbol": "MemoryWorker._upsert_mrcall_entity",
-      "call": "store_blob",
-      "count": 1,
-      "mode": "async",
-      "milestone": 6
-    },
-    {
-      "path": "zylch/workers/memory.py",
-      "symbol": "MemoryWorker._upsert_mrcall_entity",
-      "call": "update_blob",
-      "count": 1,
-      "mode": "async",
-      "milestone": 6
-    },
-    {
-      "path": "zylch/workers/memory.py",
-      "symbol": "MemoryWorker.process_calendar_event",
-      "call": "add_calendar_blob_link",
-      "count": 1,
-      "mode": "async",
-      "milestone": 6
-    },
-    {
-      "path": "zylch/workers/memory.py",
-      "symbol": "MemoryWorker.process_calendar_event",
-      "call": "store_blob",
-      "count": 1,
-      "mode": "async",
-      "milestone": 6
-    },
-    {
-      "path": "zylch/workers/memory.py",
-      "symbol": "MemoryWorker.process_calendar_event",
-      "call": "update_blob",
-      "count": 1,
-      "mode": "async",
-      "milestone": 6
+      "milestone": 6,
+      "note": "adapter door: the helper submits to the harness (milestone 6); the row records the door, not a direct write"
     }
   ],
   "orm_sinks": [

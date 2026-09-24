@@ -106,9 +106,18 @@ def _proposal_from(payload: Mapping[str, Any]) -> Proposal:
             declared_effects=_effects(payload.get("declared_effects")),
             no_op_target=_single_target(payload.get("no_op_target")),
             confidence=_confidence(payload.get("confidence")),
+            ineligible=_ids(payload.get("ineligible")),
         )
     except MnemonicContractError as exc:
         raise MemoryResponseError(f"Memory decision breaks its contract: {exc}") from None
+
+
+def _ids(raw: Any) -> Tuple[str, ...]:
+    if raw in (None, ""):
+        return ()
+    if not isinstance(raw, list) or not all(isinstance(item, str) for item in raw):
+        raise MnemonicContractError("ineligible must be a list of blob ids")
+    return tuple(item.strip() for item in raw if item.strip())
 
 
 def _upper(value: Any) -> str:
@@ -227,7 +236,16 @@ def decide(
                     attempts=attempts - 1,
                 )
             except BudgetError as exc:
-                return _failure(event, attempts - 1, f"paid decision unavailable: {exc}", proposal)
+                # Carried as the object it is — a pause is a PreparationStopped,
+                # a budget refusal a BudgetError — so a caller whose batch stops
+                # on that class can re-raise the same one.
+                return _failure(
+                    event,
+                    attempts - 1,
+                    f"paid decision unavailable: {exc}",
+                    proposal,
+                    refusal=exc,
+                )
 
             try:
                 proposal = adapt_response(response)
@@ -299,12 +317,16 @@ def _accepted(
 
 
 def _failure(
-    event: MemoryEvent, attempts: int, reason: str, proposal: Optional[Proposal]
+    event: MemoryEvent,
+    attempts: int,
+    reason: str,
+    proposal: Optional[Proposal],
+    refusal: Optional[BaseException] = None,
 ) -> MnemonicDecision:
     return MnemonicDecision(
         event_id=event.event_id,
         result=MnemonicResult.retryable_failure(
-            event.event_id, reason, proposal=proposal, attempts=attempts
+            event.event_id, reason, proposal=proposal, attempts=attempts, refusal=refusal
         ),
         proposal=proposal,
         attempts=attempts,

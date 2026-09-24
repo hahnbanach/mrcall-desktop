@@ -212,9 +212,10 @@ def submitted_event(monkeypatch, context):
 def test_the_query_reaches_the_decision_as_nothing_at_all(profile, monkeypatch, embedder):
     """It selects nothing, and it is not a subject hint either.
 
-    It was one, briefly: ``SubjectHint(name=query)``, on the theory that a name
-    hint widens retrieval. It does not — see the next test — and it made the
-    validator read every solve as a caller-resolved entity subject.
+    It was one, briefly: ``SubjectHint(name=query)``. A name hint does drive
+    the retrieval query — see the next test — but it also makes the validator
+    read the solve as a caller-resolved entity subject, which forbids the
+    company FACT a solve is most likely to be asked for.
     """
     seen = submitted_event(monkeypatch, SolveContext(task_id="t1", instruction=SAID))
     event = seen["event"]
@@ -224,7 +225,9 @@ def test_the_query_reaches_the_decision_as_nothing_at_all(profile, monkeypatch, 
     assert seen["requested"].blob_id is None
 
 
-def test_a_name_hint_would_not_have_widened_retrieval(profile, embedder):
+def test_a_name_hint_widens_retrieval_by_driving_the_query(profile, embedder):
+    """A hint that names its subject is what the cosine search is asked; a bare
+    target id names no subject and leaves the observation as the query."""
     from zylch.memory.blob_storage import BlobStorage
     from zylch.memory.mnemonic.candidates import gather
     from zylch.memory.mnemonic.contracts import MemoryEvent, SubjectHint
@@ -260,7 +263,7 @@ def test_a_name_hint_would_not_have_widened_retrieval(profile, embedder):
         get_blob=lambda bid: storage.get_blob(bid, OWNER_A),
         search=searched,
     )
-    assert queries == ["Da lunedì apriamo alle 8"] * 2
+    assert queries == ["Name: Beta Spa", "Da lunedì apriamo alle 8"]
     assert [c.blob_id for c in by_name] == []
     assert [c.blob_id for c in by_id] == [target]
 

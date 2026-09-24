@@ -37,7 +37,7 @@ import secrets
 import uuid
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import Any, Dict, Optional, Tuple
+from typing import Any, Dict, Optional, Sequence, Tuple
 
 from sqlalchemy.orm import Session
 
@@ -341,6 +341,7 @@ def receipt(
     result: MnemonicResult,
     state: str,
     proposal: Optional[Proposal] = None,
+    restrictions: Sequence[Dict[str, Any]] = (),
 ) -> None:
     """Write the operation's outcome INTO the caller's transaction.
 
@@ -348,6 +349,12 @@ def receipt(
     memory and the receipt that says it exists cannot disagree. Terminal
     states prune the payload down to a minimal idempotency receipt: the
     digests stay so a replay is still recognized, the bodies go.
+
+    ``restrictions`` are the read restrictions a review records against exact
+    blob identities and observed versions — a FACT the role declined to treat
+    as company knowledge. They survive the pruning, and recording one bumps
+    the store's mutation sequence in this same transaction, so every process's
+    vector index learns that a row it holds is no longer eligible.
     """
     row.state = state
     row.result = {
@@ -359,6 +366,11 @@ def receipt(
     row.departure = result.departure
     if proposal is not None:
         row.proposal_digest = proposal_digest(proposal)
+    if restrictions:
+        row.restrictions = [dict(entry) for entry in restrictions]
+        from zylch.memory.store import bump_mutation_seq
+
+        bump_mutation_seq(session)
     if state in TERMINAL:
         row.payload = None
         row.lease = None
@@ -372,6 +384,7 @@ def record_result(
     *,
     state: str,
     proposal: Optional[Proposal] = None,
+    restrictions: Sequence[Dict[str, Any]] = (),
 ) -> None:
     """Standalone form of :func:`receipt`, for an outcome with no write."""
     try:
@@ -379,7 +392,14 @@ def record_result(
             row = session.get(MemoryOperation, event_id)
             if row is None:
                 raise JournalError(f"no operation for event {event_id}")
-            receipt(session, row, result=result, state=state, proposal=proposal)
+            receipt(
+                session,
+                row,
+                result=result,
+                state=state,
+                proposal=proposal,
+                restrictions=restrictions,
+            )
     except JournalError:
         raise
     except Exception as exc:  # noqa: BLE001

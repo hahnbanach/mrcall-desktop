@@ -737,8 +737,8 @@ def test_a_merge_proposal_is_recorded_for_review_and_writes_nothing(profile_a, c
 
 
 def test_a_create_slice_refuses_an_update_instead_of_writing_it_the_old_way(profile_a, context):
-    """Milestone 4 owns approving a change to existing memory. Until then the
-    answer is review — never the legacy direct write."""
+    """A path that admits CREATE only answers a proposed change to existing
+    memory with review — never the legacy direct write."""
     blob = seed_blob(context)
     result = submit(
         event(event_id="evt-slice"),
@@ -749,7 +749,7 @@ def test_a_create_slice_refuses_an_update_instead_of_writing_it_the_old_way(prof
     )
 
     assert result.outcome == "review_needed"
-    assert "approval" in result.reason
+    assert "admits CREATE only" in result.reason
     with get_session() as session:
         assert "orders@acme.test" not in session.get(Blob, blob["id"]).content
 
@@ -1275,3 +1275,44 @@ def test_there_is_one_path_and_it_goes_through_the_journal(tmp_path, monkeypatch
             assert session.query(MemoryOperation).count() == 1
     finally:
         dbm.dispose_engine()
+
+
+def test_a_chat_turn_reaches_the_identity_index_in_its_own_form(profile_a, embedder):
+    """A dotted address typed in chat finds the row the index holds for it.
+
+    The index stores an address as written and lowercased; the comparison
+    tokens strip its dots. The lookup is built in the index's own form —
+    proven end to end with the search switched off, so only the identifier
+    path can surface the row, and with the dot-stripped form shown to find
+    nothing.
+    """
+    storage = BlobStorage(get_session, embedder)
+    giulia = (
+        "#IDENTIFIERS\nEntity type: PERSON\nScope: entity\nName: Giulia Verdi\n"
+        "Email: giulia.verdi@acme.test\n#ABOUT\nRuns procurement."
+    )
+    blob = storage.store_blob(
+        owner_id=OWNER_A, namespace=f"user:{COMPANY_A}", content=giulia, event_description="seed"
+    )
+    rows = Storage()
+    rows.add_person_identifiers(OWNER_A, blob["id"], [("email", "giulia.verdi@acme.test")])
+    assert rows.find_blobs_by_identifiers(OWNER_A, [("email", "giuliaverdi@acmetest")]) == []
+    context = CommitContext(
+        storage=storage,
+        get_blob=lambda blob_id: storage.get_blob(blob_id, OWNER_A),
+        search=lambda _query, _limit: (),  # only the identifier path can find the row
+        identifier_blob_ids=lambda ids: rows.find_blobs_by_identifiers(OWNER_A, list(ids)),
+    )
+    llm = client(json.dumps({"action": "SKIP", "reason": "nothing new about her"}))
+
+    result = submit(
+        event(observation="Giulia.Verdi@acme.test ha chiamato: nulla di nuovo da annotare."),
+        client=llm,
+        context=context,
+    )
+
+    assert result.outcome == "skipped", result.reason
+    payload = llm._client.messages.create.call_args.kwargs["messages"][0]["content"]
+    assert blob["id"] in payload
+    assert '"retrieved_by": "identifier-only"' in payload
+    assert '"shared_identifiers": 1' in payload

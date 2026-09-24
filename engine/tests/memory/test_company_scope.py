@@ -163,9 +163,9 @@ async def test_model_supplied_namespace_is_rescoped_never_stored(company_db, emb
 
     An entity goes through the mnemonic role (its answer is scripted here; the
     validator, journal and commit are real) and lands in the company's entity
-    namespace whatever followed the colon. A rule-family hint goes to this
-    owner's own rule bucket without asking the role. An unknown family is
-    refused before anything is decided.
+    namespace whatever followed the colon. A rule-family hint goes through the
+    rule store's door — the role decides that too — and lands in this owner's
+    own rule bucket. An unknown family is refused before anything is decided.
     """
     import json
 
@@ -191,7 +191,16 @@ async def test_model_supplied_namespace_is_rescoped_never_stored(company_db, emb
                     "content": "#IDENTIFIERS\nEntity type: PERSON\nScope: entity\nName: X\n#ABOUT\ny",
                     "reason": "no visible candidate describes this person",
                 }
-            )
+            ),
+            json.dumps(
+                {
+                    "action": "CREATE",
+                    "entity_type": "STYLE",
+                    "scope": "account",
+                    "content": "#IDENTIFIERS\nEntity type: STYLE\nScope: account\n#ABOUT\nbe terse",
+                    "reason": "a new rule",
+                }
+            ),
         ),
     )
 

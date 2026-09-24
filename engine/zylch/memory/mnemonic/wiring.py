@@ -11,11 +11,10 @@ is shown, and the read-only callables that produce it.
 from __future__ import annotations
 
 import logging
-import re
 from dataclasses import dataclass
 from typing import Any, Callable, Optional, Sequence, Tuple
 
-from .candidates import event_identifiers, gather
+from .candidates import gather, identity_pairs_of, mines_observation
 from .contracts import MAX_CANDIDATES, Candidate, MemoryEvent
 
 logger = logging.getLogger(__name__)
@@ -36,8 +35,15 @@ class CommitContext:
     identifier_blob_ids: Callable[[Sequence[Tuple[str, str]]], Sequence[str]] = lambda _i: ()
 
 
-def default_context(owner_id: str) -> CommitContext:
-    """Wire the engine's real memory surfaces for this account."""
+def default_context(owner_id: str, *, retrieval: bool = True) -> CommitContext:
+    """Wire the engine's real memory surfaces for this account.
+
+    ``retrieval=False`` is the merge-gate brake: the search and the identity
+    index answer nothing, so the role is shown no candidate and can only
+    create or skip — which is what the legacy worker did under an unhealthy
+    canary by emptying its candidate set. Exact reads stay: a hinted target is
+    still read by id, so a FACT's exact-row pin survives the brake.
+    """
     from zylch.memory import EmbeddingEngine, MemoryConfig
     from zylch.memory.blob_storage import BlobStorage
     from zylch.memory.hybrid_search import HybridSearchEngine
@@ -49,6 +55,11 @@ def default_context(owner_id: str) -> CommitContext:
     search_engine = HybridSearchEngine(get_session, embeddings)
     rows = Storage()
 
+    if not retrieval:
+        return CommitContext(
+            storage=storage,
+            get_blob=lambda blob_id: storage.get_blob(blob_id, owner_id),
+        )
     return CommitContext(
         storage=storage,
         get_blob=lambda blob_id: storage.get_blob(blob_id, owner_id),
@@ -71,26 +82,35 @@ def parse_identifiers_block(content: str) -> list:
     return _parse_identifiers_block(content or "")
 
 
-_PHONE_SHAPED = re.compile(r"^\+?\d{7,}$")
-
-
 def typed_identifiers(event: MemoryEvent) -> list:
-    """The event's identifiers as ``(kind, value)``, for the identity index.
+    """The event's identity tokens as ``(kind, value)``, for the identity index.
 
-    Only the two shapes the index actually stores get a kind. A name or a
-    company name is no identifier at all for ``person_identifiers``, which
-    deliberately excludes names — two people called Mario Rossi are two people.
-    A name does reach ``event_identifiers``, so the role is told how many
-    identifiers a candidate shares; it does not reach this index and it does not
-    reach the search, so it never surfaces a candidate on its own.
+    The hint's own ``(kind, value)`` pairs when it states them — an ingestion
+    child's, in the canonical form the index stores, so a lid keeps the kind
+    the parser gave it instead of being dropped by a shape guess — otherwise
+    the identity tokens ``candidates.identity_tokens`` yields: for the chat and
+    solve adapters, which state no identifiers, the observation's shapes, so
+    their turns reach the index exactly as they did; for an automatic child
+    with no stated address, nothing, because its observation is the whole
+    message and the sender's address must never select a candidate for it.
+
+    Names never reach this index, in either branch. ``person_identifiers``
+    deliberately excludes them — two people called Mario Rossi are two people —
+    and identity tokens are emails, phones and lids by construction. A name
+    still reaches the role as a shared retrieval token and drives the search
+    query; it just never selects a candidate through this index.
     """
-    pairs = []
-    for token in event_identifiers(event):
-        if "@" in token:
-            pairs.append(("email", token))
-        elif _PHONE_SHAPED.match(token):
-            pairs.append(("phone", token))
-    return pairs
+    hint = event.subject_hint
+    if hint is not None and (hint.identifiers or hint.email or hint.phone):
+        pairs = list(hint.identifiers)
+        if hint.email:
+            pairs.append(("email", hint.email.strip().lower()))
+        if hint.phone:
+            pairs.append(("phone", hint.phone.strip()))
+        return pairs
+    if not mines_observation(event):
+        return []
+    return identity_pairs_of(event.observation)
 
 
 def candidates_for(event: MemoryEvent, context: CommitContext) -> Tuple[Candidate, ...]:

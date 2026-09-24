@@ -167,6 +167,16 @@ def pause(owner):
         )
 
 
+def current_run():
+    """The active ``(owner, run_id)`` preparation run, or ``None``.
+
+    A helper writer reached inside a run but outside an admitted item has no
+    contract: it may neither claim the interactive one nor spend as automatic
+    work, and this is what lets it tell.
+    """
+    return _current.get() or None
+
+
 def current_item():
     """The admitted ``(owner, stage, source, run_id)`` item, or ``None``.
 

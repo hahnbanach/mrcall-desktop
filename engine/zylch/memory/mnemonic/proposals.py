@@ -21,6 +21,7 @@ from typing import Any, Dict, Optional, Tuple
 from .contracts import (
     COMMITTED,
     ENTITY_TYPES,
+    MAX_CANDIDATES,
     MAX_CONTENT_CHARS,
     MAX_DECLARED_EFFECTS,
     MAX_REASON_CHARS,
@@ -29,6 +30,7 @@ from .contracts import (
     OUTCOMES,
     REQUIRED_FAMILY,
     RETRYABLE_FAILURE,
+    REVIEW,
     REVIEW_NEEDED,
     SCOPES,
     SKIPPED,
@@ -136,6 +138,13 @@ class Proposal:
     A control envelope, not an ontology: ``content`` is free narrative prose
     under the minimal header. ``confidence`` is diagnostic output and is never
     a threshold that substitutes for identity evidence.
+
+    ``ineligible`` is a REVIEW's own field: the candidates the role declined to
+    treat as company knowledge — a FACT row that is really about one customer.
+    It is not a write set (nothing is written) and it never rides a mutating
+    proposal; the harness records a read restriction against each named row
+    that was actually among the candidates shown. Bounded here like the write
+    set, so a model that names a thousand ids has produced no proposal at all.
     """
 
     action: str
@@ -148,6 +157,7 @@ class Proposal:
     declared_effects: Tuple[str, ...] = ()
     no_op_target: Optional[WriteTarget] = None
     confidence: Optional[float] = None
+    ineligible: Tuple[str, ...] = ()
     effects: Tuple[DeclaredEffect, ...] = field(default=(), init=False, compare=False)
 
     def __post_init__(self) -> None:
@@ -168,6 +178,11 @@ class Proposal:
         )
         object.__setattr__(self, "write_set", tuple(self.write_set))
         object.__setattr__(self, "declared_effects", tuple(self.declared_effects))
+        object.__setattr__(
+            self,
+            "ineligible",
+            tuple(_text(bid, limit=200, what="ineligible blob id") for bid in self.ineligible),
+        )
         if len(self.write_set) > MAX_WRITE_SET:
             raise MnemonicContractError(
                 f"write set holds {len(self.write_set)} targets; the bound is {MAX_WRITE_SET}"
@@ -177,6 +192,15 @@ class Proposal:
         ids = [target.blob_id for target in self.write_set]
         if len(set(ids)) != len(ids):
             raise MnemonicContractError("write set names the same blob twice")
+        if len(self.ineligible) > MAX_CANDIDATES:
+            raise MnemonicContractError(
+                f"a review names {len(self.ineligible)} ineligible memories; "
+                f"it was shown at most {MAX_CANDIDATES}"
+            )
+        if len(set(self.ineligible)) != len(self.ineligible):
+            raise MnemonicContractError("a review names the same ineligible memory twice")
+        if self.ineligible and self.action != REVIEW:
+            raise MnemonicContractError("only a REVIEW may name ineligible memories")
         # Parsed at construction so a malformed effect is no proposal at all,
         # the same way a malformed write target is.
         object.__setattr__(self, "effects", tuple(parse_effect(e) for e in self.declared_effects))
@@ -256,6 +280,13 @@ class MnemonicResult:
     # None. Diagnostics the journal row and the tool response both carry; it
     # gates nothing (see mnemonic/approval.py).
     departure: Optional[Dict[str, Any]] = None
+    # The refusal a paid dispatch met before it reached a provider — the
+    # ``BudgetError`` the decision round caught, or its ``PreparationStopped``
+    # subclass for a pause — carried as the object itself so a caller that owes
+    # its own caller that class (the ingestion loop, whose batch stops on it)
+    # can re-raise it rather than a flattened copy. Never serialized: the
+    # journal keeps the reason, the result keeps the exception.
+    refusal: Optional[BaseException] = field(default=None, compare=False)
 
     def __post_init__(self) -> None:
         _choice(self.outcome, OUTCOMES, "outcome")
@@ -267,6 +298,8 @@ class MnemonicResult:
             raise MnemonicContractError(f"a {self.outcome} result cannot name committed ids")
         if self.outcome != COMMITTED and not self.reason:
             raise MnemonicContractError(f"a {self.outcome} result must carry a reason")
+        if self.refusal is not None and self.outcome != RETRYABLE_FAILURE:
+            raise MnemonicContractError("only a retryable failure carries a dispatch refusal")
 
     @classmethod
     def committed(
@@ -303,13 +336,16 @@ class MnemonicResult:
         )
 
     @classmethod
-    def retryable_failure(cls, event_id, reason, *, proposal=None, attempts=0) -> "MnemonicResult":
+    def retryable_failure(
+        cls, event_id, reason, *, proposal=None, attempts=0, refusal=None
+    ) -> "MnemonicResult":
         return cls(
             outcome=RETRYABLE_FAILURE,
             event_id=event_id,
             reason=reason,
             proposal=proposal,
             attempts=attempts,
+            refusal=refusal,
         )
 
     @property
