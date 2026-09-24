@@ -350,6 +350,14 @@ carrier duration still leaves Vonage's provider maximum/default of 7,200 seconds
   the mechanical documentation gate pass. A broader Ruff scan including legacy
   scripts/evaluation tests reports 11 unrelated existing findings; they were
   left untouched.
+- The operator subsequently reported payment. Read-only checks at 11:12 UTC
+  still return zero CALLCREDIT for the selected Demo business (including a check
+  without category exclusions); its subscription status is FREE. The other
+  visible business also returned zero. A single real engine diagnostic recognized
+  both permitted facts but returned `BudgetError` before delivering a result.
+  Retained engine reservations now total USD0.110; no rows were reset/refunded.
+  Payment application is not yet confirmed by the API. No new telephone call was
+  placed; the isolated listener remains available without local test ceilings.
 
 ### M2 — 2026-09-24
 
