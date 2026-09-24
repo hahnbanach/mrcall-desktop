@@ -412,12 +412,39 @@ def test_an_event_for_another_account_is_refused_before_any_paid_work():
 
 def test_a_budget_failure_mid_loop_is_retryable_not_a_refusal():
     event, candidates = interactive("corroborated_same_person")
-    llm = client(text_response("{ broken"), BudgetError("daily limit reached"))
+    refused = BudgetError("daily limit reached")
+    llm = client(text_response("{ broken"), refused)
 
     decision = decide(event, candidates, client=llm)
 
     assert decision.result.outcome == c.RETRYABLE_FAILURE
     assert decision.result.advances_checkpoint is False
+    # Carried as the object itself, so a caller whose batch stops on that
+    # class re-raises the same one and not a flattened copy.
+    assert decision.result.refusal is refused
+
+
+def test_a_pause_keeps_its_own_class_through_the_decision():
+    from zylch.services.preparation import PreparationStopped
+
+    event, candidates = interactive("corroborated_same_person")
+    paused = PreparationStopped("Preparation paused.")
+    llm = client(paused)
+
+    decision = decide(event, candidates, client=llm)
+
+    assert decision.result.outcome == c.RETRYABLE_FAILURE
+    assert isinstance(decision.result.refusal, PreparationStopped)
+    assert decision.result.refusal is paused
+
+
+def test_a_review_may_name_the_candidates_it_declined_as_company_knowledge():
+    proposal = adapt_response(text_response(decision_text("contradictory_legacy_fact_rule")))
+    assert proposal.action == c.REVIEW
+    assert proposal.ineligible == ("legacy-fact-edera",)
+    assert proposal.write_set == ()
+    with pytest.raises(MemoryResponseError):
+        adapt_response(text_response('{"action": "REVIEW", "reason": "r", "ineligible": "fact-1"}'))
 
 
 # ─── The cached block, over the whole conversation ────────────────────

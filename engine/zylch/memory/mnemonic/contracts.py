@@ -43,6 +43,14 @@ MNEMONIC_MAX_TOKENS = 2048
 # of it, so a restart resumes the event instead of restarting its budget.
 EVENT_DISPATCH_ALLOWANCE = MAX_DECISION_ATTEMPTS + 1
 
+# The most entities one source extraction may fan out into. An extraction past
+# this bound is refused visibly as a review, never truncated: a manifest that
+# silently dropped its tail would mark the source processed with part of what
+# it said never decided. Sixteen is far above what one mail, message, event or
+# call yields and small enough that the manifest stays a bounded payload
+# (MAX_EXTRACTED_ENTITIES * MAX_CONTENT_CHARS).
+MAX_EXTRACTED_ENTITIES = 16
+
 
 # ─── Vocabularies ─────────────────────────────────────────────────────
 
@@ -180,6 +188,18 @@ class SubjectHint:
     The caller may say "this is about Acme" or "blob X is the intended
     subject". It may not make X authoritative by writing to it: a hint widens
     retrieval and narrows classification, and nothing else.
+
+    ``identifiers`` carries the ``(kind, value)`` pairs an extracted entity's
+    ``#IDENTIFIERS`` header states — email, phone, lid — in the canonical form
+    ``workers.memory._parse_identifiers_block`` produces, which is also the form
+    the identity index stores. It is the ingestion adapter's field; the chat
+    adapters keep passing the scalar fields, and both are read the same way.
+
+    A ``FACT`` hint is the one that names no entity: it says the caller expects
+    company-wide knowledge, and it may pin the exact ``(Category, Key)`` row
+    through ``target_blob_id``. A FACT hint that also carries a name, an email,
+    a phone, a company or identifiers is contradicting itself — a caller who
+    resolved an entity and says FACT — and is refused at construction.
     """
 
     entity_type: Optional[str] = None
@@ -188,10 +208,25 @@ class SubjectHint:
     phone: Optional[str] = None
     company: Optional[str] = None
     target_blob_id: Optional[str] = None
+    identifiers: Tuple[Tuple[str, str], ...] = ()
 
     def __post_init__(self) -> None:
         if self.entity_type is not None:
             _choice(self.entity_type, ENTITY_TYPES, "subject hint entity_type")
+        pairs = []
+        for entry in self.identifiers:
+            kind, value = entry
+            kind, value = str(kind or "").strip().lower(), str(value or "").strip()
+            if kind and value:
+                pairs.append((kind, value))
+        object.__setattr__(self, "identifiers", tuple(pairs))
+        if self.entity_type == FACT and any(
+            (self.name, self.email, self.phone, self.company, self.identifiers)
+        ):
+            raise MnemonicContractError(
+                "a FACT hint names company knowledge; it cannot also carry an entity's "
+                "name, email, phone, company or identifiers"
+            )
 
     @property
     def structured(self) -> bool:
@@ -202,19 +237,33 @@ class SubjectHint:
         entity cannot be committed as global knowledge.
         """
         return any(
-            (self.entity_type, self.name, self.email, self.phone, self.company, self.target_blob_id)
+            (
+                self.entity_type,
+                self.name,
+                self.email,
+                self.phone,
+                self.company,
+                self.target_blob_id,
+                self.identifiers,
+            )
         )
 
     @property
     def names_entity_subject(self) -> bool:
         """True when the hint identifies a specific person or company.
 
-        A bare ``entity_type: FACT`` hint says the caller expected global
-        knowledge; it is not a customer subject.
+        A ``FACT`` hint never does, even when it pins its exact row: the caller
+        said company knowledge, and the pinned row is the fact it means to
+        change, not a customer. Every other populated field — a name, an
+        identifier, a target — is the caller having resolved an entity.
         """
+        if self.entity_type == FACT:
+            return False
         if self.entity_type in (PERSON, COMPANY):
             return True
-        return any((self.name, self.email, self.phone, self.company, self.target_blob_id))
+        return any(
+            (self.name, self.email, self.phone, self.company, self.target_blob_id, self.identifiers)
+        )
 
 
 @dataclass(frozen=True)

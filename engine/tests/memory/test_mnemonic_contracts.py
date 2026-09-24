@@ -293,3 +293,92 @@ def test_the_multi_entity_source_keeps_every_child_and_the_whole_observation():
     assert len({child.event_id for child in children}) == len(children)
     for child in children:
         assert child.observation == multi["original_observation"]
+
+
+# ─── Typed hint identifiers and the FACT hint (milestone 6) ───────────
+
+
+def test_a_hint_carries_typed_identifiers_in_canonical_form():
+    """The ingestion adapter hands the parser's pairs in; a scalar field reads the same."""
+    hint = SubjectHint(
+        entity_type=c.PERSON,
+        name="Luca Bianchi",
+        identifiers=[(" Email ", "luca@alpha.example"), ("phone", "+393331200000"), ("", "x")],
+    )
+    assert hint.identifiers == (("email", "luca@alpha.example"), ("phone", "+393331200000"))
+    assert hint.structured is True
+    assert hint.names_entity_subject is True
+
+
+def test_identifiers_alone_still_name_an_entity_subject():
+    """An untyped extraction with only an ``Email:`` line resolved an entity all the same."""
+    hint = SubjectHint(identifiers=[("email", "nina@beta.example")])
+    assert hint.structured is True
+    assert hint.names_entity_subject is True
+
+
+def test_a_fact_hint_may_pin_its_exact_row_and_stays_a_non_entity_subject():
+    hint = SubjectHint(entity_type=c.FACT, target_blob_id="fact-hours")
+    assert hint.structured is True
+    assert hint.names_entity_subject is False
+
+
+@pytest.mark.parametrize(
+    "field",
+    [
+        {"name": "Acme"},
+        {"email": "info@acme.test"},
+        {"phone": "+390212345678"},
+        {"company": "Acme"},
+        {"identifiers": [("email", "info@acme.test")]},
+    ],
+)
+def test_a_fact_hint_that_also_names_an_entity_is_a_contract_error(field):
+    with pytest.raises(MnemonicContractError):
+        SubjectHint(entity_type=c.FACT, **field)
+
+
+# ─── A review's ineligible list is bounded like a write set ───────────
+
+
+def test_a_review_may_name_ineligible_candidates_within_the_candidate_bound():
+    proposal = Proposal(action=c.REVIEW, reason="a customer's price", ineligible=["fact-1"])
+    assert proposal.ineligible == ("fact-1",)
+    with pytest.raises(MnemonicContractError):
+        Proposal(
+            action=c.REVIEW,
+            reason="r",
+            ineligible=[f"fact-{i}" for i in range(c.MAX_CANDIDATES + 1)],
+        )
+    with pytest.raises(MnemonicContractError):
+        Proposal(action=c.REVIEW, reason="r", ineligible=["fact-1", "fact-1"])
+
+
+@pytest.mark.parametrize("action", [c.CREATE, c.UPDATE, c.MERGE, c.SKIP])
+def test_only_a_review_names_ineligible_memories(action):
+    with pytest.raises(MnemonicContractError):
+        Proposal(
+            action=action,
+            entity_type=c.FACT,
+            scope=c.COMPANY_SCOPE,
+            content="x",
+            reason="r",
+            ineligible=["fact-1"],
+        )
+
+
+def test_the_extraction_bound_is_finite():
+    assert 1 < c.MAX_EXTRACTED_ENTITIES <= 32
+
+
+# ─── A refusal rides only a retryable failure, as the object it was ───
+
+
+def test_a_dispatch_refusal_is_carried_as_the_exception_it_was():
+    from zylch.services.preparation import PreparationStopped
+
+    paused = PreparationStopped("Preparation paused.")
+    result = MnemonicResult.retryable_failure("evt-1", "paid decision unavailable", refusal=paused)
+    assert result.refusal is paused
+    with pytest.raises(MnemonicContractError):
+        MnemonicResult(outcome=c.REVIEW_NEEDED, event_id="evt-1", reason="r", refusal=paused)

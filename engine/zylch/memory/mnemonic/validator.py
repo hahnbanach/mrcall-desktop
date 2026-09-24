@@ -20,9 +20,11 @@ from typing import Dict, List, Sequence, Tuple
 
 from zylch.memory.company_key import RULE_FAMILIES
 
-from .candidates import event_identifiers, parse_header, parse_identifiers
+from .candidates import parse_header
+from .evidence import corroborates, duplicate_candidates
 from .contracts import (
     ACCOUNT_SCOPE,
+    AUTOMATIC_OBSERVATION,
     COMPANY,
     COMPANY_SCOPE,
     CREATE,
@@ -32,6 +34,7 @@ from .contracts import (
     PERSON,
     REQUIRED_FAMILY,
     REQUIRED_SCOPE,
+    REVIEW,
     SKIP,
     STYLE,
     UPDATE,
@@ -86,9 +89,11 @@ def validate(
     check = _Check(event=event, proposal=proposal, by_id={c.blob_id: c for c in candidates})
 
     _check_refusals(check)
+    _check_ineligible(check)
     if proposal.mutates:
         _check_family_and_scope(check)
         _check_caller_subject(check)
+        _check_automatic_rule(check)
         _check_content(check)
         _check_write_set(check)
         _check_declared_effects(check)
@@ -130,6 +135,26 @@ def _check_refusals(check: _Check) -> None:
         check.fail("the no-op target's version is stale; re-read it before claiming a no-op")
     if not proposal.reason:
         check.fail("a semantic no-op must say why the information is already recorded")
+
+
+def _check_ineligible(check: _Check) -> None:
+    """A review may mark as ineligible only memories it was actually shown.
+
+    ``ineligible`` is the one field a REVIEW carries that has an effect — the
+    harness records a read restriction against each row it names — so it is
+    checked like a write set: an id the role was not shown is refused, not
+    recorded. The contract already bounds the list and keeps it off mutating
+    proposals; this is the check that needs the candidate set.
+    """
+    proposal = check.proposal
+    if proposal.action != REVIEW or not proposal.ineligible:
+        return
+    for blob_id in proposal.ineligible:
+        if blob_id not in check.by_id:
+            check.fail(
+                f"{blob_id} is not one of the memories this decision was shown; a review may "
+                "mark as ineligible only what it was shown"
+            )
 
 
 # ─── Family, scope, header and namespace must agree ───────────────────
@@ -236,6 +261,28 @@ def _check_caller_subject(check: _Check) -> None:
         )
 
 
+def _check_automatic_rule(check: _Check) -> None:
+    """An automatic observation cannot write an account rule.
+
+    A STYLE rule is one account's own instruction about how its replies are
+    written, and ``REQUIRED_FAMILY[STYLE]`` files it in the rule namespace
+    every prompt injects verbatim. A channel message — a mail, a WhatsApp
+    message, a call — is an observation about somebody else, and behavioural
+    detail in it belongs to that person's or company's memory. Without this
+    line an extraction typed STYLE would become an operating rule of the
+    account that merely received the message: the runaway class the rule store
+    exists to keep out. The role's prompt says the same; this is the structural
+    backstop, and a proposal that insists lands the event in review.
+    """
+    if check.event.caller_class != AUTOMATIC_OBSERVATION:
+        return
+    if check.proposal.entity_type == STYLE:
+        check.fail(
+            "an automatic observation cannot write an account rule; behavioural detail in a "
+            "channel message belongs to that person's or company's memory, or is skipped"
+        )
+
+
 def _check_content(check: _Check) -> None:
     proposal = check.proposal
     if not proposal.content:
@@ -280,7 +327,7 @@ def _check_write_set(check: _Check) -> None:
             check.fail("a MERGE must declare the alias and reference effects it relies on")
         for role, target in (("keeper", keeper), ("donor", donor)):
             candidate = check.by_id.get(target.blob_id)
-            if candidate is not None and not _corroborates(check.event, candidate, proposal):
+            if candidate is not None and not corroborates(check.event, candidate, proposal.entity_type):
                 check.fail(
                     f"the {role} carries no identity evidence tying it to this observation; "
                     "similarity, a shared company or a shared switchboard cannot authorize a merge"
@@ -290,62 +337,16 @@ def _check_write_set(check: _Check) -> None:
 def _check_duplicate_create(check: _Check) -> None:
     """A CREATE may not duplicate an entity it was just shown corroborated.
 
-    The role saw a candidate sharing a personal identifier with this
-    observation and chose to make a second one anyway. That is the duplicate-
-    CREATE fallback the brief rules out — "never create a fourth Andrea" — and
-    it is the mirror of the merge gate: the same evidence that would authorize
-    folding two rows together forbids splitting them apart.
-
-    Only entities, and only against candidates of the same family: a FACT in
-    the retrieval set says nothing about whether this person is new. Where the
-    evidence is absent — a similar name, a shared switchboard, a shared
-    company — nothing fires, which is exactly the unrelated-namesakes and
-    shared-switchboard incidents, and they stay CREATE.
+    The evidence rule itself — what counts as identity for a person and for a
+    company — lives in :mod:`zylch.memory.mnemonic.evidence`; this is the
+    check that applies it to a CREATE, the mirror of the merge gate.
     """
-    proposal = check.proposal
-    if proposal.entity_type not in (PERSON, COMPANY):
-        return
-    family = REQUIRED_FAMILY[proposal.entity_type]
-    for candidate in check.by_id.values():
-        same_family = candidate.namespace.split(":", 1)[0].strip().lower() == family
-        stated = (candidate.entity_type or "").strip().upper()
-        if not same_family or (stated and stated != proposal.entity_type):
-            continue
-        if _corroborates(check.event, candidate, proposal):
-            check.fail(
-                f"{candidate.blob_id} already shares identifying evidence with this "
-                "observation; update it or return REVIEW rather than creating a second "
-                "memory for the same subject"
-            )
-
-
-def _corroborates(event: MemoryEvent, candidate: Candidate, proposal: Proposal) -> bool:
-    """Is there real identity evidence between this observation and this row?
-
-    Checked against the actual inputs, never against the proposal's own claim
-    of confidence or evidence. What counts depends on the family, because the
-    same overlap means different things:
-
-    - a PERSON needs a shared personal identifier — an email address — or a
-      shared identifier *plus* the same stated name. A shared company name is
-      not evidence that two people are one person, and neither is a number two
-      colleagues both answer. That is the shared-switchboard incident exactly:
-      retrieval legitimately found the reception number and the company in
-      common, and merging Sara Conti into Marco Blu on that basis is the
-      failure this gate exists to stop.
-    - a COMPANY or FACT may rely on any shared structured identifier: a name, a
-      domain or a switchboard genuinely does identify the company.
-    """
-    shared = event_identifiers(event) & parse_identifiers(candidate.content)
-    if not shared:
-        return False
-    if proposal.entity_type != PERSON:
-        return True
-    if any("@" in value for value in shared):
-        return True
-    stated = (parse_header(candidate.content).get("name") or "").strip().lower()
-    hinted = ((event.subject_hint.name if event.subject_hint else "") or "").strip().lower()
-    return bool(stated and hinted and stated == hinted)
+    for candidate in duplicate_candidates(check.event, check.proposal, check.by_id.values()):
+        check.fail(
+            f"{candidate.blob_id} already shares identifying evidence with this "
+            "observation; update it or return REVIEW rather than creating a second "
+            "memory for the same subject"
+        )
 
 
 def _check_declared_effects(check: _Check) -> None:

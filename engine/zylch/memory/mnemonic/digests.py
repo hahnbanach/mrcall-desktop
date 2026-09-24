@@ -46,6 +46,7 @@ def proposal_digest(proposal: Optional[Proposal]) -> Optional[str]:
         "content": proposal.content,
         "write_set": [(t.blob_id, t.expected_version, t.role) for t in proposal.write_set],
         "declared_effects": list(proposal.declared_effects),
+        "ineligible": list(proposal.ineligible),
         "reclassification": (
             None
             if proposal.reclassification is None

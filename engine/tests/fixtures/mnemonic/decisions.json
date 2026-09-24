@@ -191,7 +191,10 @@
     "contradictory_legacy_fact_rule": {
       "decision": {
         "action": "REVIEW",
-        "reason": "Edera's 12-month minimum term contradicts a legacy company FACT and an entity-shaped account rule that both say 6 months. Resolving which representation survives is a reclassification, not an update."
+        "reason": "Edera's 12-month minimum term contradicts a legacy company FACT and an entity-shaped account rule that both say 6 months. Resolving which representation survives is a reclassification, not an update.",
+        "ineligible": [
+          "legacy-fact-edera"
+        ]
       }
     },
     "multi_entity_source__person": {
