@@ -737,8 +737,8 @@ def test_a_merge_proposal_is_recorded_for_review_and_writes_nothing(profile_a, c
 
 
 def test_a_create_slice_refuses_an_update_instead_of_writing_it_the_old_way(profile_a, context):
-    """Milestone 4 owns approving a change to existing memory. Until then the
-    answer is review — never the legacy direct write."""
+    """A path that admits CREATE only answers a proposed change to existing
+    memory with review — never the legacy direct write."""
     blob = seed_blob(context)
     result = submit(
         event(event_id="evt-slice"),
@@ -749,7 +749,7 @@ def test_a_create_slice_refuses_an_update_instead_of_writing_it_the_old_way(prof
     )
 
     assert result.outcome == "review_needed"
-    assert "approval" in result.reason
+    assert "admits CREATE only" in result.reason
     with get_session() as session:
         assert "orders@acme.test" not in session.get(Blob, blob["id"]).content
 

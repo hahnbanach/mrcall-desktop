@@ -4,6 +4,7 @@ All handlers return markdown-formatted strings (no print statements).
 No Anthropic API calls in these handlers.
 """
 
+import asyncio
 import logging
 from datetime import datetime, timezone
 from typing import List
@@ -422,14 +423,76 @@ Your sync is running in the background. You'll be notified when complete.
         return f"❌ **Sync failed:** {str(e)}"
 
 
+def _store_memory(owner_id: str, content: str, blob_storage, force_new: bool) -> str:
+    """``/memory store`` as one memory event on this turn, answered by its outcome.
+
+    The observation is what the human said — the turn's own words when the
+    verb was reached through chat, the typed content otherwise — and the
+    content is the caller's suggestion, labelled as such, because the semantic
+    command matcher may have written this line. The event is an explicit
+    request, so the role may not answer it with a silent SKIP. The role
+    decides whether this is new memory or a change to memory it was shown; a
+    change is recorded as a departure from the create that was asked for.
+    Under ``--force`` only a CREATE is admitted: a proposal to change existing
+    memory is refused and reported, never written another way. Success is a
+    committed receipt and a row that reads back.
+
+    Runs on a worker thread: the turn's context is copied in, its cancellation
+    handle shared.
+    """
+    from zylch.assistant.turn_context import get_turn_id, get_turn_observation
+    from zylch.memory.company_key import require_company_key
+    from zylch.memory.mnemonic import submit
+    from zylch.memory.mnemonic.contracts import CREATE, UPDATE
+    from zylch.tools.memory_events import create_event, create_request
+
+    event = create_event(
+        owner_id=owner_id,
+        company_key=require_company_key(),
+        content=content,
+        namespace_hint=None,
+        observation=get_turn_observation() or content,
+        source_id=f"turn:{get_turn_id()}",
+        explicit_request=True,
+    )
+    result = submit(
+        event,
+        allow_actions=(CREATE,) if force_new else (CREATE, UPDATE),
+        requested=create_request(None),
+    )
+    logger.debug(f"[/memory store] submit(event={event.event_id}) -> outcome={result.outcome}")
+
+    if result.outcome == "committed":
+        blob_id, _version = result.committed_ids[0]
+        stored = blob_storage.get_blob(blob_id, owner_id)
+        if stored is None:
+            return "❌ **Not confirmed**: the memory was committed but cannot be read back"
+        if result.proposal is not None and result.proposal.action == UPDATE:
+            return f"""✅ **Memory updated** (ID: {blob_id})
+
+**Merged into an existing memory** rather than added; the text it replaced is retained.
+
+**Content:** {stored["content"]}"""
+        return f"""✅ **Memory stored** (ID: {blob_id})
+
+**Content:** {stored["content"]}
+
+Memory will be searchable via hybrid search."""
+    if result.outcome == "skipped":
+        return f"**Nothing new to store**: {result.reason}"
+    if result.outcome == "review_needed":
+        return f"❌ **Not stored**: {result.reason}"
+    return f"❌ **Not stored, retry later**: {result.reason}"
+
+
 async def handle_memory(args: List[str], config: ToolConfig, owner_id: str) -> str:
     """Handle /memory command - entity-centric memory management."""
     help_text = """**🧠 Entity Memory System**
 
 **Usage:**
 • `/memory search <query>` - Search memories (hybrid FTS + semantic)
-• `/memory store <content>` - Store new memory (with auto-reconsolidation)
-• `/memory store --force <content>` - Force create new blob (skip merge)
+• `/memory store <content>` - Remember this: the memory role decides whether it is new memory or a change to an existing one
+• `/memory store --force <content>` - Remember this as new memory only; a change to an existing one is refused
 • `/memory delete <blob_id>` - Delete a specific memory blob
 • `/memory versions <blob_id>` - List the retained versions of a memory
 • `/memory restore <blob_id> <version_id>` - Bring a memory back to a retained version (the current text is retained first)
@@ -461,8 +524,6 @@ Use `/agent process` to extract facts from synced data:
         HybridSearchEngine,
         EmbeddingEngine,
         MemoryConfig,
-        LLMMergeService,
-        is_no_merge_response,
     )
 
     try:
@@ -472,12 +533,6 @@ Use `/agent process` to extract facts from synced data:
         embedding_engine = EmbeddingEngine(mem_config)
         blob_storage = BlobStorage(get_session, embedding_engine)
         search_engine = HybridSearchEngine(get_session, embedding_engine)
-
-        # Initialize LLM merge service (for reconsolidation). Skip if
-        # no LLM transport is configured.
-        from zylch.llm import try_make_llm_client
-
-        llm_merge = LLMMergeService() if try_make_llm_client() is not None else None
 
         from zylch.memory.company_key import entity_namespace, require_company_key
 
@@ -512,8 +567,8 @@ Use `/agent process` to extract facts from synced data:
             return output
 
         elif cmd == "store":
-            # Store new memory (with optional auto-reconsolidation)
-            # Check for --force flag to skip consolidation
+            # One memory event on this turn; the memory role decides. The
+            # verb never writes a blob itself, with or without ``--force``.
             force_new = "--force" in args
             args_content = [a for a in args[1:] if a != "--force"]
 
@@ -521,74 +576,7 @@ Use `/agent process` to extract facts from synced data:
                 return "❌ Missing content\n\nUsage: `/memory store <content>` or `/memory store --force <content>`"
 
             content = " ".join(args_content)
-
-            # Skip reconsolidation if --force flag is set
-            if force_new:
-                # Create new blob (forced)
-                result = blob_storage.store_blob(
-                    owner_id=owner_id,
-                    namespace=namespace,
-                    content=content,
-                    event_description="Created via /memory store (forced)",
-                )
-                return f"""✅ **Memory stored (forced new blob)** (ID: {result['id']})
-
-**Content:** {content}
-
-Memory will be searchable via hybrid search."""
-
-            # Get top 3 candidates above threshold (same logic as memory_agent.py)
-            existing_blobs = search_engine.find_candidates_for_reconsolidation(
-                owner_id=owner_id, content=content, namespace=namespace, limit=3
-            )
-
-            upserted = False
-            upserted_result = None
-            matched_blob = None
-
-            # Fail if candidates exist but no API key for LLM merge
-            if existing_blobs and not llm_merge:
-                return "❌ **Cannot reconsolidate**: Anthropic API key not configured. Use `--force` to create a new blob instead."
-
-            for existing in existing_blobs:
-                merged_content = llm_merge.merge(existing.content, content)
-
-                # If the gate returned the INSERT/SKIP sentinel, try next candidate
-                if is_no_merge_response(merged_content):
-                    logger.debug(f"Skipping blob {existing.blob_id} - entities don't match")
-                    continue
-
-                # Successful merge
-                upserted_result = blob_storage.update_blob(
-                    blob_id=existing.blob_id,
-                    owner_id=owner_id,
-                    content=merged_content,
-                    event_description="Reconsolidated via /memory store",
-                )
-                matched_blob = existing
-                upserted = True
-                break
-
-            if upserted:
-                return f"""✅ **Memory reconsolidated** (ID: {upserted_result['id']})
-
-**Merged with existing memory** (score: {matched_blob.hybrid_score:.2f})
-
-New content merged into existing entity blob."""
-
-            else:
-                # No suitable blob found, create new
-                result = blob_storage.store_blob(
-                    owner_id=owner_id,
-                    namespace=namespace,
-                    content=content,
-                    event_description="Created via /memory store",
-                )
-                return f"""✅ **Memory stored** (ID: {result['id']})
-
-**Content:** {content}
-
-Memory will be searchable via hybrid search."""
+            return await asyncio.to_thread(_store_memory, owner_id, content, blob_storage, force_new)
 
         elif cmd == "delete":
             # Delete a specific memory blob

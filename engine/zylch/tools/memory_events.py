@@ -2,7 +2,8 @@
 
 The chat agent calls ``create_memory(content=...)`` or
 ``update_memory(blob_id=..., new_content=...)`` because the human asked it to
-remember or correct something. Two different things are in that sentence and the
+remember or correct something; the ``/memory store`` verb is the same create
+request typed directly. Two different things are in that sentence and the
 harness keeps them apart:
 
 - **what the human said** — captured into ``assistant/turn_context`` by
@@ -65,8 +66,9 @@ def create_event(
     namespace_hint: Optional[str],
     observation: str,
     source_id: str,
+    explicit_request: bool = False,
 ) -> MemoryEvent:
-    """Build the authenticated event for one supervised ``create_memory`` call.
+    """Build the authenticated event for one create request.
 
     ``namespace_hint`` is the tool's own ``namespace`` argument, which names a
     *family*, not a subject. Only one value says anything the validator can
@@ -74,6 +76,11 @@ def create_event(
     an entity, and that is passed on as a bare ``FACT`` hint. Everything else
     carries no hint at all — inventing a structured subject from ``user`` would
     silently forbid a company FACT the role is entitled to propose.
+
+    ``explicit_request`` is True for the ``/memory store`` verb, a human's own
+    instruction to remember: the role may not answer it with a silent SKIP. A
+    supervised ``create_memory`` tool call is the model's reading of the turn
+    and leaves it False.
     """
     family = (namespace_hint or "").split(":", 1)[0].strip().lower()
     hint = SubjectHint(entity_type=FACT) if family == "facts" else None
@@ -87,7 +94,7 @@ def create_event(
         source_revision=_revision(observation),
         observation=observation,
         subject_hint=hint,
-        explicit_request=False,
+        explicit_request=explicit_request,
         cancellation=turn_cancellation(),
     )
     return event.with_model_arguments({"content": content})

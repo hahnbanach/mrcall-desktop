@@ -56,6 +56,15 @@ def _write_env(pdir, email, key, source):
     (pdir / ".env").write_text("\n".join(lines) + "\n")
 
 
+def _fact(owner, embedder, category, key, value):
+    """Seed one fact row as the store keeps it, without asking the memory role."""
+    from zylch.services.facts_store import facts_namespace, format_fact
+
+    BlobStorage(get_session, embedder).store_blob(
+        owner, facts_namespace(owner), format_fact(category, key, value), "seed"
+    )
+
+
 def _boot(monkeypatch, tmp_path, name, key, source):
     """Boot profile ``name`` in this process (the previous one is disposed)."""
     pdir = tmp_path / name
@@ -195,7 +204,7 @@ def test_fact_from_a_reaches_b(monkeypatch, tmp_path, stub_embedder):
     key = current_company_key()
     from zylch.services import facts_store
 
-    facts_store.upsert_fact(a, "pricing", "MOQ", "500 units")
+    _fact(a, stub_embedder, "pricing", "MOQ", "500 units")
     BlobStorage(get_session, stub_embedder).store_blob(
         a, entity_namespace(key), PERSON, "extracted"
     )

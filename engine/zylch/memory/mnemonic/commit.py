@@ -271,8 +271,8 @@ def _unsupported(proposal: Proposal, allow_actions: Sequence[str]) -> str:
         return MERGE_NOT_READY
     if proposal.action not in allow_actions:
         return (
-            f"this path submits {'/'.join(allow_actions)} only; a {proposal.action} of existing "
-            "memory needs the approval step that is not installed yet"
+            f"this path admits {'/'.join(allow_actions)} only; the proposal was a "
+            f"{proposal.action} of existing memory, which it does not write"
         )
     return ""
 

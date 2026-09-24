@@ -233,7 +233,7 @@ def test_an_account_rule_operation_is_private_to_its_owner(profile_a):
 
     with get_session() as session:
         row = session.get(MemoryOperation, "evt-1")
-        assert row.target_family == "prefs"
+        assert row.target_family == "template"
         assert journal.visible(row, OWNER_A, COMPANY_A) is True
         assert journal.visible(row, OWNER_B, COMPANY_A) is False
 

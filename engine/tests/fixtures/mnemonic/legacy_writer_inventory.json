@@ -82,7 +82,8 @@
       "call": "delete_all_blobs",
       "count": 1,
       "mode": "async",
-      "milestone": 6
+      "milestone": 1,
+      "note": "a human delete verb; constrained by the approval gate, never by the harness"
     },
     {
       "path": "zylch/services/command_handlers.py",
@@ -90,23 +91,8 @@
       "call": "delete_blob",
       "count": 1,
       "mode": "async",
-      "milestone": 6
-    },
-    {
-      "path": "zylch/services/command_handlers.py",
-      "symbol": "handle_memory",
-      "call": "store_blob",
-      "count": 2,
-      "mode": "async",
-      "milestone": 6
-    },
-    {
-      "path": "zylch/services/command_handlers.py",
-      "symbol": "handle_memory",
-      "call": "update_blob",
-      "count": 1,
-      "mode": "async",
-      "milestone": 6
+      "milestone": 1,
+      "note": "a human delete verb; constrained by the approval gate, never by the harness"
     },
     {
       "path": "zylch/services/command_handlers.py",
