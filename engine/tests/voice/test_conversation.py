@@ -285,7 +285,7 @@ def test_voice_answer_during_backend_is_reconciled_without_repetition(fixture_db
         release.set()
 
 
-def test_diagnostic_delay_preserves_the_request_revision_snapshot(fixture_db, monkeypatch):
+def test_diagnostic_delay_skips_superseded_snapshot_before_paid_dispatch(fixture_db, monkeypatch):
     requests = []
 
     def model(**kwargs):
@@ -304,8 +304,9 @@ def test_diagnostic_delay_preserves_the_request_revision_snapshot(fixture_db, mo
             {"type": "session.input_transcript.delta", "delta": " CORRECTION: delivery day?"}
         )
         await until(lambda: conv.evidence["results_sent"] == 1)
-        assert "CORRECTION" not in requests[0], "Run labeled with old revision saw newer input"
-        assert "CORRECTION" in requests[-1]
+        assert len(requests) == 1, "Obsolete pre-delay snapshot was dispatched"
+        assert "CORRECTION" in requests[0]
+        assert conv.evidence["reconciliations"] == 1
         assert len([row for row in sent if row["type"] == "session.commentary.append"]) == 1
         await conv.close()
 
@@ -373,3 +374,102 @@ def test_voice_reconciliation_still_delivers_missing_or_corrected_answer(
         asyncio.run(scenario())
     finally:
         release.set()
+
+
+def test_greeting_requested_once_before_delayed_lookup(fixture_db, monkeypatch):
+    conv, _, sent = make_conversation(monkeypatch, [])
+
+    async def scenario():
+        conv.memory.diagnostic_delay = 60
+        conv.start()
+        conv.event({"type": "session.started"})
+        conv.event({"type": "session.started"})
+        await until(lambda: bool(sent))
+        assert [s["type"] for s in sent] == ["session.instructions.append"]
+        assert sent[0]["delegation_id"] is None
+        assert conv.context["missing"] == ["Caller lookup pending"]
+        await conv.close()
+        assert len(sent) == 1
+
+    asyncio.run(scenario())
+
+
+def test_correction_abandons_stale_tool_loop_before_extra_dispatch(fixture_db, monkeypatch):
+    entered, release = threading.Event(), threading.Event()
+    calls = []
+
+    def model(**kwargs):
+        calls.append(kwargs)
+        if len(calls) == 1:
+            entered.set()
+            assert release.wait(3)
+            return response(tool={"query": "tracking"})
+        return response("The corrected request is blue filters for Thursday.")
+
+    conv, _, sent = make_conversation(monkeypatch, model)
+    lookup = AsyncMock(wraps=conv.memory.execute)
+    conv.memory.execute = lookup
+
+    async def scenario():
+        conv.event({"type": "session.input_transcript.delta", "delta": "Tracking?"})
+        conv.event(delegation("old"))
+        await until(entered.is_set)
+        conv.event({"type": "session.input_transcript.delta", "delta": "No, filters and day?"})
+        conv.event(delegation("corrected"))
+        release.set()
+        await until(lambda: conv.evidence["results_sent"] == 1)
+        assert len(calls) == 2
+        assert lookup.await_count == 0  # stale tool request never executes
+        assert "filters and day?" in str(calls[1]["messages"])
+        assert not any("tool_result" in str(m) for m in calls[1]["messages"])
+        assert sent[-1]["delegation_id"] == "corrected"
+        assert conv.evidence["reconciliations"] == 1
+        await conv.close()
+
+    try:
+        asyncio.run(scenario())
+    finally:
+        release.set()
+
+
+def test_correction_during_tool_preserves_prior_turn_and_skips_remaining_tools(
+    fixture_db, monkeypatch
+):
+    two_tools = response(tool={})
+    two_tools.content.append(
+        SimpleNamespace(type="tool_use", id="second", name="caller_memory", input={})
+    )
+    conv, client, sent = make_conversation(
+        monkeypatch, [response("PRIOR COMPLETED TURN"), two_tools, response("Corrected Thursday.")]
+    )
+
+    async def scenario():
+        await conv.agent.process_message("Prior request")
+        entered, release = asyncio.Event(), asyncio.Event()
+        original = conv.memory.execute
+        tool_calls = []
+
+        async def delayed(**kwargs):
+            tool_calls.append(kwargs)
+            entered.set()
+            await release.wait()
+            return await original(**kwargs)
+
+        conv.memory.execute = delayed
+        conv.event({"type": "session.input_transcript.delta", "delta": "Tracking?"})
+        conv.event(delegation("old"))
+        await entered.wait()
+        conv.event({"type": "session.input_transcript.delta", "delta": "No, delivery day?"})
+        conv.event(delegation("corrected"))
+        release.set()
+        await conv.worker
+        assert len(tool_calls) == 1
+        assert conv.evidence["results_sent"] == 1
+        assert conv.evidence["reconciliations"] == 1
+        latest = str(client._client.messages.create.call_args.kwargs["messages"])
+        assert "PRIOR COMPLETED TURN" in latest and "delivery day?" in latest
+        assert "tool_result" not in latest and "tool_use" not in latest
+        assert sent[-1]["delegation_id"] == "corrected"
+        await conv.close()
+
+    asyncio.run(scenario())

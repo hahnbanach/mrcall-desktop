@@ -38,8 +38,9 @@ class CallerMemory(Tool):
             "caller_memory",
             "Read the permitted stored facts for this caller. An empty query returns all "
             "selected facts. A query uses literal word overlap, not semantic or multilingual "
-            "search. If a query finds nothing, read with an empty query before concluding "
-            "the information is absent.",
+            "search. If no words match, returns all still-permitted selected facts "
+            "with a fallback label. Those facts may not answer the query; never invent "
+            "missing details.",
         )
         self.snapshot = snapshot
         self.caller_number = caller_number
@@ -133,8 +134,6 @@ class CallerMemory(Tool):
                 if pins.get((customer.blob_id, row.id)) != fingerprint(row):
                     continue
                 score = len(words & set(re.findall(r"\w+", row.sentence_text.casefold())))
-                if words and not score:
-                    continue
                 facts.append(
                     (
                         score,
@@ -147,6 +146,12 @@ class CallerMemory(Tool):
                 )
         require_binding(bound)
         facts.sort(key=lambda item: (-item[0], item[1]["source"]["sentence_id"]))
-        return result(
+        matching = [item for item in facts if item[0]] if words else facts
+        fallback = bool(words and facts and not matching)
+        facts = matching or facts
+        found = result(
             "matched", [fact for _, fact in facts], None if facts else "No permitted fact found"
         )
+        if fallback:
+            found.data["retrieval"] = "selected_facts_fallback_no_lexical_match"
+        return found

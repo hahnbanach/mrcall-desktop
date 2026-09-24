@@ -22,8 +22,9 @@ it from what the caller now says. No writes or external operations are available
 Interpret the complete transcript, follow-up questions and latest corrections.
 A previous draft in your history may NEVER have been spoken: consult the actual
 voice transcript. Reuse a prior tool result if still relevant; otherwise search
-again. A query with no word overlap does not prove absence: read caller_memory
-with an empty query before claiming a stored fact is missing. Explicitly rectify contradicted information that the voice already said.
+again. A query with no word overlap returns the permitted facts without filtering;
+this fallback does not assert that they answer the query. Explicitly rectify
+contradicted information that the voice already said.
 If the voice transcript already fully answers the latest request correctly using
 permitted facts, return exactly [NO_FURTHER_RESPONSE], with no other text. This is
 an internal delivery decision, never text to quote to the caller. An acknowledgement,
@@ -56,6 +57,24 @@ def chunks(text: str):
         yield part
 
 
+class SupersededRun(Exception):
+    """Stop an obsolete agent loop at a safe boundary, after paid settlement."""
+
+
+class VoiceAgent(ZylchAIAgent):
+    def __init__(self, *args, check_current, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.check_current = check_current
+
+    async def _create_message_within_budget(self, **kwargs):
+        self.check_current()
+        return await super()._create_message_within_budget(**kwargs)
+
+    async def _call_tool(self, *args, **kwargs):
+        self.check_current()
+        return await super()._call_tool(*args, **kwargs)
+
+
 class Conversation:
     def __init__(
         self,
@@ -75,7 +94,9 @@ class Conversation:
         self.backend_delay = backend_delay
         self.run_number = 0
         self.memory.trace = trace
-        self.agent = ZylchAIAgent(
+        self.active_revisions = None
+        self.agent = VoiceAgent(
+            check_current=self._check_current,
             tools=[memory] if "caller_memory" in snapshot.config.tools else [],
             client=client,
             customer_service_instructions=BACKEND_RULES + "\n" + snapshot.config.instructions,
@@ -88,6 +109,7 @@ class Conversation:
         self.pending = []
         self.worker = None
         self.lookup = None
+        self.greeting = None
         self.context = {"facts": [], "missing": ["Caller lookup pending"]}
         self.seen = set()
         self.started = time.monotonic()
@@ -100,6 +122,25 @@ class Conversation:
 
     def start(self):
         self.lookup = asyncio.create_task(self._recognize())
+
+    def _check_current(self):
+        if self.closed or (
+            self.active_revisions is not None
+            and self.active_revisions != (self.revision, self.voice_revision)
+        ):
+            raise SupersededRun()
+
+    async def _greet(self):
+        try:
+            await self._append(
+                "session.instructions.append",
+                "Begin the call now, without waiting for the caller or memory lookup. "
+                "Use the greeting and language in the configured instructions; otherwise "
+                "briefly introduce yourself and ask how you can help. Then pause and listen. "
+                "If you have already greeted the caller, do not repeat the greeting.",
+            )
+        except Exception:
+            self.evidence["greeting_request_failed"] = True
 
     async def _append(self, kind, text, identifier=None, revision=None, voice_revision=None):
         for part in chunks(text):
@@ -152,6 +193,8 @@ class Conversation:
             safe["delegation_id"] = delegation.get("id")
             safe["target"] = delegation.get("target")
         self.record(kind, **safe)
+        if kind == "session.started" and self.greeting is None:
+            self.greeting = asyncio.create_task(self._greet())
         if kind in ("session.input_transcript.delta", "session.output_transcript.delta"):
             delta = event.get("delta")
             if not isinstance(delta, str) or not delta:
@@ -167,6 +210,10 @@ class Conversation:
                 self.revision += 1
             else:
                 self.voice_revision += 1
+                self.evidence.setdefault(
+                    "first_voice_transcript_ms", round((time.monotonic() - self.started) * 1000)
+                )
+                self.evidence.setdefault("first_voice_provider_start_ms", event.get("start_ms"))
         elif kind == "session.delegation.created":
             delegation = event.get("delegation", {})
             identifier = delegation.get("id")
@@ -190,6 +237,7 @@ class Conversation:
             while self.pending and not self.closed:
                 revision = self.revision
                 voice_revision = self.voice_revision
+                self.active_revisions = (revision, voice_revision)
                 # Capture text and revisions atomically before the test delay or
                 # any other await. Later speech is reconciled as new evidence.
                 request = json.dumps(
@@ -207,9 +255,19 @@ class Conversation:
                 self.record("backend_started")
                 if self.backend_delay:
                     await asyncio.sleep(self.backend_delay)
-                self.evidence["engine_turns"] = self.evidence.get("engine_turns", 0) + 1
-                with call_site("voice.customer_service"):
-                    answer = await self.agent.process_message(request)
+                history = list(self.agent.conversation_history)
+                try:
+                    self._check_current()
+                    self.evidence["engine_turns"] = self.evidence.get("engine_turns", 0) + 1
+                    with call_site("voice.customer_service"):
+                        answer = await self.agent.process_message(request)
+                except SupersededRun:
+                    # No unmatched tool-call/result messages survive an aborted
+                    # loop. Prior completed turns and financial ledgers remain.
+                    self.agent.conversation_history[:] = history
+                    self.record("backend_superseded_at_boundary")
+                    self.evidence["reconciliations"] = self.evidence.get("reconciliations", 0) + 1
+                    continue
                 self.record("backend_answer", answer=answer, answer_revision=revision)
                 if self.closed:
                     self.record("answer_suppressed", reason="closed")
@@ -256,7 +314,7 @@ class Conversation:
             return
         self.record("conversation_closed", pending=list(self.pending))
         self.closed = True
-        tasks = [task for task in (self.lookup, self.worker) if task]
+        tasks = [task for task in (self.lookup, self.worker, self.greeting) if task]
         for task in tasks:
             task.cancel()
         await asyncio.gather(*tasks, return_exceptions=True)

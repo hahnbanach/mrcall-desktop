@@ -56,8 +56,9 @@ def test_normalized_and_followup_only_approved_model_input(fixture_db, phone):
     ):
         assert forbidden not in model_input
     assert not any("blobs.content" in sql or "embedding" in sql for sql in statements)
-    missing = asyncio.run(tool(phone).execute(query="nonexistent elephant"))
-    assert not missing.data["facts"] and missing.data["missing"]
+    fallback = asyncio.run(tool(phone).execute(query="nonexistent elephant"))
+    assert {fact["text"] for fact in fallback.data["facts"]} == {PUBLIC, FOLLOWUP}
+    assert fallback.data["retrieval"] == "selected_facts_fallback_no_lexical_match"
 
 
 @pytest.mark.parametrize(
@@ -104,7 +105,7 @@ def test_stale_sentence_never_inherits_grant(fixture_db, change):
                     company_key=fixture_db,
                 )
             )
-    out = asyncio.run(memory.execute())
+    out = asyncio.run(memory.execute(query="giorno consegna"))
     assert [f["text"] for f in out.data["facts"]] == [FOLLOWUP]
 
 
@@ -188,3 +189,13 @@ def test_final_binding_read_shares_the_lookup_deadline(fixture_db, monkeypatch):
             release.set()
 
     asyncio.run(scenario())
+
+
+def test_cross_language_query_falls_back_only_to_pinned_selected_facts(fixture_db):
+    save()
+    out = asyncio.run(tool().execute(query="numero tracciamento ordine filtri consegna"))
+    assert {fact["text"] for fact in out.data["facts"]} == {PUBLIC, FOLLOWUP}
+    assert out.data["retrieval"] == "selected_facts_fallback_no_lexical_match"
+    assert not out.data["missing"]
+    for forbidden in (INTERNAL, OTHER_FACT, fixture_db, "PRIVATE FULL BLOB"):
+        assert forbidden not in json.dumps(out.data)
