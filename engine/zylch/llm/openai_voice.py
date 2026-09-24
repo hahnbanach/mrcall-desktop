@@ -15,6 +15,7 @@ import httpx
 from .budget_pricing import BudgetError, _content
 
 MODEL = "gpt-6-sol"
+FUNCTIONS = frozenset({"caller_memory", "get_current_time"})
 MAX_OUTPUT_TOKENS = 128000  # Provider capacity, not a conversation limit.
 
 
@@ -67,8 +68,10 @@ def responses_request(request):
             if kind == "text":
                 items.append({"role": role, "content": block["text"]})
             elif kind == "tool_use" and role == "assistant":
-                if block.get("name") != "caller_memory" or not isinstance(block.get("input"), dict):
-                    raise BudgetError("Only selected caller memory is available to OpenAI voice.")
+                if block.get("name") not in FUNCTIONS or not isinstance(block.get("input"), dict):
+                    raise BudgetError(
+                        "Only approved voice functions are available to OpenAI voice."
+                    )
                 items.append(
                     {
                         "type": "function_call",
@@ -90,11 +93,11 @@ def responses_request(request):
     tools = request.get("tools") or []
     if not isinstance(tools, list) or any(
         not isinstance(t, dict)
-        or t.get("name") != "caller_memory"
+        or t.get("name") not in FUNCTIONS
         or set(t) - {"name", "description", "input_schema", "cache_control"}
         for t in tools
     ):
-        raise BudgetError("Only selected caller memory is available to OpenAI voice.")
+        raise BudgetError("Only approved voice functions are available to OpenAI voice.")
     body = {
         "model": MODEL,
         "input": items,
@@ -180,7 +183,7 @@ def decode_response(data):
                 name, identifier = item["name"], item["call_id"]
                 args = json.loads(item["arguments"])
                 if (
-                    name != "caller_memory"
+                    name not in FUNCTIONS
                     or item.get("status") != "completed"
                     or not isinstance(identifier, str)
                     or not identifier

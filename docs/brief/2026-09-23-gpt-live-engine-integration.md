@@ -52,6 +52,68 @@ wording below. Use only the frozen approved history: blue replacement filters
 and delivery agreed for Thursday in the prior email. M3 requires a successful
 integrated phone demonstration and independent review; M4 is now authorized; historical M3 evidence remains limited.
 
+## M4 correction: GPT-6 owns answers and tool selection — 2026-09-24
+
+The operator explicitly requests implementation of this responsibility boundary:
+GPT-6 receives permitted caller context, interprets the request, chooses enabled
+tools when needed and authors the substantive answer. The engine provides data,
+executes tools and handles transport/accounting. GPT-Live greets, listens,
+interrupts and presents GPT-6 answers naturally; it delegates substantive requests
+instead of independently answering business questions from quiet context. This
+supersedes the direct-context voice-answer experiment and ambiguous references
+to the engine as the semantic answer author below.
+
+Initial caller lookup remains asynchronous and independent of the greeting. All
+selected facts go into GPT-6's call context before its first request; full facts
+are no longer separately pushed to GPT-Live. GPT-6 can answer from this context
+without an obligatory repeat lookup. Missing tracking must be reported as missing:
+no carrier/order lookup exists, and an order number alone cannot enable one.
+Only caller input, binding changes and closure invalidate pending results. Voice
+acknowledgements must not start another GPT-6 turn or discard an answer. GPT-Live
+still sees its own spoken history and must avoid repeating already-spoken content;
+this generative behavior requires listening, not just controller tests.
+
+Call 6 demonstrates the defect: a tracking request produced a useful GPT-6 answer
+in 4.427 seconds, discarded solely because GPT-Live said “Certo, controllo subito.”
+The caller had not added input. A second GPT-6 turn took 4.667 seconds. Its result
+was forwarded; only the historical Thursday/blue-filter clause was transcribed
+before closure. These are backend durations, not measured handset latency.
+
+Add one incremental read-only capability, `get_current_time(timezone)`, explicitly
+enabled in each call's configuration. It returns fresh system time as structured
+ISO date/time, IANA timezone and UTC offset; it executes no shell command and reads
+no profile or customer data. Require an explicit valid timezone. If location is
+unclear, GPT-6 asks; isolated instructions may set Europe/Rome as the test default.
+Do not add memory writes, live tracking integrations or a generic tool/plugin
+framework. Unsupported tools remain unavailable. Record sanitized clock tool
+arguments/results in the same private correlated diagnostic trace.
+
+Acceptance for this correction: one semantic backend run survives voice filler;
+caller corrections still fence tools/model calls and each answer fragment; hangup
+suppresses late results; preloaded facts reach GPT-6 without forced lookup; a real
+GPT-6 clock-tool round trip returns fresh timezone-aware data under normal ledger
+accounting. Review before isolated activation. Then verify the revised telephone
+path with correlated transcripts and listening. Existing M4 scenario criteria
+remain open until separately demonstrated; automated success does not close M4.
+
+### Autonomous phone tests authorized — 2026-09-24
+
+The operator must leave and explicitly requests autonomous test calls. Use a
+standalone diagnostic caller to dial ONLY the already-authorized test number,
+with that same owned number as caller ID; never impersonate the frozen customer
+or call the operator's personal number. Vonage NCCO text-to-speech and waits
+exercise the real incoming carrier/audio path. This is a test driver, not a
+production outbound feature. Keep a private durable attempt/receipt ledger before
+origination, retain uncertain reservations, do not automatically retry an
+uncertain create, and collect actual provider closure/price evidence. The existing
+incoming ledger is unchanged. No recordings, routing changes or tunnel restart.
+A scripted test has finite dialogue steps and hangs up when done; it adds no
+runtime expiry or general conversation ceiling. Calls from this test number may
+correctly be unidentified; label identity scenarios honestly. Pair the incoming
+correlated transcript with the exact scripted caller text and observed tool
+results. These calls can prove provider paths and failures, but cannot stand in
+for human handset listening or certify known-caller recognition when unidentified.
+
 ## First experience: recognize the caller and use company memory
 
 A customer calls. The agent greets them while the engine looks up their phone

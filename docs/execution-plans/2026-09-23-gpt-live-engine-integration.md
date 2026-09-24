@@ -23,6 +23,110 @@ integrated telephone call and fresh independent integration review are APPROVED.
 Listening evidence and its limits are recorded below. M4 is now active; this
 four-milestone plan stays active.
 
+## Active M4 implementation: GPT-6 answers and incremental tools — 2026-09-24
+
+The amended brief independently returned APPROVED before this plan amendment.
+This is within M4, superseding the direct-context voice policy in older entries.
+Owner: lead implementation/activation; independent reviewers own each review gate.
+
+1. Extend the explicit voice tool allowlist and immutable configuration with
+   `get_current_time`; preserve default memory-only configurations and reject
+   unknown/duplicate capabilities. Implement a read-only ZoneInfo clock requiring
+   a valid IANA timezone, structured ISO datetime/timezone/UTC offset and private
+   argument/result diagnostics. No shell, customer data, writes or new framework.
+   Wire both concrete agent tool validation and all Responses conversion paths.
+2. Give GPT-6 caller facts plus accumulated transcript; instruct GPT-Live to
+   delegate substantive questions and present results without inventing checks.
+   Keep immediate one-shot greeting. Stop pushing full memory to quiet voice
+   context. Initial lookup still runs independently; the existing bounded read
+   returns empty facts and an explicit missing/error result on timeout/failure,
+   so GPT-6 can answer without memory. Diagnostic delay is test-only, normally 0.
+   Remove voice-only invalidation at final delivery and fragment append; retain
+   caller revision, binding and closure guards. Retain the backend no-further-
+   response decision for already-completed history, without a mandatory extra run.
+3. Verify config/tool permissions (including disabled clock), malformed zones,
+   timezone offsets/DST, clock request/result through real Responses translation
+   and common ledger, preload/no extra lookup, voice progress (one semantic run),
+   caller corrections, chunk interruption and hangup. Preserve normal owner-agent
+   tool behavior. Run voice/kernel/budget regression and changed-file lint.
+4. Run real GPT-6 backend-only replays with the frozen isolated profile: preloaded
+   tracking facts with voice acknowledgement in flight, then fresh Rome time with
+   an actual clock-tool result. Record exact traces, serial dispatch counts and
+   settled costs. No artificial intent routing; GPT-6 chooses tools. Backend-only
+   evidence is not phone acceptance. Obtain independent integration review before
+   activation; address failures and re-review.
+5. While idle, snapshot all voice ledger rows; update isolated config through
+   actual authenticated cs rpc to enable the clock and replace obsolete direct-
+   voice instructions (Europe/Rome is an explicit test default). Restart only the
+   smoke service; verify cold health before operator reconnect, unchanged ledger,
+   unlimited mode, diagnostics, zero delays, tunnel PID and infinite lifetimes.
+   Rollback: restore previous source/config while idle with a NEW config revision;
+   keep every hold/receipt, do not overwrite live data or restart the tunnel.
+6. Offer a short phone retest: tracking, delivery follow-up, current Rome time and
+   interruption; inspect correlated text and tool payloads alongside listening.
+   Final independent end-to-end review and doc reconciliation must distinguish
+   implementation readiness from M4's still-open live matrix. If the caller is
+   unavailable, leave the runtime ready and M4 active, without claiming acceptance.
+
+Evidence motivating this correction: call 6 (`call-948ead5eac1b4b5ea09525519eaf267d.db`)
+loaded two selected facts in 132 ms. The tracking answer completed in 4.427 s but
+was discarded solely because voice said “Certo, controllo subito.”; caller revision
+stayed 4. A second run took 4.667 s, then one result was sent/acknowledged. Only the
+historical Thursday/blue-filter sentence was transcribed before closure; no proof
+that the missing-tracking clause reached the caller. Private report and literal
+sequence diagram are retained outside tracked documentation (DUPLEX.md remains
+operator-owned/untracked). This demonstrates redundant backend latency, not the
+cause of every previous interruption or an instrumented handset measurement.
+
+Implementation verification in progress: the plan gate returned APPROVED. The
+voice/kernel/budget regression passes 239 tests; changed-source Ruff passes.
+Real backend replay `call-b624cd90150145c0b67a49fd5e654e9f.db` answers tracking in
+2.448 seconds with one GPT-6 request despite injected voice progress, then calls
+`get_current_time` for Rome and answers from its result (two more serial Responses
+requests). The replay explicitly simulates spoken delivery before the follow-up;
+it is not telephone audio. An earlier replay omitted that simulated delivery and
+therefore repeated the still-undelivered tracking correction; retain its trace
+`call-f2d405bb1b1d49c9b9b3a092a7cdc666.db` as evidence of this test limitation.
+Independent integration review APPROVED after 51 focused tests. Configuration
+4→5 replaced obsolete voice instructions through actual authenticated cs rpc;
+the old daemon correctly refused the new clock capability. After smoke-only
+restart and cold health readiness, config 5→6 enabled the clock through the same
+client. No ID token persisted. Nine previous voice rows hash-match the prestart
+snapshot; tunnel PID 1903954 and both infinite lifetimes remain unchanged.
+The diagnostic caller extension received separate brief/plan approval and
+integration APPROVED after four independently passing lifecycle tests.
+Before autonomous calls: 57 settled GPT-6 requests, estimated USD0.137293,
+no unresolved OpenAI reservations; two old proxy holds total USD0.110 unchanged.
+
+### Autonomous phone tests authorized — 2026-09-24
+
+The operator must leave and explicitly requests autonomous test calls. Use a
+standalone diagnostic caller to dial ONLY the already-authorized test number,
+with that same owned number as caller ID; never impersonate the frozen customer
+or call the operator's personal number. Vonage NCCO text-to-speech and waits
+exercise the real incoming carrier/audio path. This is a test driver, not a
+production outbound feature. Keep a private durable attempt/receipt ledger before
+origination, retain uncertain reservations, do not automatically retry an
+uncertain create, and collect actual provider closure/price evidence. The existing
+incoming ledger is unchanged. No recordings, routing changes or tunnel restart.
+A scripted test has finite dialogue steps and hangs up when done; it adds no
+runtime expiry or general conversation ceiling. Calls from this test number may
+correctly be unidentified; label identity scenarios honestly. Pair the incoming
+correlated transcript with the exact scripted caller text and observed tool
+results. These calls can prove provider paths and failures, but cannot stand in
+for human handset listening or certify known-caller recognition when unidentified.
+
+Driver implementation/verification (lead-owned, reviewed before paid origination):
+fix and enforce both destination and owned caller ID to the authorized number;
+persist intent before POST, with a durable unresolved-state guard across restarts.
+A lost create response or uncertain closure blocks a new origination rather than
+retrying. For each known UUID, finally attempts hangup if active and reconciles
+terminal status/price receipts, preserving all reservations. Mocked transport
+checks must cover lost create responses, exceptions after UUID receipt and terminal
+receipt handling. Independent integration review must approve the driver before
+its first paid origination. This guard prevents overlapping uncertain calls; it is
+not a reinstated financial, duration or attempt ceiling.
+
 ## Current M3 correction — 2026-09-24
 
 This supersedes earlier requirements for a funded MrCall business and the earlier

@@ -242,47 +242,23 @@ def test_append_limit_preserves_multibyte_content():
     assert all(len(part.encode()) <= 480 for part in parts)
 
 
-def test_voice_answer_during_backend_is_reconciled_without_repetition(fixture_db, monkeypatch):
-    """Voice may answer from quiet context while the backend is in flight."""
-    entered, release = threading.Event(), threading.Event()
-    requests = []
-
-    def model(**kwargs):
-        requests.append(json.dumps(kwargs["messages"]))
-        if len(requests) == 1:
-            entered.set()
-            assert release.wait(3)
-            return response("The filters are blue.")
-        return response("[NO_FURTHER_RESPONSE]")
-
-    conv, _, sent = make_conversation(monkeypatch, model)
+def test_completed_voice_history_consumes_backend_silence_decision(fixture_db, monkeypatch):
+    conv, client, sent = make_conversation(monkeypatch, [response("[NO_FURTHER_RESPONSE]")])
 
     async def scenario():
         conv.start()
-        conv.event(
-            {"type": "session.input_transcript.delta", "delta": "What colour are my filters?"}
-        )
-        conv.event(delegation("colour"))
-        await until(entered.is_set)
-        conv.event(
-            {
-                "type": "session.output_transcript.delta",
-                "delta": "The stored request is for blue replacement filters.",
-            }
-        )
-        release.set()
-        await until(lambda: conv.worker.done())
-        assert len(requests) == 2, "Backend did not see voice's answer before delivery"
-        assert "stored request is for blue" in requests[-1]
+        conv.event({"type": "session.input_transcript.delta", "delta": "Which filters?"})
+        conv.event({"type": "session.output_transcript.delta", "delta": PUBLIC})
+        conv.event(delegation("already-addressed"))
+        await conv.worker
+        assert client._client.messages.create.call_count == 1
+        assert PUBLIC in str(client._client.messages.create.call_args.kwargs["messages"])
         assert conv.evidence["results_sent"] == 0
         assert not any(row["type"] == "session.commentary.append" for row in sent)
         assert conv.evidence["answers_already_addressed"] == 1
         await conv.close()
 
-    try:
-        asyncio.run(scenario())
-    finally:
-        release.set()
+    asyncio.run(scenario())
 
 
 def test_diagnostic_delay_skips_superseded_snapshot_before_paid_dispatch(fixture_db, monkeypatch):
@@ -329,7 +305,7 @@ def test_diagnostic_delay_skips_superseded_snapshot_before_paid_dispatch(fixture
         ),
     ],
 )
-def test_voice_reconciliation_still_delivers_missing_or_corrected_answer(
+def test_voice_history_and_new_caller_request_reach_backend(
     fixture_db, monkeypatch, spoken, latest_caller, answer
 ):
     entered, release = threading.Event(), threading.Event()
@@ -340,7 +316,7 @@ def test_voice_reconciliation_still_delivers_missing_or_corrected_answer(
         if len(requests) == 1:
             entered.set()
             assert release.wait(3)
-            return response("OUTDATED BACKEND DRAFT")
+            return response("OUTDATED BACKEND DRAFT" if latest_caller else answer)
         return response(answer)
 
     conv, _, sent = make_conversation(monkeypatch, model)
@@ -353,15 +329,16 @@ def test_voice_reconciliation_still_delivers_missing_or_corrected_answer(
                 "delta": "Check my prior request and delivery.",
             }
         )
+        conv.event({"type": "session.output_transcript.delta", "delta": spoken})
         conv.event(delegation("request"))
         await until(entered.is_set)
-        conv.event({"type": "session.output_transcript.delta", "delta": spoken})
         if latest_caller:
             conv.event({"type": "session.input_transcript.delta", "delta": latest_caller})
             conv.event(delegation("followup"))
         release.set()
         await until(lambda: conv.worker.done())
-        assert len(requests) == 2 and spoken in requests[-1]
+        assert len(requests) == (2 if latest_caller else 1)
+        assert spoken in requests[-1]
         if latest_caller:
             assert latest_caller in requests[-1]
         delivered = [row for row in sent if row["type"] == "session.commentary.append"]

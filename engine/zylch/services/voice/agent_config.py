@@ -47,7 +47,9 @@ class AgentConfig(FrozenModel):
     called_number: str = Field(default="", strict=True, pattern=r"^(?:\+[1-9][0-9]{7,14})?$")
     instructions: str = Field(default="", strict=True, max_length=8000)
     caller_context_policy: Literal["selected_facts_only"] = "selected_facts_only"
-    tools: tuple[Literal["caller_memory"], ...] = Field(default=(), max_length=1)
+    tools: tuple[Literal["caller_memory", "get_current_time"], ...] = Field(
+        default=(), max_length=2
+    )
     limits: Limits = Limits()
     customers: tuple[CustomerFacts, ...] = Field(default=(), max_length=16)
 
@@ -55,6 +57,8 @@ class AgentConfig(FrozenModel):
     def valid_selection(self):
         if self.enabled and (not self.called_number or not self.instructions.strip()):
             raise ValueError("Enabled agents require a number and instructions")
+        if len(set(self.tools)) != len(self.tools):
+            raise ValueError("Duplicate capability")
         blobs = [c.blob_id for c in self.customers]
         sentences = [s for c in self.customers for s in c.sentence_ids]
         if len(set(blobs)) != len(blobs) or len(set(sentences)) != len(sentences):

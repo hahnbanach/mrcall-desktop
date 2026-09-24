@@ -152,9 +152,10 @@ class ZylchAIAgent(BaseConversationalAgent):
         """
         if customer_service_instructions is not None:
             from ..services.voice.caller_memory import CallerMemory
+            from ..services.voice.current_time import CurrentTime
 
-            if any(not isinstance(tool, CallerMemory) for tool in tools):
-                raise ValueError("Customer service permits only selected caller memory")
+            if any(not isinstance(tool, (CallerMemory, CurrentTime)) for tool in tools):
+                raise ValueError("Customer service permits only selected memory and clock tools")
         self.customer_service_instructions = customer_service_instructions
         from ..llm.model_policy import isolated_voice_unlimited
 
