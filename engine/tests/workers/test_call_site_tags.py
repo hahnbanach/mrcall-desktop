@@ -32,9 +32,9 @@ def _text_resp(text="INSERT"):
 
 
 class _Rec:
-    """One recorder that satisfies BOTH the client protocol
-    (create_message / create_message_sync) and the LLMMergeService protocol
-    (.merge), appending the active call_site tag on every call."""
+    """One recorder that satisfies the client protocol (create_message /
+    create_message_sync), appending the active call_site tag on every call;
+    the canary reaches it as an LLMMergeService's ``.client``."""
 
     model = "rec-model"
 
@@ -49,10 +49,6 @@ class _Rec:
     def create_message_sync(self, **kwargs):
         self.sites.append(current_call_site())
         return _text_resp(self.text)
-
-    def merge(self, existing, new):
-        self.sites.append(current_call_site())
-        return "INSERT"
 
 
 # ── task.detect ─────────────────────────────────────────────────────────
@@ -133,10 +129,10 @@ def test_calendar_extract_and_decision_tags(tmp_path, monkeypatch):
 def test_canary_tag():
     from zylch.memory.llm_merge import merge_gate_selfcheck
 
-    rec = _Rec()
-    res = merge_gate_selfcheck(rec)  # pass our recorder as the merge service
+    rec = _Rec(text='{"action": "SKIP", "reason": "a person and an unrelated company"}')
+    res = merge_gate_selfcheck(types.SimpleNamespace(client=rec))  # the recorder as its client
     assert rec.sites == ["canary"]
-    assert res["healthy"] is True  # INSERT → distinct entities refused
+    assert res["healthy"] is True  # SKIP → the role did not fold the two
 
 
 # ── fresh-DB fixture for the storage-driven sweeps ──────────────────────

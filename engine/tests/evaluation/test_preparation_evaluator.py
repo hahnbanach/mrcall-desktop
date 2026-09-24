@@ -30,7 +30,7 @@ def test_reference_checks_evaluator_not_model_quality():
     cases, captures = dataset()
     result = module.evaluate(cases, captures, reference=True)
     assert result["quality"] == "unmeasured"
-    assert len(result["cases"]) == 10
+    assert len(result["cases"]) == 7
     assert all(row["correct"] for row in result["cases"])
 
 
@@ -40,12 +40,6 @@ def test_sender_identifier_contamination_is_wrong():
         "text"
     ].replace("Email: luca@example.test", "Email: luca@example.test, anna@example.test")
     assert not module.evaluate(cases, captures)["cases"][0]["correct"]
-
-
-def test_false_merge_is_wrong_even_with_finished_output():
-    cases, captures = dataset()
-    captures[5]["response"] = captures[4]["response"]
-    assert not module.evaluate(cases, captures)["cases"][5]["correct"]
 
 
 def test_truncated_task_cannot_be_accepted():
@@ -73,7 +67,7 @@ def test_incomplete_or_unaccountable_capture_set_refused(problem):
 
 def test_malformed_model_decision_scores_failure_without_aborting_report():
     cases, captures = dataset()
-    captures[7]["response"]["content"][0]["input"]["task_action"] = []
-    assert not module.evaluate(cases, captures)["cases"][7]["correct"]
+    captures[4]["response"]["content"][0]["input"]["task_action"] = []
+    assert not module.evaluate(cases, captures)["cases"][4]["correct"]
     captures[0]["response"]["content"] = None
     assert not module.evaluate(cases, captures)["cases"][0]["correct"]

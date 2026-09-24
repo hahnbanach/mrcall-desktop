@@ -9,7 +9,6 @@ from pathlib import Path
 from types import SimpleNamespace
 
 from zylch.memory.response_validation import complete_memory_text
-from zylch.memory.llm_merge import is_no_merge_response
 from zylch.workers.memory import MemoryWorker, _parse_identifiers_block
 
 FIXTURES = Path(__file__).resolve().parents[1] / "tests/evaluation/preparation_cases.json"
@@ -57,19 +56,12 @@ def assess(case, raw):
         }
     try:
         text = complete_memory_text(response)
-        refused_merge = case["role"] == "merge" and is_no_merge_response(text)
-        blobs = (
-            []
-            if text.upper() == "SKIP" or refused_merge
-            else MemoryWorker._parse_entities(None, text)
-        )
+        blobs = [] if text.upper() == "SKIP" else MemoryWorker._parse_entities(None, text)
         identities = sorted(sorted(_parse_identifiers_block(blob)) for blob in blobs)
         targets = sorted(
             sorted(tuple(pair) for pair in group) for group in expected.get("identities", [])
         )
         correct = expected["accept"] and identities == targets
-        if case["role"] == "merge":
-            correct = correct and refused_merge == expected["insert"]
         return {"accepted": True, "correct": bool(correct), "identity_exact": identities == targets}
     except (ValueError, RuntimeError, TypeError, AttributeError):
         return {"accepted": False, "correct": not expected["accept"]}

@@ -1,139 +1,139 @@
-"""Regression tests for the merge gate (2026-06 universal-'John'-sink).
+"""The merge gate's canary asks the mnemonic role, and its verdicts mean what they say.
 
-Root cause: a prompt-cache refactor (58f392a) put only the one-line
-preamble ("Merge these entities into a SINGLE ENTITY:") into the cached
-system prompt — ``MERGE_PROMPT.split("EXISTING_ENTITY:")[0]`` — and dropped
-the ENTIRE rule set, including the "return INSERT when the entities differ"
-rule. The model was never told it could refuse, refused 0 times across 859
-merges, and collapsed 400+ unrelated contacts into the first blob, each
-one's specifics discarded.
+The gate exists for the 2026-06 universal-'John'-sink: a model that folds
+unrelated contacts into one memory, with nothing to say so. These lock in,
+without a live LLM, the invariants the canary and the pair decision stand on:
 
-These lock in the invariant (full instructions in the cached system prompt,
-entity data ONLY in the user message) and the sentinel detection / canary,
-all without a live LLM — so the structural regression can never return
-silently. The semantic side (a real model actually returning INSERT) is
-covered by the live test in tests/llm and by merge_gate_selfcheck() at
-runtime.
+- the role's whole rule set travels in the cached system block, and the two
+  memories only in the user turn — the split whose loss caused the sink;
+- a consolidation pair reaches the harness through ``decide_pair``, with the
+  merge-routed client;
+- the canary's verdicts: ``refused`` when the role does not propose to fold
+  the two; ``merged`` when it answers MERGE, or an UPDATE that absorbs the
+  other memory, whatever the validator says; ``error`` — never disabling —
+  when the call fails or the answer is unusable.
+
+Each case runs the canary against a recording client: the canary's own
+logic, the role's prompt builders, the response adapter and the validator are
+the real ones. The paid path — the real ``LLMClient`` inside a preparation
+run — is ``tests/memory/test_consolidation.py``'s canary cases.
 """
-from unittest.mock import MagicMock
+
+import json
 
 import pytest
 
-from zylch.memory.llm_merge import (
-    LLMMergeService,
-    MERGE_INSTRUCTIONS,
-    is_no_merge_response,
-    merge_gate_selfcheck,
+from zylch.memory import llm_merge
+from zylch.memory.llm_merge import LLMMergeService, merge_gate_selfcheck
+from zylch.memory.mnemonic import prompts
+
+from tests.memory.consolidation_env import CANARY_FOLDS, CANARY_REFUSES
+from tests.memory.mnemonic_env import text_response
+
+ABSORBING_UPDATE = json.dumps(
+    {
+        "action": "UPDATE",
+        "entity_type": "PERSON",
+        "scope": "entity",
+        "content": "#IDENTIFIERS\nEntity type: PERSON\nScope: entity\nName: Aldo Bianchi\n"
+        "#ABOUT\nA customer; also Zeta Logistics.",
+        "write_set": [{"blob_id": "canary-person", "expected_version": "canary", "role": "target"}],
+        "declared_effects": ["alias:canary-company->canary-person", "delete:canary-company"],
+        "reason": "the same subject",
+    }
 )
 
 
-def _svc_with_fake_client(monkeypatch, returns_text):
-    """LLMMergeService whose LLM returns fixed text, capturing call kwargs."""
-    captured = {}
+class RecordingClient:
+    """The client protocol the canary uses: answers in order, records each request."""
 
-    def fake_create_message_sync(**kwargs):
-        captured.update(kwargs)
-        resp = MagicMock()
-        resp.stop_reason = "end_turn"
-        resp.content = [MagicMock(type="text", text=returns_text)]
-        return resp
+    model = "fake-model"
 
-    fake_client = MagicMock()
-    fake_client.model = "fake-model"
-    fake_client.create_message_sync.side_effect = fake_create_message_sync
+    def __init__(self, *answers):
+        self.answers = list(answers)
+        self.requests = []
 
-    monkeypatch.setattr(
-        "zylch.memory.llm_merge.make_llm_client", lambda model=None: fake_client
-    )
-    return LLMMergeService(), captured
+    def create_message_sync(self, **request):
+        self.requests.append(request)
+        answer = self.answers.pop(0)
+        if isinstance(answer, BaseException):
+            raise answer
+        return text_response(answer)
 
 
-# ── is_no_merge_response: the shared gate sentinel ──────────────────
+def service(monkeypatch, *answers):
+    """An ``LLMMergeService`` whose routed client is a recording client."""
+    recording = RecordingClient(*answers)
+    monkeypatch.setattr(llm_merge, "make_llm_client", lambda model=None: recording)
+    return LLMMergeService(), recording
+
+
+def test_the_role_rules_ride_the_cached_block_and_the_memories_the_user_turn(monkeypatch):
+    svc, recording = service(monkeypatch, CANARY_REFUSES)
+
+    merge_gate_selfcheck(svc)
+
+    (sent,) = recording.requests
+    system_text = "".join(block["text"] for block in sent["system"])
+    assert system_text == prompts.MNEMONIC_INSTRUCTIONS
+    assert sent["system"][-1]["cache_control"] == {"type": "ephemeral"}
+    user_text = json.dumps(sent["messages"])
+    for address in ("aldo.bianchi@canary-person.example", "info@canary-company.example"):
+        assert address not in system_text and address in user_text
+
+
+def test_a_pair_reaches_the_harness_through_decide_pair(monkeypatch):
+    from zylch.memory.mnemonic import pairs
+
+    svc, _ = service(monkeypatch)
+    seen = {}
+
+    def decide(pair_, *, client):
+        seen.update(pair=pair_, client=client)
+        return "the harness's result"
+
+    monkeypatch.setattr(pairs, "decide", decide)
+    assert svc.decide_pair({"id": "a|b"}) == "the harness's result"
+    assert seen == {"pair": {"id": "a|b"}, "client": svc.client}
+
+
 @pytest.mark.parametrize(
-    "text,expected",
-    [
-        ("INSERT", True),
-        ("INSERT.", True),
-        ("insert\n", True),
-        ("  INSERT  ", True),
-        ("SKIP", True),  # legacy sentinel the upsert paths used to miss
-        ("skip", True),
-        ("", False),
-        (None, False),
-        # A genuinely merged blob must NOT read as a refusal, even when its
-        # prose happens to contain the word "insert".
-        (
-            "#IDENTIFIERS\nEntity type: PERSON\nName: X\n#ABOUT\nWe should insert this lead.",
-            False,
-        ),
-        ("#IDENTIFIERS\nEntity type: COMPANY\nName: Acme", False),
-    ],
+    "answer",
+    [CANARY_REFUSES, json.dumps({"action": "REVIEW", "reason": "cannot tell"})],
+    ids=["skip", "review"],
 )
-def test_is_no_merge_response(text, expected):
-    assert is_no_merge_response(text) is expected
+def test_the_canary_is_healthy_when_the_role_does_not_fold_them(monkeypatch, answer):
+    svc, _ = service(monkeypatch, answer)
+    result = merge_gate_selfcheck(svc)
+    assert result["healthy"] is True and result["verdict"] == "refused"
 
 
-# ── the regression invariant: rules in system, data in user ─────────
-def test_merge_ships_full_rules_in_system_not_just_preamble(monkeypatch):
-    svc, captured = _svc_with_fake_client(monkeypatch, "INSERT")
-    existing = "#IDENTIFIERS\nName: John Doe\nEmail: john@acme.com"
-    new = "#IDENTIFIERS\nName: Fani Motors\nEmail: info@fanimotors.it"
-
-    result = svc.merge(existing, new)
-
-    # The cached system prompt must carry the WHOLE instruction set —
-    # this is exactly what 58f392a sliced off.
-    system_text = captured["system"][0]["text"]
-    assert "INSERT" in system_text, "system prompt lost the refuse-token rule"
-    assert (
-        "#IDENTIFIERS" in system_text
-        and "#ABOUT" in system_text
-        and "#HISTORY" in system_text
-    ), "system prompt lost the output format"
-    assert system_text.strip() != "Merge these entities into a SINGLE ENTITY:"
-    assert system_text == MERGE_INSTRUCTIONS
-
-    # Entity DATA must live in the user message, never baked into the cached
-    # system block (that is what the refactor was reaching for; do it right).
-    assert "john@acme.com" not in system_text
-    assert "info@fanimotors.it" not in system_text
-    user_text = captured["messages"][0]["content"]
-    assert "john@acme.com" in user_text and "info@fanimotors.it" in user_text
-
-    assert result == "INSERT"
-    assert is_no_merge_response(result)
+BARE_MERGE = json.dumps({**json.loads(CANARY_FOLDS), "declared_effects": []})
 
 
-def test_merge_returns_blob_for_same_entity(monkeypatch):
-    merged = "#IDENTIFIERS\nEntity type: PERSON\nName: John Doe\n#ABOUT\none\n#HISTORY\nx"
-    svc, _ = _svc_with_fake_client(monkeypatch, merged)
-    out = svc.merge("existing", "new")
-    assert out == merged
-    assert not is_no_merge_response(out)
+@pytest.mark.parametrize("answer", [CANARY_FOLDS, BARE_MERGE], ids=["declared", "bare"])
+def test_the_canary_is_broken_open_when_the_role_answers_merge(monkeypatch, answer):
+    svc, _ = service(monkeypatch, answer)
+    result = merge_gate_selfcheck(svc)
+    # The validator refuses this merge — no evidence ties the two — and the
+    # verdict is still broken open: the gate guards the model's judgment. A
+    # MERGE is broken open whether or not it declares what it absorbs.
+    assert result["healthy"] is False and result["verdict"] == "merged"
+    assert result["validator"] == "refused"
 
 
-# ── the canary (closes "the silence") ───────────────────────────────
-def test_selfcheck_healthy_when_gate_refuses(monkeypatch):
-    svc, _ = _svc_with_fake_client(monkeypatch, "INSERT")
-    res = merge_gate_selfcheck(svc)
-    assert res["healthy"] is True
-    assert res["verdict"] == "refused"
+def test_the_canary_is_broken_open_when_an_update_absorbs_the_other(monkeypatch):
+    svc, _ = service(monkeypatch, ABSORBING_UPDATE)
+    result = merge_gate_selfcheck(svc)
+    assert result["healthy"] is False and result["verdict"] == "merged"
 
 
-def test_selfcheck_broken_open_when_gate_merges(monkeypatch):
-    # The broken-open gate returns a merged blob for the two unrelated
-    # canary fixtures instead of INSERT.
-    merged = "#IDENTIFIERS\nEntity type: PERSON\nName: Aldo\n#ABOUT\nsink\n#HISTORY\ny"
-    svc, _ = _svc_with_fake_client(monkeypatch, merged)
-    res = merge_gate_selfcheck(svc)
-    assert res["healthy"] is False
-    assert res["verdict"] == "merged"
+def test_the_canary_is_unknown_and_never_disabling_when_it_cannot_judge(monkeypatch):
+    down, _ = service(monkeypatch, RuntimeError("api down"))
+    assert merge_gate_selfcheck(down)["healthy"] is None
 
-
-def test_selfcheck_unknown_on_error_never_disables(monkeypatch):
-    svc, _ = _svc_with_fake_client(monkeypatch, "INSERT")
-    svc.client.create_message_sync.side_effect = RuntimeError("api down")
-    res = merge_gate_selfcheck(svc)
-    # healthy=None means "couldn't check" — must NOT be treated as broken,
-    # so a flaky API call never disables merging for a whole build.
-    assert res["healthy"] is None
+    unusable, _ = service(monkeypatch, "I think they are different people.")
+    result = merge_gate_selfcheck(unusable)
+    # healthy=None means "couldn't check" — never broken, so a flaky call or
+    # an unusable answer does not disable merging for a whole build.
+    assert result["healthy"] is None and result["verdict"] == "error"

@@ -35,6 +35,24 @@ from tests.memory.mnemonic_env import (
 LUCA = "Luca Bianchi"
 LUCA_EMAIL = "luca@alpha.example"
 
+# The role's answers to the merge-gate canary's pair (llm_merge's two fixtures).
+CANARY_REFUSES = json.dumps({"action": "SKIP", "reason": "a person and an unrelated company"})
+CANARY_FOLDS = json.dumps(
+    {
+        "action": "MERGE",
+        "entity_type": "PERSON",
+        "scope": "entity",
+        "content": "#IDENTIFIERS\nEntity type: PERSON\nScope: entity\nName: Aldo Bianchi\n"
+        "#ABOUT\nA customer who is also a freight company.",
+        "write_set": [
+            {"blob_id": "canary-person", "expected_version": "canary", "role": "keeper"},
+            {"blob_id": "canary-company", "expected_version": "canary", "role": "donor"},
+        ],
+        "declared_effects": ["alias:canary-company->canary-person", "delete:canary-company"],
+        "reason": "the same subject",
+    }
+)
+
 
 def person(
     name=LUCA,

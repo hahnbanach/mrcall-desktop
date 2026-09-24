@@ -5,8 +5,8 @@ Consolidation (:mod:`zylch.memory.consolidation`) submits every pair it
 clusters through :meth:`LLMMergeService.decide_pair` into the mnemonic
 harness, where the role decides, the validator checks and the commit writes;
 nothing here writes memory. :func:`merge_gate_selfcheck` is the canary that
-asks the same routed model whether it still refuses to fold two unrelated
-memories together.
+asks the same routed model, through the same role and the same rule set,
+whether it still refuses to fold two unrelated memories together.
 
 Every mnemonic import here is deferred into the function that needs it:
 ``zylch.memory`` loads this module, and the mnemonic package loads
@@ -16,149 +16,23 @@ Every mnemonic import here is deferred into the function that needs it:
 import logging
 from typing import Any, Dict, Optional
 
-from zylch.memory.response_validation import complete_memory_text
 from zylch.llm import LLMClient, make_llm_client, routed_model
 from zylch.llm.usage import call_site
 
 logger = logging.getLogger(__name__)
 
 
-# ─── Merge-gate sentinel ─────────────────────────────────────────────
-#
-# The merge model answers a TWO-part question: are EXISTING and NEW the
-# same real-world entity, and — only if so — what is the merged blob? When
-# they are NOT the same entity it must emit a short sentinel ("INSERT", or
-# the legacy "SKIP") instead of a blob. Every caller MUST treat that
-# sentinel as "do not merge"; writing it into a blob — or, worse, the model
-# never emitting it at all — silently destroys contact data.
-#
-# That second failure is the 2026-06 regression: the prompt-cache refactor
-# in 58f392a put only the one-line preamble ("Merge these entities into a
-# SINGLE ENTITY:") into the cached system prompt — `MERGE_PROMPT.split(
-# "EXISTING_ENTITY:")[0]` — and dropped the ENTIRE rule set, including the
-# INSERT rule, on the floor. The model was never told it could refuse, so
-# across 859 merges it refused 0 times: the first PERSON blob ("John Doe")
-# became a universal sink that absorbed 400+ unrelated contacts, each one's
-# specifics discarded by the one-sentence #ABOUT constraint, and nobody
-# could notice. merge_gate_selfcheck() below is the canary that now makes
-# that failure loud and non-destructive.
-
-_NO_MERGE_TOKENS = ("INSERT", "SKIP")
-
-
-def is_no_merge_response(merged: Optional[str]) -> bool:
-    """True when :meth:`LLMMergeService.merge` declined to merge.
-
-    Tolerant of trailing punctuation / whitespace / case ("INSERT.",
-    "insert\\n") but length-bounded, so a genuinely merged blob that merely
-    contains the word "insert" somewhere in its prose is NOT misread as a
-    refusal. Single source of truth for every merge-gate call site (the
-    upsert paths historically checked only "INSERT", so a bare "SKIP" would
-    have been written into a blob as its new content).
-    """
-    if not merged:
-        return False
-    up = merged.strip().upper()
-    if up in _NO_MERGE_TOKENS:
-        return True
-    return len(up) < 12 and any(tok in up for tok in _NO_MERGE_TOKENS)
-
-
-# The complete merge instructions. The ENTIRE rule set lives here and ships
-# as the cached system prompt; ONLY the two entities go in the per-call
-# user message. Do NOT fold the existing/new data into this string —
-# keeping data out of the cached block is what 58f392a was reaching for,
-# but it sliced the template and lost the rules. Data and instructions stay
-# physically separate now.
-MERGE_INSTRUCTIONS = """You compare two entity memories and decide whether they describe the SAME real-world entity, then merge them ONLY if they do.
-
-You receive EXISTING_ENTITY and NEW_ENTITY in the user message.
-
-STEP 1 — Decide identity. They are the SAME entity ONLY if their identifiers point to the same real-world person / company / project: the same email address, the same phone number, or unmistakably the same name together with the same company. A similar topic, a shared subject line, or both parties writing to the same support inbox is NOT enough. Two parties that merely interacted with each other (e.g. a customer and your company) are DIFFERENT entities.
-
-If they are NOT the same entity, output EXACTLY this one word and nothing else:
-INSERT
-
-STEP 2 — Only if they ARE the same entity, merge them into ONE entity, in this exact format:
-
-#IDENTIFIERS
-Entity type: [person/company/project]
-Name: [name]
-[other identifiers as available: Email, Phone, Company, Website, etc.]
-
-#ABOUT
-[One sentence describing who/what this single entity is]
-
-#HISTORY
-[Chronological narrative of events and interactions; append new events, keep concise]
-
-Rules when merging:
-1. The result describes EXACTLY ONE entity — never combine two different people or companies into a single blob.
-2. #IDENTIFIERS: add identifiers from NEW_ENTITY only when they belong to that same one entity.
-3. #ABOUT: keep it to ONE sentence; update it only if NEW_ENTITY adds information.
-4. #HISTORY: append new events chronologically, keep it concise.
-
-Output ONLY the single word INSERT, or ONLY the merged entity in the exact format above — nothing else."""
-
-
 class LLMMergeService:
     """The merge-routed LLM client, and consolidation's pair decision through it.
 
     :meth:`decide_pair` is how a consolidation pair reaches the mnemonic
-    harness; :meth:`merge` is the legacy two-entity prompt the canary still
-    asks.
+    harness; :func:`merge_gate_selfcheck` asks the same client whether the
+    role still refuses to fold two unrelated memories together.
     """
 
     def __init__(self, model: str = None):
         self.client: LLMClient = make_llm_client(model=model)
         self.model = self.client.model
-        # Backward-compat alias; the rule set now lives module-level.
-        self.MERGE_PROMPT = MERGE_INSTRUCTIONS
-
-    def merge(self, existing: str, new: str) -> str:
-        """Merge two memory contents using the LLM.
-
-        The cached system prompt carries the COMPLETE instruction set
-        (identity decision + INSERT refusal + output format); the user
-        message carries ONLY the two entities. Returns either the
-        ``INSERT`` sentinel (distinct entities — test with
-        :func:`is_no_merge_response`) or the merged blob.
-
-        Args:
-            existing: Current blob content.
-            new: New information to merge.
-
-        Returns:
-            Merged content string, or the ``INSERT`` sentinel.
-        """
-        system = [
-            {
-                "type": "text",
-                "text": MERGE_INSTRUCTIONS,
-                "cache_control": {"type": "ephemeral"},
-            },
-        ]
-        user_content = f"EXISTING_ENTITY:\n{existing}\n\nNEW_ENTITY:\n{new}"
-        from zylch.llm.usage import call_site, current_call_site
-
-        site = current_call_site()
-        with call_site("memory.merge" if site == "untagged" else site):
-            response = self.client.create_message_sync(
-                model=self.model,
-                max_tokens=1024,
-                system=system,
-                messages=[
-                    {"role": "user", "content": user_content},
-                ],
-            )
-        result = complete_memory_text(response)
-        # Log the DECISION at INFO so the INSERT rate is visible at a glance
-        # in the logs — a sustained 0% INSERT rate is the fingerprint of a
-        # broken-open gate (the 2026-06 silent regression).
-        decision = "INSERT" if is_no_merge_response(result) else "MERGE"
-        logger.info(f"[merge] decision={decision} model={self.model}")
-        logger.debug("[merge] existing=%r\nnew=%r\nresult=%r", existing, new, result)
-        return result
 
     def decide_pair(self, pair: Dict[str, Any]) -> Any:
         """Submit one consolidation pair to the mnemonic harness with this client.
@@ -174,15 +48,19 @@ class LLMMergeService:
         return decide(pair, client=self.client)
 
 
-# ─── Merge-gate canary (closes the 2026-06 silent regression) ────────
+# ─── Merge-gate canary ────────────────────────────────────────────────
 #
-# Two fixtures that are UNMISTAKABLY different entities — an individual and
-# an unrelated company, sharing no identifier. A healthy gate must refuse
-# to merge them (emit the INSERT sentinel). If it returns a merged blob the
-# gate is "broken-open": every new contact is being absorbed into an
-# existing blob and its specifics discarded. The memory build runs this
-# once per pass so that condition is loud and, via the worker's
-# merge_enabled guard, non-destructive — never again silent.
+# Two fixtures that are UNMISTAKABLY different subjects — an individual and an
+# unrelated company, sharing no identifier — shown to the mnemonic role as one
+# consolidation pair. A healthy role does not propose to fold them together.
+# If it proposes a MERGE, or a write that absorbs the other memory, the gate is
+# broken open: consolidation would fold strangers and ingestion would absorb
+# new contacts into existing memories, their specifics discarded. The canary
+# makes that loud and, through the merge gate it sets, non-destructive: an
+# unhealthy verdict shows ingestion's role no candidate and suspends every
+# consolidation pair.
+_CANARY_OWNER = "merge-gate-canary"
+_CANARY_COMPANY = "merge-gate-canary"
 _CANARY_EXISTING = (
     "#IDENTIFIERS\n"
     "Entity type: PERSON\n"
@@ -207,44 +85,96 @@ _CANARY_NEW = (
 )
 
 
+def _canary_memory(blob_id: str, content: str) -> Dict[str, Any]:
+    """A canary fixture in the shape ``get_blob`` returns a memory."""
+    return {
+        "id": blob_id,
+        "content": content,
+        "updated_at": "canary",
+        "namespace": f"user:{_CANARY_COMPANY}",
+    }
+
+
 def merge_gate_selfcheck(merge_service: Optional["LLMMergeService"] = None) -> Dict[str, Any]:
-    """Semantic canary for the merge gate.
+    """Semantic canary for the merge gate: does the role still refuse to fold strangers?
 
-    Feeds two unmistakably-distinct entities to the LIVE merge model and
-    asserts it refuses to merge them. This is the detector for the
-    'broken-open gate' failure mode (2026-06) in which the model is never
-    told it may refuse, silently collapses every contact into one blob, and
-    discards their data.
+    The two canary memories are built into a consolidation pair
+    (:func:`~zylch.memory.mnemonic.pairs.pair_event`, pinned candidates) and
+    shown to the LIVE merge-routed model with the mnemonic role's own cached
+    rule set and data turn (``prompts.system_blocks``, ``prompts.user_message``):
+    one call, tagged ``canary``, an auxiliary preparation dispatch. It asks for
+    a decision and writes nothing — no grant, no journal row. This is the
+    detector for the 'broken-open gate' failure mode (2026-06), in which the
+    model folds unrelated contacts together and their data is lost.
 
-    Returns ``{"healthy": bool|None, "verdict": str, "raw": str}``.
-    ``healthy is None`` means the check could not run (no LLM / transient
-    error) — treat as 'unknown', NOT 'broken', so a flaky API call never
-    disables merging. ``healthy is False`` is a data-destroying condition
-    and is logged at ERROR.
+    Returns ``{"healthy": bool|None, "verdict": str, "raw": str, "validator": str}``:
+
+    - ``refused`` (``healthy`` True) when the role does not propose to fold the
+      two together;
+    - ``merged`` (``healthy`` False, logged at ERROR) when it answers MERGE or
+      a proposal that absorbs the other memory, whatever the validator then
+      says: the gate guards the model's judgment, and a model that folds
+      strangers is broken open even where the validator refuses this pair;
+    - ``error`` (``healthy`` None) when the check could not run or the answer
+      was unusable — treat as 'unknown', NOT 'broken', so a flaky API call
+      never disables merging.
+
+    ``validator`` is whether the validator would have accepted the proposal
+    (``accepted`` / ``refused``), recorded for the log; it decides nothing.
     """
+    from zylch.memory.mnemonic import prompts
+    from zylch.memory.mnemonic.agent import adapt_response
+    from zylch.memory.mnemonic.candidates import pinned
+    from zylch.memory.mnemonic.contracts import MERGE, MNEMONIC_MAX_TOKENS
+    from zylch.memory.mnemonic.pairs import pair_event
+    from zylch.memory.mnemonic.validator import validate
+    from zylch.memory.response_validation import complete_memory_text
+
     try:
         # MODEL_MEMORY_MERGE per-worker knob (empty → engine default). The
         # canary must exercise the SAME model the live merge gate uses.
         svc = merge_service or LLMMergeService(model=routed_model("MODEL_MEMORY_MERGE"))
+        members = {
+            "canary-person": _canary_memory("canary-person", _CANARY_EXISTING),
+            "canary-company": _canary_memory("canary-company", _CANARY_NEW),
+        }
+        event = pair_event(_CANARY_OWNER, _CANARY_COMPANY, *members.values())
+        candidates = pinned(event, members.get, list(members))
         with call_site("canary"):
-            raw = svc.merge(_CANARY_EXISTING, _CANARY_NEW)
+            response = svc.client.create_message_sync(
+                system=prompts.system_blocks(),
+                messages=[{"role": "user", "content": prompts.user_message(event, candidates)}],
+                max_tokens=MNEMONIC_MAX_TOKENS,
+            )
+        raw = complete_memory_text(response)
+        proposal = adapt_response(response)
     except Exception as e:
         logger.warning(f"[merge-gate] self-check could not run: {e}")
-        return {"healthy": None, "verdict": "error", "raw": str(e)}
+        return {"healthy": None, "verdict": "error", "raw": str(e), "validator": ""}
 
-    healthy = is_no_merge_response(raw)
+    healthy = proposal.action != MERGE and not proposal.absorbs_another_memory
+    try:
+        judged = "accepted" if validate(event, proposal, candidates).ok else "refused"
+    except Exception as e:  # noqa: BLE001 - the verdict stands; only the log detail is lost
+        judged = f"unavailable ({e})"
     if healthy:
-        logger.info("[merge-gate] self-check OK — distinct entities correctly refused (INSERT)")
+        logger.info(
+            f"[merge-gate] self-check OK — the role answered {proposal.action} "
+            "for two unrelated memories"
+        )
     else:
         logger.error(
-            "[merge-gate] BROKEN-OPEN: the merge model MERGED two unrelated "
-            "entities instead of refusing. New contacts would be absorbed "
-            "into existing blobs and their data discarded; memory merging is "
-            "being DISABLED for this build to prevent corruption. raw=%r",
+            "[merge-gate] BROKEN-OPEN: the role proposed to fold two unrelated "
+            "memories together (action=%s, validator %s). Consolidation would "
+            "fold strangers and ingestion would absorb new contacts; memory "
+            "merging is being DISABLED to prevent corruption. raw=%r",
+            proposal.action,
+            judged,
             raw,
         )
     return {
         "healthy": healthy,
         "verdict": "refused" if healthy else "merged",
         "raw": raw,
+        "validator": judged,
     }

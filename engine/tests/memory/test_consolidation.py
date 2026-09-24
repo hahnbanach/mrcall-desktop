@@ -31,6 +31,8 @@ from zylch.storage.migrations import db_file_lock
 from zylch.storage.models import Blob, TaskItem
 
 from tests.memory.consolidation_env import (
+    CANARY_FOLDS,
+    CANARY_REFUSES,
     attempts,
     healthy,
     live,
@@ -267,9 +269,9 @@ def test_outside_a_preparation_run_no_pair_is_decided(store, monkeypatch):
 def test_an_unhealthy_canary_suspends_every_pair_and_says_so(store, monkeypatch):
     keeper, donor = pair_of(store)
     other_a, other_b = pair_of(store, name="Anna Verdi")
-    # No verdict stored: the policy runs the canary, which folds the two
-    # unrelated fixtures together — the model is broken open.
-    transport = scripted(monkeypatch, "#IDENTIFIERS\nName: Aldo Bianchi\n#ABOUT\nmerged")
+    # No verdict stored: the policy runs the canary, and the role folds its two
+    # unrelated memories together — the model is broken open.
+    transport = scripted(monkeypatch, CANARY_FOLDS)
 
     summary = sweep()
 
@@ -290,7 +292,7 @@ def test_the_callers_gate_is_obeyed_without_a_canary(store, monkeypatch):
 
 def test_a_healthy_canary_lets_the_pairs_through(store, monkeypatch):
     keeper, donor = pair_of(store)
-    transport = scripted(monkeypatch, "INSERT", merge_answer(store, keeper, donor))
+    transport = scripted(monkeypatch, CANARY_REFUSES, merge_answer(store, keeper, donor))
 
     summary = sweep()
 
