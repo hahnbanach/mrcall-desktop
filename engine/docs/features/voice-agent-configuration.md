@@ -223,10 +223,17 @@ Each call owns one customer-service agent using the existing LLM/tool loop and
 budget admission. It gets only configured instructions and `CallerMemory`; owner
 persona, preferences, channel status, triggers, slash routing and general tools
 are excluded. Transcript fragments accumulate without dispatch. Delegation starts
-one request; new input while it runs triggers reconciliation before delivery.
-Actual spoken transcript distinguishes a draft from an answer already said, so
-corrections can explicitly rectify stale speech. M3 listening confirms timely interruption; the complete spoken-correction and
-duplex scenario matrix remains part of M4 acceptance.
+one request. Each run snapshots transcript text and both caller/voice revision
+counters before awaiting work. New input or voice output while it runs triggers
+reconciliation before delivery. The backend returns exactly
+`[NO_FURTHER_RESPONSE]` when the voice has already fully answered the latest
+request correctly; the controller consumes this decision without a commentary
+append. Partial, incorrect answers and new questions still require useful replies.
+Every delegated-answer append fragment checks both revisions and closure. New speech
+can postpone delivery while reconciliation runs; live latency remains an M4
+acceptance criterion. Transcript events describe provider output, not proof of
+handset playback. M4 listening confirms spoken correction on the earlier controller;
+the revised reconciliation path still needs a phone retest.
 
 Hangup, deadline and daemon shutdown cancel asynchronous work and suppress late
 results. A dispatched blocking LLM request may finish and settle in its original

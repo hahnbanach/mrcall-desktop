@@ -16,17 +16,21 @@ sentences. M3 integrates these with a per-call customer-service agent using
 Calls run without cs-operator or an operator RPC session. MrCall CALLCREDIT is
 not a dependency of this explicitly selected test backend.
 
-M4 is active. Private opt-in SQLite traces now correlate selected retrieval,
-backend answers, voice appends/acknowledgements, transcript deltas and timing;
-raw audio and hidden reasoning are excluded. The first M4 call uses both blue
-filters and the Thursday agreement in voice transcript, and the caller reports
-an excellent exchange. Greeting precedes the deliberately delayed lookup.
-No backend delegation or correction happened in that call; those live scenarios
-remain open. The earlier M3 missing-recall/repetition cause cannot be reconstructed
-because no old transcript/audio exists. Actual kernel configuration changed the
-next-call greeting at revision 2; audible verification is pending.
+M4 is active. Private opt-in SQLite traces correlate selected retrieval, backend
+answers, voice appends/acknowledgements, transcript deltas and timing; raw audio
+and hidden reasoning are excluded. Two real calls have positive caller feedback:
+blue filters/Thursday are used, greeting precedes delayed lookup, revision-2
+configuration is spoken and an interrupted subject is explicitly corrected.
+The second call runs GPT-6 but hangs up before reconciliation finishes. Full
+backend delivery, exceptional callers/failures and the complete audio matrix remain
+open. The earlier M3 cause is unknowable without its missing transcript/audio.
 
-Local diagnostics activation review and 215 voice/budget tests pass. Calls remain
+A local regression reproduces possible repetition when voice output changes during
+backend work. The revised controller snapshots text/revisions consistently and
+reconciles both caller and voice changes, consuming a no-response decision when
+already answered. Independent activation review passes 25 focused tests; four
+real GPT-6 replay scenarios and 220 voice/kernel/budget tests pass. The correction
+is active after an isolated cold restart; phone retesting is still required. Calls remain
 isolated with all local experiment ceilings removed; ledger history, accounting
 and provider constraints are preserved. Service and tunnel have no expiry. See
 [configuration and diagnostics](features/voice-agent-configuration.md),

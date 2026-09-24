@@ -339,15 +339,15 @@ APPROVED; fresh plan amendment review also APPROVED. Existing M1–M3 approvals 
 
 | M4 criterion | Evidence/state |
 | --- | --- |
-| Cold start without operator/Desktop | First M4 memory-backed call passes after cold start before RPC; live GPT-6 reasoning pending |
-| Configuration changes from next call | Actual authenticated kernel client changed revision 1→2 after first call; next-call speech pending |
+| Cold start without operator/Desktop | First call passes memory-backed cold start before RPC; second call has real GPT-6 after earlier configuration RPC. Strict GPT-6 cold-start-before-RPC retest pending |
+| Configuration changes from next call | Actual authenticated kernel client changed revision 1→2; second call speaks the new greeting |
 | Greeting before delayed lookup | First M4 call: first reflected audio 2,455 ms from admission; lookup 5,145 ms from attach; caller positive |
 | Blue filters / Thursday / follow-up / missing facts | First M4 call recalls both historical facts, caller positive; backend follow-up/correction pending |
 | Unknown / ambiguous identity | Pending explicit scenario evidence |
-| Correction during backend work / speech | Pending transcript plus listening |
+| Correction during backend work / speech | Second call explicitly rectifies spoken subject; real backend draft superseded, reconciliation canceled on hangup. Revised controller retest pending |
 | Internal / other-customer exclusion | Existing local boundary tests; M4 call pending |
 | Lookup failure / forced close / no late output | Local failure/closure/suppression tests pass; real backend lookup-error passes; live phone scenarios pending |
-| Latency / costs / continuity | First call timings and usage measured; remaining live scenarios pending |
+| Latency / costs / continuity | Two calls measured with positive listening feedback; revised controller continuity and remaining scenarios pending |
 | Independent final end-to-end review | REVISE: diagnostic implementation has no new blocker; full live criteria remain open |
 
 ## Verification and review record
@@ -391,8 +391,8 @@ APPROVED; fresh plan amendment review also APPROVED. Existing M1–M3 approvals 
   ID token only in memory/anonymous pipes, changed revision 1→2 between calls.
   Only instructions changed: next greeting should begin “Buongiorno, test memoria
   MrCall”. Readback confirmed revision 2, client exited, temporary workspace was
-  removed without an auth cache. No service restart was needed. Second call and
-  operator feedback remain pending.
+  removed without an auth cache. No service restart was needed. The second call
+  below confirms the new greeting with positive operator feedback.
 - Final combined regression on the activated diagnostic implementation: **215
   passed**, covering all voice tests, actual kernel CLI and budget dispatch/ledger.
   The historical M3 failure stage remains unknowable; new successful recall does
@@ -412,6 +412,54 @@ APPROVED; fresh plan amendment review also APPROVED. Existing M1–M3 approvals 
   diagnosis, unknown/ambiguous callers, internal/other-customer exclusion,
   lookup failure/forced closure/late suppression, and corresponding listening,
   latency/cost evidence. M4 stays active; this is not an acceptance downgrade of M3.
+
+- Second real M4 call, 14:13:49 UTC, revision 2, private trace
+  `call-28a04137b910483ca25832a0117899c9.db`: caller reports an excellent exchange.
+  The revised greeting is spoken. Caller interrupts tracking discussion, corrects
+  the subject and then reaffirms blue filters; voice explicitly retracts the
+  mismatched subject and follows the new request. No unwanted repeat is observed.
+  GPT-6 runs once; later caller input supersedes its draft. Reconciliation is
+  pending when normal hangup cancels it, and no backend commentary is sent.
+  This proves real backend execution/cancellation, not a completed follow-up
+  tool read or reconciled-backend delivery. Voice uses the selected quiet context.
+- The new trace motivates a reproduced local repetition defect: output transcript
+  changes alone did not invalidate a pending backend result, so an answer already
+  provided by the voice could be sent again. A failing regression demonstrates
+  this independently of the unavailable M3 transcript. A second failing test shows
+  diagnostic delay allowed a run's text snapshot to differ from its labeled input
+  revision. Implemented fix: snapshot text/revisions before awaits, reconcile
+  voice-output changes as well as caller corrections, and let the backend return
+  an internal no-further-response decision when the latest request is already
+  correctly answered. Wrong/partial speech and new questions must still receive
+  useful answers. Independent activation review is APPROVED with 25 focused tests.
+  Four real GPT-6 backend-only replay scenarios pass: complete answer returns the
+  silent decision; filler gets the historical facts; wrong Friday is corrected to
+  Thursday; new tracking question gets the missing-number clarification. Seven
+  Responses requests cost USD0.013170. These are not phone acceptance.
+- Second-call timings: first reflected audio 3,704 ms from admission; lookup
+  5,012 ms from attachment including the five-second delay. Voice reports 53
+  seconds, estimated USD0.044167; carrier legs report 54/55 seconds and prices
+  0.00405000 + 0.00385000 = 0.00790000 account units, with currency omitted.
+  After replay, five closed calls retain USD5 in voice holds; 31 settled GPT-6
+  requests total USD0.055282, no unresolved OpenAI hold. The two historical proxy
+  holds still total USD0.110. No reset or manual reimbursement occurred.
+- Corrective commit `e745fc5`: all voice tests including actual kernel CLI plus
+  budget dispatch/ledger pass (**220 passed**). Production-source Ruff and the
+  changed test file pass; a broader test-tree lint also finds three pre-existing
+  E701/E702 errors in `tests/evaluation/test_model_quality_runner.py`, outside M4.
+  Changed-file Black and diff checks pass. Restarted only the idle smoke service
+  with the approved correction, PID 2226989; readiness is available/unlimited
+  before any RPC. All five previous call rows hash-match the preactivation copy.
+  Tunnel PID 1903954 and both infinite service lifetimes are unchanged. A new
+  phone retest has been requested; the correction is not yet phone-accepted.
+- Updated independent end-to-end review after the second phone call and correction:
+  **APPROVED for activation, REVISE for M4 completion**. Reviewer independently
+  passed 25 tests and inspected both the second-call trace and all four real-model
+  replays. No new implementation blocker. Remaining evidence: corrected-controller
+  continuity/no repetition and corrections during work/speech; GPT-6 after cold
+  start before any RPC; follow-up lookup and reconciled backend delivery; live
+  unknown/ambiguous callers, internal/other-customer exclusion, lookup failure,
+  forced close and late suppression; corresponding listening, timing and costs.
 
 ### M3 — 2026-09-24
 
