@@ -8,28 +8,23 @@ are preserved in [active-context-archive.md](active-context-archive.md).
 
 ## State now
 
-GPT-Live has an isolated, opt-in M1 smoke runner with durable test reservations
-and a fixed client-delegation result. One real Vonage SIP call verifies duplex,
-delayed Python delegation and clean closure; final M1 integration review is
-approved. Local failure-path tests cover admission, closure, restart and secret
-logging. M2 adds authenticated operator configuration through `cs rpc`, immutable
-snapshots and read-only retrieval restricted to selected customer sentences.
-The isolated fixture and real Firebase/client demonstration pass; independent M2
-integration review is approved. Authorized M3 now connects the isolated engine
-listener to selected memory and a per-call customer-service agent. Deterministic
-conversation/lifecycle tests and independent local activation review pass; the
-dedicated service has cold-started with its own encrypted Firebase refresh token.
-Carrier-number normalization and explicit billing business selection have
-regression coverage and independent local approval.
-The isolated backend uses direct GPT-6 Sol with the dedicated
-OpenAI test project; real Responses inference and selected-memory tool calls pass.
-The prior MrCall CALLCREDIT failure is historical, not a funding requirement for
-this test. Voice remains GPT-Live 1. The operator removed local test ceilings;
-accounting history remains intact. Independent activation review passes, and the isolated service cold-starts without
-an operator RPC connection. A successful integrated phone retest is still needed
-for M3 acceptance.
-M4 is unstarted. No production number is connected. See the
-[smoke guide](features/gpt-live-smoke.md),
+GPT-Live M1–M3 are approved for the isolated prototype. M1 provides the direct
+Vonage SIP transport and durable call ledger; M2 provides authenticated `cs rpc`
+configuration, immutable snapshots and retrieval limited to selected customer
+sentences. M3 integrates these with a per-call customer-service agent using
+`gpt-6-sol` Responses and the dedicated OpenAI project/key; voice is `gpt-live-1`.
+Calls run without cs-operator or an operator RPC session. MrCall CALLCREDIT is
+not a dependency of this explicitly selected test backend.
+
+The integrated phone demonstration confirms selected-fact retrieval, a GPT-6
+tool/result turn, caller-observed timely interruption and clean closure. A repeated
+answer after interruption is an observed quality limitation. Audible delivery of
+both historical facts is not explicitly confirmed; the full M4 audio scenario
+matrix is unstarted. Deterministic follow-up/correction/lifecycle coverage, real
+backend-only demonstrations and independent M3 review pass. No production number
+is connected. Local experiment ceilings are removed only in the isolated profile;
+ledger history, accounting and provider constraints remain. The service and tunnel
+have no automatic expiry. See the [smoke guide](features/gpt-live-smoke.md),
 [configuration contract](features/voice-agent-configuration.md) and milestone plan.
 
 Engine chat now supports negotiated read-only policy version 1. The policy is

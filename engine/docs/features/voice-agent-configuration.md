@@ -140,7 +140,7 @@ Anonymous pipes supply the CLI's in-memory auth source, bypassing its ordinary
 disk ID-token cache; CLI configuration, transport, dispatch and SQLite are real.
 Memory is synthetic/temporary. No personal profile is activated, token persisted,
 paid call/model invoked, or service/number changed. The report proves M2 only;
-conversation and live memory audio acceptance remain in M3/M4 under the
+M3 integration acceptance and the unstarted M4 audio matrix are recorded under the
 [milestone plan](../../../docs/execution-plans/2026-09-23-gpt-live-engine-integration.md).
 
 ## Integrated isolated daemon (M3)
@@ -225,8 +225,8 @@ persona, preferences, channel status, triggers, slash routing and general tools
 are excluded. Transcript fragments accumulate without dispatch. Delegation starts
 one request; new input while it runs triggers reconciliation before delivery.
 Actual spoken transcript distinguishes a draft from an answer already said, so
-corrections can explicitly rectify stale speech. Both spoken correction quality
-and duplex still require listening to the real call.
+corrections can explicitly rectify stale speech. M3 listening confirms timely interruption; the complete spoken-correction and
+duplex scenario matrix remains part of unstarted M4.
 
 Hangup, deadline and daemon shutdown cancel asynchronous work and suppress late
 results. A dispatched blocking LLM request may finish and settle in its original
@@ -236,9 +236,14 @@ lookup timing and failures, never raw transcript/facts or a false zero engine co
 engine charges remain in the profile's existing LLM ledger. Shutdown allows the
 executor to drain; forced termination still retains unresolved reservations.
 
-Current live acceptance is **pending direct GPT-6 phone retest**, not complete: the first
-integrated call exposed carrier-number and billing-business defects now repaired.
-Direct GPT-6 inference and selected-fact tool calls now succeed with the dedicated
-key. The prior MrCall credit failure is historical, not a prerequisite for retest.
-See the plan for exact evidence and retained reservations. The operator has authorized unrestricted local retests;
-no further spending or attempt approval is required.
+M3 isolated integration acceptance is **approved**: the telephone demonstration
+confirms selected caller recognition, a real GPT-6 tool/result turn and clean
+closure. The caller reports timely interruption and correct acknowledgement of
+missing tracking, with a repeated answer after interruption. Audible delivery of
+both historical facts is not explicitly confirmed. Deterministic tests cover
+follow-ups and corrections arriving during backend execution. Real backend-only
+demonstrations cover sequential follow-up/correction content; this one live call
+does not certify M4's complete audio matrix. M4
+remains unstarted. Detailed evidence, usage and independent review are in the
+milestone plan. The operator authorizes unrestricted local retests; no further
+spending or attempt approval is required.

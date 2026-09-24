@@ -18,8 +18,10 @@ an additional adversarial review also approved after the cold-start correction.
 M1 is complete: live demonstration and final integration review passed. The first
 implementation's approval was withdrawn by the subsequent failure-path review.
 M2 is complete: authenticated client/fixture demonstration and independent
-integration review passed. M3 is implemented locally; its first integrated live call failed and corrected
-code awaits a direct GPT-6 retest with the dedicated OpenAI key. M4 remains unstarted.
+integration review passed. M3 is complete: direct GPT-6 backend demonstration,
+integrated telephone call and fresh independent integration review are APPROVED.
+Listening evidence and its limits are recorded below. M4 remains unstarted; this
+four-milestone plan stays active.
 
 ## Current M3 correction — 2026-09-24
 
@@ -285,6 +287,50 @@ missing access or a failed live scenario remains explicit unfinished work.
 
 ### M3 — 2026-09-24
 
+**Integrated GPT-6 telephone retest — 2026-09-24 12:05 UTC:** the caller reports
+that interruption happens at the right time. The agent correctly said it had no
+tracking number, was interrupted, then repeated that answer; the caller judged
+the exchange acceptable. The repetition is an observed quality limitation, not
+proof of flawless correction handling. Audible delivery of the blue-filter and
+Thursday facts is not explicitly confirmed by the caller; transcript/audio is not retained. Retrieval is verified,
+but no claim is made that both facts were spoken. This distinction remains in
+the evidence rather than being inferred from the caller's overall acceptance.
+
+**Final independent M3 integration review: APPROVED.** The fresh reviewer
+inspected the integrated boundaries and independently passed **43 focused tests**
+covering follow-up delegation, correction during backend work, late-result
+suppression, settlement after hangup, owner-context exclusion, fresh histories,
+configuration snapshots, direct GPT-6 conversion and autonomous preparation.
+The reviewer accepted this integrated call against M3's Done criteria, preserving
+the limits above. M3 is complete; no M4 scenario or production readiness is
+certified. The plan remains active because M4 is unstarted.
+
+The isolated ledger confirms configuration revision 1, `gpt-6-sol` over
+`openai_voice`, caller `matched`, exactly two selected facts and 145 ms caller
+lookup. One client delegation ran one backend agent turn and delivered one
+result; two paid Responses requests (tool request plus result response) settled
+at USD0.004054. No backend failure or reconciliation event was recorded. This
+phone call therefore does not by itself prove a multi-delegation follow-up or
+correction-during-backend-work scenario. Deterministic tests cover those event
+sequences; real backend-only demonstrations cover sequential follow-up/correction
+content. The M4 scenario matrix remains unstarted.
+
+Voice finalization is confirmed by `session.closed`: 48 reported seconds,
+USD0.040 estimated voice cost, reflected first audio 3,337 ms (not handset
+latency), 53,754 ms observed adapter lifetime. `sideband_eof` is the closure
+trigger after confirmed finalization, not an unresolved call. Read-only Vonage
+receipts confirm inbound 49 seconds and SIP bridge 50 seconds, both completed
+12:05:41–12:06:30/31 UTC. Their prices are 0.00367500 + 0.00350000 = 0.00717500
+account-currency units; the API omits currency, so no new cross-currency settled
+invoice is claimed. Voice plus backend is USD0.044054 excluding carrier.
+
+All three voice ledger rows are closed, with USD3 retained call reservations;
+the original two rows and USD0.110 historical MrCall holds remain untouched.
+All 17 direct GPT-6 requests (diagnostics plus phone) are settled, total estimated
+USD0.030836, with no new unresolved OpenAI holds. Both services are still active
+with infinite runtime, unchanged PIDs since activation and post-call health
+available. No operator RPC was needed for admission, memory, reasoning or closure.
+
 **Direct GPT-6 correction (latest):** dedicated-key model discovery returns all
 three GPT-6 variants and `gpt-live-1`. Replaced the unactivated GPT-4.1 draft with
 GPT-6 Sol Responses/function calling; standard-tier prices, cache writes/reads
@@ -311,8 +357,7 @@ dedicated key/project; original `LLM_PROVIDER` is retained only for smoke-policy
 identity. Only the smoke-named service restarted. Cold-start health is available,
 RPC port 8788 has no client connections, both services remain at infinite runtime,
 tunnel PID/URL are unchanged, and the original voice ledger is byte-for-byte
-identical at the row level. The physical caller has been given the M3 test script;
-phone observation and evidence collection are pending.
+identical at the row level before the integrated retest recorded above.
 
 Real backend demonstration: recognized exactly two selected facts, executed tool
 calls and settled usage through the original isolated engine ledger. The first
@@ -321,8 +366,8 @@ explains empty-query retrieval before claiming absence. The repeat passed blue
 replacement filters, prior-email Thursday delivery, a follow-up and correction to
 the absent tracking number. Four memory calls, seven model dispatches, estimated
 USD0.013720 for the successful repeat; the initial diagnostic cost USD0.009896.
-Prior MrCall USD0.110 liabilities remain; no voice call or ledger reset occurred.
-This is backend evidence only: successful telephone demonstration remains pending.
+Prior MrCall USD0.110 liabilities remain; no ledger reset occurred. These
+diagnostics preceded the integrated telephone retest recorded above.
 
 
 **Latest operator instruction — supersedes earlier test caps:** remove all local
