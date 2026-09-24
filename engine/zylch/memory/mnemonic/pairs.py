@@ -239,10 +239,14 @@ def settled(event: MemoryEvent) -> Optional[str]:
     Matched by ``source_ref`` — the pair and its versions, no owner — so a pair
     another account sharing the store already answered costs nobody a second
     decision; the answer stands until one of the two blobs changes, which is a
-    new ``source_ref``. Only an answer the role gave counts, which is a row
-    that carries a proposal: a review a refusal produced — a read-only origin,
-    an account that is not the event's, a revoked grant — carries none, and
-    the pair is decided again once the refusal no longer holds.
+    new ``source_ref``. A row counts only when it carries a proposal. A review
+    a refusal produced before the role answered — a read-only origin, an
+    account that is not the event's, a revoked grant — carries none, so
+    another account's run still decides the pair; the refused account's own
+    re-submission replays its recorded review, like any terminal row. A
+    refusal at the commit's re-check comes after the role answered and keeps
+    its proposal, so it settles the pair like an answer: one fold missed until
+    a member changes, never a wrong one.
     """
     from zylch.storage.models import MemoryOperation
 

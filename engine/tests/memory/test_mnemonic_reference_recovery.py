@@ -302,3 +302,16 @@ def test_follow_ups_applied_out_of_order_end_on_the_chains_survivor(store, monke
     assert references.apply(second, owner_id=OWNER_A) == ()
     assert references.apply(first, owner_id=OWNER_A) == ()
     assert task("t-a")["sources"]["blobs"] == [final]
+
+
+def test_a_follow_up_follows_the_keeper_through_every_later_merge(store, monkeypatch):
+    fourth = LUCA_THIRD.replace("A third record.", "A fourth record.")
+    a, b, c, d = (seed(store, text) for text in (LUCA_CAL, LUCA_MAIL, LUCA_THIRD, fourth))
+    seed_task(OWNER_A, "t-a", [a])
+    with monkeypatch.context() as patched:
+        patched.setattr(references, "_rewrite_ledger", Mock(side_effect=OSError("profile busy")))
+        events = [merge(store, keeper, donor)[1] for keeper, donor in ((b, a), (c, b), (d, c))]
+
+    for event_id in reversed(events):  # the last merge's follow-up first
+        references.apply(event_id, owner_id=OWNER_A)
+    assert task("t-a")["sources"]["blobs"] == [d]
