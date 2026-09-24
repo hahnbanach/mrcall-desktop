@@ -1,10 +1,10 @@
-# Voice agent configuration and memory-backed calls (M2–M3)
+# Voice agent configuration, memory-backed calls and diagnostics (M2–M4)
 
 <!-- doc-scope:start -->
 Scope: authenticated operator configuration, immutable snapshots and read-only
-selected-fact retrieval from M2 and the opt-in M3 engine listener. The isolated
-listener reuses M1's durable admission and closure ledger. Live M3 acceptance
-is recorded in the milestone plan; M4 is separate.
+selected-fact retrieval from M2, the opt-in M3 engine listener and M4 private
+diagnostic capture. The isolated listener reuses M1's durable admission and
+closure ledger. The milestone plan owns live acceptance evidence and open criteria.
 <!-- doc-scope:end -->
 
 cs-operator configures the agent through the existing **`cs rpc`** command in its
@@ -140,7 +140,7 @@ Anonymous pipes supply the CLI's in-memory auth source, bypassing its ordinary
 disk ID-token cache; CLI configuration, transport, dispatch and SQLite are real.
 Memory is synthetic/temporary. No personal profile is activated, token persisted,
 paid call/model invoked, or service/number changed. The report proves M2 only;
-M3 integration acceptance and the unstarted M4 audio matrix are recorded under the
+M3 integration acceptance and the active M4 audio matrix are recorded under the
 [milestone plan](../../../docs/execution-plans/2026-09-23-gpt-live-engine-integration.md).
 
 ## Integrated isolated daemon (M3)
@@ -226,7 +226,7 @@ are excluded. Transcript fragments accumulate without dispatch. Delegation start
 one request; new input while it runs triggers reconciliation before delivery.
 Actual spoken transcript distinguishes a draft from an answer already said, so
 corrections can explicitly rectify stale speech. M3 listening confirms timely interruption; the complete spoken-correction and
-duplex scenario matrix remains part of unstarted M4.
+duplex scenario matrix remains part of M4 acceptance.
 
 Hangup, deadline and daemon shutdown cancel asynchronous work and suppress late
 results. A dispatched blocking LLM request may finish and settle in its original
@@ -242,11 +242,60 @@ closure. The caller reports timely interruption and correct acknowledgement of
 missing tracking, with a repeated answer after interruption. The caller later
 reports that the agent seemed not to recall the blue filters; Thursday recall is
 unconfirmed. Retrieval success is not evidence that the voice used those facts.
-M4 requires private correlated test transcripts to diagnose this gap; transcript
-persistence is not yet implemented or enabled. Deterministic tests cover
+M4 adds opt-in private correlated test transcripts to diagnose this gap (below). Deterministic tests cover
 follow-ups and corrections arriving during backend execution. Real backend-only
 demonstrations cover sequential follow-up/correction content; this one live call
 does not certify M4's complete audio matrix. M4
-remains unstarted. Detailed evidence, usage and independent review are in the
+is active, with live criteria still open. Detailed evidence, usage and independent review are in the
 milestone plan. The operator authorizes unrestricted local retests; no further
 spending or attempt approval is required.
+
+## M4 private diagnostics
+
+The isolated listener supports saved `VOICE_DIAGNOSTICS=1` in its explicit private
+profile `.env`. It requires matching OWNER/SMOKE/ISOLATED UID markers, no ordinary
+profile database, and a profile outside any Git checkout. Shell flags alone cannot
+enable it. Default is off. This setting does not affect the smoke policy digest,
+reservation ledger, unlimited mode, normal profiles or provider storage (`false`).
+
+Each attached call creates a randomly named SQLite file under private
+`<isolated-profile>/voice-diagnostics/` (directory 0700, file 0600). The call ledger
+contains only its basename and capture status. The trace records UTC/local receipt
+times, provider timeline offsets, call/config revision, backend run/input revision
+and delegation IDs. Separate records hold selected memory results, final backend
+answers, superseded answers, attempted/sent append content, server acknowledgements,
+caller/voice transcript deltas, audio timing ranges and closure. Audio bytes,
+hidden reasoning, provider payloads, credential configuration and unselected memory
+are never supplied to the sink. Known saved secret values and recognizable token
+strings are redacted defensively. Raw traces remain outside Git; retain them until
+the operator explicitly requests removal. No new trace reconstructs an old call.
+
+Append acknowledgement establishes provider acceptance, not exact spoken wording
+or playback. Transcript/audio overlaps are candidates for interruption diagnosis,
+not proof of what reached the handset. Capture starts at sideband attachment;
+anything before attachment is not observed. Always pair these observations with
+caller listening feedback. A capture error marks evidence `incomplete`; it must
+not prevent hangup, accounting or release of the active call. SQLite WAL/NORMAL
+keeps per-event diagnostic writes short; unlike the financial ledger this trace
+is not a guarantee against power-loss evidence loss.
+
+Explicit test-only fault controls require capture plus the isolated markers:
+`VOICE_DIAGNOSTIC_LOOKUP_DELAY` delays each memory invocation asynchronously;
+`VOICE_DIAGNOSTIC_BACKEND_DELAY` delays each delegated engine run;
+`VOICE_DIAGNOSTIC_FAIL_LOOKUP=1` returns a safe unavailable result without reading
+facts. Delays are seconds, finite/nonnegative, and default to zero. They are
+scenario controls, not conversation/duration/spending limits. Saved changes take
+effect after restarting only the isolated listener while idle. Do not restart the
+tunnel. Use service shutdown during a supervised call for forced-closure testing;
+restore the listener afterwards and preserve every reservation.
+
+Official event semantics: [transcripts](https://developers.openai.com/api/docs/guides/live-conversations)
+and [client delegation](https://developers.openai.com/api/docs/guides/live-delegation),
+checked 2026-09-24 against SDK 3.19.0. Live M4 results and unresolved criteria belong
+in the existing milestone plan, not in a passing-test claim here.
+
+Read a trace without activating any profile:
+`python engine/scripts/voice_diagnostic_report.py /private/path/call-uuid.db`.
+Its output includes private dialogue: keep reports outside Git. The renderer
+preserves complete transcript text; the underlying SQLite events retain every
+original fragment and timing for overlap/repetition analysis.

@@ -9,6 +9,7 @@ from .agent_config import snapshot_for_call
 from .caller_memory import CallerMemory
 from .conversation import Conversation, VOICE_RULES
 from .preparation import prepare_client
+from .diagnostics import CallTrace, DiagnosticOptions
 from .smoke_runtime import Call, SmokeRuntime
 from .smoke_transport import carrier_token_hash
 
@@ -29,6 +30,7 @@ class EngineVoiceRuntime(SmokeRuntime):
         super().__init__(config, ledger, transport)
         if not config.vonage_application_id:
             raise ValueError("Voice requires the isolated signed carrier route")
+        self.diagnostics = DiagnosticOptions.load(config.profile)
         self.pending = {}
         self.ready = False
         self.preparation_lock = asyncio.Lock()
@@ -129,10 +131,21 @@ class EngineVoiceRuntime(SmokeRuntime):
     def attached(self, call, ws):
         prepared = call.prepared
         memory = CallerMemory(prepared.snapshot, prepared.caller)
+        call.trace = CallTrace(
+            self.config.profile,
+            call.session_id,
+            prepared.snapshot.revision,
+            call.evidence,
+            self.diagnostics,
+        )
+        memory.diagnostic_delay = self.diagnostics.lookup_delay
+        memory.diagnostic_failure = self.diagnostics.fail_lookup
 
         async def send(raw):
             if call.allow_results and not call.stopped.is_set():
                 await ws.send(raw)
+            else:
+                raise RuntimeError("Call closed before append")
 
         call.conversation = Conversation(
             prepared.snapshot,
@@ -141,6 +154,8 @@ class EngineVoiceRuntime(SmokeRuntime):
             send,
             call.evidence,
             unlimited=self.config.unlimited,
+            trace=call.trace,
+            backend_delay=self.diagnostics.backend_delay,
         )
         call.conversation.start()
 

@@ -44,6 +44,9 @@ class CallerMemory(Tool):
         self.snapshot = snapshot
         self.caller_number = caller_number
         self.timeout = timeout
+        self.trace = None
+        self.diagnostic_delay = 0
+        self.diagnostic_failure = False
 
     def get_schema(self) -> dict:
         return {
@@ -57,6 +60,26 @@ class CallerMemory(Tool):
         }
 
     async def execute(self, validation_only: bool = False, **kwargs) -> ToolResult:
+        if self.trace:
+            self.trace.record("memory_started", query=kwargs.get("query", ""))
+        try:
+            if self.diagnostic_delay:
+                await asyncio.sleep(self.diagnostic_delay)
+            if self.diagnostic_failure:
+                found = ToolResult(
+                    ToolStatus.ERROR, {"facts": []}, error="Caller memory unavailable"
+                )
+            else:
+                found = await self._execute(validation_only, **kwargs)
+            if self.trace:
+                self.trace.record("memory_result", result=found.data, error=found.error)
+            return found
+        except asyncio.CancelledError:
+            if self.trace:
+                self.trace.record("memory_cancelled")
+            raise
+
+    async def _execute(self, validation_only=False, **kwargs):
         query = kwargs.get("query", "")
         if set(kwargs) - {"query"} or not isinstance(query, str) or len(query) > 500:
             return ToolResult(ToolStatus.ERROR, {"facts": []}, error="Invalid memory query")

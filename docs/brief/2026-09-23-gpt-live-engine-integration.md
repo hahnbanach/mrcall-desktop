@@ -10,7 +10,7 @@ Scope: product brief for a customer-service voice agent using GPT-Live, Python,
 Vonage and the existing engine. Defines the first memory-backed conversation,
 operator configuration and the direction for repeatable service integrations.
 M1–M3 are approved for the isolated prototype.
-M4's full listening acceptance remains outside the current authorized scope.
+M4 is authorized as of 2026-09-24; acceptance requires new correlated traces and listening.
 <!-- doc-scope:end -->
 
 Execution: [four-milestone plan](../execution-plans/2026-09-23-gpt-live-engine-integration.md).
@@ -50,7 +50,7 @@ and tunnel lifetime. Provider limits remain distinct. No further spending
 approval is needed. These instructions supersede the original bounded-test
 wording below. Use only the frozen approved history: blue replacement filters
 and delivery agreed for Thursday in the prior email. M3 requires a successful
-integrated phone demonstration and independent review; M4 remains unstarted.
+integrated phone demonstration and independent review; M4 is now authorized; historical M3 evidence remains limited.
 
 ## First experience: recognize the caller and use company memory
 
@@ -169,8 +169,19 @@ This is required diagnostic evidence after the caller reported possible failure
 to recall the blue filters despite a successful lookup. Verify actual use of the
 facts in the answer; retrieval counts alone do not pass conversational acceptance.
 Keep credentials and unselected facts out of the trace, retain real listening
-checks, and keep raw audio retention off by default. Capture is not implemented
-or activated by this planning amendment.
+checks, and keep raw audio retention off by default. Capture must be enabled only in the explicit isolated profile, stored in a private
+SQLite diagnostic file outside Git, and off for ordinary profiles. Record the
+provider's playback offsets separately from local receipt timestamps: generated
+voice text is not proof of handset delivery. Never persist hidden thinking,
+provider payloads or raw audio. Diagnostic failure must be visible in sanitized
+call evidence and must not obstruct hangup or accounting.
+
+The current operator request authorizes M4 implementation, necessary isolated
+restarts, unrestricted local retests and an independent final review. Preserve
+the existing tunnel, frozen fixture and every ledger reservation. Use reversible,
+explicit isolated test controls for delayed/failed lookup; simulated identity
+scenarios must be labeled as simulations, never as real caller recognition.
+Do not claim the earlier repetition's cause without new reproducible evidence.
 
 Verify one audio transport first: prefer direct Vonage-to-OpenAI SIP if project
 access and compatibility are confirmed; otherwise use a Python audio bridge.
@@ -196,7 +207,7 @@ OpenAI documentation checked on 2026-09-23:
 [telephony and SIP](https://developers.openai.com/api/docs/guides/voice-sip).
 Project access and the isolated Vonage SIP route passed M1's real-call check;
 M3 memory-backed integration also passes its demonstration and independent review.
-The full M4 listening scenario matrix remains unstarted; see the execution plan.
+M4 is in progress; its listening scenario matrix remains unverified. See the execution plan.
 
 Existing engine boundaries:
 [company memory](../../engine/docs/features/entity-memory-system.md),

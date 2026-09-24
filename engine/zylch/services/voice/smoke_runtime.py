@@ -19,6 +19,9 @@ logger = logging.getLogger(__name__)
 FIXED_FACT = "The isolated test case is ready for the demonstration."
 OBSERVED_EVENTS = {
     "session.started",
+    "session.commentary.appended",
+    "session.thinking.appended",
+    "session.instructions.appended",
     "session.input_transcript.delta",
     "session.output_transcript.delta",
     "session.delegation.created",
@@ -40,6 +43,7 @@ class Call:
     task: asyncio.Task | None = None
     worker: asyncio.Task | None = None
     conversation: object | None = None
+    trace: object | None = None
     prepared: object | None = None
     duration_seconds: int | None = None
     seen_delegations: set[str] = field(default_factory=set)
@@ -227,6 +231,13 @@ class SmokeRuntime:
                     "observed_elapsed_ms": round((time.monotonic() - call.started) * 1000),
                 }
             )
+            if call.trace:
+                try:
+                    call.trace.record("call_finished", state=state, evidence=call.evidence)
+                    call.trace.close()
+                except Exception:
+                    call.evidence["diagnostics"] = "incomplete"
+                    logger.warning("[voice] diagnostic finalization incomplete")
             self._record(call.session_id, state, call.evidence)
             logger.info("[voice-smoke] call finished state=%s", state)
             if self.call is call:
@@ -246,6 +257,8 @@ class SmokeRuntime:
                 continue
             counts = call.evidence["events"]
             counts[kind] = counts.get(kind, 0) + 1
+            # Observe before closure disables conversation; audio metadata only.
+            handled = self.event(call, event)
             if kind == "session.output_audio.delta":
                 call.evidence.setdefault(
                     "first_audio_ms", round((time.monotonic() - call.started) * 1000)
@@ -266,7 +279,7 @@ class SmokeRuntime:
                 return
             elif kind == "error":
                 raise RuntimeError("Live session error")
-            elif self.event(call, event):
+            elif handled:
                 continue
             elif kind == "session.delegation.created" and call.allow_results:
                 delegation = event.get("delegation", {})

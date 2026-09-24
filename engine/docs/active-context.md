@@ -16,17 +16,22 @@ sentences. M3 integrates these with a per-call customer-service agent using
 Calls run without cs-operator or an operator RPC session. MrCall CALLCREDIT is
 not a dependency of this explicitly selected test backend.
 
-The integrated phone demonstration confirms selected-fact retrieval, a GPT-6
-tool/result turn, caller-observed timely interruption and clean closure. A repeated
-answer after interruption is an observed quality limitation. The caller reports
-possible failure to recall the blue filters; Thursday recall is unconfirmed.
-Retrieval does not certify use in speech. M4 requires correlated private test
-transcripts to diagnose this gap; capture and the full audio matrix are unstarted. Deterministic follow-up/correction/lifecycle coverage, real
-backend-only demonstrations and independent M3 review pass. No production number
-is connected. Local experiment ceilings are removed only in the isolated profile;
-ledger history, accounting and provider constraints remain. The service and tunnel
-have no automatic expiry. See the [smoke guide](features/gpt-live-smoke.md),
-[configuration contract](features/voice-agent-configuration.md) and milestone plan.
+M4 is active. Private opt-in SQLite traces now correlate selected retrieval,
+backend answers, voice appends/acknowledgements, transcript deltas and timing;
+raw audio and hidden reasoning are excluded. The first M4 call uses both blue
+filters and the Thursday agreement in voice transcript, and the caller reports
+an excellent exchange. Greeting precedes the deliberately delayed lookup.
+No backend delegation or correction happened in that call; those live scenarios
+remain open. The earlier M3 missing-recall/repetition cause cannot be reconstructed
+because no old transcript/audio exists. Actual kernel configuration changed the
+next-call greeting at revision 2; audible verification is pending.
+
+Local diagnostics activation review and 215 voice/budget tests pass. Calls remain
+isolated with all local experiment ceilings removed; ledger history, accounting
+and provider constraints are preserved. Service and tunnel have no expiry. See
+[configuration and diagnostics](features/voice-agent-configuration.md),
+[smoke guide](features/gpt-live-smoke.md) and the milestone plan for evidence and
+the remaining listening matrix. No production number is connected.
 
 Engine chat now supports negotiated read-only policy version 1. The policy is
 enforced before slash/semantic/task routing and again at assistant and task

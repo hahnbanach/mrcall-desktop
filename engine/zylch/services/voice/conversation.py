@@ -8,6 +8,7 @@ import time
 from zylch.assistant.core import ZylchAIAgent
 from zylch.llm.usage import call_site
 from zylch.services.voice.agent_config import require_binding
+from zylch.services.voice.diagnostics import RUN
 from zylch.services.voice.smoke_transport import command
 
 logger = logging.getLogger(__name__)
@@ -49,9 +50,24 @@ def chunks(text: str):
 
 
 class Conversation:
-    def __init__(self, snapshot, memory, client, send, evidence, *, unlimited=False):
+    def __init__(
+        self,
+        snapshot,
+        memory,
+        client,
+        send,
+        evidence,
+        *,
+        unlimited=False,
+        trace=None,
+        backend_delay=0,
+    ):
         self.snapshot, self.memory, self.send, self.evidence = snapshot, memory, send, evidence
         self.unlimited = unlimited
+        self.trace = trace
+        self.backend_delay = backend_delay
+        self.run_number = 0
+        self.memory.trace = trace
         self.agent = ZylchAIAgent(
             tools=[memory] if "caller_memory" in snapshot.config.tools else [],
             client=client,
@@ -68,14 +84,24 @@ class Conversation:
         self.seen = set()
         self.started = time.monotonic()
 
+    def record(self, kind, **data):
+        if self.trace:
+            self.trace.record(kind, input_revision=self.revision, **data)
+
     def start(self):
         self.lookup = asyncio.create_task(self._recognize())
 
     async def _append(self, kind, text, identifier=None, revision=None):
         for part in chunks(text):
             if self.closed or (revision is not None and revision != self.revision):
+                self.record(
+                    "append_suppressed", command=kind, delegation_id=identifier, revision=revision
+                )
                 return False
-            await self.send(command(kind, part, identifier))
+            raw = command(kind, part, identifier)
+            self.record("append_attempt", **json.loads(raw))
+            await self.send(raw)
+            self.record("append_sent", **json.loads(raw))
         return True
 
     async def _recognize(self):
@@ -100,6 +126,18 @@ class Conversation:
         if self.closed:
             return
         kind = event.get("type")
+        safe = {
+            key: event[key]
+            for key in ("event_id", "client_event_id", "start_ms", "end_ms", "offset_ms")
+            if key in event
+        }
+        if kind in ("session.input_transcript.delta", "session.output_transcript.delta"):
+            safe["delta"] = event.get("delta")
+        if kind == "session.delegation.created":
+            delegation = event.get("delegation", {})
+            safe["delegation_id"] = delegation.get("id")
+            safe["target"] = delegation.get("target")
+        self.record(kind, **safe)
         if kind in ("session.input_transcript.delta", "session.output_transcript.delta"):
             delta = event.get("delta")
             if not isinstance(delta, str) or not delta:
@@ -135,18 +173,32 @@ class Conversation:
                 await asyncio.shield(self.lookup)
             while self.pending and not self.closed:
                 revision = self.revision
+                self.run_number += 1
+                RUN.set(
+                    {
+                        "id": self.run_number,
+                        "input_revision": revision,
+                        "delegation_ids": list(self.pending),
+                    }
+                )
+                self.record("backend_started")
+                if self.backend_delay:
+                    await asyncio.sleep(self.backend_delay)
                 request = json.dumps(
                     {"transcript": self.transcript, "caller_context": self.context}
                 )
                 self.evidence["engine_turns"] = self.evidence.get("engine_turns", 0) + 1
                 with call_site("voice.customer_service"):
                     answer = await self.agent.process_message(request)
+                self.record("backend_answer", answer=answer, answer_revision=revision)
                 if self.closed:
+                    self.record("answer_suppressed", reason="closed")
                     return
                 await asyncio.to_thread(require_binding, self.snapshot.binding)
                 if self.closed:
                     return
                 if revision != self.revision:
+                    self.record("answer_superseded", answer_revision=revision)
                     self.evidence["reconciliations"] = self.evidence.get("reconciliations", 0) + 1
                     continue
                 # New delegations during this run describe the same accumulated
@@ -171,6 +223,9 @@ class Conversation:
             self.pending.clear()
 
     async def close(self):
+        if self.closed:
+            return
+        self.record("conversation_closed", pending=list(self.pending))
         self.closed = True
         tasks = [task for task in (self.lookup, self.worker) if task]
         for task in tasks:

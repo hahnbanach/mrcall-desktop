@@ -20,7 +20,7 @@ implementation's approval was withdrawn by the subsequent failure-path review.
 M2 is complete: authenticated client/fixture demonstration and independent
 integration review passed. M3 is complete: direct GPT-6 backend demonstration,
 integrated telephone call and fresh independent integration review are APPROVED.
-Listening evidence and its limits are recorded below. M4 remains unstarted; this
+Listening evidence and its limits are recorded below. M4 is now active; this
 four-milestone plan stays active.
 
 ## Current M3 correction — 2026-09-24
@@ -267,7 +267,7 @@ and voice output distinct, including interruptions and repeated or superseded
 answers. Do not capture hidden model reasoning. Store this diagnostic privately
 outside Git, excluding credentials, tokens, MEMORY_KEY and unselected facts.
 Ordinary profiles keep transcript persistence off; no raw audio is retained by
-default. This is planned M4 work, not enabled by this documentation change.
+default. Capture implementation/activation are M4 tasks, not established evidence yet.
 
 Use the correlated trace to locate failures between retrieval, backend reasoning,
 voice delivery and interruption handling. Specifically verify that blue filters
@@ -278,8 +278,7 @@ handset: retain the real listening check alongside the trace.
 
 Use a short call script with the controlled history: known customer and follow-up;
 unknown/ambiguous caller; correction during delayed lookup; correction during
-speech; failed lookup and forced closure. Combine scenarios within the remaining
-call allowance rather than requiring a separate paid call for each assertion.
+speech; failed lookup and forced closure. Combine scenarios where useful; the operator removed all local call/spend ceilings.
 After configuring, stop the operator, disconnect its client and restart the
 daemon. Make an incoming call without opening Desktop, cs-operator or another
 configuration client; it must perform real engine reasoning in the recorded
@@ -301,7 +300,118 @@ in an engine voice-channel guide; update IPC and living context only for behavio
 actually delivered. Mark this plan completed only after real-call acceptance;
 missing access or a failed live scenario remains explicit unfinished work.
 
+### M4 execution sequence — authorized 2026-09-24
+
+1. Lead: implement opt-in private SQLite traces in the isolated profile only.
+   Correlate call/config revision, backend run/input revision, delegation IDs,
+   selected tool results, final backend answer, actual append commands and server
+   acknowledgements. Preserve transcript deltas and provider timeline offsets,
+   reflected audio ranges without audio bytes, closure and suppression decisions.
+   Mark overlap as an interruption candidate, never handset playback proof.
+   Failures mark diagnostics incomplete but cannot prevent cleanup/accounting.
+2. Lead: test real agent/tool/transport boundaries, default-off and file privacy,
+   credential exclusion, duplicate/overlapping events, stale-answer suppression,
+   lookup failure and close races. Reproduce defects before changing behavior;
+   do not infer the old call's unavailable content. Run focused voice/adjacent
+   regression and actual kernel-client tests. Fresh local review before activation.
+3. Lead: enable capture in the private saved profile; restart only the existing
+   smoke-named service after checking it is idle. Preserve unlimited settings,
+   tunnel PID/URL, memory fixture and ledger history. Verify cold start before
+   any operator RPC. Collect real GPT-6 backend evidence with frozen selected facts.
+4. Lead/operator: real calls with short scripts and listening feedback. First call:
+   historical filters, Thursday, missing tracking, follow-up and interruption.
+   Between calls use authenticated actual kernel `cs rpc` configuration update
+   via in-memory auth, then disconnect it. Verify next-call changed greeting.
+   Use explicit isolated fault/delay controls for five-second lookup, corrections
+   during backend work, lookup error and forced closure; no numeric call ceiling.
+   Unknown/ambiguous cases use withheld/other caller when available; any injected
+   fixture number is labeled simulated and cannot alone certify physical caller
+   recognition. Unperformed/failed scenarios stay open.
+5. Lead: correlate transcripts with caller feedback, timings, voice/backend usage
+   and available carrier receipts. Fix demonstrated faults, repeat affected calls.
+   Fresh independent end-to-end review evaluates all M4 criteria and actual
+   operator path. Update guide, living context and this matrix faithfully; only
+   real passing evidence permits completion. Rollback disables diagnostics or
+   restores the isolated runtime/configuration, retaining all evidence and holds.
+
+No implementation is delegated. Review gates: M4 brief amendment independently
+APPROVED; fresh plan amendment review also APPROVED. Existing M1–M3 approvals remain scoped.
+
+| M4 criterion | Evidence/state |
+| --- | --- |
+| Cold start without operator/Desktop | First M4 memory-backed call passes after cold start before RPC; live GPT-6 reasoning pending |
+| Configuration changes from next call | Actual authenticated kernel client changed revision 1→2 after first call; next-call speech pending |
+| Greeting before delayed lookup | First M4 call: first reflected audio 2,455 ms from admission; lookup 5,145 ms from attach; caller positive |
+| Blue filters / Thursday / follow-up / missing facts | First M4 call recalls both historical facts, caller positive; backend follow-up/correction pending |
+| Unknown / ambiguous identity | Pending explicit scenario evidence |
+| Correction during backend work / speech | Pending transcript plus listening |
+| Internal / other-customer exclusion | Existing local boundary tests; M4 call pending |
+| Lookup failure / forced close / no late output | Local failure/closure/suppression tests pass; real backend lookup-error passes; live phone scenarios pending |
+| Latency / costs / continuity | First call timings and usage measured; remaining live scenarios pending |
+| Independent final end-to-end review | REVISE: diagnostic implementation has no new blocker; full live criteria remain open |
+
 ## Verification and review record
+
+### M4 — in progress, 2026-09-24
+
+- Brief/plan amendments independently APPROVED. Added opt-in isolated SQLite
+  diagnostics with selected-tool, final-answer, append/acknowledgement, transcript,
+  timing and closure correlation. No audio or hidden thinking capture.
+- Initial voice regression: 156 passed, one real-kernel test skipped without its
+  interpreter. Located the installed kernel and reran: 157 passed including its
+  actual CLI journey. New diagnostics independently passed seven tests; the
+  focused conversation/runtime/kernel selection passed 20 before the final extra
+  close-failure regression. Whole-engine Ruff and mechanical docs checks pass.
+- Local activation review first returned REVISE: diagnostic close failure could
+  bypass final ledger update. Fixed sink and runtime finalizer, added the injected
+  failure regression. Same independent reviewer reran seven diagnostic tests and
+  returned APPROVED for activation only.
+- Enabled private capture plus five-second lookup/backend delays only in the
+  saved isolated profile. Restarted only `mrcall-gpt-live-smoke`; cold-start health
+  is available/unlimited before any operator RPC. Tunnel PID remains 1903954;
+  both services retain infinite lifetime. All three previous closed voice rows
+  hash-match the preactivation snapshot. USD3 voice holds, USD0.110 unresolved
+  MrCall holds, 17 settled GPT-6 requests/USD0.030836 were verified beforehand.
+- First M4 call, 13:46:53–13:47:32 UTC, configuration revision 1: private trace
+  `call-8fa6549dfedc46c8bd90f2ade227e582.db` contains 478 events and closes cleanly.
+  The voice greets before delayed lookup, then explicitly uses both blue-filter
+  history and the prior Thursday agreement. Caller feedback: the exchange was
+  perfect. When asked about identity, it does not invent a name. No delegation
+  occurred: these facts came through quiet selected context, not a new GPT-6
+  turn. No correction/interruption scenario was performed in this call.
+- Timings: first reflected audio 2,455 ms from admission; caller lookup 5,145 ms
+  from attachment (includes 5-second fault delay); useful fact speech begins at
+  provider offset 10,000 ms after a question ending around 9,800 ms. The caller
+  confirms the listening experience; there is no instrumented handset latency.
+  Voice reports 38 seconds, estimated USD0.031667; no new backend usage. Two
+  completed carrier legs each last 39 seconds, prices 0.00292500 + 0.00273000 =
+  0.00565500 account-currency units. Receipt currency is omitted, so no settled
+  USD total across providers is asserted. Original historical liabilities remain.
+- Actual installed kernel `cs rpc`, authenticated using headless Firebase with
+  ID token only in memory/anonymous pipes, changed revision 1→2 between calls.
+  Only instructions changed: next greeting should begin “Buongiorno, test memoria
+  MrCall”. Readback confirmed revision 2, client exited, temporary workspace was
+  removed without an auth cache. No service restart was needed. Second call and
+  operator feedback remain pending.
+- Final combined regression on the activated diagnostic implementation: **215
+  passed**, covering all voice tests, actual kernel CLI and budget dispatch/ledger.
+  The historical M3 failure stage remains unknowable; new successful recall does
+  not reconstruct it. Repetition after interruption still needs a reproduced call.
+
+
+- Real GPT-6 backend-only M4 scenarios exercise unknown caller, ambiguous frozen
+  fixture number and injected lookup failure. Each uses a real tool/result turn
+  and asks for clarification without inventing identity/order facts. Six Responses
+  requests settled at USD0.009026 total; no new unresolved OpenAI hold. These are
+  explicitly non-phone traces under the private `M4-backend/voice-diagnostics/`.
+- Fresh independent end-to-end review: **REVISE for M4 completion**, with no new
+  implementation blocker. Reviewer independently passed 20 diagnostic/conversation/
+  runtime tests and read the first phone and backend-only traces. Remaining live
+  criteria: revision-2 greeting, autonomous GPT-6 turn after cold start, follow-up
+  lookup/missing facts, corrections during backend/speech and repeated-answer
+  diagnosis, unknown/ambiguous callers, internal/other-customer exclusion,
+  lookup failure/forced closure/late suppression, and corresponding listening,
+  latency/cost evidence. M4 stays active; this is not an acceptance downgrade of M3.
 
 ### M3 — 2026-09-24
 
