@@ -50,7 +50,7 @@ from zylch.memory.commit_permit import (
 )
 from zylch.memory.company_key import family_of, scoped_namespace
 
-from . import journal, writes
+from . import journal, references, writes
 from .agent import decide
 from .approval import RequestedWrite, departure_for
 from .authorization import MnemonicRefusal, authorize_request
@@ -427,7 +427,7 @@ def _commit(
     )
     # The invalidation callback is a same-process fast path; the mutation
     # sequence written above is what every OTHER engine on this store reads.
-    return MnemonicResult.committed(
+    result = MnemonicResult.committed(
         event.event_id,
         committed_ids,
         proposal=proposal,
@@ -435,6 +435,10 @@ def _commit(
         departure=departure,
         pending=pending,
     )
+    # A merge's recorded follow-up — this profile's task ledger — runs only now,
+    # after the company commit; what it cannot do stays pending, and the result
+    # is committed either way (mnemonic/references.py).
+    return references.follow_up(result, owner_id=event.owner_id) if pending else result
 
 
 __all__ = [

@@ -225,9 +225,9 @@ def test_a_pairs_merge_commits_every_effect_in_one_transaction(store):
     assert after["seq"] == before["seq"] + 1
     receipt = operation(event_id)
     assert receipt["state"] == "committed"
-    assert receipt["pending_effects"] == [
-        {"kind": "task_references", "detail": f"{donor}->{keeper}"}
-    ]
+    # The recorded ledger follow-up ran right after the company commit and was
+    # cleared; test_mnemonic_reference_recovery.py shows it recorded when it fails.
+    assert receipt["pending_effects"] == [] and result.pending_effects == ()
     assert llm._client.messages.create.call_count == 1
 
 
@@ -339,14 +339,13 @@ def test_a_failure_at_any_company_write_leaves_everything_as_it_was(
     before = state()
     module, _, cls = target.partition(":")
     owner = importlib.import_module(module)
-    monkeypatch.setattr(
-        getattr(owner, cls) if cls else owner, attr, Mock(side_effect=RuntimeError(attr))
-    )
-
-    result = run(pair_, llm)
+    with monkeypatch.context() as patched:
+        patched.setattr(
+            getattr(owner, cls) if cls else owner, attr, Mock(side_effect=RuntimeError(attr))
+        )
+        result = run(pair_, llm)
 
     assert result.outcome == "retryable_failure", result.reason
-    monkeypatch.undo()
     assert state() == before
     # Failed, or still pending when the receipt itself is what failed (recording
     # the failure goes through it too): resumable either way, never committed.

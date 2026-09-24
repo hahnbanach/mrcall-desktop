@@ -69,29 +69,38 @@ def links_in_scope(model, company_key: str):
     return model.company_key == company_key
 
 
+# How far an alias chain is followed. A donor is deleted when it is aliased and
+# a deleted blob never becomes a keeper, so the graph has no cycles; the bound
+# is there anyway, and a chain this long would itself be worth a look.
+MAX_ALIAS_HOPS = 32
+
+
 def resolve_aliases(session, blob_ids) -> set:
-    """``blob_ids`` widened through ``blob_aliases`` in both directions.
+    """``blob_ids`` widened through ``blob_aliases`` in both directions, across chains.
 
     A blob merged away by another account's sweep leaves its old id in
     this profile's task ledger (a JSON list in a file the sweep could not
     open). Every hydration of ledger ids goes through here so a stale id
     finds its keeper and a keeper finds the ledgers still naming its
-    merged-away twins.
+    merged-away twins — and the chain is followed, so an id merged into a
+    keeper that was later merged itself still finds the survivor, and the
+    survivor finds every id that was ever folded into it.
     """
     from zylch.storage.models import BlobAlias
 
     wanted = {str(b) for b in blob_ids if b}
-    if not wanted:
-        return wanted
-    try:
-        rows = (
-            session.query(BlobAlias.merged_id, BlobAlias.keeper_id)
-            .filter(or_(BlobAlias.merged_id.in_(wanted), BlobAlias.keeper_id.in_(wanted)))
-            .all()
-        )
-    except Exception:
-        return wanted
-    for merged_id, keeper_id in rows:
-        wanted.add(str(merged_id))
-        wanted.add(str(keeper_id))
+    frontier = set(wanted)
+    for _ in range(MAX_ALIAS_HOPS):
+        if not frontier:
+            break
+        try:
+            rows = (
+                session.query(BlobAlias.merged_id, BlobAlias.keeper_id)
+                .filter(or_(BlobAlias.merged_id.in_(frontier), BlobAlias.keeper_id.in_(frontier)))
+                .all()
+            )
+        except Exception:
+            return wanted
+        frontier = {str(blob_id) for row in rows for blob_id in row} - wanted
+        wanted |= frontier
     return wanted
