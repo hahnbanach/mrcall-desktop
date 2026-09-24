@@ -30,6 +30,27 @@ The first useful delivery needs only company memory. External services and the
 meta-skill for creating their integrations follow; Google Calendar is a candidate,
 not a prerequisite for the telephone channel.
 
+## M3 model and test correction — 2026-09-24
+
+Use the latest verified model generation, never an older model for adapter
+convenience. Voice remains `gpt-live-1`; the isolated backend uses direct OpenAI
+`gpt-6-sol` through Responses with function calling, using the dedicated key and
+project in `/home/mal/.config/mrcall/gpt-live-test.env`. Verify actual inference
+and a memory-tool round trip, not merely model listing or health. Official basis:
+[GPT-6 Sol](https://developers.openai.com/api/docs/models/gpt-6-sol) and
+[function calling](https://developers.openai.com/api/docs/guides/function-calling).
+The abandoned, unactivated GPT-4.1 draft must be replaced; no GPT-4.1 inference
+was performed. MrCall CALLCREDIT/business funding is not a dependency of this test.
+
+The operator has removed all local experiment ceilings (attempts, duration,
+spend and artificial conversation limits) in the isolated profile. Preserve
+ledger reservations, usage accounting, profile isolation and indefinite service
+and tunnel lifetime. Provider limits remain distinct. No further spending
+approval is needed. These instructions supersede the original bounded-test
+wording below. Use only the frozen approved history: blue replacement filters
+and delivery agreed for Thursday in the prior email. M3 requires a successful
+integrated phone demonstration and independent review; M4 remains unstarted.
+
 ## First experience: recognize the caller and use company memory
 
 A customer calls. The agent greets them while the engine looks up their phone

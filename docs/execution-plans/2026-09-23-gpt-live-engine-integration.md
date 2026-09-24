@@ -19,7 +19,44 @@ M1 is complete: live demonstration and final integration review passed. The firs
 implementation's approval was withdrawn by the subsequent failure-path review.
 M2 is complete: authenticated client/fixture demonstration and independent
 integration review passed. M3 is implemented locally; its first integrated live call failed and corrected
-code awaits a funded retest. M4 remains unstarted.
+code awaits a direct GPT-6 retest with the dedicated OpenAI key. M4 remains unstarted.
+
+## Current M3 correction — 2026-09-24
+
+This supersedes earlier requirements for a funded MrCall business and the earlier
+provider-change prohibition. The user explicitly selected the dedicated OpenAI
+key/project at `/home/mal/.config/mrcall/gpt-live-test.env` for the backend too.
+Use the latest verified models: `gpt-live-1` voice and `gpt-6-sol` backend, with
+Responses function calling. Never select obsolete models for implementation
+convenience. Official model and function-calling references are in the brief.
+The unactivated GPT-4.1 adapter is an incomplete abandoned draft; no GPT-4.1
+inference was sent. Its partial regression run finished with 56 passing tests.
+
+M3-only completion steps, owned by the lead and independently reviewed:
+
+1. Verify official model/API/prices and dedicated-project model availability.
+   Replace the draft with Responses text/function conversion, explicit GPT-6
+   validation, standard-tier pricing and conservative durable accounting.
+   Select `reasoning.effort=none` for the short, selected-fact voice backend;
+   this is documented GPT-6 Sol support, not a model substitution.
+2. Keep direct OpenAI selection confined to the explicit isolated voice profile.
+   Test function round trips, usage/cache accounting, incomplete/error responses,
+   no billing fallback, ordinary chat regression and call cancellation.
+3. Run real GPT-6 inference through the common budget ledger and frozen synthetic
+   memory, including a tool round trip, follow-up, correction and missing facts.
+   Model listing/health alone is not acceptance. Review before activation.
+4. Activate only the isolated voice backend, retain every ledger row/hold and
+   the tunnel URL, then cold-start the existing service without operator RPC.
+   Keep both services at infinite lifetime and all local test ceilings removed.
+5. Listen to an integrated incoming phone demonstration with cs-operator stopped;
+   record facts used, follow-up/correction behavior, closure, latency and usage.
+   Obtain independent M3 integration review. Do not start M4 or certify its full
+   scenario matrix. Without successful phone evidence M3 remains incomplete.
+
+Rollback disables the isolated OpenAI voice selection or listener and retains
+accounting; no production profile, memory fixture, carrier routing or tunnel
+changes. Prior failed MrCall holds remain unresolved historical liabilities.
+Brief and plan corrections independently APPROVED before implementation.
 
 ## M1 rewrite — 2026-09-23
 
@@ -247,6 +284,46 @@ missing access or a failed live scenario remains explicit unfinished work.
 ## Verification and review record
 
 ### M3 — 2026-09-24
+
+**Direct GPT-6 correction (latest):** dedicated-key model discovery returns all
+three GPT-6 variants and `gpt-live-1`. Replaced the unactivated GPT-4.1 draft with
+GPT-6 Sol Responses/function calling; standard-tier prices, cache writes/reads
+and long-context rates are explicitly accounted. No old-model inference occurred.
+The adapter's 22 new tests pass. Also removed inherited generic-agent local
+prompt/tool-result/ten-round ceilings solely for isolated unlimited voice calls.
+The broad regression initially returned 414 passed, four failed and one skipped;
+the failures exposed missing default initialization in legacy agent fixtures.
+Fixed the compatible class default; the final affected selection passed all 40
+cases (agent regressions, 22 adapter, seven runtime and real kernel CLI).
+Final full regression on the corrected code: **423 passed, 1 skipped**; the skip
+is the existing optional K3 credit-contract module because this voice environment
+has no FastAPI. Actual kernel CLI coverage passed. Engine Ruff, changed voice
+formatting and `git diff --check` pass. The mechanical docs gate is clean;
+independent doc-critic verified 28 claim groups with zero stale findings after
+repairs, while explicitly leaving provider/audio/runtime evidence to the parent
+session rather than claiming to repeat it.
+Independent activation review is APPROVED. Its missing-cache-breakdown finding
+is fixed and tested: absent/partial usage retains the hold. The final strict-parser
+real tool roundtrip passed at USD0.003166, bringing all diagnostics to USD0.026782.
+
+The isolated profile explicitly saves `VOICE_ENGINE_PROVIDER=openai`, with the
+dedicated key/project; original `LLM_PROVIDER` is retained only for smoke-policy
+identity. Only the smoke-named service restarted. Cold-start health is available,
+RPC port 8788 has no client connections, both services remain at infinite runtime,
+tunnel PID/URL are unchanged, and the original voice ledger is byte-for-byte
+identical at the row level. The physical caller has been given the M3 test script;
+phone observation and evidence collection are pending.
+
+Real backend demonstration: recognized exactly two selected facts, executed tool
+calls and settled usage through the original isolated engine ledger. The first
+run exposed Italian-query/English-fixture lexical mismatch; the tool contract now
+explains empty-query retrieval before claiming absence. The repeat passed blue
+replacement filters, prior-email Thursday delivery, a follow-up and correction to
+the absent tracking number. Four memory calls, seven model dispatches, estimated
+USD0.013720 for the successful repeat; the initial diagnostic cost USD0.009896.
+Prior MrCall USD0.110 liabilities remain; no voice call or ledger reset occurred.
+This is backend evidence only: successful telephone demonstration remains pending.
+
 
 **Latest operator instruction — supersedes earlier test caps:** remove all local
 experiment limits. Unlimited incoming attempts, call duration and local engine/test

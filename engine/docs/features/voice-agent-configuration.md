@@ -86,7 +86,9 @@ during demonstrations. A configuration update re-approves the selected sentences
 then-current content.
 
 Follow-ups rank word overlap **inside the permitted set**, without embeddings or
-paid inference. `ToolResult.data` contains `recognition`, `facts` (text,
+paid inference. A query with no overlap (including a language mismatch) is not
+proof of absent knowledge: tool instructions require an empty-query read of all
+selected facts before claiming absence. `ToolResult.data` contains `recognition`, `facts` (text,
 blob/sentence source IDs, `knowledge: "stored_history"`) and `missing`. Errors
 return no facts and fixed messages. History is not a fresh external-system check.
 Blocking reads/ranking run in a worker with a three-second default timeout.
@@ -160,6 +162,38 @@ the existing OAuth table. Credentials are supplied by private file references;
 ID tokens travel in anonymous pipes and memory only. It refuses an existing
 fixture instead of replacing data. It does not alter the original smoke ledger.
 
+### Dedicated GPT-6 backend for this experiment
+
+The isolated M3 profile explicitly saves `VOICE_ENGINE_PROVIDER=openai`; its
+`OPENAI_API_KEY` and `OPENAI_PROJECT_ID` come from the dedicated private test env.
+This voice-only selection requires matching OWNER/SMOKE/ISOLATED profile markers
+and no ordinary populated database. Ordinary engine provider selection remains
+unchanged; its legacy `LLM_PROVIDER` value is retained for the original smoke
+ledger's policy identity and does **not** choose this voice backend.
+
+`openai_voice` translates the existing agent/tool loop to Responses with
+`model=gpt-6-sol`, `reasoning.effort=none`, `store=false`, standard processing and
+only `caller_memory` function calls. GPT-Live remains `gpt-live-1`. This short
+selected-fact workload uses no hidden reasoning state or provider conversation
+storage. Unknown models/options/response shapes fail closed, without fallback.
+The common LLM ledger reserves before dispatch and settles actual input, cache
+read/write and output usage at verified GPT-6 prices, including the >272K tier.
+Uncertain responses retain holds; proved provider refusals release only their own
+undispatched-cost reservation. Earlier MrCall liabilities remain untouched.
+
+Preparation checks model access without paid inference. Health is availability,
+not evidence of successful reasoning. Activation also requires a separate real
+inference/tool demonstration with this dedicated project and the frozen fixture.
+No Firebase session, StarChat business or CALLCREDIT is used for this backend.
+The unlimited override also bypasses the generic agent's ten-round, local prompt
+and tool-result bounds only for isolated customer-service calls; Responses still
+has its physical model window and 128,000 output-token capacity.
+
+Official contracts checked 2026-09-24: [GPT-6 Sol](https://developers.openai.com/api/docs/models/gpt-6-sol),
+[functions](https://developers.openai.com/api/docs/guides/function-calling).
+The test uses the latest verified generation, never an older model merely to fit
+an existing adapter.
+
 Before listening and before each carrier admission, memory/configuration and the
 engine client are prepared off the event loop. MrCall uses `ensure_fresh_session`
 with the isolated encrypted refresh token even when automatic preparation is off.
@@ -170,8 +204,9 @@ Quotation does not guarantee a funded credit balance: paid execution may still
 refuse insufficient credits. Missing/expired credentials, failed refresh/quotation,
 disabled configuration, exhausted engine budget or exhausted call allowance
 refuse admission. Personal-key clients
-use the saved provider/key without fallback; remote authentication of alternate
-providers has not been demonstrated. `/healthz` reports only runtime availability,
+use the saved provider/key without fallback. Direct OpenAI authentication,
+inference and selected-memory tools have passed the isolated diagnostic; live
+Anthropic/OpenRouter voice-backend authentication has not been demonstrated. `/healthz` reports only runtime availability,
 allowing cold-start readiness checks before connecting an operator client.
 
 Only the signed Vonage callback supplies caller recognition metadata. International
@@ -201,9 +236,9 @@ lookup timing and failures, never raw transcript/facts or a false zero engine co
 engine charges remain in the profile's existing LLM ledger. Shutdown allows the
 executor to drain; forced termination still retains unresolved reservations.
 
-Current live acceptance is **failed/pending retest**, not complete: the first
+Current live acceptance is **pending direct GPT-6 phone retest**, not complete: the first
 integrated call exposed carrier-number and billing-business defects now repaired.
-Corrected headless preparation and selected-fact reads succeed, but paid MrCall
-reasoning is refused for insufficient credits. See the plan for exact evidence,
-retained reservations. The operator has authorized unrestricted local retests;
+Direct GPT-6 inference and selected-fact tool calls now succeed with the dedicated
+key. The prior MrCall credit failure is historical, not a prerequisite for retest.
+See the plan for exact evidence and retained reservations. The operator has authorized unrestricted local retests;
 no further spending or attempt approval is required.

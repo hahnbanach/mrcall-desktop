@@ -225,7 +225,7 @@ def _coerce_messages(messages: List[Any]) -> List[Any]:
 # ─── Client ───────────────────────────────────────────────────────────
 
 
-Transport = Literal["direct", "proxy", "openrouter"]
+Transport = Literal["direct", "proxy", "openrouter", "openai_voice"]
 
 
 class LLMClient:
@@ -248,6 +248,7 @@ class LLMClient:
         transport: Transport,
         *,
         api_key: Optional[str] = None,
+        openai_project: Optional[str] = None,
         firebase_session: Optional[Any] = None,
         proxy_base_url: Optional[str] = None,
         billing_business_id: Optional[str] = None,
@@ -272,6 +273,10 @@ class LLMClient:
             # billing transport or leak a second credential to the provider.
             self._client.auth_token = None
             self.model = model or settings.anthropic_model
+        elif transport == "openai_voice":
+            from .openai_voice import OpenAIVoiceClient, MODEL
+            self._client = OpenAIVoiceClient(api_key, openai_project)
+            self.model = model or MODEL
         elif transport == "openrouter":
             if not api_key:
                 raise ValueError("api_key is required for transport='openrouter'")

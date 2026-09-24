@@ -19,13 +19,15 @@ integration review is approved. Authorized M3 now connects the isolated engine
 listener to selected memory and a per-call customer-service agent. Deterministic
 conversation/lifecycle tests and independent local activation review pass; the
 dedicated service has cold-started with its own encrypted Firebase refresh token.
-The first integrated call failed (carrier-number normalization and missing billing
-business selection); both defects are repaired and independently reviewed locally.
-A corrected real diagnostic now reaches the selected MrCall business but receives
-HTTP402: both visible businesses had zero CALLCREDIT at the last check. The
-operator has removed local test ceilings via the isolated unlimited override;
-accounting history remains intact. A funded live retest is needed for M3 acceptance,
-with no further spending or attempt approval required.
+Carrier-number normalization and explicit billing business selection have
+regression coverage and independent local approval.
+The isolated backend uses direct GPT-6 Sol with the dedicated
+OpenAI test project; real Responses inference and selected-memory tool calls pass.
+The prior MrCall CALLCREDIT failure is historical, not a funding requirement for
+this test. Voice remains GPT-Live 1. The operator removed local test ceilings;
+accounting history remains intact. Independent activation review passes, and the isolated service cold-starts without
+an operator RPC connection. A successful integrated phone retest is still needed
+for M3 acceptance.
 M4 is unstarted. No production number is connected. See the
 [smoke guide](features/gpt-live-smoke.md),
 [configuration contract](features/voice-agent-configuration.md) and milestone plan.

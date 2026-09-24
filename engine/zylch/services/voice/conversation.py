@@ -20,7 +20,8 @@ it from what the caller now says. No writes or external operations are available
 Interpret the complete transcript, follow-up questions and latest corrections.
 A previous draft in your history may NEVER have been spoken: consult the actual
 voice transcript. Reuse a prior tool result if still relevant; otherwise search
-again. Explicitly rectify contradicted information that the voice already said.
+again. A query with no word overlap does not prove absence: read caller_memory
+with an empty query before claiming a stored fact is missing. Explicitly rectify contradicted information that the voice already said.
 Return concise speakable facts or a clarification in the caller's language.
 """
 VOICE_RULES = """Greet immediately; do not wait for caller lookup. Keep listening.
@@ -55,7 +56,7 @@ class Conversation:
             tools=[memory] if "caller_memory" in snapshot.config.tools else [],
             client=client,
             customer_service_instructions=BACKEND_RULES + "\n" + snapshot.config.instructions,
-            max_tokens=512,
+            max_tokens=(128000 if unlimited and client.transport == "openai_voice" else 512),
         )
         self.transcript = []
         self.revision = 0

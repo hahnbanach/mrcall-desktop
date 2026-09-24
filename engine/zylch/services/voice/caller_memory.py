@@ -34,7 +34,13 @@ class CallerMemory(Tool):
     """
 
     def __init__(self, snapshot: Snapshot, caller_number: str | None, *, timeout: float = 3.0):
-        super().__init__("caller_memory", "Read the permitted stored facts for this caller.")
+        super().__init__(
+            "caller_memory",
+            "Read the permitted stored facts for this caller. An empty query returns all "
+            "selected facts. A query uses literal word overlap, not semantic or multilingual "
+            "search. If a query finds nothing, read with an empty query before concluding "
+            "the information is absent.",
+        )
         self.snapshot = snapshot
         self.caller_number = caller_number
         self.timeout = timeout

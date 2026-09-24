@@ -131,6 +131,7 @@ class ZylchAIAgent(BaseConversationalAgent):
     """
 
     customer_service_instructions: Optional[str] = None
+    unlimited_voice: bool = False
 
     def __init__(
         self,
@@ -155,6 +156,11 @@ class ZylchAIAgent(BaseConversationalAgent):
             if any(not isinstance(tool, CallerMemory) for tool in tools):
                 raise ValueError("Customer service permits only selected caller memory")
         self.customer_service_instructions = customer_service_instructions
+        from ..llm.model_policy import isolated_voice_unlimited
+
+        self.unlimited_voice = (
+            customer_service_instructions is not None and isolated_voice_unlimited()
+        )
         self.client: LLMClient = client if client is not None else make_llm_client()
         self.tools = tools
         self.tool_map = {tool.name: tool for tool in tools}
@@ -346,7 +352,7 @@ class ZylchAIAgent(BaseConversationalAgent):
         # Handle tool use loop
         step = 0
         while response.stop_reason == "tool_use":
-            if step >= 10:
+            if step >= 10 and not self.unlimited_voice:
                 raise RuntimeError(
                     "Chat stopped after 10 tool rounds. Review progress before continuing."
                 )
@@ -459,7 +465,12 @@ class ZylchAIAgent(BaseConversationalAgent):
         )
         tools = self._get_tool_schemas()
         try:
-            estimated = check_prompt_budget(system=system_blocks, tools=tools, messages=messages)
+            if self.unlimited_voice:
+                from .budget import estimate_tokens
+
+                estimated = estimate_tokens(system_blocks, tools, messages)
+            else:
+                estimated = check_prompt_budget(system=system_blocks, tools=tools, messages=messages)
         except LLMPromptTooLargeError as e:
             logger.error(f"[chat turn={turn_id} step={step}] prompt refused before dispatch: {e}")
             raise
@@ -649,9 +660,10 @@ class ZylchAIAgent(BaseConversationalAgent):
                     continue
 
                 # Format result for Anthropic, within the per-result budget.
-                formatted_result, cut = bound_tool_result(
-                    tool_name, self._format_tool_result(tool_result)
-                )
+                formatted_result = self._format_tool_result(tool_result)
+                cut = None
+                if not self.unlimited_voice:
+                    formatted_result, cut = bound_tool_result(tool_name, formatted_result)
                 if cut:
                     logger.warning(
                         f"[chat turn={tid} step={step}] tool={tool_name} result truncated:"

@@ -208,6 +208,9 @@ def settle(reservation, response_usage, *, receipt=None):
 
     if reservation.transport == "proxy":
         amount, counts = None, {}
+    elif reservation.transport == "openai_voice":
+        from .openai_voice import usage_cost as openai_cost
+        amount, counts = openai_cost(reservation.model, response_usage)
     elif reservation.transport == "openrouter":
         from .openrouter_pricing import usage_cost as router_cost
 

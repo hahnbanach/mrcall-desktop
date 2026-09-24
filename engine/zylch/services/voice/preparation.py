@@ -17,6 +17,29 @@ async def prepare_client(snapshot):
     def prepare():
         require_binding(snapshot.binding)
         owner = snapshot.binding.owner_uid
+        from zylch.llm.model_policy import (
+            profile_values,
+            isolated_voice_profile,
+            policy_fingerprint,
+        )
+
+        values = profile_values()
+        voice_provider = values.get("VOICE_ENGINE_PROVIDER")
+        if voice_provider:
+            if voice_provider != "openai" or not isolated_voice_profile(values):
+                raise ValueError("Unsupported voice provider configuration")
+            from zylch.llm.client import LLMClient
+
+            if budget_snapshot(owner)["paused"]:
+                raise ValueError("Voice engine budget unavailable")
+            client = LLMClient(
+                "openai_voice",
+                api_key=values.get("OPENAI_API_KEY"),
+                openai_project=values.get("OPENAI_PROJECT_ID"),
+            )
+            client._saved_policy_fingerprint = policy_fingerprint(values)
+            client._client.ready()
+            return client
         if resolve_provider() == "mrcall":
             if not ensure_fresh_session(owner):
                 raise ValueError("Voice credentials unavailable")

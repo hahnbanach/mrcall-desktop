@@ -114,6 +114,8 @@ class EngineVoiceRuntime(SmokeRuntime):
         )
         call.evidence.update(
             config_revision=prepared.snapshot.revision,
+            engine_model=prepared.client.model,
+            engine_transport=prepared.client.transport,
             engine_cost_microusd=None,
             engine_accounting="profile durable LLM ledger; dispatched holds survive closure",
         )
