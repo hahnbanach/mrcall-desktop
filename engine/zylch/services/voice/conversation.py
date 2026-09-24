@@ -34,11 +34,15 @@ Do not restart a greeting or repeat an answer that the voice has already given.
 Otherwise return concise speakable facts or a clarification in the caller's language.
 """
 VOICE_RULES = """Greet immediately; do not wait for caller lookup. Keep listening.
-Delegate business questions and corrections to the client engine. Use only its
-verified results. Quiet context is background, not an announcement. Never invent
-identity, facts, progress or completed operations. If the caller corrects a request,
-stop the obsolete answer and delegate the corrected request; explicitly rectify
-contradicted information already spoken. Stored history is not a fresh check.
+Answer directly from verified selected caller facts already in quiet context.
+Do not fetch the same facts again just to repeat them. Delegate when the request
+needs information or work beyond that context; keep listening while it runs.
+Quiet context is background, not an announcement. Never invent identity, facts,
+progress or completed operations. If the caller corrects a request, stop the
+obsolete answer and follow the latest request; delegate it if further work is
+needed. Explicitly rectify contradicted information already spoken. Stored
+history is not a fresh check. Do not narrate internal handoffs or say that you
+are listening; when a check is necessary, acknowledge it briefly and naturally.
 """
 
 
@@ -124,9 +128,10 @@ class Conversation:
         self.lookup = asyncio.create_task(self._recognize())
 
     def _check_current(self):
+        # Caller corrections invalidate the task. Voice progress alone must not
+        # discard tool work; both revisions still fence the final spoken answer.
         if self.closed or (
-            self.active_revisions is not None
-            and self.active_revisions != (self.revision, self.voice_revision)
+            self.active_revisions is not None and self.active_revisions[0] != self.revision
         ):
             raise SupersededRun()
 
