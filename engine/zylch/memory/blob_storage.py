@@ -328,10 +328,14 @@ class BlobStorage(BlobReads, CommittedWrites):
         donor inside its own transaction — ``session`` is that transaction, and
         then this method neither opens a session nor bumps the mutation
         sequence, because the merge commits, and bumps once, for everything it
-        writes. The default is the owner's delete, and an owner who deletes
-        means it — the blob's versions go with it, explicitly, because
-        ``blob_versions`` carries no cascade on purpose.
+        writes. A retaining drop therefore requires ``session``: without one
+        it is refused, so it exists only inside a caller's transaction. The
+        default is the owner's delete, and an owner who deletes means it — the
+        blob's versions go with it, explicitly, because ``blob_versions``
+        carries no cascade on purpose.
         """
+        if retain and session is None:
+            raise ValueError("a retaining drop runs only inside the caller's transaction")
         key = require_company_key()
         with self._session_or(session) as active:
             blob = (

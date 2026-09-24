@@ -378,13 +378,15 @@ def memory_status(ctx):
 @cli.command(name="memory-sweep")
 @click.pass_context
 def memory_sweep(ctx):
-    """Reconsolidate this company's memory now: unite duplicate entities.
+    """Consolidate this company's memory now: retention, then duplicate entities.
 
-    Same sweep the desktop Settings Maintenance card runs, and the one the
-    daemon runs after each update; once per company (another engine
-    holding the lock makes this a no-op that says so). Needs an LLM: BYOK
-    key in the profile, or a live MrCall session — a profile in credits
-    mode with no session answers no_llm.
+    Same operation the desktop Settings Maintenance card runs, and the one
+    the daemon runs after each update, inside one bounded preparation run
+    like theirs (a paused or running preparation answers skipped); once per
+    company (another engine holding the lock makes this a no-op that says
+    so). Pairs need an LLM: BYOK key in the profile, or a live MrCall
+    session — a profile in credits mode with no session answers no_llm,
+    after retention has run.
     """
     import asyncio
 
@@ -393,24 +395,22 @@ def memory_sweep(ctx):
     profile = _setup_profile(profile_name, lock=False)
     logger.info(f"[CLI] memory-sweep profile={profile}")
     from zylch.cli.utils import get_owner_id
-    from zylch.memory.llm_merge import reconsolidate_now
+    from zylch.memory.consolidation import consolidate, summary_lines
+    from zylch.services.preparation import PreparationStopped, preparation_run
     from zylch.storage.storage import Storage
 
     Storage.get_instance()
-    summary = asyncio.run(reconsolidate_now(get_owner_id(), force=True))
-    if summary.get("skipped"):
-        click.echo(f"skipped: {summary.get('reason')}")
+    owner = get_owner_id()
+    try:
+        with preparation_run(owner):
+            summary = asyncio.run(consolidate(owner, force=True))
+    except PreparationStopped as exc:
+        click.echo(f"skipped: {exc}")
         return
+    for line in summary_lines(summary):
+        click.echo(line)
     if summary.get("no_llm"):
-        click.echo(
-            "no LLM transport for this profile: the sweep needs one (BYOK key or a live session)"
-        )
         raise SystemExit(2)
-    click.echo(
-        f"examined {summary.get('blobs_examined', 0)} blobs in {summary.get('groups_examined', 0)} group(s): "
-        f"merged {summary.get('blobs_merged', 0)}, kept distinct {summary.get('blobs_kept_distinct', 0)}"
-        + (" — pair cap hit, run again to continue" if summary.get("pair_cap_hit") else "")
-    )
 
 
 @cli.command(name="memory-join")

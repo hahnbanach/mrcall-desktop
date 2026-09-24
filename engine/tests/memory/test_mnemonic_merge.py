@@ -426,3 +426,12 @@ def test_a_pair_submitted_outside_its_admitted_item_is_refused_before_any_call(s
     assert result.outcome == "review_needed"
     assert llm._client.messages.create.call_count == 0
     assert state() == before
+
+
+def test_a_retaining_drop_outside_a_callers_transaction_is_refused(store):
+    donor = seed(store, LUCA_CAL)
+    with pytest.raises(ValueError):
+        store.delete_blob(donor, OWNER_A, retain=True)
+    assert read(store, donor) is not None
+    with get_session() as session:
+        assert list_versions(session, donor) == []

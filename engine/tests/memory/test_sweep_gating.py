@@ -1,4 +1,4 @@
-"""The reconsolidation sweep runs after an update only when the store changed."""
+"""Consolidation runs after an update only when the store changed."""
 
 from __future__ import annotations
 
@@ -25,18 +25,18 @@ def stub_embedder(monkeypatch, embedder):
 
 
 def test_sweep_runs_once_per_change_and_rests_otherwise(monkeypatch, tmp_path, stub_embedder):
-    import zylch.memory.llm_merge as lm
+    import zylch.memory.consolidation as lm
     from zylch.memory.blob_storage import BlobStorage
 
     monkeypatch.setattr(
         lm, "try_make_llm_client", lambda *a, **k: None
-    )  # no LLM: the sweep body exits early
+    )  # no LLM: the run stops after retention
     a = _boot(monkeypatch, tmp_path, "a", key=None, source=None)
     key = current_company_key()
     engine = dbm.current_memory_engine()
 
     # a fresh store: nothing changed since "the last sweep" (both 0)
-    first = asyncio.run(lm.reconsolidate_now(a))
+    first = asyncio.run(lm.consolidate(a))
     assert first["skipped"] is True and "nothing changed" in first["reason"]
 
     BlobStorage(get_session, stub_embedder).store_blob(
@@ -45,15 +45,15 @@ def test_sweep_runs_once_per_change_and_rests_otherwise(monkeypatch, tmp_path, s
     meta = get_meta(engine)
     assert meta["mutation_seq"] > meta["last_sweep_seq"]
 
-    second = asyncio.run(lm.reconsolidate_now(a))
+    second = asyncio.run(lm.consolidate(a))
     assert not second.get("skipped") and second["no_llm"] is True  # it ran (and found no LLM)
     meta = get_meta(engine)
     assert meta["last_sweep_seq"] == meta["mutation_seq"]
 
-    third = asyncio.run(lm.reconsolidate_now(a))
+    third = asyncio.run(lm.consolidate(a))
     assert third["skipped"] is True  # nothing changed since
 
-    forced = asyncio.run(lm.reconsolidate_now(a, force=True))
+    forced = asyncio.run(lm.consolidate(a, force=True))
     assert not forced.get("skipped")  # the button and the CLI always sweep
 
 
@@ -61,7 +61,7 @@ def test_a_new_identifier_alone_makes_the_sweep_due(monkeypatch, tmp_path, stub_
     """Identifiers are the clustering signal: an entity that gains an email
     can now match another blob, so the sweep must run even if no blob
     content changed."""
-    import zylch.memory.llm_merge as lm
+    import zylch.memory.consolidation as lm
     from zylch.memory.blob_storage import BlobStorage
     from zylch.storage.storage import Storage
 
@@ -72,14 +72,14 @@ def test_a_new_identifier_alone_makes_the_sweep_due(monkeypatch, tmp_path, stub_
     bid = BlobStorage(get_session, stub_embedder).store_blob(
         a, entity_namespace(key), "#IDENTIFIERS\nName: G\n#ABOUT\nx", "x"
     )["id"]
-    assert not asyncio.run(lm.reconsolidate_now(a)).get("skipped")  # the new blob
-    assert asyncio.run(lm.reconsolidate_now(a))["skipped"] is True  # rests
+    assert not asyncio.run(lm.consolidate(a)).get("skipped")  # the new blob
+    assert asyncio.run(lm.consolidate(a))["skipped"] is True  # rests
 
     Storage._instance = None
     assert Storage.get_instance().add_person_identifiers(a, bid, [("email", "g@c.test")]) == 1
     meta = get_meta(engine)
     assert meta["mutation_seq"] > meta["last_sweep_seq"]
-    assert not asyncio.run(lm.reconsolidate_now(a)).get("skipped")  # due again
+    assert not asyncio.run(lm.consolidate(a)).get("skipped")  # due again
     # the same identifier again is a no-op: no bump, no sweep
     assert Storage.get_instance().add_person_identifiers(a, bid, [("email", "g@c.test")]) == 0
-    assert asyncio.run(lm.reconsolidate_now(a))["skipped"] is True
+    assert asyncio.run(lm.consolidate(a))["skipped"] is True

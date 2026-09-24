@@ -7,9 +7,9 @@ two memories. The merge is deterministic and lossless:
   being joined wins, it is the company's — and the value that does not
   win is kept in ``fact_history`` with the losing row's ``owner_id``, so
   the rollback can still return it to the profile it came from;
-- **entities** from both memories are all kept; duplicates are united by
-  the reconsolidation sweep, which under a shared store runs once per
-  company;
+- **entities** from both memories are all kept; consolidation, which
+  under a shared store runs once per company, folds the duplicates whose
+  headers state the same identity;
 - **rules** travel with their owner (``template:<owner>`` is personal);
 - sentences, links and identifiers follow their blob.
 

@@ -408,11 +408,11 @@ class FactHistory(DictMixin, Base):
 
 
 class BlobAlias(DictMixin, Base):
-    """merged_id -> keeper_id, written by the reconsolidation sweep.
+    """merged_id -> keeper_id, written by the consolidation MERGE commit.
 
     A blob merged away by one account leaves ids in OTHER profiles' task
-    ledgers (`task_items.sources.blobs`, a JSON list in a file the sweep
-    cannot open). Readers resolve a stale id through this table instead."""
+    ledgers (`task_items.sources.blobs`, a JSON list in a file the merge
+    cannot open). Readers resolve a stale id through this table, chains too."""
 
     __tablename__ = "blob_aliases"
 

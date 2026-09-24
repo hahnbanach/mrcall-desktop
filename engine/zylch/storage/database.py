@@ -168,8 +168,8 @@ def get_session_factory() -> sessionmaker:
     store and everything else to the profile file. No ORM join crosses
     the boundary (every access is single-table), so one session serves
     both; a session that touches both files commits two transactions,
-    not one — `_reset_all_data` and `migrate_blob_references` are the two
-    such places and each defines its own partial-failure outcome.
+    not one — `_reset_all_data` is the one such place and defines its own
+    partial-failure outcome; a merge records its profile half instead.
     """
     global _session_factory
     if _session_factory is None:

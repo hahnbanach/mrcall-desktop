@@ -369,13 +369,13 @@ def test_self_notion_is_injected_for_every_profile(monkeypatch, tmp_path):
 
 def test_sweep_is_skipped_while_another_engine_holds_it(monkeypatch, tmp_path):
     a = _boot(monkeypatch, tmp_path, "a", key=None, source=None)
-    from zylch.memory.llm_merge import reconsolidate_now
+    from zylch.memory.consolidation import consolidate
     from zylch.storage.migrations import db_file_lock
 
     with db_file_lock(memory_db_path(current_company_key()), suffix=".sweep.lock"):
         # force: the change-gating (tested elsewhere) must not short-circuit
         # before the lock, which is what this proves
-        summary = asyncio.run(reconsolidate_now(a, force=True))
+        summary = asyncio.run(consolidate(a, force=True))
     assert summary["skipped"] is True and summary["reason"] == "another engine is sweeping"
 
 

@@ -45,38 +45,6 @@
       "milestone": 8
     },
     {
-      "path": "zylch/memory/llm_merge.py",
-      "symbol": "_reconsolidate_locked",
-      "call": "_record_alias",
-      "count": 1,
-      "mode": "async",
-      "milestone": 7
-    },
-    {
-      "path": "zylch/memory/llm_merge.py",
-      "symbol": "_reconsolidate_locked",
-      "call": "delete_blob",
-      "count": 1,
-      "mode": "async",
-      "milestone": 7
-    },
-    {
-      "path": "zylch/memory/llm_merge.py",
-      "symbol": "_reconsolidate_locked",
-      "call": "migrate_blob_references",
-      "count": 1,
-      "mode": "async",
-      "milestone": 7
-    },
-    {
-      "path": "zylch/memory/llm_merge.py",
-      "symbol": "_reconsolidate_locked",
-      "call": "update_blob",
-      "count": 1,
-      "mode": "async",
-      "milestone": 7
-    },
-    {
       "path": "zylch/services/command_handlers.py",
       "symbol": "handle_memory",
       "call": "delete_all_blobs",
@@ -219,34 +187,6 @@
       "call": "construct:EmailBlob",
       "count": 1,
       "milestone": 8
-    },
-    {
-      "path": "zylch/storage/storage.py",
-      "symbol": "Storage.migrate_blob_references",
-      "call": "construct:CalendarBlob",
-      "count": 1,
-      "milestone": 7
-    },
-    {
-      "path": "zylch/storage/storage.py",
-      "symbol": "Storage.migrate_blob_references",
-      "call": "construct:EmailBlob",
-      "count": 1,
-      "milestone": 7
-    },
-    {
-      "path": "zylch/storage/storage.py",
-      "symbol": "Storage.migrate_blob_references",
-      "call": "construct:PersonIdentifier",
-      "count": 1,
-      "milestone": 7
-    },
-    {
-      "path": "zylch/storage/storage.py",
-      "symbol": "Storage.migrate_blob_references",
-      "call": "construct:WhatsAppBlob",
-      "count": 1,
-      "milestone": 7
     },
     {
       "path": "zylch/memory/blob_versions.py",
@@ -397,7 +337,8 @@
       "symbol": "record_sweep_started",
       "call": "sql:UPDATE:memory_meta",
       "count": 1,
-      "milestone": 7
+      "milestone": 7,
+      "note": "consolidation's own change gate, not memory: it records the mutation sequence a run starts from (zylch/memory/consolidation.py), so the next tick knows whether anything changed since"
     },
     {
       "path": "zylch/storage/step_company_key.py",

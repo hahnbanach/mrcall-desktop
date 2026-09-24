@@ -342,10 +342,10 @@ class MemoryWorker:
         # instead of refusing — the 2026-06 universal-"John"-sink
         # regression), it flips this to False and the mnemonic role is shown
         # no candidate for any entity, so it can only create or skip: every
-        # entity becomes a fresh blob, exactly as before. Duplicates are
-        # recoverable via the reconsolidate sweep; a silent universal merge
-        # is not. A FACT's exact-row pin survives the brake: it is mechanical
-        # dedup, not the merge model's judgment.
+        # entity becomes a fresh blob, exactly as before. Consolidation folds
+        # the ones whose headers prove one subject once the gate is healthy; a
+        # universal merge is not undone. A FACT's exact-row pin survives the
+        # brake: it is mechanical dedup, not the merge model's judgment.
         self.merge_enabled: bool = True
 
         logger.info(f"MemoryWorker initialized for owner={owner_id}")

@@ -70,20 +70,22 @@ async def tasks_topic_dedup_now(params: Dict[str, Any], notify: NotifyFn) -> Any
 async def memory_reconsolidate_now(params: Dict[str, Any], notify: NotifyFn) -> Any:
     """memory.reconsolidate_now() -> summary dict.
 
-    Runs the memory reconsolidation pass on the active profile. The
-    pass walks blob entities, merges semantically-equivalent duplicates
-    (same person across multiple "John Smith PERSON" blobs etc.),
-    and returns counts.
+    Runs consolidation on the active profile's company memory: the
+    retention policy first (versions pruned, sinks reported by id), then
+    the duplicate entities — each pair the store clusters decided by the
+    mnemonic role, checked by the validator and committed as one MERGE
+    (same person across multiple "John Smith PERSON" blobs etc.) — and
+    returns counts.
 
-    Implementation lives in zylch.memory.llm_merge — this RPC is a
+    Implementation lives in zylch.memory.consolidation — this RPC is a
     thin wrapper for the Settings button.
     """
-    from zylch.memory.llm_merge import reconsolidate_now as _reconsolidate
+    from zylch.memory.consolidation import consolidate
 
     owner_id = _owner_id()
     logger.debug(f"[rpc] memory.reconsolidate_now owner_id={owner_id}")
     try:
-        summary = await _reconsolidate(owner_id, force=True)  # the button always sweeps
+        summary = await consolidate(owner_id, force=True)  # the button always sweeps
     except Exception as e:
         logger.exception(f"[rpc] memory.reconsolidate_now failed: {e}")
         return {"ok": False, "error": str(e)}

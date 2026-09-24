@@ -231,7 +231,8 @@ def test_a_dropped_donors_versions_are_pruned_to_the_floor_and_never_a_sink(prof
     donor = seed_blob(embedder, "Gone Srl")
     seed_versions(donor, 30)
     # The consolidation drop: the final text retained, the row gone, no cascade.
-    assert storage(embedder).delete_blob(donor, OWNER_A, retain=True) is True
+    with get_session() as session:
+        assert storage(embedder).delete_blob(donor, OWNER_A, retain=True, session=session)
 
     report, pruned = run()
 
@@ -313,6 +314,56 @@ def test_retention_is_company_scoped(profile_a, embedder):
     assert count(blob, company=OTHER_COMPANY) == 20
 
 
+# ─── Through the operation ────────────────────────────────────────────
+
+
+def consolidate_now(monkeypatch):
+    """One run of the operation itself, as the button starts it; no LLM, so retention only."""
+    from zylch.memory import consolidation
+
+    from tests.memory.consolidation_env import sweep
+
+    monkeypatch.setattr(consolidation, "try_make_llm_client", lambda *a, **k: None)
+    return sweep(OWNER_A)
+
+
+def test_the_operation_names_a_sink_on_every_run_until_its_owner_restores(
+    profile_a, embedder, monkeypatch
+):
+    sink = seed_blob(embedder, "Sink Srl")
+    seed_versions(sink, 30)
+    ordinary = seed_blob(embedder, "Ordinary Srl")
+    seed_versions(ordinary, 12)
+
+    first, second = consolidate_now(monkeypatch), consolidate_now(monkeypatch)
+
+    for summary in (first, second):
+        assert summary["version_sinks"] == [{"blob_id": sink, "versions": 30}]
+        assert summary["version_sinks_total"] == 1 and summary["blobs_versions_max"] == 30
+    assert (first["versions_pruned"], second["versions_pruned"]) == (2, 0)
+    assert count(sink) == 30 and count(ordinary) == FLOOR
+
+    with get_session() as session:
+        oldest = list_versions(session, sink)[0].id
+    assert storage(embedder).restore_version(sink, OWNER_A, oldest)["ok"] is True
+    after = consolidate_now(monkeypatch)
+    assert after["version_sinks_total"] == 0 and after["versions_pruned"] == 21
+    assert count(sink) == FLOOR
+
+
+def test_the_operation_refuses_an_invalid_setting_and_prunes_nothing(
+    profile_a, embedder, monkeypatch
+):
+    blob = seed_blob(embedder)
+    seed_versions(blob, 20)
+    monkeypatch.setenv("MEMORY_VERSION_RETENTION_DAYS", "0")
+
+    summary = consolidate_now(monkeypatch)
+
+    assert summary["retention_refused"] == ["version_retention_days=0 is below 1"]
+    assert summary["versions_pruned"] == 0 and count(blob) == 20
+
+
 # ─── Who may prune ────────────────────────────────────────────────────
 
 
@@ -354,4 +405,4 @@ def test_only_the_owners_delete_and_reset_remove_a_blobs_versions_wholesale():
 
 
 def test_only_the_consolidation_operation_prunes_by_the_policy():
-    assert {path for path, _ in _callers("expire_versions")} <= {"zylch/memory/consolidation.py"}
+    assert _callers("expire_versions") == {("zylch/memory/consolidation.py", "_retention")}
