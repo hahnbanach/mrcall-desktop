@@ -26,7 +26,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from tests.memory.mnemonic_env import COMPANY_A, OWNER_A, BagOfWordsEmbedder, client
+from tests.memory.mnemonic_env import COMPANY_A, OWNER_A, BagOfWordsEmbedder
 from tests.workers.ingestion_env import booted, make_worker, run
 
 

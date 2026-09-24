@@ -31,7 +31,6 @@ from tests.workers.ingestion_env import (
     extraction,
     make_worker,
     run,
-    scripted,
     seed_calendar,
     seed_email,
     seed_mrcall,

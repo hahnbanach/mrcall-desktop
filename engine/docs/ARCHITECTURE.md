@@ -99,7 +99,11 @@ zylch/
 │   ├── join.py           # memory.join — merge a profile's store into another key's store, rebind in-process
 │   ├── blob_storage.py   # Blob CRUD (embeddings as BLOB), compare-and-swap updates
 │   ├── embeddings.py     # fastembed (ONNX, 384-dim)
-│   ├── hybrid_search.py  # InMemoryVectorIndex + text search
+│   ├── hybrid_search.py  # Hybrid search over eligible rows: index load, text search, hydration
+│   ├── vector_index.py   # InMemoryVectorIndex
+│   ├── eligibility.py    # Which facts-family rows an ordinary read may return
+│   ├── blob_versions.py  # A retained version under every rewrite; restore
+│   ├── mnemonic/         # The semantic write boundary: events, role, validator, commit, journal, ingestion (features/mnemonic-*.md)
 │   ├── llm_merge.py      # Memory reconsolidation — identifier-clustered union-find + LLM merge gate + cross-reference migration before delete (Phase 1c, whatsapp-pipeline-parity)
 │   ├── pattern_detection.py # Pattern extraction
 │   ├── text_processing.py # Text normalization
@@ -109,10 +113,12 @@ zylch/
 # `person_identifiers(company_key, kind, value, blob_id)` — unique per
 # company, `owner_id` as provenance — indexes structured identifiers
 # (email/phone/lid) parsed from each blob's `#IDENTIFIERS` block.
-# `MemoryWorker._upsert_entity` matches identifier-first then falls back to
-# cosine; `reconsolidate_now` clusters via union-find on these tuples (+ Name
-# fallback). Helpers `_parse_identifiers_block` / `_normalise_phone` live in
-# `workers/memory.py`. Cross-reference migration via
+# Ingestion (`memory/mnemonic/ingestion.py`) asks it with each extracted
+# entity's own identifiers, never the sender's, and the semantic commit
+# replaces a blob's rows on every UPDATE; `reconsolidate_now` clusters via
+# union-find on these tuples (+ Name fallback). Helpers
+# `_parse_identifiers_block` / `_normalise_phone` live in `workers/memory.py`.
+# Cross-reference migration via
 # `Storage.migrate_blob_references` before delete keeps email_blobs /
 # calendar_blobs / task_items.sources.blobs intact through dedup.
 # `reconsolidate_now` runs at the end of every update's memory stage when
@@ -185,7 +191,7 @@ User
 
 - Firebase profiles stored in `~/.zylch/profiles/{firebase_uid}/`
 - Each profile has `.env`, `zylch.db`, `profile.lock`; the `.env` carries `MEMORY_KEY` (+ `MEMORY_KEY_SOURCE`: `mint` | `provision` | `join`), which selects the company memory store
-- `create_memory`, `update_memory` and the task solve write company memory through the semantic commit only, and every rewrite retains the replaced text in `blob_versions`; no setting selects a writer. See [mnemonic commit](features/mnemonic-commit.md)
+- `create_memory`, `update_memory`, the task solve, `/memory store`, the four ingestion channels (pipeline and background job), the fact and rule stores and correction learning write company memory through the semantic commit only, and every rewrite retains the replaced text in `blob_versions`; no setting selects a writer. See [mnemonic commit](features/mnemonic-commit.md)
 - CLI `-p/--profile` option for explicit selection
 - Auto-selects if only one profile exists
 - Exclusive locking via `flock` (write commands)

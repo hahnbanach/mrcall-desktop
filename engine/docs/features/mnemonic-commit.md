@@ -35,6 +35,11 @@ measured against it and the difference is recorded; the write itself is never
 conditioned on it ([the departure](#the-departure)). An adapter that supplies
 none records nothing: there is no baseline to differ from.
 
+`allow_actions` narrows what a caller admits: `/memory store --force` passes
+`(CREATE,)`, and a proposal outside the set is refused as review, never written
+another way. `parent_event_id` files the event as one child of a source
+operation ([children of a source](#children-of-a-source)).
+
 ## One transaction
 
 Embeddings are computed **before** the transaction: encoding is seconds of CPU
@@ -107,10 +112,13 @@ The three standing grants in the estate — `cs --allow`, the engine's
 `chat.approve(mode="session")` and the Desktop "Allow for session" button —
 grant the tool. That is the whole of what they grant, and it is enough.
 
-The commit runs on a worker thread (`asyncio.to_thread` in both tools) so the
-paid decision round does not block the event loop, and under a `revocable_turn`:
-`chat.send`, `tasks.solve` and the interactive CLI solve each open one, so
-cancelling the turn revokes a dispatch grant already copied into that thread.
+The commit runs on a worker thread (`asyncio.to_thread` in the two tools, in
+`/memory store` and in the tools' rule paths) so the paid decision round does
+not block the event loop, and under a `revocable_turn`: `chat.send`,
+`tasks.solve`, the interactive CLI solve and the background memory job each
+open one, so cancelling the turn revokes a dispatch grant already copied into
+that thread. Correction learning's thread is spawned inside the solve's turn,
+so the same revocation reaches it.
 
 ## Retention
 
@@ -211,6 +219,30 @@ or a task has a row of its own; copying its body here would give the same text
 two retention policies. On a terminal state the bodies are dropped and the
 digests stay, which is exactly enough to recognize a replay.
 
+### Children of a source
+
+An ingested source — a mail, a WhatsApp message, a calendar event, a MrCall
+conversation — is one **parent** operation whose id is derived from owner,
+company, kind, source id and the digest of the rendered text, so an edited
+source is a new revision and never reuses an old digest. Extraction runs under
+the parent's own grant; `mnemonic/manifest.py` then records the bounded
+manifest (at most `MAX_EXTRACTED_ENTITIES`, 16 — more is a review) and one
+pending child row per entity, with stable ids `<parent>:<n>`, in a single
+transaction under the parent's lease. Each child is submitted with
+`parent_event_id` and settles on its own: committed, skipped, review or failed.
+The parent is terminal only when every child is. Committed or skipped children
+advance the source's checkpoint; a child in review parks the source visibly; a
+failed child keeps its retry evidence; an empty valid extraction is an explicit
+skip. A resume after a crash re-reads the manifest and decides only the
+children that are not yet terminal, and a source already terminal replays its
+receipt without a paid call. A review may also record `restrictions` — the
+exact ids and versions of FACT candidates the role named as one customer's
+knowledge rather than the company's — which `memory/eligibility.py` excludes
+from every ordinary fact read ([what the validator
+refuses](mnemonic-decisions.md#what-the-validator-refuses)). `mnemonic/ingestion.py`
+is the loop; the journal stays a record, not a queue — admission, retries and
+batches remain preparation's.
+
 Sizes are bounded by the contracts, not by a second check here: `MemoryEvent`
 refuses an oversized observation or suggestion and `Proposal` an oversized
 content or write set. Refusal, never truncation — a trimmed observation is a
@@ -236,33 +268,28 @@ every blob row before and after to prove it.
 - **MERGE and reclassification return `review_needed`.** The proposal is
   recorded, nothing is written. Approximating a merge with an update is the
   failure this harness exists to remove.
-- **Only `create_memory`, `update_memory` and the task solve are routed here.**
-  They have no other path: no setting selects a writer, and the direct writes
-  they replaced are gone rather than parked behind configuration. What guards
-  the change is the tests below and the priced corpus of milestone 9. A
-  proposal the harness cannot admit is refused, never written another way.
-- **`entry_type='behavioral_rule'` still goes to `prefs_store.store_rule`.**
-  Account rules keep their own dedup and supersession logic.
-- **No adapter populates a `SubjectHint`'s `name`, `email`, `phone` or
-  `company`.** `create_memory` passes at most a bare `FACT` hint, `update_memory`
-  passes a `target_blob_id`, and the solve passes none. Three rules in
-  [mnemonic-decisions.md](mnemonic-decisions.md) therefore describe branches
-  nothing currently reaches: the caller-named-subject anchor an UPDATE falls back
-  to for a legacy row stating neither `Name` nor `Key` (so such a row cannot be
-  updated through the harness at all — it returns review), and the PERSON
-  corroboration arm that needs "a shared identifier plus the same stated name",
-  which leaves PERSON corroboration effectively email-only for
-  `_check_duplicate_create`. Both fail visibly rather than silently, and a
-  populated hint is what a converting adapter supplies when it has one — the
-  rules are not dead, they are unused.
-- **Every other writer in the inventory is still direct.** There is no
-  single-writer claim.
+- **Reconsolidation, its alias writer and the donor delete are still direct**
+  (`memory/llm_merge.py`, milestone 7), as are join, the storage migrations and
+  the repair scripts (milestone 8). The frozen inventory names every one; no
+  setting selects a writer anywhere, and a proposal the harness cannot admit is
+  refused, never written another way.
+- **A review parks its source.** A child in review leaves its parent pending
+  and its source unprocessed, visibly; nothing resolves it yet (milestone 8's
+  tooling).
+- **Calendar extraction is prose**, so a calendar child carries no typed
+  identifiers and cannot corroborate: the duplicate-CREATE gate is off on that
+  path and the sweep recovers its duplicates. The gate comes back by making
+  that extraction structured, not by mining the message for identity.
+- **A headerless legacy row anchors an UPDATE on the hint's name**, so an
+  UPDATE against such a row commits without identity evidence; the replaced
+  text is retained.
 
 ## The adapters
 
 `zylch/tools/memory_events.py` turns a `create_memory` or `update_memory` call
-into an authenticated event, and `zylch/services/solve_memory.py` does the same
-for the task solve's `update_memory`. Two things are kept apart:
+into an authenticated event (its `create_event` also serves `/memory store`),
+and `zylch/services/solve_memory.py` does the same for the task solve's
+`update_memory`. Two things are kept apart:
 
 - **what the human said** — captured into `assistant/turn_context` by
   `ChatService.process_message` as its first statement, upstream of the
@@ -293,10 +320,10 @@ Extracted content cannot acquire an instruction's authority by being passed to
 the tool a human also uses, and nothing a model writes changes either — the
 authority fields are `MODEL_SEALED`. The solve's `query` reaches the decision as
 nothing at all: it is what the model searched with. It is not a `SubjectHint`
-either — a name hint does not widen retrieval (`candidates.gather` searches the
-observation, and the identifier index stores no names) and it makes
-`names_entity_subject` true, which forbids a company FACT outright, so a solve
-could not store "from Monday we open at 8". Because the caller names no blob,
+either: a name hint drives the retrieval query (`candidates.retrieval_query`)
+but never reaches the identity index, and it makes `names_entity_subject` true,
+which forbids a company FACT outright, so a solve could not store "from Monday
+we open at 8". Because the caller names no blob,
 every solve proposal writes to a subject it did not choose, and the departure
 says so (`unnamed_subject`). The origin stays `interactive` in both cases: a
 human pressed Solve, so the dispatch rides their turn and leaves bounded
@@ -307,6 +334,61 @@ operator typed, around each of its three executor runs.
 The tool reports success only after a committed receipt **and** an actual
 read-back through the ordinary scoped read path. A decision is never reported
 as a save.
+
+**Ingestion** (`workers/memory.py` over `mnemonic/ingestion.py`). Each channel
+worker collects the original source — the mail, the WhatsApp message, the
+rendered calendar event or MrCall conversation — and hands it to `ingest` as a
+`Source`; the worker writes no blob. Extraction stays on the owner's trained
+extraction prompt and the extract-routed client, under the parent's grant;
+each extracted entity becomes one child event whose observation is a bounded
+view of the source (`MAX_OBSERVATION_CHARS`, marked when cut) and whose
+`SubjectHint` carries the entity's own header — type, name, and the
+`identifiers` its `#IDENTIFIERS` block states, in the index's canonical form.
+The sender is never injected: an automatic event's observation is the whole
+message and is never mined for identity, so a name-only entity reaches the
+role with no identity at all rather than with the sender's. The caller class is
+`automatic_observation`, the origin `automatic` with the admitted item's stage,
+the decision client the merge-routed model. The merge-gate brake
+(`merge_enabled` off) keeps its meaning as an empty candidate set: search and
+identifier lookups return nothing, exact reads stay, and every entity becomes a
+fresh blob. Disabled channels stay disabled, their paths tested.
+
+**Background jobs** (`services/job_executor.py`). `memory_process` is a facade
+over the worker's own admitted path: `run_source_sync` runs the worker's
+bounded coroutine for one item in a private loop, on a thread that carries the
+job's context (`contextvars.copy_context().run`), under one `preparation_run`
+and one `revocable_turn` for the whole job. A source through the job and the
+same source through the pipeline is one parent operation with the same
+children. A `BudgetError` leaves the channel loop and fails the job visibly; a
+stop lands between sources and, through the turn, before the next child's
+dispatch. The job has no entity decision of its own.
+
+**Helper writers** (`services/facts_store.upsert_fact`,
+`prefs_store.store_rule` / `refine_rule`, `services/correction_learning.py`).
+Each is an adapter over `submit()` and asks no human. A FACT hint pins the
+exact `(Category, Key)` row; a rule pins its supersession candidate; a shape
+refusal and an exact duplicate are decided without a paid call; the outcome is
+reported as itself (`created`, `superseded`, `refined`, `duplicate`, `review`,
+`refused`, `error`). STYLE files in the canonical `template` namespace, and the
+rule body — the pure STYLE control header stripped — is what rendering, dedup
+and ranking read. Where a helper is called decides its contract
+(`mnemonic/entry.py`): inside an admitted preparation item it is automatic with
+that item's stage and source; inside a run but outside an item it is refused,
+so a trainer or a maintenance RPC cannot buy the interactive contract by
+omission; otherwise it is interactive on the current turn, with the turn's
+observation or the text it was handed. Correction learning builds one entry per
+approved send — the drafted and sent texts with their recipients, keyed by their
+digest, source kind `correction` — on the solve turn that produced it; that
+observation is an envelope and is never mined for identity.
+
+**`/memory store`** (`services/command_handlers.py`). The verb submits one
+explicit interactive event on the chat turn: the turn's words are the
+observation (the typed content when no turn stands behind the verb), the
+content is the labelled suggestion, and `explicit_request` is set so a silent
+SKIP is refused. The role may answer with an UPDATE of memory it was shown; that
+is committed and recorded as a departure from the create that was asked for.
+`--force` admits CREATE only. The answer is read back from the committed row;
+the verb writes no blob itself.
 
 ## Tests
 
@@ -331,3 +413,19 @@ split and the sealed authority fields), `tests/services/test_mnemonic_solve.py`
 real `TaskExecutor` driven across both of its thread boundaries and through
 its cancellation handler) and `tests/services/test_task_interactive_memory.py`
 (the CLI solve carries its context).
+
+Ingestion, the jobs, the helper writers and the verb have their own, on real
+split databases with the role scripted at the transport:
+`tests/workers/test_mnemonic_replay.py` (the replay contract — real fault
+injection before the manifest, between children, after the company commit and
+before the checkpoint, on a resume; the sender never inherited; a source edit
+as a new revision; a budget refusal that consumes no retry),
+`tests/services/test_mnemonic_jobs.py` (one source, one operation through
+either entry; the restart; the stop; the read-only origin; the tag and the turn
+read inside the thread), `tests/memory/test_mnemonic_children.py` (the
+manifest and the restrictions), `tests/services/test_helper_writer_events.py`
+(the three entry states, the adapters' outcomes, the spawn inside the solve
+turn asserted structurally), `tests/services/test_memory_verb_events.py`
+(`/memory store`, `--force` and a read-only turn) and
+`tests/memory/test_fact_eligibility.py` (a customer-shaped FACT leaves every
+read). `tests/workers/ingestion_env.py` is the shared bench.

@@ -34,7 +34,22 @@ instruction. Token possession, a callback, `--allow` or a caller-supplied
 `human=true` is not evidence of one.
 
 A `SubjectHint` widens retrieval and narrows classification. It never makes its
-target authoritative.
+target authoritative. Its `identifiers` are `(kind, value)` pairs in the
+identity index's canonical form — an email lowercased as written, a phone
+canonical, a lid as parsed — and they are the hint's identity; a `name` or a
+`company` is a retrieval token (`candidates.retrieval_query` drives the search
+with it) and never evidence. A FACT hint carries at most the exact row it pins
+(`target_blob_id`); any other populated field makes `names_entity_subject`
+true, which forbids a company FACT.
+
+Whether an observation may be read for identity at all is
+`candidates.mines_observation`: only an interactive event from a mined source
+kind (`chat`, `cli`, `rpc`, `task`, `task_instruction`) whose hint states no
+identity. An automatic event's observation is a whole channel message, and a
+correction's is the drafted and sent texts with their recipients — envelopes,
+never mined, so a sender or a recipient can never select a candidate for an
+entity that is not them. The index is asked in its own form
+(`identity_pairs_of`): an address as written and lowercased, dots kept.
 
 ## The role
 
@@ -86,13 +101,24 @@ conversation implies a changed relationship or how two histories reconcile.
   note about one.
 - MERGE takes one keeper and one donor, both visible at exact versions, with
   the alias/reference effects declared, and needs identity evidence checked
-  against the actual inputs. For a PERSON that means a shared email address, or
-  a shared identifier plus the same stated name — a shared company or a shared
-  switchboard is not evidence that two people are one person.
+  against the actual inputs (`mnemonic/evidence.py`). For a PERSON that means a
+  shared email address, or a shared phone or lid plus the same stated name — a
+  shared company or a shared switchboard is not evidence that two people are
+  one person. For a COMPANY or a FACT the shared retrieval tokens, names
+  included, are the evidence.
 - CREATE is the mirror of that gate: an entity that corroborates with a visible
   candidate of the same family may not be created a second time. Where the
   evidence is absent — a similar name, a shared company, a shared switchboard —
   nothing fires and the new entity is created.
+- An automatic observation cannot propose a STYLE rule: a channel message is
+  not one account's instruction about how to write.
+- A REVIEW may name `ineligible` FACT candidates — ids it was shown whose text
+  is one customer's knowledge rather than the company's — and only ids it was
+  shown. The commit records them as read `restrictions` on the operation and
+  bumps the store's mutation sequence in the same transaction;
+  `memory/eligibility.py` then excludes those rows, and every facts-family row
+  whose own header states an entity scope or type, from category reads,
+  counts, `get_facts_by_category` and hybrid search before ranking.
 - Moving a memory between families requires an explicit `reclassification`
   matching the envelope; it is never inferred from an UPDATE's prose. So does
   retyping one inside a family — PERSON and COMPANY share `user:`, so the
@@ -170,16 +196,23 @@ have spent nothing first.
 
 `origin` is set by the adapter, so the interactive contract has a structural
 guard: inside an admitted preparation item the only contract available is the
-automatic one, whatever the event calls itself. That guard reaches exactly as
-far as `bounded_item` does — the engine's synchronous job paths
-(`services/job_executor.py`) set no item context and are not covered by it.
-They are unconverted legacy writers listed for milestone 6; until they are
-converted, nothing routes them through here at all.
+automatic one, whatever the event calls itself. The paths that reach it:
 
-Both limits stand as stated. An UPDATE whose *prose* absorbs another entity
-also remains the role's judgment, measured by semantic evaluation rather than
-by the validator; the structural disguised-MERGE check above compares blob ids
-and says nothing about wording.
+- the channel workers and the pipeline admit each source as a `bounded_item`,
+  and every child of it dispatches under that item's stage and source;
+- the background memory job runs the same worker coroutine per item inside one
+  `preparation_run` and one `revocable_turn`, on a thread that carries the
+  job's context, so its grants are the same automatic grants;
+- a helper writer takes its contract from where it is called
+  (`mnemonic/entry.py`): automatic inside an admitted item, refused inside a
+  run with no admitted item, interactive on the turn otherwise;
+- correction learning is interactive on the solve turn that produced the send,
+  so a preparation pause does not stop it and the daily budget is its bound;
+  `/memory store` is interactive on the chat turn with `explicit_request` set.
+
+An UPDATE whose *prose* absorbs another entity remains the role's judgment,
+measured by semantic evaluation rather than by the validator; the structural
+disguised-MERGE check above compares blob ids and says nothing about wording.
 
 `llm/client.py` refuses `tools`/`tool_choice` inside a mnemonic dispatch scope:
 the role returns a proposal, so it never receives a write tool.
@@ -189,15 +222,22 @@ the role returns a proposal, so it never receives a write tool.
 One result type, four outcomes: `committed`, `skipped`, `review_needed`,
 `retryable_failure`, produced by `commit.submit`. Only a committed result names
 committed ids; every other outcome must carry a reason. Non-semantic follow-up work is listed in
-`pending_effects` rather than demoting a real commit to a failure. Automatic
-workers advance a processed checkpoint only on `committed` or a deliberate
-`skipped`.
+`pending_effects` rather than demoting a real commit to a failure. A
+`retryable_failure` met at a refused dispatch carries the refusal itself
+(`refusal`), so an ingestion loop can stop its batch on the exception class
+preparation raised. Ingestion aggregates its children into one `Ingestion`
+outcome ([children of a source](mnemonic-commit.md#children-of-a-source)): a
+source's checkpoint advances only when every child is committed or
+deliberately skipped, an empty valid extraction is an explicit skip, a review
+parks the source visibly, and a failed child keeps its retry evidence.
 
 ## Tests
 
 `tests/memory/test_mnemonic_contracts.py`, `test_mnemonic_validator.py`,
+`test_mnemonic_evidence.py`, `test_mnemonic_candidates.py`,
 `test_mnemonic_agent.py` and `tests/llm/test_mnemonic_admission.py`; the commit
-half has its own, listed in [mnemonic-commit.md](mnemonic-commit.md). The
+half and the ingestion suites have their own, listed in
+[mnemonic-commit.md](mnemonic-commit.md). The
 validator and agent tests replay the frozen milestone 0 incident corpus
 (`tests/fixtures/mnemonic/incidents.json`) through the deterministic decisions
 in `tests/fixtures/mnemonic/decisions.json`. Budget, truncation and admission

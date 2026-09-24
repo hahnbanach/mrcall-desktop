@@ -1,8 +1,8 @@
 # Mnemonic writer inventory
 
-This is the Milestone 0 freeze for the mnemonic harness plan. It describes the
-current production write graph; it does not claim that the single-writer seam
-exists yet. The executable source of truth is
+This is the executable freeze of the memory write graph for the mnemonic
+harness plan. It describes the production write graph as it is; the
+single-writer seam is not complete. The executable source of truth is
 `tests/fixtures/mnemonic/legacy_writer_inventory.json`, checked by
 `tests/memory/test_mnemonic_inventory.py` and
 `tests/memory/test_mnemonic_kernel_inventory.py`. Every temporary entry names
@@ -17,33 +17,35 @@ flowchart LR
     C --> I[interactive tools and task solve]
     C --> H[slash memory handlers]
     A[mail / WhatsApp / calendar / MrCall] --> W[MemoryWorker]
-    A --> J[JobExecutor sync facades]
+    J[JobExecutor memory job] --> W
     E[approved edits] --> L[correction learning]
     I --> P[prefs_store]
-    H --> B[BlobStorage]
-    I --> B
-    W --> F[facts_store]
-    W --> B
-    J --> B
     L --> P
-    L --> F
-    P --> B
-    F --> B
+    L --> F[facts_store]
+    W --> N[mnemonic ingestion]
+    N --> S[mnemonic submit]
+    I --> S
+    H -->|store| S
+    P --> S
+    F --> S
+    S --> B[BlobStorage semantic_create / semantic_update]
+    S --> X[references, identifiers and aliases]
+    H -->|delete, reset| B
     R[reconsolidation] --> B
-    R --> X[references, identifiers and aliases]
+    R --> X
     B --> T[blobs and blob_sentences]
-    W --> X
-    J --> X
     O[join, migrations and repair scripts] --> T
     O --> X
 ```
 
-The graph has both asynchronous and synchronous semantic loops. The automatic
-`MemoryWorker` path is async, while the job executor repeats entity decisions
-in synchronous helpers. Calendar and MrCall each have their own variants in
-both paths. Interactive `create_memory`, `update_memory`, slash memory storage
-and task solve also reach persistence independently. Correction learning can
-write through both `prefs_store.store_rule` and `facts_store.upsert_fact`.
+Every semantic loop is one loop. The channel workers collect a source and hand
+it to `mnemonic/ingestion.py`; the background memory job runs the worker's own
+coroutine per item; interactive `create_memory`, `update_memory`, the task
+solve and `/memory store` submit events; `prefs_store`, `facts_store` and
+correction learning are adapters over `submit()`. What still writes outside the
+harness is reconsolidation with its alias writer and donor delete (milestone
+7), the owner's `/memory delete` and `/memory reset` (milestone 1's gate, no
+model), and join, migrations and the repair scripts (milestone 8).
 
 `BlobStorage.store_blob` and `update_blob` are the common low-level blob
 writers and are not capability protected; the same primitives now also back
@@ -104,7 +106,7 @@ The ownership sequence is:
 | 3 | guarded `BlobStorage` commit primitives and transaction-scoped sinks (installed: `semantic_create`/`semantic_update` under a permit, `memory/associations.py`) |
 | 4 | interactive create/update and task-solve adapters |
 | 5 | no writer conversion: retention under every rewrite, the departure record and the mechanical restore |
-| 6 | async workers, synchronous job facades, associations and identifiers; facts, rules, correction learning and memory command writers |
+| 6 | installed: ingestion, the job facade, the helper-writer adapters and the memory verb write through the harness; the four adapter doors (`store_rule` and `refine_rule` from the tools, `store_rule` and `upsert_fact` from correction learning) stay listed as the edges a re-added direct write would surface on |
 | 7 | reconsolidation, reference migration, donor deletion and aliases |
 | 8 | join, storage migrations, backfills and semantic repair scripts |
 

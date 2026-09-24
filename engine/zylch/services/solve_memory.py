@@ -82,7 +82,7 @@ def _submit_event(query: str, new_content: str, owner_id: str) -> str:
         return str(e)
 
     # No subject hint. The query used to be passed as `SubjectHint(name=...)`.
-    # A name hint does drive the cosine query now (`candidates.retrieval_query`),
+    # A name hint drives the cosine query (`candidates.retrieval_query`),
     # but it also makes `SubjectHint.names_entity_subject` true, which is the
     # validator's signal that the caller already resolved a person or a company
     # — and that forbids a company FACT outright. So a solve could never
