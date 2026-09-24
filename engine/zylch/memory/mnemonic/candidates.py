@@ -48,8 +48,10 @@ _IDENTIFIER_LINE = re.compile(
 )
 # A WhatsApp lid is identity, and it is not a phone: its line is read on its
 # own and kept out of the phone scan, and its comparison token always carries
-# ``@lid`` so it can never equal somebody's number.
-_LID_LINE = re.compile(r"^lid\s*:\s*(.+)$", re.IGNORECASE | re.MULTILINE)
+# ``@lid`` so it can never equal somebody's number. The line is read in every
+# form the hint side's parser reads (``workers/memory.py``, ``_LID_LABEL_RE``):
+# indented or bulleted, with ``:`` or ``=``.
+_LID_LINE = re.compile(r"^[ \t]*[-*•]?[ \t]*lid[ \t]*[:=][ \t]*(.+)$", re.IGNORECASE | re.MULTILINE)
 _EMAIL = re.compile(r"[\w.+-]+@[\w-]+\.[\w.-]+")
 # A phone is a run of digits with separators. The lookarounds keep it from
 # reading the local part of an email or of a WhatsApp ``<digits>@lid`` as a

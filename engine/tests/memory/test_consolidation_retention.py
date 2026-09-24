@@ -204,6 +204,29 @@ def test_consolidate_and_restore_versions_never_count_and_appends_count_after_a_
     assert report["version_sinks_total"] == 0
 
 
+def test_only_the_appends_after_the_latest_restore_count(profile_a, embedder):
+    blob = seed_blob(embedder)
+    seed_versions(blob, 1, reason=RESTORE, days_old=300)
+    seed_versions(blob, 30, days_old=250)  # between the two restores
+    seed_versions(blob, 1, reason=RESTORE, days_old=200)
+    seed_versions(blob, 5, days_old=100)
+
+    with get_session() as session:
+        assert version_counts(session, COMPANY_A)[blob] == 5
+    report, _ = run()
+    assert report["version_sinks_total"] == 0
+
+
+def test_a_count_exactly_at_the_threshold_is_not_a_sink(profile_a, embedder):
+    blob = seed_blob(embedder)
+    seed_versions(blob, THRESHOLD)
+
+    report, pruned = run()
+
+    assert report["version_sinks_total"] == 0 and report["blobs_versions_max"] == THRESHOLD
+    assert pruned == THRESHOLD - FLOOR and count(blob) == FLOOR
+
+
 def test_a_dropped_donors_versions_are_pruned_to_the_floor_and_never_a_sink(profile_a, embedder):
     donor = seed_blob(embedder, "Gone Srl")
     seed_versions(donor, 30)

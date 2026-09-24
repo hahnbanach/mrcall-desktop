@@ -19,7 +19,7 @@ from zylch.memory.mnemonic import pairs
 from zylch.memory.mnemonic.candidates import parse_header
 from zylch.memory.mnemonic.contracts import Candidate, MnemonicContractError
 from zylch.memory.mnemonic.proposals import MnemonicResult, Proposal, WriteTarget
-from zylch.services.preparation import preparation_run
+from zylch.services.preparation import bounded_item, preparation_run
 from zylch.storage import database as dbm
 from zylch.storage.database import get_session
 from zylch.storage.models import MemoryOperation
@@ -194,14 +194,15 @@ def _pair():
     return first, second
 
 
-def _record(event, owner, state):
+def _record(event, owner, state, *, proposal="p"):
     with get_session() as session:
         session.add(
             MemoryOperation(
-                event_id=f"{owner}-{state}",
+                event_id=f"{owner}-{state}-{proposal}",
                 owner_id=owner,
                 company_key=COMPANY_A,
                 input_digest="d",
+                proposal_digest=proposal,
                 source_ref=event.source_ref,
                 origin=c.AUTOMATIC,
                 caller_class=c.AUTOMATIC_OBSERVATION,
@@ -215,6 +216,8 @@ def test_a_pair_another_account_answered_is_settled_and_a_pending_one_is_not(pro
     event = pairs.pair_event(OWNER_A, COMPANY_A, first, second)
     assert pairs.settled(event) is None
     _record(event, OWNER_B, "pending")
+    assert pairs.settled(event) is None
+    _record(event, OWNER_B, "review", proposal=None)  # a refusal's review: no answer
     assert pairs.settled(event) is None
     _record(event, OWNER_B, "skipped")
     assert pairs.settled(event) == "skipped"
@@ -270,3 +273,25 @@ def test_the_merge_door_admits_only_the_pair_inside_its_admitted_item(profile_a)
     with preparation_run(OWNER_A):
         asyncio.run(item.run({"id": event.source_id, "event": event}))
     assert seen == {"same": "", "other": pairs.MERGE_OTHER_PAIR}
+
+    # Admitted, but for another pair's source, or for another stage.
+    def probe(label):
+        def decide(pair_):
+            seen[label] = pairs.admits_merge(pair_["event"], merge, (c.MERGE,))
+            return MnemonicResult.skipped(pair_["event"].event_id, "probe")
+
+        return decide
+
+    class OtherStage:
+        owner_id = OWNER_A
+
+        @bounded_item("memory:email")
+        async def run(self, pair_):
+            return probe("stage")(pair_).outcome == c.SKIPPED
+
+    with preparation_run(OWNER_A):
+        asyncio.run(
+            pairs.PairItem(OWNER_A, probe("source")).run({"id": "blob-a|blob-z", "event": event})
+        )
+        asyncio.run(OtherStage().run({"id": event.source_id, "event": event}))
+    assert seen["source"] == seen["stage"] == pairs.MERGE_UNADMITTED

@@ -24,11 +24,16 @@ Three rules keep the follow-up safe:
   donor by the keeper in each ledger list that names it — nothing else in the
   row changes — and then removes the effect from the receipt. A crash between
   the two re-applies a rewrite that has nothing left to do. The effects come
-  from the journal, never from an argument.
+  from the journal, never from an argument. The keeper is followed to where it
+  lives now, so follow-ups replayed in any order along a chain of merges end
+  on the chain's survivor, never on a dropped id.
 
 A failure leaves the effect recorded: the merge stays the authoritative
 ``committed``, with the effect in ``pending_effects``, and the next
-consolidation run replays it (:func:`replay_pending`).
+consolidation run replays it (:func:`replay_pending`). A follow-up is never
+reported done that did not run: a receipt this process cannot read counts as
+still pending, and a journal that cannot list the pending follow-ups is an
+error, not "none".
 """
 
 from __future__ import annotations
@@ -53,26 +58,36 @@ def follow_up(result: MnemonicResult, *, owner_id: str) -> MnemonicResult:
 
     Called by the commit right after its company transaction. What could not be
     applied stays in ``pending_effects`` — the result is ``committed`` either
-    way, because the memory is.
+    way, because the memory is. Nothing raised here may reach the commit's
+    failure handling, which would record a failure over a committed receipt:
+    a follow-up that raises leaves every effect pending, as recorded.
     """
-    remaining = apply(result.event_id, owner_id=owner_id)
+    try:
+        remaining = apply(result.event_id, owner_id=owner_id)
+    except Exception as exc:  # noqa: BLE001 - the memory is committed; the effect stays recorded
+        logger.warning(f"[references] follow-up of {result.event_id} failed: {exc}")
+        remaining = None
+    if remaining is None:
+        return result
     return dataclasses.replace(result, pending_effects=remaining)
 
 
-def apply(event_id: str, *, owner_id: str) -> Tuple[PendingEffect, ...]:
+def apply(event_id: str, *, owner_id: str) -> Optional[Tuple[PendingEffect, ...]]:
     """Apply one committed operation's recorded follow-up; return what is left.
 
-    Nothing is applied when the operation is not in this company's store, when
-    it belongs to another account, or when this profile is now bound to
-    another company: those effects are not this process's to apply.
+    ``None`` when this process cannot tell — the receipt could not be read, or
+    it is not in the store this profile is bound to now — and the caller keeps
+    the effects it holds as pending. Nothing is applied when the operation
+    belongs to another account: those effects are not this process's to
+    apply, and they come back as left.
     """
     try:
         row = _row(event_id)
     except journal.JournalError as exc:
         logger.warning(f"[references] cannot read operation {event_id}: {exc}")
-        return ()
+        return None
     if row is None:
-        return ()
+        return None
     effects = row["effects"]
     if row["owner_id"] != owner_id or row["company_key"] != current_company_key():
         return effects
@@ -84,6 +99,7 @@ def apply(event_id: str, *, owner_id: str) -> Tuple[PendingEffect, ...]:
             continue
         donor, _, keeper = effect.detail.partition("->")
         try:
+            keeper = _survivor(keeper)
             rewritten = _rewrite_ledger(owner_id, donor, keeper)
         except Exception as exc:  # noqa: BLE001 - recorded and replayed, never swallowed
             logger.warning(
@@ -111,16 +127,16 @@ def replay_pending(owner_id: str) -> Dict[str, int]:
     Run by consolidation before anything else. Reads the committed merges of
     this owner in the store this profile is bound to now — no ids from any
     caller — and answers how many follow-ups it resolved and how many are still
-    pending.
+    pending; one whose receipt cannot be read again counts as pending. Raises
+    :class:`~zylch.memory.mnemonic.session.JournalError` when the pending
+    follow-ups cannot be listed at all.
     """
-    try:
-        pending = _pending_of(owner_id)
-    except journal.JournalError as exc:
-        logger.warning(f"[references] cannot list pending follow-ups: {exc}")
-        return {"references_resolved": 0, "references_pending": 0}
+    pending = _pending_of(owner_id)
     resolved = left = 0
     for event_id, effects in pending:
         remaining = apply(event_id, owner_id=owner_id)
+        if remaining is None:
+            remaining = effects
         resolved += len(effects) - len(remaining)
         left += len(remaining)
     return {"references_resolved": resolved, "references_pending": left}
@@ -189,6 +205,18 @@ def _record_remaining(event_id: str, remaining: List[PendingEffect]) -> None:
         raise
     except Exception as exc:  # noqa: BLE001
         raise journal.JournalError(f"operation journal unavailable: {exc}") from exc
+
+
+def _survivor(keeper: str) -> str:
+    """Where the keeper lives now: a later merge may have folded it in turn."""
+    from zylch.memory.scope import survivor
+
+    try:
+        with journal.company_transaction() as session:
+            return survivor(session, keeper)
+    except Exception as exc:  # noqa: BLE001 - the alias still resolves the keeper for readers
+        logger.warning(f"[references] cannot follow the merges of {keeper}; using it: {exc}")
+        return keeper
 
 
 # ─── The profile half ─────────────────────────────────────────────────

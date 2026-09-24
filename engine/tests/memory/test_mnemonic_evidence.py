@@ -13,6 +13,8 @@ from __future__ import annotations
 
 import dataclasses
 
+import pytest
+
 from zylch.memory.mnemonic import contracts as c
 from zylch.memory.mnemonic.agent import adapt_response
 from zylch.memory.mnemonic.contracts import Candidate, MemoryEvent, SubjectHint
@@ -164,7 +166,25 @@ def test_a_bare_digit_lid_never_equals_a_phone_in_either_direction():
         _lid_event("Nina Rossi", digits), phone_line, "Nina Rossi", f"LID: {digits}"
     )
     # A bare-digit lid and its suffixed form are the same lid.
-    assert _duplicate_refused(_lid_event("Nina Rossi", digits), lid_line, "Nina Rossi", f"LID: {digits}")
+    assert _duplicate_refused(
+        _lid_event("Nina Rossi", digits), lid_line, "Nina Rossi", f"LID: {digits}"
+    )
+
+
+@pytest.mark.parametrize("line", ["- LID: {lid}", "  LID = {lid}", "• lid: {lid}"])
+def test_a_lid_line_in_any_form_the_header_parser_reads_is_a_lid(line):
+    """Bulleted, indented or with ``=``: the candidate side reads what the hint side reads,
+    and the bare-digit value is still a lid, never a phone."""
+    digits = "185800503328844"
+    candidate = _person_candidate("person-nina-lid", "Nina Rossi", line.format(lid=digits))
+    assert _duplicate_refused(
+        _lid_event("Nina Rossi", digits), candidate, "Nina Rossi", f"LID: {digits}"
+    )
+    phone_event = _person_event(
+        SubjectHint(entity_type=c.PERSON, name="Nina Rossi", identifiers=[("phone", digits)]),
+        "Nina calls.",
+    )
+    assert not _duplicate_refused(phone_event, candidate, "Nina Rossi", f"Phone: {digits}")
 
 
 def test_a_lid_in_a_phone_line_needs_the_same_name_too():

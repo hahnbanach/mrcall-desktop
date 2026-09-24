@@ -19,6 +19,8 @@ ever scoped by owner alone.
 
 from __future__ import annotations
 
+import logging
+
 from sqlalchemy import and_, or_
 
 from zylch.memory.company_key import RULE_FAMILIES
@@ -30,6 +32,8 @@ from zylch.storage.models import (
     PersonIdentifier,
     WhatsAppBlob,
 )
+
+logger = logging.getLogger(__name__)
 
 
 def _is_rule_namespace(column):
@@ -99,8 +103,26 @@ def resolve_aliases(session, blob_ids) -> set:
                 .filter(or_(BlobAlias.merged_id.in_(frontier), BlobAlias.keeper_id.in_(frontier)))
                 .all()
             )
-        except Exception:
+        except Exception as exc:  # noqa: BLE001 - the ids asked for still resolve to themselves
+            logger.warning(f"[scope] alias lookup failed; ids resolve without their merges: {exc}")
             return wanted
         frontier = {str(blob_id) for row in rows for blob_id in row} - wanted
         wanted |= frontier
     return wanted
+
+
+def survivor(session, blob_id: str) -> str:
+    """The blob ``blob_id`` lives on as now: its merges followed forward, keeper to keeper.
+
+    An id no alias names as merged away is its own survivor. Bounded by
+    :data:`MAX_ALIAS_HOPS`, like :func:`resolve_aliases`.
+    """
+    from zylch.storage.models import BlobAlias
+
+    current = str(blob_id)
+    for _ in range(MAX_ALIAS_HOPS):
+        row = session.get(BlobAlias, current)
+        if row is None:
+            break
+        current = str(row.keeper_id)
+    return current

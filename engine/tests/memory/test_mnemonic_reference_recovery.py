@@ -6,8 +6,9 @@ the merge's own receipt recorded. These cases run real merges through the real
 harness and then look at the ledger and the receipt: only the donor's id
 changes in the ledger, a crash after the company commit leaves the effect on
 record for the next replay, another profile's file is never opened, a profile
-that has since joined another company applies nothing, and alias chains resolve
-from either end.
+that has since joined another company applies nothing, a follow-up that did not
+run is never reported done, and alias chains resolve from either end — and a
+ledger re-pointed along a chain ends on its survivor, whatever the order.
 """
 
 from __future__ import annotations
@@ -19,7 +20,7 @@ from unittest.mock import Mock
 import pytest
 
 from zylch.memory.blob_storage import BlobStorage
-from zylch.memory.mnemonic import references
+from zylch.memory.mnemonic import journal, references
 from zylch.memory.mnemonic.proposals import PendingEffect
 from zylch.memory.scope import resolve_aliases
 from zylch.storage import database as dbm
@@ -91,6 +92,11 @@ def task(task_id):
 def pending(event_id):
     with get_session() as session:
         return session.get(MemoryOperation, event_id).pending_effects
+
+
+def operation_state(event_id):
+    with get_session() as session:
+        return session.get(MemoryOperation, event_id).state
 
 
 def merge(store, keeper, donor):
@@ -174,7 +180,7 @@ def test_a_profile_bound_to_another_company_applies_nothing(store, tmp_path, mon
 
     boot(monkeypatch, tmp_path, OWNER_A, COMPANY_B)  # the profile joined another company
     assert references.replay_pending(OWNER_A) == {"references_resolved": 0, "references_pending": 0}
-    assert references.apply(event_id, owner_id=OWNER_A) == ()  # not in this store at all
+    assert references.apply(event_id, owner_id=OWNER_A) is None  # not in this store at all
     assert task("t-1")["sources"]["blobs"] == [donor]
 
     boot(monkeypatch, tmp_path, OWNER_A, COMPANY_A)
@@ -207,6 +213,55 @@ def test_the_immediate_follow_up_checks_the_binding_too(store, monkeypatch):
     assert task("t-1")["sources"]["blobs"] == [donor]
 
 
+# ─── Never reported done when it did not run ──────────────────────────
+
+
+def test_an_unreadable_receipt_at_the_follow_up_leaves_the_effect_pending(store, monkeypatch):
+    keeper, donor = seed(store, LUCA_MAIL), seed(store, LUCA_CAL)
+    seed_task(OWNER_A, "t-1", [donor])
+    with monkeypatch.context() as patched:
+        patched.setattr(references, "_row", Mock(side_effect=journal.JournalError("busy")))
+        result, event_id = merge(store, keeper, donor)
+
+    effect = PendingEffect(kind="task_references", detail=f"{donor}->{keeper}")
+    assert result.pending_effects == (effect,) and pending(event_id) != []
+    assert task("t-1")["sources"]["blobs"] == [donor]
+
+
+def test_an_unreadable_receipt_at_the_replay_is_counted_pending(store, monkeypatch):
+    keeper, donor = seed(store, LUCA_MAIL), seed(store, LUCA_CAL)
+    seed_task(OWNER_A, "t-1", [donor])
+    with monkeypatch.context() as patched:
+        patched.setattr(references, "_rewrite_ledger", Mock(side_effect=OSError("profile busy")))
+        _, event_id = merge(store, keeper, donor)
+    with monkeypatch.context() as patched:
+        patched.setattr(references, "_row", Mock(side_effect=journal.JournalError("busy")))
+        replayed = references.replay_pending(OWNER_A)
+
+    assert replayed == {"references_resolved": 0, "references_pending": 1}
+    assert task("t-1")["sources"]["blobs"] == [donor] and pending(event_id) != []
+
+
+def test_a_journal_that_cannot_list_the_follow_ups_is_an_error_not_none(store, monkeypatch):
+    def unavailable(*args, **kwargs):
+        raise journal.JournalError("company memory is unavailable")
+
+    monkeypatch.setattr(references.journal, "company_transaction", unavailable)
+    with pytest.raises(journal.JournalError):
+        references.replay_pending(OWNER_A)
+
+
+def test_a_follow_up_that_raises_leaves_the_merge_committed(store, monkeypatch):
+    keeper, donor = seed(store, LUCA_MAIL), seed(store, LUCA_CAL)
+    with monkeypatch.context() as patched:
+        patched.setattr(references, "apply", Mock(side_effect=RuntimeError("unexpected")))
+        result, event_id = merge(store, keeper, donor)
+
+    effect = PendingEffect(kind="task_references", detail=f"{donor}->{keeper}")
+    assert result.pending_effects == (effect,)
+    assert operation_state(event_id) == "committed" and pending(event_id) != []
+
+
 # ─── Chains ───────────────────────────────────────────────────────────
 
 
@@ -229,3 +284,21 @@ def test_alias_chains_resolve_from_either_end(store):
     assert task("t-b")["sources"]["blobs"] == [first_donor]
     found = Storage().get_open_tasks_by_blobs(OWNER_B, [final])
     assert [t["id"] for t in found] == ["t-b"]
+
+
+def test_follow_ups_applied_out_of_order_end_on_the_chains_survivor(store, monkeypatch):
+    first_donor, keeper, final = (
+        seed(store, LUCA_CAL),
+        seed(store, LUCA_MAIL),
+        seed(store, LUCA_THIRD),
+    )
+    seed_task(OWNER_A, "t-a", [first_donor])
+    with monkeypatch.context() as patched:
+        patched.setattr(references, "_rewrite_ledger", Mock(side_effect=OSError("profile busy")))
+        _, first = merge(store, keeper, first_donor)  # first_donor -> keeper
+        _, second = merge(store, final, keeper)  # keeper -> final
+
+    # The later merge's follow-up first: nothing names the keeper yet.
+    assert references.apply(second, owner_id=OWNER_A) == ()
+    assert references.apply(first, owner_id=OWNER_A) == ()
+    assert task("t-a")["sources"]["blobs"] == [final]

@@ -52,7 +52,7 @@ from .contracts import (
 )
 from .evidence import corroborates
 from .turn import turn_cancellation
-from .wiring import CommitContext
+from .wiring import CommitContext, parse_identifiers_block
 
 logger = logging.getLogger(__name__)
 
@@ -117,9 +117,6 @@ def common_hint(first_content: str, second_content: str) -> SubjectHint:
     another person's address can never become evidence, and the evidence does
     not depend on which member the role later makes the keeper.
     """
-    # Deferred: the workers package loads the memory package, which loads this one.
-    from zylch.workers.memory import _parse_identifiers_block
-
     first, second = parse_header(first_content), parse_header(second_content)
     stated = {
         value
@@ -137,7 +134,7 @@ def common_hint(first_content: str, second_content: str) -> SubjectHint:
     def comparable(content: str) -> set:
         return {
             (kind, lid_token(value) if kind == "lid" else value)
-            for kind, value in _parse_identifiers_block(content)
+            for kind, value in parse_identifiers_block(content)
         }
 
     shared = {pair_ for pair_ in comparable(first_content) & comparable(second_content) if pair_[1]}
@@ -242,7 +239,10 @@ def settled(event: MemoryEvent) -> Optional[str]:
     Matched by ``source_ref`` — the pair and its versions, no owner — so a pair
     another account sharing the store already answered costs nobody a second
     decision; the answer stands until one of the two blobs changes, which is a
-    new ``source_ref``.
+    new ``source_ref``. Only an answer the role gave counts, which is a row
+    that carries a proposal: a review a refusal produced — a read-only origin,
+    an account that is not the event's, a revoked grant — carries none, and
+    the pair is decided again once the refusal no longer holds.
     """
     from zylch.storage.models import MemoryOperation
 
@@ -254,6 +254,7 @@ def settled(event: MemoryEvent) -> Optional[str]:
                     MemoryOperation.company_key == event.company_key,
                     MemoryOperation.source_ref == event.source_ref,
                     MemoryOperation.state.in_(journal.TERMINAL),
+                    MemoryOperation.proposal_digest.isnot(None),
                 )
                 .first()
             )
