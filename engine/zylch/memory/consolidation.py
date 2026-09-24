@@ -90,15 +90,20 @@ _PAIR_LABELS = (
 
 
 def failed(summary: Dict[str, Any]) -> Optional[str]:
-    """Why a run did not happen because something is broken, or ``None``.
+    """Why a run did not happen, or did not finish, because something is broken.
 
-    ``skipped`` also covers the two ordinary reasons a run rests — nothing
-    changed since the last sweep, another engine holds the lock — which are no
-    failure. Company memory that is unavailable, or an operation journal that
-    cannot answer, is one: the Settings button answers it as an error and
+    ``None`` for a run that did its work or rested. ``skipped`` also covers the
+    two ordinary reasons a run rests — nothing changed since the last sweep,
+    another engine holds the lock — which are no failure. Company memory that
+    is unavailable, or an operation journal that cannot answer — before the
+    run starts, or at a pair's pre-check once it is under way, when the counts
+    so far are kept — is one: the Settings button answers it as an error and
     ``zylch memory-sweep`` exits 2, rather than letting a caller read it as a
-    rest.
+    rest or a finished run.
     """
+    stopped = str(summary.get("stopped") or "")
+    if stopped.startswith(JOURNAL_UNAVAILABLE):
+        return stopped
     if not summary.get("skipped") or summary.get("reason") in (NOTHING_CHANGED, ANOTHER_ENGINE):
         return None
     return str(summary.get("reason") or "consolidation could not run")

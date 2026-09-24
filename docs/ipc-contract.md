@@ -1283,8 +1283,9 @@ task-reference follow-ups, applies the version-retention policy, then folds
 duplicate entities — the same "John Smith PERSON" spread across several
 blobs — each pair decided by the mnemonic role and committed as one MERGE. It
 answers `{ok: true, ...summary}`; `{ok: false, error, ...summary}` when company
-memory is unavailable or the operation journal cannot answer (the run did not
-happen, and `error` says why); `{ok: false, error}` when it raised. It forces
+memory is unavailable or the operation journal cannot answer — before the run
+starts, or at a pair's pre-check once it is under way, when the counts so far
+are kept — and `error` says why; `{ok: false, error}` when it raised. It forces
 the run; the daemon's own post-update run is gated on the store's change
 counter. The summary always carries its whole shape:
 

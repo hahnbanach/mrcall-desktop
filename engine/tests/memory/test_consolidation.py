@@ -223,6 +223,7 @@ def test_every_early_return_carries_the_whole_shape(store, monkeypatch):
     monkeypatch.setattr(consolidation, "try_make_llm_client", lambda *a, **k: None)
     no_llm = sweep()
     assert set(locked) == set(rested) == set(no_llm) == shape
+    assert consolidation.failed(locked) is None and consolidation.failed(rested) is None
 
 
 def test_a_journal_that_cannot_answer_skips_the_run_and_says_why(store, monkeypatch):
@@ -262,17 +263,22 @@ def test_a_journal_that_stops_answering_mid_run_ends_it_with_the_reason(store, m
     from zylch.memory.mnemonic import journal, pairs
 
     pair_of(store)
+    pair_of(store, name="Anna Verdi")
     healthy(monkeypatch)
     transport = scripted(monkeypatch)
+    answers = [journal.JournalError("database is locked")]  # the first pre-check only
 
     def broken(event):
-        raise journal.JournalError("database is locked")
+        if answers:
+            raise answers.pop()
+        return None
 
     monkeypatch.setattr(pairs, "settled", broken)
     summary = sweep()
 
     assert summary["stopped"] == f"{consolidation.JOURNAL_UNAVAILABLE}: database is locked"
-    assert summary["groups_examined"] == 1 and transport.call_count == 0
+    assert summary["groups_examined"] == 2 and summary["pairs_decided"] == 0
+    assert transport.call_count == 0 and consolidation.failed(summary) == summary["stopped"]
 
 
 # ─── What a run does without pairs ────────────────────────────────────
