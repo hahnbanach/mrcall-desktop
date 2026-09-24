@@ -39,6 +39,9 @@ class Call:
     interruptible: bool = False
     task: asyncio.Task | None = None
     worker: asyncio.Task | None = None
+    conversation: object | None = None
+    prepared: object | None = None
+    duration_seconds: int | None = None
     seen_delegations: set[str] = field(default_factory=set)
     evidence: dict = field(
         default_factory=lambda: {
@@ -79,13 +82,25 @@ class SmokeRuntime:
         if decision == "duplicate":
             return
         if decision == "accept":
-            self.call = Call(session_id)
+            self.call = self.new_call(session_id, event)
             task = asyncio.create_task(self._run(self.call))
             self.call.task = task
         else:
             task = asyncio.create_task(self._reject(session_id))
         self.tasks.add(task)
         task.add_done_callback(self.tasks.discard)
+
+    def new_call(self, session_id: str, event: dict) -> Call:
+        return Call(session_id)
+
+    async def accept_call(self, call: Call) -> bool:
+        return await self.transport.accept(call.session_id)
+
+    def attached(self, call: Call, ws) -> None:
+        pass
+
+    def event(self, call: Call, event: dict) -> bool:
+        return False
 
     def _record(self, session_id: str, state: str, evidence: dict | None = None) -> None:
         """Fail closed on disk errors, but never let them prevent provider cleanup."""
@@ -141,11 +156,11 @@ class SmokeRuntime:
         reason = "sideband_eof"
         try:
             # Deadline starts before accept, not after the sideband handshake.
-            async with asyncio.timeout(self.config.duration_seconds):
+            async with asyncio.timeout(call.duration_seconds or self.config.duration_seconds):
                 if call.stopped.is_set():
                     reason = "shutdown"
                     return
-                if not await self.transport.accept(call.session_id):
+                if not await self.accept_call(call):
                     reason = "accept_unconfirmed"
                     return
                 self._record(call.session_id, "active")
@@ -156,6 +171,7 @@ class SmokeRuntime:
                 if call.stopped.is_set() or self.stopping:
                     reason = "shutdown"
                     return
+                self.attached(call, ws)
                 reader = asyncio.create_task(self._read(ws, call))
                 stop_waiter = asyncio.create_task(call.stopped.wait())
                 done, _ = await asyncio.wait(
@@ -175,6 +191,8 @@ class SmokeRuntime:
             # Shutdown may interrupt setup/active work, never bounded cleanup.
             call.interruptible = False
             call.allow_results = False
+            if call.conversation:
+                await call.conversation.close()
             if call.worker:
                 call.worker.cancel()
                 await asyncio.gather(call.worker, return_exceptions=True)
@@ -231,6 +249,8 @@ class SmokeRuntime:
             elif kind == "session.closed":
                 call.finalized = True
                 call.allow_results = False
+                if call.conversation:
+                    await call.conversation.close()
                 call.evidence["finalization"] = "confirmed"
                 usage = event.get("usage")
                 seconds = usage.get("seconds") if isinstance(usage, dict) else None
@@ -242,6 +262,8 @@ class SmokeRuntime:
                 return
             elif kind == "error":
                 raise RuntimeError("Live session error")
+            elif self.event(call, event):
+                continue
             elif kind == "session.delegation.created" and call.allow_results:
                 delegation = event.get("delegation", {})
                 identifier = delegation.get("id")

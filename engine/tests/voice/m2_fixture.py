@@ -33,6 +33,12 @@ def seed(root, monkeypatch, owner=OWNER):
     Base.metadata.create_all(memory, tables=db.memory_tables())
     ensure_space(memory)
     db.set_memory_engine(memory, None)
+    populate(key, owner)
+    return key
+
+
+def populate(key, owner, known=KNOWN):
+    """Frozen synthetic facts; optional authorized live caller number."""
     with db.get_session() as session:
         for bid, company in (("customer-a", key), ("customer-b", key), ("foreign", "foreign-key")):
             session.add(
@@ -63,18 +69,17 @@ def seed(root, monkeypatch, owner=OWNER):
                 )
             )
         for bid, phone, company in (
-            ("customer-a", KNOWN, key),
+            ("customer-a", known, key),
             ("customer-b", OTHER, key),
             ("customer-a", SHARED, key),
             ("customer-b", SHARED, key),
-            ("foreign", KNOWN, "foreign-key"),
+            ("foreign", known, "foreign-key"),
         ):
             session.add(
                 PersonIdentifier(
                     blob_id=bid, owner_id=owner, company_key=company, kind="phone", value=phone
                 )
             )
-    return key
 
 
 def configuration():

@@ -18,7 +18,8 @@ an additional adversarial review also approved after the cold-start correction.
 M1 is complete: live demonstration and final integration review passed. The first
 implementation's approval was withdrawn by the subsequent failure-path review.
 M2 is complete: authenticated client/fixture demonstration and independent
-integration review passed. M3 awaits a new operator go-ahead.
+integration review passed. M3 is implemented locally; its first integrated live call failed and corrected
+code awaits a funded retest. M4 remains unstarted.
 
 ## M1 rewrite — 2026-09-23
 
@@ -86,7 +87,8 @@ memory tool contract so later integrations do not require new telephone plumbing
 - The M1 runtime exists in `engine/zylch/services/voice/`, with focused tests in
   `engine/tests/voice/`. M2 adds `rpc/voice_actions.py` for operator configuration
   and `services/voice/agent_config.py` / `caller_memory.py` for snapshots and
-  selected-fact retrieval. These components are not yet connected to live calls.
+  selected-fact retrieval. M3's opt-in engine listener now connects these to calls;
+  live listening acceptance remains separately recorded below.
 - Register configuration methods in the existing RPC table. Use the authenticated
   profile WebSocket transport for operator access; provider webhooks use their
   own verified route and never expose the owner RPC surface to callers.
@@ -243,6 +245,92 @@ actually delivered. Mark this plan completed only after real-call acceptance;
 missing access or a failed live scenario remains explicit unfinished work.
 
 ## Verification and review record
+
+### M3 — 2026-09-24
+
+- Operator authorized only M3, including deterministic verification, integrated
+  demonstration and independent review. Preserve the existing ledger, limits and
+  unlimited service/tunnel lifetime. Use isolated synthetic memory only.
+- Baseline: clean branch `gpt-live-m1`, accepted M2 `c6c1fcf`; whole-engine Ruff
+  passes. M4 remains unstarted.
+- **Operator spending authorization (2026-09-24):** testing costs are authorized.
+  Do not repeatedly ask for cost/budget confirmation or treat the inherited M1
+  zero-engine budget as a product blocker. Configure the isolated test engine's
+  allowance to perform M3 reasoning, keeping durable reservations and accounting.
+  Start with USD3 engine allowance within the existing USD5 combined experiment
+  ceiling (USD2 retained voice/carrier holds). Do not reset the existing ledger,
+  alter production budgets, or add automatic service/tunnel expiry.
+
+- Implemented the opt-in provider listener in the engine WebSocket lifecycle;
+  explicit-path bootstrap uses only the isolated fixture, no ordinary profile
+  activation or automatic channels. Carrier callbacks prepare credentials before
+  reservation/NCCO and bind caller metadata to the one-use nonce in memory.
+- Each call owns a customer-service agent, selected-memory tool, transcript and
+  serialized delegation worker. Revision changes reconcile pending drafts against
+  the latest input before speech. Late caller context is quiet. Ordinary owner
+  prompt/tools/context stay on their original path. Hangup prevents further agent
+  work while dispatched LLM threads retain normal accounting/settlement.
+- Independent local activation review: **APPROVED** after suppressing inherited
+  DEBUG fact logging and correcting runtime availability after exhaustion/busy
+  callbacks. Reviewer independently passed 126 voice cases (125 plus the actual
+  kernel CLI case separately), then the 20 M3 cases after fixes. This does not
+  yet approve the integrated live call or M4.
+- Isolated provisioning and cold start: **PASSED**, real Firebase credentials.
+  Frozen synthetic M2 facts only, company capability persisted through
+  `memory.join`, freshly minted refresh token encrypted in the isolated OAuth
+  table. ID tokens were never persisted. Caller binding comes from the completed
+  authorized M1 carrier receipt, not the personal profile. Saved engine allowance
+  is USD3 under the operator's explicit test-spending authorization.
+- Initial activation, before the M3 call: the dedicated service started
+  `scripts/voice_engine_isolated.py` on provider port 8787 and owner-authenticated
+  RPC port 8788. Service and unchanged tunnel were active with
+  `RuntimeMaxUSec=infinity`. Local/public `/healthz` returned `engine_listener` /
+  `calls_available: true` after a fresh process start, before any operator RPC
+  connection. At that point, only the original closed M1 row and USD1 hold existed.
+- First integrated incoming-call demonstration: **FAILED**. The operator heard
+  no knowledge of the filters/order. The session nevertheless closed cleanly:
+  65 reported voice seconds, 4 client delegations, 4 backend turn attempts and
+  zero successful results. No engine LLM reservation was created by that call.
+  Reflected first audio was 3,553 ms; caller lookup completed in 9 ms. No raw
+  transcript/audio was retained. Estimated voice cost: USD0.054167. Read-only
+  Vonage receipts show two completed 66-second legs, 10:34:02–10:35:08 UTC,
+  priced 0.00495000 and 0.00462000 account currency units. Currency is omitted;
+  using the same M1 EUR inference/reference gives approximately USD0.0651 combined,
+  not a settled invoice.
+- Root causes reproduced independently of audio: Vonage's signed `from` uses
+  international digits without `+`, while the fixture index uses E.164; lookup
+  returned unknown. Also, real bounded quotations returned HTTP400
+  `business_id_required`: this Firebase account sees two businesses and the
+  engine client did not forward the server's supported explicit selection.
+- Repairs: canonicalize the signed carrier representation before lookup; test
+  actual matched recognition and two facts with a digits-only callback. Forward
+  the saved `SMS_BUSINESS_ID` on quote and execute, verify quoted business and
+  include the setting in client policy fingerprints. A free validated quotation
+  now checks account/business/model readiness before carrier admission. Error
+  evidence retains safe exception type and lookup outcome/count, not content.
+- Independent repair review: **APPROVED locally**, 23 focused tests passed.
+  Explicit billing selection in the isolated profile is the owner's named
+  `Demo Convesazione Smart Dati Clienti` business; no server/business variables
+  or production settings were changed. Both visible businesses were checked
+  read-only and have **zero CALLCREDIT**. A real corrected diagnostic passed
+  Firebase refresh, quotation and recognition (two permitted facts), then the
+  server refused execution with **HTTP402 insufficient credits**. Its durable
+  USD0.055 engine hold remains; do not refund/reset it manually.
+- Final post-repair verification: **214 passed** (129 voice, including actual cs
+  CLI authentication, plus 85 adjacent chat/prompt/tool/budget/OpenRouter cases).
+  Whole-engine Ruff and changed voice-file formatting pass; the mechanical docs
+  gate is clean. No whole-engine test/format cleanup was attempted.
+- Final independent review: **APPROVED for the local repaired implementation**;
+  complete M3 is **NOT APPROVED**, because integrated live acceptance has not passed.
+  The reviewer checked the final code/tests and truthful documentation boundaries.
+- Live M3 remains incomplete. The original two voice attempts are both closed,
+  with USD2 retained, and the two-attempt admission ceiling is unchanged. The
+  user's spending authorization is recorded above; their separate instruction
+  to preserve existing limits remains in effect. A repeat needs a funded MrCall
+  account and explicit authorization for another attempt. Do not switch billing
+  provider, create production credits, reset the ledger, or call this M3 accepted.
+  Services remain active without automatic expiry, and `/healthz` reports calls
+  unavailable while the allowance is exhausted. M4 is unstarted.
 
 ### M2 — 2026-09-24
 

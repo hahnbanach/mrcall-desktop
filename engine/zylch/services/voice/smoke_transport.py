@@ -99,7 +99,7 @@ class LiveTransport:
         )
         return response.status_code == 200
 
-    async def accept(self, session_id: str) -> bool:
+    async def accept(self, session_id: str, instructions: str | None = None) -> bool:
         return await self.control(
             session_id,
             "accept",
@@ -109,9 +109,13 @@ class LiveTransport:
                     "model": "gpt-live-1",
                     "store": False,
                     "instructions": (
-                        "This is an isolated telephone test, not a real customer-service agent. "
-                        "Greet the caller. For the test fact, delegate to the client and wait "
-                        "for its result. Keep listening while it works."
+                        instructions
+                        if instructions is not None
+                        else (
+                            "This is an isolated telephone test, not a real customer-service agent. "
+                            "Greet the caller. For the test fact, delegate to the client and wait "
+                            "for its result. Keep listening while it works."
+                        )
                     ),
                     "audio": {"output": {"voice": "marin"}},
                     "delegation": {"type": "client"},

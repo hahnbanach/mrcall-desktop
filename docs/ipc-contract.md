@@ -17,11 +17,14 @@ The existing authenticated owner WebSocket exposes `voice.config.get()` and
 cs-kernel's `cs rpc` client. Responses contain the binding, revision,
 `binding_valid` and settings; credentials and the company memory key are never
 returned. Updates replace the complete configuration with revision checking.
-`voice.status()` distinguishes `configured_enabled` from `calls_available: false`
-and `runtime: "not_integrated"`. No provider route or M1 ledger is changed.
+`voice.status()` distinguishes `configured_enabled` from current `calls_available`.
+The opt-in M3 daemon reports `runtime: "engine_listener"`; ordinary daemons report
+`runtime: "not_integrated"` and cannot receive voice calls. Availability considers
+current configuration, call allowance and engine budget. Configuration updates do
+not reset the M1 ledger or expand its original admission limits.
 Schema, errors, selected sentence permissions and operator examples:
 [voice configuration contract](../engine/docs/features/voice-agent-configuration.md).
-Telephone runtime integration remains M3.
+The isolated telephone runtime is described in the configuration contract.
 
 ## Transports
 

@@ -72,7 +72,12 @@ def add_vonage_routes(app: web.Application, runtime) -> None:
         if not isinstance(carrier_id, str) or not re.fullmatch(r"[A-Za-z0-9-]{1,100}", carrier_id):
             return web.Response(status=422)
         token = secrets.token_urlsafe(32)
+        prepared = None
         try:
+            if hasattr(runtime, "prepare_carrier"):
+                prepared = await runtime.prepare_carrier()
+                if prepared is None:
+                    return web.json_response([])
             available = runtime.ledger.reserve_carrier(
                 carrier_id,
                 hashlib.sha256(token.encode()).hexdigest(),
@@ -83,6 +88,10 @@ def add_vonage_routes(app: web.Application, runtime) -> None:
         logger.debug("[voice-smoke] Vonage answer available=%s", available)
         if not available:
             return web.json_response([])
+        duration = config.duration_seconds
+        if prepared is not None:
+            runtime.carrier_reserved(hashlib.sha256(token.encode()).hexdigest(), payload, prepared)
+            duration = min(duration, prepared[0].config.limits.duration_seconds)
         # Never accept caller-provided destinations or forward caller metadata.
         uri = f"sip:{config.project_id}@sip.api.openai.com;transport=tls;media=srtp"
         return web.json_response(
@@ -90,7 +99,7 @@ def add_vonage_routes(app: web.Application, runtime) -> None:
                 {
                     "action": "connect",
                     "timeout": 15,
-                    "limit": config.duration_seconds,
+                    "limit": duration,
                     "endpoint": [
                         {"type": "sip", "uri": uri, "headers": {"Mrcall-Smoke-Attempt": token}}
                     ],

@@ -15,8 +15,16 @@ approved. Local failure-path tests cover admission, closure, restart and secret
 logging. M2 adds authenticated operator configuration through `cs rpc`, immutable
 snapshots and read-only retrieval restricted to selected customer sentences.
 The isolated fixture and real Firebase/client demonstration pass; independent M2
-integration review is approved. Connection to the telephone runtime remains M3 and needs a
-new go-ahead; no production number is connected. See the
+integration review is approved. Authorized M3 now connects the isolated engine
+listener to selected memory and a per-call customer-service agent. Deterministic
+conversation/lifecycle tests and independent local activation review pass; the
+dedicated service has cold-started with its own encrypted Firebase refresh token.
+The first integrated call failed (carrier-number normalization and missing billing
+business selection); both defects are repaired and independently reviewed locally.
+A corrected real diagnostic now reaches the selected MrCall business but receives
+HTTP402: both visible businesses have zero CALLCREDIT. The unchanged two-call
+allowance is exhausted; a funded, authorized retest is needed for M3 acceptance.
+M4 is unstarted. No production number is connected. See the
 [smoke guide](features/gpt-live-smoke.md),
 [configuration contract](features/voice-agent-configuration.md) and milestone plan.
 

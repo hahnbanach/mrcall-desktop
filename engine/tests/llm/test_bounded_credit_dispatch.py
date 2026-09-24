@@ -107,12 +107,15 @@ def test_factory_and_status_use_saved_proxy_endpoint(ledger, tmp_path, monkeypat
     from zylch.config import settings
     from zylch.llm.client import make_llm_client
     from zylch.rpc.usage_queries import _credit_client
-    tmp_path.joinpath('.env').write_text('LLM_PROVIDER=mrcall\nMRCALL_PROXY_URL=https://saved.example.test\n')
+    tmp_path.joinpath('.env').write_text('LLM_PROVIDER=mrcall\nMRCALL_PROXY_URL=https://saved.example.test\nSMS_BUSINESS_ID=saved-business\n')
     monkeypatch.setenv('ZYLCH_PROFILE_DIR', str(tmp_path))
     monkeypatch.setenv('MRCALL_PROXY_URL', 'https://ambient.example.test')
+    monkeypatch.setenv('SMS_BUSINESS_ID', 'ambient-business')
     monkeypatch.setattr(settings, 'mrcall_proxy_url', 'https://startup.example.test')
     monkeypatch.setattr(auth, 'get_session', lambda: SimpleNamespace(id_token='fake'))
-    assert make_llm_client()._client.base == 'https://saved.example.test'
+    client = make_llm_client()
+    assert client._client.base == 'https://saved.example.test'
+    assert client._client.business_id == 'saved-business'
     assert _credit_client().base == 'https://saved.example.test'
 
 
@@ -142,3 +145,48 @@ def test_reconciliation_can_advance_past_permanent_holds(ledger, monkeypatch):
     assert first['unresolved'] == 10 and first['next_cursor']
     second = reconcile(c._client, cursor=first['next_cursor'])
     assert second['recovered'] == 1 and second['next_cursor'] is None
+
+
+def test_selected_business_is_sent_on_quote_and_execute_and_cannot_drift(ledger):
+    from zylch.llm.bounded_proxy import wire_request
+
+    bodies = []
+    def handler(request):
+        body = json.loads(request.content)
+        bodies.append(body)
+        assert body["business_id"] == "selected-business"
+        if request.url.path.endswith("/quote"):
+            value = dict(protocol=PROTOCOL, currency="USD", account_id="account",
+                business_id="selected-business", payload_hash=digest(wire_request(body["request"])),
+                tariff_version="fixture", model=body["request"]["model"],
+                credit_value_micro_usd=1000, max_credits=1, max_debit_micro_usd=1000)
+            return httpx.Response(200, json=value | {"quote_hash":digest(value)})
+        receipt = {**body["quote"], "request_id":body["request_id"],
+            "authorized_max_debit_micro_usd":1000,"credits":1,"debit_micro_usd":1000}
+        return httpx.Response(200,json={"state":"settled","receipt":receipt,
+            "message":{"model":"claude-haiku-4-5","content":[{"type":"text","text":"ok"}],
+                "stop_reason":"end_turn","usage":{"input_tokens":5,"output_tokens":1}}})
+    c = LLMClient("proxy", firebase_session=SimpleNamespace(id_token="fake"),
+                  model="claude-haiku-4-5", billing_business_id="selected-business")
+    c._client.http = httpx.Client(transport=httpx.MockTransport(handler))
+    assert c.create_message_sync(**ARGS).content[0].text == "ok"
+    assert len(bodies) == 2
+    c._client._call = lambda *args: {"business_id":"wrong-business"}
+    with pytest.raises(BudgetError, match="business changed"):
+        c._client.quote({"model":"claude-haiku-4-5"})
+
+
+def test_saved_business_change_invalidates_existing_client(ledger, tmp_path, monkeypatch):
+    from zylch.auth import set_session, clear_session
+    from zylch.llm.client import make_llm_client
+    path = tmp_path / ".env"
+    path.write_text("LLM_PROVIDER=mrcall\nSMS_BUSINESS_ID=before\n")
+    monkeypatch.setenv("ZYLCH_PROFILE_DIR", str(tmp_path))
+    set_session(uid="account", email=None, id_token="fake", expires_at_ms=9999999999999)
+    try:
+        client = make_llm_client()
+        path.write_text("LLM_PROVIDER=mrcall\nSMS_BUSINESS_ID=after\n")
+        with pytest.raises(BudgetError, match="AI settings changed"):
+            client.create_message_sync(**ARGS)
+    finally:
+        clear_session()

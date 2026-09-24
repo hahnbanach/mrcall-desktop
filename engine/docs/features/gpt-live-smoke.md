@@ -10,7 +10,9 @@ Its webhook listens on **127.0.0.1 only**, at `/openai/live`, separately from
 the engine RPC daemon. It returns a fixed test fact on client delegation and
 does no company-memory or paid engine reasoning work. cs-operator is not used
 during calls. [M2 configuration and selected-fact retrieval](voice-agent-configuration.md)
-are separate components; M3 integration into calls is not implemented.
+are shared with the opt-in M3 engine listener described below. This M1 entry
+point retains its fixed-response behavior; integrated live acceptance is recorded
+in the milestone plan.
 
 The selected path is Vonage SIP → GPT-Live audio, with Python attached to the
 Live sideband. The isolated real-call demonstration verifies project access and
@@ -185,3 +187,14 @@ API basis checked 2026-09-23: [GPT-Live SIP](https://developers.openai.com/api/d
 [finalization](https://developers.openai.com/api/docs/guides/live-conversations).
 Carrier contracts: [Vonage NCCO](https://developer.vonage.com/en/voice/voice-api/ncco-reference)
 and [Voice webhooks](https://developer.vonage.com/en/voice/voice-api/webhook-reference).
+
+## M3 handoff
+
+The authorized M3 runner uses the same private profile directory and
+`voice-smoke.db`, preserving the original policy digest, paid rows and limits.
+`scripts/voice_engine_isolated.py` adds a separate `voice-engine.db`, controlled
+company memory and authenticated operator RPC. Its listener uses the M1 carrier
+admission/closure path with customer-service configuration and memory instead of
+the fixed fact. The original smoke entry point remains available for rollback;
+see [integrated configuration](voice-agent-configuration.md#integrated-isolated-daemon-m3).
+Both the dedicated smoke-named service and tunnel remain without automatic expiry.

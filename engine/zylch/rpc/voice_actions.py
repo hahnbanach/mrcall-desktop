@@ -16,16 +16,20 @@ async def config_update(params, notify):
 
 
 async def status(params, notify):
-    """voice.status() -> configuration state and M2 runtime boundary."""
+    """voice.status() -> configuration state and opt-in runtime availability."""
     saved = await asyncio.to_thread(agent_config.get_config)
+    import sys
+
+    listener = sys.modules.get("zylch.services.voice.listener")
+    runtime = getattr(listener, "active_runtime", None)
     return {
         "owner_uid": saved["owner_uid"],
         "space_id": saved["space_id"],
         "revision": saved["revision"],
         "binding_valid": saved["binding_valid"],
         "configured_enabled": saved["config"]["enabled"],
-        "runtime": "not_integrated",
-        "calls_available": False,
+        "runtime": "engine_listener" if runtime else "not_integrated",
+        "calls_available": await runtime.available() if runtime else False,
     }
 
 

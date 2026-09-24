@@ -130,12 +130,16 @@ class ZylchAIAgent(BaseConversationalAgent):
     Single-agent architecture with native function calling via Anthropic SDK.
     """
 
+    customer_service_instructions: Optional[str] = None
+
     def __init__(
         self,
         tools: List[Tool],
         model_selector: Optional[ModelSelector] = None,
         max_tokens: int = 4096,
         triggered_instructions: Optional[List[str]] = None,
+        customer_service_instructions: Optional[str] = None,
+        client: Optional[LLMClient] = None,
     ):
         """Initialize Zylch AI agent.
 
@@ -145,7 +149,13 @@ class ZylchAIAgent(BaseConversationalAgent):
             max_tokens: Maximum tokens for response
             triggered_instructions: List of triggered instructions (optional, for prompt injection)
         """
-        self.client: LLMClient = make_llm_client()
+        if customer_service_instructions is not None:
+            from ..services.voice.caller_memory import CallerMemory
+
+            if any(not isinstance(tool, CallerMemory) for tool in tools):
+                raise ValueError("Customer service permits only selected caller memory")
+        self.customer_service_instructions = customer_service_instructions
+        self.client: LLMClient = client if client is not None else make_llm_client()
         self.tools = tools
         self.tool_map = {tool.name: tool for tool in tools}
         self.model_selector = model_selector or ModelSelector()
@@ -263,29 +273,32 @@ class ZylchAIAgent(BaseConversationalAgent):
         # same day/hour. The current date/time is injected into the user
         # message below, AFTER the cache breakpoint, so minute-granular
         # time updates don't invalidate the cached history.
-        system_prompt = get_system_prompt_base()
-        if context and context.get("current_business_id"):
-            system_prompt += f"\n\n**CURRENT SESSION:**\n✅ Selected MrCall Assistant: {context['current_business_id']}\nYou CAN save contacts directly to this assistant."
+        if self.customer_service_instructions is not None:
+            system_prompt = self.customer_service_instructions
+        else:
+            system_prompt = get_system_prompt_base()
+            if context and context.get("current_business_id"):
+                system_prompt += f"\n\n**CURRENT SESSION:**\n✅ Selected MrCall Assistant: {context['current_business_id']}\nYou CAN save contacts directly to this assistant."
 
-        # Inject user personal data / notes / secret instructions into the
-        # cached system block (Deliverable 2). These live in the profile
-        # .env and change rarely, so placing them inside the cached prefix
-        # keeps the cache valid across turns while still letting them
-        # steer every chat response.
-        owner_id_for_prefs = context.get("user_id") if context else None
-        personal_section = get_personal_data_section(owner_id=owner_id_for_prefs)
-        if personal_section:
-            system_prompt += f"\n\n**USER CONTEXT:**{personal_section}"
+            # Inject user personal data / notes / secret instructions into the
+            # cached system block (Deliverable 2). These live in the profile
+            # .env and change rarely, so placing them inside the cached prefix
+            # keeps the cache valid across turns while still letting them
+            # steer every chat response.
+            owner_id_for_prefs = context.get("user_id") if context else None
+            personal_section = get_personal_data_section(owner_id=owner_id_for_prefs)
+            if personal_section:
+                system_prompt += f"\n\n**USER CONTEXT:**{personal_section}"
 
-        # Inject triggered instructions (for prompt awareness - NOT for execution)
-        # Note: Trigger execution happens elsewhere (e.g., ChatService.execute_session_start_triggers)
-        # This just makes the AI aware of the triggers in case they're relevant during conversation
-        if self.triggered_instructions:
-            instructions_text = "\n".join(f"- {instr}" for instr in self.triggered_instructions)
-            system_prompt += f"\n\n**TRIGGERED INSTRUCTIONS (event-driven, for reference):**\n{instructions_text}"
-            logger.info(
-                f"Injected {len(self.triggered_instructions)} triggered instructions into system prompt"
-            )
+            # Inject triggered instructions (for prompt awareness - NOT for execution)
+            # Note: Trigger execution happens elsewhere (e.g., ChatService.execute_session_start_triggers)
+            # This just makes the AI aware of the triggers in case they're relevant during conversation
+            if self.triggered_instructions:
+                instructions_text = "\n".join(f"- {instr}" for instr in self.triggered_instructions)
+                system_prompt += f"\n\n**TRIGGERED INSTRUCTIONS (event-driven, for reference):**\n{instructions_text}"
+                logger.info(
+                    f"Injected {len(self.triggered_instructions)} triggered instructions into system prompt"
+                )
 
         # Wrap system as a single cached text block. Anthropic caches the
         # full prefix (tools + system) up to this marker, and the history
@@ -306,7 +319,7 @@ class ZylchAIAgent(BaseConversationalAgent):
             "\n\n[CURRENT DATE/TIME — "
             f"{now.strftime('%A, %B %d, %Y')}, {now.strftime('%H:%M')}]"
             "\n\n"
-            f"{get_channel_status_block()}"
+            f"{get_channel_status_block() if self.customer_service_instructions is None else ''}"
         )
 
         # Create message with tool support (with current date/time)
@@ -334,7 +347,9 @@ class ZylchAIAgent(BaseConversationalAgent):
         step = 0
         while response.stop_reason == "tool_use":
             if step >= 10:
-                raise RuntimeError("Chat stopped after 10 tool rounds. Review progress before continuing.")
+                raise RuntimeError(
+                    "Chat stopped after 10 tool rounds. Review progress before continuing."
+                )
             step += 1
             logger.debug(
                 f"[chat turn={turn_id} step={step}] tool_use stop_reason"
@@ -498,9 +513,11 @@ class ZylchAIAgent(BaseConversationalAgent):
                     f"[chat turn={tid} step={step}] tool={tool_name}"
                     f" input_keys={input_keys} status=executing"
                 )
-                logger.debug(
-                    f"[chat turn={tid} step={step}] tool={tool_name}" f" full_input={tool_input}"
-                )
+                if self.customer_service_instructions is None:
+                    logger.debug(
+                        f"[chat turn={tid} step={step}] tool={tool_name}"
+                        f" full_input={tool_input}"
+                    )
 
                 # Origin policy wins before an approval request. A previous
                 # approval, or a client willing to approve now, cannot widen a
@@ -642,7 +659,8 @@ class ZylchAIAgent(BaseConversationalAgent):
                         f" (budget {TOOL_RESULT_MAX_CHARS})"
                     )
                     self.last_truncations.append(cut)
-                logger.debug(f"Formatted tool result sent to agent:\n{formatted_result}")
+                if self.customer_service_instructions is None:
+                    logger.debug(f"Formatted tool result sent to agent:\n{formatted_result}")
 
                 results.append(
                     {"type": "tool_result", "tool_use_id": block.id, "content": formatted_result}

@@ -106,6 +106,6 @@ def policy_fingerprint(values=None):
     values = profile_values() if values is None else values
     keys = (*ROLES, "LLM_PROVIDER", "LLM_MODEL_PRESET", "ANTHROPIC_MODEL",
             "MRCALL_CREDITS_MODEL", "OPENROUTER_MODEL", "DEFAULT_MODEL",
-            "ANTHROPIC_API_KEY", "OPENROUTER_API_KEY", "MRCALL_PROXY_URL")
+            "ANTHROPIC_API_KEY", "OPENROUTER_API_KEY", "MRCALL_PROXY_URL", "SMS_BUSINESS_ID")
     selected = {key: values.get(key) for key in keys}
     return hashlib.sha256(json.dumps(selected, sort_keys=True).encode()).digest()

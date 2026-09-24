@@ -1,9 +1,10 @@
-# Voice agent configuration and selected caller memory (M2)
+# Voice agent configuration and memory-backed calls (M2–M3)
 
 <!-- doc-scope:start -->
 Scope: authenticated operator configuration, immutable snapshots and read-only
-selected-fact retrieval delivered in M2. Telephone/agent orchestration belongs
-to M3; M1's isolated smoke and durable ledger remain independent.
+selected-fact retrieval from M2 and the opt-in M3 engine listener. The isolated
+listener reuses M1's durable admission and closure ledger. Live M3 acceptance
+is recorded in the milestone plan; M4 is separate.
 <!-- doc-scope:end -->
 
 cs-operator configures the agent through the existing **`cs rpc`** command in its
@@ -63,10 +64,11 @@ settings. No company-memory or schema rollback is needed.
 ## Snapshot and retrieval contract
 
 `snapshot_for_call(called_number)` returns immutable settings for an enabled,
-matching number. Updates affect later snapshots. This is the M3 integration
-seam: **M2 does not attach these settings to M1 phone calls**. `voice.status`
-reports `configured_enabled` separately from `calls_available: false` and
-`runtime: "not_integrated"`.
+matching number. The integrated listener loads this snapshot before emitting the
+carrier connection NCCO; updates affect subsequent calls. `voice.status` reports
+`configured_enabled` separately from current `calls_available`. `runtime` is
+`engine_listener` only inside the opted-in daemon, otherwise `not_integrated`.
+The standalone M1 smoke still uses its fixed test response.
 
 `CallerMemory(snapshot, caller_number)` is a read-only `Tool`. The adapter supplies
 the phone; model arguments accept only an optional `query`. Initial retrieval and
@@ -95,10 +97,11 @@ controlled fixture permission, not a general caller authorization system.
 ## Limits and verification
 
 Settings default to 120 seconds, two calls and USD2, with validation ceilings of
-180 seconds, six calls and USD5. They are future admission settings, **not a new
-ledger**. M1 independently enforces its existing saved limits and reservations;
-M2 updates neither increase nor reset that allowance. There is no service expiry.
-M3 must combine settings with durable admission before enabling calls.
+180 seconds, six calls and USD5. The integrated listener intersects these settings
+with M1's saved duration, call count and retained reservations. Configuration can
+restrict but cannot increase or reset the original allowance. Engine requests use
+the existing profile LLM budget and selected provider; voice/carrier reservations
+remain separate. There is no service expiry.
 
 From `engine/`, using the voice-extra test environment:
 
@@ -130,3 +133,69 @@ Memory is synthetic/temporary. No personal profile is activated, token persisted
 paid call/model invoked, or service/number changed. The report proves M2 only;
 conversation and live memory audio acceptance remain in M3/M4 under the
 [milestone plan](../../../docs/execution-plans/2026-09-23-gpt-live-engine-integration.md).
+
+## Integrated isolated daemon (M3)
+
+`engine/scripts/voice_engine_isolated.py` takes an explicit `--profile-dir`,
+`--port` (provider HTTP, default 8787) and `--rpc-port` (authenticated WebSocket,
+default 8788). It requires the UID-matching `VOICE_ENGINE_ISOLATED_PROFILE` and
+M1 test markers, an existing `voice-engine.db`, isolated company memory and no
+ordinary populated profile database. It scrubs ambient configuration before
+importing engine settings, holds the profile lock and runs `serve_ws` with an
+opt-in listener and automatic channels disabled. Never invoke the normal CLI
+against a personal UID to start this experiment.
+
+The source-only `scripts/voice_m3_provision.py` creates the frozen M2 synthetic
+facts in that private skeleton. It binds the caller from the completed authorized
+M1 carrier receipt, creates a separate company store, persists membership through
+`memory.join`, and stores a freshly minted Firebase refresh token encrypted through
+the existing OAuth table. Credentials are supplied by private file references;
+ID tokens travel in anonymous pipes and memory only. It refuses an existing
+fixture instead of replacing data. It does not alter the original smoke ledger.
+
+Before listening and before each carrier admission, memory/configuration and the
+engine client are prepared off the event loop. MrCall uses `ensure_fresh_session`
+with the isolated encrypted refresh token even when automatic preparation is off.
+A free validated bounded quotation also checks account/business/model compatibility.
+The selected saved `SMS_BUSINESS_ID` is forwarded on quotation and execution for
+accounts with multiple businesses; a quote for another business is refused.
+Quotation does not guarantee a funded credit balance: paid execution may still
+refuse insufficient credits. Missing/expired credentials, failed refresh/quotation,
+disabled configuration, exhausted engine budget or exhausted call allowance
+refuse admission. Personal-key clients
+use the saved provider/key without fallback; remote authentication of alternate
+providers has not been demonstrated. `/healthz` reports only runtime availability,
+allowing cold-start readiness checks before connecting an operator client.
+
+Only the signed Vonage callback supplies caller recognition metadata. International
+digits without a `+` are canonicalized at this carrier boundary. The number stays
+in memory behind the one-use carrier nonce; arbitrary SIP `From` metadata is ignored.
+The greeting can start before caller lookup completes. Selected late context uses
+quiet `session.thinking.append`; delegated answers use `session.commentary.append`.
+Append content is split without loss within a conservative 480-byte bound, below
+the provider's 500-token limit. Official contracts:
+[delegation](https://developers.openai.com/api/docs/guides/live-delegation) and
+[transcripts](https://developers.openai.com/api/docs/guides/live-conversations).
+
+Each call owns one customer-service agent using the existing LLM/tool loop and
+budget admission. It gets only configured instructions and `CallerMemory`; owner
+persona, preferences, channel status, triggers, slash routing and general tools
+are excluded. Transcript fragments accumulate without dispatch. Delegation starts
+one request; new input while it runs triggers reconciliation before delivery.
+Actual spoken transcript distinguishes a draft from an answer already said, so
+corrections can explicitly rectify stale speech. Both spoken correction quality
+and duplex still require listening to the real call.
+
+Hangup, deadline and daemon shutdown cancel asynchronous work and suppress late
+results. A dispatched blocking LLM request may finish and settle in its original
+worker; uncertain outcomes retain their normal durable hold. It cannot resume the
+agent tool loop after cancellation. The call ledger records counts, revision,
+lookup timing and failures, never raw transcript/facts or a false zero engine cost;
+engine charges remain in the profile's existing LLM ledger. Shutdown allows the
+executor to drain; forced termination still retains unresolved reservations.
+
+Current live acceptance is **failed/pending retest**, not complete: the first
+integrated call exposed carrier-number and billing-business defects now repaired.
+Corrected headless preparation and selected-fact reads succeed, but paid MrCall
+reasoning is refused for insufficient credits. See the plan for exact evidence,
+retained reservations and the unchanged exhausted call allowance.
