@@ -227,15 +227,24 @@ the provider's 500-token limit. Official contracts:
 [delegation](https://developers.openai.com/api/docs/guides/live-delegation) and
 [transcripts](https://developers.openai.com/api/docs/guides/live-conversations).
 
+At attachment, initial lookup loads all selected, still-authorized facts for the
+recognized caller asynchronously, independently of the greeting. The voice may
+answer directly from that verified context; it delegates missing information or
+additional work. It must distinguish stored history from a current external check,
+avoid technical handoff narration and never announce loaded facts unsolicited.
+This does not expand caller permissions or load unselected/internal facts.
+
 Each call owns one customer-service agent using the existing LLM/tool loop and
 budget admission. It gets only configured instructions and `CallerMemory`; owner
 persona, preferences, channel status, triggers, slash routing and general tools
 are excluded. Transcript fragments accumulate without dispatch. Delegation starts
 one request. Each run snapshots transcript text and both caller/voice revision
 counters before awaiting work. New input or voice output while it runs triggers
-reconciliation before delivery. A voice-specific subclass checks revisions before
-each tool execution and model dispatch. In-flight paid requests finish through
-normal accounting; at the next boundary an obsolete loop stops, its incomplete
+reconciliation before delivery. A voice-specific subclass checks the caller revision before
+each tool execution and model dispatch. Voice progress alone does not abort a
+lookup or discard its result; both caller and voice revisions still fence final
+answers and every delegated-answer append. In-flight paid requests finish through
+normal accounting; at the next boundary an obsolete caller task stops, its incomplete
 history is removed and the latest transcript is processed serially. Previously
 completed history is retained. No backend request is dispatched in parallel.
 The backend returns exactly
@@ -245,11 +254,11 @@ append. Partial, incorrect answers and new questions still require useful replie
 Every delegated-answer append fragment checks both revisions and closure. New speech
 can postpone delivery while reconciliation runs; live latency remains an M4
 acceptance criterion. Transcript events describe provider output, not proof of
-handset playback. M4 listening confirms spoken correction on both controller
-versions. A subsequent backend-focused phone call exposes late greeting and no
-useful answer before hangup, with diagnostic delays and obsolete work still active.
-The greeting/boundary/fallback corrections require a new phone demonstration;
-local tests and real backend replay do not establish live acceptance.
+handset playback. Live listening confirms spoken correction and one reconciled
+backend/tool answer delivered through voice, but a later day follow-up remains
+unanswered. The latest caller-only intermediate checks and direct-context policy
+still need a phone retest for useful continuity. Final voice-aware reconciliation
+can still require another agent run; it must preserve completed lookup work.
 
 Hangup, deadline and daemon shutdown cancel asynchronous work and suppress late
 results. A dispatched blocking LLM request may finish and settle in its original

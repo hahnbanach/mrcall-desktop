@@ -339,15 +339,15 @@ APPROVED; fresh plan amendment review also APPROVED. Existing M1–M3 approvals 
 
 | M4 criterion | Evidence/state |
 | --- | --- |
-| Cold start without operator/Desktop | Fourth call performs autonomous GPT-6/tool work after cold start before RPC, but closes without useful answer; complete backend conversation remains open |
+| Cold start without operator/Desktop | Fifth call after cold restart delivers a corrected GPT-6/tool answer through voice; later day follow-up remains unanswered |
 | Configuration changes from next call | Actual authenticated kernel client changed revision 1→2; second call speaks the new greeting |
-| Greeting before delayed lookup | First call positive. Fourth call reports delayed greeting; transcript starts at provider 6,200 ms after lookup. Explicit greeting fix needs retest |
-| Blue filters / Thursday / follow-up / missing facts | First M4 call recalls both historical facts, caller positive; backend follow-up/correction pending |
+| Greeting before delayed lookup | Fifth call greeting starts at provider 1,000 ms with zero diagnostic delay; greeting under deliberately delayed lookup still needs retest |
+| Blue filters / Thursday / follow-up / missing facts | Both historical facts recalled in early calls; fifth call delivers corrected backend blue-filter answer with new lookup, but day follow-up is unanswered |
 | Unknown / ambiguous identity | Pending explicit scenario evidence |
-| Correction during backend work / speech | Spoken corrections pass in calls 2/3. Fourth call exercises correction during backend work but fails useful completion while obsolete work continues. Phone retest of boundary/greeting fix 293c524 remains pending |
+| Correction during backend work / speech | Calls 2/3 handle spoken corrections. Fifth call delivers a corrected backend answer, but voice-progress invalidations stall the day follow-up. Retest of b89c052/natural configuration remains pending |
 | Internal / other-customer exclusion | Existing local boundary tests; M4 call pending |
 | Lookup failure / forced close / no late output | Local failure/closure/suppression tests pass; real backend lookup-error passes; live phone scenarios pending |
-| Latency / costs / continuity | Three positive calls; fourth backend-focused call fails useful-response continuity. Normal-delay retest and exceptional scenarios pending |
+| Latency / costs / continuity | Fifth call has one backend answer but day-follow-up continuity fails; voice-progress fix/natural-context retest and exceptional scenarios pending |
 | Independent final end-to-end review | REVISE: diagnostic implementation has no new blocker; full live criteria remain open |
 
 ## Verification and review record
@@ -550,6 +550,58 @@ APPROVED; fresh plan amendment review also APPROVED. Existing M1–M3 approvals 
   Separately rerun greeting with deliberately delayed lookup: disabling that delay
   cannot establish the delayed-lookup criterion. Exceptional phone scenarios and
   delivery of the reconciled backend response remain open.
+
+
+- Fifth real M4 call, 15:40:05–15:41:02 UTC, revision 3, trace
+  `call-970acf505c234a8cae5ddfd8fb3186b8.db`, 669 complete events. Initial lookup
+  takes 145 ms; both blue/Thursday facts are sent as quiet context at 171 ms and
+  acknowledged at 1,190 ms. Greeting transcript starts at provider 1,000 ms
+  (arrival 967 ms from attachment). No injected delays. A corrected backend
+  answer about blue filters is appended at 27,556 ms, acknowledged and spoken.
+  This proves corrected backend/tool-to-voice delivery after cold start. The later
+  day question is unanswered before hangup; full continuity still fails.
+- Caller finds the repeated checking/listening wording awkward and requests that
+  available phone-linked information be loaded immediately. It already is, within
+  the selected-fact boundary. The special revision-3 configuration forced fresh
+  verification even when initial context answered the question. Restore direct
+  use of loaded authorized facts; delegate only missing information/additional
+  work and avoid narrating handoffs or listening. Do not expand access merely
+  because a phone number matches.
+- Fifth-call diagnostics show nine agent runs and seven reconciliations. Runs
+  1/5/6/8 stop at a tool boundary solely because voice progress changed, although
+  caller revision is unchanged. A new regression fails on the prior controller:
+  its acknowledgement discards the required lookup. The correction invalidates
+  intermediate work only for caller changes; both revisions still fence final
+  delivery, including the silent decision and each commentary fragment. Useful
+  tool results survive the agent's own progress. Independent activation review
+  APPROVED with 48 tests. Real backend-only replay completes the Thursday answer
+  in 6,656 ms, three serial Responses requests, trace
+  `call-fadfdc82a5264eeba23a115418d9d2ed.db`. Phone acceptance remains open.
+- Fifth-call voice usage: 55 seconds, estimated USD0.045834. Both carrier legs
+  complete at 57 seconds, total price 0.00427500 + 0.00399000 = 0.00826500 account
+  units, currency omitted. After call and replay, 49 GPT-6 requests settle at
+  USD0.113170; no unresolved OpenAI hold. Historical proxy holds remain USD0.110.
+- Activated `b89c052` after **225 passed** voice/kernel/budget tests, source/voice
+  Ruff, changed-file Black and diff checks. Actual authenticated kernel `cs rpc`
+  changed configuration revision 3→4, instructions only: restored the earlier
+  greeting/base policy and explicitly allows immediate use of loaded selected
+  facts, delegation for missing information/work, no technical handoff narration.
+  Private revision-3 backup retained; token only in memory/pipes and temporary
+  operator workspace removed. This implements the user's request without changing
+  the frozen fixture or widening phone recognition permissions.
+- Restarted only idle smoke, PID 2417148, with available/unlimited health before
+  further RPC. Tunnel PID 1903954, infinite service lifetimes, capture enabled
+  and zero injected delays remain unchanged. Eight closed voice rows hash-match
+  `M4-natural-prestart.json`; USD8 voice holds remain. No phone call has yet
+  verified the new natural-context configuration.
+- Final independent review of the fifth trace, new controller and replay passes
+  15 tests: APPROVED for isolated retest, REVISE for M4 completion. No new
+  implementation blocker. Verify revision-4 natural answers, completed day
+  follow-up, no repetition and no discarded lookup/tool rounds caused solely by
+  voice progress. Delayed-lookup
+  greeting and exceptional caller/failure/closure scenarios remain open. Also
+  verify precise missing-data wording: the fifth answer's broad claim of no other
+  order details is misleading when the selected Thursday agreement is available.
 
 ### M3 — 2026-09-24
 

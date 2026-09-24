@@ -17,23 +17,25 @@ Calls run without cs-operator or an operator RPC session. MrCall CALLCREDIT is
 not a dependency of this explicitly selected test backend.
 
 M4 is active with private correlated traces and no raw audio/hidden reasoning.
-Three calls have positive listening feedback, including memory recall and natural
-interruptions. The fourth, backend-focused call exposes late greeting and silence
-after correction: no useful backend answer before hangup. It proves autonomous
-GPT-6 dispatch after cold start, not successful response delivery. The old M3 cause
-remains unknowable without its missing transcript/audio.
+Three calls have positive listening feedback. The fourth exposes late greeting
+and no useful backend answer; the fifth confirms greeting at provider 1 second
+and a corrected backend answer about blue filters, but its day follow-up remains
+unanswered. Both facts were already loaded in 145 ms. Forced verification and
+voice-progress invalidations caused unnecessary work. The old M3 cause remains
+unknowable without its missing transcript/audio.
 
-Corrections now request a greeting explicitly at session start, stop superseded
-agent loops before another tool/model dispatch, and return pinned selected facts
-with a labeled fallback when query language produces no lexical match. Prior
-completed history and financial accounting survive. A real GPT-6 replay returns
-the corrected blue/Thursday answer with serial requests; phone acceptance is still
-open. Saved revision 3 requests backend verification for business questions.
-Correction `293c524` is active after an idle restart; diagnostic delays are zero
-and trace capture stays on. Local independent review and 224 voice/kernel/budget
-tests pass. The normal phone retest remains pending.
-The existing no-response decision prevents repeating an already-completed answer;
-its live race demonstration and exceptional scenarios remain open. Calls remain
+Greeting is explicitly requested at session start. Caller corrections stop obsolete
+tool/model rounds; voice progress preserves useful lookup work, while both caller
+and voice revisions fence final delivery. A labeled lexical-miss fallback remains
+limited to pinned selected facts. Real backend replay returns Thursday in 6.656
+seconds with three serial requests; independent activation review passes 48 tests.
+The user requests immediate use of available caller information: initial loading
+already supplies all authorized selected facts, and voice instructions now allow
+direct answers with no repeated check or technical handoff narration. Configuration
+revision 4 and correction `b89c052` are active; 225 voice/kernel/budget tests pass.
+Natural-context phone verification remains pending. Diagnostic delays are zero;
+capture stays on. Full continuity, exceptional scenarios and delayed-lookup greeting
+remain open. Calls remain
 isolated with all local experiment ceilings removed; ledger history, accounting
 and provider constraints are preserved. Service and tunnel have no expiry. See
 [configuration and diagnostics](features/voice-agent-configuration.md),
