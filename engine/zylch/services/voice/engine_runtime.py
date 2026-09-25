@@ -8,7 +8,7 @@ from dataclasses import dataclass
 from .agent_config import snapshot_for_call
 from .caller_memory import CallerMemory
 from .conversation import Conversation, VOICE_RULES
-from .preparation import prepare_client
+from .preparation import prepare_call
 from .diagnostics import CallTrace, DiagnosticOptions
 from .smoke_runtime import Call, SmokeRuntime
 from .smoke_transport import carrier_token_hash
@@ -19,7 +19,6 @@ logger = logging.getLogger(__name__)
 @dataclass(repr=False)
 class PreparedCall:
     snapshot: object
-    client: object
     caller: str | None
 
 
@@ -52,11 +51,9 @@ class EngineVoiceRuntime(SmokeRuntime):
         if not self.ready or self.stopping or self.call or self.pending:
             return False
         try:
-            from zylch.llm.budget import budget_snapshot
-
             snapshot = await asyncio.to_thread(snapshot_for_call, self.config.test_number)
-            budget = await asyncio.to_thread(budget_snapshot, snapshot.binding.owner_uid)
-            return self._within_limits(snapshot) and not budget["paused"]
+            await prepare_call(snapshot)
+            return self._within_limits(snapshot)
         except Exception:
             return False
 
@@ -71,17 +68,17 @@ class EngineVoiceRuntime(SmokeRuntime):
                 snapshot = await asyncio.to_thread(snapshot_for_call, self.config.test_number)
                 if not self._within_limits(snapshot):
                     return None
-                client = await prepare_client(snapshot)
+                await prepare_call(snapshot)
                 if self.stopping:
                     return None
                 self.ready = True
-                return snapshot, client
+                return (snapshot,)
             except Exception:
                 logger.debug("[voice] admission unavailable during preparation")
                 return None
 
     def carrier_reserved(self, token_hash, payload, prepared):
-        snapshot, client = prepared
+        snapshot = prepared[0]
         # The verified carrier callback, never an unbound SIP From or model
         # argument, supplies recognition metadata. It is not proof of identity.
         caller = payload.get("from")
@@ -91,7 +88,7 @@ class EngineVoiceRuntime(SmokeRuntime):
             # Vonage answer callbacks use international digits without '+'.
             # Canonicalize this carrier representation at its trusted boundary.
             caller = "+" + caller
-        self.pending[token_hash] = PreparedCall(snapshot, client, caller)
+        self.pending[token_hash] = PreparedCall(snapshot, caller)
 
     def incoming(self, event):
         digest = carrier_token_hash(event)
@@ -116,10 +113,9 @@ class EngineVoiceRuntime(SmokeRuntime):
         )
         call.evidence.update(
             config_revision=prepared.snapshot.revision,
-            engine_model=prepared.client.model,
-            engine_transport=prepared.client.transport,
-            engine_cost_microusd=None,
-            engine_accounting="profile durable LLM ledger; dispatched holds survive closure",
+            conversational_model="gpt-live-1",
+            delegated_engine_model=None,
+            engine_accounting="no telephone backend LLM dispatch",
         )
         return call
 
@@ -143,6 +139,13 @@ class EngineVoiceRuntime(SmokeRuntime):
 
         async def send(raw):
             if call.allow_results and not call.stopped.is_set():
+                conversation = call.conversation
+                if (
+                    conversation
+                    and conversation.send_guard_revision is not None
+                    and conversation.send_guard_revision != conversation.revision
+                ):
+                    return False
                 await ws.send(raw)
             else:
                 raise RuntimeError("Call closed before append")
@@ -150,7 +153,6 @@ class EngineVoiceRuntime(SmokeRuntime):
         call.conversation = Conversation(
             prepared.snapshot,
             memory,
-            prepared.client,
             send,
             call.evidence,
             unlimited=self.config.unlimited,

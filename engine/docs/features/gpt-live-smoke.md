@@ -214,13 +214,13 @@ imposes its own default/maximum of 7,200 seconds (see the linked NCCO reference)
 External provider credits and service limits still apply. No ledger reset is needed.
 
 
-For the current M3 test, `VOICE_ENGINE_PROVIDER=openai` explicitly chooses the
-same dedicated OpenAI project/key for backend `gpt-6-sol`; `gpt-live-1` remains
-the voice model. This isolated override supersedes the historical MrCall backend
-choice without changing the original smoke policy hash or ledger. GPT-6 uses
-Responses and the existing paid engine dispatch; real inference/tool verification
-is recorded in the plan. Health/model discovery alone does not certify inference.
-See [direct backend configuration](voice-agent-configuration.md#dedicated-gpt-6-backend-for-this-experiment).
+M3 historically used a dedicated GPT-6 backend. The current M4 listener uses
+GPT-Live as its only conversational model and routes enabled fresh-data
+delegations through direct engine functions; the saved old
+`VOICE_ENGINE_PROVIDER` value has no telephone effect. The old usage rows and
+unsettled historical proxy holds remain intact. See
+[current integrated configuration](voice-agent-configuration.md#current-telephone-runtime-gpt-live-with-selected-context-m4)
+and the active milestone plan for verified behavior and open acceptance criteria.
 
 
 ## Restoring the isolated transient service

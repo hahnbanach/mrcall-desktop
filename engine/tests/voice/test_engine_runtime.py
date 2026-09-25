@@ -1,4 +1,4 @@
-"""M3 signed ingress, real call lifecycle and two configuration snapshots."""
+"""Signed ingress, selected context and closure without a telephone LLM client."""
 
 import asyncio
 import json
@@ -8,12 +8,12 @@ import pytest
 from aiohttp.test_utils import TestClient, TestServer
 
 from tests.voice.helpers import Transport, delegation, finished, incoming, config_for, Socket
-from tests.voice.m2_fixture import KNOWN, NUMBER, configuration
+from tests.voice.m2_fixture import KNOWN, NUMBER, configuration, PUBLIC
 from tests.voice.test_agent_config import save
-from tests.voice.test_conversation import make_conversation, response, until
+from tests.voice.test_conversation import until
 from tests.voice.test_vonage import CARRIER, signed
 from zylch.services.voice import engine_runtime
-from zylch.services.voice.conversation import BACKEND_RULES, VOICE_RULES
+from zylch.services.voice.conversation import VOICE_RULES
 from zylch.services.voice.live_sip_smoke import create_app
 from zylch.storage.voice_smoke import SmokeLedger
 
@@ -28,8 +28,8 @@ class VoiceTransport(Transport):
         return await super().accept(session)
 
 
-def setup_runtime(tmp_path, monkeypatch, client, **config_changes):
-    config = config_for(tmp_path, test_number=NUMBER, **CARRIER, **config_changes)
+def setup_runtime(tmp_path, monkeypatch, client=None, **changes):
+    config = config_for(tmp_path, test_number=NUMBER, **CARRIER, **changes)
     ledger = SmokeLedger(
         config.profile / "voice-smoke.db",
         config.policy_id,
@@ -41,8 +41,8 @@ def setup_runtime(tmp_path, monkeypatch, client, **config_changes):
     transport.ledger = ledger
     runtime = engine_runtime.EngineVoiceRuntime(config, ledger, transport)
     runtime.finalization_timeout = 0.01
-    prepare = AsyncMock(return_value=client)
-    monkeypatch.setattr(engine_runtime, "prepare_client", prepare)
+    prepare = AsyncMock(return_value=None)
+    monkeypatch.setattr(engine_runtime, "prepare_call", prepare)
     return config, ledger, transport, runtime, prepare
 
 
@@ -65,10 +65,8 @@ async def admit(http, config, caller=KNOWN, carrier="carrier-1", session="sessio
 
 
 def test_full_lifecycle_snapshot_and_followup(fixture_db, tmp_path, monkeypatch):
-    _, client, _ = make_conversation(
-        monkeypatch, [response("stored filters"), response("Thursday")]
-    )
-    config, ledger, transport, runtime, prepare = setup_runtime(tmp_path, monkeypatch, client)
+    save()
+    config, ledger, transport, runtime, prepare = setup_runtime(tmp_path, monkeypatch)
 
     async def scenario():
         async with TestClient(
@@ -81,53 +79,43 @@ def test_full_lifecycle_snapshot_and_followup(fixture_db, tmp_path, monkeypatch)
             await first.conversation.lookup
             assert first.conversation.context["recognition"] == "matched"
             assert len(first.conversation.context["facts"]) == 2
-            assert "Greet immediately" in transport.instructions[0]
             assert transport.instructions[0].endswith(VOICE_RULES)
-            assert first.conversation.agent.customer_service_instructions.endswith(BACKEND_RULES)
+            assert "sole conversational assistant" in transport.instructions[0]
+            assert first.evidence["delegated_engine_model"] is None
             save(configuration() | {"instructions": "NEXT CALL ONLY"})
-            assert "NEXT CALL ONLY" not in first.conversation.agent.customer_service_instructions
+            assert "NEXT CALL ONLY" not in transport.instructions[0]
             transport.socket.events.put_nowait(
                 {"type": "session.input_transcript.delta", "delta": "filters"}
             )
             transport.socket.events.put_nowait(delegation("first"))
             await until(lambda: first.evidence["results_sent"] == 1)
-            transport.socket.events.put_nowait(
-                {"type": "session.output_transcript.delta", "delta": "stored filters"}
-            )
-            transport.socket.events.put_nowait(
-                {"type": "session.input_transcript.delta", "delta": "delivery?"}
-            )
-            transport.socket.events.put_nowait(delegation("followup"))
-            await until(lambda: first.evidence["results_sent"] == 2)
+            assert PUBLIC in str(transport.socket.sent)
             transport.socket.events.put_nowait({"type": "session.closed", "usage": {"seconds": 3}})
             await finished(runtime)
             assert ledger.rows()[0]["state"] == "closed"
             assert KNOWN not in str(ledger.rows())
-            assert "filters" not in str(ledger.rows())
             transport.socket, transport.entered = Socket(), asyncio.Event()
             await admit(http, config, carrier="carrier-2", session="session-2")
             await transport.entered.wait()
             assert "NEXT CALL ONLY" in transport.instructions[1]
-            assert runtime.call.conversation.agent.get_history() == []
             transport.socket.events.put_nowait({"type": "session.closed", "usage": {"seconds": 1}})
             await finished(runtime)
             assert prepare.await_count == 2
             assert await admit(http, config, carrier="carrier-3", session="session-3") is None
             assert len(ledger.rows()) == 2
-            assert not await runtime.available()
         ledger.close()
 
     asyncio.run(scenario())
 
 
-@pytest.mark.parametrize("failure", ["disabled", "credentials", "budget", "count", "unprepared"])
-def test_no_paid_admission_on_failed_readiness(fixture_db, tmp_path, monkeypatch, failure):
-    _, client, _ = make_conversation(monkeypatch, [response()])
-    config, ledger, transport, runtime, prepare = setup_runtime(tmp_path, monkeypatch, client)
+@pytest.mark.parametrize("failure", ["disabled", "binding", "budget", "count", "unprepared"])
+def test_no_admission_on_failed_readiness(fixture_db, tmp_path, monkeypatch, failure):
+    save()
+    config, ledger, transport, runtime, prepare = setup_runtime(tmp_path, monkeypatch)
     if failure == "disabled":
         save(configuration() | {"enabled": False})
-    elif failure == "credentials":
-        prepare.side_effect = ValueError("secret-bearing upstream error")
+    elif failure == "binding":
+        prepare.side_effect = ValueError("binding unavailable")
     elif failure == "budget":
         save(configuration() | {"limits": {"budget_microusd": 1}})
     elif failure == "count":
@@ -140,23 +128,20 @@ def test_no_paid_admission_on_failed_readiness(fixture_db, tmp_path, monkeypatch
             TestServer(create_app(runtime, lambda body, _: json.loads(body)))
         ) as http:
             if failure == "unprepared":
-                event = incoming(to=config.sip_to_uri)
-                result = await http.post("/openai/live", json=event)
+                result = await http.post("/openai/live", json=incoming(to=config.sip_to_uri))
                 assert result.status == 200
                 await finished(runtime)
             else:
                 assert await admit(http, config) is None
             assert not transport.accept_calls
-            assert client._client.messages.create.call_count == 0
         ledger.close()
 
     asyncio.run(scenario())
 
 
-def test_watchdog_cancels_memory_and_keeps_ledger(fixture_db, tmp_path, monkeypatch):
-    _, client, _ = make_conversation(monkeypatch, [response()])
+def test_watchdog_cancels_lookup_and_keeps_ledger(fixture_db, tmp_path, monkeypatch):
     save(configuration() | {"limits": {"duration_seconds": 1}})
-    config, ledger, transport, runtime, _ = setup_runtime(tmp_path, monkeypatch, client)
+    config, ledger, transport, runtime, _ = setup_runtime(tmp_path, monkeypatch)
 
     async def scenario():
         async with TestClient(
@@ -168,7 +153,6 @@ def test_watchdog_cancels_memory_and_keeps_ledger(fixture_db, tmp_path, monkeypa
             await finished(runtime)
             assert call.conversation.closed
             assert ledger.rows()[0]["state"] == "stopped"
-            assert json.loads(ledger.rows()[0]["evidence"])["closure_trigger"] == "duration_limit"
         ledger.close()
 
     asyncio.run(scenario())

@@ -105,16 +105,16 @@ controlled fixture permission, not a general caller authorization system.
 Settings default to 120 seconds, two calls and USD2, with validation ceilings of
 180 seconds, six calls and USD5. In bounded mode the listener intersects these settings
 with M1's saved duration, call count and retained reservations. Configuration can
-restrict but cannot increase or reset the original allowance. Engine requests use
-the existing profile LLM budget and selected provider; voice/carrier reservations
-remain separate. There is no service expiry.
+restrict but cannot increase or reset the original allowance. Current telephone
+delegations do not dispatch engine LLM requests; voice/carrier reservations remain
+separate. There is no service expiry.
 
 For the explicitly authorized isolated M3 test, saved `VOICE_ENGINE_UNLIMITED=1`
 overrides these numeric test ceilings and the engine daily budget. The mode is
 restricted to the marked isolated profile without an ordinary `zylch.db`; see
 [the smoke guide](gpt-live-smoke.md#m3-handoff). Budget/remaining values are `null`
 in this mode, while usage and reservations stay recorded. `/healthz` exposes
-`test_limits: "unlimited"`. Paid provider credit requirements still apply.
+`test_limits: "unlimited"`. This does not alter external provider billing.
 
 From `engine/`, using the voice-extra test environment:
 
@@ -166,148 +166,53 @@ the existing OAuth table. Credentials are supplied by private file references;
 ID tokens travel in anonymous pipes and memory only. It refuses an existing
 fixture instead of replacing data. It does not alter the original smoke ledger.
 
-### Dedicated GPT-6 backend for this experiment
+### Current telephone runtime: GPT-Live with selected context (M4)
 
-The isolated M3 profile explicitly saves `VOICE_ENGINE_PROVIDER=openai`; its
-`OPENAI_API_KEY` and `OPENAI_PROJECT_ID` come from the dedicated private test env.
-This voice-only selection requires matching OWNER/SMOKE/ISOLATED profile markers
-and no ordinary populated database. Ordinary engine provider selection remains
-unchanged; its legacy `LLM_PROVIDER` value is retained for the original smoke
-ledger's policy identity and does **not** choose this voice backend.
+The active isolated listener uses `gpt-live-1` as its sole conversational model.
+The per-call engine GPT-6 agent, paid dispatch, tool-selection loop and fallback
+are removed from `services/voice/`. Other engine LLM workflows and the historical
+usage ledger remain intact. Admission validates the company binding and the
+existing carrier reservation; it does not initialize an engine LLM client or
+reserve a telephone backend inference. The isolated profile's old
+`VOICE_ENGINE_PROVIDER` setting is historical and ignored by this listener.
 
-`openai_voice` translates the existing agent/tool loop to Responses with
-`model=gpt-6-sol`, `reasoning.effort=none`, `store=false`, standard processing and
-only the approved `caller_memory` and `get_current_time` function names.
-Each call exposes only its configured subset; unknown tools cannot execute. GPT-Live remains `gpt-live-1`. This short
-selected-fact workload uses no hidden reasoning state or provider conversation
-storage. Unknown models/options/response shapes fail closed, without fallback.
-The common LLM ledger reserves before dispatch and settles actual input, cache
-read/write and output usage at verified GPT-6 prices, including the >272K tier.
-Uncertain responses retain holds; proved provider refusals release only their own
-undispatched-cost reservation. Earlier MrCall liabilities remain untouched.
+The signed carrier callback supplies the phone used for recognition, not proof of
+identity. Each call loads one immutable configuration snapshot. Live receives the
+configured greeting and conversation rules in the initial session instructions;
+a one-shot instruction after `session.started` requests immediate speech. The
+engine starts a read-only selected-fact lookup concurrently. Only matched,
+selected, pinned customer sentences enter `session.thinking.append` with a null
+delegation ID; unknown and ambiguous callers receive an explicit no-facts
+context. The reviewed isolated configuration revision contains no
+customer-specific example facts; saved instructions require the same check on
+later revisions. Stored history
+is labeled as historical, not a current order or shipment check. Neither a
+transcript event nor a context append starts paid reasoning.
 
-Preparation checks model access without paid inference. Health is availability,
-not evidence of successful reasoning. Activation also requires a separate real
-inference/tool demonstration with this dedicated project and the frozen fixture.
-No Firebase session, StarChat business or CALLCREDIT is used for this backend.
-The unlimited override also bypasses the generic agent's ten-round, local prompt
-and tool-result bounds only for isolated customer-service calls; Responses still
-has its physical model window and 128,000 output-token capacity.
+Live answers ordinary questions directly from available selected context. For a
+client delegation, the engine joins any initial lookup already running and
+associates the delegation ID with accumulated caller transcript. It supplies
+question-bound `session.commentary.append` only for missing context, an enabled
+fresh clock read, or explicit unavailability. `get_current_time` uses the existing
+read-only `CurrentTime` tool with a valid IANA zone, ISO timestamp and UTC offset.
+The configured Europe/Rome default applies when the question omits a zone. No
+shipment/tracking or booking tool is exposed; a delegated request for those
+functions receives an unavailable result. Opening-hours/open-now requires a
+verified schedule, timezone and exceptions; this isolated configuration has no
+such input, so the engine reports it unavailable. There is no speculative
+anti-repetition controller.
 
-Official contracts checked 2026-09-24: [GPT-6 Sol](https://developers.openai.com/api/docs/models/gpt-6-sol),
-[functions](https://developers.openai.com/api/docs/guides/function-calling).
-The test uses the latest verified generation, never an older model merely to fit
-an existing adapter.
+Caller corrections invalidate an in-flight result by input revision. Hangup and
+shutdown cancel pending work and suppress late appends. Binding is checked again
+before commentary disclosure. Provider acknowledgements are recorded separately
+from output transcript and human listening. The shared M1 ledger retains every
+old and new hold; service and tunnel have unlimited lifetime in the authorized
+isolated mode. The [active plan](../../../docs/execution-plans/2026-09-23-gpt-live-engine-integration.md#current-m4-plan--live-uses-selected-context-engine-supplies-new-results)
+records carrier tests, observed failures and remaining human acceptance.
 
-Before listening and before each carrier admission, memory/configuration and the
-engine client are prepared off the event loop. MrCall uses `ensure_fresh_session`
-with the isolated encrypted refresh token even when automatic preparation is off.
-A free validated bounded quotation also checks account/business/model compatibility.
-The selected saved `SMS_BUSINESS_ID` is forwarded on quotation and execution for
-accounts with multiple businesses; a quote for another business is refused.
-Quotation does not guarantee a funded credit balance: paid execution may still
-refuse insufficient credits. Missing/expired credentials, failed refresh/quotation,
-disabled configuration, exhausted engine budget or exhausted call allowance
-refuse admission. Personal-key clients
-use the saved provider/key without fallback. Direct OpenAI authentication,
-inference and selected-memory tools have passed the isolated diagnostic; live
-Anthropic/OpenRouter voice-backend authentication has not been demonstrated. `/healthz` reports only runtime availability,
-allowing cold-start readiness checks before connecting an operator client.
-
-Only the signed Vonage callback supplies caller recognition metadata. International
-digits without a `+` are canonicalized at this carrier boundary. The number stays
-in memory behind the one-use carrier nonce; arbitrary SIP `From` metadata is ignored.
-After `session.started`, a tracked one-shot `session.instructions.append` requests
-an immediate greeting in the configured language/wording, without waiting for
-lookup or caller speech. The command asks not to repeat an already-spoken greeting;
-acknowledgement is not proof of speech or playback. This explicit start instruction
-follows the [official greeting flow](https://developers.openai.com/api/docs/guides/live-conversations#greet-before-the-caller-speaks).
-The task is canceled on close. Selected caller context is supplied to GPT-6;
-delegated answers use `session.commentary.append`.
-Append content is split without loss within a conservative 480-byte bound, below
-the provider's 500-token limit. Official contracts:
-[delegation](https://developers.openai.com/api/docs/guides/live-delegation) and
-[transcripts](https://developers.openai.com/api/docs/guides/live-conversations).
-
-At attachment, initial lookup loads all selected, still-authorized facts for the
-recognized caller asynchronously, independently of the greeting. GPT-6 receives
-these facts with the accumulated transcript before its first semantic run. The
-three-second read timeout or a lookup failure produces empty facts plus missing
-information; it does not prevent an answer. Diagnostic delays are explicit test
-controls and normally zero. Full facts are no longer independently forwarded as
-quiet voice context. GPT-Live is instructed to delegate substantive questions,
-follow-ups and every correction, then present the new backend result.
-GPT-6 chooses whether the preloaded facts suffice or an enabled tool is needed.
-Role-specific rules follow shared configuration in both model instruction paths.
-GPT-6 is instructed not to greet; greeting configuration belongs to GPT-Live. Before backend
-commentary, GPT-Live may only remain quiet or give a neutral acknowledgement,
-except for its initial greeting; it must not claim access, facts or operations.
-Backend instructions attribute caller statements and preserve weekday granularity;
-a clock alone cannot establish an order date. These are model instructions, not
-a deterministic output validator. The 2026-09-24 carrier retest delegates a spoken
-correction correctly, but obsolete speech continues during the interruption.
-The 2026-09-25 filler experiments fail overall acceptance and are withdrawn;
-repetitive waiting announcements and reliable speech ownership remain open.
-There is no live shipment/tracking lookup; absent tracking is stated specifically,
-without promising a check that an order number would supposedly enable.
-
-Each call owns one GPT-6 customer-service agent using the existing LLM/tool loop
-and budget admission. Only configured tools are supplied: `caller_memory` and,
-optionally, `get_current_time`. Owner persona, preferences, channel status,
-triggers, slash routing and general tools are excluded. No intent keyword router
-selects tools. Clock calls require an explicit valid IANA `timezone` and return
-`datetime` (ISO timestamp), `timezone`, `utc_offset_seconds` and
-`source: "system_clock"`. Invalid arguments return a fixed error without echoing
-them. The tool uses Python's system clock/ZoneInfo, executes no shell and reads no
-customer/profile data. Configuration may set a default timezone; otherwise GPT-6
-asks when the location is unclear. Prompt timestamps and earlier clock results
-are not a current reading. Existing configurations remain memory-only unless
-explicitly updated; duplicate/unknown capability names are refused.
-
-Transcript fragments accumulate without dispatch. Delegation starts one semantic
-run. Each run snapshots transcript text and caller/voice counters before awaiting
-work; counters remain diagnostic evidence. Only caller changes invalidate tools,
-model dispatch and final answer delivery. Voice acknowledgement alone never
-restarts GPT-6 or discards its answer. Every answer fragment checks caller revision
-and closure; binding is revalidated before delivery. In-flight paid requests
-finish normal accounting; at the next boundary an obsolete caller task stops,
-incomplete history is removed and the latest transcript is processed serially.
-Completed history is retained. No backend requests run in parallel. After a
-superseded run or interrupted answer append, the controller waits for a fresh
-delegation at the latest caller revision or 1.2 seconds of input quiet. Further
-caller fragments reset that interval; voice output does not. This coalescing is a
-cancellable scheduling heuristic, not a provider turn-complete event or a local
-conversation ceiling; initial dispatch stays immediate. Diagnostics record the
-wait and whether delegation or quiet released it.
-
-The backend can return `[NO_FURTHER_RESPONSE]` when the actual transcript already
-fully answers the latest request correctly; this decision is consumed without
-commentary. It requires no extra voice-only reconciliation run. GPT-Live must
-preserve material missing-information clauses and avoid repeating already-spoken
-content. These model behaviors still require telephone evidence: a successful
-append is not proof of exact wording or handset playback. M4 remains open.
-
-Hangup, deadline and daemon shutdown cancel asynchronous work and suppress late
-results. A dispatched blocking LLM request may finish and settle in its original
-worker; uncertain outcomes retain their normal durable hold. It cannot resume the
-agent tool loop after cancellation. The call ledger records counts, revision,
-lookup timing and failures, never raw transcript/facts or a false zero engine cost;
-engine charges remain in the profile's existing LLM ledger. Shutdown allows the
-executor to drain; forced termination still retains unresolved reservations.
-
-M3 isolated integration acceptance is **approved**: the telephone demonstration
-confirms selected caller recognition, a real GPT-6 tool/result turn and clean
-closure. The caller reports timely interruption and correct acknowledgement of
-missing tracking, with a repeated answer after interruption. The caller later
-reports that the agent seemed not to recall the blue filters; Thursday recall is
-unconfirmed. Retrieval success is not evidence that the voice used those facts.
-M4 adds opt-in private correlated test transcripts to diagnose this gap (below). Deterministic tests cover
-follow-ups and corrections arriving during backend execution. Real backend-only
-demonstrations cover sequential follow-up/correction content; this one live call
-does not certify M4's complete audio matrix. M4
-is active, with live criteria still open. Detailed evidence, usage and independent review are in the
-milestone plan. The operator authorizes unrestricted local retests; no further
-spending or attempt approval is required.
+M3 used a dedicated `gpt-6-sol` Responses backend; its approval, usage rows and
+old reservations are historical evidence. The adapter code remains available to
+settle/read that historical transport but no telephone runtime imports it.
 
 ## M4 private diagnostics
 
@@ -325,9 +230,9 @@ reservation ledger, unlimited mode, normal profiles or provider storage (`false`
 Each attached call creates a randomly named SQLite file under private
 `<isolated-profile>/voice-diagnostics/` (directory 0700, file 0600). The call ledger
 contains only its basename and capture status. The trace records UTC/local receipt
-times, provider timeline offsets, call/config revision, backend run/input revision
-and delegation IDs. Separate records hold selected memory results, final backend
-answers, superseded answers, attempted/sent append content, server acknowledgements,
+times, provider timeline offsets, call/config revision, input revision
+and delegation IDs. Separate records hold selected memory results, delegated
+tool results, suppressed stale appends, attempted/sent append content, server acknowledgements,
 caller/voice transcript deltas, clock arguments/results, audio timing ranges and closure. Audio bytes,
 hidden reasoning, provider payloads, credential configuration and unselected memory
 are never supplied to the sink. Known saved secret values and recognizable token

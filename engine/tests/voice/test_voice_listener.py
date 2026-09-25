@@ -8,8 +8,9 @@ from pathlib import Path
 import httpx
 import pytest
 
-from tests.voice.test_conversation import make_conversation, response, until
+from tests.voice.test_conversation import until
 from tests.voice.test_engine_runtime import VoiceTransport
+from tests.voice.test_agent_config import save
 from tests.voice.test_vonage import CARRIER, signed
 from tests.voice.helpers import config_for, incoming
 from tests.voice.m2_fixture import NUMBER
@@ -18,7 +19,7 @@ from zylch.services.voice import listener, engine_runtime
 
 
 def test_listener_shares_daemon_lifecycle(fixture_db, tmp_path, monkeypatch):
-    _, client, _ = make_conversation(monkeypatch, [response()])
+    save()
     config = config_for(tmp_path, test_number=NUMBER, **CARRIER)
     transport = VoiceTransport()
     transport.closed = False
@@ -36,9 +37,9 @@ def test_listener_shares_daemon_lifecycle(fixture_db, tmp_path, monkeypatch):
     monkeypatch.setattr(listener, "LiveTransport", lambda _: transport)
 
     async def prepare(snapshot):
-        return client
+        return None
 
-    monkeypatch.setattr(engine_runtime, "prepare_client", prepare)
+    monkeypatch.setattr(engine_runtime, "prepare_call", prepare)
     monkeypatch.setattr(server_ws, "_auto_update_loop", lambda: pytest.fail("automatic work"))
     monkeypatch.setattr(server_ws, "_whatsapp_refresh_loop", lambda: pytest.fail("WhatsApp"))
     with socket.socket() as probe:

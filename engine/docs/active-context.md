@@ -8,55 +8,29 @@ are preserved in [active-context-archive.md](active-context-archive.md).
 
 ## State now
 
-GPT-Live M1–M3 are approved for the isolated prototype. M1 provides the direct
-Vonage SIP transport and durable call ledger; M2 provides authenticated `cs rpc`
-configuration, immutable snapshots and retrieval limited to selected customer
-sentences. M3 integrates these with a per-call customer-service agent using
-`gpt-6-sol` Responses and the dedicated OpenAI project/key; voice is `gpt-live-1`.
-Calls run without cs-operator or an operator RPC session. MrCall CALLCREDIT is
-not a dependency of this explicitly selected test backend.
+GPT-Live M1–M3 remain approved as historical isolated milestones. M4 now runs a
+single conversational model, `gpt-live-1`, in the isolated telephone listener.
+The engine validates carrier admission and company binding, selects pinned
+caller-safe facts, sends quiet `thinking`, executes only enabled direct tools on
+client delegation and supplies task-bound `commentary`. Its previous telephone
+GPT-6 agent, dispatch and fallback are removed from the active runtime. Ordinary
+engine LLM workflows and all historical usage/reservation rows remain intact.
 
-M4 is active with private correlated traces and no raw audio/hidden reasoning.
-The configured architecture assigns substantive answers/tool selection to GPT-6
-and speech/listening to GPT-Live; provider compliance is still under live review.
-Initial caller facts are preloaded into
-GPT-6's prompt, with no mandatory repeat lookup or parallel business answer from
-voice quiet context. The engine executes only configured selected-memory and
-current-time tools. No live shipment lookup exists.
-
-Greeting is explicitly requested at session start. Caller corrections stop obsolete
-tool/model work and final delivery; voice acknowledgements do not invalidate an
-answer or cause another semantic run. A lexical-miss fallback remains limited to
-pinned selected facts. Clock results contain an ISO time, IANA timezone and UTC
-offset; the tool executes no shell. Configuration revision 6 is active, with
-Europe/Rome as explicit test default. The voice/kernel/budget regression passes
-248 tests; subsequent adapter/prompt checks pass 41 and 27 focused tests. Real
-carrier calls confirm fresh Rome/New York clock tools and missing-tracking answers.
-Superseded corrections wait for a new delegation or 1.2 seconds of input quiet;
-the repeated scenario improves from seven to four semantic runs. Two injected
-lookup-failure repeats pass after one unsupported voice claim exposed inadequate
-role instructions. Shutdown during a paid request suppresses late output while
-the original request settles. A later spoken-correction call bypassed GPT-6; an
-explicit re-delegation prompt passes the identical retest, but obsolete speech
-continues during caller interruption. This remains an open M4 defect. A subsequent
-human call confirms recognized blue-filter/Thursday facts are used and spoken,
-but repeats a waiting phrase on every turn. Eight autonomous filler experiments
-failed overall acceptance: some suppress filler, but others lose delegation,
-anticipate answers, repeat speech or retain the waiting phrase. All session code
-changes are withdrawn and the previously reviewed implementation is restored.
-Repetitive waiting phrases remain unresolved. A clock test also exposes repeated
-fresh-clock reads before answering; this is an open latency finding. Private traces
-preserve every attempt; neither the filler fix nor complete M4 is accepted.
-
-Autonomous calls to the authorized test number use a separate diagnostic TTS
-caller with a private attempt/receipt ledger; uncertain attempts prevent another
-origination. Human handset listening remains distinct. Full M4 continuity and
-exceptional-scenario acceptance remains open. Diagnostic capture is on; ordinary
-delays are zero. Calls remain isolated with all local experiment ceilings removed;
-ledger history, accounting and provider constraints are preserved. Service and
-tunnel have no expiry. See [configuration and diagnostics](features/voice-agent-configuration.md),
-[smoke guide](features/gpt-live-smoke.md) and the milestone plan for evidence and
-remaining criteria. No production number is connected.
+The revised M4 implementation passed the voice suite (171 passed, 1 skipped)
+and 90 unaffected LLM budget/transport tests. The isolated carrier setup has
+private correlated traces and receipts for seven autonomous calls covering
+clock follow-up, unknown-caller privacy, spoken correction, delayed lookup, and
+lookup failure. Those are operator-observed private records, not repository
+artifacts or proof of handset audio. The diagnostic caller is unknown to the
+frozen customer fixture. Known-caller blue-filter/Thursday speech, human
+listening, live ambiguity and the full exceptional-scenario matrix remain
+unaccepted. The independent reviewer approved code integration and rated full
+M4 REVISE pending the live matrix. M4 stays active. The experiment sequence,
+private trace references, and remaining criteria are in the
+[active plan](../../docs/execution-plans/2026-09-23-gpt-live-engine-integration.md).
+The operator reports that the isolated service and tunnel retain infinite
+runtime, no local test ceiling exists, and prior ledger rows remain intact;
+these live/private state claims require verification against the isolated host.
 
 Engine chat now supports negotiated read-only policy version 1. The policy is
 enforced before slash/semantic/task routing and again at assistant and task

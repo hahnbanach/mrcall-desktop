@@ -1,53 +1,14 @@
-"""Real agent/tool/storage/budget boundaries; only the paid model wire is mocked."""
+"""Selected context and deterministic Live delegations at the real memory boundary."""
 
 import asyncio
 import json
-import threading
-from types import SimpleNamespace
-from unittest.mock import Mock, AsyncMock
-
-import pytest
 
 from tests.voice.helpers import delegation
-from tests.voice.m2_fixture import FOLLOWUP, INTERNAL, KNOWN, NUMBER, OTHER_FACT, PUBLIC
+from tests.voice.m2_fixture import KNOWN, NUMBER, PUBLIC, FOLLOWUP, INTERNAL, OTHER_FACT
 from tests.voice.test_agent_config import save
-from zylch.assistant import core
-from zylch.llm.budget import budget_snapshot
-from zylch.llm.client import LLMClient
 from zylch.services.voice.agent_config import snapshot_for_call
 from zylch.services.voice.caller_memory import CallerMemory
-from zylch.services.voice.conversation import Conversation, chunks
-
-
-def response(text="Verified answer", tool=None):
-    return SimpleNamespace(
-        content=(
-            [SimpleNamespace(type="tool_use", id="lookup", name="caller_memory", input=tool)]
-            if tool is not None
-            else [SimpleNamespace(type="text", text=text)]
-        ),
-        model="claude-haiku-4-5",
-        stop_reason="tool_use" if tool is not None else "end_turn",
-        usage=SimpleNamespace(input_tokens=30, output_tokens=20),
-    )
-
-
-def make_conversation(monkeypatch, calls):
-    monkeypatch.delenv("ZYLCH_PROFILE_DIR", raising=False)
-    monkeypatch.setenv("LLM_DAILY_BUDGET_USD", "2")
-    monkeypatch.setenv("LLM_PROVIDER", "anthropic")
-    save()
-    snap = snapshot_for_call(NUMBER)
-    client = LLMClient(transport="direct", api_key="fake", model="claude-haiku-4-5")
-    client._client.messages.create = Mock(side_effect=calls)
-    sent = []
-
-    async def send(raw):
-        sent.append(json.loads(raw))
-
-    memory = CallerMemory(snap, KNOWN)
-    conv = Conversation(snap, memory, client, send, {"results_sent": 0})
-    return conv, client, sent
+from zylch.services.voice.conversation import Conversation, VOICE_RULES, chunks
 
 
 async def until(predicate):
@@ -56,397 +17,201 @@ async def until(predicate):
             await asyncio.sleep(0.005)
 
 
-def test_followup_actual_tools_no_owner_inputs(fixture_db, monkeypatch, caplog):
-    import logging
+def make_conversation(monkeypatch=None, unused=None, *, caller=KNOWN, trace=None):
+    save()
+    snapshot = snapshot_for_call(NUMBER)
+    sent = []
 
-    caplog.set_level(logging.DEBUG)
-    conv, client, sent = make_conversation(
-        monkeypatch,
-        [
-            response(tool={"query": "filters"}),
-            response(PUBLIC),
-            response(tool={"query": "delivery"}),
-            response(FOLLOWUP),
-        ],
+    async def send(raw):
+        sent.append(json.loads(raw))
+
+    conv = Conversation(
+        snapshot, CallerMemory(snapshot, caller), send, {"results_sent": 0}, trace=trace
     )
-    monkeypatch.setattr(core, "get_system_prompt_base", Mock(side_effect=AssertionError("owner")))
-    monkeypatch.setattr(
-        core, "get_personal_data_section", Mock(side_effect=AssertionError("owner"))
-    )
-    monkeypatch.setattr(core, "get_channel_status_block", Mock(side_effect=AssertionError("owner")))
+    return conv, None, sent
+
+
+def test_quiet_selected_context_before_question(fixture_db, monkeypatch):
+    conv, _, sent = make_conversation(monkeypatch)
 
     async def scenario():
         conv.start()
-        conv.event({"type": "session.input_transcript.delta", "delta": "My earlier request?"})
-        conv.event(delegation("first"))
-        await until(lambda: conv.evidence["results_sent"] == 1)
-        conv.event({"type": "session.output_transcript.delta", "delta": PUBLIC})
-        conv.event({"type": "session.input_transcript.delta", "delta": "And delivery?"})
-        conv.event(delegation("followup"))
-        await until(lambda: conv.evidence["results_sent"] == 2)
-        for call in client._client.messages.create.call_args_list:
-            wire = str(call.kwargs)
-            assert INTERNAL not in wire and OTHER_FACT not in wire and fixture_db not in wire
-            assert "PRIVATE FULL BLOB" not in wire
-            assert [t["name"] for t in call.kwargs["tools"]] == ["caller_memory"]
-        assert FOLLOWUP in str(sent)
-        assert FOLLOWUP not in caplog.text and PUBLIC not in caplog.text
-        assert INTERNAL not in caplog.text and fixture_db not in caplog.text
-        assert budget_snapshot("fixture-owner")["spent_usd"] > 0
+        conv.event({"type": "session.started"})
+        await conv.lookup
+        await until(lambda: any(row["type"] == "session.instructions.append" for row in sent))
+        assert any(
+            row["type"] == "session.thinking.append" and row["delegation_id"] is None
+            for row in sent
+        )
+        assert PUBLIC in str(sent) and FOLLOWUP in str(sent)
+        assert INTERNAL not in str(sent) and OTHER_FACT not in str(sent)
+        assert "Delegate every substantive" not in VOICE_RULES
+        assert not any(row["type"] == "session.commentary.append" for row in sent)
         await conv.close()
 
     asyncio.run(scenario())
 
 
-def test_delayed_lookup_and_revision_reconciliation(fixture_db, monkeypatch):
-    entered, release = threading.Event(), threading.Event()
-    calls = []
-
-    def model(**kwargs):
-        calls.append(kwargs)
-        if len(calls) == 1:
-            entered.set()
-            assert release.wait(3)
-            return response("OBSOLETE DRAFT")
-        return response(
-            "Correction: the caller now asks about delivery; stored history says Thursday."
-        )
-
-    conv, _, sent = make_conversation(monkeypatch, model)
+def test_early_question_joins_lookup_and_binds_commentary(fixture_db, monkeypatch):
+    conv, _, sent = make_conversation(monkeypatch)
     original = conv.memory.execute
+    gate = asyncio.Event()
+    calls = 0
+
+    async def delayed(**kwargs):
+        nonlocal calls
+        calls += 1
+        await gate.wait()
+        return await original(**kwargs)
+
+    conv.memory.execute = delayed
 
     async def scenario():
-        lookup_release = asyncio.Event()
-
-        async def delayed(**kwargs):
-            await lookup_release.wait()
-            return await original(**kwargs)
-
-        conv.memory.execute = delayed
         conv.start()
-        conv.event({"type": "session.output_transcript.delta", "delta": "Hello"})
-        assert not sent
-        conv.event({"type": "session.input_transcript.delta", "delta": "filters"})
-        conv.event(delegation("first"))
-        lookup_release.set()
-        await until(entered.is_set)
-        conv.event({"type": "session.input_transcript.delta", "delta": " No, delivery."})
-        conv.event(delegation("corrected"))
+        conv.event({"type": "session.started"})
+        conv.event(
+            {"type": "session.input_transcript.delta", "delta": "Quali filtri e quando arriva?"}
+        )
+        conv.event(delegation("early"))
+        await until(lambda: calls == 1)
+        assert not any(row["type"] == "session.commentary.append" for row in sent)
+        gate.set()
+        await until(lambda: conv.evidence["results_sent"] == 1)
+        assert calls == 1
+        assert [r["type"] for r in sent if r["type"] != "session.instructions.append"] == [
+            "session.thinking.append",
+            "session.commentary.append",
+        ]
+        answer = sent[-1]
+        assert answer["delegation_id"] == "early"
+        assert PUBLIC in answer["content"] and FOLLOWUP in answer["content"]
+        await conv.close()
+
+    asyncio.run(scenario())
+
+
+def test_correction_during_clock_and_hangup_suppress_stale(fixture_db, monkeypatch):
+    from tests.voice.m2_fixture import configuration
+    from zylch.services.voice.current_time import CurrentTime
+
+    conv, _, sent = make_conversation(monkeypatch)
+    save(configuration() | {"tools": ["caller_memory", "get_current_time"]})
+    conv.snapshot = snapshot_for_call(NUMBER)
+    entered, release = asyncio.Event(), asyncio.Event()
+    original = CurrentTime.execute
+
+    async def delayed(self, **kwargs):
+        entered.set()
+        await release.wait()
+        return await original(self, **kwargs)
+
+    monkeypatch.setattr(CurrentTime, "execute", delayed)
+
+    async def scenario():
+        conv.start()
+        await conv.lookup
+        conv.event({"type": "session.input_transcript.delta", "delta": "Che ore sono a Roma?"})
+        conv.event(delegation("old"))
+        await entered.wait()
+        conv.event({"type": "session.input_transcript.delta", "delta": " No, quali filtri?"})
+        conv.event(delegation("new"))
         release.set()
         await until(lambda: conv.evidence["results_sent"] == 1)
-        assert len(calls) == 2
-        assert "No, delivery." in str(calls[-1]["messages"])
-        assert "OBSOLETE DRAFT" not in str(sent)
-        assert sent[-1]["delegation_id"] == "corrected"
-        assert conv.evidence["reconciliations"] == 1
-        await conv.close()
-
-    try:
-        asyncio.run(scenario())
-    finally:
-        release.set()
-
-
-def test_hangup_during_dispatch_settles_without_more_tools(fixture_db, monkeypatch):
-    entered, release = threading.Event(), threading.Event()
-
-    def model(**kwargs):
-        entered.set()
-        assert release.wait(3)
-        return response(tool={"query": "delivery"})
-
-    conv, client, sent = make_conversation(monkeypatch, model)
-
-    async def scenario():
-        conv.start()
-        conv.event({"type": "session.input_transcript.delta", "delta": "delivery?"})
-        conv.event(delegation())
-        await until(entered.is_set)
+        assert sent[-1]["delegation_id"] == "new"
+        assert PUBLIC in sent[-1]["content"]
+        assert not any("Current system-clock" in row["content"] for row in sent)
         await conv.close()
         before = list(sent)
-        assert budget_snapshot("fixture-owner")["reserved_usd"] > 0
-        release.set()
-        await until(lambda: budget_snapshot("fixture-owner")["reserved_usd"] == 0)
-        assert budget_snapshot("fixture-owner")["spent_usd"] > 0
-        assert client._client.messages.create.call_count == 1
-        assert sent == before and conv.agent.get_history() == []
+        conv.event(delegation("late"))
+        assert sent == before
 
-    try:
-        asyncio.run(scenario())
-    finally:
-        release.set()
+    asyncio.run(scenario())
 
 
-def test_late_read_and_next_call_have_no_history(fixture_db, monkeypatch):
-    conv, _, sent = make_conversation(monkeypatch, [response()])
-    original = conv.memory._lookup
-    entered, release = threading.Event(), threading.Event()
-
-    def delayed(query):
-        entered.set()
-        assert release.wait(3)
-        return original(query)
-
-    conv.memory._lookup = delayed
+def test_unknown_caller_and_tracking_unavailable(fixture_db, monkeypatch):
+    conv, _, sent = make_conversation(monkeypatch, caller="+399999999999")
 
     async def scenario():
         conv.start()
-        await until(entered.is_set)
-        conv.event({"type": "session.input_transcript.delta", "delta": "private caller input"})
+        await conv.lookup
+        conv.event({"type": "session.input_transcript.delta", "delta": "Dov'è il tracking?"})
+        conv.event(delegation("unknown"))
+        await until(lambda: conv.evidence["results_sent"] == 1)
+        assert PUBLIC not in str(sent) and FOLLOWUP not in str(sent)
+        assert PUBLIC not in VOICE_RULES and FOLLOWUP not in VOICE_RULES
+        assert "blue" not in VOICE_RULES.lower() and "thursday" not in VOICE_RULES.lower()
+        assert "No live shipment or tracking lookup" in sent[-1]["content"]
         await conv.close()
-        release.set()
-        await asyncio.sleep(0.05)
-        assert sent == []
-        new, _, _ = make_conversation(monkeypatch, [response()])
-        assert new.transcript == [] and new.agent.get_history() == []
-        await new.close()
 
-    try:
-        asyncio.run(scenario())
-    finally:
-        release.set()
+    asyncio.run(scenario())
 
 
-def test_owner_agent_unchanged_and_voice_tools_enforced(monkeypatch):
-    client = SimpleNamespace(
-        transport="mock",
-        create_message=AsyncMock(
-            return_value=SimpleNamespace(
-                content=[SimpleNamespace(text="ok")], stop_reason="end_turn", usage={}
-            )
-        ),
-    )
-    monkeypatch.setattr(core, "get_system_prompt_base", lambda: "OWNER PROMPT")
-    monkeypatch.setattr(core, "get_personal_data_section", lambda **kw: "OWNER PRIVATE")
-    monkeypatch.setattr(core, "get_channel_status_block", lambda: "OWNER CHANNELS")
-    tool = SimpleNamespace(name="owner_tool", get_schema=lambda: {"name": "owner_tool"})
-    agent = core.ZylchAIAgent([tool], client=client, triggered_instructions=["OWNER TRIGGER"])
-    asyncio.run(agent.process_message("hello"))
-    wire = str(client.create_message.call_args.kwargs)
-    for expected in (
-        "OWNER PROMPT",
-        "OWNER PRIVATE",
-        "OWNER CHANNELS",
-        "OWNER TRIGGER",
-        "owner_tool",
-    ):
-        assert expected in wire
-    with pytest.raises(ValueError):
-        core.ZylchAIAgent([tool], client=client, customer_service_instructions="voice")
-
-
-def test_append_limit_preserves_multibyte_content():
-    text = "è漢字 hello " * 800
-    parts = list(chunks(text))
-    assert "".join(parts) == text
+def test_append_preserves_multibyte_content():
+    value = "è漢字 hello " * 800
+    parts = list(chunks(value))
+    assert "".join(parts) == value
     assert all(len(part.encode()) <= 480 for part in parts)
 
 
-def test_completed_voice_history_consumes_backend_silence_decision(fixture_db, monkeypatch):
-    conv, client, sent = make_conversation(monkeypatch, [response("[NO_FURTHER_RESPONSE]")])
+def test_fresh_clock_does_not_wait_for_caller_lookup(fixture_db, monkeypatch):
+    from tests.voice.m2_fixture import configuration
+
+    conv, _, sent = make_conversation(monkeypatch)
+    save(configuration() | {"tools": ["caller_memory", "get_current_time"]})
+    conv.snapshot = snapshot_for_call(NUMBER)
+    gate = asyncio.Event()
+    entered = asyncio.Event()
+    original = conv.memory.execute
+
+    async def delayed(**kwargs):
+        entered.set()
+        await gate.wait()
+        return await original(**kwargs)
+
+    conv.memory.execute = delayed
 
     async def scenario():
         conv.start()
-        conv.event({"type": "session.input_transcript.delta", "delta": "Which filters?"})
-        conv.event({"type": "session.output_transcript.delta", "delta": PUBLIC})
-        conv.event(delegation("already-addressed"))
-        await conv.worker
-        assert client._client.messages.create.call_count == 1
-        assert PUBLIC in str(client._client.messages.create.call_args.kwargs["messages"])
-        assert conv.evidence["results_sent"] == 0
-        assert not any(row["type"] == "session.commentary.append" for row in sent)
-        assert conv.evidence["answers_already_addressed"] == 1
-        await conv.close()
-
-    asyncio.run(scenario())
-
-
-def test_diagnostic_delay_skips_superseded_snapshot_before_paid_dispatch(fixture_db, monkeypatch):
-    requests = []
-
-    def model(**kwargs):
-        requests.append(json.dumps(kwargs["messages"]))
-        return response("Stored delivery is Thursday.")
-
-    conv, _, sent = make_conversation(monkeypatch, model)
-    conv.backend_delay = 0.05
-
-    async def scenario():
-        conv.start()
-        conv.event({"type": "session.input_transcript.delta", "delta": "Which filters?"})
-        conv.event(delegation("first"))
-        await until(lambda: conv.run_number == 1)
-        conv.event(
-            {"type": "session.input_transcript.delta", "delta": " CORRECTION: delivery day?"}
-        )
+        await entered.wait()
+        conv.event({"type": "session.input_transcript.delta", "delta": "Che ore sono a Roma?"})
+        conv.event(delegation("clock-before-memory"))
         await until(lambda: conv.evidence["results_sent"] == 1)
-        assert len(requests) == 1, "Obsolete pre-delay snapshot was dispatched"
-        assert "CORRECTION" in requests[0]
-        assert conv.evidence["reconciliations"] == 1
-        assert len([row for row in sent if row["type"] == "session.commentary.append"]) == 1
+        assert not conv.lookup.done()
+        assert "Europe/Rome" in sent[-1]["content"]
         await conv.close()
 
     asyncio.run(scenario())
 
 
-@pytest.mark.parametrize(
-    "spoken,latest_caller,answer",
-    [
-        ("One moment, I am checking.", None, "Stored delivery is Thursday."),
-        (
-            "The agreed delivery is Friday.",
-            None,
-            "Correction: the prior email agreed Thursday, not Friday.",
-        ),
-        (
-            "The stored request is for blue filters.",
-            "And the tracking number?",
-            "There is no tracking number in the selected history.",
-        ),
-    ],
-)
-def test_voice_history_and_new_caller_request_reach_backend(
-    fixture_db, monkeypatch, spoken, latest_caller, answer
-):
-    entered, release = threading.Event(), threading.Event()
-    requests = []
+def test_correction_during_send_preserves_new_delegation(fixture_db, monkeypatch):
+    conv, _, sent = make_conversation(monkeypatch)
+    entered, release = asyncio.Event(), asyncio.Event()
 
-    def model(**kwargs):
-        requests.append(json.dumps(kwargs["messages"]))
-        if len(requests) == 1:
-            entered.set()
-            assert release.wait(3)
-            return response("OUTDATED BACKEND DRAFT" if latest_caller else answer)
-        return response(answer)
-
-    conv, _, sent = make_conversation(monkeypatch, model)
-
-    async def scenario():
-        conv.start()
-        conv.event(
-            {
-                "type": "session.input_transcript.delta",
-                "delta": "Check my prior request and delivery.",
-            }
-        )
-        conv.event({"type": "session.output_transcript.delta", "delta": spoken})
-        conv.event(delegation("request"))
-        await until(entered.is_set)
-        if latest_caller:
-            conv.event({"type": "session.input_transcript.delta", "delta": latest_caller})
-            conv.event(delegation("followup"))
-        release.set()
-        await until(lambda: conv.worker.done())
-        assert len(requests) == (2 if latest_caller else 1)
-        assert spoken in requests[-1]
-        if latest_caller:
-            assert latest_caller in requests[-1]
-        delivered = [row for row in sent if row["type"] == "session.commentary.append"]
-        assert len(delivered) == 1 and delivered[0]["content"] == answer
-        assert "OUTDATED" not in str(sent)
-        assert conv.evidence.get("answers_already_addressed", 0) == 0
-        await conv.close()
-
-    try:
-        asyncio.run(scenario())
-    finally:
-        release.set()
-
-
-def test_greeting_requested_once_before_delayed_lookup(fixture_db, monkeypatch):
-    conv, _, sent = make_conversation(monkeypatch, [])
-
-    async def scenario():
-        conv.memory.diagnostic_delay = 60
-        conv.start()
-        conv.event({"type": "session.started"})
-        conv.event({"type": "session.started"})
-        await until(lambda: bool(sent))
-        assert [s["type"] for s in sent] == ["session.instructions.append"]
-        assert sent[0]["delegation_id"] is None
-        assert conv.context["missing"] == ["Caller lookup pending"]
-        await conv.close()
-        assert len(sent) == 1
-
-    asyncio.run(scenario())
-
-
-def test_correction_abandons_stale_tool_loop_before_extra_dispatch(fixture_db, monkeypatch):
-    entered, release = threading.Event(), threading.Event()
-    calls = []
-
-    def model(**kwargs):
-        calls.append(kwargs)
-        if len(calls) == 1:
-            entered.set()
-            assert release.wait(3)
-            return response(tool={"query": "tracking"})
-        return response("The corrected request is blue filters for Thursday.")
-
-    conv, _, sent = make_conversation(monkeypatch, model)
-    lookup = AsyncMock(wraps=conv.memory.execute)
-    conv.memory.execute = lookup
-
-    async def scenario():
-        conv.event({"type": "session.input_transcript.delta", "delta": "Tracking?"})
-        conv.event(delegation("old"))
-        await until(entered.is_set)
-        conv.event({"type": "session.input_transcript.delta", "delta": "No, filters and day?"})
-        conv.event(delegation("corrected"))
-        release.set()
-        await until(lambda: conv.evidence["results_sent"] == 1)
-        assert len(calls) == 2
-        assert lookup.await_count == 0  # stale tool request never executes
-        assert "filters and day?" in str(calls[1]["messages"])
-        assert not any("tool_result" in str(m) for m in calls[1]["messages"])
-        assert sent[-1]["delegation_id"] == "corrected"
-        assert conv.evidence["reconciliations"] == 1
-        await conv.close()
-
-    try:
-        asyncio.run(scenario())
-    finally:
-        release.set()
-
-
-def test_correction_during_tool_preserves_prior_turn_and_skips_remaining_tools(
-    fixture_db, monkeypatch
-):
-    two_tools = response(tool={})
-    two_tools.content.append(
-        SimpleNamespace(type="tool_use", id="second", name="caller_memory", input={})
-    )
-    conv, client, sent = make_conversation(
-        monkeypatch, [response("PRIOR COMPLETED TURN"), two_tools, response("Corrected Thursday.")]
-    )
-
-    async def scenario():
-        await conv.agent.process_message("Prior request")
-        entered, release = asyncio.Event(), asyncio.Event()
-        original = conv.memory.execute
-        tool_calls = []
-
-        async def delayed(**kwargs):
-            tool_calls.append(kwargs)
+    async def paused_send(raw):
+        data = json.loads(raw)
+        if data["type"] == "session.commentary.append" and data["delegation_id"] == "old":
             entered.set()
             await release.wait()
-            return await original(**kwargs)
+        if conv.send_guard_revision is not None and conv.send_guard_revision != conv.revision:
+            return False
+        sent.append(data)
 
-        conv.memory.execute = delayed
-        conv.event({"type": "session.input_transcript.delta", "delta": "Tracking?"})
+    conv.send = paused_send
+
+    async def scenario():
+        conv.start()
+        await conv.lookup
+        conv.event({"type": "session.input_transcript.delta", "delta": "Quali filtri?"})
         conv.event(delegation("old"))
         await entered.wait()
-        conv.event({"type": "session.input_transcript.delta", "delta": "No, delivery day?"})
-        conv.event(delegation("corrected"))
+        conv.event({"type": "session.input_transcript.delta", "delta": " No, tracking?"})
+        conv.event(delegation("new"))
         release.set()
-        await conv.worker
-        assert len(tool_calls) == 1
-        assert conv.evidence["results_sent"] == 1
-        assert conv.evidence["reconciliations"] == 1
-        latest = str(client._client.messages.create.call_args.kwargs["messages"])
-        assert "PRIOR COMPLETED TURN" in latest and "delivery day?" in latest
-        assert "tool_result" not in latest and "tool_use" not in latest
-        assert sent[-1]["delegation_id"] == "corrected"
+        await until(lambda: conv.evidence["results_sent"] == 1)
+        assert not any(r["delegation_id"] == "old" for r in sent)
+        assert sent[-1]["delegation_id"] == "new"
+        assert "No live shipment or tracking lookup" in sent[-1]["content"]
+        assert conv.pending == []
         await conv.close()
 
     asyncio.run(scenario())

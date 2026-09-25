@@ -26,7 +26,7 @@ four-milestone plan stays active.
 
 ## Current M4 plan — Live uses selected context; engine supplies new results
 
-**Planning decision, 2026-09-25; not implemented or phone-accepted.** M1–M3
+**Design decision, 2026-09-25; implemented in the isolated listener, not yet phone-accepted as M4.** M1–M3
 approvals remain historical evidence for those milestones. M4 **replaces and
 removes** the mandatory GPT-6 telephone path: no concrete telephone task here
 requires a separate GPT-6 turn. Remove the per-call GPT-6 voice agent, its
@@ -142,9 +142,77 @@ changing existing ledger holds. Official API basis, checked 2026-09-25:
    every financial reservation. If a criterion fails, leave M4 active and the
    failure explicit; preserve the isolated ledgers and service state on rollback.
 
-Current status: **planning only** for this replacement. The obsolete telephone
-runtime is a removal task, not a supported M4 variant. Updating this plan does
-not itself remove code or change the running call service.
+Current status: **implemented in the isolated listener; M4 acceptance remains
+open.** The obsolete telephone GPT-6 runtime is removed from the active call
+path. The carrier and human matrix below still governs acceptance.
+
+### Revised M4 implementation and carrier evidence — 2026-09-25
+
+The active `services/voice/` listener no longer prepares an engine LLM client,
+constructs a telephone agent, dispatches GPT-6, reserves backend inference or
+falls back to that path. Other engine LLM workflows and historical usage rows
+remain intact. The listener sends immediate session instructions and a one-shot
+greeting request, starts the selected caller lookup concurrently, appends
+caller-safe facts as quiet `thinking`, and handles client delegations with the
+existing read-only clock or explicit unavailability. Early delegated questions
+join the one in-flight lookup. Caller revision, binding and close checks suppress
+late commentary. A concrete tracking/open-now request has no invented function.
+No verified StarChat opening-hours schedule plus exceptions was found wired to
+this isolated call; open-now remains unavailable. The saved isolated configuration
+was updated through owner-authenticated RPC from revision 6 to 8. Revision 8 has
+no caller-specific examples in global instructions. Firebase ID tokens stayed
+in memory; private revision backups remain outside Git.
+
+`tests/voice` passed **171, 1 skipped** after the final scheduling fixes;
+90 focused tests for unrelated LLM budget/transports also passed. Independent
+end-to-end review approved code integration after a same-gate revision; full M4
+remains REVISE because the live/human matrix is incomplete. The prior 31 incoming rows
+hash to `be84d78f…` and the prior 18 autonomous rows to `78a065a5…`, unchanged
+after activation. At this checkpoint 38 incoming and 25 autonomous rows are all
+closed, with USD38 and USD25 respective retained holds. Historical `openai_voice`
+usage remains 140 rows / USD0.394726 estimated, zero unresolved OpenAI holds;
+two old proxy holds remain USD0.110. No reset or refund occurred. The tunnel PID
+remains `1903954`; service and tunnel RuntimeMaxUSec remain infinity.
+
+Seven authorized TTS calls, all from/to the test number, have complete private
+traces and completed originator plus incoming carrier receipts. Provider receipts
+omit currency; voice amounts below are rate-based estimates, not invoices:
+
+| Scenario | Private trace | Observed outcome |
+|---|---|---|
+| Rome → New York → tracking | `call-f704497804a34128b4d987582c5d1fd0.db` | Greeting transcript at 0.9 s; two matching clock delegations/reads and spoken times with seconds; tracking answered without a tool. Closed, 70 voice seconds. |
+| Unknown-caller privacy, first try | `call-de6148c4c2634a8b8fb60808d3d4f736.db` | **Failed:** Live spoke blue-filter/Thursday facts despite unknown recognition; those examples had leaked through global instructions. Closed, 70 s. |
+| Privacy retest, config 8 | `call-86a2efb9d7cd46248095851108e36a34.db` | No selected facts disclosed; no internal/other-customer data, fresh Rome clock returned. Closed, 70 s. |
+| Spoken correction, first try | `call-67d0a099534a429aabbdb7b9f5180b96.db` | **Failed:** delegated Italian “l’ora di Roma”/“data di oggi” missed clock routing; unavailability commentary. Closed, 57 s. |
+| Spoken correction retest | `call-a352278d04e44a67a8442c4583ac1a93.db` | New York → corrected Rome → today's Rome date used three distinct clock delegations, one read each, with corresponding spoken results. Final overlap includes about 44 ms of prior speech after caller interruption; handset impact unconfirmed. Closed, 56 s. |
+| Clock while initial lookup runs | `call-7b5a83f833e646f79330d91f3304b183.db` | With 20 s diagnostic lookup delay, Rome clock started +10.139 s and Rome speech appeared +15.848 s, before caller context was ready +20.047 s. New York follow-up also used one clock read. Closed, 70 s; delay restored to zero. |
+| Injected lookup failure | `call-216fa369a2a24cadb2c71ad37cbceb95.db` | Unknown test caller received no selected facts and no internal data; later fresh Rome clock still worked. Closed, 70 s; failure injection restored off. Since this test number is unknown anyway, it does not certify a recognized caller losing memory safely. |
+
+All seven incoming carrier legs have completed receipts (five 71-second legs,
+two 57-second legs; prices 0.00532500 and 0.00427500 per leg respectively,
+unspecified account currency). Corresponding originator receipts are completed
+(five 71-second legs at 0.01146650; two 57-second legs at 0.00920550, currency
+absent). Do not sum
+these into a claimed USD invoice. The diagnostic databases contain exact script
+text, selected context, append/ack, delegation IDs, clock results, output
+transcripts and closure, with no raw audio. Acknowledgements are never counted
+as heard speech.
+
+The fresh independent review first returned REVISE for two scheduling bugs:
+clock requests waited on unrelated caller lookup, and a delegation could be
+erased while an earlier commentary send was suspended. Both were repaired with
+paused-lookup/paused-send regressions; the same reviewer then approved those
+code-integration fixes. A send already underway cannot retract its frame, so
+post-send correction steering still requires handset observation. No speculative
+anti-repetition controller was added.
+
+Remaining acceptance: recognized caller directly hearing the blue-filter and
+Thursday facts plus follow-up; human handset feedback on greeting,
+interruption and continuity; live ambiguous identity and injected lookup-failure
+paths; further correction during engine work and a closure/late-result call;
+full final independent end-to-end review of this revised architecture. Local
+tests cover these boundaries but cannot substitute for the outstanding carrier
+and listening scenarios. M4 remains **active**, not completed.
 
 ## Historical M4 filler experiments — 2026-09-25
 

@@ -7,8 +7,8 @@ import pytest
 from aiohttp.test_utils import TestClient, TestServer
 
 from tests.voice.helpers import config_for, finished
-from tests.voice.test_conversation import make_conversation, response
 from tests.voice.test_engine_runtime import setup_runtime, admit
+from tests.voice.test_agent_config import save
 from zylch.llm.budget import BudgetError, budget_snapshot, reserve
 from zylch.llm.model_policy import isolated_voice_unlimited
 from zylch.services.voice.live_sip_smoke import create_app
@@ -80,11 +80,10 @@ def test_unlimited_engine_budget_is_file_scoped_and_keeps_reservations(
 
 
 def test_unlimited_removes_carrier_and_runtime_duration_caps(fixture_db, tmp_path, monkeypatch):
-    _, client, _ = make_conversation(monkeypatch, [response()])
+    save()
     config, ledger, transport, runtime, _ = setup_runtime(
         tmp_path,
         monkeypatch,
-        client,
         unlimited=True,
         duration_seconds=1,
     )

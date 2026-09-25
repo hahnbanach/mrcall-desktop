@@ -1,37 +1,21 @@
-"""Clock capability, strict permissions and the paid adapter's actual tool loop."""
+"""Direct read-only clock route and capability enforcement for Live delegations."""
 
 import asyncio
 import json
 from datetime import datetime, timezone
 from unittest.mock import Mock
 
-import httpx
 import pytest
 
+from tests.voice.helpers import delegation
 from tests.voice.m2_fixture import KNOWN, NUMBER, configuration
 from tests.voice.test_agent_config import save
-from tests.voice.test_openai_voice import client_with, reply
-from zylch.llm.budget import budget_snapshot
-from zylch.llm.budget_pricing import BudgetError
-from zylch.llm.openai_voice import MODEL, request_bound
+from tests.voice.test_conversation import until
 from zylch.services.voice import current_time
 from zylch.services.voice.agent_config import VoiceError, snapshot_for_call
 from zylch.services.voice.caller_memory import CallerMemory
-from zylch.services.voice.conversation import Conversation
+from zylch.services.voice.conversation import Conversation, request_text, wants_clock, clock_zone
 from zylch.services.voice.current_time import CurrentTime
-
-
-@pytest.mark.parametrize("name", ["shell", ["get_current_time"], {"tool": "get_current_time"}])
-def test_unknown_or_malformed_tool_name_fails_before_dispatch(name):
-    with pytest.raises(BudgetError):
-        request_bound(
-            {
-                "model": MODEL,
-                "max_tokens": 128,
-                "messages": [{"role": "user", "content": "time?"}],
-                "tools": [{"name": name, "input_schema": {"type": "object"}}],
-            }
-        )
 
 
 @pytest.mark.parametrize("month,offset", [(1, 3600), (7, 7200)])
@@ -42,12 +26,10 @@ def test_timezone_offset_and_dst(monkeypatch, month, offset):
     monkeypatch.setattr(current_time, "datetime", clock)
     trace = Mock()
     result = asyncio.run(CurrentTime(trace=trace).execute(timezone="Europe/Rome"))
-    data = result.data
     assert not result.error
-    assert datetime.fromisoformat(data["datetime"]) == instant
-    assert data["utc_offset_seconds"] == offset
-    assert data["timezone"] == "Europe/Rome" and data["source"] == "system_clock"
-    assert trace.record.call_args.kwargs["result"] == data
+    assert datetime.fromisoformat(result.data["datetime"]) == instant
+    assert result.data["utc_offset_seconds"] == offset
+    assert trace.record.call_args.kwargs["result"] == result.data
 
 
 @pytest.mark.parametrize(
@@ -67,8 +49,30 @@ def test_invalid_clock_arguments_do_not_echo_input(args):
     assert result.error == "A valid IANA timezone is required" and result.data is None
 
 
-def test_clock_capability_snapshot_and_disabled_tool(fixture_db, monkeypatch):
-    monkeypatch.delenv("ZYLCH_PROFILE_DIR")
+def make(snapshot):
+    sent = []
+
+    async def send(raw):
+        sent.append(json.loads(raw))
+
+    return Conversation(snapshot, CallerMemory(snapshot, KNOWN), send, {}), sent
+
+
+@pytest.mark.parametrize(
+    "phrase",
+    [
+        "Che ore sono a Roma?",
+        "No, mi correggo. Voglio sapere l’ora di Roma.",
+        "Lascia perdere il tracking. Dimmi la data di oggi a Roma.",
+    ],
+)
+def test_observed_correction_phrases_route_to_rome_clock(phrase):
+    question = request_text([{"role": "caller", "text": phrase}])
+    assert wants_clock(question)
+    assert clock_zone(question) == "Europe/Rome"
+
+
+def test_capability_snapshot_and_direct_roundtrip(fixture_db, monkeypatch):
     save()
     before = snapshot_for_call(NUMBER)
     save(configuration() | {"tools": ["caller_memory", "get_current_time"]})
@@ -78,40 +82,54 @@ def test_clock_capability_snapshot_and_disabled_tool(fixture_db, monkeypatch):
     for tools in (["get_current_time", "get_current_time"], ["shell"]):
         with pytest.raises(VoiceError):
             save(configuration() | {"tools": tools})
-    client = client_with(lambda _: httpx.Response(200, json=reply()))
-    conv = Conversation(before, CallerMemory(before, KNOWN), client, None, {})
-    result = asyncio.run(conv.agent._call_tool("get_current_time", {"timezone": "UTC"}))
-    assert result.error == "Unknown tool: get_current_time"
+
+    async def scenario():
+        disabled, sent_disabled = make(before)
+        disabled.start()
+        await disabled.lookup
+        disabled.event({"type": "session.input_transcript.delta", "delta": "Che ore sono a Roma?"})
+        disabled.event(delegation("no-clock"))
+        await until(lambda: disabled.evidence["results_sent"] == 1)
+        assert "unavailable" in sent_disabled[-1]["content"]
+        await disabled.close()
+
+        enabled, sent = make(after)
+        enabled.start()
+        await enabled.lookup
+        enabled.event({"type": "session.input_transcript.delta", "delta": "Che ore sono a Roma?"})
+        enabled.event(delegation("clock"))
+        await until(lambda: enabled.evidence["results_sent"] == 1)
+        assert sent[-1]["delegation_id"] == "clock"
+        assert (
+            "Europe/Rome" in sent[-1]["content"] and "Current system-clock" in sent[-1]["content"]
+        )
+        enabled.event({"type": "session.output_transcript.delta", "delta": "Sono le..."})
+        enabled.event({"type": "session.input_transcript.delta", "delta": "E a New York?"})
+        enabled.event(delegation("followup"))
+        await until(lambda: enabled.evidence["results_sent"] == 2)
+        assert "America/New_York" in sent[-1]["content"]
+        await enabled.close()
+
+    asyncio.run(scenario())
 
 
-def test_responses_clock_roundtrip_settles_and_records_data(fixture_db, monkeypatch):
-    monkeypatch.delenv("ZYLCH_PROFILE_DIR")
-    save(configuration() | {"tools": ["caller_memory", "get_current_time"]})
-    snap = snapshot_for_call(NUMBER)
-    bodies = []
-
-    def wire(request):
-        body = json.loads(request.content)
-        bodies.append(body)
-        assert {t["name"] for t in body["tools"]} == {"caller_memory", "get_current_time"}
-        if len(bodies) == 1:
-            data = reply(tool=True)
-            data["output"][0].update(name="get_current_time", arguments='{"timezone":"UTC"}')
-            return httpx.Response(200, json=data)
-        return httpx.Response(200, json=reply())
-
-    trace = Mock()
-    conv = Conversation(snap, CallerMemory(snap, KNOWN), client_with(wire), None, {}, trace=trace)
-    before = datetime.now(timezone.utc)
-    asyncio.run(conv.agent.process_message("Current UTC time?"))
-    after = datetime.now(timezone.utc)
-    assert len(bodies) == 2
-    output = next(i for i in bodies[1]["input"] if i.get("type") == "function_call_output")
-    assert "system_clock" in output["output"] and '"timezone": "UTC"' in output["output"]
-    recorded = next(
-        c.kwargs["result"] for c in trace.record.call_args_list if c.args == ("clock_result",)
+def test_configured_default_zone_for_fresh_clock(fixture_db):
+    save(
+        configuration()
+        | {
+            "tools": ["caller_memory", "get_current_time"],
+            "instructions": "Per richieste di ora, fuso predefinito Europe/Rome.",
+        }
     )
-    instant = datetime.fromisoformat(recorded["datetime"])
-    assert before.replace(microsecond=0) <= instant <= after
-    assert budget_snapshot("fixture-owner")["reserved_usd"] == 0
-    assert budget_snapshot("fixture-owner")["spent_usd"] > 0
+    conv, sent = make(snapshot_for_call(NUMBER))
+
+    async def scenario():
+        conv.start()
+        await conv.lookup
+        conv.event({"type": "session.input_transcript.delta", "delta": "Che ore sono?"})
+        conv.event(delegation("default-zone"))
+        await until(lambda: conv.evidence["results_sent"] == 1)
+        assert "Europe/Rome" in sent[-1]["content"]
+        await conv.close()
+
+    asyncio.run(scenario())

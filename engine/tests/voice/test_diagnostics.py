@@ -8,7 +8,7 @@ import pytest
 
 from tests.voice.helpers import delegation
 from tests.voice.m2_fixture import PUBLIC, FOLLOWUP, INTERNAL, OTHER_FACT
-from tests.voice.test_conversation import make_conversation, response, until
+from tests.voice.test_conversation import make_conversation, until
 from zylch.services.voice.diagnostics import CallTrace, DiagnosticOptions
 
 
@@ -65,7 +65,7 @@ def test_private_sink_redacts_and_refuses_symlinks(tmp_path):
 
 
 def test_correlated_boundary_no_audio_or_unselected_facts(fixture_db, monkeypatch, tmp_path):
-    conv, _, sent = make_conversation(monkeypatch, [response(tool={}), response(PUBLIC)])
+    conv, _, sent = make_conversation(monkeypatch)
     trace = CallTrace(
         tmp_path, "live-call", 1, conv.evidence, DiagnosticOptions(True, secrets=(fixture_db,))
     )
@@ -132,8 +132,7 @@ def test_correlated_boundary_no_audio_or_unselected_facts(fixture_db, monkeypatc
     ):
         assert forbidden not in content
     assert PUBLIC in content and FOLLOWUP in content and "Filtri blu" in content
-    tool = [d for k, d in rows if k == "memory_result" and d["run"]]
-    assert tool and tool[0]["run"]["delegation_ids"] == ["d1"]
+    assert any(k == "delegated_work_started" and d["delegation_id"] == "d1" for k, d in rows)
     assert all(d["call_id"] == "live-call" and d["config_revision"] == 1 for _, d in rows)
     ack = next(d for k, d in rows if k == "session.commentary.appended")
     assert any(k == "append_sent" and d["event_id"] == ack["client_event_id"] for k, d in rows)
@@ -141,7 +140,7 @@ def test_correlated_boundary_no_audio_or_unselected_facts(fixture_db, monkeypatc
 
 
 def test_capture_failure_preserves_conversation_cleanup(fixture_db, monkeypatch, tmp_path):
-    conv, _, _ = make_conversation(monkeypatch, [response(PUBLIC)])
+    conv, _, _ = make_conversation(monkeypatch)
     trace = CallTrace(tmp_path, "call", 1, conv.evidence, DiagnosticOptions(True))
     trace.db.close()
     conv.trace = conv.memory.trace = trace
@@ -159,7 +158,7 @@ def test_capture_failure_preserves_conversation_cleanup(fixture_db, monkeypatch,
 
 
 def test_delayed_memory_cancelled_without_late_result(fixture_db, monkeypatch, tmp_path):
-    conv, client, sent = make_conversation(monkeypatch, [response(PUBLIC)])
+    conv, _, sent = make_conversation(monkeypatch)
     trace = CallTrace(tmp_path, "call", 1, conv.evidence, DiagnosticOptions(True))
     conv.trace = conv.memory.trace = trace
     conv.memory.diagnostic_delay = 5
@@ -172,13 +171,13 @@ def test_delayed_memory_cancelled_without_late_result(fixture_db, monkeypatch, t
         trace.close()
 
     asyncio.run(scenario())
-    assert not sent and not client._client.messages.create.called
+    assert not sent
     kinds = [k for k, _ in records(tmp_path)]
     assert "memory_cancelled" in kinds and "memory_result" not in kinds
 
 
 def test_injected_lookup_failure_has_no_facts(fixture_db, monkeypatch, tmp_path):
-    conv, _, sent = make_conversation(monkeypatch, [response("Non posso verificare lo storico.")])
+    conv, _, sent = make_conversation(monkeypatch)
     trace = CallTrace(tmp_path, "call", 1, conv.evidence, DiagnosticOptions(True, fail_lookup=True))
     conv.trace = conv.memory.trace = trace
     conv.memory.diagnostic_failure = True
@@ -197,7 +196,7 @@ def test_injected_lookup_failure_has_no_facts(fixture_db, monkeypatch, tmp_path)
     content = str(records(tmp_path))
     assert PUBLIC not in content and FOLLOWUP not in content
     assert "unavailable" in content
-    assert "Non posso verificare" in str(sent)
+    assert "No authorized customer facts" in str(sent)
 
 
 def test_diagnostic_close_failure_preserves_final_ledger(fixture_db, monkeypatch, tmp_path):
@@ -207,8 +206,10 @@ def test_diagnostic_close_failure_preserves_final_ledger(fixture_db, monkeypatch
     from tests.voice.test_engine_runtime import setup_runtime, admit
     from zylch.services.voice.live_sip_smoke import create_app
 
-    _, client, _ = make_conversation(monkeypatch, [response(PUBLIC)])
-    config, ledger, transport, runtime, _ = setup_runtime(tmp_path, monkeypatch, client)
+    from tests.voice.test_agent_config import save
+
+    save()
+    config, ledger, transport, runtime, _ = setup_runtime(tmp_path, monkeypatch)
 
     async def scenario():
         async with TestClient(
