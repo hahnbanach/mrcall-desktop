@@ -208,10 +208,12 @@ Rome clock answer after one bound delegation and one engine clock read. The
 engine ledger row is closed with its USD1 hold retained and diagnostic complete;
 this row estimates 45 voice seconds and has no telephone engine-LLM charge.
 The operator rated the call perfect and explicitly confirmed the facts
-were correct and an interruption succeeded. This report is the handset evidence;
+were correct and an interruption succeeded. The operator separately confirmed
+the greeting was immediate and fluent, without waiting or repetition. This
+report is the handset evidence;
 the trace and append acknowledgements alone would not prove what was heard.
-The operator did not provide verbatim heard speech or a separate precise
-greeting-latency measurement. A carrier receipt for this human call is not yet
+The operator did not provide verbatim heard speech or a stopwatch measurement
+of greeting latency. A carrier receipt for this human call is not yet
 recorded here.
 An independent read-only review of the trace and current runtime confirmed
 matched recognition, exactly two selected facts, one clock read and bound result,
@@ -228,8 +230,7 @@ code-integration fixes. A send already underway cannot retract its frame, so
 post-send correction steering still requires handset observation. No speculative
 anti-repetition controller was added.
 
-Remaining acceptance: precise handset greeting latency and verbatim hearing
-details; live ambiguous identity and a recognized-caller injected lookup-failure
+Remaining acceptance: verbatim hearing details; live ambiguous identity and a recognized-caller injected lookup-failure
 path; correction during pending engine work and a closure/late-result call.
 The latest independent end-to-end review returned REVISE on those missing
 scenarios. Local
