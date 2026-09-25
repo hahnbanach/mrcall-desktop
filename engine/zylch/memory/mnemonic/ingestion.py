@@ -83,6 +83,7 @@ from .wiring import CommitContext
 logger = logging.getLogger(__name__)
 
 SOURCE_KINDS: Tuple[str, ...] = ("email", "whatsapp", "calendar", "mrcall")
+PARENT_ID_PREFIX = "src-"
 
 
 @dataclass(frozen=True)
@@ -129,7 +130,7 @@ def parent_event_id(owner_id: str, company_key: str, source: Source) -> str:
             "utf-8"
         )
     ).hexdigest()
-    return f"src-{digest[:40]}"
+    return f"{PARENT_ID_PREFIX}{digest[:40]}"
 
 
 def child_event_id(parent_id: str, index: int) -> str:
@@ -418,39 +419,53 @@ def _decide_children(
     return _aggregate(parent, results)
 
 
-def _aggregate(parent: MemoryEvent, results: Sequence[MnemonicResult]) -> Ingestion:
+def parent_settlement(
+    parent_id: str, results: Sequence[MnemonicResult]
+) -> Optional[Tuple[MnemonicResult, str]]:
+    """How a parent settles from its children's results: its result and journal state.
+
+    ``None`` while a child is still a retryable failure. Otherwise ``review``
+    when a child is in review, ``committed`` when a child committed (their
+    committed ids aggregated), ``skipped`` when none did. The one rule both the
+    ingestion loop and the owner's resolution (:mod:`~zylch.memory.mnemonic.reviews`)
+    settle a parent by.
+    """
     outcomes = [r.outcome for r in results]
-    committed_ids: Tuple[Tuple[str, str], ...] = tuple(
-        pair for r in results if r.outcome == COMMITTED for pair in r.committed_ids
-    )
     if RETRYABLE_FAILURE in outcomes:
-        failed = next(r for r in results if r.outcome == RETRYABLE_FAILURE)
-        return Ingestion(
-            RETRYABLE_FAILURE, parent.event_id, failed.reason, tuple(results), committed_ids
-        )
+        return None
     if REVIEW_NEEDED in outcomes:
         reasons = "; ".join(
             f"{r.event_id}: {r.reason}" for r in results if r.outcome == REVIEW_NEEDED
         )
-        settled = _settle_parent(
-            parent, MnemonicResult.review_needed(parent.event_id, reasons), journal.REVIEW
-        )
-        return Ingestion(settled.outcome, parent.event_id, settled.reason, tuple(results), committed_ids)
+        return MnemonicResult.review_needed(parent_id, reasons), journal.REVIEW
+    committed_ids: Tuple[Tuple[str, str], ...] = tuple(
+        pair for r in results if r.outcome == COMMITTED for pair in r.committed_ids
+    )
     if committed_ids:
-        settled = _settle_parent(
-            parent, MnemonicResult.committed(parent.event_id, committed_ids), journal.COMMITTED
+        return MnemonicResult.committed(parent_id, committed_ids), journal.COMMITTED
+    return (
+        MnemonicResult.skipped(parent_id, f"all {len(results)} children skipped"),
+        journal.SKIPPED,
+    )
+
+
+def _aggregate(parent: MemoryEvent, results: Sequence[MnemonicResult]) -> Ingestion:
+    committed_ids: Tuple[Tuple[str, str], ...] = tuple(
+        pair for r in results if r.outcome == COMMITTED for pair in r.committed_ids
+    )
+    settles = parent_settlement(parent.event_id, results)
+    if settles is None:
+        failed = next(r for r in results if r.outcome == RETRYABLE_FAILURE)
+        return Ingestion(
+            RETRYABLE_FAILURE, parent.event_id, failed.reason, tuple(results), committed_ids
         )
-    else:
-        settled = _settle_parent(
-            parent,
-            MnemonicResult.skipped(parent.event_id, f"all {len(results)} children skipped"),
-            journal.SKIPPED,
-        )
+    settled = _settle_parent(parent, *settles)
     return Ingestion(settled.outcome, parent.event_id, settled.reason, tuple(results), committed_ids)
 
 
 __all__ = [
     "Ingestion",
+    "PARENT_ID_PREFIX",
     "SOURCE_KINDS",
     "Source",
     "bounded_view",
@@ -458,4 +473,5 @@ __all__ = [
     "hint_for",
     "ingest",
     "parent_event_id",
+    "parent_settlement",
 ]
