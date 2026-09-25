@@ -220,7 +220,7 @@ delegations through direct engine functions; the saved old
 `VOICE_ENGINE_PROVIDER` value has no telephone effect. The old usage rows and
 unsettled historical proxy holds remain intact. See
 [current integrated configuration](voice-agent-configuration.md#current-telephone-runtime-gpt-live-with-selected-context-m4)
-and the active milestone plan for verified behavior and open acceptance criteria.
+and the completed milestone plan for verified behavior and evidence limits.
 
 
 ## Restoring the isolated transient service

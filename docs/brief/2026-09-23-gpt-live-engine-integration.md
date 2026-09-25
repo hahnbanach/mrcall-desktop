@@ -10,8 +10,9 @@ Scope: product brief for a customer-service voice agent using GPT-Live, Python,
 Vonage and the existing engine. Defines the first memory-backed conversation,
 operator configuration and the direction for repeatable service integrations.
 M1–M3 are approved for the isolated prototype.
-M4 is active with a revised Live-context design; acceptance requires new
-correlated traces and listening. Older GPT-6 design entries are historical.
+M4 is complete under the operator-adjusted Live-context acceptance scope,
+supported by correlated traces, human listening and independent review.
+Older GPT-6 design entries are historical.
 <!-- doc-scope:end -->
 
 Execution: [four-milestone plan](../execution-plans/2026-09-23-gpt-live-engine-integration.md).
@@ -272,7 +273,8 @@ OpenAI documentation checked on 2026-09-23:
 [telephony and SIP](https://developers.openai.com/api/docs/guides/voice-sip).
 Project access and the isolated Vonage SIP route passed M1's real-call check;
 M3 memory-backed integration also passes its demonstration and independent review.
-M4 is in progress; its listening scenario matrix remains unverified. See the execution plan.
+M4 is accepted under the operator-adjusted scope; see the execution plan for
+evidence, limits and the historical broader scenario matrix.
 
 Existing engine boundaries:
 [company memory](../../engine/docs/features/entity-memory-system.md),

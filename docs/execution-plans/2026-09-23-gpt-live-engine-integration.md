@@ -1,5 +1,5 @@
 ---
-status: active
+status: completed
 date: 2026-09-23
 ---
 
@@ -21,12 +21,12 @@ implementation's approval was withdrawn by the subsequent failure-path review.
 M2 is complete: authenticated client/fixture demonstration and independent
 integration review passed. M3 is complete: direct GPT-6 backend demonstration,
 integrated telephone call and fresh independent integration review are APPROVED.
-Listening evidence and its limits are recorded below. M4 is now active; this
-four-milestone plan stays active.
+Listening evidence and its limits are recorded below. M4 is complete under the
+operator-adjusted acceptance scope; the four-milestone plan is complete.
 
 ## Current M4 plan — Live uses selected context; engine supplies new results
 
-**Design decision, 2026-09-25; implemented in the isolated listener, not yet phone-accepted as M4.** M1–M3
+**Design decision, 2026-09-25; implemented and phone-accepted within the operator-adjusted M4 scope.** M1–M3
 approvals remain historical evidence for those milestones. M4 **replaces and
 removes** the mandatory GPT-6 telephone path: no concrete telephone task here
 requires a separate GPT-6 turn. Remove the per-call GPT-6 voice agent, its
@@ -129,9 +129,12 @@ changing existing ledger holds. Official API basis, checked 2026-09-25:
    smoke service. Demonstrate real calls with the operator's short script and
    feedback plus private correlated transcripts: cold start without Desktop or
    cs-operator, next-call configuration change, immediate greeting, known caller
-   filters/Thursday and follow-up, unknown/ambiguous callers, correction during
-   engine work and speech, other-customer/internal exclusion, lookup failure,
+   filters/Thursday and follow-up, unknown-caller privacy, spoken correction,
    close/late-result suppression, clock/tool path, latency, continuity and costs.
+   Cover ambiguous matches, lookup errors, correction during engine work, and
+   other-customer/internal exclusion with deterministic tests and targeted
+   diagnostics; the operator's acceptance adjustment below defines the
+   remaining carrier gate.
    Repeat failed cases after fixes. Independently verify the old telephone GPT-6
    request path is gone while unrelated engine LLM workflows still work.
    Automated calls cannot certify handset audio or the known-caller case when
@@ -142,9 +145,9 @@ changing existing ledger holds. Official API basis, checked 2026-09-25:
    every financial reservation. If a criterion fails, leave M4 active and the
    failure explicit; preserve the isolated ledgers and service state on rollback.
 
-Current status: **implemented in the isolated listener; M4 acceptance remains
-open.** The obsolete telephone GPT-6 runtime is removed from the active call
-path. The carrier and human matrix below still governs acceptance.
+Current status: **M4 approved under the operator-adjusted acceptance scope.**
+The obsolete telephone GPT-6 runtime is removed from the active call path.
+The carrier, deterministic and human evidence below supports this acceptance.
 
 ### Revised M4 implementation and carrier evidence — 2026-09-25
 
@@ -164,9 +167,10 @@ no caller-specific examples in global instructions. Firebase ID tokens stayed
 in memory; private revision backups remain outside Git.
 
 `tests/voice` passed **171, 1 skipped** after the final scheduling fixes;
-90 focused tests for unrelated LLM budget/transports also passed. Independent
-end-to-end review approved code integration after a same-gate revision; full M4
-remains REVISE because the live/human matrix is incomplete. The prior 31 incoming rows
+90 focused tests for unrelated LLM budget/transports also passed. At this
+earlier checkpoint, independent review approved code integration after a
+same-gate revision but returned REVISE for the broader live/human matrix; final
+operator-adjusted acceptance and review appear below. The prior 31 incoming rows
 hash to `be84d78f…` and the prior 18 autonomous rows to `78a065a5…`, unchanged
 after activation. At this checkpoint 38 incoming and 25 autonomous rows are all
 closed, with USD38 and USD25 respective retained holds. Historical `openai_voice`
@@ -227,15 +231,40 @@ clock requests waited on unrelated caller lookup, and a delegation could be
 erased while an earlier commentary send was suspended. Both were repaired with
 paused-lookup/paused-send regressions; the same reviewer then approved those
 code-integration fixes. A send already underway cannot retract its frame, so
-post-send correction steering still requires handset observation. No speculative
+post-send correction steering remains a technical limit; the operator accepted
+the completed handset interruption test as sufficient. No speculative
 anti-repetition controller was added.
 
-Remaining acceptance: verbatim hearing details; live ambiguous identity and a recognized-caller injected lookup-failure
-path; correction during pending engine work and a closure/late-result call.
-The latest independent end-to-end review returned REVISE on those missing
-scenarios. Local
-tests cover these boundaries but cannot substitute for the outstanding carrier
-and listening scenarios. M4 remains **active**, not completed.
+Operator acceptance adjustment, 2026-09-25: the recognized-caller call is
+sufficient for spoken correction and normal dialogue; do not require another
+human barge-in during pending engine work. A phone identifier can match multiple
+company blobs (for example a shared switchboard or duplicate records); the
+engine then sends no personal facts. The deterministic ambiguity and lookup-error
+tests are sufficient for these fail-closed boundaries. A failed lookup provides
+no selected facts to disclose, though model instructions cannot guarantee the
+absence of every hallucination. Do not require carrier calls solely for those
+two cases. Verbatim hearing details are useful diagnostics, not a completion
+gate after the operator's positive listening report.
+
+The operator performed the remaining hangup call on 2026-09-25. Private trace
+`call-afef4d6175e04f06a2e25904d1331556.db` confirms a 20-second injected
+lookup delay, greeting, caller question about the filters, and an immediate
+Live response saying the details were not available to it. The operator heard
+the response and judged it correct: the selected facts had not reached Live,
+and Live had no direct memory tool. Do not treat this as a defect or add prompt
+steering for it. The call closed at +17.076 s, cancelled the pending lookup,
+sent zero delegated results and closed its private trace. The isolated incoming
+ledger has 40/40 closed rows and USD40 in retained holds; this row's diagnostic
+is complete with 16 estimated voice seconds. The diagnostic delay was restored
+to zero; the listener is healthy and the tunnel was not restarted. This is
+operator-observed private evidence, not a repository artifact or invoice.
+
+The live hangup scenario proves cancellation of an in-flight lookup and no
+post-close append. It does not depict a completed delegated result racing with
+hangup; deterministic tests cover that boundary. The fresh independent
+end-to-end review reran nine focused tests and returned **APPROVED** for code
+integration and M4 acceptance under the operator-adjusted scope. No concrete
+acceptance blocker remains in that scope. M4 is **completed**.
 
 ## Historical M4 filler experiments — 2026-09-25
 

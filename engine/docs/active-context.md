@@ -25,11 +25,14 @@ artifacts or proof of handset audio. The autonomous diagnostic caller is unknown
 to the frozen customer fixture. Operator handset feedback confirms correct
 blue-filter/Thursday facts, immediate fluent greeting, and a successful
 interruption for a recognized caller, correlated with a private closed trace.
-Verbatim heard wording, live ambiguity and the full exceptional-scenario
-matrix remain unaccepted. The independent reviewer approved code integration
-and rated full M4 REVISE after the human call. M4 stays active. The experiment sequence,
-private trace references, and remaining criteria are in the
-[active plan](../../docs/execution-plans/2026-09-23-gpt-live-engine-integration.md).
+Delayed-lookup hangup has private evidence of closure without a late result,
+cancelled lookup and retained ledger hold. Deterministic
+tests cover ambiguous identity and lookup failure; the operator accepted the
+completed interruption test as sufficient. Final independent review approved
+M4 within the operator-adjusted scope. The hangup trace proves cancellation of
+the in-flight lookup; deterministic tests cover a completed delegated result
+racing with closure. The experiment sequence and private trace references are
+in the [completed plan](../../docs/execution-plans/2026-09-23-gpt-live-engine-integration.md).
 The operator reports that the isolated service and tunnel retain infinite
 runtime, no local test ceiling exists, and prior ledger rows remain intact;
 these live/private state claims require verification against the isolated host.

@@ -207,8 +207,9 @@ shutdown cancel pending work and suppress late appends. Binding is checked again
 before commentary disclosure. Provider acknowledgements are recorded separately
 from output transcript and human listening. The shared M1 ledger retains every
 old and new hold; service and tunnel have unlimited lifetime in the authorized
-isolated mode. The [active plan](../../../docs/execution-plans/2026-09-23-gpt-live-engine-integration.md#current-m4-plan--live-uses-selected-context-engine-supplies-new-results)
-records carrier tests, observed failures and remaining human acceptance.
+isolated mode. The [completed plan](../../../docs/execution-plans/2026-09-23-gpt-live-engine-integration.md#current-m4-plan--live-uses-selected-context-engine-supplies-new-results)
+records carrier tests, observed failures, operator acceptance and evidence
+limits.
 
 M3 used a dedicated `gpt-6-sol` Responses backend; its approval, usage rows and
 old reservations are historical evidence. The adapter code remains available to
