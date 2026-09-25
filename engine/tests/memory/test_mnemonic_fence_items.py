@@ -18,6 +18,7 @@ from unittest.mock import AsyncMock, Mock, patch
 import pytest
 
 from zylch.memory.mnemonic import fence
+from zylch.memory.mnemonic.contracts import MAX_EXTRACTED_ENTITIES
 from zylch.memory.mnemonic.fence import JOINING, CompanyFenced
 from zylch.services import preparation
 from zylch.storage.storage import Storage
@@ -69,6 +70,30 @@ def test_an_item_the_fence_refuses_after_a_paid_extraction_counts_no_failure(pro
     def extract_then_fence(**kwargs):
         fenced_by_another_account()
         return text_response(extraction(LUCA))
+
+    worker.client._client.messages.create = Mock(side_effect=extract_then_fence)
+
+    with pytest.raises(CompanyFenced, match=JOINING):
+        run(worker, "process_email", mail)
+
+    assert worker.client._client.messages.create.call_count == 1
+    assert attempt_rows() == [
+        {"stage": "memory:email", "source": "mail-1", "inflight": 0, "dispatched": 1, "failures": 0}
+    ]
+    assert accounting() == (0, 0, JOINING)
+    parent = parent_of("mail-1")
+    assert parent["state"] == "pending" and children_of(parent["event_id"]) == {}
+    assert not email_processed("mail-1") and blobs() == {}
+
+
+def test_a_paid_source_whose_parent_settles_into_the_fence_counts_no_failure(profile):
+    mail = seed_email()
+    many = [LUCA.replace("Luca Bianchi", f"Person {i}") for i in range(MAX_EXTRACTED_ENTITIES + 1)]
+    worker = make_worker([], [])
+
+    def extract_then_fence(**kwargs):
+        fenced_by_another_account()
+        return text_response(extraction(*many))
 
     worker.client._client.messages.create = Mock(side_effect=extract_then_fence)
 

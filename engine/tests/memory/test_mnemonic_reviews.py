@@ -193,6 +193,18 @@ def test_dismissing_one_of_two_reviewed_children_leaves_the_parent_in_review(pro
     assert operations()[parent]["payload"] is None
 
 
+def test_dismissing_a_leftover_child_leaves_a_dismissed_parent_as_it_was(profile):
+    _, parent, _, second = reviewed_source()
+    reviews.resolve(parent, DISMISS)
+    dismissed = operations()[parent]
+    assert dismissed["state"] == journal.SKIPPED and dismissed["result"]["reason"] == DISMISSED
+
+    answer = reviews.resolve(second, DISMISS)
+
+    assert answer["parent"] == {"event_id": parent, "state": journal.SKIPPED}
+    assert operations()[parent] == dismissed
+
+
 def test_dismissing_a_failed_chat_row_and_a_leased_pending_row_outlasts_their_attempts(profile):
     failed = parked(chat_event("turn-failed"), state=journal.FAILED)
     leased = chat_event("turn-leased")

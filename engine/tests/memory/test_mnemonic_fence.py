@@ -39,6 +39,7 @@ from zylch.storage.join_fence_model import MemoryJoinFence
 from zylch.storage.models import Blob, MemoryMeta, MemoryOperation
 
 from . import seeding
+from .consolidation_env import healthy, live, person, scripted, seed, skip_answer, sweep
 from .mnemonic_env import (
     COMPANY_A,
     COMPANY_B,
@@ -224,6 +225,29 @@ def test_a_review_with_restrictions_is_refused_at_its_receipt_and_restricts_noth
     assert snapshot[0][0]["evt-1"]["restrictions"] == [] and snapshot[0][0]["evt-1"]["state"] == journal.PENDING
 
 
+def test_a_fence_met_at_the_dispatch_releases_the_hold_and_charges_nothing(profile_a, monkeypatch):
+    from zylch.llm.budget import budget_snapshot
+
+    real = journal.claim
+
+    def claimed_then_fenced(event_id):
+        lease = real(event_id)
+        fence_at(FENCED, owners=(OWNER_B,))
+        return lease
+
+    monkeypatch.setattr(journal, "claim", claimed_then_fenced)
+    spent = budget_snapshot(OWNER_A)["spent_usd"]
+    llm = client(json.dumps({"action": "CREATE", "entity_type": "COMPANY", "scope": "entity", "content": ACME, "reason": "new"}))
+
+    result = submit(ev(), client=llm)
+
+    assert result.outcome == "retryable_failure" and result.reason == JOINING
+    assert isinstance(result.refusal, CompanyFenced)
+    assert llm._client.messages.create.call_count == 0
+    assert budget_snapshot(OWNER_A)["reserved_usd"] == 0
+    assert budget_snapshot(OWNER_A)["spent_usd"] == spent
+
+
 def test_a_chat_create_memory_answers_retryable_failure_under_a_fence(profile_a, monkeypatch):
     from zylch.assistant.turn_context import set_turn_observation
     from zylch.tools.create_memory_tool import CreateMemoryTool
@@ -365,6 +389,33 @@ def test_consolidation_rests_while_the_company_is_fenced(profile_a):
     assert journal_state() == before
     fence.release(fence_id)
     assert asyncio.run(consolidate(OWNER_A, force=True))["skipped"] is False
+
+
+def test_a_fence_placed_between_pairs_stops_the_sweep_and_is_no_failure(profile_a, monkeypatch, embedder):
+    from zylch.memory import consolidation
+
+    store = BlobStorage(get_session, embedder)
+    first = seed(store, person(about="Purchasing at Alpha; handles every order and every return."))
+    second = seed(store, person(about="Joins the Thursday sync."))
+    third = seed(store, person(about="Called once."))
+    healthy(monkeypatch)
+    transport = scripted(monkeypatch, skip_answer())
+    real = consolidation._tally
+
+    def tallied_then_fenced(summary, result):
+        kept = real(summary, result)
+        fence_at(FENCED, owners=(OWNER_B,))
+        return kept
+
+    monkeypatch.setattr(consolidation, "_tally", tallied_then_fenced)
+
+    summary = sweep()
+
+    assert summary["stopped"] == JOINING and summary["skipped"] is False
+    assert summary["pairs_decided"] == summary["blobs_kept_distinct"] == 1
+    assert consolidation.failed(summary) is None
+    assert transport.call_count == 1
+    assert live(store, first, second, third) == {first, second, third}
 
 
 def test_consolidation_rests_for_a_profile_that_left_the_company(company_db):

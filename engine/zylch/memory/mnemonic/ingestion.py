@@ -412,9 +412,12 @@ def _decide_children(
             + (f" reason={result.reason}" if result.reason else "")
         )
         if result.outcome == RETRYABLE_FAILURE and result.refusal is not None:
-            # The class it was — a pause or a budget refusal — so the batch
-            # stops as it always did. The child's row says failed; the parent
-            # stays pending; preparation's accounting owns the rest.
+            # The class it was — a pause, a budget refusal or a join fence —
+            # so the batch stops as it always did. After a pause or a budget
+            # refusal the child's row says failed; a fence refuses that write
+            # too, so the child's row stays pending, as its manifest recorded
+            # it. The parent stays pending; preparation's accounting owns the
+            # rest.
             raise result.refusal
     return _aggregate(parent, results)
 
