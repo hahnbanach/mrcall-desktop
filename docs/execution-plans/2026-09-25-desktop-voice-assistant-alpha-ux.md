@@ -39,9 +39,11 @@ the service-number inventory inconsistent.
 1. **Read-only identity and inventory.** Resolve `production@cafe124.it` to
    its immutable Firebase UID. Read its existing StarChat businesses,
    subscription and credit state, and the number's test and production
-   service-number rows. Confirm that no business owns the number, that the
-   Vonage application still routes it to the isolated listener, and that
-   there are no active calls. Record IDs and current routing privately;
+   service-number rows. Confirm that no business owns the number, that it is
+   still linked to the dedicated GPT-Live Vonage application, and that there
+   are no active calls. Inspect the application's Voice region,
+   signed-callback setting and answer/event webhook URLs. Record the
+   application ID, number association and current configuration privately;
    neither a mailbox address nor a phone number is a substitute for the UID.
    Stop on any owner, number or route mismatch.
 2. **Prepare the `desktop` template.** Read the actual StarChat template and
@@ -79,21 +81,27 @@ the service-number inventory inconsistent.
    time of the request; otherwise this is a blocker requiring a narrow API
    capability. Read back both records and stop on partial assignment. Do
    not mutate either table directly or silently move a production number.
-7. **Switch the carrier route.** With the business-aware listener healthy,
-   update only the authorized Vonage application answer/event URLs for
-   +390289047081. Keep signed callbacks and the existing application/key.
+7. **Update the Vonage application and route.** With the business-aware
+   listener healthy, update the dedicated Vonage Voice application's answer
+   and event webhook URLs to the new listener's `/vonage/answer` and
+   `/vonage/event` endpoints, and verify its configured Voice region,
+   signed callbacks and application key. Confirm that +390289047081 remains
+   linked to that application; if its association must change, update and
+   read back the number-to-application link as a separate carrier operation.
+   Keep the previous application configuration and association for rollback.
    Change the tunnel URL if required; do not restart the tunnel merely to
-   change its URL. Save the prior route for rollback and verify a signed
-   carrier callback reaches the intended business before inviting callers.
+   change its URL. Verify a signed callback reaches the intended business
+   before inviting callers.
 8. **Call and verify.** Make a real incoming call and listen for immediate
    greeting, correct Café 124 facts, a follow-up, an interruption and a
    missing-data answer. Correlate the heard words with private diagnostic
    transcription, selected facts, tool results, carrier closure and cost
    ledger. An ACK or transcript alone is not proof of audible delivery.
    Verify the assistant remains reachable with Electron closed.
-9. **Finish or restore.** If any gate fails, restore the previous carrier
-   route and keep the pilot inactive; retain the business and accounting
-   evidence for diagnosis. Do not reset holds, reservations or call history.
+9. **Finish or restore.** If any gate fails, restore the previous Vonage
+   application configuration and number association, then keep the pilot
+   inactive; retain the business and accounting evidence for diagnosis. Do
+   not reset holds, reservations or call history.
    Mark the number active for the customer only after the real-call checks
    pass. Record the actual account, business ID, route and verification
    outcome in private operational notes, not in this repository.
@@ -102,6 +110,8 @@ the service-number inventory inconsistent.
 
 - StarChat reads show the intended UID owns one `desktop` trial business and
   both number records agree on +390289047081.
+- Vonage reads show the number attached to the intended application, with
+  the intended Voice region, signed callbacks and live answer/event URLs.
 - The listener resolves that business and its allowed context; an unrelated
   business and an unknown caller cannot see its private facts.
 - A human-heard call demonstrates greeting, grounded answers, follow-up and
