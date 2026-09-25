@@ -275,10 +275,11 @@ def test_a_restore_brings_back_the_named_version_and_retains_what_it_replaced(pr
     assert out["ok"] is True, out
     assert out["blob"]["content"] == BETA
     assert blobs()[target] == BETA
-    # The restore retained the text it replaced: history only grows.
+    # The restore retained the text it replaced: history only grows. It is
+    # stamped as the owner's restore, which is what ends a sink's count.
     assert [(r, c) for _, r, c in versions_of(target)] == [
         ("append", BETA),
-        ("append", BETA_CORRECTED),
+        ("restore", BETA_CORRECTED),
     ]
 
 

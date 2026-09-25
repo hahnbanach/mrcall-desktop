@@ -618,8 +618,8 @@ Use `/agent process` to extract facts from synced data:
 
             output = f"**🕘 Retained versions of `{blob_id}`** ({len(rows)}, oldest first)\n\n"
             for version_id, reason, superseded_at, content in rows:
-                # Bounded per version: retention is unbounded until the
-                # consolidation window lands, and the answer must not be.
+                # Bounded per version: a sink keeps every version, and the
+                # answer must stay readable however many that is.
                 shown = content if len(content) <= 400 else content[:400] + " […]"
                 output += f"**{version_id}** _{reason}, superseded {superseded_at}_\n{shown}\n\n"
             output += "Bring one back with `/memory restore <blob_id> <version_id>`."

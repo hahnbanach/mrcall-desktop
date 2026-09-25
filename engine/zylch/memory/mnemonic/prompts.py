@@ -85,6 +85,13 @@ ACTIONS
   no_op_target with its exact id and version.
 - REVIEW: you cannot decide safely. Say why in reason.
 
+A consolidation observation (source kind "consolidation") is not new
+information: it shows exactly two memories that were paired because they share
+an identifier or a stated name. Answer MERGE when the inputs prove they are the
+same subject, SKIP with a reason when they are different subjects, and REVIEW
+when the identity cannot be decided. Never answer CREATE or UPDATE to a
+consolidation observation.
+
 Every entry in declared_effects is written as "verb:blob_id" or
 "verb:blob_id->blob_id", and the verb is one of alias, reference, index or
 delete. Every blob id it names must also be in your write_set: the effects are

@@ -21,7 +21,7 @@ implementation of each rule rather than two that can drift.
 from __future__ import annotations
 
 import logging
-from typing import Iterable, Sequence, Tuple
+from typing import Iterable, List, Sequence, Tuple
 
 from sqlalchemy.orm import Session
 
@@ -84,6 +84,26 @@ def link_source(
     session.add(row)
     session.flush()
     return True
+
+
+def links_of(session: Session, *, blob_id: str, company_key: str) -> List[Tuple[str, str, str]]:
+    """Every source link of one blob, as ``(source_kind, source_id, owner_id)``.
+
+    Read by a merge before it drops its donor, so each source the donor was
+    extracted from can be linked to the keeper in the same transaction: the
+    donor's own link rows go with it by cascade, and a source link is
+    provenance the merge must not lose. Each link keeps the ``owner_id`` of
+    whoever linked it.
+    """
+    found: List[Tuple[str, str, str]] = []
+    for kind, (model, column) in SOURCE_LINKS.items():
+        rows = (
+            session.query(getattr(model, column), model.owner_id)
+            .filter(model.blob_id == blob_id, model.company_key == company_key)
+            .all()
+        )
+        found.extend((kind, str(source_id), str(owner)) for source_id, owner in rows)
+    return found
 
 
 def add_identifiers(
@@ -175,5 +195,6 @@ __all__ = [
     "drop_identifiers",
     "identifiers_from",
     "link_source",
+    "links_of",
     "record_alias",
 ]

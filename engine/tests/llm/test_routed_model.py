@@ -138,7 +138,8 @@ def test_merge_gate_uses_memory_merge_knob(monkeypatch, saved_model):
         client = MagicMock()
         client.model = model or "default"
         client.create_message_sync.return_value = types.SimpleNamespace(
-            stop_reason="end_turn", content=[types.SimpleNamespace(type="text", text="INSERT")]
+            stop_reason="end_turn",
+            content=[types.SimpleNamespace(type="text", text='{"action": "SKIP", "reason": "x"}')],
         )
         return client
 
@@ -147,4 +148,4 @@ def test_merge_gate_uses_memory_merge_knob(monkeypatch, saved_model):
 
     res = merge_gate_selfcheck()  # merge_service=None → builds its own
     assert captured["model"] == "claude-mergegate-x"
-    assert res["healthy"] is True  # INSERT → distinct entities correctly refused
+    assert res["healthy"] is True  # SKIP → the role did not fold the two

@@ -13,6 +13,8 @@ from __future__ import annotations
 
 import dataclasses
 
+import pytest
+
 from zylch.memory.mnemonic import contracts as c
 from zylch.memory.mnemonic.agent import adapt_response
 from zylch.memory.mnemonic.contracts import Candidate, MemoryEvent, SubjectHint
@@ -127,6 +129,70 @@ def test_a_lid_written_into_a_phone_line_still_corroborates():
     mislabelled = _person_candidate("person-nina-lid", "Nina Rossi", "Phone: 185800503328844@lid")
     errors = validate(event, _create_person("Nina Rossi", "LID: 185800503328844@lid"), (mislabelled,)).errors
     assert any("already shares identifying evidence" in e for e in errors)
+
+
+def _lid_event(name: str, lid: str) -> MemoryEvent:
+    return _person_event(
+        SubjectHint(entity_type=c.PERSON, name=name, identifiers=[("lid", lid)]),
+        f"WhatsApp from {name}.",
+    )
+
+
+def _duplicate_refused(event: MemoryEvent, candidate: Candidate, name: str, *lines: str) -> bool:
+    errors = validate(event, _create_person(name, *lines), (candidate,)).errors
+    return any("already shares identifying evidence" in e for e in errors)
+
+
+def test_a_shared_lid_line_corroborates_a_person_only_under_the_same_name():
+    """A ``LID:`` header line is read on the candidate side too; like a phone, a lid
+    is shared by whoever answers it, so it needs the same stated name."""
+    lid = "185800503328844@lid"
+    same = _person_candidate("person-nina-lid", "Nina Rossi", f"LID: {lid}")
+    assert _duplicate_refused(_lid_event("Nina Rossi", lid), same, "Nina Rossi", f"LID: {lid}")
+    other = _person_candidate("person-marta-lid", "Marta Riva", f"LID: {lid}")
+    assert not _duplicate_refused(_lid_event("Nina Rossi", lid), other, "Nina Rossi", f"LID: {lid}")
+
+
+def test_a_bare_digit_lid_never_equals_a_phone_in_either_direction():
+    digits = "185800503328844"
+    lid_line = _person_candidate("person-nina-lid", "Nina Rossi", f"LID: {digits}")
+    phone_line = _person_candidate("person-nina-phone", "Nina Rossi", f"Phone: {digits}")
+    phone_event = _person_event(
+        SubjectHint(entity_type=c.PERSON, name="Nina Rossi", identifiers=[("phone", digits)]),
+        "Nina calls.",
+    )
+    assert not _duplicate_refused(phone_event, lid_line, "Nina Rossi", f"Phone: {digits}")
+    assert not _duplicate_refused(
+        _lid_event("Nina Rossi", digits), phone_line, "Nina Rossi", f"LID: {digits}"
+    )
+    # A bare-digit lid and its suffixed form are the same lid.
+    assert _duplicate_refused(
+        _lid_event("Nina Rossi", digits), lid_line, "Nina Rossi", f"LID: {digits}"
+    )
+
+
+@pytest.mark.parametrize("line", ["- LID: {lid}", "  LID = {lid}", "• lid: {lid}"])
+def test_a_lid_line_in_any_form_the_header_parser_reads_is_a_lid(line):
+    """Bulleted, indented or with ``=``: the candidate side reads what the hint side reads,
+    and the bare-digit value is still a lid, never a phone."""
+    digits = "185800503328844"
+    candidate = _person_candidate("person-nina-lid", "Nina Rossi", line.format(lid=digits))
+    assert _duplicate_refused(
+        _lid_event("Nina Rossi", digits), candidate, "Nina Rossi", f"LID: {digits}"
+    )
+    phone_event = _person_event(
+        SubjectHint(entity_type=c.PERSON, name="Nina Rossi", identifiers=[("phone", digits)]),
+        "Nina calls.",
+    )
+    assert not _duplicate_refused(phone_event, candidate, "Nina Rossi", f"Phone: {digits}")
+
+
+def test_a_lid_in_a_phone_line_needs_the_same_name_too():
+    lid = "185800503328844@lid"
+    mislabelled = _person_candidate("person-marta-lid", "Marta Riva", f"Phone: {lid}")
+    assert not _duplicate_refused(
+        _lid_event("Nina Rossi", lid), mislabelled, "Nina Rossi", f"LID: {lid}"
+    )
 
 
 def test_a_company_sharing_only_its_name_is_still_corroborated():

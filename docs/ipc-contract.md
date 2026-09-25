@@ -223,7 +223,7 @@ registry on 2026-08-15 (65 methods), plus `emails.needs_reply` added
 | `memory.status` | — | {has_key, available, reason, self_notion?, blob_count?, fact_count?, contributors?} — whether this profile's memory is usable and why not; sizes when it is. Never a path |
 | `memory.join_preview` | `key?` | {well_formed, exists, reason, self_notion?, blob_count?, fact_count?, contributors?} — the echo before a join; creates nothing, an unknown key answers `exists: false` |
 | `memory.join` | `key?` | {ok, reason?, already?, merged?, …summary} — merge this profile's memory into the store the key names, write the key, rebind the running engine. The ONLY write path for `MEMORY_KEY` (`settings.update` refuses it) |
-| `memory.reconsolidate_now` | — | summary dict; `skipped: true, reason: "another engine is sweeping"` when another daemon holds the company's sweep lock |
+| `memory.reconsolidate_now` | — | the consolidation summary; `skipped: true, reason: "another engine is sweeping"` when another daemon holds the company's sweep lock |
 | `memory.restore_version` | `blob_id?, version_id?` | {ok, blob?, version_id?, reason?} — bring one memory blob back to a version `blob_versions` retained for it; mechanical, no model, the text it replaces is retained first. `{ok: false, reason}` for a missing id, a version of another blob, or a blob this profile cannot see |
 
 **`mrcall.*`**
@@ -1277,13 +1277,38 @@ separate and free of LLM inference.
 ### `memory.reconsolidate_now()` / `tasks.dedup_now()`
 
 The two manual-maintenance buttons in Settings; both return a worker
-summary dict. `memory.reconsolidate_now` runs the reconsolidation pass
-(`zylch.memory.llm_merge`), walking blob entities and merging
-semantically-equivalent duplicates — the same "John Smith PERSON" spread
-across several blobs. It forces the sweep; the daemon's own post-update
-sweep is gated on the store's change counter and answers
-`{skipped: true, reason}` when nothing changed since the last sweep or
-another engine holds the company's sweep lock. `tasks.dedup_now` runs the F8 dedup sweep
+summary dict. `memory.reconsolidate_now` runs consolidation
+(`zylch.memory.consolidation`): it replays this account's pending
+task-reference follow-ups, applies the version-retention policy, then folds
+duplicate entities — the same "John Smith PERSON" spread across several
+blobs — each pair decided by the mnemonic role and committed as one MERGE. It
+answers `{ok: true, ...summary}`; `{ok: false, error, ...summary}` when company
+memory is unavailable or the operation journal cannot answer — before the run
+starts, or at a pair's pre-check once it is under way, when the counts so far
+are kept — and `error` says why; `{ok: false, error}` when it raised. It forces
+the run; the daemon's own post-update run is gated on the store's change
+counter. The summary always carries its whole shape:
+
+- `skipped`, `reason` — the run did not happen: with `ok: true`, nothing
+  changed since the last sweep or another engine holds the company's sweep
+  lock; with `ok: false`, the failure above;
+- `no_llm` — no LLM transport for this profile; retention still ran;
+- `groups_examined`, `blobs_examined`, `blobs_merged`, `blobs_kept_distinct`,
+  `pair_cap_hit` — what the Settings card shows;
+- `aborted_overload` — two consecutive pairs failed on an overloaded provider,
+  and the run stopped;
+- `pairs_decided`, `pairs_settled_before`, `pairs_review`, `pairs_failed`,
+  `pairs_changed`, `pairs_without_evidence`, `pairs_deferred`, `stopped` (what
+  ended the loop early: a preparation or budget refusal, an exhausted batch,
+  no preparation run, or a journal that stopped answering mid-run);
+- `merge_suspended`, `pairs_pending_review` — the merge gate was unhealthy and
+  no pair was decided;
+- `references_resolved`, `references_pending` — the task-reference follow-ups;
+- `versions_pruned`, `retention_refused`, `blobs_versions_max`,
+  `version_sinks_total`, `version_sinks` (`[{blob_id, versions}]`, the sinks
+  this account can see, largest first, at most 100).
+
+`tasks.dedup_now` runs the F8 dedup sweep
 immediately and returns counts the renderer can phrase as "Closed N tasks
 across M cluster(s)"; it tolerates a profile with no LLM configured,
 answering `no_llm=True` instead of failing.

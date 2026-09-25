@@ -28,11 +28,11 @@ flowchart LR
     H -->|store| S
     P --> S
     F --> S
-    S --> B[BlobStorage semantic_create / semantic_update]
+    R[consolidation: button, memory-sweep, post-update] -->|pairs| S
+    R -->|retention| V[blob_versions]
+    S --> B[BlobStorage semantic_create / semantic_update / semantic_merge]
     S --> X[references, identifiers and aliases]
     H -->|delete, reset| B
-    R[reconsolidation] --> B
-    R --> X
     B --> T[blobs and blob_sentences]
     O[join, migrations and repair scripts] --> T
     O --> X
@@ -42,19 +42,25 @@ Every semantic loop is one loop. The channel workers collect a source and hand
 it to `mnemonic/ingestion.py`; the background memory job runs the worker's own
 coroutine per item; interactive `create_memory`, `update_memory`, the task
 solve and `/memory store` submit events; `prefs_store`, `facts_store` and
-correction learning are adapters over `submit()`. What still writes outside the
-harness is reconsolidation with its alias writer and donor delete (milestone
-7), the owner's `/memory delete` and `/memory reset` (milestone 1's gate, no
-model), and join, migrations and the repair scripts (milestone 8).
+correction learning are adapters over `submit()`; consolidation submits its
+pairs, and a MERGE is committed only for a consolidation pair, the donor's
+retaining drop and the alias inside that one transaction. What still writes
+outside the harness is the owner's `/memory delete` and `/memory reset`
+(milestone 1's gate, no model), and join, migrations and the repair scripts
+(milestone 8). Consolidation's own mechanism stays listed as milestone 7: the
+retention prune (`expire_versions`) and the record of the sequence a sweep
+starts from (`record_sweep_started`).
 
 `BlobStorage.store_blob` and `update_blob` are the common low-level blob
 writers and are not capability protected; the same primitives now also back
 `semantic_create` / `semantic_update`, which are. Associations and identity
-meaning can also change through `Storage.add_*_blob_link`,
-`add_person_identifiers`, `migrate_blob_references` and the reconsolidation
-alias writer; those four now delegate to the transaction-scoped forms in
+meaning can also change through `Storage.add_*_blob_link` and
+`add_person_identifiers`; both delegate to the transaction-scoped forms in
 `memory/associations.py`, so one implementation serves both the legacy
-standalone sessions and the semantic commit's single transaction. Join, company-key/split/identifier migrations and three repair
+standalone sessions and the semantic commit's single transaction. The alias is
+written only inside a MERGE commit. `tracked_calls` keeps
+`migrate_blob_references` and `_record_alias`, so a re-added helper of either
+name is scanned. Join, company-key/split/identifier migrations and three repair
 scripts contain direct SQL or fixed ORM writes outside those methods. The
 manifest distinguishes these mechanical or migration candidates from runtime
 semantic adapters so Milestone 8 can review each one rather than granting a
@@ -107,7 +113,7 @@ The ownership sequence is:
 | 4 | interactive create/update and task-solve adapters |
 | 5 | no writer conversion: retention under every rewrite, the departure record and the mechanical restore |
 | 6 | installed: ingestion, the job facade, the helper-writer adapters and the memory verb write through the harness; the four adapter doors (`store_rule` and `refine_rule` from the tools, `store_rule` and `upsert_fact` from correction learning) stay listed as the edges a re-added direct write would surface on |
-| 7 | reconsolidation, reference migration, donor deletion and aliases |
+| 7 | installed: consolidation is the one removing operation — its pairs through the harness (the MERGE commit's retaining donor drop under the permit, the links, the identifiers, the alias), the recorded task-reference follow-up and the retention policy; its three rows are its own mechanism (`CommittedWrites.semantic_merge → delete_blob`, `expire_versions → orm:delete:BlobVersion`, `record_sweep_started → sql:UPDATE:memory_meta`) |
 | 8 | join, storage migrations, backfills and semantic repair scripts |
 
 ## Kernel and permission edges

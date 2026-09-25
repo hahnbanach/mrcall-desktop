@@ -32,6 +32,7 @@ from .candidates import (
     event_identifiers,
     identity_tokens,
     identity_tokens_of,
+    is_email_token,
     parse_header,
     parse_identifiers,
 )
@@ -44,7 +45,9 @@ def corroborates(event: MemoryEvent, candidate: Candidate, entity_type: Optional
         shared = identity_tokens(event) & identity_tokens_of(candidate.content)
         if not shared:
             return False
-        if any("@" in value for value in shared):
+        # Only an email identifies a person on its own; a phone or a lid is
+        # shared by whoever answers it, and needs the same stated name.
+        if any(is_email_token(value) for value in shared):
             return True
         stated = (parse_header(candidate.content).get("name") or "").strip().lower()
         hinted = ((event.subject_hint.name if event.subject_hint else "") or "").strip().lower()

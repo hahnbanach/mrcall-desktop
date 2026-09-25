@@ -98,13 +98,16 @@ zylch/
 │   ├── store.py          # ~/.zylch/memory/<key>.db: open/create by provenance, memory_meta (self-notion, mutation_seq, last_sweep_seq)
 │   ├── join.py           # memory.join — merge a profile's store into another key's store, rebind in-process
 │   ├── blob_storage.py   # Blob CRUD (embeddings as BLOB), compare-and-swap updates
+│   ├── blob_commits.py   # The permit-guarded committed writers: semantic_create / semantic_update / semantic_merge
 │   ├── embeddings.py     # fastembed (ONNX, 384-dim)
 │   ├── hybrid_search.py  # Hybrid search over eligible rows: index load, text search, hydration
 │   ├── vector_index.py   # InMemoryVectorIndex
 │   ├── eligibility.py    # Which facts-family rows an ordinary read may return
-│   ├── blob_versions.py  # A retained version under every rewrite; restore
+│   ├── blob_versions.py  # A retained version under every rewrite; restore; the retention policy and sink report
 │   ├── mnemonic/         # The semantic write boundary: events, role, validator, commit, journal, ingestion (features/mnemonic-*.md)
-│   ├── llm_merge.py      # Memory reconsolidation — identifier-clustered union-find + LLM merge gate + cross-reference migration before delete (Phase 1c, whatsapp-pipeline-parity)
+│   ├── consolidation.py  # Consolidation — the one removing operation: follow-up replay, retention, pairs through the harness
+│   ├── clusters.py       # The entity family clustered by identity (union-find), sinks and restricted rows left out
+│   ├── llm_merge.py      # The merge-routed client pairs are decided with (decide_pair) and the merge-gate canary
 │   ├── pattern_detection.py # Pattern extraction
 │   ├── text_processing.py # Text normalization
 │   └── config.py         # Memory configuration
@@ -115,16 +118,16 @@ zylch/
 # (email/phone/lid) parsed from each blob's `#IDENTIFIERS` block.
 # Ingestion (`memory/mnemonic/ingestion.py`) asks it with each extracted
 # entity's own identifiers, never the sender's, and the semantic commit
-# replaces a blob's rows on every UPDATE; `reconsolidate_now` clusters via
+# replaces a blob's rows on every UPDATE; consolidation clusters via
 # union-find on these tuples (+ Name fallback). Helpers
 # `_parse_identifiers_block` / `_normalise_phone` live in `workers/memory.py`.
-# Cross-reference migration via
-# `Storage.migrate_blob_references` before delete keeps email_blobs /
-# calendar_blobs / task_items.sources.blobs intact through dedup.
-# `reconsolidate_now` runs at the end of every update's memory stage when
-# the store changed since the last sweep (`memory_meta.mutation_seq` vs
-# `last_sweep_seq`), once per company under `<store>.sweep.lock`; the
-# Settings button and `zylch memory-sweep` force it.
+# A MERGE commit re-creates the donor's email / calendar / WhatsApp links on
+# the keeper and replaces its identifiers from the merged text; the alias
+# resolves the donor's id, and a recorded follow-up re-points the committing
+# profile's task_items.sources.blobs. Consolidation runs at the end of every
+# update's memory stage when the store changed since the last sweep
+# (`memory_meta.mutation_seq` vs `last_sweep_seq`), once per company under
+# `<store>.sweep.lock`; the Settings button and `zylch memory-sweep` force it.
 │
 ├── llm/                  # LLM client
 │   ├── client.py         # LLMClient (direct Anthropic/OpenAI SDK; "mrcall" → MrCallProxyClient)

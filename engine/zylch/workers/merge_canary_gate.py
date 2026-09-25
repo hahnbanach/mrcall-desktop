@@ -1,11 +1,14 @@
 """Merge-gate canary policy — when to re-verify, not what to verify.
 
 The canary itself (``zylch.memory.llm_merge.merge_gate_selfcheck``)
-feeds two unmistakably-distinct entities to the live merge model and
-asserts it refuses to merge them — the detector for the 2026-06
-broken-open regression. Before support-llm-cost-fix / P3 it ran on
+shows two unmistakably-distinct memories to the mnemonic role, through
+the live merge-routed model, as one consolidation pair, and asserts the
+role does not propose to fold them together — the detector for the
+2026-06 broken-open regression. Before support-llm-cost-fix / P3 it ran on
 EVERY mail-bearing tick (~30-50 calls/day). This module decides when
-``_run_memory`` actually runs it:
+``_run_memory`` actually runs it, and consolidation
+(``zylch.memory.consolidation``) consults the same policy before the
+first pair it would decide when its caller passes no verdict:
 
 a. last definitive verdict missing or UNHEALTHY → run. Sticky: while
    unhealthy the canary runs on every memory pass and merging stays

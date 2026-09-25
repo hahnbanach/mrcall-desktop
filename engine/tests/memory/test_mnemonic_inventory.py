@@ -206,6 +206,11 @@ def test_every_literal_sql_sink_is_owned_by_a_later_milestone():
         "blob_aliases",
         "fact_history",
         "memory_meta",
+        # No literal statement writes these today; scanning them makes
+        # "only consolidation prunes a version" and the journal's own writer
+        # structural rather than a matter of reading the code.
+        "blob_versions",
+        "memory_operations",
     }
     pattern = re.compile(
         r"\b(INSERT(?:\s+OR\s+\w+)?\s+INTO|UPDATE|DELETE\s+FROM)\s+("

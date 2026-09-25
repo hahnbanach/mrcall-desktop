@@ -194,7 +194,8 @@ def test_a_rewrite_that_fails_retains_nothing(profile_a, embedder, monkeypatch):
 
 def test_the_sweeps_delete_keeps_the_donors_final_text(profile_a, embedder):
     blob_id = seed(embedder)
-    assert storage(embedder).delete_blob(blob_id, OWNER_A, retain=True) is True
+    with get_session() as session:  # a retaining drop runs inside its caller's transaction
+        assert storage(embedder).delete_blob(blob_id, OWNER_A, retain=True, session=session)
     kept = versions(blob_id)
     assert [v["content"] for v in kept] == [ACME]
     assert kept[0]["reason"] == CONSOLIDATE
@@ -258,25 +259,25 @@ def test_a_reset_on_a_shared_store_prunes_only_the_blobs_it_deletes(
     clear_process_state()
 
 
-# ─── The sweep, for real: both halves of a merge are retained ──────────
+# ─── Consolidation, for real: both halves of a merge are retained ──────
 
 
 def test_a_real_consolidation_retains_the_donor_and_the_keeper(profile_a, embedder, monkeypatch):
-    """Through `reconsolidate_now` itself, not the primitives.
+    """Through `consolidate` itself, not the primitives.
 
-    Two blobs share an identifier, so the sweep pairs them; a fake merge
-    service folds the donor into the keeper. What must hold afterwards: the
-    donor row is gone but its final text is a `consolidate` version, the
-    keeper's pre-merge text is a `consolidate` version too (so the sweep's own
-    rewrite is never read as a sink's growth), and the alias points at the
-    keeper. Only the LLM is faked; the lock, the clustering, the reference
-    migration, the rewrite, the delete and the alias are the real ones.
+    Two blobs share an identifier, so consolidation pairs them; the role,
+    scripted at the provider transport, folds the donor into the keeper and
+    the harness commits the MERGE. What must hold afterwards: the donor row is
+    gone but its final text is a `consolidate` version, the keeper's pre-merge
+    text is a `consolidate` version too (so consolidation's own rewrite is
+    never read as a sink's growth), and the alias points at the keeper. Only
+    the transport is faked; the lock, the clustering, the preparation item,
+    the validator, the rewrite, the drop and the alias are the real ones.
     """
-    import asyncio
-
-    import zylch.memory.llm_merge as lm
     from zylch.storage.models import BlobAlias
     from zylch.storage.storage import Storage
+
+    from tests.memory.consolidation_env import healthy, merge_answer, scripted, sweep
 
     keeper = seed(embedder, content=ACME)
     donor = seed(embedder, content=ACME.replace("Industrial supplier", "Also a distributor"))
@@ -286,17 +287,10 @@ def test_a_real_consolidation_retains_the_donor_and_the_keeper(profile_a, embedd
             owner_id=OWNER_A, blob_id=blob_id, identifiers=[("email", "info@acme.test")]
         )
 
-    class FakeMergeService:
-        def __init__(self, *_a, **_k):
-            pass
+    healthy(monkeypatch)
+    scripted(monkeypatch, merge_answer(storage(embedder), keeper, donor, entity_type="COMPANY"))
 
-        def merge(self, existing, new):
-            return existing + "\n#HISTORY\n- merged a duplicate record"
-
-    monkeypatch.setattr(lm, "try_make_llm_client", lambda *a, **k: object())
-    monkeypatch.setattr(lm, "LLMMergeService", FakeMergeService)
-
-    summary = asyncio.run(lm.reconsolidate_now(OWNER_A, force=True))
+    summary = sweep(OWNER_A)
 
     assert summary["blobs_merged"] == 1, summary
     survivors = {bid for bid in (keeper, donor) if content_of(bid) is not None}
@@ -305,10 +299,10 @@ def test_a_real_consolidation_retains_the_donor_and_the_keeper(profile_a, embedd
     gone_id = donor if kept_id == keeper else keeper
     # The keeper carries the merged text; its pre-merge text is retained as
     # the sweep's own version.
-    assert "merged a duplicate record" in content_of(kept_id)
+    assert f"folded in {gone_id[:8]}" in content_of(kept_id)
     keeper_versions = versions(kept_id)
     assert [v["reason"] for v in keeper_versions] == [CONSOLIDATE]
-    assert "merged a duplicate record" not in keeper_versions[0]["content"]
+    assert "folded in" not in keeper_versions[0]["content"]
     # The donor's final text survives its row.
     donor_versions = versions(gone_id)
     assert [v["reason"] for v in donor_versions] == [CONSOLIDATE]

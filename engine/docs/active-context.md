@@ -27,14 +27,15 @@ usage label. Interactive grants leave bounded preparation untouched; automatic
 grants must match the admitted item.
 Contract and bounds: [mnemonic decisions](features/mnemonic-decisions.md).
 
-The boundary now commits. `mnemonic/commit.py` writes a validated CREATE or
-UPDATE — blob, sentences, identifier index, source link, mutation sequence and
-the operation receipt — in one transaction on the company store, under a
-single-use `CommitPermit` checked at the storage boundary and a CAS against the
-version re-read inside that transaction. A `memory_operations` table in the
-same store makes an event idempotent, fences concurrent attempts and carries
-the per-event dispatch allowance across a restart. MERGE and reclassification
-return `review_needed`.
+The boundary now commits. `mnemonic/commit.py` writes a validated CREATE,
+UPDATE or — for a consolidation pair, inside its admitted item, and nowhere
+else — MERGE: blob, sentences, identifier index, source links, the alias,
+mutation sequence and the operation receipt, in one transaction on the company
+store, under a single-use `CommitPermit` checked at the storage boundary and a
+CAS against the versions re-read inside that transaction. A `memory_operations`
+table in the same store makes an event idempotent, fences concurrent attempts
+and carries the per-event dispatch allowance across a restart.
+Reclassification, and a MERGE anywhere else, return `review_needed`.
 
 No write asks a human. A validated proposal is written, and the difference
 between what the calling tool asked for and what the role decided — a different
@@ -43,11 +44,15 @@ as a `departure` on the operation row, in the tool's response and in the solve's
 answer. The three standing grants in the estate (`cs --allow`, the engine's
 session grant, the Desktop session button) grant the tool, which is the one
 permission a memory write needs. Every rewrite first retains the replaced text
-in `blob_versions` (`append`); the sweep's consolidation retains the donor's
-text and the keeper's replaced text (`consolidate`); the owner's delete and
-reset are the only paths that leave no version behind. A retained version is
-restorable through `memory.restore_version` and `/memory restore`, mechanically
-and gated like every other memory mutation.
+in `blob_versions` (`append`); a consolidation MERGE retains the keeper's
+replaced text and the donor's final text (`consolidate`); a restore retains
+what it replaces (`restore`); the owner's delete and reset are the only paths
+that leave no version behind. A retained version is restorable through
+`memory.restore_version` and `/memory restore`, mechanically and gated like
+every other memory mutation. Consolidation alone prunes versions: older than
+90 days and beyond a blob's 10 newest, never a sink's — a live blob with more
+than 25 `append` versions since its latest restore, reported by id on every run
+until its owner restores a version or deletes it.
 
 `create_memory`, `update_memory`, the task solve — chat, RPC and the
 interactive CLI solve, which carries its solve context — `/memory store`, the
@@ -61,14 +66,21 @@ skipped, a review parks it visibly, a crash resumes the unfinished children,
 and an edited source is a new revision. An extracted entity carries its own
 identifiers and never the sender's. A known customer-shaped FACT — by its own
 header or by a review's restriction — is absent from every ordinary fact read
-and from hybrid search before ranking. Still direct: reconsolidation with its
-alias writer and donor delete (M7), the owner's delete and reset, and join,
-migrations and the repair scripts (M8). Contracts:
+and from hybrid search before ranking. Consolidation
+(`memory/consolidation.py`) is the one operation that removes memory: the
+Settings button, `zylch memory-sweep` (inside its own preparation run) and the
+post-update run call it. It replays this account's recorded task-reference
+follow-ups, applies retention, then decides each duplicate pair through the
+role — pairs the validator's identity rule could never accept cost no call —
+and commits a MERGE; its merge gate follows the canary, which asks the role.
+Still direct: the owner's delete and reset, and join, migrations and the repair
+scripts (M8). Contracts:
 [mnemonic commit](features/mnemonic-commit.md),
 [mnemonic decisions](features/mnemonic-decisions.md),
 [writer inventory](features/mnemonic-writer-inventory.md). Tested locally
 against the frozen milestone 0 incident corpus and real split profile/company
-databases, on the `mnemonic-m6` branch; **not merged, not deployed**.
+databases. Milestones 5 and 6 are on `main`; milestone 7 is on the
+`mnemonic-m7` branch; **not merged, not deployed**.
 
 Support's engine exposes approval-gated `initiate_call` through the dashboard's
 Firebase atom API, with an explicit calling assistant ID. A live request on
@@ -123,6 +135,11 @@ API budgets; see [control boundaries](../../docs/operator-setup.md#ai-execution-
 
 ## Unresolved
 
+- The mnemonic harness refuses every memory write on a profile whose
+  `OWNER_ID` is not its `EMAIL_ADDRESS` — every app-created profile: events
+  carry `get_owner_id()` (the email) and are authorized against `OWNER_ID`.
+  Latent, since milestones 5–7 are not deployed; the fix is the CTO's
+  decision (hb `docs/known-issues/2026-09-24-mnemonic-owner-identity-mismatch.md`).
 - The remaining three profiles await a billing choice; funded credit acceptance
   remains open. No backlog resumption is part of model configuration.
 - Incident checkpoint counts and project inventories in dated records are

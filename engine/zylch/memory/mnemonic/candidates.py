@@ -46,6 +46,12 @@ _IDENTIFIER_LINE = re.compile(
     r"^(?:name|email|e-mail|phone|mobile|tel|telephone|company|domain|vat|id)\s*:\s*(.+)$",
     re.IGNORECASE | re.MULTILINE,
 )
+# A WhatsApp lid is identity, and it is not a phone: its line is read on its
+# own and kept out of the phone scan, and its comparison token always carries
+# ``@lid`` so it can never equal somebody's number. The line is read in every
+# form the hint side's parser reads (``workers/memory.py``, ``_LID_LABEL_RE``):
+# indented or bulleted, with ``:`` or ``=``.
+_LID_LINE = re.compile(r"^[ \t]*[-*•]?[ \t]*lid[ \t]*[:=][ \t]*(.+)$", re.IGNORECASE | re.MULTILINE)
 _EMAIL = re.compile(r"[\w.+-]+@[\w-]+\.[\w.-]+")
 # A phone is a run of digits with separators. The lookarounds keep it from
 # reading the local part of an email or of a WhatsApp ``<digits>@lid`` as a
@@ -88,6 +94,26 @@ def _normalize(value: str) -> str:
     return value
 
 
+def lid_token(value: str) -> str:
+    """A lid's comparison token: lowercased, separators stripped, ending in ``@lid``.
+
+    A bare-digit lid gets the suffix, so the same lid compares equal whether a
+    header wrote ``185800503328844`` or ``185800503328844@lid``, and never
+    equal to a phone number. Anything else carrying an ``@`` is not a lid.
+    """
+    value = re.sub(r"[\s()\-/]", "", (value or "").strip().lower())
+    if value.endswith("@lid"):
+        return value
+    if "@" not in value and value.isdigit() and len(value) >= 6:
+        return value + "@lid"
+    return ""
+
+
+def is_email_token(token: str) -> bool:
+    """An email — the one identity token that corroborates a person on its own."""
+    return "@" in token and not token.endswith("@lid")
+
+
 def _is_identity_token(token: str) -> bool:
     """An email, a lid or a phone — never a name, a company or a category."""
     if "@" in token:
@@ -108,10 +134,18 @@ def parse_identifiers(content: str) -> set:
     for raw in _IDENTIFIER_LINE.findall(content or ""):
         value = _normalize(raw)
         if value:
-            found.add(value)
-    for match in _EMAIL.findall(content or ""):
+            found.add(lid_token(value) if value.endswith("@lid") else value)
+    for raw in _LID_LINE.findall(content or ""):
+        for piece in raw.split(","):
+            token = lid_token(piece)
+            if token:
+                found.add(token)
+    # The shape scans read everything but the lid lines: a bare-digit lid is
+    # not a phone, whatever its digits look like.
+    scanned = _LID_LINE.sub("", content or "")
+    for match in _EMAIL.findall(scanned):
         found.add(_normalize(match))
-    for match in _PHONE.findall(content or ""):
+    for match in _PHONE.findall(scanned):
         found.add(_normalize(match))
     return found
 
@@ -148,7 +182,9 @@ def _hint_identity(event: MemoryEvent) -> Set[str]:
     hint = event.subject_hint
     if hint is None:
         return set()
-    found = {_normalize(value) for _, value in hint.identifiers}
+    found = {
+        lid_token(value) if kind == "lid" else _normalize(value) for kind, value in hint.identifiers
+    }
     for value in (hint.email, hint.phone):
         if value:
             found.add(_normalize(value))
@@ -296,6 +332,38 @@ def gather(
             blob = get_blob(row["blob_id"]) or {}
             row = {**row, "namespace": blob.get("namespace", "")}
         chosen.append(_as_candidate(row, hinted=row["blob_id"] == hinted_id))
+    return tuple(chosen)
+
+
+def pinned(
+    event: MemoryEvent,
+    get_blob: Callable[[str], Optional[dict]],
+    blob_ids: Sequence[str],
+) -> Tuple[Candidate, ...]:
+    """Exactly these blobs, re-read now, in this order — a consolidation pair.
+
+    No search and no identity-index lookup: the pair is the whole comparison
+    set, so a third memory can never be shown. ``get_blob`` must already be
+    owner and company scoped; a blob it no longer returns is left out, which is
+    how the commit learns that a paired member vanished.
+    """
+    wanted = event_identifiers(event)
+    chosen = []
+    for blob_id in blob_ids:
+        blob = get_blob(blob_id)
+        if not blob or not blob.get("content"):
+            continue
+        shared = wanted.intersection(parse_identifiers(blob["content"]))
+        row = {
+            "blob_id": blob_id,
+            "content": blob["content"],
+            "updated_at": blob.get("updated_at"),
+            "namespace": blob.get("namespace", ""),
+            "source": "consolidation",
+            "shared_identifiers": len(shared),
+            "score": 0.0,
+        }
+        chosen.append(_as_candidate(row, hinted=False))
     return tuple(chosen)
 
 

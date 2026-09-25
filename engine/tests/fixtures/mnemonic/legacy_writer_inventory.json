@@ -45,38 +45,6 @@
       "milestone": 8
     },
     {
-      "path": "zylch/memory/llm_merge.py",
-      "symbol": "_reconsolidate_locked",
-      "call": "_record_alias",
-      "count": 1,
-      "mode": "async",
-      "milestone": 7
-    },
-    {
-      "path": "zylch/memory/llm_merge.py",
-      "symbol": "_reconsolidate_locked",
-      "call": "delete_blob",
-      "count": 1,
-      "mode": "async",
-      "milestone": 7
-    },
-    {
-      "path": "zylch/memory/llm_merge.py",
-      "symbol": "_reconsolidate_locked",
-      "call": "migrate_blob_references",
-      "count": 1,
-      "mode": "async",
-      "milestone": 7
-    },
-    {
-      "path": "zylch/memory/llm_merge.py",
-      "symbol": "_reconsolidate_locked",
-      "call": "update_blob",
-      "count": 1,
-      "mode": "async",
-      "milestone": 7
-    },
-    {
       "path": "zylch/services/command_handlers.py",
       "symbol": "handle_memory",
       "call": "delete_all_blobs",
@@ -145,6 +113,15 @@
       "mode": "sync",
       "milestone": 6,
       "note": "adapter door: the helper submits to the harness (milestone 6); the row records the door, not a direct write"
+    },
+    {
+      "path": "zylch/memory/blob_commits.py",
+      "symbol": "CommittedWrites.semantic_merge",
+      "call": "delete_blob",
+      "count": 1,
+      "mode": "sync",
+      "milestone": 7,
+      "note": "consolidation's donor drop: inside the MERGE commit's one company transaction, under the MERGE permit, retaining the donor's final text first"
     }
   ],
   "orm_sinks": [
@@ -212,34 +189,6 @@
       "milestone": 8
     },
     {
-      "path": "zylch/storage/storage.py",
-      "symbol": "Storage.migrate_blob_references",
-      "call": "construct:CalendarBlob",
-      "count": 1,
-      "milestone": 7
-    },
-    {
-      "path": "zylch/storage/storage.py",
-      "symbol": "Storage.migrate_blob_references",
-      "call": "construct:EmailBlob",
-      "count": 1,
-      "milestone": 7
-    },
-    {
-      "path": "zylch/storage/storage.py",
-      "symbol": "Storage.migrate_blob_references",
-      "call": "construct:PersonIdentifier",
-      "count": 1,
-      "milestone": 7
-    },
-    {
-      "path": "zylch/storage/storage.py",
-      "symbol": "Storage.migrate_blob_references",
-      "call": "construct:WhatsAppBlob",
-      "count": 1,
-      "milestone": 7
-    },
-    {
       "path": "zylch/memory/blob_versions.py",
       "symbol": "retain_version",
       "call": "construct:BlobVersion",
@@ -291,6 +240,14 @@
       "count": 1,
       "milestone": 5,
       "note": "the owner's delete and reset prune a blob's versions with the blob; never filtered on owner_id, which is the writer's provenance"
+    },
+    {
+      "path": "zylch/memory/blob_versions.py",
+      "symbol": "expire_versions",
+      "call": "orm:delete:BlobVersion",
+      "count": 1,
+      "milestone": 7,
+      "note": "the retention policy consolidation applies: a version older than the window and beyond its blob's floor is removed, a sink's never; its callers are pinned by tests/memory/test_consolidation_retention.py"
     }
   ],
   "orm_assignments": [
@@ -380,7 +337,8 @@
       "symbol": "record_sweep_started",
       "call": "sql:UPDATE:memory_meta",
       "count": 1,
-      "milestone": 7
+      "milestone": 7,
+      "note": "consolidation's own change gate, not memory: it records the mutation sequence a run starts from (zylch/memory/consolidation.py), so the next tick knows whether anything changed since"
     },
     {
       "path": "zylch/storage/step_company_key.py",

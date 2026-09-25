@@ -11,7 +11,7 @@ Extracts facts from emails and stores them in entity-centric blobs with reconsol
 
 ## Purpose
 
-Process incoming emails to extract relationship information about contacts, storing in blobs with automatic merging of existing knowledge.
+Process incoming emails to extract relationship information about contacts, storing in blobs: an entity already known is updated rather than duplicated, and consolidation folds the duplicates left behind.
 
 ## Training: Thread-Based Email Fetching
 
@@ -28,14 +28,16 @@ The memory agent trainer uses **thread-based fetching** to avoid context window 
 
 ```python
 class MemoryWorker:
-    """Extract facts from emails and store in entity-centric blobs.
+    """Collects each channel's sources and takes them through the harness.
 
-    Flow:
-    1. Extract facts from email about the contact
-    2. Search for existing blob about this entity (hybrid search)
-    3. If found: LLM-merge new facts with existing knowledge
-    4. If not found: create new blob
-    5. Mark email as processed
+    Flow, for every channel:
+    1. Fetch the source and render it (envelope and body, or the call's text)
+    2. Hand the rendered text, the admitted stage and the extraction closure to
+       ``ingestion.ingest``, which pays for extraction under the source's own
+       grant, persists the manifest and decides every extracted entity through
+       the mnemonic role and the retaining commit
+    3. Mark the source processed only when the answer says every child is
+       terminal — committed, or deliberately skipped
     """
 ```
 
@@ -57,28 +59,33 @@ from zylch.memory import BlobStorage, HybridSearchEngine, LLMMergeService, Embed
 
 Uses LLM with extraction prompt. Multiple entities from a single email separated by `---ENTITY---`.
 
-## Reconsolidation
+## Updating instead of duplicating
 
-When a new entity is extracted, the agent searches for existing blobs:
-
-1. Find top 3 candidates above threshold (hybrid search)
-2. For each candidate, try LLM merge
-3. If LLM says INSERT (entities don't match), try next candidate
-4. If no suitable blob found, create new one
+Each extracted entity is one child event of its source's operation
+(`zylch/memory/mnemonic/ingestion.py`). The mnemonic role is shown at most 3
+candidates — the identity-index matches for the entity's own identifiers, never
+the sender's, and hybrid-search results — and decides UPDATE, CREATE, SKIP or
+REVIEW; the validator refuses a second CREATE of an entity a candidate already
+corroborates, and the harness commits in one transaction
+([mnemonic-decisions.md](../features/mnemonic-decisions.md)). While the merge
+gate is unhealthy the role is shown no candidate, so every entity becomes a
+fresh memory.
 
 The candidates come from the company store, so the worker matches against
 the entities every colleague's mail produced, not only this account's
 (scope in [`../features/entity-memory-system.md`](../features/entity-memory-system.md)).
 
-A second, company-wide pass — `reconsolidate_now` in
-`zylch/memory/llm_merge.py` — clusters blobs that share an identifier
-(union-find over `person_identifiers`, Name as fallback), asks the LLM
-whether each pair is one entity, merges the pair and migrates every
-reference before deleting the duplicate. The daemon runs it at the end of
-every update's memory stage when the shared store changed since the last
-sweep (a join, a merge, a new entity or identifier); the Settings →
-Maintenance button and `zylch memory-sweep` force it. One sweep per
-company at a time — the other daemons answer "another engine is sweeping".
+A second, company-wide pass — consolidation, `zylch/memory/consolidation.py` —
+clusters the entity family by shared `person_identifiers` rows (union-find, the
+stated `Name:` as fallback), asks the role about each pair that the
+validator's own identity rule could accept, and commits a MERGE through the
+harness: the donor's links, the identifiers the merged text states and an
+alias move to the keeper, and both texts are kept as versions. It also applies
+the version-retention policy and reports the sinks. The daemon runs it at the
+end of every update's memory stage when the shared store changed since the
+last sweep started (a join, a merge, a new entity or identifier); the Settings
+→ Maintenance button and `zylch memory-sweep` force it. One sweep per company
+at a time — the other daemons answer "another engine is sweeping".
 
 ## Flow
 
@@ -94,18 +101,18 @@ process_email()
      |    _parse_entities() -> Split by ---ENTITY---
      |
      v
-For each entity:
+For each entity (one child event):
      |
-     +-> find_candidates_for_reconsolidation() -> Top 3 matches
+     +-> candidates: identity-index matches + hybrid search -> at most 3
      |
-     +-> LLMMergeService.merge() -> Merge or INSERT?
+     +-> the mnemonic role decides; the validator checks
      |         |
-     |         +-> Merge: update_blob()
+     |         +-> UPDATE a candidate / CREATE a new memory: one commit
      |         |
-     |         +-> INSERT: Try next candidate or store_blob()
+     |         +-> SKIP / REVIEW: recorded, nothing written
      |
      v
-mark_email_processed()
+mark_email_processed() once every child is terminal
 ```
 
 ## Entity Types
@@ -127,8 +134,10 @@ Reusable response pattern. When a similar inquiry arrives, the assistant can dra
 
 | File | Purpose |
 |------|---------|
-| `zylch/agents/memory_agent.py` | MemoryWorker implementation |
-| `zylch/memory/llm_merge.py` | LLMMergeService for blob merging |
+| `zylch/workers/memory.py` | MemoryWorker implementation |
+| `zylch/memory/mnemonic/ingestion.py` | One source, one parent operation, one child per entity |
+| `zylch/memory/consolidation.py` | Consolidation: retention, sinks, duplicate pairs |
+| `zylch/memory/llm_merge.py` | The merge-routed client pairs are decided with, and the merge-gate canary |
 | `zylch/memory/hybrid_search.py` | HybridSearchEngine for finding candidates |
 | `zylch/memory/blob_storage.py` | BlobStorage for persistence |
 

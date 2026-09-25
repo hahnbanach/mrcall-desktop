@@ -42,6 +42,7 @@ from tests.workers.ingestion_env import (
     role_messages,
     run,
     seed_email,
+    seed_whatsapp,
     update_decision,
 )
 
@@ -163,6 +164,33 @@ def test_the_candidates_the_role_is_shown_are_identifier_first_then_cosine(profi
     assert shown[0]["shared_identifiers"] >= 1
     assert blobs()[a["id"]] == LUCA
     assert len(blobs()) == 2
+
+
+def test_a_blob_the_identity_index_finds_by_lid_is_shown_as_an_identifier_match(profile):
+    """A ``LID:`` header line is read on the candidate side, so a blob the index
+    found by lid is shown as what it is — an identifier match — rather than
+    dropped or passed off as a cosine neighbour."""
+    lid = "185800503328844@lid"
+    nina = (
+        "#IDENTIFIERS\nEntity type: PERSON\nScope: entity\nName: Nina Rossi\n"
+        f"LID: {lid}\n#ABOUT\nWrites on WhatsApp about the order.\n#HISTORY\n- asked for the invoice"
+    )
+    storage = BlobStorage(get_session, profile.embedder)
+    known = storage.store_blob(
+        OWNER_A,
+        f"user:{COMPANY_A}",
+        f"#IDENTIFIERS\nEntity type: PERSON\nName: N. Rossi\nLID: {lid}\n#ABOUT\nOld note.",
+        "seed",
+    )
+    Storage().add_person_identifiers(OWNER_A, known["id"], [("lid", lid)])
+    worker = make_worker([extraction(nina)], [create_decision(nina, "PERSON")])
+
+    assert run(worker, "process_whatsapp_message", seed_whatsapp()) is True
+
+    shown = role_messages(worker)[0]["candidates"]
+    assert shown[0]["blob_id"] == known["id"]
+    assert shown[0]["retrieved_by"].startswith("identifier")
+    assert shown[0]["shared_identifiers"] >= 1
 
 
 def test_a_fact_entity_pins_its_exact_row(profile):

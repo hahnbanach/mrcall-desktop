@@ -14,7 +14,7 @@ import logging
 from dataclasses import dataclass
 from typing import Any, Callable, Optional, Sequence, Tuple
 
-from .candidates import gather, identity_pairs_of, mines_observation
+from .candidates import gather, identity_pairs_of, mines_observation, pinned
 from .contracts import MAX_CANDIDATES, Candidate, MemoryEvent
 
 logger = logging.getLogger(__name__)
@@ -33,6 +33,9 @@ class CommitContext:
     get_blob: Callable[[str], Optional[dict]]
     search: Callable[[str, int], Sequence[Any]] = lambda _q, _n: ()
     identifier_blob_ids: Callable[[Sequence[Tuple[str, str]]], Sequence[str]] = lambda _i: ()
+    # A consolidation pair: each blob id with the version it was paired at.
+    # When set, the role is shown exactly these blobs and nothing retrieved.
+    pinned: Tuple[Tuple[str, str], ...] = ()
 
 
 def default_context(owner_id: str, *, retrieval: bool = True) -> CommitContext:
@@ -114,7 +117,13 @@ def typed_identifiers(event: MemoryEvent) -> list:
 
 
 def candidates_for(event: MemoryEvent, context: CommitContext) -> Tuple[Candidate, ...]:
-    """The bounded, read-only comparison set for one event."""
+    """The bounded, read-only comparison set for one event.
+
+    A consolidation pair's context pins its two blobs: they are re-read on
+    every round and nothing else is shown — no search, no identity index.
+    """
+    if context.pinned:
+        return pinned(event, context.get_blob, [blob_id for blob_id, _ in context.pinned])
     typed = typed_identifiers(event)
     identifier_ids = list(context.identifier_blob_ids(typed))[:MAX_CANDIDATES] if typed else []
     return gather(

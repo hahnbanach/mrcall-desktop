@@ -408,11 +408,11 @@ class FactHistory(DictMixin, Base):
 
 
 class BlobAlias(DictMixin, Base):
-    """merged_id -> keeper_id, written by the reconsolidation sweep.
+    """merged_id -> keeper_id, written by the consolidation MERGE commit.
 
     A blob merged away by one account leaves ids in OTHER profiles' task
-    ledgers (`task_items.sources.blobs`, a JSON list in a file the sweep
-    cannot open). Readers resolve a stale id through this table instead."""
+    ledgers (`task_items.sources.blobs`, a JSON list in a file the merge
+    cannot open). Readers resolve a stale id through this table, chains too."""
 
     __tablename__ = "blob_aliases"
 
@@ -429,11 +429,11 @@ class BlobVersion(DictMixin, Base):
     the consolidation sweep before it drops a donor — in the same transaction
     as the write it precedes, so the version exists exactly when the text it
     preserves is gone. A wrong write is therefore a recoverable wrong belief,
-    not a lost fact; `reason` says which kind of write produced it (`append`
-    for an ordinary rewrite, `consolidate` for the sweep's own), so the count
-    of `append` versions on one blob is a signal — the June 2026 sink absorbed
-    hundreds of contacts into one row, and every one of those absorptions
-    would have left a version here.
+    not a lost fact; `reason` says which write produced it — `append` for an
+    ordinary rewrite, `consolidate` for consolidation's own, `restore` for the
+    owner's — so the count of `append` versions after a blob's latest restore
+    is a signal: the June 2026 sink absorbed hundreds of contacts into one row,
+    and every one of those absorptions would have left a version here.
 
     `blob_id` is indexed and deliberately NOT a foreign key with a cascade:
     foreign keys are enforced on this store, and a cascade would delete a
@@ -452,7 +452,7 @@ class BlobVersion(DictMixin, Base):
     owner_id = Column(Text, nullable=False)
     namespace = Column(Text, nullable=False)
     content = Column(Text, nullable=False)
-    reason = Column(Text, nullable=False)  # append | consolidate
+    reason = Column(Text, nullable=False)  # append | consolidate | restore
     operation_id = Column(String(64), nullable=True)  # the journal event, when there is one
     superseded_at = Column(DateTime, default=_utcnow, index=True)
 

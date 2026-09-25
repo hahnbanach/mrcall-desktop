@@ -2,9 +2,10 @@
 
 Phase 2a is additive: a new join table mirroring email_blobs / calendar_blobs
 between WhatsAppMessage and Blob, plus the matching Storage helpers
-(`add_whatsapp_blob_link`, `get_blobs_for_whatsapp_message`) and an
-extension to `migrate_blob_references` so the Phase 1c reconsolidation
-sweep doesn't drop these rows when CASCADE fires.
+(`add_whatsapp_blob_link`, `get_blobs_for_whatsapp_message`). A merge
+keeps these rows: the consolidation MERGE commit re-creates a donor's links
+on its keeper before CASCADE drops the donor's own
+(`tests/memory/test_mnemonic_merge.py`).
 
 Nothing reads or writes whatsapp_blobs yet — Phase 2c will. These tests
 lock the contract.
@@ -208,68 +209,3 @@ def test_cascade_delete_blob_removes_link(fresh_db):
     with get_session() as s:
         rows = s.query(WhatsAppBlob).filter(WhatsAppBlob.blob_id == blob_id).all()
     assert rows == []
-
-
-# ---------------------------------------------------------------------
-# migrate_blob_references — Phase 1c keeps WA links intact
-# ---------------------------------------------------------------------
-
-
-def test_migrate_whatsapp_blobs_to_keeper(fresh_db):
-    """whatsapp_blobs(msg_id, dup) must become whatsapp_blobs(msg_id, keeper)."""
-    from zylch.storage.database import get_session
-    from zylch.storage.models import WhatsAppBlob
-    from zylch.storage.storage import Storage
-
-    storage = Storage()
-    owner = "alice@example.com"
-    keeper = _make_blob(owner, content="KEEPER")
-    dup = _make_blob(owner, content="DUP")
-
-    msg_keeper = _make_wa_message(owner)
-    msg_dup = _make_wa_message(owner)
-    msg_shared = _make_wa_message(owner)
-
-    storage.add_whatsapp_blob_link(owner, msg_keeper, keeper)
-    storage.add_whatsapp_blob_link(owner, msg_shared, keeper)
-    storage.add_whatsapp_blob_link(owner, msg_dup, dup)
-    storage.add_whatsapp_blob_link(owner, msg_shared, dup)
-
-    counts = storage.migrate_blob_references(owner_id=owner, dup_blob_id=dup, keeper_blob_id=keeper)
-    # Only msg_dup is new on keeper; msg_shared already linked to keeper.
-    assert counts["whatsapp_blobs_migrated"] == 1
-
-    keeper_msgs = storage.get_blobs_for_whatsapp_message(owner, msg_dup)
-    assert keeper in keeper_msgs
-
-    # Sanity: dup's whatsapp_blobs rows still exist; CASCADE will drop
-    # them when the blob is deleted.
-    with get_session() as s:
-        dup_links = (
-            s.query(WhatsAppBlob.whatsapp_message_id)
-            .filter(WhatsAppBlob.blob_id == dup, WhatsAppBlob.owner_id == owner)
-            .all()
-        )
-    assert {str(r[0]) for r in dup_links} == {msg_dup, msg_shared}
-
-
-def test_migrate_blob_references_reports_zero_when_no_wa_links(fresh_db):
-    """Phase 2a is additive: existing migrate callers (no WA links) keep
-    seeing 0 in the new key without breaking."""
-    from zylch.storage.storage import Storage
-
-    storage = Storage()
-    owner = "alice@example.com"
-    keeper = _make_blob(owner)
-    dup = _make_blob(owner)
-
-    counts = storage.migrate_blob_references(owner_id=owner, dup_blob_id=dup, keeper_blob_id=keeper)
-    assert counts["whatsapp_blobs_migrated"] == 0
-    # Existing keys still present
-    for key in (
-        "person_identifiers_migrated",
-        "email_blobs_migrated",
-        "calendar_blobs_migrated",
-        "task_items_updated",
-    ):
-        assert key in counts

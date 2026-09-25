@@ -1,6 +1,6 @@
 # Offline preparation model evaluation
 
-This evaluator scores recorded responses against ten synthetic, human-authored
+This evaluator scores recorded responses against seven synthetic, human-authored
 cases. It makes no API requests, initializes no worker or profile database, and
 never starts mailbox processing. Model quality remains **unmeasured** until
 actual model captures are supplied. A passing reference self-check validates
@@ -18,7 +18,7 @@ The command prints a JSON report and exits with status 1 if any case fails.
 Invalid or incomplete capture collections are rejected; omitted cases cannot
 inflate the score. Fixtures live in
 `engine/tests/evaluation/preparation_cases.json`. Their `input` contains the
-synthetic source or merge pair; `expected` contains explicit review judgments;
+synthetic source; `expected` contains explicit review judgments;
 `reference_response` is a manually written example for evaluator tests only.
 Do not include expectations or reference answers in prompts sent to a model.
 
@@ -27,18 +27,17 @@ Do not include expectations or reference answers in prompts sent to a model.
 - Extraction: two people with separate identifiers; a notification relay whose
   address must not be attributed to a named person; semantic `SKIP`; truncated
   output that must leave processing pending.
-- Merge: the same person; two people sharing a topic; the same display name at
-  different companies. Distinct people must produce `INSERT`, not a combined
-  memory.
 - Tasks: a direct request, an informational message, and a truncated tool
   decision that must not be accepted as complete.
 
+Consolidation's pair decisions belong to the mnemonic role and are not scored
+here.
+
 Extraction uses the actual `MemoryWorker._parse_entities` and structured
-identifier parser. Completion uses `complete_memory_text`; merge refusal uses
-`is_no_merge_response`. Identifier sets must match exactly **per entity**, so
-adding the sender to every entity fails even if all addresses exist in the
-source. These are mechanical comparisons of explicit labels, not a replacement
-semantic classifier. Task scoring checks the completion/tool shape and the
+identifier parser. Completion uses `complete_memory_text`. Identifier sets must
+match exactly **per entity**, so adding the sender to every entity fails even
+if all addresses exist in the source. These are mechanical comparisons of
+explicit labels, not a replacement semantic classifier. Task scoring checks the completion/tool shape and the
 selected action/required flag against the case's human-authored expectation.
 
 The report includes per-role correct/total counts, false acceptances of

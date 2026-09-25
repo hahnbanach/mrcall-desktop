@@ -27,10 +27,14 @@ receipt and returned to the caller (:mod:`zylch.memory.mnemonic.approval`).
 Nothing asks a human at write time: what protects the memory is that the
 rewrite retained the text it replaced, and that the record says who chose what.
 
-What it is not yet: MERGE and reclassification return ``review_needed`` until
-the milestones that own them arrive. They are refused here rather than
-approximated, because an UPDATE standing in for a merge is precisely the
-failure this harness exists to remove.
+A MERGE is committed for a consolidation pair and nowhere else
+(:func:`~zylch.memory.mnemonic.pairs.admits_merge`): it folds a donor into its
+keeper in the same one transaction — keeper rewritten, donor dropped, both
+texts retained, every source link, the identifiers and the alias — and owes one
+recorded follow-up, the committing profile's task ledger, applied after the
+company commit. A reclassification still returns ``review_needed``: it is
+refused here rather than approximated, because an UPDATE standing in for a
+move between families is precisely the failure this harness exists to remove.
 """
 
 from __future__ import annotations
@@ -46,17 +50,13 @@ from zylch.memory.commit_permit import (
 )
 from zylch.memory.company_key import family_of, scoped_namespace
 
-from . import journal
+from . import journal, references, writes
 from .agent import decide
 from .approval import RequestedWrite, departure_for
 from .authorization import MnemonicRefusal, authorize_request
 from .contracts import CREATE, FACT, MAX_DECISION_ATTEMPTS, MERGE, UPDATE, MemoryEvent
-from .wiring import (
-    CommitContext,
-    candidates_for,
-    default_context,
-    parse_identifiers_block,
-)
+from .pairs import PAIR_CHANGED, admits_merge, intact
+from .wiring import CommitContext, candidates_for, default_context
 from .proposals import MnemonicResult, Proposal
 
 logger = logging.getLogger(__name__)
@@ -65,7 +65,6 @@ logger = logging.getLogger(__name__)
 # operation produced it. Bounded and id-only: never the observation.
 EVENT_NOTE = "mnemonic operation {event_id}"
 
-MERGE_NOT_READY = "merging two memories is not installed yet; the proposal is recorded for review"
 RECLASSIFY_NOT_READY = (
     "moving a memory between families is not installed yet; " "the proposal is recorded for review"
 )
@@ -166,6 +165,11 @@ def _decide_and_commit(
     result: Optional[MnemonicResult] = None
     for attempt in range(MAX_DECISION_ATTEMPTS):
         candidates = candidates_for(event, context)
+        if context.pinned and not intact(context.pinned, candidates):
+            # A consolidation pair whose member changed or vanished: its hint
+            # was built from the texts it was paired at, so it is settled here,
+            # unpaid, and the next consolidation pairs the changed blobs afresh.
+            return _settle(event, MnemonicResult.skipped(event.event_id, PAIR_CHANGED), None)
         try:
             decision = decide(event, candidates, client=client)
         except journal.JournalError as exc:
@@ -188,7 +192,7 @@ def _decide_and_commit(
             )
             return _settle(event, settled, proposal, candidates)
 
-        refusal = _unsupported(proposal, allow_actions)
+        refusal = _unsupported(proposal, allow_actions, event)
         if refusal:
             return _settle(
                 event,
@@ -263,12 +267,12 @@ def _settled_elsewhere(event: MemoryEvent) -> Optional[MnemonicResult]:
         return None
 
 
-def _unsupported(proposal: Proposal, allow_actions: Sequence[str]) -> str:
-    """Why this validated proposal cannot be committed by this milestone."""
+def _unsupported(proposal: Proposal, allow_actions: Sequence[str], event: MemoryEvent) -> str:
+    """Why this validated proposal cannot be committed on this path, or ``""``."""
     if proposal.reclassification is not None:
         return RECLASSIFY_NOT_READY
     if proposal.action == MERGE:
-        return MERGE_NOT_READY
+        return admits_merge(event, proposal, allow_actions)
     if proposal.action not in allow_actions:
         return (
             f"this path admits {'/'.join(allow_actions)} only; the proposal was a "
@@ -359,7 +363,6 @@ def _commit(
     # fail, and neither should happen while holding the company write lock.
     prepared = context.storage.prepare(proposal.content)
 
-    target = proposal.target
     permit = issue_commit_permit(
         action=proposal.action,
         company_key=event.company_key,
@@ -368,9 +371,7 @@ def _commit(
         proposal_digest=journal.proposal_digest(proposal) or "",
         content=proposal.content,
         namespace=namespace,
-        write_set=(
-            () if proposal.action == CREATE else ((target.blob_id, target.expected_version),)
-        ),
+        write_set=tuple((t.blob_id, t.expected_version) for t in proposal.write_set),
     )
 
     committed_ids: Tuple[Tuple[str, str], ...]
@@ -382,6 +383,7 @@ def _commit(
             # thinking must stop the write, not merely the next dispatch.
             authorize_request(event)
 
+            note = EVENT_NOTE.format(event_id=event.event_id)
             if proposal.action == CREATE:
                 blob = context.storage.semantic_create(
                     session,
@@ -389,15 +391,18 @@ def _commit(
                     owner_id=event.owner_id,
                     namespace=namespace,
                     prepared=prepared,
-                    event_description=EVENT_NOTE.format(event_id=event.event_id),
+                    event_description=note,
                 )
+            elif proposal.action == MERGE:
+                blob = writes.merge(session, event, proposal, permit, prepared, context, note=note)
             else:
-                blob = _update(session, event, proposal, permit, prepared, context)
+                blob = writes.update(session, event, proposal, permit, prepared, context, note=note)
 
             blob_id = str(blob["id"])
-            _write_indexes(session, event, blob_id, proposal)
+            writes.indexes(session, event, blob_id, proposal)
             context.storage.mark_mutated(session)
             committed_ids = ((blob_id, str(blob.get("updated_at") or "")),)
+            pending = writes.pending_for(proposal)
             journal.receipt(
                 session,
                 row,
@@ -407,6 +412,7 @@ def _commit(
                     proposal=proposal,
                     attempts=attempts,
                     departure=departure,
+                    pending=pending,
                 ),
                 state=journal.COMMITTED,
                 proposal=proposal,
@@ -421,62 +427,22 @@ def _commit(
     )
     # The invalidation callback is a same-process fast path; the mutation
     # sequence written above is what every OTHER engine on this store reads.
-    return MnemonicResult.committed(
-        event.event_id, committed_ids, proposal=proposal, attempts=attempts, departure=departure
+    result = MnemonicResult.committed(
+        event.event_id,
+        committed_ids,
+        proposal=proposal,
+        attempts=attempts,
+        departure=departure,
+        pending=pending,
     )
-
-
-def _update(session, event, proposal, permit, prepared, context):
-    """Re-read the target under the lock, then rewrite it at its exact version."""
-    target = proposal.target
-    live = context.storage.visible_target(session, target.blob_id, event.owner_id)
-    if live is None:
-        raise ConflictError(
-            f"blob {target.blob_id} is no longer visible to this account; refusing the update"
-        )
-    return context.storage.semantic_update(
-        session,
-        permit,
-        blob=live,
-        owner_id=event.owner_id,
-        prepared=prepared,
-        expected_version=target.expected_version,
-        event_description=EVENT_NOTE.format(event_id=event.event_id),
-    )
-
-
-def _write_indexes(session, event: MemoryEvent, blob_id: str, proposal: Proposal) -> None:
-    """Identity index and source link — inside the same transaction as the blob.
-
-    An UPDATE **replaces** the blob's identifier rows rather than adding to
-    them. The old writer only appended, so correcting an email address left the
-    wrong one in the index and the next cross-channel lookup still matched it.
-    """
-    from zylch.memory import associations
-
-    identifiers = associations.identifiers_from(parse_identifiers_block(proposal.content))
-    if proposal.action == UPDATE:
-        associations.drop_identifiers(session, blob_id=blob_id, company_key=event.company_key)
-    if identifiers:
-        associations.add_identifiers(
-            session,
-            owner_id=event.owner_id,
-            blob_id=blob_id,
-            identifiers=identifiers,
-            company_key=event.company_key,
-        )
-    associations.link_source(
-        session,
-        source_kind=event.source_kind,
-        source_id=event.source_id,
-        blob_id=blob_id,
-        owner_id=event.owner_id,
-    )
+    # A merge's recorded follow-up — this profile's task ledger — runs only now,
+    # after the company commit; what it cannot do stays pending, and the result
+    # is committed either way (mnemonic/references.py).
+    return references.follow_up(result, owner_id=event.owner_id) if pending else result
 
 
 __all__ = [
     "CommitContext",
-    "MERGE_NOT_READY",
     "RECLASSIFY_NOT_READY",
     "candidates_for",
     "default_context",
