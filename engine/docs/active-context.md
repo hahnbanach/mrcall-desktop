@@ -79,12 +79,9 @@ scripts (M8). Contracts:
 [mnemonic decisions](features/mnemonic-decisions.md),
 [writer inventory](features/mnemonic-writer-inventory.md). Tested locally
 against the frozen milestone 0 incident corpus and real split profile/company
-databases. Milestones 5 and 6 are on `main`; milestone 7 is on the
-`mnemonic-m7` branch, and the account check that accepts either identity of the
-profile, uid or email ([who the account is](features/mnemonic-decisions.md#who-pays)),
-is on `mnemonic-owner`, built on it; **not merged, not deployed**. Until both
-are merged, `main` refuses every harness write on a profile whose `OWNER_ID`
-is not its `EMAIL_ADDRESS`, which is every profile the app creates.
+databases. Milestones 5–7 and the account check that accepts either identity
+of the profile, uid or email ([who the account is](features/mnemonic-decisions.md#who-pays)),
+are on `main` and pushed; **not deployed**.
 
 Support's engine exposes approval-gated `initiate_call` through the dashboard's
 Firebase atom API, with an explicit calling assistant ID. A live request on
