@@ -78,6 +78,26 @@ manage any authorized Desktop business; an ordinary customer can manage only
 their own. StarChat enforces that boundary. The skill must not rely on its
 prompt or on a support account's shared credentials as the access control.
 
+## Production carrier credentials
+
+Telephone activation requires a configured Vonage Voice application, its
+assigned number and reachable answer/event webhooks. The application has a
+public/private key pair for JWT-authenticated Voice API requests. Its **private
+key stays in protected server-side storage**; Vonage generates it for download
+or accepts the corresponding public key when the pair is supplied by the
+operator. The private key is not pasted into the application or exposed in
+Desktop. Managing the Vonage application and its number uses the account API
+key and API secret. Signed incoming webhooks use a separate Vonage signature
+secret, which the engine verifies before accepting a call. Provisioning must
+verify the required credential paths and never put any of these secrets in a
+business variable, customer profile export, transcript or Git. The existing
+isolated test key is not evidence that production credentials are provisioned.
+
+Vonage references: [application authentication](https://developer.vonage.com/en/dashboard/build/applications)
+and [signed Voice webhooks](https://developer.vonage.com/en/voice/voice-api/webhook-reference),
+plus the [Application](https://developer.vonage.com/en/api/application.v2) and
+[Numbers](https://developer.vonage.com/en/api/numbers) management APIs.
+
 ## Alpha boundaries and acceptance
 
 The first alpha favors a short path to a real call over full self-service.

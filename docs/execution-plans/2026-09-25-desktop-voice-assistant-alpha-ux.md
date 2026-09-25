@@ -39,25 +39,30 @@ the service-number inventory inconsistent.
 1. **Read-only identity and inventory.** Resolve `production@cafe124.it` to
    its immutable Firebase UID. Read its existing StarChat businesses,
    subscription and credit state, and the number's test and production
-   service-number rows. Confirm that no business owns the number, that it is
-   still linked to the dedicated GPT-Live Vonage application, and that there
-   are no active calls. Inspect the application's Voice region,
-   signed-callback setting and answer/event webhook URLs. Record the
-   application ID, number association and current configuration privately;
-   neither a mailbox address nor a phone number is a substitute for the UID.
-   Stop on any owner, number or route mismatch.
-2. **Prepare the `desktop` template.** Read the actual StarChat template and
+   service-number rows. Confirm that no business owns the number. Record the
+   business and owner IDs privately; neither a mailbox address nor a phone
+   number is a substitute for the UID. Stop on any owner or inventory mismatch.
+2. **Inspect the Vonage application.** Confirm that +390289047081 is linked
+   to the dedicated GPT-Live application and that there are no active calls.
+   Read the application's Voice region, signed-callback setting and
+   answer/event webhook URLs. Confirm the account API key/secret references
+   used to manage the application and number, the separate callback signature
+   secret, and the application private-key reference if JWT-authenticated
+   Voice operations are needed. Do not print any secret. Record its ID,
+   number association and current configuration privately for rollback. Stop
+   on any unexpected application, number link or route.
+3. **Prepare the `desktop` template.** Read the actual StarChat template and
    variable schema. If absent, define the template and customer-editable
    variables through the supported StarChat administration path before
    creating the business. Record which fields are required. Do not copy the
    older assistant's variables blindly.
-3. **Create one manual trial business.** Use an authenticated StarChat
+4. **Create one manual trial business.** Use an authenticated StarChat
    business API request with `template=desktop` and the verified owner UID.
    Read it back through the customer's identity to verify ownership and
    edit permissions. Mark it as a manual alpha trial. Do not represent this
    step as a paid checkout and do not grant 1000 credits without the intended
    payment or an explicitly recorded trial-credit operation.
-4. **Prepare permitted context.** Use the verified `production@` engine
+5. **Prepare permitted context.** Use the verified `production@` engine
    profile and company-memory membership, preserving its existing memory
    capability and account isolation. Select business facts that callers may
    hear; verify their provenance and distinguish customer-specific facts
@@ -65,7 +70,7 @@ the service-number inventory inconsistent.
    memory key into the M4 synthetic test profile. A small bounded mail import
    may be used only after the mailbox and resulting fact selection are
    inspected. Stop if the selected context is ambiguous or unapproved.
-5. **Make the telephone runtime business-aware.** Replace the current
+6. **Make the telephone runtime business-aware.** Replace the current
    single-profile fixture binding with a mapping from the called service
    number to the StarChat business and the correct UID-keyed engine profile.
    Preserve GPT-Live as the only telephone conversational model and retain
@@ -73,7 +78,7 @@ the service-number inventory inconsistent.
    closure accounting and indefinite service/tunnel lifetime. Prove that an
    unknown number or mismatched owner fails closed. Test the mapping and
    customer fact isolation before a carrier route is changed.
-6. **Resolve exact-number assignment.** Establish and verify a StarChat API
+7. **Resolve exact-number assignment.** Establish and verify a StarChat API
    operation that can assign the selected free test number to the trial
    business while updating both `service_number.businessId` and
    `business.service_number`. The existing `autoAssign` route is usable only
@@ -81,24 +86,25 @@ the service-number inventory inconsistent.
    time of the request; otherwise this is a blocker requiring a narrow API
    capability. Read back both records and stop on partial assignment. Do
    not mutate either table directly or silently move a production number.
-7. **Update the Vonage application and route.** With the business-aware
+8. **Update the Vonage application and route.** With the business-aware
    listener healthy, update the dedicated Vonage Voice application's answer
    and event webhook URLs to the new listener's `/vonage/answer` and
    `/vonage/event` endpoints, and verify its configured Voice region,
-   signed callbacks and application key. Confirm that +390289047081 remains
-   linked to that application; if its association must change, update and
+   signed callbacks, application public key and server-side credential
+   references. Confirm that +390289047081 remains linked to that
+   application; if its association must change, update and
    read back the number-to-application link as a separate carrier operation.
    Keep the previous application configuration and association for rollback.
    Change the tunnel URL if required; do not restart the tunnel merely to
    change its URL. Verify a signed callback reaches the intended business
    before inviting callers.
-8. **Call and verify.** Make a real incoming call and listen for immediate
+9. **Call and verify.** Make a real incoming call and listen for immediate
    greeting, correct Café 124 facts, a follow-up, an interruption and a
    missing-data answer. Correlate the heard words with private diagnostic
    transcription, selected facts, tool results, carrier closure and cost
    ledger. An ACK or transcript alone is not proof of audible delivery.
    Verify the assistant remains reachable with Electron closed.
-9. **Finish or restore.** If any gate fails, restore the previous Vonage
+10. **Finish or restore.** If any gate fails, restore the previous Vonage
    application configuration and number association, then keep the pilot
    inactive; retain the business and accounting evidence for diagnosis. Do
    not reset holds, reservations or call history.
