@@ -312,8 +312,10 @@ parks the source visibly, and a failed child keeps its retry evidence.
 `tests/memory/test_mnemonic_contracts.py`, `test_mnemonic_validator.py`,
 `test_mnemonic_evidence.py`, `test_mnemonic_candidates.py`,
 `test_mnemonic_agent.py`, `test_mnemonic_pairs.py`,
-`tests/workers/test_merge_gate.py` (the canary) and
-`tests/llm/test_mnemonic_admission.py`; the commit
+`tests/workers/test_merge_gate.py` (the canary),
+`tests/llm/test_mnemonic_admission.py` and
+`tests/memory/test_mnemonic_owner_identity.py` (the account: either identity
+of the profile, through each trigger's own owner, and no other); the commit
 half and the ingestion suites have their own, listed in
 [mnemonic-commit.md](mnemonic-commit.md). The
 validator and agent tests replay the frozen milestone 0 incident corpus
