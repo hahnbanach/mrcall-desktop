@@ -230,13 +230,13 @@ MEMORY_TABLE_NAMES = (
     # M5). Same install path as the journal below: the name puts the table on
     # the memory bind and inside `prepare_store`'s ensure pass, additive.
     "blob_versions",
-    # the semantic write path's operation journal (mnemonic harness M3).
-    # Registering it here is what installs it: the name puts the table on
-    # the memory bind, so every statement naming it reaches the company
-    # store, and inside `memory.store.prepare_store`'s ensure pass, so
-    # `create_all` adds it and its indexes to every store under the file's
-    # migration lock. Additive: no existing row is read or rewritten.
+    # the semantic write path's operation journal (mnemonic harness M3). The
+    # name installs it: it binds every statement naming the table to the company
+    # store and puts the table in `memory.store.prepare_store`'s ensure pass,
+    # where `create_all` adds it and its indexes under the file's migration lock.
     "memory_operations",
+    # a company's join fences (`storage/join_fence_model.py`), installed alike
+    "memory_join_fences",
 )
 
 

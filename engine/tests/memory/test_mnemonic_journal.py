@@ -223,6 +223,52 @@ def test_claiming_a_settled_operation_returns_nothing_to_work_on(profile_a):
     assert journal.claim("evt-1") is None
 
 
+# ─── A terminal row is not an attempt's to change ─────────────────────
+
+
+SETTLED = {
+    journal.COMMITTED: lambda: MnemonicResult.committed("evt-1", (("blob-1", "v1"),)),
+    journal.SKIPPED: lambda: MnemonicResult.skipped("evt-1", "dismissed by owner"),
+    journal.REVIEW: lambda: MnemonicResult.review_needed("evt-1", "ambiguous subject"),
+}
+
+
+def settled(state):
+    journal.open_operation(event())
+    journal.record_result("evt-1", SETTLED[state](), state=state)
+    with get_session() as session:
+        return session.get(MemoryOperation, "evt-1").to_dict()
+
+
+@pytest.mark.parametrize("state", journal.TERMINAL)
+def test_a_terminal_row_refuses_another_receipt(profile_a, state):
+    before = settled(state)
+    late = MnemonicResult.committed("evt-1", (("blob-9", "v9"),))
+
+    with pytest.raises(journal.JournalError, match="already"):
+        journal.record_result("evt-1", late, state=journal.COMMITTED)
+    with journal.company_transaction(write=True) as session:
+        row = session.get(MemoryOperation, "evt-1")
+        with pytest.raises(journal.JournalError, match="already"):
+            journal.receipt(session, row, result=late, state=journal.FAILED)
+
+    with get_session() as session:
+        assert session.get(MemoryOperation, "evt-1").to_dict() == before
+
+
+@pytest.mark.parametrize("state", journal.TERMINAL)
+def test_a_terminal_row_refuses_a_late_attempt(profile_a, state):
+    before = settled(state)
+
+    with pytest.raises(journal.JournalError, match="already"):
+        journal.record_attempt("evt-1", event(), proposal())
+
+    with get_session() as session:
+        row = session.get(MemoryOperation, "evt-1")
+        assert row.to_dict() == before
+        assert row.attempts == 0 and row.proposal_digest is None
+
+
 # ─── Reading, scoped like the memory it describes ─────────────────────
 
 

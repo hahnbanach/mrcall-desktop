@@ -7,19 +7,24 @@ when one of two things is true, and nothing else:
 - its own header states an explicit structured mismatch — ``Scope: entity`` or
   ``Scope: account``, or an ``Entity type`` of PERSON, COMPANY or STYLE — so the
   row itself says it is not company-wide knowledge;
-- a review recorded in the operation journal names its blob id in
-  ``restrictions``: the mnemonic role was shown the row, declined to treat it
-  as company knowledge, and the harness recorded that against the exact
-  identity and observed version (``mnemonic/commit.restrictions_from``).
+- a row of the operation journal names its blob id in ``restrictions``,
+  whatever that row's state. A review writes one when the mnemonic role was
+  shown the row, declined to treat it as company knowledge, and the harness
+  recorded that against the exact identity and observed version
+  (``mnemonic/commit.restrictions_from``); the row keeps it when it settles
+  otherwise, so a review the owner dismissed (state ``skipped``) and a join
+  receipt that carries a source store's restrictions into the destination
+  (state ``committed``) keep the restricted row ineligible.
 
 The predicate is applied *before* ranking and limits — in the fact store's
 category enumeration and reads, and in hybrid search at index load, text
 search and hydration — so a quarantined row cannot crowd a valid one out of
 the top-K. It never classifies: a read path makes no paid call and writes no
-marker; a restriction exists only because a review wrote it, and it stays
-until an authorized resolution clears it (none does in this milestone). A
-version change does not clear it — the restriction is keyed by blob id, and
-the recorded version is evidence of what was seen, not the key.
+marker; a restriction exists only because a review wrote it, or a join
+carried one a review wrote, and it stays on its row whatever the row becomes:
+no resolution clears it. A version change does not clear it either — the
+restriction is keyed by blob id, and the recorded version is evidence of what
+was seen, not the key.
 
 Exact-id reads (``BlobStorage.get_blob``) are not filtered: candidate pinning
 and ``update_memory``'s hint read by id, and no prompt-assembly path reads a
@@ -30,6 +35,7 @@ from __future__ import annotations
 
 from typing import Set
 
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from zylch.storage.models import Blob, MemoryOperation
@@ -53,12 +59,17 @@ def scope_mismatch(content: str) -> bool:
 
 
 def restricted_ids(session: Session, company_key: str) -> Set[str]:
-    """Blob ids a review in this company's journal has restricted."""
+    """Blob ids any row of this company's journal has restricted, in any state.
+
+    Filtered in SQL to the rows whose ``restrictions`` is not empty, which keeps
+    the read off the rest of the journal.
+    """
     rows = (
         session.query(MemoryOperation.restrictions)
         .filter(
             MemoryOperation.company_key == company_key,
-            MemoryOperation.state == "review",
+            MemoryOperation.restrictions.isnot(None),
+            func.json_array_length(MemoryOperation.restrictions) > 0,
         )
         .all()
     )
@@ -74,8 +85,8 @@ def ineligible_fact_ids(session: Session, company_key: str) -> Set[str]:
     """Every facts-family row this company's ordinary reads must leave out.
 
     One read over the facts family (small: tens to hundreds of rows) and one
-    over the review rows, in the caller's own session — no second transaction,
-    no paid call, no marker written anywhere.
+    over the journal rows that carry restrictions, in the caller's own session
+    — no second transaction, no paid call, no marker written anywhere.
     """
     rows = (
         session.query(Blob.id, Blob.content)

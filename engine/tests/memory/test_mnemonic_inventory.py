@@ -17,10 +17,44 @@ from tests.memory.mnemonic_inventory_scan import (
 
 ENGINE_ROOT = Path(__file__).resolve().parents[2]
 FIXTURE = ENGINE_ROOT / "tests" / "fixtures" / "mnemonic" / "legacy_writer_inventory.json"
+WRITER_SECTIONS = (
+    "call_sites",
+    "orm_sinks",
+    "orm_mutations",
+    "orm_assignments",
+    "orm_core_mutations",
+    "raw_sql_sinks",
+    "known_dynamic_sql_sinks",
+)
 
 
 def _manifest() -> dict:
     return json.loads(FIXTURE.read_text())
+
+
+def ownership_problems(manifest: dict) -> list[str]:
+    """Writer rows that do not carry exactly one owner.
+
+    A row names either the ``milestone`` (1-8) that converted or removes its
+    edge, or ``exempt``: the reviewed mechanical primitive and the precondition
+    it checks. Neither leaves an edge nobody answers for; both leave it unclear
+    which one does.
+    """
+    problems: list[str] = []
+    for section in WRITER_SECTIONS:
+        for row in manifest.get(section, []):
+            label = f"{section} {row.get('path')}:{row.get('symbol')}"
+            if ("milestone" in row) == ("exempt" in row):
+                problems.append(f"{label}: needs exactly one of milestone and exempt")
+            elif "milestone" in row and not (
+                isinstance(row["milestone"], int) and 1 <= row["milestone"] <= 8
+            ):
+                problems.append(f"{label}: milestone {row['milestone']!r} is out of range")
+            elif "exempt" in row and not (
+                isinstance(row["exempt"], str) and row["exempt"].strip()
+            ):
+                problems.append(f"{label}: exempt must name the primitive and its precondition")
+    return problems
 
 
 def _source_files(manifest: dict) -> list[Path]:
@@ -69,14 +103,29 @@ def test_every_direct_writer_call_is_owned_by_a_later_milestone():
     assert actual_mutations == _expected(manifest["orm_mutations"], include_mode=False)
     assert actual_assignments == _expected(manifest["orm_assignments"], include_mode=False)
     assert actual_core_mutations == _expected(manifest["orm_core_mutations"], include_mode=False)
-    for section in (
-        "call_sites",
-        "orm_sinks",
-        "orm_mutations",
-        "orm_assignments",
-        "orm_core_mutations",
-    ):
-        assert all(1 <= row["milestone"] <= 8 for row in manifest[section])
+
+
+def test_every_writer_row_is_owned_by_a_milestone_or_a_named_exemption():
+    assert ownership_problems(_manifest()) == []
+
+
+def test_a_row_with_neither_owner_or_both_is_refused():
+    edge = {"path": "zylch/x.py", "symbol": "write", "call": "sql:UPDATE:blobs", "count": 1}
+    manifest = {
+        "call_sites": [{**edge, "milestone": 3}, {**edge, "symbol": "neither"}],
+        "raw_sql_sinks": [
+            {**edge, "exempt": "a migration step, guarded by its column check"},
+            {**edge, "symbol": "both", "milestone": 8, "exempt": "a primitive"},
+            {**edge, "symbol": "blank", "exempt": "  "},
+            {**edge, "symbol": "late", "milestone": 9},
+        ],
+    }
+    assert ownership_problems(manifest) == [
+        "call_sites zylch/x.py:neither: needs exactly one of milestone and exempt",
+        "raw_sql_sinks zylch/x.py:both: needs exactly one of milestone and exempt",
+        "raw_sql_sinks zylch/x.py:blank: exempt must name the primitive and its precondition",
+        "raw_sql_sinks zylch/x.py:late: milestone 9 is out of range",
+    ]
 
 
 def test_assignment_scanner_catches_aliases_and_equivalent_write_forms(tmp_path: Path):
@@ -255,10 +304,8 @@ def test_every_literal_sql_sink_is_owned_by_a_later_milestone():
         Visitor().visit(tree)
 
     assert actual == _expected(manifest["raw_sql_sinks"], include_mode=False)
-    assert all(1 <= row["milestone"] <= 8 for row in manifest["raw_sql_sinks"])
 
     for row in manifest["known_dynamic_sql_sinks"]:
         source = (ENGINE_ROOT / row["path"]).read_text()
         assert f"def {row['symbol']}(" in source
         assert all(table in source for table in row["tables"])
-        assert 1 <= row["milestone"] <= 8

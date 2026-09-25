@@ -315,13 +315,23 @@ def spend_allowance(event_id: str) -> Optional[int]:
 # ─── Recording progress and outcomes ──────────────────────────────────
 
 
+def _refuse_terminal(row: MemoryOperation) -> None:
+    if row.state in TERMINAL:
+        raise JournalError(f"operation {row.event_id} is already {row.state}")
+
+
 def record_attempt(event_id: str, event: MemoryEvent, proposal: Optional[Proposal]) -> None:
-    """Persist the current proposal and bump the durable attempt count."""
+    """Persist the current proposal and bump the durable attempt count.
+
+    A terminal row is refused: an attempt still in flight when its row was
+    settled elsewhere writes nothing.
+    """
     try:
         with company_transaction(write=True) as session:
             row = session.get(MemoryOperation, event_id)
             if row is None:
                 raise JournalError(f"no operation for event {event_id}")
+            _refuse_terminal(row)
             row.attempts = int(row.attempts or 0) + 1
             row.proposal_digest = proposal_digest(proposal)
             row.target_family = _target_family(proposal)
@@ -355,7 +365,15 @@ def receipt(
     as company knowledge. They survive the pruning, and recording one bumps
     the store's mutation sequence in this same transaction, so every process's
     vector index learns that a row it holds is no longer eligible.
+
+    A parent settled in ``review`` keeps its extraction manifest
+    (``payload["manifest"]``) and nothing else of its payload, so a reviewed
+    child can be decided again against it; settling ``committed`` or
+    ``skipped`` prunes it with the rest. A row that is already terminal is
+    refused: an attempt still in flight when its row was settled elsewhere
+    writes nothing.
     """
+    _refuse_terminal(row)
     row.state = state
     row.result = {
         "outcome": result.outcome,
@@ -372,7 +390,8 @@ def receipt(
 
         bump_mutation_seq(session)
     if state in TERMINAL:
-        row.payload = None
+        kept = dict(row.payload or {}).get("manifest") if state == REVIEW else None
+        row.payload = {"manifest": kept} if kept is not None else None
         row.lease = None
     row.updated_at = _now()
     session.flush()

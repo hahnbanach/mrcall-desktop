@@ -179,12 +179,13 @@ def prepare_store(engine: Engine, company_key: str, *, created_by: Optional[str]
         ensure_space(_engine)
 
     from zylch.storage.step_identifiers_company_unique import STEP as identifiers_step
+    from zylch.storage.step_memory_operations_drop_approval import STEP as drop_approval_step
 
     run_migrations(
         engine,
         path,
         ensure=(_ensure_memory_tables, _ensure_memory_columns, _meta),
-        steps=(identifiers_step,),
+        steps=(identifiers_step, drop_approval_step),
     )
 
 

@@ -94,7 +94,7 @@
       "call": "copy_if_absent",
       "count": 1,
       "mode": "sync",
-      "milestone": 8
+      "exempt": "migration step 0002_memory_split, run once under the profile's migration lock after a backup: it copies into the company store only a row whose primary key the store lacks, and only into a store attached under a vouched provenance"
     },
     {
       "path": "zylch/tools/create_memory_tool.py",
@@ -231,7 +231,7 @@
       "symbol": "Storage.delete_whatsapp_message_by_message_id",
       "call": "orm:delete:WhatsAppBlob",
       "count": 1,
-      "milestone": 8
+      "exempt": "a WhatsApp revoke's purge: it removes only the whatsapp_blobs links of this owner's whatsapp_messages rows whose protocol message_id the revoke names, before deleting those rows; no blob is written"
     },
     {
       "path": "zylch/memory/blob_versions.py",
@@ -345,14 +345,14 @@
       "symbol": "apply",
       "call": "sql:UPDATE:blobs",
       "count": 1,
-      "milestone": 8
+      "exempt": "migration step 0001_company_key on the profile store, run once under the file's migration lock after a backup: it stamps company_key only on rows whose company_key IS NULL and rewrites a company-family namespace only where it is not already <family>:<key>"
     },
     {
       "path": "zylch/storage/step_company_key.py",
       "symbol": "reverse",
       "call": "sql:UPDATE:blobs",
       "count": 1,
-      "milestone": 8
+      "exempt": "the reverse of migration step 0001_company_key, run by hand and never by the runner: it rewrites only company-family namespaces, back to <family>:<owner_id>, exact because the step never overwrote owner_id, and un-records the step"
     },
     {
       "path": "scripts/backfill_email_blobs.py",
@@ -416,7 +416,7 @@
         "whatsapp_blobs",
         "person_identifiers"
       ],
-      "milestone": 8,
+      "exempt": "migration step 0001_company_key on the profile store, run once under the file's migration lock after a backup: it stamps company_key only on rows whose company_key IS NULL and rewrites a company-family namespace only where it is not already <family>:<key>",
       "reason": "company-key migration stamps every fixed MEMORY_TABLES entry through a table-parameterized UPDATE"
     },
     {
@@ -426,7 +426,7 @@
         "person_identifiers",
         "person_identifiers_new"
       ],
-      "milestone": 8,
+      "exempt": "memory-store step 0001_identifiers_company_unique, run once under the store's migration lock after a backup: it rebuilds person_identifiers only when the table exists without the per-company unique constraint",
       "reason": "fixed table rebuild assembled from adjacent string literals and index-name formatting"
     },
     {
@@ -440,7 +440,7 @@
         "whatsapp_blobs",
         "person_identifiers"
       ],
-      "milestone": 8,
+      "exempt": "the byte-preserving copy of migration step 0002_memory_split: INSERT OR IGNORE by primary key, so a row the destination already holds is never overwritten, and only for tables both files hold",
       "reason": "byte-preserving forward copy over the fixed MEMORY_TABLES tuple"
     },
     {
@@ -454,7 +454,7 @@
         "whatsapp_blobs",
         "person_identifiers"
       ],
-      "milestone": 8,
+      "exempt": "migration step 0002_memory_split, run once under the profile's migration lock after a backup: it drops the profile-side tables only after copy_if_absent has returned, and raises instead when no store is attached while the profile still holds memory rows",
       "reason": "after the copy, the split migration drops each fixed profile-side memory table through dynamic SQL"
     },
     {
@@ -468,8 +468,18 @@
         "whatsapp_blobs",
         "person_identifiers"
       ],
-      "milestone": 8,
+      "exempt": "the reverse of migration step 0002_memory_split, run by hand and never by the runner: it copies back only the rows whose owner_id is the reverting profile's, INSERT OR IGNORE by primary key, and un-records the step",
       "reason": "rollback restores owner-scoped rows through a table-parameterized INSERT OR IGNORE loop"
+    },
+    {
+      "path": "zylch/storage/step_memory_operations_drop_approval.py",
+      "symbol": "apply",
+      "tables": [
+        "memory_operations",
+        "memory_operations_new"
+      ],
+      "exempt": "memory-store step 0002_memory_operations_drop_approval, run once under the store's migration lock after a backup: it rebuilds memory_operations only when the table carries the approval column, copying every other column of every row unchanged",
+      "reason": "the rebuild writes memory_operations through memory_operations_new with a column list joined at run time, which the literal scan does not attribute to memory_operations"
     }
   ],
   "kernel_chat_callers": [

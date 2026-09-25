@@ -516,14 +516,10 @@ class MemoryOperation(DictMixin, Base):
     # the commit re-checks that it still holds it inside its own transaction,
     # so a superseded attempt finds out instead of overwriting the winner.
     lease = Column(Text, nullable=True)
-    # Bounded: the proposal, its write set and the original instruction when
-    # no durable source can be referenced. Pruned on terminal completion.
+    # Bounded: the proposal, its write set, the original instruction when no
+    # durable source can be referenced, and a parent's extraction manifest.
+    # Pruned on terminal completion; a parent in review keeps its manifest.
     payload = Column(JSON, nullable=True)
-    # Inert: nothing reads or writes it. The write-time acceptance that was
-    # bound here is withdrawn (2026-09-23). Left in place because a rename is
-    # not additive and every journal read maps this column; milestone 8
-    # rebuilds the table without it.
-    approval = Column(JSON, nullable=True)
     # How a committed proposal departed from what the caller asked for —
     # flags, the requested baseline, the proposed shape — or NULL when it did
     # what was asked. Written by `journal.receipt` inside the commit
@@ -533,9 +529,9 @@ class MemoryOperation(DictMixin, Base):
     result = Column(JSON, nullable=True)
     pending_effects = Column(JSON, default=list)
     # Read restrictions recorded against an exact blob identity/version.
-    # Written by the milestone that owns legacy FACT read eligibility;
-    # nothing writes or reads it yet, and it stays through a rollback
-    # because dropping it would make quarantined memory globally usable.
+    # Written by a review's receipt (`journal.receipt`) and read, whatever the
+    # row's state, by `memory/eligibility.restricted_ids`; it stays through a
+    # rollback because dropping it would make quarantined memory globally usable.
     restrictions = Column(JSON, default=list)
     created_at = Column(DateTime, default=_utcnow)
     updated_at = Column(DateTime, default=_utcnow, onupdate=_utcnow)
@@ -1121,3 +1117,6 @@ class LlmBillingAuthorization(Base):
     reservation_id = Column(String(36), primary_key=True)
     quote = Column(JSON, nullable=False)
     receipt = Column(JSON, nullable=True)
+
+
+from .join_fence_model import MemoryJoinFence  # noqa: E402,F401

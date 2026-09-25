@@ -21,14 +21,18 @@ from zylch.memory.mnemonic.contracts import (
     AUTOMATIC,
     AUTOMATIC_OBSERVATION,
     COMPANY,
+    INTERACTIVE,
+    OPERATOR_DELEGATED,
     MemoryEvent,
     SubjectHint,
 )
+from zylch.memory.mnemonic.proposals import MnemonicResult
 from zylch.services import facts_store
 from zylch.storage import database as dbm
 from zylch.storage.database import get_session
 from zylch.storage.models import Blob
 
+from . import seeding
 from .mnemonic_cases import case, decision_text
 from .mnemonic_env import COMPANY_A, OWNER_A, boot, clear_process_state, client, stub_embedder
 
@@ -238,3 +242,47 @@ def test_the_corpus_rule_row_is_not_quarantined_by_that_review(profile_a, embedd
     admitted(event)(client(decision_text("contradictory_legacy_fact_rule")))
     with get_session() as session:
         assert ineligible_fact_ids(session, COMPANY_A) == {"legacy-fact-edera"}
+
+
+# ─── A restriction outlives the review that wrote it ──────────────────
+
+
+@pytest.mark.parametrize(
+    "state, settled",
+    [
+        (journal.COMMITTED, lambda eid: MnemonicResult.committed(eid, (("blob-2", "v1"),))),
+        (journal.SKIPPED, lambda eid: MnemonicResult.skipped(eid, "dismissed by owner")),
+    ],
+)
+def test_a_restriction_on_a_settled_row_still_excludes_the_fact(
+    profile_a, embedder, state, settled
+):
+    """A join receipt is ``committed`` and a dismissed review ``skipped``: the
+    restriction either one carries keeps the row out, whatever the state."""
+    storage = BlobStorage(get_session, embedder)
+    price = seeding.store_blob(storage, OWNER_A, FACTS, PRICE, "seed")
+    hours = seeding.store_blob(storage, OWNER_A, FACTS, HOURS, "seed")
+    settling = MemoryEvent(
+        event_id="evt-settled",
+        owner_id=OWNER_A,
+        company_key=COMPANY_A,
+        caller_class=OPERATOR_DELEGATED,
+        origin=INTERACTIVE,
+        source_kind="chat",
+        source_id="turn:1",
+        source_revision="rev-1",
+        observation="The list price is Acme's negotiated one, not everyone's.",
+    )
+    journal.open_operation(settling)
+    journal.record_result(
+        settling.event_id,
+        settled(settling.event_id),
+        state=state,
+        restrictions=[{"blob_id": price["id"], "version": price["updated_at"]}],
+    )
+
+    assert restrictions() == [price["id"]]
+    assert fact_ids() == {hours["id"]}
+    assert facts_store.exact_fact(OWNER_A, "pricing", "list") is None
+    with get_session() as session:
+        assert ineligible_fact_ids(session, COMPANY_A) == {price["id"]}

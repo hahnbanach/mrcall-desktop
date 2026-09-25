@@ -212,6 +212,46 @@ def test_a_terminal_child_replays_from_its_own_row(profile_a):
     assert journal.open_operation(children[0], parent_event_id="src-1").replay is None
 
 
+# ─── A reviewed parent keeps its manifest; a settled one does not ─────
+
+
+def manifested_parent():
+    source, lease = opened_parent()
+    children = [child(0, ENTITIES[0]), child(1, ENTITIES[1])]
+    manifest.record_manifest(source, lease, ENTITIES, children)
+    return manifest.read_manifest("src-1")
+
+
+def test_a_parent_settled_in_review_keeps_its_manifest_and_nothing_else(profile_a):
+    recorded = manifested_parent()
+
+    journal.record_result(
+        "src-1", MnemonicResult.review_needed("src-1", "src-1:1: unclear"), state=journal.REVIEW
+    )
+
+    row = rows()["src-1"]
+    assert row["state"] == journal.REVIEW
+    assert row["payload"] == {"manifest": recorded}
+    assert row["lease"] is None
+    assert manifest.read_manifest("src-1") == recorded
+
+
+@pytest.mark.parametrize(
+    "state, settled",
+    [
+        (journal.COMMITTED, MnemonicResult.committed("src-1", (("blob-1", "v1"),))),
+        (journal.SKIPPED, MnemonicResult.skipped("src-1", "all 2 children skipped")),
+    ],
+)
+def test_a_parent_settled_committed_or_skipped_prunes_its_manifest(profile_a, state, settled):
+    manifested_parent()
+
+    journal.record_result("src-1", settled, state=state)
+
+    assert rows()["src-1"]["payload"] is None
+    assert manifest.read_manifest("src-1") is None
+
+
 # ─── A review records restrictions, and the sequence moves with them ──
 
 
