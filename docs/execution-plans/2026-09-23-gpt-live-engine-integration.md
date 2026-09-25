@@ -198,6 +198,28 @@ text, selected context, append/ack, delegation IDs, clock results, output
 transcripts and closure, with no raw audio. Acknowledgements are never counted
 as heard speech.
 
+The operator then made a recognized-caller handset call on 2026-09-25,
+correlated to private trace `call-ef86c43c38b44e199c929097751d2dc1.db`.
+The saved configuration was revision 8; selected Thursday-delivery and blue-filter
+history was ready and sent as `thinking` within 49 ms of attach. The output
+transcript places the greeting at provider 0.4–3.0 s, the historical Thursday
+answer after the shipment question, the blue-filter answer on follow-up, and a
+Rome clock answer after one bound delegation and one engine clock read. The
+engine ledger row is closed with its USD1 hold retained and diagnostic complete;
+this row estimates 45 voice seconds and has no telephone engine-LLM charge.
+The operator rated the call perfect and explicitly confirmed the facts
+were correct and an interruption succeeded. This report is the handset evidence;
+the trace and append acknowledgements alone would not prove what was heard.
+The operator did not provide verbatim heard speech or a separate precise
+greeting-latency measurement. A carrier receipt for this human call is not yet
+recorded here.
+An independent read-only review of the trace and current runtime confirmed
+matched recognition, exactly two selected facts, one clock read and bound result,
+diagnostic closure, and 39/39 closed incoming ledger rows with USD39 retained
+holds. It accepted the new human report as separate evidence for the recognized
+facts and interruption, while leaving full M4 at REVISE for the remaining live
+exceptional scenarios.
+
 The fresh independent review first returned REVISE for two scheduling bugs:
 clock requests waited on unrelated caller lookup, and a delegation could be
 erased while an earlier commentary send was suspended. Both were repaired with
@@ -206,11 +228,11 @@ code-integration fixes. A send already underway cannot retract its frame, so
 post-send correction steering still requires handset observation. No speculative
 anti-repetition controller was added.
 
-Remaining acceptance: recognized caller directly hearing the blue-filter and
-Thursday facts plus follow-up; human handset feedback on greeting,
-interruption and continuity; live ambiguous identity and injected lookup-failure
-paths; further correction during engine work and a closure/late-result call;
-full final independent end-to-end review of this revised architecture. Local
+Remaining acceptance: precise handset greeting latency and verbatim hearing
+details; live ambiguous identity and a recognized-caller injected lookup-failure
+path; correction during pending engine work and a closure/late-result call.
+The latest independent end-to-end review returned REVISE on those missing
+scenarios. Local
 tests cover these boundaries but cannot substitute for the outstanding carrier
 and listening scenarios. M4 remains **active**, not completed.
 
