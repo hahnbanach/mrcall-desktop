@@ -11,7 +11,7 @@ source. The worker marks a source processed only when that answer says every
 child is terminal.
 """
 
-from zylch.services.preparation import bounded_item, bounded_operation
+from zylch.services.preparation import batch_stops, bounded_item, bounded_operation
 
 import logging
 import re
@@ -19,7 +19,6 @@ from typing import Callable, Dict, List, Optional, Sequence, Tuple
 
 from zylch.memory.response_validation import complete_memory_text
 from zylch.llm import LLMClient, make_llm_client, routed_model
-from zylch.llm.budget import BudgetError
 from zylch.llm.usage import call_site
 from zylch.storage import Storage
 from zylch.memory import (
@@ -458,7 +457,7 @@ class MemoryWorker:
             logger.info(f"[memory] email {email_id} not settled: {outcome.outcome} {outcome.reason}")
             return False
 
-        except BudgetError:
+        except batch_stops():
             raise
         except Exception as e:
             logger.error(f"Error processing email {email_id}: {e}", exc_info=True)
@@ -552,7 +551,7 @@ class MemoryWorker:
                     return
                 try:
                     success = await self.process_email(email)
-                except BudgetError:
+                except batch_stops():
                     stop = True
                     raise
                 if success is None:
@@ -807,7 +806,7 @@ class MemoryWorker:
             logger.info(f"[memory] WA {wa_id} not settled: {outcome.outcome} {outcome.reason}")
             return False
 
-        except BudgetError:
+        except batch_stops():
             raise
         except Exception as e:
             logger.error(f"Error processing WhatsApp message {wa_id}: {e}", exc_info=True)
@@ -844,7 +843,7 @@ class MemoryWorker:
                     return
                 try:
                     ok = await self.process_whatsapp_message(msg)
-                except BudgetError:
+                except batch_stops():
                     stop = True
                     raise
                 if ok is None:
@@ -1058,7 +1057,7 @@ class MemoryWorker:
             logger.info(f"[memory] event {event_id} not settled: {outcome.outcome} {outcome.reason}")
             return False
 
-        except BudgetError:
+        except batch_stops():
             raise
         except Exception as e:
             logger.error(f"Error processing event {event_id}: {e}", exc_info=True)
@@ -1198,7 +1197,7 @@ Output ONLY the facts as natural language prose (2-5 sentences). If no meaningfu
             logger.info(f"[memory] conversation {conv_id} not settled: {outcome.outcome} {outcome.reason}")
             return False
 
-        except BudgetError:
+        except batch_stops():
             raise
         except Exception as e:
             logger.error(f"Error processing conversation {conv_id}: {e}", exc_info=True)

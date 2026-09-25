@@ -249,7 +249,12 @@ def join(key: str) -> Dict[str, Any]:
 
 
 def status() -> Dict[str, Any]:
-    """Is memory available for this profile, and if not, why. No paths."""
+    """Is memory available for this profile, and if not, why. No paths.
+
+    ``joining`` says whether an active join fence holds the bound company, and
+    ``joining_reason`` says why its writes are refused while it does. Neither
+    names the destination: not its key, not its digest.
+    """
     from zylch.memory.company_key import current_company_key
     from zylch.storage import database as dbm
 
@@ -265,7 +270,18 @@ def status() -> Dict[str, Any]:
         if engine is not None:
             try:
                 out.update(store_summary(engine))
+                out.update(_joining(key))
             except MemoryUnavailable as e:
                 out.update({"available": False, "reason": e.reason})
     _ = text  # imported for callers that extend this module
     return out
+
+
+def _joining(key: Optional[str]) -> Dict[str, Any]:
+    """Whether an active join fence holds the bound company, and the refusal it answers."""
+    from zylch.memory.mnemonic.fence import JOINING, active
+    from zylch.memory.mnemonic.session import company_transaction
+
+    with company_transaction() as session:
+        fenced = bool(key) and active(session, key) is not None
+    return {"joining": True, "joining_reason": JOINING} if fenced else {"joining": False}

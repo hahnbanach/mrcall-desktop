@@ -21,12 +21,14 @@ NotifyFn = Callable[[str, Dict[str, Any]], None]
 
 
 async def memory_status(params: Dict[str, Any], notify: NotifyFn) -> Any:
-    """memory.status() -> {has_key, available, reason, self_notion?, blob_count?, contributors?}.
+    """memory.status() -> {has_key, available, reason, joining?, joining_reason?, self_notion?, blob_count?, contributors?}.
 
     Whether this profile's memory is usable, and when it is not, why —
     "no company memory store exists for this key on this host" is the
     answer a typed unknown key gets, with memory disabled and mail sync
-    untouched. Sizes and the company's self-notion when available.
+    untouched. Sizes and the company's self-notion when available, and
+    whether an active join fence holds the company (``joining``, with the
+    refusal it answers), never the destination it joins.
     """
     from zylch.memory.join import status
 

@@ -398,6 +398,7 @@ async def _run_pipeline(
             f"Extracting memory from {' + '.join(bits)}…",
             _eta_for_memory(pending_mem + pending_wa),
         )
+        from zylch.services.preparation import PreparationStopped, company_fenced
         try:
             mem_count, wa_count = await _run_memory(owner_id, store)
             summary_stats["memory_processed"] = int(mem_count or 0)
@@ -406,11 +407,10 @@ async def _run_pipeline(
                 console.print(f"  {mem_count}/{pending_mem} emails processed")
             if pending_wa:
                 console.print(f"  {wa_count}/{pending_wa} WhatsApp messages processed")
+        except company_fenced() as e:
+            raise PreparationStopped(str(e)) from e
         except Exception as e:
-            logger.error(
-                f"[/process] memory failed: {e}",
-                exc_info=True,
-            )
+            logger.error(f"[/process] memory failed: {e}", exc_info=True)
             console.print(f"[red]  Memory extraction failed:" f" {e}[/red]")
             if errors_out is not None:
                 errors_out.append({"stage": "memory", "error": e})

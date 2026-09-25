@@ -94,17 +94,22 @@ def failed(summary: Dict[str, Any]) -> Optional[str]:
 
     ``None`` for a run that did its work or rested. ``skipped`` also covers the
     two ordinary reasons a run rests — nothing changed since the last sweep,
-    another engine holds the lock — which are no failure. Company memory that
+    another engine holds the lock — which are no failure, and so is a company
+    whose memory is being joined or that this profile has left (the join
+    fence's two refusals): the run rests until the fence is gone. Company memory that
     is unavailable, or an operation journal that cannot answer — before the
     run starts, or at a pair's pre-check once it is under way, when the counts
     so far are kept — is one: the Settings button answers it as an error and
     ``zylch memory-sweep`` exits 2, rather than letting a caller read it as a
     rest or a finished run.
     """
+    from zylch.memory.mnemonic.fence import JOINING, REBOUND
+
     stopped = str(summary.get("stopped") or "")
     if stopped.startswith(JOURNAL_UNAVAILABLE):
         return stopped
-    if not summary.get("skipped") or summary.get("reason") in (NOTHING_CHANGED, ANOTHER_ENGINE):
+    rests = (NOTHING_CHANGED, ANOTHER_ENGINE, JOINING, REBOUND)
+    if not summary.get("skipped") or summary.get("reason") in rests:
         return None
     return str(summary.get("reason") or "consolidation could not run")
 
@@ -148,12 +153,16 @@ async def consolidate(
 ) -> Dict[str, Any]:
     """One consolidation run of this profile's company memory; returns its summary.
 
-    ``force`` skips the change gate: the button and the CLI always run.
+    ``force`` skips the change gate: the button and the CLI always run. A
+    company the join fence refuses — being joined, or left by this profile —
+    answers ``skipped`` with the fence's reason before any work, the recorded
+    follow-ups included.
     ``merge_enabled`` is the merge gate of a caller that already consulted the
     canary — the post-update run passes its worker's — and ``None`` lets this
     run consult it.
     """
     from zylch.memory.company_key import require_company_key
+    from zylch.memory.mnemonic.fence import refusal
     from zylch.memory.mnemonic.references import replay_pending
     from zylch.memory.mnemonic.session import JournalError
     from zylch.memory.store import memory_db_path, record_sweep_started, sweep_due
@@ -165,6 +174,13 @@ async def consolidate(
     if engine is None:
         reason = memory_unavailable_reason() or "company memory is unavailable"
         return empty_summary(skipped=True, reason=reason)
+    try:
+        fenced = refusal(company_key)
+    except JournalError as exc:
+        return empty_summary(skipped=True, reason=f"{JOURNAL_UNAVAILABLE}: {exc}")
+    if fenced:
+        logger.info(f"[consolidate] skipped: {fenced}")
+        return empty_summary(skipped=True, reason=fenced)
     try:
         references = replay_pending(owner_id)
     except JournalError as exc:
@@ -278,6 +294,7 @@ async def _decide_pairs(
     from zylch.memory import BlobStorage, EmbeddingEngine, MemoryConfig
     from zylch.memory.llm_merge import LLMMergeService
     from zylch.memory.mnemonic.candidates import pinned
+    from zylch.memory.mnemonic.fence import CompanyFenced
     from zylch.memory.mnemonic.pairs import PairItem, has_evidence, pair, settled
     from zylch.memory.mnemonic.session import JournalError
     from zylch.services.preparation import current_run
@@ -333,7 +350,7 @@ async def _decide_pairs(
                 return
             try:
                 admitted = await item.run(pair_)
-            except BudgetError as exc:
+            except (BudgetError, CompanyFenced) as exc:
                 summary["stopped"] = str(exc)
                 return
             if admitted is None:

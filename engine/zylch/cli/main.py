@@ -364,9 +364,8 @@ def memory_status(ctx):
     out = status()
     click.echo(f"profile:      {profile}")
     click.echo(f"memory key:   {current_company_key() or '(none)'}")
-    click.echo(
-        f"available:    {out['available']}" + (f"  ({out['reason']})" if out.get("reason") else "")
-    )
+    note = out.get("reason") or out.get("joining_reason")
+    click.echo(f"available:    {out['available']}" + (f"  ({note})" if note else ""))
     if out.get("available"):
         click.echo(f"self-notion:  {out.get('self_notion') or '(unset)'}")
         click.echo(

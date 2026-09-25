@@ -55,6 +55,7 @@ from .agent import decide
 from .approval import RequestedWrite, departure_for
 from .authorization import MnemonicRefusal, authorize_request
 from .contracts import CREATE, FACT, MAX_DECISION_ATTEMPTS, MERGE, UPDATE, MemoryEvent
+from .fence import CompanyFenced
 from .pairs import PAIR_CHANGED, admits_merge, intact
 from .wiring import CommitContext, candidates_for, default_context
 from .proposals import MnemonicResult, Proposal
@@ -122,7 +123,7 @@ def _submit(
     except journal.EventIdReused as exc:
         return MnemonicResult.review_needed(event.event_id, str(exc))
     except journal.JournalError as exc:
-        return MnemonicResult.retryable_failure(event.event_id, str(exc))
+        return _journal_refused(event, exc)
 
     if opened.replay is not None:
         logger.info(f"[mnemonic] replayed event={event.event_id} outcome={opened.replay.outcome}")
@@ -132,14 +133,14 @@ def _submit(
     try:
         lease = journal.claim(event.event_id)
     except journal.JournalError as exc:
-        return MnemonicResult.retryable_failure(event.event_id, str(exc))
+        return _journal_refused(event, exc)
     if lease is None:
         # Settled between opening and claiming — another attempt, another
         # process. Re-read rather than decide: the answer already exists.
         try:
             replayed = journal.open_operation(event).replay
         except journal.JournalError as exc:
-            return MnemonicResult.retryable_failure(event.event_id, str(exc))
+            return _journal_refused(event, exc)
         return replayed or MnemonicResult.review_needed(
             event.event_id, "another attempt already settled this event"
         )
@@ -175,11 +176,11 @@ def _decide_and_commit(
         except journal.JournalError as exc:
             # The durable allowance is spent at the client boundary, so a
             # journal that stops answering surfaces here, mid-dispatch.
-            return MnemonicResult.retryable_failure(event.event_id, str(exc))
+            return _journal_refused(event, exc)
         try:
             journal.record_attempt(event.event_id, event, decision.proposal)
         except journal.JournalError as exc:
-            return MnemonicResult.retryable_failure(event.event_id, str(exc))
+            return _journal_refused(event, exc)
 
         proposal = decision.proposal
         if not decision.accepted or proposal is None:
@@ -240,7 +241,7 @@ def _decide_and_commit(
             settled = _settled_elsewhere(event)
             if settled is not None:
                 return settled
-            return MnemonicResult.retryable_failure(event.event_id, str(exc))
+            return _journal_refused(event, exc)
         except Exception as exc:  # noqa: BLE001 - a failed write is a retry, never a claim
             logger.error(f"[mnemonic] commit failed event={event.event_id}: {exc}")
             return _record_failure(event, f"commit failed: {exc}", proposal)
@@ -265,6 +266,17 @@ def _settled_elsewhere(event: MemoryEvent) -> Optional[MnemonicResult]:
         return journal.open_operation(event).replay
     except journal.JournalError:
         return None
+
+
+def _journal_refused(event: MemoryEvent, exc: Exception) -> MnemonicResult:
+    """A journal that refused or could not answer, as the retryable failure it is.
+
+    A fenced company (:class:`~zylch.memory.mnemonic.fence.CompanyFenced`)
+    travels as the result's ``refusal``, so an ingestion loop re-raises it as
+    itself and preparation finishes the item as refused rather than failed.
+    """
+    refusal = exc if isinstance(exc, CompanyFenced) else None
+    return MnemonicResult.retryable_failure(event.event_id, str(exc), refusal=refusal)
 
 
 def _unsupported(proposal: Proposal, allow_actions: Sequence[str], event: MemoryEvent) -> str:
@@ -307,7 +319,7 @@ def _settle(
             event.event_id, result, state=state, proposal=proposal, restrictions=restrictions
         )
     except journal.JournalError as exc:
-        return MnemonicResult.retryable_failure(event.event_id, str(exc))
+        return _journal_refused(event, exc)
     return result
 
 

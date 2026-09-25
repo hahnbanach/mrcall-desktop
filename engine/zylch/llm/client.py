@@ -420,7 +420,7 @@ class LLMClient:
         )
         from zylch.llm.budget import reserve, settle
         from zylch.memory.mnemonic.authorization import MnemonicAuthorizationError, assert_no_tools
-        from zylch.services.preparation import check_dispatch, record_dispatch
+        from zylch.services.preparation import check_dispatch, company_fenced, record_dispatch
 
         # The mnemonic role returns a proposal, never a write. Refusing tools
         # here — at the one boundary every dispatch passes — means no future
@@ -433,9 +433,9 @@ class LLMClient:
         reservation = reserve(request_kwargs, self.transport, quote=quote)
         try:
             record_dispatch()
-        except MnemonicAuthorizationError:
-            # Revoked between admission and dispatch: nothing reached a
-            # provider, so the hold can go back.
+        except (MnemonicAuthorizationError, company_fenced()):
+            # Revoked or fenced between admission and dispatch: nothing
+            # reached a provider, so the hold can go back.
             self._release_unused_reservation(reservation, settle)
             raise
         receipt = None

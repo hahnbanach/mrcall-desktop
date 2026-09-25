@@ -16,7 +16,7 @@ from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Any, Dict, Optional
 
-from zylch.llm.budget import BudgetError
+from zylch.services.preparation import batch_stops, company_fenced
 
 if TYPE_CHECKING:
     from zylch.storage import Storage
@@ -203,7 +203,7 @@ class JobExecutor:
                 raise ValueError(f"Unknown job type: {job_type}")
 
         except Exception as e:
-            logger.exception(f"Job {job_id} failed: {e}")
+            logger.error(f"Job {job_id} failed: {e}", exc_info=not isinstance(e, company_fenced()))
             self.storage.fail_background_job(job_id, str(e))
             error_msg = _normalize_error(str(e))
             logger.debug(f"[job_executor] normalized error: {error_msg}")
@@ -238,10 +238,10 @@ class JobExecutor:
             with that reason), every source is one admitted item through the
             worker's own coroutine, and the job opens one revocable turn that a
             user's stop revokes, so a source's remaining children are refused
-            before dispatch. A refusal a source meets — a pause, a budget
-            refusal, a ``BudgetError`` of any kind — leaves this loop instead
-            of being swallowed per item: the job fails with that reason and the
-            remaining sources are left untouched for the next run.
+            before dispatch. A refusal a source meets — a pause, a budget refusal, a
+            ``BudgetError`` of any kind, a join fence — leaves this loop instead of being
+            swallowed per item: the job fails with that reason, a fence with no traceback,
+            and the remaining sources are left untouched for the next run.
             """
             from zylch.memory.mnemonic.turn import revocable_turn, revoke
             from zylch.services.preparation import preparation_run
@@ -334,7 +334,7 @@ class JobExecutor:
                         # one is retried by preparation's own controls.
                         try:
                             settled = run_source_sync(worker, ch, item) is True
-                        except BudgetError:
+                        except batch_stops():
                             raise
                         except Exception as e:
                             err_str = str(e).lower()

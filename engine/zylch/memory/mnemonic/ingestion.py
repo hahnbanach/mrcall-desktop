@@ -27,6 +27,9 @@ The replay contract, in order:
    and failed are recorded per child; a refusal a child met before dispatch —
    a pause, a budget refusal — is re-raised as the exception it was, so the
    batch stops the way it always did and preparation's accounting applies;
+   a join fence (:class:`~zylch.memory.mnemonic.fence.CompanyFenced`) the
+   parent or a child meets at a journal write is re-raised the same way, and
+   preparation finishes the item as refused, never as failed;
 5. the parent is committed when a child committed, skipped when none did and
    none is in review (an empty valid extraction included), in review when a
    child is (visible, terminal, replayed free), and left pending while a
@@ -46,6 +49,7 @@ from typing import Any, Callable, List, Optional, Sequence, Tuple
 from zylch.llm.budget import BudgetError
 
 from . import journal, manifest
+from .fence import CompanyFenced
 from .authorization import (
     MnemonicAuthorizationError,
     MnemonicRefusal,
@@ -218,11 +222,23 @@ def _child(parent: MemoryEvent, index: int, entity: str) -> MemoryEvent:
     )
 
 
+def _journal_failure(parent: MemoryEvent, exc: journal.JournalError) -> Ingestion:
+    """A journal that could not answer leaves the source retryable; a fence is re-raised.
+
+    :class:`~zylch.memory.mnemonic.fence.CompanyFenced` is no failure of the
+    source: it reaches preparation as itself, which finishes the item as
+    refused and ends the run with the fence as its stop reason.
+    """
+    if isinstance(exc, CompanyFenced):
+        raise exc
+    return Ingestion(RETRYABLE_FAILURE, parent.event_id, str(exc))
+
+
 def _settle_parent(parent: MemoryEvent, result: MnemonicResult, state: str) -> Ingestion:
     try:
         journal.record_result(parent.event_id, result, state=state)
     except journal.JournalError as exc:
-        return Ingestion(RETRYABLE_FAILURE, parent.event_id, str(exc))
+        return _journal_failure(parent, exc)
     return Ingestion(result.outcome, parent.event_id, result.reason, committed_ids=result.committed_ids)
 
 
@@ -278,19 +294,19 @@ def ingest(
     except journal.EventIdReused as exc:
         return Ingestion(REVIEW_NEEDED, parent.event_id, str(exc))
     except journal.JournalError as exc:
-        return Ingestion(RETRYABLE_FAILURE, parent.event_id, str(exc))
+        return _journal_failure(parent, exc)
     if opened.replay is not None:
         return _from_replay(parent, opened.replay)
 
     try:
         lease = journal.claim(parent.event_id)
     except journal.JournalError as exc:
-        return Ingestion(RETRYABLE_FAILURE, parent.event_id, str(exc))
+        return _journal_failure(parent, exc)
     if lease is None:
         try:
             replay = journal.open_operation(parent).replay
         except journal.JournalError as exc:
-            return Ingestion(RETRYABLE_FAILURE, parent.event_id, str(exc))
+            return _journal_failure(parent, exc)
         return (
             _from_replay(parent, replay)
             if replay
@@ -318,7 +334,7 @@ def ingest(
             # retryable instead of parked in review.
             logger.warning(f"[ingestion] extraction refused source={parent.source_ref}: {exc}")
             return Ingestion(RETRYABLE_FAILURE, parent.event_id, f"extraction refused: {exc}")
-        except BudgetError:
+        except (BudgetError, CompanyFenced):
             raise
         except Exception as exc:  # noqa: BLE001 - extraction failed; the source is retried
             logger.error(f"[ingestion] extraction failed source={parent.source_ref}: {exc}")
@@ -338,7 +354,7 @@ def ingest(
         try:
             manifest.record_manifest(parent, lease, entities, children)
         except journal.JournalError as exc:
-            return Ingestion(RETRYABLE_FAILURE, parent.event_id, str(exc))
+            return _journal_failure(parent, exc)
     else:
         children = [_child(parent, entry["index"], entry["content"]) for entry in stored]
 

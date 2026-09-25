@@ -28,6 +28,13 @@ vanish with the donor. Admission, retry limits, backoff and status stay with
 the store cannot answer, and the submission facade turns that into a
 ``retryable_failure``: recording a commit that may not have been recorded is
 the one outcome this module must never produce.
+
+**Every writer checks the join fence.** Inside its write transaction, after
+the write lock, each writer here calls
+:func:`~zylch.memory.mnemonic.fence.refuse_if_fenced` for the company it
+writes, so nothing lands in a company that is being joined or that this
+profile's ``.env`` has left. A terminal row still replays through
+:func:`open_operation` unchecked: a replay writes nothing.
 """
 
 from __future__ import annotations
@@ -45,6 +52,7 @@ from zylch.storage.models import MemoryOperation
 
 from .contracts import EVENT_DISPATCH_ALLOWANCE, MemoryEvent
 from .digests import input_digest, proposal_digest
+from .fence import refuse_if_fenced
 from .journal_reads import read, visible
 from .session import JournalError, company_transaction, session_factory
 from .proposals import MnemonicResult, PendingEffect, Proposal
@@ -149,6 +157,7 @@ def open_operation(event: MemoryEvent, *, parent_event_id: Optional[str] = None)
             row = session.get(MemoryOperation, event.event_id)
             digest = input_digest(event)
             if row is None:
+                refuse_if_fenced(session, event.company_key)
                 session.add(
                     MemoryOperation(
                         event_id=event.event_id,
@@ -179,6 +188,8 @@ def open_operation(event: MemoryEvent, *, parent_event_id: Optional[str] = None)
                 raise EventIdReused(
                     f"event id {event.event_id} belongs to another account or company"
                 )
+            if row.state not in TERMINAL:
+                refuse_if_fenced(session, row.company_key)
             replay = _result_from(row) if row.state in TERMINAL else None
             return Opened(
                 event.event_id,
@@ -233,6 +244,7 @@ def claim(event_id: str) -> Optional[str]:
                 raise JournalError(f"no operation for event {event_id}")
             if row.state in TERMINAL:
                 return None
+            refuse_if_fenced(session, row.company_key)
             row.lease = lease
             row.updated_at = _now()
             session.flush()
@@ -303,11 +315,14 @@ def spend_allowance(event_id: str) -> Optional[int]:
             row = session.get(MemoryOperation, event_id)
             if row is None:
                 return None
+            refuse_if_fenced(session, row.company_key)
             remaining = max(0, int(row.allowance or 0) - 1)
             row.allowance = remaining
             row.updated_at = _now()
             session.flush()
             return remaining
+    except JournalError:
+        raise
     except Exception as exc:  # noqa: BLE001
         raise JournalError(f"operation journal unavailable: {exc}") from exc
 
@@ -332,6 +347,7 @@ def record_attempt(event_id: str, event: MemoryEvent, proposal: Optional[Proposa
             if row is None:
                 raise JournalError(f"no operation for event {event_id}")
             _refuse_terminal(row)
+            refuse_if_fenced(session, row.company_key)
             row.attempts = int(row.attempts or 0) + 1
             row.proposal_digest = proposal_digest(proposal)
             row.target_family = _target_family(proposal)
@@ -374,6 +390,7 @@ def receipt(
     writes nothing.
     """
     _refuse_terminal(row)
+    refuse_if_fenced(session, row.company_key)
     row.state = state
     row.result = {
         "outcome": result.outcome,

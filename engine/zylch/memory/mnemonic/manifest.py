@@ -33,6 +33,7 @@ from .journal import (
     company_transaction,
     owns,
 )
+from .fence import refuse_if_fenced
 
 
 def record_manifest(
@@ -54,13 +55,16 @@ def record_manifest(
     re-pointed.
 
     The parent must still be held under ``lease``: a manifest written by an
-    attempt another process has since taken over would race the winner's.
+    attempt another process has since taken over would race the winner's. A
+    fenced company refuses the whole transaction
+    (:func:`~zylch.memory.mnemonic.fence.refuse_if_fenced`).
     """
     if len(entities) != len(children):
         raise JournalError("every extracted entity needs exactly one child event")
     try:
         with company_transaction(write=True) as session:
             row = owns(session, parent.event_id, lease)
+            refuse_if_fenced(session, row.company_key)
             manifest = [
                 {"event_id": child.event_id, "index": index, "content": entity}
                 for index, (child, entity) in enumerate(zip(children, entities))

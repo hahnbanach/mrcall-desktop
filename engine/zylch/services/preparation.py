@@ -12,12 +12,25 @@ from zylch.llm.budget import BudgetError
 
 _current = contextvars.ContextVar("preparation_run", default=None)
 _in_item = contextvars.ContextVar("preparation_item", default=False)
+_INTERRUPTED = "Run interrupted; incomplete items remain pending."
+_BUDGET_STOP = "AI budget or billing unavailable; review spending status before resuming."
 
 
 class PreparationStopped(BudgetError):
     """Preparation is paused or its shared item allowance is exhausted."""
 
     code = -32020
+
+
+def company_fenced():
+    """The join fence's refusal class, imported on use: the harness imports this module."""
+    from zylch.memory.mnemonic.fence import CompanyFenced
+    return CompanyFenced
+
+
+def batch_stops():
+    """The refusals that end a batch instead of failing its item: a budget refusal, a join fence."""
+    return (BudgetError, company_fenced())
 
 
 @contextmanager
@@ -122,17 +135,8 @@ def preparation_run(owner, *, explicit=False):
     try:
         yield
     except BaseException as exc:
-        with _db() as conn:
-            conn.exec_driver_sql(
-                "UPDATE preparation_state SET stop_reason=? WHERE owner=? AND run_id=?",
-                (
-                    str(exc)
-                    if isinstance(exc, PreparationStopped)
-                    else "Run interrupted; incomplete items remain pending.",
-                    owner,
-                    run_id,
-                ),
-            )
+        stopped = isinstance(exc, (PreparationStopped, company_fenced()))
+        _stop(owner, run_id, str(exc) if stopped else _INTERRUPTED)
         raise
     finally:
         _current.reset(token)
@@ -276,12 +280,12 @@ def _admit(owner, stage, source):
     return run_id
 
 
-def _finish(owner, stage, source, run_id, result, *, refused=False):
+def _finish(owner, stage, source, run_id, result, *, refused=False, fenced=False):
     owner = _account(owner)
     if not run_id:
         return
     with _db() as conn:
-        if refused:
+        if refused and not fenced:
             dispatched = conn.exec_driver_sql(
                 "SELECT dispatched FROM preparation_attempts WHERE owner=? AND stage=? AND source=? AND run_id=?",
                 (owner, stage, source, run_id),
@@ -311,6 +315,15 @@ def _finish(owner, stage, source, run_id, result, *, refused=False):
             )
 
 
+def _stop(owner, run_id, reason):
+    if run_id:
+        with _db() as conn:
+            conn.exec_driver_sql(
+                "UPDATE preparation_state SET stop_reason=? WHERE owner=? AND run_id=?",
+                (reason, _account(owner), run_id),
+            )
+
+
 def bounded_item(stage=None):
     """Decorate memory bool processors or the task dict processor."""
 
@@ -335,12 +348,11 @@ def bounded_item(stage=None):
                 result = await fn(self, *args, **kwargs)
             except BudgetError:
                 _finish(self.owner_id, key, source, admitted, False, refused=True)
-                if admitted:
-                    with _db() as conn:
-                        conn.exec_driver_sql(
-                            "UPDATE preparation_state SET stop_reason='AI budget or billing unavailable; review spending status before resuming.' WHERE owner=? AND run_id=?",
-                            (_account(self.owner_id), admitted),
-                        )
+                _stop(self.owner_id, admitted, _BUDGET_STOP)
+                raise
+            except company_fenced() as exc:
+                _finish(self.owner_id, key, source, admitted, False, refused=True, fenced=True)
+                _stop(self.owner_id, admitted, str(exc))
                 raise
             except BaseException:
                 _finish(self.owner_id, key, source, admitted, False)

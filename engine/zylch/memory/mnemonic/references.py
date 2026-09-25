@@ -46,6 +46,7 @@ from zylch.memory.company_key import current_company_key
 from zylch.storage.models import MemoryOperation
 
 from . import journal
+from .fence import refuse_if_fenced
 from .pairs import PAIR_SOURCE_KIND
 from .proposals import MnemonicResult, PendingEffect
 from .writes import TASK_REFERENCES
@@ -199,6 +200,7 @@ def _record_remaining(event_id: str, remaining: List[PendingEffect]) -> None:
             row = session.get(MemoryOperation, event_id)
             if row is None:
                 raise journal.JournalError(f"no operation for event {event_id}")
+            refuse_if_fenced(session, row.company_key)
             row.pending_effects = [{"kind": e.kind, "detail": e.detail} for e in remaining]
             session.flush()
     except journal.JournalError:
