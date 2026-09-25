@@ -1,5 +1,5 @@
 ---
-doc_baseline_commit: 2b180527be2065fe8eeed0e55bbc9ea13acc47ec
+doc_baseline_commit: b32999a856558b1d6ed56e46f3220e32902f4c90
 doc_baseline_date: 2026-09-25
 ---
 
@@ -46,7 +46,7 @@ billing and pause controls. See [operator setup](operator-setup.md#ai-execution-
 
 The isolated GPT-Live M4 telephone prototype has accepted real-call and human
 listening evidence for its selected-context behavior. The proposed Desktop
-voice alpha still needs a StarChat `desktop` business, multi-business runtime
+voice alpha still needs a StarChat `desktop` business, real-profile runtime
 binding and customer activation. The [manual Café 124 pilot](execution-plans/2026-09-25-desktop-voice-assistant-alpha-ux.md)
 is planned; its specific-number assignment path is unresolved.
 
