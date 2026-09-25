@@ -1,5 +1,5 @@
 ---
-doc_baseline_commit: e940b2a54283bbc7ec0aee4bb0c26568b66cd9a6
+doc_baseline_commit: 57933f0dbf5aad9ca56b852a49958d9a09af82bb
 doc_baseline_date: 2026-09-25
 ---
 
@@ -43,6 +43,12 @@ connection, prepares data and hands off a descriptor-based cs-kernel workspace.
 The engine owns mailbox processing and shared memory; the clone owns operator
 procedures. Claude Code headless and kernel direct classifiers have separate
 billing and pause controls. See [operator setup](operator-setup.md#ai-execution-and-controls).
+
+The isolated GPT-Live M4 telephone prototype has accepted real-call and human
+listening evidence for its selected-context behavior. The proposed Desktop
+voice alpha still needs a StarChat `desktop` business, multi-business runtime
+binding and customer activation. The [manual Café 124 pilot](execution-plans/2026-09-25-desktop-voice-assistant-alpha-ux.md)
+is planned; its specific-number assignment path is unresolved.
 
 Settings supports independent provider/model selection, daily budgets and bounded
 preparation. It remains reachable with an unavailable engine; stale connection
@@ -100,7 +106,7 @@ from a quiet one.
   does not establish membership. Settings catalog refresh has a known same-value
   reload gap; reopen Settings after connection changes. See [backlog](harness-backlog.md).
 - Product chat, delegated sending, approval isolation and a comprehensive security
-  review are deferred. Calendar integration, phone memory parity, raw RPC errors,
+  review are deferred. Calendar integration, raw RPC errors,
   installer coverage and multi-window auth checks retain their existing owners.
 - Historical task-mode/import and legacy transport issues need verification
   before their paths are restored.
