@@ -211,6 +211,18 @@ re-checks authorization under the company write lock and refuses without a
 destructive effects the caller asked for is written, and the difference is
 recorded with the operation ([the departure](mnemonic-commit.md#the-departure)).
 
+The account is the profile's, and a profile names it twice: `OWNER_ID`, the
+Firebase uid, which the budget and the preparation ledger key on, and
+`EMAIL_ADDRESS`, which `get_owner_id()` answers and so every trigger — the RPC
+handlers, `update.run`, the CLI — puts on its event. An event or a grant owned
+by either is this process's own (`authorization._current_owners`). Any other
+owner is another account and is refused, another profile on the same company
+store included. An identity the profile does not state is none: the
+`local-user` stand-in that `get_owner_id()` answers for a profile without an
+email names no account, and a profile that states neither cannot name the
+account it is acting as. The journal records each operation under the owner
+string its event carried.
+
 The authority is the dispatch scope, not the usage label. `call_site` tags stay
 what they were — diagnostics for spend attribution — and a call relabelled
 `chat` or left untagged inside a mnemonic dispatch is checked identically,
@@ -300,8 +312,10 @@ parks the source visibly, and a failed child keeps its retry evidence.
 `tests/memory/test_mnemonic_contracts.py`, `test_mnemonic_validator.py`,
 `test_mnemonic_evidence.py`, `test_mnemonic_candidates.py`,
 `test_mnemonic_agent.py`, `test_mnemonic_pairs.py`,
-`tests/workers/test_merge_gate.py` (the canary) and
-`tests/llm/test_mnemonic_admission.py`; the commit
+`tests/workers/test_merge_gate.py` (the canary),
+`tests/llm/test_mnemonic_admission.py` and
+`tests/memory/test_mnemonic_owner_identity.py` (the account: either identity
+of the profile, through each trigger's own owner, and no other); the commit
 half and the ingestion suites have their own, listed in
 [mnemonic-commit.md](mnemonic-commit.md). The
 validator and agent tests replay the frozen milestone 0 incident corpus

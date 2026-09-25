@@ -81,12 +81,18 @@ def booted(tmp_path, monkeypatch, embedder):
 # ─── Sources, workers, runs ───────────────────────────────────────────
 
 
-def seed_email(email_id="mail-1", body="Luca Bianchi will call; Acme confirms.", sender="mario@acme.test"):
+def seed_email(
+    email_id="mail-1",
+    body="Luca Bianchi will call; Acme confirms.",
+    sender="mario@acme.test",
+    *,
+    owner=OWNER_A,
+):
     with get_session() as session:
         session.add(
             Email(
                 id=email_id,
-                owner_id=OWNER_A,
+                owner_id=owner,
                 gmail_id=email_id,
                 thread_id=f"t-{email_id}",
                 from_email=sender,
@@ -97,7 +103,7 @@ def seed_email(email_id="mail-1", body="Luca Bianchi will call; Acme confirms.",
         )
     # The dict the storage hands the worker and the job alike, so a source
     # renders to one revision whichever entry takes it.
-    return next(row for row in Storage().get_unprocessed_emails(OWNER_A) if row["id"] == email_id)
+    return next(row for row in Storage().get_unprocessed_emails(owner) if row["id"] == email_id)
 
 
 def extraction(*entities: str) -> str:
@@ -129,10 +135,10 @@ def update_decision(blob_id: str, version: str, content: str, entity_type: str) 
     )
 
 
-def make_worker(extractions, decisions):
+def make_worker(extractions, decisions, *, owner=OWNER_A):
     """The real worker with both of its clients scripted at the transport."""
     with patch.object(mem_mod, "make_llm_client", return_value=MagicMock()):
-        worker = mem_mod.MemoryWorker(storage=Storage(), owner_id=OWNER_A)
+        worker = mem_mod.MemoryWorker(storage=Storage(), owner_id=owner)
     worker._custom_prompt = "Extract entities with #IDENTIFIERS, #ABOUT, #HISTORY. SKIP if none."
     worker._custom_prompt_loaded = True
     worker.client = client(*extractions) if all(isinstance(e, str) for e in extractions) else scripted(extractions)
@@ -153,7 +159,7 @@ def scripted(items):
 
 def run(worker, method, item):
     """One source as the pipeline runs it: inside an admitted preparation run."""
-    with preparation_run(OWNER_A):
+    with preparation_run(worker.owner_id):
         return asyncio.run(getattr(worker, method)(item))
 
 
