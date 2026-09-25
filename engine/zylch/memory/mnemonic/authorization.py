@@ -31,7 +31,7 @@ import secrets
 import uuid
 from collections import OrderedDict
 from dataclasses import dataclass
-from typing import Any, Dict, Iterator, Optional
+from typing import Any, Dict, FrozenSet, Iterator, Optional
 
 from .contracts import (
     AUTOMATIC,
@@ -130,24 +130,38 @@ _scope: contextvars.ContextVar[Optional[DispatchGrant]] = contextvars.ContextVar
 )
 
 
-def _current_owner() -> str:
-    """The account this process is actually acting as, or ``""`` if unknowable.
+def _current_owners() -> FrozenSet[str]:
+    """The identities of the account this process is actually acting as, or none.
 
-    An empty answer is not "any account": every caller here treats it as a
+    A profile names its account twice. ``OWNER_ID`` is the Firebase uid, which
+    the budget and the preparation ledger key on. ``EMAIL_ADDRESS`` is what
+    :func:`zylch.cli.utils.get_owner_id` answers, so it is the owner every
+    trigger — the RPC handlers, ``update.run``, the CLI — puts on an event. An
+    event or a grant owned by either is this account's; any other owner is
+    another account's.
+
+    An identity the profile does not state is none. For a profile without an
+    email ``get_owner_id`` answers ``local-user``, a stand-in every such profile
+    shares, so it names no account and is left out: counting it would let two
+    profiles without an email act on each other's events in one company store.
+    An email ``get_owner_id`` cannot resolve is left out too, with a warning,
+    and ``OWNER_ID`` alone may still name the account.
+
+    An empty set is not "any account": every caller here treats it as a
     refusal. A paid semantic write path that cannot say which account it is
     acting as has no business spending money or proposing a mutation, and
     milestone 1 already set that direction — missing mutation authority
     defaults to refusal on write paths.
     """
-    owner = os.environ.get("OWNER_ID")
-    if owner:
-        return owner
-    try:
-        from zylch.cli.utils import get_owner_id
+    owners = [os.environ.get("OWNER_ID")]
+    if os.environ.get("EMAIL_ADDRESS"):
+        try:
+            from zylch.cli.utils import get_owner_id
 
-        return str(get_owner_id() or "")
-    except Exception:  # noqa: BLE001 - an unresolvable owner is a refusal, see callers
-        return ""
+            owners.append(get_owner_id())
+        except Exception as exc:  # noqa: BLE001 - an unresolvable email names no account
+            logger.warning(f"[mnemonic] this profile's email identity cannot be resolved: {exc}")
+    return frozenset(str(owner) for owner in owners if owner)
 
 
 def _registered(grant: Any) -> bool:
@@ -168,12 +182,12 @@ def authorize_request(event: MemoryEvent) -> None:
 
     if is_read_only():
         raise MnemonicRefusal(refusal_text("memory_write"))
-    owner = _current_owner()
-    if not owner:
+    owners = _current_owners()
+    if not owners:
         raise MnemonicRefusal(
             "this process cannot say which account it is acting as; refusing semantic memory work"
         )
-    if owner != event.owner_id:
+    if event.owner_id not in owners:
         raise MnemonicRefusal(
             "the submitting account does not match the event owner; refusing cross-account memory work"
         )
@@ -298,12 +312,12 @@ def authorize_active_dispatch() -> Optional[str]:
         raise MnemonicAuthorizationError(
             "mnemonic dispatch presented a grant this process never issued"
         )
-    owner = _current_owner()
-    if not owner:
+    owners = _current_owners()
+    if not owners:
         raise MnemonicAuthorizationError(
             "this process cannot say which account it is acting as; refusing the dispatch"
         )
-    if owner != grant.owner_id:
+    if grant.owner_id not in owners:
         raise MnemonicAuthorizationError(
             "mnemonic grant belongs to another account; refusing cross-owner dispatch"
         )

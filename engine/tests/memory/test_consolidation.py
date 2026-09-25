@@ -57,6 +57,7 @@ ENGINE_ROOT = Path(__file__).resolve().parents[2]
 LONG = "Purchasing at Alpha; handles every order and every return."
 SHORT = "Joins the Thursday sync."
 OVERLOADED = RuntimeError("Error code: 529 - {'type': 'overloaded_error', 'message': 'Overloaded'}")
+EMAIL_A = f"{OWNER_A}@company.test"  # the profile's EMAIL_ADDRESS: the account the triggers act as
 
 
 @pytest.fixture
@@ -73,23 +74,15 @@ def pair_of(store, about=LONG, other=SHORT, name="Luca Bianchi"):
     return seed(store, person(name, about=about)), seed(store, person(name, about=other))
 
 
-def as_the_triggers_resolve_it(monkeypatch):
-    """The RPC and the CLI act as ``get_owner_id()`` (``EMAIL_ADDRESS``); the
-    harness as ``OWNER_ID``. Aligned here, as every harness suite aligns them,
-    so these cases test the trigger rather than the recorded owner-identity
-    issue (``docs/known-issues/2026-09-24-mnemonic-owner-identity-mismatch.md``)."""
-    monkeypatch.setenv("EMAIL_ADDRESS", OWNER_A)
-
-
 # ─── Three triggers, one operation ────────────────────────────────────
 
 
 def test_the_button_runs_the_operation_inside_its_preparation_run(store, monkeypatch):
     from zylch.rpc import maintenance
 
-    as_the_triggers_resolve_it(monkeypatch)
+    assert maintenance._owner_id() == EMAIL_A != OWNER_A  # the email, not OWNER_ID
     keeper, donor = pair_of(store)
-    healthy(monkeypatch)
+    healthy(monkeypatch, owner=EMAIL_A)
     transport = scripted(monkeypatch, merge_answer(store, keeper, donor))
 
     result = asyncio.run(maintenance.memory_reconsolidate_now({}, lambda *a: None))
@@ -106,12 +99,11 @@ def test_the_cli_runs_inside_its_own_preparation_run_and_says_why_not(store, tmp
 
     from tests.memory.test_cli_memory import _cli_for
 
-    as_the_triggers_resolve_it(monkeypatch)
-    env = tmp_path / f"profile-{OWNER_A}" / ".env"  # the profile load re-reads it
-    env.write_text(env.read_text().replace(f"={OWNER_A}@company.test", f"={OWNER_A}"))
+    loaded = (tmp_path / f"profile-{OWNER_A}" / ".env").read_text()  # what the CLI loads
+    assert f"EMAIL_ADDRESS={EMAIL_A}\n" in loaded and f"OWNER_ID={OWNER_A}\n" in loaded
     monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-test")  # the profile load sets it
     keeper, donor = pair_of(store)
-    healthy(monkeypatch)
+    healthy(monkeypatch, owner=EMAIL_A)
     transport = scripted(monkeypatch, merge_answer(store, keeper, donor))
     cli = _cli_for(monkeypatch, tmp_path, f"profile-{OWNER_A}")
 
@@ -243,7 +235,6 @@ def test_the_button_answers_a_run_that_could_not_happen_as_an_error(store, monke
     from zylch.rpc import maintenance
     from zylch.storage import database as dbm
 
-    as_the_triggers_resolve_it(monkeypatch)
     if broken == "journal":
 
         def unavailable(*args, **kwargs):

@@ -80,7 +80,11 @@ scripts (M8). Contracts:
 [writer inventory](features/mnemonic-writer-inventory.md). Tested locally
 against the frozen milestone 0 incident corpus and real split profile/company
 databases. Milestones 5 and 6 are on `main`; milestone 7 is on the
-`mnemonic-m7` branch; **not merged, not deployed**.
+`mnemonic-m7` branch, and the account check that accepts either identity of the
+profile, uid or email ([who the account is](features/mnemonic-decisions.md#who-pays)),
+is on `mnemonic-owner`, built on it; **not merged, not deployed**. Until both
+are merged, `main` refuses every harness write on a profile whose `OWNER_ID`
+is not its `EMAIL_ADDRESS`, which is every profile the app creates.
 
 Support's engine exposes approval-gated `initiate_call` through the dashboard's
 Firebase atom API, with an explicit calling assistant ID. A live request on
@@ -135,11 +139,6 @@ API budgets; see [control boundaries](../../docs/operator-setup.md#ai-execution-
 
 ## Unresolved
 
-- The mnemonic harness refuses every memory write on a profile whose
-  `OWNER_ID` is not its `EMAIL_ADDRESS` — every app-created profile: events
-  carry `get_owner_id()` (the email) and are authorized against `OWNER_ID`.
-  Latent, since milestones 5–7 are not deployed; the fix is the CTO's
-  decision (hb `docs/known-issues/2026-09-24-mnemonic-owner-identity-mismatch.md`).
 - The remaining three profiles await a billing choice; funded credit acceptance
   remains open. No backlog resumption is part of model configuration.
 - Incident checkpoint counts and project inventories in dated records are

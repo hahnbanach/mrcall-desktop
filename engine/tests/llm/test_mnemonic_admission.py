@@ -340,7 +340,7 @@ def test_a_process_that_cannot_name_its_account_refuses(monkeypatch):
     from zylch.memory.mnemonic.authorization import MnemonicRefusal
 
     monkeypatch.delenv("OWNER_ID", raising=False)
-    monkeypatch.setattr("zylch.memory.mnemonic.authorization._current_owner", lambda: "")
+    monkeypatch.setattr("zylch.memory.mnemonic.authorization._current_owners", lambda: frozenset())
     with pytest.raises(MnemonicRefusal) as exc:
         issue_grant(event())
     assert "cannot say which account" in str(exc.value)
@@ -544,7 +544,7 @@ def test_a_process_that_cannot_name_its_account_refuses_at_the_dispatch_too(monk
     """Not only when the grant is minted: the account can become unknowable after."""
     llm = client()
     grant = issue_grant(event())
-    monkeypatch.setattr("zylch.memory.mnemonic.authorization._current_owner", lambda: "")
+    monkeypatch.setattr("zylch.memory.mnemonic.authorization._current_owners", lambda: frozenset())
 
     with pytest.raises(MnemonicAuthorizationError) as exc:
         dispatch(llm, grant)

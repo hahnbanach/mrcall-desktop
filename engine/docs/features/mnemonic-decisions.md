@@ -211,6 +211,18 @@ re-checks authorization under the company write lock and refuses without a
 destructive effects the caller asked for is written, and the difference is
 recorded with the operation ([the departure](mnemonic-commit.md#the-departure)).
 
+The account is the profile's, and a profile names it twice: `OWNER_ID`, the
+Firebase uid, which the budget and the preparation ledger key on, and
+`EMAIL_ADDRESS`, which `get_owner_id()` answers and so every trigger — the RPC
+handlers, `update.run`, the CLI — puts on its event. An event or a grant owned
+by either is this process's own (`authorization._current_owners`). Any other
+owner is another account and is refused, another profile on the same company
+store included. An identity the profile does not state is none: the
+`local-user` stand-in that `get_owner_id()` answers for a profile without an
+email names no account, and a profile that states neither cannot name the
+account it is acting as. The journal records each operation under the owner
+string its event carried.
+
 The authority is the dispatch scope, not the usage label. `call_site` tags stay
 what they were — diagnostics for spend attribution — and a call relabelled
 `chat` or left untagged inside a mnemonic dispatch is checked identically,
