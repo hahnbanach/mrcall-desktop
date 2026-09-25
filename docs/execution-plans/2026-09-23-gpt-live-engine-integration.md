@@ -7,8 +7,9 @@ date: 2026-09-23
 
 <!-- doc-scope:start -->
 Scope: execution plan for the isolated telephone customer-service prototype:
-caller recognition, GPT-6 answers, selected-memory/clock tools and autonomous
-carrier verification. Owns milestones, evidence and rollback; intent is in the brief.
+caller recognition, selected company context for GPT-Live, engine tools and
+autonomous carrier verification. Owns milestones, evidence and rollback; intent
+is in the brief. Historical GPT-6 integration evidence remains in this plan.
 <!-- doc-scope:end -->
 
 Brief: [telephone customer service](../brief/2026-09-23-gpt-live-engine-integration.md).
@@ -23,347 +24,161 @@ integrated telephone call and fresh independent integration review are APPROVED.
 Listening evidence and its limits are recorded below. M4 is now active; this
 four-milestone plan stays active.
 
-## M4 conversational filler experiments — 2026-09-25
+## Current M4 plan — Live uses selected context; engine supplies new results
 
-**Current outcome: correction NOT accepted. All session code changes withdrawn;
-previously reviewed implementation restored. M4 remains active.** The following
-records the attempts and their failures; no intermediate pass certifies the fix.
+**Planning decision, 2026-09-25; not implemented or phone-accepted.** M1–M3
+approvals remain historical evidence for those milestones. M4 **replaces and
+removes** the mandatory GPT-6 telephone path: no concrete telephone task here
+requires a separate GPT-6 turn. Remove the per-call GPT-6 voice agent, its
+across-the-board delegation policy and its clock-selection route from the
+isolated telephone runtime; do not retain them as an alternative or fallback.
+This section supersedes older M4 implementation instructions and acceptance
+steps below wherever they require GPT-6 to author phone answers or choose tools.
+Only historical test results and financial records remain as evidence.
 
-Human call `call-5b3751cfe4d34d32a6ad1697dfce2fd6.db` recognizes the caller and
-loads both authorized facts in 50 ms. GPT-6 uses blue filters/Thursday, and voice
-speaks both: this now proves recognized-caller use on the GPT-6-owned flow.
-The caller then asks the time: the actual Europe/Rome tool returns 09:59:04,
-followed by the correct spoken answer. However, voice repeats the same waiting
-phrase for all three turns, including the caller's complaint about that phrase.
-The operator confirms the experience is unnatural and requests its correction.
-The prompt explicitly offered that phrase twice; routine delegation, not tool
-execution time, explains its repeated availability. The clock itself starts and
-finishes within the same recorded millisecond; question-end to final voice is
-5.303 s and includes delegation and model time.
+The target has **one conversational model, GPT-Live**. The engine owns caller
+recognition, selection and freshness of permitted data, available functions,
+execution, configuration snapshots, security boundaries, persistence, accounting
+and closure. GPT-Live greets, listens, speaks, handles ordinary questions from
+selected facts and delegates when a fresh result or unavailable fact is needed.
+The engine answers supported delegations with its own data and deterministic
+functions. No generic intent framework, external tracking service or memory
+write is part of this revision. Other engine workflows outside the telephone
+runtime are outside this M4 replacement.
 
-The initial prompt-only attempt used the fast path: local, reversible phrasing
-with no contract, tool, permission, persistence or scheduling boundary change.
-The later runtime changes follow the separately reviewed brief/plan gates below. Remove both filler examples;
-instruct silent delegation/listening until current backend commentary, then a
-direct answer with no waiting preamble. Greeting and correction delegation remain.
-Verify focused runtime/conversation checks, activate only the idle isolated smoke
-service, and run the existing three-question clock carrier scenario. Acceptance
-requires actual clock results and spoken answers without routine waiting fillers;
-this does not promise reduced backend latency or close M4's interruption/identity
-criteria. Rollback restores the previous prompt on the idle service, retaining
-all ledgers. Focused runtime/conversation checks pass 11 tests. The first carrier
-check `call-699d5cc7525e47f585d8fc14224c3667.db` FAILED: no waiting filler, but
-voice states an invented Rome time before the actual clock result, then retracts
-it. Preserve this failure. The next prompt revision organizes the same constraints
-under explicit backchannel/interruption/delegation sections, lists backend
-capabilities and says a delegation is not a result. It must wait for commentary
-for the current request, including clock questions. This follows the
-[official GPT-Live prompting structure](https://developers.openai.com/api/docs/guides/live-prompting)
-checked 2026-09-25; it is not a deterministic speech gate. Repeat the same scenario
-and verify chronology/grounding as well as absence of filler before acceptance.
+### Data delivered to Live
 
-### Withdrawn experiment: task-specific waiting steering
+1. Create the session with `instructions` for greeting, conversational style,
+   interruption, historical-versus-current wording, supported capabilities and
+   delegation policy. Ask for one substantive answer per caller request. The
+   greeting starts as soon as the session starts, independently of caller lookup.
+   These are model instructions, not authorization or a deterministic speech gate.
+2. Start the allowed caller lookup concurrently. Select only facts permitted for
+   this company and caller. A phone-number match is recognition, not proof of
+   identity; unknown or ambiguous callers receive no asserted personal identity
+   or another customer's facts. Send the selected baseline via
+   `session.thinking.append` with `delegation_id: null` as soon as it is ready.
+   Include provenance and uncertainty: e.g., “the prior email says blue filters
+   and delivery agreed for Thursday,” not a newly verified order status. Do not
+   copy whole company memory, hidden reasoning, credentials or `MEMORY_KEY` into
+   Live. Reuse StarChat opening-hours/state inputs where verified; the engine
+   computes time-sensitive “open now” with zone, as-of time and exceptions, then
+   updates context when it changes rather than freezing that state in instructions.
+3. Live answers directly when current permitted context or conversation suffices.
+   No engine `commentary` and no new lookup are required for an already available
+   blue-filter/Thursday answer. Its transcript still reaches the engine for
+   diagnostics; transcript receipt alone does not start work.
+4. If a caller asks before baseline `thinking` arrives, Live delegates. The
+   engine associates `session.delegation.created` with accumulated caller
+   transcript because that event contains metadata and an ID, not request text.
+   Join the lookup already in flight; do not start a second identical search.
+   When facts arrive, send the selected baseline `thinking` for later turns, then
+   a `session.commentary.append` bound to that delegation ID if its question is
+   still pending. This commentary is the task's speakable result. The instructions
+   ask Live not to repeat an answer it has already given. Observe the actual
+   output transcript and listening before adding a more elaborate duplicate-
+   suppression mechanism; do not make an unobserved race a new implementation
+   requirement. An append acknowledgement proves context insertion, not speech.
+5. For an enabled fresh-data request such as “What time is it in Rome?”, Live
+   delegates. The engine uses the transcript and current call state to route the
+   specific supported request, calls `get_current_time(Europe/Rome)` directly,
+   validates its result and sends `commentary` with the matching delegation ID.
+   A stale clock value in `thinking` is not a fresh reading. If no suitable
+   function exists, return an explicit unavailable result; do not invent a live
+   check or imply that an order number unlocks tracking. New function routes are
+   added only as actual needs arise.
 
-The structured prompt retest `call-6035a14954a7442793e31a674dbc5d4e.db` still
-speaks waiting announcements, including the original unwanted phrase. The amended
-brief and plan for task-specific steering returned APPROVED. Lead implementation:
+The three append events are **session updates**, not three independent REST
+endpoints. Startup `instructions` can be set in the initial session configuration;
+later `instructions.append`, `thinking.append` and `commentary.append` carry
+plain-string content. Client delegation IDs bind task results; `null` identifies
+session-wide context. The engine must handle rejected/late appends, caller
+corrections, superseded results and closure without speaking stale data or
+changing existing ledger holds. Official API basis, checked 2026-09-25:
+[session context and acknowledgement timing](https://developers.openai.com/api/docs/guides/live-conversations),
+[client delegation and append semantics](https://developers.openai.com/api/docs/guides/live-delegation),
+[prompting and when not to delegate](https://developers.openai.com/api/docs/guides/live-prompting).
 
-1. Sends a short `session.instructions.append` on the existing serial worker before
-   awaiting initial lookup/backend work, bound to its pending delegation and caller
-   revision. Request silence until NEW commentary, then speak that result normally.
-   Reassert on superseded work before correction coalescing. Use `_append` guards;
-   never add separate fire-and-forget tasks that could steer after a final result.
-2. Keeps the instruction free of customer facts, results and paid-model calls.
-   A failed send records a diagnostic failure and continues the ordinary backend
-   path; it cannot turn into a business result. Existing close cancels the worker,
-   and its append guards suppress closed/stale sends. A late result cannot escape
-   existing fences. No deterministic audio-mute or interruption claim.
-3. Test ordering before delayed lookup, closure cancellation, stale revision,
-   correction reassertion and send failure without duplicate paid work. Adjust
-   existing speech assertions to distinguish instruction events from commentary.
-   The focused conversation/runtime suite passes 34 tests; independent integration
-   review APPROVED activation after 16 tests; refined wording passed 11 independent
-   tests. Broader voice regression passes all 204 tests.
-4. Idle smoke-only activation, then repeat clock/tracking and spoken correction
-   carrier scenarios; inspect every pre-result voice fragment, clock/result text,
-   delegation and closure. Retain all failures/receipts. If steering fails, keep
-   the criterion open; do not call silence successful from acknowledgements alone.
+### Implementation and acceptance sequence
 
-The first task-specific call `call-10ef451ebd66444c90493d62be9ebfca.db` is also
-FAILED: a partial waiting word escapes before steering, and after the first answer
-no delegation appears for either follow-up. The instruction is therefore clarified
-to pause speech only, keep delegating new/corrected requests even during the wait,
-and expire that wait when commentary arrives. The session-start greeting instruction
-also states silent delegation after greeting. Broader voice tests exposed one old
-assertion treating instructions as speech; update it to forbid late commentary
-and paid dispatch, while allowing the new pre-lookup steering event.
+1. Review the revised brief and this plan as the new M4 design boundary before
+   implementation. Inventory existing selected-fact retrieval, clock execution
+   and call diagnostics; verify whether StarChat actually exposes opening-hours
+   or open-state inputs before planning reuse. Preserve the isolated profile
+   and all holds; do not restart the tunnel.
+2. Prepare a minimal Live prompt and authorized `thinking` payload. Remove the
+   forced delegation of every substantive question and remove the telephone
+   GPT-6 agent path rather than leaving it dormant. Keep precise “delegate when
+   data/tool is missing” guidance. Keep the caller lookup asynchronous to the
+   greeting. Test selection, provenance, unknown/ambiguous caller handling,
+   timing and lookup failure with real transport event shapes. Never treat a
+   model instruction as the permission boundary. The new voice path must have
+   no telephone GPT-6 dispatch, reservation or hidden fallback.
+3. Route only the concrete enabled clock request directly through the engine;
+   return tool result or explicit unavailability through bound `commentary`.
+   Preserve the shared tool's valid IANA zone, read-only behavior and trace.
+   Test the first fresh request, a follow-up, correction while
+   work runs, stale result, error and hangup. Do not substitute GPT-6 silently.
+4. Exercise both lookup orderings: facts ready before the first question, and
+   first question delegated before `thinking`. Correlate the exact selected facts,
+   append/acknowledgement, delegation ID, output transcript and call timing.
+   Expect one useful spoken answer per request; if duplication actually occurs,
+   diagnose that trace before changing scheduling. Also test no tracking tool,
+   opening-hours freshness and historical-versus-live wording.
+5. Obtain independent integration review, then activate only the idle isolated
+   smoke service. Demonstrate real calls with the operator's short script and
+   feedback plus private correlated transcripts: cold start without Desktop or
+   cs-operator, next-call configuration change, immediate greeting, known caller
+   filters/Thursday and follow-up, unknown/ambiguous callers, correction during
+   engine work and speech, other-customer/internal exclusion, lookup failure,
+   close/late-result suppression, clock/tool path, latency, continuity and costs.
+   Repeat failed cases after fixes. Independently verify the old telephone GPT-6
+   request path is gone while unrelated engine LLM workflows still work.
+   Automated calls cannot certify handset audio or the known-caller case when
+   their number is unknown.
+6. Finish only after a fresh independent end-to-end review of **this revised
+   design** and all M4 criteria. A successful append, unit test or one pleasant
+   call is not M4 acceptance. Preserve private evidence, provider receipts and
+   every financial reservation. If a criterion fails, leave M4 active and the
+   failure explicit; preserve the isolated ledgers and service state on rollback.
 
-The refined clock/tracking call `call-d9461f1043924958bee62d359b4e3b5a.db`
-completes all three delegated turns without pre-result voice output or routine
-waiting phrases. Rome tool returns 10:14:46, New York 04:15:09; both reach backend
-answers and speech after their results. Tracking receives a precise unavailable
-answer. Question-end to first answer transcript is 4.094/5.121/2.883 seconds
-(local receipt timing), so this removes filler rather than eliminating inference
-latency. Caller identity is unknown in this autonomous test. Spoken correction
-test `call-85991a6ea1f740449efa4449b41c3a67.db` then FAILED semantic ownership:
-voice repeats caller-supplied facts and the correction with zero backend delegations.
-The next refinement restores the previously reviewed detailed voice ownership rules,
-removes their filler examples, adds explicit delegation for repetition requests,
-and retains task-specific waiting. Repeat both scenarios; the successful clock
-trace cannot certify this failed correction path.
+Current status: **planning only** for this replacement. The obsolete telephone
+runtime is a removal task, not a supported M4 variant. Updating this plan does
+not itself remove code or change the running call service.
 
+## Historical M4 filler experiments — 2026-09-25
 
+**Outcome of those experiments: not accepted.** The recognized-caller human call
+`call-5b3751cfe4d34d32a6ad1697dfce2fd6.db` loaded the authorized blue-filter
+and Thursday facts in 50 ms and spoke them on the old GPT-6 path, but repeated a
+waiting phrase on three turns. Prompt-only and task-specific/early steering
+variants passed local checks yet failed carrier conversations: an invented Rome
+time before a tool result, speech before delegation, lost follow-up delegation,
+repeated waiting phrases, seven clock reads in one turn and an unsupported
+tracking-access claim. A successful clock-only trace did not cure the spoken
+correction failure. The eight autonomous attempts and their private correlated
+traces remain historical diagnostic evidence. All steering changes were rolled
+back after the last failed carrier test; the old runtime was restored only as the
+pre-redesign checkpoint. The full experiment sequence is preserved in Git.
 
-### Withdrawn experiment: earlier waiting cue
+The final historical accounting snapshot showed 28 closed incoming calls with
+USD28 retained holds and 18 closed autonomous caller attempts with USD18
+retained holds. The old GPT-6 ledger had 139 usage rows, estimated USD0.391130,
+no unresolved OpenAI reservation; two older proxy holds totaling USD0.110
+remained. These were observations, not values to restore or provider invoices.
+The listener was available with configuration revision 6, infinite service and
+tunnel lifetimes, and an unchanged tunnel PID. Final independent review accepted
+the rollback but rated filler correction and M4 **REVISE**. These results do not
+accept the replacement architecture or the complete telephone experience.
 
-Retest `call-3a7253b7f2de444f944521064654f226.db` has two real backend turns,
-but a short acknowledgement and a corrected-fact fragment begin before the
-corresponding delegation/result. A cue sent only after delegation cannot prevent
-speech already started. The amended early-cue brief is APPROVED.
+## Superseded M4 GPT-6 implementation record — 2026-09-24
 
-Lead implementation arms one managed early-steering task on the first caller
-transcript fragment of a pending turn. Its content is the same generic waiting
-instruction, with null delegation ID and no caller text or fact revision to stale.
-Further fragments share that task. The serial worker awaits it before lookup/model
-work; delegation without a transcript retains the existing bound cue as fallback.
-Final commentary and the internal already-answered outcome rearm the next caller
-turn. Superseded work retains the existing revision-bound reassertion; close
-cancels and joins the early task along with existing tasks. Send errors stay
-observable and never create another paid run. No detached task may inject silence
-after commentary, including correction/error paths. Local send ordering is not
-proof of provider application or handset silence. The affected suite passes
-44 tests; sentinel/error rearming adds two further cases in the broad regression.
+The earlier M4 work added the current-time tool and tested a mandatory GPT-6
+telephone backend. Its carrier traces, costs and review outcomes remain in the
+verification record below and the private diagnostics. The new plan at the top
+replaces that runtime path; this record is not a set of implementation steps.
 
-Test first-fragment precedence before delegation, multiple-fragment coalescing,
-no late cue after result, rearming for follow-up/correction and close during a
-blocked send. Run affected suites, independent integration review, idle activation,
-then clock/tracking and correction phone retests. Retain previous failed traces;
-only complete, grounded conversations without waiting filler can pass this fix.
-
-### Final attempted refinement and complete rollback
-
-Early-cue retest `call-99ac5ae012a847d2b719721e290a9d0b.db` FAILED: voice says
-it will check the caller's statement before the backend result. Both substantive
-turns delegate, but the unwanted waiting announcement remains. All 209 local
-voice tests pass; that does not establish the requested conversational behavior.
-The early cue and per-delegation steering are therefore withdrawn, including their
-session-only tests and related test assertion changes. All seven experimental
-carrier traces and private summaries remain preserved.
-
-The final attempted change used stable scheduling and only refined the original
-prompts: remove both fixed waiting-phrase examples, discourage routine
-acknowledgements and repeated lookup announcements, allow an occasional natural
-neutral acknowledgement, and ask the backend to start with its answer. Independent
-integration review approved isolated activation, verifying via AST that only the
-two prompt values changed; 11 independent checks and 26 focused checks passed.
-
-Carrier test `call-345ff3362bf3406f84878628430d62ee.db` FAILED too. The first
-Rome request performs seven clock reads without answering before the next caller
-question. The New York turn says the original waiting phrase, then a grounded
-backend answer gives both times, which voice repeats. The tracking question gets
-an independent voice answer with an unsupported access claim and no new backend
-delegation. The private summary is `M4-filler-final-prompt-failed.json`. Preserve
-this failure; the repeated clock calls are an additional latency finding, not a
-proven consequence of one prompt line.
-
-All session source/test changes and the attempted durable feature description
-are withdrawn. The idle smoke service reloads the previously reviewed HEAD code;
-the tunnel stays untouched. No filler correction is delivered or accepted. The
-last prompt candidate's correction scenario is not run after its clock/tracking
-failure; do not imply it passed. Eight autonomous calls were actually originated
-in this session. An immediate post-restart health ConnectError occurred before
-reservation or carrier dispatch; unchanged attempt count was verified before a
-healthy start. No uncertain paid attempt was retried.
-
-Next work must establish a reliable provider delegation/speech-control contract
-and investigate repeated fresh-clock reads before claiming improved naturalness.
-Keep the complete M4 criteria open, preserve accounting, and retain the known
-human result separately from autonomous failures. Final independent review and
-financial/runtime observations follow below.
-
-Final candidate regression: **200 voice tests pass**, including the real kernel
-client integration, before complete rollback. Independent prompt activation
-review passed 11 tests, but carrier acceptance failed; these results certify no
-conversational improvement. All production source and tests now match the reviewed
-HEAD. Read-only final accounting: 28 incoming calls closed with USD28 retained
-holds, 18 autonomous caller attempts closed with USD18 retained holds; all 20
-pre-session incoming rows are byte-for-byte unchanged. GPT-6 ledger has 139 usage
-rows, estimated USD0.391130 total, no unresolved OpenAI reservations. The two old
-proxy holds totaling USD0.110 remain. These are accounting snapshots, not settled
-provider invoices or spending limits. Restored listener health is available,
-configuration stays revision 6, both service lifetimes remain infinite, and the
-tunnel PID stays 1903954.
-
-Carrier receipt refresh retains 25 diagnostic incoming-call groups. The final
-attempt has two completed 71-second incoming/SIP legs priced 0.00532500 and
-0.00497000; its separate originating leg is completed, 71 seconds, price
-0.01146650. Currency is absent in the receipts, so these are not USD figures.
-Documentation review reports zero STALE findings and root living-context shape
-OK (120 lines). Its independent limits are test execution, runtime chronology,
-financial snapshots and human listening; those remain supported by lead tool
-outputs or the explicit operator feedback, not invented reviewer observations.
-
-Final independent end-to-end review confirms the source/test rollback, restored
-listener and unchanged infinite-lifetime tunnel, plus all final ledger totals and
-unresolved-reservation counts above. Its read-only trace audit confirms the final
-clock loop, repeated speech, waiting phrase and undelegated tracking answer.
-Rollback is acceptable; filler correction and overall M4 remain **REVISE**, with
-no acceptance inferred from local test results. Human naturalness after a future
-fix still needs listening evidence.
-
-## Active M4 implementation: GPT-6 answers and incremental tools — 2026-09-24
-
-The amended brief independently returned APPROVED before this plan amendment.
-This is within M4, superseding the direct-context voice policy in older entries.
-Owner: lead implementation/activation; independent reviewers own each review gate.
-
-1. Extend the explicit voice tool allowlist and immutable configuration with
-   `get_current_time`; preserve default memory-only configurations and reject
-   unknown/duplicate capabilities. Implement a read-only ZoneInfo clock requiring
-   a valid IANA timezone, structured ISO datetime/timezone/UTC offset and private
-   argument/result diagnostics. No shell, customer data, writes or new framework.
-   Wire both concrete agent tool validation and all Responses conversion paths.
-2. Give GPT-6 caller facts plus accumulated transcript; instruct GPT-Live to
-   delegate substantive questions and present results without inventing checks.
-   Keep immediate one-shot greeting. Stop pushing full memory to quiet voice
-   context. Initial lookup still runs independently; the existing bounded read
-   returns empty facts and an explicit missing/error result on timeout/failure,
-   so GPT-6 can answer without memory. Diagnostic delay is test-only, normally 0.
-   Remove voice-only invalidation at final delivery and fragment append; retain
-   caller revision, binding and closure guards. Retain the backend no-further-
-   response decision for already-completed history, without a mandatory extra run.
-3. Verify config/tool permissions (including disabled clock), malformed zones,
-   timezone offsets/DST, clock request/result through real Responses translation
-   and common ledger, preload/no extra lookup, voice progress (one semantic run),
-   caller corrections, chunk interruption and hangup. Preserve normal owner-agent
-   tool behavior. Run voice/kernel/budget regression and changed-file lint.
-4. Run real GPT-6 backend-only replays with the frozen isolated profile: preloaded
-   tracking facts with voice acknowledgement in flight, then fresh Rome time with
-   an actual clock-tool result. Record exact traces, serial dispatch counts and
-   settled costs. No artificial intent routing; GPT-6 chooses tools. Backend-only
-   evidence is not phone acceptance. Obtain independent integration review before
-   activation; address failures and re-review.
-5. While idle, snapshot all voice ledger rows; update isolated config through
-   actual authenticated cs rpc to enable the clock and replace obsolete direct-
-   voice instructions (Europe/Rome is an explicit test default). Restart only the
-   smoke service; verify cold health before operator reconnect, unchanged ledger,
-   unlimited mode, diagnostics, zero delays, tunnel PID and infinite lifetimes.
-   Rollback: restore previous source/config while idle with a NEW config revision;
-   keep every hold/receipt, do not overwrite live data or restart the tunnel.
-6. Offer a short phone retest: tracking, delivery follow-up, current Rome time and
-   interruption; inspect correlated text and tool payloads alongside listening.
-   Final independent end-to-end review and doc reconciliation must distinguish
-   implementation readiness from M4's still-open live matrix. If the caller is
-   unavailable, leave the runtime ready and M4 active, without claiming acceptance.
-
-Evidence motivating this correction: call 6 (`call-948ead5eac1b4b5ea09525519eaf267d.db`)
-loaded two selected facts in 132 ms. The tracking answer completed in 4.427 s but
-was discarded solely because voice said “Certo, controllo subito.”; caller revision
-stayed 4. A second run took 4.667 s, then one result was sent/acknowledged. Only the
-historical Thursday/blue-filter sentence was transcribed before closure; no proof
-that the missing-tracking clause reached the caller. Private report and literal
-sequence diagram are retained outside tracked documentation (DUPLEX.md remains
-operator-owned/untracked). This demonstrates redundant backend latency, not the
-cause of every previous interruption or an instrumented handset measurement.
-
-Implementation verification in progress: the plan gate returned APPROVED. The
-voice/kernel/budget regression passes 239 tests; changed-source Ruff passes.
-Real backend replay `call-b624cd90150145c0b67a49fd5e654e9f.db` answers tracking in
-2.448 seconds with one GPT-6 request despite injected voice progress, then calls
-`get_current_time` for Rome and answers from its result (two more serial Responses
-requests). The replay explicitly simulates spoken delivery before the follow-up;
-it is not telephone audio. An earlier replay omitted that simulated delivery and
-therefore repeated the still-undelivered tracking correction; retain its trace
-`call-f2d405bb1b1d49c9b9b3a092a7cdc666.db` as evidence of this test limitation.
-Independent integration review APPROVED after 51 focused tests. Configuration
-4→5 replaced obsolete voice instructions through actual authenticated cs rpc;
-the old daemon correctly refused the new clock capability. After smoke-only
-restart and cold health readiness, config 5→6 enabled the clock through the same
-client. No ID token persisted. Nine previous voice rows hash-match the prestart
-snapshot; tunnel PID 1903954 and both infinite lifetimes remain unchanged.
-The diagnostic caller extension received separate brief/plan approval and
-integration APPROVED after four independently passing lifecycle tests.
-Before autonomous calls: 57 settled GPT-6 requests, estimated USD0.137293,
-no unresolved OpenAI reservations; two old proxy holds total USD0.110 unchanged.
-
-### Correction-fragment scheduling follow-through
-
-The first autonomous correction trace (`call-ff6c480d2d02447e84a8062bd247815c.db`)
-proves stale New York/tracking answers are suppressed and corrected Rome/time/date
-answers reach voice. It also exposes seven semantic runs/five invalidations caused
-by immediately re-dispatching incomplete caller fragments. Commit 98e5d8d coalesces
-only superseded work: it waits for a new delegation at the current caller revision,
-or 1.2 seconds of input quiet if no new delegation arrives. Initial dispatch is
-unchanged; this is cancellable scheduling, not a conversation/duration/attempt
-ceiling or an assertion of a provider turn-complete event. Voice progress does
-not affect the wait. Tests cover complete correction dispatch, no-new-delegation fallback and close
-cancellation. The identical carrier retest after independent integration review
-used four semantic runs/two invalidations rather than seven/five; caller correction
-end to first final voice transcript fell from 6.602/7.365 s to 3.303/3.675 s. These
-are service-observed receipt times, not instrumented handset audio latency.
-
-The autonomous lookup-failure trace (`call-3f15e1ef4f894d5483ed568542d097b2.db`)
-FAILED greeting/voice grounding: the greeting instruction was sent and acknowledged,
-but no greeting transcript preceded caller speech. With no facts supplied to voice,
-GPT-Live independently claimed to see a filter order before GPT-6's safe unavailable
-answer. GPT-6 corrected that claim on the next turn, which is insufficient acceptance.
-Shared configuration also made GPT-6 include a late greeting. Commit 98e5d8d puts
-role-specific instructions after shared configuration: backend never greets; before
-a backend answer voice uses only silence/neutral acknowledgement, no claimed facts,
-access or operations. Actual facts remain backend-only. Two real fault repeats
-greeted before caller speech and produced safe unavailable answers, privacy
-refusals and fresh clock results, without an invented order. Do not claim the cause of the provider's ignored
-greeting is known, or a prompt can guarantee against every unsupported generation.
-
-### Spoken-correction follow-through
-
-Autonomous trace `call-c1113311959f4eaea4cd54dbd0cd390e.db` exposes another
-failure: the caller corrects red/Friday to blue/Thursday during voice output;
-GPT-Live repeats the corrected facts without another delegation to GPT-6. The
-content matches the caller but violates the agreed semantic ownership. GPT-6
-also expanded Friday into September 25 without evidence of the intended date. Retain
-this failed trace. The reviewed prompt refinement removes the ambiguous voice
-instruction to rectify facts itself: all corrections, even obvious restatements, must be
-re-delegated and only GPT-6's new result may supply the substantive correction.
-Backend rules attribute caller-provided facts and preserve relative weekdays
-without adding dates unless an explicit dated fact establishes the intended date;
-a clock result alone cannot establish which Friday an order meant. Independent plan
-and integration reviews APPROVED this refinement (26 independent tests; 27 lead
-focused tests). The identical tenth call now delegates the correction to a second
-GPT-6 run and speaks its attributed blue/Thursday answer, with no added date.
-However, the preceding obsolete answer continues during caller correction. Prompt
-compliance is empirical; immediate interruption remains unresolved.
-
-### Autonomous phone tests authorized — 2026-09-24
-
-The operator must leave and explicitly requests autonomous test calls. Use a
-standalone diagnostic caller to dial ONLY the already-authorized test number,
-with that same owned number as caller ID; never impersonate the frozen customer
-or call the operator's personal number. Vonage NCCO text-to-speech and waits
-exercise the real incoming carrier/audio path. This is a test driver, not a
-production outbound feature. Keep a private durable attempt/receipt ledger before
-origination, retain uncertain reservations, do not automatically retry an
-uncertain create, and collect actual provider closure/price evidence. The existing
-incoming ledger is unchanged. No recordings, routing changes or tunnel restart.
-A scripted test has finite dialogue steps and hangs up when done; it adds no
-runtime expiry or general conversation ceiling. Calls from this test number may
-correctly be unidentified; label identity scenarios honestly. Pair the incoming
-correlated transcript with the exact scripted caller text and observed tool
-results. These calls can prove provider paths and failures, but cannot stand in
-for human handset listening or certify known-caller recognition when unidentified.
-
-Driver implementation/verification (lead-owned, reviewed before paid origination):
-fix and enforce both destination and owned caller ID to the authorized number;
-persist intent before POST, with a durable unresolved-state guard across restarts.
-A lost create response or uncertain closure blocks a new origination rather than
-retrying. For each known UUID, finally attempts hangup if active and reconciles
-terminal status/price receipts, preserving all reservations. Mocked transport
-checks must cover lost create responses, exceptions after UUID receipt and terminal
-receipt handling. Independent integration review must approve the driver before
-its first paid origination. This guard prevents overlapping uncertain calls; it is
-not a reinstated financial, duration or attempt ceiling.
-
-## Current M3 correction — 2026-09-24
+## Historical M3 correction — 2026-09-24
 
 This supersedes earlier requirements for a funded MrCall business and the earlier
 provider-change prohibition. The user explicitly selected the dedicated OpenAI
@@ -596,86 +411,15 @@ in-memory sessions and refresh failure with automatic preparation disabled.
 **Rollback.** Disable the listener; ordinary engine RPC/chat remain available.
 Restore prior engine code if the focused regression fails.
 
-## M4 — Verify the complete customer experience
+## Historical M4 verification program and evidence
 
-**Required diagnostic addition (operator request, 2026-09-24):** before the M4
-calls, implement opt-in transcript capture for the isolated test. Record caller
-and voice transcript events with timestamps and call/delegation/revision IDs;
-correlate them with selected-memory tool results, the backend's final answer and
-the commentary actually sent to GPT-Live. Keep retrieved facts, backend answers
-and voice output distinct, including interruptions and repeated or superseded
-answers. Do not capture hidden model reasoning. Store this diagnostic privately
-outside Git, excluding credentials, tokens, MEMORY_KEY and unselected facts.
-Ordinary profiles keep transcript persistence off; no raw audio is retained by
-default. Capture implementation/activation are M4 tasks, not established evidence yet.
-
-Use the correlated trace to locate failures between retrieval, backend reasoning,
-voice delivery and interruption handling. Specifically verify that blue filters
-and the prior-email Thursday agreement are used correctly when asked, and explain
-the reported repetition after interruption. A retrieved-fact count is insufficient
-acceptance evidence. Transcript output also does not prove what reached the
-handset: retain the real listening check alongside the trace.
-
-Use a short call script with the controlled history: known customer and follow-up;
-unknown/ambiguous caller; correction during delayed lookup; correction during
-speech; failed lookup and forced closure. Combine scenarios where useful; the operator removed all local call/spend ceilings.
-After configuring, stop the operator, disconnect its client and restart the
-daemon. Make an incoming call without opening Desktop, cs-operator or another
-configuration client; it must perform real engine reasoning in the recorded
-payment mode. Keep automatic preparation disabled and the fixture frozen.
-Also change configuration between calls and confirm that new instructions apply
-only to the next call.
-
-Listen to entire exchanges, not just final transcripts. The five brief criteria
-must pass, including absence of internal/other-customer facts and explicit
-rectification of stale speech. With lookup artificially delayed five seconds,
-the greeting must start before lookup completion; after a correction, the next
-substantive answer must address it or ask the necessary clarification. Record
-actual first-audio and useful-answer latency rather than inventing a production
-SLO. Save sanitized observations and usage; no raw audio retention by default.
-
-A separate final review checks evidence against the brief and the actual operator
-configuration path. Document setup, selected transport, teardown and limitations
-in an engine voice-channel guide; update IPC and living context only for behavior
-actually delivered. Mark this plan completed only after real-call acceptance;
-missing access or a failed live scenario remains explicit unfinished work.
-
-### M4 execution sequence — authorized 2026-09-24
-
-1. Lead: implement opt-in private SQLite traces in the isolated profile only.
-   Correlate call/config revision, backend run/input revision, delegation IDs,
-   selected tool results, final backend answer, actual append commands and server
-   acknowledgements. Preserve transcript deltas and provider timeline offsets,
-   reflected audio ranges without audio bytes, closure and suppression decisions.
-   Mark overlap as an interruption candidate, never handset playback proof.
-   Failures mark diagnostics incomplete but cannot prevent cleanup/accounting.
-2. Lead: test real agent/tool/transport boundaries, default-off and file privacy,
-   credential exclusion, duplicate/overlapping events, stale-answer suppression,
-   lookup failure and close races. Reproduce defects before changing behavior;
-   do not infer the old call's unavailable content. Run focused voice/adjacent
-   regression and actual kernel-client tests. Fresh local review before activation.
-3. Lead: enable capture in the private saved profile; restart only the existing
-   smoke-named service after checking it is idle. Preserve unlimited settings,
-   tunnel PID/URL, memory fixture and ledger history. Verify cold start before
-   any operator RPC. Collect real GPT-6 backend evidence with frozen selected facts.
-4. Lead/operator: real calls with short scripts and listening feedback. First call:
-   historical filters, Thursday, missing tracking, follow-up and interruption.
-   Between calls use authenticated actual kernel `cs rpc` configuration update
-   via in-memory auth, then disconnect it. Verify next-call changed greeting.
-   Use explicit isolated fault/delay controls for five-second lookup, corrections
-   during backend work, lookup error and forced closure; no numeric call ceiling.
-   Unknown/ambiguous cases use withheld/other caller when available; any injected
-   fixture number is labeled simulated and cannot alone certify physical caller
-   recognition. Unperformed/failed scenarios stay open.
-5. Lead: correlate transcripts with caller feedback, timings, voice/backend usage
-   and available carrier receipts. Fix demonstrated faults, repeat affected calls.
-   Fresh independent end-to-end review evaluates all M4 criteria and actual
-   operator path. Update guide, living context and this matrix faithfully; only
-   real passing evidence permits completion. Rollback disables diagnostics or
-   restores the isolated runtime/configuration, retaining all evidence and holds.
-
-No implementation is delegated. Review gates: M4 brief amendment independently
-APPROVED; fresh plan amendment review also APPROVED. Existing M1–M3 approvals remain scoped.
+The earlier M4 program required private correlated transcripts, real carrier
+calls, listening, failure and closure checks, costs and a final independent
+review. Those diagnostic and evidence obligations remain in the active sequence
+above. The obsolete GPT-6-specific execution steps have been removed from this
+plan; Git history preserves their exact wording. The table below records what
+those prior experiments actually established and what remained open. It does
+not authorize or define the replacement telephone runtime.
 
 | M4 criterion | Evidence/state |
 | --- | --- |

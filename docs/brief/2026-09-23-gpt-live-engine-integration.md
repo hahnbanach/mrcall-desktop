@@ -10,7 +10,8 @@ Scope: product brief for a customer-service voice agent using GPT-Live, Python,
 Vonage and the existing engine. Defines the first memory-backed conversation,
 operator configuration and the direction for repeatable service integrations.
 M1–M3 are approved for the isolated prototype.
-M4 is authorized as of 2026-09-24; acceptance requires new correlated traces and listening.
+M4 is active with a revised Live-context design; acceptance requires new
+correlated traces and listening. Older GPT-6 design entries are historical.
 <!-- doc-scope:end -->
 
 Execution: [four-milestone plan](../execution-plans/2026-09-23-gpt-live-engine-integration.md).
@@ -18,8 +19,8 @@ Execution: [four-milestone plan](../execution-plans/2026-09-23-gpt-live-engine-i
 ## Objective
 
 Add telephone conversations to customer service alongside email and WhatsApp.
-The voice agent serves the company's customers using the engine's reasoning,
-company memory and permitted tools. **cs-operator configures this agent; it does
+The voice agent serves the company's customers using selected company memory
+and permitted engine tools. **cs-operator configures this agent; it does
 not conduct the calls.** Calls must work while cs-operator is stopped.
 
 Start with incoming calls. Later, outgoing calls use the same agent and
@@ -31,70 +32,67 @@ The first useful delivery needs only company memory. External services and the
 meta-skill for creating their integrations follow; Google Calendar is a candidate,
 not a prerequisite for the telephone channel.
 
-## M3 model and test correction — 2026-09-24
+## Historical M3 model and test correction — 2026-09-24
 
-Use the latest verified model generation, never an older model for adapter
-convenience. Voice remains `gpt-live-1`; the isolated backend uses direct OpenAI
-`gpt-6-sol` through Responses with function calling, using the dedicated key and
-project in `/home/mal/.config/mrcall/gpt-live-test.env`. Verify actual inference
-and a memory-tool round trip, not merely model listing or health. Official basis:
-[GPT-6 Sol](https://developers.openai.com/api/docs/models/gpt-6-sol) and
-[function calling](https://developers.openai.com/api/docs/guides/function-calling).
-The abandoned, unactivated GPT-4.1 draft must be replaced; no GPT-4.1 inference
-was performed. MrCall CALLCREDIT/business funding is not a dependency of this test.
+The isolated M3 telephone prototype used `gpt-live-1` with a direct
+`gpt-6-sol` Responses/function-calling backend under the dedicated test
+key/project. The unactivated GPT-4.1 draft sent no inference. Integrated phone
+demonstration and independent M3 review were approved, but their evidence does
+not accept M4 or keep GPT-6 in the replacement path. The operator removed all
+local experiment ceilings in the isolated profile; ledger holds, usage
+accounting, profile isolation and indefinite service/tunnel lifetime remain
+required. The approved test history uses blue replacement filters and the
+prior-email Thursday agreement.
 
-The operator has removed all local experiment ceilings (attempts, duration,
-spend and artificial conversation limits) in the isolated profile. Preserve
-ledger reservations, usage accounting, profile isolation and indefinite service
-and tunnel lifetime. Provider limits remain distinct. No further spending
-approval is needed. These instructions supersede the original bounded-test
-wording below. Use only the frozen approved history: blue replacement filters
-and delivery agreed for Thursday in the prior email. M3 requires a successful
-integrated phone demonstration and independent review; M4 is now authorized; historical M3 evidence remains limited.
+## Superseded M4 telephone backend direction — 2026-09-24
 
-## M4 correction: GPT-6 owns answers and tool selection — 2026-09-24
+The prior isolated telephone path delegated substantive questions and tool
+selection to GPT-6. Its reviewed M3 integration and subsequent M4 calls remain
+historical evidence; they are not an M4 implementation option. The call traces
+showed waiting even when selected facts were already loaded, and the operator
+replaced that design with the Live-context direction below. The earlier wording
+and detailed test history remain available in Git and the execution evidence.
 
-The operator explicitly requests implementation of this responsibility boundary:
-GPT-6 receives permitted caller context, interprets the request, chooses enabled
-tools when needed and authors the substantive answer. The engine provides data,
-executes tools and handles transport/accounting. GPT-Live greets, listens,
-interrupts and presents GPT-6 answers naturally; it delegates substantive requests
-instead of independently answering business questions from quiet context. This
-supersedes the direct-context voice-answer experiment and ambiguous references
-to the engine as the semantic answer author below.
+## Current M4 direction: one conversational model — 2026-09-25
 
-Initial caller lookup remains asynchronous and independent of the greeting. All
-selected facts go into GPT-6's call context before its first request; full facts
-are no longer separately pushed to GPT-Live. GPT-6 can answer from this context
-without an obligatory repeat lookup. Missing tracking must be reported as missing:
-no carrier/order lookup exists, and an order number alone cannot enable one.
-Only caller input, binding changes and closure invalidate pending results. Voice
-acknowledgements must not start another GPT-6 turn or discard an answer. GPT-Live
-still sees its own spoken history and must avoid repeating already-spoken content;
-this generative behavior requires listening, not just controller tests.
+The preceding GPT-6 answer-ownership correction is superseded for M4. The
+telephone runtime must remove that mandatory GPT-6 path rather than retain it as
+an option or fallback. The engine selects permitted information and capabilities;
+GPT-Live uses that context for ordinary phone conversation. No demonstrated
+telephone task requires a separate GPT-6 turn. Its across-the-board delegation
+caused waiting even for facts already retrieved. Previous milestone approvals and
+failed M4 traces remain historical evidence, not acceptance of this replacement.
 
-Call 6 demonstrates the defect: a tracking request produced a useful GPT-6 answer
-in 4.427 seconds, discarded solely because GPT-Live said “Certo, controllo subito.”
-The caller had not added input. A second GPT-6 turn took 4.667 seconds. Its result
-was forwarded; only the historical Thursday/blue-filter clause was transcribed
-before closure. These are backend durations, not measured handset latency.
+At session creation, provide Live with instructions for the greeting, tone,
+delegation, historical-versus-current language and one response per caller
+request. Greet before caller recognition completes. The engine concurrently
+selects authorized caller/company facts and sends them as quiet `thinking` when
+ready; a phone-number match alone never proves identity. Reuse validated StarChat
+opening-hours/state inputs where applicable, computing time-sensitive “open
+now” with a fresh clock, timezone and exceptions. Live answers directly from
+current permitted facts and conversation without a second model call.
 
-Add one incremental read-only capability, `get_current_time(timezone)`, explicitly
-enabled in each call's configuration. It returns fresh system time as structured
-ISO date/time, IANA timezone and UTC offset; it executes no shell command and reads
-no profile or customer data. Require an explicit valid timezone. If location is
-unclear, GPT-6 asks; isolated instructions may set Europe/Rome as the test default.
-Do not add memory writes, live tracking integrations or a generic tool/plugin
-framework. Unsupported tools remain unavailable. Record sanitized clock tool
-arguments/results in the same private correlated diagnostic trace.
+When a caller asks before initial context arrives, Live may delegate. The engine
+joins its existing lookup, sends the selected baseline through `thinking` for
+subsequent turns and supplies a task-bound `commentary` result for the pending
+question. When fresh information is needed, such as the time in Rome, Live
+delegates and the engine invokes the specific enabled function directly, then
+returns a speakable `commentary` result. Missing capability or data is stated
+as unavailable; no order/tracking check is invented. The engine's data selection
+and tool permissions remain code-enforced. `thinking` and `commentary` are
+different session updates, and a received append acknowledgement is not proof
+of what the caller heard.
 
-Acceptance for this correction: one semantic backend run survives voice filler;
-caller corrections still fence tools/model calls and each answer fragment; hangup
-suppresses late results; preloaded facts reach GPT-6 without forced lookup; a real
-GPT-6 clock-tool round trip returns fresh timezone-aware data under normal ledger
-accounting. Review before isolated activation. Then verify the revised telephone
-path with correlated transcripts and listening. Existing M4 scenario criteria
-remain open until separately demonstrated; automated success does not close M4.
+Start with a clear instruction not to repeat an answer already given. Do not
+pre-build a special duplicate-suppression controller for a hypothetical race;
+inspect correlated speech and delegation traces, then fix any repetition actually
+observed. Preserve real interruption, correction, unknown-caller, failure,
+closure, cost and human listening requirements. The [revised M4 execution
+plan](../execution-plans/2026-09-23-gpt-live-engine-integration.md#current-m4-plan--live-uses-selected-context-engine-supplies-new-results)
+owns the delivery sequence and acceptance matrix. Official basis checked
+2026-09-25: [Live context](https://developers.openai.com/api/docs/guides/live-conversations),
+[client delegation](https://developers.openai.com/api/docs/guides/live-delegation),
+[prompting](https://developers.openai.com/api/docs/guides/live-prompting).
 
 ### Autonomous phone tests authorized — 2026-09-24
 
@@ -121,10 +119,12 @@ number in company memory. Relevant facts from previous email or WhatsApp exchang
 arrive during the conversation, letting the agent continue an existing discussion
 without making the customer repeat everything.
 
-The customer says, “I'm calling about my earlier request.” The engine searches
-memory for the relevant details. While it works, the customer clarifies which
-request they mean. The agent answers the corrected question using the retrieved
-facts. If memory lacks an answer, it acknowledges the gap and asks what it needs.
+The customer says, “I'm calling about my earlier request.” The engine has
+already started selecting relevant memory at call establishment. If that context
+is ready, Live answers from it; otherwise the delegated request joins the
+lookup in progress. While it works, the customer clarifies which request they
+mean. The agent answers the corrected question using the selected facts. If
+memory lacks an answer, it acknowledges the gap and asks what it needs.
 Historical information is not presented as a fresh check of an external system.
 
 Caller lookup starts when the call is established, independently of the first
@@ -150,31 +150,31 @@ is outside this first delivery.
 | Component | Responsibility |
 |-----------|----------------|
 | cs-operator | Configure the agent and enabled capabilities; create integrations through the meta-skill during setup. |
-| GPT-Live | Greet, listen, interrupt, delegate substantive requests and present GPT-6 answers. |
-| GPT-6 | Interpret requests/corrections, use permitted context, choose tools and author substantive answers. |
-| Engine | Supply permitted context, execute enabled tools and maintain storage/accounting. |
+| GPT-Live | Greet, listen, interrupt, answer from selected facts and conversation, delegate missing/fresh work and present engine results. |
+| Engine | Select permitted facts and available functions, execute enabled tools, return new results and maintain storage/accounting. |
 | Python call adapter | Connect Vonage and GPT-Live, maintain per-call context and schedule delegated work. |
 
 Use GPT-Live client delegation to connect the engine. The adapter retains the
 transcript, caller context and pending work: delegation events identify work but
-do not contain the complete request. GPT-6 interprets this accumulated
-context. The adapter needs no additional general-purpose LLM.
+do not contain the complete request. The engine correlates transcripts with
+delegations, executes a concrete supported function when needed and returns
+the result to Live. The revised telephone path does not require another LLM.
 
-Initially run one business request at a time per call, alongside the asynchronous
-caller lookup. Keep listening while work proceeds. If new customer input arrives,
-let the engine reconcile it with the pending result before returning an answer
-for speech. It may reuse the result, ask a question or perform another lookup.
-This avoids requiring changes to an in-flight model request. Keep one logical
-conversation rather than starting an independent agent for every transcript
-fragment. Communicate useful facts when available without inventing progress.
+Keep listening while the asynchronous caller lookup or a delegated function
+runs. If new customer input arrives, let the engine reconcile it with the
+pending result before returning an answer for speech. It may reuse a current
+result or report unavailable data. Keep one logical conversation rather than
+starting independent work for every transcript fragment. Communicate useful
+facts when available without inventing progress.
 Check late results against current context before passing them to the voice;
 if a correction concerns something already spoken, rectify it clearly.
 
-Expose a small authenticated configuration interface that cs-operator can read
-and update: company/profile binding, voice instructions, caller-context policy,
-enabled capabilities and call limits. Each call loads its configuration at start;
-changes affect subsequent calls. This interface is new work. Credentials stay
-server-side and are not included in conversational prompts.
+The existing authenticated voice configuration interface lets cs-operator read
+and update company/profile binding, voice instructions, caller-context policy,
+enabled capabilities and the isolated profile's saved settings. Each call loads
+its configuration at start; changes affect subsequent calls. Accounting and
+ledger preservation are engine boundaries, separate from conversational prompts.
+Credentials stay server-side.
 
 ## Repeatable integrations: skills and a meta-skill
 
@@ -215,19 +215,20 @@ customer history. The first delivery passes when:
 2. A deliberately delayed caller lookup does not delay the greeting. Relevant
    prior context becomes usable during the call; unknown and ambiguous callers
    are handled without invented identity.
-3. A follow-up question triggers another memory lookup. Answers use stored facts,
-   acknowledge gaps and distinguish new caller statements from stored knowledge.
+3. A follow-up question uses selected context directly when sufficient; only a
+   missing or fresh fact triggers a new lookup or enabled function. Answers use
+   stored facts, acknowledge gaps and distinguish new caller statements from stored knowledge.
    Include an internal note and another customer's fact in the test store and
    check that neither reaches the caller's conversation.
 4. Try a correction during a slow lookup and another during speech. Listen to
    the whole exchange: the answer follows the corrected request, and anything
    already spoken that needs correcting is clearly rectified.
-5. Hangup, lookup failure and duration limits are handled explicitly, with call
+5. Hangup and lookup failure are handled explicitly, with call
    work stopped on closure. Trace lookup, delegation, results and closure;
    record conversational continuity, response latency and test cost.
 
 For M4, capture an opt-in private transcript of the isolated test, correlated
-with selected-memory retrieval, backend answers and voice delivery/interruptions.
+with selected-memory retrieval, engine/tool results and voice delivery/interruptions.
 This is required diagnostic evidence after the caller reported possible failure
 to recall the blue filters despite a successful lookup. Verify actual use of the
 facts in the answer; retrieval counts alone do not pass conversational acceptance.
@@ -253,9 +254,10 @@ There is no need to implement both. Electron need not carry audio or remain open
 Preserve Firebase UID profile boundaries, in-memory-only Firebase ID tokens and
 company-memory scope. Never log or disclose MEMORY_KEY. Expose only the call's
 configured capabilities. Start with read-only memory; subsequent writes must use
-the engine's existing memory policy and write paths. Set explicit duration and
-test-spend limits: voice, engine and carrier charges are separate, and existing
-engine budgets do not cover all three. Record incomplete usage as such.
+the engine's existing memory policy and write paths. Preserve usage accounting
+for voice, engine and carrier charges separately; existing engine budgets do not
+cover all three. Record incomplete usage as such without restoring local
+experiment limits.
 
 Outgoing support follows through provider origination into this same runtime.
 The existing StarChat outbound tool does not provide that connection. External
@@ -282,40 +284,12 @@ The current chat entry point returns a final answer; per-call adaptation is new
 work, and richer progress events are optional for this first delivery.
 
 
-## Withdrawn waiting-steering experiment — 2026-09-25
+## Historical waiting-steering result — 2026-09-25
 
-The following reviewed experiment was withdrawn after failed carrier tests;
-the waiting-policy decision below supersedes it.
-
-A recognized-caller phone test repeats a waiting phrase on every delegated turn.
-Static prompt-only attempts either preserve filler or allow an unsupported clock
-answer before the result. The requested experience is direct, grounded answers
-without routine waiting announcements. Add task-specific silent-wait steering at
-client delegation, retaining the same backend authority and final commentary.
-The instruction carries no business facts and performs no tool or model call.
-It is provider steering, not a hard audio mute; live chronology must prove the
-observed behavior. Preserve immediate greeting, caller corrections, lookup
-concurrency, closure and all accounting. A failed retest stays failed; no claim
-that prompt steering guarantees silence or solves all interruption cases.
-
-The delegated-work instruction can arrive after voice has already started a filler
-or an independent correction. Extend the same waiting cue to the first caller
-transcript fragment in a pending turn, before provider delegation. It carries no
-caller text or inferred intent. Keep at most one managed early-steering task for
-that pending turn; await it before backend work and cancel it on close, so it can
-never arrive after the result it was meant to precede. Further fragments retain
-the same pending turn until commentary delivery. Real tests must show that earlier
-steering preserves greeting, delegation/follow-ups and grounded answers; it remains
-instruction steering, not a guaranteed audio gate.
-
-## Waiting-policy decision — 2026-09-25
-
-Forced-silence steering and the final minimal prompt-only refinement failed real
-carrier verification despite passing local tests. Withdraw all session code
-changes, including per-delegation/early-transcript instructions and revised prompt
-wording; restore the previously reviewed implementation. Preserve every failed
-trace. No filler correction is accepted, and M4 remains active. Further work must
-first establish reliable delegation and speech ownership rather than infer control
-from an instruction acknowledgement. The last clock test also exposes repeated
-fresh-clock reads before an answer; record this latency defect without attributing
-it to a proven cause. Do not add artificial conversation or financial limits.
+Carrier tests did not validate the attempted prompt-only and early-delegation
+silent-wait steering. The changes were withdrawn, and the GPT-6 telephone
+implementation was restored only as the historical checkpoint before the M4
+redesign above. Traces of repeated fresh-clock reads and waiting phrases remain
+failure evidence, not a requirement to keep that backend or a reason to impose
+artificial local limits. The replacement design starts with direct answers from
+selected context and uses new correlated traces to diagnose actual repetition.
