@@ -38,7 +38,15 @@ lookup-failure repeats pass after one unsupported voice claim exposed inadequate
 role instructions. Shutdown during a paid request suppresses late output while
 the original request settles. A later spoken-correction call bypassed GPT-6; an
 explicit re-delegation prompt passes the identical retest, but obsolete speech
-continues during caller interruption. This remains an open M4 defect.
+continues during caller interruption. This remains an open M4 defect. A subsequent
+human call confirms recognized blue-filter/Thursday facts are used and spoken,
+but repeats a waiting phrase on every turn. Eight autonomous filler experiments
+failed overall acceptance: some suppress filler, but others lose delegation,
+anticipate answers, repeat speech or retain the waiting phrase. All session code
+changes are withdrawn and the previously reviewed implementation is restored.
+Repetitive waiting phrases remain unresolved. A clock test also exposes repeated
+fresh-clock reads before answering; this is an open latency finding. Private traces
+preserve every attempt; neither the filler fix nor complete M4 is accepted.
 
 Autonomous calls to the authorized test number use a separate diagnostic TTS
 caller with a private attempt/receipt ledger; uncertain attempts prevent another

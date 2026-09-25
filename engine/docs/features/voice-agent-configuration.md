@@ -244,8 +244,10 @@ commentary, GPT-Live may only remain quiet or give a neutral acknowledgement,
 except for its initial greeting; it must not claim access, facts or operations.
 Backend instructions attribute caller statements and preserve weekday granularity;
 a clock alone cannot establish an order date. These are model instructions, not
-a deterministic output validator. The latest carrier retest delegates a spoken
+a deterministic output validator. The 2026-09-24 carrier retest delegates a spoken
 correction correctly, but obsolete speech continues during the interruption.
+The 2026-09-25 filler experiments fail overall acceptance and are withdrawn;
+repetitive waiting announcements and reliable speech ownership remain open.
 There is no live shipment/tracking lookup; absent tracking is stated specifically,
 without promising a check that an order number would supposedly enable.
 

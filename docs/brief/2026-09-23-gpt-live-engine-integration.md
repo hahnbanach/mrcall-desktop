@@ -280,3 +280,42 @@ Existing engine boundaries:
 [spending controls](../../engine/docs/features/daily-llm-budget.md).
 The current chat entry point returns a final answer; per-call adaptation is new
 work, and richer progress events are optional for this first delivery.
+
+
+## Withdrawn waiting-steering experiment — 2026-09-25
+
+The following reviewed experiment was withdrawn after failed carrier tests;
+the waiting-policy decision below supersedes it.
+
+A recognized-caller phone test repeats a waiting phrase on every delegated turn.
+Static prompt-only attempts either preserve filler or allow an unsupported clock
+answer before the result. The requested experience is direct, grounded answers
+without routine waiting announcements. Add task-specific silent-wait steering at
+client delegation, retaining the same backend authority and final commentary.
+The instruction carries no business facts and performs no tool or model call.
+It is provider steering, not a hard audio mute; live chronology must prove the
+observed behavior. Preserve immediate greeting, caller corrections, lookup
+concurrency, closure and all accounting. A failed retest stays failed; no claim
+that prompt steering guarantees silence or solves all interruption cases.
+
+The delegated-work instruction can arrive after voice has already started a filler
+or an independent correction. Extend the same waiting cue to the first caller
+transcript fragment in a pending turn, before provider delegation. It carries no
+caller text or inferred intent. Keep at most one managed early-steering task for
+that pending turn; await it before backend work and cancel it on close, so it can
+never arrive after the result it was meant to precede. Further fragments retain
+the same pending turn until commentary delivery. Real tests must show that earlier
+steering preserves greeting, delegation/follow-ups and grounded answers; it remains
+instruction steering, not a guaranteed audio gate.
+
+## Waiting-policy decision — 2026-09-25
+
+Forced-silence steering and the final minimal prompt-only refinement failed real
+carrier verification despite passing local tests. Withdraw all session code
+changes, including per-delegation/early-transcript instructions and revised prompt
+wording; restore the previously reviewed implementation. Preserve every failed
+trace. No filler correction is accepted, and M4 remains active. Further work must
+first establish reliable delegation and speech ownership rather than infer control
+from an instruction acknowledgement. The last clock test also exposes repeated
+fresh-clock reads before an answer; record this latency defect without attributing
+it to a proven cause. Do not add artificial conversation or financial limits.
