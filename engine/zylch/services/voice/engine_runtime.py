@@ -3,6 +3,7 @@
 import asyncio
 import logging
 import re
+import time
 from dataclasses import dataclass
 
 from .agent_config import snapshot_for_call
@@ -20,6 +21,7 @@ logger = logging.getLogger(__name__)
 class PreparedCall:
     snapshot: object
     caller: str | None
+    business_version: int | None = None
 
 
 class EngineVoiceRuntime(SmokeRuntime):
@@ -29,14 +31,27 @@ class EngineVoiceRuntime(SmokeRuntime):
         super().__init__(config, ledger, transport)
         if not config.vonage_application_id:
             raise ValueError("Voice requires the isolated signed carrier route")
-        self.diagnostics = DiagnosticOptions.load(config.profile)
+        self.production = hasattr(config, "expected_business")
+        self.diagnostics = (
+            DiagnosticOptions.for_production(config)
+            if self.production else DiagnosticOptions.load(config.profile)
+        )
         self.pending = {}
         self.ready = False
         self.preparation_lock = asyncio.Lock()
 
     def _within_limits(self, snapshot):
+        if self.production and (
+            snapshot.config.policy != "production"
+            or snapshot.config.business_id != self.config.business_id
+            or snapshot.config.limits is not None
+        ):
+            return False
         if self.config.unlimited:
-            return not self.ledger.unresolved()
+            return (
+                self.ledger.admission_ready()
+                if self.production else not self.ledger.unresolved()
+            )
         rows = self.ledger.rows()
         held = sum(row["reserved_microusd"] for row in rows)
         count = sum(row["reserved_microusd"] > 0 for row in rows)
@@ -47,12 +62,19 @@ class EngineVoiceRuntime(SmokeRuntime):
             and not self.ledger.unresolved()
         )
 
+    async def _prepare(self, snapshot, previous_version=None):
+        if self.production:
+            return await prepare_call(
+                snapshot, self.config.expected_business, previous_version
+            )
+        return await prepare_call(snapshot)
+
     async def available(self):
         if not self.ready or self.stopping or self.call or self.pending:
             return False
         try:
             snapshot = await asyncio.to_thread(snapshot_for_call, self.config.test_number)
-            await prepare_call(snapshot)
+            await self._prepare(snapshot)
             return self._within_limits(snapshot)
         except Exception:
             return False
@@ -68,11 +90,11 @@ class EngineVoiceRuntime(SmokeRuntime):
                 snapshot = await asyncio.to_thread(snapshot_for_call, self.config.test_number)
                 if not self._within_limits(snapshot):
                     return None
-                await prepare_call(snapshot)
+                verified = await self._prepare(snapshot)
                 if self.stopping:
                     return None
                 self.ready = True
-                return (snapshot,)
+                return (snapshot, verified)
             except Exception:
                 logger.debug("[voice] admission unavailable during preparation")
                 return None
@@ -88,7 +110,10 @@ class EngineVoiceRuntime(SmokeRuntime):
             # Vonage answer callbacks use international digits without '+'.
             # Canonicalize this carrier representation at its trusted boundary.
             caller = "+" + caller
-        self.pending[token_hash] = PreparedCall(snapshot, caller)
+        verified = prepared[1]
+        self.pending[token_hash] = PreparedCall(
+            snapshot, caller, verified.version if verified is not None else None
+        )
 
     def incoming(self, event):
         digest = carrier_token_hash(event)
@@ -108,9 +133,10 @@ class EngineVoiceRuntime(SmokeRuntime):
     def new_call(self, session_id, event):
         prepared = self.pending.pop(carrier_token_hash(event))
         call = Call(session_id, prepared=prepared)
-        call.duration_seconds = min(
-            self.config.duration_seconds, prepared.snapshot.config.limits.duration_seconds
-        )
+        if not self.production:
+            call.duration_seconds = min(
+                self.config.duration_seconds, prepared.snapshot.config.limits.duration_seconds
+            )
         call.evidence.update(
             config_revision=prepared.snapshot.revision,
             conversational_model="gpt-live-1",
@@ -120,6 +146,8 @@ class EngineVoiceRuntime(SmokeRuntime):
         return call
 
     async def accept_call(self, call):
+        if self.production:
+            await self._prepare(call.prepared.snapshot, call.prepared.business_version)
         return await self.transport.accept(
             call.session_id, call.prepared.snapshot.config.instructions + "\n" + VOICE_RULES
         )
@@ -139,6 +167,18 @@ class EngineVoiceRuntime(SmokeRuntime):
 
         async def send(raw):
             if call.allow_results and not call.stopped.is_set():
+                if self.production:
+                    try:
+                        current = await asyncio.to_thread(
+                            snapshot_for_call, self.config.test_number
+                        )
+                        if current.revision != prepared.snapshot.revision:
+                            raise ValueError("Voice configuration changed during call")
+                        await self._prepare(prepared.snapshot, prepared.business_version)
+                    except Exception:
+                        call.evidence["binding_invalidated"] = True
+                        call.stopped.set()
+                        raise ValueError("Voice binding unavailable during call") from None
                 conversation = call.conversation
                 if (
                     conversation
@@ -160,8 +200,64 @@ class EngineVoiceRuntime(SmokeRuntime):
             backend_delay=self.diagnostics.backend_delay,
         )
         call.conversation.start()
+        if self.production:
+            task = asyncio.create_task(self._meter(call))
+            self.tasks.add(task)
+            task.add_done_callback(self.tasks.discard)
+            watcher = asyncio.create_task(self._watch_binding(call))
+            self.tasks.add(watcher)
+            watcher.add_done_callback(self.tasks.discard)
+
+    async def _watch_binding(self, call):
+        while call.allow_results and not call.stopped.is_set():
+            await asyncio.sleep(5)
+            if not call.allow_results or call.stopped.is_set():
+                return
+            try:
+                current = await asyncio.to_thread(
+                    snapshot_for_call, self.config.test_number
+                )
+                if current.revision != call.prepared.snapshot.revision:
+                    raise ValueError("Voice configuration changed during call")
+                await self._prepare(
+                    call.prepared.snapshot, call.prepared.business_version
+                )
+            except Exception:
+                call.evidence["binding_invalidated"] = True
+                call.stopped.set()
+                logger.warning("[voice] active call binding invalidated")
+                return
+
+    async def _meter(self, call):
+        rate = (
+            self.config.voice_per_minute_microusd
+            + self.config.carrier_per_minute_microusd
+        )
+        while call.allow_results and not call.stopped.is_set():
+            try:
+                elapsed = time.monotonic() - call.started
+                await asyncio.to_thread(self.ledger.accrue, call.session_id, elapsed, rate)
+            except Exception:
+                # End an unmetered call through the normal bounded hangup path.
+                # Its hold stays uncertain and blocks further admission.
+                self.stopping = True
+                call.evidence["exposure"] = "uncertain"
+                logger.error("[voice] production exposure accrual failed")
+                call.stopped.set()
+                return
+            await asyncio.sleep(5)
+
+    def _record(self, session_id, state, evidence=None):
+        if self.production and evidence and evidence.get("exposure") == "uncertain":
+            state = "uncertain"
+        super()._record(session_id, state, evidence)
 
     def event(self, call, event):
+        if self.production and event.get("type") == "session.closed":
+            usage = event.get("usage")
+            seconds = usage.get("seconds") if isinstance(usage, dict) else None
+            if type(seconds) in (int, float):
+                self.ledger.record_provider_usage(call.session_id, seconds=seconds)
         if call.conversation and call.allow_results:
             call.conversation.event(event)
         return True

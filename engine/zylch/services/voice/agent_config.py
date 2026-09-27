@@ -43,6 +43,8 @@ class Limits(FrozenModel):
 
 
 class AgentConfig(FrozenModel):
+    policy: Literal["isolated", "production"] = "isolated"
+    business_id: str = Field(default="", strict=True, max_length=100)
     enabled: bool = Field(default=False, strict=True)
     called_number: str = Field(default="", strict=True, pattern=r"^(?:\+[1-9][0-9]{7,14})?$")
     instructions: str = Field(default="", strict=True, max_length=8000)
@@ -50,13 +52,21 @@ class AgentConfig(FrozenModel):
     tools: tuple[Literal["caller_memory", "get_current_time"], ...] = Field(
         default=(), max_length=2
     )
-    limits: Limits = Limits()
+    limits: Limits | None = Limits()
     customers: tuple[CustomerFacts, ...] = Field(default=(), max_length=16)
 
     @model_validator(mode="after")
     def valid_selection(self):
+        if (self.policy == "production" and self.limits is not None) or (
+            self.policy == "isolated" and self.limits is None
+        ):
+            raise ValueError("Voice policy limits do not match the selected mode")
         if self.enabled and (not self.called_number or not self.instructions.strip()):
             raise ValueError("Enabled agents require a number and instructions")
+        if self.policy == "production" and self.enabled and (
+            not self.business_id or not self.customers
+        ):
+            raise ValueError("Production voice requires a business and approved sentences")
         if len(set(self.tools)) != len(self.tools):
             raise ValueError("Duplicate capability")
         blobs = [c.blob_id for c in self.customers]
@@ -169,6 +179,13 @@ def update_config(owner_uid: str, space_id: str, expected_revision: int, config:
     if type(expected_revision) is not int or expected_revision < 0:
         raise VoiceError(-32602, "Invalid voice revision")
     parsed = parse_config(config)
+    if parsed.policy == "production":
+        if (
+            parsed.business_id != os.environ.get("VOICE_PRODUCTION_BUSINESS_ID")
+            or parsed.called_number != os.environ.get("VOICE_PRODUCTION_NUMBER")
+            or bound.owner_uid != os.environ.get("VOICE_PRODUCTION_OWNER_UID")
+        ):
+            raise VoiceError(-32061, "Production voice binding is unavailable")
     pins = []
     with database.get_session() as session:
         for customer in parsed.customers:
