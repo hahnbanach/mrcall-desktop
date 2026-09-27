@@ -1,15 +1,22 @@
 ---
-status: planned
+status: superseded
 date: 2026-09-25
 ---
 
 # Desktop voice alpha: manual Café 124 number pilot
 
+This original pilot procedure targeted `+390289047081` and creation of a
+`desktop` business. It is superseded by the operator's 2026-09-27 test input:
+`+390250552776` and an existing business whose template remains `starter`.
+The operator guarantees that number/business assignment. Do not execute the
+old provisioning steps below for the current test; the production-account
+runtime and carrier cutover still need a current plan.
+
 <!-- doc-scope:start -->
-Scope: implementation plan, operator procedure and acceptance for adding the
-GPT-Live telephone agent to production@cafe124.it on +390289047081. Tracks the
-first manual instance of the paired UX brief; implementation and activation
-remain pending.
+Scope: historical implementation plan and operator procedure for the original
+GPT-Live pilot proposed for production@cafe124.it on +390289047081. Its number
+and business-creation steps are superseded; the paired UX brief remains the
+product intent.
 <!-- doc-scope:end -->
 
 Product intent: [Desktop voice alpha UX](../briefs/2026-09-25-desktop-voice-assistant-alpha-ux.md).

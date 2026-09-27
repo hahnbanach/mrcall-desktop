@@ -33,9 +33,12 @@ M4 within the operator-adjusted scope. The hangup trace proves cancellation of
 the in-flight lookup; deterministic tests cover a completed delegated result
 racing with closure. The experiment sequence and private trace references are
 in the [completed plan](../../docs/execution-plans/2026-09-23-gpt-live-engine-integration.md).
-The operator reports that the isolated service and tunnel retain infinite
-runtime, no local test ceiling exists, and prior ledger rows remain intact;
-these live/private state claims require verification against the isolated host.
+The isolated service now starts from the merged `main` checkout. Its runtime
+and the existing tunnel remain active with infinite duration. Local and public
+health checks pass; an unsigned public Vonage POST receives 401. The ledger's
+SQLite integrity check passes with 41 closed calls, 41 carrier receipts and
+the retained USD41 in voice reservations. The service has not received a new
+human-listened call since this code-path switch.
 
 Engine chat now supports negotiated read-only policy version 1. The policy is
 enforced before slash/semantic/task routing and again at assistant and task

@@ -44,11 +44,13 @@ The engine owns mailbox processing and shared memory; the clone owns operator
 procedures. Claude Code headless and kernel direct classifiers have separate
 billing and pause controls. See [operator setup](operator-setup.md#ai-execution-and-controls).
 
-The isolated GPT-Live M4 telephone prototype has accepted real-call and human
-listening evidence for its selected-context behavior. The proposed Desktop
-voice alpha still needs a StarChat `desktop` business, real-profile runtime
-binding and customer activation. The [manual Café 124 pilot](execution-plans/2026-09-25-desktop-voice-assistant-alpha-ux.md)
-is planned; its specific-number assignment path is unresolved.
+The GPT-Live M4 telephone code is merged into `main` (`a90583c`). The isolated
+voice service runs from that checkout behind the existing Cloudflare tunnel;
+local and public health checks pass. M4 has real-call and human listening
+evidence for its selected-context behavior. The operator reports that the new
+Café 124 business and number are already assigned, with template `starter`.
+Customer activation still needs a business-aware runtime for
+`production@cafe124.it`; the current listener uses the M4 fixture.
 
 Settings supports independent provider/model selection, daily budgets and bounded
 preparation. It remains reachable with an unavailable engine; stale connection
