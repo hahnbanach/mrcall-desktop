@@ -1,5 +1,5 @@
 ---
-status: blocked
+status: active
 date: 2026-09-27
 ---
 
@@ -8,9 +8,9 @@ date: 2026-09-27
 <!-- doc-scope:start -->
 Scope: development, verification and one-number cutover plan for the manual
 Café 124 alpha on +390250552776. Paired with the
-[brief](../briefs/2026-09-27-cafe124-voice-daemon.md). Implementation and a
-reversible route cutover were verified; the customer fact-selection and heard
-call gates remain blocked, so production voice admission is disabled.
+[brief](../briefs/2026-09-27-cafe124-voice-daemon.md). A supervised second
+cutover serves the production daemon with a name-only caller grant. Human
+heard-audio and correlated receipt gates are pending.
 <!-- doc-scope:end -->
 
 ## Fixed boundary and observed starting point
@@ -133,10 +133,12 @@ already retained carrier hold if a later check fails.
   `engine/zylch/rpc/voice_actions.py`, introduce an explicit production voice
   policy/schema for this one bound profile. Keep `voice.config.get/update` on
   the existing owner-authenticated RPC route with revision checks. An operator
-  selects and approves complete sentence IDs from Café 124 memory and saves
+  approves an explicit caller display name or complete sentence IDs, and saves
   greeting, instructions, enabled tools, caller policy and called number. Keep
   saving configuration free. Default to disabled, and validate the exact
-  business/owner/company binding before enabling.
+  business/owner/company binding before enabling. For this supervised call,
+  only the first name of one uniquely phone-matched contact is approved; no
+  sentence is selected. Do not read the rest of that contact's memory.
 - Remove the test-only duration, max-call and aggregate-spend ceilings from the
   production policy; do not copy the isolated `VOICE_ENGINE_UNLIMITED` marker
   into a populated profile. Retain durable per-attempt reservations, duplicate
@@ -265,15 +267,16 @@ ledgers, reservations and private evidence intact.
 
 ### 6. Prove the call and review end to end
 
-- Place a real incoming call to +390250552776 from a caller whose Café 124
-  sentences were approved for phone disclosure. A human must report what was
-  **heard**: prompt greeting, correct permitted facts, follow-up and an
+- Place a real incoming call to +390250552776 from the selected caller. A
+  human must report what was **heard**: prompt greeting with the approved
+  first name, Café 124 identification, an invitation to speak, refusal to
+  disclose unapproved history, a follow-up and an
   interruption/correction that stops or supersedes the old answer. An ACK,
   transcript or audio counter is diagnostic evidence, not proof of handset
   playback. Repeat a failed scenario after its specific fix.
 - Exercise an unknown/ambiguous caller and a missing/fresh-data question.
   Confirm no cross-customer disclosure or invented live check. Correlate the
-  human report with private diagnostic transcript, selected sentence IDs,
+  human report with private diagnostic transcript, the selected name grant,
   Vonage/OpenAI receipts and closed ledger rows. Preserve unresolved holds for
   reconciliation; do not call estimates invoices or CALLCREDIT debits.
 - Have an independent reviewer inspect the actual deployed commit, targeted
@@ -295,8 +298,8 @@ OpenAI callbacks retain the same public URL, which reached the production
 listener during the reversible cutover. Direct carrier/OpenAI charges remain
 separate from StarChat credits. The ledger's rates and holds are conservative
 estimates; a real call and provider receipts are still required to establish
-actual amounts and reconciliation behavior. Approved customer fact selection
-and heard audio are the immediate blockers.
+actual amounts and reconciliation behavior. The name-only selection is
+approved; heard audio and provider receipts remain unverified.
 
 ## Gate evidence and current outcome — 2026-09-27
 
@@ -371,11 +374,57 @@ number is different, so it cannot serve +390250552776. No Vonage assignment,
 business/template, callback URL, tunnel, other daemon, or historical hold was
 changed for rollback.
 
-**Open acceptance:** select and approve a specific Café 124 sentence or add a
-verified, phone-safe fact for this caller, then revalidate exact IDs and
-content. Deploy and verify the logging fix, re-run targeted deployment and
-webhook checks, place the real call,
-correlate private diagnostics and provider receipts, obtain a human report of
-heard greeting/facts/follow-up/interruption, and run independent final
-end-to-end review. Keep this plan blocked and the number inactive until those
-gates pass. Neither health nor callback rejection tests establish audio.
+## Second supervised cutover — 2026-09-27
+
+The operator specified the greeting order: greet, use the caller's name if
+known, identify the Café 124 assistant, then invite the caller to speak. For
+this call the only approved caller-specific content is the first name from the
+unique contact matching +393480727052. No historical sentence is selected or
+authorized for disclosure. The production configuration revision 3 grants a
+display name to that contact's blob and an empty sentence list; unknown and
+ambiguous callers receive a generic greeting. A phone match is not identity
+proof. The supervised source check confirmed the configured first name against
+the contact's person summary without copying the summary or other facts into
+the voice configuration.
+
+Commit `a9e6539` adds the name-only production grant and passes the selected
+name to GPT-Live before its first turn. It reloads local configuration and
+rechecks StarChat after lookup, refusing to send the name if either binding
+changes. The isolated M4 policy still requires selected sentences. The focused
+voice/RPC suite passed (206 passed, 1 skipped), lint passed, and independent
+code review cleared the changes after both invalidation races were fixed.
+
+The versioned release `/home/mrcalld/releases/mrcall-voice-cafe124-a9e6539`
+was built under `mrcalld` and its actual voice module import path checked. A
+targeted drop-in first ran it without a phone listener, retaining the Desktop
+socket. Owner-authenticated `voice.config.update` verified StarChat and saved
+revision 3. The isolated listener was then stopped and only the production
+daemon restarted with the protected voice configuration. Its effective
+`ExecStart` points to `a9e6539`, `PYTHONPATH` is empty, and the imported voice
+module path is in that release. The same process serves the Unix socket and
+127.0.0.1:8787; local/public health returned HTTP 200 with calls available.
+Authenticated `settings.get` and `voice.status` passed. Public negative webhook
+probes returned 401 for unsigned Vonage and signed missing-app callbacks, 403
+for a signed wrong destination, and 400 for an unsigned OpenAI callback. No
+raw WebSocket RPC frames appeared in the journal after the new release began.
+Read-only Vonage account lookup found exactly one +390250552776 entry still
+linked to the same application. Application readback confirmed its signed
+answer/event/fallback URLs still point to the existing Cloudflare URL. OpenAI
+project readback found exactly one matching `/openai/live` webhook. The
+Cloudflare process and URL and provider callback settings were not changed.
+
+An independent read-only pre-call review checked the running unit, imported
+release files, protected binding, name-only revision, socket, tunnel, empty
+ledger, unaffected peer daemons and rollback path. It found no technical
+deployment blocker. It cannot certify handset audio or end-to-end behavior
+before the operator's real call. The latest ledger read before that call still
+has zero call, carrier and meter rows.
+
+**Pending acceptance:** the operator has been asked to call from the selected
+number and report what was actually heard. Then correlate a private diagnostic
+transcript and provider receipts with the call UUID and ledger closure, test
+unknown/ambiguous caller handling and missing-data behavior, and obtain the
+independent final end-to-end review. A successful health check, webhook
+rejection or usage counter alone does not prove handset playback. On failure,
+disable admission and restore the prior release and isolated listener while
+preserving the ledger and evidence.

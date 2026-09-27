@@ -32,11 +32,11 @@ business, reassign the number, change its template, or broaden this application
 to other customers as part of this alpha.
 
 The existing Cloudflare tunnel runs on the **same host** and forwards its public
-URL to `127.0.0.1:8787`. Today that port is served by the isolated M4 process
-under `mal`, using synthetic facts and a separate test profile. The
-`production@` daemon runs under `mrcalld` from a pinned release and currently
-exposes only its Desktop RPC Unix socket. A Git push or checkout update does
-not activate phone callbacks in that daemon.
+URL to `127.0.0.1:8787`. The production daemon under `mrcalld` now serves that
+port and its Desktop RPC Unix socket from one pinned release. The isolated M4
+process under `mal` remains available for rollback but is stopped during the
+production call test. A Git push or checkout update alone does not change the
+running daemon.
 
 ## Customer call contract
 
@@ -45,9 +45,10 @@ Firebase-UID profile. The engine validates the called-number/business/profile
 binding before accepting the carrier connection and again before disclosing
 facts. Unknown numbers, owner mismatches, disabled configuration and failed
 headless authentication refuse admission. The caller's phone number helps
-retrieve permitted facts; it is not proof of identity. Only approved sentences
-from Café 124 company memory reach GPT-Live. Internal notes and other companies'
-facts stay out of the call.
+retrieve permitted context; it is not proof of identity. For the supervised
+name-only greeting test, the only caller-specific disclosure is the first name
+of the uniquely matched contact; no historical sentence is selected. Internal
+notes and other companies' facts stay out of the call.
 
 StarChat is authoritative for the business ID, owner UID, service number,
 template and business version. Read these through an authenticated StarChat API
@@ -61,12 +62,12 @@ before activation and each call; changes to binding fields require reapproval.
 For this **manual** alpha, the engine's `voice_agent_config` facility, once
 deployed and configured in the production profile, is the approved source for
 the GPT-Live greeting,
-instructions, enabled tools, called number, caller policy and selected sentence
-IDs. An authenticated operator creates and approves that record if absent.
+instructions, enabled tools, called number, caller policy and approved caller
+context. An authenticated operator creates and approves that record if absent.
 The existing `voice.config.get/update` RPC supplies the revision and company
-binding. The production policy implementation uses a separate schema without
-M2 test limits, while the isolated policy retains them. Production admission
-still requires the protected service enablement and approved sentence selection;
+binding. The configuration model has a production policy branch without M2
+test limits, while the isolated policy retains them. Production admission
+still requires the protected service enablement and approved caller selection;
 an RPC record alone does not activate the phone. The StarChat business version
 and this local voice-config revision are distinct.
 The `starter` template inherits variables used by the older assistant,
@@ -77,9 +78,11 @@ longer-term `desktop` template and StarChat-variable mapping remain separate
 work; this temporary local configuration is disclosed rather than presented
 as the finished Desktop configuration journey.
 
-GPT-Live remains the **only telephone conversational model**. It greets from
-initial instructions while the engine selects facts. Permitted historical
-facts arrive as quiet `thinking`; Live answers directly when those facts suffice.
+GPT-Live remains the **only telephone conversational model**. The engine
+resolves the approved display name and rechecks both bindings before Live's
+initial greeting. Permitted historical facts, if selected in a later
+configuration, arrive as quiet `thinking`; Live answers directly when those
+facts suffice.
 For missing or fresh data, Live delegates and the engine returns the specific
 tool result or an explicit unavailable answer in task-bound `commentary`. No
 telephone GPT-6 agent, dispatch or fallback returns. Preserve interruption,
@@ -135,11 +138,12 @@ local/public health, account isolation, rejection of every other called number
 and preservation of the Desktop RPC route. Rehearse rollback without deleting
 ledgers or profile data.
 
-Then place a real incoming call to +390250552776 from a caller whose facts have
-been explicitly approved for telephone disclosure.
-Human listening must confirm an immediate greeting, the permitted Café 124
-facts, a follow-up and an interruption. Correlate private diagnostics with
-selected sentences, provider receipts and closed ledger rows. An ACK,
+Then place a real incoming call to +390250552776 from the selected caller.
+Human listening must confirm an immediate greeting with the first name,
+Café 124 identification, invitation to speak, an answer that withholds
+unapproved history, a follow-up and an interruption. Correlate private
+diagnostics with the selected name grant, provider receipts and closed ledger
+rows. An ACK,
 transcript or counter alone does not prove heard audio. Exercise missing data
 and an unrecognized caller without exposing another customer's facts. An
 independent end-to-end review checks code, configuration, route, accounting,
