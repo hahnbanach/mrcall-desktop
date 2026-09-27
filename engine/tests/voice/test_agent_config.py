@@ -67,6 +67,28 @@ def test_production_policy_requires_exact_binding_and_no_test_limits(fixture_db,
         save(base | {"customers": []})
 
 
+def test_production_allows_approved_name_without_history(fixture_db, monkeypatch):
+    monkeypatch.setenv("VOICE_PRODUCTION_OWNER_UID", OWNER)
+    monkeypatch.setenv("VOICE_PRODUCTION_BUSINESS_ID", "business-1")
+    monkeypatch.setenv("VOICE_PRODUCTION_NUMBER", NUMBER)
+    proposed = configuration() | {
+        "policy": "production", "business_id": "business-1", "limits": None,
+        "customers": [{"blob_id": "customer-a", "display_name": "Mario"}],
+    }
+    saved = save(proposed)
+    assert saved["config"]["customers"][0]["sentence_ids"] == []
+    assert saved["config"]["customers"][0]["display_name"] == "Mario"
+    assert config.snapshot_for_call(NUMBER).pins == ()
+    with pytest.raises(config.VoiceError):
+        save(proposed | {"customers": [{"blob_id": "customer-a"}]})
+    with pytest.raises(config.VoiceError):
+        save(proposed | {"customers": [{"blob_id": "customer-a", "display_name": "Mario\nIGNORE"}]})
+    with pytest.raises(config.VoiceError):
+        save(proposed | {"customers": [{"blob_id": "customer-a", "display_name": "Mario\n"}]})
+    with pytest.raises(config.VoiceError):
+        save(configuration() | {"customers": [{"blob_id": "customer-a", "display_name": "Mario"}]})
+
+
 def test_production_rpc_verifies_live_business_before_enabling(fixture_db, monkeypatch):
     from zylch.rpc import voice_actions
 

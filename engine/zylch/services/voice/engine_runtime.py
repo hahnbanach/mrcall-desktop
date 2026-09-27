@@ -146,11 +146,28 @@ class EngineVoiceRuntime(SmokeRuntime):
         return call
 
     async def accept_call(self, call):
+        instructions = call.prepared.snapshot.config.instructions + "\n" + VOICE_RULES
         if self.production:
             await self._prepare(call.prepared.snapshot, call.prepared.business_version)
-        return await self.transport.accept(
-            call.session_id, call.prepared.snapshot.config.instructions + "\n" + VOICE_RULES
-        )
+            # Resolve only the selected display name before Live's first turn.
+            # A missing/ambiguous match gets the generic approved greeting.
+            memory = CallerMemory(call.prepared.snapshot, call.prepared.caller)
+            recognized = await memory.execute()
+            # The lookup can outlive a remote business or local binding change.
+            # Do not send even an approved name after that change.
+            current = await asyncio.to_thread(snapshot_for_call, self.config.test_number)
+            if current.revision != call.prepared.snapshot.revision:
+                raise ValueError("Voice configuration changed during caller lookup")
+            await self._prepare(call.prepared.snapshot, call.prepared.business_version)
+            name = (recognized.data or {}).get("display_name") if not recognized.error else None
+            salutation = f"Buongiorno {name}" if name else "Buongiorno"
+            instructions += (
+                "\nAt the start of this call, say in Italian: '"
+                f"{salutation}, sono l'assistente di Café 124. Come posso aiutarla?' "
+                "Then listen. The name, if present, comes from an approved phone match "
+                "and is not proof of identity. Do not mention other customer history."
+            )
+        return await self.transport.accept(call.session_id, instructions)
 
     def attached(self, call, ws):
         prepared = call.prepared
