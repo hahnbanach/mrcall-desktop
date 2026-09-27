@@ -64,6 +64,8 @@ dependencies = [
 
 [project.optional-dependencies]
 evaluation = ["jsonschema>=4.23,<5"]
+# Isolated M1 runner only; do not upgrade the packaged engine's SDK for a smoke.
+voice-smoke = ["openai==3.19.0", "aiohttp>=3.12,<4", "websockets>=14,<18"]
 
 [project.scripts]
 zylch = "zylch.cli.main:main"

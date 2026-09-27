@@ -34,6 +34,8 @@ def _now():
 
 
 def _budget():
+    from .model_policy import isolated_voice_unlimited
+
     profile_dir = os.environ.get("ZYLCH_PROFILE_DIR")
     if profile_dir:
         from io import StringIO
@@ -49,6 +51,8 @@ def _budget():
             values = dotenv_values(stream=StringIO(content), interpolate=False)
         except (OSError, UnicodeError):
             raise BudgetError("AI paused: the saved budget setting is unavailable.") from None
+        if isolated_voice_unlimited(values, profile_dir):
+            return None
         raw = values.get("LLM_DAILY_BUDGET_USD", "")
     else:
         raw = os.environ.get("LLM_DAILY_BUDGET_USD", "")
@@ -173,7 +177,7 @@ def reserve(request_kwargs, transport, *, quote=None):
             raise BudgetError(
                 "AI paused: recorded provider usage exceeded its bound; pricing reconciliation is required."
             )
-        if cap == 0 or spent + held + amount > cap:
+        if cap is not None and (cap == 0 or spent + held + amount > cap):
             raise BudgetError(
                 f"AI paused: daily budget ${cap / 1e6:.2f}; "
                 f"used or reserved ${(spent + held) / 1e6:.2f}. "
@@ -204,6 +208,9 @@ def settle(reservation, response_usage, *, receipt=None):
 
     if reservation.transport == "proxy":
         amount, counts = None, {}
+    elif reservation.transport == "openai_voice":
+        from .openai_voice import usage_cost as openai_cost
+        amount, counts = openai_cost(reservation.model, response_usage)
     elif reservation.transport == "openrouter":
         from .openrouter_pricing import usage_cost as router_cost
 
@@ -274,13 +281,13 @@ def budget_snapshot(owner_id):
         cap = _budget()
         spent, held, reset, stale = _totals(conn, owner_id, _now())
         fault = _pricing_fault(conn)
-    exceeded = spent + held >= cap or fault
+    exceeded = (cap is not None and spent + held >= cap) or fault
     return {
         "spent_usd": spent / 1e6,
-        "budget_usd": cap / 1e6,
+        "budget_usd": None if cap is None else cap / 1e6,
         "exceeded": exceeded,
         "reserved_usd": held / 1e6,
-        "remaining_usd": 0.0 if fault else max(0, cap - spent - held) / 1e6,
+        "remaining_usd": 0.0 if fault else (None if cap is None else max(0, cap - spent - held) / 1e6),
         "pricing_fault": fault,
         "resets_at": reset.isoformat() + "Z",
         "paused": exceeded,

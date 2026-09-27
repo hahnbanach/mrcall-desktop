@@ -225,7 +225,7 @@ def _coerce_messages(messages: List[Any]) -> List[Any]:
 # ─── Client ───────────────────────────────────────────────────────────
 
 
-Transport = Literal["direct", "proxy", "openrouter"]
+Transport = Literal["direct", "proxy", "openrouter", "openai_voice"]
 
 
 class LLMClient:
@@ -248,8 +248,10 @@ class LLMClient:
         transport: Transport,
         *,
         api_key: Optional[str] = None,
+        openai_project: Optional[str] = None,
         firebase_session: Optional[Any] = None,
         proxy_base_url: Optional[str] = None,
+        billing_business_id: Optional[str] = None,
         model: Optional[str] = None,
     ) -> None:
         from zylch.config import settings
@@ -271,6 +273,10 @@ class LLMClient:
             # billing transport or leak a second credential to the provider.
             self._client.auth_token = None
             self.model = model or settings.anthropic_model
+        elif transport == "openai_voice":
+            from .openai_voice import OpenAIVoiceClient, MODEL
+            self._client = OpenAIVoiceClient(api_key, openai_project)
+            self.model = model or MODEL
         elif transport == "openrouter":
             if not api_key:
                 raise ValueError("api_key is required for transport='openrouter'")
@@ -289,6 +295,7 @@ class LLMClient:
             self._client = BoundedProxyClient(
                 proxy_base_url=proxy_base_url or settings.mrcall_proxy_url,
                 firebase_session=firebase_session,
+                business_id=billing_business_id,
             )
             self.model = model or settings.mrcall_credits_model
         else:
@@ -572,7 +579,8 @@ def make_llm_client(model: Optional[str] = None) -> LLMClient:
     if session is None:
         raise RuntimeError("Sign in to use the selected MrCall credits billing mode.")
     client = LLMClient(transport="proxy", firebase_session=session, model=selected_model,
-                       proxy_base_url=str(values.get("MRCALL_PROXY_URL") or "https://zylch.mrcall.ai").strip())
+                       proxy_base_url=str(values.get("MRCALL_PROXY_URL") or "https://zylch.mrcall.ai").strip(),
+                       billing_business_id=str(values.get("SMS_BUSINESS_ID") or "").strip())
     client._saved_policy_fingerprint = policy_fingerprint(values)
     return client
 

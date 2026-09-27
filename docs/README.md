@@ -22,6 +22,9 @@ The repo has three parallel doc trees, mirroring the three index files. Each tre
 
 ## Index
 
+- [GPT-Live customer-service channel](brief/2026-09-23-gpt-live-engine-integration.md) — incoming calls with asynchronous company memory first; agent configured by cs-operator. [Four-milestone plan](execution-plans/2026-09-23-gpt-live-engine-integration.md); repeatable integrations and outbound support follow.
+- [Desktop voice alpha UX](briefs/2026-09-25-desktop-voice-assistant-alpha-ux.md) — customer setup and preview journey; [manual Café 124 number pilot](execution-plans/2026-09-25-desktop-voice-assistant-alpha-ux.md) records the procedure and stop conditions.
+
 - [Complete selected-case review](evaluations/2026-09-16-reviewed-model-comparison.md) — all 60 selected cases / 240 outputs, concrete errors, separate uncertainty and measured costs.
 - [Disputed case evidence](evaluations/2026-09-16-disputed-case-review.md) — exact source/model excerpts, equal Opus/K3 criteria and withdrawn operational-error claims.
 - [Grading correction](evaluations/2026-09-16-grading-correction.md) — corrected company facts, concrete payment evidence, revised labels and withdrawn quality recommendations.

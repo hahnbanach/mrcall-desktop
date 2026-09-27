@@ -1,6 +1,6 @@
 ---
-doc_baseline_commit: 59ddaad77c0c08fb0e81805d601b0a521db55d4c
-doc_baseline_date: 2026-09-23
+doc_baseline_commit: b32999a856558b1d6ed56e46f3220e32902f4c90
+doc_baseline_date: 2026-09-25
 ---
 
 # Active Context — Cross-cutting
@@ -44,6 +44,12 @@ The engine owns mailbox processing and shared memory; the clone owns operator
 procedures. Claude Code headless and kernel direct classifiers have separate
 billing and pause controls. See [operator setup](operator-setup.md#ai-execution-and-controls).
 
+The isolated GPT-Live M4 telephone prototype has accepted real-call and human
+listening evidence for its selected-context behavior. The proposed Desktop
+voice alpha still needs a StarChat `desktop` business, real-profile runtime
+binding and customer activation. The [manual Café 124 pilot](execution-plans/2026-09-25-desktop-voice-assistant-alpha-ux.md)
+is planned; its specific-number assignment path is unresolved.
+
 Settings supports independent provider/model selection, daily budgets and bounded
 preparation. It remains reachable with an unavailable engine; stale connection
 snapshots are invalidated. The workspace handoff exposes a path and command;
@@ -81,9 +87,8 @@ change, not ours.
 `WHATSAPP_REFRESH_MINUTES` (default 15), skipping silently with no session on
 disk, and is its only caller — the app's Refresh button still calls
 `whatsapp.list_threads`, and `whatsapp.sync` has no preload binding, so the
-renderer cannot reach it yet. Deployed 2026-09-23 (`a2b0e66`), with all seven daemons restarted onto it;
-a real restart reattached in one second and synced 169 contacts, 83 groups and
-662 LID contacts. What remains is the operator's view: nothing outside this repo
+renderer cannot reach it yet. All seven daemons run the deployed refresh change
+(`a2b0e66`). What remains is the operator's view: nothing outside this repo
 reads `whatsapp.status`, so a headless caller still cannot tell a dead channel
 from a quiet one.
 
@@ -101,7 +106,7 @@ from a quiet one.
   does not establish membership. Settings catalog refresh has a known same-value
   reload gap; reopen Settings after connection changes. See [backlog](harness-backlog.md).
 - Product chat, delegated sending, approval isolation and a comprehensive security
-  review are deferred. Calendar integration, phone memory parity, raw RPC errors,
+  review are deferred. Calendar integration, raw RPC errors,
   installer coverage and multi-window auth checks retain their existing owners.
 - Historical task-mode/import and legacy transport issues need verification
   before their paths are restored.
@@ -114,8 +119,7 @@ from a quiet one.
    personal-key entry, and the Windows one at all — install, open, scan the
    WhatsApp QR. Until that runs, support@ keeps telling customers macOS only.
 3. Give a headless caller a way to see the WhatsApp channel's state —
-   `whatsapp.status` has no reader outside this repo, which is what let an
-   eleven-day outage pass unnoticed.
+   `whatsapp.status` has no reader outside this repo.
 4. Resume deferred product work from its existing briefs when requested.
    The [thin web/mobile client brief](execution-plans/cross-machine-thin-clients.md)
    is a parked nice-to-have, not scheduled work; remind the CTO that it already

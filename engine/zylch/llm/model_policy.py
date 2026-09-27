@@ -106,6 +106,27 @@ def policy_fingerprint(values=None):
     values = profile_values() if values is None else values
     keys = (*ROLES, "LLM_PROVIDER", "LLM_MODEL_PRESET", "ANTHROPIC_MODEL",
             "MRCALL_CREDITS_MODEL", "OPENROUTER_MODEL", "DEFAULT_MODEL",
-            "ANTHROPIC_API_KEY", "OPENROUTER_API_KEY", "MRCALL_PROXY_URL")
+            "ANTHROPIC_API_KEY", "OPENROUTER_API_KEY", "MRCALL_PROXY_URL", "SMS_BUSINESS_ID",
+            "VOICE_ENGINE_PROVIDER", "OPENAI_API_KEY", "OPENAI_PROJECT_ID")
     selected = {key: values.get(key) for key in keys}
     return hashlib.sha256(json.dumps(selected, sort_keys=True).encode()).digest()
+
+
+def isolated_voice_unlimited(values=None, directory=None):
+    """Explicit file-only operator override, restricted to the isolated voice profile."""
+    values = profile_values() if values is None else values
+    return values.get("VOICE_ENGINE_UNLIMITED") == "1" and isolated_voice_profile(values, directory)
+
+
+def isolated_voice_profile(values=None, directory=None):
+    """Validate the isolated profile markers without changing ordinary policy."""
+    directory = directory or os.environ.get("ZYLCH_PROFILE_DIR")
+    if not directory:
+        return False
+    values = profile_values() if values is None else values
+    uid = Path(directory).name
+    return (
+        all(values.get(key) == uid for key in (
+            "OWNER_ID", "VOICE_SMOKE_TEST_PROFILE", "VOICE_ENGINE_ISOLATED_PROFILE"))
+        and not (Path(directory) / "zylch.db").exists()
+    )

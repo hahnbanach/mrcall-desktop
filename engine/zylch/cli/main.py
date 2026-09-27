@@ -611,6 +611,39 @@ def serve(ctx, ws_addr, unix_path):
         logger.info("[CLI] serve interrupted, shutting down")
 
 
+@cli.command(name="voice-smoke")
+@click.option("--port", default=8787, show_default=True, type=click.IntRange(1, 65535))
+@click.pass_context
+def voice_smoke(ctx, port):
+    """Run the bounded GPT-Live SIP test webhook (never production routing)."""
+    from pathlib import Path
+    from zylch.cli.profiles import acquire_lock, get_profile_dir, release_lock, select_profile
+    from zylch.services.voice.smoke_config import SmokeConfigurationError, load_smoke_config
+
+    profile = ctx.obj.get("profile") if ctx.obj else None
+    if not profile:
+        raise click.UsageError("pass -p <isolated-test-firebase-uid>; auto-selection is refused")
+    try:
+        profile = select_profile(profile)
+        config = load_smoke_config(Path(get_profile_dir(profile)))
+    except SmokeConfigurationError as exc:
+        raise click.UsageError(str(exc)) from exc
+    try:
+        from zylch.services.voice.live_sip_smoke import run_smoke_server
+    except ImportError:
+        raise click.ClickException(
+            "install the voice-smoke extra in an isolated environment"
+        ) from None
+    if not acquire_lock(profile):
+        raise click.ClickException("selected test profile is already in use")
+    try:
+        run_smoke_server(config, port)
+    except Exception:
+        raise click.ClickException("voice smoke stopped; inspect its sanitized ledger") from None
+    finally:
+        release_lock()
+
+
 @cli.command()
 def telegram():
     """Start Telegram bot interface."""

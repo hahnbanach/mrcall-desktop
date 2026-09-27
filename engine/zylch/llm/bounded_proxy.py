@@ -64,10 +64,11 @@ def validate_receipt(reservation, quote, receipt):
 
 
 class BoundedProxyClient:
-    def __init__(self, proxy_base_url, firebase_session, *, http_client=None):
+    def __init__(self, proxy_base_url, firebase_session, *, http_client=None, business_id=None):
         self.base = proxy_base_url.rstrip('/')
         self.session = firebase_session
         self.http = http_client
+        self.business_id = business_id or None
 
     def _call(self, method, path, body=None):
         token = getattr(self.session, 'id_token', None)
@@ -102,13 +103,22 @@ class BoundedProxyClient:
         return result
 
     def quote(self, request):
-        return self._call('POST', '/quote', {'request': wire_request(request)})
+        body = {'request': wire_request(request)}
+        if self.business_id:
+            body['business_id'] = self.business_id
+        quote = self._call('POST', '/quote', body)
+        if self.business_id and quote.get('business_id') != self.business_id:
+            raise BudgetError('MrCall billing business changed; request refused.')
+        return quote
 
     def execute(self, request, quote, reservation):
-        result = self._call('POST', '/execute', {
+        body = {
             'request': wire_request(request), 'quote': quote, 'request_id': reservation.id,
             'max_debit_micro_usd': reservation.reserved_micro_usd,
-        })
+        }
+        if self.business_id:
+            body['business_id'] = self.business_id
+        result = self._call('POST', '/execute', body)
         if not isinstance(result, dict) or result.get('state') != 'settled':
             raise BudgetError('MrCall request unresolved; reservation retained. Check its status.')
         message = result.get('message')

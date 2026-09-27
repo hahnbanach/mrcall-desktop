@@ -2487,3 +2487,10 @@ for _name, _fn in _PREPARATION_METHODS.items():
     if _name in METHODS:
         raise RuntimeError(f"duplicate RPC method registration: {_name}")
     METHODS[_name] = _fn
+
+from zylch.rpc.voice_actions import METHODS as _VOICE_METHODS  # noqa: E402
+
+for _name, _fn in _VOICE_METHODS.items():
+    if _name in METHODS:
+        raise RuntimeError(f"duplicate RPC method registration: {_name}")
+    METHODS[_name] = _fn

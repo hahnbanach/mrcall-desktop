@@ -183,6 +183,7 @@ split indexes.**
 | docs/execution-plans/cross-machine-transport.md | 428 | keep whole — one workstream's argument, read end to end | 2026-08-26 |
 
 | docs/briefs/2026-09-08-shared-company-memory-implementation.md | 598 | keep whole — one company-memory design argument, read by section | 2026-09-10 |
+| docs/execution-plans/2026-09-23-gpt-live-engine-integration.md | 449 | keep whole — one bounded four-milestone plan and its acceptance evidence, read by section | 2026-09-24 |
 
 ## Resolved
 

@@ -403,6 +403,8 @@ async def serve_ws(
     port: Optional[int] = None,
     warmup: bool = True,
     unix_path: Optional[str] = None,
+    voice_listener=None,
+    background: bool = True,
 ) -> None:
     """Run the WebSocket JSON-RPC server until cancelled.
 
@@ -454,7 +456,15 @@ async def serve_ws(
             ping_timeout=WS_PING_TIMEOUT_SECONDS,
         )
 
-    async with server_cm as server:
+    from contextlib import AsyncExitStack
+
+    async with AsyncExitStack() as lifecycle:
+        server = await lifecycle.enter_async_context(server_cm)
+        if voice_listener is not None:
+            await lifecycle.enter_async_context(voice_listener)
+        if not background:
+            await server.serve_forever()
+            return
         if unix_path:
             # Guarantee the socket is group-writable so the reverse-proxy
             # (Caddy, group `caddy`, inherited via the setgid /run/mrcalld dir)

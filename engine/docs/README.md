@@ -67,3 +67,4 @@ Complete documentation for Zylch standalone (local CLI sales intelligence tool).
 | [harness-backlog.md](harness-backlog.md) | Claude Code harness gaps |
 
 - [K3 max reasoning](features/k3-reasoning.md) — transport, billing bounds and profile selection.
+- [Voice agent configuration](features/voice-agent-configuration.md) — M2 authenticated operator settings and selected caller facts, separate from the M1 smoke.
