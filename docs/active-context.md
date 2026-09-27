@@ -1,5 +1,5 @@
 ---
-doc_baseline_commit: 78dddf4cf761632b98e91833b9b47568b2f97e2e
+doc_baseline_commit: a9e6539d270d3272cdff83a39346be9372245809
 doc_baseline_date: 2026-09-27
 ---
 
@@ -46,18 +46,17 @@ procedures. Claude Code headless and kernel direct classifiers have separate
 billing and pause controls. See [operator setup](operator-setup.md#ai-execution-and-controls).
 
 GPT-Live M4 is merged and phone-accepted for the isolated fixture. The
-Cloudflare tunnel and isolated listener serve 127.0.0.1:8787. Authenticated
-StarChat readback confirms Café 124 business
+Cloudflare tunnel now forwards 127.0.0.1:8787 to the production daemon; its
+public URL is unchanged. Authenticated StarChat readback confirms Café 124 business
 `d44a1864-23cc-34f9-aec5-6e04bb2fd2ef-desktop` under production UID
 `Gn9IcuWzYyY7DBMHkVUGB7bIiTp2`, with number +390250552776, template
 `starter` and version 9. Vonage and OpenAI callbacks retain their existing
-public URLs. The production voice implementation is committed and received
-independent predeployment review. Its targeted daemon release and webhook
-path passed a reversible health and Desktop RPC check. Production voice is
-disabled and its daemon is back on the prior pinned `340a99d` release because
-the caller's matched memory has no approved, suitable Café 124 sentence. The
-number is not active on that daemon; a dial returned busy, with no heard audio
-or accepted call. See the blocked [plan](execution-plans/2026-09-27-cafe124-voice-daemon.md).
+public URLs. The production daemon runs pinned voice release `a9e6539`, with
+the Desktop socket and loopback listener in one process. Local/public health,
+authenticated Desktop RPC and negative webhook probes pass. Voice config
+revision 3 grants only the known caller's first name for a greeting; no
+historical sentence is selected. A real heard call and correlated receipts
+remain unverified. See the active [plan](execution-plans/2026-09-27-cafe124-voice-daemon.md).
 
 Settings supports independent provider/model selection, daily budgets and bounded
 preparation. It remains reachable with an unavailable engine; stale connection
@@ -101,17 +100,15 @@ Refresh button only lists threads. See the archived
   installer coverage and multi-window auth checks retain their existing owners.
 - Historical task-mode/import and legacy transport issues need verification
   before their paths are restored.
-- The Café 124 voice plan still needs an approved phone-safe fact for the known
-  caller, deployment verification of the WebSocket frame-logging fix, a real
-  heard call, correlated diagnostics and final independent review.
+- The Café 124 voice plan still needs a real heard call, correlated diagnostics
+  and receipts, and final independent review. If the test fails, restore the
+  prior pinned release and isolated listener without changing the tunnel.
 
 ## Next
 
-1. Approve a specific Café 124 fact for +393480727052, then revalidate its
-   selected sentence. Before the supervised cutover, review and deploy the
-   WebSocket logging fix; verify no raw RPC frames appear in the daemon log.
-   Repeat the real call and final review while preserving the current Desktop
-   socket, isolated listener and tunnel until handoff.
+1. Obtain the caller's report of what was heard on +390250552776, correlate
+   private call evidence and provider receipts, then run final independent
+   review. Keep unapproved contact history out of the call.
 2. Resolve the remaining billing choices and funded credit acceptance. Keep
    preparation paused until the CTO explicitly requests a bounded run.
 3. Verify the installed applications through their GUI: the Mac one with
