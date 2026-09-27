@@ -7,6 +7,7 @@ dispatch, defaults to interactive chat when invoked bare.
 import atexit
 import logging
 import os
+from pathlib import Path
 
 import click
 
@@ -544,8 +545,14 @@ def rpc(ctx):
     default=None,
     help="Unix-socket path to listen on instead of --ws (for a Caddy reverse-proxy).",
 )
+@click.option(
+    "--voice-config",
+    type=click.Path(path_type=Path, exists=True, dir_okay=False),
+    default=None,
+    help="Protected production voice configuration for this one daemon.",
+)
 @click.pass_context
-def serve(ctx, ws_addr, unix_path):
+def serve(ctx, ws_addr, unix_path, voice_config):
     """WebSocket JSON-RPC backend for cross-machine clients.
 
     Same RPC surface as `rpc` (stdio) but over a WebSocket, so an
@@ -593,9 +600,27 @@ def serve(ctx, ws_addr, unix_path):
 
     from zylch.rpc.server_ws import serve_ws
 
+    voice_context = None
+    if voice_config is not None:
+        if not unix_path:
+            raise click.UsageError("Production voice requires the existing Unix socket")
+        from zylch.cli.profiles import get_profile_dir
+        from zylch.config import settings
+        from zylch.services.voice.listener import voice_listener
+        from zylch.services.voice.production_config import load_production_config
+
+        config = load_production_config(voice_config, Path(get_profile_dir(profile)))
+        if config.owner_uid != owner_uid:
+            raise click.UsageError("Production voice owner does not match this profile")
+        os.environ["VOICE_PRODUCTION_OWNER_UID"] = config.owner_uid
+        os.environ["VOICE_PRODUCTION_BUSINESS_ID"] = config.business_id
+        os.environ["VOICE_PRODUCTION_NUMBER"] = config.test_number
+        settings.firebase_web_api_key = config.firebase_web_api_key.get_secret_value()
+        voice_context = voice_listener(config, 8787)
+
     if unix_path:
         logger.info(f"[CLI] serve --unix {unix_path} profile={profile} owner={owner_uid}")
-        coro = serve_ws(unix_path=unix_path)
+        coro = serve_ws(unix_path=unix_path, voice_listener=voice_context)
     else:
         host, sep, port_str = ws_addr.rpartition(":")
         if not sep or not host or not port_str.isdigit():

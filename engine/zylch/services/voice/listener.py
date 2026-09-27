@@ -6,6 +6,7 @@ from contextlib import asynccontextmanager
 from aiohttp import web
 
 from zylch.storage.voice_smoke import SmokeLedger
+from zylch.storage.voice_production import ProductionVoiceLedger
 
 from .engine_runtime import EngineVoiceRuntime
 from .live_sip_smoke import create_app
@@ -27,12 +28,17 @@ async def voice_listener(config, port):
         "zylch.auth.refresh",
     ):
         logging.getLogger(name).setLevel(logging.CRITICAL + 1)
-    ledger = SmokeLedger(
-        config.profile / "voice-smoke.db",
-        config.policy_id,
-        config.reservation_microusd,
-        config.max_calls,
-        unlimited=config.unlimited,
+    production = hasattr(config, "expected_business")
+    ledger = (
+        ProductionVoiceLedger(
+            config.profile / "voice-production.db", config.policy_id,
+            config.reservation_microusd,
+            config.voice_per_minute_microusd + config.carrier_per_minute_microusd,
+        )
+        if production else SmokeLedger(
+            config.profile / "voice-smoke.db", config.policy_id,
+            config.reservation_microusd, config.max_calls, unlimited=config.unlimited,
+        )
     )
     transport = LiveTransport(config)
     runtime = EngineVoiceRuntime(config, ledger, transport)
@@ -40,7 +46,9 @@ async def voice_listener(config, port):
     try:
         await runtime.recover()
         # Loads memory/config and prepares credentials even with no RPC client.
-        await runtime.prepare_carrier()
+        prepared = await runtime.prepare_carrier()
+        if production and prepared is None:
+            raise RuntimeError("Production voice admission is not ready")
         app = create_app(runtime, transport.verify)
 
         async def health(_request):
@@ -48,7 +56,9 @@ async def voice_listener(config, port):
                 {
                     "runtime": "engine_listener",
                     "calls_available": await runtime.available(),
-                    "test_limits": "unlimited" if config.unlimited else "bounded",
+                    "test_limits": None if production else (
+                        "unlimited" if config.unlimited else "bounded"
+                    ),
                 }
             )
 

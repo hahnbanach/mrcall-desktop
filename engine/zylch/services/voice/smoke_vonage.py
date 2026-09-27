@@ -34,7 +34,7 @@ def verify_callback(body: bytes, authorization: str, config) -> dict:
         raise ValueError("stale callback")
     if claims["api_key"] != config.vonage_api_key.get_secret_value():
         raise ValueError("wrong callback account")
-    if claims.get("application_id", config.vonage_application_id) != config.vonage_application_id:
+    if claims.get("application_id") != config.vonage_application_id:
         raise ValueError("wrong callback application")
     digest = claims["payload_hash"]
     if not isinstance(digest, str) or not hmac.compare_digest(
@@ -64,7 +64,17 @@ def add_vonage_routes(app: web.Application, runtime) -> None:
         except TimeoutError:
             return web.Response(status=408)
         if request.path == "/vonage/event":
-            # No caller data retained; this is not authoritative billing evidence.
+            if hasattr(runtime.ledger, "record_carrier_receipt"):
+                carrier_id = payload.get("uuid")
+                if isinstance(carrier_id, str) and re.fullmatch(r"[A-Za-z0-9-]{1,100}", carrier_id):
+                    runtime.ledger.record_carrier_receipt(
+                        carrier_id,
+                        conversation_uuid=payload.get("conversation_uuid"),
+                        direction=payload.get("direction"),
+                        status=str(payload.get("status", "")),
+                        price=payload.get("price") if isinstance(payload.get("price"), str) else None,
+                        currency=payload.get("currency") if isinstance(payload.get("currency"), str) else None,
+                    )
             return web.Response(status=204)
         if payload.get("to") not in (config.test_number, config.test_number.removeprefix("+")):
             return web.Response(status=403)
@@ -78,10 +88,15 @@ def add_vonage_routes(app: web.Application, runtime) -> None:
                 prepared = await runtime.prepare_carrier()
                 if prepared is None:
                     return web.json_response([])
+            carrier_binding = (
+                {"conversation_uuid": payload.get("conversation_uuid")}
+                if getattr(runtime.ledger, "requires_conversation_uuid", False) else {}
+            )
             available = runtime.ledger.reserve_carrier(
                 carrier_id,
                 hashlib.sha256(token.encode()).hexdigest(),
                 allowed=not runtime.stopping and runtime.call is None,
+                **carrier_binding,
             )
         except Exception:
             return web.Response(status=503)
@@ -91,7 +106,8 @@ def add_vonage_routes(app: web.Application, runtime) -> None:
         duration = config.duration_seconds
         if prepared is not None:
             runtime.carrier_reserved(hashlib.sha256(token.encode()).hexdigest(), payload, prepared)
-            duration = min(duration, prepared[0].config.limits.duration_seconds)
+            if not config.unlimited:
+                duration = min(duration, prepared[0].config.limits.duration_seconds)
         # Never accept caller-provided destinations or forward caller metadata.
         uri = f"sip:{config.project_id}@sip.api.openai.com;transport=tls;media=srtp"
         return web.json_response(

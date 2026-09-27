@@ -28,6 +28,23 @@ class DiagnosticOptions:
     secrets: tuple = ()
 
     @classmethod
+    def for_production(cls, config):
+        """Protected production sink, without the isolated fault-injection controls."""
+        profile = config.profile
+        if not (profile / "zylch.db").is_file():
+            raise ValueError("Production diagnostics require an ordinary profile")
+        if any((parent / ".git").exists() for parent in (profile, *profile.parents)):
+            raise ValueError("Diagnostics must remain outside Git")
+        secrets = tuple(
+            value.get_secret_value() for value in (
+                config.api_key, config.webhook_secret,
+                config.vonage_api_key, config.vonage_signature_secret,
+                config.firebase_web_api_key,
+            )
+        )
+        return cls(enabled=True, secrets=secrets)
+
+    @classmethod
     def load(cls, profile: Path):
         values = dotenv_values(profile / ".env", interpolate=False)
         if values.get("VOICE_DIAGNOSTICS") != "1":
