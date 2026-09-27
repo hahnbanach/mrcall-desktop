@@ -2,19 +2,23 @@
 
 import asyncio
 import json
+from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
 import pytest
 from aiohttp.test_utils import TestClient, TestServer
 
 from tests.voice.helpers import Transport, delegation, finished, incoming, config_for, Socket
-from tests.voice.m2_fixture import KNOWN, NUMBER, configuration, PUBLIC
+from tests.voice.m2_fixture import KNOWN, NUMBER, SHARED, configuration, PUBLIC
 from tests.voice.test_agent_config import save
 from tests.voice.test_conversation import until
 from tests.voice.test_vonage import CARRIER, signed
 from zylch.services.voice import engine_runtime
 from zylch.services.voice.conversation import VOICE_RULES
+from zylch.services.voice.agent_config import snapshot_for_call
+from zylch.services.voice.engine_runtime import PreparedCall
 from zylch.services.voice.live_sip_smoke import create_app
+from zylch.services.voice.smoke_runtime import Call
 from zylch.storage.voice_smoke import SmokeLedger
 
 
@@ -106,6 +110,88 @@ def test_full_lifecycle_snapshot_and_followup(fixture_db, tmp_path, monkeypatch)
         ledger.close()
 
     asyncio.run(scenario())
+
+
+def test_production_greeting_uses_only_approved_name(fixture_db, tmp_path, monkeypatch):
+    from tests.voice.m2_fixture import OWNER
+
+    monkeypatch.setenv("VOICE_PRODUCTION_OWNER_UID", OWNER)
+    monkeypatch.setenv("VOICE_PRODUCTION_BUSINESS_ID", "business-1")
+    monkeypatch.setenv("VOICE_PRODUCTION_NUMBER", NUMBER)
+    save(configuration() | {
+        "policy": "production", "business_id": "business-1", "limits": None,
+        "customers": [{"blob_id": "customer-a", "display_name": "Mario"}],
+    })
+    _, ledger, transport, runtime, _ = setup_runtime(tmp_path, monkeypatch)
+    runtime.production = True
+    runtime._prepare = AsyncMock(return_value=None)
+    snapshot = snapshot_for_call(NUMBER)
+
+    async def capture(_session, instructions):
+        transport.instructions.append(instructions)
+        return True
+
+    transport.accept = capture
+
+    async def scenario():
+        for caller in (KNOWN, SHARED, None):
+            call = Call("session-test", prepared=PreparedCall(snapshot, caller))
+            assert await runtime.accept_call(call)
+
+    asyncio.run(scenario())
+    assert "Buongiorno Mario, sono l'assistente di Café 124" in transport.instructions[0]
+    assert "Buongiorno, sono l'assistente di Café 124" in transport.instructions[1]
+    assert "Buongiorno, sono l'assistente di Café 124" in transport.instructions[2]
+    assert PUBLIC not in str(transport.instructions)
+    ledger.close()
+
+
+def test_production_name_is_withheld_if_binding_changes_during_lookup(
+    fixture_db, tmp_path, monkeypatch
+):
+    from tests.voice.m2_fixture import OWNER
+
+    monkeypatch.setenv("VOICE_PRODUCTION_OWNER_UID", OWNER)
+    monkeypatch.setenv("VOICE_PRODUCTION_BUSINESS_ID", "business-1")
+    monkeypatch.setenv("VOICE_PRODUCTION_NUMBER", NUMBER)
+    save(configuration() | {
+        "policy": "production", "business_id": "business-1", "limits": None,
+        "customers": [{"blob_id": "customer-a", "display_name": "Mario"}],
+    })
+    _, ledger, transport, runtime, _ = setup_runtime(tmp_path, monkeypatch)
+    runtime.production = True
+    runtime._prepare = AsyncMock(side_effect=[None, ValueError("binding changed")])
+    call = Call("session-test", prepared=PreparedCall(snapshot_for_call(NUMBER), KNOWN))
+    with pytest.raises(ValueError, match="binding changed"):
+        asyncio.run(runtime.accept_call(call))
+    assert transport.instructions == []
+    ledger.close()
+
+
+def test_production_name_is_withheld_if_config_changes_during_lookup(
+    fixture_db, tmp_path, monkeypatch
+):
+    from tests.voice.m2_fixture import OWNER
+
+    monkeypatch.setenv("VOICE_PRODUCTION_OWNER_UID", OWNER)
+    monkeypatch.setenv("VOICE_PRODUCTION_BUSINESS_ID", "business-1")
+    monkeypatch.setenv("VOICE_PRODUCTION_NUMBER", NUMBER)
+    save(configuration() | {
+        "policy": "production", "business_id": "business-1", "limits": None,
+        "customers": [{"blob_id": "customer-a", "display_name": "Mario"}],
+    })
+    _, ledger, transport, runtime, _ = setup_runtime(tmp_path, monkeypatch)
+    runtime.production = True
+    runtime._prepare = AsyncMock(return_value=None)
+    snapshot = snapshot_for_call(NUMBER)
+    monkeypatch.setattr(engine_runtime, "snapshot_for_call", lambda _: SimpleNamespace(
+        revision=snapshot.revision + 1
+    ))
+    call = Call("session-test", prepared=PreparedCall(snapshot, KNOWN))
+    with pytest.raises(ValueError, match="configuration changed"):
+        asyncio.run(runtime.accept_call(call))
+    assert transport.instructions == []
+    ledger.close()
 
 
 @pytest.mark.parametrize("failure", ["disabled", "binding", "budget", "count", "unprepared"])

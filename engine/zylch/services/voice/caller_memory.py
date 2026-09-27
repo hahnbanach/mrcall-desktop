@@ -152,6 +152,8 @@ class CallerMemory(Tool):
         found = result(
             "matched", [fact for _, fact in facts], None if facts else "No permitted fact found"
         )
+        if customer.display_name:
+            found.data["display_name"] = customer.display_name
         if fallback:
             found.data["retrieval"] = "selected_facts_fallback_no_lexical_match"
         return found

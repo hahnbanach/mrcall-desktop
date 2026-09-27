@@ -33,7 +33,10 @@ class FrozenModel(BaseModel):
 
 class CustomerFacts(FrozenModel):
     blob_id: Identifier
-    sentence_ids: tuple[Identifier, ...] = Field(min_length=1, max_length=32)
+    sentence_ids: tuple[Identifier, ...] = Field(default=(), max_length=32)
+    display_name: str | None = Field(
+        default=None, strict=True, pattern=r"\A[A-Za-zÀ-ÿ][A-Za-zÀ-ÿ' -]{0,79}\z"
+    )
 
 
 class Limits(FrozenModel):
@@ -66,7 +69,16 @@ class AgentConfig(FrozenModel):
         if self.policy == "production" and self.enabled and (
             not self.business_id or not self.customers
         ):
-            raise ValueError("Production voice requires a business and approved sentences")
+            raise ValueError("Production voice requires a business and approved caller context")
+        for customer in self.customers:
+            if self.policy == "isolated" and (
+                not customer.sentence_ids or customer.display_name is not None
+            ):
+                raise ValueError("Isolated voice requires selected sentences")
+            if self.policy == "production" and not (
+                customer.sentence_ids or customer.display_name
+            ):
+                raise ValueError("Production voice requires an approved name or sentence")
         if len(set(self.tools)) != len(self.tools):
             raise ValueError("Duplicate capability")
         blobs = [c.blob_id for c in self.customers]

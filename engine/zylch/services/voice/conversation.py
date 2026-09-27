@@ -47,13 +47,21 @@ def chunks(content: str):
 def selected_context(data):
     recognition = data.get("recognition", "unavailable")
     facts = data.get("facts") or []
+    name = data.get("display_name") if recognition == "matched" else None
     if recognition == "matched" and facts:
         lines = [
             "Only these caller-safe stored-history facts are available. They are not a fresh status check:"
         ]
+        if name:
+            lines.append(f"Approved greeting name: {name}. A phone match is not identity proof.")
         lines.extend(f"- {fact['text']} (prior stored history)" for fact in facts)
         lines.append("No current shipment status or tracking capability is provided.")
         return "\n".join(lines)
+    if recognition == "matched" and name:
+        return (
+            f"Approved greeting name: {name}. No other personal customer facts are authorized. "
+            "A phone match is not identity proof. Do not infer a relationship or past request."
+        )
     return (
         f"Caller recognition: {recognition}. No personal customer facts are authorized. "
         "A phone-number match alone would not verify identity. Ask for clarification "
