@@ -1,6 +1,7 @@
 """Opt-in provider listener owned by the isolated engine WebSocket lifecycle."""
 
 import logging
+import inspect
 from contextlib import asynccontextmanager
 
 from aiohttp import web
@@ -42,6 +43,11 @@ async def voice_listener(config, port):
     )
     transport = LiveTransport(config)
     runtime = EngineVoiceRuntime(config, ledger, transport)
+    if production:
+        logging.getLogger(__name__).info(
+            "[voice] production runtime module=%s",
+            inspect.getfile(EngineVoiceRuntime),
+        )
     runner = None
     try:
         await runtime.recover()
