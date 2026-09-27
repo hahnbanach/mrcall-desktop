@@ -59,7 +59,7 @@ selected memory sentences. None of these currently makes StarChat variables
 the source of truth for a customer's telephone configuration. The isolated
 unlimited override also cannot simply be copied to a populated profile.
 
-## Delivery milestones
+## Historical delivery milestones — do not execute for the current pilot
 
 Each milestone produces evidence before its checkbox is completed. The
 procedure below supplies the operational details for the activation stages.
@@ -171,7 +171,7 @@ telephone behavior.
   completed only after the manual pilot passes; retain separate UX acceptance
   for checkout, credit fulfillment and Electron preview.
 
-## Procedure and stop conditions
+## Historical procedure and stop conditions
 
 1. **Read-only identity and inventory.** Resolve `production@cafe124.it` to
    its immutable Firebase UID. Read its existing StarChat businesses,
