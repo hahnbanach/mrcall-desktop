@@ -5,6 +5,32 @@ That file is a living snapshot and carries only `State now` / `Unresolved` /
 `Next`; anything chronological lands here instead. Newest section first.
 Nothing is discarded — only relocated, verbatim.
 
+## 2026-09-27 — WhatsApp channel detail pruned from living context
+
+**WhatsApp is a linked device, and it expires.** whatsmeow's protocol version
+is compiled into neonize; when it falls behind, WhatsApp answers
+`<failure reason="405"/>` and closes the socket, and nothing in the product
+says so. `neonize` is therefore unconstrained in `engine/pyproject.toml`, the
+build installs it with `--upgrade`, and the build fails when what it installed
+is not the newest on PyPI — blocking on macOS, while on Windows
+`continue-on-error` turns it into a release with no Windows installer and no
+red run. Messages themselves arrive by push on
+that socket (`MessageEv`), exactly as they do in WhatsApp Web — nothing polls
+for them. `whatsapp.sync` re-pulls what a linked device may ask for (contacts,
+groups, LID) and does not fetch message history. The protocol has a request for
+it — neonize builds `HISTORY_SYNC_ON_DEMAND` — but whatsmeow sends that as a
+PEER message to your own JID and neonize's `send_message()` exposes no peer
+flag, so it is buildable and unsendable from Python. Reaching it is a neonize
+change, not ours.
+`_whatsapp_refresh_loop` in `serve_ws` reattaches and re-syncs every
+`WHATSAPP_REFRESH_MINUTES` (default 15), skipping silently with no session on
+disk, and is its only caller — the app's Refresh button still calls
+`whatsapp.list_threads`, and `whatsapp.sync` has no preload binding, so the
+renderer cannot reach it yet. All seven daemons run the deployed refresh change
+(`a2b0e66`). What remains is the operator's view: nothing outside this repo
+reads `whatsapp.status`, so a headless caller still cannot tell a dead channel
+from a quiet one.
+
 ## 2026-09-23 — WhatsApp refresh deployment observations
 
 Deployed 2026-09-23 (`a2b0e66`), with all seven daemons restarted onto it;

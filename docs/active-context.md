@@ -1,5 +1,5 @@
 ---
-doc_baseline_commit: 07ffe41bae2bd932943f5892ce5fcc327b342875
+doc_baseline_commit: 78dddf4cf761632b98e91833b9b47568b2f97e2e
 doc_baseline_date: 2026-09-27
 ---
 
@@ -19,8 +19,9 @@ what is *current*, targeting ≤ ~120 lines.
 
 ## State now
 
-Four Café124 engines run pinned release `8d83193`; the billing server is
-`prod-99091c35`. Production uses K3 max through its personal OpenRouter key,
+Three Café124 engines import pinned release `8d83193`; production runs the
+separate evolution-pilot release `340a99d` through its systemd drop-in. The
+billing server is `prod-99091c35`. Production uses K3 max through its personal OpenRouter key,
 with a USD20/day limit. The other three profiles retain their previous billing
 and model choices and USD5/day limits. All four have automatic processing off
 and preparation paused. Adding a saved Anthropic key does not change the selected
@@ -44,13 +45,19 @@ The engine owns mailbox processing and shared memory; the clone owns operator
 procedures. Claude Code headless and kernel direct classifiers have separate
 billing and pause controls. See [operator setup](operator-setup.md#ai-execution-and-controls).
 
-The GPT-Live M4 telephone code is merged into `main` (`a90583c`). The isolated
-voice service runs from that checkout behind the existing Cloudflare tunnel;
-local and public health checks pass. M4 has real-call and human listening
-evidence for its selected-context behavior. The operator reports that the new
-Café 124 business and number are already assigned, with template `starter`.
-Customer activation still needs a business-aware runtime for
-`production@cafe124.it`; the current listener uses the M4 fixture.
+GPT-Live M4 is merged and phone-accepted for the isolated fixture. The
+Cloudflare tunnel and isolated listener serve 127.0.0.1:8787. Authenticated
+StarChat readback confirms Café 124 business
+`d44a1864-23cc-34f9-aec5-6e04bb2fd2ef-desktop` under production UID
+`Gn9IcuWzYyY7DBMHkVUGB7bIiTp2`, with number +390250552776, template
+`starter` and version 9. Vonage and OpenAI callbacks retain their existing
+public URLs. The production voice implementation is committed and received
+independent predeployment review. Its targeted daemon release and webhook
+path passed a reversible health and Desktop RPC check. Production voice is
+disabled and its daemon is back on the prior pinned `340a99d` release because
+the caller's matched memory has no approved, suitable Café 124 sentence. The
+number is not active on that daemon; a dial returned busy, with no heard audio
+or accepted call. See the blocked [plan](execution-plans/2026-09-27-cafe124-voice-daemon.md).
 
 Settings supports independent provider/model selection, daily budgets and bounded
 preparation. It remains reachable with an unavailable engine; stale connection
@@ -70,29 +77,11 @@ package, and a green build cannot prove that import resolves at run time.
 Runtime contracts are in [IPC](ipc-contract.md),
 [remote backend](remote-backend.md) and per-tree docs.
 
-**WhatsApp is a linked device, and it expires.** whatsmeow's protocol version
-is compiled into neonize; when it falls behind, WhatsApp answers
-`<failure reason="405"/>` and closes the socket, and nothing in the product
-says so. `neonize` is therefore unconstrained in `engine/pyproject.toml`, the
-build installs it with `--upgrade`, and the build fails when what it installed
-is not the newest on PyPI — blocking on macOS, while on Windows
-`continue-on-error` turns it into a release with no Windows installer and no
-red run. Messages themselves arrive by push on
-that socket (`MessageEv`), exactly as they do in WhatsApp Web — nothing polls
-for them. `whatsapp.sync` re-pulls what a linked device may ask for (contacts,
-groups, LID) and does not fetch message history. The protocol has a request for
-it — neonize builds `HISTORY_SYNC_ON_DEMAND` — but whatsmeow sends that as a
-PEER message to your own JID and neonize's `send_message()` exposes no peer
-flag, so it is buildable and unsendable from Python. Reaching it is a neonize
-change, not ours.
-`_whatsapp_refresh_loop` in `serve_ws` reattaches and re-syncs every
-`WHATSAPP_REFRESH_MINUTES` (default 15), skipping silently with no session on
-disk, and is its only caller — the app's Refresh button still calls
-`whatsapp.list_threads`, and `whatsapp.sync` has no preload binding, so the
-renderer cannot reach it yet. All seven daemons run the deployed refresh change
-(`a2b0e66`). What remains is the operator's view: nothing outside this repo
-reads `whatsapp.status`, so a headless caller still cannot tell a dead channel
-from a quiet one.
+WhatsApp can silently disconnect when neonize's bundled protocol falls behind.
+The current checkout defines a refresh loop, but the pinned Café 124 releases
+do not contain it. `whatsapp.status` still has no external reader, and the app
+Refresh button only lists threads. See the archived
+[channel details](active-context-archive.md).
 
 ## Unresolved
 
@@ -112,17 +101,25 @@ from a quiet one.
   installer coverage and multi-window auth checks retain their existing owners.
 - Historical task-mode/import and legacy transport issues need verification
   before their paths are restored.
+- The Café 124 voice plan still needs an approved phone-safe fact for the known
+  caller, deployment verification of the WebSocket frame-logging fix, a real
+  heard call, correlated diagnostics and final independent review.
 
 ## Next
 
-1. Resolve the remaining billing choices and funded credit acceptance. Keep
+1. Approve a specific Café 124 fact for +393480727052, then revalidate its
+   selected sentence. Before the supervised cutover, review and deploy the
+   WebSocket logging fix; verify no raw RPC frames appear in the daemon log.
+   Repeat the real call and final review while preserving the current Desktop
+   socket, isolated listener and tunnel until handoff.
+2. Resolve the remaining billing choices and funded credit acceptance. Keep
    preparation paused until the CTO explicitly requests a bounded run.
-2. Verify the installed applications through their GUI: the Mac one with
+3. Verify the installed applications through their GUI: the Mac one with
    personal-key entry, and the Windows one at all — install, open, scan the
    WhatsApp QR. Until that runs, support@ keeps telling customers macOS only.
-3. Give a headless caller a way to see the WhatsApp channel's state —
+4. Give a headless caller a way to see the WhatsApp channel's state —
    `whatsapp.status` has no reader outside this repo.
-4. Resume deferred product work from its existing briefs when requested.
+5. Resume deferred product work from its existing briefs when requested.
    The [thin web/mobile client brief](execution-plans/cross-machine-thin-clients.md)
    is a parked nice-to-have, not scheduled work; remind the CTO that it already
    exists rather than analysing it again. Electron remains the primary client.
