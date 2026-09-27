@@ -183,6 +183,10 @@ def _configure_logging():
         # serve daemon looping on a failing LLM wrote a 1.6 GB zylch.log.
         "anthropic",
         "openai",
+        # Protocol DEBUG records include raw RPC text frames. Root DEBUG is
+        # useful for engine breadcrumbs, but these frames can carry secrets
+        # and selected company facts into the journal and profile log.
+        "websockets",
     ):
         logging.getLogger(noisy).setLevel(logging.ERROR)
 
