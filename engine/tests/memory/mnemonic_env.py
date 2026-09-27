@@ -103,13 +103,15 @@ def clear_process_state() -> None:
     commit_permit._SPENT.clear()
 
 
-def boot(monkeypatch, root: Path, owner: str, key: str) -> str:
+def boot(monkeypatch, root: Path, owner: str, key: str, *, profile: str = "") -> str:
     """Bring up one profile against its real databases. Returns the owner id.
 
     Every previous engine is disposed first, so the profile that was open
     before is left exactly as another process would find it on disk.
+    ``profile`` names the profile directory under ``root`` when it is not the
+    owner's usual one — a second, fresh profile of the same account.
     """
-    profile_dir = root / f"profile-{owner}"
+    profile_dir = root / (profile or f"profile-{owner}")
     write_env(profile_dir, owner, key)
     monkeypatch.setenv("MEMORY_DB_DIR", str(root / "memory"))
     monkeypatch.setenv("ZYLCH_PROFILE_DIR", str(profile_dir))

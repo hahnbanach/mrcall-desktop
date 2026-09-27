@@ -229,7 +229,34 @@ def place(company_key: str, owner_ids: Iterable[str], destination_key: str) -> s
     return fence_id
 
 
-def move(fence_id: str, expected_phase: str, new_phase: str, **fields: Any) -> bool:
+def cas(session: Session, fence_id: str, expected_phase: str, new_phase: str, **fields: Any) -> bool:
+    """Compare-and-set one fence inside the caller's transaction; True when it moved.
+
+    The caller holds the store's write lock. :func:`move` is this in a
+    transaction of its own; the join import calls it inside the source
+    transaction that read its snapshot, so the acceptance and the snapshot it
+    accepts are one write. Same rules and errors as :func:`move`, except that
+    an ``IntegrityError`` reaches the caller as it is.
+    """
+    if (expected_phase, new_phase) not in MOVES:
+        raise ValueError(f"a fence cannot move from {expected_phase} to {new_phase}")
+    unknown = set(fields) - FIELDS
+    if unknown:
+        raise ValueError(f"a fence has no field {', '.join(sorted(unknown))}")
+    moved = (
+        session.query(MemoryJoinFence)
+        .filter(MemoryJoinFence.id == fence_id, MemoryJoinFence.phase == expected_phase)
+        .update(
+            {"phase": new_phase, "updated_at": _now(), **fields},
+            synchronize_session=False,
+        )
+    )
+    return moved == 1
+
+
+def move(
+    fence_id: str, expected_phase: str, new_phase: str, *, engine: Any = None, **fields: Any
+) -> bool:
     """Compare-and-set one fence from ``expected_phase`` to ``new_phase``; True when it moved.
 
     :data:`MOVES` lists every move a fence may take; a move within an active
@@ -238,35 +265,24 @@ def move(fence_id: str, expected_phase: str, new_phase: str, **fields: Any) -> b
     programming error and raises ``ValueError``; a fence that is no longer in
     ``expected_phase`` (another process moved it) answers ``False``. Moving
     into an active phase is refused by the partial unique index when the
-    company already holds another active fence.
+    company already holds another active fence. ``engine`` names the store
+    the fence lives in when it is not the attached one: the source a join has
+    already left.
     """
-    if (expected_phase, new_phase) not in MOVES:
-        raise ValueError(f"a fence cannot move from {expected_phase} to {new_phase}")
-    unknown = set(fields) - FIELDS
-    if unknown:
-        raise ValueError(f"a fence has no field {', '.join(sorted(unknown))}")
     try:
-        with company_transaction(write=True) as session:
-            moved = (
-                session.query(MemoryJoinFence)
-                .filter(MemoryJoinFence.id == fence_id, MemoryJoinFence.phase == expected_phase)
-                .update(
-                    {"phase": new_phase, "updated_at": _now(), **fields},
-                    synchronize_session=False,
-                )
-            )
-            return moved == 1
+        with company_transaction(write=True, engine=engine) as session:
+            return cas(session, fence_id, expected_phase, new_phase, **fields)
     except IntegrityError as exc:
         raise CompanyFenced(JOINING) from exc
-    except JournalError:
+    except (JournalError, ValueError):
         raise
     except Exception as exc:  # noqa: BLE001
         raise JournalError(f"join fence unavailable: {exc}") from exc
 
 
-def release(fence_id: str, *, expected_phase: str = FENCED) -> bool:
+def release(fence_id: str, *, expected_phase: str = FENCED, engine: Any = None) -> bool:
     """Release a fence from ``expected_phase``; True when it was released by this call."""
-    return move(fence_id, expected_phase, RELEASED)
+    return move(fence_id, expected_phase, RELEASED, engine=engine)
 
 
 __all__ = [
@@ -279,6 +295,7 @@ __all__ = [
     "RELEASED",
     "CompanyFenced",
     "active",
+    "cas",
     "destination_digest",
     "move",
     "place",

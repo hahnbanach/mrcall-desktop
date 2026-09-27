@@ -21,6 +21,7 @@ from __future__ import annotations
 
 from typing import Optional
 
+from sqlalchemy import Engine
 from sqlalchemy.orm import Session, sessionmaker
 
 
@@ -28,7 +29,7 @@ class JournalError(RuntimeError):
     """The operation journal could not answer; the caller must not proceed."""
 
 
-def session_factory() -> sessionmaker:
+def session_factory(engine: Optional[Engine] = None) -> sessionmaker:
     """A session bound to the COMPANY store and to nothing else.
 
     Not ``database.get_session``: that one carries per-table binds for both
@@ -36,9 +37,14 @@ def session_factory() -> sessionmaker:
     transaction and commit it separately. An operation that claims to be
     atomic must not be able to do that by accident, so this factory binds one
     engine and a profile table simply has nowhere to go.
+
+    ``engine`` names a company store other than the attached one — the source
+    a join left, whose fence the join completes after the rebind.
     """
     from zylch.storage.database import current_memory_engine, memory_unavailable_reason
 
+    if engine is not None:
+        return sessionmaker(bind=engine, expire_on_commit=False)
     engine = current_memory_engine()
     if engine is None:
         raise JournalError(memory_unavailable_reason() or "company memory is unavailable")
@@ -58,14 +64,18 @@ class company_transaction:
     *immediately*: ``busy_timeout`` never gets a chance, because there is
     nothing to wait for. Two engines on one company store would then both fail
     and neither would write.
+
+    ``engine`` binds the transaction to that company store instead of the
+    attached one.
     """
 
-    def __init__(self, *, write: bool = False) -> None:
+    def __init__(self, *, write: bool = False, engine: Optional[Engine] = None) -> None:
         self._session: Optional[Session] = None
         self._write = write
+        self._engine = engine
 
     def __enter__(self) -> Session:
-        session = session_factory()()
+        session = session_factory(self._engine)()
         self._session = session
         if self._write:
             from zylch.memory.store import take_write_lock

@@ -10,13 +10,30 @@ from sqlalchemy import inspect, select
 
 from tests.memory.test_split_store import _boot
 from zylch.memory.company_key import current_company_key
-from zylch.memory.join import join, merge_store_into
+from zylch.memory.join import join
 from zylch.services import project_store as p
 from zylch.storage import database as dbm
 
 
 def encoded(raw=b"first\r\n\x00\xff"):
     return base64.b64encode(raw).decode("ascii")
+
+
+def imported(src, dst, src_key, dst_key):
+    """One join import of ``src`` into ``dst`` under a fence of its own, completed after."""
+    from zylch.memory import join_import
+    from zylch.memory.mnemonic import fence
+
+    fence_id = fence.place(src_key, ["src"], dst_key)
+    try:
+        counts = join_import.import_into(
+            src, dst, fence_id, source_key=src_key, destination_key=dst_key
+        )
+    except BaseException:
+        fence.release(fence_id)
+        raise
+    assert fence.move(fence_id, fence.ACCEPTED, fence.COMPLETED)
+    return counts
 
 
 @pytest.fixture
@@ -158,14 +175,14 @@ def test_join_prefix_and_identical_head_divergent_history(boot):
     src = dbm.current_memory_engine()
     space = p.listing()["space_id"]
     p.write(space, "demo", "status.md", encoded(b"first"), 0, "src")
-    merge_store_into(src, dst, src_key, dst_key)
+    imported(src, dst, src_key, dst_key)
     p.write(space, "demo", "status.md", encoded(b"second"), 1, "src")
-    assert merge_store_into(src, dst, src_key, dst_key)["project_revisions"] == 1
-    assert merge_store_into(src, dst, src_key, dst_key)["project_revisions"] == 0
+    assert imported(src, dst, src_key, dst_key)["project_revisions"] == 1
+    assert imported(src, dst, src_key, dst_key)["project_revisions"] == 0
     with dst.begin() as conn:
         conn.execute(p.R.update().where(p.R.c.revision == 1).values(author_uid="different"))
     with pytest.raises(p.ProjectError):
-        merge_store_into(src, dst, src_key, dst_key)
+        imported(src, dst, src_key, dst_key)
 
 
 def test_real_dispatch_errors_and_payload_redaction(boot, monkeypatch, caplog):

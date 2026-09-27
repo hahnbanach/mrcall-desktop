@@ -33,7 +33,7 @@ FACT by id — facts reach prompts only through the reads covered here.
 
 from __future__ import annotations
 
-from typing import Set
+from typing import Any, Dict, List, Set
 
 from sqlalchemy import func
 from sqlalchemy.orm import Session
@@ -58,11 +58,13 @@ def scope_mismatch(content: str) -> bool:
     return scope in _ENTITY_SCOPES or entity_type in _ENTITY_TYPES
 
 
-def restricted_ids(session: Session, company_key: str) -> Set[str]:
-    """Blob ids any row of this company's journal has restricted, in any state.
+def restriction_entries(session: Session, company_key: str) -> List[Dict[str, Any]]:
+    """Every restriction entry any row of this company's journal records, in any state.
 
+    Each entry names a ``blob_id`` (and the version the review observed).
     Filtered in SQL to the rows whose ``restrictions`` is not empty, which keeps
-    the read off the rest of the journal.
+    the read off the rest of the journal. The join import carries the entries
+    against the blobs it copies onto its receipt in the destination.
     """
     rows = (
         session.query(MemoryOperation.restrictions)
@@ -73,12 +75,21 @@ def restricted_ids(session: Session, company_key: str) -> Set[str]:
         )
         .all()
     )
-    found: Set[str] = set()
-    for (entries,) in rows:
-        for entry in entries or []:
-            if isinstance(entry, dict) and entry.get("blob_id"):
-                found.add(str(entry["blob_id"]))
-    return found
+    return [
+        dict(entry)
+        for (entries,) in rows
+        for entry in entries or []
+        if isinstance(entry, dict) and entry.get("blob_id")
+    ]
+
+
+def restricted_ids(session: Session, company_key: str) -> Set[str]:
+    """Blob ids any row of this company's journal has restricted, in any state.
+
+    Filtered in SQL to the rows whose ``restrictions`` is not empty, which keeps
+    the read off the rest of the journal.
+    """
+    return {str(entry["blob_id"]) for entry in restriction_entries(session, company_key)}
 
 
 def ineligible_fact_ids(session: Session, company_key: str) -> Set[str]:
@@ -97,4 +108,4 @@ def ineligible_fact_ids(session: Session, company_key: str) -> Set[str]:
     return mismatched | restricted_ids(session, company_key)
 
 
-__all__ = ["ineligible_fact_ids", "restricted_ids", "scope_mismatch"]
+__all__ = ["ineligible_fact_ids", "restricted_ids", "restriction_entries", "scope_mismatch"]

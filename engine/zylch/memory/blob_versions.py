@@ -8,7 +8,7 @@ retrieval time — but a wrong write becomes a recoverable wrong belief instead
 of a lost fact, and the number of versions a blob has accumulated is itself the
 alarm the June 2026 sink never raised.
 
-Three reasons, and they are told apart on purpose:
+Four reasons, and they are told apart on purpose:
 
 - ``append`` — an ordinary rewrite: ingestion merging a new message into a
   known contact, a chat or solve correction. These are the writes whose
@@ -19,6 +19,9 @@ Three reasons, and they are told apart on purpose:
 - ``restore`` — the owner bringing a blob back to one of its versions. It is
   the owner's judgment of which text is the entity, so a blob's count starts
   again after its latest restore.
+- ``join`` — a company-memory join that found the blob's id already in the
+  destination with other text: the destination's row stays and the source's
+  text is kept here (:mod:`zylch.memory.join_import`).
 
 Retention is bounded by one policy, which the consolidation operation applies
 and nothing else does (:func:`expire_versions`): a version older than the
@@ -49,7 +52,8 @@ logger = logging.getLogger(__name__)
 APPEND = "append"
 CONSOLIDATE = "consolidate"
 RESTORE = "restore"
-REASONS = (APPEND, CONSOLIDATE, RESTORE)
+JOIN = "join"
+REASONS = (APPEND, CONSOLIDATE, RESTORE, JOIN)
 
 # The most sinks one report lists by id. ``version_sinks_total`` always says how
 # many there are, so a store with more is told so rather than shown a short list.
@@ -361,6 +365,7 @@ def expire_versions(
 __all__ = [
     "APPEND",
     "CONSOLIDATE",
+    "JOIN",
     "REASONS",
     "RESTORE",
     "SINK_REPORT_LIMIT",

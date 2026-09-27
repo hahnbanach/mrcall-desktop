@@ -83,27 +83,54 @@ def memory_sweep(ctx):
 
 
 @click.command(name="memory-join")
-@click.argument("key")
+@click.argument("key", required=False)
 @click.option("--yes", is_flag=True, help="Join without the confirmation prompt (scripts).")
+@click.option(
+    "--drain",
+    is_flag=True,
+    help="First run one memory pass of this profile, admitted by preparation (it may pay).",
+)
+@click.option(
+    "--release-fence",
+    "release",
+    is_flag=True,
+    help="Release a join fence left on this company memory by a join that stopped.",
+)
 @click.pass_context
-def memory_join(ctx, key, yes):
+def memory_join(ctx, key, yes, drain, release):
     """Join the company memory KEY names: preview (the echo), confirm, merge, switch.
 
     The same gesture the desktop Settings card performs, for a headless
     profile on the host. Needs the profile lock: stop its daemon first
-    (scripts/server/join-company.sh does stop, join, start).
+    (scripts/server/join-company.sh does stop, join, start). A join is refused
+    while this profile's memory work in its current company is unsettled; the
+    refusal lists each blocking operation with the command that settles it.
+    ``--drain`` first runs one ordinary memory pass under preparation, which
+    resumes pending work and lands settled sources' checkpoints; a paused or
+    busy preparation refuses it. ``--release-fence`` (no KEY) releases a join
+    fence still in phase ``fenced`` on the bound company; an accepted one is
+    finished only by its own profile's recovery.
     """
     from zylch.cli import main as _main
 
     _main._configure_logging()
     profile_name = ctx.obj.get("profile") if ctx.obj else None
     profile = _main._setup_profile(profile_name, lock=True)
-    logger.info(f"[CLI] memory-join profile={profile}")
+    logger.info(f"[CLI] memory-join profile={profile} drain={drain} release_fence={release}")
     from zylch.memory.company_key import current_company_key
-    from zylch.memory.join import join, preview
+    from zylch.memory.join import join, preview, release_fence
     from zylch.storage.storage import Storage
 
     Storage.get_instance()
+    if release:
+        out = release_fence()
+        click.echo("released the join fence" if out.get("ok") else f"refused: {out.get('reason')}")
+        if not out.get("ok"):
+            raise SystemExit(2)
+        return
+    if not key:
+        click.echo("refused: give the KEY of the company memory to join")
+        raise SystemExit(2)
     echo = preview(key)
     if not echo.get("well_formed"):
         click.echo(f"refused: {echo.get('reason')}")
@@ -123,9 +150,12 @@ def memory_join(ctx, key, yes):
     ):
         click.echo("aborted")
         raise SystemExit(1)
-    out = join(key)
+    out = join(key, drain=drain)
     if not out.get("ok"):
         click.echo(f"refused: {out.get('reason')}")
+        for row in out.get("blocking") or []:
+            click.echo(f"  {row['event_id']}  {row['state']}  {row['source_ref']}")
+            click.echo(f"    settle with: {row['verb']}")
         raise SystemExit(2)
     merged = out.get("merged") or {}
     click.echo(
@@ -137,7 +167,6 @@ def memory_join(ctx, key, yes):
         )
         + f"; now {out.get('blob_count', 0)} entries, contributors: {', '.join(out.get('contributors') or [])}"
     )
-
 
 
 @click.command(name="memory-reviews")

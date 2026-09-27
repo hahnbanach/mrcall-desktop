@@ -31,7 +31,7 @@ import logging
 import os
 import re
 import secrets
-from typing import Optional, Tuple
+from typing import Dict, Optional, Tuple
 
 logger = logging.getLogger(__name__)
 
@@ -85,12 +85,15 @@ def _profile_dir() -> Optional[str]:
     return get_active_profile_dir() or os.environ.get("ZYLCH_PROFILE_DIR") or None
 
 
-def persist_company_key(key: str, *, source: str) -> None:
+def persist_company_key(key: str, *, source: str, also: Optional[Dict[str, str]] = None) -> None:
     """Write the key and how it was obtained to the profile ``.env`` and the live environment.
 
     ``source`` is one of ``mint`` / ``join`` / ``provision`` — the provenance
     the store-creation rule reads: a minted or provisioned key may create a
-    store, a joined (typed) one may only open an existing one.
+    store, a joined (typed) one may only open an existing one. ``also`` names
+    further settings written in the same atomic replacement of the file — the
+    join's ``MEMORY_JOIN_FROM`` / ``MEMORY_JOIN_TO``, which must change with the
+    key and never apart from it.
 
     Raises when no profile directory can be resolved: an unpersisted key
     would be re-minted on the next boot and every row written under the
@@ -104,7 +107,7 @@ def persist_company_key(key: str, *, source: str) -> None:
         )
     from zylch.services.settings_io import update_env
 
-    update_env({SETTING: key, "MEMORY_KEY_SOURCE": source})  # also hot-loads os.environ
+    update_env({SETTING: key, "MEMORY_KEY_SOURCE": source, **(also or {})})  # hot-loads os.environ
     logger.info(f"[memory] company key persisted to the profile .env (source={source})")
 
 

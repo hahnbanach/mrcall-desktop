@@ -37,14 +37,6 @@
   ],
   "call_sites": [
     {
-      "path": "zylch/memory/join.py",
-      "symbol": "join",
-      "call": "merge_store_into",
-      "count": 1,
-      "mode": "sync",
-      "milestone": 8
-    },
-    {
       "path": "zylch/services/command_handlers.py",
       "symbol": "handle_memory",
       "call": "delete_all_blobs",
@@ -298,27 +290,6 @@
   ],
   "raw_sql_sinks": [
     {
-      "path": "zylch/memory/join.py",
-      "symbol": "merge_store_into",
-      "call": "sql:INSERT:blobs",
-      "count": 1,
-      "milestone": 8
-    },
-    {
-      "path": "zylch/memory/join.py",
-      "symbol": "merge_store_into",
-      "call": "sql:INSERT:fact_history",
-      "count": 1,
-      "milestone": 8
-    },
-    {
-      "path": "zylch/memory/join.py",
-      "symbol": "merge_store_into",
-      "call": "sql:UPDATE:memory_meta",
-      "count": 2,
-      "milestone": 8
-    },
-    {
       "path": "zylch/memory/store.py",
       "symbol": "ensure_meta_row",
       "call": "sql:INSERT:memory_meta",
@@ -392,9 +363,12 @@
   ],
   "known_dynamic_sql_sinks": [
     {
-      "path": "zylch/memory/join.py",
-      "symbol": "_copy",
+      "path": "zylch/memory/join_import.py",
+      "symbol": "_put",
       "tables": [
+        "blobs",
+        "fact_history",
+        "blob_versions",
         "blob_sentences",
         "email_blobs",
         "calendar_blobs",
@@ -402,8 +376,8 @@
         "person_identifiers",
         "blob_aliases"
       ],
-      "milestone": 8,
-      "reason": "join copies the fixed association/index/alias tables through a nested table-parameterized INSERT OR IGNORE helper"
+      "exempt": "the join import (memory/join_import.import_into), run only under a join fence of this attempt in phase fenced, compared-and-set under the source store's write lock: it inserts with INSERT OR IGNORE by each row's own key, so a row the destination already holds is never overwritten, and only rows the joining account can see in the source (scope.blob_visible) and their dependents",
+      "reason": "the join import writes each fixed memory table through one table-parameterized INSERT OR IGNORE helper whose column list comes from the table's model"
     },
     {
       "path": "zylch/storage/step_company_key.py",

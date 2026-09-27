@@ -54,12 +54,16 @@ async def memory_join_preview(params: Dict[str, Any], notify: NotifyFn) -> Any:
 
 
 async def memory_join(params: Dict[str, Any], notify: NotifyFn) -> Any:
-    """memory.join(key?) -> {ok, reason?, already?, merged?, self_notion?, blob_count?, contributors?}.
+    """memory.join(key?) -> {ok, reason?, blocking?, already?, merged?, self_notion?, blob_count?, contributors?}.
 
     Merge this profile's memory into the store ``key`` names, write the
     key to the profile, rebind the running engine to the joined store.
     Refuses a malformed or unknown key with ``ok: false``; the old store
-    stays on disk.
+    stays on disk. While this profile's memory work in its current company
+    is unsettled the join is refused with ``blocking``: one entry per
+    operation, with ``event_id``, ``state``, ``source_ref`` and the ``verb``
+    (an engine CLI command) that settles it. It never drains: that is the
+    CLI's ``zylch memory-join --drain``.
     """
     from zylch.memory.join import join
 

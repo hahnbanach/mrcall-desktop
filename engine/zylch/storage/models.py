@@ -452,7 +452,7 @@ class BlobVersion(DictMixin, Base):
     owner_id = Column(Text, nullable=False)
     namespace = Column(Text, nullable=False)
     content = Column(Text, nullable=False)
-    reason = Column(Text, nullable=False)  # append | consolidate | restore
+    reason = Column(Text, nullable=False)  # append | consolidate | restore | join
     operation_id = Column(String(64), nullable=True)  # the journal event, when there is one
     superseded_at = Column(DateTime, default=_utcnow, index=True)
 

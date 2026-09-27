@@ -132,3 +132,81 @@ async def test_settings_update_refuses_the_memory_key(monkeypatch, tmp_path):
     with pytest.raises(ValueError) as e:
         await settings_update({"updates": {"MEMORY_KEY": mint_key()}}, lambda *a: None)
     assert getattr(e.value, "code", None) == -32602 and "memory.join" in str(e.value)
+
+
+# ─── AC4: what a join carries, and what it keeps out ──────────────────
+
+HOURS = "Category: hours\nKey: opening\nValue: 9-18 on weekdays"
+TERMS = "Category: pricing\nKey: acme-term\nValue: 60 days, the terms Acme negotiated"
+MOQ_A = "Category: pricing\nKey: MOQ\nValue: 300 units"
+MOQ_B = "Category: pricing\nKey: MOQ\nValue: 500 units"
+LUCA = "#IDENTIFIERS\nEntity type: PERSON\nName: Luca Bianchi\n#ABOUT\nPurchasing at Alpha."
+
+
+def test_a_join_carries_what_the_joiner_sees_its_rules_its_versions_and_every_restriction(
+    monkeypatch, tmp_path, embedder
+):
+    from tests.memory import seeding
+    from tests.memory.join_env import isolate, store_digest
+    from tests.memory.mnemonic_env import COMPANY_A, COMPANY_B, OWNER_A, OWNER_B, boot, stub_embedder
+    from zylch.memory.eligibility import ineligible_fact_ids
+    from zylch.memory.hybrid_search import HybridSearchEngine
+    from zylch.memory.mnemonic import journal
+    from zylch.memory.mnemonic.contracts import INTERACTIVE, OPERATOR_DELEGATED, MemoryEvent
+    from zylch.memory.mnemonic.proposals import MnemonicResult
+    from zylch.services import facts_store
+
+    colleague = "uid-owner-c"
+    isolate(monkeypatch)
+    stub_embedder(monkeypatch, embedder)
+    boot(monkeypatch, tmp_path, OWNER_B, COMPANY_B)
+    seeding.store_blob(BlobStorage(get_session, embedder), OWNER_B, f"facts:{COMPANY_B}", MOQ_B, "seed")
+    boot(monkeypatch, tmp_path, colleague, COMPANY_A)
+    theirs = seeding.store_blob(
+        BlobStorage(get_session, embedder), colleague, f"template:{colleague}", "Colleague rule", "x"
+    )
+    boot(monkeypatch, tmp_path, OWNER_A, COMPANY_A)
+    store = BlobStorage(get_session, embedder)
+    luca = seeding.store_blob(store, OWNER_A, f"user:{COMPANY_A}", LUCA, "seed")
+    seeding.update_blob(store, luca["id"], OWNER_A, LUCA + "\n#HISTORY\n- quote", "seed",
+                        expected_updated_at=luca["updated_at"])
+    mine = seeding.store_blob(store, OWNER_A, f"template:{OWNER_A}", "Joiner rule", "x")
+    loser = seeding.store_blob(store, OWNER_A, f"facts:{COMPANY_A}", MOQ_A, "seed")
+    hours = seeding.store_blob(store, OWNER_A, f"facts:{COMPANY_A}", HOURS, "seed")
+    terms = seeding.store_blob(store, OWNER_A, f"facts:{COMPANY_A}", TERMS, "seed")
+    review = MemoryEvent(
+        event_id="evt-colleague-review", owner_id=colleague, company_key=COMPANY_A,
+        caller_class=OPERATOR_DELEGATED, origin=INTERACTIVE, source_kind="chat",
+        source_id="turn:1", source_revision="rev-1", observation="Those are Acme's terms only.",
+    )
+    journal.open_operation(review)
+    journal.record_result(
+        review.event_id, MnemonicResult.review_needed(review.event_id, "customer-specific"),
+        state=journal.REVIEW, restrictions=[{"blob_id": terms["id"], "version": terms["updated_at"]}],
+    )
+    source = store_digest(COMPANY_A)
+
+    assert join(COMPANY_B)["ok"] is True
+
+    assert _rows(COMPANY_B, f"SELECT id FROM blobs WHERE namespace = 'template:{OWNER_A}'") == [(mine["id"],)]
+    assert _rows(COMPANY_B, f"SELECT COUNT(*) FROM blobs WHERE id = '{theirs['id']}'") == [(0,)]
+    assert _rows(COMPANY_B, f"SELECT namespace FROM blobs WHERE id = '{luca['id']}'") == [(f"user:{COMPANY_B}",)]
+    assert _rows(COMPANY_B, f"SELECT namespace FROM blob_versions WHERE blob_id = '{luca['id']}'") == [
+        (f"user:{COMPANY_B}",)
+    ]
+    assert _rows(COMPANY_B, "SELECT losing_blob_id, losing_owner_id FROM fact_history") == [(loser["id"], OWNER_A)]
+    assert _rows(COMPANY_B, f"SELECT COUNT(*) FROM blobs WHERE id = '{terms['id']}'") == [(1,)]
+    assert store_digest(COMPANY_A) == source
+    assert _rows(COMPANY_A, "SELECT state, restrictions FROM memory_operations WHERE event_id = 'evt-colleague-review'") == [
+        ("review", f'[{{"blob_id": "{terms["id"]}", "version": "{terms["updated_at"]}"}}]')
+    ]
+
+    boot(monkeypatch, tmp_path, OWNER_B, COMPANY_B)
+    assert BlobStorage(get_session, embedder).get_blob(luca["id"], OWNER_B)["content"].startswith(LUCA)
+    fact_ids = {row["blob_id"] for row in facts_store._all_fact_blobs(OWNER_B)}
+    assert hours["id"] in fact_ids and terms["id"] not in fact_ids
+    assert facts_store.exact_fact(OWNER_B, "pricing", "acme-term") is None
+    with get_session() as session:
+        assert terms["id"] in ineligible_fact_ids(session, COMPANY_B)
+    found = [r.blob_id for r in HybridSearchEngine(get_session, embedder).search(OWNER_B, "Acme negotiated terms 60 days")]
+    assert terms["id"] not in found

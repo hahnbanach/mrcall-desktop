@@ -330,6 +330,9 @@ def _attach_store_then_backfill() -> None:
     """
     if current_memory_engine() is None:
         attach_memory_store(migrating=False)
+    from zylch.memory.join_recover import recover
+
+    recover()
     _apply_data_backfills()
 
 
@@ -509,12 +512,8 @@ def _backfill_task_thread_id() -> None:
     "calendar_events": [...]} with no thread_id. Derive thread_id
     from Email rows via sources.emails[0].
     """
-    # NOTE: this used to live inline in _apply_data_backfills with an
-    # `if not needs_lookup: return` early-out. That `return` short-circuited
-    # the whole `_apply_data_backfills` body — the new Fase 3.1 / 3.2
-    # backfills appended below were silently skipped on every install
-    # whose tasks already had thread_id (i.e. all current installs).
-    # Lifting it into its own function makes the early-out local.
+    # Its own function so the `if not needs_lookup: return` early-out below
+    # stays local and never skips the backfills that run after this one.
     from zylch.storage.models import Email, TaskItem
 
     factory = get_session_factory()
