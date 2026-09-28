@@ -51,13 +51,14 @@ Cloudflare tunnel and URL. StarChat readback binds business
 and voice config revision 6 are live; health and negative
 webhook probes pass. The caller policy validates incoming numbers with
 libphonenumber and allows on-demand filtered history only for a uniquely
-matched selected contact. Six calls have closed ledgers with provisional
-exposure reconciliation. A private `sessions.db` (0600) now has six rows keyed
-to those ledger calls: three backfilled from received transcript deltas and
-three marked `legacy_no_text`. The operator cancelled StarChat transcript
-upload and permanently accepts possible missing words before transcript
-attachment. A new real call on this release still needs archive/trace/ledger
-correlation and final independent review. See the active
+matched selected contact. Eight funded calls have closed ledgers with
+provisional exposure reconciliation. Private `sessions.db` (0600) has eight
+matching rows: three historical `legacy_no_text` rows and five reconstructed
+from received deltas. The two post-release calls match their private delta
+sources exactly. The operator cancelled StarChat transcript upload and
+permanently accepts possible missing words before transcript attachment.
+On the latest call GPT-Live invented business services without delegating or
+reading business facts. Post-call review remains open; see the active
 [plan](execution-plans/2026-09-27-cafe124-voice-daemon.md).
 
 Settings supports independent provider/model selection, daily budgets and bounded
@@ -97,15 +98,14 @@ Refresh button only lists threads. See the archived
   installer coverage and multi-window auth checks retain their existing owners.
 - Historical task-mode/import and legacy transport issues need verification
   before their paths are restored.
-- Café 124's manual one-number voice test passed independent final review.
-  The local archive is deployed and backfilled; a new call and final review
-  remain open. Model judgment of mixed notes remains supervised. Six call
-  reserves remain held; exposure is provisional, not settled.
+- Café 124's post-call review and plan closure remain open. Business-service
+  grounding needs a design decision; mixed-note judgment remains supervised.
+  Eight reserves remain held with provisional exposure, not settled invoices.
 
 ## Next
 
-1. Correlate a new real call across the private delta file, `sessions` row and
-   ledger, then obtain independent final review of the local archive.
+1. Review the two post-release calls independently, decide whether the
+   ungrounded answer blocks plan closure, then discuss response grounding.
 2. Resolve the remaining billing choices and funded credit acceptance. Keep
    preparation paused until the CTO explicitly requests a bounded run.
 3. Verify the installed applications through their GUI: the Mac one with
