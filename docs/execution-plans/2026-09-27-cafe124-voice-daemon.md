@@ -10,8 +10,9 @@ Scope: development, verification and one-number cutover plan for the manual
 Café 124 alpha on +390250552776. Paired with the
 [brief](../briefs/2026-09-27-cafe124-voice-daemon.md). A supervised second
 cutover serves the production daemon with the known caller's name. The
-supervised per-question memory review is active. The final end-to-end review
-remains open on the latest caller-validation release and transcript completeness.
+supervised per-question memory review is active. The independent final review
+passed the supervised handset and identity gates on the latest release. Complete
+transcription remains an open gate.
 <!-- doc-scope:end -->
 
 ## Fixed boundary and observed starting point
@@ -779,7 +780,42 @@ target and URL. Root-only rollback
 the prior `d60d46b` drop-in after checking revision 6 and no active call; its
 syntax was checked, and it does not touch ledger or tunnel.
 
-A repeat anonymous handset call on `d7fa315` and independent final end-to-end
-review remain open. The earlier human report cannot verify code added after
-that call. Full transcription of the accept-to-sideband interval is also not
-established. StarChat upload is explicitly deferred by the operator.
+A repeat anonymous handset call on `d7fa315` was completed after this cutover;
+its correlation and outcome follow below. Full transcription of the
+accept-to-sideband interval is not established. StarChat upload is explicitly
+deferred by the operator.
+
+## Anonymous handset acceptance on the validation release — 2026-09-28
+
+The operator called with withheld caller ID at 13:16:07 UTC, after the
+`d7fa315` daemon started at 11:51:40 UTC. They heard the assistant decline
+historical data and offer to answer general questions about the service. They
+judged that response perfect. The closed call has config revision 6,
+`caller_recognition=unknown` and zero caller facts. Its private mode-0600 trace
+has one initial memory recognition call with `query_present=false`, one
+delegated work result, one Live session start and close, and `trace_closed`.
+There is no on-demand memory query for the spoken self-identification. The
+trace contains 11 caller and 43 assistant transcript deltas; diagnostics are
+complete and provider finalization is confirmed. The human report establishes
+what was heard; the deltas establish only provider text received and retained.
+
+The ledger retains a 10,000,000-micro-USD reserve for this sixth call. Its
+accrued estimate is 48,796 microUSD over 36 voice seconds, with two completed
+priced carrier legs and `provisionally_covered` reconciliation. No reserve was
+deleted and no settled charge is claimed. Public health remains available
+with `calls_available=true` and no local test limits. Independent final
+end-to-end reassessment found the deployed module path, exact owner/business/
+number binding, unchanged tunnel and Desktop socket, healthy webhook route,
+private trace, closed ledger, both priced carrier legs and root-only rollback
+consistent with this call. The supervised one-number functional, audio and
+unknown-caller gates **pass** on `d7fa315`. The ambiguous-number branch remains
+covered by tests rather than a handset call.
+
+The independent overall verdict remains **Blocked** on transcript completeness.
+The 54 received deltas do not establish what, if anything, was spoken before
+the sideband attached after provider acceptance. The operator deferred upload
+to StarChat, not the requirement that calls be transcribed. Keep the plan
+`active` and this limitation visible; do not mark full transcription or remote
+archival complete. The production phone service remains active and healthy,
+with the targeted rollback prepared if a concrete safety or audio failure
+appears.

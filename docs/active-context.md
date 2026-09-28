@@ -1,5 +1,5 @@
 ---
-doc_baseline_commit: d7fa3155b30d0fd5f9bccb4b3c6b88efa4f4f537
+doc_baseline_commit: 19076ca8f19a5b7c10ba2c7df629c7e5637b8734
 doc_baseline_date: 2026-09-28
 ---
 
@@ -51,11 +51,12 @@ Cloudflare tunnel and URL. StarChat readback binds business
 and voice config revision 6 are live; health, authenticated RPC and negative
 webhook probes pass. The caller policy validates incoming numbers with
 libphonenumber and allows on-demand filtered history only for a uniquely
-matched selected contact. Five calls have closed ledgers with provisional
+matched selected contact. Six calls have closed ledgers with provisional
 exposure reconciliation. The two latest private call records retain received
 transcript deltas; complete transcription is unverified and StarChat upload is
-deferred.
-The new release awaits an anonymous handset retest. See the active
+deferred. The operator heard an anonymous call on `d7fa315` decline historical
+data and offer general service help; the private trace confirms zero caller
+facts and no on-demand historical query. See the active
 [plan](execution-plans/2026-09-27-cafe124-voice-daemon.md).
 
 Settings supports independent provider/model selection, daily budgets and bounded
@@ -95,18 +96,17 @@ Refresh button only lists threads. See the archived
   installer coverage and multi-window auth checks retain their existing owners.
 - Historical task-mode/import and legacy transport issues need verification
   before their paths are restored.
-- Café 124's selected-caller listening gate passed. Final review needs an
-  anonymous call on `d7fa315` and a transcript-completeness verdict. Model
-  judgment of mixed notes remains supervised. Five call reserves remain held;
-  exposure is provisional, not settled. Provider accept precedes transcript
-  attachment, and StarChat lacks an external-call import route.
+- Café 124's selected-caller and anonymous listening gates passed. Independent
+  final review blocks full acceptance because provider acceptance precedes
+  transcript attachment. Model judgment of mixed notes remains supervised. Six
+  call reserves remain held; exposure is provisional, not settled. StarChat
+  lacks an external-call import route, and its upload is deferred.
 
 ## Next
 
-1. Hear an anonymous call on `d7fa315`, resolve the complete-transcript
-   gap for this pilot, then repeat final independent
-   review. Roll back the targeted service and config if unsafe
-   disclosure or audio failure is confirmed.
+1. Resolve the complete-transcript gap and repeat independent acceptance.
+   Roll back the targeted service and config if unsafe disclosure or audio
+   failure is confirmed.
 2. Resolve the remaining billing choices and funded credit acceptance. Keep
    preparation paused until the CTO explicitly requests a bounded run.
 3. Verify the installed applications through their GUI: the Mac one with
