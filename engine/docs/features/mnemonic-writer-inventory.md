@@ -137,8 +137,9 @@ The ownership sequence of the harness's own rows is:
 `cs-kernel` has no memory persistence and remains an RPC client. Its current
 edges are nevertheless part of the freeze:
 
-- `cmd_ask` calls `rpc.chat` with an empty tool allowlist. That controls pending
-  tool approvals but is not a server-enforced read-only request policy.
+- `cmd_ask` calls `rpc.chat` with `read_only=True`. The client negotiates
+  read-only policy version 1 and sends `mutation_policy=read_only` to the engine;
+  an empty tool allowlist remains a separate pending-approval control.
 - `cmd_chat` accepts caller-selected tool names; `rpc.chat` approves pending
   calls by matching those names.
 - `cmd_draft_reply` also passes an empty allowlist but intentionally creates an
@@ -165,8 +166,8 @@ expects. The normalized chat-effect inventory covers memory store/force,
 delete/reset, agent memory run/process, jobs resume, update and hard reset;
 each entry is tied to its current slash-command route and engine handler.
 
-Those are audit findings for Milestone 1 and later approval binding. Milestone
-0 intentionally does not change routing or permissions.
+The inventory continues to cover kernel permission edges as well as engine
+memory writers.
 
 ## Behavioral fixtures
 
@@ -178,10 +179,10 @@ and price corrections, company hours, account feedback, planned work,
 contradictory legacy representations, malformed/truncated output and a
 multi-entity source with stable child keys.
 
-`current_behavior.json` and `test_mnemonic_fixtures.py` capture the starting
-storage behavior with actual temporary profile and company SQLite databases:
-company entities and FACTs are visible across owners sharing the key, account
-rules are private, a known customer-shaped legacy FACT is still returned by an
-ordinary category read, and the email memory checkpoint is owner-scoped but
-source-grained. Later milestones must change an expectation only alongside the
-corresponding production boundary.
+`current_behavior.json` and `test_mnemonic_fixtures.py` retain the frozen
+pre-conversion storage fixture with temporary profile and company SQLite
+databases. Its customer-shaped legacy FACT read is historical evidence; current
+ordinary fact reads exclude that shape before category filtering. Company
+entities and eligible FACTs remain shared by key, while account rules are
+private. Fixture expectations change only with the corresponding production
+boundary.

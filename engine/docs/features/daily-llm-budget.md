@@ -59,6 +59,12 @@ window among the priced models. Unknown models, premium options, multimodal and
 provider-side tools refuse before dispatch. Ordinary client-executed function
 tools remain supported and each subsequent LLM request gets its own reservation.
 
+MrCall accounts with several businesses can select the billed business using the
+saved `SMS_BUSINESS_ID`. The engine forwards it on bounded quote/execute requests,
+rejects a quote for another business, and invalidates existing clients when the
+saved selection changes. An unset selection leaves the server's existing sole-
+business resolution in force; it refuses an ambiguous account.
+
 MrCall credits use the additive `mrcall-bounded-v1` server contract. A free quote
 binds the account, business, request and frozen tariff, including markup and
 credit rounding. Its maximum debit is reserved atomically with the quote in

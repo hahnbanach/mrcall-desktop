@@ -10,6 +10,24 @@ description: |
 
 # IPC Contract — Engine ↔ App
 
+## Voice agent configuration (M2)
+
+The existing authenticated owner WebSocket exposes `voice.config.get()` and
+`voice.config.update(owner_uid, space_id, expected_revision, config)` to
+cs-kernel's `cs rpc` client. Responses contain the binding, revision,
+`binding_valid` and settings; credentials and the company memory key are never
+returned. Updates replace the complete configuration with revision checking.
+`voice.status()` distinguishes `configured_enabled` from current `calls_available`.
+The opt-in M3 daemon reports `runtime: "engine_listener"`; ordinary daemons report
+`runtime: "not_integrated"` and cannot receive voice calls. Availability considers
+current configuration, call allowance and engine budget. Configuration updates do
+not reset the M1 ledger or expand its original admission limits.
+Schema, errors, selected sentence permissions and operator examples:
+[voice configuration contract](../engine/docs/features/voice-agent-configuration.md).
+The isolated telephone runtime is described in the configuration contract.
+
+## Transports
+
 Transport: JSON-RPC 2.0, transport-agnostic on the engine side
 (`engine/zylch/rpc/dispatch.py` parses one frame and routes it; the
 read/write of bytes is the adapter's job). Two adapters:

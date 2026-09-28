@@ -119,6 +119,9 @@ def _context_tokens(payload_bytes):
 
 def request_bound(request, transport):
     """Return micro-USD hold; bytes + protocol allowance bound text input."""
+    if transport == "openai_voice":
+        from .openai_voice import request_bound as openai_bound
+        return openai_bound(request)
     if transport == "openrouter":
         from .openrouter_pricing import request_bound as router_bound
 

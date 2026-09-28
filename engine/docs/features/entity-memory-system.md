@@ -57,24 +57,18 @@ last sweep started, once per company (`<store>.sweep.lock`).
 Memory is changed through one semantic writer, the **mnemonic harness**
 (the direct `store_blob` and `update_blob` left production with milestone 8
 and live only in the test seeding module): a caller submits an observation, a
-bounded role decides what the memory should become, a small validator refuses
-what it can hold honestly, and one transaction on the company store writes the
+bounded role decides what the memory should become, and a small validator
+rejects unsupported decisions. One transaction on the company store writes the
 blob, its sentences, its identifier index, its source link, the mutation
 sequence and an operation receipt together. Which callers are converted is
 [mnemonic-writer-inventory.md](mnemonic-writer-inventory.md); the decision
 contract is [mnemonic-decisions.md](mnemonic-decisions.md) and the commit
 contract [mnemonic-commit.md](mnemonic-commit.md).
+The old `store_blob` and `update_blob` methods remain defined in
+`blob_storage.py` but have no production callers. Join, migrations and repair
+scripts still have their separate direct paths.
 
 ## Key Concepts
-
-### Memory Reconsolidation
-
-Like human memory: when you learn someone moved to Milan, you update the existing memory, not create a second one.
-
-1. New information arrives: "Mario moved to Milan"
-2. Hybrid search for similar existing memories
-3. If found: **UPDATE** via LLM merge
-4. If not found: **CREATE** new blob
 
 ### Hybrid Search
 
@@ -116,17 +110,18 @@ Candidates: identity-index matches + hybrid search (text LIKE + cosine), at most
      ▼
 The mnemonic role decides; the validator checks the identity evidence
      │
-     ├── the same subject ──► UPDATE it: one transaction, sentences re-embedded
-     │
-     └── a new subject ──► CREATE a new blob + embed sentences
+     ├── proven same subject ──► UPDATE it: one transaction, sentences re-embedded
+     ├── new subject ────────► CREATE a new blob + embed sentences
+     └── unsupported or uncertain ──► SKIP or REVIEW without a write
 ```
 
 ### Consolidation
 
 Duplicates that ingestion still creates — a calendar-born person beside its
 mail-born twin, two blobs a join brought together — are folded by
-consolidation (`zylch/memory/consolidation.py`), the one operation that
-removes memory. It runs from the Settings button (`memory.reconsolidate_now`),
+consolidation (`zylch/memory/consolidation.py`), the only ordinary semantic
+operation that merges and removes duplicate memory. It runs from the Settings
+button (`memory.reconsolidate_now`),
 `zylch memory-sweep` and after every update. Each run replays this account's
 pending task-reference follow-ups, applies the version-retention policy and
 reports the sinks, then clusters the entity family by shared identity-index
@@ -140,9 +135,12 @@ keeps the replaced and the dropped text as versions
 
 | Parameter | Default | Description |
 |-----------|---------|-------------|
-| `RECONSOLIDATION_THRESHOLD` | 0.65 | Min score to trigger merge |
-| `EMBEDDING_MODEL` | all-MiniLM-L6-v2 | fastembed model (ONNX) |
-| Embedding dimensions | 384 | Vector size |
+| `MEMORY_EMBEDDING_MODEL` | `sentence-transformers/all-MiniLM-L6-v2` | FastEmbed model (ONNX) |
+| `MEMORY_EMBEDDING_DIM` | 384 | Vector size |
+
+`MemoryConfig` still declares `MEMORY_RECONSOLIDATION_THRESHOLD`, but the
+current consolidation path does not use it to decide a MERGE. The mnemonic
+role and validator control that decision.
 
 ## Files
 

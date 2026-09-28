@@ -198,11 +198,12 @@ def spent_today_usd(owner_id: str) -> float:
         raise BudgetError("AI spending cannot be read; no new paid call is authorized.") from None
 
 
-def daily_budget_usd() -> float:
+def daily_budget_usd() -> float | None:
     """Configured daily USD limit; zero pauses AI and invalid values refuse."""
     from zylch.llm.budget import _budget
 
-    return _budget() / 1_000_000
+    cap = _budget()
+    return None if cap is None else cap / 1_000_000
 
 
 def budget_state(owner_id: str) -> Dict[str, Any]:

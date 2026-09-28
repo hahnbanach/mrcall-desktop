@@ -957,10 +957,12 @@ class Storage:
     # +393331234567 and a WhatsApp message from JID 393331234567@s.whatsapp.net
     # both produce identifier kind='phone' value='+393331234567'.
 
+    @staticmethod
     def find_blobs_by_identifiers(
-        self,
         owner_id: str,
         identifiers: List[tuple],
+        *,
+        raise_errors: bool = False,
     ) -> List[str]:
         """Look up blob ids that share at least one identifier with the
         given set.
@@ -1017,6 +1019,8 @@ class Storage:
                 )
                 return [str(r[0]) for r in rows]
         except Exception as e:
+            if raise_errors:
+                raise
             logger.warning(f"find_blobs_by_identifiers(n={len(norm)}) failed: {e}")
             return []
 

@@ -131,6 +131,9 @@ def _redact_params(method: Optional[str], params: Dict[str, Any]) -> Dict[str, A
             if payload in params:
                 params[payload] = "<redacted project document>"
 
+    if method == "voice.config.update":
+        params = {k: "<redacted voice configuration>" for k in params}
+
     def redact(value: Any, key: Optional[str] = None) -> Any:
         if key is not None and _is_secret_key(key, extra) and value:
             return f"<redacted len={len(value)}>" if isinstance(value, str) else "<redacted>"
@@ -224,6 +227,13 @@ async def dispatch_raw(raw: str, notify: NotifyFn) -> Optional[Dict[str, Any]]:
     try:
         result = await handler(params, notify)
     except Exception as e:
+        if method.startswith("voice."):
+            from zylch.services.voice.agent_config import VoiceError
+
+            code = e.code if isinstance(e, VoiceError) else INTERNAL_ERROR
+            message = str(e) if isinstance(e, VoiceError) else "Voice operation failed"
+            logger.warning("[rpc] voice operation failed code=%s", code)
+            return None if is_notification else _error(req_id, code, message)
         # Project storage exceptions may include SQL parameters (document bytes).
         # Only our dedicated safe exception may cross this boundary verbatim.
         from zylch.services.project_store import ProjectError
