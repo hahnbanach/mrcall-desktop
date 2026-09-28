@@ -55,10 +55,11 @@ socket and phone listener in one process. Health, authenticated RPC and negative
 webhook probes pass. Voice config revision 6 starts with the approved name,
 then lets GPT-Live review bounded, filtered contact history after a legitimate
 request. The operator heard suitable professional notes and no Shopify order
-claim; they reported about five seconds before the greeting. Three calls have
-closed ledgers with provisional exposure reconciliation. The new release writes
-received caller and assistant transcript deltas to a private call record; a
-heard call and readback on this release are pending. Complete transcription and
+claim; they reported about five seconds before the greeting. The operator also
+heard an adversarial call on release `d60d46b` and judged the behavior good.
+Four calls have closed ledgers with provisional exposure reconciliation. The
+new release retained caller and assistant transcript deltas in a private
+call record, correlated with the latest call. Complete transcription and
 StarChat archival are not established. See the active
 [plan](execution-plans/2026-09-27-cafe124-voice-daemon.md).
 
@@ -104,9 +105,9 @@ Refresh button only lists threads. See the archived
   installer coverage and multi-window auth checks retain their existing owners.
 - Historical task-mode/import and legacy transport issues need verification
   before their paths are restored.
-- The Café 124 voice plan still needs a call on the transcript-capture release,
-  interruption evidence, private record/receipt correlation and final
-  independent review. Model judgment of mixed notes is supervised. All three
+- The Café 124 voice plan still needs specific interruption evidence. Its
+  independent end-to-end review returned Blocked on that and transcript/archive
+  gaps. Model judgment of mixed notes is supervised. All four
   calls' reserves remain held against provisional exposure, not settled charges.
   The provider accept-to-attach interval prevents a full-transcript guarantee;
   StarChat lacks an external-call import route. Restore the prior pinned release
@@ -114,9 +115,9 @@ Refresh button only lists threads. See the archived
 
 ## Next
 
-1. Obtain the caller's report from the transcript-capture call on +390250552776,
-   correlate private transcript, diagnostics and provider/ledger receipts, then run final
-   independent review. Roll back the targeted service and config if unsafe
+1. Obtain the specific heard interruption/correction result, resolve the
+   complete-transcript and StarChat archive gaps, then repeat final independent
+   review. Roll back the targeted service and config if unsafe
    disclosure or audio failure is confirmed.
 2. Resolve the remaining billing choices and funded credit acceptance. Keep
    preparation paused until the CTO explicitly requests a bounded run.
