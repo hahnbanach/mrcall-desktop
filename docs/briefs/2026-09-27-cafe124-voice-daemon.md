@@ -164,13 +164,16 @@ supervised call over adding a shareability field to every blob now. The goal is
 to answer useful questions about the caller without treating a phone-number
 match as identity proof or broadcasting the contact's whole history.
 
-This preference does not authorize mixed private notes to enter GPT-Live
-verbatim. The runtime path needs a stable link between the caller, the source
-and the subject of any statement, plus a bounded output contract. A semantic
-classification of arbitrary blob content cannot be established by keyword
-co-occurrence alone. Human listening and independent predeploy review remain
-required. GPT-Live remains the sole conversational telephone model; no agent
-dispatch or GPT-6 phone fallback is part of this pilot.
+The operator clarified the sequence: GPT-Live judges whether a caller's
+request justifies consulting the matched contact; only then does the engine
+read memory, and Live judges what is appropriate to say. A broad request for
+information about oneself is eligible for that judgment. The engine still
+enforces exact contact and company scope, excludes obvious private/secret
+notes, redacts contact details, bounds model input and keeps source text out of
+local diagnostics. The model can still misjudge a mixed note. This is a
+supervised pilot risk, not a general authorization system; human listening and
+independent predeploy review remain required. GPT-Live remains the sole
+conversational telephone model, with no agent dispatch or GPT-6 phone fallback.
 
 Related contracts: [M4 Live-context plan](../execution-plans/2026-09-23-gpt-live-engine-integration.md#current-m4-plan--live-uses-selected-context-engine-supplies-new-results),
 [this alpha's development plan](../execution-plans/2026-09-27-cafe124-voice-daemon.md),

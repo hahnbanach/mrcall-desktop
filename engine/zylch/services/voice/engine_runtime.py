@@ -165,8 +165,20 @@ class EngineVoiceRuntime(SmokeRuntime):
                 "\nAt the start of this call, say in Italian: '"
                 f"{salutation}, sono l'assistente di Café 124. Come posso aiutarla?' "
                 "Then listen. The name, if present, comes from an approved phone match "
-                "and is not proof of identity. Do not mention other customer history."
+                "and is not proof of identity."
             )
+            if call.prepared.snapshot.config.caller_context_policy == "on_demand_review":
+                instructions += (
+                    " Do not mention customer history in the greeting. When the caller "
+                    "asks for information, first judge whether consulting their memory "
+                    "is legitimate for this request. Delegate to the client only then. "
+                    "For 'what information do you have about me', consult the matched "
+                    "contact, then decide what is relevant and safe to say. A phone "
+                    "match alone does not verify identity; never disclose secrets, "
+                    "sensitive private details, internal notes, or another person's data."
+                )
+            else:
+                instructions += " Do not mention other customer history."
         return await self.transport.accept(call.session_id, instructions)
 
     def attached(self, call, ws):

@@ -100,6 +100,35 @@ Cancellation/timeout suppress results; a running read may finish but cannot writ
 or deliver a late answer. Binding is rechecked before disclosure. This is a
 controlled fixture permission, not a general caller authorization system.
 
+### Production on-demand review (supervised pilot)
+
+`caller_context_policy: "on_demand_review"` is available only in production
+with one configured customer, an approved display name, `caller_memory`, and no
+pinned sentences. The initial lookup resolves recognition and name only. A
+caller utterance and GPT-Live client delegation are required before a history
+read. The server uses the current caller transcript and the carrier-bound
+number; the model cannot supply a different phone, blob or owner.
+
+The read is limited to that uniquely matched contact's company-scoped sentence
+rows. It refuses more than 24 rows or 12,000 bytes rather than returning a
+partial history. Explicit internal/confidential markers and common credential
+formats are excluded;
+email addresses and international phone numbers are replaced before model
+input. Obvious requests for credentials or another person's private data are
+declined before reading memory. GPT-Live receives remaining sentences as
+untrusted historical candidates and decides what relevant, appropriate part
+answers the caller. A broad question such as “what do you know about me?” may
+return several candidates; it does not require a verbatim inventory. This mode
+does not promise that model judgment can reliably classify every mixed note.
+
+The production diagnostic trace records recognition, candidate counts, byte
+lengths and event timing in this mode, without source text, caller questions,
+transcript deltas or appended content. Selected-fact mode retains its original
+pin and diagnostic behavior. The production binding and config revision are
+rechecked before client commentary leaves the engine; an invalidated call
+suppresses further results. Supervised handset listening is still required to
+assess what GPT-Live actually said.
+
 ## Limits and verification
 
 Settings default to 120 seconds, two calls and USD2, with validation ceilings of
