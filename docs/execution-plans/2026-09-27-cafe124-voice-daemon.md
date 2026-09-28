@@ -984,8 +984,46 @@ business's actual services. The operator asked to discuss wider sharing of
 verified company information and controls against such answers, without
 implementing a correction yet.
 
-The prior independent final review predates these calls. Obtain a fresh
-independent post-call review and decide explicitly whether this grounding
-failure blocks completion of this voice plan. Keep `status: active` until
-that decision and review are recorded. Do not treat archive correlation as
-acceptance of the incorrect spoken response.
+The prior independent final review predates these calls. The following fresh
+production review supersedes its missing-new-call finding. Archive correlation
+does not constitute acceptance of the incorrect spoken response.
+
+## Independent post-release final review — 2026-09-28
+
+The fresh reviewer inspected the running production daemon and private call
+evidence in read-only mode. The daemon has run release `8fb21d3` since
+14:08:08 UTC; its effective command and imported archive module point to that
+release, with an empty `PYTHONPATH`. The same process owns the phone listener
+and Desktop socket. Local health reports calls available and no test limits;
+the targeted rollback remains protected. The profile-owned `sessions.db` is
+mode 0600. No service or file was changed during this review.
+
+**Local call-transcript table — APPROVED.** The 14:33 and 14:34 calls started
+after the release. Their archive rows have the exact owner and business, the
+same IDs as the funded closed ledgers, `deltas_observed` capture status and the
+accepted possible pre-attachment gap. The ordered archive messages match all
+77 and 59 received private deltas respectively (7 and 3 assembled messages).
+Both private traces are closed. All eight funded ledger IDs have archive rows.
+This satisfies the previously missing post-release call correlation gate. It
+proves preservation of received text, not every spoken word or handset audio.
+The two new ledger reconciliations remain provisional, not settled invoices.
+
+**Overall plan acceptance — REVISE.** The 14:34 private transcript records a
+business-services question followed by an unsupported hospitality-service
+answer. Its complete trace has no delegation or delegated work for that
+question. The only memory lookup was initial caller recognition, with no
+query and zero facts delivered. The current telephone path exposes selected
+caller history, not a verified company service catalog. The trace cannot
+establish the model's internal reasoning or recover words before transcript
+attachment, but the recorded answer has no verified source in this call. It
+fails the plan's suitable, fact-grounded answer gate. The earlier independent
+`BLOCKED` verdict concerned only the missing post-release call; that condition
+is resolved. Archive approval does not approve the spoken response.
+
+Keep this plan `active`. Discuss a design for broad, scoped access to verified
+company facts and an enforceable response-grounding rule before changing phone
+behavior. After the chosen design is implemented and reviewed, its acceptance
+must include a real business-services question with verified source evidence
+and a spoken answer that neither invents services nor exposes unselected or
+private facts. Do not repeat the already completed archive correlation merely
+to satisfy that new behavioral gate.
