@@ -13,6 +13,7 @@ from .preparation import prepare_call
 from .diagnostics import CallTrace, DiagnosticOptions
 from .smoke_runtime import Call, SmokeRuntime
 from .smoke_transport import carrier_token_hash
+from .sessions import CallSessions
 
 logger = logging.getLogger(__name__)
 
@@ -32,6 +33,10 @@ class EngineVoiceRuntime(SmokeRuntime):
         if not config.vonage_application_id:
             raise ValueError("Voice requires the isolated signed carrier route")
         self.production = hasattr(config, "expected_business")
+        self.sessions = (
+            CallSessions(config.profile, config.owner_uid, config.business_id, config.test_number)
+            if self.production else None
+        )
         self.diagnostics = (
             DiagnosticOptions.for_production(config)
             if self.production else DiagnosticOptions.load(config.profile)
@@ -148,6 +153,7 @@ class EngineVoiceRuntime(SmokeRuntime):
     async def accept_call(self, call):
         instructions = call.prepared.snapshot.config.instructions + "\n" + VOICE_RULES
         if self.production:
+            self.sessions.begin(call.session_id, caller=call.prepared.caller)
             await self._prepare(call.prepared.snapshot, call.prepared.business_version)
             # Resolve only the selected display name before Live's first turn.
             # A missing/ambiguous match gets the generic approved greeting.
@@ -192,6 +198,7 @@ class EngineVoiceRuntime(SmokeRuntime):
                 call.prepared.snapshot.revision,
                 call.evidence,
                 self.diagnostics,
+                self.sessions,
             )
             if call.trace.db is None:
                 raise ValueError("Private call transcript unavailable")
@@ -207,6 +214,7 @@ class EngineVoiceRuntime(SmokeRuntime):
                 prepared.snapshot.revision,
                 call.evidence,
                 self.diagnostics,
+                self.sessions,
             )
         else:
             call.trace.record("sideband_attached")
