@@ -29,6 +29,7 @@ class ProductionVoiceConfig(BaseModel):
     api_key: SecretStr
     webhook_secret: SecretStr
     firebase_web_api_key: SecretStr
+    company_knowledge_enabled: bool = False
     voice_per_minute_microusd: int = 50_000
     carrier_per_minute_microusd: int = 20_000
     carrier_setup_microusd: int = 0
@@ -116,7 +117,14 @@ def load_production_config(path: Path, profile: Path) -> ProductionVoiceConfig:
         "vonage_signature_secret": "VONAGE_SIGNATURE_SECRET",
     }
     try:
-        return ProductionVoiceConfig(profile=profile, **{k: values.get(v) for k, v in fields.items()})
+        flag = values.get("VOICE_COMPANY_KNOWLEDGE_ENABLED", "0")
+        if flag not in ("0", "1"):
+            raise ValueError("Invalid protected company-knowledge switch")
+        return ProductionVoiceConfig(
+            profile=profile,
+            company_knowledge_enabled=flag == "1",
+            **{k: values.get(v) for k, v in fields.items()},
+        )
     except ValidationError:
         # Pydantic validation errors may include credential input values.
         raise ValueError("Invalid protected production voice configuration") from None

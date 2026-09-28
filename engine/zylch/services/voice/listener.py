@@ -21,6 +21,8 @@ active_runtime = None
 
 async def refresh_company_notes_once(runtime, config):
     """Verify the remote business before an offline note may reach the LLM."""
+    if not getattr(config, "company_knowledge_enabled", False):
+        return None
     snapshot = await asyncio.to_thread(snapshot_for_call, config.test_number)
     await runtime._prepare(snapshot)
     return await prepare_company_notes(config.profile, snapshot)
@@ -86,7 +88,7 @@ async def voice_listener(config, port):
         await runner.setup()
         await web.TCPSite(runner, "127.0.0.1", port).start()
         active_runtime = runtime
-        if production:
+        if production and config.company_knowledge_enabled:
             async def refresh_notes():
                 while True:
                     try:

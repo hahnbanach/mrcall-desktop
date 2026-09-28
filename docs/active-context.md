@@ -20,7 +20,7 @@ what is *current*, targeting ≤ ~120 lines.
 ## State now
 
 Three Café124 engines import pinned release `8d83193`; production runs the
-separate evolution-pilot release `340a99d` through its systemd drop-in. The
+separate voice release `8fb21d3` through its systemd drop-in. The
 billing server is `prod-99091c35`. Production uses K3 max through its personal OpenRouter key,
 with a USD20/day limit. The other three profiles retain their previous billing
 and model choices and USD5/day limits. All four have automatic processing off
@@ -60,14 +60,14 @@ transcript upload is cancelled; possible missing words before attachment are
 permanently accepted. The latest call contains invented business services
 without delegation or a fact lookup. Overall acceptance is REVISE and the
 [pilot plan](execution-plans/2026-09-27-cafe124-voice-daemon.md) remains active.
-The [shared-knowledge brief](briefs/2026-09-28-voice-company-knowledge.md) and
-its `USER_NOTES` amendment have independent approval. The revised
-[execution plan](execution-plans/2026-09-28-voice-company-knowledge.md) routes
-offline telephone-note extraction through `MODEL_MEMORY_EXTRACT`; implementation
-and production activation remain future work. The production company store is
-locally readable as `mrcalld` and contains structured facts and revisioned
-projects; source authority and caller disclosure remain unverified. Initial
-context and company retrieval are unimplemented.
+The [voice knowledge plan](execution-plans/2026-09-28-voice-company-knowledge.md)
+is blocked. Its `USER_NOTES` only path is built locally, but M3 detail mapping
+has REVISE and the new path is absent from
+the pinned production release. A real derived view failed independent source
+review and was removed from the production profile. The new company path is
+disabled by default, and its semantic and spoken behavior has not passed M4.
+The saved isolated fixture currently routes to production and cannot support
+phone trials. No company-store revision has been admitted for disclosure.
 
 Settings supports independent provider/model selection, daily budgets and bounded
 preparation. It remains reachable with an unavailable engine; stale connection
@@ -107,16 +107,16 @@ Refresh button only lists threads. See the archived
 - Historical task-mode/import and legacy transport issues need verification
   before their paths are restored.
 - Café 124's overall plan acceptance remains open after the local archive passed
-  independent review. Shared company knowledge needs private source-content/authority review and
-  spoken-answer verification; its milestone plan is reviewed, while mixed-note judgment remains supervised.
+  independent review. The changed detail mapping reopens voice knowledge M3;
+  M4 needs a safe source-backed conversion, an isolated provider route,
+  spoken-answer review and latency evidence.
   Eight reserves remain held with provisional exposure, not settled invoices.
 
 ## Next
 
-1. On a separately authorized implementation session, inspect eligible
-   production `USER_NOTES` content and any company-store sources to be used,
-   then implement the reviewed voice plan. The local metadata inventory does
-   not establish an approved service catalog.
+1. Reconcile the uncertain note-conversion reservation, establish a separately
+   routed isolated telephone fixture and restore approved source/detail mapping
+   before spoken and latency trials. Keep M5 activation closed.
 2. Resolve the remaining billing choices and funded credit acceptance. Keep
    preparation paused until the CTO explicitly requests a bounded run.
 3. Verify the installed applications through their GUI: the Mac one with
