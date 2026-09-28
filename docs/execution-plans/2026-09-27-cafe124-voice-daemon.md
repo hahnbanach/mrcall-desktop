@@ -13,7 +13,7 @@ cutover serves the production daemon with the known caller's name. The
 supervised per-question memory review is active. The independent final review
 passed the supervised handset and identity gates on the latest release. The
 operator permanently accepts possible missing words before transcript attach.
-The manual test is complete; a local call-transcript table is now planned.
+The manual test is complete; a local `sessions` table is now planned.
 No upload of call transcripts to StarChat is planned.
 <!-- doc-scope:end -->
 
@@ -865,16 +865,25 @@ PostgreSQL schema, and no live database schema was queried, so the suggested
 shows a `conversation_log` column absent from the current startup schema;
 model the current `data.conversation_transcription` shape, not that column.
 
-Create one SQLite table `voice_call_transcripts` in a dedicated profile-owned
-`voice-transcripts.db` (mode 0600), with one row per production call. Proposed
-columns are `session_id` (primary key matching the voice ledger), `business_id`,
-`owner_uid`, `called_number`, nullable validated `caller_number`,
-`start_timestamp_ms`, `updated_at_ms`, nullable `duration_ms`, `state`,
-`capture_status`, and `data` (validated JSON). In `data`, store
-`conversation_transcription` as an ordered array of `{role, content}` entries,
-using `user`/`assistant` like StarChat. Optional timing fields may accompany
-an entry if the provider supplies them. Avoid StarChat-only state variables,
-access keys, audio blobs, company memory keys, and unselected memory facts.
+Create a SQLite table named `sessions` in a dedicated profile-owned
+`sessions.db` (mode 0600), with one row per production call. Match StarChat's
+useful column names and meanings: `id` is the existing voice ledger session ID;
+`start_timestamp`, `timestamp`, `created_at`, and `updated_at` are UTC
+timestamps; `owner` is the Firebase UID; `business_id` is the exact bound
+business; and `data` is validated JSON. Include `expired`, `deleted`, and
+`archived` only if their lifecycle semantics are needed for local reads and
+retention. Use an index on `(business_id, start_timestamp)` for ordered lookup.
+There is no need to copy StarChat's state variables, access key, audio fields,
+or PostgreSQL/TimescaleDB machinery into SQLite.
+
+In `data`, store `conversation_transcription` as an ordered array of
+`{role, content}` entries, using `user`/`assistant` like StarChat. Put local
+call metadata such as called number, nullable validated caller number,
+duration and capture status in `data` without inventing a different top-level
+table contract. Optional timing fields may accompany a transcript entry if
+the provider supplies them. Do not store company memory keys or unselected
+memory facts. The local SQLite table is named `sessions` deliberately; the
+unverified PostgreSQL schema name `business` is not copied.
 
 Populate the row from the existing append-only private `transcript_deltas`
 source. Create an identifiable row when a call starts, update it durably as
@@ -890,7 +899,7 @@ Before activation, review the table migration and privacy boundary
 independently. Test ordered role assembly, empty/partial calls, restart and
 duplicate replay, exact profile/business binding, file permissions, and
 absence of transcript text in ordinary logs. On a supervised real call, read
-back the table under `mrcalld` and correlate its `session_id`, roles, status,
+back the table under `mrcalld` and correlate its `id`, roles, capture status,
 and timing to the private deltas and ledger. The table is not implemented by
 this planning edit. The execution plan remains `active` for this local storage
 phase, while the one-number phone acceptance remains complete.

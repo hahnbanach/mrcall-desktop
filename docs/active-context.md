@@ -1,5 +1,5 @@
 ---
-doc_baseline_commit: 365374f1adb56a321f7ea96f14ca13ebf564a7da
+doc_baseline_commit: 3936ad67d9018e78116c131b71f969e3ce2dbca2
 doc_baseline_date: 2026-09-28
 ---
 
@@ -58,7 +58,7 @@ StarChat transcript upload and permanently accepts possible missing words
 before transcript attachment. On an anonymous call on `d7fa315`, the assistant
 declined historical data and offered general service help. The private trace
 confirms zero caller facts and no on-demand historical query. A local transcript
-table modeled loosely on StarChat session data is planned. See the active
+`sessions` table modeled on StarChat session data is planned. See the active
 [plan](execution-plans/2026-09-27-cafe124-voice-daemon.md).
 
 The hosted engine is being isolated per tenant
@@ -117,13 +117,13 @@ Refresh button only lists threads. See the archived
 - Historical task-mode/import and legacy transport issues need verification
   before their paths are restored.
 - Café 124's manual one-number voice test passed independent final review.
-  The local call-transcript table remains unbuilt. Model judgment of mixed
+  The local `sessions` transcript table remains unbuilt. Model judgment of mixed
   notes remains supervised. Six call reserves remain held; exposure is
   provisional, not settled.
 
 ## Next
 
-1. Build and verify the private local call-transcript table from retained
+1. Build and verify the private local `sessions` table from retained
    provider deltas; keep the existing ledger and diagnostic files intact.
 2. Resolve the remaining billing choices and funded credit acceptance. Keep
    preparation paused until the CTO explicitly requests a bounded run.
