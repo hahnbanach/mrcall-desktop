@@ -4,6 +4,15 @@ Historical snapshots preserved verbatim when the living context is consolidated.
 Dated deployment claims and incident counts below are historical observations,
 not current operational state; use [active-context.md](active-context.md).
 
+## 2026-09-28 — Isolated voice listener before route recheck
+
+The isolated service now starts from the merged `main` checkout. Its runtime
+and the existing tunnel remain active with infinite duration. Local and public
+health checks pass; an unsigned public Vonage POST receives 401. The ledger's
+SQLite integrity check passes with 41 closed calls, 41 carrier receipts and
+the retained USD41 in voice reservations. The service has not received a new
+human-listened call since this code-path switch.
+
 
 
 

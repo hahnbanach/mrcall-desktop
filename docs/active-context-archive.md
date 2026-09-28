@@ -5,6 +5,31 @@ That file is a living snapshot and carries only `State now` / `Unresolved` /
 `Next`; anything chronological lands here instead. Newest section first.
 Nothing is discarded — only relocated, verbatim.
 
+## 2026-09-28 — Voice knowledge planning snapshot before implementation
+
+Three Café124 engines import pinned release `8d83193`; production runs the
+separate evolution-pilot release `340a99d` through its systemd drop-in. The
+billing server is `prod-99091c35`. Production uses K3 max through its personal OpenRouter key,
+with a USD20/day limit. The other three profiles retain their previous billing
+and model choices and USD5/day limits. All four have automatic processing off
+and preparation paused. Adding a saved Anthropic key does not change the selected
+provider or enable fallback. See [K3 adoption](execution-plans/2026-09-16-k3-production.md)
+and [runtime contract](../engine/docs/features/k3-reasoning.md).
+
+The [shared-knowledge brief](briefs/2026-09-28-voice-company-knowledge.md) and
+its `USER_NOTES` amendment have independent approval. The revised
+[execution plan](execution-plans/2026-09-28-voice-company-knowledge.md) routes
+offline telephone-note extraction through `MODEL_MEMORY_EXTRACT`; implementation
+and production activation remain future work. The production company store is
+locally readable as `mrcalld` and contains structured facts and revisioned
+projects; source authority and caller disclosure remain unverified. Initial
+context and company retrieval are unimplemented.
+
+1. On a separately authorized implementation session, inspect eligible
+   production `USER_NOTES` content and any company-store sources to be used,
+   then implement the reviewed voice plan. The local metadata inventory does
+   not establish an approved service catalog.
+
 ## 2026-09-27 — WhatsApp channel detail pruned from living context
 
 **WhatsApp is a linked device, and it expires.** whatsmeow's protocol version

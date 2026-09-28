@@ -33,12 +33,19 @@ M4 within the operator-adjusted scope. The hangup trace proves cancellation of
 the in-flight lookup; deterministic tests cover a completed delegated result
 racing with closure. The experiment sequence and private trace references are
 in the [completed plan](../../docs/execution-plans/2026-09-23-gpt-live-engine-integration.md).
-The isolated service now starts from the merged `main` checkout. Its runtime
-and the existing tunnel remain active with infinite duration. Local and public
-health checks pass; an unsigned public Vonage POST receives 401. The ledger's
-SQLite integrity check passes with 41 closed calls, 41 carrier receipts and
-the retained USD41 in voice reservations. The service has not received a new
-human-listened call since this code-path switch.
+The isolated ledger retains 41 closed historical smoke calls and 41 carrier
+receipts, but its service is currently absent. Its saved provider endpoint now
+reaches the production listener, so it is not an isolated route for new tests.
+The production listener remains pinned to `8fb21d3`.
+
+The company-knowledge notes-only path is built locally on `main`: an offline
+`MODEL_MEMORY_EXTRACT` converter, versioned private artifact, failed-request
+cooldown, short initial context and distinct company-detail delegation. It is
+not deployed; the protected company switch defaults off. A real K3 conversion
+produced an exact-span artifact, but independent source review rejected its
+selected facts and Italian detail matching. The artifact was removed from the
+production profile. M3 detail mapping is reopened, and M4 has no spoken-answer
+or latency acceptance; see the [blocked plan](../../docs/execution-plans/2026-09-28-voice-company-knowledge.md).
 
 Engine chat now supports negotiated read-only policy version 1. The policy is
 enforced before slash/semantic/task routing and again at assistant and task
@@ -245,6 +252,9 @@ API budgets; see [control boundaries](../../docs/operator-setup.md#ai-execution-
   remains open. No backlog resumption is part of model configuration.
 - Incident checkpoint counts and project inventories in dated records are
   historical; re-read current state before a cleanup or backlog operation.
+- Voice knowledge M3 detail mapping and M4 source selection need repair and
+  private semantic review. M4 also needs a separately routed isolated fixture
+  and supervised answer/latency evidence before any production activation.
 - Desktop v0.1.49 installation and personal-key entry on the CTO's Mac remain
   unverified. Saved-prompt format repairs have no new business-quality result.
 - The Desktop app does not read `memory.status`'s `joining` or
@@ -263,4 +273,5 @@ API budgets; see [control boundaries](../../docs/operator-setup.md#ai-execution-
 3. Merge `mnemonic-m9` as is (decision taken; workflow green on the pushed
    branch first); re-measure AC 5 in milestone 10 on the resolver-chosen
    model; deploy only through the rollout plan.
-4. Continue other workstreams under their existing plans.
+4. Resolve the voice knowledge M4 findings under its active plan before M5.
+5. Continue other workstreams under their existing plans.

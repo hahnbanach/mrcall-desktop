@@ -58,6 +58,7 @@ def setup_runtime(tmp_path, monkeypatch, client=None, **changes):
 def enable_test_production_archive(runtime):
     profile = runtime.config.profile
     (profile / "zylch.db").touch()
+    object.__setattr__(runtime.config, "company_knowledge_enabled", True)
     runtime.production = True
     runtime.sessions = CallSessions(profile, profile.name, "business-1", NUMBER)
 
@@ -208,11 +209,25 @@ def test_production_greeting_uses_only_approved_name(fixture_db, tmp_path, monke
     assert all("source-backed fixture service" in text for text in transport.instructions)
     assert PUBLIC not in str(transport.instructions)
     assert all("Wait silently for the backend" in text for text in transport.instructions)
+
+    object.__setattr__(runtime.config, "company_knowledge_enabled", False)
+    monkeypatch.setattr(
+        engine_runtime,
+        "current_company_notes",
+        lambda *_: pytest.fail("disabled company path read notes"),
+    )
+    disabled = Call("session-company-disabled", prepared=PreparedCall(snapshot, KNOWN))
+    assert asyncio.run(runtime.accept_call(disabled))
+    assert "source-backed fixture service" not in transport.instructions[-1]
+    assert "Verified company services are unavailable" not in transport.instructions[-1]
+    assert "company_note_status" not in disabled.evidence
+    disabled.trace.close()
+
     runtime.diagnostics = DiagnosticOptions()
     refused = Call("session-no-transcript", prepared=PreparedCall(snapshot, KNOWN))
     with pytest.raises(ValueError, match="transcript unavailable"):
         asyncio.run(runtime.accept_call(refused))
-    assert len(transport.instructions) == 3
+    assert len(transport.instructions) == 4
     ledger.close()
 
 
