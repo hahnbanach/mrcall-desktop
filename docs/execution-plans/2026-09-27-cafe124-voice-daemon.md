@@ -1024,8 +1024,8 @@ Keep this plan `active`. The operator-agreed direction is shared company
 sources, an initial company context and scoped detail retrieval with explicit
 missing-information behavior. The independently approved
 [brief](../briefs/2026-09-28-voice-company-knowledge.md) defines the constraints;
-the [planning handoff](2026-09-28-voice-company-knowledge.md) assigns the detailed
-plan and its next independent review to subsequent work. The current transport
+the [reviewed execution plan](2026-09-28-voice-company-knowledge.md) defines
+the milestones and later acceptance gates. Production source admission remains open. The current transport
 has no engine approval step before each spoken answer, so a deterministic
 pre-speech correctness gate is not an accepted implementation claim.
 After the chosen design is implemented and reviewed, its acceptance
