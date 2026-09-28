@@ -3,7 +3,8 @@
 <!-- doc-scope:start -->
 Scope: authenticated operator configuration, immutable snapshots and read-only
 selected-fact retrieval from M2, supervised production on-demand review,
-the opt-in M3 engine listener and M4 private diagnostic/transcript capture,
+the opt-in M3 engine listener, M4 private diagnostics and the production
+transcript record,
 the optional clock capability and autonomous diagnostic caller.
 The isolated listener reuses M1's durable admission and
 closure ledger. The milestone plan owns live acceptance evidence and open criteria.
@@ -304,7 +305,8 @@ Its output includes private dialogue: keep reports outside Git. For new calls,
 the renderer reads exact fragments and provider timing from the private
 `transcript_deltas` table. Older isolated traces can still use transcript text
 in diagnostic events. The production capture is prepared before Live accepts a
-call, and the greeting is held until sideband attachment. A failed transcript
+call, and Live is instructed to wait for sideband attachment before greeting.
+A failed transcript
 write stops the call and marks capture incomplete. A call with no provider text
 is marked `no_provider_text`, not transcribed. This records provider transcript
 events, not a verified verbatim audio recording. The current Cloudflare route

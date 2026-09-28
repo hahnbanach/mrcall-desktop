@@ -649,3 +649,37 @@ external Cloudflare call. No StarChat archive write is possible through the
 currently verified contract. Preserve the private transcript for a later
 import and keep remote archival as a named open gate. The plan cannot claim
 that all calls are already stored in StarChat.
+
+## Targeted transcript-delta release — 2026-09-28
+
+Commit `d60d46b` contains the private `transcript_deltas` table and provider
+event wiring. Diagnostic events in on-demand mode still retain only counts and
+timing. The voice suite passed 214 tests with one skip; Ruff and
+`git diff --check` passed. Independent code review approved deployment of
+**received provider deltas only**, with an explicit incomplete-capture limit.
+The review confirmed a writable sink is required before Live accept, write
+failure stops the call, and statuses distinguish observed deltas, possible
+gaps, no provider text and incomplete capture. It did not certify a complete
+transcription, because provider accept precedes sideband attach. Live is
+instructed to wait for a backend greeting instruction after attachment, but caller
+speech or provider output in that gap is still possible.
+
+Release `/home/mrcalld/releases/mrcall-voice-cafe124-d60d46b` was built from
+tracked commit files with its own virtual environment. Source hash, release
+marker and imported module path were checked. A new root-only rollback folder
+holds the previous 99 drop-in and a targeted script; a private revision-6
+config snapshot is retained. Only the production daemon restarted. Effective
+`ExecStart` and logged imported module point at `d60d46b`; `PYTHONPATH` is
+empty. The Desktop socket remains mode 0660 `mrcalld:caddy`, the tunnel PID and
+URL are unchanged, and local/public health report calls available. Public
+unsigned Vonage and OpenAI probes returned 401 and 400. Authenticated RPC
+readback still shows revision 6, one configured customer, zero pins and
+`on_demand_review`. The prior three call ledgers and holds remain intact.
+
+**Next gate:** obtain a real heard call on this release, read the private
+transcript table and diagnostic statuses without printing its text to general
+logs, correlate provider usage and ledger, and obtain final independent
+end-to-end review. Keep the plan active until interruption behavior and the
+full-transcription/StarChat archival gaps are resolved or explicitly accepted
+as deferred product work. A failure of the new capture calls for the prepared
+targeted rollback; never remove historical ledger or transcript evidence.
