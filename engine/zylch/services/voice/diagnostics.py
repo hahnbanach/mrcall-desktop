@@ -81,13 +81,15 @@ class CallTrace:
     SDK response, session configuration, SIP metadata, raw audio or model thinking.
     """
 
-    def __init__(self, profile, session_id, revision, evidence, options):
+    def __init__(self, profile, session_id, revision, evidence, options, sessions=None):
         self.db = None
         self.evidence = evidence
         self.started = time.monotonic()
         self.options = options
         self.session_id = session_id
         self.revision = revision
+        self.sessions = sessions
+        self.path = None
         self.transcript_count = 0
         self.transcript_roles = set()
         self.audio_roles = set()
@@ -104,6 +106,7 @@ class CallTrace:
             import uuid
 
             path = directory / f"call-{uuid.uuid4().hex}.db"
+            self.path = path
             fd = os.open(path, os.O_CREAT | os.O_EXCL | os.O_WRONLY | os.O_NOFOLLOW, 0o600)
             os.close(fd)
             self.db = sqlite3.connect(path, timeout=0)
@@ -133,6 +136,8 @@ class CallTrace:
                 fail_lookup=options.fail_lookup,
                 playback="unverified; transcript/audio reflection is not handset playback",
             )
+            if self.sessions:
+                self.sessions.sync(self.session_id, path)
         except Exception:
             self._failed()
 
@@ -203,6 +208,8 @@ class CallTrace:
                 ),
             )
             self.db.commit()
+            if self.sessions:
+                self.sessions.sync(self.session_id, self.path)
             self.transcript_count += 1
             self.transcript_roles.add(role)
             return True
@@ -225,5 +232,11 @@ class CallTrace:
                             or not self.audio_roles.issubset(self.transcript_roles)
                         ) else "deltas_observed"
                     )
+                    if self.sessions:
+                        self.sessions.sync(
+                            self.session_id, self.path,
+                            status=self.evidence["transcript_capture"],
+                            duration_ms=self.evidence.get("observed_elapsed_ms"),
+                        )
                 except Exception:
                     self._failed()

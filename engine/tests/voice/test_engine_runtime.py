@@ -18,6 +18,7 @@ from zylch.services.voice.conversation import VOICE_RULES
 from zylch.services.voice.agent_config import snapshot_for_call
 from zylch.services.voice.engine_runtime import PreparedCall
 from zylch.services.voice.diagnostics import DiagnosticOptions
+from zylch.services.voice.sessions import CallSessions
 from zylch.services.voice.live_sip_smoke import create_app
 from zylch.services.voice.smoke_runtime import Call
 from zylch.storage.voice_smoke import SmokeLedger
@@ -49,6 +50,13 @@ def setup_runtime(tmp_path, monkeypatch, client=None, **changes):
     prepare = AsyncMock(return_value=None)
     monkeypatch.setattr(engine_runtime, "prepare_call", prepare)
     return config, ledger, transport, runtime, prepare
+
+
+def enable_test_production_archive(runtime):
+    profile = runtime.config.profile
+    (profile / "zylch.db").touch()
+    runtime.production = True
+    runtime.sessions = CallSessions(profile, profile.name, "business-1", NUMBER)
 
 
 async def admit(http, config, caller=KNOWN, carrier="carrier-1", session="session-1"):
@@ -124,7 +132,7 @@ def test_production_greeting_uses_only_approved_name(fixture_db, tmp_path, monke
         "customers": [{"blob_id": "customer-a", "display_name": "Mario"}],
     })
     _, ledger, transport, runtime, _ = setup_runtime(tmp_path, monkeypatch)
-    runtime.production = True
+    enable_test_production_archive(runtime)
     runtime.diagnostics = DiagnosticOptions(True)
     runtime._prepare = AsyncMock(return_value=None)
     snapshot = snapshot_for_call(NUMBER)
@@ -169,7 +177,7 @@ def test_production_name_is_withheld_if_binding_changes_during_lookup(
         "customers": [{"blob_id": "customer-a", "display_name": "Mario"}],
     })
     _, ledger, transport, runtime, _ = setup_runtime(tmp_path, monkeypatch)
-    runtime.production = True
+    enable_test_production_archive(runtime)
     runtime._prepare = AsyncMock(side_effect=[None, ValueError("binding changed")])
     call = Call("session-test", prepared=PreparedCall(snapshot_for_call(NUMBER), KNOWN))
     with pytest.raises(ValueError, match="binding changed"):
@@ -191,7 +199,7 @@ def test_production_name_is_withheld_if_config_changes_during_lookup(
         "customers": [{"blob_id": "customer-a", "display_name": "Mario"}],
     })
     _, ledger, transport, runtime, _ = setup_runtime(tmp_path, monkeypatch)
-    runtime.production = True
+    enable_test_production_archive(runtime)
     runtime._prepare = AsyncMock(return_value=None)
     snapshot = snapshot_for_call(NUMBER)
     monkeypatch.setattr(engine_runtime, "snapshot_for_call", lambda _: SimpleNamespace(

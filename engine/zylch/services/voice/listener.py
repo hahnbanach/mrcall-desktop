@@ -50,6 +50,8 @@ async def voice_listener(config, port):
         )
     runner = None
     try:
+        if production:
+            runtime.sessions.recover(ledger.rows())
         await runtime.recover()
         # Loads memory/config and prepares credentials even with no RPC client.
         prepared = await runtime.prepare_carrier()
@@ -81,3 +83,5 @@ async def voice_listener(config, port):
             await runner.cleanup()
         await transport.close()
         ledger.close()
+        if production:
+            runtime.sessions.close()
