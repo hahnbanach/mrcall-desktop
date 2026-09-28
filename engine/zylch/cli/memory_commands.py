@@ -1,6 +1,7 @@
 """The company-memory commands of the ``zylch`` CLI.
 
-``memory-status``, ``memory-sweep``, ``memory-join`` and ``memory-reviews``, each
+``memory-status``, ``memory-sweep``, ``memory-join``, ``memory-reviews`` and
+``memory-reindex-identifiers``, each
 booting the profile the way every subcommand of ``zylch.cli.main`` does, which
 registers them on its group (:data:`MEMORY_COMMANDS`). The profile helpers are
 read from ``zylch.cli.main`` when a command runs, never at import, because that
@@ -230,4 +231,39 @@ def memory_reviews(ctx, retry_id, dismiss_id):
             click.echo(f"    reason: {row['reason']}")
 
 
-MEMORY_COMMANDS = (memory_status, memory_sweep, memory_join, memory_reviews)
+@click.command(name="memory-reindex-identifiers")
+@click.option("--apply", "apply_", is_flag=True, help="Write the missing rows (default: report only).")
+@click.pass_context
+def memory_reindex_identifiers(ctx, apply_):
+    """Rebuild the identity index from the PERSON and COMPANY entries this profile can see.
+
+    Only the exact ``#IDENTIFIERS`` entries those rows state are indexed, the
+    way a commit indexes them; nothing else is read or written, and no blob
+    changes (a rebuild that would change one rolls back). Without ``--apply``
+    it reports what is missing and writes nothing.
+    """
+    from zylch.cli import main as _main
+
+    _main._configure_logging()
+    profile_name = ctx.obj.get("profile") if ctx.obj else None
+    profile = _main._setup_profile(profile_name, lock=False)
+    logger.info(f"[CLI] memory-reindex-identifiers profile={profile} apply={apply_}")
+    from zylch.cli.utils import get_owner_id
+    from zylch.memory.rebuilds import reindex_identifiers
+    from zylch.storage.storage import Storage
+
+    Storage.get_instance()
+    out = reindex_identifiers(get_owner_id(), apply=apply_)
+    click.echo(
+        f"entities: {out['entities']}  missing: {out['missing']}  indexed: {out['indexed']}"
+        + ("" if apply_ else "  (dry run: nothing written; re-run with --apply)")
+    )
+
+
+MEMORY_COMMANDS = (
+    memory_status,
+    memory_sweep,
+    memory_join,
+    memory_reviews,
+    memory_reindex_identifiers,
+)

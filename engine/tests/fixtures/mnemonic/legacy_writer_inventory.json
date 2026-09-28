@@ -114,6 +114,14 @@
       "mode": "sync",
       "milestone": 7,
       "note": "consolidation's donor drop: inside the MERGE commit's one company transaction, under the MERGE permit, retaining the donor's final text first"
+    },
+    {
+      "path": "scripts/compact_learned_prefs.py",
+      "symbol": "drop_rules",
+      "call": "delete_blob",
+      "count": 1,
+      "mode": "sync",
+      "exempt": "the owner's rule compaction (scripts/compact_learned_prefs.py --apply), booted on the profile: it drops only the booted profile's own template:/prefs: rows that are an exact duplicate of an older one or strictly contained in a longer one, through the retaining drop, so each dropped text is kept as a maintenance version, in one company transaction that bumps the mutation sequence once"
     }
   ],
   "orm_sinks": [
@@ -167,18 +175,18 @@
       "milestone": 3
     },
     {
-      "path": "zylch/storage/database.py",
-      "symbol": "_backfill_email_blobs_index",
+      "path": "zylch/memory/rebuilds.py",
+      "symbol": "rebuild_source_links",
       "call": "construct:CalendarBlob",
       "count": 1,
-      "milestone": 8
+      "exempt": "the source-link rebuild (memory/rebuilds.rebuild_source_links), run once per boot: it merges an email_blobs / calendar_blobs link by its own key only for a blob whose legacy events name one of this profile's emails, or a calendar summary exactly one of this profile's events carries, inside a digest guard that rolls back any change to the company's blob rows"
     },
     {
-      "path": "zylch/storage/database.py",
-      "symbol": "_backfill_email_blobs_index",
+      "path": "zylch/memory/rebuilds.py",
+      "symbol": "rebuild_source_links",
       "call": "construct:EmailBlob",
       "count": 1,
-      "milestone": 8
+      "exempt": "the source-link rebuild (memory/rebuilds.rebuild_source_links), run once per boot: it merges an email_blobs / calendar_blobs link by its own key only for a blob whose legacy events name one of this profile's emails, or a calendar summary exactly one of this profile's events carries, inside a digest guard that rolls back any change to the company's blob rows"
     },
     {
       "path": "zylch/memory/blob_versions.py",
@@ -324,41 +332,6 @@
       "call": "sql:UPDATE:blobs",
       "count": 1,
       "exempt": "the reverse of migration step 0001_company_key, run by hand and never by the runner: it rewrites only company-family namespaces, back to <family>:<owner_id>, exact because the step never overwrote owner_id, and un-records the step"
-    },
-    {
-      "path": "scripts/backfill_email_blobs.py",
-      "symbol": "_backfill",
-      "call": "sql:INSERT:email_blobs",
-      "count": 1,
-      "milestone": 8
-    },
-    {
-      "path": "scripts/backfill_email_blobs.py",
-      "symbol": "_backfill",
-      "call": "sql:INSERT:calendar_blobs",
-      "count": 1,
-      "milestone": 8
-    },
-    {
-      "path": "scripts/backfill_person_identifiers.py",
-      "symbol": "_backfill",
-      "call": "sql:INSERT:person_identifiers",
-      "count": 1,
-      "milestone": 8
-    },
-    {
-      "path": "scripts/compact_learned_prefs.py",
-      "symbol": "run",
-      "call": "sql:UPDATE:blobs",
-      "count": 1,
-      "milestone": 8
-    },
-    {
-      "path": "scripts/compact_learned_prefs.py",
-      "symbol": "run",
-      "call": "sql:DELETE:blobs",
-      "count": 1,
-      "milestone": 8
     }
   ],
   "known_dynamic_sql_sinks": [

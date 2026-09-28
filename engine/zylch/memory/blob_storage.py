@@ -319,6 +319,7 @@ class BlobStorage(BlobReads, CommittedWrites):
         retain: bool = False,
         session: Optional[Session] = None,
         operation_id: Optional[str] = None,
+        reason: str = CONSOLIDATE,
     ) -> bool:
         """Delete a visible blob (sentences, links and identifiers cascade via FK).
 
@@ -333,6 +334,11 @@ class BlobStorage(BlobReads, CommittedWrites):
         default is the owner's delete, and an owner who deletes means it — the
         blob's versions go with it, explicitly, because ``blob_versions``
         carries no cascade on purpose.
+
+        ``reason`` stamps the retained version: ``consolidate`` for a merge's
+        donor, ``maintenance`` for a rule an owner's maintenance run drops
+        (``scripts/compact_learned_prefs.py``), which bumps the sequence once
+        itself for everything it drops. It is read only by a retaining drop.
         """
         if retain and session is None:
             raise ValueError("a retaining drop runs only inside the caller's transaction")
@@ -347,7 +353,7 @@ class BlobStorage(BlobReads, CommittedWrites):
                 return False
             if retain:
                 retain_version(
-                    active, blob, reason=CONSOLIDATE, owner_id=owner_id, operation_id=operation_id
+                    active, blob, reason=reason, owner_id=owner_id, operation_id=operation_id
                 )
             else:
                 prune_versions(active, [blob.id])

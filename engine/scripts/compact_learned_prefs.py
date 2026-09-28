@@ -18,18 +18,30 @@ memory ENTITIES (``#IDENTIFIERS`` / ``Entity type: STYLE`` — trained
 ``user:<owner>``, where they are retrieved by relevance search, not
 pinned into every prompt at full length.
 
-This script repairs an existing store. Three deterministic passes, in
-order; no LLM is involved and none is needed, because every decision is
+This script repairs an existing store. It runs against the profile's
+company memory through the engine's own boot (``--profile``), never a raw
+connection on a database file, and it reads and touches only the booted
+profile's own rules — the ``template:`` / ``prefs:`` rows of either identity
+the profile states — never another account's. Three deterministic passes,
+in order; no LLM is involved and none is needed, because every decision is
 made on the extractor's own structural markers rather than on prose:
 
-1. RELOCATE — an entity-shaped blob is MOVED to ``user:<owner>``. It is
-   never deleted: it is real extracted memory, just filed in the wrong
-   drawer. This is the pass that recovers ~99% of the space.
+1. RELOCATE — an entity-shaped blob belongs in ``user:<owner>``. Moving it
+   would turn a private rule into company memory every key holder reads:
+   a reclassification, which is a semantic judgment the owner makes. So it
+   is reported as needing review and never executed; this script moves
+   nothing. The entity stays where it is until its owner acts on it.
 2. DEDUPE — blobs whose content is identical after whitespace/case
    normalisation collapse to the oldest one; the newer copies are
-   deleted (with their sentence rows, via ON DELETE CASCADE).
+   dropped.
 3. SUPERSEDE — when one rule strictly contains another (both ≥ 40
-   normalised chars), the shorter one is deleted and the longer kept.
+   normalised chars), the shorter one is dropped and the longer kept.
+
+A drop is the retaining drop consolidation uses for a donor
+(``BlobStorage.delete_blob(retain=True)``): the rule's final text is kept
+in ``blob_versions`` with reason ``maintenance`` before the row goes, and
+every drop of one run happens in one company transaction that bumps the
+mutation sequence once.
 
 Optional fourth pass, ``--llm``: the three passes above are structural,
 and they leave behind a residue they cannot judge — on support@, two
@@ -39,49 +51,33 @@ rule store as if they were instructions. Telling narration from an
 operating rule is free-text classification, which is an LLM's job with
 structured output and never a regex. ``--llm`` sends the surviving
 blobs to the profile's configured provider in ONE batched tool call and
-drops the ones it judges not to be rules. Off by default: the
-deterministic passes must be reproducible without a provider.
+REPORTS the ones it judges not to be rules; it drops nothing, because
+that judgment is the owner's to act on (``/memory delete``). Off by
+default: the deterministic passes must be reproducible without a provider.
 
-Idempotent: a second run finds nothing to do.
+Idempotent: a second run finds nothing to do. Dry run is the default and
+writes nothing.
 
 Usage:
     # dry run against a profile (default — prints what it would do)
     python scripts/compact_learned_prefs.py --profile <UID>
 
-    # dry run against an explicit database file (e.g. a copy)
-    python scripts/compact_learned_prefs.py --db /path/zylch.db
+    # actually drop the duplicate and superseded rules
+    python scripts/compact_learned_prefs.py --profile <UID> --apply
 
-    # actually write
-    python scripts/compact_learned_prefs.py --db /path/zylch.db --apply
-
-    # include the LLM residue pass (1 call)
-    python scripts/compact_learned_prefs.py --profile <UID> --llm --apply
+    # include the LLM residue report (1 call)
+    python scripts/compact_learned_prefs.py --profile <UID> --llm
 """
 
 from __future__ import annotations
 
 import argparse
 import re
-import sqlite3
 import sys
 from pathlib import Path
-from typing import Any, Dict, List, Optional
-
-PROFILE_ROOT = Path.home() / ".zylch" / "profiles"
+from typing import Any, Dict, Iterable, List, Optional
 
 DEFAULT_CAP = 8000
-
-
-def _resolve_db(profile: Optional[str], db: Optional[str]) -> Path:
-    if db:
-        path = Path(db).expanduser()
-    elif profile:
-        path = PROFILE_ROOT / profile / "zylch.db"
-    else:
-        raise SystemExit("give --profile <UID> or --db <path>")
-    if not path.exists():
-        raise SystemExit(f"database not found: {path}")
-    return path
 
 
 def normalise(content: str) -> str:
@@ -152,12 +148,11 @@ _CLASSIFY_SYSTEM = (
 )
 
 
-def _llm_filter(rows: List[sqlite3.Row]) -> List[Dict[str, Any]]:
+def _llm_filter(rows: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     """Classify surviving blobs. Returns verdicts; [] when unavailable.
 
     ONE batched call through the engine's configured provider.
     """
-    sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
     from zylch.llm import try_make_llm_client
 
     client = try_make_llm_client()
@@ -193,164 +188,166 @@ def _llm_filter(rows: List[sqlite3.Row]) -> List[Dict[str, Any]]:
     return []
 
 
-def _owners(conn: sqlite3.Connection) -> List[str]:
-    rows = conn.execute(
-        "SELECT DISTINCT owner_id FROM blobs "
-        "WHERE namespace LIKE 'template:%' OR namespace LIKE 'prefs:%'"
-    ).fetchall()
-    return [r[0] for r in rows]
+def plan(rows: List[Dict[str, Any]]) -> Dict[str, List[Dict[str, Any]]]:
+    """The three structural passes over one owner's rules, oldest first. Pure: writes nothing.
+
+    Answers ``relocate`` (entity-shaped rows, reported for review only),
+    ``drop`` (each row with ``why``: ``duplicate`` or ``superseded`` and the
+    id it yields to) and ``final`` (the rules that stay).
+    """
+    relocate = [r for r in rows if is_entity_shaped(r["content"])]
+    keep = [r for r in rows if not is_entity_shaped(r["content"])]
+    seen: Dict[str, Dict[str, Any]] = {}
+    drop: List[Dict[str, Any]] = []
+    survivors: List[Dict[str, Any]] = []
+    for r in keep:
+        key = normalise(r["content"])
+        if key in seen:
+            drop.append({**r, "why": "duplicate", "of": seen[key]["id"]})
+        else:
+            seen[key] = r
+            survivors.append(r)
+    final: List[Dict[str, Any]] = []
+    for r in sorted(survivors, key=lambda x: -len(normalise(x["content"]))):
+        key = normalise(r["content"])
+        absorbed = next(
+            (
+                kept
+                for kept in final
+                if len(key) >= 40
+                and len(normalise(kept["content"])) >= 40
+                and key in normalise(kept["content"])
+            ),
+            None,
+        )
+        if absorbed is not None:
+            drop.append({**r, "why": "superseded", "of": absorbed["id"]})
+        else:
+            final.append(r)
+    return {"relocate": relocate, "drop": drop, "final": final}
 
 
-def run(db_path: Path, apply: bool, cap: int, use_llm: bool = False) -> Dict[str, int]:
-    conn = sqlite3.connect(str(db_path))
-    conn.row_factory = sqlite3.Row
-    conn.execute("PRAGMA foreign_keys=ON")
-    stats = {
-        "owners": 0,
-        "before_blobs": 0,
-        "before_chars": 0,
-        "relocated": 0,
-        "relocated_chars": 0,
-        "deduped": 0,
-        "deduped_chars": 0,
-        "superseded": 0,
-        "superseded_chars": 0,
-        "llm_kept": 0,
-        "llm_dropped": 0,
-        "llm_dropped_chars": 0,
-        "after_blobs": 0,
-        "after_chars": 0,
-    }
-    try:
-        for owner in _owners(conn):
-            stats["owners"] += 1
-            rows = conn.execute(
-                "SELECT id, namespace, content, created_at FROM blobs "
-                "WHERE owner_id = ? AND namespace IN (?, ?) "
-                "ORDER BY created_at ASC",
-                (owner, f"template:{owner}", f"prefs:{owner}"),
-            ).fetchall()
-            before_chars = sum(len(r["content"] or "") for r in rows)
-            stats["before_blobs"] += len(rows)
-            stats["before_chars"] += before_chars
-            print(f"\nowner={owner}: {len(rows)} blob(s), {before_chars} chars (cap {cap})")
+def _rules(owner: str, company_key: str) -> List[Dict[str, Any]]:
+    """``owner``'s own ``template:`` / ``prefs:`` rows in the bound company, oldest first."""
+    from zylch.memory.mnemonic.session import company_transaction
+    from zylch.storage.models import Blob
 
-            relocate: List[sqlite3.Row] = []
-            keep: List[sqlite3.Row] = []
-            for r in rows:
-                if is_entity_shaped(r["content"]):
-                    relocate.append(r)
-                else:
-                    keep.append(r)
-
-            for r in relocate:
-                name = _entity_name(r["content"])
-                print(
-                    f"  MOVE  {r['id']} [{len(r['content'])} chars] "
-                    f"{r['namespace']} -> user:{owner}  ({name})"
-                )
-                stats["relocated"] += 1
-                stats["relocated_chars"] += len(r["content"] or "")
-
-            # Pass 2 — exact duplicates (oldest wins).
-            seen: Dict[str, sqlite3.Row] = {}
-            drop: List[sqlite3.Row] = []
-            survivors: List[sqlite3.Row] = []
-            for r in keep:
-                key = normalise(r["content"])
-                if key in seen:
-                    print(
-                        f"  DUP   {r['id']} [{len(r['content'])} chars] "
-                        f"identical to {seen[key]['id']}"
-                    )
-                    drop.append(r)
-                    stats["deduped"] += 1
-                    stats["deduped_chars"] += len(r["content"] or "")
-                else:
-                    seen[key] = r
-                    survivors.append(r)
-
-            # Pass 3 — strict containment (longer wins).
-            final: List[sqlite3.Row] = []
-            for r in sorted(survivors, key=lambda x: -len(normalise(x["content"]))):
-                key = normalise(r["content"])
-                absorbed = None
-                for kept_row in final:
-                    other = normalise(kept_row["content"])
-                    if len(other) < 40 or len(key) < 40:
-                        continue
-                    if key in other:
-                        absorbed = kept_row
-                        break
-                if absorbed is not None:
-                    print(
-                        f"  SUPER {r['id']} [{len(r['content'])} chars] "
-                        f"contained in {absorbed['id']}"
-                    )
-                    drop.append(r)
-                    stats["superseded"] += 1
-                    stats["superseded_chars"] += len(r["content"] or "")
-                else:
-                    final.append(r)
-
-            # Pass 4 (optional) — LLM residue filter.
-            if use_llm and final:
-                verdicts = _llm_filter(final)
-                by_index = {v.get("index"): v for v in verdicts if isinstance(v, dict)}
-                surviving: List[sqlite3.Row] = []
-                for i, r in enumerate(final):
-                    verdict = by_index.get(i)
-                    if verdict is not None and verdict.get("is_operating_rule") is False:
-                        print(
-                            f"  LLM-  {r['id']} [{len(r['content'])} chars] not an "
-                            f"operating rule: {verdict.get('why')}"
-                        )
-                        drop.append(r)
-                        stats["llm_dropped"] += 1
-                        stats["llm_dropped_chars"] += len(r["content"] or "")
-                    else:
-                        why = (verdict or {}).get("why", "no verdict — kept by default")
-                        print(f"  LLM+  {r['id']} [{len(r['content'])} chars] kept: {why}")
-                        stats["llm_kept"] += 1
-                        surviving.append(r)
-                final = surviving
-
-            after_chars = sum(len(r["content"] or "") for r in final)
-            stats["after_blobs"] += len(final)
-            stats["after_chars"] += after_chars
-            print(
-                f"  => {len(final)} rule blob(s), {after_chars} chars "
-                f"({'UNDER' if after_chars <= cap else 'STILL OVER'} the {cap} cap)"
+    with company_transaction() as session:
+        rows = (
+            session.query(Blob.id, Blob.namespace, Blob.content, Blob.created_at)
+            .filter(
+                Blob.company_key == company_key,
+                Blob.owner_id == owner,
+                Blob.namespace.in_((f"template:{owner}", f"prefs:{owner}")),
             )
+            .order_by(Blob.created_at, Blob.id)
+            .all()
+        )
+    return [
+        {"id": str(i), "namespace": ns, "content": c or "", "created_at": at}
+        for i, ns, c, at in rows
+    ]
 
-            if apply:
-                if relocate:
-                    conn.executemany(
-                        "UPDATE blobs SET namespace = ? WHERE id = ?",
-                        [(f"user:{owner}", r["id"]) for r in relocate],
-                    )
-                if drop:
-                    conn.executemany(
-                        "DELETE FROM blobs WHERE id = ?",
-                        [(r["id"],) for r in drop],
-                    )
-                conn.commit()
-    finally:
-        conn.close()
+
+def drop_rules(storage: Any, owner: str, blob_ids: Iterable[str]) -> int:
+    """Drop ``owner``'s rules by id in one company transaction, each text retained first.
+
+    The retaining drop (``delete_blob(retain=True, reason="maintenance")``)
+    neither opens a session nor bumps the mutation sequence inside a caller's
+    transaction, so this bumps it once for the whole run. Returns the rows
+    dropped.
+    """
+    from zylch.memory.blob_versions import MAINTENANCE
+    from zylch.memory.mnemonic.session import company_transaction
+    from zylch.memory.store import bump_mutation_seq
+
+    dropped = 0
+    with company_transaction(write=True) as session:
+        for blob_id in blob_ids:
+            dropped += int(
+                storage.delete_blob(blob_id, owner, retain=True, session=session, reason=MAINTENANCE)
+            )
+        if dropped:
+            bump_mutation_seq(session)
+    return dropped
+
+
+def run(
+    owners: Iterable[str],
+    *,
+    apply: bool,
+    cap: int = DEFAULT_CAP,
+    use_llm: bool = False,
+    storage: Any = None,
+) -> Dict[str, int]:
+    """Compact each of ``owners``' own rules in the bound company; ``storage`` drops them."""
+    from zylch.memory.company_key import require_company_key
+
+    key = require_company_key()
+    stats = {
+        name: 0
+        for name in (
+            "owners", "before_blobs", "before_chars", "relocate_review", "relocate_review_chars",
+            "deduped", "deduped_chars", "superseded", "superseded_chars", "llm_flagged",
+            "dropped", "after_blobs", "after_chars",
+        )
+    }
+    for owner in sorted({str(o) for o in owners if o}):
+        rows = _rules(owner, key)
+        if not rows:
+            continue
+        stats["owners"] += 1
+        stats["before_blobs"] += len(rows)
+        stats["before_chars"] += sum(len(r["content"]) for r in rows)
+        print(f"\nowner={owner}: {len(rows)} blob(s), {sum(len(r['content']) for r in rows)} chars (cap {cap})")
+        planned = plan(rows)
+        for r in planned["relocate"]:
+            print(f"  REVIEW {r['id']} [{len(r['content'])} chars] entity-shaped in {r['namespace']}: "
+                  f"belongs in user:<company>; a move is the owner's decision, not made here")
+            stats["relocate_review"] += 1
+            stats["relocate_review_chars"] += len(r["content"])
+        for r in planned["drop"]:
+            label = "DUP  " if r["why"] == "duplicate" else "SUPER"
+            print(f"  {label} {r['id']} [{len(r['content'])} chars] {r['why']}: yields to {r['of']}")
+            stats["deduped" if r["why"] == "duplicate" else "superseded"] += 1
+            stats[("deduped" if r["why"] == "duplicate" else "superseded") + "_chars"] += len(r["content"])
+        final = planned["final"]
+        if use_llm and final:
+            verdicts = {v.get("index"): v for v in _llm_filter(final) if isinstance(v, dict)}
+            for i, r in enumerate(final):
+                verdict = verdicts.get(i)
+                if verdict is not None and verdict.get("is_operating_rule") is False:
+                    print(f"  LLM?  {r['id']} [{len(r['content'])} chars] may not be an operating "
+                          f"rule: {verdict.get('why')} (reported only; /memory delete removes it)")
+                    stats["llm_flagged"] += 1
+        after = len(rows) - len(planned["drop"])
+        after_chars = sum(len(r["content"]) for r in rows) - sum(len(r["content"]) for r in planned["drop"])
+        stats["after_blobs"] += after
+        stats["after_chars"] += after_chars
+        print(f"  => {after} rule blob(s), {after_chars} chars "
+              f"({'UNDER' if after_chars <= cap else 'STILL OVER'} the {cap} cap)")
+        if apply and planned["drop"]:
+            stats["dropped"] += drop_rules(storage, owner, [r["id"] for r in planned["drop"]])
     return stats
 
 
-def _entity_name(content: str) -> str:
-    for line in (content or "").splitlines()[:6]:
-        if line.strip().lower().startswith("name:"):
-            return line.strip()
-    return "(unnamed entity)"
+def _boot(profile: Optional[str]):
+    """The profile booted the way every ``zylch`` subcommand boots it; its identities and a store."""
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+    from zylch.cli import main as _main
+    from zylch.memory import BlobStorage, EmbeddingEngine, MemoryConfig
+    from zylch.memory.mnemonic.authorization import _current_owners
+    from zylch.storage.database import get_session
+    from zylch.storage.storage import Storage
+
+    _main._setup_profile(profile, lock=False)
+    Storage.get_instance()
+    return sorted(_current_owners()), BlobStorage(get_session, EmbeddingEngine(MemoryConfig()))
 
 
-def main() -> int:
+def main(argv: Optional[List[str]] = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--profile", help="profile UID under ~/.zylch/profiles")
-    parser.add_argument("--db", help="explicit path to a zylch.db (e.g. a copy)")
+    parser.add_argument("--profile", required=True, help="profile under ~/.zylch/profiles")
     parser.add_argument(
         "--cap",
         type=int,
@@ -361,38 +358,30 @@ def main() -> int:
         "--llm",
         action="store_true",
         help=(
-            "also run the LLM residue pass over the surviving blobs "
-            "(1 batched call; needs the profile's configured provider)"
+            "also report what the LLM residue pass judges not to be rules "
+            "(1 batched call; needs the profile's configured provider; drops nothing)"
         ),
     )
     parser.add_argument(
         "--apply",
         action="store_true",
-        help="write the changes (default: dry run, prints what it would do)",
+        help="drop the duplicate and superseded rules (default: dry run, prints what it would do)",
     )
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
 
-    db_path = _resolve_db(args.profile, args.db)
-    mode = "APPLY" if args.apply else "DRY RUN"
-    print(f"[{mode}] {db_path}")
-    stats = run(db_path, apply=args.apply, cap=args.cap, use_llm=args.llm)
+    owners, storage = _boot(args.profile)
+    print(f"[{'APPLY' if args.apply else 'DRY RUN'}] profile={args.profile} owners={', '.join(owners)}")
+    stats = run(owners, apply=args.apply, cap=args.cap, use_llm=args.llm, storage=storage)
     print(
         f"\nowners={stats['owners']} "
         f"before={stats['before_blobs']} blobs / {stats['before_chars']} chars "
         f"-> after={stats['after_blobs']} blobs / {stats['after_chars']} chars\n"
-        f"relocated={stats['relocated']} ({stats['relocated_chars']} chars) "
+        f"relocate_review={stats['relocate_review']} ({stats['relocate_review_chars']} chars) "
         f"deduped={stats['deduped']} ({stats['deduped_chars']} chars) "
         f"superseded={stats['superseded']} ({stats['superseded_chars']} chars)"
-        + (
-            f"\nllm_kept={stats['llm_kept']} llm_dropped={stats['llm_dropped']} "
-            f"({stats['llm_dropped_chars']} chars)"
-            if args.llm
-            else ""
-        )
+        + (f"\nllm_flagged={stats['llm_flagged']}" if args.llm else "")
     )
-    if not args.apply and (
-        stats["relocated"] or stats["deduped"] or stats["superseded"] or stats["llm_dropped"]
-    ):
+    if not args.apply and (stats["deduped"] or stats["superseded"]):
         print("(dry run — nothing written; re-run with --apply)")
     return 0
 

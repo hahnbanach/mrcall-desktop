@@ -35,10 +35,11 @@ def _manifest() -> dict:
 def ownership_problems(manifest: dict) -> list[str]:
     """Writer rows that do not carry exactly one owner.
 
-    A row names either the ``milestone`` (1-8) that converted or removes its
+    A row names either the ``milestone`` (1-7) that converted or removes its
     edge, or ``exempt``: the reviewed mechanical primitive and the precondition
-    it checks. Neither leaves an edge nobody answers for; both leave it unclear
-    which one does.
+    it checks. Milestone 8 sealed the boundary, so no edge is left for a later
+    milestone to convert: a row at 8 or above is out of range. Neither leaves
+    an edge nobody answers for; both leave it unclear which one does.
     """
     problems: list[str] = []
     for section in WRITER_SECTIONS:
@@ -47,7 +48,7 @@ def ownership_problems(manifest: dict) -> list[str]:
             if ("milestone" in row) == ("exempt" in row):
                 problems.append(f"{label}: needs exactly one of milestone and exempt")
             elif "milestone" in row and not (
-                isinstance(row["milestone"], int) and 1 <= row["milestone"] <= 8
+                isinstance(row["milestone"], int) and 1 <= row["milestone"] <= 7
             ):
                 problems.append(f"{label}: milestone {row['milestone']!r} is out of range")
             elif "exempt" in row and not (
@@ -118,6 +119,7 @@ def test_a_row_with_neither_owner_or_both_is_refused():
             {**edge, "symbol": "both", "milestone": 8, "exempt": "a primitive"},
             {**edge, "symbol": "blank", "exempt": "  "},
             {**edge, "symbol": "late", "milestone": 9},
+            {**edge, "symbol": "sealed", "milestone": 8},
         ],
     }
     assert ownership_problems(manifest) == [
@@ -125,6 +127,7 @@ def test_a_row_with_neither_owner_or_both_is_refused():
         "raw_sql_sinks zylch/x.py:both: needs exactly one of milestone and exempt",
         "raw_sql_sinks zylch/x.py:blank: exempt must name the primitive and its precondition",
         "raw_sql_sinks zylch/x.py:late: milestone 9 is out of range",
+        "raw_sql_sinks zylch/x.py:sealed: milestone 8 is out of range",
     ]
 
 

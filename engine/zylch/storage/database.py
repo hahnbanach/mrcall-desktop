@@ -577,121 +577,14 @@ def _backfill_email_blobs_index() -> None:
     index from the legacy blob.events descriptions.
 
     Runs on every init_db but exits cheaply when the index is already
-    populated (or there are no blobs to migrate). Mirrors the logic in
-    ``engine/scripts/backfill_email_blobs.py`` so the script remains
-    available for explicit reruns / dry-runs.
+    populated (or there are no blobs to migrate). The rebuild itself is the
+    mechanical primitive :func:`zylch.memory.rebuilds.rebuild_source_links`,
+    which guards the blobs it reads and links a calendar summary only when it
+    names exactly one event; the standalone script it once mirrored is gone.
     """
-    import json
-    import re
+    from zylch.memory.rebuilds import rebuild_source_links
 
-    from zylch.cli.utils import get_owner_id
-    from zylch.memory.company_key import current_company_key
-    from zylch.storage.models import Blob, CalendarBlob, CalendarEvent, Email, EmailBlob
-
-    owner_id = get_owner_id()
-    company_key = current_company_key()
-    factory = get_session_factory()
-    session = factory()
-    try:
-        # Per-profile guard: under a shared store "the index is populated"
-        # must mean populated FOR THIS PROFILE'S MAIL, or only whichever
-        # profile boots first is ever backfilled. Provenance says who wrote
-        # a link, so the guard is on the writer, not on the table.
-        existing_links = (
-            session.query(EmailBlob.email_id)
-            .filter(EmailBlob.owner_id == owner_id)
-            .limit(1)
-            .first()
-        )
-        blob_scan = session.query(Blob)
-        if company_key:
-            blob_scan = blob_scan.filter(Blob.company_key == company_key)
-        any_blobs = blob_scan.with_entities(Blob.id).limit(1).first()
-        if existing_links is not None:
-            return  # already populated for this profile
-        if any_blobs is None:
-            return  # nothing to backfill
-
-        email_pattern = re.compile(
-            r"^Extracted from email\s+([^\s()]+)(?:\s*\(.*\))?\s*$",
-            re.IGNORECASE,
-        )
-        calendar_pattern = re.compile(
-            r"^Extracted from calendar event\s+'(.+?)'\s*\(.*\)\s*$",
-            re.IGNORECASE,
-        )
-
-        email_ids = {str(r[0]) for r in session.query(Email.id).all() if r[0]}
-        summary_to_events: dict[str, list[str]] = {}
-        for r in (
-            session.query(CalendarEvent.id, CalendarEvent.summary)
-            .filter(CalendarEvent.summary.isnot(None))
-            .all()
-        ):
-            eid, summary = str(r[0]), str(r[1] or "")
-            summary_to_events.setdefault(summary, []).append(eid)
-
-        n_email = 0
-        n_calendar = 0
-        # The company's blobs, joined against THIS profile's mail (the
-        # `email_ids` set above is per-profile); the link rows carry the
-        # indexing profile as provenance, not the blob's contributor.
-        for blob in blob_scan.all():
-            blob_id = str(blob.id)
-            events = blob.events or []
-            if not isinstance(events, list):
-                try:
-                    events = json.loads(events)
-                except (TypeError, ValueError):
-                    continue
-            for item in events:
-                if isinstance(item, dict):
-                    desc = item.get("description")
-                else:
-                    desc = item
-                if not isinstance(desc, str):
-                    continue
-                desc = desc.strip()
-                m_email = email_pattern.match(desc)
-                if m_email:
-                    target_email_id = m_email.group(1).strip()
-                    if target_email_id not in email_ids:
-                        continue
-                    session.merge(
-                        EmailBlob(
-                            email_id=target_email_id,
-                            blob_id=blob_id,
-                            owner_id=owner_id,
-                        )
-                    )
-                    n_email += 1
-                    continue
-                m_cal = calendar_pattern.match(desc)
-                if m_cal:
-                    summary = m_cal.group(1).strip()
-                    for eid in summary_to_events.get(summary, []):
-                        session.merge(
-                            CalendarBlob(
-                                event_id=eid,
-                                blob_id=blob_id,
-                                owner_id=owner_id,
-                            )
-                        )
-                        n_calendar += 1
-
-        if n_email or n_calendar:
-            session.commit()
-            logger.info(
-                f"[backfill] populated email_blobs index: "
-                f"{n_email} email_blobs + {n_calendar} calendar_blobs rows"
-            )
-        else:
-            session.rollback()
-    except Exception as e:
-        session.rollback()
-        logger.warning(f"[backfill] email_blobs index backfill failed: {e}")
-    finally:
-        session.close()
+    rebuild_source_links()
 
 
 def _backfill_task_channels() -> None:
