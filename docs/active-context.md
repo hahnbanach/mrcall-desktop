@@ -1,6 +1,6 @@
 ---
 doc_baseline_commit: a9e6539d270d3272cdff83a39346be9372245809
-doc_baseline_date: 2026-09-27
+doc_baseline_date: 2026-09-28
 ---
 
 # Active Context — Cross-cutting
@@ -53,10 +53,15 @@ public URL is unchanged. Authenticated StarChat readback confirms Café 124 busi
 `starter` and version 9. Vonage and OpenAI callbacks retain their existing
 public URLs. The production daemon runs pinned voice release `a9e6539`, with
 the Desktop socket and loopback listener in one process. Local/public health,
-authenticated Desktop RPC and negative webhook probes pass. Voice config
-revision 3 grants only the known caller's first name for a greeting; no
-historical sentence is selected. A real heard call and correlated receipts
-remain unverified. See the active [plan](execution-plans/2026-09-27-cafe124-voice-daemon.md).
+authenticated Desktop RPC and negative webhook probes pass. The first real
+call used voice config revision 3: the operator heard their name and an answer
+that claimed no information was available. Private diagnostics confirm the
+contact matched, with zero historical sentences selected; the closed ledger
+holds correlated usage and two carrier leg receipts under provisional
+reconciliation. Revision 4 clarifies that other contact details are simply
+not authorized for this phone call. The company store has 11 sentences for
+that contact, but none is selected. See the active
+[plan](execution-plans/2026-09-27-cafe124-voice-daemon.md).
 
 Settings supports independent provider/model selection, daily budgets and bounded
 preparation. It remains reachable with an unavailable engine; stale connection
@@ -100,15 +105,18 @@ Refresh button only lists threads. See the archived
   installer coverage and multi-window auth checks retain their existing owners.
 - Historical task-mode/import and legacy transport issues need verification
   before their paths are restored.
-- The Café 124 voice plan still needs a real heard call, correlated diagnostics
-  and receipts, and final independent review. If the test fails, restore the
-  prior pinned release and isolated listener without changing the tunnel.
+- The Café 124 voice plan still needs approval of any additional contact fact,
+  heard follow-up and interruption evidence, and final independent review.
+  The first call's reserve remains held against provisionally covered exposure;
+  it is not a settled invoice. If a later test fails, restore the prior pinned
+  release and isolated listener without changing the tunnel.
 
 ## Next
 
-1. Obtain the caller's report of what was heard on +390250552776, correlate
-   private call evidence and provider receipts, then run final independent
-   review. Keep unapproved contact history out of the call.
+1. Resolve approval of one exact contact role statement for +393480727052.
+   If approved, grant only that statement, repeat the real call and obtain a
+   human report on the fact, follow-up and interruption before final review.
+   Keep unapproved contact history out of the call.
 2. Resolve the remaining billing choices and funded credit acceptance. Keep
    preparation paused until the CTO explicitly requests a bounded run.
 3. Verify the installed applications through their GUI: the Mac one with

@@ -428,3 +428,45 @@ independent final end-to-end review. A successful health check, webhook
 rejection or usage counter alone does not prove handset playback. On failure,
 disable admission and restore the prior release and isolated listener while
 preserving the ledger and evidence.
+
+## First real call and remaining acceptance — 2026-09-28
+
+The operator called from the selected number and reported hearing the greeting
+with their name. They also heard the assistant say it had no information about
+them. The production ledger has exactly one closed call, one carrier attempt
+and one closed exposure meter. Its private diagnostic file is complete and
+records unique caller recognition, the approved display name and **zero
+selected facts** under voice configuration revision 3. This explains the
+answer: company memory did contain contact information, but the telephone
+selection exposed only the name. The phone number matches one company-memory
+contact with 11 stored sentences. Matching the number does not authorize those
+sentences, and the relevant originals mix suitable context with material not
+approved for this call.
+
+The private trace contains inbound and outbound audio events, transcription
+events and normal closure. The operator's report supplies evidence that the
+greeting and name were heard; the trace alone would not. Provider usage records
+29 voice seconds. Vonage reported two completed carrier legs with prices. The
+ledger retains a 10,000,000 micro-USD reserve against a 39,337 micro-USD
+accrued estimate, with no hold increase; reconciliation is **provisionally
+covered**, not an invoice or settled charge. An independent read-only call
+review confirmed the call-to-config and ledger correlation. The operator has
+not yet confirmed a follow-up or interruption/correction, so that acceptance
+gate remains open.
+
+An authenticated configuration update advanced to revision 4 after this call.
+It still selects zero historical sentences and now instructs Live to say that
+only the caller's name is available to share on this call, rather than implying
+that company memory has no information. The exact first name and a short role
+statement supported by the contact's person summary have been proposed for
+explicit telephone approval; no extra fact has been selected while awaiting
+that approval. Production voice stays enabled for the supervised one-number
+test. The daemon, tunnel and public health remain available after a midnight
+service restart; the current unit still imports `a9e6539`.
+
+**Next gate:** receive the operator's decision on the proposed role statement.
+If approved, grant only that statement with a stable source/pin, independently
+review its disclosure path, then repeat the real call and obtain an explicit
+report covering the permitted fact, follow-up and interruption. Preserve the
+historical hold and provider evidence; keep this plan active until the final
+end-to-end review passes.
