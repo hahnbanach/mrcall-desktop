@@ -22,6 +22,7 @@ from tests.voice.m2_fixture import (
 from tests.voice.test_agent_config import save
 from zylch.services.voice import agent_config as config
 from zylch.services.voice.caller_memory import CallerMemory
+from zylch.storage.storage import Storage
 from zylch.storage import database as db
 from zylch.storage.models import BlobSentence
 
@@ -77,6 +78,22 @@ def test_no_customer_context_for_unknown_or_ambiguous(fixture_db, phone, state):
     save()
     out = asyncio.run(tool(phone).execute())
     assert out.data["recognition"] == state and out.data["facts"] == []
+
+
+@pytest.mark.parametrize(
+    "phone", [None, "anonymous", "withheld", "12345678", "+393", "+393330000001 ext 1",
+              "++393330000001", "00+393330000001", "+39+3330000001"]
+)
+def test_invalid_incoming_number_never_searches_company_memory(fixture_db, monkeypatch, phone):
+    save()
+
+    def forbidden(*args, **kwargs):
+        raise AssertionError("Invalid caller number searched company memory")
+
+    monkeypatch.setattr(Storage, "find_blobs_by_identifiers", forbidden)
+    out = asyncio.run(tool(phone).execute(query="Sono Mario, cosa sai di me?"))
+    assert out.data["recognition"] == "unknown"
+    assert out.data["facts"] == []
 
 
 @pytest.mark.parametrize("change", ["delete", "text", "customer", "company", "replace"])
