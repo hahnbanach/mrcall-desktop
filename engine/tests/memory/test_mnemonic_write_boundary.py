@@ -15,7 +15,10 @@ what makes that list a boundary rather than a census:
   ``getattr`` string, an import alias — is an edge too, and the real tree has
   none; synthetic sources prove each spelling, and a raw statement, are caught;
 - the storage internals that assign ``Blob.content`` are reached only by the
-  committed writers and the byte-identical restore;
+  committed writers and the byte-identical restore, and the permit factory is
+  called only by the commit — neither by any spelling elsewhere;
+- a statement built from strings at run time is frozen per function, so a new
+  one is a reviewed change;
 - at run time a fresh ``BlobStorage`` has no seeding writer and refuses a
   semantic write without a permit, no production module imports the permit
   factory but the commit module, and none imports the test seeding module.
@@ -30,7 +33,12 @@ from pathlib import Path
 
 import pytest
 
-from .mnemonic_inventory_scan import literal_sql_sinks, symbol_calls, writer_references
+from .mnemonic_inventory_scan import (
+    built_sql_calls,
+    literal_sql_sinks,
+    symbol_calls,
+    writer_references,
+)
 
 ENGINE_ROOT = Path(__file__).resolve().parents[2]
 FIXTURE = ENGINE_ROOT / "tests" / "fixtures" / "mnemonic" / "legacy_writer_inventory.json"
@@ -76,6 +84,41 @@ INTERNAL_CALLERS = Counter(
 )
 
 
+# The one caller of the permit factory.
+PERMIT_FACTORY = "issue_commit_permit"
+PERMIT_CALLERS = Counter({("zylch/memory/mnemonic/commit.py", "_commit", PERMIT_FACTORY): 1})
+
+# Every function that hands SQL built from strings to the driver, and how often.
+# The memory-writing ones are the inventory's ``known_dynamic_sql_sinks`` and the
+# join import; the others write profile or ledger tables or only read.
+BUILT_SQL = Counter(
+    {
+        ("scripts/backfill_notifier_task_contacts.py", "run", "execute"): 1,
+        ("zylch/email/sync_cursor.py", "drop_cursor", "exec_driver_sql"): 1,
+        ("zylch/email/sync_cursor.py", "get_cursor", "exec_driver_sql"): 1,
+        ("zylch/email/sync_cursor.py", "list_cursors", "exec_driver_sql"): 1,
+        ("zylch/email/sync_cursor.py", "set_cursor", "exec_driver_sql"): 1,
+        ("zylch/memory/join_import.py", "_put", "exec_driver_sql"): 1,
+        ("zylch/memory/join_import.py", "_rows", "exec_driver_sql"): 1,
+        ("zylch/rpc/preparation.py", "preparation_status", "exec_driver_sql"): 2,
+        ("zylch/services/command_handlers.py", "handle_email", "text"): 2,
+        ("zylch/services/preparation.py", "_finish", "exec_driver_sql"): 1,
+        ("zylch/storage/database.py", "_apply_column_migrations", "exec_driver_sql"): 3,
+        ("zylch/storage/migrations.py", "applied_step_ids", "text"): 1,
+        ("zylch/storage/migrations.py", "ensure_schema_version_table", "exec_driver_sql"): 1,
+        ("zylch/storage/migrations.py", "record_step", "text"): 1,
+        ("zylch/storage/migrations.py", "unrecord_step", "text"): 1,
+        ("zylch/storage/step_company_key.py", "apply", "exec_driver_sql"): 1,
+        ("zylch/storage/step_identifiers_company_unique.py", "apply", "exec_driver_sql"): 2,
+        ("zylch/storage/step_memory_operations_drop_approval.py", "apply", "exec_driver_sql"): 1,
+        ("zylch/storage/step_memory_split.py", "_columns", "exec_driver_sql"): 1,
+        ("zylch/storage/step_memory_split.py", "apply", "exec_driver_sql"): 1,
+        ("zylch/storage/step_memory_split.py", "copy_if_absent", "exec_driver_sql"): 2,
+        ("zylch/storage/step_memory_split.py", "reverse_into_profile", "exec_driver_sql"): 2,
+    }
+)
+
+
 def _manifest() -> dict:
     return json.loads(FIXTURE.read_text())
 
@@ -100,8 +143,13 @@ def test_the_inventory_exempts_exactly_the_reviewed_primitives():
     assert exempt_rows(_manifest()) == set(EXEMPT)
 
 
+def _guarded_names() -> set[str]:
+    """Every name a write may not be reached through: the tracked writers, the row internals, the permit factory."""
+    return set(_manifest()["tracked_calls"]) | INTERNAL_WRITERS | {PERMIT_FACTORY}
+
+
 def test_no_tracked_writer_is_reached_by_reference_getattr_or_alias():
-    tracked = set(_manifest()["tracked_calls"])
+    tracked = _guarded_names()
     found: Counter = Counter()
     for path in _source_files():
         rel = path.relative_to(ENGINE_ROOT).as_posix()
@@ -120,6 +168,25 @@ def test_the_blob_row_internals_are_reached_only_by_the_committed_writers_and_th
     assert found == INTERNAL_CALLERS
 
 
+def test_only_the_commit_calls_the_permit_factory():
+    found: Counter = Counter()
+    for path in _source_files():
+        rel = path.relative_to(ENGINE_ROOT).as_posix()
+        calls, _ = symbol_calls(path, {PERMIT_FACTORY}, set())
+        for (symbol, name, _mode), count in calls.items():
+            found[(rel, symbol, name)] += count
+    assert found == PERMIT_CALLERS
+
+
+def test_sql_built_at_run_time_is_frozen_per_function():
+    found: Counter = Counter()
+    for path in _source_files():
+        rel = path.relative_to(ENGINE_ROOT).as_posix()
+        for (symbol, method), count in built_sql_calls(path).items():
+            found[(rel, symbol, method)] += count
+    assert found == BUILT_SQL
+
+
 # ─── Synthetic bypasses: each spelling is caught ──────────────────────
 
 BYPASSES = {
@@ -135,6 +202,20 @@ BYPASSES = {
         "def write(storage):\n    getattr(storage, 'update_blob')('b', 'o', 'x')\n",
         ("write", "getattr:update_blob"),
     ),
+    "row internal by getattr": (
+        "def write(storage, session, prepared):\n"
+        "    getattr(storage, '_insert')(session, owner_id='o', namespace='n', prepared=prepared)\n",
+        ("write", "getattr:_insert"),
+    ),
+    "row internal by reference": (
+        "def write(storage):\n    rewrite = storage._rewrite\n    return rewrite\n",
+        ("write", "ref:_rewrite"),
+    ),
+    "permit factory by getattr": (
+        "from zylch.memory import commit_permit\n\n"
+        "def mint():\n    return getattr(commit_permit, 'issue_commit_permit')\n",
+        ("mint", "getattr:issue_commit_permit"),
+    ),
     "import alias": (
         "from zylch.services.facts_store import upsert_fact as keep\n\n"
         "def write():\n    keep('o', 'pricing', 'list', '100')\n",
@@ -148,9 +229,8 @@ def test_a_writer_reached_around_its_name_is_caught(tmp_path, name):
     source, edge = BYPASSES[name]
     path = tmp_path / "bypass.py"
     path.write_text(source)
-    tracked = set(_manifest()["tracked_calls"])
 
-    assert writer_references(path, tracked)[edge] == 1
+    assert writer_references(path, _guarded_names())[edge] == 1
 
 
 def test_an_aliased_call_is_attributed_to_the_writer_it_names(tmp_path):
@@ -159,6 +239,31 @@ def test_an_aliased_call_is_attributed_to_the_writer_it_names(tmp_path):
     calls, _ = symbol_calls(path, set(_manifest()["tracked_calls"]), set())
 
     assert calls == Counter({("write", "upsert_fact", "sync"): 1})
+
+
+def test_a_permit_minted_through_the_module_is_caught(tmp_path):
+    path = tmp_path / "mint.py"
+    path.write_text(
+        "from zylch.memory import commit_permit\n\n"
+        "def mint(event):\n    return commit_permit.issue_commit_permit(event)\n"
+    )
+    calls, _ = symbol_calls(path, {PERMIT_FACTORY}, set())
+
+    assert calls == Counter({("mint", PERMIT_FACTORY, "sync"): 1})
+
+
+def test_a_statement_built_from_strings_is_caught(tmp_path):
+    path = tmp_path / "built.py"
+    path.write_text(
+        "def write(conn, table, column):\n"
+        "    conn.exec_driver_sql(f'UPDATE {table} SET content = ?', ('x',))\n"
+        "    sql = 'DELETE FROM ' + table\n"
+        "    conn.execute(sql)\n"
+        "    conn.execute('UPDATE {} SET {} = ?'.format(table, column), ('y',))\n"
+        "    conn.execute('SELECT 1')\n"
+    )
+
+    assert built_sql_calls(path) == Counter({("write", "exec_driver_sql"): 1, ("write", "execute"): 2})
 
 
 def test_a_raw_statement_is_caught(tmp_path):

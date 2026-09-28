@@ -19,9 +19,11 @@ is that rule.
 The store's own engine owns its transaction boundaries (pysqlite
 ``isolation_level=None`` plus a ``begin`` listener that emits ``BEGIN`` —
 SQLAlchemy's default emits none where one is needed). Transactions are
-DEFERRED so N daemons' readers share the file under WAL; the one place
-that must serialize — the compare-and-swap in ``BlobStorage.update_blob``
-— upgrades to the write lock with a no-op write as its first statement,
+DEFERRED so N daemons' readers share the file under WAL; the places that
+must serialize — the semantic commit's compare-and-swap and every journal
+write, each in ``mnemonic.session.company_transaction(write=True)``, the
+test seeding module's ``update_blob`` too — upgrade to the write lock with a
+no-op write as their first statement,
 so its read, check and write happen under one lock without every search
 on the store queueing behind it. ``busy_timeout`` is the retry budget.
 

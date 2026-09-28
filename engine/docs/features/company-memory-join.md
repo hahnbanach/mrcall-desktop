@@ -68,7 +68,12 @@ in the source journal (either identity) are read under it. The cutover is
 refused, the fence released and the `.env` left untouched when any of these
 holds: a row `pending` or `failed`; a row in `review`; a `committed` or
 `skipped` ingestion parent whose source row in this profile has no
-`memory_processed_at`; a `committed` row with a pending effect. The answer
+`memory_processed_at`; a `committed` row with a pending effect. The drain
+replays pending effects only of rows recorded under the identity
+`get_owner_id()` answers (the email when the profile states one), and a
+committed row cannot be dismissed: a pending effect recorded under the other
+identity, or one that keeps failing, blocks the join with no command that
+settles it. Merges record their effects under the email today. The answer
 lists each blocking row with its `event_id`, `state`, `source_ref` and the
 command that settles it (`--drain`, `zylch memory-reviews --retry` or
 `--dismiss`). Other accounts' rows never block and stay in the source.
@@ -113,8 +118,8 @@ once the store is attached, and a join runs its body first:
 - *after the key* (`MEMORY_JOIN_FROM` set): the process is bound to the
   destination (a live process is rebound), the source fence becomes
   `completed`, the setting is cleared.
-- *completed*: a `fenced` fence of this profile left by a crash before the
-  evaluation is released.
+- *completed*: a `fenced` fence of this profile left by a crash after the
+  fence was placed and before `MEMORY_JOIN_TO` was written is released.
 
 One lock serialises a join and its recovery: the profile's join lock
 (`<zylch.db>.join.lock`). Boot recovery takes it without waiting and does

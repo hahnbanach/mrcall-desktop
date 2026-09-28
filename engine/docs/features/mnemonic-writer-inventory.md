@@ -11,7 +11,8 @@ Every writer edge in `zylch/` and `scripts/` is either the harness's own
 mechanism (a row with the `milestone`, 1–7, that installed it) or a reviewed
 mechanical primitive (a row with `exempt`: the primitive and the precondition
 it checks). A row with neither, both, or a milestone of 8 or more is refused;
-adding a writer edge without a reviewed row fails the test.
+adding a scanned writer edge without a reviewed row fails the test. What the
+scan cannot see is named below.
 
 ## Current call graph
 
@@ -84,13 +85,26 @@ scan of the real tree:
   (`blob_versions` and `memory_operations` included); no literal statement may
   set `blobs.content` anywhere;
 - statements assembled at run time (`known_dynamic_sql_sinks`), each naming
-  its function and the tables it may touch.
+  its function and the tables it may touch; these rows are checked to exist,
+  not matched against a scan.
 
-`test_mnemonic_write_boundary.py` adds what a census cannot: a tracked writer
-reached by attribute reference, `getattr` string or import alias (none on the
-real tree; a synthetic source proves each spelling and a raw statement is
-caught), and the literal list of exempt `(path, symbol)` pairs the inventory's
-`exempt` rows must equal, so adding an exemption changes a reviewed test.
+`test_mnemonic_write_boundary.py` adds what a census cannot:
+
+- a tracked writer, a row internal (`_insert`, `_rewrite`) or the permit
+  factory reached by attribute reference, `getattr` string or import alias —
+  none on the real tree;
+- the callers of `_insert` / `_rewrite` and of `issue_commit_permit`, however
+  spelled at the call, pinned to the committed writers, the restore and the
+  commit;
+- every function that hands the driver SQL built from strings at run time
+  (an f-string, a concatenation, `.format` / `.join`, or a local bound to
+  one), frozen per function, so a new dynamic statement is a reviewed change;
+- the literal list of exempt `(path, symbol)` pairs the inventory's `exempt`
+  rows must equal, so adding an exemption changes a reviewed test.
+
+Synthetic sources prove each spelling is caught. Not seen: SQL a caller passes
+into another function as a parameter, and a writer reached through a name the
+scan does not track.
 
 ## The exempt primitives
 

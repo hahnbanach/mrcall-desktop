@@ -425,3 +425,66 @@ def writer_references(path: Path, tracked: set[str]) -> Counter:
 
     Visitor().visit(tree)
     return found
+
+
+SQL_CALLS = frozenset({"execute", "exec_driver_sql", "text", "executemany", "executescript"})
+
+
+def _built_string(node: ast.AST) -> bool:
+    """An f-string, a concatenation, or a ``.format`` / ``.join`` call: text assembled at run time."""
+    return isinstance(node, (ast.JoinedStr, ast.BinOp)) or (
+        isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Attribute)
+        and node.func.attr in ("format", "join")
+    )
+
+
+def built_sql_calls(path: Path) -> Counter:
+    """SQL handed to ``execute`` / ``exec_driver_sql`` / ``text`` as a string built at run time, per function.
+
+    Keyed ``(symbol, method)``. The first argument counts when it is built in
+    place (:func:`_built_string`) or is a local name the same function bound to
+    one. A literal statement is :func:`literal_sql_sinks`'s; a statement a
+    caller passes in as a parameter is not seen here.
+    """
+    tree = ast.parse(path.read_text(), filename=str(path))
+    found: Counter = Counter()
+    stack: list[str] = []
+    built: list[dict[str, bool]] = [{}]
+
+    class Visitor(ast.NodeVisitor):
+        def visit_ClassDef(self, node: ast.ClassDef) -> None:
+            stack.append(node.name)
+            self.generic_visit(node)
+            stack.pop()
+
+        def _visit_function(self, node: ast.FunctionDef | ast.AsyncFunctionDef) -> None:
+            stack.append(node.name)
+            built.append({})
+            self.generic_visit(node)
+            built.pop()
+            stack.pop()
+
+        visit_FunctionDef = _visit_function
+        visit_AsyncFunctionDef = _visit_function
+
+        def visit_Assign(self, node: ast.Assign) -> None:
+            for target in node.targets:
+                if isinstance(target, ast.Name):
+                    built[-1][target.id] = _built_string(node.value)
+            self.generic_visit(node)
+
+        def visit_Call(self, node: ast.Call) -> None:
+            name = (
+                node.func.attr
+                if isinstance(node.func, ast.Attribute)
+                else (node.func.id if isinstance(node.func, ast.Name) else "")
+            )
+            if name in SQL_CALLS and node.args:
+                first = node.args[0]
+                if _built_string(first) or (isinstance(first, ast.Name) and built[-1].get(first.id)):
+                    found[(".".join(stack) or "<module>", name)] += 1
+            self.generic_visit(node)
+
+    Visitor().visit(tree)
+    return found

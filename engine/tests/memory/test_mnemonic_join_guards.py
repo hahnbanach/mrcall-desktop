@@ -113,3 +113,15 @@ def test_a_failure_writing_the_join_setting_releases_the_fence(world, monkeypatc
 
     assert phases(COMPANY_A) == [RELEASED] and env_value("MEMORY_JOIN_TO") == ""
     assert current_company_key() == COMPANY_A and receipts() == []
+
+
+def test_the_import_bumps_the_destinations_mutation_sequence_once(world):
+    """Other engines on the destination refresh their index, and the next sweep sees the imported rows."""
+
+    def sequence():
+        return rows(COMPANY_B, "SELECT mutation_seq FROM memory_meta")[0][0]
+
+    before = sequence()
+    imported(fence.place(COMPANY_A, [OWNER_A], COMPANY_B))
+
+    assert sequence() == before + 1
