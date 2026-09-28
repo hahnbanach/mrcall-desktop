@@ -13,7 +13,7 @@ cutover serves the production daemon with the known caller's name. The
 supervised per-question memory review is active. The independent review passed
 the manual handset and identity gates before the local archive release. The
 operator permanently accepts possible missing words before transcript attach.
-The local `sessions` table is deployed; its post-release call gate remains open.
+The local `sessions` table is deployed; post-release final acceptance remains open.
 No upload of call transcripts to StarChat is planned.
 <!-- doc-scope:end -->
 
@@ -960,3 +960,32 @@ rollback evidence. The requested supervised call has not yet produced a new
 ledger ID; no archive/trace/ledger correlation for this release can be claimed.
 After that call, repeat the correlation and obtain another independent final
 review before setting `status: completed`.
+
+## Post-release transcript calls and grounding failure — 2026-09-28
+
+Two real calls on release `8fb21d3` started at 14:33:05 and 14:34:29 UTC.
+Both are closed in the production ledger and have private `sessions` rows with
+the exact owner and business binding. Each row's ordered messages match its
+private `transcript_deltas` source exactly. Both rows report
+`deltas_observed` and retain the accepted possible pre-attachment gap.
+The ledger now has eight funded closed calls and the archive has eight rows:
+three historical `legacy_no_text` rows and five with received text. The two
+new holds are `provisionally_covered`, not settled provider invoices. This
+correlation verifies the local archival path for real post-release calls; it
+does not by itself verify every spoken word or handset playback.
+
+The operator heard a severe incorrect answer on the 14:34 call. The private
+transcript records a question about the business's services and an answer
+inventing hospitality offerings. Its trace records no delegation for that
+question and no business-fact lookup; the initial matched-caller lookup
+returned no facts. GPT-Live had the business name in its instructions, but no
+verified service catalog. This establishes an ungrounded answer, not the
+business's actual services. The operator asked to discuss wider sharing of
+verified company information and controls against such answers, without
+implementing a correction yet.
+
+The prior independent final review predates these calls. Obtain a fresh
+independent post-call review and decide explicitly whether this grounding
+failure blocks completion of this voice plan. Keep `status: active` until
+that decision and review are recorded. Do not treat archive correlation as
+acceptance of the incorrect spoken response.
