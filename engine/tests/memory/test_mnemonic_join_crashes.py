@@ -361,3 +361,90 @@ def test_another_account_a_fresh_profile_and_the_joiner_coming_back_write_the_so
 
     assert journal.open_operation(chat_event("turn-back")).state == journal.PENDING
     assert phases(COMPANY_A) == [COMPLETED] and phases(COMPANY_B) == [COMPLETED]
+
+
+# ─── What the import's digest and its guards answer ───────────────────
+
+
+def test_a_source_text_changed_after_the_destination_commit_refuses_the_switch(world, monkeypatch):
+    monkeypatch.setattr(join_import, "_accept", once(join_import._accept))
+    with pytest.raises(Crash):
+        join(COMPANY_B)
+    current = world.storage.get_blob(world.luca, OWNER_A)
+    seeding.update_blob(
+        world.storage, world.luca, OWNER_A, LUCA_LATER + "\n- paid", "seed",
+        expected_updated_at=current["updated_at"],
+    )
+
+    answer = join_recover.recover()
+
+    assert answer["action"] == "released" and "changed" in answer["reason"]
+    assert phases(COMPANY_A) == [RELEASED] and current_company_key() == COMPANY_A
+
+
+def test_a_restriction_recorded_after_the_destination_commit_refuses_the_switch(world, monkeypatch):
+    from zylch.memory.mnemonic.proposals import MnemonicResult
+
+    monkeypatch.setattr(join_import, "_accept", once(join_import._accept))
+    with pytest.raises(Crash):
+        join(COMPANY_B)
+    with monkeypatch.context() as slipped:
+        slipped.setattr(journal, "refuse_if_fenced", lambda *args, **kwargs: None)
+        event = chat_event("turn-restricts")
+        journal.open_operation(event)
+        journal.record_result(
+            event.event_id, MnemonicResult.review_needed(event.event_id, "customer-specific"),
+            state=journal.REVIEW, restrictions=[{"blob_id": world.price, "version": "v"}],
+        )
+
+    answer = join_recover.recover()
+
+    assert answer["action"] == "released" and "changed" in answer["reason"]
+    assert phases(COMPANY_A) == [RELEASED] and env_value("MEMORY_JOIN_TO") == ""
+
+
+def test_a_destination_that_is_being_joined_itself_refuses_the_import(world):
+    from zylch.memory.mnemonic.session import company_transaction
+    from zylch.storage.join_fence_model import MemoryJoinFence
+
+    destination = join_recover.open_store(COMPANY_B)
+    with company_transaction(write=True, engine=destination) as session:
+        session.add(MemoryJoinFence(
+            id="fence-of-b", company_key=COMPANY_B, owner_ids=[OWNER_B],
+            destination_digest=fence.destination_digest(COMPANY_A), phase=FENCED, detail={},
+        ))
+    destination.dispose()
+    before = store_digest(COMPANY_B)
+
+    out = join(COMPANY_B)
+
+    assert out["ok"] is False and "being joined" in out["reason"], out
+    assert store_digest(COMPANY_B) == before and receipts() == []
+    assert phases(COMPANY_A) == [RELEASED] and env_value("MEMORY_JOIN_TO") == ""
+    assert current_company_key() == COMPANY_A
+
+
+def test_an_acceptance_that_finds_the_fence_moved_refuses_the_switch(world, monkeypatch):
+    real = fence.cas
+
+    def moved(session, fence_id, expected, new, **fields):
+        return False if new == ACCEPTED else real(session, fence_id, expected, new, **fields)
+
+    monkeypatch.setattr(fence, "cas", moved)
+
+    out = join(COMPANY_B)
+
+    assert out["ok"] is False and "moved during the import" in out["reason"], out
+    assert phases(COMPANY_A) == [RELEASED] and env_value("MEMORY_JOIN_TO") == ""
+    assert current_company_key() == COMPANY_A and env_value("MEMORY_KEY") == COMPANY_A
+
+
+def test_a_live_process_stopped_after_the_key_write_is_rebound_by_its_next_recovery(world, monkeypatch):
+    monkeypatch.setattr(dbm, "rebind_memory", once(dbm.rebind_memory))
+    with pytest.raises(Crash):
+        join(COMPANY_B)
+    assert dbm.current_memory_engine().url.database == memory_db_path(COMPANY_A)
+
+    assert join_recover.recover() == {"state": "after_key", "completed": True}
+
+    converged(world)
