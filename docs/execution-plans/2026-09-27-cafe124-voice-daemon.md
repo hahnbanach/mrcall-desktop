@@ -10,10 +10,10 @@ Scope: development, verification and one-number cutover plan for the manual
 Café 124 alpha on +390250552776. Paired with the
 [brief](../briefs/2026-09-27-cafe124-voice-daemon.md). A supervised second
 cutover serves the production daemon with the known caller's name. The
-supervised per-question memory review is active. The independent final review
-passed the supervised handset and identity gates on the latest release. The
+supervised per-question memory review is active. The independent review passed
+the manual handset and identity gates before the local archive release. The
 operator permanently accepts possible missing words before transcript attach.
-The manual test is complete; a local `sessions` table is now planned.
+The local `sessions` table is deployed; its post-release call gate remains open.
 No upload of call transcripts to StarChat is planned.
 <!-- doc-scope:end -->
 
@@ -903,3 +903,60 @@ back the table under `mrcalld` and correlate its `id`, roles, capture status,
 and timing to the private deltas and ledger. The table is not implemented by
 this planning edit. The execution plan remains `active` for this local storage
 phase, while the one-number phone acceptance remains complete.
+
+## Local sessions implementation and activation — 2026-09-28
+
+Commit `1d1a43f` adds `sessions.db` with a private `sessions` table and the
+StarChat-derived `id`, timestamp, owner, business ID and JSON data fields.
+Provider deltas are replayed in order into `data.conversation_transcription`;
+the local ID equals the ledger session ID. The production call starts a row
+before provider accept, commits each received delta into the raw private trace
+and the durable archive, then finalizes capture status and duration. Startup
+replays funded ledger calls from private delta files. Old files without a
+`transcript_deltas` table become `legacy_no_text` with empty messages. The
+accepted possible pre-attachment gap is recorded on every row. No transcript
+is sent to StarChat. GPT-Live, business binding, the approved voice settings,
+headless authentication and the existing accounting ledger are unchanged.
+
+Predeploy independent code review returned **APPROVED** after finding and
+resolving an old-trace startup failure. The full voice suite passed with 227
+tests and one skip; Ruff and `git diff --check` passed. The dedicated tests
+cover role order, restart replay, duplicate replay, empty and partial calls,
+legacy missing text, exact owner/business binding and private file modes.
+
+Commit `8fb21d3` makes each production delta-source commit WAL/FULL before the
+archive commit, while ordinary diagnostic metadata stays WAL/NORMAL. This
+prevents a power-loss restart from replacing a durable archive with a shorter
+source. The focused 22-test suite and Ruff passed; an independent review
+approved the durability and audio-path separation.
+
+Release `/home/mrcalld/releases/mrcall-voice-cafe124-8fb21d3` was built from
+the committed engine tree with its own environment. The installed voice
+module hash matches source. Only the production instance restarted. Effective
+`ExecStart`, empty `PYTHONPATH` and the running imported module point to this
+release. The Desktop socket remains mode 0660 (`mrcalld:caddy`), and the
+existing tunnel PID, target and public URL remain live. Local/public health
+report available; unsigned Vonage answer/event probes return 401 and unsigned
+OpenAI webhook returns 400. The unchanged voice config is revision 6, and the
+ledger had no active calls at cutover. A root-only targeted rollback script and
+the previous drop-in are retained under
+`/etc/mrcalld/rollback-cafe124-local-sessions-20260928/`.
+
+Startup created `sessions.db` mode 0600 under the production UID profile.
+Six funded ledger calls have six archive rows with matching IDs and exact
+owner/business: three historical calls have `legacy_no_text` and zero messages,
+and three calls with retained deltas have ordered messages. Raw files and the
+ledger remain in place. **Open gate:** a new supervised real call must be
+correlated across the private delta file, `sessions` row and closed ledger;
+then obtain a fresh independent final end-to-end review. The plan remains
+`active` until those checks pass.
+
+The independent final review returned **BLOCKED** on the new-call gate alone:
+at 14:08:08 UTC release activation and at the later read-only review, all six
+funded calls predated the release, and there was no active call. The reviewer
+verified the live pinned import, archive schema/mode, all six ledger matches,
+exact old-delta reconstruction, Desktop socket, tunnel, public health and
+rollback evidence. The requested supervised call has not yet produced a new
+ledger ID; no archive/trace/ledger correlation for this release can be claimed.
+After that call, repeat the correlation and obtain another independent final
+review before setting `status: completed`.

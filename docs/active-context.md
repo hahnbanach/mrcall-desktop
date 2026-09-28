@@ -1,5 +1,5 @@
 ---
-doc_baseline_commit: 3936ad67d9018e78116c131b71f969e3ce2dbca2
+doc_baseline_commit: 8fb21d37781415c78259c94179927ffa8047e0f5
 doc_baseline_date: 2026-09-28
 ---
 
@@ -47,18 +47,17 @@ GPT-Live M4 is phone-accepted for the isolated fixture. The Café 124 production
 daemon serves both its Desktop socket and +390250552776 through the existing
 Cloudflare tunnel and URL. StarChat readback binds business
 `d44a1864-23cc-34f9-aec5-6e04bb2fd2ef-desktop`, UID
-`Gn9IcuWzYyY7DBMHkVUGB7bIiTp2` and `starter`. Pinned release `d7fa315`
-and voice config revision 6 are live; health, authenticated RPC and negative
+`Gn9IcuWzYyY7DBMHkVUGB7bIiTp2` and `starter`. Pinned release `8fb21d3`
+and voice config revision 6 are live; health and negative
 webhook probes pass. The caller policy validates incoming numbers with
 libphonenumber and allows on-demand filtered history only for a uniquely
 matched selected contact. Six calls have closed ledgers with provisional
-exposure reconciliation. The two latest private call records retain received
-transcript deltas; complete transcription is unverified. The operator cancelled
-StarChat transcript upload and permanently accepts possible missing words
-before transcript attachment. On an anonymous call on `d7fa315`, the assistant
-declined historical data and offered general service help. The private trace
-confirms zero caller facts and no on-demand historical query. A local transcript
-`sessions` table modeled on StarChat session data is planned. See the active
+exposure reconciliation. A private `sessions.db` (0600) now has six rows keyed
+to those ledger calls: three backfilled from received transcript deltas and
+three marked `legacy_no_text`. The operator cancelled StarChat transcript
+upload and permanently accepts possible missing words before transcript
+attachment. A new real call on this release still needs archive/trace/ledger
+correlation and final independent review. See the active
 [plan](execution-plans/2026-09-27-cafe124-voice-daemon.md).
 
 Settings supports independent provider/model selection, daily budgets and bounded
@@ -99,14 +98,14 @@ Refresh button only lists threads. See the archived
 - Historical task-mode/import and legacy transport issues need verification
   before their paths are restored.
 - Café 124's manual one-number voice test passed independent final review.
-  The local `sessions` transcript table remains unbuilt. Model judgment of mixed
-  notes remains supervised. Six call reserves remain held; exposure is
-  provisional, not settled.
+  The local archive is deployed and backfilled; a new call and final review
+  remain open. Model judgment of mixed notes remains supervised. Six call
+  reserves remain held; exposure is provisional, not settled.
 
 ## Next
 
-1. Build and verify the private local `sessions` table from retained
-   provider deltas; keep the existing ledger and diagnostic files intact.
+1. Correlate a new real call across the private delta file, `sessions` row and
+   ledger, then obtain independent final review of the local archive.
 2. Resolve the remaining billing choices and funded credit acceptance. Keep
    preparation paused until the CTO explicitly requests a bounded run.
 3. Verify the installed applications through their GUI: the Mac one with

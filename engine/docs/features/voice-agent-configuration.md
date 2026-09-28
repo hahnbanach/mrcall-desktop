@@ -310,8 +310,29 @@ A failed transcript
 write stops the call and marks capture incomplete. A call with no provider text
 is marked `no_provider_text`, not transcribed. This records provider transcript
 events, not a verified verbatim audio recording. The current Cloudflare route
-does not create a StarChat conversation; the available StarChat API cannot
-import one, so remote archival remains a separate backend integration.
+does not create a StarChat conversation. Call-transcript upload to StarChat was
+cancelled.
+
+### Local production call sessions
+
+The production profile has a separate `sessions.db` file, mode 0600, with a
+`sessions` table. Its `id` is the voice ledger session ID; `owner` is the
+Firebase UID, `business_id` is the exact approved business, and `data` is
+validated JSON. `data.conversation_transcription` contains ordered
+`{role, content}` entries, using `user` and `assistant`. Adjacent metadata
+records the called number, a nullable validated caller number, observed
+duration, capture status and the accepted possible pre-attachment gap.
+
+Each provider delta is first committed to the existing private per-call
+`transcript_deltas` table with WAL/FULL sync, then replayed into `sessions`
+with a durable SQLite commit. Ordinary diagnostic event metadata retains
+WAL/NORMAL. The row starts before provider accept and is finalized after closure.
+On daemon startup, the archive replays private sources against funded ledger
+IDs. Earlier calls whose trace has no delta table receive `legacy_no_text`
+with an empty transcript; no text is reconstructed from diagnostic counts.
+`recording`, `incomplete`, `no_provider_text` and `deltas_observed` remain
+distinct. Replaying a call updates its row by ID, so restart does not duplicate
+messages or rows. The raw diagnostic files and accounting ledger remain intact.
 
 
 ### Autonomous diagnostic caller
