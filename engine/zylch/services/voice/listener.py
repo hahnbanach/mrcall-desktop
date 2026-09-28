@@ -1,5 +1,6 @@
 """Opt-in provider listener owned by the isolated engine WebSocket lifecycle."""
 
+import asyncio
 import logging
 import inspect
 from contextlib import asynccontextmanager
@@ -10,10 +11,19 @@ from zylch.storage.voice_smoke import SmokeLedger
 from zylch.storage.voice_production import ProductionVoiceLedger
 
 from .engine_runtime import EngineVoiceRuntime
+from .agent_config import snapshot_for_call
+from .company_notes import prepare_company_notes
 from .live_sip_smoke import create_app
 from .smoke_transport import LiveTransport
 
 active_runtime = None
+
+
+async def refresh_company_notes_once(runtime, config):
+    """Verify the remote business before an offline note may reach the LLM."""
+    snapshot = await asyncio.to_thread(snapshot_for_call, config.test_number)
+    await runtime._prepare(snapshot)
+    return await prepare_company_notes(config.profile, snapshot)
 
 
 @asynccontextmanager
@@ -49,6 +59,7 @@ async def voice_listener(config, port):
             inspect.getfile(EngineVoiceRuntime),
         )
     runner = None
+    notes_task = None
     try:
         if production:
             runtime.sessions.recover(ledger.rows())
@@ -75,9 +86,29 @@ async def voice_listener(config, port):
         await runner.setup()
         await web.TCPSite(runner, "127.0.0.1", port).start()
         active_runtime = runtime
+        if production:
+            async def refresh_notes():
+                while True:
+                    try:
+                        result = await refresh_company_notes_once(runtime, config)
+                        logging.getLogger(__name__).info(
+                            "[voice] company notes preparation status=%s", result.status
+                        )
+                    except asyncio.CancelledError:
+                        raise
+                    except Exception:
+                        logging.getLogger(__name__).warning(
+                            "[voice] company notes preparation unavailable"
+                        )
+                    await asyncio.sleep(60)
+
+            notes_task = asyncio.create_task(refresh_notes())
         yield runtime
     finally:
         active_runtime = None
+        if notes_task:
+            notes_task.cancel()
+            await asyncio.gather(notes_task, return_exceptions=True)
         await runtime.shutdown()
         if runner:
             await runner.cleanup()
