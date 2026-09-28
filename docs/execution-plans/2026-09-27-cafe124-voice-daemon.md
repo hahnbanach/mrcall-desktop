@@ -1020,9 +1020,15 @@ fails the plan's suitable, fact-grounded answer gate. The earlier independent
 `BLOCKED` verdict concerned only the missing post-release call; that condition
 is resolved. Archive approval does not approve the spoken response.
 
-Keep this plan `active`. Discuss a design for broad, scoped access to verified
-company facts and an enforceable response-grounding rule before changing phone
-behavior. After the chosen design is implemented and reviewed, its acceptance
+Keep this plan `active`. The operator-agreed direction is shared company
+sources, an initial company context and scoped detail retrieval with explicit
+missing-information behavior. The independently approved
+[brief](../briefs/2026-09-28-voice-company-knowledge.md) defines the constraints;
+the [planning handoff](2026-09-28-voice-company-knowledge.md) assigns the detailed
+plan and its next independent review to subsequent work. The current transport
+has no engine approval step before each spoken answer, so a deterministic
+pre-speech correctness gate is not an accepted implementation claim.
+After the chosen design is implemented and reviewed, its acceptance
 must include a real business-services question with verified source evidence
 and a spoken answer that neither invents services nor exposes unselected or
 private facts. Do not repeat the already completed archive correlation merely

@@ -1,5 +1,5 @@
 ---
-doc_baseline_commit: a0f3254f1ac657d82811f0d96c85a9ac460b48a3
+doc_baseline_commit: 1b54aec0ea44cfed88b8cfa4fc9f66db603ef7dd
 doc_baseline_date: 2026-09-28
 ---
 
@@ -55,15 +55,13 @@ matched selected contact. Eight funded calls have closed ledgers with
 provisional exposure reconciliation. Private `sessions.db` (0600) has eight
 matching rows: three historical `legacy_no_text` rows and five reconstructed
 from received deltas. The two post-release calls match their private delta
-sources exactly. An independent read-only production review approved the local
-archive gate after checking both calls against the closed ledger. The operator
-cancelled StarChat transcript upload and
-permanently accepts possible missing words before transcript attachment.
-On the latest call GPT-Live invented business services without delegating or
-reading business facts. The independent overall acceptance verdict is REVISE;
-the phone path exposes selected caller history but no verified company-service
-catalog. The plan remains active; see the
-[plan](execution-plans/2026-09-27-cafe124-voice-daemon.md).
+sources exactly. Local archive acceptance is independently APPROVED. StarChat
+transcript upload is cancelled; possible missing words before attachment are
+permanently accepted. The latest call contains invented business services
+without delegation or a fact lookup. Overall acceptance is REVISE and the
+[pilot plan](execution-plans/2026-09-27-cafe124-voice-daemon.md) remains active.
+The [shared-knowledge brief](briefs/2026-09-28-voice-company-knowledge.md) is
+independently approved; its initial context and company retrieval are unimplemented.
 
 Settings supports independent provider/model selection, daily budgets and bounded
 preparation. It remains reachable with an unavailable engine; stale connection
@@ -103,14 +101,14 @@ Refresh button only lists threads. See the archived
 - Historical task-mode/import and legacy transport issues need verification
   before their paths are restored.
 - Café 124's overall plan acceptance remains open after the local archive passed
-  independent review. Business-service grounding needs a design decision and
-  a verified spoken-answer gate; mixed-note judgment remains supervised.
+  independent review. Shared company knowledge needs source inventory, a reviewed
+  implementation plan and spoken-answer verification; mixed-note judgment remains supervised.
   Eight reserves remain held with provisional exposure, not settled invoices.
 
 ## Next
 
-1. Discuss company-fact access and response grounding for GPT-Live, then review
-   and verify the chosen behavior before closing the Café 124 plan.
+1. Use sol-medium to prepare the shared-company-knowledge plan from the approved
+   brief, then obtain a fresh independent plan review before implementation.
 2. Resolve the remaining billing choices and funded credit acceptance. Keep
    preparation paused until the CTO explicitly requests a bounded run.
 3. Verify the installed applications through their GUI: the Mac one with
