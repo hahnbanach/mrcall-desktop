@@ -504,3 +504,36 @@ ledger and rollback. Verify imported module, health, webhook behavior and
 private diagnostic redaction; obtain a real call report covering the response,
 follow-up and interruption, then run final independent end-to-end review. The
 plan stays active while this gate is unresolved.
+
+## Clarified on-demand memory judgment — 2026-09-28
+
+The operator clarified that GPT-Live should first decide whether a caller's
+request legitimately calls for memory. Only after a caller utterance and a Live
+client delegation may the engine read that caller's company contact; Live then
+judges what to say. “What information do you have about me?” is an intended
+broad request. This instruction supersedes the earlier proposed fixed-role
+grant. The operator accepts supervised model judgment as the pilot's disclosure
+policy, while the deterministic contact, company and log boundaries remain.
+
+An opt-in `on_demand_review` implementation is in the checkout, not yet in the
+pinned production release or voice configuration. It keeps the greeting to the
+name, enforces a single company-wide phone match and configured customer blob,
+reads sentence columns only after a question, refuses oversized histories,
+excludes obvious private/secret markers and credential formats, and redacts
+contact details. It sends
+remaining sentences to GPT-Live as untrusted candidates with an explicit
+relevance and privacy instruction. Local diagnostics omit source text, queries,
+transcript deltas and appended content. The production binding and revision
+checks still guard every outbound append. This cannot guarantee that GPT-Live
+will not disclose a sensitive part of a mixed candidate; the handset test must
+inspect that behavior.
+
+**Next gate:** run the complete meaningful voice suite and adversarial cases,
+then obtain a new independent predeploy code review against this clarified
+policy. If it passes, create a new pinned release, update the authenticated
+production voice configuration to `on_demand_review`, verify service, webhooks
+and redacted diagnostics, and invite a real call. Correlate the heard answer,
+follow-up and interruption with private call evidence and provider/ledger
+receipts. Run final independent end-to-end review before marking this plan
+completed. On any gate failure, keep the current name-only daemon active and
+record the exact blocker.

@@ -51,7 +51,7 @@ class AgentConfig(FrozenModel):
     enabled: bool = Field(default=False, strict=True)
     called_number: str = Field(default="", strict=True, pattern=r"^(?:\+[1-9][0-9]{7,14})?$")
     instructions: str = Field(default="", strict=True, max_length=8000)
-    caller_context_policy: Literal["selected_facts_only"] = "selected_facts_only"
+    caller_context_policy: Literal["selected_facts_only", "on_demand_review"] = "selected_facts_only"
     tools: tuple[Literal["caller_memory", "get_current_time"], ...] = Field(
         default=(), max_length=2
     )
@@ -70,6 +70,13 @@ class AgentConfig(FrozenModel):
             not self.business_id or not self.customers
         ):
             raise ValueError("Production voice requires a business and approved caller context")
+        if self.caller_context_policy == "on_demand_review":
+            if self.policy != "production" or len(self.customers) != 1:
+                raise ValueError("On-demand review requires one production caller")
+            if "caller_memory" not in self.tools:
+                raise ValueError("On-demand review requires caller memory")
+            if not self.customers[0].display_name or self.customers[0].sentence_ids:
+                raise ValueError("On-demand review requires a name and no pinned sentences")
         for customer in self.customers:
             if self.policy == "isolated" and (
                 not customer.sentence_ids or customer.display_name is not None

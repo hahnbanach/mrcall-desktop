@@ -123,19 +123,20 @@ Refresh button only lists threads. See the archived
   installer coverage and multi-window auth checks retain their existing owners.
 - Historical task-mode/import and legacy transport issues need verification
   before their paths are restored.
-- The Café 124 voice plan still needs a reviewed runtime disclosure boundary,
-  heard follow-up and interruption evidence, and final independent review.
-  Production still grants only the known caller's first name.
+- The Café 124 voice plan still needs production validation of the reviewed
+  runtime disclosure path, heard follow-up and interruption evidence, and final
+  independent review.
+  An on-demand review path is coded and independently reviewed in the checkout;
+  production still grants only the known caller's first name.
   The first call's reserve remains held against provisionally covered exposure;
   it is not a settled invoice. If a later test fails, restore the prior pinned
   release and isolated listener without changing the tunnel.
 
 ## Next
 
-1. Design a per-question memory filter for +393480727052 with stable subject
-   binding and a reviewed disclosure boundary. Keep mixed, unapproved contact
-   history out of GPT-Live. After a passing code review and targeted deploy,
-   repeat the call and obtain a human report on follow-up and interruption.
+1. Deploy the reviewed per-question memory path for +393480727052 to a new
+   pinned production release, then verify the service, webhooks and diagnostics.
+   Repeat the call and obtain a human report on follow-up and interruption.
 2. Resolve the remaining billing choices and funded credit acceptance. Keep
    preparation paused until the CTO explicitly requests a bounded run.
 3. Verify the installed applications through their GUI: the Mac one with
