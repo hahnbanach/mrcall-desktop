@@ -152,6 +152,19 @@ Unconfigured models default to inexpensive Haiku or GLM. Model choice never
 changes billing provider. Long-lived clients refuse dispatch after relevant
 saved settings change; start a new run or conversation to create fresh clients.
 
+Choose a role by the work it performs, then resolve its saved model through
+the normal role override and provider policy. `MODEL_MEMORY_EXTRACT` is for
+turning source text into a bounded, structured representation while preserving
+source/entity boundaries, exact identifiers and explicit missing information.
+`MODEL_MEMORY_MERGE` decides how an extracted item changes existing memory;
+`MODEL_TASK_DETECTION` decides whether source text contains an actionable task.
+The planned offline conversion of production `USER_NOTES` into telephone notes
+is source-to-structured extraction, so it uses `MODEL_MEMORY_EXTRACT` rather
+than a hard-coded model ID or the merge/task role. This is a role choice, not a
+claim that the current model has been validated for telephone disclosure. The
+conversion is not implemented; the [voice knowledge plan](../../../docs/execution-plans/2026-09-28-voice-company-knowledge.md)
+defines its source, refresh and acceptance gates.
+
 See [bounded preparation](bounded-preparation.md) for batch/retry controls and
 [model evaluation](../qa/preparation-model-evaluation.md) for offline comparisons.
 A small blinded Claude/K3 [comparison](../../../docs/evaluations/2026-09-13-openrouter-models.md)

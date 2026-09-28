@@ -60,8 +60,14 @@ transcript upload is cancelled; possible missing words before attachment are
 permanently accepted. The latest call contains invented business services
 without delegation or a fact lookup. Overall acceptance is REVISE and the
 [pilot plan](execution-plans/2026-09-27-cafe124-voice-daemon.md) remains active.
-The [shared-knowledge brief](briefs/2026-09-28-voice-company-knowledge.md) is
-independently approved and its execution plan has independent APPROVED review. The production company store is locally readable as `mrcalld` and contains structured facts and revisioned projects; source authority and caller disclosure remain unverified. Initial context and company retrieval are unimplemented.
+The [shared-knowledge brief](briefs/2026-09-28-voice-company-knowledge.md) and
+its `USER_NOTES` amendment have independent approval. The revised
+[execution plan](execution-plans/2026-09-28-voice-company-knowledge.md) routes
+offline telephone-note extraction through `MODEL_MEMORY_EXTRACT`; implementation
+and production activation remain future work. The production company store is
+locally readable as `mrcalld` and contains structured facts and revisioned
+projects; source authority and caller disclosure remain unverified. Initial
+context and company retrieval are unimplemented.
 
 The hosted engine is being isolated per tenant
 ([toward-sandbox](execution-plans/2026-09-29-toward-sandbox.md)): M1 (tool
@@ -125,9 +131,10 @@ Refresh button only lists threads. See the archived
 
 ## Next
 
-1. On a separately authorized implementation session, verify production company
-   source authority and caller disclosure before implementing the reviewed voice plan.
-   The local metadata inventory does not establish an approved service catalog.
+1. On a separately authorized implementation session, inspect eligible
+   production `USER_NOTES` content and any company-store sources to be used,
+   then implement the reviewed voice plan. The local metadata inventory does
+   not establish an approved service catalog.
 2. Resolve the remaining billing choices and funded credit acceptance. Keep
    preparation paused until the CTO explicitly requests a bounded run.
 3. Verify the installed applications through their GUI: the Mac one with
