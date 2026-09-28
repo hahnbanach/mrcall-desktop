@@ -17,6 +17,7 @@ from zylch.services.voice import engine_runtime
 from zylch.services.voice.conversation import VOICE_RULES
 from zylch.services.voice.agent_config import snapshot_for_call
 from zylch.services.voice.engine_runtime import PreparedCall
+from zylch.services.voice.diagnostics import DiagnosticOptions
 from zylch.services.voice.live_sip_smoke import create_app
 from zylch.services.voice.smoke_runtime import Call
 from zylch.storage.voice_smoke import SmokeLedger
@@ -124,6 +125,7 @@ def test_production_greeting_uses_only_approved_name(fixture_db, tmp_path, monke
     })
     _, ledger, transport, runtime, _ = setup_runtime(tmp_path, monkeypatch)
     runtime.production = True
+    runtime.diagnostics = DiagnosticOptions(True)
     runtime._prepare = AsyncMock(return_value=None)
     snapshot = snapshot_for_call(NUMBER)
 
@@ -137,12 +139,20 @@ def test_production_greeting_uses_only_approved_name(fixture_db, tmp_path, monke
         for caller in (KNOWN, SHARED, None):
             call = Call("session-test", prepared=PreparedCall(snapshot, caller))
             assert await runtime.accept_call(call)
+            assert call.trace.db is not None
+            call.trace.close()
 
     asyncio.run(scenario())
     assert "Buongiorno Mario, sono l'assistente di Café 124" in transport.instructions[0]
     assert "Buongiorno, sono l'assistente di Café 124" in transport.instructions[1]
     assert "Buongiorno, sono l'assistente di Café 124" in transport.instructions[2]
     assert PUBLIC not in str(transport.instructions)
+    assert all("Wait silently for the backend" in text for text in transport.instructions)
+    runtime.diagnostics = DiagnosticOptions()
+    refused = Call("session-no-transcript", prepared=PreparedCall(snapshot, KNOWN))
+    with pytest.raises(ValueError, match="transcript unavailable"):
+        asyncio.run(runtime.accept_call(refused))
+    assert len(transport.instructions) == 3
     ledger.close()
 
 

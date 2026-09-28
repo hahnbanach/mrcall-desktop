@@ -64,6 +64,45 @@ def test_private_sink_redacts_and_refuses_symlinks(tmp_path):
     assert failed["diagnostics"] == "incomplete"
 
 
+def test_spoken_transcript_is_private_product_record_not_debug_event(tmp_path):
+    secret = "sk-live-spoken-test-key"
+    evidence = {"finalization": "confirmed"}
+    trace = CallTrace(tmp_path, "live-call", 6, evidence, DiagnosticOptions(True, secrets=(secret,)))
+    trace.record("session.input_transcript.delta", characters=12)
+    trace.record_transcript("caller", f"Il mio codice è {secret}", start_ms=10, end_ms=60)
+    trace.record_transcript("voice", "Posso aiutarti.", start_ms=70, end_ms=100)
+    trace.close()
+
+    path = next((tmp_path / "voice-diagnostics").glob("*.db"))
+    assert path.stat().st_mode & 0o777 == 0o600
+    with sqlite3.connect(path) as db:
+        rows = db.execute(
+            "select role,delta,start_ms,end_ms from transcript_deltas order by seq"
+        ).fetchall()
+        events = db.execute("select data from events").fetchall()
+    assert rows == [
+        ("caller", f"Il mio codice è {secret}", 10, 60),
+        ("voice", "Posso aiutarti.", 70, 100),
+    ]
+    assert secret not in str(events)
+    assert evidence["diagnostics"] == "complete"
+    assert evidence["transcript_capture"] == "deltas_observed"
+
+
+def test_transcript_status_marks_partial_and_missing_provider_text(tmp_path):
+    partial = {"finalization": "confirmed"}
+    trace = CallTrace(tmp_path, "partial", 1, partial, DiagnosticOptions(True))
+    trace.record("session.output_audio.delta")
+    assert trace.record_transcript("caller", "Ciao")
+    trace.close()
+    assert partial["transcript_capture"] == "possible_gap"
+
+    empty = {"finalization": "confirmed"}
+    trace = CallTrace(tmp_path, "empty", 1, empty, DiagnosticOptions(True))
+    trace.close()
+    assert empty["transcript_capture"] == "no_provider_text"
+
+
 def test_correlated_boundary_no_audio_or_unselected_facts(fixture_db, monkeypatch, tmp_path):
     conv, _, sent = make_conversation(monkeypatch)
     trace = CallTrace(

@@ -46,9 +46,11 @@ binding before accepting the carrier connection and again before disclosing
 facts. Unknown numbers, owner mismatches, disabled configuration and failed
 headless authentication refuse admission. The caller's phone number helps
 retrieve permitted context; it is not proof of identity. For the supervised
-name-only greeting test, the only caller-specific disclosure is the first name
-of the uniquely matched contact; no historical sentence is selected. Internal
-notes and other companies' facts stay out of the call.
+pilot, the greeting discloses only the approved name of the uniquely matched
+contact. After a caller request and GPT-Live delegation, the on-demand review
+path can supply filtered company-scoped sentence candidates from that contact.
+GPT-Live judges the relevant portion to say. Internal notes and other
+companies' facts stay out of the model context.
 
 StarChat is authoritative for the business ID, owner UID, service number,
 template and business version. Read these through an authenticated StarChat API
@@ -80,9 +82,9 @@ as the finished Desktop configuration journey.
 
 GPT-Live remains the **only telephone conversational model**. The engine
 resolves the approved display name and rechecks both bindings before Live's
-initial greeting. Permitted historical facts, if selected in a later
-configuration, arrive as quiet `thinking`; Live answers directly when those
-facts suffice.
+initial greeting. Selected-fact mode supplies approved pinned history as quiet
+`thinking`. The supervised production on-demand mode starts with only the name
+and consults the matched contact after a legitimate caller question.
 For missing or fresh data, Live delegates and the engine returns the specific
 tool result or an explicit unavailable answer in task-bound `commentary`. No
 telephone GPT-6 agent, dispatch or fallback returns. Preserve interruption,
@@ -139,11 +141,10 @@ and preservation of the Desktop RPC route. Rehearse rollback without deleting
 ledgers or profile data.
 
 Then place a real incoming call to +390250552776 from the selected caller.
-Human listening must confirm an immediate greeting with the first name,
-Café 124 identification, invitation to speak, an answer that withholds
-unapproved history, a follow-up and an interruption. Correlate private
-diagnostics with the selected name grant, provider receipts and closed ledger
-rows. An ACK,
+Human listening must confirm the greeting with the name, Café 124
+identification, invitation to speak, a suitable answer from the on-demand
+review, a follow-up and an interruption. Correlate private transcript and
+diagnostics with the caller match, provider receipts and closed ledger rows. An ACK,
 transcript or counter alone does not prove heard audio. Exercise missing data
 and an unrecognized caller without exposing another customer's facts. An
 independent end-to-end review checks code, configuration, route, accounting,
@@ -157,8 +158,8 @@ multi-business routing or general availability.
 
 ## Caller memory after the first call
 
-The company store recognizes the selected caller's number and name, while the
-telephone configuration makes no historical sentence available. The operator
+The first call recognized the selected caller's number and name, while its
+then-current configuration made no historical sentence available. The operator
 prefers a per-question disclosure judgment during the
 supervised call over adding a shareability field to every blob now. The goal is
 to answer useful questions about the caller without treating a phone-number
@@ -170,10 +171,19 @@ read memory, and Live judges what is appropriate to say. A broad request for
 information about oneself is eligible for that judgment. The engine still
 enforces exact contact and company scope, excludes obvious private/secret
 notes, redacts contact details, bounds model input and keeps source text out of
-local diagnostics. The model can still misjudge a mixed note. This is a
+diagnostic event records. Full caller and assistant transcription deltas belong
+in a separate private call record. The model can still misjudge a mixed note. This is a
 supervised pilot risk, not a general authorization system; human listening and
 independent predeploy review remain required. GPT-Live remains the sole
 conversational telephone model, with no agent dispatch or GPT-6 phone fallback.
+
+The operator requires every phone call to be transcribed and its transcript
+eventually stored in StarChat. The production daemon must retain the exact
+provider transcript in a private call record now. StarChat currently offers
+search and properties updates for existing customer conversations but no
+creation/import route for this external Cloudflare call, so remote archival
+needs a backend contract before it can be claimed active. Prior calls without
+stored text cannot be reconstructed from diagnostic counts.
 
 Related contracts: [M4 Live-context plan](../execution-plans/2026-09-23-gpt-live-engine-integration.md#current-m4-plan--live-uses-selected-context-engine-supplies-new-results),
 [this alpha's development plan](../execution-plans/2026-09-27-cafe124-voice-daemon.md),

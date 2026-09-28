@@ -1,4 +1,4 @@
-"""Opt-in isolated call diagnostics; never retain wire payloads or hidden thinking."""
+"""Private call evidence and spoken transcript; never retain wire payloads or thinking."""
 
 import contextvars
 import json
@@ -88,9 +88,13 @@ class CallTrace:
         self.options = options
         self.session_id = session_id
         self.revision = revision
+        self.transcript_count = 0
+        self.transcript_roles = set()
+        self.audio_roles = set()
         if not options.enabled:
             return
         evidence["diagnostics"] = "incomplete"
+        evidence["transcript_capture"] = "incomplete"
         try:
             directory = profile / "voice-diagnostics"
             directory.mkdir(mode=0o700, exist_ok=True)
@@ -111,8 +115,17 @@ class CallTrace:
                 "CREATE TABLE events (seq INTEGER PRIMARY KEY, utc TEXT, "
                 "elapsed_ms INTEGER, kind TEXT, data TEXT)"
             )
+            # Product transcript is separate from redacted diagnostic events.
+            # It contains only provider transcription deltas, never memory
+            # candidates, prompts, audio bytes or wire payloads.
+            self.db.execute(
+                "CREATE TABLE transcript_deltas (seq INTEGER PRIMARY KEY, utc TEXT, "
+                "elapsed_ms INTEGER, role TEXT NOT NULL, start_ms INTEGER, "
+                "end_ms INTEGER, delta TEXT NOT NULL)"
+            )
             evidence["diagnostic_file"] = path.name
             evidence["diagnostics"] = "recording"
+            evidence["transcript_capture"] = "recording"
             self.record(
                 "call_attached",
                 lookup_delay=options.lookup_delay,
@@ -125,6 +138,7 @@ class CallTrace:
 
     def _failed(self):
         self.evidence["diagnostics"] = "incomplete"
+        self.evidence["transcript_capture"] = "incomplete"
         logger.warning("[voice] private diagnostic capture incomplete")
         if self.db:
             try:
@@ -164,8 +178,37 @@ class CallTrace:
                 ),
             )
             self.db.commit()
+            if kind == "session.input_audio.append":
+                self.audio_roles.add("caller")
+            elif kind == "session.output_audio.delta":
+                self.audio_roles.add("voice")
         except Exception:
             self._failed()
+
+    def record_transcript(self, role, delta, *, start_ms=None, end_ms=None):
+        """Persist exactly what the provider transcribed, outside debug logs."""
+        if self.db is None or role not in ("caller", "voice") or not isinstance(delta, str) or not delta:
+            return False
+        try:
+            self.db.execute(
+                "INSERT INTO transcript_deltas "
+                "(utc,elapsed_ms,role,start_ms,end_ms,delta) VALUES (?,?,?,?,?,?)",
+                (
+                    datetime.now(timezone.utc).isoformat(),
+                    round((time.monotonic() - self.started) * 1000),
+                    role,
+                    start_ms if isinstance(start_ms, int) else None,
+                    end_ms if isinstance(end_ms, int) else None,
+                    delta,
+                ),
+            )
+            self.db.commit()
+            self.transcript_count += 1
+            self.transcript_roles.add(role)
+            return True
+        except Exception:
+            self._failed()
+            return False
 
     def close(self):
         if self.db is not None:
@@ -175,5 +218,12 @@ class CallTrace:
                     self.db.close()
                     self.db = None
                     self.evidence["diagnostics"] = "complete"
+                    self.evidence["transcript_capture"] = (
+                        "no_provider_text" if not self.transcript_count
+                        else "possible_gap" if (
+                            self.evidence.get("finalization") != "confirmed"
+                            or not self.audio_roles.issubset(self.transcript_roles)
+                        ) else "deltas_observed"
+                    )
                 except Exception:
                     self._failed()
