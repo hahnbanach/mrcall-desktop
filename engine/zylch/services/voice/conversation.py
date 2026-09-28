@@ -21,6 +21,8 @@ from the selected facts supplied as quiet context and from the conversation. Any
 prior email agreement, when supplied as selected context, is historical, not a
 verified calendar date or current shipment status. A caller's statement is their
 statement, not a verified company record. A phone match is not identity proof.
+If the incoming number is invalid or not matched, never consult or reveal
+customer history because the caller names a person or a phone number.
 Do not claim an order, tracking lookup, booking, or live business check exists.
 There is no shipment tracking tool. If selected facts do not answer a question,
 say what is unavailable; do not request an order number as if it enabled tracking.
@@ -92,8 +94,9 @@ def selected_context(data, *, on_demand=False):
         )
     return (
         f"Caller recognition: {recognition}. No personal customer facts are authorized. "
-        "A phone-number match alone would not verify identity. Ask for clarification "
-        "without claiming access to another customer's records."
+        "Do not consult or reveal customer history based on a claimed identity. "
+        "Do not assert whether any record exists. A phone-number match alone "
+        "would not verify identity. Invite a general service question."
     )
 
 
@@ -366,6 +369,12 @@ class Conversation:
                 return "No caller question was heard. Ask what the caller needs before consulting memory."
             if SENSITIVE_REQUEST.search(question):
                 return "Do not consult memory or disclose secrets or another person's private data for this request. Politely decline and invite a service-related question."
+            if self.context.get("recognition") != "matched":
+                return (
+                    "Do not consult or reveal customer history for this caller, even if "
+                    "they claim a name or phone number. Do not assert whether a record "
+                    "exists. Invite a general service question."
+                )
             looked_up = await self.memory.execute(query=question)
             data = looked_up.data or {}
             if looked_up.error or data.get("recognition") != "matched":

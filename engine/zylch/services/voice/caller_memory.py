@@ -4,6 +4,7 @@ import asyncio
 import logging
 import re
 
+import phonenumbers
 from sqlalchemy import select
 
 from zylch.memory.scope import blob_visible, sentences_in_scope
@@ -156,9 +157,20 @@ class CallerMemory(Tool):
     def _lookup(self, query: str) -> ToolResult:
         bound = self.snapshot.binding
         require_binding(bound)
-        phone = _normalise_phone(self.caller_number or "")
-        if not phone:
-            return result("unknown", missing="Caller number is unavailable")
+        raw_phone = self.caller_number or ""
+        # Vonage sends E.164 digits; fixtures and other adapters may include
+        # harmless separators or a 00 prefix. Reject text before normalizing,
+        # since the memory index normalizer intentionally clips narrative tails.
+        if not re.fullmatch(r"(?:\+[1-9]|00[1-9])[0-9\s()./\-]*", raw_phone):
+            return result("unknown", missing="Caller number is unavailable or invalid")
+        phone = _normalise_phone(raw_phone)
+        if not phone or not phone.startswith("+"):
+            return result("unknown", missing="Caller number is unavailable or invalid")
+        try:
+            if not phonenumbers.is_valid_number(phonenumbers.parse(phone, None)):
+                return result("unknown", missing="Caller number is unavailable or invalid")
+        except phonenumbers.NumberParseException:
+            return result("unknown", missing="Caller number is unavailable or invalid")
         matches = Storage.find_blobs_by_identifiers(
             bound.owner_uid,
             [("phone", phone)],
