@@ -179,18 +179,39 @@ class EngineVoiceRuntime(SmokeRuntime):
                 )
             else:
                 instructions += " Do not mention other customer history."
+            # The provider starts the session on accept. Hold speech until the
+            # sideband is attached, so its first greeting can be transcribed.
+            instructions += (
+                " Wait silently for the backend's explicit greeting instruction "
+                "before speaking. This timing rule overrides earlier greeting "
+                "timing. Continue listening while waiting."
+            )
+            call.trace = CallTrace(
+                self.config.profile,
+                call.session_id,
+                call.prepared.snapshot.revision,
+                call.evidence,
+                self.diagnostics,
+            )
+            if call.trace.db is None:
+                raise ValueError("Private call transcript unavailable")
         return await self.transport.accept(call.session_id, instructions)
 
     def attached(self, call, ws):
         prepared = call.prepared
         memory = CallerMemory(prepared.snapshot, prepared.caller)
-        call.trace = CallTrace(
-            self.config.profile,
-            call.session_id,
-            prepared.snapshot.revision,
-            call.evidence,
-            self.diagnostics,
-        )
+        if call.trace is None:
+            call.trace = CallTrace(
+                self.config.profile,
+                call.session_id,
+                prepared.snapshot.revision,
+                call.evidence,
+                self.diagnostics,
+            )
+        else:
+            call.trace.record("sideband_attached")
+            if call.trace.db is None:
+                raise ValueError("Private call transcript unavailable")
         memory.diagnostic_delay = self.diagnostics.lookup_delay
         memory.diagnostic_failure = self.diagnostics.fail_lookup
 

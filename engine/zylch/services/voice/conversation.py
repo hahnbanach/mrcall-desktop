@@ -13,7 +13,8 @@ from zylch.services.voice.smoke_transport import command
 logger = logging.getLogger(__name__)
 
 VOICE_RULES = """You are the sole conversational assistant on this telephone call.
-Greet immediately in the configured language; do not wait for caller recognition.
+Greet promptly after the backend greeting instruction in the configured language;
+do not wait for caller recognition.
 Listen while the caller speaks and stop obsolete speech when interrupted. Give one
 useful answer per request and do not repeat an answer already given. Answer directly
 from the selected facts supplied as quiet context and from the conversation. Any
@@ -293,6 +294,13 @@ class Conversation:
             if not isinstance(delta, str) or not delta:
                 return
             role = "caller" if kind == "session.input_transcript.delta" else "voice"
+            if self.trace:
+                saved = self.trace.record_transcript(
+                    role, delta,
+                    start_ms=event.get("start_ms"), end_ms=event.get("end_ms"),
+                )
+                if not saved and self.snapshot.config.policy == "production":
+                    raise RuntimeError("Private call transcript unavailable")
             if self.transcript and self.transcript[-1]["role"] == role:
                 self.transcript[-1]["text"] += delta
             else:

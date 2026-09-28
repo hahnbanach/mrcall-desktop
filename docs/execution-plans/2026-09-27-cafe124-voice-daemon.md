@@ -9,8 +9,9 @@ date: 2026-09-27
 Scope: development, verification and one-number cutover plan for the manual
 Café 124 alpha on +390250552776. Paired with the
 [brief](../briefs/2026-09-27-cafe124-voice-daemon.md). A supervised second
-cutover serves the production daemon with the known caller's name. A supervised
-per-question memory review is under design; heard-audio acceptance remains open.
+cutover serves the production daemon with the known caller's name. The
+supervised per-question memory review is active; interruption acceptance and
+the final end-to-end review remain open.
 <!-- doc-scope:end -->
 
 ## Fixed boundary and observed starting point
@@ -537,3 +538,114 @@ follow-up and interruption with private call evidence and provider/ledger
 receipts. Run final independent end-to-end review before marking this plan
 completed. On any gate failure, keep the current name-only daemon active and
 record the exact blocker.
+
+## Targeted on-demand deployment — 2026-09-28
+
+Commit `94b42de` contains the on-demand path. The final voice suite passed
+212 tests with one skip; Ruff and `git diff --check` passed. Independent
+predeploy review found and then cleared credential-pattern leaks, including a
+fine-grained GitHub token. It accepted the code for this supervised policy and
+left the model's judgment of mixed notes to the real-call gate.
+
+Release `/home/mrcalld/releases/mrcall-voice-cafe124-94b42de` was built from
+tracked commit files under `mrcalld`, with its own virtual environment. The
+source hash and module import path were checked before service change. The
+previous `99-cafe124-voice.conf` drop-in, its release and a private copy of
+the voice-config row are retained for targeted rollback without rewinding the
+profile database or ledger. Only the production UID service was restarted;
+the effective `ExecStart` and logged imported runtime module point at
+`94b42de`, with empty `PYTHONPATH`. The Desktop socket and loopback listener
+remain in that process. The Cloudflare tunnel PID and URL are unchanged;
+local/public health return `calls_available: true` and no local test limits.
+
+An owner-authenticated, headless Unix-socket RPC read checked revision 4 and
+the exact pilot customer before update. `voice.config.update` then reverified
+the StarChat business and saved revision 5 with `on_demand_review`, the same
+customer name and zero pinned sentences. Authenticated `voice.status` reported
+enabled and available; a second authenticated read returned revision 5.
+Public unsigned Vonage answer/event probes return 401; unsigned OpenAI webhook
+returns 400. No provider callback, business, number, template or tunnel setting
+was changed.
+
+**Awaiting heard-audio gate:** the operator has been invited to call from the
+selected number and report the greeting, answer to “quali informazioni avete su
+di me?”, a follow-up and an interruption/correction. Correlate that report
+with private diagnostic events and the newly retained provider/ledger rows.
+If the model speaks inappropriate detail or audio fails, execute the targeted
+rollback and keep this plan open. Final independent end-to-end review follows
+the heard call and reconciliation checks.
+
+## Supervised calls on revisions 5 and 6 — 2026-09-28
+
+The operator heard the revision-5 greeting name, but no additional information;
+an order question also returned no data. The private diagnostic is complete at
+revision 5: one unique caller match, zero facts in the initial greeting, seven
+candidate sentences after the broad personal question, three delegations, and
+later queries with zero matches. Its 71 voice seconds and two covered carrier
+legs correlate with a closed ledger row: 10,000,000 micro-USD reserve, 89,936
+micro-USD accrued estimate, and `provisionally_covered` reconciliation. This
+shows the history reached GPT-Live; the operator's heard report shows it was
+too reluctant to summarize an ordinary business fact. The company contact
+matched by phone contains the Café 124 email the operator named, not their
+personal Gmail address; phone matching is not email authentication. There is
+no Shopify order entry in that contact, and this voice path has no live Shopify
+order tool.
+
+The authenticated headless RPC updated only the approved voice instructions to
+revision 6. They now explicitly allow a short summary of a relevant ordinary
+professional fact even if other parts of the same note must be withheld, and
+distinguish historical memory from unavailable live Shopify orders. The
+rollback preflight now accepts revisions 4–6; a private revision-5 row backup
+is retained. Service PID, pinned release, Desktop socket, tunnel and URL were
+unchanged. Authenticated readback confirmed revision 6, the same one customer,
+zero pinned sentences and `on_demand_review`; health still reports calls
+available.
+
+The operator's revision-6 call report confirms the name and some appropriate
+professional notes were heard, with no private detail reported. The assistant
+correctly said it could not see Shopify orders. The operator perceived about
+five seconds before the greeting; this is a separate latency issue. Private
+timing places the call ledger start 3.5 seconds before diagnostic attach and
+the first outbound audio delta 0.46 seconds after attach. These events cannot
+establish handset playback timing, so the operator's estimate is the audio
+evidence. The revision-6 private trace is complete and redacted: unique match,
+zero initial facts, seven candidates after one delegation, 60 voice seconds,
+two covered carrier legs and a closed 10,000,000 micro-USD reserve against a
+75,089 micro-USD accrued estimate. Reconciliation remains provisional, not a
+settled invoice. The current diagnostic mode records event counts and timings,
+not transcript text; the earlier isolated trace behavior does not apply here.
+
+**Remaining acceptance:** obtain the operator's interruption/correction report,
+perform final independent end-to-end review of the revision-6 call, and close
+the plan only if those gates pass. Retain the latency issue as a separate
+follow-up with its measured preattach interval. If a disclosure or audio gate
+fails, execute the targeted rollback, preserve the ledger and keep this plan
+open.
+
+## Transcript requirement correction — 2026-09-28
+
+The operator corrected the product requirement: every telephone conversation
+must be transcribed and later stored in StarChat. The revision-6 diagnostic
+mode retained only event counts and timing, so its three completed production
+calls have no recoverable transcript text in the local files. Those calls must
+not be described as archived. The operator also reports that the revision-6
+assistant shared appropriate professional notes and correctly lacked Shopify
+order access; the perceived greeting delay was about five seconds. The
+interruption/correction report remains pending.
+
+The next code change adds an exact provider-transcript table to the private
+per-call SQLite record while keeping source memory and append text out of debug
+events. Production admission must require a writable record before Live accept;
+the greeting must wait for sideband attachment so the first spoken words can
+be observed. A failed write stops the call, and a call with no provider text is
+marked separately. These measures capture received provider transcript events;
+they do not prove that no audio was omitted or that handset playback matched
+the text. Review, pinned release deployment and a new heard call are required
+before accepting this behavior.
+
+The local StarChat backend exposes customer-conversation search and property
+updates for existing sessions, but no creation/import endpoint for this
+external Cloudflare call. No StarChat archive write is possible through the
+currently verified contract. Preserve the private transcript for a later
+import and keep remote archival as a named open gate. The plan cannot claim
+that all calls are already stored in StarChat.
