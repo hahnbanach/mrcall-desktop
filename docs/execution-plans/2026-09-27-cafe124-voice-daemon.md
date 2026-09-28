@@ -10,8 +10,8 @@ Scope: development, verification and one-number cutover plan for the manual
 Café 124 alpha on +390250552776. Paired with the
 [brief](../briefs/2026-09-27-cafe124-voice-daemon.md). A supervised second
 cutover serves the production daemon with the known caller's name. The
-supervised per-question memory review is active; interruption acceptance and
-the final end-to-end review remain open.
+supervised per-question memory review is active. The final end-to-end review
+remains open on the latest caller-validation release and transcript completeness.
 <!-- doc-scope:end -->
 
 ## Fixed boundary and observed starting point
@@ -705,11 +705,81 @@ The call meter records 170 voice seconds and two carrier legs. Its
 `provisionally_covered` reconciliation; no hold was deleted or called settled.
 A local pattern scan found no credential-format string in the assistant
 transcript and no transcript, query or sentence text in diagnostic events.
-The operator has not specifically reported whether an interruption or
-correction was heard to work. Complete-call capture and StarChat archival
-remain open. Independent final end-to-end review checked the live release,
+The operator subsequently confirmed that interruption/correction worked well
+in the same call. This closes the human listening gate for the supervised
+manual test. Complete-call capture and StarChat archival remain open.
+Independent final end-to-end review checked the live release,
 route, binding, ledger, private file and redacted diagnostics, and returned
-**Blocked** on those unresolved acceptance gates. It found no obvious
+**Blocked** before this last heard report. It found no obvious
 credential or contact-detail pattern in the assistant transcript, but a
-pattern scan cannot certify semantic privacy or handset playback. The plan
-therefore remains `active`.
+pattern scan cannot certify semantic privacy or handset playback. An
+independent reassessment of the pilot gate returned **Blocked**. The reviewer
+accepted the heard answer, follow-up and interruption/correction evidence for
+the selected caller. It found no real unknown/ambiguous-caller call; code tests
+exercise unknown, ambiguous and unselected memory lookup, but they do not
+establish handset behavior for another caller. The received-delta record still
+does not guarantee complete transcription, and StarChat has no import contract
+for this external call. The plan remains `active` with these exact gates open.
+
+## Archive deferral and alternate number check — 2026-09-28
+
+The operator explicitly deferred sending call transcripts to StarChat for now.
+The private production transcript remains retained; remote archival is future
+product work, not a gate for this one-number manual call test. This does not
+claim the StarChat requirement was implemented or abandoned.
+
+The operator offered +393518808669 for an unknown-caller exercise. A read-only
+lookup of the production company's exact phone identifier found one match:
+the **same** configured pilot contact. The national-format identifier had no
+separate match, while the number also appears in company text. Calling from
+this second number may legitimately trigger the approved name and on-demand
+review, so it cannot prove the unknown-caller branch. Another number must be
+checked before that live gate. The operator has been asked for one. The
+accept-before-sideband interval remains a documented transcript-completeness
+limit; the observed 400 deltas from the adversarial call are retained.
+
+## Anonymous caller and explicit number validation — 2026-09-28
+
+The operator called with withheld caller ID on release `d60d46b` at 11:38:58
+UTC. The fifth production call closed with `caller_recognition=unknown`, zero
+caller facts, confirmed provider finalization, complete private diagnostics and
+`deltas_observed`. Its private call file retained 74 caller and 148 voice
+transcript deltas. The ledger retained a 10,000,000-micro-USD reserve against a
+142,128-micro-USD accrued estimate for 117 voice seconds; reconciliation is
+`provisionally_covered`, not a settled charge. The operator heard a generic
+response and reported that saying they were Mario Alemi did not unlock history.
+They asked for an explicit rule that invalid or withheld incoming numbers may
+never read customer memory, even after a spoken identity claim.
+
+Commit `d7fa315` implements that rule. The incoming caller string must have a
+single international `+` prefix or `00` prefix and pass the Python
+`phonenumbers` port of libphonenumber before any company-memory identifier
+search. Missing, withheld, malformed and implausible numbers return `unknown`
+without that search. On-demand conversation delegation now refuses historical
+lookup for every recognition other than `matched`, regardless of the spoken
+name or number; it does not assert whether a record exists. A valid number
+still needs the exact unique selected contact. No caller may choose a different
+memory key or business through model input.
+
+The full voice suite passed with 221 tests and one skipped before the last raw
+syntax fix. The final 46 focused tests, Ruff and diff check passed after it.
+An independent code review found and blocked an initial malformed-plus case;
+after the fix, its nine invalid-number spy cases and self-claim test passed and
+the reviewer approved deployment. A new production release
+`/home/mrcalld/releases/mrcall-voice-cafe124-d7fa315` installed
+`phonenumbers` 9.0.40. The installed caller-memory and conversation modules
+match the committed source hashes. The production daemon alone restarted at
+11:51:40 UTC with effective ExecStart in that release, empty PYTHONPATH and an
+imported voice module under its venv. The Desktop socket remains mode 660,
+`mrcalld:caddy`. Local and public health passed; unsigned Vonage answer/event
+and OpenAI webhook probes returned 401/401/400. Authenticated owner RPC read
+voice revision 6 with no selected sentence IDs. The tunnel retained its PID,
+target and URL. Root-only rollback
+`/etc/mrcalld/rollback-cafe124-phone-validation-20260928/rollback.sh` restores
+the prior `d60d46b` drop-in after checking revision 6 and no active call; its
+syntax was checked, and it does not touch ledger or tunnel.
+
+A repeat anonymous handset call on `d7fa315` and independent final end-to-end
+review remain open. The earlier human report cannot verify code added after
+that call. Full transcription of the accept-to-sideband interval is also not
+established. StarChat upload is explicitly deferred by the operator.
