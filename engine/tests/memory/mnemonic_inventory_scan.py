@@ -1,8 +1,9 @@
-"""AST scanners shared by the Milestone 0 mnemonic inventory tests."""
+"""AST scanners shared by the Milestone 0 mnemonic inventory tests and the milestone 8 boundary test."""
 
 from __future__ import annotations
 
 import ast
+import re
 from collections import Counter
 from pathlib import Path
 
@@ -294,3 +295,133 @@ def orm_core_mutations(path: Path, models: set[str]) -> Counter:
 
     Visitor().visit(tree)
     return mutations
+
+
+WRITER_TABLES = frozenset(
+    {
+        "blobs",
+        "blob_sentences",
+        "person_identifiers",
+        "email_blobs",
+        "calendar_blobs",
+        "whatsapp_blobs",
+        "blob_aliases",
+        "fact_history",
+        "memory_meta",
+        # No literal statement writes these today; scanning them makes
+        # "only consolidation prunes a version" and the journal's own writer
+        # structural rather than a matter of reading the code.
+        "blob_versions",
+        "memory_operations",
+    }
+)
+
+
+def literal_sql_sinks(path: Path, tables: frozenset = WRITER_TABLES) -> Counter:
+    """Literal ``INSERT INTO`` / ``UPDATE`` / ``DELETE FROM`` statements on ``tables``, per function.
+
+    Keyed ``(symbol, "sql:<VERB>:<table>")``. A statement assembled at run time
+    cannot be read here; those are the inventory's ``known_dynamic_sql_sinks``.
+    """
+    pattern = re.compile(
+        r"\b(INSERT(?:\s+OR\s+\w+)?\s+INTO|UPDATE|DELETE\s+FROM)\s+("
+        + "|".join(sorted(tables, key=len, reverse=True))
+        + r")\b",
+        re.IGNORECASE,
+    )
+    tree = ast.parse(path.read_text(), filename=str(path))
+    sinks: Counter = Counter()
+    stack: list[str] = []
+
+    class Visitor(ast.NodeVisitor):
+        def visit_ClassDef(self, node: ast.ClassDef) -> None:
+            stack.append(node.name)
+            self.generic_visit(node)
+            stack.pop()
+
+        def _visit_function(self, node: ast.FunctionDef | ast.AsyncFunctionDef) -> None:
+            stack.append(node.name)
+            self.generic_visit(node)
+            stack.pop()
+
+        visit_FunctionDef = _visit_function
+        visit_AsyncFunctionDef = _visit_function
+
+        def visit_Constant(self, node: ast.Constant) -> None:
+            if not isinstance(node.value, str):
+                return
+            for match in pattern.finditer(node.value):
+                verb = match.group(1).upper().split()[0]
+                sinks[(".".join(stack) or "<module>", f"sql:{verb}:{match.group(2).lower()}")] += 1
+
+    Visitor().visit(tree)
+    return sinks
+
+
+def writer_references(path: Path, tracked: set[str]) -> Counter:
+    """A tracked writer reached other than by calling its name, per function.
+
+    Three spellings a call scanner does not see, keyed ``(symbol, kind:name)``:
+
+    - ``ref:<name>`` — the writer named without being called
+      (``save = storage.store_blob``, ``handlers = [upsert_fact]``), so a call
+      through the new name is invisible to :func:`symbol_calls`;
+    - ``getattr:<name>`` — ``getattr(obj, "<name>")`` with the name as a
+      literal string;
+    - ``import-alias:<name>`` — ``from m import <name> as other``.
+    """
+    tree = ast.parse(path.read_text(), filename=str(path))
+    aliases = import_aliases(tree)
+    found: Counter = Counter()
+    stack: list[str] = []
+    called: set[int] = set()
+
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Call):
+            called.add(id(node.func))
+
+    class Visitor(ast.NodeVisitor):
+        def visit_ClassDef(self, node: ast.ClassDef) -> None:
+            stack.append(node.name)
+            self.generic_visit(node)
+            stack.pop()
+
+        def _visit_function(self, node: ast.FunctionDef | ast.AsyncFunctionDef) -> None:
+            stack.append(node.name)
+            self.generic_visit(node)
+            stack.pop()
+
+        visit_FunctionDef = _visit_function
+        visit_AsyncFunctionDef = _visit_function
+
+        def _symbol(self) -> str:
+            return ".".join(stack) or "<module>"
+
+        def visit_ImportFrom(self, node: ast.ImportFrom) -> None:
+            for item in node.names:
+                if item.name in tracked and item.asname and item.asname != item.name:
+                    found[(self._symbol(), f"import-alias:{item.name}")] += 1
+
+        def visit_Attribute(self, node: ast.Attribute) -> None:
+            if node.attr in tracked and id(node) not in called and isinstance(node.ctx, ast.Load):
+                found[(self._symbol(), f"ref:{node.attr}")] += 1
+            self.generic_visit(node)
+
+        def visit_Name(self, node: ast.Name) -> None:
+            name = aliases.get(node.id, node.id)
+            if name in tracked and id(node) not in called and isinstance(node.ctx, ast.Load):
+                found[(self._symbol(), f"ref:{name}")] += 1
+
+        def visit_Call(self, node: ast.Call) -> None:
+            if (
+                isinstance(node.func, ast.Name)
+                and node.func.id == "getattr"
+                and len(node.args) >= 2
+                and isinstance(node.args[1], ast.Constant)
+                and node.args[1].value in tracked
+            ):
+                found[(self._symbol(), f"getattr:{node.args[1].value}")] += 1
+            self.generic_visit(node)
+
+    Visitor().visit(tree)
+    return found

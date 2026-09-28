@@ -21,7 +21,6 @@ from zylch.memory.blob_storage import BlobStorage
 from zylch.storage import database as dbm
 from zylch.storage.database import get_engine, get_session
 from zylch.storage.models import BlobVersion, PersonIdentifier
-from zylch.storage.storage import Storage
 
 from tests.memory.mnemonic_env import (
     COMPANY_A,
@@ -31,6 +30,7 @@ from tests.memory.mnemonic_env import (
     stub_embedder,
     text_response,
 )
+from tests.memory import seeding
 
 LUCA = "Luca Bianchi"
 LUCA_EMAIL = "luca@alpha.example"
@@ -85,9 +85,9 @@ def profile(tmp_path, monkeypatch, embedder):
 
 def seed(store, content, *identifiers, owner=OWNER_A):
     """A memory in the entity family, with identity-index rows when given."""
-    blob_id = store.store_blob(owner, f"user:{COMPANY_A}", content, "seed")["id"]
+    blob_id = seeding.store_blob(store, owner, f"user:{COMPANY_A}", content, "seed")["id"]
     if identifiers:
-        Storage().add_person_identifiers(owner, blob_id, list(identifiers))
+        seeding.add_person_identifiers(owner, blob_id, list(identifiers))
     return blob_id
 
 

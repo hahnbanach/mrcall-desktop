@@ -38,6 +38,7 @@ from tests.memory.mnemonic_env import (
     stub_embedder,
     with_client,
 )
+from tests.memory import seeding
 
 RULE = (
     "Never promise a specific callback time to a customer; say the team will get "
@@ -114,7 +115,7 @@ def version_of(blob_id, embedder):
 
 def test_a_fact_pins_its_exact_row_and_names_an_update(profile, monkeypatch, embedder):
     storage = BlobStorage(get_session, embedder)
-    row = storage.store_blob(OWNER_A, f"facts:{COMPANY_A}", "Category: pricing\nKey: list\nValue: 100", "seed")
+    row = seeding.store_blob(storage, OWNER_A, f"facts:{COMPANY_A}", "Category: pricing\nKey: list\nValue: 100", "seed")
     seen = submitted(monkeypatch)
 
     assert facts_store.upsert_fact(OWNER_A, "Pricing", "List", "EUR 120") is None  # captured, not written

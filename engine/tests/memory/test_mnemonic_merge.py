@@ -47,7 +47,6 @@ from zylch.storage.models import (
     PersonIdentifier,
     WhatsAppBlob,
 )
-from zylch.storage.storage import Storage
 
 from tests.memory.mnemonic_env import (
     COMPANY_A,
@@ -59,6 +58,7 @@ from tests.memory.mnemonic_env import (
     stub_embedder,
     text_response,
 )
+from tests.memory import seeding
 
 HEADER = "#IDENTIFIERS\nEntity type: PERSON\nScope: entity\nName: Luca Bianchi\n"
 LUCA_MAIL = (
@@ -89,7 +89,7 @@ def store(tmp_path, monkeypatch, embedder):
 
 
 def seed(store, content):
-    return store.store_blob(OWNER_A, f"user:{COMPANY_A}", content, "seed")["id"]
+    return seeding.store_blob(store, OWNER_A, f"user:{COMPANY_A}", content, "seed")["id"]
 
 
 def read(store, blob_id):
@@ -136,13 +136,12 @@ def run(pair_, llm, *, decide=None):
 def seed_pair(store):
     """Keeper and donor with identifiers and links, as ingestion would leave them."""
     keeper, donor = seed(store, LUCA_MAIL), seed(store, LUCA_CAL)
-    rows = Storage()
     # Each blob also carries an index row no text states — a sender address or a
     # switchboard a legacy writer attached. A merge must not keep or spread either.
-    rows.add_person_identifiers(
+    seeding.add_person_identifiers(
         OWNER_A, keeper, [("email", "luca@alpha.example"), ("phone", "+390200000000")]
     )
-    rows.add_person_identifiers(
+    seeding.add_person_identifiers(
         OWNER_A, donor, [("email", "luca@alpha.example"), ("email", "sender@shop.example")]
     )
     for email_id, blob_id in (
@@ -151,9 +150,9 @@ def seed_pair(store):
         ("mail-3", keeper),
         ("mail-3", donor),
     ):
-        rows.add_email_blob_link(OWNER_A, email_id, blob_id)
-    rows.add_calendar_blob_link(OWNER_A, "cal-1", donor)
-    rows.add_whatsapp_blob_link(OWNER_A, "wa-1", donor)
+        seeding.add_email_blob_link(OWNER_A, email_id, blob_id)
+    seeding.add_calendar_blob_link(OWNER_A, "cal-1", donor)
+    seeding.add_whatsapp_blob_link(OWNER_A, "wa-1", donor)
     return keeper, donor
 
 
@@ -257,8 +256,8 @@ def test_a_stale_member_ends_the_pair_unpaid_and_the_next_pairing_commits(store,
     moved = keeper if stale == "keeper" else donor
 
     def another_writer_then_answer(*_args, **_kwargs):
-        store.update_blob(
-            blob_id=moved,
+        seeding.update_blob(
+            store, blob_id=moved,
             owner_id=OWNER_A,
             content=read(store, moved)["content"] + "\n- another writer got here first",
             event_description="concurrent",

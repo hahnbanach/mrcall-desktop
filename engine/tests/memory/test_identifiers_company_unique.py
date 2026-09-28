@@ -14,6 +14,7 @@ from zylch.storage.migrations import applied_step_ids
 from zylch.storage.step_identifiers_company_unique import STEP_ID
 
 from tests.memory.test_split_store import _boot  # noqa: E402
+from tests.memory import seeding
 
 
 @pytest.fixture
@@ -34,15 +35,14 @@ def test_fresh_store_is_company_unique_and_two_owners_share_one_row(
 
     a = _boot(monkeypatch, tmp_path, "a", key=None, source=None)
     key = current_company_key()
-    bid = BlobStorage(get_session, stub_embedder).store_blob(
+    bid = seeding.store_blob(BlobStorage(get_session, stub_embedder),
         a, entity_namespace(key), "#IDENTIFIERS\nName: G\n#ABOUT\nx", "x"
     )["id"]
-    st = Storage.get_instance()
-    assert st.add_person_identifiers(a, bid, [("email", "g@c.test")]) == 1
+    assert seeding.add_person_identifiers(a, bid, [("email", "g@c.test")]) == 1
     b = _boot(monkeypatch, tmp_path, "b", key=key, source="join")
     Storage._instance = None
     assert (
-        Storage.get_instance().add_person_identifiers(b, bid, [("email", "g@c.test")]) == 0
+        seeding.add_person_identifiers(b, bid, [("email", "g@c.test")]) == 0
     )  # already indexed by A
     c = sqlite3.connect(memory_db_path(key))
     try:

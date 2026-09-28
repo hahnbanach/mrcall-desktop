@@ -13,6 +13,7 @@ from zylch.memory.company_key import current_company_key
 from zylch.storage import database as dbm
 
 from tests.memory.test_split_store import _boot  # noqa: E402
+from tests.memory import seeding
 
 
 @pytest.fixture
@@ -49,7 +50,7 @@ def test_memory_status_and_join_from_the_cli(monkeypatch, tmp_path, stub_embedde
 
     a = _boot(monkeypatch, tmp_path, "a", key=None, source=None)
     key_a = current_company_key()
-    BlobStorage(get_session, stub_embedder).store_blob(
+    seeding.store_blob(BlobStorage(get_session, stub_embedder),
         a, entity_namespace(key_a), "#IDENTIFIERS\nName: Giulia\n#ABOUT\npallets", "x"
     )
     _boot(monkeypatch, tmp_path, "b", key=None, source=None)

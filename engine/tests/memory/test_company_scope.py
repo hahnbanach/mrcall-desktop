@@ -28,6 +28,7 @@ from zylch.memory.company_key import (
 from zylch.memory.hybrid_search import HybridSearchEngine
 from zylch.storage.database import get_session
 from zylch.storage.models import Blob
+from tests.memory import seeding
 
 A = "alice@company.test"
 B = "bob@company.test"
@@ -50,11 +51,11 @@ def search(company_db, embedder):
 
 
 def _rule(store, owner, text):
-    return store.store_blob(owner, rule_namespaces(owner)[0], text, "taught")["id"]
+    return seeding.store_blob(store, owner, rule_namespaces(owner)[0], text, "taught")["id"]
 
 
 def _entity(store, owner, text=PERSON):
-    return store.store_blob(owner, entity_namespace(current_company_key()), text, "extracted")["id"]
+    return seeding.store_blob(store, owner, entity_namespace(current_company_key()), text, "extracted")["id"]
 
 
 # ─── the key itself ───────────────────────────────────────────
@@ -83,7 +84,7 @@ def test_rows_carry_provenance_and_the_company_key(store):
 
 def test_entity_written_by_a_is_actually_updated_by_b(store):
     bid = _entity(store, A)
-    out = store.update_blob(bid, B, PERSON + "\n- moved to net-60 terms in June", "merged")
+    out = seeding.update_blob(store, bid, B, PERSON + "\n- moved to net-60 terms in June", "merged")
     assert out, "cross-owner update returned an empty dict: the lost-update bug"
     assert "net-60" in store.get_blob(bid, A)["content"]
     # provenance stays with the account that CREATED the row
@@ -110,7 +111,7 @@ def test_rules_are_invisible_to_the_other_account_on_every_path(store, search):
         entity_namespace(current_company_key()),
     }
     # edit
-    assert store.update_blob(a_rule, B, "poisoned", "x") == {}
+    assert seeding.update_blob(store, a_rule, B, "poisoned", "x") == {}
     assert "Never promise" in store.get_blob(a_rule, A)["content"]
     # delete
     assert store.delete_blob(a_rule, B) is False

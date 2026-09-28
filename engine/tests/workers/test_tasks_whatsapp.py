@@ -31,6 +31,7 @@ from datetime import datetime, timezone
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+from tests.memory import seeding
 
 
 # ---------------------------------------------------------------------
@@ -325,7 +326,7 @@ async def test_cross_channel_wa_updates_existing_email_task(fresh_db):
     # New WA message. Link it to the same blob via whatsapp_blobs so F7
     # finds the existing email task.
     wa_id = _insert_wa_message(owner, text="John: ti chiamo per il corso?")
-    storage.add_whatsapp_blob_link(owner, wa_id, blob_id)
+    seeding.add_whatsapp_blob_link(owner, wa_id, blob_id)
 
     # LLM picks UPDATE on the email task id.
     worker = _make_worker(

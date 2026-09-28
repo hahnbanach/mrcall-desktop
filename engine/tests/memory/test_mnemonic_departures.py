@@ -46,6 +46,7 @@ from tests.memory.mnemonic_env import (
     stub_embedder,
     with_client,
 )
+from tests.memory import seeding
 
 ACME = (
     "#IDENTIFIERS\nEntity type: COMPANY\nScope: entity\nName: Acme Srl\n"
@@ -80,7 +81,7 @@ def seed(content, embedder):
     from zylch.memory.blob_storage import BlobStorage
 
     storage = BlobStorage(get_session, embedder)
-    blob = storage.store_blob(
+    blob = seeding.store_blob(storage,
         owner_id=OWNER_A, namespace=f"user:{COMPANY_A}", content=content, event_description="seed"
     )
     return blob["id"], storage.get_blob(blob["id"], OWNER_A)["updated_at"]
@@ -266,7 +267,7 @@ def test_a_restore_brings_back_the_named_version_and_retains_what_it_replaced(pr
 
     storage = BlobStorage(get_session, embedder)
     target, _ = seed(BETA, embedder)
-    storage.update_blob(target, OWNER_A, BETA_CORRECTED, event_description="correction")
+    seeding.update_blob(storage, target, OWNER_A, BETA_CORRECTED, event_description="correction")
     ((first_id, _, first_text),) = versions_of(target)
     assert first_text == BETA
 
@@ -289,7 +290,7 @@ def test_a_version_of_another_blob_cannot_be_restored_into_this_one(profile, emb
     storage = BlobStorage(get_session, embedder)
     acme, _ = seed(ACME, embedder)
     beta, _ = seed(BETA, embedder)
-    storage.update_blob(beta, OWNER_A, BETA_CORRECTED, event_description="correction")
+    seeding.update_blob(storage, beta, OWNER_A, BETA_CORRECTED, event_description="correction")
     ((beta_version, _, _),) = versions_of(beta)
 
     out = storage.restore_version(acme, OWNER_A, beta_version)
@@ -308,7 +309,7 @@ def test_the_rpc_and_the_slash_verb_drive_the_same_restore(profile, embedder, mo
 
     storage = BlobStorage(get_session, embedder)
     target, _ = seed(BETA, embedder)
-    storage.update_blob(target, OWNER_A, BETA_CORRECTED, event_description="correction")
+    seeding.update_blob(storage, target, OWNER_A, BETA_CORRECTED, event_description="correction")
     ((v1, _, _),) = versions_of(target)
     monkeypatch.setattr(maintenance, "_owner_id", lambda: OWNER_A)
 

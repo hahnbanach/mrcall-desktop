@@ -29,6 +29,7 @@ from tests.memory.mnemonic_env import (
     stub_embedder,
 )
 from tests.memory.test_mnemonic_merge import LUCA_CAL, LUCA_MAIL, LUCA_THIRD, MERGED, read, seed
+from tests.memory import seeding
 
 
 @pytest.fixture
@@ -96,7 +97,7 @@ def test_a_donor_the_permit_does_not_name_is_never_dropped(store):
 def test_a_donor_outside_the_permits_namespace_is_never_dropped(store):
     """Visible to the account and in the company, in another entity namespace."""
     keeper = read(store, seed(store, LUCA_MAIL))
-    donor_id = store.store_blob(OWNER_A, "user:another-namespace", LUCA_CAL, "seed")["id"]
+    donor_id = seeding.store_blob(store, OWNER_A, "user:another-namespace", LUCA_CAL, "seed")["id"]
     donor = read(store, donor_id)
 
     with pytest.raises(PermitError, match="namespace the permit does not authorize"):

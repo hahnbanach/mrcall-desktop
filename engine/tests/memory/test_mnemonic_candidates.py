@@ -24,6 +24,7 @@ from zylch.memory.mnemonic.candidates import (
 )
 from zylch.memory.mnemonic.contracts import MemoryEvent, SubjectHint
 from zylch.memory.mnemonic.wiring import typed_identifiers
+from tests.memory import seeding
 
 MAIL = (
     "From: mario@acme.test\nTo: support@company.test\nCC: cc@acme.test\n"
@@ -219,7 +220,7 @@ def test_a_context_without_retrieval_answers_nothing_but_exact_reads(company_db,
     storage = BlobStorage(get_session, embedder)
     from zylch.memory.company_key import current_company_key
 
-    blob = storage.store_blob(
+    blob = seeding.store_blob(storage,
         "owner-a", f"user:{current_company_key()}", "#IDENTIFIERS\nName: Acme\n#ABOUT\nx", "seed"
     )
     braked = default_context("owner-a", retrieval=False)

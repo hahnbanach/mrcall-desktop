@@ -21,7 +21,6 @@ from zylch.memory.blob_storage import BlobStorage
 from zylch.memory.mnemonic import ingestion
 from zylch.storage.database import get_session
 from zylch.storage.models import EmailBlob
-from zylch.storage.storage import Storage
 
 from tests.memory.mnemonic_env import COMPANY_A, OWNER_A, BagOfWordsEmbedder
 from tests.workers.ingestion_env import (
@@ -45,6 +44,7 @@ from tests.workers.ingestion_env import (
     seed_whatsapp,
     update_decision,
 )
+from tests.memory import seeding
 
 
 @pytest.fixture
@@ -113,13 +113,13 @@ def test_a_name_only_person_never_inherits_the_senders_identity(profile):
     be judged by that address: the index is not asked with it, the sender's
     blob is not evidence, and the person is created."""
     storage = BlobStorage(get_session, profile.embedder)
-    sender = storage.store_blob(
-        OWNER_A,
+    sender = seeding.store_blob(
+        storage, OWNER_A,
         f"user:{COMPANY_A}",
         "#IDENTIFIERS\nEntity type: PERSON\nScope: entity\nName: Mario Verdi\nEmail: mario@acme.test\n#ABOUT\nBuyer.",
         "seed",
     )
-    Storage().add_person_identifiers(OWNER_A, sender["id"], [("email", "mario@acme.test")])
+    seeding.add_person_identifiers(OWNER_A, sender["id"], [("email", "mario@acme.test")])
     mail = seed_email(body="Luca Bianchi, my colleague at Acme, will call you about the order.")
     worker = make_worker([extraction(NAME_ONLY_PERSON)], [create_decision(NAME_ONLY_PERSON, "PERSON")])
     asked = []
@@ -145,10 +145,10 @@ def test_the_candidates_the_role_is_shown_are_identifier_first_then_cosine(profi
     """The ``test_person_identifiers`` incident, on the harness: blob A is in
     the identity index, blob B is only a cosine match, and A is shown first."""
     storage = BlobStorage(get_session, profile.embedder)
-    a = storage.store_blob(OWNER_A, f"user:{COMPANY_A}", LUCA.replace("Purchasing at Alpha.", "Old note."), "seed")
-    Storage().add_person_identifiers(OWNER_A, a["id"], [("email", "luca@alpha.example")])
-    b = storage.store_blob(
-        OWNER_A,
+    a = seeding.store_blob(storage, OWNER_A, f"user:{COMPANY_A}", LUCA.replace("Purchasing at Alpha.", "Old note."), "seed")
+    seeding.add_person_identifiers(OWNER_A, a["id"], [("email", "luca@alpha.example")])
+    b = seeding.store_blob(
+        storage, OWNER_A,
         f"user:{COMPANY_A}",
         "#IDENTIFIERS\nEntity type: PERSON\nName: Luca Bianchi\n#ABOUT\nPurchasing at Alpha, maybe.",
         "seed",
@@ -176,13 +176,13 @@ def test_a_blob_the_identity_index_finds_by_lid_is_shown_as_an_identifier_match(
         f"LID: {lid}\n#ABOUT\nWrites on WhatsApp about the order.\n#HISTORY\n- asked for the invoice"
     )
     storage = BlobStorage(get_session, profile.embedder)
-    known = storage.store_blob(
-        OWNER_A,
+    known = seeding.store_blob(
+        storage, OWNER_A,
         f"user:{COMPANY_A}",
         f"#IDENTIFIERS\nEntity type: PERSON\nName: N. Rossi\nLID: {lid}\n#ABOUT\nOld note.",
         "seed",
     )
-    Storage().add_person_identifiers(OWNER_A, known["id"], [("lid", lid)])
+    seeding.add_person_identifiers(OWNER_A, known["id"], [("lid", lid)])
     worker = make_worker([extraction(nina)], [create_decision(nina, "PERSON")])
 
     assert run(worker, "process_whatsapp_message", seed_whatsapp()) is True
@@ -195,7 +195,7 @@ def test_a_blob_the_identity_index_finds_by_lid_is_shown_as_an_identifier_match(
 
 def test_a_fact_entity_pins_its_exact_row(profile):
     storage = BlobStorage(get_session, profile.embedder)
-    fact = storage.store_blob(OWNER_A, f"facts:{COMPANY_A}", "Category: pricing\nKey: list\nValue: EUR 100 per unit", "seed")
+    fact = seeding.store_blob(storage, OWNER_A, f"facts:{COMPANY_A}", "Category: pricing\nKey: list\nValue: EUR 100 per unit", "seed")
     version = storage.get_blob(fact["id"], OWNER_A)["updated_at"]
     mail = seed_email(body="Our list price is now EUR 120 per unit.")
     worker = make_worker([extraction(FACT_ENTITY)], [update_decision(fact["id"], version, FACT_ENTITY, "FACT")])

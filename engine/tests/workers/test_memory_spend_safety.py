@@ -36,6 +36,7 @@ from tests.workers.ingestion_env import (
     seed_mrcall,
     seed_whatsapp,
 )
+from tests.memory import seeding
 
 
 def entity(email, phone=""):
@@ -167,7 +168,7 @@ def test_a_truncated_decision_never_writes_or_marks_the_source(profile):
     """The old merge could be cut off mid-blob; now the role's decision can be.
     A truncated decision is no proposal at all, and after the bounded rounds
     the source is in review: the existing memory untouched, nothing marked."""
-    existing = BlobStorage(get_session, profile.embedder).store_blob(OWNER_A, f"user:{COMPANY_A}", LUCA, "seed")
+    existing = seeding.store_blob(BlobStorage(get_session, profile.embedder), OWNER_A, f"user:{COMPANY_A}", LUCA, "seed")
     mail = seed_email()
     worker = make_worker(
         [extraction(LUCA)],

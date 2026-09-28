@@ -51,6 +51,7 @@ from tests.workers.ingestion_env import (
     seed_whatsapp,
     update_decision,
 )
+from tests.memory import seeding
 
 
 @pytest.fixture
@@ -260,9 +261,9 @@ def test_an_oversized_extraction_is_a_review_and_nothing_is_written(profile):
 
 def test_an_unhealthy_merge_gate_shows_the_role_no_candidate_and_keeps_the_fact_pin(profile):
     storage = BlobStorage(get_session, profile.embedder)
-    luca = storage.store_blob(OWNER_A, f"user:{COMPANY_A}", LUCA, "seed")
-    Storage().add_person_identifiers(OWNER_A, luca["id"], [("email", "luca@alpha.example")])
-    fact = storage.store_blob(OWNER_A, f"facts:{COMPANY_A}", "Category: pricing\nKey: list\nValue: EUR 100", "seed")
+    luca = seeding.store_blob(storage, OWNER_A, f"user:{COMPANY_A}", LUCA, "seed")
+    seeding.add_person_identifiers(OWNER_A, luca["id"], [("email", "luca@alpha.example")])
+    fact = seeding.store_blob(storage, OWNER_A, f"facts:{COMPANY_A}", "Category: pricing\nKey: list\nValue: EUR 100", "seed")
     version = storage.get_blob(fact["id"], OWNER_A)["updated_at"]
     mail = seed_email()
     worker = make_worker(

@@ -38,6 +38,7 @@ from zylch.storage import database as dbm
 from zylch.storage.database import get_session
 from zylch.storage.migrations import applied_step_ids
 from zylch.storage.step_memory_split import STEP_ID as SPLIT, copy_if_absent
+from tests.memory import seeding
 
 PERSON = (
     "#IDENTIFIERS\nName: Giulia Verdi\nEmail: giulia@cliente.test\n"
@@ -60,9 +61,8 @@ def _fact(owner, embedder, category, key, value):
     """Seed one fact row as the store keeps it, without asking the memory role."""
     from zylch.services.facts_store import facts_namespace, format_fact
 
-    BlobStorage(get_session, embedder).store_blob(
-        owner, facts_namespace(owner), format_fact(category, key, value), "seed"
-    )
+    seeding.store_blob(BlobStorage(get_session, embedder), owner, facts_namespace(owner),
+                       format_fact(category, key, value), "seed")
 
 
 def _boot(monkeypatch, tmp_path, name, key, source):
@@ -205,8 +205,8 @@ def test_fact_from_a_reaches_b(monkeypatch, tmp_path, stub_embedder):
     from zylch.services import facts_store
 
     _fact(a, stub_embedder, "pricing", "MOQ", "500 units")
-    BlobStorage(get_session, stub_embedder).store_blob(
-        a, entity_namespace(key), PERSON, "extracted"
+    seeding.store_blob(
+        BlobStorage(get_session, stub_embedder), a, entity_namespace(key), PERSON, "extracted"
     )
 
     b = _boot(monkeypatch, tmp_path, "b", key=key, source="join")  # typed key, store exists
@@ -246,13 +246,13 @@ def test_per_account_reset_under_shared_store_keeps_company_rows(
     a = _boot(monkeypatch, tmp_path, "a", key=None, source=None)
     key = current_company_key()
     store = BlobStorage(get_session, stub_embedder)
-    a_entity = store.store_blob(a, entity_namespace(key), PERSON, "x")["id"]
+    a_entity = seeding.store_blob(store, a, entity_namespace(key), PERSON, "x")["id"]
     b = _boot(monkeypatch, tmp_path, "b", key=key, source="join")
     store = BlobStorage(get_session, stub_embedder)
-    store.store_blob(b, f"template:{b}", "B's rule", "x")
-    b_entity = store.store_blob(b, entity_namespace(key), PERSON.replace("Giulia", "Marco"), "x")[
-        "id"
-    ]
+    seeding.store_blob(store, b, f"template:{b}", "B's rule", "x")
+    b_entity = seeding.store_blob(
+        store, b, entity_namespace(key), PERSON.replace("Giulia", "Marco"), "x"
+    )["id"]
     assert store.delete_all_blobs(b) == 1  # the rule only
     assert store.get_blob(a_entity, b) and store.get_blob(b_entity, b)
 
@@ -290,8 +290,8 @@ def test_task_context_hydrates_another_accounts_entity_and_aliases(
 ):
     a = _boot(monkeypatch, tmp_path, "a", key=None, source=None)
     key = current_company_key()
-    keeper = BlobStorage(get_session, stub_embedder).store_blob(
-        a, entity_namespace(key), PERSON, "x"
+    keeper = seeding.store_blob(
+        BlobStorage(get_session, stub_embedder), a, entity_namespace(key), PERSON, "x"
     )["id"]
     from zylch.services.solve_constants import build_task_context
     from zylch.storage.models import BlobAlias
@@ -399,7 +399,7 @@ def test_backfill_links_this_profiles_mail_to_company_blobs(monkeypatch, tmp_pat
                 date=datetime(2026, 9, 8),
             )
         )
-    BlobStorage(get_session, stub_embedder).store_blob(
+    seeding.store_blob(BlobStorage(get_session, stub_embedder),
         a, entity_namespace(key), PERSON, "Extracted from email mail-1 (2026-09-08)"
     )
     with get_session() as s:
@@ -440,7 +440,7 @@ _CAS_WRITER = textwrap.dedent("""
     from zylch.storage import database as dbm
     dbm.init_db()
     from zylch.storage.database import get_session
-    from zylch.memory.blob_storage import BlobStorage
+    from zylch.memory.blob_storage import BlobStorage; from tests.memory import seeding
     class E:
         def encode(self, t):
             if isinstance(t, str): return np.ones(8, dtype=np.float32)
@@ -451,7 +451,7 @@ _CAS_WRITER = textwrap.dedent("""
         cur = bs.get_blob(blob_id, "w@c.test")
         time.sleep(hold)  # the "LLM merge": long enough for the other writer to interleave
         merged = cur["content"] + "\\n- " + marker
-        out = bs.update_blob(blob_id, "w@c.test", merged, "cas", expected_updated_at=cur["updated_at"])
+        out = seeding.update_blob(bs, blob_id, "w@c.test", merged, "cas", expected_updated_at=cur["updated_at"])
         attempts += 1
         if not out.get("conflict"):
             break
@@ -467,7 +467,7 @@ _INSERTER = textwrap.dedent("""
     from zylch.storage import database as dbm
     dbm.init_db()
     from zylch.storage.database import get_session
-    from zylch.memory.blob_storage import BlobStorage
+    from zylch.memory.blob_storage import BlobStorage; from tests.memory import seeding
     import hashlib, re
     class E:
         def _one(self, text):
@@ -477,7 +477,7 @@ _INSERTER = textwrap.dedent("""
             return v
         def encode(self, t):
             return self._one(t) if isinstance(t, str) else np.array([self._one(x) for x in t])
-    BlobStorage(get_session, E()).store_blob("w@c.test", f"user:{key}", "#IDENTIFIERS\\nName: Late Arrival\\n#ABOUT\\nzeta", "x")
+    seeding.store_blob(BlobStorage(get_session, E()), "w@c.test", f"user:{key}", "#IDENTIFIERS\\nName: Late Arrival\\n#ABOUT\\nzeta", "x")
     print("inserted")
     """)
 
@@ -525,8 +525,8 @@ def test_two_processes_writing_one_entity_converge_without_lost_update(
 ):
     a = _boot(monkeypatch, tmp_path, "a", key=None, source=None)
     key = current_company_key()
-    blob_id = BlobStorage(get_session, stub_embedder).store_blob(
-        a, entity_namespace(key), PERSON, "x"
+    blob_id = seeding.store_blob(
+        BlobStorage(get_session, stub_embedder), a, entity_namespace(key), PERSON, "x"
     )["id"]
     env = {"MEMORY_DB_DIR": os.environ["MEMORY_DB_DIR"]}
     pw = str(tmp_path / "writer")

@@ -870,44 +870,6 @@ class Storage:
     # worker reads them in _collect to find which existing blobs were
     # extracted from a new email/event without similarity search.
 
-    def _link_source(
-        self,
-        source_kind: str,
-        source_id: str,
-        blob_id: str,
-        owner_id: str,
-    ) -> bool:
-        """One standalone-session link, for the writers not yet converted.
-
-        The rule itself lives in :mod:`zylch.memory.associations`, which the
-        semantic commit calls inside its own transaction. These legacy callers
-        keep their own session and their own swallow-and-log behavior; what
-        they must not keep is a second copy of the rule.
-        """
-        from zylch.memory.associations import link_source
-
-        try:
-            with get_session() as session:
-                return link_source(
-                    session,
-                    source_kind=source_kind,
-                    source_id=source_id,
-                    blob_id=blob_id,
-                    owner_id=owner_id,
-                )
-        except Exception as e:
-            logger.error(f"add_{source_kind}_blob_link({source_id}, {blob_id}) failed: {e}")
-            return False
-
-    def add_email_blob_link(
-        self,
-        owner_id: str,
-        email_id: str,
-        blob_id: str,
-    ) -> bool:
-        """Idempotent (email_id, blob_id) link. Returns True when inserted."""
-        return self._link_source("email", email_id, blob_id, owner_id)
-
     def get_blobs_for_email(
         self,
         owner_id: str,
@@ -933,15 +895,6 @@ class Storage:
             logger.error(f"get_blobs_for_email({email_id}) failed: {e}")
             return []
 
-    def add_calendar_blob_link(
-        self,
-        owner_id: str,
-        event_id: str,
-        blob_id: str,
-    ) -> bool:
-        """Idempotent (event_id, blob_id) link. Returns True when inserted."""
-        return self._link_source("calendar", event_id, blob_id, owner_id)
-
     def get_blobs_for_event(
         self,
         owner_id: str,
@@ -966,15 +919,6 @@ class Storage:
         except Exception as e:
             logger.error(f"get_blobs_for_event({event_id}) failed: {e}")
             return []
-
-    def add_whatsapp_blob_link(
-        self,
-        owner_id: str,
-        whatsapp_message_id: str,
-        blob_id: str,
-    ) -> bool:
-        """Idempotent (whatsapp_message_id, blob_id) link. Returns True when inserted."""
-        return self._link_source("whatsapp", whatsapp_message_id, blob_id, owner_id)
 
     def get_blobs_for_whatsapp_message(
         self,
@@ -1012,54 +956,6 @@ class Storage:
     # would miss it" — for example: an email signed with phone
     # +393331234567 and a WhatsApp message from JID 393331234567@s.whatsapp.net
     # both produce identifier kind='phone' value='+393331234567'.
-
-    def add_person_identifiers(
-        self,
-        owner_id: str,
-        blob_id: str,
-        identifiers: List[tuple],
-    ) -> int:
-        """Bulk add identifier rows for a blob.
-
-        Args:
-            owner_id: Profile owner.
-            blob_id: Blob the identifiers belong to.
-            identifiers: List of (kind, value) tuples. kind ∈ {'email','phone','lid'}.
-                Values should be already normalised by the caller (lowercased
-                emails, digit-only phones with optional leading '+', etc.).
-                Empty / None values are skipped.
-
-        Returns:
-            Number of NEW rows inserted (existing rows are silently no-op'd
-            via the unique constraint).
-        """
-        if not (owner_id and blob_id and identifiers):
-            return 0
-        from zylch.memory.associations import add_identifiers
-
-        try:
-            with get_session() as session:
-                inserted = add_identifiers(
-                    session,
-                    owner_id=owner_id,
-                    blob_id=blob_id,
-                    identifiers=identifiers,
-                    company_key=_company_key(),
-                )
-                if inserted:
-                    # identifiers are what the reconsolidation sweep clusters
-                    # on: a new one can make two blobs a merge candidate, so
-                    # it counts as a change the next sweep must see
-                    try:
-                        from zylch.memory.store import bump_mutation_seq
-
-                        bump_mutation_seq(session)
-                    except Exception as e:  # a store without the meta row (legacy tests)
-                        logger.debug(f"add_person_identifiers: mutation_seq bump skipped: {e}")
-                return inserted
-        except Exception as e:
-            logger.warning(f"add_person_identifiers(blob={blob_id}) failed: {e}")
-            return 0
 
     def find_blobs_by_identifiers(
         self,

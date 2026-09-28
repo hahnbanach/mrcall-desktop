@@ -44,6 +44,7 @@ from tests.memory.mnemonic_env import (
     clear_process_state,
     stub_embedder,
 )
+from tests.memory import seeding
 
 ENGINE_ROOT = Path(__file__).resolve().parents[2]
 WINDOW, FLOOR, THRESHOLD = 90, 10, 25
@@ -71,8 +72,8 @@ def seed_blob(embedder, name="Acme Srl", owner=OWNER_A, namespace=None) -> str:
     content = (
         f"#IDENTIFIERS\nEntity type: COMPANY\nScope: entity\nName: {name}\n#ABOUT\nA supplier."
     )
-    return storage(embedder).store_blob(
-        owner_id=owner,
+    return seeding.store_blob(
+        storage(embedder), owner_id=owner,
         namespace=namespace or f"user:{COMPANY_A}",
         content=content,
         event_description="seed",

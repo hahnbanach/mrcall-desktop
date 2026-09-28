@@ -37,6 +37,7 @@ from tests.memory.mnemonic_env import (
     client,
     stub_embedder,
 )
+from tests.memory import seeding
 
 ACME = (
     "#IDENTIFIERS\nEntity type: COMPANY\nScope: entity\nName: Acme Srl\n"
@@ -64,8 +65,8 @@ def storage(embedder) -> BlobStorage:
 
 
 def seed(embedder, content=ACME, owner=OWNER_A, namespace=None):
-    blob = storage(embedder).store_blob(
-        owner_id=owner,
+    blob = seeding.store_blob(
+        storage(embedder), owner_id=owner,
         namespace=namespace or f"user:{COMPANY_A}",
         content=content,
         event_description="seed",
@@ -97,7 +98,7 @@ def test_a_legacy_rewrite_keeps_the_text_it_replaced(profile_a, embedder):
     blob_id = seed(embedder)
     assert versions(blob_id) == []
 
-    storage(embedder).update_blob(blob_id=blob_id, owner_id=OWNER_A, content=ACME_2)
+    seeding.update_blob(storage(embedder), blob_id=blob_id, owner_id=OWNER_A, content=ACME_2)
 
     kept = versions(blob_id)
     assert [v["content"] for v in kept] == [ACME]
@@ -110,8 +111,8 @@ def test_a_legacy_rewrite_keeps_the_text_it_replaced(profile_a, embedder):
 
 def test_every_rewrite_adds_a_version_oldest_first(profile_a, embedder):
     blob_id = seed(embedder)
-    storage(embedder).update_blob(blob_id=blob_id, owner_id=OWNER_A, content=ACME_2)
-    storage(embedder).update_blob(blob_id=blob_id, owner_id=OWNER_A, content=ACME_3)
+    seeding.update_blob(storage(embedder), blob_id=blob_id, owner_id=OWNER_A, content=ACME_2)
+    seeding.update_blob(storage(embedder), blob_id=blob_id, owner_id=OWNER_A, content=ACME_3)
     assert [v["content"] for v in versions(blob_id)] == [ACME, ACME_2]
     assert content_of(blob_id) == ACME_3
 
@@ -119,13 +120,13 @@ def test_every_rewrite_adds_a_version_oldest_first(profile_a, embedder):
 def test_the_reason_is_the_callers_word_not_the_writers_guess(profile_a, embedder):
     """`_rewrite` cannot know its caller; the sweep says `consolidate` itself."""
     blob_id = seed(embedder)
-    storage(embedder).update_blob(
-        blob_id=blob_id, owner_id=OWNER_A, content=ACME_2, reason=CONSOLIDATE
+    seeding.update_blob(
+        storage(embedder), blob_id=blob_id, owner_id=OWNER_A, content=ACME_2, reason=CONSOLIDATE
     )
     assert versions(blob_id)[0]["reason"] == CONSOLIDATE
     with pytest.raises(ValueError):
-        storage(embedder).update_blob(
-            blob_id=blob_id, owner_id=OWNER_A, content=ACME_3, reason="whatever"
+        seeding.update_blob(
+            storage(embedder), blob_id=blob_id, owner_id=OWNER_A, content=ACME_3, reason="whatever"
         )
     assert content_of(blob_id) == ACME_2  # the refused write wrote nothing
 
@@ -135,7 +136,7 @@ def test_the_semantic_update_retains_under_the_operations_id(profile_a, embedder
     blob_id = seed(embedder)
     with get_session() as session:
         version_read = session.get(Blob, blob_id).updated_at
-    from zylch.memory.blob_storage import _iso
+    from zylch.memory.blob_commits import _iso
 
     decision = json.dumps(
         {
@@ -183,7 +184,7 @@ def test_a_rewrite_that_fails_retains_nothing(profile_a, embedder, monkeypatch):
 
     monkeypatch.setattr(BlobStorage, "_add_sentences", explode)
     with pytest.raises(RuntimeError):
-        storage(embedder).update_blob(blob_id=blob_id, owner_id=OWNER_A, content=ACME_2)
+        seeding.update_blob(storage(embedder), blob_id=blob_id, owner_id=OWNER_A, content=ACME_2)
 
     assert versions(blob_id) == []
     assert content_of(blob_id) == ACME
@@ -205,7 +206,7 @@ def test_the_sweeps_delete_keeps_the_donors_final_text(profile_a, embedder):
 def test_the_owners_delete_takes_the_versions_with_the_blob(profile_a, embedder):
     """An owner who deletes means it, and nothing cascades — so this is explicit."""
     blob_id = seed(embedder)
-    storage(embedder).update_blob(blob_id=blob_id, owner_id=OWNER_A, content=ACME_2)
+    seeding.update_blob(storage(embedder), blob_id=blob_id, owner_id=OWNER_A, content=ACME_2)
     assert len(versions(blob_id)) == 1
 
     assert storage(embedder).delete_blob(blob_id, OWNER_A) is True
@@ -232,18 +233,18 @@ def test_a_reset_on_a_shared_store_prunes_only_the_blobs_it_deletes(
     stub_embedder(monkeypatch, embedder)
     boot(monkeypatch, tmp_path, OWNER_A, COMPANY_A)
     a_blob = seed(embedder, owner=OWNER_A)
-    storage(embedder).update_blob(blob_id=a_blob, owner_id=OWNER_A, content=ACME_2)
+    seeding.update_blob(storage(embedder), blob_id=a_blob, owner_id=OWNER_A, content=ACME_2)
 
     boot(monkeypatch, tmp_path, OWNER_B, COMPANY_A)  # same file, second account
     # B rewrites A's company blob: the version's provenance is B, the blob is A's.
-    storage(embedder).update_blob(blob_id=a_blob, owner_id=OWNER_B, content=ACME_3)
+    seeding.update_blob(storage(embedder), blob_id=a_blob, owner_id=OWNER_B, content=ACME_3)
     b_rule = seed(
         embedder,
         content="Always answer B's customers in Italian.",
         owner=OWNER_B,
         namespace=f"template:{OWNER_B}",
     )
-    storage(embedder).update_blob(
+    seeding.update_blob(storage(embedder),
         blob_id=b_rule, owner_id=OWNER_B, content="Always answer B's customers in Italian, briefly."
     )
     assert [v["owner_id"] for v in versions(a_blob)] == [OWNER_A, OWNER_B]
@@ -275,15 +276,13 @@ def test_a_real_consolidation_retains_the_donor_and_the_keeper(profile_a, embedd
     the validator, the rewrite, the drop and the alias are the real ones.
     """
     from zylch.storage.models import BlobAlias
-    from zylch.storage.storage import Storage
 
     from tests.memory.consolidation_env import healthy, merge_answer, scripted, sweep
 
     keeper = seed(embedder, content=ACME)
     donor = seed(embedder, content=ACME.replace("Industrial supplier", "Also a distributor"))
-    rows = Storage()
     for blob_id in (keeper, donor):
-        rows.add_person_identifiers(
+        seeding.add_person_identifiers(
             owner_id=OWNER_A, blob_id=blob_id, identifiers=[("email", "info@acme.test")]
         )
 

@@ -28,6 +28,7 @@ import pytest
 
 from tests.memory.mnemonic_env import COMPANY_A, OWNER_A, BagOfWordsEmbedder
 from tests.workers.ingestion_env import booted, make_worker, run
+from tests.memory import seeding
 
 
 # ---------------------------------------------------------------------
@@ -223,16 +224,14 @@ def test_process_whatsapp_message_merges_into_existing_email_blob(profile):
     from zylch.memory.blob_storage import BlobStorage
     from zylch.storage.database import get_session
     from zylch.storage.models import Blob, WhatsAppBlob
-    from zylch.storage.storage import Storage
 
     owner = OWNER_A
-    storage = Storage()
 
     # Pre-seed an "email-derived" blob with a Phone identifier already
     # indexed into person_identifiers. Mirrors what process_email would
     # leave behind after the user received an email signed by John.
-    seeded = BlobStorage(get_session, profile.embedder).store_blob(
-        owner,
+    seeded = seeding.store_blob(
+        BlobStorage(get_session, profile.embedder), owner,
         f"user:{COMPANY_A}",
         "#IDENTIFIERS\n"
         "Entity type: PERSON\n"
@@ -245,7 +244,7 @@ def test_process_whatsapp_message_merges_into_existing_email_blob(profile):
     )
     pre_blob_id = seeded["id"]
     version = BlobStorage(get_session, profile.embedder).get_blob(pre_blob_id, owner)["updated_at"]
-    storage.add_person_identifiers(
+    seeding.add_person_identifiers(
         owner,
         pre_blob_id,
         [("email", "contact@example.com"), ("phone", "+393331234567")],

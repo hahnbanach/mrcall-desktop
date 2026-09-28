@@ -17,6 +17,7 @@ from zylch.memory.store import memory_db_path, set_self_notion
 from zylch.storage import database as dbm
 from zylch.storage.database import get_session
 
+from tests.memory import seeding
 from tests.memory.test_split_store import _boot, _fact  # noqa: E402  (shared helpers)
 
 
@@ -46,7 +47,7 @@ def test_join_converges_facts_keeps_history_and_unites_the_rest(
     a = _boot(monkeypatch, tmp_path, "a", key=None, source=None)
     key_a = current_company_key()
     _fact(a, stub_embedder, "pricing", "MOQ", "500 units")
-    BlobStorage(get_session, stub_embedder).store_blob(
+    seeding.store_blob(BlobStorage(get_session, stub_embedder),
         a, entity_namespace(key_a), "#IDENTIFIERS\nName: A-only\n#ABOUT\nx", "x"
     )
 
@@ -56,8 +57,8 @@ def test_join_converges_facts_keeps_history_and_unites_the_rest(
     _fact(b, stub_embedder, "pricing", "MOQ", "300 units")  # same (category, key), other value
     _fact(b, stub_embedder, "pricing", "Lead time", "6 weeks")
     store_b = BlobStorage(get_session, stub_embedder)
-    store_b.store_blob(b, entity_namespace(key_b), "#IDENTIFIERS\nName: B-only\n#ABOUT\ny", "x")
-    store_b.store_blob(b, f"template:{b}", "B signs with the warehouse number", "x")
+    seeding.store_blob(store_b, b, entity_namespace(key_b), "#IDENTIFIERS\nName: B-only\n#ABOUT\ny", "x")
+    seeding.store_blob(store_b, b, f"template:{b}", "B signs with the warehouse number", "x")
 
     out = join(key_a)
     assert out["ok"] and not out.get("already"), out
@@ -107,7 +108,7 @@ def test_preview_echoes_self_notion_and_size_without_creating(monkeypatch, tmp_p
     key_a = current_company_key()
     set_self_notion(dbm.current_memory_engine(), "Café 124")
     for i in range(3):
-        BlobStorage(get_session, stub_embedder).store_blob(
+        seeding.store_blob(BlobStorage(get_session, stub_embedder),
             a, entity_namespace(key_a), f"#IDENTIFIERS\nName: N{i}\n#ABOUT\nz", "x"
         )
 
@@ -146,7 +147,6 @@ LUCA = "#IDENTIFIERS\nEntity type: PERSON\nName: Luca Bianchi\n#ABOUT\nPurchasin
 def test_a_join_carries_what_the_joiner_sees_its_rules_its_versions_and_every_restriction(
     monkeypatch, tmp_path, embedder
 ):
-    from tests.memory import seeding
     from tests.memory.join_env import isolate, store_digest
     from tests.memory.mnemonic_env import COMPANY_A, COMPANY_B, OWNER_A, OWNER_B, boot, stub_embedder
     from zylch.memory.eligibility import ineligible_fact_ids

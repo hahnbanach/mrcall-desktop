@@ -24,6 +24,7 @@ import uuid
 from datetime import datetime, timezone
 
 import pytest
+from tests.memory import seeding
 
 OWNER = "owner-rules-test"
 
@@ -129,7 +130,7 @@ def seed_entity(embedder, content):
     from zylch.storage.database import get_session
 
     storage = BlobStorage(get_session, embedder)
-    blob = storage.store_blob(OWNER, entity_namespace(current_company_key()), content, "seed")
+    blob = seeding.store_blob(storage, OWNER, entity_namespace(current_company_key()), content, "seed")
     return blob["id"], storage.get_blob(blob["id"], OWNER)["updated_at"]
 
 

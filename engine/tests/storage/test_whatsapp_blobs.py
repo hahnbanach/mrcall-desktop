@@ -15,6 +15,7 @@ import uuid
 from datetime import datetime, timezone
 
 import pytest
+from tests.memory import seeding
 
 
 @pytest.fixture
@@ -85,7 +86,7 @@ def test_add_whatsapp_blob_link_inserts_new_row(fresh_db):
     blob_id = _make_blob(owner)
     msg_id = _make_wa_message(owner)
 
-    inserted = storage.add_whatsapp_blob_link(owner, msg_id, blob_id)
+    inserted = seeding.add_whatsapp_blob_link(owner, msg_id, blob_id)
     assert inserted is True
 
     blobs = storage.get_blobs_for_whatsapp_message(owner, msg_id)
@@ -100,24 +101,22 @@ def test_add_whatsapp_blob_link_is_idempotent(fresh_db):
     blob_id = _make_blob(owner)
     msg_id = _make_wa_message(owner)
 
-    assert storage.add_whatsapp_blob_link(owner, msg_id, blob_id) is True
-    assert storage.add_whatsapp_blob_link(owner, msg_id, blob_id) is False
+    assert seeding.add_whatsapp_blob_link(owner, msg_id, blob_id) is True
+    assert seeding.add_whatsapp_blob_link(owner, msg_id, blob_id) is False
 
     blobs = storage.get_blobs_for_whatsapp_message(owner, msg_id)
     assert blobs == [blob_id]
 
 
 def test_add_whatsapp_blob_link_skips_empty_inputs(fresh_db):
-    from zylch.storage.storage import Storage
 
-    storage = Storage()
     owner = "alice@example.com"
     blob_id = _make_blob(owner)
     msg_id = _make_wa_message(owner)
 
-    assert storage.add_whatsapp_blob_link("", msg_id, blob_id) is False
-    assert storage.add_whatsapp_blob_link(owner, "", blob_id) is False
-    assert storage.add_whatsapp_blob_link(owner, msg_id, "") is False
+    assert seeding.add_whatsapp_blob_link("", msg_id, blob_id) is False
+    assert seeding.add_whatsapp_blob_link(owner, "", blob_id) is False
+    assert seeding.add_whatsapp_blob_link(owner, msg_id, "") is False
 
 
 def test_get_blobs_for_whatsapp_message_returns_multiple_blobs(fresh_db):
@@ -130,8 +129,8 @@ def test_get_blobs_for_whatsapp_message_returns_multiple_blobs(fresh_db):
     blob_b = _make_blob(owner, content="COMPANY")
     msg_id = _make_wa_message(owner)
 
-    storage.add_whatsapp_blob_link(owner, msg_id, blob_a)
-    storage.add_whatsapp_blob_link(owner, msg_id, blob_b)
+    seeding.add_whatsapp_blob_link(owner, msg_id, blob_a)
+    seeding.add_whatsapp_blob_link(owner, msg_id, blob_b)
 
     blobs = storage.get_blobs_for_whatsapp_message(owner, msg_id)
     assert set(blobs) == {blob_a, blob_b}
@@ -150,8 +149,8 @@ def test_get_blobs_for_whatsapp_message_is_company_scoped(fresh_db):
     msg_alice = _make_wa_message("alice@example.com")
     msg_bob = _make_wa_message("bob@example.com")
 
-    storage.add_whatsapp_blob_link("alice@example.com", msg_alice, blob_alice)
-    storage.add_whatsapp_blob_link("bob@example.com", msg_bob, blob_bob)
+    seeding.add_whatsapp_blob_link("alice@example.com", msg_alice, blob_alice)
+    seeding.add_whatsapp_blob_link("bob@example.com", msg_bob, blob_bob)
 
     assert storage.get_blobs_for_whatsapp_message("alice@example.com", msg_alice) == [blob_alice]
     assert storage.get_blobs_for_whatsapp_message("bob@example.com", msg_bob) == [blob_bob]
@@ -178,7 +177,7 @@ def test_deleting_a_whatsapp_message_through_storage_removes_its_link(fresh_db):
     owner = "alice@example.com"
     blob_id = _make_blob(owner)
     msg_id = _make_wa_message(owner)
-    storage.add_whatsapp_blob_link(owner, msg_id, blob_id)
+    seeding.add_whatsapp_blob_link(owner, msg_id, blob_id)
     with get_session() as s:
         wa_message_id = (
             s.query(WhatsAppMessage.message_id).filter(WhatsAppMessage.id == msg_id).scalar()
@@ -195,13 +194,11 @@ def test_cascade_delete_blob_removes_link(fresh_db):
     """ON DELETE CASCADE on blob_id — same guarantee email_blobs gives."""
     from zylch.storage.database import get_session
     from zylch.storage.models import Blob, WhatsAppBlob
-    from zylch.storage.storage import Storage
 
-    storage = Storage()
     owner = "alice@example.com"
     blob_id = _make_blob(owner)
     msg_id = _make_wa_message(owner)
-    storage.add_whatsapp_blob_link(owner, msg_id, blob_id)
+    seeding.add_whatsapp_blob_link(owner, msg_id, blob_id)
 
     with get_session() as s:
         s.query(Blob).filter(Blob.id == blob_id).delete()

@@ -9,6 +9,7 @@ from pathlib import Path
 import re
 
 from tests.memory.mnemonic_inventory_scan import (
+    literal_sql_sinks,
     orm_assignments,
     orm_core_mutations,
     orm_query_mutations,
@@ -247,64 +248,19 @@ def test_no_literal_sql_statement_rewrites_a_blobs_content_column():
 
 
 def test_every_literal_sql_sink_is_owned_by_a_later_milestone():
-    manifest = _manifest()
-    table_names = {
-        "blobs",
-        "blob_sentences",
-        "person_identifiers",
-        "email_blobs",
-        "calendar_blobs",
-        "whatsapp_blobs",
-        "blob_aliases",
-        "fact_history",
-        "memory_meta",
-        # No literal statement writes these today; scanning them makes
-        # "only consolidation prunes a version" and the journal's own writer
-        # structural rather than a matter of reading the code.
-        "blob_versions",
-        "memory_operations",
-    }
-    pattern = re.compile(
-        r"\b(INSERT(?:\s+OR\s+\w+)?\s+INTO|UPDATE|DELETE\s+FROM)\s+("
-        + "|".join(sorted(table_names, key=len, reverse=True))
-        + r")\b",
-        re.IGNORECASE,
-    )
-    actual: Counter = Counter()
+    """Every literal statement on a memory table, frozen per function (``literal_sql_sinks``).
 
+    The tables it reads include ``blob_versions`` and ``memory_operations``,
+    which no literal statement writes today: scanning them makes "only
+    consolidation prunes a version" and the journal's own writer structural
+    rather than a matter of reading the code.
+    """
+    manifest = _manifest()
+    actual: Counter = Counter()
     for path in _source_files(manifest):
         rel = path.relative_to(ENGINE_ROOT).as_posix()
-        tree = ast.parse(path.read_text(), filename=str(path))
-        stack: list[str] = []
-
-        class Visitor(ast.NodeVisitor):
-            def visit_ClassDef(self, node: ast.ClassDef) -> None:
-                stack.append(node.name)
-                self.generic_visit(node)
-                stack.pop()
-
-            def _visit_function(self, node: ast.FunctionDef | ast.AsyncFunctionDef) -> None:
-                stack.append(node.name)
-                self.generic_visit(node)
-                stack.pop()
-
-            visit_FunctionDef = _visit_function
-            visit_AsyncFunctionDef = _visit_function
-
-            def visit_Constant(self, node: ast.Constant) -> None:
-                if not isinstance(node.value, str):
-                    return
-                for match in pattern.finditer(node.value):
-                    verb = match.group(1).upper().split()[0]
-                    actual[
-                        (
-                            rel,
-                            ".".join(stack) or "<module>",
-                            f"sql:{verb}:{match.group(2).lower()}",
-                        )
-                    ] += 1
-
-        Visitor().visit(tree)
+        for (symbol, sink), count in literal_sql_sinks(path).items():
+            actual[(rel, symbol, sink)] += count
 
     assert actual == _expected(manifest["raw_sql_sinks"], include_mode=False)
 

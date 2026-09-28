@@ -18,6 +18,7 @@ from zylch.services.facts_store import get_facts_by_category
 from zylch.storage.database import get_session
 from zylch.storage.models import Email
 from zylch.storage.storage import Storage
+from tests.memory import seeding
 
 FIXTURES = Path(__file__).resolve().parents[1] / "fixtures" / "mnemonic"
 
@@ -74,8 +75,8 @@ def test_current_visibility_and_legacy_fact_exposure_use_real_company_store(comp
     ids: dict[str, str] = {}
 
     for row in fixture["blobs"]:
-        saved = store.store_blob(
-            row["owner"],
+        saved = seeding.store_blob(
+            store, row["owner"],
             namespaces[row["family"]],
             row["content"],
             "mnemonic M0 fixture",

@@ -224,7 +224,7 @@ def test_a_rewrite_of_a_restricted_fact_does_not_restore_its_eligibility(profile
     assert "legacy-fact-edera" not in fact_ids()
 
     storage = BlobStorage(get_session, embedder)
-    rewritten = storage.update_blob(
+    rewritten = seeding.update_blob(storage,
         "legacy-fact-edera", OWNER_A, "Category: pricing\nKey: edera-term\nEdera has a 12-month minimum."
     )
     assert rewritten and rewritten["content"].endswith("12-month minimum.")

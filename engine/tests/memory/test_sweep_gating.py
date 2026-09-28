@@ -12,6 +12,7 @@ from zylch.storage import database as dbm
 from zylch.storage.database import get_session
 
 from tests.memory.test_split_store import _boot  # noqa: E402
+from tests.memory import seeding
 
 
 @pytest.fixture
@@ -39,7 +40,7 @@ def test_sweep_runs_once_per_change_and_rests_otherwise(monkeypatch, tmp_path, s
     first = asyncio.run(lm.consolidate(a))
     assert first["skipped"] is True and "nothing changed" in first["reason"]
 
-    BlobStorage(get_session, stub_embedder).store_blob(
+    seeding.store_blob(BlobStorage(get_session, stub_embedder),
         a, entity_namespace(key), "#IDENTIFIERS\nName: G\n#ABOUT\nx", "x"
     )
     meta = get_meta(engine)
@@ -69,17 +70,17 @@ def test_a_new_identifier_alone_makes_the_sweep_due(monkeypatch, tmp_path, stub_
     a = _boot(monkeypatch, tmp_path, "a", key=None, source=None)
     key = current_company_key()
     engine = dbm.current_memory_engine()
-    bid = BlobStorage(get_session, stub_embedder).store_blob(
+    bid = seeding.store_blob(BlobStorage(get_session, stub_embedder),
         a, entity_namespace(key), "#IDENTIFIERS\nName: G\n#ABOUT\nx", "x"
     )["id"]
     assert not asyncio.run(lm.consolidate(a)).get("skipped")  # the new blob
     assert asyncio.run(lm.consolidate(a))["skipped"] is True  # rests
 
     Storage._instance = None
-    assert Storage.get_instance().add_person_identifiers(a, bid, [("email", "g@c.test")]) == 1
+    assert seeding.add_person_identifiers(a, bid, [("email", "g@c.test")]) == 1
     meta = get_meta(engine)
     assert meta["mutation_seq"] > meta["last_sweep_seq"]
     assert not asyncio.run(lm.consolidate(a)).get("skipped")  # due again
     # the same identifier again is a no-op: no bump, no sweep
-    assert Storage.get_instance().add_person_identifiers(a, bid, [("email", "g@c.test")]) == 0
+    assert seeding.add_person_identifiers(a, bid, [("email", "g@c.test")]) == 0
     assert asyncio.run(lm.consolidate(a))["skipped"] is True

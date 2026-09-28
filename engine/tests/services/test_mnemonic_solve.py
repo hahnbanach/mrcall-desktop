@@ -54,6 +54,7 @@ from tests.memory.mnemonic_env import (
     text_response,
     with_client,
 )
+from tests.memory import seeding
 
 BETA = (
     "#IDENTIFIERS\nEntity type: COMPANY\nScope: entity\nName: Beta Spa\n"
@@ -84,9 +85,8 @@ def seed(content, embedder):
     from zylch.memory.blob_storage import BlobStorage
 
     storage = BlobStorage(get_session, embedder)
-    blob = storage.store_blob(
-        owner_id=OWNER_A, namespace=f"user:{COMPANY_A}", content=content, event_description="seed"
-    )
+    blob = seeding.store_blob(storage, owner_id=OWNER_A, namespace=f"user:{COMPANY_A}",
+                              content=content, event_description="seed")
     return blob["id"], storage.get_blob(blob["id"], OWNER_A)["updated_at"]
 
 

@@ -17,6 +17,7 @@ import uuid
 import pytest
 
 from zylch.workers.memory import _normalise_phone, _parse_identifiers_block
+from tests.memory import seeding
 
 # ---------------------------------------------------------------------
 # _normalise_phone — pure function, no DB
@@ -232,7 +233,7 @@ def test_add_identifiers_inserts_new_rows(fresh_db):
     storage = Storage()
     blob_id = _make_blob("alice@example.com")
 
-    n = storage.add_person_identifiers(
+    n = seeding.add_person_identifiers(
         owner_id="alice@example.com",
         blob_id=blob_id,
         identifiers=[("email", "contact@example.com"), ("phone", "+393331234567")],
@@ -252,7 +253,7 @@ def test_add_identifiers_is_idempotent(fresh_db):
     storage = Storage()
     blob_id = _make_blob("alice@example.com")
 
-    first = storage.add_person_identifiers(
+    first = seeding.add_person_identifiers(
         owner_id="alice@example.com",
         blob_id=blob_id,
         identifiers=[("email", "x@y.com"), ("phone", "+393311111111")],
@@ -260,7 +261,7 @@ def test_add_identifiers_is_idempotent(fresh_db):
     assert first == 2
 
     # Re-run with same input + one new entry
-    second = storage.add_person_identifiers(
+    second = seeding.add_person_identifiers(
         owner_id="alice@example.com",
         blob_id=blob_id,
         identifiers=[
@@ -276,16 +277,14 @@ def test_add_identifiers_is_idempotent(fresh_db):
 
 
 def test_add_identifiers_skips_empty_inputs(fresh_db):
-    from zylch.storage.storage import Storage
 
-    storage = Storage()
     blob_id = _make_blob("alice@example.com")
 
-    assert storage.add_person_identifiers("", blob_id, [("email", "a@b.c")]) == 0
-    assert storage.add_person_identifiers("alice@example.com", "", [("email", "a@b.c")]) == 0
-    assert storage.add_person_identifiers("alice@example.com", blob_id, []) == 0
+    assert seeding.add_person_identifiers("", blob_id, [("email", "a@b.c")]) == 0
+    assert seeding.add_person_identifiers("alice@example.com", "", [("email", "a@b.c")]) == 0
+    assert seeding.add_person_identifiers("alice@example.com", blob_id, []) == 0
     # Empty / None tuple values are silently skipped, not raising
-    n = storage.add_person_identifiers(
+    n = seeding.add_person_identifiers(
         owner_id="alice@example.com",
         blob_id=blob_id,
         identifiers=[("email", ""), ("", "value"), ("email", "real@test.com")],
@@ -300,12 +299,12 @@ def test_find_blobs_by_identifiers_finds_match(fresh_db):
     blob1 = _make_blob("alice@example.com")
     blob2 = _make_blob("alice@example.com")
 
-    storage.add_person_identifiers(
+    seeding.add_person_identifiers(
         "alice@example.com",
         blob1,
         [("phone", "+393331234567"), ("email", "contact@example.com")],
     )
-    storage.add_person_identifiers("alice@example.com", blob2, [("phone", "+393339998888")])
+    seeding.add_person_identifiers("alice@example.com", blob2, [("phone", "+393339998888")])
 
     # Match by phone — finds blob1 only
     hits = storage.find_blobs_by_identifiers("alice@example.com", [("phone", "+393331234567")])
@@ -340,8 +339,8 @@ def test_find_blobs_by_identifiers_is_company_scoped(fresh_db):
     blob_a = _make_blob("alice@example.com")
     blob_b = _make_blob("bob@example.com")
 
-    storage.add_person_identifiers("alice@example.com", blob_a, [("phone", "+393331234567")])
-    storage.add_person_identifiers("bob@example.com", blob_b, [("phone", "+393331234567")])
+    seeding.add_person_identifiers("alice@example.com", blob_a, [("phone", "+393331234567")])
+    seeding.add_person_identifiers("bob@example.com", blob_b, [("phone", "+393331234567")])
 
     hits_a = storage.find_blobs_by_identifiers("alice@example.com", [("phone", "+393331234567")])
     hits_b = storage.find_blobs_by_identifiers("bob@example.com", [("phone", "+393331234567")])
@@ -355,7 +354,7 @@ def test_find_blobs_normalises_input_kind_and_value(fresh_db):
 
     storage = Storage()
     blob = _make_blob("alice@example.com")
-    storage.add_person_identifiers("alice@example.com", blob, [("email", "stored@test.com")])
+    seeding.add_person_identifiers("alice@example.com", blob, [("email", "stored@test.com")])
 
     # Caller passes upper-case kind and value with whitespace
     hits = storage.find_blobs_by_identifiers(
@@ -379,11 +378,9 @@ def test_cascade_delete_blob_removes_identifiers(fresh_db):
     """FK ondelete=CASCADE: deleting the blob must remove its rows."""
     from zylch.storage.database import get_session
     from zylch.storage.models import Blob, PersonIdentifier
-    from zylch.storage.storage import Storage
 
-    storage = Storage()
     blob_id = _make_blob("alice@example.com")
-    storage.add_person_identifiers("alice@example.com", blob_id, [("email", "x@y.com")])
+    seeding.add_person_identifiers("alice@example.com", blob_id, [("email", "x@y.com")])
 
     with get_session() as s:
         s.query(Blob).filter(Blob.id == blob_id).delete()

@@ -13,9 +13,11 @@ blob** and writes into it. Each one is idempotent, none of them commits, and
 none of them swallows an error: inside a transaction a swallowed failure is
 exactly the half-written state this module exists to prevent.
 
-``storage.Storage`` keeps its own standalone methods for the legacy writers
-that have not been converted yet; they delegate here so there is one
-implementation of each rule rather than two that can drift.
+``storage.Storage`` kept its own standalone methods for the legacy writers
+that had not been converted yet, delegating here so there was one
+implementation of each rule rather than two that could drift. Milestone 8
+removed them from production once no caller was left; the test seeding module
+keeps them, still delegating here.
 """
 
 from __future__ import annotations

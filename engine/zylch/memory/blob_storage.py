@@ -1,11 +1,14 @@
 """Blob storage with sentence-level embeddings using SQLAlchemy.
 
-Two ways in, deliberately unequal.
+One way in, and it is deliberately narrow.
 
-``store_blob`` and ``update_blob`` are the **legacy** writers: they open their
-own session, decide their own transaction boundary, and trust whoever called
-them. The writers the mnemonic harness has not converted yet still use them,
-and the harness converts those callers milestone by milestone.
+``store_blob`` and ``update_blob`` were the **legacy** writers: they opened
+their own session, decided their own transaction boundary, and trusted
+whoever called them. The mnemonic harness converted their callers milestone
+by milestone, and milestone 8 removed them from production: the only place
+they still exist is the test seeding module (``tests/memory/seeding.py``),
+and ``tests/memory/test_mnemonic_write_boundary.py`` proves a fresh
+``BlobStorage`` has neither.
 
 ``semantic_create``, ``semantic_update`` and ``semantic_merge`` are the
 **committed** writers, a mixin in :mod:`zylch.memory.blob_commits`. They write
@@ -31,7 +34,7 @@ from sqlalchemy.orm import Session
 
 from .text_processing import split_sentences
 from .embeddings import EmbeddingEngine
-from .blob_commits import CommittedWrites, _iso
+from .blob_commits import CommittedWrites
 from .company_key import require_company_key
 from .scope import blob_contributed, blob_owned_rules, blob_visible
 from zylch.storage.models import Blob, BlobSentence
@@ -222,94 +225,6 @@ class BlobStorage(BlobReads, CommittedWrites):
         self._add_sentences(session, blob.id, owner_id, prepared)
         session.flush()
         return blob
-
-    def store_blob(
-        self, owner_id: str, namespace: str, content: str, event_description: Optional[str] = None
-    ) -> Dict[str, Any]:
-        """Store new blob with sentence embeddings.
-
-        Returns the created blob record.
-        """
-        prepared = self.prepare(content)
-        with self._get_session() as session:
-            blob = self._insert(
-                session,
-                owner_id=owner_id,
-                namespace=namespace,
-                prepared=prepared,
-                event_description=event_description,
-            )
-            self._notify_mutation(session)
-            return blob.to_dict()
-
-    def update_blob(
-        self,
-        blob_id: str,
-        owner_id: str,
-        content: str,
-        event_description: Optional[str] = None,
-        expected_updated_at: Optional[str] = None,
-        reason: str = APPEND,
-    ) -> Dict[str, Any]:
-        """Update blob content and regenerate sentence embeddings.
-
-        Compare-and-swap: the caller read the blob, merged new facts into
-        it (an LLM call taking seconds — never inside a transaction), and
-        now writes back. With ``expected_updated_at`` set to the value it
-        read, a blob that another writer changed in between is NOT
-        overwritten: the return carries ``conflict: True`` plus the
-        current row, and the caller re-merges onto that. The transaction
-        takes the store's write lock as its first statement, so the
-        check and the write happen under one lock.
-
-        Returns ``{}`` when the blob is not visible to this owner.
-        """
-        # Generate new embeddings before entering transaction
-        prepared = self.prepare(content)
-
-        key = require_company_key()
-        with self._get_session() as session:
-            # Hold the store's write lock across read + compare + write.
-            try:
-                from .store import take_write_lock
-
-                take_write_lock(session)
-            except Exception as e:  # a store without the meta row (tests, legacy)
-                logger.debug(f"[BlobStorage] write-lock upgrade skipped: {e}")
-            blob = (
-                session.query(Blob)
-                .filter(Blob.id == blob_id, blob_visible(owner_id, key))
-                .one_or_none()
-            )
-
-            if blob is None:
-                logger.warning(
-                    f"update_blob: blob {blob_id} is not visible to owner {owner_id} "
-                    f"(missing, or another account's rule)"
-                )
-                return {}
-
-            if expected_updated_at is not None and _iso(blob.updated_at) != _iso(
-                expected_updated_at
-            ):
-                logger.info(
-                    f"update_blob: blob {blob_id} changed since it was read "
-                    f"(expected {expected_updated_at}, now {_iso(blob.updated_at)}) — conflict"
-                )
-                current = blob.to_dict()
-                current["conflict"] = True
-                return current
-
-            self._rewrite(
-                session,
-                blob,
-                owner_id=owner_id,
-                prepared=prepared,
-                event_description=event_description,
-                reason=reason,
-            )
-            self._notify_mutation(session)
-            return blob.to_dict()
 
     def delete_blob(
         self,

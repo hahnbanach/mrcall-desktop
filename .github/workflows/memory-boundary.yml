@@ -1,0 +1,44 @@
+name: Memory write boundary
+
+# The sealed direct-write boundary of company memory (mnemonic harness,
+# milestone 8): the frozen writer inventory and the boundary test must pass
+# on every change to the engine. Both are static scans of engine/zylch and
+# engine/scripts plus a few run-time checks, so the job installs the engine's
+# requirements and runs only those two files.
+
+on:
+  push:
+    paths:
+      - 'engine/**'
+      - '.github/workflows/memory-boundary.yml'
+  pull_request:
+    paths:
+      - 'engine/**'
+      - '.github/workflows/memory-boundary.yml'
+
+jobs:
+  boundary:
+    name: Inventory and boundary tests
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: engine
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install the engine
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e . pytest pytest-asyncio
+
+      - name: Inventory and boundary
+        env:
+          PYTHONPATH: ${{ github.workspace }}/engine
+        run: |
+          python -m pytest -q -p no:cacheprovider \
+            tests/memory/test_mnemonic_inventory.py \
+            tests/memory/test_mnemonic_write_boundary.py

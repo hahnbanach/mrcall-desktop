@@ -58,6 +58,7 @@ from .mnemonic_env import (
     clear_process_state,
     reboot,
 )
+from tests.memory import seeding
 
 ENGINE_ROOT = Path(__file__).resolve().parents[2]
 
@@ -587,8 +588,8 @@ def test_an_event_settled_between_opening_and_claiming_returns_that_answer(
 
 
 def seed_blob(context, content=ACME):
-    return context.storage.store_blob(
-        owner_id=OWNER_A,
+    return seeding.store_blob(
+        context.storage, owner_id=OWNER_A,
         namespace=f"user:{COMPANY_A}",
         content=content,
         event_description="seed",
@@ -621,8 +622,8 @@ def test_an_update_at_the_read_version_rewrites_the_blob_and_its_index(profile_a
 def test_a_second_writer_changing_the_blob_first_wins_and_the_stale_one_refuses(profile_a, context):
     blob = seed_blob(context)
     stale_version = blob["updated_at"]
-    context.storage.update_blob(
-        blob_id=blob["id"],
+    seeding.update_blob(
+        context.storage, blob_id=blob["id"],
         owner_id=OWNER_A,
         content=ACME + "\n- another writer got here first",
         event_description="concurrent write",
@@ -661,9 +662,8 @@ def test_a_cas_redecision_pays_exactly_one_reservation_per_round(profile_a, cont
     """
     blob = seed_blob(context)
     stale = blob["updated_at"]
-    context.storage.update_blob(
-        blob_id=blob["id"], owner_id=OWNER_A, content=ACME + "\n- moved", event_description="x"
-    )
+    seeding.update_blob(context.storage, blob_id=blob["id"], owner_id=OWNER_A,
+                        content=ACME + "\n- moved", event_description="x")
 
     before = mnemonic_reservations()
     llm = client(*[update_decision(blob["id"], stale) for _ in range(EVENT_DISPATCH_ALLOWANCE)])
@@ -1291,11 +1291,11 @@ def test_a_chat_turn_reaches_the_identity_index_in_its_own_form(profile_a, embed
         "#IDENTIFIERS\nEntity type: PERSON\nScope: entity\nName: Giulia Verdi\n"
         "Email: giulia.verdi@acme.test\n#ABOUT\nRuns procurement."
     )
-    blob = storage.store_blob(
+    blob = seeding.store_blob(storage,
         owner_id=OWNER_A, namespace=f"user:{COMPANY_A}", content=giulia, event_description="seed"
     )
     rows = Storage()
-    rows.add_person_identifiers(OWNER_A, blob["id"], [("email", "giulia.verdi@acme.test")])
+    seeding.add_person_identifiers(OWNER_A, blob["id"], [("email", "giulia.verdi@acme.test")])
     assert rows.find_blobs_by_identifiers(OWNER_A, [("email", "giuliaverdi@acmetest")]) == []
     context = CommitContext(
         storage=storage,

@@ -31,6 +31,7 @@ from zylch.storage.database import get_session
 from zylch.storage.models import MemoryOperation
 
 from .mnemonic_env import COMPANY_A, OWNER_A, boot, clear_process_state, client, stub_embedder
+from tests.memory import seeding
 
 pytestmark = pytest.mark.usefixtures("stub_embeddings")
 
@@ -286,7 +287,7 @@ def seed_fact(embedder, content):
     from zylch.memory.blob_storage import BlobStorage
 
     storage = BlobStorage(get_session, embedder)
-    blob = storage.store_blob(OWNER_A, f"facts:{COMPANY_A}", content, "seed")
+    blob = seeding.store_blob(storage, OWNER_A, f"facts:{COMPANY_A}", content, "seed")
     return blob["id"], storage.get_blob(blob["id"], OWNER_A)["updated_at"]
 
 
@@ -340,7 +341,7 @@ def test_a_review_naming_an_entity_row_records_nothing_either(profile_a, embedde
     from zylch.memory.blob_storage import BlobStorage
 
     storage = BlobStorage(get_session, embedder)
-    person = storage.store_blob(
+    person = seeding.store_blob(storage,
         OWNER_A, f"user:{COMPANY_A}", "#IDENTIFIERS\nEntity type: PERSON\nName: Edera Rossi\n#ABOUT\nx", "seed"
     )["id"]
     event = MemoryEvent(**{**fact_event(person).__dict__, "subject_hint": SubjectHint(target_blob_id=person)})
