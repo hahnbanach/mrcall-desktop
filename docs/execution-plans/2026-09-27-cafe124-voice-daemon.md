@@ -11,8 +11,10 @@ Café 124 alpha on +390250552776. Paired with the
 [brief](../briefs/2026-09-27-cafe124-voice-daemon.md). A supervised second
 cutover serves the production daemon with the known caller's name. The
 supervised per-question memory review is active. The independent final review
-passed the supervised handset and identity gates on the latest release. Complete
-transcription remains an open gate.
+passed the supervised handset and identity gates on the latest release. The
+operator permanently accepts possible missing words before transcript attach.
+The manual test is complete; a local call-transcript table is now planned.
+No upload of call transcripts to StarChat is planned.
 <!-- doc-scope:end -->
 
 ## Fixed boundary and observed starting point
@@ -623,10 +625,11 @@ follow-up with its measured preattach interval. If a disclosure or audio gate
 fails, execute the targeted rollback, preserve the ledger and keep this plan
 open.
 
-## Transcript requirement correction — 2026-09-28
+## Transcript requirement correction at the time — 2026-09-28
 
-The operator corrected the product requirement: every telephone conversation
-must be transcribed and later stored in StarChat. The revision-6 diagnostic
+The operator then asked for every telephone conversation to be transcribed
+and later stored in StarChat. The later local-table decision at the end of
+this plan cancels the StarChat upload. The revision-6 diagnostic
 mode retained only event counts and timing, so its three completed production
 calls have no recoverable transcript text in the local files. Those calls must
 not be described as archived. The operator also reports that the revision-6
@@ -644,12 +647,10 @@ they do not prove that no audio was omitted or that handset playback matched
 the text. Review, pinned release deployment and a new heard call are required
 before accepting this behavior.
 
-The local StarChat backend exposes customer-conversation search and property
+The local StarChat backend exposed customer-conversation search and property
 updates for existing sessions, but no creation/import endpoint for this
-external Cloudflare call. No StarChat archive write is possible through the
-currently verified contract. Preserve the private transcript for a later
-import and keep remote archival as a named open gate. The plan cannot claim
-that all calls are already stored in StarChat.
+external Cloudflare call. This prevented the upload then under consideration.
+The proposed upload was subsequently cancelled.
 
 ## Targeted transcript-delta release — 2026-09-28
 
@@ -680,10 +681,11 @@ readback still shows revision 6, one configured customer, zero pins and
 **Next gate:** obtain a real heard call on this release, read the private
 transcript table and diagnostic statuses without printing its text to general
 logs, correlate provider usage and ledger, and obtain final independent
-end-to-end review. Keep the plan active until interruption behavior and the
-full-transcription/StarChat archival gaps are resolved or explicitly accepted
-as deferred product work. A failure of the new capture calls for the prepared
-targeted rollback; never remove historical ledger or transcript evidence.
+end-to-end review. At that point the plan stayed active pending interruption,
+transcript coverage and the proposed StarChat upload. Later operator decisions
+accepted the initial coverage gap and cancelled the upload. A failure of the
+new capture would call for the prepared targeted rollback; historical ledger
+and transcript evidence must remain intact.
 
 ## First transcript-capture call — 2026-09-28
 
@@ -708,7 +710,8 @@ A local pattern scan found no credential-format string in the assistant
 transcript and no transcript, query or sentence text in diagnostic events.
 The operator subsequently confirmed that interruption/correction worked well
 in the same call. This closes the human listening gate for the supervised
-manual test. Complete-call capture and StarChat archival remain open.
+manual test. At that review, complete-call capture and the proposed StarChat
+upload were treated as open.
 Independent final end-to-end review checked the live release,
 route, binding, ledger, private file and redacted diagnostics, and returned
 **Blocked** before this last heard report. It found no obvious
@@ -719,15 +722,15 @@ accepted the heard answer, follow-up and interruption/correction evidence for
 the selected caller. It found no real unknown/ambiguous-caller call; code tests
 exercise unknown, ambiguous and unselected memory lookup, but they do not
 establish handset behavior for another caller. The received-delta record still
-does not guarantee complete transcription, and StarChat has no import contract
-for this external call. The plan remains `active` with these exact gates open.
+does not guarantee complete transcription, and StarChat had no import contract
+for this external call. The plan remained `active` at that review; later
+operator decisions superseded those two transcript gates.
 
 ## Archive deferral and alternate number check — 2026-09-28
 
-The operator explicitly deferred sending call transcripts to StarChat for now.
-The private production transcript remains retained; remote archival is future
-product work, not a gate for this one-number manual call test. This does not
-claim the StarChat requirement was implemented or abandoned.
+At this point, the operator deferred sending call transcripts to StarChat.
+The private production transcript remained retained. The later decision at the
+end of this plan cancels the upload rather than scheduling it as future work.
 
 The operator offered +393518808669 for an unknown-caller exercise. A read-only
 lookup of the production company's exact phone identifier found one match:
@@ -811,11 +814,83 @@ consistent with this call. The supervised one-number functional, audio and
 unknown-caller gates **pass** on `d7fa315`. The ambiguous-number branch remains
 covered by tests rather than a handset call.
 
-The independent overall verdict remains **Blocked** on transcript completeness.
+At that review, the independent overall verdict was **Blocked** on transcript
+completeness.
 The 54 received deltas do not establish what, if anything, was spoken before
 the sideband attached after provider acceptance. The operator deferred upload
-to StarChat, not the requirement that calls be transcribed. Keep the plan
-`active` and this limitation visible; do not mark full transcription or remote
-archival complete. The production phone service remains active and healthy,
+to StarChat, not the requirement that calls be transcribed. The plan remained
+`active` with this limit visible; full transcription and remote archival were
+not marked complete. The production phone service remained active and healthy,
 with the targeted rollback prepared if a concrete safety or audio failure
 appears.
+
+## Final acceptance decision — 2026-09-28
+
+The operator explicitly and permanently accepts that words spoken before the
+sideband transcript connection may be absent from the saved call record. This
+changes the product acceptance rule, not the observed capture: the daemon
+retains received caller and assistant provider deltas in private per-call
+records, and no one claims verbatim coverage of the pre-attach interval or
+recovery of earlier calls without stored text. The operator separately deferred
+upload to StarChat at that point. The later cancellation supersedes the upload
+proposal entirely.
+
+With this explicit acceptance, the independent final end-to-end reviewer
+reassessed the verified `d7fa315` release and returned **Done** for the manual
+Café 124 one-number test. The heard selected-caller and anonymous calls, exact
+business binding, headless authentication, service and webhook checks, private
+diagnostics, provisional exposure ledger, and targeted rollback satisfy this
+manual test's supervised gates. The service remains active on the pinned
+release with the existing tunnel and Desktop socket. The accepted transcript
+timing limit remains recorded as a product fact.
+
+## Local call-transcript table — planned after manual acceptance
+
+The operator cancelled the proposal to upload call transcripts to StarChat.
+Keep StarChat only for the exact business binding and other existing service
+contracts. Store future call transcripts locally, in a private table owned by
+the production profile. No StarChat session creation, import, or upload belongs
+to this plan.
+
+A read-only inspection of the StarChat source checkout found that its current
+`SessionTimescaleService.createSchemaSqlStatement()` creates a `sessions` table
+with `id`, `start_timestamp`, `timestamp`, `created_at`, `updated_at`, `owner`,
+`business_id`, and a JSONB `data` field, among other lifecycle fields.
+`CustomerConversationService` writes the parsed `public.CONVERSATION_JSON`
+value under `data.conversation_transcription`; the customer-conversation API
+guide shows entries with `role` (`user` or `assistant`) and `content`. The
+configured table name is `sessions`. The code does not qualify it with a
+PostgreSQL schema, and no live database schema was queried, so the suggested
+`business.sessions` namespace is unconfirmed. The older reference migration
+shows a `conversation_log` column absent from the current startup schema;
+model the current `data.conversation_transcription` shape, not that column.
+
+Create one SQLite table `voice_call_transcripts` in a dedicated profile-owned
+`voice-transcripts.db` (mode 0600), with one row per production call. Proposed
+columns are `session_id` (primary key matching the voice ledger), `business_id`,
+`owner_uid`, `called_number`, nullable validated `caller_number`,
+`start_timestamp_ms`, `updated_at_ms`, nullable `duration_ms`, `state`,
+`capture_status`, and `data` (validated JSON). In `data`, store
+`conversation_transcription` as an ordered array of `{role, content}` entries,
+using `user`/`assistant` like StarChat. Optional timing fields may accompany
+an entry if the provider supplies them. Avoid StarChat-only state variables,
+access keys, audio blobs, company memory keys, and unselected memory facts.
+
+Populate the row from the existing append-only private `transcript_deltas`
+source. Create an identifiable row when a call starts, update it durably as
+provider text arrives, and finalize it on closure; a restart must leave a
+readable partial state and permit idempotent recovery from the per-call source.
+Preserve the raw delta files and the ledger. Backfill only calls whose delta
+text exists locally; for earlier calls with diagnostic counts alone, record
+`legacy_no_text` without inventing speech. Keep the permanent acceptance of
+possible missing words before sideband attachment explicit in `capture_status`
+or adjacent metadata.
+
+Before activation, review the table migration and privacy boundary
+independently. Test ordered role assembly, empty/partial calls, restart and
+duplicate replay, exact profile/business binding, file permissions, and
+absence of transcript text in ordinary logs. On a supervised real call, read
+back the table under `mrcalld` and correlate its `session_id`, roles, status,
+and timing to the private deltas and ledger. The table is not implemented by
+this planning edit. The execution plan remains `active` for this local storage
+phase, while the one-number phone acceptance remains complete.

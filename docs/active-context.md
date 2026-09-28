@@ -1,5 +1,5 @@
 ---
-doc_baseline_commit: 19076ca8f19a5b7c10ba2c7df629c7e5637b8734
+doc_baseline_commit: 365374f1adb56a321f7ea96f14ca13ebf564a7da
 doc_baseline_date: 2026-09-28
 ---
 
@@ -53,10 +53,12 @@ webhook probes pass. The caller policy validates incoming numbers with
 libphonenumber and allows on-demand filtered history only for a uniquely
 matched selected contact. Six calls have closed ledgers with provisional
 exposure reconciliation. The two latest private call records retain received
-transcript deltas; complete transcription is unverified and StarChat upload is
-deferred. The operator heard an anonymous call on `d7fa315` decline historical
-data and offer general service help; the private trace confirms zero caller
-facts and no on-demand historical query. See the active
+transcript deltas; complete transcription is unverified. The operator cancelled
+StarChat transcript upload and permanently accepts possible missing words
+before transcript attachment. On an anonymous call on `d7fa315`, the assistant
+declined historical data and offered general service help. The private trace
+confirms zero caller facts and no on-demand historical query. A local transcript
+table modeled loosely on StarChat session data is planned. See the active
 [plan](execution-plans/2026-09-27-cafe124-voice-daemon.md).
 
 The hosted engine is being isolated per tenant
@@ -114,17 +116,15 @@ Refresh button only lists threads. See the archived
   installer coverage and multi-window auth checks retain their existing owners.
 - Historical task-mode/import and legacy transport issues need verification
   before their paths are restored.
-- Café 124's selected-caller and anonymous listening gates passed. Independent
-  final review blocks full acceptance because provider acceptance precedes
-  transcript attachment. Model judgment of mixed notes remains supervised. Six
-  call reserves remain held; exposure is provisional, not settled. StarChat
-  lacks an external-call import route, and its upload is deferred.
+- Café 124's manual one-number voice test passed independent final review.
+  The local call-transcript table remains unbuilt. Model judgment of mixed
+  notes remains supervised. Six call reserves remain held; exposure is
+  provisional, not settled.
 
 ## Next
 
-1. Resolve the complete-transcript gap and repeat independent acceptance.
-   Roll back the targeted service and config if unsafe disclosure or audio
-   failure is confirmed.
+1. Build and verify the private local call-transcript table from retained
+   provider deltas; keep the existing ledger and diagnostic files intact.
 2. Resolve the remaining billing choices and funded credit acceptance. Keep
    preparation paused until the CTO explicitly requests a bounded run.
 3. Verify the installed applications through their GUI: the Mac one with
