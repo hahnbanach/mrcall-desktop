@@ -1,5 +1,5 @@
 ---
-doc_baseline_commit: d60d46b35215741b01bcc6f6fe335549bee8471d
+doc_baseline_commit: d7fa3155b30d0fd5f9bccb4b3c6b88efa4f4f537
 doc_baseline_date: 2026-09-28
 ---
 
@@ -34,10 +34,8 @@ A funded K3 credit response remains unverified. The separate failed credit smoke
 has a conservative USD0.209 hold; hosted profile budgets are unaffected.
 
 The [reviewed comparison](evaluations/2026-09-16-reviewed-model-comparison.md)
-covers 60 selected cases and 240 outputs from 37 business clusters. It supersedes
-older semantic scores. Its separate action, grounding and uncertainty findings
-are post-hoc evidence, not a production error-rate estimate or model equivalence
-claim. Deployment is the CTO's model choice under that limited evidence.
+covers 60 cases and 240 outputs. Its findings do not estimate production error
+rates or establish model equivalence.
 
 Desktop's setup journey configures an engine, verifies its authenticated
 connection, prepares data and hands off a descriptor-based cs-kernel workspace.
@@ -45,22 +43,19 @@ The engine owns mailbox processing and shared memory; the clone owns operator
 procedures. Claude Code headless and kernel direct classifiers have separate
 billing and pause controls. See [operator setup](operator-setup.md#ai-execution-and-controls).
 
-GPT-Live M4 is merged and phone-accepted for the isolated fixture. The
-Cloudflare tunnel forwards 127.0.0.1:8787 to the Café 124 production daemon
-without changing its public URL or provider callbacks. Authenticated StarChat
-readback confirms business `d44a1864-23cc-34f9-aec5-6e04bb2fd2ef-desktop`,
-UID `Gn9IcuWzYyY7DBMHkVUGB7bIiTp2`, number +390250552776 and `starter`
-template. The daemon runs pinned voice release `d60d46b`, serving the Desktop
-socket and phone listener in one process. Health, authenticated RPC and negative
-webhook probes pass. Voice config revision 6 starts with the approved name,
-then lets GPT-Live review bounded, filtered contact history after a legitimate
-request. The operator heard suitable professional notes and no Shopify order
-claim; they reported about five seconds before the greeting. The operator also
-heard an adversarial call on release `d60d46b` and judged the behavior good.
-Four calls have closed ledgers with provisional exposure reconciliation. The
-new release retained caller and assistant transcript deltas in a private
-call record, correlated with the latest call. Complete transcription and
-StarChat archival are not established. See the active
+GPT-Live M4 is phone-accepted for the isolated fixture. The Café 124 production
+daemon serves both its Desktop socket and +390250552776 through the existing
+Cloudflare tunnel and URL. StarChat readback binds business
+`d44a1864-23cc-34f9-aec5-6e04bb2fd2ef-desktop`, UID
+`Gn9IcuWzYyY7DBMHkVUGB7bIiTp2` and `starter`. Pinned release `d7fa315`
+and voice config revision 6 are live; health, authenticated RPC and negative
+webhook probes pass. The caller policy validates incoming numbers with
+libphonenumber and allows on-demand filtered history only for a uniquely
+matched selected contact. Five calls have closed ledgers with provisional
+exposure reconciliation. The two latest private call records retain received
+transcript deltas; complete transcription is unverified and StarChat upload is
+deferred.
+The new release awaits an anonymous handset retest. See the active
 [plan](execution-plans/2026-09-27-cafe124-voice-daemon.md).
 
 Settings supports independent provider/model selection, daily budgets and bounded
@@ -70,14 +65,9 @@ refresh credentials remain in the private descriptor outside the workspace.
 Shared written projects are revisioned company-engine records separate from
 entity blobs; see [project memory](../engine/docs/features/project-memory.md).
 
-Desktop `v0.1.51-win` is the recorded release and carries a **Windows x64
-installer alongside the Apple Silicon dmg**. The previous one was `v0.1.29`,
-so a Windows user upgrading arrives from a build that old; `v0.1.40` through
-`v0.1.51` ship the dmg alone. Neither application has been exercised: Mac
-installation with personal-key GUI entry is unverified, and the `.exe` has not
-been downloaded from the release, let alone run. The Windows risk is specific —
-neonize loads from loose files via `sys._MEIPASS` rather than as a collected
-package, and a green build cannot prove that import resolves at run time.
+Desktop `v0.1.51-win` ships a Windows x64 installer and Apple Silicon dmg.
+Neither has been installed and exercised. Windows runtime import of neonize
+remains unverified; its loose-file loading through `sys._MEIPASS` is a risk.
 Runtime contracts are in [IPC](ipc-contract.md),
 [remote backend](remote-backend.md) and per-tree docs.
 
@@ -105,18 +95,16 @@ Refresh button only lists threads. See the archived
   installer coverage and multi-window auth checks retain their existing owners.
 - Historical task-mode/import and legacy transport issues need verification
   before their paths are restored.
-- The Café 124 voice plan still needs specific interruption evidence. Its
-  independent end-to-end review returned Blocked on that and transcript/archive
-  gaps. Model judgment of mixed notes is supervised. All four
-  calls' reserves remain held against provisional exposure, not settled charges.
-  The provider accept-to-attach interval prevents a full-transcript guarantee;
-  StarChat lacks an external-call import route. Restore the prior pinned release
-  if the new capture harms the call, without changing the tunnel.
+- Café 124's selected-caller listening gate passed. Final review needs an
+  anonymous call on `d7fa315` and a transcript-completeness verdict. Model
+  judgment of mixed notes remains supervised. Five call reserves remain held;
+  exposure is provisional, not settled. Provider accept precedes transcript
+  attachment, and StarChat lacks an external-call import route.
 
 ## Next
 
-1. Obtain the specific heard interruption/correction result, resolve the
-   complete-transcript and StarChat archive gaps, then repeat final independent
+1. Hear an anonymous call on `d7fa315`, resolve the complete-transcript
+   gap for this pilot, then repeat final independent
    review. Roll back the targeted service and config if unsafe
    disclosure or audio failure is confirmed.
 2. Resolve the remaining billing choices and funded credit acceptance. Keep
