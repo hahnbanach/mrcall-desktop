@@ -45,10 +45,9 @@ For an uncovered detail, retrieve first and answer from the result. If no
 usable source exists, say which detail cannot be confirmed. A caller proposing
 a nonexistent service must not cause the model to add it to the catalog.
 
-The operator has agreed to this direction and requests a reviewed brief for
-handoff to sol-medium. This delivery is documentation and independent brief
-review only. A detailed milestone plan, its independent review, implementation
-and any production activation belong to subsequent work.
+The operator agreed to this direction. The brief and its detailed milestone
+plan have independent approval. Implementation and production activation remain
+separate future gates.
 
 ## What to transfer from cs-kernel and cs-operator
 
@@ -231,16 +230,12 @@ not an assumption that the current transport already supports it.
 
 ## Handoff and source anchors
 
-The [planning handoff](../execution-plans/2026-09-28-voice-company-knowledge.md)
-records the independent brief verdict and the next review gate.
-
-After independent brief approval, sol-medium prepares the milestone plan and
-gets a fresh plan review before implementation. Resolve source inventory,
-authority/disclosure representation, revision freshness, delegation shape and
-test/latency thresholds in that plan. Reuse existing engine reads where they
-fit; verify compatibility with the pinned production release before choosing
-an API. Keep the original pilot `active` until its failed behavioral gate has
-independent acceptance. A new brief approval does not close that plan.
+The [reviewed execution plan](../execution-plans/2026-09-28-voice-company-knowledge.md)
+sets source inventory, authority/disclosure, revision freshness, delegation,
+latency and behavior gates. Production source authority remains unverified and
+blocks implementation of a public catalog until its first milestone passes.
+Keep the original pilot `active` until its failed behavioral gate has
+independent acceptance. Approval of this brief and plan does not close it.
 
 Relevant implementation anchors:
 [caller lookup](../../engine/zylch/services/voice/caller_memory.py),
