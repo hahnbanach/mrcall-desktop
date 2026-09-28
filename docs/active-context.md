@@ -61,7 +61,7 @@ permanently accepted. The latest call contains invented business services
 without delegation or a fact lookup. Overall acceptance is REVISE and the
 [pilot plan](execution-plans/2026-09-27-cafe124-voice-daemon.md) remains active.
 The [shared-knowledge brief](briefs/2026-09-28-voice-company-knowledge.md) is
-independently approved and its execution plan has independent APPROVED review. Production source authority and disclosure are still unverified because read-only host access failed; initial context and company retrieval are unimplemented.
+independently approved and its execution plan has independent APPROVED review. The production company store is locally readable as `mrcalld` and contains structured facts and revisioned projects; source authority and caller disclosure remain unverified. Initial context and company retrieval are unimplemented.
 
 Settings supports independent provider/model selection, daily budgets and bounded
 preparation. It remains reachable with an unavailable engine; stale connection
@@ -101,7 +101,7 @@ Refresh button only lists threads. See the archived
 - Historical task-mode/import and legacy transport issues need verification
   before their paths are restored.
 - Café 124's overall plan acceptance remains open after the local archive passed
-  independent review. Shared company knowledge needs verified production source inventory and
+  independent review. Shared company knowledge needs private source-content/authority review and
   spoken-answer verification; its milestone plan is reviewed, while mixed-note judgment remains supervised.
   Eight reserves remain held with provisional exposure, not settled invoices.
 
@@ -109,7 +109,7 @@ Refresh button only lists threads. See the archived
 
 1. On a separately authorized implementation session, verify production company
    source authority and caller disclosure before implementing the reviewed voice plan.
-   Do not infer a catalog from the company name or the stale local profile copy.
+   The local metadata inventory does not establish an approved service catalog.
 2. Resolve the remaining billing choices and funded credit acceptance. Keep
    preparation paused until the CTO explicitly requests a bounded run.
 3. Verify the installed applications through their GUI: the Mac one with
