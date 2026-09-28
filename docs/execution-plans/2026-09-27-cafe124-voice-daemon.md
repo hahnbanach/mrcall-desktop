@@ -9,8 +9,8 @@ date: 2026-09-27
 Scope: development, verification and one-number cutover plan for the manual
 Café 124 alpha on +390250552776. Paired with the
 [brief](../briefs/2026-09-27-cafe124-voice-daemon.md). A supervised second
-cutover serves the production daemon with a name-only caller grant. Human
-heard-audio and correlated receipt gates are pending.
+cutover serves the production daemon with the known caller's name. A supervised
+per-question memory review is under design; heard-audio acceptance remains open.
 <!-- doc-scope:end -->
 
 ## Fixed boundary and observed starting point
@@ -470,3 +470,37 @@ review its disclosure path, then repeat the real call and obtain an explicit
 report covering the permitted fact, follow-up and interruption. Preserve the
 historical hold and provider evidence; keep this plan active until the final
 end-to-end review passes.
+
+## Operator revision: review memory during the call — 2026-09-28
+
+The operator chose per-question judgment for this supervised pilot rather than
+adding a persistent shareability field to company blobs or approving one more
+fixed phrase. The previous **Next gate** above is superseded by this decision.
+The runtime path must still bind the same production business, UID, called
+number and uniquely matched caller. The greeting may use the approved first
+name. Two local prototypes were tested but **neither was deployed**. The first
+would have forwarded mixed historical sentences to GPT-Live; one such sentence
+combined the caller's company role with unrelated private context. The second
+would have emitted a fixed role statement after finding role words in one
+sentence. Independent predeploy review rejected both. Co-occurring words do
+not prove which person has a role, and an unpinned sentence can change without
+a voice-config revision. The second prototype also accepted unrelated questions
+containing “me.” The local prototypes and their tests were reverted after the
+failed gate. Production remains on release `a9e6539` with the name-only policy,
+voice-config revision 4, and no selected historical sentence.
+
+The operator's preferred design is a runtime disclosure assessment, without a
+new field on every blob. A safe implementation still needs a stable source and
+subject binding plus an output boundary that cannot turn a mixed private note
+into unrestricted telephone context. GPT-Live remains the only conversational
+telephone model; no agent dispatch or GPT-6 phone fallback is authorized.
+
+**Revised gate:** design and independently review a disclosure boundary that
+meets the operator's runtime preference. Then implement it with meaningful
+negative tests and another independent predeploy review. Only after that review
+passes, build a new pinned release and update the production config through
+authenticated RPC. Preserve the business, number, tunnel, other profiles,
+ledger and rollback. Verify imported module, health, webhook behavior and
+private diagnostic redaction; obtain a real call report covering the response,
+follow-up and interruption, then run final independent end-to-end review. The
+plan stays active while this gate is unresolved.
