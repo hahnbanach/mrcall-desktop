@@ -28,10 +28,16 @@ def test_deltas_are_ordered_private_and_replayable(tmp_path):
     sessions.begin("call-1", started=100, caller="+390212345678")
     evidence = {"finalization": "confirmed"}
     trace = CallTrace(profile, "call-1", 6, evidence, DiagnosticOptions(True), sessions)
+    assert trace.db.execute("PRAGMA synchronous").fetchone()[0] == 1
+    statements = []
+    trace.db.set_trace_callback(lambda sql: statements.append(sql) if sql.startswith("PRAGMA synchronous=") else None)
     for role, text in (("caller", "Buon"), ("caller", "giorno"),
                        ("voice", "Salve"), ("caller", "Grazie")):
         assert trace.record_transcript(role, text)
     trace.close()
+    assert "PRAGMA synchronous=FULL" in statements
+    assert statements.count("PRAGMA synchronous=FULL") == 4
+    assert statements.count("PRAGMA synchronous=NORMAL") == 4
     identity, data = read(sessions, "call-1")
     assert identity == ("owner-uid", "exact-business")
     assert data["conversation_transcription"] == [
