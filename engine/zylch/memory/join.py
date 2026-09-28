@@ -310,8 +310,8 @@ def _cut_over(key: str) -> Dict[str, Any]:
         fence.release(fence_id)
         logger.info(f"[memory] join refused: {len(blocking)} unsettled operation(s)")
         return {"ok": False, "reason": BLOCKED, "blocking": blocking}
-    update_env({JOIN_TO: key})
     try:
+        update_env({JOIN_TO: key})
         dst = _open(key)
         merged = join_import.import_into(
             source, dst, fence_id, source_key=current, destination_key=key

@@ -115,15 +115,17 @@ def test_a_source_with_one_committed_child_and_an_undecided_remainder_blocks(pro
     assert blocking[parent]["source_ref"].startswith("email:mail-1@")
 
 
-def test_a_committed_parent_whose_checkpoint_has_not_landed_blocks(profile, monkeypatch):
+@pytest.mark.parametrize("settled", [journal.COMMITTED, journal.SKIPPED])
+def test_a_settled_parent_whose_checkpoint_has_not_landed_blocks(profile, monkeypatch, settled):
     def crash(*args, **kwargs):
         raise Crash()
 
     monkeypatch.setattr(Storage, "mark_email_processed", crash)
+    decision = create_decision(LUCA, "PERSON") if settled == journal.COMMITTED else NOTHING
     with pytest.raises(Crash):
-        run(make_worker([extraction(LUCA)], [create_decision(LUCA, "PERSON")]), "process_email", seed_email())
+        run(make_worker([extraction(LUCA)], [decision]), "process_email", seed_email())
     parent = parent_of("mail-1")
-    assert parent["state"] == journal.COMMITTED and not email_processed("mail-1")
+    assert parent["state"] == settled and not email_processed("mail-1")
 
     blocking = refused()
 

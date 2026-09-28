@@ -261,3 +261,38 @@ def test_the_script_and_the_cli_boot_the_profile_and_default_to_a_dry_run(world,
     assert out.exit_code == 0, out.output
     assert "entities: 1  missing: 2  indexed: 0  (dry run" in out.output
     assert store_digest(COMPANY_A) == before
+
+
+def test_compaction_never_touches_the_profiles_company_memory(world):
+    """``owner_id`` is provenance: an entity or fact this profile wrote is company memory, not a rule."""
+    entity = seeding.store_blob(world.storage, OWNER_A, f"user:{COMPANY_A}", RULE, "seed")
+    twin = seeding.store_blob(world.storage, OWNER_A, f"user:{COMPANY_A}", RULE.upper(), "seed")
+    fact = seeding.store_blob(world.storage, OWNER_A, f"facts:{COMPANY_A}", RULE, "seed")
+
+    compaction().run([OWNER_A, EMAIL_A], apply=True, storage=world.storage)
+
+    assert [namespace_of(b["id"]) for b in (entity, twin, fact)] == [
+        f"user:{COMPANY_A}", f"user:{COMPANY_A}", f"facts:{COMPANY_A}"
+    ]
+
+
+def test_a_link_rebuild_that_changes_a_blob_is_rolled_back(world, monkeypatch):
+    from sqlalchemy.orm import Session
+
+    with get_session() as session:
+        session.add(Email(id="mail-1", owner_id=EMAIL_A, gmail_id="g-1", thread_id="t", subject="x",
+                          from_email="luca@alpha.example", date=datetime(2026, 9, 8)))
+        session.commit()
+    seeding.store_blob(world.storage, OWNER_A, f"user:{COMPANY_A}", LUCA, "Extracted from email mail-1 (x)")
+    real = Session.merge
+
+    def tampering(self, instance, *args, **kwargs):
+        self.query(Blob).filter(Blob.id == world.longer).update({"content": "rewritten"})
+        return real(self, instance, *args, **kwargs)
+
+    monkeypatch.setattr(Session, "merge", tampering)
+    before = blob_rows()
+
+    assert rebuilds.rebuild_source_links()["failed"] == 1
+
+    assert blob_rows() == before and rows(COMPANY_A, "SELECT COUNT(*) FROM email_blobs") == [(0,)]
