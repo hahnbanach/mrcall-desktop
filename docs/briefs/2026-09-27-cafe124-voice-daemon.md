@@ -178,8 +178,9 @@ independent predeploy review remain required. GPT-Live remains the sole
 conversational telephone model, with no agent dispatch or GPT-6 phone fallback.
 
 The operator requires every phone call to be transcribed and its transcript
-eventually stored in StarChat. The production daemon must retain the exact
-provider transcript in a private call record now. StarChat currently offers
+eventually stored in StarChat. The production daemon now retains exact received
+provider transcript deltas in a private call record. This does not prove that
+the provider delivered every spoken word. StarChat currently offers
 search and properties updates for existing customer conversations but no
 creation/import route for this external Cloudflare call, so remote archival
 needs a backend contract before it can be claimed active. Prior calls without
