@@ -6,8 +6,8 @@ mechanical maintenance routes (`zylch memory-reindex-identifiers`,
 `scripts/compact_learned_prefs.py`, the boot link rebuild). Milestone 8 of the
 mnemonic harness; the semantic write path itself is
 [mnemonic-commit.md](mnemonic-commit.md), the sealed writer boundary
-[mnemonic-writer-inventory.md](mnemonic-writer-inventory.md). Built and
-tested on branch `mariocc/loving-fermi-5xde8j`; **not merged, not deployed**.
+[mnemonic-writer-inventory.md](mnemonic-writer-inventory.md). On `main` since
+`71bbc21`; **not deployed**.
 
 ## A join is a fenced, crash-safe cutover
 

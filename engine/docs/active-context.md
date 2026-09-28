@@ -126,9 +126,8 @@ and identifier writers exist only in the test seeding module; a static
 boundary test and its CI workflow fail on a new scanned writer edge, a new
 caller of the row internals or the permit factory by any spelling, and a new
 statement built from strings ([what it cannot see](features/mnemonic-writer-inventory.md#what-is-scanned)); the inert
-`memory_operations.approval` column is removed by a table rebuild. Built and
-reviewed on branch `mariocc/loving-fermi-5xde8j`; **not merged, not
-deployed**. A store it migrates cannot be opened by a milestone 5–7 build.
+`memory_operations.approval` column is removed by a table rebuild. Merged into
+`main` (`71bbc21`); **not deployed**. A store it migrates cannot be opened by a milestone 5–7 build.
 
 Support's engine exposes approval-gated `initiate_call` through the dashboard's
 Firebase atom API, with an explicit calling assistant ID. A live request on
