@@ -683,3 +683,33 @@ end-to-end review. Keep the plan active until interruption behavior and the
 full-transcription/StarChat archival gaps are resolved or explicitly accepted
 as deferred product work. A failure of the new capture calls for the prepared
 targeted rollback; never remove historical ledger or transcript evidence.
+
+## First transcript-capture call — 2026-09-28
+
+The operator made an adversarial call on the new release and reported that the
+assistant behaved well. This is a human report about the heard response, not a
+claim that every provider transcript delta reached the handset. The production
+ledger has a fourth closed call, started at 11:18:58 UTC, using voice config
+revision 6. Its private mode-0600 file contains 172 caller and 228 assistant
+transcript deltas in the dedicated table. The diagnostic event table contains
+redacted event metadata, counts and timing, without transcript, query or
+sentence text or memory candidates. The call ID matches
+through the trace and ledger. The trace records one `session.started`, one
+`session.closed`, six delegations and memory results, and `trace_closed`.
+`transcript_capture` is `deltas_observed`, `diagnostics` is `complete`, and
+provider finalization is confirmed. These statuses establish receipt and
+retention of the provider's deltas, not completeness of the audio transcript.
+
+The call meter records 170 voice seconds and two carrier legs. Its
+10,000,000-micro-USD reserve covers a 205,029-micro-USD accrued estimate with
+`provisionally_covered` reconciliation; no hold was deleted or called settled.
+A local pattern scan found no credential-format string in the assistant
+transcript and no transcript, query or sentence text in diagnostic events.
+The operator has not specifically reported whether an interruption or
+correction was heard to work. Complete-call capture and StarChat archival
+remain open. Independent final end-to-end review checked the live release,
+route, binding, ledger, private file and redacted diagnostics, and returned
+**Blocked** on those unresolved acceptance gates. It found no obvious
+credential or contact-detail pattern in the assistant transcript, but a
+pattern scan cannot certify semantic privacy or handset playback. The plan
+therefore remains `active`.
