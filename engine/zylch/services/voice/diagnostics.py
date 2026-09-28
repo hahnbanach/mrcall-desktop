@@ -110,8 +110,8 @@ class CallTrace:
             fd = os.open(path, os.O_CREAT | os.O_EXCL | os.O_WRONLY | os.O_NOFOLLOW, 0o600)
             os.close(fd)
             self.db = sqlite3.connect(path, timeout=0)
-            # Small nonblocking WAL commits keep diagnostic disk fsync off the
-            # audio reader's per-event path. This is evidence, not the cost ledger.
+            # Normal event metadata remains cheap; transcript writes below
+            # sync the WAL before the durable sessions archive is updated.
             self.db.execute("PRAGMA journal_mode=WAL")
             self.db.execute("PRAGMA synchronous=NORMAL")
             self.db.execute(
@@ -195,6 +195,8 @@ class CallTrace:
         if self.db is None or role not in ("caller", "voice") or not isinstance(delta, str) or not delta:
             return False
         try:
+            if self.sessions:
+                self.db.execute("PRAGMA synchronous=FULL")
             self.db.execute(
                 "INSERT INTO transcript_deltas "
                 "(utc,elapsed_ms,role,start_ms,end_ms,delta) VALUES (?,?,?,?,?,?)",
@@ -208,6 +210,8 @@ class CallTrace:
                 ),
             )
             self.db.commit()
+            if self.sessions:
+                self.db.execute("PRAGMA synchronous=NORMAL")
             if self.sessions:
                 self.sessions.sync(self.session_id, self.path)
             self.transcript_count += 1
