@@ -177,14 +177,17 @@ supervised pilot risk, not a general authorization system; human listening and
 independent predeploy review remain required. GPT-Live remains the sole
 conversational telephone model, with no agent dispatch or GPT-6 phone fallback.
 
-The operator requires every phone call to be transcribed and its transcript
-eventually stored in StarChat. The production daemon now retains exact received
-provider transcript deltas in a private call record. This does not prove that
-the provider delivered every spoken word. StarChat currently offers
-search and properties updates for existing customer conversations but no
-creation/import route for this external Cloudflare call, so remote archival
-needs a backend contract before it can be claimed active. Prior calls without
-stored text cannot be reconstructed from diagnostic counts.
+The operator requires phone-call transcripts to be stored locally and cancelled
+the previously proposed upload to StarChat. The production daemon retains
+exact received provider transcript deltas in a private call record. This does
+not prove that the provider delivered every spoken word. The operator
+explicitly and permanently accepts possible loss of words before the sideband transcript
+connection; the product retains all provider deltas it receives rather than
+promising verbatim coverage of that initial interval. A follow-up local SQLite
+table will hold one conversation record per call, using the StarChat session
+`data.conversation_transcription` shape as a loose reference. No StarChat
+transcript upload is planned. Prior calls without stored text cannot be
+reconstructed from diagnostic counts.
 
 Related contracts: [M4 Live-context plan](../execution-plans/2026-09-23-gpt-live-engine-integration.md#current-m4-plan--live-uses-selected-context-engine-supplies-new-results),
 [this alpha's development plan](../execution-plans/2026-09-27-cafe124-voice-daemon.md),
