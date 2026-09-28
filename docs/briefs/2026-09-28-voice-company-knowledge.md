@@ -45,9 +45,9 @@ For an uncovered detail, retrieve first and answer from the result. If no
 usable source exists, say which detail cannot be confirmed. A caller proposing
 a nonexistent service must not cause the model to add it to the catalog.
 
-The operator agreed to this direction. The brief and its detailed milestone
-plan have independent approval. Implementation and production activation remain
-separate future gates.
+The operator agreed to this direction. The `USER_NOTES` amendment and revised
+plan have separate independent approval. Implementation and production
+activation remain future gates.
 
 ## What to transfer from cs-kernel and cs-operator
 
@@ -74,7 +74,8 @@ No kernel process is required for an incoming call to work.
 
 ### One authority, with a telephone disclosure boundary
 
-Use the existing company-bound engine stores. Structured business facts have
+Use the existing company-bound engine stores and the production profile's
+operator-authored `USER_NOTES` as distinct candidate sources. Structured business facts have
 exact categories; authored project documents carry revisions. These are
 candidate sources, not automatic public knowledge. Company membership grants
 internal access; it does not authorize disclosing every company record to a
@@ -90,16 +91,32 @@ customer data or secrets into repository documents or ordinary logs. If no
 authoritative service description exists, record that concrete content gap;
 neither the company name nor old model output supplies the answer.
 
-The initial release must cover an operator-reviewed set of actual services
+The initial release must cover actual services selected by the operator
 and at least one useful detail category. This is a bounded first delivery,
 not a requirement to classify every historical blob. Broader coverage grows
 by admitting more appropriate sources through the same company-owned process.
 
-The plan must name the existing write/approval route used for any new or
-corrected source and how both operator and voice consume it. Avoid a second,
-hand-maintained telephone catalog. A derived view/cache is acceptable when
-its source references, revision checks and rebuild/invalidation rules are
-explicit. Prefer deterministic composition of approved fields or excerpts.
+The plan must name the existing write route for any new or corrected
+company-store source, define a separate caller-disclosure approval route,
+and explain how both operator and voice consume admitted content.
+For `USER_NOTES`, saving the operator-authored source is the editorial decision:
+an offline LLM conversion may automatically produce structured telephone notes
+when that source changes, with no separate human approval for each generated
+version. The operator accepts the remaining semantic risk. Use the engine's
+`MODEL_MEMORY_EXTRACT` role because this is source-to-structured extraction;
+the selected model follows the saved role/provider policy. A derived view/cache
+must record its source hash, prompt/schema/model version, validation outcome
+and rebuild/invalidation rules. It is not a second hand-maintained catalog.
+Company-store records still require separate caller-disclosure admission.
+The conversion selects only company identity, customer-facing services,
+qualifications, exclusions and available actions that the source states as
+business facts. It omits writing instructions, persona/signature material,
+customer-specific history, credentials, internal costs and unsupported
+inferences. Ambiguous content is omitted with an explicit gap. Source saving
+authorizes this bounded automatic selection; it does not make every sentence
+public. Mechanical checks can reject malformed or out-of-bound output, but
+cannot prove semantic correctness. The accepted residual risk is measured in
+offline source-to-output cases and later supervised spoken-answer tests.
 If a concise authored description is needed, keep it as an approved shared
 company record with provenance, not as uncited prose in phone configuration.
 
@@ -109,6 +126,9 @@ Prepare a compact view of identity, actual services, relevant exclusions and
 available actions from admitted sources. Make it available when the call is
 accepted, independently of caller recognition. Do not wait for a delegation
 before giving Live the facts needed for an ordinary services question.
+Test changed, unchanged, empty, ambiguous and failed `USER_NOTES` conversions;
+verify retained qualifications and exclusion of instruction-like, customer and
+secret text before the derived view is eligible for a new call.
 
 Record which company/source revisions produced the view. New calls must use
 the current approved view or an explicit unavailable state, never silently
@@ -221,8 +241,9 @@ not an assumption that the current transport already supports it.
   company capability or unselected facts in logs, repository or model input.
   Firebase ID tokens stay in memory. Company/profile binding is enforced before
   both initial context and later tool results leave the engine.
-- No new local call-count, duration or spending ceilings. No paid preparation,
-  memory writes, test calls or service changes are authorized by this brief.
+- No new local call-count, duration or spending ceilings. Future implementation
+  may run the budgeted offline `USER_NOTES` conversion. This planning session
+  authorizes no paid preparation, memory writes, test calls or service changes.
 - Work on `main`, without branches/worktrees. Preserve unrelated untracked
   files, especially `DUPLEX.md`; do not use `update-daemons.sh`.
 - No full kernel port, second telephone agent, automatic catalog inference,
