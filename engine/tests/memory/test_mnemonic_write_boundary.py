@@ -261,9 +261,13 @@ def test_a_statement_built_from_strings_is_caught(tmp_path):
         "    conn.execute(sql)\n"
         "    conn.execute('UPDATE {} SET {} = ?'.format(table, column), ('y',))\n"
         "    conn.execute('SELECT 1')\n"
+        "    grown = 'DELETE FROM '\n"
+        "    grown += table\n"
+        "    conn.execute(grown)\n"
+        "    conn.exec_driver_sql(statement=f'DELETE FROM {table}')\n"
     )
 
-    assert built_sql_calls(path) == Counter({("write", "exec_driver_sql"): 1, ("write", "execute"): 2})
+    assert built_sql_calls(path) == Counter({("write", "exec_driver_sql"): 2, ("write", "execute"): 3})
 
 
 def test_a_raw_statement_is_caught(tmp_path):

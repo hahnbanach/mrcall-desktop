@@ -443,8 +443,8 @@ def built_sql_calls(path: Path) -> Counter:
     """SQL handed to ``execute`` / ``exec_driver_sql`` / ``text`` as a string built at run time, per function.
 
     Keyed ``(symbol, method)``. The first argument counts when it is built in
-    place (:func:`_built_string`) or is a local name the same function bound to
-    one. A literal statement is :func:`literal_sql_sinks`'s; a statement a
+    place (:func:`_built_string`), is a local name the same function bound to
+    one or grew with ``+=``, or is passed by keyword. A literal statement is :func:`literal_sql_sinks`'s; a statement a
     caller passes in as a parameter is not seen here.
     """
     tree = ast.parse(path.read_text(), filename=str(path))
@@ -474,16 +474,23 @@ def built_sql_calls(path: Path) -> Counter:
                     built[-1][target.id] = _built_string(node.value)
             self.generic_visit(node)
 
+        def visit_AugAssign(self, node: ast.AugAssign) -> None:
+            if isinstance(node.target, ast.Name):
+                built[-1][node.target.id] = True
+            self.generic_visit(node)
+
         def visit_Call(self, node: ast.Call) -> None:
             name = (
                 node.func.attr
                 if isinstance(node.func, ast.Attribute)
                 else (node.func.id if isinstance(node.func, ast.Name) else "")
             )
-            if name in SQL_CALLS and node.args:
-                first = node.args[0]
-                if _built_string(first) or (isinstance(first, ast.Name) and built[-1].get(first.id)):
-                    found[(".".join(stack) or "<module>", name)] += 1
+            arguments = [*node.args[:1], *(k.value for k in node.keywords)]
+            if name in SQL_CALLS and any(
+                _built_string(a) or (isinstance(a, ast.Name) and built[-1].get(a.id))
+                for a in arguments
+            ):
+                found[(".".join(stack) or "<module>", name)] += 1
             self.generic_visit(node)
 
     Visitor().visit(tree)

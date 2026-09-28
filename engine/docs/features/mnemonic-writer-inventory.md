@@ -97,8 +97,8 @@ scan of the real tree:
   spelled at the call, pinned to the committed writers, the restore and the
   commit;
 - every function that hands the driver SQL built from strings at run time
-  (an f-string, a concatenation, `.format` / `.join`, or a local bound to
-  one), frozen per function, so a new dynamic statement is a reviewed change;
+  (an f-string, a concatenation, `.format` / `.join`, a local bound to one or
+  grown with `+=`, positional or keyword), frozen per function, so a new dynamic statement is a reviewed change;
 - the literal list of exempt `(path, symbol)` pairs the inventory's `exempt`
   rows must equal, so adding an exemption changes a reviewed test.
 
