@@ -323,7 +323,15 @@ user: the preview echo (self-notion, size, contributors), a confirmation
 prompt, then the merge and the switch (`--yes` as a third argument skips
 the prompt, for scripts). **There is no company check**: the key is the
 capability, so joining `support@` to a Café 124 key merges MrCall's memory
-into Café 124's store — read the echo before confirming. The same join is available to a signed-in user from
+into Café 124's store — read the echo before confirming. A join is refused
+while the profile's own memory work in its current company is unsettled;
+the refusal lists each operation and the command that settles it
+(`zylch -p <uid> memory-join --drain <key>`, which first runs one memory pass
+and may pay, or `zylch -p <uid> memory-reviews --retry|--dismiss <id>`).
+While a join runs, the source company's memory writes are refused for every
+profile on it; a join that stopped is finished or undone by its profile's
+next boot, or `memory-join --release-fence` releases it
+([contract](../engine/docs/features/company-memory-join.md)). The same join is available to a signed-in user from
 the desktop app (Settings → Company memory → paste, Test, Join) over the
 WebSocket.
 

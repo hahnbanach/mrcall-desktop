@@ -73,8 +73,8 @@ post-update run call it. It replays this account's recorded task-reference
 follow-ups, applies retention, then decides each duplicate pair through the
 role — pairs the validator's identity rule could never accept cost no call —
 and commits a MERGE; its merge gate follows the canary, which asks the role.
-Still direct: the owner's delete and reset, and join, migrations and the repair
-scripts (M8). Contracts:
+Outside the harness stay only the owner's delete, reset and restore, and the
+reviewed exempt primitives the writer inventory names. Contracts:
 [mnemonic commit](features/mnemonic-commit.md),
 [mnemonic decisions](features/mnemonic-decisions.md),
 [writer inventory](features/mnemonic-writer-inventory.md). Tested locally
@@ -82,6 +82,19 @@ against the frozen milestone 0 incident corpus and real split profile/company
 databases. Milestones 5–7 and the account check that accepts either identity
 of the profile, uid or email ([who the account is](features/mnemonic-decisions.md#who-pays)),
 are on `main` and pushed; **not deployed**.
+
+Milestone 8 seals the boundary ([join, reviews and maintenance](features/company-memory-join.md)):
+a company-memory join is a fenced, crash-safe cutover that refuses while the
+account's own work in the source is unsettled, imports what it can see
+without laundering a restricted FACT, and tells its three crash states apart
+at boot; `zylch memory-reviews` retries or dismisses parked work; the
+maintenance routes retain what they drop, touch only their own rows and roll
+back a tampered rebuild; `store_blob`, `update_blob` and the `Storage` link
+and identifier writers exist only in the test seeding module; a static
+boundary test and its CI workflow fail on any new writer edge; the inert
+`memory_operations.approval` column is removed by a table rebuild. Built and
+reviewed on branch `mariocc/loving-fermi-5xde8j`; **not merged, not
+deployed**. A store it migrates cannot be opened by a milestone 5–7 build.
 
 Support's engine exposes approval-gated `initiate_call` through the dashboard's
 Firebase atom API, with an explicit calling assistant ID. A live request on
@@ -142,6 +155,12 @@ API budgets; see [control boundaries](../../docs/operator-setup.md#ai-execution-
   historical; re-read current state before a cleanup or backlog operation.
 - Desktop v0.1.49 installation and personal-key entry on the CTO's Mac remain
   unverified. Saved-prompt format repairs have no new business-quality result.
+- The Desktop app does not read `memory.status`'s `joining` or
+  `memory.join`'s `blocking`: a refused join shows its reason only, and the
+  settling commands exist on the engine CLI alone (M8 added no RPC for them).
+- `tests/memory/test_mnemonic_kernel_inventory.py` passes against `cs-kernel`
+  `258c927` and fails against its current `main`: the kernel's cron template
+  no longer carries the `--disallowed-tools` block the audit reads.
 - Calendar token integration, phone memory parity, RPC error humanization and
   WhatsApp multi-profile isolation remain separate [backlog](harness-backlog.md)
   work. Product chat and comprehensive security review remain deferred.

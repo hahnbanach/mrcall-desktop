@@ -179,10 +179,11 @@ retained with reason `consolidate` before the row goes, and a retaining drop
 without the caller's session is refused. The owner's own `/memory delete` and
 `/memory reset` retain nothing and prune the versions of exactly the blobs they
 remove — consolidation is the only *semantic* operation that removes memory,
-and it keeps what it removes. The one raw delete in the estate,
-`scripts/compact_learned_prefs.py`'s `DELETE FROM blobs`, is a maintenance
-script the frozen inventory names (`sql:DELETE:blobs`, milestone 8); it
-retains nothing and stays until milestone 8 converts it.
+and it keeps what it removes. The owner's rule compaction,
+`scripts/compact_learned_prefs.py --apply`, drops a duplicate or contained rule
+through the same retaining drop with reason `maintenance`
+([company-memory-join.md](company-memory-join.md#maintenance-routes)); no raw
+statement deletes a blob anywhere in the estate.
 
 `blob_versions.blob_id` is indexed and deliberately **not** a foreign key: a
 cascade would delete a retained donor inside the very transaction that retains
@@ -290,7 +291,12 @@ proposal and its write set — plus the original instruction only when the sourc
 cannot be referenced durably (a chat turn the engine does not keep). An email
 or a task has a row of its own; copying its body here would give the same text
 two retention policies. On a terminal state the bodies are dropped and the
-digests stay, which is exactly enough to recognize a replay.
+digests stay, which is exactly enough to recognize a replay — except that a
+parent in `review` keeps its manifest, so one reviewed child can be retried,
+and prunes it when it settles. A terminal row changes only through
+`zylch memory-reviews`: `receipt` and `record_attempt` refuse it. While a join
+fence holds the company, every writer here refuses
+([company-memory-join.md](company-memory-join.md)).
 
 ### Children of a source
 
@@ -311,7 +317,8 @@ children that are not yet terminal, and a source already terminal replays its
 receipt without a paid call. A review may also record `restrictions` — the
 exact ids and versions of FACT candidates the role named as one customer's
 knowledge rather than the company's — which `memory/eligibility.py` excludes
-from every ordinary fact read ([what the validator
+from every ordinary fact read whatever state the recording row ends in (a
+dismissed review and a join's import receipt keep theirs) ([what the validator
 refuses](mnemonic-decisions.md#what-the-validator-refuses)). `mnemonic/ingestion.py`
 is the loop; the journal stays a record, not a queue — admission, retries and
 batches remain preparation's.
@@ -369,13 +376,14 @@ every blob row before and after to prove it.
   but a consolidation pair's own admitted item. The proposal is recorded,
   nothing is written. Approximating a merge with an update is the failure this
   harness exists to remove.
-- **Join, the storage migrations and the repair scripts are still direct**
-  (milestone 8). The frozen inventory names every one; no setting selects a
-  writer anywhere, and a proposal the harness cannot admit is refused, never
-  written another way.
-- **A review parks its source.** A child in review leaves its parent pending
-  and its source unprocessed, visibly; nothing resolves it yet (milestone 8's
-  tooling).
+- **A review parks its source** until its owner settles it: a child in review
+  leaves its parent pending and its source unprocessed, visibly, and
+  `zylch memory-reviews --retry` or `--dismiss` resolves it
+  ([company-memory-join.md](company-memory-join.md#resolving-parked-work-zylch-memory-reviews)).
+  The join, the storage migrations and the repair scripts are converted or are
+  named exempt primitives ([writer inventory](mnemonic-writer-inventory.md));
+  no setting selects a writer anywhere, and a proposal the harness cannot
+  admit is refused, never written another way.
 - **Calendar extraction is prose**, so a calendar child carries no typed
   identifiers and cannot corroborate: the duplicate-CREATE gate is off on that
   path. Consolidation folds a calendar-born PERSON into its mail-born twin only

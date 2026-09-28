@@ -96,7 +96,10 @@ zylch/
 │   ├── company_key.py    # MEMORY_KEY mint/validate; namespace families (user/facts by key, template/prefs by owner)
 │   ├── scope.py          # blob_visible — the one visibility predicate every memory path applies
 │   ├── store.py          # ~/.zylch/memory/<key>.db: open/create by provenance, memory_meta (self-notion, mutation_seq, last_sweep_seq)
-│   ├── join.py           # memory.join — merge a profile's store into another key's store, rebind in-process
+│   ├── join.py           # memory.join — fenced cutover of a profile into another key's store, rebind in-process
+│   ├── join_import.py    # The join's import: one mechanical transaction per store, idempotent by row
+│   ├── join_recover.py   # The join's crash states, at boot and at every join, under the profile's join lock
+│   ├── rebuilds.py       # Identifier reindex and source-link rebuild, inside a digest guard
 │   ├── blob_storage.py   # Blob CRUD (embeddings as BLOB), compare-and-swap updates
 │   ├── blob_commits.py   # The permit-guarded committed writers: semantic_create / semantic_update / semantic_merge
 │   ├── embeddings.py     # fastembed (ONNX, 384-dim)

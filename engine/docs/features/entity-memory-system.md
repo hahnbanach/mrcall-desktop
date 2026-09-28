@@ -37,11 +37,16 @@ every read, write, update, delete and list; no call site filters on
 scoped by the company key; an identifier is unique per
 `(company_key, kind, value, blob_id)`.
 
-Joining (`memory.join`, `zylch memory-join`, the Settings card) merges the
-profile's current store into the target key's store: entities are all kept
-and consolidation folds afterwards the duplicates whose headers prove one
-subject, facts converge to one row per key with the losing value in
-`fact_history`, rules keep their owner. The old store file stays on disk.
+Joining (`memory.join`, `zylch memory-join`, the Settings card) imports
+what the profile can see of its current store into the target key's store,
+as a fenced, crash-safe cutover: entities are all kept and consolidation
+folds afterwards the duplicates whose headers prove one subject, facts
+converge to one row per key with the losing value in `fact_history`, the
+joining account's rules keep their owner and another account's stay behind,
+versions and restrictions travel with their rows. A join is refused while the
+account's own memory work in the current company is unsettled, and names what
+settles each operation. The old store file stays on disk. Contract:
+[company-memory-join.md](company-memory-join.md).
 Several daemons write one store: updates compare-and-swap on `updated_at`,
 the in-process vector index is keyed on the store's `mutation_seq`, and
 consolidation runs after each update only when the store changed since the
@@ -49,9 +54,9 @@ last sweep started, once per company (`<store>.sweep.lock`).
 
 ## The semantic write path
 
-Memory is changed through two kinds of writer today. `store_blob` and
-`update_blob` are the direct ones every unconverted caller still uses. Beside
-them the **mnemonic harness** now commits: a caller submits an observation, a
+Memory is changed through one semantic writer, the **mnemonic harness**
+(the direct `store_blob` and `update_blob` left production with milestone 8
+and live only in the test seeding module): a caller submits an observation, a
 bounded role decides what the memory should become, a small validator refuses
 what it can hold honestly, and one transaction on the company store writes the
 blob, its sentences, its identifier index, its source link, the mutation
@@ -146,7 +151,10 @@ keeps the replaced and the dropped text as versions
 | `zylch/memory/company_key.py` | `MEMORY_KEY` mint/validate, namespace families |
 | `zylch/memory/scope.py` | `blob_visible` and the other scope predicates |
 | `zylch/memory/store.py` | The per-company store file, `memory_meta`, sweep gating |
-| `zylch/memory/join.py` | Joining a company memory (merge + rebind) |
+| `zylch/memory/join.py` | Joining a company memory: drain, fence, evaluation, key switch, rebind |
+| `zylch/memory/join_import.py` | The join import: one mechanical transaction per store, idempotent by row |
+| `zylch/memory/join_recover.py` | The join's crash states, told apart at boot and at every join |
+| `zylch/memory/rebuilds.py` | The identifier reindex and the source-link rebuild, inside a digest guard |
 | `zylch/memory/blob_storage.py` | Blob CRUD (embeddings as BLOB in SQLite), compare-and-swap updates |
 | `zylch/memory/blob_commits.py` | The permit-guarded `semantic_create` / `semantic_update` / `semantic_merge` |
 | `zylch/memory/blob_versions.py` | Retained versions, the restore, the retention policy and the sink report |

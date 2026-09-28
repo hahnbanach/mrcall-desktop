@@ -1,13 +1,17 @@
 # Mnemonic writer inventory
 
-This is the executable freeze of the memory write graph for the mnemonic
-harness plan. It describes the production write graph as it is; the
-single-writer seam is not complete. The executable source of truth is
+This is the executable freeze of the memory write graph, and since milestone 8
+the boundary it describes is sealed. The executable source of truth is
 `tests/fixtures/mnemonic/legacy_writer_inventory.json`, checked by
-`tests/memory/test_mnemonic_inventory.py` and
-`tests/memory/test_mnemonic_kernel_inventory.py`. Every temporary entry names
-the milestone that must remove or constrain it. Adding a direct writer without
-updating that reviewed inventory fails the test.
+`tests/memory/test_mnemonic_inventory.py`,
+`tests/memory/test_mnemonic_kernel_inventory.py` and
+`tests/memory/test_mnemonic_write_boundary.py`, which
+`.github/workflows/memory-boundary.yml` runs on every change to `engine/`.
+Every writer edge in `zylch/` and `scripts/` is either the harness's own
+mechanism (a row with the `milestone`, 1–7, that installed it) or a reviewed
+mechanical primitive (a row with `exempt`: the primitive and the precondition
+it checks). A row with neither, both, or a milestone of 8 or more is refused;
+adding a writer edge without a reviewed row fails the test.
 
 ## Current call graph
 
@@ -31,10 +35,10 @@ flowchart LR
     R[consolidation: button, memory-sweep, post-update] -->|pairs| S
     R -->|retention| V[blob_versions]
     S --> B[BlobStorage semantic_create / semantic_update / semantic_merge]
-    S --> X[references, identifiers and aliases]
-    H -->|delete, reset| B
+    S --> X[associations: identifiers, links, alias]
+    H -->|delete, reset, restore| B
     B --> T[blobs and blob_sentences]
-    O[join, migrations and repair scripts] --> T
+    O[exempt primitives: join import, rebuilds, rule compaction, migration steps, revoke unlink] --> T
     O --> X
 ```
 
@@ -44,77 +48,75 @@ coroutine per item; interactive `create_memory`, `update_memory`, the task
 solve and `/memory store` submit events; `prefs_store`, `facts_store` and
 correction learning are adapters over `submit()`; consolidation submits its
 pairs, and a MERGE is committed only for a consolidation pair, the donor's
-retaining drop and the alias inside that one transaction. What still writes
-outside the harness is the owner's `/memory delete` and `/memory reset`
-(milestone 1's gate, no model), and join, migrations and the repair scripts
-(milestone 8). Consolidation's own mechanism stays listed as milestone 7: the
-retention prune (`expire_versions`) and the record of the sequence a sweep
-starts from (`record_sweep_started`).
+retaining drop and the alias inside that one transaction. Outside the harness
+stay only the owner's `/memory delete` and `/memory reset` (milestone 1's
+gate) and the byte-identical restore (milestone 5), none of which asks a
+model, and the exempt primitives below.
 
-`BlobStorage.store_blob` and `update_blob` are the common low-level blob
-writers and are not capability protected; the same primitives now also back
-`semantic_create` / `semantic_update`, which are. Associations and identity
-meaning can also change through `Storage.add_*_blob_link` and
-`add_person_identifiers`; both delegate to the transaction-scoped forms in
-`memory/associations.py`, so one implementation serves both the legacy
-standalone sessions and the semantic commit's single transaction. The alias is
-written only inside a MERGE commit. `tracked_calls` keeps
-`migrate_blob_references` and `_record_alias`, so a re-added helper of either
-name is scanned. Join, company-key/split/identifier migrations and three repair
-scripts contain direct SQL or fixed ORM writes outside those methods. The
-manifest distinguishes these mechanical or migration candidates from runtime
-semantic adapters so Milestone 8 can review each one rather than granting a
-general offline exemption.
+`BlobStorage` has no writer that trusts its caller: `store_blob` and
+`update_blob` left production with milestone 8, and so did `Storage`'s
+`add_person_identifiers` and `add_*_blob_link`, which had no caller left. They
+live in the test seeding module (`tests/memory/seeding.py`), which no
+production module imports. The row internals that assign `Blob.content`
+(`_insert`, `_rewrite`) are reached only by `semantic_create`,
+`semantic_update`, `semantic_merge` and `blob_versions.restore_version`, and
+only `mnemonic/commit.py` imports the permit factory. The associations
+primitives (`link_source`, `add_identifiers`, `drop_identifiers`,
+`record_alias`) are tracked writers: the commit's index writes, the MERGE's
+link and alias moves, and the identifier reindex call them.
 
-## Finite legacy allowlist
+## What is scanned
 
-The JSON inventory freezes six independently scanned sets:
+The JSON inventory freezes seven sets, each with frozen equality against the
+scan of the real tree:
 
-- calls to semantic writer helpers, including nested aliases and their exact
-  enclosing symbol, count, execution mode and owning milestone;
-- direct ORM construction of blob, sentence, association, identifier and alias
-  rows;
+- calls to tracked writer helpers, including aliased imports, with their exact
+  enclosing symbol, count and execution mode;
+- direct ORM construction of blob, sentence, association, identifier, alias,
+  history, version and meta rows;
 - ORM `update`/`delete` operations on those models;
-- direct assignments to a queried or constructed ORM row, independent of the
-  local variable name (the current four are `Blob.content`, `embedding`,
-  `events` and `updated_at` in `BlobStorage._rewrite`); `setattr` on a bound
-  row, imported model aliases, inline query-result assignments and a row handed
-  in as a parameter annotated with a tracked model are treated as the same
-  write;
-- SQLAlchemy Core `insert`/`update`/`delete` operations on tracked models,
-  including the two `MemoryMeta` lock/mutation-sequence updates;
-- literal `INSERT`, `UPDATE` and `DELETE` statements against mnemonic tables.
+- direct assignments to a queried, constructed or annotated ORM row
+  (`setattr`, model aliases and inline query results included) — the four are
+  `Blob.content`, `embedding`, `events` and `updated_at` in
+  `BlobStorage._rewrite`;
+- SQLAlchemy Core `insert`/`update`/`delete` operations on tracked models;
+- literal `INSERT`, `UPDATE` and `DELETE` statements against the memory tables
+  (`blob_versions` and `memory_operations` included); no literal statement may
+  set `blobs.content` anywhere;
+- statements assembled at run time (`known_dynamic_sql_sinks`), each naming
+  its function and the tables it may touch.
 
-`memory_meta` is included because the eventual commit must carry the mutation
-sequence atomically. Its fixed seed, self-notion, sweep and join writes are now
-listed alongside blob sinks rather than hidden as coordination detail.
+`test_mnemonic_write_boundary.py` adds what a census cannot: a tracked writer
+reached by attribute reference, `getattr` string or import alias (none on the
+real tree; a synthetic source proves each spelling and a raw statement is
+caught), and the literal list of exempt `(path, symbol)` pairs the inventory's
+`exempt` rows must equal, so adding an exemption changes a reviewed test.
 
-Six fixed dynamic-SQL implementations are recorded separately because a plain
-literal matcher cannot represent their table construction honestly. They cover
-the join helper's association/index/alias copies, company-key stamping, the
-identifier-table rebuild, and the memory split's forward copy, profile-table
-drop and rollback restore. Every one is bounded to an explicit table tuple and
-belongs to Milestone 8 review; there is no generic offline-write exemption.
+## The exempt primitives
 
-Two aliases are explicit beyond the plan's grouped table:
-`handle_reset._reset_all_data` reaches
-`BlobStorage.delete_all_blobs`, and
-`Storage.delete_whatsapp_message_by_message_id` directly deletes semantic
-association rows while enforcing source retention. The first belongs to the
-Milestone 1 reset gate; the second is a fixed deletion/retention path for
-Milestone 8 review.
-
-The ownership sequence is:
-
-| Milestone | Temporary owners |
+| Primitive | Precondition it checks |
 |---|---|
-| 1 | mutation authorization before slash/reset routing and kernel request policy |
-| 3 | guarded `BlobStorage` commit primitives and transaction-scoped sinks (installed: `semantic_create`/`semantic_update` under a permit, `memory/associations.py`) |
+| `memory/join_import._put` | the join import, only under this attempt's `fenced` fence, compared-and-set under the source's write lock; `INSERT OR IGNORE` by each row's own key; only rows the joining account can see ([company-memory-join.md](company-memory-join.md)) |
+| `memory/rebuilds.rebuild_source_links` | the boot link rebuild: links by their own key, a calendar summary only when exactly one event carries it, inside the digest guard |
+| `memory/rebuilds.reindex_identifiers` | the exact `#IDENTIFIERS` entries of visible PERSON / COMPANY rows through `add_identifiers`, inside the digest guard |
+| `scripts/compact_learned_prefs.drop_rules` | the booted profile's own rules only, duplicates and strictly contained ones, through the retaining drop, one transaction, one mutation bump |
+| `storage.Storage.delete_whatsapp_message_by_message_id` | a WhatsApp revoke: only the links of this owner's messages the revoke names |
+| `storage/step_company_key.apply` / `reverse` | migration `0001_company_key`, once, under the profile's migration lock, after a backup; `reverse` by hand only |
+| `storage/step_memory_split.apply` / `copy_if_absent` / `reverse_into_profile` | migration `0002_memory_split`, copy by primary key into a store attached under a vouched provenance; `reverse_into_profile` by hand only |
+| `storage/step_identifiers_company_unique.apply` | memory-store step `0001_identifiers_company_unique`, only when the constraint is missing |
+| `storage/step_memory_operations_drop_approval.apply` | memory-store step `0002_memory_operations_drop_approval`, only when the column is present, every other column copied unchanged |
+
+The ownership sequence of the harness's own rows is:
+
+| Milestone | Rows |
+|---|---|
+| 1 | mutation authorization before slash/reset routing and kernel request policy; the owner's delete and reset |
+| 3 | guarded `BlobStorage` commit primitives and transaction-scoped sinks (`semantic_create`/`semantic_update` under a permit, `memory/associations.py`, the commit's index writes) |
 | 4 | interactive create/update and task-solve adapters |
 | 5 | no writer conversion: retention under every rewrite, the departure record and the mechanical restore |
-| 6 | installed: ingestion, the job facade, the helper-writer adapters and the memory verb write through the harness; the four adapter doors (`store_rule` and `refine_rule` from the tools, `store_rule` and `upsert_fact` from correction learning) stay listed as the edges a re-added direct write would surface on |
-| 7 | installed: consolidation is the one removing operation — its pairs through the harness (the MERGE commit's retaining donor drop under the permit, the links, the identifiers, the alias), the recorded task-reference follow-up and the retention policy; its three rows are its own mechanism (`CommittedWrites.semantic_merge → delete_blob`, `expire_versions → orm:delete:BlobVersion`, `record_sweep_started → sql:UPDATE:memory_meta`) |
-| 8 | join, storage migrations, backfills and semantic repair scripts |
+| 6 | ingestion, the job facade, the helper-writer adapters and the memory verb through the harness; the four adapter doors stay listed as the edges a re-added direct write would surface on |
+| 7 | consolidation as the one removing operation: the MERGE commit's retaining donor drop, links and alias, the task-reference follow-up and the retention policy |
+| 8 | no rows: the join, migrations, backfills and repair scripts were converted or became the exempt primitives above, and the boundary is sealed |
 
 ## Kernel and permission edges
 

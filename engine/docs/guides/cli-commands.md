@@ -16,7 +16,11 @@ zylch sync         # Sync emails via IMAP
 zylch tasks        # Show actionable tasks
 zylch status       # Show sync status
 zylch -p <uid> memory-status        # Company memory: key source, store, blob count, or why it is off
-zylch -p <uid> memory-join KEY      # Join another company memory (echo, confirm, merge); --yes skips the prompt
+zylch -p <uid> memory-join KEY      # Join another company memory (echo, confirm, fenced import, switch); --yes skips the prompt
+zylch -p <uid> memory-join --drain KEY  # First one memory pass under preparation (it may pay), then the join
+zylch -p <uid> memory-join --release-fence  # Release a join fence a stopped join left on this company (phase fenced only)
+zylch -p <uid> memory-reviews       # This profile's unsettled memory operations; --retry ID or --dismiss ID settles one
+zylch -p <uid> memory-reindex-identifiers  # Report missing identity-index rows; --apply writes them
 zylch -p <uid> memory-sweep         # Consolidation now: retention, sinks, duplicate pairs (the daemon runs it after each update)
 ```
 
