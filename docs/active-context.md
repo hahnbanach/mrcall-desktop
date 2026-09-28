@@ -1,5 +1,5 @@
 ---
-doc_baseline_commit: c851e14fc89349f85bc87e560ac4d8f9062c1e13
+doc_baseline_commit: a0f3254f1ac657d82811f0d96c85a9ac460b48a3
 doc_baseline_date: 2026-09-28
 ---
 
@@ -55,10 +55,14 @@ matched selected contact. Eight funded calls have closed ledgers with
 provisional exposure reconciliation. Private `sessions.db` (0600) has eight
 matching rows: three historical `legacy_no_text` rows and five reconstructed
 from received deltas. The two post-release calls match their private delta
-sources exactly. The operator cancelled StarChat transcript upload and
+sources exactly. An independent read-only production review approved the local
+archive gate after checking both calls against the closed ledger. The operator
+cancelled StarChat transcript upload and
 permanently accepts possible missing words before transcript attachment.
 On the latest call GPT-Live invented business services without delegating or
-reading business facts. Post-call review remains open; see the active
+reading business facts. The independent overall acceptance verdict is REVISE;
+the phone path exposes selected caller history but no verified company-service
+catalog. The plan remains active; see the
 [plan](execution-plans/2026-09-27-cafe124-voice-daemon.md).
 
 The hosted engine is being isolated per tenant
@@ -116,14 +120,15 @@ Refresh button only lists threads. See the archived
   installer coverage and multi-window auth checks retain their existing owners.
 - Historical task-mode/import and legacy transport issues need verification
   before their paths are restored.
-- Café 124's post-call review and plan closure remain open. Business-service
-  grounding needs a design decision; mixed-note judgment remains supervised.
+- Café 124's overall plan acceptance remains open after the local archive passed
+  independent review. Business-service grounding needs a design decision and
+  a verified spoken-answer gate; mixed-note judgment remains supervised.
   Eight reserves remain held with provisional exposure, not settled invoices.
 
 ## Next
 
-1. Review the two post-release calls independently, decide whether the
-   ungrounded answer blocks plan closure, then discuss response grounding.
+1. Discuss company-fact access and response grounding for GPT-Live, then review
+   and verify the chosen behavior before closing the Café 124 plan.
 2. Resolve the remaining billing choices and funded credit acceptance. Keep
    preparation paused until the CTO explicitly requests a bounded run.
 3. Verify the installed applications through their GUI: the Mac one with
