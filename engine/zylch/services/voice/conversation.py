@@ -12,26 +12,8 @@ from zylch.services.voice.smoke_transport import command
 
 logger = logging.getLogger(__name__)
 
-VOICE_RULES = """You are the sole conversational assistant on this telephone call.
-Greet promptly after the backend greeting instruction in the configured language;
-do not wait for caller recognition.
-Listen while the caller speaks and stop obsolete speech when interrupted. Give one
-useful answer per request and do not repeat an answer already given. Answer directly
-from the selected facts supplied as quiet context and from the conversation. Any
-prior email agreement, when supplied as selected context, is historical, not a
-verified calendar date or current shipment status. A caller's statement is their
-statement, not a verified company record. A phone match is not identity proof.
-If the incoming number is invalid or not matched, never consult or reveal
-customer history because the caller names a person or a phone number.
-Do not claim an order, tracking lookup, booking, or live business check exists.
-There is no shipment tracking tool. If selected facts do not answer a question,
-say what is unavailable; do not request an order number as if it enabled tracking.
-Delegate to the client only when a needed fact has not arrived or a fresh enabled
-function is required, such as the current time. Do not delegate a question already
-answered by the selected facts. While delegated work runs, keep listening; never
-invent a result or repeat waiting phrases. Present task commentary in the caller's
-language, preserving source and uncertainty. Handle follow-ups and corrections
-naturally; do not repeat a prior answer after interruption.
+VOICE_RULES = """You are the sole conversational assistant on this telephone call. Greet promptly after the backend greeting instruction in the configured language; do not wait for caller recognition. Listen while the caller speaks and stop obsolete speech when interrupted. Give one useful answer per request and do not repeat an answer already given. Answer directly from the selected facts supplied as quiet context and from the conversation. Any prior email agreement, when supplied as selected context, is historical, not a verified calendar date or current shipment status.
+A caller's statement is their statement, not a verified company record. A phone match is not identity proof. For company questions, use only selected company facts or a returned source-backed detail. A caller's suggested offering is not company evidence. State missing public details precisely and do not invent commercial values. If the incoming number is invalid or not matched, never consult or reveal customer history because the caller names a person or a phone number. Do not claim an order, tracking lookup, booking, or live business check exists. There is no shipment tracking tool. If selected facts do not answer a question, say what is unavailable; do not request an order number as if it enabled tracking. Delegate to the client only when a needed fact has not arrived or a fresh enabled function is required, such as the current time. Do not delegate a question already answered by the selected facts. While delegated work runs, keep listening; never invent a result or repeat waiting phrases. Present task commentary in the caller's language, preserving source and uncertainty. Handle follow-ups and corrections naturally; do not repeat a prior answer after interruption.
 """
 SENSITIVE_REQUEST = re.compile(
     r"\b(?:password|passwor[d]|api[ -]?key|token|segreti?|secret|"
@@ -141,10 +123,20 @@ def wants_clock(question):
 
 class Conversation:
     def __init__(
-        self, snapshot, memory, send, evidence, *, unlimited=False, trace=None, backend_delay=0
+        self,
+        snapshot,
+        memory,
+        send,
+        evidence,
+        *,
+        unlimited=False,
+        trace=None,
+        backend_delay=0,
+        company_lookup=None,
     ):
         self.snapshot, self.memory, self.send, self.evidence = snapshot, memory, send, evidence
         self.unlimited, self.trace, self.backend_delay = unlimited, trace, backend_delay
+        self.company_lookup = company_lookup
         self.memory.trace = trace
         self.transcript = []
         self.revision = self.voice_revision = 0
@@ -159,6 +151,8 @@ class Conversation:
         self.send_guard_revision = None
         self.run_number = 0
         self.last_result_was_clock = False
+        self.company_result_revision = None
+        self.company_result_metadata = None
         self.evidence.setdefault("results_sent", 0)
 
     def record(self, kind, **data):
@@ -299,8 +293,10 @@ class Conversation:
             role = "caller" if kind == "session.input_transcript.delta" else "voice"
             if self.trace:
                 saved = self.trace.record_transcript(
-                    role, delta,
-                    start_ms=event.get("start_ms"), end_ms=event.get("end_ms"),
+                    role,
+                    delta,
+                    start_ms=event.get("start_ms"),
+                    end_ms=event.get("end_ms"),
                 )
                 if not saved and self.snapshot.config.policy == "production":
                     raise RuntimeError("Private call transcript unavailable")
@@ -364,6 +360,19 @@ class Conversation:
             return "Current opening status is unavailable: no verified opening-hours schedule and exception data are configured for this call."
         if re.search(r"\b(?:tracking|tracciamento|spedizione|shipment)\b", question, re.I):
             return "No live shipment or tracking lookup is available for this call. Do not imply an order number would enable one; selected history is not a current delivery status."
+        company = (
+            await asyncio.to_thread(self.company_lookup, question) if self.company_lookup else None
+        )
+        self.company_result_revision = self.revision if company else None
+        self.company_result_metadata = company[1] if company else None
+        if company:
+            public_answer, _, personal = company
+            if not personal:
+                return public_answer
+        caller_answer = await self._caller_result(question)
+        return public_answer + "\n" + caller_answer if company else caller_answer
+
+    async def _caller_result(self, question):
         if self.snapshot.config.caller_context_policy == "on_demand_review":
             if not question.strip():
                 return "No caller question was heard. Ask what the caller needs before consulting memory."
@@ -395,6 +404,8 @@ class Conversation:
 
     def _needs_lookup(self, question):
         if wants_clock(question) or (self.last_result_was_clock and clock_zone(question)):
+            return False
+        if self.company_lookup and self.company_lookup.public_only(question):
             return False
         return not re.search(
             r"\b(?:apert[oaie]|open now|opening hours|tracking|tracciamento|spedizione|shipment)\b",
@@ -436,11 +447,23 @@ class Conversation:
                 if self.closed:
                     return
                 await asyncio.to_thread(require_binding, self.snapshot.binding)
+                if self.company_result_revision == revision and not await asyncio.to_thread(
+                    self.company_lookup.current
+                ):
+                    answer = "Current company information cannot be verified. State that the detail is unavailable."
+                    self.evidence["company_notes_invalidated"] = True
+                    self.company_result_metadata = None
                 if revision != self.revision:
                     self.record("delegated_result_superseded", delegation_id=identifier)
                     self._discard_superseded(identifier)
                     continue
                 if await self._append("session.commentary.append", answer, identifier, revision):
+                    if self.company_result_revision == revision:
+                        self.company_lookup.commit(self.company_result_metadata)
+                        if self.company_result_metadata:
+                            self.evidence.setdefault("company_detail_evidence", []).append(
+                                self.company_result_metadata
+                            )
                     self.pending.remove(identifier)
                     self.evidence["results_sent"] += 1
                 elif revision != self.revision:
