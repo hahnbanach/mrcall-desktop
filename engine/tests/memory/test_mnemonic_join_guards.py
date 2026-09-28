@@ -94,3 +94,22 @@ def test_recovery_leaves_a_fence_placed_for_another_destination(world):
     assert join_recover.recover() == {"state": "after_key", "completed": False}
     assert phases(COMPANY_A) == [ACCEPTED] and COMPLETED not in phases(COMPANY_A)
     assert count(COMPANY_C, "blobs") == 0
+
+
+def test_a_failure_writing_the_join_setting_releases_the_fence(world, monkeypatch):
+    from zylch.services import settings_io
+
+    real = settings_io.update_env
+
+    def refusing(updates):
+        if updates.get("MEMORY_JOIN_TO"):
+            raise OSError("no space left on device")
+        return real(updates)
+
+    monkeypatch.setattr(settings_io, "update_env", refusing)
+
+    with pytest.raises(OSError):
+        join(COMPANY_B)
+
+    assert phases(COMPANY_A) == [RELEASED] and env_value("MEMORY_JOIN_TO") == ""
+    assert current_company_key() == COMPANY_A and receipts() == []
