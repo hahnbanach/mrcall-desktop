@@ -155,6 +155,23 @@ historical evidence and uncertain reservations. This brief covers the one
 manual Café 124 pilot; it does not certify checkout, preview in Electron,
 multi-business routing or general availability.
 
+## Caller memory after the first call
+
+The company store recognizes the selected caller's number and name, while the
+telephone configuration makes no historical sentence available. The operator
+prefers a per-question disclosure judgment during the
+supervised call over adding a shareability field to every blob now. The goal is
+to answer useful questions about the caller without treating a phone-number
+match as identity proof or broadcasting the contact's whole history.
+
+This preference does not authorize mixed private notes to enter GPT-Live
+verbatim. The runtime path needs a stable link between the caller, the source
+and the subject of any statement, plus a bounded output contract. A semantic
+classification of arbitrary blob content cannot be established by keyword
+co-occurrence alone. Human listening and independent predeploy review remain
+required. GPT-Live remains the sole conversational telephone model; no agent
+dispatch or GPT-6 phone fallback is part of this pilot.
+
 Related contracts: [M4 Live-context plan](../execution-plans/2026-09-23-gpt-live-engine-integration.md#current-m4-plan--live-uses-selected-context-engine-supplies-new-results),
 [this alpha's development plan](../execution-plans/2026-09-27-cafe124-voice-daemon.md),
 [engine voice configuration](../../engine/docs/features/voice-agent-configuration.md),
