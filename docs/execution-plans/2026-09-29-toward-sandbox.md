@@ -9,227 +9,249 @@ Scope: milestones, ownership, verification and rollback for the approved
 isolation brief. Mechanisms are chosen here; properties come from the brief.
 <!-- doc-scope:end -->
 
-Brief: [threat model, intent and acceptance](../briefs/2026-09-29-toward-sandbox.md).
-Approved 2026-09-29 by two independent brief reviews (the second with external
-research and tool enumeration; it overturned the first's approval on two HIGH
-findings, both verified against source).
+Brief: [threat model, intent and acceptance](../briefs/2026-09-29-toward-sandbox.md),
+approved 2026-09-29 by two independent reviews. This plan was revised once on
+two independent plan reviews (conformance; adversarial mechanisms), whose
+findings are folded in below.
 
-## Ground truth the plan builds on
+## Facts the brief does not state
 
-- There is no "serve mode" flag today. `zylch serve` (`engine/zylch/cli/main.py:434`)
-  activates the profile like every other command; nothing downstream can tell a
-  daemon from a laptop sidecar. M1 introduces one.
-- Path-taking tools, enumerated: `read_document` (absolute-path shortcut and
-  `_collect_search_paths`, `engine/zylch/tools/read_document_tool.py:86-127,156-158`);
-  `download_attachment` (`_resolve_target_dir`, `:22-48`, model-supplied
-  `target_dir`) which calls `IMAPClient.fetch_attachments`
-  (`engine/zylch/email/imap_client.py:1424-1434`, unsanitised filename);
-  `run_python` (two copies, `engine/zylch/tools/run_python_tool.py:76-83`,
-  `engine/zylch/services/solve_tools.py:264-292`, shared `/tmp/zylch`).
-  WhatsApp media is returned as bytes (`engine/zylch/whatsapp/client.py:293`),
-  not written by the model; Google tools take no path. Model-supplied URLs:
-  none outside `web_search` (provider side). The only engine-side outbound
-  fetches are the Firebase certificate URL (`engine/zylch/rpc/firebase_auth.py:66`)
-  and the configured providers.
-- `DOCUMENT_PATHS`, `DOWNLOADS_DIR` are Settings keys (`engine/zylch/services/settings_schema.py:445-462`)
-  written by `settings.update` (`engine/zylch/rpc/methods.py:2206`) and read
-  from `os.environ` by the two tools.
-- `encryption.py:_get_fernet` (`engine/zylch/utils/encryption.py:40-75`)
-  reads `ENCRYPTION_KEY` from the environment, then the profile `.env`, then
-  disables encryption with a warning.
-- Host: `zylch-server@.service` runs as `mrcalld` with
-  `EnvironmentFile=-/etc/mrcalld/env`; `/run/mrcalld` is `2750 mrcalld:caddy`
-  (tmpfiles); `update-daemons.sh` (root; pulls as `mrcalld`) is run by the
-  reconcile path/timer (`engine/scripts/server/README-reconcile.md`);
-  `zylch-provisiond.service` runs as `mrcalld`; `join-company.sh` uses
-  `sudo -u mrcalld` and globs `$MEMORY/$key.db`.
-- Six live profiles on the host; four are one company (Café124). Pinned
-  release `8d83193` per `docs/active-context.md`.
+- There is no serve flag: `zylch serve` (`engine/zylch/cli/main.py:434`)
+  activates the profile like any command. Profile resolution is
+  `~/.zylch/profiles` computed at import (`engine/zylch/cli/profiles.py:16-17`),
+  with no environment override; `whatsapp.db`, the fastembed cache and
+  `memory_dir()` also resolve through `~`.
+- Path-taking code, enumerated: `read_document` and `download_attachment`
+  exist twice — the tool classes (`engine/zylch/tools/`) and the solve copies
+  (`engine/zylch/services/solve_tools.py:209-245,616-650`) used by the task
+  executor; `run_python` twice likewise. `fetch_attachments`
+  (`engine/zylch/email/imap_client.py:1424-1434`) writes the sender's
+  filename. `read_document` also has a relative-path fallback
+  (`read_document_tool.py:181`, cwd `/home/mrcalld`). WhatsApp media is
+  returned as bytes; Google tools take no path; no model-supplied URL is
+  fetched engine-side.
+- `decrypt` fails open (`engine/zylch/utils/encryption.py:129-135`);
+  provider credentials are an outer Fernet blob whose JSON carries inner
+  `encrypted:` fields; nothing in the company store is encrypted.
+- `open_company_store` creates a store when the key source is vouched
+  (`engine/zylch/storage/database.py:151-154`): a daemon that cannot find its
+  store under a new name would silently start an empty one.
+- Host: units and tmpfiles as `docs/remote-backend.md` B.1 installs them;
+  `update-daemons.sh` restarts every daemon when the checkout changes and is
+  run by the reconcile path/timer; `zylch-provisiond.service` runs as
+  `mrcalld`. Six live profiles, four of them one company (Café124). Pinned
+  release `8d83193`.
 
 ## M1 — Hotfix: close the tenant boundary in code
 
-Owner: python-engine-specialist. Independent of everything after it; ships
-alone. Done only when brief criteria 1 (first two clauses), 2 (first two
-clauses) and 3 hold.
+Owner: python-engine-specialist. Ships alone. Done only when brief criteria 1
+(first two clauses), 2 (first two clauses) and 3 hold.
 
-1. **Serve flag.** `zylch serve` sets `ZYLCH_SERVE=1` in the process
-   environment after `activate_profile`; a `zylch.runtime.is_serving()` helper
-   reads it. Nothing else reads the variable directly.
-2. **Downloads subdirectory.** `_resolve_target_dir` returns
-   `<ZYLCH_PROFILE_DIR>/downloads` when serving, ignoring `DOWNLOADS_DIR` and
-   the `target_dir` argument unless the argument resolves (after `realpath`)
-   inside that subdirectory; otherwise the tool returns an error naming the
-   allowed root. Off serve, current behaviour is kept, but `target_dir` is
-   still resolved and refused if it lands on the profile root or on `.env`,
-   `zylch.db`, `whatsapp.db` anywhere.
-3. **Attachment basename.** `fetch_attachments` reduces every filename to
-   `os.path.basename` after header decoding, rejects empty or dot-only
-   results with the `attachment_<n>` fallback, and `realpath`-checks the
-   final path against `save_dir`. Applies everywhere, not only when serving.
-4. **Search set.** `_collect_search_paths` returns
-   `[<profile>/downloads, <profile scratch>]` when serving and ignores
-   `DOCUMENT_PATHS`; the absolute-path shortcut is removed on both modes and
-   replaced by "absolute path accepted only if inside the search set". The
-   profile root is not in the search set (it holds `.env`).
-5. **Scratch.** `/tmp/zylch` becomes `<ZYLCH_PROFILE_DIR>/scratch` when
-   serving (`run_python` output dir, attachment fallback dir, `read_document`
-   search). Local mode keeps `/tmp/zylch`.
-6. **`run_python` refused when serving** in both copies, with an error the
-   model can read ("not available on hosted engines"); the two copies are
-   unified behind one function so the refusal and the scratch path live once.
-   `solve_constants.py:75` loses "in a sandbox".
-7. **Settings honesty.** `settings.get` marks `DOCUMENT_PATHS` and
-   `DOWNLOADS_DIR` as `ignored: true` with a reason when serving;
-   `settings.update` accepts them (no contract change) and the app shows the
-   flag. Additive field; documented in `docs/ipc-contract.md`.
+1. **Serve flag.** `zylch serve` sets a module variable
+   (`zylch.runtime.serving = True`) *before* `activate_profile`;
+   `is_serving()` reads the variable, never the environment.
+   `settings.update` refuses `ZYLCH_*` keys.
+2. **One confinement, four callers.** A `zylch.tools.paths` module owns:
+   `downloads_dir()` (`<profile>/downloads` when serving, else today's
+   resolution), `scratch_dir()` (`<profile>/scratch` when serving, else
+   `/tmp/zylch`), `search_paths()` (when serving: downloads and scratch only,
+   `DOCUMENT_PATHS` ignored; else today's defaults), `confine(path, root)`
+   (`realpath` of the final *file*, must be inside `root`, else a named
+   error). The tool classes and the solve copies of `read_document` and
+   `download_attachment` all call it; the two `run_python` copies become one
+   function. The absolute-path shortcut and the relative-path fallback are
+   replaced by "accepted only if inside the search set", in both modes.
+3. **Attachment basename** in `fetch_attachments`, after header decoding
+   (`sub/dir.pdf` becomes `dir.pdf`; non-ASCII is preserved), empty or
+   dot-only names get `attachment_<n>`, then `confine` against `save_dir`.
+   Everywhere, not only when serving.
+4. **`target_dir`** must `confine` into `downloads_dir()` when serving. Off
+   serve, a deliberate extension beyond the brief's local change set: the
+   profile root and `.env`, `zylch.db`, `whatsapp.db` are refused as targets
+   anywhere. Named here so the integration reviewer measures against it.
+5. **`run_python` refused when serving** with an error the model can read;
+   `solve_constants.py:75` loses "in a sandbox", and every prompt string that
+   names `/tmp/zylch/attachments` (`solve_constants.py:64,147,218`,
+   `run_python_tool.py:36`) says "the downloads folder" instead, so the model
+   does not pass a path that is refused.
+6. **Settings honesty.** `settings.get` gains a top-level sibling
+   `ignored: {KEY: reason}` next to `values` when serving; `values` keeps its
+   `Record<string,string>` shape, so existing readers (`Settings.tsx:76-80`)
+   are untouched. Documented in `docs/ipc-contract.md` as additive. App
+   display of the flag is a later app change, not part of M1.
 
-Verification (offline, in `engine/`): new tests under `tests/tools/` and
-`tests/email/` — absolute path to a sibling profile `.env` refused; a
-`DOCUMENT_PATHS` pointing at the profiles root yields no hit outside the
-profile; a locally built `email.message` with attachments named
-`/etc/passwd`, `../../x`, `.env` lands as `passwd`, `x`, `attachment_<n>`
-under `downloads/`; `target_dir=<profile root>` refused; `run_python` refused
-with `ZYLCH_SERVE=1` and working without it; existing `tests/tools`,
-`tests/email`, `tests/rpc` green; `ruff` clean. Live, on a scratch profile on
-the host before touching customers: the same four probes through `cs chat`
-against the scratch daemon, plus a real self-sent mail with a traversal
-filename (to the scratch mailbox, not a customer's).
+Verification (offline, `engine/`): tests under `tests/tools/` and
+`tests/email/` — sibling-profile `.env` by absolute path refused through
+both the tool class and the solve copy; `DOCUMENT_PATHS` at the profiles root
+yields nothing outside the profile; a locally built message with attachments
+named `/etc/passwd`, `../../x`, `.env`, `sub/dir.pdf` lands as `passwd`, `x`,
+`attachment_<n>`, `dir.pdf` under `downloads/`; `target_dir=<profile root>`
+refused; `run_python` refused with the flag and working without; `ZYLCH_SERVE`
+refused by `settings.update`; existing `tests/tools`, `tests/email`,
+`tests/rpc` green; `ruff` clean. Live on a scratch profile: the same probes
+through `cs chat`, plus one self-sent mail to the scratch mailbox with a
+traversal filename.
 
-Deploy: copy the reviewed files into the service checkout as
-`docs/execution-plans/2026-09-17-mrcall-outbound.md` M2 did (backup dir,
-byte-compare, one unit at a time, Café124 last), then commit and pin. Rollback
-is the backup dir plus a unit restart. Assumption check first: ask the four
-Café124 users whether they use `run_python` or absolute document paths; the
-tool logs do not record paths.
+Deploy as `2026-09-17-mrcall-outbound.md` M2 did (backup dir, byte-compare,
+one unit at a time, Café124 last); rollback is the backup plus a restart.
+Before deploy the operator asks the four Café124 users whether they rely on
+`run_python` or absolute document paths (logs do not record paths).
 
-Integration review before M2 starts.
+Integration review before M2.
 
 ## M2 — Per-profile OS identity and read-only code
 
-Owner: python-engine-specialist with release-engineer for the units and
-scripts. One systemd change, applied one profile at a time.
+Owner: python-engine-specialist (engine changes) and release-engineer (units,
+helper, runbook). Two separate host operations: **2a** store rename per
+company, all its daemons stopped together; **2b** identity, one profile at a
+time. Sign-up (own brief) opens only after 2b is deployed on all six.
 
-1. **Deploy identity.** `mrcalld` keeps the checkout and venv and becomes the
-   deploy identity only: no daemon runs as it after M2. `update-daemons.sh`
-   still pulls as `mrcalld`.
-2. **Unit template.** `zylch-server@.service` gains `User=zylch-%i`,
-   `Group=zylch-%i`, `SupplementaryGroups=` the company group (from the
-   profile's key, see 5), `ProtectSystem=strict`, `ProtectHome=yes`,
-   `PrivateTmp=yes`, `NoNewPrivileges=yes`, `CapabilityBoundingSet=`,
-   `RestrictSUIDSGID=yes`, `ReadOnlyPaths=/home/mrcalld/mrcall-desktop`,
-   `ReadWritePaths=` the profile dir and the company store dir,
-   `RuntimeDirectory=mrcalld/%i` with `RuntimeDirectoryMode=2750` and group
-   `caddy` so the socket stays reachable by the proxy (constraint: Caddy must
-   still connect; the `path_regexp` route gains the extra directory level),
-   `EnvironmentFile=/etc/mrcalld/keys/%i` (no `-`: missing key is a unit
-   failure). `Environment=HOME=` the profile dir; `ZYLCH_PROFILE_DIR` and
-   `MEMORY_DB_DIR` set explicitly so nothing resolves through `~`.
-3. **Root helper.** `engine/scripts/server/tenant-helper.sh`, root-owned,
-   mode 750, with an allowlisted verb set: `create <uid>` (user, group,
-   membership in the company group, key file generated with
-   `Fernet.generate_key()`, `chown` of the profile dir, downloads/scratch
-   subdirs), `delete <uid>`, `join <uid> <company-group>`. Invoked by
-   `update-daemons.sh` (already root) for discovered profiles without a user;
-   later by provisiond through a sudoers rule limited to this script.
-   provisiond itself stays `mrcalld`.
-4. **Encryption.** `_get_fernet` refuses the `.env` and passthrough fallbacks
-   when serving: no `ENCRYPTION_KEY` in the environment means the daemon
-   exits at start with a named error. Local mode keeps today's behaviour.
-   A `zylch -p <uid> rekey --from-env-key` command decrypts every
-   `OAuthToken` row with the old key and re-encrypts with the profile key,
-   idempotent, run by the migration runbook while the unit is stopped; the
-   shared `/etc/mrcalld/env` key stays on disk until the runbook's rollback
-   window closes.
-5. **Store rename and mode.** `memory/store.py` derives the file name as
-   `sha256(key)[:32].db`; `memory_dir()` is created `2770 mrcalld:<company>`
-   per company subdirectory (`<MEMORY_DB_DIR>/<company-group>/`), never
-   listed by `store_exists`, `memory.join` or `join-company.sh table` (which
-   derives the name the same way through `zylch memory-status`). Migration
-   renames each existing store while its daemons are stopped. The two-user
-   WAL test precedes Café124: two scratch daemons under two users write the
-   same store concurrently, `-wal`/`-shm` stay group-writable, a third user
-   is refused.
-6. **Scripts.** `update-daemons.sh` calls the helper for new profiles and
-   never `chown -R`s a profile to `mrcalld` again; `join-company.sh` runs the
-   join as the profile's user and updates group membership through the
-   helper.
-7. **Offboarding.** `tenant-helper.sh delete <uid>` stops the unit, runs
-   `zylch -p <uid> memory-offboard` (deletes the profile's owned rule rows,
-   `blob_owned_rules` in `scope.py`; deletes the store only when the profile
-   was the company's last key holder, checked through the company group's
-   membership), removes the profile dir, key file, user and group membership.
-8. **Runbook** `docs/remote-backend.md` gains the migration sequence per
-   profile (stop, helper create, rekey, store rename if first of its company,
-   start, verify) and the rollback (stop, restore ownership from the recorded
-   `stat` output, restore old unit, start).
+1. **Profiles root override.** `ZYLCH_HOME` honoured by `profiles.py`,
+   `cli/utils.py`, `config.py`, `memory/store.py`, the WhatsApp paths and the
+   embeddings cache, so nothing resolves through `~`. The unit sets
+   `ZYLCH_HOME=/home/mrcalld/.zylch` and `HOME=<profile dir>` (writable,
+   private). Verified with `systemd-run` on the scratch unit first.
+2. **Names.** Unix user `mc-<sha256(uid)[:12]>`, company group
+   `mc-c-<sha256(key)[:12]>`, store file `<sha256(key)[:32]>.db` under
+   `<MEMORY_DB_DIR>/mc-c-<sha256(key)[:12]>/`: all lowercase, under 32
+   chars, and none reversible to the uid or the key (the key never appears
+   in `/etc/group`, `ps` or `ls`). `zylch memory-status` prints the derived
+   names; `join-company.sh table` reports file size only and never opens a
+   store as `mrcalld`.
+3. **Unit template + drop-in.** The template keeps what is common:
+   `ProtectSystem=strict`, `ProtectHome=tmpfs`,
+   `BindReadOnlyPaths=/home/mrcalld/mrcall-desktop`, `PrivateTmp=yes`,
+   `NoNewPrivileges=yes`, `CapabilityBoundingSet=`, `RestrictSUIDSGID=yes`,
+   `PYTHONDONTWRITEBYTECODE=1`, `EnvironmentFile=/etc/mrcalld/keys/%i`
+   (root-only 0400, read by systemd before dropping privileges; no `-`, so a
+   missing key fails the unit), `ExecStart` with socket
+   `/run/mrcalld/%i/ws.sock`. Per-instance values a template cannot derive
+   go in a helper-written drop-in
+   `zylch-server@<uid>.service.d/tenant.conf`: `User=`, `Group=`,
+   `SupplementaryGroups=<company group>`, `BindPaths=` the profile dir and
+   the company store dir. A tmpfiles fragment per uid,
+   `d /run/mrcalld/<uid> 2750 <user> caddy`, keeps the socket reachable;
+   Caddy's `path_regexp` maps `/ws/<uid>` to `/run/mrcalld/<uid>/ws.sock`.
+   `systemctl --version` is recorded in the runbook (nested
+   `RuntimeDirectory` not used; `RestrictSUIDSGID` needs v242+).
+4. **Root helper** `engine/scripts/server/tenant-helper.sh` (root, 750),
+   verbs `create <uid>`, `join <uid> <company-group>`, `delete <uid>`,
+   validating `<uid>` with the same regex as `provisiond/handler.py:105`
+   and rejecting `.`/`..`; idempotent, so a reconcile trigger on a
+   half-written profile converges. `create` makes the user, key file
+   (`Fernet.generate_key()`), drop-in, tmpfiles fragment, downloads/scratch
+   subdirs, `chown` of the profile tree, and records uid→user in a root-only
+   table used by `delete`. Invoked by `update-daemons.sh` (root) for
+   discovered profiles without a user; later by provisiond through a sudoers
+   rule limited to this script. provisiond stays `mrcalld`, which becomes the
+   deploy identity only.
+5. **Dual-name store, then rename (2a).** `store.py` opens the legacy
+   `<key>.db` when the derived name is absent and never creates while the
+   legacy exists; this ships before any rename. Then, per company, all its
+   daemons stopped in one window: rename the store into its subdirectory,
+   set the directory `2770 mrcalld:<group>`, start all. Rollback is the
+   reverse rename in the same all-stopped window. Café124's four units go
+   together, a few minutes. Runtime `memory.join` returns "operator action"
+   when serving; `join-company.sh` (stop, helper `join`, join, start) is the
+   only hosted join path, so group membership and `.env` key have one writer;
+   `memory-status` cross-checks them and the runbook runs it after every join.
+6. **Encryption (2b).** `_get_fernet` refuses the `.env` and passthrough
+   fallbacks when serving: no `ENCRYPTION_KEY` in the environment exits at
+   start with a named error. `zylch -p <uid> rekey --from <oldkey-file> --to
+   <newkey-file>` constructs two `Fernet` instances directly, and for each
+   provider row (`firebase` refresh token, `google_calendar`, any other via
+   `save_provider_credentials`) first tries the new key (already done → skip,
+   so it is idempotent), else decrypts outer and inner `encrypted:` fields
+   with the old key and re-encrypts with the new; `--verify` decrypts every
+   row under the new key and fails loudly on any miss; `--from`/`--to`
+   swapped is the rollback. Run as root while the unit is stopped, never by
+   the profile user. The shared `/etc/mrcalld/env` key stays until every
+   profile's rollback window has closed.
+7. **Identity migration (2b), one profile per day.** Stop, `stat -c` record
+   of the tree, helper `create`, `rekey --verify`, start, criterion 1 clause
+   three and criterion 5 checked, then the next. Rollback: stop, `rekey` back,
+   remove drop-in and fragment, restore ownership from the record, start
+   under the old template.
+8. **Offboarding.** `tenant-helper.sh delete <uid>`: stop, `zylch -p <uid>
+   memory-offboard` (deletes the profile's `blob_owned_rules` rows; deletes
+   the store only when the profile's group has no other member, after the
+   `memory-status` cross-check), remove profile dir, key, drop-in, fragment,
+   user, table row.
+9. **Scripts.** `update-daemons.sh` calls the helper for new profiles and no
+   longer `chown -R`s to `mrcalld`; `join-company.sh` as in 5.
 
-Verification: unit tests for the store name derivation, the rekey command
-(round-trip on a fixture DB), the offboarding row selection and the encryption
-refusal; `systemd-analyze verify` and `security` on the rendered unit; on the
-host, two scratch profiles in one company plus one in another: brief criteria
-1 (all clauses), 2 (all clauses), 4, 5, 7 executed as named commands and
-recorded here. Then Café124's four, one per day, each verified against
-criterion 1 clause three before the next.
+Verification: unit tests for name derivation, dual-name open (legacy present
+→ opened, never created), `rekey` round trip on a fixture DB including nested
+fields and the idempotence case, offboarding row selection, encryption
+refusal; `systemd-analyze verify` and `security` on template plus drop-in;
+`systemd-run` start of the scratch unit under `ProtectHome=tmpfs` proving
+the venv and profile are visible; on the host, two scratch profiles in one
+company plus one in another: brief criteria 1 (all clauses), 2 (all
+clauses), 4 (two users writing concurrently, `-wal`/`-shm` group-writable,
+third user refused, `memory.join` finds the renamed store), 5, 7, and Caddy
+reaching the new socket path. Then 2a for Café124, then 2b one per day.
 
 Integration review before M3.
 
 ## M3 — Egress bound per daemon
 
-Owner: release-engineer. Own migration step with its own rollback, after M2
-is stable on all six profiles.
+Owner: release-engineer. After M2 is stable on all six; own rollback.
 
-1. Enumerate endpoints from code and configuration: IMAP/SMTP hosts per
-   profile `.env`, WhatsApp (`web.whatsapp.com`, `*.whatsapp.net`), StarChat
-   and `MRCALL_PROXY_URL`, Anthropic, OpenRouter, Google certificate and
-   OAuth hosts, Pipedrive when configured.
-2. Mechanism: a host-local allowlisting forward proxy (name-based; IP rules do
-   not fit mail hosts) with one allowlist file per unit under
-   `/etc/mrcalld/egress/<uid>`, generated from the profile `.env` by the
-   helper; daemons get `HTTPS_PROXY`/`HTTP_PROXY`, and for IMAP/SMTP/WhatsApp
-   (not HTTP) `IPAddressDeny=any` plus `IPAddressAllow=` for the resolved
-   hosts refreshed by a timer, accepting that this part is IP-based.
-   The allowlist file is the observable set (brief criterion 6).
-3. Rollout one profile at a time with mail sync watched for one full cycle
-   before the next; rollback removes the proxy variables and the IP rules for
-   that unit only.
+1. Enumerate from code and configuration: IMAP/SMTP hosts per profile,
+   WhatsApp, StarChat and `MRCALL_PROXY_URL`, Anthropic, OpenRouter, Google
+   (`www.googleapis.com`, `securetoken.googleapis.com`, OAuth hosts, the
+   certificate URL), `huggingface.co` (fastembed model), Pipedrive when
+   configured.
+2. Mechanism: nftables rules keyed on `meta skuid <tenant user>` with a
+   DNS-fed set (dnsmasq `nftset`) per tenant, so the allowed names follow
+   every resolver answer — `imaplib`, `smtplib` and neonize's Go client read
+   no proxy variable, so a proxy alone cannot cover them. The per-tenant set
+   is the observable allow list (`nft list set`). httpx clients keep
+   `trust_env` where it is set; `openai_voice.py:250` and
+   `smoke_transport.py:83` are audited for the same behaviour.
+3. Rollout one profile at a time, mail sync watched for one full cycle
+   before the next; rollback deletes that tenant's rules only.
 
-Verification: from a scratch daemon, `curl` to an outside host fails, IMAP
-sync completes, a WhatsApp message arrives, an LLM call succeeds; criterion 6
-recorded.
+Verification on a scratch daemon: outbound to a host not in the set refused,
+IMAP sync completes, a WhatsApp message arrives, an LLM call succeeds, a
+Firebase token verification succeeds; criterion 6 recorded.
 
-## M4 — Docs and plan reconciliation
+## M4 — Docs and reconciliation
 
 Owner: primary session. `docs/remote-backend.md` (multi-tenancy statement,
-identity model, helper, egress, migration runbook; remove the WhatsApp
-caveat), `AGENTS.md` hosting paragraph, `docs/ipc-contract.md` (settings
-`ignored` field), `docs/active-context.md`, this plan's status. Criterion 8.
+identity model, names, helper, egress, runbook; WhatsApp caveat removed),
+`AGENTS.md`, `docs/ipc-contract.md` (`ignored` sibling), `docs/active-context.md`,
+this plan's status. Criterion 8.
 
 ## Final review
 
-After M1–M4 each pass integration review: one separate end-to-end review
-through the user path — a signed-in desktop client on a hosted profile reads
-mail, downloads an attachment, searches a document, and a second client on a
-sibling profile cannot see any of it — with the recorded evidence for all
-eight criteria.
+After M1–M4 pass integration review: one separate end-to-end review through
+the user path — a signed-in client on a hosted profile reads mail, downloads
+an attachment, searches a document; a client on a sibling profile cannot see
+any of it — with recorded evidence for all eight criteria.
 
 ## Risks and rollback
 
-- **Live customers.** Every host step runs on scratch profiles first, then
-  Café124 one per day, operator present, backup and `stat` record before.
-- **Caddy reachability** after `RuntimeDirectory` changes: tested on the
-  scratch unit with the route change before any customer unit.
-- **Encryption refusal** taking a customer down: the rekey is verified with
-  `zylch -p <uid> memory-status` and one decrypted token read while stopped,
-  before the unit starts under the new key.
-- **Egress allowlist wrong**: M3 is separate and per unit; mail sync is the
-  canary.
-- **Local engine regression** from M1: CI `tests/tools`, `tests/email`
-  and the app's offline browser checks must stay green; the only local
-  changes are the basename rule and the profile-root refusal.
+- **Live customers.** Scratch first; Café124 store rename in one all-stopped
+  window; identity one per day, operator present, `stat` record and backup
+  before each.
+- **Store fork.** Dual-name code ships before any rename; a restart of an
+  unmigrated daemon opens the legacy store, never an empty one.
+- **Token lockout.** `rekey --verify` before the unit starts; the reverse
+  `rekey` is the rollback; the shared key is kept.
+- **Unit does not start.** `ProtectHome=tmpfs` + bind paths proven with
+  `systemd-run` on the scratch unit before any customer unit.
+- **Caddy reachability.** New socket path and tmpfiles fragment tested on
+  the scratch unit with the route change first.
+- **Egress wrong.** M3 is separate and per tenant; mail sync is the canary.
+- **Local engine regression.** CI `tests/tools`, `tests/email` and the app's
+  offline browser checks stay green; the only local changes are the basename
+  rule, the search-set rule and the named `target_dir` extension.
 
-## Parked (from the brief, recorded here)
+## Parked (from the brief)
 
-Self-serve provisioning (own brief; uses the helper from M2.3); operations
-floor (backup/restore, pinned rollout, alerting); data-processor obligations
-(CTO); bubblewrap for `run_python` on hosts; VM per company; send/credential
-separation and shared-memory poisoning; native Mac/Windows engine hardening.
+Self-serve provisioning (own brief; opens only after M2b on all six profiles,
+uses the helper); operations floor; data-processor obligations (CTO);
+bubblewrap for hosted `run_python`; VM per company; send/credential
+separation and shared-memory poisoning; native Mac/Windows engine hardening;
+app display of the `ignored` settings flag.
