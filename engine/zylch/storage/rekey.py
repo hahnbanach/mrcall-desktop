@@ -30,6 +30,7 @@ from cryptography.fernet import Fernet, InvalidToken
 
 from zylch.storage.database import get_session
 from zylch.storage.models import OAuthToken
+from zylch.utils.encryption import is_encrypted as _looks_encrypted
 
 logger = logging.getLogger(__name__)
 
@@ -53,10 +54,6 @@ def _try(fernet: Fernet, token: str) -> str | None:
         return fernet.decrypt(token.encode()).decode()
     except (InvalidToken, ValueError, TypeError):
         return None
-
-
-def _looks_encrypted(value: str) -> bool:
-    return isinstance(value, str) and value.startswith("gAAA") and len(value) > 80
 
 
 def _rekey_inner(obj, old: Fernet, new: Fernet, report: RekeyReport, provider: str):
@@ -99,10 +96,12 @@ def rekey(old_key: str, new_key: str) -> RekeyReport:
                     # (a partial earlier run); walk them with old→new anyway.
                     outer_plain = _try(new, blob)
                     inner_before = report.failed[:]
-                    walked = _rekey_inner(_load(outer_plain), old, new, report, row.provider)
+                    loaded = _load(outer_plain)
+                    walked = _rekey_inner(loaded, old, new, report, row.provider)
                     if report.failed != inner_before:
                         continue
-                    row.credentials = new.encrypt(json.dumps(walked).encode()).decode()
+                    if walked != loaded:  # an inner field was still under the old key
+                        row.credentials = new.encrypt(_dump(walked, outer_plain).encode()).decode()
                     report.already += 1
                     continue
                 outer_plain = _try(old, blob)
@@ -113,7 +112,7 @@ def rekey(old_key: str, new_key: str) -> RekeyReport:
                 outer_plain = blob
                 report.plaintext += 1
             walked = _rekey_inner(_load(outer_plain), old, new, report, row.provider)
-            row.credentials = new.encrypt(json.dumps(walked).encode()).decode()
+            row.credentials = new.encrypt(_dump(walked, outer_plain).encode()).decode()
             report.rewritten += 1
     logger.info(
         f"[rekey] rewritten={report.rewritten} already={report.already} "
@@ -157,8 +156,16 @@ def _verify_inner(obj, new: Fernet, report: RekeyReport, provider: str) -> None:
 
 
 def _load(text: str):
-    """The outer plaintext is JSON in every writer; tolerate a bare string."""
+    """The outer plaintext is JSON in every writer; a bare string is kept as is."""
     try:
         return json.loads(text)
     except (ValueError, TypeError):
         return text
+
+
+def _dump(walked, raw: str) -> str:
+    """Re-emit the outer plaintext: JSON when it was JSON, else the raw text
+    unchanged (never quoted into a JSON string)."""
+    if isinstance(walked, str) and walked == raw:
+        return raw
+    return json.dumps(walked)

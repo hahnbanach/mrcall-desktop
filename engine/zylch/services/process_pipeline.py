@@ -755,11 +755,13 @@ def _run_whatsapp_sync(
     import threading
     from pathlib import Path
 
+    from zylch.home import zylch_home as _zylch_home
+
     profile_dir = os.environ.get("ZYLCH_PROFILE_DIR", "")
     wa_db = Path(
         os.path.join(profile_dir, "whatsapp.db")
         if profile_dir
-        else os.path.join(__import__("zylch.home", fromlist=["zylch_home"]).zylch_home(), "whatsapp.db")
+        else os.path.join(_zylch_home(), "whatsapp.db")
     )
     if not wa_db.exists():
         return {

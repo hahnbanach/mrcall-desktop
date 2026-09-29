@@ -148,3 +148,22 @@ def test_rekey_reverse_is_the_rollback(db):
     assert rk.verify(OLD).ok
     outer = json.loads(Fernet(OLD.encode()).decrypt(_read("pipedrive").encode()))
     assert outer["pipedrive"]["api_token"].startswith("encrypted:")
+
+
+def test_rekey_keeps_a_bare_string_outer_unquoted(db):
+    _row("legacy", Fernet(OLD.encode()).encrypt(b"not-json-token").decode())
+    assert rk.rekey(OLD, NEW).ok
+    assert Fernet(NEW.encode()).decrypt(_read("legacy").encode()) == b"not-json-token"
+
+
+def test_serve_pins_the_unit_key_over_a_profile_env_key(monkeypatch):
+    from zylch.cli.main import _pin_hosted_encryption_key
+
+    monkeypatch.setenv("ENCRYPTION_KEY", OLD)  # what load_env() left behind
+    _pin_hosted_encryption_key(NEW)
+    import os
+
+    assert os.environ["ENCRYPTION_KEY"] == NEW
+    monkeypatch.setenv("ENCRYPTION_KEY", OLD)
+    _pin_hosted_encryption_key(None)
+    assert "ENCRYPTION_KEY" not in os.environ

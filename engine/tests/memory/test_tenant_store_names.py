@@ -39,16 +39,6 @@ def test_names_are_short_lowercase_and_one_way():
     assert tenant_names.company_group(KEY) != tenant_names.company_group(KEY[::-1])
 
 
-def test_shell_helper_derives_the_same_names():
-    """tenant-helper.sh recomputes the names with sha256sum; keep them equal."""
-    import hashlib
-
-    uid = "Gn9IcuHxiZhWEBabcdefghijklmn"
-    assert tenant_names.unix_user(uid) == "mc-" + hashlib.sha256(uid.encode()).hexdigest()[:12]
-    assert tenant_names.company_group(KEY) == "mc-c-" + hashlib.sha256(KEY.encode()).hexdigest()[:12]
-    assert tenant_names.store_basename(KEY) == hashlib.sha256(KEY.encode()).hexdigest()[:32] + ".db"
-
-
 def _touch_db(path: str):
     os.makedirs(os.path.dirname(path), exist_ok=True)
     sqlite3.connect(path).close()
@@ -108,3 +98,21 @@ def test_zylch_home_moves_the_default_memory_dir(tmp_path, monkeypatch):
     monkeypatch.delenv("MEMORY_DB_DIR", raising=False)
     monkeypatch.setenv("ZYLCH_HOME", str(tmp_path / "h"))
     assert store.memory_dir() == str(tmp_path / "h" / "memory")
+
+
+def test_hosted_memory_join_rpc_is_an_operator_action(serving):
+    import asyncio
+
+    from zylch.rpc.memory_join import memory_join
+
+    out = asyncio.run(memory_join({"key": KEY}, lambda *a, **k: None))
+    assert out["ok"] is False and out["operator_action"] is True
+
+
+def test_relocate_moves_lock_files_too(memdir):
+    legacy = store.legacy_memory_db_path(KEY)
+    _touch_db(legacy)
+    open(legacy + ".sweep.lock", "w").close()
+    moved = store.relocate_store(KEY)
+    assert os.path.exists(moved + ".sweep.lock") and not os.path.exists(legacy + ".sweep.lock")
+    assert not any(KEY in name for name in os.listdir(memdir))

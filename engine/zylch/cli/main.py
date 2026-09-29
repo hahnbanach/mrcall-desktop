@@ -355,6 +355,22 @@ for _command in MEMORY_COMMANDS + TENANT_COMMANDS:
     cli.add_command(_command)
 
 
+def _pin_hosted_encryption_key(unit_key: str | None) -> None:
+    """A hosted daemon's key comes from the unit's EnvironmentFile only.
+
+    `activate_profile` and `load_env` load the profile .env with
+    override=True, so an ENCRYPTION_KEY line there would silently beat the
+    per-profile key file (plan M2.6): restore the unit's value and say so.
+    """
+    loaded = os.environ.get("ENCRYPTION_KEY")
+    if unit_key and loaded != unit_key:
+        logger.warning("[CLI] serve: profile .env carries ENCRYPTION_KEY; ignored on a hosted engine")
+        os.environ["ENCRYPTION_KEY"] = unit_key
+    elif not unit_key and loaded:
+        logger.warning("[CLI] serve: ENCRYPTION_KEY came from the profile .env, not the unit")
+        del os.environ["ENCRYPTION_KEY"]
+
+
 @cli.command()
 @click.pass_context
 def rpc(ctx):
@@ -472,9 +488,11 @@ def serve(ctx, ws_addr, unix_path):
         sys.stderr.write(f"Profile '{profile}' is already in use by another session.\n")
         raise SystemExit(1)
     atexit.register(release_lock)
+    unit_key = os.environ.get("ENCRYPTION_KEY")
     activate_profile(profile)
     _setup_log_file()
     load_env()
+    _pin_hosted_encryption_key(unit_key)
 
     owner_uid = os.environ.get("OWNER_ID", "")
     if not owner_uid:

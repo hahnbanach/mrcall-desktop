@@ -47,9 +47,12 @@ def memory_names(ctx):
         click.echo("company group: (no MEMORY_KEY)")
         return
     click.echo(f"company group: {company_group(key)}")
-    click.echo(f"store (now):   {memory_db_path(key)}")
-    click.echo(f"store legacy:  {legacy_memory_db_path(key)}")
-    click.echo(f"store derived: {derived_memory_db_path(key)}")
+    # The legacy path IS the key: report its presence, never the path.
+    derived = derived_memory_db_path(key)
+    now = memory_db_path(key)
+    click.echo(f"store derived: {derived}")
+    click.echo(f"store legacy:  {'present' if os.path.isfile(legacy_memory_db_path(key)) else 'absent'}")
+    click.echo(f"store in use:  {'derived' if now == derived else 'legacy'}")
 
 
 @click.command(name="memory-relocate-store")
@@ -75,6 +78,7 @@ def memory_relocate_store(ctx):
         click.echo(f"refused: {e.reason}")
         raise SystemExit(2) from None
     click.echo(f"relocated to {moved}" if moved else "nothing to move (already derived or absent)")
+    # `moved` is the derived path (no key in it); the legacy path is never echoed.
 
 
 @click.command(name="rekey")
@@ -160,7 +164,7 @@ def memory_offboard(ctx, yes, last_holder):
     click.echo(f"removed {removed} owned rule row(s)")
     if last_holder:
         path = delete_store(key)
-        click.echo(f"deleted store {path}" if path else "no store file to delete")
+        click.echo("deleted the company store" if path else "no store file to delete")
 
 
 TENANT_COMMANDS = (memory_names, memory_relocate_store, rekey, memory_offboard)

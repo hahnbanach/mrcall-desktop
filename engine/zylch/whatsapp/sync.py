@@ -24,7 +24,9 @@ def _wa_media_dir() -> str:
     ``~/.zylch``. Downloaded voice-note bytes are written here so the
     later transcription pass can read them off disk.
     """
-    base = os.environ.get("ZYLCH_PROFILE_DIR") or os.path.expanduser("~/.zylch")
+    from zylch.home import zylch_home
+
+    base = os.environ.get("ZYLCH_PROFILE_DIR") or zylch_home()
     media_dir = os.path.join(base, "wa_media")
     Path(media_dir).mkdir(parents=True, exist_ok=True)
     return media_dir

@@ -122,7 +122,8 @@ def relocate_store(company_key: str) -> Optional[str]:
     if os.path.isfile(derived):
         raise MemoryUnavailable("both the legacy and the derived store exist; resolve by hand")
     os.makedirs(os.path.dirname(derived), mode=0o700, exist_ok=True)
-    for suffix in ("", "-wal", "-shm"):
+    # sidecars and the lock files whose names carry the key
+    for suffix in ("", "-wal", "-shm", ".sweep.lock", ".migrate.lock", ".join.lock"):
         if os.path.exists(legacy + suffix):
             os.replace(legacy + suffix, derived + suffix)
     logger.info("[memory] store relocated to its derived name")
