@@ -107,12 +107,18 @@ tool enumerated rather than one.
 **In.**
 
 - **Hotfix, first and independent of the rest.** In `serve` mode: the search
-  set of every path-taking tool is the profile directory and its downloads
-  directory only; `DOCUMENT_PATHS` and `DOWNLOADS_DIR` are ignored (or refused
-  by `settings.update`); the absolute-path shortcut is removed; every
-  attachment filename is reduced to its basename before saving and
-  `target_dir` outside the profile is refused; the scratch directory is per
-  profile; `run_python` is refused. On the local (stdio) engine the default
+  set of every path-taking tool is the profile's downloads subdirectory and
+  its scratch directory only; the downloads directory is a dedicated
+  subdirectory of the profile directory (e.g. `<profile>/downloads`), never
+  `~/Downloads` (today `/home/mrcalld/Downloads`, one directory for every
+  daemon) and never the profile root; `DOCUMENT_PATHS` and `DOWNLOADS_DIR` are
+  ignored (or refused by `settings.update`); the absolute-path shortcut is
+  removed; every attachment filename is reduced to its basename before saving
+  and `target_dir` must resolve inside the downloads subdirectory — the
+  profile root and its `.env`, `zylch.db` and `whatsapp.db` are never a tool
+  write target, so one inbound mail cannot replace the profile's own
+  credentials or database; the scratch directory is per profile; `run_python`
+  is refused. On the local (stdio) engine the default
   folders (`~/Documents`, `~/Downloads`, `~/gdrive-shared`, `DOCUMENT_PATHS`)
   keep working; only the absolute-path shortcut and the attachment basename
   rule apply everywhere. The "sandbox" wording leaves the prompt. The plan
@@ -126,7 +132,8 @@ tool enumerated rather than one.
   daemons. The company store is owned by a per-company group in a directory
   whose mode the plan verifies; its file name is derived from the key rather
   than being the key; existing stores are renamed and
-  `memory.join`/`store_exists` lookups follow without listing the directory.
+  `memory.join`/`store_exists` lookups and `join-company.sh table` follow
+  without listing the directory.
   Each profile has its own `ENCRYPTION_KEY`, stored outside the
   model-reachable tree (e.g. `/etc/mrcalld/keys/<uid>`), readable by that
   profile's user only and included in the operator's backup set; existing
@@ -139,10 +146,15 @@ tool enumerated rather than one.
   root. The host scripts (`update-daemons.sh`, `join-company.sh`) follow the
   new identity model. The six live profiles are migrated with a runbook and a
   rollback.
-- **Egress.** Each daemon's outbound network is limited to the mail, WhatsApp,
-  StarChat and LLM-provider endpoints its profile is configured for, and the
-  limit is observable on the host. This does not replace intent 1; it bounds
-  what a compromised daemon can do with its *own* data.
+- **Egress.** Each daemon's outbound network is limited to the endpoints the
+  engine needs (mail, WhatsApp, StarChat, the LLM providers, Firebase
+  certificate fetch for token verification, Google OAuth, CRM), and the limit
+  is observable on the host. The plan enumerates the endpoints from the code
+  and chooses a name-based mechanism (an allowlisting proxy) where IP rules
+  do not fit hosts behind changing addresses. Egress is its own migration
+  step after identity: a wrong allowlist takes a customer's mail sync down,
+  and its rollback must be separate. This does not replace intent 1; it
+  bounds what a compromised daemon can do with its *own* data.
 - **Tenant offboarding.** Deleting a profile removes its directory, key,
   user and daemon, and deletes its owned rule rows (`template:<owner>`,
   `prefs:<owner>`) from the company store. Company-family rows
@@ -214,14 +226,17 @@ tool enumerated rather than one.
 
 1. **Cross-tenant read closed, three ways.** With profile A's daemon running
    as its own user: `read_document` with B's `.env` absolute path is refused;
-   A's `settings.update` of `DOCUMENT_PATHS` to the profiles root is ignored
-   and `read_document("*.env")` finds nothing outside A; `open()` of B's file
+   A's `settings.update` of `DOCUMENT_PATHS` to the profiles root is ignored,
+   `read_document("*.env")` finds nothing outside A, and A's attachments are
+   not in B's search set; `open()` of B's file
    from a shell as A's user is denied by the OS. Before the OS change, the
    hotfix alone makes the first two hold.
 2. **Cross-tenant write closed.** A locally constructed message with an
    attachment named with an absolute path and one with `../` components lands
-   under A's downloads directory as its basename; `download_attachment` with a
-   `target_dir` outside A is refused; as A's user, a write into the engine
+   under A's downloads subdirectory as its basename; `download_attachment`
+   with a `target_dir` outside that subdirectory (including A's profile root)
+   is refused, and an attachment named `.env` cannot replace A's `.env`; as
+   A's user, a write into the engine
    checkout and into B's profile is denied by the OS.
 3. **Model code cannot reach secrets.** `run_python` is refused in `serve`
    mode. On the local engine, `~/Documents` and `DOCUMENT_PATHS` still resolve.
@@ -250,7 +265,7 @@ tests; each criterion names the command or RPC that proved it.
 
 The hotfix ships first and alone, and it is not done until criteria 1 (first
 two clauses), 2 (first two clauses) and 3 hold: closing one read path is not
-closing the tenant boundary. Per-profile identity, read-only code and egress
-follow as one systemd change, one migration at a time. Self-serve
+closing the tenant boundary. Per-profile identity and read-only code follow
+as one systemd change, one migration at a time; egress is the step after. Self-serve
 provisioning is built in parallel under its own brief and opens only after
 identity is deployed. Parked items are recorded in the plan, not dropped.
