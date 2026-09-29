@@ -105,6 +105,36 @@ Before deploy the operator asks the four Café124 users whether they rely on
 
 Integration review before M2.
 
+### M1 record (2026-09-29)
+
+Implemented on `claude/muse-architecture-comparison-i8x8g1` (`db23a28`,
+`c0fa401`). `zylch.runtime` holds the serve flag; `zylch.utils.safe_paths`
+(confine, basename) is dependency-free so `zylch.email` can use it, and
+`zylch.tools.paths` owns the folder policy for the tool classes, the solve
+copies and the draft tools' attachment paths; `zylch.tools.python_exec` is
+the single `run_python`. `save_attachments()` was extracted from
+`fetch_attachments` so the basename rule is testable from a local message.
+Two local changes beyond the DoD list, deliberate: the solve copies now
+honour `target_dir` and use the same downloads folder and search set as
+the tool classes (plan §M1.2 unification; `read_document` still searches
+the old `/tmp/zylch*` locations locally), and `test_phase_a_registration`'s
+smoke test sets `DOCUMENT_PATHS` because the absolute-path shortcut is gone.
+Verification: 31 new tests (`tests/tools/test_path_confinement.py`,
+`tests/email/test_attachment_filenames.py`,
+`tests/rpc/test_settings_hosted_ignored.py`), including a `glob` `..`
+traversal that really reaches the sibling file and is refused by
+`confine`, and a non-dotfile secret (glob's `*` never matches `.env`, so a
+dotfile-only test is vacuous). `tests/tools tests/email tests/rpc
+tests/services` + the CI memory-boundary gate: 606 passed; the two
+failures (`test_contract_boundaries`, `test_memory_readonly`) reproduce on
+the parent commit and are not M1's. Integration review: REVISE on three
+small items (unused import, hosted prompt wording, the vacuous dotfile
+test), repaired; approval recorded below when confirmed. Left for later:
+`settings_schema` help text for `DOWNLOADS_DIR` still says `~/Downloads`
+(app-side display change, parked with the `ignored` flag);
+`fetch_attachments`' default `save_dir` string is unused by both callers.
+Live probes on a scratch profile and the deploy are still to do.
+
 ## M2 — Per-profile OS identity and read-only code
 
 Owner: python-engine-specialist (engine changes) and release-engineer (units,
