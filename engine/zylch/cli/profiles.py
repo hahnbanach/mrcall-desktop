@@ -11,9 +11,13 @@ import shutil
 
 import click
 
+from zylch.home import zylch_home
+
 logger = logging.getLogger(__name__)
 
-ZYLCH_DIR = os.path.expanduser("~/.zylch")
+# `$ZYLCH_HOME` or `~/.zylch`; module constants so tests can point them at
+# a throwaway directory (the unit sets ZYLCH_HOME before import).
+ZYLCH_DIR = zylch_home()
 PROFILES_DIR = os.path.join(ZYLCH_DIR, "profiles")
 
 # Module-level state: set by activate_profile()

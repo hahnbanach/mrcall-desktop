@@ -45,9 +45,15 @@ if [ "${1:-}" = "table" ]; then
     [ -f "$envf" ] || continue
     email=$(env_value "$envf" EMAIL_ADDRESS); key=$(env_value "$envf" MEMORY_KEY)
     store="-"
-    if [ -n "$key" ] && [ -f "$MEMORY/$key.db" ]; then
-      n=$(sudo -u "$SVC_USER" sqlite3 "$MEMORY/$key.db" 'select count(*) from blobs' 2>/dev/null || echo '?')
-      store="$n blobs"
+    if [ -n "$key" ]; then
+      # size only: opening a store as mrcalld would leave -wal/-shm the
+      # tenant daemon cannot write (docs/remote-backend.md). The derived
+      # name is what mrcall-tenant names prints; the legacy name may still
+      # exist before the 2a relocation.
+      g="mc-c-$(printf '%s' "$key" | sha256sum | cut -c1-12)"
+      f="$MEMORY/$g/$(printf '%s' "$key" | sha256sum | cut -c1-32).db"
+      [ -f "$f" ] || f="$MEMORY/$key.db"
+      [ -f "$f" ] && store="$(stat -c %s "$f") bytes"
     fi
     printf '%-30s %-36s %-24s %s\n' "$uid" "$email" "${key:-(none)}" "$store"
   done
@@ -67,6 +73,27 @@ echo "== stopping $unit (the join needs the profile lock) =="
 systemctl stop "$unit"
 trap 'echo "== starting $unit =="; systemctl start "$unit"' EXIT
 
+# Plan M2.5: the join runs AS THE TENANT USER (never mrcalld or root, so
+# the store's -wal/-shm keep tenant ownership), with membership in BOTH
+# company groups until it finished — the join reads the source store and
+# join_recover reopens it afterwards. Outside the unit nothing sets the
+# data root, so it is passed explicitly.
+tenant_user="mc-$(printf '%s' "$uid" | sha256sum | cut -c1-12)"
+new_group="mc-c-$(printf '%s' "$key" | sha256sum | cut -c1-12)"
+old_key=$(env_value "$PROFILES/$uid/.env" MEMORY_KEY)
+old_group=""; [ -n "$old_key" ] && old_group="mc-c-$(printf '%s' "$old_key" | sha256sum | cut -c1-12)"
+id "$tenant_user" >/dev/null 2>&1 || { echo "no tenant user for $uid — run: mrcall-tenant create $uid"; exit 2; }
+
+echo "== adding $tenant_user to $new_group (keeps $old_group until finished) =="
+/usr/local/sbin/mrcall-tenant join "$uid" "$new_group"
+
 echo "== joining $uid to $key =="
 # shellcheck disable=SC2086
-sudo -u "$SVC_USER" env HOME="/home/$SVC_USER" "$VENV/bin/zylch" -p "$uid" memory-join $yes_flag "$key"
+sudo -u "$tenant_user" env HOME="$PROFILES/$uid" ZYLCH_HOME="/home/$SVC_USER/.zylch" MEMORY_DB_DIR="$MEMORY" \
+  "$VENV/bin/zylch" -p "$uid" memory-join $yes_flag "$key"
+
+echo "== regenerating the drop-in for the new key; old group stays until you run: =="
+echo "   mrcall-tenant unjoin $uid $old_group     # after zylch memory-status shows the join finished"
+/usr/local/sbin/mrcall-tenant create "$uid"
+sudo -u "$tenant_user" env HOME="$PROFILES/$uid" ZYLCH_HOME="/home/$SVC_USER/.zylch" MEMORY_DB_DIR="$MEMORY" \
+  "$VENV/bin/zylch" -p "$uid" memory-status || true

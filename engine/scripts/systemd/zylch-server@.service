@@ -1,43 +1,68 @@
 [Unit]
 # Cross-machine WebSocket engine, one instance per profile (%i = Firebase uid).
-# Owned and run by the dedicated service user `mrcalld`, which holds the engine
-# checkout (git) and ALL profiles and runs every profile's daemon. Each
-# instance serves one profile over a per-uid Unix socket in /run/mrcalld/;
-# Caddy reverse-proxies /ws/<uid> to <uid>.sock — one URL for everyone, no
-# per-user port. See docs/execution-plans/multi-profile-routing.md.
+#
+# Since plan M2 (docs/execution-plans/2026-09-29-toward-sandbox.md) every
+# instance runs as ITS OWN Unix user, set by a per-instance drop-in that
+# `mrcall-tenant create <uid>` writes (User=, Group=, SupplementaryGroups=
+# for the company store, BindPaths=/ReadWritePaths= for the profile and the
+# store directory). `mrcalld` is the deploy identity only: it owns the
+# checkout and the venv, read-only to every daemon. This template holds
+# what is common. See docs/remote-backend.md.
 #   sudo systemctl enable --now zylch-server@<uid>
 Description=mrcall-desktop cross-machine WS engine (profile %i)
 After=network-online.target
 Wants=network-online.target
 # Don't crash-loop forever on a misconfigured profile (e.g. one with no
-# OWNER_ID makes the engine exit non-zero): give up after 5 starts in 60s.
+# OWNER_ID, or no key file, makes the engine exit non-zero): give up after
+# 5 starts in 60s.
 StartLimitIntervalSec=60
 StartLimitBurst=5
 
 [Service]
 Type=simple
-User=mrcalld
-Group=mrcalld
-Environment=HOME=/home/mrcalld
-# Optional at-rest encryption key (ENCRYPTION_KEY, Fernet) for the stored OAuth
-# / Firebase refresh tokens. The `-` makes it non-fatal if absent (encryption
-# falls back to passthrough). Lives out of git at /etc/mrcalld/env (mode 600).
-EnvironmentFile=-/etc/mrcalld/env
-WorkingDirectory=/home/mrcalld
-# The socket is /run/mrcalld/<uid>.sock. That dir is setgid group `caddy`
-# (engine/scripts/tmpfiles.d/mrcalld.conf), so the socket inherits group
-# `caddy`; UMask=0007 + an explicit chmod(0o660) in server_ws.py make it
-# group-writable so the Caddy reverse-proxy (group caddy) can connect. The
-# socket path derives from the instance name %i — no per-user port.
+# User=/Group= come from the drop-in (a template cannot derive
+# `mc-<sha256(uid)>` from %i).
+# Data root: the daemon's HOME is its own profile (private, writable);
+# ZYLCH_HOME points at the shared tree so profiles/, memory/ and the
+# embedding cache resolve there and never through `~`.
+Environment=HOME=/home/mrcalld/.zylch/profiles/%i
+Environment=ZYLCH_HOME=/home/mrcalld/.zylch
+Environment=MEMORY_DB_DIR=/home/mrcalld/.zylch/memory
+Environment=PYTHONDONTWRITEBYTECODE=1
+# Per-profile at-rest key (ENCRYPTION_KEY), root-only 0400, read by systemd
+# before dropping privileges. No `-`: a missing key FAILS the unit — a
+# hosted engine never falls back to the profile .env or to plaintext.
+EnvironmentFile=/etc/mrcalld/keys/%i
+WorkingDirectory=/home/mrcalld/.zylch/profiles/%i
+
+# ── sandbox ─────────────────────────────────────────────────────────────
+# Everything read-only except what the drop-in lists under ReadWritePaths=.
+ProtectSystem=strict
+# /home is an empty tmpfs; the checkout is bound read-only, the profile and
+# the company store directory are bound (BindPaths=) by the drop-in.
+# ProtectHome=yes would drop those nested mounts.
+ProtectHome=tmpfs
+BindReadOnlyPaths=/home/mrcalld/mrcall-desktop
+PrivateTmp=yes
+NoNewPrivileges=yes
+CapabilityBoundingSet=
+RestrictSUIDSGID=yes
+RestrictNamespaces=yes
+LockPersonality=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+# The socket lives in /run/mrcalld/<uid>/ (a tmpfiles fragment per uid,
+# 2750 <user>:caddy, written by mrcall-tenant). Under ProtectSystem=strict
+# /run is read-only, so the directory must be writable explicitly.
+ReadWritePaths=/run/mrcalld/%i
 UMask=0007
-ExecStart=/home/mrcalld/mrcall-desktop/engine/venv/bin/zylch -p %i serve --unix /run/mrcalld/%i.sock
-# Remove the socket when the daemon stops for good (clean disable/prune). The
-# unlink-before-bind in server_ws.py separately covers the crash/respawn case.
-ExecStopPost=/bin/rm -f /run/mrcalld/%i.sock
+ExecStart=/home/mrcalld/mrcall-desktop/engine/venv/bin/zylch -p %i serve --unix /run/mrcalld/%i/ws.sock
+ExecStopPost=/bin/rm -f /run/mrcalld/%i/ws.sock
 Restart=on-failure
 RestartSec=3
-# Engine logs INFO/DEBUG to ~/.zylch/profiles/%i/zylch.log; only WARNING+
-# reaches journald (journalctl -u zylch-server@%i).
+# Engine logs INFO/DEBUG to <profile>/zylch.log; only WARNING+ reaches
+# journald (journalctl -u zylch-server@%i).
 
 [Install]
 WantedBy=multi-user.target

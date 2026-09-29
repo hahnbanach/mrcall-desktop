@@ -30,7 +30,9 @@ def _default_wa_db() -> str:
     profile_dir = os.environ.get("ZYLCH_PROFILE_DIR")
     if profile_dir:
         return os.path.join(profile_dir, "whatsapp.db")
-    return os.path.expanduser("~/.zylch/whatsapp.db")
+    from zylch.home import zylch_home
+
+    return os.path.join(zylch_home(), "whatsapp.db")
 
 
 class WhatsAppClient:

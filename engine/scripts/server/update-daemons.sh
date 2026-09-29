@@ -35,6 +35,8 @@ TMPFILES_SRC="$ENGINE/scripts/tmpfiles.d/mrcalld.conf"
 TMPFILES_DST="/etc/tmpfiles.d/mrcalld.conf"
 LOGROTATE_SRC="$ENGINE/scripts/logrotate.d/mrcalld"
 LOGROTATE_DST="/etc/logrotate.d/mrcalld"
+HELPER_SRC="$ENGINE/scripts/server/tenant-helper.sh"
+HELPER_DST="/usr/local/sbin/mrcall-tenant"
 
 DRY=0; PRUNE=0; RESTART_ALL=0
 for a in "$@"; do
@@ -70,6 +72,9 @@ run install -m 644 "$UNIT_SRC" "/etc/systemd/system/zylch-server@.service"
 run install -m 644 "$PROVISIOND_UNIT_SRC" "/etc/systemd/system/zylch-provisiond.service"
 run install -m 644 "$TMPFILES_SRC" "$TMPFILES_DST"
 run install -m 644 "$LOGROTATE_SRC" "$LOGROTATE_DST"
+# The tenant helper is executed ONLY from its installed, root-owned copy:
+# the checkout is mrcalld-writable, so a sudoers rule must never name it.
+run install -m 750 -o root -g root "$HELPER_SRC" "$HELPER_DST"
 run systemd-tmpfiles --create "$TMPFILES_DST"
 run systemctl daemon-reload
 
@@ -83,6 +88,14 @@ if [ -d "$PROFILES" ]; then
   done
 fi
 echo "  found ${#UIDS[@]}: ${UIDS[*]:-<none>}"
+
+echo "== 3a. one Unix identity per profile (plan M2: user, key, drop-in, runtime dir) =="
+for u in "${UIDS[@]:-}"; do
+  [ -n "$u" ] || continue
+  # idempotent; a half-copied profile converges on the next run. Never
+  # chown a profile back to mrcalld: the tenant user owns it from here on.
+  run "$HELPER_DST" create "$u"
+done
 
 echo "== 3b. one daemon per profile (enable + start/restart) =="
 for u in "${UIDS[@]:-}"; do

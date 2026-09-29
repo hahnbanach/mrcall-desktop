@@ -8,7 +8,8 @@
 # `token.uid == OWNER_ID`.
 #
 # Multi-profile routing: each profile's daemon (zylch-server@<uid>, run by the
-# `mrcalld` service user) listens on its own Unix socket /run/mrcalld/<uid>.sock.
+# `mc-<hash>` tenant user since plan M2) listens on its own Unix socket
+# /run/mrcalld/<uid>/ws.sock.
 # The uid captured from the path selects the socket, so every user shares this
 # one URL — no per-user port. A uid with no running daemon → 502 (nothing
 # exposed). Security is the per-daemon JWT gate (token.uid == OWNER_ID); a
@@ -27,7 +28,7 @@
 
 desktop.mrcall.ai {
 	@ws path_regexp uid ^/ws/([^/]+)$
-	reverse_proxy @ws unix//run/mrcalld/{re.uid.1}.sock
+	reverse_proxy @ws unix//run/mrcalld/{re.uid.1}/ws.sock
 
 	@provision path /api/provision*
 	reverse_proxy @provision unix//run/mrcalld/provisiond.sock

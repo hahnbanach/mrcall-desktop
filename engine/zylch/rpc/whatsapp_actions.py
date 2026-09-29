@@ -116,7 +116,9 @@ def _wa_db_path() -> str:
     profile_dir = os.environ.get("ZYLCH_PROFILE_DIR")
     if profile_dir:
         return os.path.join(profile_dir, "whatsapp.db")
-    return os.path.expanduser("~/.zylch/whatsapp.db")
+    from zylch.home import zylch_home
+
+    return os.path.join(zylch_home(), "whatsapp.db")
 
 
 def _qr_to_png_b64(data_qr: bytes) -> Optional[str]:

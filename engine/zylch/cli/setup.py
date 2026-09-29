@@ -303,9 +303,9 @@ def _run_wizard(env: dict, profile_name: str | None):
         )
         / "whatsapp.db"
     )
-    _wa_global_path = Path(
-        os.path.expanduser("~/.zylch/whatsapp.db"),
-    )
+    from zylch.home import zylch_home
+
+    _wa_global_path = Path(zylch_home()) / "whatsapp.db"
     wa_db = _wa_profile_path if _wa_profile_path.exists() else _wa_global_path
     wa_connected = wa_db.exists()
 

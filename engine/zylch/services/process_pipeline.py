@@ -759,7 +759,7 @@ def _run_whatsapp_sync(
     wa_db = Path(
         os.path.join(profile_dir, "whatsapp.db")
         if profile_dir
-        else os.path.expanduser("~/.zylch/whatsapp.db")
+        else os.path.join(__import__("zylch.home", fromlist=["zylch_home"]).zylch_home(), "whatsapp.db")
     )
     if not wa_db.exists():
         return {

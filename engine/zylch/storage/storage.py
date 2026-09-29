@@ -2373,6 +2373,12 @@ class Storage:
             logger.info(f"Stored OAuth token for owner " f"{owner_id} provider {provider}")
             return row.to_dict() if row else {}
 
+    def list_oauth_token_rows(self) -> List[Dict[str, Any]]:
+        """Every oauth_tokens row of this profile DB (the serve start-time
+        encryption self-check reads their ``credentials``)."""
+        with get_session() as session:
+            return [row.to_dict() for row in session.query(OAuthToken).all()]
+
     def get_oauth_token(self, owner_id: str, provider: str) -> Optional[Dict[str, Any]]:
         """Get OAuth token for a user."""
         with get_session() as session:

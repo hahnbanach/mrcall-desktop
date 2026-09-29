@@ -65,7 +65,19 @@ async def memory_join(params: Dict[str, Any], notify: NotifyFn) -> Any:
     (an engine CLI command) that settles it. It never drains: that is the
     CLI's ``zylch memory-join --drain``.
     """
+    from zylch import runtime
     from zylch.memory.join import join
+
+    if runtime.is_serving():
+        # A hosted daemon runs as a Unix user that is a member of exactly
+        # its company's group and has no bind mount for another company's
+        # store directory (plan M2.5): the join is an operator action there.
+        logger.info("[rpc] memory.join refused: hosted engine, operator action")
+        return {
+            "ok": False,
+            "reason": "on a hosted engine the company join is an operator action (join-company.sh)",
+            "operator_action": True,
+        }
 
     key = params.get("key")
     out = join(key if isinstance(key, str) else "")

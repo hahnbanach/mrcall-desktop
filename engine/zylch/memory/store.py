@@ -65,19 +65,68 @@ class MemoryUnavailable(RuntimeError):
 
 
 def memory_dir() -> str:
-    """``$MEMORY_DB_DIR`` or ``~/.zylch/memory`` — one directory per host."""
+    """``$MEMORY_DB_DIR`` or ``$ZYLCH_HOME/memory`` — one directory per host."""
     override = os.environ.get("MEMORY_DB_DIR")
     if override:
         return override
-    return os.path.join(os.path.expanduser("~/.zylch"), MEMORY_DIRNAME)
+    from zylch.home import zylch_home
+
+    return os.path.join(zylch_home(), MEMORY_DIRNAME)
+
+
+def legacy_memory_db_path(company_key: str) -> str:
+    """Where a store lived before 2026-09: the key itself as the file name."""
+    return os.path.join(memory_dir(), f"{company_key}.db")
+
+
+def derived_memory_db_path(company_key: str) -> str:
+    """``<memory_dir>/<company group>/<sha256(key)[:32]>.db`` — the name a
+    host can list without learning the key (plan M2.2/M2.5)."""
+    from zylch.memory.tenant_names import company_group, store_basename
+
+    return os.path.join(memory_dir(), company_group(company_key), store_basename(company_key))
 
 
 def memory_db_path(company_key: str) -> str:
-    return os.path.join(memory_dir(), f"{company_key}.db")
+    """The store this key names. Dual-name rule: the derived path when it
+    exists, else the legacy one when *it* exists. For a store that does
+    not exist yet, a hosted engine names the derived path and a local
+    engine the legacy one (local engines keep the legacy name by design).
+    A legacy store is therefore always found and never shadowed by a fresh
+    empty one — the fork the plan's 2a step guards against."""
+    from zylch import runtime
+
+    derived = derived_memory_db_path(company_key)
+    if os.path.isfile(derived):
+        return derived
+    legacy = legacy_memory_db_path(company_key)
+    if os.path.isfile(legacy):
+        return legacy
+    return derived if runtime.is_serving() else legacy
 
 
 def store_exists(company_key: str) -> bool:
     return os.path.isfile(memory_db_path(company_key))
+
+
+def relocate_store(company_key: str) -> Optional[str]:
+    """Move a legacy-named store to its derived path (2a). Returns the new
+    path, or None when there was nothing to move. Refuses when both exist.
+    Every daemon of the company must be stopped: SQLite's ``-wal``/``-shm``
+    sidecars are renamed with the file, which is only safe with no open
+    handle."""
+    legacy = legacy_memory_db_path(company_key)
+    derived = derived_memory_db_path(company_key)
+    if not os.path.isfile(legacy):
+        return None
+    if os.path.isfile(derived):
+        raise MemoryUnavailable("both the legacy and the derived store exist; resolve by hand")
+    os.makedirs(os.path.dirname(derived), mode=0o700, exist_ok=True)
+    for suffix in ("", "-wal", "-shm"):
+        if os.path.exists(legacy + suffix):
+            os.replace(legacy + suffix, derived + suffix)
+    logger.info("[memory] store relocated to its derived name")
+    return derived
 
 
 def key_source() -> Optional[str]:
@@ -121,6 +170,7 @@ def open_memory_engine(company_key: str, *, create: bool) -> Engine:
         if not create:
             raise MemoryUnavailable("no company memory store exists for this key on this host")
         os.makedirs(memory_dir(), mode=0o700, exist_ok=True)
+        os.makedirs(os.path.dirname(path), mode=0o700, exist_ok=True)
         logger.info("[memory] creating a new company store")
     engine = create_engine(f"sqlite:///{path}", echo=False)
     _install_pragmas(engine)

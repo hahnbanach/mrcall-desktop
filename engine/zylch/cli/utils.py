@@ -3,9 +3,11 @@
 import logging
 import os
 
+from zylch.home import zylch_home
+
 logger = logging.getLogger(__name__)
 
-ZYLCH_DIR = os.path.expanduser("~/.zylch")
+ZYLCH_DIR = zylch_home()
 
 
 def load_env():

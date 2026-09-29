@@ -24,7 +24,9 @@ def _resolve_db_path() -> str:
     env_path = os.environ.get("ZYLCH_DB_PATH")
     if env_path:
         return env_path
-    return os.path.join(os.path.expanduser("~/.zylch"), "zylch.db")
+    from zylch.home import zylch_home
+
+    return os.path.join(zylch_home(), "zylch.db")
 
 
 DB_DIR = os.path.expanduser("~/.zylch")  # legacy compat

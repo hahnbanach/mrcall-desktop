@@ -14,7 +14,7 @@ class Settings(BaseSettings):
             ".env",
             os.environ.get(
                 "ZYLCH_PROFILE_DIR",
-                os.path.expanduser("~/.zylch"),
+                os.environ.get("ZYLCH_HOME") or os.path.expanduser("~/.zylch"),
             )
             + "/.env",
         ),
@@ -201,7 +201,7 @@ class Settings(BaseSettings):
 
     # WhatsApp (optional channel — neonize/whatsmeow)
     whatsapp_db_path: str = Field(
-        default="~/.zylch/whatsapp.db",
+        default="~/.zylch/whatsapp.db",  # legacy; see whatsapp/client.py
         description=("Path to neonize session database (WhatsApp Web multi-device)"),
     )
     whatsapp_enabled: bool = Field(

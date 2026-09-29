@@ -1,7 +1,6 @@
 """Embedding generation using fastembed (ONNX backend)."""
 
 import logging
-import os
 import threading
 from pathlib import Path
 from typing import Dict, List, Tuple, Union
@@ -22,7 +21,9 @@ def _persistent_cache_dir() -> str:
     stayed behind. Anchor the cache under `~/.zylch/` instead so it
     survives reboots and $TMPDIR cleanup.
     """
-    cache = Path(os.path.expanduser("~/.zylch/fastembed_cache"))
+    from zylch.home import zylch_home
+
+    cache = Path(zylch_home()) / "fastembed_cache"
     cache.mkdir(parents=True, exist_ok=True)
     return str(cache)
 
