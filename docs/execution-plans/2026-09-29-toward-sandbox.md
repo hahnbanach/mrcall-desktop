@@ -129,7 +129,10 @@ tests/services` + the CI memory-boundary gate: 606 passed; the two
 failures (`test_contract_boundaries`, `test_memory_readonly`) reproduce on
 the parent commit and are not M1's. Integration review: REVISE on three
 small items (unused import, hosted prompt wording, the vacuous dotfile
-test), repaired; approval recorded below when confirmed. Left for later:
+test), repaired; APPROVED at `c0fa401` with no bypass found. "Ruff clean"
+for M1 means the F-family/E9 check on the touched files: the venv's ruff
+reports hundreds of pre-existing findings in `imap_client.py` that M1 did
+not add. Left for later:
 `settings_schema` help text for `DOWNLOADS_DIR` still says `~/Downloads`
 (app-side display change, parked with the `ignored` flag);
 `fetch_attachments`' default `save_dir` string is unused by both callers.
