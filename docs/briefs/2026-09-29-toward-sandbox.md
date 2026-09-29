@@ -83,14 +83,21 @@ mechanisms.
   is derived from the key rather than being the key; existing stores are
   renamed and `memory.join`/`store_exists` lookups follow. Each profile has
   its own `ENCRYPTION_KEY`, stored outside the model-reachable tree
-  (`/etc/mrcalld/keys/<uid>`, readable by that profile's user only) and
-  included in the operator's backup set. The host scripts
+  (e.g. `/etc/mrcalld/keys/<uid>`), readable by that profile's user only and
+  included in the operator's backup set; existing `OAuthToken` rows are
+  re-encrypted from the shared key to the profile key, with the shared key
+  kept until rollback is no longer needed. The host scripts
   (`update-daemons.sh`, `join-company.sh`) and provisiond follow the new
   identity model. The six live profiles are migrated with a runbook and a
   rollback.
-- **Tenant offboarding.** Deleting a profile removes its directory, key,
-  daemon and its rows' visibility in the company store, leaving no readable
-  data for that uid on the host.
+- **Tenant offboarding.** Deleting a profile removes its directory, key and
+  daemon, and deletes its owned rule rows (`template:<owner>`,
+  `prefs:<owner>`) from the company store. Company-family rows
+  (`user:<key>`, `facts:<key>`) stay with the company and keep their
+  provenance, as `engine/zylch/memory/scope.py` defines them; removing one of
+  Café124's profiles must not strip facts the other three rely on. When the
+  departing profile is the company's last key holder, the store itself is
+  deleted.
 - **Docs.** `docs/remote-backend.md` (multi-tenancy statement, WhatsApp
   caveat, identity model) and `AGENTS.md` where the hosting model changes.
 
@@ -138,6 +145,9 @@ mechanisms.
 - Existing customers tolerate a short, announced restart per profile.
 - The host distribution allows per-profile Unix users and the needed systemd
   features (the plan verifies the version).
+- No current hosted customer flow depends on `run_python` or on absolute
+  document paths; the operator confirms this against the profiles' logs
+  before the hotfix is deployed.
 
 ## Acceptance criteria
 
@@ -153,8 +163,10 @@ mechanisms.
    the renamed store.
 4. **Keys separated.** Each live profile decrypts its `OAuthToken` rows with
    its own key after migration; profile A's user cannot read profile B's key.
-5. **Offboarding leaves nothing.** After deleting a scratch profile, no file
-   on the host is readable by, or attributable to, that uid.
+5. **Offboarding leaves nothing of the profile.** After deleting a scratch
+   profile that shares a store with another, no file on the host belongs to
+   that uid, its owned rule rows are gone, and the other profile's company
+   facts are intact.
 6. **Docs reconciled.** `docs/remote-backend.md` and `AGENTS.md` describe the
    identity model; the stale WhatsApp caveat is gone.
 
