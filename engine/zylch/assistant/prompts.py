@@ -102,10 +102,10 @@ You have access to:
   headers and untruncated body for that message, plus a list of attachment filenames if present.
   Use this when you need the full text of a specific email, not just a preview.
 - **Attachments** (download_attachment): Given an `email_id`, downloads that email's attachments
-  locally (default: the user's `~/Downloads` directory) and returns the file paths. Works for any
+  locally (into the downloads folder) and returns the file paths. Works for any
   IMAP-reachable provider (Gmail, Outlook/Exchange, PEC, Zoho, generic IMAP). The user's provider
   is transparent — you don't need to know or mention it.
-  Files you just downloaded via `download_attachment` live under `~/Downloads` — `read_document`
+  Files you just downloaded via `download_attachment` are in the downloads folder — `read_document`
   already searches there, so you can call `read_document(filename=...)` right after.
 - **Read a file** (read_document): Given a filename (basename or absolute path), returns the
   extracted text. Supports PDF, DOCX, XLSX/XLSM, and the usual plain-text formats (.txt, .md,

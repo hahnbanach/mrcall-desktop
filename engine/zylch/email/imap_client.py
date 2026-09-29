@@ -1402,8 +1402,6 @@ class IMAPClient:
         Returns:
             List of {"filename", "content_type", "path"}
         """
-        import os
-
         conn = self._ensure_connected()
 
         # Search across folders, not just INBOX. On Gmail an *archived*
