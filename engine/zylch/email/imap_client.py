@@ -22,6 +22,7 @@ from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple
 from datetime import datetime
 
 from zylch.utils.msgid import clean_message_id, clean_references
+from zylch.utils.safe_paths import PathRefused, confine, safe_attachment_name
 
 logger = logging.getLogger(__name__)
 
@@ -260,6 +261,42 @@ def _decode_header_value(raw: Optional[str]) -> str:
         else:
             decoded_parts.append(data)
     return "".join(decoded_parts)
+
+
+def save_attachments(msg: email_lib.message.Message, save_dir: str) -> list[dict[str, str]]:
+    """Write every attachment part of `msg` under `save_dir`.
+
+    The sender's filename is reduced to a basename (`safe_attachment_name`)
+    and the final path is confined to `save_dir`, so a name like
+    `../../x` or `/home/<other>/.env` can never land outside the folder.
+    """
+    os.makedirs(save_dir, exist_ok=True)
+    results: list[dict[str, str]] = []
+    for part in msg.walk():
+        disp = str(part.get("Content-Disposition", ""))
+        if "attachment" not in disp:
+            continue
+        filename = safe_attachment_name(_decode_header_value(part.get_filename()), len(results))
+        payload = part.get_payload(decode=True)
+        if not payload:
+            continue
+        try:
+            path = confine(os.path.join(save_dir, filename), [save_dir])
+        except PathRefused:
+            logger.warning("[IMAP] attachment name refused, skipped")
+            continue
+        with open(path, "wb") as f:
+            f.write(payload)
+        results.append(
+            {
+                "filename": filename,
+                "content_type": part.get_content_type(),
+                "path": path,
+                "size": len(payload),
+            },
+        )
+        logger.info(f"[IMAP] Saved attachment: {filename} ({len(payload)} bytes)")
+    return results
 
 
 def _extract_attachment_filenames(
@@ -1411,42 +1448,7 @@ class IMAPClient:
             return []
 
         msg = email_lib.message_from_bytes(msg_data[0][1])
-        os.makedirs(save_dir, exist_ok=True)
-
-        results = []
-        for part in msg.walk():
-            disp = str(
-                part.get("Content-Disposition", ""),
-            )
-            if "attachment" not in disp:
-                continue
-
-            filename = part.get_filename()
-            if not filename:
-                filename = f"attachment_{len(results)}"
-            filename = _decode_header_value(filename)
-
-            payload = part.get_payload(decode=True)
-            if not payload:
-                continue
-
-            path = os.path.join(save_dir, filename)
-            with open(path, "wb") as f:
-                f.write(payload)
-
-            results.append(
-                {
-                    "filename": filename,
-                    "content_type": part.get_content_type(),
-                    "path": path,
-                    "size": len(payload),
-                },
-            )
-            logger.info(
-                f"[IMAP] Saved attachment:" f" {filename} ({len(payload)} bytes)",
-            )
-
-        return results
+        return save_attachments(msg, save_dir)
 
     @_imap_serialized
     def get_batch(

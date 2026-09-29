@@ -268,7 +268,7 @@ registry on 2026-08-15 (65 methods), plus `emails.needs_reply` added
 
 | Method | Declared parameters | Returns |
 |---|---|---|
-| `settings.get` | — | {values: {KEY: string}} — the active profile's `.env`, secrets masked |
+| `settings.get` | — | {values: {KEY: string}, ignored?: {KEY: reason}} — the active profile's `.env`, secrets masked; `ignored` only on a hosted engine |
 | `settings.get_secret` | `key` | {key, value} — ONE secret field in clear; refuses a key that is not a secret. The desktop reads the company memory key back through this (the Settings memory card); `cs init` reads mail credentials |
 | `settings.schema` | — | {fields: [...]} — field descriptors, no values |
 | `settings.update` | `updates: {key: value}` | {ok, applied, skipped_unchanged} |
@@ -1366,6 +1366,15 @@ by the app's onboarding IPCs instead.
 with every secret field (password / api_key) **always masked**: `"<set>"`
 when a value is present, `""` when absent. There is no `include_secrets`
 opt-out — to change a secret the user types a new value over it.
+
+On a hosted engine (`zylch serve`) the result carries an additional
+top-level sibling, `ignored: {KEY: reason}`, naming the keys the engine
+accepts but does not honour there — today `DOCUMENT_PATHS` and
+`DOWNLOADS_DIR`, because a hosted profile reads and writes documents only
+in its own `downloads/` folder (see
+[toward-sandbox](briefs/2026-09-29-toward-sandbox.md)). `values` keeps its
+shape; a client that ignores unknown top-level fields is unaffected. The
+field is absent on the local stdio engine.
 
 `update` takes `{updates: {KEY: value}}`, validates every key against the
 schema, and **skips any secret whose value is still the literal
