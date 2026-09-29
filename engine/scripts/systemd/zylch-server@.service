@@ -1,68 +1,45 @@
 [Unit]
 # Cross-machine WebSocket engine, one instance per profile (%i = Firebase uid).
 #
-# Since plan M2 (docs/execution-plans/2026-09-29-toward-sandbox.md) every
-# instance runs as ITS OWN Unix user, set by a per-instance drop-in that
-# `mrcall-tenant create <uid>` writes (User=, Group=, SupplementaryGroups=
-# for the company store, BindPaths=/ReadWritePaths= for the profile and the
-# store directory). `mrcalld` is the deploy identity only: it owns the
-# checkout and the venv, read-only to every daemon. This template holds
-# what is common. See docs/remote-backend.md.
+# TRANSITIONAL TEMPLATE (plan M2 of docs/execution-plans/2026-09-29-toward-sandbox.md).
+# Unchanged for an instance that has NOT been migrated: it still runs as the
+# `mrcalld` service user with the shared key and the flat socket, exactly as
+# before. A migrated instance carries a per-instance drop-in written by
+# `mrcall-tenant create <uid>` (zylch-server@<uid>.service.d/tenant.conf)
+# that overrides User=/Group=, the key file, the data-root environment, the
+# socket path and adds the whole sandbox. So the reconcile automation can
+# pull this file at any time without touching a running customer; only the
+# operator's explicit `create` migrates a profile. Once every profile is
+# migrated the drop-in's content is folded into this template.
 #   sudo systemctl enable --now zylch-server@<uid>
 Description=mrcall-desktop cross-machine WS engine (profile %i)
 After=network-online.target
 Wants=network-online.target
 # Don't crash-loop forever on a misconfigured profile (e.g. one with no
-# OWNER_ID, or no key file, makes the engine exit non-zero): give up after
-# 5 starts in 60s.
+# OWNER_ID makes the engine exit non-zero): give up after 5 starts in 60s.
 StartLimitIntervalSec=60
 StartLimitBurst=5
 
 [Service]
 Type=simple
-# User=/Group= come from the drop-in (a template cannot derive
-# `mc-<sha256(uid)>` from %i).
-# Data root: the daemon's HOME is its own profile (private, writable);
-# ZYLCH_HOME points at the shared tree so profiles/, memory/ and the
-# embedding cache resolve there and never through `~`.
-Environment=HOME=/home/mrcalld/.zylch/profiles/%i
-Environment=ZYLCH_HOME=/home/mrcalld/.zylch
-Environment=MEMORY_DB_DIR=/home/mrcalld/.zylch/memory
-Environment=PYTHONDONTWRITEBYTECODE=1
-# Per-profile at-rest key (ENCRYPTION_KEY), root-only 0400, read by systemd
-# before dropping privileges. No `-`: a missing key FAILS the unit — a
-# hosted engine never falls back to the profile .env or to plaintext.
-EnvironmentFile=/etc/mrcalld/keys/%i
-WorkingDirectory=/home/mrcalld/.zylch/profiles/%i
-
-# ── sandbox ─────────────────────────────────────────────────────────────
-# Everything read-only except what the drop-in lists under ReadWritePaths=.
-ProtectSystem=strict
-# /home is an empty tmpfs; the checkout is bound read-only, the profile and
-# the company store directory are bound (BindPaths=) by the drop-in.
-# ProtectHome=yes would drop those nested mounts.
-ProtectHome=tmpfs
-BindReadOnlyPaths=/home/mrcalld/mrcall-desktop
-PrivateTmp=yes
-NoNewPrivileges=yes
-CapabilityBoundingSet=
-RestrictSUIDSGID=yes
-RestrictNamespaces=yes
-LockPersonality=yes
-ProtectKernelTunables=yes
-ProtectKernelModules=yes
-ProtectControlGroups=yes
-# The socket lives in /run/mrcalld/<uid>/ (a tmpfiles fragment per uid,
-# 2750 <user>:caddy, written by mrcall-tenant). Under ProtectSystem=strict
-# /run is read-only, so the directory must be writable explicitly.
-ReadWritePaths=/run/mrcalld/%i
+User=mrcalld
+Group=mrcalld
+Environment=HOME=/home/mrcalld
+# Shared at-rest key (ENCRYPTION_KEY, Fernet) for the stored OAuth / Firebase
+# refresh tokens of UNMIGRATED profiles. The `-` makes it non-fatal if absent.
+# A migrated instance's drop-in resets this to its own root-only key file.
+EnvironmentFile=-/etc/mrcalld/env
+WorkingDirectory=/home/mrcalld
+# Unmigrated socket: /run/mrcalld/<uid>.sock in the setgid `caddy` dir
+# (engine/scripts/tmpfiles.d/mrcalld.conf); UMask=0007 + chmod(0o660) in
+# server_ws.py let the Caddy reverse-proxy connect.
 UMask=0007
-ExecStart=/home/mrcalld/mrcall-desktop/engine/venv/bin/zylch -p %i serve --unix /run/mrcalld/%i/ws.sock
-ExecStopPost=/bin/rm -f /run/mrcalld/%i/ws.sock
+ExecStart=/home/mrcalld/mrcall-desktop/engine/venv/bin/zylch -p %i serve --unix /run/mrcalld/%i.sock
+ExecStopPost=/bin/rm -f /run/mrcalld/%i.sock
 Restart=on-failure
 RestartSec=3
-# Engine logs INFO/DEBUG to <profile>/zylch.log; only WARNING+ reaches
-# journald (journalctl -u zylch-server@%i).
+# Engine logs INFO/DEBUG to the profile's zylch.log; only WARNING+
+# reaches journald (journalctl -u zylch-server@%i).
 
 [Install]
 WantedBy=multi-user.target

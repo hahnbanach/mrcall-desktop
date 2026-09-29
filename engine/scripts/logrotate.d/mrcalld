@@ -17,5 +17,7 @@
     compress
     delaycompress
     copytruncate
-    su mrcalld mrcalld
+    # No `su`: since plan M2 each profile dir is owned by its tenant user;
+    # logrotate runs as root and the 0711 parents are not group/other
+    # writable, so its parent-directory check passes.
 }

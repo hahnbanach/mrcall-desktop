@@ -89,11 +89,12 @@ echo "== adding $tenant_user to $new_group (keeps $old_group until finished) =="
 
 echo "== joining $uid to $key =="
 # shellcheck disable=SC2086
+# umask 007: a store or -wal/-shm created here must stay group-writable
 sudo -u "$tenant_user" env HOME="$PROFILES/$uid" ZYLCH_HOME="/home/$SVC_USER/.zylch" MEMORY_DB_DIR="$MEMORY" \
-  "$VENV/bin/zylch" -p "$uid" memory-join $yes_flag "$key"
+  bash -c 'umask 007; exec "$@"' _ "$VENV/bin/zylch" -p "$uid" memory-join $yes_flag "$key"
 
 echo "== regenerating the drop-in for the new key; old group stays until you run: =="
 echo "   mrcall-tenant unjoin $uid $old_group     # after zylch memory-status shows the join finished"
 /usr/local/sbin/mrcall-tenant create "$uid"
 sudo -u "$tenant_user" env HOME="$PROFILES/$uid" ZYLCH_HOME="/home/$SVC_USER/.zylch" MEMORY_DB_DIR="$MEMORY" \
-  "$VENV/bin/zylch" -p "$uid" memory-status || true
+  bash -c 'umask 007; exec "$@"' _ "$VENV/bin/zylch" -p "$uid" memory-status || true

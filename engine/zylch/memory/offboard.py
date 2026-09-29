@@ -14,32 +14,29 @@ from __future__ import annotations
 import logging
 import os
 
-from sqlalchemy.orm import sessionmaker
-
-from zylch.memory.blob_versions import prune_versions
 from zylch.memory.company_key import require_company_key
-from zylch.memory.scope import blob_owned_rules
 from zylch.memory.store import memory_db_path
 from zylch.storage import database as dbm
-from zylch.storage.models import Blob
 
 logger = logging.getLogger(__name__)
 
 
 def delete_owned_rules(owner_id: str) -> int:
-    """Delete ``owner_id``'s rule rows (and their versions) from the bound
-    company store. Company-family rows are untouched. Returns the count."""
-    key = require_company_key()
-    engine = dbm.current_memory_engine()
-    if engine is None:
+    """Delete ``owner_id``'s personal rows from the bound company store.
+
+    Delegates to :meth:`BlobStorage.delete_all_blobs`, the one per-account
+    reset: on a store other accounts contributed to it removes only this
+    account's rule rows (``blob_owned_rules``); on a store this account
+    alone wrote, everything — which is the last-holder case, where the
+    file goes too. Returns the count."""
+    from zylch.memory.blob_storage import BlobStorage
+    from zylch.storage.database import get_session
+
+    require_company_key()
+    if dbm.current_memory_engine() is None:
         raise RuntimeError(f"memory unavailable: {dbm.memory_unavailable_reason()}")
-    predicate = blob_owned_rules(owner_id, key)
-    with sessionmaker(bind=engine)() as session:
-        ids = [row.id for row in session.query(Blob.id).filter(predicate).all()]
-        count = session.query(Blob).filter(predicate).delete(synchronize_session=False)
-        pruned = prune_versions(session, ids)
-        session.commit()
-    logger.info(f"[offboard] owner rules removed={count} versions pruned={pruned}")
+    count = BlobStorage(get_session, None).delete_all_blobs(owner_id)
+    logger.info(f"[offboard] rows removed={count}")
     return count
 
 

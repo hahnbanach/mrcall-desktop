@@ -154,6 +154,10 @@ def _marker_path(uid: str) -> str:
     return os.path.join(_profile_dir(uid), MARKER_NAME)
 
 
+def _tenant_dropin_path(uid: str) -> str:
+    return f"/etc/systemd/system/zylch-server@{uid}.service.d/tenant.conf"
+
+
 def _env_path(uid: str) -> str:
     return os.path.join(_profile_dir(uid), ".env")
 
@@ -340,7 +344,10 @@ def handle_status(claims: dict[str, Any]) -> tuple[int, dict[str, Any]]:
     # on disk tells those two apart, and answering "not_provisioned" for
     # a live customer mid-restart would send them back to the app to
     # re-do setup they already did.
-    if os.path.exists(_env_path(uid)):
+    if os.path.exists(_env_path(uid)) or os.path.exists(_tenant_dropin_path(uid)):
+        # A migrated profile (plan M2) is owned by its tenant user, 0700,
+        # so its .env is invisible to provisiond; the drop-in the helper
+        # wrote is the visible proof it exists.
         return 200, {"state": "preparing"}
 
     return 200, {"state": "not_provisioned"}

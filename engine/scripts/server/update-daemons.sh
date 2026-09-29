@@ -89,13 +89,17 @@ if [ -d "$PROFILES" ]; then
 fi
 echo "  found ${#UIDS[@]}: ${UIDS[*]:-<none>}"
 
-echo "== 3a. one Unix identity per profile (plan M2: user, key, drop-in, runtime dir) =="
-for u in "${UIDS[@]:-}"; do
-  [ -n "$u" ] || continue
-  # idempotent; a half-copied profile converges on the next run. Never
-  # chown a profile back to mrcalld: the tenant user owns it from here on.
-  run "$HELPER_DST" create "$u"
-done
+echo "== 3a. re-apply the per-tenant identity of ALREADY MIGRATED profiles (plan M2) =="
+# Migration is the operator's explicit `mrcall-tenant create <uid>` (runbook
+# M2.7, one profile per day, rekey in between). This automation only
+# re-applies it for uids the helper already recorded, so a pull never
+# migrates a running customer by itself. Idempotent; never chowns a profile
+# back to mrcalld.
+if [ -x "$HELPER_DST" ]; then
+  for u in $("$HELPER_DST" list 2>/dev/null); do
+    run "$HELPER_DST" create "$u"
+  done
+fi
 
 echo "== 3b. one daemon per profile (enable + start/restart) =="
 for u in "${UIDS[@]:-}"; do

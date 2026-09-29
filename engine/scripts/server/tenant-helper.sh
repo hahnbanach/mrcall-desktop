@@ -10,16 +10,19 @@
 # docs/execution-plans/2026-09-29-toward-sandbox.md.
 #
 # Usage (root):
-#   mrcall-tenant create <uid>                 # user, key file, drop-in, runtime dir, subdirs, chown, company group+dir
+#   mrcall-tenant create <uid>                 # MIGRATES a profile: user, key file, drop-in, runtime dir, subdirs, chown, company group+dir
 #   mrcall-tenant join   <uid> <company-group> # add the user to a second company group (during a join)
 #   mrcall-tenant unjoin <uid> <company-group> # remove it (after the join finished)
-#   mrcall-tenant delete <uid> [--last-holder] # stop, offboard (as the tenant user), remove everything
+#   mrcall-tenant delete <uid>                 # stop, offboard (as the tenant user; last-holder derived), remove everything
 #   mrcall-tenant names  <uid>                 # print the derived names, change nothing
+#   mrcall-tenant list                         # the migrated uids (tenants table)
 #
-# Every verb is idempotent: a reconcile trigger on a half-written profile
-# converges on the next run. Names never carry the uid or the key:
-# user `mc-<sha256(uid)[:12]>`, group `mc-c-<sha256(key)[:12]>` (see
-# zylch/memory/tenant_names.py — this script derives them the same way).
+# `create` is the operator's explicit migration step (runbook M2.7); the
+# reconcile automation re-runs it ONLY for uids already in the table, so a
+# pull never migrates a running customer by itself. Every verb is
+# idempotent. Names never carry the uid or the key: user
+# `mc-<sha256(uid)[:12]>`, group `mc-c-<sha256(key)[:12]>` (the same
+# derivation as zylch/memory/tenant_names.py).
 set -euo pipefail
 
 SVC_USER=mrcalld
@@ -27,6 +30,7 @@ ROOT="/home/$SVC_USER"
 ZHOME="$ROOT/.zylch"
 PROFILES="$ZHOME/profiles"
 MEMORY="$ZHOME/memory"
+EMB_CACHE="$ZHOME/fastembed_cache"
 REPO="$ROOT/mrcall-desktop"
 VENV="$REPO/engine/venv"
 KEYS_DIR=/etc/mrcalld/keys
@@ -44,15 +48,14 @@ die() { echo "[tenant] ERROR: $*" >&2; exit 2; }
 
 # The same guard provisiond applies to a uid before it becomes a path
 # component (zylch/provisiond/handler.py _UID_RE), plus an explicit refusal
-# of `.` and `..`.
+# of `.` and `..`. A uid only ever appears inside absolute paths, after
+# `-p`, or through printf '%s'; useradd/chown/gpasswd get derived names.
 check_uid() {
   local u="$1"
   [[ "$u" =~ ^[A-Za-z0-9_.-]+$ ]] || die "uid has characters outside [A-Za-z0-9_.-]"
   [ "$u" != "." ] && [ "$u" != ".." ] || die "uid may not be . or .."
 }
-check_group() {
-  [[ "$1" =~ ^mc-c-[0-9a-f]{12}$ ]] || die "not a derived company group name: $1"
-}
+check_group() { [[ "$1" =~ ^mc-c-[0-9a-f]{12}$ ]] || die "not a derived company group name: $1"; }
 
 sha12() { printf '%s' "$1" | sha256sum | cut -c1-12; }
 sha32() { printf '%s' "$1" | sha256sum | cut -c1-32; }
@@ -66,25 +69,95 @@ env_value() { # env_value <file> <KEY>
   printf '%s' "$line"
 }
 
-ensure_table() { install -m 600 -o root -g root /dev/null "$TABLE" 2>/dev/null || true; [ -f "$TABLE" ] || : > "$TABLE"; chmod 600 "$TABLE"; }
-table_user() { awk -F'\t' -v u="$1" '$1==u {print $2}' "$TABLE" 2>/dev/null | tail -n1; }
+ensure_table() { [ -f "$TABLE" ] || install -m 600 -o root -g root /dev/null "$TABLE"; chmod 600 "$TABLE"; }
+table_has() { awk -F'\t' -v u="$1" '$1==u {found=1} END {exit !found}' "$TABLE" 2>/dev/null; }
+table_drop() { awk -F'\t' -v u="$1" '$1!=u' "$TABLE" > "$TABLE.tmp" && mv "$TABLE.tmp" "$TABLE" && chmod 600 "$TABLE"; }
 
-verb="${1:-}"; uid="${2:-}"
-case "$verb" in create|join|unjoin|delete|names) ;; *) sed -n '2,20p' "$0"; exit 2 ;; esac
-[ -n "$uid" ] || die "missing <uid>"
+# Run the engine CLI as a tenant user, outside the unit: the data root is
+# passed explicitly (nothing else sets it there) and umask 007, or a store
+# or -wal/-shm created here would be 0644 and read-only for the other
+# members of the company group.
+as_tenant() { # as_tenant <user> <profile_dir> <zylch args...>
+  local u="$1" pd="$2"; shift 2
+  sudo -u "$u" env HOME="$pd" ZYLCH_HOME="$ZHOME" MEMORY_DB_DIR="$MEMORY" \
+    bash -c 'umask 007; exec "$@"' _ "$VENV/bin/zylch" "$@"
+}
+
+verb="${1:-}"
+case "$verb" in
+  list) ensure_table; cut -f1 "$TABLE"; exit 0 ;;
+  create|join|unjoin|delete|names) ;;
+  *) sed -n '2,25p' "$0"; exit 2 ;;
+esac
+uid="${2:-}"; [ -n "$uid" ] || die "missing <uid>"
 check_uid "$uid"
 
 profile_dir="$PROFILES/$uid"
 user=$(user_of "$uid")
 unit="$UNIT_PREFIX$uid.service"
-dropin="$DROPIN_DIR/$unit.d/tenant.conf"
+dropin_d="$DROPIN_DIR/$unit.d"
+dropin="$dropin_d/tenant.conf"
 fragment="$TMPFILES_DIR/mrcalld-$user.conf"
 keyfile="$KEYS_DIR/$uid"
 
-company_group_for_profile() {
-  local key
-  key=$(env_value "$profile_dir/.env" MEMORY_KEY)
-  [ -n "$key" ] && group_of_key "$key" || echo ""
+profile_key() { env_value "$profile_dir/.env" MEMORY_KEY; }
+company_group_for_profile() { local k; k=$(profile_key); [ -n "$k" ] && group_of_key "$k" || echo ""; }
+
+# 2a before 2b: a sandboxed daemon cannot see a legacy `<key>.db` (the
+# memory dir is a tmpfs plus its bound group dir) and would start an empty
+# store. Refuse to migrate or join while the legacy file still exists.
+require_relocated() { # require_relocated <key>
+  local k="$1" g
+  [ -n "$k" ] || return 0
+  g=$(group_of_key "$k")
+  if [ -f "$MEMORY/$k.db" ] && [ ! -f "$MEMORY/$g/$(sha32 "$k").db" ]; then
+    die "the company store still has its legacy name; run 2a first: zylch -p $uid memory-relocate-store (all of the company's daemons stopped)"
+  fi
+}
+
+write_dropin() { # write_dropin <group or empty>
+  local group="$1"
+  install -d -m 0755 "$dropin_d"
+  {
+    echo "# generated by mrcall-tenant create; do not edit — plan M2 per-tenant identity + sandbox"
+    echo "[Service]"
+    echo "User=$user"
+    echo "Group=$user"
+    [ -n "$group" ] && echo "SupplementaryGroups=$group"
+    echo "Environment=HOME=$profile_dir"
+    echo "Environment=ZYLCH_HOME=$ZHOME"
+    echo "Environment=MEMORY_DB_DIR=$MEMORY"
+    echo "Environment=PYTHONDONTWRITEBYTECODE=1"
+    echo "WorkingDirectory=$profile_dir"
+    # reset the template's shared key, then the root-only per-profile file
+    # (no `-`: a missing key FAILS the unit)
+    echo "EnvironmentFile="
+    echo "EnvironmentFile=$keyfile"
+    echo "ProtectSystem=strict"
+    echo "ProtectHome=tmpfs"
+    echo "BindReadOnlyPaths=$REPO"
+    echo "BindReadOnlyPaths=$EMB_CACHE"
+    echo "BindPaths=$profile_dir"
+    [ -n "$group" ] && echo "BindPaths=$MEMORY/$group"
+    echo "ReadWritePaths=$profile_dir"
+    [ -n "$group" ] && echo "ReadWritePaths=$MEMORY/$group"
+    echo "ReadWritePaths=$RUN_ROOT/$uid"
+    echo "PrivateTmp=yes"
+    echo "NoNewPrivileges=yes"
+    echo "CapabilityBoundingSet="
+    echo "RestrictSUIDSGID=yes"
+    echo "RestrictNamespaces=yes"
+    echo "LockPersonality=yes"
+    echo "ProtectKernelTunables=yes"
+    echo "ProtectKernelModules=yes"
+    echo "ProtectControlGroups=yes"
+    echo "UMask=0007"
+    echo "ExecStart="
+    echo "ExecStart=$VENV/bin/zylch -p $uid serve --unix $RUN_ROOT/$uid/ws.sock"
+    echo "ExecStopPost="
+    echo "ExecStopPost=/bin/rm -f $RUN_ROOT/$uid/ws.sock"
+  } > "$dropin.tmp"
+  if ! cmp -s "$dropin.tmp" "$dropin" 2>/dev/null; then mv "$dropin.tmp" "$dropin"; log "wrote $dropin"; else rm -f "$dropin.tmp"; fi
 }
 
 case "$verb" in
@@ -92,29 +165,36 @@ case "$verb" in
 names)
   echo "user:  $user"
   g=$(company_group_for_profile); echo "group: ${g:-(no MEMORY_KEY)}"
-  [ -n "$g" ] && echo "store: $MEMORY/$g/$(sha32 "$(env_value "$profile_dir/.env" MEMORY_KEY)").db"
+  [ -n "$g" ] && echo "store: $MEMORY/$g/$(sha32 "$(profile_key)").db"
   exit 0 ;;
 
 create)
   [ -f "$profile_dir/.env" ] || die "no profile .env at $profile_dir"
+  [ -L "$profile_dir/.env" ] && die "$profile_dir/.env is a symlink; refusing"
+  key=$(profile_key); require_relocated "$key"
   ensure_table
   # 1. traversal on the parents (tenant users reach their profile and the
   #    store outside the unit sandbox: join-company.sh, rekey) — never list.
+  #    The profiles dir stays writable by mrcalld (provisiond writes there).
   chmod 0711 "$ROOT" "$ZHOME" "$PROFILES"
   install -d -m 0711 -o "$SVC_USER" -g "$SVC_USER" "$MEMORY"
-  # 2. the user (no login, no home creation: HOME is the profile dir)
+  # 2. the embedding cache, pre-warmed as mrcalld and bound read-only
+  #    (a per-start download into a tmpfs would fail and cost RAM)
+  install -d -m 0755 -o "$SVC_USER" -g "$SVC_USER" "$EMB_CACHE"
+  # 3. the user (no login, no home creation: HOME is the profile dir)
   if ! id "$user" >/dev/null 2>&1; then
     useradd --system --no-create-home --home-dir "$profile_dir" --shell /usr/sbin/nologin "$user"
     log "created user $user"
   fi
-  # 3. company group + store directory (a sandboxed daemon cannot create them)
-  group=$(company_group_for_profile)
-  if [ -n "$group" ]; then
+  # 4. company group + store directory (a sandboxed daemon cannot create them)
+  group=""
+  if [ -n "$key" ]; then
+    group=$(group_of_key "$key")
     getent group "$group" >/dev/null || { groupadd --system "$group"; log "created group $group"; }
     usermod -a -G "$group" "$user"
     install -d -m 2770 -o "$SVC_USER" -g "$group" "$MEMORY/$group"
   fi
-  # 4. per-profile encryption key (root-only file read by systemd before
+  # 5. per-profile encryption key (root-only file read by systemd before
   #    dropping privileges). Never printed.
   install -d -m 0700 -o root -g root "$KEYS_DIR"
   if [ ! -s "$keyfile" ]; then
@@ -122,32 +202,20 @@ create)
     log "minted key file for $uid"
   fi
   chmod 0400 "$keyfile"; chown root:root "$keyfile"
-  # 5. per-instance drop-in: what the template cannot derive from %i
-  install -d -m 0755 "$(dirname "$dropin")"
-  {
-    echo "# generated by mrcall-tenant create; do not edit"
-    echo "[Service]"
-    echo "User=$user"
-    echo "Group=$user"
-    [ -n "$group" ] && echo "SupplementaryGroups=$group"
-    echo "BindPaths=$profile_dir"
-    [ -n "$group" ] && echo "BindPaths=$MEMORY/$group"
-    echo "ReadWritePaths=$profile_dir"
-    [ -n "$group" ] && echo "ReadWritePaths=$MEMORY/$group"
-  } > "$dropin.tmp"
-  if ! cmp -s "$dropin.tmp" "$dropin" 2>/dev/null; then mv "$dropin.tmp" "$dropin"; log "wrote $dropin"; else rm -f "$dropin.tmp"; fi
-  # 6. runtime socket dir: parent 0751 mrcalld:caddy (traversable by the
-  #    tenant), per-uid dir 2750 <user>:caddy so the socket inherits the
-  #    proxy's group and server_ws.py's chmod(0o660) lets Caddy connect.
-  printf 'd %s 0751 %s %s -\nd %s/%s 2750 %s %s -\n' "$RUN_ROOT" "$SVC_USER" "$PROXY_GROUP" "$RUN_ROOT" "$uid" "$user" "$PROXY_GROUP" > "$fragment"
+  # 6. per-instance drop-in: identity, key, data root, socket, sandbox
+  write_dropin "$group"
+  # 7. runtime socket dir: per-uid 2750 <user>:caddy so the socket inherits
+  #    the proxy's group and server_ws.py's chmod(0o660) lets Caddy connect.
+  #    The parent comes from tmpfiles.d/mrcalld.conf (2751 mrcalld:caddy).
+  printf 'd %s/%s 2750 %s %s -\n' "$RUN_ROOT" "$uid" "$user" "$PROXY_GROUP" > "$fragment"
   systemd-tmpfiles --create "$fragment"
-  # 7. profile tree: subdirs, then ownership — LAST, so any -wal/-shm a
+  # 8. profile tree: subdirs, then ownership — LAST, so any -wal/-shm a
   #    root-run rekey left behind is re-owned (plan M2.7).
   install -d -m 0750 "$profile_dir/downloads" "$profile_dir/scratch"
-  chown -R "$user:$user" "$profile_dir"
+  chown -R --no-dereference "$user:$user" "$profile_dir"
   chmod 0700 "$profile_dir"; chmod 0600 "$profile_dir/.env"
-  # 8. record
-  grep -qP "^$uid\t" "$TABLE" || printf '%s\t%s\t%s\n' "$uid" "$user" "$(date -u +%FT%TZ)" >> "$TABLE"
+  # 9. record
+  table_has "$uid" || printf '%s\t%s\t%s\n' "$uid" "$user" "$(date -u +%FT%TZ)" >> "$TABLE"
   systemctl daemon-reload
   log "ready: $uid -> $user${group:+ (group $group)}"
   ;;
@@ -166,24 +234,34 @@ unjoin)
   id "$user" >/dev/null 2>&1 || die "no user for $uid"
   gpasswd -d "$user" "$g" >/dev/null 2>&1 || true
   log "$user removed from $g"
-  # the drop-in must follow the .env key: regenerate it
+  # the drop-in must follow the .env key: regenerate (idempotent)
   "$0" create "$uid"
   ;;
 
 delete)
-  last=""; [ "${3:-}" = "--last-holder" ] && last="--last-holder"
+  [ "${3:-}" = "" ] || die "delete takes no flag: last-holder is derived from group membership"
   systemctl disable --now "$unit" >/dev/null 2>&1 || true
+  group=$(company_group_for_profile)
+  last=""
+  if [ -n "$group" ] && getent group "$group" >/dev/null; then
+    others=$(getent group "$group" | awk -F: '{print $4}' | tr ',' '\n' | grep -v "^$user$" | grep -c . || true)
+    [ "$others" = 0 ] && last="--last-holder"
+  fi
   if id "$user" >/dev/null 2>&1 && [ -f "$profile_dir/.env" ]; then
     # offboarding runs AS THE TENANT USER, never root, so the company
     # store's -wal/-shm keep the group ownership the other members need
-    sudo -u "$user" env HOME="$profile_dir" ZYLCH_HOME="$ZHOME" MEMORY_DB_DIR="$MEMORY" \
-      "$VENV/bin/zylch" -p "$uid" memory-offboard --yes $last || log "offboard reported a problem (continuing)"
+    # shellcheck disable=SC2086
+    as_tenant "$user" "$profile_dir" -p "$uid" memory-offboard --yes $last || log "offboard reported a problem (continuing)"
   fi
   rm -rf "$profile_dir"
   rm -f "$keyfile" "$fragment"
-  rm -rf "$(dirname "$dropin")" "$RUN_ROOT/$uid"
+  rm -rf "$dropin_d" "$RUN_ROOT/$uid"
   if id "$user" >/dev/null 2>&1; then userdel "$user"; log "removed user $user"; fi
-  ensure_table; grep -vP "^$uid\t" "$TABLE" > "$TABLE.tmp" || true; mv "$TABLE.tmp" "$TABLE"; chmod 600 "$TABLE"
+  if [ -n "$last" ] && [ -n "$group" ]; then
+    rm -rf "$MEMORY/$group"; groupdel "$group" >/dev/null 2>&1 || true
+    log "removed empty company group $group and its store directory"
+  fi
+  ensure_table; table_drop "$uid"
   systemctl daemon-reload
   log "deleted $uid"
   ;;

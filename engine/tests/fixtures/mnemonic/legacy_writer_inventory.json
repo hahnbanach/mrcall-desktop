@@ -41,6 +41,85 @@
   ],
   "call_sites": [
     {
+      "path": "scripts/compact_learned_prefs.py",
+      "symbol": "drop_rules",
+      "call": "delete_blob",
+      "count": 1,
+      "mode": "sync",
+      "exempt": "the owner's rule compaction (scripts/compact_learned_prefs.py --apply), booted on the profile: it drops only the booted profile's own template:/prefs: rows that are an exact duplicate of an older one or strictly contained in a longer one, through the retaining drop, so each dropped text is kept as a maintenance version, in one company transaction that bumps the mutation sequence once"
+    },
+    {
+      "path": "zylch/memory/blob_commits.py",
+      "symbol": "CommittedWrites.semantic_merge",
+      "call": "delete_blob",
+      "count": 1,
+      "mode": "sync",
+      "milestone": 7,
+      "note": "consolidation's donor drop: inside the MERGE commit's one company transaction, under the MERGE permit, retaining the donor's final text first"
+    },
+    {
+      "path": "zylch/memory/mnemonic/writes.py",
+      "symbol": "indexes",
+      "call": "add_identifiers",
+      "count": 1,
+      "mode": "sync",
+      "milestone": 3,
+      "note": "the commit's identity index and source link, inside _commit's one company transaction, after the permit-gated blob write"
+    },
+    {
+      "path": "zylch/memory/mnemonic/writes.py",
+      "symbol": "indexes",
+      "call": "drop_identifiers",
+      "count": 1,
+      "mode": "sync",
+      "milestone": 3,
+      "note": "the commit's identity index and source link, inside _commit's one company transaction, after the permit-gated blob write"
+    },
+    {
+      "path": "zylch/memory/mnemonic/writes.py",
+      "symbol": "indexes",
+      "call": "link_source",
+      "count": 1,
+      "mode": "sync",
+      "milestone": 3,
+      "note": "the commit's identity index and source link, inside _commit's one company transaction, after the permit-gated blob write"
+    },
+    {
+      "path": "zylch/memory/mnemonic/writes.py",
+      "symbol": "merge",
+      "call": "link_source",
+      "count": 1,
+      "mode": "sync",
+      "milestone": 7,
+      "note": "consolidation's MERGE: the donor's source links move to the keeper and its id becomes an alias, inside the MERGE commit's one company transaction"
+    },
+    {
+      "path": "zylch/memory/mnemonic/writes.py",
+      "symbol": "merge",
+      "call": "record_alias",
+      "count": 1,
+      "mode": "sync",
+      "milestone": 7,
+      "note": "consolidation's MERGE: the donor's source links move to the keeper and its id becomes an alias, inside the MERGE commit's one company transaction"
+    },
+    {
+      "path": "zylch/memory/offboard.py",
+      "symbol": "delete_owned_rules",
+      "call": "delete_all_blobs",
+      "count": 1,
+      "mode": "sync",
+      "milestone": 1,
+      "note": "an operator delete verb (tenant offboarding, plan 2026-09-29-toward-sandbox M2.8), run from the host helper as the tenant user; same class as handle_reset._reset_all_data"
+    },
+    {
+      "path": "zylch/memory/rebuilds.py",
+      "symbol": "reindex_identifiers",
+      "call": "add_identifiers",
+      "count": 1,
+      "mode": "sync",
+      "exempt": "the identifier reindex (memory/rebuilds.reindex_identifiers, `zylch memory-reindex-identifiers --apply`): it indexes only the exact #IDENTIFIERS entries of PERSON and COMPANY rows the profile can see, parsed by the parser a commit uses, through add_identifiers, which skips a pair the blob already has, inside a digest guard that rolls back any change to the company's blob rows"
+    },
+    {
       "path": "zylch/services/command_handlers.py",
       "symbol": "handle_memory",
       "call": "delete_all_blobs",
@@ -109,76 +188,6 @@
       "mode": "sync",
       "milestone": 6,
       "note": "adapter door: the helper submits to the harness (milestone 6); the row records the door, not a direct write"
-    },
-    {
-      "path": "zylch/memory/blob_commits.py",
-      "symbol": "CommittedWrites.semantic_merge",
-      "call": "delete_blob",
-      "count": 1,
-      "mode": "sync",
-      "milestone": 7,
-      "note": "consolidation's donor drop: inside the MERGE commit's one company transaction, under the MERGE permit, retaining the donor's final text first"
-    },
-    {
-      "path": "scripts/compact_learned_prefs.py",
-      "symbol": "drop_rules",
-      "call": "delete_blob",
-      "count": 1,
-      "mode": "sync",
-      "exempt": "the owner's rule compaction (scripts/compact_learned_prefs.py --apply), booted on the profile: it drops only the booted profile's own template:/prefs: rows that are an exact duplicate of an older one or strictly contained in a longer one, through the retaining drop, so each dropped text is kept as a maintenance version, in one company transaction that bumps the mutation sequence once"
-    },
-    {
-      "path": "zylch/memory/mnemonic/writes.py",
-      "symbol": "indexes",
-      "call": "add_identifiers",
-      "count": 1,
-      "mode": "sync",
-      "milestone": 3,
-      "note": "the commit's identity index and source link, inside _commit's one company transaction, after the permit-gated blob write"
-    },
-    {
-      "path": "zylch/memory/mnemonic/writes.py",
-      "symbol": "indexes",
-      "call": "drop_identifiers",
-      "count": 1,
-      "mode": "sync",
-      "milestone": 3,
-      "note": "the commit's identity index and source link, inside _commit's one company transaction, after the permit-gated blob write"
-    },
-    {
-      "path": "zylch/memory/mnemonic/writes.py",
-      "symbol": "indexes",
-      "call": "link_source",
-      "count": 1,
-      "mode": "sync",
-      "milestone": 3,
-      "note": "the commit's identity index and source link, inside _commit's one company transaction, after the permit-gated blob write"
-    },
-    {
-      "path": "zylch/memory/mnemonic/writes.py",
-      "symbol": "merge",
-      "call": "link_source",
-      "count": 1,
-      "mode": "sync",
-      "milestone": 7,
-      "note": "consolidation's MERGE: the donor's source links move to the keeper and its id becomes an alias, inside the MERGE commit's one company transaction"
-    },
-    {
-      "path": "zylch/memory/mnemonic/writes.py",
-      "symbol": "merge",
-      "call": "record_alias",
-      "count": 1,
-      "mode": "sync",
-      "milestone": 7,
-      "note": "consolidation's MERGE: the donor's source links move to the keeper and its id becomes an alias, inside the MERGE commit's one company transaction"
-    },
-    {
-      "path": "zylch/memory/rebuilds.py",
-      "symbol": "reindex_identifiers",
-      "call": "add_identifiers",
-      "count": 1,
-      "mode": "sync",
-      "exempt": "the identifier reindex (memory/rebuilds.reindex_identifiers, `zylch memory-reindex-identifiers --apply`): it indexes only the exact #IDENTIFIERS entries of PERSON and COMPANY rows the profile can see, parsed by the parser a commit uses, through add_identifiers, which skips a pair the blob already has, inside a digest guard that rolls back any change to the company's blob rows"
     }
   ],
   "orm_sinks": [

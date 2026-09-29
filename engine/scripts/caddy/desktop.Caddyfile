@@ -28,7 +28,14 @@
 
 desktop.mrcall.ai {
 	@ws path_regexp uid ^/ws/([^/]+)$
-	reverse_proxy @ws unix//run/mrcalld/{re.uid.1}/ws.sock
+	# Migrated daemons (plan M2) bind /run/mrcalld/<uid>/ws.sock; unmigrated
+	# ones still bind the flat /run/mrcalld/<uid>.sock. Try the new path
+	# first, fall back to the old one, so both layouts serve during the
+	# per-profile migration window. Drop the fallback after profile six.
+	reverse_proxy @ws unix//run/mrcalld/{re.uid.1}/ws.sock unix//run/mrcalld/{re.uid.1}.sock {
+		lb_policy first
+		lb_try_duration 1s
+	}
 
 	@provision path /api/provision*
 	reverse_proxy @provision unix//run/mrcalld/provisiond.sock
