@@ -1,5 +1,5 @@
 ---
-status: planned
+status: approved
 ---
 
 # Toward a sandbox: execution plan
@@ -203,7 +203,9 @@ time. Sign-up (own brief) opens only after 2b is deployed on all six.
    `encryption.py:150`) are encrypted with the new key and counted by
    `--verify`. When serving, `decrypt` raises instead of returning
    ciphertext, so a wrong or rotated key file fails loudly rather than
-   yielding garbage refresh tokens. The shared `/etc/mrcalld/env` key stays
+   yielding garbage refresh tokens; because storage callers catch and return
+   `None` (`engine/zylch/storage/storage.py:2424-2427`), the daemon also
+   runs a one-row decrypt self-check at start and fails the unit on a miss. The shared `/etc/mrcalld/env` key stays
    until every profile's rollback window has closed.
 7. **Identity migration (2b), one profile per day.** Stop, `stat -c` record
    of the tree, `rekey --verify` (root), *then* helper `create` — the
@@ -222,7 +224,9 @@ time. Sign-up (own brief) opens only after 2b is deployed on all six.
    `memory-status` cross-check), then remove profile dir, key, drop-in,
    fragment, user, table row.
 9. **Scripts.** `update-daemons.sh` calls the helper for new profiles and no
-   longer `chown -R`s to `mrcalld`; `join-company.sh` as in 5.
+   longer `chown -R`s to `mrcalld`; `join-company.sh` as in 5, passing
+   `ZYLCH_HOME` and `MEMORY_DB_DIR` on its `sudo -u <tenant> env` line, since
+   outside the unit nothing else sets them.
 
 Verification: unit tests for name derivation, dual-name open (legacy present
 → opened, never created), `rekey` round trip on a fixture DB including nested
