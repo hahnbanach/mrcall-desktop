@@ -73,7 +73,10 @@ def test_factory_imports_new_tools():
 
 
 @pytest.mark.asyncio
-async def test_read_document_smoke(tmp_path):
+async def test_read_document_smoke(tmp_path, monkeypatch):
+    # A full path is accepted only inside a document folder (no
+    # absolute-path shortcut any more, see 2026-09-29-toward-sandbox).
+    monkeypatch.setenv("DOCUMENT_PATHS", str(tmp_path))
     f = tmp_path / "phase_a.txt"
     f.write_text("ciao Phase A")
     rd = ReadDocumentTool()

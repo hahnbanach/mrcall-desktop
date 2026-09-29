@@ -266,13 +266,19 @@ def _download_attachment(
 
     try:
         from zylch.email.imap_client import IMAPClient
+        from zylch.tools.paths import resolve_download_target
+        from zylch.utils.safe_paths import PathRefused
 
+        try:
+            save_dir = resolve_download_target(args.get("target_dir"))
+        except PathRefused as e:
+            return f"Download refused: {e}"
         client = IMAPClient(
             email_addr=os.environ.get("EMAIL_ADDRESS", ""),
             password=os.environ.get("EMAIL_PASSWORD", ""),
             imap_host=os.environ.get("IMAP_HOST") or None,
         )
-        attachments = client.fetch_attachments(message_id)
+        attachments = client.fetch_attachments(message_id, save_dir=save_dir)
         if not attachments:
             return "No attachments found in this email"
 
@@ -292,56 +298,10 @@ def _download_attachment(
 
 
 def _run_python(args: Dict) -> str:
-    """Execute Python code in subprocess with timeout."""
-    import os
-    import subprocess
-    import tempfile
+    """Execute Python code — same path as RunPythonTool (refused when hosted)."""
+    from zylch.tools.python_exec import run_python_code
 
-    code = args.get("code", "")
-    if not code.strip():
-        return "No code provided"
-
-    output_dir = "/tmp/zylch"
-    os.makedirs(output_dir, exist_ok=True)
-
-    # Script temp file in /tmp (not /tmp/zylch) to avoid
-    # showing up when user code scans the output directory
-    with tempfile.NamedTemporaryFile(
-        mode="w",
-        suffix=".py",
-        delete=False,
-    ) as f:
-        f.write(code)
-        script_path = f.name
-
-    try:
-        import sys
-
-        python = sys.executable or "python3"
-        result = subprocess.run(
-            [python, script_path],
-            capture_output=True,
-            text=True,
-            timeout=60,
-            cwd=output_dir,
-        )
-        parts = []
-        if result.stdout.strip():
-            parts.append(result.stdout.strip())
-        if result.stderr.strip():
-            parts.append(f"STDERR:\n{result.stderr.strip()}")
-        if result.returncode != 0:
-            parts.append(f"Exit code: {result.returncode}")
-        return "\n".join(parts) if parts else "OK (no output)"
-    except subprocess.TimeoutExpired:
-        return "Timed out (60s limit)"
-    except Exception as e:
-        return f"Execution failed: {e}"
-    finally:
-        try:
-            os.unlink(script_path)
-        except OSError:
-            pass
+    return run_python_code(args.get("code", "")).summary()
 
 
 # ─── Send actions (need approval) ────────────────────
@@ -644,47 +604,30 @@ def _send_sms(
 
 
 def _read_document(args: Dict) -> str:
-    """Read a file from user's document folders."""
-    import glob
+    """Read a file from user's document folders (search set from zylch.tools.paths)."""
     import os
+
+    from zylch.tools.paths import find_document, search_paths
+    from zylch.utils.safe_paths import PathRefused
 
     filename = args.get("filename", "")
     if not filename:
         return "No filename provided"
 
-    home = os.path.expanduser("~")
-    profile_dir = os.environ.get("ZYLCH_PROFILE_DIR", "")
-    defaults = [
-        os.path.join(home, "gdrive-shared"),
-        os.path.join(home, "Documents"),
-        os.path.join(home, "Downloads"),
-    ]
-    if profile_dir:
-        defaults.append(profile_dir)
-    doc_paths = os.environ.get("DOCUMENT_PATHS", "")
-    if doc_paths:
-        configured = [os.path.expanduser(p.strip()) for p in doc_paths.split(",") if p.strip()]
-        paths = [p for p in configured if os.path.isdir(p)]
+    try:
+        path = find_document(filename)
+    except PathRefused as e:
+        return f"Read refused: {e}"
+    if not path:
+        paths = search_paths()
         if not paths:
-            paths = [p for p in defaults if os.path.isdir(p)]
-    else:
-        paths = [p for p in defaults if os.path.isdir(p)]
-    if not paths:
-        return "No document folders found." " Add DOCUMENT_PATHS to your profile .env"
+            return "No document folders found."
+        return f"No file matching '{filename}' in: {', '.join(paths)}"
 
-    found = []
-    for base in paths:
-        pattern = os.path.join(base, "**", f"*{filename}*")
-        found.extend(glob.glob(pattern, recursive=True))
-
-    if not found:
-        return f"No file matching '{filename}' in:" f" {', '.join(paths)}"
-
-    path = found[0]
     ext = os.path.splitext(path)[1].lower()
 
     if ext == ".pdf":
-        return f"Found PDF: {path}\n" f"Use run_python to read it with pypdf."
+        return f"Found PDF: {path}\nUse run_python to read it with pypdf."
     elif ext in (".txt", ".md", ".csv", ".json", ".xml"):
         try:
             with open(path, "r", errors="replace") as f:
@@ -693,7 +636,7 @@ def _read_document(args: Dict) -> str:
         except Exception as e:
             return f"Could not read {path}: {e}"
     else:
-        return f"Found: {path} ({ext})\n" f"Use run_python to process this file."
+        return f"Found: {path} ({ext})\nUse run_python to process this file."
 
 
 # ─── Web search ──────────────────────────────────────

@@ -1962,7 +1962,16 @@ async def settings_get(params: Dict[str, Any], notify: NotifyFn) -> Any:
     logger.debug(
         f"[rpc] settings.get -> {len(out)} keys, {masked} secrets masked",
     )
-    return {"values": out}
+    result: dict[str, Any] = {"values": out}
+    from zylch import runtime
+
+    if runtime.is_serving():
+        # Additive sibling of `values`: keys the hosted engine accepts but
+        # does not honour, with the reason. `values` keeps its shape.
+        from zylch.tools.paths import HOSTED_IGNORED_SETTINGS
+
+        result["ignored"] = dict(HOSTED_IGNORED_SETTINGS)
+    return result
 
 
 async def settings_get_secret(params: Dict[str, Any], notify: NotifyFn) -> Any:

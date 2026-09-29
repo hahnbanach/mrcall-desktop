@@ -61,7 +61,7 @@ request, then get_facts_by_category to load ALL and ONLY that category's \
 facts. Never mix categories (e.g. white-label vs private-label) — using \
 the wrong category's numbers produces a wrong offer.
 - search_emails: Full-text email search across the local archive.
-- download_attachment: Save email attachments to /tmp/zylch/attachments/.
+- download_attachment: Save email attachments to the downloads folder.
 - read_document: Read files from the user's document folders.
 - web_search: Look up public info (PEC addresses, regulations, vendor \
 contact details).
@@ -69,8 +69,8 @@ contact details).
 the payload via an inline approval card.
 - update_memory: Correct or update a contact memory entry. User \
 approves.
-- run_python: Execute Python in a sandbox (PDF parsing, calculations). \
-User approves the code.
+- run_python: Execute Python in a subprocess (PDF parsing, calculations). \
+User approves the code; not available on a hosted engine.
 """
 
 
@@ -141,7 +141,7 @@ SOLVE_TOOLS = [
             " Use for: PDF processing, file manipulation,"
             " data transformation, calculations."
             " The user will review the code before execution."
-            " Output files go to /tmp/zylch/."
+            " Output files go to the scratch folder."
         ),
         "input_schema": {
             "type": "object",
@@ -203,7 +203,7 @@ SOLVE_TOOLS = [
         "description": (
             "Download attachments from an email."
             " Use the email ID from search_emails results."
-            " Saves to /tmp/zylch/attachments/."
+            " Saves to the downloads folder."
         ),
         "input_schema": {
             "type": "object",

@@ -13,6 +13,7 @@ import socket
 from typing import List, Optional
 
 from ..services.approval_gate import draft_approval_card, draft_updates_from_card
+from ..utils.safe_paths import PathRefused
 from .base import Tool, ToolResult, ToolStatus
 
 logger = logging.getLogger(__name__)
@@ -100,7 +101,13 @@ def delivery_is_uncertain(error: BaseException) -> bool:
 
 
 def _normalize_attachment_paths(paths: Optional[List[str]]) -> List[str]:
-    """Expand ~ and resolve to absolute paths. Does NOT verify existence."""
+    """Expand ~ and resolve to absolute paths. Does NOT verify existence.
+
+    On a hosted engine each path must lie inside the document search set
+    (raises PathRefused otherwise); see zylch.tools.paths.
+    """
+    from .paths import confine_attachment_paths
+
     if not paths:
         return []
     out: List[str] = []
@@ -108,7 +115,7 @@ def _normalize_attachment_paths(paths: Optional[List[str]]) -> List[str]:
         if not isinstance(p, str) or not p.strip():
             continue
         out.append(os.path.abspath(os.path.expanduser(p)))
-    return out
+    return confine_attachment_paths(out)
 
 
 class GmailSearchTool(Tool):
@@ -397,7 +404,10 @@ class CreateDraftTool(Tool):
                 )
 
             # Normalize + verify attachments BEFORE persisting so we fail fast.
-            norm_paths = _normalize_attachment_paths(attachment_paths)
+            try:
+                norm_paths = _normalize_attachment_paths(attachment_paths)
+            except PathRefused as e:
+                return ToolResult(status=ToolStatus.ERROR, data=None, error=f"Attachment refused: {e}")
             for p in norm_paths:
                 if not os.path.isfile(p):
                     return ToolResult(
@@ -658,7 +668,12 @@ class UpdateDraftTool(Tool):
             if body is not None:
                 update_data["body"] = body
             if attachment_paths is not None:
-                norm_paths = _normalize_attachment_paths(attachment_paths)
+                try:
+                    norm_paths = _normalize_attachment_paths(attachment_paths)
+                except PathRefused as e:
+                    return ToolResult(
+                        status=ToolStatus.ERROR, data=None, error=f"Attachment refused: {e}"
+                    )
                 for p in norm_paths:
                     if not os.path.isfile(p):
                         return ToolResult(

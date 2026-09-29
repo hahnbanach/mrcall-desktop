@@ -9,48 +9,14 @@ import logging
 import os
 from typing import Any, Dict, Optional
 
+from zylch.utils.safe_paths import PathRefused
+
 from .base import Tool, ToolResult, ToolStatus
+from .paths import resolve_download_target
 from .session_state import SessionState
 from ..assistant.turn_context import get_turn_id
 
 logger = logging.getLogger(__name__)
-
-
-DEFAULT_FALLBACK_DIR = "/tmp/zylch/attachments"
-
-
-def _resolve_target_dir(target_dir: Optional[str]) -> str:
-    """Resolve the directory where attachments should be written.
-
-    Rules:
-      1. If `target_dir` is provided (explicit param from the LLM), expand ``~`` and return it.
-      2. Else if DOWNLOADS_DIR env var is set (user preference from Settings), use it.
-      3. Otherwise default to ``~/Downloads``.
-      4. If the home directory does not exist, fall back to ``/tmp/zylch/attachments``.
-
-    The directory is created if missing.
-    """
-    if target_dir:
-        resolved = os.path.expanduser(target_dir)
-    else:
-        configured = os.environ.get("DOWNLOADS_DIR", "").strip()
-        if configured:
-            resolved = os.path.expanduser(configured)
-        else:
-            home = os.path.expanduser("~")
-            if not os.path.isdir(home):
-                resolved = DEFAULT_FALLBACK_DIR
-            else:
-                resolved = os.path.join(home, "Downloads")
-
-    try:
-        os.makedirs(resolved, exist_ok=True)
-    except OSError:
-        # Last-ditch fallback if we can't create the requested dir.
-        resolved = DEFAULT_FALLBACK_DIR
-        os.makedirs(resolved, exist_ok=True)
-
-    return resolved
 
 
 class DownloadAttachmentTool(Tool):
@@ -68,8 +34,8 @@ class DownloadAttachmentTool(Tool):
                 "Download attachments from an email. Resolves the email by ID from"
                 " the local SQLite store, fetches the attachments over IMAP, and saves"
                 " them to disk. Works for any email provider (Gmail, Outlook, Exchange,"
-                " generic IMAP). Files are saved to `target_dir` (default: the user's"
-                " ~/Downloads folder)."
+                " generic IMAP). Files are saved to the downloads folder, or to"
+                " `target_dir` inside it."
             ),
         )
         self.storage = storage
@@ -146,7 +112,12 @@ class DownloadAttachmentTool(Tool):
 
         message_id = email.get("message_id") or email.get("message_id_header") or email_id
 
-        save_dir = _resolve_target_dir(target_dir)
+        try:
+            save_dir = resolve_download_target(target_dir)
+        except PathRefused as e:
+            result = ToolResult(status=ToolStatus.ERROR, data=None, error=str(e))
+            logger.debug(f"[download_attachment turn={turn_id}] -> status={result.status} refused")
+            return result
         logger.debug(
             f"[download_attachment turn={turn_id}] resolved save_dir={save_dir}"
             f" message_id={message_id!r}"
@@ -236,9 +207,8 @@ class DownloadAttachmentTool(Tool):
                     "target_dir": {
                         "type": "string",
                         "description": (
-                            "Optional directory to save the attachments in. Accepts"
-                            " ~-expanded paths. Defaults to the user's ~/Downloads"
-                            " folder."
+                            "Optional subfolder of the downloads folder to save"
+                            " into. Defaults to the downloads folder itself."
                         ),
                     },
                 },

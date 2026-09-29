@@ -571,6 +571,13 @@ def serve(ctx, ws_addr, unix_path):
     )
     from zylch.cli.utils import load_env
 
+    from zylch import runtime
+
+    # Hosted-engine policy (path confinement, no run_python) keys on this
+    # flag; set before the profile .env is loaded so nothing in it can
+    # influence it. See docs/briefs/2026-09-29-toward-sandbox.md.
+    runtime.mark_serving()
+
     profile_name = ctx.obj.get("profile") if ctx.obj else None
     migrate_legacy_profile()
     profile = select_profile(profile_name)
