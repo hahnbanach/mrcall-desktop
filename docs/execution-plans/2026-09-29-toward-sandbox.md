@@ -168,15 +168,21 @@ time. Sign-up (own brief) opens only after 2b is deployed on all six.
    the profile user. The shared `/etc/mrcalld/env` key stays until every
    profile's rollback window has closed.
 7. **Identity migration (2b), one profile per day.** Stop, `stat -c` record
-   of the tree, helper `create`, `rekey --verify`, start, criterion 1 clause
-   three and criterion 5 checked, then the next. Rollback: stop, `rekey` back,
-   remove drop-in and fragment, restore ownership from the record, start
-   under the old template.
+   of the tree, `rekey --verify` (root), *then* helper `create` — the
+   `chown` comes last so the `-wal`/`-shm` files root's open left behind are
+   re-owned, otherwise the daemon hits the `readonly database` trap
+   `docs/remote-backend.md` records — start, then check: criterion 1 clause
+   three, criterion 5, and `-wal`/`-shm` owner equals the unit user for
+   `zylch.db` and the company store. Rollback: stop, `rekey` back, remove
+   drop-in and fragment, restore ownership from the record including
+   `-wal`/`-shm`, start under the old template.
 8. **Offboarding.** `tenant-helper.sh delete <uid>`: stop, `zylch -p <uid>
-   memory-offboard` (deletes the profile's `blob_owned_rules` rows; deletes
-   the store only when the profile's group has no other member, after the
-   `memory-status` cross-check), remove profile dir, key, drop-in, fragment,
-   user, table row.
+   memory-offboard` run as the profile user (`sudo -u`), never as root, so
+   the company store's `-wal`/`-shm` keep the group ownership the other
+   members need (deletes the profile's `blob_owned_rules` rows; deletes the
+   store only when the profile's group has no other member, after the
+   `memory-status` cross-check), then remove profile dir, key, drop-in,
+   fragment, user, table row.
 9. **Scripts.** `update-daemons.sh` calls the helper for new profiles and no
    longer `chown -R`s to `mrcalld`; `join-company.sh` as in 5.
 
