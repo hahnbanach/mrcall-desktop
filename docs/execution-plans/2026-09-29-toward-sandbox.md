@@ -136,7 +136,23 @@ not add. Left for later:
 `settings_schema` help text for `DOWNLOADS_DIR` still says `~/Downloads`
 (app-side display change, parked with the `ignored` flag);
 `fetch_attachments`' default `save_dir` string is unused by both callers.
-Live probes on a scratch profile and the deploy are still to do.
+Live probe on a scratch host (2026-09-29, this session's Linux container,
+root, no systemd): the real `zylch -p scratchA serve --unix` daemon with a
+sibling `scratchB` holding secrets; only Firebase token verification was
+replaced (no real token available). Over the WebSocket as A's client:
+`settings.get` carries `ignored` for `DOCUMENT_PATHS`/`DOWNLOADS_DIR`;
+`settings.update DOCUMENT_PATHS=<profiles root>` is accepted and stored,
+the second `settings.get` still marks it ignored; `ZYLCH_SERVE` refused as
+unknown; B's token on A's socket gets 403. Inside the daemon process,
+through `ZylchAIAgent._execute_tools` with an approving callback (the
+model's exact path): `read_document` on B's `.env` and `secrets.txt` by
+absolute path refused ("outside the allowed folders"), by name and by
+`sub/../../../scratchB/...` not found, A's own download read;
+`run_python` refused after approval; `resolve_download_target` refuses
+B, A's root, `~`, `/tmp` and accepts `downloads/sub`. B's files unchanged
+after the run. Not probed live: `download_attachment` end to end (needs an
+IMAP mailbox; covered by `save_attachments` tests on a local message).
+Deploy to the VPS is still to do.
 
 ## M2 — Per-profile OS identity and read-only code
 
