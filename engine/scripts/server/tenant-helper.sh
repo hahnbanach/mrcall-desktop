@@ -258,6 +258,9 @@ unmigrate)
   systemctl stop "$unit" >/dev/null 2>&1 || true
   rm -rf "$dropin_d" "$RUN_ROOT/$uid"; rm -f "$fragment"
   [ -d "$profile_dir" ] && chown -R --no-dereference "$SVC_USER:$SVC_USER" "$profile_dir"
+  # a -wal/-shm the tenant left on the relocated store is 0660 <tenant>:<group>;
+  # give the returning mrcalld daemon the group so it can write it
+  g=$(company_group_for_profile); [ -n "$g" ] && getent group "$g" >/dev/null && usermod -a -G "$g" "$SVC_USER"
   ensure_table; table_drop "$uid"
   systemctl daemon-reload
   log "unmigrated $uid (user and key file kept)"

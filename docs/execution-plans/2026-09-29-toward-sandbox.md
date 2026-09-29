@@ -358,7 +358,8 @@ checks, `chmod -R go=rX` on the cache + warm-up step, continue on failure,
 `sole_holder` selector on `delete_all_blobs`, reconcile lock held by
 `join-company.sh` and the runbook, `MRCALL_JOIN_KEY` 2a guard on join,
 symlink guard on subdirs, provisiond 409 on a drop-in, `mrcall-tenant
-unmigrate`).
+unmigrate`). B: APPROVED at `54c503f` for the artifacts as code; the
+scratch-unit probe stays the gate before any customer.
 Verification here: 24 new tests (`tests/memory/test_tenant_store_names.py`,
 `tests/storage/test_rekey_and_encryption.py`, `tests/memory/test_offboard.py`),
 the writer-inventory and retention guards updated for the offboard call
