@@ -32,6 +32,9 @@ def host(tmp_path, monkeypatch):
     for prof in (a, b):
         prof.mkdir(parents=True)
         (prof / ".env").write_text(f"EMAIL_PASSWORD=secret-of-{prof.name}\n")
+        # A non-dotfile too: glob's `*` never matches a leading dot, so a
+        # test on `.env` alone would pass with confinement removed.
+        (prof / "secrets.txt").write_text(f"plain-secret-of-{prof.name}")
         (prof / "zylch.db").write_bytes(b"db")
     (a / "downloads").mkdir()
     (a / "downloads" / "invoice.txt").write_text("invoice A")
@@ -116,9 +119,18 @@ def test_hosted_document_paths_setting_is_ignored(host, serving, monkeypatch):
     a, b = host
     monkeypatch.setenv("DOCUMENT_PATHS", str(b.parent))
     assert paths.search_paths() == [str(a / "downloads"), str(a / "scratch")]
-    result = _read("*.env")
-    assert result.status.value == "error"
-    assert "secret-of" not in (result.error or "")
+    for name in ("secrets", "secrets.txt", "*.env", ".env"):
+        result = _read(name)
+        assert result.status.value == "error", name
+        assert "secret-of" not in (result.error or "") + (result.message or "")
+    assert "plain-secret-of-uidB" not in solve_tools._read_document({"filename": "secrets"})
+
+
+def test_local_document_paths_at_profiles_root_does_find_the_file(host, monkeypatch):
+    """Control for the test above: the same setting is honoured locally."""
+    _a, b = host
+    monkeypatch.setenv("DOCUMENT_PATHS", str(b.parent))
+    assert "plain-secret-of-uidB" in _read("secrets").data["text"]
 
 
 def test_hosted_reads_its_own_download(host, serving):
