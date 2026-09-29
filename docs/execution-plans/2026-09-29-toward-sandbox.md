@@ -290,6 +290,88 @@ reaching the new socket path. Then 2a for Café124, then 2b one per day.
 
 Integration review before M3.
 
+### M2 record — host-independent part (2026-09-29)
+
+Implemented on `claude/muse-architecture-comparison-i8x8g1` (`ecde110`,
+`3ce1928`, `d15137d`) from a container without systemd, so everything that
+needs a real host is listed at the end. Engine: `zylch.home.zylch_home()`
+(`ZYLCH_HOME`) behind every former `~/.zylch` resolution;
+`zylch.memory.tenant_names` (user `mc-<sha256(uid)[:12]>`, group
+`mc-c-<sha256(key)[:12]>`, store `<sha256(key)[:32]>.db`); `store.py`
+dual-name rule (derived if present, else legacy if present; a new store is
+derived only when serving — local engines keep the legacy name by design),
+`relocate_store` moving `.db`, sidecars and the three lock files, refusing
+when both exist; `memory.join` RPC returns `operator_action` when serving;
+hosted encryption refuses the `.env` and passthrough fallbacks, `decrypt`
+raises for a value that looks encrypted, `serve` pins the unit's
+`ENCRYPTION_KEY` over any `.env` one and runs a start-time self-check over
+every `oauth_tokens` row (a deliberate tightening: `Storage.get_instance()`
+is now fatal before `serve_ws`, where warm-up was best-effort);
+`zylch rekey --from-key-file --to-key-file [--verify|--verify-only]`
+(two `Fernet` instances, idempotent, nested `encrypted:` fields, plaintext
+rows encrypted, bare-string outer preserved, swap the files to roll back);
+`zylch memory-offboard` delegating to the owner's reset (owned rule rows
+only on a shared store) with `--last-holder` deleting the file;
+`zylch memory-names` (derived names; the legacy path is never printed
+because it is the key) and `zylch memory-relocate-store` (2a). Deviations
+from the plan text: names come from `memory-names`, not `memory-status`;
+the group/`.env` cross-check is host-side work.
+
+Host artifacts (not yet executed anywhere): `tenant-helper.sh`, installed
+by `update-daemons.sh` to `/usr/local/sbin/mrcall-tenant`, verbs
+`create|join|unjoin|delete|names|list`; the unit template is
+**transitional** (unchanged behaviour for an unmigrated instance) and the
+helper's per-instance drop-in carries the whole per-tenant set: identity,
+data-root environment, key file (`EnvironmentFile=` reset, no `-`),
+`ProtectSystem=strict`, `ProtectHome=tmpfs` with `BindReadOnlyPaths` for
+the checkout and the pre-warmed embedding cache, `BindPaths`/`ReadWritePaths`
+for the profile, the company store dir and `/run/mrcalld/<uid>`, the
+socket at `/run/mrcalld/<uid>/ws.sock`. `update-daemons.sh` re-applies
+`create` only for uids in the root-only tenants table, so a pull never
+migrates a running customer; migration is the operator's explicit `create`.
+Caddy tries the new socket path then the flat one during the window.
+`/run/mrcalld` is `2751` (setgid kept for provisiond's flat socket). Every
+tenant run outside the unit goes through `umask 007`. `create` refuses
+while the company's legacy store exists (2a first). `delete` derives
+last-holder from group membership and removes the empty group and dir.
+logrotate no longer uses `su`; provisiond's status treats the drop-in as
+proof a migrated profile exists.
+
+Reviews: A (plan conformance + Python) REVISE → APPROVED at `3ce1928`
+(legacy path echoed; `.env` key beating the unit's; bare-string rekey;
+lock files; leftovers — all repaired). B (host scripts, adversarial)
+REVISE at `ecde110` with a CRITICAL — the first version ran `create` for
+every profile on every reconcile under a template that dropped `User=`,
+which would have migrated and broken all six customers on the first
+automatic pull — plus setgid loss on `/run/mrcalld`, `sudo` umask making
+stores read-only for the other group members, 2b-before-2a forking the
+store, the embedding cache unwritable in the sandbox, tenants table
+truncation, operator-asserted last-holder, provisiond/logrotate blind to
+tenant-owned dirs; all repaired at `d15137d`, re-review pending.
+Verification here: 24 new tests (`tests/memory/test_tenant_store_names.py`,
+`tests/storage/test_rekey_and_encryption.py`, `tests/memory/test_offboard.py`),
+the writer-inventory and retention guards updated for the offboard call
+site, full regression 1391 passed (the two known pre-existing failures
+only), `systemd-analyze verify` on the rendered drop-in (only the absent
+binary reported) and `security` exposure 4.4.
+
+**Left for the host session (VM scratch first):** unit start under the
+drop-in (`systemd-run` proof), Caddy reaching the new socket, the two-user
+WAL test on one store, criteria 1 (all clauses), 2, 4, 5, 7; then 2a for
+Café124 in one all-stopped window, then 2b one profile per day. Runbook
+M2.7 as the scripts now are: stop; `stat` record + backup;
+`mrcall-tenant create U` (mints the key file, writes drop-in, first
+chown); as root `env HOME=<profile> ZYLCH_HOME=/home/mrcalld/.zylch
+MEMORY_DB_DIR=/home/mrcalld/.zylch/memory $VENV/bin/zylch -p U rekey
+--from-key-file /etc/mrcalld/env --to-key-file /etc/mrcalld/keys/U
+--verify`; `mrcall-tenant create U` again (re-owns the sidecars root
+left); `stat` shows the tenant user on `zylch.db*` and the store; start;
+`memory-status`; criteria 1/5; WS check. Rollback: stop; `rekey` with the
+files swapped; remove the drop-in dir, fragment and `/run/mrcalld/U`;
+`daemon-reload`; `chown -R mrcalld:mrcalld` from the record (sidecars
+included); start. Keep the key file and the user so the forward path is
+repeatable.
+
 ## M3 — Egress bound per daemon
 
 Owner: release-engineer. After M2 is stable on all six; own rollback.
