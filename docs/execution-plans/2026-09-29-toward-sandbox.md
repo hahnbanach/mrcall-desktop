@@ -27,9 +27,12 @@ findings are folded in below.
   executor; `run_python` twice likewise. `fetch_attachments`
   (`engine/zylch/email/imap_client.py:1424-1434`) writes the sender's
   filename. `read_document` also has a relative-path fallback
-  (`read_document_tool.py:181`, cwd `/home/mrcalld`). WhatsApp media is
-  returned as bytes; Google tools take no path; no model-supplied URL is
-  fetched engine-side.
+  (`read_document_tool.py:181`, cwd `/home/mrcalld`). `send_email` takes
+  `attachment_paths` normalised to any absolute path
+  (`engine/zylch/tools/gmail_tools.py:102-110`, opened at
+  `imap_client.py:1612`): a model-supplied read path that is approval-gated,
+  which the brief does not count. WhatsApp media is returned as bytes;
+  Google tools take no path; no model-supplied URL is fetched engine-side.
 - `decrypt` fails open (`engine/zylch/utils/encryption.py:129-135`);
   provider credentials are an outer Fernet blob whose JSON carries inner
   `encrypted:` fields; nothing in the company store is encrypted.
@@ -58,8 +61,9 @@ Owner: python-engine-specialist. Ships alone. Done only when brief criteria 1
    `DOCUMENT_PATHS` ignored; else today's defaults), `confine(path, root)`
    (`realpath` of the final *file*, must be inside `root`, else a named
    error). The tool classes and the solve copies of `read_document` and
-   `download_attachment` all call it; the two `run_python` copies become one
-   function. The absolute-path shortcut and the relative-path fallback are
+   `download_attachment` all call it, and `send_email` confines every
+   `attachment_paths` entry into the search set; the two `run_python` copies
+   become one function. The absolute-path shortcut and the relative-path fallback are
    replaced by "accepted only if inside the search set", in both modes.
 3. **Attachment basename** in `fetch_attachments`, after header decoding
    (`sub/dir.pdf` becomes `dir.pdf`; non-ASCII is preserved), empty or
@@ -83,7 +87,9 @@ Owner: python-engine-specialist. Ships alone. Done only when brief criteria 1
 Verification (offline, `engine/`): tests under `tests/tools/` and
 `tests/email/` — sibling-profile `.env` by absolute path refused through
 both the tool class and the solve copy; `DOCUMENT_PATHS` at the profiles root
-yields nothing outside the profile; a locally built message with attachments
+yields nothing outside the profile; `send_email` with a sibling-profile
+`.env` in `attachment_paths` refused before any SMTP call; a locally built
+message with attachments
 named `/etc/passwd`, `../../x`, `.env`, `sub/dir.pdf` lands as `passwd`, `x`,
 `attachment_<n>`, `dir.pdf` under `downloads/`; `target_dir=<profile root>`
 refused; `run_python` refused with the flag and working without; `ZYLCH_SERVE`
@@ -125,36 +131,62 @@ time. Sign-up (own brief) opens only after 2b is deployed on all six.
    `PYTHONDONTWRITEBYTECODE=1`, `EnvironmentFile=/etc/mrcalld/keys/%i`
    (root-only 0400, read by systemd before dropping privileges; no `-`, so a
    missing key fails the unit), `ExecStart` with socket
-   `/run/mrcalld/%i/ws.sock`. Per-instance values a template cannot derive
-   go in a helper-written drop-in
+   `/run/mrcalld/%i/ws.sock` and `ReadWritePaths=/run/mrcalld/%i` — under
+   `ProtectSystem=strict` `/run` is read-only and the bind would fail with
+   EROFS; `ExecStopPost` removes the new path. Per-instance values a
+   template cannot derive go in a helper-written drop-in
    `zylch-server@<uid>.service.d/tenant.conf`: `User=`, `Group=`,
-   `SupplementaryGroups=<company group>`, `BindPaths=` the profile dir and
-   the company store dir. A tmpfiles fragment per uid,
-   `d /run/mrcalld/<uid> 2750 <user> caddy`, keeps the socket reachable;
+   `SupplementaryGroups=<company group>`, and the profile dir and the
+   company store dir under both `BindPaths=` and `ReadWritePaths=`, so
+   writability does not rest on mount ordering. A tmpfiles fragment per uid,
+   `d /run/mrcalld/<uid> 2750 <user> caddy`, keeps the socket reachable, and
+   the parent `/run/mrcalld` becomes `0751 mrcalld caddy` so a tenant user
+   can traverse it (today's `2750` would refuse);
    Caddy's `path_regexp` maps `/ws/<uid>` to `/run/mrcalld/<uid>/ws.sock`.
    `systemctl --version` is recorded in the runbook (nested
    `RuntimeDirectory` not used; `RestrictSUIDSGID` needs v242+).
-4. **Root helper** `engine/scripts/server/tenant-helper.sh` (root, 750),
-   verbs `create <uid>`, `join <uid> <company-group>`, `delete <uid>`,
+4. **Root helper** `engine/scripts/server/tenant-helper.sh`, installed by
+   `update-daemons.sh` to `/usr/local/sbin/mrcall-tenant` with
+   `install -m 750` (as it installs units today); the checkout copy is never
+   executed and the sudoers rule names the installed path only — the checkout
+   is `mrcalld`-writable and a rule on it would be a root escalation from the
+   network-facing provisiond. Verbs `create <uid>`, `join <uid>
+   <company-group>`, `unjoin <uid> <company-group>`, `delete <uid>`,
    validating `<uid>` with the same regex as `provisiond/handler.py:105`
    and rejecting `.`/`..`; idempotent, so a reconcile trigger on a
    half-written profile converges. `create` makes the user, key file
    (`Fernet.generate_key()`), drop-in, tmpfiles fragment, downloads/scratch
-   subdirs, `chown` of the profile tree, and records uid→user in a root-only
-   table used by `delete`. Invoked by `update-daemons.sh` (root) for
+   subdirs, `chown` of the profile tree, and — from the profile's
+   `MEMORY_KEY` — the company group and its store directory
+   (`2770 mrcalld:<group>`) when absent, because a sandboxed daemon cannot
+   create them (`store.py:123` makes `0700` under a read-only parent) and a
+   new customer would otherwise start with memory unavailable; it records
+   uid→user in a root-only table used by `delete`. Invoked by `update-daemons.sh` (root) for
    discovered profiles without a user; later by provisiond through a sudoers
    rule limited to this script. provisiond stays `mrcalld`, which becomes the
    deploy identity only.
 5. **Dual-name store, then rename (2a).** `store.py` opens the legacy
    `<key>.db` when the derived name is absent and never creates while the
-   legacy exists; this ships before any rename. Then, per company, all its
+   legacy exists; this ships before any rename. Local engines keep the
+   legacy name indefinitely, by design; inside the sandbox `profiles/` holds
+   only the bound uid, so `select_profile` always receives `-p` (the unit
+   does). Then, per company, all its
    daemons stopped in one window: rename the store into its subdirectory,
    set the directory `2770 mrcalld:<group>`, start all. Rollback is the
    reverse rename in the same all-stopped window. Café124's four units go
    together, a few minutes. Runtime `memory.join` returns "operator action"
-   when serving; `join-company.sh` (stop, helper `join`, join, start) is the
-   only hosted join path, so group membership and `.env` key have one writer;
-   `memory-status` cross-checks them and the runbook runs it after every join.
+   when serving; `join-company.sh` is the only hosted join path: stop,
+   helper `join` adds the *new* company group while keeping the old (the join
+   reads the source store and `join_recover` reopens it afterwards,
+   `engine/zylch/memory/join_recover.py:262-268`), run the join as the tenant
+   user (`sudo -u <user>`, never `mrcalld` or root, so the store's
+   `-wal`/`-shm` keep tenant ownership), start, and only after `finish` does
+   helper `unjoin` remove the old group. Group membership and `.env` key
+   therefore have one writer; `memory-status` cross-checks them, tolerating
+   the interim two-group state, and the runbook runs it after every join.
+   For the tenant user to reach the store outside the unit sandbox,
+   `/home/mrcalld`, `.zylch`, `.zylch/memory` and `.zylch/profiles` are
+   `0711` (traverse, no list).
 6. **Encryption (2b).** `_get_fernet` refuses the `.env` and passthrough
    fallbacks when serving: no `ENCRYPTION_KEY` in the environment exits at
    start with a named error. `zylch -p <uid> rekey --from <oldkey-file> --to
@@ -164,9 +196,15 @@ time. Sign-up (own brief) opens only after 2b is deployed on all six.
    so it is idempotent), else decrypts outer and inner `encrypted:` fields
    with the old key and re-encrypts with the new; `--verify` decrypts every
    row under the new key and fails loudly on any miss; `--from`/`--to`
-   swapped is the rollback. Run as root while the unit is stopped, never by
-   the profile user. The shared `/etc/mrcalld/env` key stays until every
-   profile's rollback window has closed.
+   swapped is the rollback. Run while the unit is stopped and before the
+   helper's `chown` (M2.7), and the runbook `stat`s `zylch.db-wal`/`-shm`
+   afterwards: the sidecars must end up owned by the unit user. Plaintext
+   rows from hosts that ran without a key (`is_encrypted()` false,
+   `encryption.py:150`) are encrypted with the new key and counted by
+   `--verify`. When serving, `decrypt` raises instead of returning
+   ciphertext, so a wrong or rotated key file fails loudly rather than
+   yielding garbage refresh tokens. The shared `/etc/mrcalld/env` key stays
+   until every profile's rollback window has closed.
 7. **Identity migration (2b), one profile per day.** Stop, `stat -c` record
    of the tree, `rekey --verify` (root), *then* helper `create` — the
    `chown` comes last so the `-wal`/`-shm` files root's open left behind are
@@ -214,7 +252,10 @@ Owner: release-engineer. After M2 is stable on all six; own rollback.
    no proxy variable, so a proxy alone cannot cover them. The per-tenant set
    is the observable allow list (`nft list set`). httpx clients keep
    `trust_env` where it is set; `openai_voice.py:250` and
-   `smoke_transport.py:83` are audited for the same behaviour.
+   `smoke_transport.py:83` are audited for the same behaviour. Daemons
+   resolve through the local dnsmasq (host `/etc/resolv.conf` at
+   `127.0.0.1`, `skuid → 127.0.0.1:53` allowed); dnsmasq 2.87+ built with
+   nftset is recorded in the runbook.
 3. Rollout one profile at a time, mail sync watched for one full cycle
    before the next; rollback deletes that tenant's rules only.
 
