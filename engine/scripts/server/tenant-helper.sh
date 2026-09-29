@@ -14,6 +14,7 @@
 #   mrcall-tenant join   <uid> <company-group> # add the user to a second company group (during a join)
 #   mrcall-tenant unjoin <uid> <company-group> # remove it (after the join finished)
 #   mrcall-tenant delete <uid>                 # stop, offboard (as the tenant user; last-holder derived), remove everything
+#   mrcall-tenant unmigrate <uid>              # rollback of create: drop-in, fragment, run dir, ownership back to mrcalld, table row (keeps user + key file)
 #   mrcall-tenant names  <uid>                 # print the derived names, change nothing
 #   mrcall-tenant list                         # the migrated uids (tenants table)
 #
@@ -86,7 +87,7 @@ as_tenant() { # as_tenant <user> <profile_dir> <zylch args...>
 verb="${1:-}"
 case "$verb" in
   list) ensure_table; cut -f1 "$TABLE"; exit 0 ;;
-  create|join|unjoin|delete|names) ;;
+  create|join|unjoin|delete|names|unmigrate) ;;
   *) sed -n '2,25p' "$0"; exit 2 ;;
 esac
 uid="${2:-}"; [ -n "$uid" ] || die "missing <uid>"
@@ -178,9 +179,11 @@ create)
   #    The profiles dir stays writable by mrcalld (provisiond writes there).
   chmod 0711 "$ROOT" "$ZHOME" "$PROFILES"
   install -d -m 0711 -o "$SVC_USER" -g "$SVC_USER" "$MEMORY"
-  # 2. the embedding cache, pre-warmed as mrcalld and bound read-only
-  #    (a per-start download into a tmpfs would fail and cost RAM)
+  # 2. the embedding cache, pre-warmed as mrcalld (runbook step 0) and
+  #    bound read-only. mrcalld's daemons wrote it under UMask=0007, so
+  #    make it world-readable or the tenant gets EACCES on the bind.
   install -d -m 0755 -o "$SVC_USER" -g "$SVC_USER" "$EMB_CACHE"
+  chmod -R u=rwX,go=rX "$EMB_CACHE"
   # 3. the user (no login, no home creation: HOME is the profile dir)
   if ! id "$user" >/dev/null 2>&1; then
     useradd --system --no-create-home --home-dir "$profile_dir" --shell /usr/sbin/nologin "$user"
@@ -211,7 +214,10 @@ create)
   systemd-tmpfiles --create "$fragment"
   # 8. profile tree: subdirs, then ownership — LAST, so any -wal/-shm a
   #    root-run rekey left behind is re-owned (plan M2.7).
-  install -d -m 0750 "$profile_dir/downloads" "$profile_dir/scratch"
+  for d in downloads scratch; do
+    [ -L "$profile_dir/$d" ] && die "$profile_dir/$d is a symlink; refusing"
+    [ -d "$profile_dir/$d" ] || mkdir -m 0750 "$profile_dir/$d"
+  done
   chown -R --no-dereference "$user:$user" "$profile_dir"
   chmod 0700 "$profile_dir"; chmod 0600 "$profile_dir/.env"
   # 9. record
@@ -223,6 +229,12 @@ create)
 join)
   g="${3:-}"; [ -n "$g" ] || die "missing <company-group>"; check_group "$g"
   id "$user" >/dev/null 2>&1 || die "no user for $uid (run create first)"
+  # 2a first for the DESTINATION too: the key arrives in the environment
+  # (MRCALL_JOIN_KEY, set by join-company.sh), never on argv
+  if [ -n "${MRCALL_JOIN_KEY:-}" ]; then
+    [ "$(group_of_key "$MRCALL_JOIN_KEY")" = "$g" ] || die "MRCALL_JOIN_KEY does not derive to $g"
+    require_relocated "$MRCALL_JOIN_KEY"
+  fi
   getent group "$g" >/dev/null || { groupadd --system "$g"; log "created group $g"; }
   install -d -m 2770 -o "$SVC_USER" -g "$g" "$MEMORY/$g"
   usermod -a -G "$g" "$user"
@@ -236,6 +248,19 @@ unjoin)
   log "$user removed from $g"
   # the drop-in must follow the .env key: regenerate (idempotent)
   "$0" create "$uid"
+  ;;
+
+unmigrate)
+  # Rollback of `create` (runbook M2.7): the unit returns to the
+  # transitional template. Keeps the user and the key file so the forward
+  # path is repeatable; the caller has already run `rekey` back to the
+  # shared key while the unit was stopped.
+  systemctl stop "$unit" >/dev/null 2>&1 || true
+  rm -rf "$dropin_d" "$RUN_ROOT/$uid"; rm -f "$fragment"
+  [ -d "$profile_dir" ] && chown -R --no-dereference "$SVC_USER:$SVC_USER" "$profile_dir"
+  ensure_table; table_drop "$uid"
+  systemctl daemon-reload
+  log "unmigrated $uid (user and key file kept)"
   ;;
 
 delete)

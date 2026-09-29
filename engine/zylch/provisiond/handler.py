@@ -261,7 +261,9 @@ def handle_provision(claims: dict[str, Any], body: Any) -> tuple[int, dict[str, 
     # its `.env` overwritten — but the race is only reachable by the
     # profile's own owner (the uid comes from their verified token), and
     # closing it would need a lock the profile tree does not have.
-    if _systemctl_is_active(uid):
+    if _systemctl_is_active(uid) or os.path.exists(_tenant_dropin_path(uid)):
+        # a migrated profile (plan M2) is tenant-owned: provisiond could not
+        # rewrite it anyway (EPERM), so answer the same 409 as a live one
         raise ProvisionError(409, "already provisioned")
 
     # Python is the authority on which keys are valid Settings fields —

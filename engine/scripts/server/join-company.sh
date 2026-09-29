@@ -65,6 +65,11 @@ uid="${1:-}"; key="${2:-}"; yes_flag=""
 [ -n "$uid" ] && [ -n "$key" ] || { echo "usage: $0 table | $0 <uid> <MEMORY_KEY> [--yes]"; exit 2; }
 [ -d "$PROFILES/$uid" ] || { echo "no profile dir for uid $uid under $PROFILES"; exit 2; }
 
+# Hold the reconcile lock for the whole window (reconcile-notify.sh uses
+# the same file): an automatic reconcile firing between stop and start
+# would restart the unit mid-join.
+exec 9>/run/mrcalld/reconcile.lock; flock 9
+
 unit="$UNIT_PREFIX$uid"
 was_active=0
 if systemctl is-active --quiet "$unit"; then was_active=1; fi
@@ -85,7 +90,8 @@ old_group=""; [ -n "$old_key" ] && old_group="mc-c-$(printf '%s' "$old_key" | sh
 id "$tenant_user" >/dev/null 2>&1 || { echo "no tenant user for $uid — run: mrcall-tenant create $uid"; exit 2; }
 
 echo "== adding $tenant_user to $new_group (keeps $old_group until finished) =="
-/usr/local/sbin/mrcall-tenant join "$uid" "$new_group"
+# the destination key travels in the environment (root-only), never argv
+MRCALL_JOIN_KEY="$key" /usr/local/sbin/mrcall-tenant join "$uid" "$new_group"
 
 echo "== joining $uid to $key =="
 # shellcheck disable=SC2086

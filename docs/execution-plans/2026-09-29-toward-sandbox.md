@@ -347,7 +347,18 @@ automatic pull — plus setgid loss on `/run/mrcalld`, `sudo` umask making
 stores read-only for the other group members, 2b-before-2a forking the
 store, the embedding cache unwritable in the sandbox, tenants table
 truncation, operator-asserted last-holder, provisiond/logrotate blind to
-tenant-owned dirs; all repaired at `d15137d`, re-review pending.
+tenant-owned dirs; all repaired at `d15137d`. B's second pass found the
+Caddy `first` policy failing over only with passive health checks
+(without `fail_duration` the reload would have 502'd every unmigrated
+customer), the bound embedding cache unreadable and unwarmed, one bad
+tenant row aborting the whole reconcile, the offboard predicate chosen by
+row presence instead of the helper's membership fact, the runbook window
+exposed to the reconcile timer, and no rollback verb; repaired (health
+checks, `chmod -R go=rX` on the cache + warm-up step, continue on failure,
+`sole_holder` selector on `delete_all_blobs`, reconcile lock held by
+`join-company.sh` and the runbook, `MRCALL_JOIN_KEY` 2a guard on join,
+symlink guard on subdirs, provisiond 409 on a drop-in, `mrcall-tenant
+unmigrate`).
 Verification here: 24 new tests (`tests/memory/test_tenant_store_names.py`,
 `tests/storage/test_rekey_and_encryption.py`, `tests/memory/test_offboard.py`),
 the writer-inventory and retention guards updated for the offboard call
@@ -359,18 +370,32 @@ binary reported) and `security` exposure 4.4.
 drop-in (`systemd-run` proof), Caddy reaching the new socket, the two-user
 WAL test on one store, criteria 1 (all clauses), 2, 4, 5, 7; then 2a for
 Café124 in one all-stopped window, then 2b one profile per day. Runbook
-M2.7 as the scripts now are: stop; `stat` record + backup;
-`mrcall-tenant create U` (mints the key file, writes drop-in, first
-chown); as root `env HOME=<profile> ZYLCH_HOME=/home/mrcalld/.zylch
-MEMORY_DB_DIR=/home/mrcalld/.zylch/memory $VENV/bin/zylch -p U rekey
---from-key-file /etc/mrcalld/env --to-key-file /etc/mrcalld/keys/U
---verify`; `mrcall-tenant create U` again (re-owns the sidecars root
-left); `stat` shows the tenant user on `zylch.db*` and the store; start;
-`memory-status`; criteria 1/5; WS check. Rollback: stop; `rekey` with the
-files swapped; remove the drop-in dir, fragment and `/run/mrcalld/U`;
-`daemon-reload`; `chown -R mrcalld:mrcalld` from the record (sidecars
-included); start. Keep the key file and the user so the forward path is
-repeatable.
+M2.7 as the scripts now are, per profile U, after its company's 2a:
+0. once per host: warm the embedding cache as `mrcalld`
+   (`ZYLCH_HOME=/home/mrcalld/.zylch`, `umask 022`, one embedding), and
+   confirm `find /home/mrcalld/mrcall-desktop ! -perm -o+r` is empty;
+1. `exec 9>/run/mrcalld/reconcile.lock; flock 9` — held until step 7;
+2. `systemctl stop zylch-server@U`; `stat -c '%U:%G %a %n'` record of the
+   tree and the company store; backup;
+3. `grep '^ENCRYPTION_KEY=' /etc/mrcalld/env > /root/oldkey.U; chmod 0400`;
+4. `mrcall-tenant create U` (mints `/etc/mrcalld/keys/U`, writes drop-in
+   and fragment, first chown);
+5. as root: `env HOME=/home/mrcalld/.zylch/profiles/U
+   ZYLCH_HOME=/home/mrcalld/.zylch MEMORY_DB_DIR=/home/mrcalld/.zylch/memory
+   $VENV/bin/zylch -p U rekey --from-key-file /root/oldkey.U
+   --to-key-file /etc/mrcalld/keys/U --verify`;
+6. `mrcall-tenant create U` again (idempotent; re-owns `profile.lock`,
+   `zylch.db-wal/-shm`, `zylch.log` root created); `stat` shows `mc-…` on
+   every file under the profile and on the store's sidecars;
+7. `systemctl start`; release the lock; `memory-status` as the tenant;
+   criteria 1/5; `wss://…/ws/U` through Caddy.
+Rollback (same lock): stop; `rekey` with the two files swapped (root);
+`mrcall-tenant unmigrate U` (drop-in, fragment, run dir, ownership back
+to `mrcalld`, table row; keeps user and key file); start under the
+transitional template, whose flat socket Caddy still serves.
+Scratch-unit probe list, before any customer: unit start under the
+drop-in; Caddy reaching `/run/mrcalld/<uid>/ws.sock`; fastembed loading
+from the read-only cache without writing; the two-user WAL test.
 
 ## M3 — Egress bound per daemon
 

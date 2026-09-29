@@ -97,7 +97,8 @@ echo "== 3a. re-apply the per-tenant identity of ALREADY MIGRATED profiles (plan
 # back to mrcalld.
 if [ -x "$HELPER_DST" ]; then
   for u in $("$HELPER_DST" list 2>/dev/null); do
-    run "$HELPER_DST" create "$u"
+    # never abort the whole reconcile on one profile: 3b must still run
+    run "$HELPER_DST" create "$u" || echo "  $u: tenant create FAILED (exit $?) — fix by hand" >&2
   done
 fi
 

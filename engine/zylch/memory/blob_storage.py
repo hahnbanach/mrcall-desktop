@@ -293,8 +293,13 @@ class BlobStorage(BlobReads, CommittedWrites):
         """
         return restore_version(self, blob_id, version_id, owner_id=owner_id)
 
-    def delete_all_blobs(self, owner_id: str) -> int:
+    def delete_all_blobs(self, owner_id: str, *, sole_holder: bool | None = None) -> int:
         """Per-account memory reset. Returns the number of blobs removed.
+
+        ``sole_holder`` overrides the row-presence test: the host helper
+        knows from group membership whether another profile holds the key,
+        and a company whose second member has not written a row yet must
+        still keep this account's company-family contributions.
 
         Company memory is deleted by whoever holds the key, never by one
         account leaving or rebuilding. So: when other accounts share this
@@ -304,7 +309,7 @@ class BlobStorage(BlobReads, CommittedWrites):
         it wrote goes, exactly as before sharing existed.
         """
         key = require_company_key()
-        shared = self.other_owners_present(owner_id)
+        shared = (not sole_holder) if sole_holder is not None else self.other_owners_present(owner_id)
         predicate = blob_owned_rules(owner_id, key) if shared else blob_contributed(owner_id, key)
         with self._get_session() as session:
             # Ids first, then the bulk delete, then the versions of exactly

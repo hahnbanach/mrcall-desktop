@@ -53,3 +53,24 @@ def test_last_holder_deletes_the_file(store_with_two_owners):
     path = offboard.delete_store(key)
     assert path and not os.path.exists(path)
     assert dbm.current_memory_engine() is None
+
+
+def test_not_last_holder_keeps_company_rows_even_when_alone_in_rows(company_db):
+    """The helper's group-membership fact wins over row presence: a second
+    member that has not written yet must not cost the leaver's facts."""
+    from sqlalchemy.orm import sessionmaker
+
+    key = current_company_key()
+    engine = dbm.current_memory_engine()
+    with sessionmaker(bind=engine)() as s:
+        s.add_all(
+            [
+                Blob(owner_id="a@x", company_key=key, namespace="user:" + key, content="fact by a"),
+                Blob(owner_id="a@x", company_key=key, namespace="prefs:a@x", content="pref of a"),
+            ]
+        )
+        s.commit()
+    assert offboard.delete_owned_rules("a@x", last_holder=False) == 1
+    assert _contents(engine) == ["fact by a"]
+    assert offboard.delete_owned_rules("a@x", last_holder=True) == 1
+    assert _contents(engine) == []

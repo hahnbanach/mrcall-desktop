@@ -160,7 +160,7 @@ def memory_offboard(ctx, yes, last_holder):
     ):
         click.echo("aborted")
         raise SystemExit(1)
-    removed = delete_owned_rules(owner)
+    removed = delete_owned_rules(owner, last_holder=last_holder)
     click.echo(f"removed {removed} owned rule row(s)")
     if last_holder:
         path = delete_store(key)

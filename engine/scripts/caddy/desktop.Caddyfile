@@ -32,9 +32,15 @@ desktop.mrcall.ai {
 	# ones still bind the flat /run/mrcalld/<uid>.sock. Try the new path
 	# first, fall back to the old one, so both layouts serve during the
 	# per-profile migration window. Drop the fallback after profile six.
+	# `first` only skips an upstream that passive health checks marked
+	# down: without fail_duration a dial error is never counted and every
+	# retry hits the same missing socket. 10s is the longest a freshly
+	# migrated socket can stay marked down after its first failed dial.
 	reverse_proxy @ws unix//run/mrcalld/{re.uid.1}/ws.sock unix//run/mrcalld/{re.uid.1}.sock {
 		lb_policy first
 		lb_try_duration 1s
+		fail_duration 10s
+		max_fails 1
 	}
 
 	@provision path /api/provision*

@@ -21,13 +21,14 @@ from zylch.storage import database as dbm
 logger = logging.getLogger(__name__)
 
 
-def delete_owned_rules(owner_id: str) -> int:
+def delete_owned_rules(owner_id: str, *, last_holder: bool = False) -> int:
     """Delete ``owner_id``'s personal rows from the bound company store.
 
     Delegates to :meth:`BlobStorage.delete_all_blobs`, the one per-account
-    reset: on a store other accounts contributed to it removes only this
-    account's rule rows (``blob_owned_rules``); on a store this account
-    alone wrote, everything — which is the last-holder case, where the
+    reset, with the predicate chosen by ``last_holder`` (the helper's
+    group-membership fact), never by row presence: not the last holder →
+    only this account's rule rows (``blob_owned_rules``), company-family
+    contributions stay with provenance; last holder → everything, and the
     file goes too. Returns the count."""
     from zylch.memory.blob_storage import BlobStorage
     from zylch.storage.database import get_session
@@ -35,7 +36,7 @@ def delete_owned_rules(owner_id: str) -> int:
     require_company_key()
     if dbm.current_memory_engine() is None:
         raise RuntimeError(f"memory unavailable: {dbm.memory_unavailable_reason()}")
-    count = BlobStorage(get_session, None).delete_all_blobs(owner_id)
+    count = BlobStorage(get_session, None).delete_all_blobs(owner_id, sole_holder=last_holder)
     logger.info(f"[offboard] rows removed={count}")
     return count
 
