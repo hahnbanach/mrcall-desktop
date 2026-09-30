@@ -129,6 +129,38 @@ statement built from strings ([what it cannot see](features/mnemonic-writer-inve
 `memory_operations.approval` column is removed by a table rebuild. Merged into
 `main` (`71bbc21`); **not deployed**. A store it migrates cannot be opened by a milestone 5–7 build.
 
+**2026-09-30 — Milestone 9, on branch `mnemonic-m9`, not merged, not deployed.**
+On the branch: the kernel template audit reads the cron deny list in either of
+its two forms and refuses neither/both, so it passes against `cs-kernel`
+`258c927` and against current kernel `main` (`ba79cc1`) with every inventory
+count unchanged; the installed-client journey — the real `cs` entry point of an
+installed kernel against the engine's own WebSocket handler, seventeen cases
+([entity memory](features/entity-memory-system.md#the-installed-client-journey-milestone-9)),
+Firebase verification not in the loop; the journey CI,
+`.github/workflows/mnemonic-journey.yml`, which clones the kernel at the commit
+pinned in the file, sets `CS_PROJECT_KERNEL_PYTHON` and
+`MNEMONIC_JOURNEY_REQUIRED=1` so a missing kernel fails rather than skips, and
+runs the journey, `test_project_kernel_journey.py`, `test_memory_readonly.py`
+and the kernel audit; and the priced-corpus runner, dry — ten incidents on one
+disposable profile, six automatic ones as admitted items of one explicit
+preparation run, four interactive ones through a real turn, a durable intent
+before every dispatch, a cumulative cap over settled rows, unsettled holds and
+open intents, the canary, budget, unpriced and truncation checks, a record with
+the key redacted ([bounded preparation](features/bounded-preparation.md#the-priced-corpus-inside-one-explicit-run),
+[spending protection](features/daily-llm-budget.md#the-corpus-runners-second-bound)).
+Entry points, from `engine/`: `tests/rpc/test_mnemonic_kernel_journey.py`,
+`_b.py`, `tests/rpc/test_mnemonic_engine_journey.py`, `_b.py` (skip without
+`CS_PROJECT_KERNEL_PYTHON`); `tests/memory/test_mnemonic_kernel_inventory.py`
+(kernel checkout beside the repository); `tests/memory/test_mnemonic_corpus_live.py`
+(dry by default; `MNEMONIC_CORPUS_EXECUTE=1` plus `ANTHROPIC_API_KEY` pays).
+Pending, none of it proven yet: the paid corpus run on `claude-haiku-4-5`
+and its record under `docs/evaluations/`; the workflow green on the pushed
+branch (a pinned clone cannot be exercised before the push); the merge; and
+the rollout, which is the CTO's step-by-step decision on the hb plan
+`docs/execution-plans/2026-09-30-mnemonic-rollout.md`, with a migration
+rehearsal on a store copy before any live step. The hosted engines still run
+pre-milestone-5 code.
+
 Support's engine exposes approval-gated `initiate_call` through the dashboard's
 Firebase atom API, with an explicit calling assistant ID. A live request on
 2026-09-17 returned HTTP 200 / provider `started`; the matching notification at
@@ -191,9 +223,6 @@ API budgets; see [control boundaries](../../docs/operator-setup.md#ai-execution-
 - The Desktop app does not read `memory.status`'s `joining` or
   `memory.join`'s `blocking`: a refused join shows its reason only, and the
   settling commands exist on the engine CLI alone (M8 added no RPC for them).
-- `tests/memory/test_mnemonic_kernel_inventory.py` passes against `cs-kernel`
-  `258c927` and fails against its current `main`: the kernel's cron template
-  no longer carries the `--disallowed-tools` block the audit reads.
 - Calendar token integration, phone memory parity, RPC error humanization and
   WhatsApp multi-profile isolation remain separate [backlog](harness-backlog.md)
   work. Product chat and comprehensive security review remain deferred.
@@ -204,4 +233,6 @@ API budgets; see [control boundaries](../../docs/operator-setup.md#ai-execution-
    uncertain requests. Keep automatic processing and preparation paused.
 2. Verify the Mac application through its GUI; start a bounded batch only when
    requested and review its role-specific outputs.
-3. Continue other workstreams under their existing plans.
+3. Run the paid corpus once, commit its record, merge `mnemonic-m9` after the
+   workflow is green on the pushed branch; deploy only through the rollout plan.
+4. Continue other workstreams under their existing plans.

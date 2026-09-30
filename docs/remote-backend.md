@@ -365,7 +365,7 @@ same from the host.
 **LLM credential and daily budget.** A profile provisioned by hand has no
 desktop app pushing a Firebase token, so the MrCall-credits mode has no
 session there: mail syncs, but the memory and task stages skip until the
-profile `.env` carries a BYOK key (`SYSTEM_LLM_PROVIDER=anthropic` +
+profile `.env` carries a BYOK key (`LLM_PROVIDER=anthropic` +
 `ANTHROPIC_API_KEY=…`), and the daemon reads `.env` only at start
 (`systemctl restart zylch-server@<uid>`). Spend is capped per profile and
 per UTC day by `LLM_DAILY_BUDGET_USD` (default 10, `0` = no cap; the
@@ -373,3 +373,38 @@ per UTC day by `LLM_DAILY_BUDGET_USD` (default 10, `0` = no cap; the
 from the budget of the profile whose tick runs it. A large
 backlog is analysed in daily instalments at the cap — raise it for a day
 with a line in `.env` and a restart.
+
+**Upgrading to the mnemonic harness (milestones 5–9).** The step-by-step
+document, with the gate of each step, the queries that read it and the two
+rollback stages, is the `hb` plan
+[`docs/execution-plans/2026-09-30-mnemonic-rollout.md`](../../hb/docs/execution-plans/2026-09-30-mnemonic-rollout.md);
+every step there is the CTO's decision, and nothing below is a step. Three
+things it needs from this host:
+
+- *The per-unit pin.* This guide documents one checkout that
+  `update-daemons.sh` pulls and one `ExecStart` for every instance, so before
+  anything else read what actually serves each unit (`git rev-parse` in the
+  checkout, `systemctl show -p FragmentPath,DropInPaths,ExecStart
+  zylch-server@<uid>` per profile) and record it here. If no per-unit pin
+  exists, the plan's proposal is a second checkout with its own venv and a
+  systemd drop-in `zylch-server@<uid>.service.d/release.conf` that resets
+  `ExecStart=` to that venv — a host change the CTO authorizes.
+- *The rehearsal on a copy.* Before the first live unit, copy the profile's
+  `zylch.db`, its `.env` and the company store through the SQLite backup API
+  (see Caveats: never open a live DB as another user) under a scratch root,
+  and boot the new engine on the copy twice with `ZYLCH_HOME` and
+  `MEMORY_DB_DIR` pointing at it: the first boot runs the store steps (the
+  destructive one is preceded by a backup under `<store dir>/backups/`), the
+  second is a no-op. A store the new build migrates cannot be opened by a
+  milestone 5–7 build; the hosted engines never ran one.
+- *The order per unit:* pause saved (preparation paused, `AUTO_UPDATE_ENABLED`
+  not `Yes`, the clone's operator paused with `CS_PAUSE`) → restart the unit
+  on the new commit → `zylch -p <uid> memory-status` and `memory-reviews`
+  clean → one bounded run and one supervised correction → soak on the plan's
+  measures → resume only on the CTO's yes.
+
+The milestone's paid corpus never runs on a host profile: it runs on a
+disposable profile under a scratch root, the provider key enters only as
+`ANTHROPIC_API_KEY` in the process environment — never on argv, in a log or
+in the record — is copied once into that profile's `.env` (mode 600), and the
+profile directory is deleted once the record is extracted.

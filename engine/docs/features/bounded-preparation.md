@@ -55,6 +55,40 @@ ledger untouched — pause, busy flag, batch allowance and per-source retry stat
 are the same before and after. The daily dollar budget and company fencing
 still apply to both. See [mnemonic decisions](mnemonic-decisions.md).
 
+## The priced corpus inside one explicit run
+
+The milestone 9 corpus runner, `tests/memory/test_mnemonic_corpus_live.py`
+(bench `corpus_live_env.py`), runs the ten incidents of
+`tests/fixtures/mnemonic/incidents.json` — every case but `malformed_output` —
+on one disposable profile under a scratch `$ZYLCH_HOME`. Six of them carry
+`caller_class: automatic_observation`, and an automatic grant is refused
+outside an admitted item of a real run (journey case 12). So the runner opens
+**one explicit preparation run** on that profile (`preparation_run(owner,
+explicit=True)`) and drives each automatic case as an admitted item of it: the
+observation is seeded as a real, unprocessed mail row and the real
+`MemoryWorker.process_email` ingests it — manifest, parent and children as
+real rows, `multi_entity_source` included — through the same admission
+production applies. The four interactive cases run under the interactive grant
+of a real turn (`revocable_turn`), which leaves this ledger untouched. No
+case's origin is overridden; the runner's `origin_check` names any case whose
+recorded origin differs from the one `mnemonic_cases.build` gives it.
+
+Why one explicit run and nothing else: automatic processing stays off, the
+runner never calls `update.run` or `preparation.resume` on the profile, so
+nothing but the corpus's own mail rows is ever admitted; the extraction prompt
+is stored directly, so no trainer runs; the worker's memory coroutine alone is
+invoked, so no task detection, maintenance or ancillary paid call joins the
+run. Every dispatch sits behind a durable per-case intent and the runner's
+cumulative cap ([spending protection](daily-llm-budget.md#the-corpus-runners-second-bound));
+the profile's own `LLM_DAILY_BUDGET_USD=10` refuses underneath. Dry by
+default on the scripted transport; `MNEMONIC_CORPUS_EXECUTE=1` with
+`ANTHROPIC_API_KEY` in the process environment is the only difference of the
+paid run, refused without the key before anything boots. `MNEMONIC_CORPUS_CASE`
+re-runs one case (a second intent on purpose), `MNEMONIC_CORPUS_ROOT` names
+the scratch home, `MNEMONIC_CORPUS_PROFILE_DIR` reopens a profile,
+`MNEMONIC_CORPUS_RECORD_DIR` receives the record and
+`MNEMONIC_CORPUS_STUB_EMBEDDER` keeps the bag-of-words embedder on a live run.
+
 ## Validation
 
 `tests/services/test_preparation.py` exercises real SQLite transactions,

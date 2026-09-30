@@ -42,6 +42,33 @@ following day permanently.
 An observed actual-cost bound breach is recorded in full and blocks future
 admission across midnight/restarts until explicit pricing reconciliation.
 
+The installed-client journey's replay case (case 15,
+`tests/rpc/test_mnemonic_engine_journey_b.py`) asserts this behaviour after a
+process death: a worker killed while the second child's decision call is in
+flight leaves that reservation unsettled, and nothing releases it — not the
+crash, not the restart, not the resumed run. It counts in full until the
+one-hour horizon; the case advances the clock past it, and the resume then
+re-extracts nothing, reserves afresh for the one undecided child and settles
+it. The profile ledger ends with three mnemonic rows — settled, unsettled,
+settled — one settled payment per decided child and the crashed hold still
+open, reported as stale.
+
+### The corpus runner's second bound
+
+The milestone 9 corpus runner (`tests/memory/corpus_live_env.py`, class
+`Ledger`) adds a **cumulative cap** on top of the per-UTC-day budget. Before
+every dispatch, and once at start before anything is seeded, it sums every
+settled `llm_usage` row of the disposable profile since its first run — not
+since midnight — plus every unsettled `llm_reservations` hold regardless of
+age (no in-flight horizon: a stale hold counts here forever) plus the bound of
+every intent still open in the profile's `corpus-intents.jsonl`, adds the
+request's own bound, and refuses (`CapExceeded`, nothing dispatched) when the
+total would pass the milestone's USD 10. A settled row dated yesterday counts:
+the guard test inserts one for USD 9.99 and the next case is refused. The
+daily budget in the profile's `.env` (`LLM_DAILY_BUDGET_USD=10`) is the second
+bound underneath, applied by the ordinary admission above; the runner never
+resets, deletes or relabels anything in either ledger.
+
 Amounts are rounded upward to integer micro-USD. Cache creation is conservatively
 settled at the one-hour rate when using the aggregate token count, so displayed
 completed spending can exceed the actual provider charge. Valid five-minute/one-hour cache usage detail is settled at its respective rate. Historical usage uses
