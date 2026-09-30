@@ -46,6 +46,7 @@ from tests.rpc.kernel_journey_cases import (
     ACCOUNT_B,
     ACME,
     ACME_ORDERS,
+    BETA,
     FACT_CONTENT,
     FACTS_NS,
     STYLE_CONTENT,
@@ -85,6 +86,7 @@ def test_case_6_tasks_solve_typed_instruction_is_the_observation(journey, monkey
     from zylch.rpc import methods
 
     acme_id, version = journey.seed(ACME)
+    beta_id, _ = journey.seed(BETA)
     created = journey.kernel.rpc(
         "tasks.create",
         {
@@ -156,7 +158,9 @@ def test_case_6_tasks_solve_typed_instruction_is_the_observation(journey, monkey
     assert op["departure"]["flags"] == ["unnamed_subject"]
     assert op["departure"]["proposed"]["targets"] == [acme_id]
     assert journey.blobs()[acme_id] == (USER_NS, ACCOUNT_A, ACME_ORDERS)
+    assert journey.blobs()[beta_id] == (USER_NS, ACCOUNT_A, BETA)
     assert journey.versions(acme_id) == [("append", ACME, event.event_id)]
+    assert journey.versions(beta_id) == []
     assert journey.read_back(acme_id, ACCOUNT_A)["content"] == ACME_ORDERS
     assert journey.hybrid_ids(ACCOUNT_A, "orders@acme.test") == [acme_id]
     assert journey.search_tool_ids(ACCOUNT_A, "Acme Srl") == [acme_id]
@@ -174,6 +178,7 @@ SAID_7 = "Ricorda: l'indirizzo ordini di Acme Srl è orders@acme.test"
 
 def test_case_7_changed_action_is_committed_and_recorded_on_both_sides(journey, monkeypatch):
     acme_id, version = journey.seed(ACME)
+    beta_id, _ = journey.seed(BETA)
     before = journey.snapshot()
     outer = env.outer(
         monkeypatch,
@@ -202,8 +207,10 @@ def test_case_7_changed_action_is_committed_and_recorded_on_both_sides(journey, 
         "targets": [acme_id],
     }
     assert journey.blobs()[acme_id] == (USER_NS, ACCOUNT_A, ACME_ORDERS)
-    assert len(journey.blobs()) == 1
+    assert len(journey.blobs()) == 2
+    assert journey.blobs()[beta_id] == (USER_NS, ACCOUNT_A, BETA)
     assert journey.versions(acme_id) == [("append", ACME, event.event_id)]
+    assert journey.versions(beta_id) == []
     # The tool's response carries the same departure back to the model.
     (tool_result,) = cases.tool_results(outer)
     assert '"action": "updated"' in tool_result and "changed_action" in tool_result
@@ -256,7 +263,6 @@ def test_case_8_a_tool_outside_allow_is_denied_and_nothing_is_written(journey, m
 # ─── Case 9: the client drops the turn while the role is deciding ────
 
 SAID_9 = "Ricorda: Beta Spa paga a 30 giorni, ordini@beta.test"
-BETA = "#IDENTIFIERS\nEntity type: COMPANY\nScope: entity\nName: Beta Spa\nEmail: ordini@beta.test\n#ABOUT\nPays at 30 days."
 
 
 def test_case_9_a_dropped_turn_revokes_the_grant_and_commits_nothing(journey, monkeypatch):
@@ -301,7 +307,10 @@ def test_case_9_a_dropped_turn_revokes_the_grant_and_commits_nothing(journey, mo
     assert authorization._ISSUED == {}
     (op,) = journey.operations()
     assert op["event_id"] == event.event_id
-    assert op["state"] != "committed" and op["state"] in ("review", "failed")
+    # Deterministic: the held answer validates, `_commit` re-runs
+    # `authorize_request` under the write lock, the cancelled turn is a
+    # MnemonicRefusal, and that settles as review_needed → REVIEW.
+    assert op["state"] == "review"
     assert op["result"]["outcome"] != "committed"
     assert set(journey.blobs()) == {acme_id}
     assert journey.versions(acme_id) == []

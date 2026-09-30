@@ -45,6 +45,7 @@ from tests.rpc.kernel_journey_cases import (
     ACME,
     ACME_MODEL,
     ACME_ROLE,
+    BETA,
     FACT_CONTENT,
     FACTS_NS,
     NEW_PHONE,
@@ -150,6 +151,7 @@ def test_case_3_cs_chat_commits_the_acme_correction_and_leaves_preparation_alone
     journey, monkeypatch
 ):
     acme_id, version = journey.seed(ACME)
+    beta_id, _ = journey.seed(BETA)
     journey.disturb_preparation()
     ledger_before = journey.preparation_ledger()
     assert ledger_before["status"]["paused"] is True
@@ -200,7 +202,9 @@ def test_case_3_cs_chat_commits_the_acme_correction_and_leaves_preparation_alone
     assert (namespace, owner, content) == (USER_NS, ACCOUNT_A, ACME_ROLE)
     assert NEW_PHONE in content and OLD_PHONE in content.split("#HISTORY", 1)[1]
     assert journey.versions(acme_id) == [("append", ACME, event.event_id)]
-    assert len(journey.blobs()) == 1
+    assert len(journey.blobs()) == 2
+    assert journey.blobs()[beta_id] == (USER_NS, ACCOUNT_A, BETA)
+    assert journey.versions(beta_id) == []
 
     # Read visibility, through every reader the brief names.
     assert journey.read_back(acme_id, ACCOUNT_A)["content"] == ACME_ROLE

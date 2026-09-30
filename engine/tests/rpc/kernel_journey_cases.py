@@ -58,6 +58,13 @@ ACME_MODEL = ACME.replace(OLD_PHONE, NEW_PHONE)
 # What the role commits: the new number in force, the old one kept in #HISTORY.
 ACME_ROLE = ACME_MODEL + f"\n- forwarding number was {OLD_PHONE} until 2026-09"
 ACME_ORDERS = ACME.replace("info@acme.test", "orders@acme.test")
+# An unrelated company row, seeded beside Acme in the cases that write to Acme
+# and never named in their excluded ids, so the unrelated-memory check has a
+# blob to protect rather than only "no row appeared or vanished".
+BETA = (
+    "#IDENTIFIERS\nEntity type: COMPANY\nScope: entity\nName: Beta Spa\n"
+    "Email: ordini@beta.test\n#ABOUT\nPackaging supplier in Turin; pays at 30 days."
+)
 
 FACT_CONTENT = "Category: Orari\nKey: Sabato\nSiamo chiusi ogni sabato."
 STYLE_CONTENT = "Evita i punti esclamativi nelle risposte ai clienti."

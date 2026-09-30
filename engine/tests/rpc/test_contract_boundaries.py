@@ -171,8 +171,18 @@ def offline_engine(tmp_path, monkeypatch):
 
     monkeypatch.setattr(httpx.HTTPTransport, "handle_request", _no_network)
     monkeypatch.setattr(httpx.AsyncHTTPTransport, "handle_async_request", _no_network)
+    # Modules that bind these factories by name at import time are imported
+    # BEFORE the package attribute is patched and then patched by their own
+    # name: one first imported while the package attribute is a stub binds
+    # the stub, and monkeypatch would restore that stub at teardown, so the
+    # next test in the process that consolidates memory would find no LLM
+    # transport for a profile that has one.
+    from zylch.memory import consolidation, llm_merge
+
     monkeypatch.setattr(llm_mod, "make_llm_client", _no_network)
     monkeypatch.setattr(llm_mod, "try_make_llm_client", lambda *a, **k: None)
+    monkeypatch.setattr(consolidation, "try_make_llm_client", lambda *a, **k: None)
+    monkeypatch.setattr(llm_merge, "make_llm_client", _no_network)
     monkeypatch.setattr(profiles_mod, "_active_profile", "contract-probe")
     monkeypatch.setattr(profiles_mod, "_active_profile_dir", str(profile))
     monkeypatch.setattr(
