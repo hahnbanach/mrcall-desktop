@@ -22,6 +22,7 @@ The repo has three parallel doc trees, mirroring the three index files. Each tre
 
 ## Index
 
+- [Additional mailboxes and PEC](briefs/2026-09-30-pec-net-mailbox-integration.md) — N IMAP mailboxes on an existing profile, synced and processed like the first; later a PEC flag that drops receipts, then `certified`/`delivered` fields. [Execution plan](execution-plans/2026-09-30-pec-net-mailbox-integration.md) for Delivery 1.
 - [GPT-Live customer-service channel](brief/2026-09-23-gpt-live-engine-integration.md) — incoming calls with asynchronous company memory first; agent configured by cs-operator. [Four-milestone plan](execution-plans/2026-09-23-gpt-live-engine-integration.md); repeatable integrations and outbound support follow.
 - [Desktop voice alpha UX](briefs/2026-09-25-desktop-voice-assistant-alpha-ux.md) — customer setup and preview journey; the [original Café 124 pilot plan](execution-plans/2026-09-25-desktop-voice-assistant-alpha-ux.md) is superseded by the existing-business test input.
 - [Café 124 production voice brief](briefs/2026-09-27-cafe124-voice-daemon.md) — one-number GPT-Live alpha in the existing `production@` daemon; [execution plan](execution-plans/2026-09-27-cafe124-voice-daemon.md) active for supervised per-question memory review, private transcript capture and final acceptance.

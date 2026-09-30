@@ -267,11 +267,25 @@ PROFILE_STEPS: list = []
 
 def _register_profile_steps() -> None:
     from zylch.storage.step_company_key import STEP as company_key_step
+    from zylch.storage.step_emails_mailbox import STEP as emails_mailbox_step
     from zylch.storage.step_memory_split import STEP as memory_split_step
 
-    for step in (company_key_step, memory_split_step):
+    for step in (company_key_step, memory_split_step, emails_mailbox_step):
         if step not in PROFILE_STEPS:
             PROFILE_STEPS.append(step)
+
+
+def _ensure_primary_mailbox(engine: Engine) -> None:
+    """Ensure pass: the primary ``mailboxes`` row exists when ``EMAIL_ADDRESS`` is set.
+
+    Runs on every boot, before the versioned steps, so step
+    ``0003_emails_mailbox`` finds the primary row and every later boot
+    mirrors the environment's hosts onto it. A profile without an address
+    gets no row (see ``zylch.email.mailboxes.ensure_primary_mailbox``).
+    """
+    from zylch.email.mailboxes import ensure_primary_mailbox
+
+    ensure_primary_mailbox(engine)
 
 
 def _ensure_all_tables(engine: Engine) -> None:
@@ -303,7 +317,7 @@ def init_db():
     applied = run_migrations(
         engine,
         _resolve_db_path(),
-        ensure=(_ensure_all_tables, _apply_column_migrations),
+        ensure=(_ensure_all_tables, _apply_column_migrations, _ensure_primary_mailbox),
         steps=PROFILE_STEPS,
         backfills=(_attach_store_then_backfill,),
     )
