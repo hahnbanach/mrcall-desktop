@@ -9,6 +9,8 @@ from types import SimpleNamespace
 
 from zylch.services.voice import company_notes as notes
 
+_STORE = {}
+
 SOURCE = "Acme sells blue widgets. Blue widgets require an appointment. We deliver weekly."
 
 
@@ -47,7 +49,8 @@ def setup(tmp_path, monkeypatch, source=SOURCE):
     profile = tmp_path / "uid-test"
     profile.mkdir()
     profile.chmod(0o700)
-    bound = SimpleNamespace(owner_uid=profile.name, company_key="company-key", space_id="space")
+    space_id = _memory_store(tmp_path, monkeypatch)
+    bound = SimpleNamespace(owner_uid=profile.name, company_key="company-key", space_id=space_id)
     config = SimpleNamespace(
         policy="production", enabled=True, business_id="business-1", called_number="+390250552776"
     )
@@ -63,15 +66,53 @@ def setup(tmp_path, monkeypatch, source=SOURCE):
     return profile, snapshot
 
 
+def _memory_store(tmp_path, monkeypatch) -> str:
+    """A private company memory with the project tables; returns its space id."""
+    from sqlalchemy import create_engine
+    from zylch.memory.store import _install_pragmas
+    from zylch.services import project_store
+    from zylch.storage import database
+    from zylch.storage.models import Base
+
+    engine = create_engine(f"sqlite:///{tmp_path / 'company.db'}")
+    _install_pragmas(engine)
+    Base.metadata.create_all(engine, tables=database.memory_tables())
+    project_store.ensure_space(engine)
+    monkeypatch.setattr(database, "current_memory_engine", lambda: engine)
+    with project_store.connection() as (_conn, space_id):
+        _STORE[tmp_path] = space_id
+        return space_id
+
+
 def save(profile: Path, source: str, model="model-one"):
-    encoded = json.dumps(source, ensure_ascii=False)
+    """Store `phone.md` as the company minter would, and write the private settings."""
+    import base64
+
+    from zylch.services import operator_instructions, project_store
+
     settings = profile / ".env"
     settings.write_text(
         f"OWNER_ID={profile.name}\nMEMORY_KEY=company-key\n"
-        f"LLM_PROVIDER=openrouter\nMODEL_MEMORY_EXTRACT={model}\nUSER_NOTES={encoded}\n",
+        f"LLM_PROVIDER=openrouter\nMODEL_MEMORY_EXTRACT={model}\n",
         encoding="utf-8",
     )
     settings.chmod(0o600)
+    space_id = _STORE[profile.parent]
+    current = 0
+    try:
+        current = project_store.read(operator_instructions.PROJECT, operator_instructions.PHONE)[
+            "revision"
+        ]
+    except project_store.ProjectError:
+        pass
+    project_store.write(
+        space_id,
+        operator_instructions.PROJECT,
+        operator_instructions.PHONE,
+        base64.b64encode(source.encode("utf-8")).decode("ascii"),
+        current,
+        author="minter",
+    )
 
 
 def provider(monkeypatch, payload, *, stop="end_turn"):
@@ -111,6 +152,7 @@ def test_prepares_private_cached_view_and_exact_detail(tmp_path, monkeypatch):
         "Public price unavailable",
         "General minimum volume unavailable",
         "Lead time unavailable",
+        "Service exclusions unavailable in initial context",
     )
     assert ("services", 0, len("Acme sells blue widgets.")) in first.included_spans
     assert len(first.included_spans) == 2

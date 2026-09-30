@@ -158,7 +158,7 @@ turning source text into a bounded, structured representation while preserving
 source/entity boundaries, exact identifiers and explicit missing information.
 `MODEL_MEMORY_MERGE` decides how an extracted item changes existing memory;
 `MODEL_TASK_DETECTION` decides whether source text contains an actionable task.
-The planned offline conversion of production `USER_NOTES` into telephone notes
+The planned offline conversion of the stored `phone.md` instructions into telephone notes
 is source-to-structured extraction, so it uses `MODEL_MEMORY_EXTRACT` rather
 than a hard-coded model ID or the merge/task role. This is a role choice, not a
 claim that the current model has been validated for telephone disclosure. The
