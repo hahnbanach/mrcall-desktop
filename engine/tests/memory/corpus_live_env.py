@@ -83,6 +83,9 @@ class IntentExists(CorpusRefused): ...
 class SecretLeak(CorpusRefused): ...
 
 
+class ProfileExists(CorpusRefused): ...
+
+
 def utc_now() -> datetime:
     return datetime.now(UTC).replace(tzinfo=None)
 
@@ -109,26 +112,28 @@ class Transport:
         return worker
 
 
-# ─── The disposable profile ───────────────────────────────────────────
-
-
 @dataclass(frozen=True)
 class Profile:
     root: Path
     profile_dir: Path
     owner: str
     key: str
-    secret: str
+    secret: str = field(repr=False)
 
     @classmethod
     def boot(cls, monkeypatch, root: Path, *, secret: str, profile_dir: Optional[Path] = None):
-        """Mint or reopen the disposable profile under ``root`` and open its databases."""
+        """Mint or reopen the profile; never mint a second one under ``root`` (a second ledger)."""
         if profile_dir is not None and (profile_dir / ".env").exists():
             from dotenv import dotenv_values
 
             saved = dotenv_values(profile_dir / ".env")
             owner, key = str(saved["OWNER_ID"]), str(saved["MEMORY_KEY"])
         else:
+            taken = sorted(p.name for p in (root / ".zylch" / "profiles").glob("corpus-*"))
+            if taken:
+                raise ProfileExists(
+                    f"{root} already holds a corpus profile ({taken[0]}); reopen it"
+                )
             owner, key = "corpus-" + secrets.token_hex(6), secrets.token_urlsafe(16)
             profile_dir = profile_dir or root / ".zylch" / "profiles" / owner
         profile = cls(root, profile_dir, owner, key, secret)
@@ -175,19 +180,7 @@ class Profile:
 
 
 def reopen() -> None:
-    dbm.dispose_engine()
-    clear_process_state()
-    dbm.init_db()
-
-
-# ─── The corpus on the store ──────────────────────────────────────────
-
-
-def selected_case_ids(environ) -> List[str]:
-    """Every case but the excluded ones, or the one ``MNEMONIC_CORPUS_CASE`` names."""
-    chosen = (environ.get("MNEMONIC_CORPUS_CASE") or "").strip()
-    every = [c["id"] for c in cases.load_incidents()["cases"] if c["id"] not in EXCLUDED]
-    return [chosen] if chosen else every
+    dbm.dispose_engine(), clear_process_state(), dbm.init_db()
 
 
 @dataclass
@@ -234,13 +227,19 @@ class Seeded:
                 seeding.add_person_identifiers(profile.owner, blob["id"], pairs)
 
     @staticmethod
-    def seed_mail(profile: Profile, spec: dict) -> dict:
-        """The automatic case's observation as a real, unprocessed mail row."""
+    def seed_mail(profile: Profile, spec: dict, tag: str) -> dict:
+        """The observation as a real, unprocessed mail row, one per intent.
+
+        The mail id carries the intent's tag: ``(owner, gmail_id)`` is unique, and the
+        parent operation's id derives from the source id and the rendered text, so the
+        same source would replay the first decision unpaid. A replay is not a
+        re-decision; a re-run asked for on purpose varies the source id instead.
+        """
         from tests.workers.ingestion_env import seed_email
 
         sender = f"sender-{spec['id']}@corpus.invalid"
         observation = spec["original_observation"]
-        return seed_email(f"corpus-{spec['id']}", observation, sender, owner=profile.owner)
+        return seed_email(f"corpus-{spec['id']}-{tag}", observation, sender, owner=profile.owner)
 
     @staticmethod
     def extraction(spec: dict) -> str:
@@ -251,7 +250,7 @@ class Seeded:
             return "\n---ENTITY---\n".join([person, entity_block("COMPANY", text, name="Acme")])
         hint = spec["subject_hint"]
         return entity_block(
-            hint["entity_type"], text, name=hint.get("name"), email=hint.get("email")
+            hint["entity_type"], text, **{k: hint.get(k) for k in ("name", "email")}
         )
 
 
@@ -261,9 +260,6 @@ def entity_block(entity_type: str, observation: str, **identifiers) -> str:
         if identifiers.get(label.lower()):
             lines.append(f"{label}: {identifiers[label.lower()]}")
     return "\n".join(lines + ["#ABOUT", observation])
-
-
-# ─── Intents and the cumulative cap ───────────────────────────────────
 
 
 class Ledger:
@@ -318,10 +314,8 @@ class Ledger:
     def check(self, bound_micro: int) -> int:
         total = self.committed_micro()
         if total + bound_micro > self.cap:
-            raise CapExceeded(
-                f"cap USD {self.cap / 1e6:.2f}: committed USD {total / 1e6:.4f} plus this "
-                f"request's bound USD {bound_micro / 1e6:.4f} would pass it; nothing dispatched"
-            )
+            usd = f"committed {total / 1e6:.4f} + bound {bound_micro / 1e6:.4f} > cap {self.cap / 1e6:.2f}"
+            raise CapExceeded(f"USD {usd}; nothing dispatched")
         return total
 
     def admit(self, case_id: str, bound_micro: int, *, force: bool = False) -> dict:
@@ -347,35 +341,29 @@ class Ledger:
             handle.write(json.dumps(record) + "\n")
 
 
-# ─── The runner ───────────────────────────────────────────────────────
-
-
 def operations(where: str) -> List[dict]:
     """The journal rows of one event or one source, compact and in event order."""
     with get_session() as session:
         query = session.query(MemoryOperation).order_by(MemoryOperation.event_id)
         rows = [r.to_dict() for r in query.all() if where in r.source_ref or r.event_id == where]
-    compact = []
-    for r in rows:
-        result = r.get("result") or {}
-        compact.append(
-            {
-                **{k: r[k] for k in ("event_id", "parent_event_id", "origin", "caller_class")},
-                **{k: r[k] for k in ("state", "attempts", "allowance")},
-                "outcome": result.get("outcome", r["state"]),
-                "reason": result.get("reason", ""),
-                "committed_ids": [list(p) for p in result.get("committed_ids") or ()],
-                "proposal": (r.get("payload") or {}).get("proposal"),
-                "departure": r.get("departure"),
-            }
-        )
-    return compact
+    keys = ("event_id", "parent_event_id", "origin", "caller_class", "state", "attempts")
+    return [
+        {
+            **{k: r[k] for k in keys + ("allowance",)},
+            "outcome": (r.get("result") or {}).get("outcome", r["state"]),
+            "reason": (r.get("result") or {}).get("reason", ""),
+            "committed_ids": [list(p) for p in (r.get("result") or {}).get("committed_ids") or ()],
+            "proposal": (r.get("payload") or {}).get("proposal"),
+            "departure": r.get("departure"),
+        }
+        for r in rows
+    ]
 
 
 def blob_snapshot(ids: Sequence[str]) -> Dict[str, tuple]:
     with get_session() as session:
-        rows = session.query(Blob).filter(Blob.id.in_(list(ids))).all()
-        return {str(b.id): (b.content, str(b.updated_at)) for b in rows}
+        query = session.query(Blob).filter(Blob.id.in_(list(ids)))
+        return {str(b.id): (b.content, str(b.updated_at)) for b in query.all()}
 
 
 def target_hits(before: dict, after: dict, committed) -> List[str]:
@@ -395,9 +383,7 @@ class Runner:
 
         self.transport = transport
         if embedder is not None:
-            # The worker binds the class by name at import, so the shared stub alone
-            # would leave it on the real model while the seeded blobs use the stub.
-            stub_embedder(monkeypatch, embedder)
+            stub_embedder(monkeypatch, embedder)  # the worker binds the class by name at import:
             monkeypatch.setattr(mem_mod, "EmbeddingEngine", lambda *a, **k: embedder)
         self.profile = Profile.boot(monkeypatch, root, secret=secret, profile_dir=profile_dir)
         self.ledger = Ledger(self.profile, cap_usd)
@@ -405,22 +391,35 @@ class Runner:
         self.storage = BlobStorage(get_session, embedder or EmbeddingEngine(MemoryConfig()))
         self.rows: List[dict] = []
 
-    def bound_for(self, case_id: str) -> int:
-        """One decision request's reservation bound for this case, as the engine prices it."""
-        event, candidates = cases.build(case_id)
-        request = {
-            "model": ARM_MODEL,
-            "system": prompts.system_blocks(),
-            "messages": [{"role": "user", "content": prompts.user_message(event, candidates)}],
-            "max_tokens": MNEMONIC_MAX_TOKENS,
-            "temperature": 1.0,
-            "service_tier": "standard_only",
-        }
+    @staticmethod
+    def _bound(system, content: str, max_tokens: int) -> int:
+        """One request's reservation bound, priced exactly as ``budget.reserve`` prices it."""
+        messages = [{"role": "user", "content": content}]
+        request = {"model": ARM_MODEL, "system": system, "messages": messages}
+        request.update(max_tokens=max_tokens, temperature=1.0, service_tier="standard_only")
         return request_bound(request, "direct")
 
+    def bound_for(self, case_id: str) -> int:
+        """One decision request's bound for this case."""
+        event, candidates = cases.build(case_id)
+        user = prompts.user_message(event, candidates)
+        return self._bound(prompts.system_blocks(), user, MNEMONIC_MAX_TOKENS)
+
+    def extraction_bound(self, spec: dict) -> int:
+        """The worker's extraction call for an automatic case; nothing for an interactive one."""
+        if spec["caller_class"] != AUTOMATIC_OBSERVATION:
+            return 0
+        system = [
+            {"type": "text", "text": EXTRACTION_PROMPT, "cache_control": {"type": "ephemeral"}}
+        ]
+        user = "Analyze this email:\n\n" + spec["original_observation"]
+        return self._bound(system, user, mem_mod.EMAIL_EXTRACTION_MAX_TOKENS)
+
     def intent_bound(self, spec: dict) -> int:
+        """One extraction plus the decision allowance per expected child."""
         children = len(Seeded.decision_keys(spec))
-        return self.bound_for(spec["id"]) * EVENT_DISPATCH_ALLOWANCE * children
+        decisions = self.bound_for(spec["id"]) * EVENT_DISPATCH_ALLOWANCE * children
+        return decisions + self.extraction_bound(spec)
 
     def start(self, case_ids: Sequence[str]) -> None:
         """The start-time cap check, then the candidates — before any mail or intent exists."""
@@ -448,7 +447,10 @@ class Runner:
         targets = [self.seeded.real(t) for t in spec["expected"].get("forbidden_targets", [])]
         before, clock = blob_snapshot(targets), time.perf_counter()
         automatic = spec["caller_class"] == AUTOMATIC_OBSERVATION
-        run = (lambda: self._automatic(spec)) if automatic else (lambda: self.interactive(spec))
+        tag = intent["intent_id"][:8] if intent else ""
+        run = (
+            (lambda: self._automatic(spec, tag)) if automatic else (lambda: self.interactive(spec))
+        )
         ops, usage, cost = self.dispatch(intent, run)
         children = [o for o in ops if o["parent_event_id"]] or ops
         committed = [tuple(p) for o in children for p in o["committed_ids"]]
@@ -488,9 +490,9 @@ class Runner:
             commit_mod.submit(event, **kwargs)
         return operations(event.event_id)
 
-    def _automatic(self, spec: dict) -> List[dict]:
+    def _automatic(self, spec: dict, tag: str) -> List[dict]:
         """One admitted item of the surrounding preparation run: the real worker, a real mail."""
-        mail = self.seeded.seed_mail(self.profile, spec)
+        mail = self.seeded.seed_mail(self.profile, spec, tag)
         extraction, decisions = [self.seeded.extraction(spec)], self.seeded.decisions(spec)
         worker = self.transport.worker(self.profile.owner, extraction, decisions)
         asyncio.run(worker.process_email(mail))
