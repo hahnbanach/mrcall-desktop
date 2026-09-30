@@ -4,6 +4,12 @@ Historical snapshots preserved verbatim when the living context is consolidated.
 Dated deployment claims and incident counts below are historical observations,
 not current operational state; use [active-context.md](active-context.md).
 
+## 2026-09-30 — Before the operator-requested conversion retry
+
+`8fb21d3` and the company path is off. Real conversion received HTTP 402 with no
+artifact, and the checked OpenRouter account has about USD0.21. Its known refusal
+was reconciled at zero; the older uncertain request remains quarantined.
+
 ## 2026-09-30 — Voice knowledge before production trial resume
 
 The company-knowledge notes-only path is built locally on `main`: an offline

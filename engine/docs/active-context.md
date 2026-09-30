@@ -42,9 +42,11 @@ Company-knowledge prompt/schema 5/3 in `d284414` has code-milestone approval:
 contiguous qualified source spans, specific detail categories/Italian phrases,
 cache-key-pinned call views, exact-key uncertainty gates and private quarantine.
 The corrected release and targeted rollback have independent approval; production still uses
-`8fb21d3` and the company path is off. Real conversion received HTTP 402 with no
-artifact, and the checked OpenRouter account has about USD0.21. Its known refusal
-was reconciled at zero; the older uncertain request remains quarantined. The
+`8fb21d3` and the company path is off. Real conversion remains unavailable with
+no artifact. The latest actual retry received HTTP402 with
+`limit_source: openrouter_credits`; its maximum request cost exceeds provider
+admission credit. Both known refusals are settled at zero; the older uncertain
+request remains quarantined. The
 owner's existing production number is the authorized handset trial route after
 real-source and deployment-delta review. See the
 [active plan](../../docs/execution-plans/2026-09-28-voice-company-knowledge.md).

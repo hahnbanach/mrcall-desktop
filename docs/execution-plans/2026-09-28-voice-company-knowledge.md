@@ -132,6 +132,21 @@ approval of a successful real source result still precedes activation.
 Funding was requested from the operator; the latest authenticated readback
 still shows USD0.20872263 available.
 
+**Operator-requested retry — 2026-09-30:** The operator raised the API-key
+limit to USD200 and explicitly requested execution despite the differing
+balance observations. After verifying zero settlement of the prior refusal,
+only that key's failed-attempt marker was archived and one real conversion was
+attempted through the same release/model/prompt. It received HTTP402 after
+4.944 seconds with no output or artifact. The captured response explicitly
+reports `limit_source: openrouter_credits` and says the request's maximum cost
+exceeds available credits. Independent verification supports a pre-inference
+refusal; only retry reservation `f101e5aa-b24f-4c47-89f6-e1a7c9f5a415` was
+settled at zero through the existing budget API, with the response and
+reconciliation retained privately. The older uncertain reservation/quarantine,
+live daemon and configuration are unchanged. No further retry or activation was
+performed; successful conversion and source review
+remain prerequisites for trial activation.
+
 ## M5 — Activate narrowly and retain rollback
 
 **Trial activation prerequisite (before handset M4):** independent approval of corrected M2/M3 code, privately validated real source-to-view result and exact release/config/rollback delta. Verify compatibility with the actual pinned release/host schema, preserve binding/headless auth/voice/greeting, ensure no active call, and retain the known-good release/config and approved source revision. The operator's production-test instruction authorizes the targeted reversible trial activation. Change only that instance through its existing release/drop-in path; never touch other profiles, mal's profile, number/tunnel or `update-daemons.sh`. Check imported release, effective switch, health, negative binding probes and current selected-context readback before reporting ready to call.

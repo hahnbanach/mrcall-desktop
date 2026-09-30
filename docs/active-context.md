@@ -1,5 +1,5 @@
 ---
-doc_baseline_commit: 4f7de897c47509640343fd15703c510ad1086d64
+doc_baseline_commit: 65659b3be482fa1782c26f4e8f6f8a9eae12e8e4
 doc_baseline_date: 2026-09-30
 ---
 
@@ -64,8 +64,9 @@ The [voice knowledge plan](execution-plans/2026-09-28-voice-company-knowledge.md
 is active. Corrected M2/M3 code in `d284414` has independent approval; prompt/schema
 5/3 preserve qualified source spans and specific detail phrases. Its release and
 rollback have independent approval, while production remains on `8fb21d3` with the company
-path off. A real K3 conversion received HTTP 402 with no artifact; the checked
-OpenRouter account balance is about USD0.21. This known refusal was reconciled
+path off. Real K3 conversion remains unavailable with no artifact. The latest
+actual retry received HTTP402 with `limit_source: openrouter_credits`; its maximum
+request cost exceeds provider admission credit. Both known refusals are settled
 at zero; the older uncertain request remains quarantined. The owner explicitly
 uses Café 124 production for handset trials after source/delta review and targeted
 activation. Real-source semantics, spoken behavior and latency remain open.

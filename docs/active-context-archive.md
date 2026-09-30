@@ -5,6 +5,12 @@ That file is a living snapshot and carries only `State now` / `Unresolved` /
 `Next`; anything chronological lands here instead. Newest section first.
 Nothing is discarded — only relocated, verbatim.
 
+## 2026-09-30 — Before the operator-requested conversion retry
+
+path off. A real K3 conversion received HTTP 402 with no artifact; the checked
+OpenRouter account balance is about USD0.21. This known refusal was reconciled
+at zero; the older uncertain request remains quarantined.
+
 ## 2026-09-30 — Voice knowledge before production trial resume
 
 The [voice knowledge plan](execution-plans/2026-09-28-voice-company-knowledge.md)
