@@ -16,6 +16,8 @@
 #   mrcall-tenant delete <uid>                 # stop, offboard (as the tenant user; last-holder derived), remove everything
 #   mrcall-tenant unmigrate <uid>              # rollback of create: drop-in, fragment, run dir, ownership back to mrcalld, table row (keeps user + key file)
 #   mrcall-tenant store  <uid>                 # 2a: company group, setgid store dir, file group/modes, mrcalld in the group
+#   mrcall-tenant unstore <uid>                # rollback of 2a (company stopped, none migrated)
+#   mrcall-tenant orphans [--archive]          # stores no profile holds any more (listed by hash; archived root-only)
 #   mrcall-tenant names  <uid>                 # print the derived names, change nothing
 #   mrcall-tenant list                         # the migrated uids (tenants table)
 #
@@ -56,6 +58,8 @@ check_uid() {
   local u="$1"
   [[ "$u" =~ ^[A-Za-z0-9_.-]+$ ]] || die "uid has characters outside [A-Za-z0-9_.-]"
   [ "$u" != "." ] && [ "$u" != ".." ] || die "uid may not be . or .."
+  # its flat link would replace provisiond's socket in /run/mrcalld
+  [ "$u" != "provisiond" ] || die "uid may not be provisiond"
 }
 check_group() { [[ "$1" =~ ^mc-c-[0-9a-f]{12}$ ]] || die "not a derived company group name: $1"; }
 
@@ -88,9 +92,40 @@ as_tenant() { # as_tenant <user> <profile_dir> <zylch args...>
 verb="${1:-}"
 case "$verb" in
   list) ensure_table; cut -f1 "$TABLE"; exit 0 ;;
-  create|join|unjoin|delete|names|unmigrate|store) ;;
-  *) sed -n '2,27p' "$0"; exit 2 ;;
+  orphans) ;;
+  create|join|unjoin|delete|names|unmigrate|store|unstore) ;;
+  *) sed -n '2,29p' "$0"; exit 2 ;;
 esac
+# Company stores no profile holds any more: a pre-join legacy `<key>.db`
+# (its name IS a key, visible to `ls`), or a derived dir left by a join
+# whose last holder was deleted. Listed by a hash of the name, never the
+# key; `--archive` moves them to a root-only dir (rename, no symlink
+# following) and drops the empty groups. Reconcile lock held.
+if [ "$verb" = orphans ]; then
+  held=(); for e in "$PROFILES"/*/.env; do [ -f "$e" ] && held+=("$(env_value "$e" MEMORY_KEY)"); done
+  is_held_key() { local h; for h in "${held[@]:-}"; do [ "$h" = "$1" ] && return 0; done; return 1; }
+  is_held_group() { local h; for h in "${held[@]:-}"; do [ -n "$h" ] && [ "$(group_of_key "$h")" = "$1" ] && return 0; done; return 1; }
+  dest=""
+  if [ "${2:-}" = "--archive" ]; then
+    exec 9>"$RUN_ROOT/reconcile.lock"; flock 9
+    dest="/root/mrcall-orphan-stores/$(date -u +%FT%H%M%SZ)"; install -d -m 0700 -o root -g root "$dest"
+  fi
+  for f in "$MEMORY"/*.db; do
+    [ -f "$f" ] && [ ! -L "$f" ] || continue
+    n=$(basename "$f" .db); is_held_key "$n" && continue
+    echo "legacy store  name-sha12=$(sha12 "$n")  $(stat -c '%s bytes, modified %y' "$f")"
+    [ -n "$dest" ] && for x in "$MEMORY/$n".db*; do mv -- "$x" "$dest/"; done
+  done
+  for d in "$MEMORY"/mc-c-*; do
+    [ -d "$d" ] && [ ! -L "$d" ] || continue
+    g=$(basename "$d"); is_held_group "$g" && continue
+    echo "company dir   $g  $(du -sb "$d" | cut -f1) bytes"
+    if [ -n "$dest" ]; then mv -- "$d" "$dest/"; groupdel "$g" >/dev/null 2>&1 || true; fi
+  done
+  [ -n "$dest" ] && log "archived to $dest (root-only); delete it once the backup window has passed"
+  exit 0
+fi
+
 uid="${2:-}"; [ -n "$uid" ] || die "missing <uid>"
 check_uid "$uid"
 
@@ -117,21 +152,13 @@ require_relocated() { # require_relocated <key>
   fi
 }
 
-# The company group, its store directory and the files already in it. 2a
-# moves a store created by mrcalld (`mrcalld:mrcalld`, 0640/0660) into the
-# setgid dir; the directory's group does not reach files that already
-# exist, so without this a tenant daemon gets EACCES on the store and its
-# lock files (scratch VM probe 2026-09-30). mrcalld stays in the group
-# during the transition: an unmigrated daemon of the same company must be
-# able to write the -wal/-shm a tenant created (0660 <tenant>:<group>).
+# The company group and its setgid store directory (create, join, store).
 ensure_company_store() { # ensure_company_store <group>
   local g="$1"
   getent group "$g" >/dev/null || { groupadd --system "$g"; log "created group $g"; }
   install -d -m 0711 -o "$SVC_USER" -g "$SVC_USER" "$MEMORY"
   [ -L "$MEMORY/$g" ] && die "$MEMORY/$g is a symlink; refusing"
   install -d -m 2770 -o "$SVC_USER" -g "$g" "$MEMORY/$g"
-  find "$MEMORY/$g" -maxdepth 1 -type f -exec chgrp "$g" {} + -exec chmod g+rw,o= {} +
-  usermod -a -G "$g" "$SVC_USER"
 }
 
 write_dropin() { # write_dropin <group or empty>
@@ -183,14 +210,51 @@ case "$verb" in
 
 store)
   # 2a, after `zylch -p <uid> memory-relocate-store` with every daemon of
-  # the company stopped: group, setgid dir, file group + g+rw, mrcalld in
-  # the group. Migrates nobody; start the company's daemons afterwards so
-  # the unmigrated ones pick up the new supplementary group.
+  # the company stopped (scratch VM probe 2026-09-30): the relocated store
+  # and its lock files are still `mrcalld:mrcalld` 0640/0660 — the setgid
+  # dir's group does not reach files that already exist, and a tenant
+  # daemon then dies with EACCES. Give them the company group, g+rw.
+  # mrcalld joins the group here, and only here: during the one-per-day
+  # 2b an unmigrated daemon must write the -wal/-shm a tenant created;
+  # remove it (`gpasswd -d mrcalld <group>`) once the company is migrated.
+  # The normalisation runs AS mrcalld, never root: the dir is writable by
+  # tenants, and a root chgrp/chmod could be raced onto a symlink.
   key=$(profile_key); [ -n "$key" ] || die "profile has no MEMORY_KEY"
   g=$(group_of_key "$key")
   [ -f "$MEMORY/$key.db" ] && die "legacy store still present; run memory-relocate-store first"
   ensure_company_store "$g"
-  log "company store ready: $g"
+  usermod -a -G "$g" "$SVC_USER"
+  runuser -u "$SVC_USER" -- find "$MEMORY/$g" -maxdepth 1 -type f -user "$SVC_USER" -links 1 \
+    -exec chgrp "$g" {} + -exec chmod g+rw,o= {} +
+  log "company store ready: $g (restart the company's daemons)"
+  ;;
+
+unstore)
+  # Rollback of 2a for the company of <uid>: every daemon of the company
+  # stopped, none of its profiles migrated. Derived store back to the
+  # legacy name, files back to mrcalld:mrcalld, mrcalld out of the group,
+  # empty dir and group removed. Reconcile lock held.
+  exec 9>"$RUN_ROOT/reconcile.lock"; flock 9
+  key=$(profile_key); [ -n "$key" ] || die "profile has no MEMORY_KEY"
+  g=$(group_of_key "$key"); h=$(sha32 "$key")
+  for e in "$PROFILES"/*/.env; do
+    [ -f "$e" ] && [ "$(env_value "$e" MEMORY_KEY)" = "$key" ] || continue
+    u=$(basename "$(dirname "$e")")
+    table_has "$u" && die "profile $u of this company is migrated; unmigrate it first"
+    systemctl is-active --quiet "$UNIT_PREFIX$u.service" && die "stop every daemon of the company first ($u is active)"
+  done
+  [ -f "$MEMORY/$key.db" ] && die "the legacy store already exists; resolve by hand"
+  [ -f "$MEMORY/$g/$h.db" ] || die "no derived store for this company"
+  for suf in "" -wal -shm .sweep.lock .migrate.lock .join.lock; do
+    [ -e "$MEMORY/$g/$h.db$suf" ] || continue
+    runuser -u "$SVC_USER" -- mv -- "$MEMORY/$g/$h.db$suf" "$MEMORY/$key.db$suf"
+    # -h: never follow a link; the memory root is writable by mrcalld only
+    chown -h "$SVC_USER:$SVC_USER" "$MEMORY/$key.db$suf"
+    runuser -u "$SVC_USER" -- chmod 0660 "$MEMORY/$key.db$suf"
+  done
+  gpasswd -d "$SVC_USER" "$g" >/dev/null 2>&1 || true
+  rmdir "$MEMORY/$g" 2>/dev/null && { groupdel "$g" >/dev/null 2>&1 || true; log "removed $g"; } || log "$MEMORY/$g not empty; left in place"
+  log "store back to its legacy name; start the company's daemons"
   ;;
 
 names)
@@ -303,14 +367,28 @@ unmigrate)
   ;;
 
 delete)
-  [ "${3:-}" = "" ] || die "delete takes no flag: last-holder is derived from group membership"
+  [ "${3:-}" = "" ] || die "delete takes no flag: last-holder is derived from group membership and the other profiles' keys"
+  # hold the reconcile lock (as join-company.sh does) and mark the profile,
+  # so no reconcile re-enables the unit while offboarding or after a
+  # failed offboard (update-daemons.sh skips a profile with .deleting)
+  exec 9>"$RUN_ROOT/reconcile.lock"; flock 9
+  [ -d "$profile_dir" ] && [ ! -L "$profile_dir" ] && install -m 0600 -o root -g root /dev/null "$profile_dir/.deleting"
   systemctl disable --now "$unit" >/dev/null 2>&1 || true
   group=$(company_group_for_profile)
   last=""
   if [ -n "$group" ] && getent group "$group" >/dev/null; then
     # mrcalld is in every company group during the transition; it is not a key holder
     others=$(getent group "$group" | awk -F: '{print $4}' | tr ',' '\n' | grep -v -e "^$user$" -e "^$SVC_USER$" | grep -c . || true)
-    [ "$others" = 0 ] && last="--last-holder"
+    # an UNMIGRATED profile of the same company runs as mrcalld and is in
+    # no group: count every other profile whose .env holds the same key
+    # (scratch VM review 2026-09-30 — without this, deleting a migrated
+    # Café124 profile mid-migration would delete the store the others use)
+    k=$(profile_key); holders=0
+    for e in "$PROFILES"/*/.env; do
+      [ "$e" = "$profile_dir/.env" ] && continue
+      [ -f "$e" ] && [ "$(env_value "$e" MEMORY_KEY)" = "$k" ] && holders=$((holders + 1))
+    done
+    [ "$others" = 0 ] && [ "$holders" = 0 ] && last="--last-holder"
   fi
   if id "$user" >/dev/null 2>&1 && [ -f "$profile_dir/.env" ]; then
     # offboarding runs AS THE TENANT USER, never root, so the company
@@ -319,7 +397,7 @@ delete)
     # a failed offboard would leave the owned rule rows behind with no
     # profile left to remove them: stop here, nothing deleted yet (the unit
     # is disabled); fix and re-run `delete`
-    as_tenant "$user" "$profile_dir" -p "$uid" memory-offboard --yes $last || die "offboard failed; nothing deleted (unit left disabled) — fix and re-run delete"
+    as_tenant "$user" "$profile_dir" -p "$uid" memory-offboard --yes $last || die "offboard failed; nothing deleted (unit disabled, .deleting keeps reconcile off it) — fix and re-run delete"
   fi
   rm -rf "$profile_dir"
   rm -f "$keyfile" "$fragment"

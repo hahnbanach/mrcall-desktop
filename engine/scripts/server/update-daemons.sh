@@ -84,6 +84,8 @@ if [ -d "$PROFILES" ]; then
   for d in "$PROFILES"/*/; do
     [ -f "${d}.env" ] || continue
     grep -qE '^OWNER_ID=.+' "${d}.env" || continue
+    # `mrcall-tenant delete` in progress or stopped on a failed offboard
+    [ -e "${d}.deleting" ] && { echo "  $(basename "$d"): .deleting -> skipped"; continue; }
     UIDS+=("$(basename "$d")")
   done
 fi
@@ -97,6 +99,7 @@ echo "== 3a. re-apply the per-tenant identity of ALREADY MIGRATED profiles (plan
 # back to mrcalld.
 if [ -x "$HELPER_DST" ]; then
   for u in $("$HELPER_DST" list 2>/dev/null); do
+    [ -e "$PROFILES/$u/.deleting" ] && continue
     # never abort the whole reconcile on one profile: 3b must still run
     run "$HELPER_DST" create "$u" || echo "  $u: tenant create FAILED (exit $?) — fix by hand" >&2
   done

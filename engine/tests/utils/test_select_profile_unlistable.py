@@ -32,8 +32,20 @@ def test_explicit_name_resolves_without_listing(unlistable):
     assert profiles.select_profile("uidA") == "uidA"
 
 
-@pytest.mark.parametrize("name", ["..", ".", "uidA/../uidB", "missing"])
-def test_non_exact_names_fall_back_to_the_listing(unlistable, name):
-    # never resolved by the direct check; the listing path then applies
+@pytest.mark.parametrize("name", ["..", ".", "uidA/../uidB", "missing", None])
+def test_non_exact_names_are_not_resolved_without_the_listing(unlistable, name):
     with pytest.raises(PermissionError):
         profiles.select_profile(name)
+
+
+def test_listable_dir_keeps_the_exact_list_match(tmp_path, monkeypatch):
+    # a case-insensitive disk (macOS, Windows) must not accept another case
+    root = tmp_path / "profiles"
+    (root / "uidA").mkdir(parents=True)
+    (root / "uidA" / ".env").write_text("OWNER_ID=uidA\n")
+    monkeypatch.setattr(profiles, "PROFILES_DIR", str(root))
+    monkeypatch.setattr(profiles.os.path, "isfile", lambda p: True)  # as if case-folded
+    monkeypatch.setattr(profiles, "list_profiles", lambda: ["uidA"])
+    assert profiles.select_profile("uidA") == "uidA"
+    with pytest.raises(SystemExit):
+        profiles.select_profile("UIDA")
