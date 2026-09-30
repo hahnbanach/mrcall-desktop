@@ -38,9 +38,7 @@ Mailbox
 -------
 A profile has N mailboxes (``zylch.email.mailboxes``); each has its own
 cursors, so an added mailbox's first sync covers its own window whatever
-the others hold. Callers that do not pass ``mailbox_id`` yet (marked
-``# M2: pass the mailbox``) get the owner's default mailbox, resolved on
-the same connection.
+the others hold. Every read and write names its mailbox.
 
 Failure policy
 --------------
@@ -172,15 +170,6 @@ def _ensure_schema(conn) -> None:
     conn.exec_driver_sql(CREATE_TABLE_SQL)
 
 
-def _mailbox(conn, owner_id: str, mailbox_id: Optional[str]) -> str:
-    """The mailbox a cursor belongs to; the owner's default when none is given."""
-    if mailbox_id:
-        return mailbox_id
-    from zylch.email.mailboxes import resolve_default_mailbox_id
-
-    return resolve_default_mailbox_id(conn, owner_id)  # M2: pass the mailbox
-
-
 def _row(r) -> FolderCursor:
     return FolderCursor(
         owner_id=r[0],
@@ -193,9 +182,7 @@ def _row(r) -> FolderCursor:
     )
 
 
-def get_cursor(
-    owner_id: str, folder: str, mailbox_id: Optional[str] = None
-) -> Optional[FolderCursor]:
+def get_cursor(owner_id: str, folder: str, mailbox_id: str) -> Optional[FolderCursor]:
     """Return the stored cursor for ``(owner_id, mailbox_id, folder)``, or ``None``.
 
     ``None`` means "no confirmed position" and the caller must fall back
@@ -208,10 +195,9 @@ def get_cursor(
 
         with get_engine().begin() as conn:
             _ensure_schema(conn)
-            mailbox = _mailbox(conn, owner_id, mailbox_id)
             row = conn.exec_driver_sql(
                 f"{_SELECT} WHERE owner_id = ? AND mailbox_id = ? AND folder = ?",
-                (owner_id, mailbox, key),
+                (owner_id, mailbox_id, key),
             ).fetchone()
     except Exception as e:
         logger.error(
@@ -224,25 +210,21 @@ def get_cursor(
 
     if row is None:
         logger.debug(
-            f"[sync-cursor] get_cursor(owner_id={owner_id}, mailbox_id={mailbox}, "
+            f"[sync-cursor] get_cursor(owner_id={owner_id}, mailbox_id={mailbox_id}, "
             f"folder={key}) -> None"
         )
         return None
 
     cursor = _row(row)
     logger.debug(
-        f"[sync-cursor] get_cursor(owner_id={owner_id}, mailbox_id={mailbox}, folder={key}) -> "
+        f"[sync-cursor] get_cursor(owner_id={owner_id}, mailbox_id={mailbox_id}, folder={key}) -> "
         f"uidvalidity={cursor.uidvalidity} last_uid={cursor.last_uid}"
     )
     return cursor
 
 
 def set_cursor(
-    owner_id: str,
-    folder: str,
-    uidvalidity: int,
-    last_uid: int,
-    mailbox_id: Optional[str] = None,
+    owner_id: str, folder: str, uidvalidity: int, last_uid: int, mailbox_id: str
 ) -> bool:
     """Upsert the confirmed position for ``(owner_id, mailbox_id, folder)``.
 
@@ -259,7 +241,6 @@ def set_cursor(
 
         with get_engine().begin() as conn:
             _ensure_schema(conn)
-            mailbox = _mailbox(conn, owner_id, mailbox_id)
             conn.exec_driver_sql(
                 f"INSERT INTO {TABLE_NAME} "
                 f"(owner_id, mailbox_id, folder, uidvalidity, last_uid, last_synced_at, updated_at) "
@@ -269,7 +250,7 @@ def set_cursor(
                 f"last_uid = excluded.last_uid, "
                 f"last_synced_at = excluded.last_synced_at, "
                 f"updated_at = excluded.updated_at",
-                (owner_id, mailbox, key, int(uidvalidity), int(last_uid), now, now),
+                (owner_id, mailbox_id, key, int(uidvalidity), int(last_uid), now, now),
             )
     except Exception as e:
         logger.error(
@@ -281,13 +262,13 @@ def set_cursor(
         return False
 
     logger.debug(
-        f"[sync-cursor] set_cursor(owner_id={owner_id}, mailbox_id={mailbox}, folder={key}) -> "
+        f"[sync-cursor] set_cursor(owner_id={owner_id}, mailbox_id={mailbox_id}, folder={key}) -> "
         f"uidvalidity={uidvalidity} last_uid={last_uid}"
     )
     return True
 
 
-def drop_cursor(owner_id: str, folder: str, mailbox_id: Optional[str] = None) -> bool:
+def drop_cursor(owner_id: str, folder: str, mailbox_id: str) -> bool:
     """Delete the cursor for ``(owner_id, mailbox_id, folder)``.
 
     Used when UIDVALIDITY changes: every stored UID for that folder is
@@ -300,10 +281,9 @@ def drop_cursor(owner_id: str, folder: str, mailbox_id: Optional[str] = None) ->
 
         with get_engine().begin() as conn:
             _ensure_schema(conn)
-            mailbox = _mailbox(conn, owner_id, mailbox_id)
             conn.exec_driver_sql(
                 f"DELETE FROM {TABLE_NAME} WHERE owner_id = ? AND mailbox_id = ? AND folder = ?",
-                (owner_id, mailbox, key),
+                (owner_id, mailbox_id, key),
             )
     except Exception as e:
         logger.error(
@@ -314,7 +294,7 @@ def drop_cursor(owner_id: str, folder: str, mailbox_id: Optional[str] = None) ->
         return False
 
     logger.info(
-        f"[sync-cursor] drop_cursor(owner_id={owner_id}, mailbox_id={mailbox}, folder={key}) "
+        f"[sync-cursor] drop_cursor(owner_id={owner_id}, mailbox_id={mailbox_id}, folder={key}) "
         f"-> deleted"
     )
     return True

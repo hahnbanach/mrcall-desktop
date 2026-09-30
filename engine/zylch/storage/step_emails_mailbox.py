@@ -139,6 +139,8 @@ EMAILS_INDEXES = (
     "archived_at",
     "deleted_at",
 )
+# (name, columns) — the first-copy rule's lookup; also ensured on every boot.
+EMAILS_COMPOSITE_INDEXES = (("ix_emails_owner_message_id_header", "owner_id, message_id_header"),)
 
 MAILBOXES_DDL = """
 CREATE TABLE IF NOT EXISTS mailboxes (
@@ -250,6 +252,8 @@ def _rebuild_emails(conn: Connection) -> tuple[int, int]:
     conn.exec_driver_sql("ALTER TABLE emails_new RENAME TO emails")
     for col in EMAILS_INDEXES:
         conn.exec_driver_sql(f"CREATE INDEX IF NOT EXISTS ix_emails_{col} ON emails ({col})")
+    for name, cols in EMAILS_COMPOSITE_INDEXES:
+        conn.exec_driver_sql(f"CREATE INDEX IF NOT EXISTS {name} ON emails ({cols})")
     return before, res.rowcount
 
 

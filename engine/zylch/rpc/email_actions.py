@@ -114,9 +114,8 @@ async def emails_archive(params: Dict[str, Any], notify: NotifyFn) -> Any:
     logger.debug(f"[rpc:emails.archive] archive(thread_id={thread_id}, " f"owner_id={owner_id})")
 
     store = Storage.get_instance()
-    # M2: pass the mailbox — the pairs say which mailbox holds each copy;
-    # until the archive opens one client per mailbox (M5), the primary's
-    # connection handles every Message-ID as before.
+    # M5 groups these pairs by mailbox and opens one client per mailbox;
+    # until then the primary's connection handles every Message-ID as before.
     message_ids = [
         mid for _mailbox_id, mid in store.get_thread_message_id_headers(owner_id, thread_id)
     ]

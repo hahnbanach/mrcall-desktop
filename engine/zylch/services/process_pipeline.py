@@ -249,13 +249,15 @@ async def _run_pipeline(
         sync_result = ({"new_messages": 0} if "--analyze-only" in args else await _run_sync(owner_id, store, days_back))
         new = sync_result.get("new_messages", 0)
         summary_stats["sync_new"] = int(new or 0)
+        if errors_out is not None:
+            errors_out.extend(mailbox_error_entries(sync_result))
         total = store.get_email_stats(owner_id).get("total_emails", 0)
         console.print(f"  +{new} new emails ({total} total)")
     except Exception as e:
         logger.error(f"[/process] sync failed: {e}", exc_info=True)
         console.print(f"[red]  Sync failed: {e}[/red]")
         if errors_out is not None:
-            errors_out.append({"stage": "email_sync", "error": e})
+            errors_out.extend(sync_failure_entries(e))
         _p(100, f"Sync failed: {e}", None)
         return f"Sync failed: {e}"
 
@@ -597,13 +599,20 @@ async def run_sync_only(
 
     # --- Step 1: Email ---
     _p(5, "Syncing emails…", None)
+
+    def _mailbox_progress(pct: int, message: str) -> None:
+        # The email stage owns the 5-60 band; messages carry the mailbox address.
+        _p(5 + int(pct * 0.55), message, None)
+
     try:
-        sync_result = await _run_sync(owner_id, store, days_back)
+        sync_result = await _run_sync(owner_id, store, days_back, progress=_mailbox_progress)
         result["sync_new"] = int(sync_result.get("new_messages", 0) or 0)
+        if errors_out is not None:
+            errors_out.extend(mailbox_error_entries(sync_result))
     except Exception as e:
         logger.error(f"[sync.run] email sync failed: {e}", exc_info=True)
         if errors_out is not None:
-            errors_out.append({"stage": "email_sync", "error": e})
+            errors_out.extend(sync_failure_entries(e))
         _p(100, f"Sync failed: {e}", None)
         return result
 
@@ -681,32 +690,29 @@ async def _run_sync(
     owner_id: str,
     store,
     days_back: int,
+    progress: Optional[Callable[[int, str], None]] = None,
 ) -> dict:
-    """Run email sync (awaitable, no nested event loop)."""
-    from zylch.email.imap_client import IMAPClient
-    from zylch.services.sync_service import SyncService
+    """Run email sync over every mailbox of the owner (awaitable).
+
+    A partial failure comes back in ``result["errors"]`` (see
+    :func:`mailbox_error_entries`); when no mailbox synced this raises
+    :class:`MailboxSyncFailed`, which carries one entry per mailbox with
+    its original exception, so the caller reports every mailbox by
+    address and the classifier still sees the IMAP, DNS, TLS or timeout
+    error that caused it.
+    """
+    from zylch.services.sync_service import MailboxSyncFailed, SyncService
 
     email_addr = os.environ.get("EMAIL_ADDRESS", "")
     email_pass = os.environ.get("EMAIL_PASSWORD", "")
     if not email_addr or not email_pass:
         raise ValueError("Email not configured." " Run 'zylch init' first.")
 
-    email_client = IMAPClient(
-        email_addr=email_addr,
-        password=email_pass,
-        imap_host=os.environ.get("IMAP_HOST") or None,
-        imap_port=(int(os.environ.get("IMAP_PORT", "0")) or None),
-        smtp_host=os.environ.get("SMTP_HOST") or None,
-        smtp_port=(int(os.environ.get("SMTP_PORT", "0")) or None),
-    )
-
-    sync_service = SyncService(
-        email_client=email_client,
-        owner_id=owner_id,
-        supabase_storage=store,
-    )
+    sync_service = SyncService(owner_id=owner_id, supabase_storage=store)
 
     def _on_progress(pct: int, message: str):
+        if progress is not None:
+            progress(pct, message)
         if pct >= 90 or pct % 25 == 0:
             console.print(f"  [dim]{message}[/dim]")
 
@@ -716,8 +722,38 @@ async def _run_sync(
     )
 
     if not result.get("success"):
-        raise RuntimeError(result.get("error", "Sync failed"))
+        raise MailboxSyncFailed(result)
     return result
+
+
+def mailbox_error_entries(sync_result: dict) -> list:
+    """Pipeline error entries for the mailboxes that failed in a sync.
+
+    Each carries ``stage`` ``email_sync``, the mailbox ``address`` under
+    ``mailbox`` and the original exception, so ``humanize_entry`` can
+    classify it and name the mailbox. Used for partial failures and,
+    through :class:`MailboxSyncFailed`, when nothing synced.
+    """
+    out = []
+    for entry in sync_result.get("errors", []) or []:
+        exc = entry.get("exception") or RuntimeError(str(entry.get("error") or "Sync failed"))
+        out.append({"stage": "email_sync", "mailbox": entry.get("address"), "error": exc})
+    return out
+
+
+def sync_failure_entries(exc: BaseException) -> list:
+    """The pipeline entries a failed email stage reports.
+
+    A :class:`MailboxSyncFailed` yields one entry per mailbox; any other
+    exception yields the single stage entry it always did.
+    """
+    from zylch.services.sync_service import MailboxSyncFailed
+
+    if isinstance(exc, MailboxSyncFailed):
+        # No per-mailbox entry (no mailbox row despite env credentials):
+        # the stage entry it always was, never an empty report.
+        return mailbox_error_entries(exc.result) or [{"stage": "email_sync", "error": exc}]
+    return [{"stage": "email_sync", "error": exc}]
 
 
 def _run_whatsapp_sync(

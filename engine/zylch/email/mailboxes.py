@@ -304,6 +304,34 @@ def ensure_primary_mailbox(engine: Engine | None = None) -> str | None:
     return mailbox_id
 
 
+def record_sync_result(owner_id: str, mailbox_id: str, error: str | None) -> None:
+    """Write the outcome of one mailbox's sync on its row.
+
+    Success stamps ``last_sync_at`` and clears ``last_error``; a failure
+    keeps the last successful time and records the message. Never
+    raises: bookkeeping must not undo a sync that already happened.
+    """
+    from zylch.storage.database import get_session
+    from zylch.storage.models import Mailbox
+
+    try:
+        with get_session() as session:
+            row = (
+                session.query(Mailbox)
+                .filter(Mailbox.owner_id == owner_id, Mailbox.id == mailbox_id)
+                .first()
+            )
+            if row is None:
+                return
+            if error is None:
+                row.last_sync_at = datetime.now(UTC).replace(tzinfo=None)
+                row.last_error = None
+            else:
+                row.last_error = error[:1000]
+    except Exception as e:
+        logger.error(f"[mailboxes] record_sync_result(mailbox_id={mailbox_id}) failed: {e}")
+
+
 # ─── Writing an additional mailbox ────────────────────────────
 
 
@@ -358,6 +386,33 @@ def add_mailbox(
 
 
 # ─── IMAP client per mailbox ──────────────────────────────────
+
+
+def credential_fingerprint(mailbox: MailboxInfo) -> str:
+    """A hash of what logs this mailbox in, for cache keys. Never the plaintext.
+
+    Covers the address, hosts, ports and the stored secret ciphertext
+    (the primary's ``EMAIL_PASSWORD`` for the primary), so a password
+    change yields a different key and a cached client is rebuilt.
+    """
+    import hashlib
+
+    if mailbox.is_primary:
+        secret_part = os.environ.get("EMAIL_PASSWORD", "")
+    else:
+        secret_part = _stored_secret(mailbox.owner_id, mailbox.id) or ""
+    material = "|".join(
+        str(x)
+        for x in (
+            mailbox.address,
+            mailbox.imap_host,
+            mailbox.imap_port,
+            mailbox.smtp_host,
+            mailbox.smtp_port,
+            secret_part,
+        )
+    )
+    return hashlib.sha256(material.encode("utf-8")).hexdigest()
 
 
 def _stored_secret(owner_id: str, mailbox_id: str) -> str | None:

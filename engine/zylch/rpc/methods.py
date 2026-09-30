@@ -1125,6 +1125,33 @@ def _task_change_key(task: Dict[str, Any]) -> str:
     return str(task.get("analyzed_at") or "")
 
 
+def _pending_email_counts(owner_id: str) -> Dict[str, int]:
+    """The email counts the ETA is built from, over the owner's active mailboxes.
+
+    ``pending_*`` count only the first stored copy of a message held by
+    several mailboxes (the copy the pickers will process); ``total`` is
+    every row in an active mailbox, for first-sync detection.
+    """
+    from sqlalchemy import or_
+
+    from zylch.storage.database import get_session
+    from zylch.storage.models import Email
+    from zylch.storage.storage import Storage
+
+    active = Storage.active_mailbox_filter(owner_id)
+    first_copy = Storage.first_copy_filter(owner_id)
+    with get_session() as session:
+        pending = session.query(Email).filter(Email.owner_id == owner_id, active, first_copy)
+        return {
+            "pending_memory": pending.filter(Email.memory_processed_at.is_(None)).count(),
+            "pending_tasks": pending.filter(Email.task_processed_at.is_(None)).count(),
+            "pending_any": pending.filter(
+                or_(Email.memory_processed_at.is_(None), Email.task_processed_at.is_(None))
+            ).count(),
+            "total": session.query(Email).filter(Email.owner_id == owner_id, active).count(),
+        }
+
+
 def _estimate_update_eta(store, owner_id: str) -> str:
     """Rough human-readable ETA for update.run.
 
@@ -1143,47 +1170,15 @@ def _estimate_update_eta(store, owner_id: str) -> str:
     have to grind through. Now we sum all three centres and add a
     first-sync bump when the email table is empty.
     """
-    from sqlalchemy import or_
-
-    from zylch.storage.database import get_session
-    from zylch.storage.models import Email
-
     try:
-        with get_session() as session:
-            # Pending memory = not yet memory-extracted
-            pending_mem = (
-                session.query(Email)
-                .filter(Email.owner_id == owner_id)
-                .filter(Email.memory_processed_at.is_(None))
-                .count()
-            )
-            # Pending tasks = not yet task-analyzed
-            pending_tasks = (
-                session.query(Email)
-                .filter(Email.owner_id == owner_id)
-                .filter(Email.task_processed_at.is_(None))
-                .count()
-            )
-            # Pending memory OR task (used as the legacy "any pending"
-            # bucket for first-sync detection).
-            pending_any = (
-                session.query(Email)
-                .filter(Email.owner_id == owner_id)
-                .filter(
-                    or_(
-                        Email.memory_processed_at.is_(None),
-                        Email.task_processed_at.is_(None),
-                    )
-                )
-                .count()
-            )
-            # If the local store is empty this is a first-time sync: IMAP
-            # will pull the whole window (default 60 days) before the
-            # pipeline even starts counting, so nudge the estimate up.
-            total = session.query(Email).filter(Email.owner_id == owner_id).count()
+        counts = _pending_email_counts(owner_id)
     except Exception as e:
         logger.warning(f"[rpc] update ETA calc failed: {e}")
         return "unknown"
+    pending_mem = counts["pending_memory"]
+    pending_tasks = counts["pending_tasks"]
+    pending_any = counts["pending_any"]
+    total = counts["total"]
 
     # Open task count drives F4 + F8 + F9 sweep cost. The sweeps run
     # even when no new emails arrived — this is exactly the case where
@@ -1473,9 +1468,9 @@ async def update_run(params: Dict[str, Any], notify: NotifyFn) -> Any:
     diff = build_update_diff_summary(before_open, after_open_by_id, closed_after)
 
     # Turn any collected stage failures into clear, structured messages.
-    from zylch.services.error_messages import humanize_error
+    from zylch.services.error_messages import humanize_entry
 
-    humanized = [humanize_error(item.get("error"), item.get("stage")) for item in pipeline_errors]
+    humanized = [humanize_entry(item) for item in pipeline_errors]
     fatal = [h for h in humanized if h.get("severity") == "error"]
 
     logger.debug(

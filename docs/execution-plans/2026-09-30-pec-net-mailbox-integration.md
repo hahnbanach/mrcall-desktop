@@ -185,6 +185,15 @@ floor while the primary has newer mail; one mailbox failing leaves the
 other's cursor advanced; rows of a mailbox with `removed_at` set are absent
 from every list, search and picker; `pytest tests/email tests/storage`.
 
+**M2 integration review (2026-09-30): APPROVED** on the third pass. The
+loop lives in `SyncService`, used by all three entry points. Fixed on the
+way: a total failure now keeps the classified per-mailbox exception, the
+"processed once" rule is a structural first-copy predicate that survives
+the reset paths, and `(owner_id, message_id_header)` is indexed so the
+pickers stay linear (20,000 rows: 0.2 s instead of 60 s). Suites: 794
+passed, one pre-existing `llm.models` failure. Left to M5 as planned:
+`get_email_by_id` across mailboxes and the `setup.state` counts.
+
 ## M3 — User identity across mailboxes (engine)
 
 **Dependency:** M1. Add `email/identity.py:user_addresses(owner_id)` =

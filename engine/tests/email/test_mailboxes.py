@@ -223,9 +223,9 @@ def test_same_message_id_in_two_mailboxes_is_two_rows(booted):
     # dedup and floor lookups are per mailbox
     newer = datetime(2026, 9, 20, 10, 0, tzinfo=UTC)
     st.store_emails_batch(OWNER, [_email("<only-second@mail.test>", newer)], mailbox_id=second.id)
-    assert "<only-second@mail.test>" not in st.get_existing_email_ids(OWNER)
+    assert "<only-second@mail.test>" not in st.get_existing_email_ids(OWNER, prim.id)
     assert "<only-second@mail.test>" in st.get_existing_email_ids(OWNER, mailbox_id=second.id)
-    assert st.get_newest_email_date(OWNER).month == 9 and st.get_newest_email_date(OWNER).day == 1
+    assert st.get_newest_email_date(OWNER, prim.id).day == 1
     assert st.get_newest_email_date(OWNER, mailbox_id=second.id).day == 20
 
     pairs = st.get_thread_message_id_headers(OWNER, "<shared@mail.test>")
@@ -254,13 +254,12 @@ def test_cursors_are_scoped_per_mailbox(booted):
     prim = mailboxes.primary(OWNER)
     second = mailboxes.add_mailbox(OWNER, "pec@pec.company.test", secrets.token_urlsafe(12))
 
-    assert sync_cursor.set_cursor(OWNER, "INBOX", 7, 100) is True  # default: primary
+    assert sync_cursor.set_cursor(OWNER, "INBOX", 7, 100, mailbox_id=prim.id) is True
     assert sync_cursor.set_cursor(OWNER, "INBOX", 9, 5, mailbox_id=second.id) is True
-    assert sync_cursor.get_cursor(OWNER, "INBOX").last_uid == 100
     assert sync_cursor.get_cursor(OWNER, "INBOX", mailbox_id=prim.id).last_uid == 100
     assert sync_cursor.get_cursor(OWNER, "INBOX", mailbox_id=second.id).last_uid == 5
     assert len(sync_cursor.list_cursors(OWNER)) == 2
     assert len(sync_cursor.list_cursors(OWNER, mailbox_id=second.id)) == 1
     assert sync_cursor.drop_cursor(OWNER, "INBOX", mailbox_id=second.id) is True
     assert sync_cursor.get_cursor(OWNER, "INBOX", mailbox_id=second.id) is None
-    assert sync_cursor.get_cursor(OWNER, "INBOX").last_uid == 100
+    assert sync_cursor.get_cursor(OWNER, "INBOX", prim.id).last_uid == 100

@@ -153,6 +153,7 @@ def test_boot_creates_mailboxes_and_stamps_every_row(legacy):
         "ix_emails_has_attachments",
         "ix_emails_mailbox_id",
         "ix_emails_owner_id",
+        "ix_emails_owner_message_id_header",
         "ix_emails_pinned_at",
         "ix_emails_read_at",
     )
@@ -176,9 +177,8 @@ def test_cursors_follow_their_mailbox_and_orphans_are_dropped(legacy):
     v2 = _rows(legacy, "SELECT owner_id, mailbox_id, folder, last_uid FROM email_sync_cursor_v2")
     assert sorted(v2) == sorted([(OWNER, prim, "INBOX", 42), (FORMER, former, "INBOX", 9)])
     assert not _rows(legacy, "SELECT name FROM sqlite_master WHERE name='email_sync_cursor'")
-    # the sync path resolves the primary without being told
-    assert sync_cursor.get_cursor(OWNER, "INBOX").last_uid == 42
-    assert sync_cursor.get_cursor(OWNER, "INBOX").mailbox_id == prim
+    assert sync_cursor.get_cursor(OWNER, "INBOX", prim).last_uid == 42
+    assert sync_cursor.get_cursor(OWNER, "INBOX", prim).mailbox_id == prim
 
 
 def test_migrated_shape_equals_fresh_shape(legacy, tmp_path, monkeypatch):

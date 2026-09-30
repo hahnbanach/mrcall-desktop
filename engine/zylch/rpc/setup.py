@@ -61,7 +61,7 @@ async def sync_run(params: Dict[str, Any], notify: NotifyFn) -> Any:
           ],
         }
     """
-    from zylch.services.error_messages import humanize_error
+    from zylch.services.error_messages import humanize_entry
     from zylch.services.process_pipeline import run_sync_only
 
     days_back = int(params.get("days_back", 60) or 60)
@@ -112,7 +112,7 @@ async def sync_run(params: Dict[str, Any], notify: NotifyFn) -> Any:
     humanized = []
     for entry in stage_errors:
         try:
-            humanized.append(humanize_error(entry["error"], entry.get("stage", "")))
+            humanized.append(humanize_entry(entry))
         except Exception as e:
             logger.warning(f"[sync.run] humanize_error failed: {e}")
 

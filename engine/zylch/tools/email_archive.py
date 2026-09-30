@@ -39,20 +39,42 @@ class EmailArchiveManager:
         gmail_client,
         owner_id: str,
         supabase_storage: Optional[Storage] = None,
+        mailbox=None,
     ):
         """Initialize archive manager.
 
         Args:
-            gmail_client: IMAPClient instance for email
+            gmail_client: IMAPClient instance for the mailbox being synced
             owner_id: User ID (required)
             supabase_storage: Optional Storage instance
+            mailbox: The ``MailboxInfo`` this manager syncs. Every row it
+                stores, its date floor, its dedup set and its cursors
+                belong to that mailbox. ``None`` means the owner's
+                primary mailbox (the owner-keyed row for a profile
+                without an address), resolved on first use; read-only
+                users of the archive (thread and search helpers) never
+                need it.
         """
         self.gmail = gmail_client
         self.owner_id = owner_id
         self.supabase = supabase_storage or Storage.get_instance()
+        self.mailbox = mailbox
+        self._mailbox_id: Optional[str] = mailbox.id if mailbox is not None else None
         self._connected = False
 
-        logger.info(f"EmailArchiveManager initialized" f" for owner {owner_id}")
+        logger.info(
+            f"EmailArchiveManager initialized for owner {owner_id} "
+            f"(mailbox={mailbox.address if mailbox is not None else 'primary'})"
+        )
+
+    @property
+    def mailbox_id(self) -> str:
+        """The mailbox this manager writes to; the owner's primary when unset."""
+        if self._mailbox_id is None:
+            from zylch.email.mailboxes import default_mailbox_id
+
+            self._mailbox_id = default_mailbox_id(self.owner_id)
+        return self._mailbox_id
 
     def _ensure_connected(self) -> None:
         """Ensure IMAP client is connected (lazy).
@@ -96,10 +118,12 @@ class EmailArchiveManager:
         sync_days = days_back if days_back is not None else 30
         target_date = now - timedelta(days=sync_days)
 
-        newest = self.supabase.get_newest_email_date(self.owner_id)
+        # Per mailbox: an added mailbox's first sync covers the whole
+        # days_back window whatever the other mailboxes already hold.
+        newest = self.supabase.get_newest_email_date(self.owner_id, self.mailbox_id)
         if newest and newest.tzinfo is None:
             newest = newest.replace(tzinfo=timezone.utc)
-        oldest = self.supabase.get_oldest_email_date(self.owner_id)
+        oldest = self.supabase.get_oldest_email_date(self.owner_id, self.mailbox_id)
         if oldest and oldest.tzinfo is None:
             oldest = oldest.replace(tzinfo=timezone.utc)
 
@@ -189,8 +213,12 @@ class EmailArchiveManager:
             logger.error(f"[sync] folder discovery failed: {e}", exc_info=True)
             return {"success": False, "error": f"folder discovery failed: {e}"}
 
-        existing_ids = self.supabase.get_existing_email_ids(self.owner_id)
-        logger.info(f"[sync] archive holds {len(existing_ids)} known message identifiers")
+        # Per mailbox: a message another mailbox already holds is still
+        # fetched for this one (stored as its own row, processed once — D2).
+        existing_ids = self.supabase.get_existing_email_ids(self.owner_id, self.mailbox_id)
+        logger.info(
+            f"[sync] mailbox {self.mailbox_id} holds {len(existing_ids)} known message identifiers"
+        )
 
         result: Dict[str, Any] = {
             "success": True,
@@ -262,7 +290,7 @@ class EmailArchiveManager:
         from zylch.email import sync_cursor
         from zylch.email.imap_client import FolderState, format_imap_date
 
-        cursor = sync_cursor.get_cursor(self.owner_id, folder)
+        cursor = sync_cursor.get_cursor(self.owner_id, folder, self.mailbox_id)
         since = format_imap_date(floor)
         # Filled in by the criteria builder below, which runs inside
         # scan_folder once EXAMINE has reported UIDVALIDITY.
@@ -277,7 +305,7 @@ class EmailArchiveManager:
                     f"folder is void; dropping the cursor and re-seeding from the date floor "
                     f"{floor.strftime('%Y-%m-%d')}"
                 )
-                sync_cursor.drop_cursor(self.owner_id, folder)
+                sync_cursor.drop_cursor(self.owner_id, folder, self.mailbox_id)
                 active = None
                 decision["cursor"] = None
             if active is None:
@@ -398,6 +426,7 @@ class EmailArchiveManager:
                 rows_written += self.supabase.store_emails_batch(
                     self.owner_id,
                     archive_messages,
+                    mailbox_id=self.mailbox_id,
                 )
                 stored.extend(chunk)
                 for archived in archive_messages:
@@ -459,7 +488,7 @@ class EmailArchiveManager:
             )
 
         new_last = max(new_last, 0)
-        sync_cursor.set_cursor(self.owner_id, folder, state.uidvalidity, new_last)
+        sync_cursor.set_cursor(self.owner_id, folder, state.uidvalidity, new_last, self.mailbox_id)
         logger.info(f"[sync] {folder}: cursor -> uid={new_last} (uidvalidity={state.uidvalidity})")
         return new_last
 
@@ -590,6 +619,7 @@ class EmailArchiveManager:
 
         return {
             "id": msg_id,
+            "mailbox_id": self.mailbox_id,
             "thread_id": msg.get("thread_id", ""),
             "from_email": from_email,
             "from_name": from_name,

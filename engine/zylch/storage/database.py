@@ -492,6 +492,18 @@ def _apply_column_migrations(engine: Engine) -> None:
                 conn.exec_driver_sql(f"CREATE INDEX IF NOT EXISTS {idx_name} ON {table}({column})")
             except Exception as e:
                 logger.warning(f"[migrate] Failed to ensure index {idx_name}: {e}")
+        # Composite indexes: (table, name, columns). A file migrated before an
+        # index was declared gets it here; the step creates it on a rebuild.
+        composite_indexes = [
+            ("emails", "ix_emails_owner_message_id_header", "owner_id, message_id_header"),
+        ]
+        for table, idx_name, cols in composite_indexes:
+            if table not in present:
+                continue
+            try:
+                conn.exec_driver_sql(f"CREATE INDEX IF NOT EXISTS {idx_name} ON {table}({cols})")
+            except Exception as e:
+                logger.warning(f"[migrate] Failed to ensure index {idx_name}: {e}")
 
 
 def _apply_data_backfills() -> None:

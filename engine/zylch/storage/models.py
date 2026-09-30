@@ -204,6 +204,9 @@ class Email(DictMixin, Base):
             "gmail_id",
             name="emails_owner_mailbox_gmail_unique",
         ),
+        # The first-copy rule (D2) correlates rows on the Message-ID header;
+        # without this index the pickers and the ETA are quadratic.
+        Index("ix_emails_owner_message_id_header", "owner_id", "message_id_header"),
     )
 
 
