@@ -316,7 +316,10 @@ delete)
     # offboarding runs AS THE TENANT USER, never root, so the company
     # store's -wal/-shm keep the group ownership the other members need
     # shellcheck disable=SC2086
-    as_tenant "$user" "$profile_dir" -p "$uid" memory-offboard --yes $last || log "offboard reported a problem (continuing)"
+    # a failed offboard would leave the owned rule rows behind with no
+    # profile left to remove them: stop here, nothing deleted yet (the unit
+    # is disabled); fix and re-run `delete`
+    as_tenant "$user" "$profile_dir" -p "$uid" memory-offboard --yes $last || die "offboard failed; nothing deleted (unit left disabled) — fix and re-run delete"
   fi
   rm -rf "$profile_dir"
   rm -f "$keyfile" "$fragment"

@@ -170,6 +170,14 @@ def select_profile(name: str | None = None) -> str:
     Raises:
         SystemExit: If no profiles exist or name not found.
     """
+    # An explicit name is checked directly, without listing: on a hosted
+    # engine the profiles dir is traverse-only (0711) for the tenant users
+    # that run join/offboard outside the unit (plan M2.5/M2.8).
+    if name and os.sep not in name and name not in (".", "..") and os.path.isfile(
+        os.path.join(PROFILES_DIR, name, ".env")
+    ):
+        return name
+
     profiles = list_profiles()
 
     if not profiles:
