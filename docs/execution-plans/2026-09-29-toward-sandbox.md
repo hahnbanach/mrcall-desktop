@@ -562,6 +562,9 @@ earlier commits are marked with the commit and why they still hold.
 
 **Runbook M2 as proven here** (supersedes the lists above).
 `VENV=/home/mrcalld/mrcall-desktop/engine/venv`, `Z=/home/mrcalld/.zylch`.
+Run everything from a **root shell** (`sudo -i`): the helper reuses the
+reconcile lock the shell holds (fd 9), and `sudo` would close that
+descriptor, so `sudo mrcall-tenant …` from a lock-holding user shell hangs.
 
 *Once per host, before anything:* after the branch is deployed,
 `systemctl is-active zylch-provisiond` and a `GET /api/provision/status`
@@ -625,6 +628,14 @@ and `/root/backup-2a-<co>`.
 *Offboarding:* `mrcall-tenant delete U` only (lock, marker, offboard as
 the tenant, last holder derived from group members **and** other
 profiles' keys); if it stops on an offboard error, fix and re-run.
+
+**Gate.** Two independent reviews on the scratch evidence and the host
+mechanisms: A (adversarial, host scripts) REVISE ×2 → APPROVED at
+`8169522`; B (evidence conformance, runbook) REVISE ×2 → APPROVED at
+`44133f7` (`8169522` only adds the lock reuse A asked for, probed in D8/D9).
+**M2 is ready for Café124:** deploy the branch, the provisiond check, 2a
+for Café124 in one window, then 2b one profile per day with the operator
+present.
 
 **Still open, not blocking Café124** (review A): `mrcalld` owns
 `/run/mrcalld`, the company store dirs and `reconcile.lock`; after the
