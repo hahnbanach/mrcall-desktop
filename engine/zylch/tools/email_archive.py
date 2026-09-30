@@ -640,6 +640,10 @@ class EmailArchiveManager:
             # threaded through here so store_emails_batch can persist it.
             "has_attachments": bool(msg.get("has_attachments")),
             "attachment_filenames": list(msg.get("attachment_filenames") or []),
+            # PEC (D4): the wrapped original's id and the envelope markers,
+            # both filled by the parser; None on ordinary mail.
+            "original_message_id": msg.get("original_message_id"),
+            "pec_markers": msg.get("pec_markers"),
         }
 
     def get_thread_messages(

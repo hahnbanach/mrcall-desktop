@@ -195,7 +195,7 @@ class Email(DictMixin, Base):
     # wrapped original's Message-ID and the transport markers land here.
     # NULL on every non-PEC row.
     original_message_id = Column(Text, nullable=True)
-    pec_markers = Column(JSON, nullable=True)
+    pec_markers = Column(JSON(none_as_null=True), nullable=True)  # SQL NULL on ordinary mail
 
     __table_args__ = (
         UniqueConstraint(

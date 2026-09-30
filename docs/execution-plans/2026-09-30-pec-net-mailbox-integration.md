@@ -247,6 +247,17 @@ inner References; a
 forward-as-attachment keeps its forwarder; a receipt without an inner
 message stores the envelope as is; `pytest tests/email`.
 
+**M4 integration review (2026-09-30): APPROVED** on the second pass. The
+first pass found that a provider-signed envelope (`multipart/signed`
+around `multipart/mixed`) was never unwrapped; `envelope_parts` now
+descends through every `multipart/*` container and never into an
+attached message. Provider parts (`postacert.eml`, `daticert.xml`,
+`smime.p7s`) are not user attachments. Receipt types follow the standard
+list with unknown values kept raw. The marker list and the signed layout
+remain standard-derived until M7's live sample. Suites: email and
+storage 224 passed; workers, rpc and services 595 passed with the
+pre-existing `llm.models` failure.
+
 ## M5 — RPC surface (engine + IPC contract)
 
 **Dependency:** M2, M3. New methods: `mailboxes.list` (rows without
@@ -262,9 +273,13 @@ active duplicate address, revives a removed one), `mailboxes.update`
 archive change replaces the "missing message counts as moved" branch of
 `move_message_by_message_id` with a named failure. `emails.list_inbox`,
 `list_sent`, `search` gain `mailbox_ids` per thread and accept an optional
-`mailbox_id` filter; `emails.list_by_thread` rows gain `mailbox_id` and
-`mailbox_address`; `emails.archive` takes the D3 shape; attachment tools
-and `get_message` resolve the client from the row's mailbox. Document all
+`mailbox_id` filter; `emails.list_by_thread` rows gain `mailbox_id`,
+`mailbox_address`, `original_message_id` and `pec_markers`;
+`emails.archive` takes the D3
+shape; attachment tools and `get_message` resolve the client from the
+row's mailbox; a reply to a PEC row uses `original_message_id` as
+`In-Reply-To` when present, because the correspondent threads on the
+original, not on the envelope. Document all
 of it in `docs/ipc-contract.md`. The IPC contract reviewer reviews this
 milestone before M6.
 
@@ -324,4 +339,9 @@ record what remains.
 - `factory._create_imap_client` caches clients by credential tuple; the
   cache key must include the mailbox id or the "interactive" client will
   serve the wrong account.
-- The PEC marker list is standard-derived until M4 captures a live sample.
+- The PEC marker list and the signed-envelope shape are standard-derived
+  until M7 confirms them on a live sample from the supervised account.
+- Known limitation: a PEC original held in one mailbox and a plain copy of
+  the same message in another are two different server identities, so the
+  first-copy rule does not pair them and both are processed. Delivery 2
+  or 3 may pair them on `original_message_id`.

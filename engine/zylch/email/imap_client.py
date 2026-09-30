@@ -379,36 +379,64 @@ def _parse_message_bytes(raw: Any) -> Optional[Dict[str, Any]]:
 
     msg = email_lib.message_from_bytes(bytes(raw))
 
+    # PEC (D4): a transport envelope wraps the sender's message in a
+    # message/rfc822 part. Sender, subject, body, attachments, threading
+    # and the auto-reply headers come from that original; the row's
+    # identity (message_id -> gmail_id and message_id_header) stays the
+    # envelope's Message-ID, because that is what the server holds.
+    # Receipts and anomaly wrappers are parsed as they are, markers kept.
+    from zylch.email.pec import is_provider_part, pec_original
+
+    unwrap = pec_original(msg)
+    source = msg
+    original_message_id: Optional[str] = None
+    pec_markers: Optional[Dict[str, Any]] = None
+    if unwrap is not None:
+        pec_markers = unwrap.envelope.to_markers()
+        if unwrap.original is not None:
+            source = unwrap.original
+            original_message_id = " ".join(str(source.get("Message-ID", "")).split()) or None
+
     # Decode headers
-    subject = _decode_header_value(msg.get("Subject"))
-    from_header = _decode_header_value(msg.get("From"))
-    to_header = _decode_header_value(msg.get("To", ""))
-    cc_header = _decode_header_value(msg.get("Cc", ""))
-    date_header = msg.get("Date", "")
+    subject = _decode_header_value(source.get("Subject"))
+    from_header = _decode_header_value(source.get("From"))
+    to_header = _decode_header_value(source.get("To", ""))
+    cc_header = _decode_header_value(source.get("Cc", ""))
+    date_header = source.get("Date", "") or msg.get("Date", "")
     message_id = msg.get("Message-ID", "")
-    in_reply_to = msg.get("In-Reply-To", "")
-    references_raw = msg.get("References", "")
+    in_reply_to = source.get("In-Reply-To", "")
+    references_raw = source.get("References", "")
 
     # Parse from name/email
     from_name, from_email = parseaddr(from_header)
 
     # Extract body
-    body_plain, body_html = _extract_plain_body(msg)
+    body_plain, body_html = _extract_plain_body(source)
 
     # Attachment metadata — filenames only, no bytes. The LLM and the
     # desktop Email tab need to know what files are present without
-    # paying for a re-fetch via fetch_attachments().
-    attachment_filenames = _extract_attachment_filenames(msg)
+    # paying for a re-fetch via fetch_attachments(). For a PEC envelope
+    # these are the original's parts: the .eml wrapper and daticert.xml
+    # are the provider's, not the user's.
+    attachment_filenames = _extract_attachment_filenames(source)
+    if unwrap is not None:
+        # A receipt or an envelope without its original is parsed as is:
+        # the provider's parts (daticert.xml, smime.p7s, postacert.eml)
+        # are still not the user's.
+        attachment_filenames = [n for n in attachment_filenames if not is_provider_part(n)]
 
-    # Thread ID: use References chain or Message-ID
+    # Thread ID: use References chain or Message-ID. A wrapped original
+    # threads by its own id: replies to it reference that id, not the
+    # envelope's.
+    anchor = original_message_id or message_id
     thread_id = ""
     if references_raw:
         refs = references_raw.strip().split()
-        thread_id = refs[0] if refs else message_id
+        thread_id = refs[0] if refs else anchor
     elif in_reply_to:
         thread_id = in_reply_to
     else:
-        thread_id = message_id
+        thread_id = anchor
 
     return {
         "message_id": message_id.strip(),
@@ -431,12 +459,55 @@ def _parse_message_bytes(raw: Any) -> Optional[Dict[str, Any]]:
         # Attachment metadata. NEVER includes raw bytes — only filenames.
         "has_attachments": bool(attachment_filenames),
         "attachment_filenames": attachment_filenames,
-        # Auto-reply detection headers
-        "auto_submitted": msg.get("Auto-Submitted", ""),
-        "x_autoreply": msg.get("X-Autoreply", ""),
-        "precedence": msg.get("Precedence", ""),
-        "x_auto_response_suppress": msg.get("X-Auto-Response-Suppress", ""),
+        # Auto-reply detection headers (the original's, for a PEC envelope)
+        "auto_submitted": source.get("Auto-Submitted", ""),
+        "x_autoreply": source.get("X-Autoreply", ""),
+        "precedence": source.get("Precedence", ""),
+        "x_auto_response_suppress": source.get("X-Auto-Response-Suppress", ""),
+        # PEC (D4): the wrapped original's Message-ID and the envelope markers
+        "original_message_id": original_message_id,
+        "pec_markers": pec_markers,
     }
+
+
+def user_attachment_source(msg: email_lib.message.Message) -> email_lib.message.Message:
+    """The message whose parts are the user's attachments.
+
+    For a PEC transport envelope that is the wrapped original, found
+    through the envelope's containers (S/MIME-signed envelopes wrap the
+    mixed body in ``multipart/signed``); for any other message, the
+    message itself. See :func:`user_attachments` for the parts.
+    """
+    from zylch.email.pec import pec_original
+
+    unwrap = pec_original(msg)
+    if unwrap is not None and unwrap.original is not None:
+        return unwrap.original
+    return msg
+
+
+def user_attachments(msg: email_lib.message.Message) -> List[email_lib.message.Message]:
+    """The attachment parts a user may download from ``msg``.
+
+    The parts of :func:`user_attachment_source`, minus the PEC provider's
+    own files (``postacert.eml``, ``daticert.xml``, ``smime.p7s``) on any
+    PEC-marked message.
+    """
+    from zylch.email.pec import detect_envelope, is_provider_part
+
+    pec = detect_envelope(msg) is not None
+    out: List[email_lib.message.Message] = []
+    for part in user_attachment_source(msg).walk():
+        if "attachment" not in str(part.get("Content-Disposition", "")).lower():
+            continue
+        # An attached message is not a file (it decodes to no bytes); the
+        # files inside it are reached by the walk, as they always were.
+        if part.get_content_type() == "message/rfc822":
+            continue
+        if pec and is_provider_part(part.get_filename()):
+            continue
+        out.append(part)
+    return out
 
 
 def _parse_uid_from_prefix(prefix: Any) -> Optional[int]:
@@ -1414,13 +1485,7 @@ class IMAPClient:
         os.makedirs(save_dir, exist_ok=True)
 
         results = []
-        for part in msg.walk():
-            disp = str(
-                part.get("Content-Disposition", ""),
-            )
-            if "attachment" not in disp:
-                continue
-
+        for part in user_attachments(msg):
             filename = part.get_filename()
             if not filename:
                 filename = f"attachment_{len(results)}"
