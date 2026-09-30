@@ -431,26 +431,9 @@ def _run_wizard(env: dict, profile_name: str | None):
     else:
         doc_paths = _prompt_document_paths()
 
-    # ─── 8. Personal notes ──────────────────────────────────
+    # ─── 8. Secret instructions ───────────────────────────────
 
-    click.echo("\n8. Personal Notes (optional)")
-    click.echo(
-        "   Anything you want Zylch to know about you.\n" "   e.g. preferences, context, style.\n",
-    )
-
-    existing_notes = env.get("USER_NOTES", "")
-    if existing_notes:
-        click.echo(f"  Current: {existing_notes[:80]}...")
-        if click.confirm("  Keep?", default=True):
-            user_notes = existing_notes
-        else:
-            user_notes = _prompt_multiline("  Notes")
-    else:
-        user_notes = _prompt_multiline("  Notes")
-
-    # ─── 9. Secret instructions ───────────────────────────────
-
-    click.echo("\n9. Secret Instructions (optional)")
+    click.echo("\n8. Secret Instructions (optional)")
     click.echo(
         "   Instructions Zylch will follow but NEVER"
         " reveal in any output.\n"
@@ -542,12 +525,6 @@ def _run_wizard(env: dict, profile_name: str | None):
         lines.append("# Document Folders")
         lines.append(f"DOCUMENT_PATHS={doc_paths}")
 
-    # Personal notes
-    if user_notes:
-        lines.append("")
-        lines.append("# Personal Notes")
-        lines.append(f"USER_NOTES={user_notes}")
-
     # Secret instructions
     if user_secret:
         lines.append("")
@@ -568,7 +545,6 @@ def _run_wizard(env: dict, profile_name: str | None):
         "MRCALL_BASE_URL",
         "MRCALL_REALM",
         "DOCUMENT_PATHS",
-        "USER_NOTES",
         "USER_SECRET_INSTRUCTIONS",
         *personal_data.keys(),
     }
@@ -587,12 +563,12 @@ def _run_wizard(env: dict, profile_name: str | None):
 
     logger.info(f"[init] Profile saved to {env_path}")
 
-    # ─── 10. Automatic updates (crontab) ─────────────────────
+    # ─── 9. Automatic updates (crontab) ─────────────────────
 
     import sys
 
     if sys.platform == "win32":
-        click.echo("\n10. Automatic Updates")
+        click.echo("\n9. Automatic Updates")
         click.echo(
             "   Not available on Windows yet." " Run 'zylch update' manually.",
         )
