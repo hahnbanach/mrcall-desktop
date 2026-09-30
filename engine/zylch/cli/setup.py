@@ -532,28 +532,7 @@ def _run_wizard(env: dict, profile_name: str | None):
         lines.append(f"USER_SECRET_INSTRUCTIONS={user_secret}")
 
     # Preserve extra vars from existing .env
-    known_keys = {
-        "ANTHROPIC_API_KEY",
-        "EMAIL_ADDRESS",
-        "EMAIL_PASSWORD",
-        "IMAP_HOST",
-        "IMAP_PORT",
-        "SMTP_HOST",
-        "SMTP_PORT",
-        "TELEGRAM_BOT_TOKEN",
-        "TELEGRAM_ALLOWED_USER_ID",
-        "MRCALL_BASE_URL",
-        "MRCALL_REALM",
-        "DOCUMENT_PATHS",
-        "USER_SECRET_INSTRUCTIONS",
-        *personal_data.keys(),
-    }
-    extra = {k: v for k, v in env.items() if k not in known_keys}
-    if extra:
-        lines.append("")
-        lines.append("# Other")
-        for k, v in extra.items():
-            lines.append(f"{k}={v}")
+    lines.extend(_preserved_lines(env, _wizard_known_keys(personal_data)))
 
     lines.append("")
 
@@ -620,6 +599,43 @@ def _run_wizard(env: dict, profile_name: str | None):
 
 
 # ─── Channel-specific helpers ─────────────────────────────────
+
+
+_WIZARD_KEYS = frozenset(
+    {
+        "ANTHROPIC_API_KEY",
+        "EMAIL_ADDRESS",
+        "EMAIL_PASSWORD",
+        "IMAP_HOST",
+        "IMAP_PORT",
+        "SMTP_HOST",
+        "SMTP_PORT",
+        "TELEGRAM_BOT_TOKEN",
+        "TELEGRAM_ALLOWED_USER_ID",
+        "MRCALL_BASE_URL",
+        "MRCALL_REALM",
+        "DOCUMENT_PATHS",
+        "USER_SECRET_INSTRUCTIONS",
+    }
+)
+
+
+def _wizard_known_keys(personal_data: dict) -> frozenset:
+    """The keys the wizard rewrites itself; every other key is preserved as found."""
+    return _WIZARD_KEYS | frozenset(personal_data.keys())
+
+
+def _preserved_lines(env: dict, known_keys: frozenset) -> list:
+    """`KEY=value` lines for every key the wizard does not own, raw and in file order.
+
+    A key the wizard no longer knows (a retired setting, a key another tool
+    wrote) survives a wizard run byte-for-byte, so a previous engine build can
+    still read it after a rollback.
+    """
+    extra = {k: v for k, v in env.items() if k not in known_keys}
+    if not extra:
+        return []
+    return ["", "# Other", *[f"{k}={v}" for k, v in extra.items()]]
 
 
 def _prompt_multiline(label: str) -> str:
