@@ -15,6 +15,7 @@
 #   mrcall-tenant unjoin <uid> <company-group> # remove it (after the join finished)
 #   mrcall-tenant delete <uid>                 # stop, offboard (as the tenant user; last-holder derived), remove everything
 #   mrcall-tenant unmigrate <uid>              # rollback of create: drop-in, fragment, run dir, ownership back to mrcalld, table row (keeps user + key file)
+#   mrcall-tenant store  <uid>                 # 2a: company group, setgid store dir, file group/modes, mrcalld in the group
 #   mrcall-tenant names  <uid>                 # print the derived names, change nothing
 #   mrcall-tenant list                         # the migrated uids (tenants table)
 #
@@ -87,8 +88,8 @@ as_tenant() { # as_tenant <user> <profile_dir> <zylch args...>
 verb="${1:-}"
 case "$verb" in
   list) ensure_table; cut -f1 "$TABLE"; exit 0 ;;
-  create|join|unjoin|delete|names|unmigrate) ;;
-  *) sed -n '2,25p' "$0"; exit 2 ;;
+  create|join|unjoin|delete|names|unmigrate|store) ;;
+  *) sed -n '2,27p' "$0"; exit 2 ;;
 esac
 uid="${2:-}"; [ -n "$uid" ] || die "missing <uid>"
 check_uid "$uid"
@@ -114,6 +115,23 @@ require_relocated() { # require_relocated <key>
   if [ -f "$MEMORY/$k.db" ] && [ ! -f "$MEMORY/$g/$(sha32 "$k").db" ]; then
     die "the company store still has its legacy name; run 2a first: zylch -p $uid memory-relocate-store (all of the company's daemons stopped)"
   fi
+}
+
+# The company group, its store directory and the files already in it. 2a
+# moves a store created by mrcalld (`mrcalld:mrcalld`, 0640/0660) into the
+# setgid dir; the directory's group does not reach files that already
+# exist, so without this a tenant daemon gets EACCES on the store and its
+# lock files (scratch VM probe 2026-09-30). mrcalld stays in the group
+# during the transition: an unmigrated daemon of the same company must be
+# able to write the -wal/-shm a tenant created (0660 <tenant>:<group>).
+ensure_company_store() { # ensure_company_store <group>
+  local g="$1"
+  getent group "$g" >/dev/null || { groupadd --system "$g"; log "created group $g"; }
+  install -d -m 0711 -o "$SVC_USER" -g "$SVC_USER" "$MEMORY"
+  [ -L "$MEMORY/$g" ] && die "$MEMORY/$g is a symlink; refusing"
+  install -d -m 2770 -o "$SVC_USER" -g "$g" "$MEMORY/$g"
+  find "$MEMORY/$g" -maxdepth 1 -type f -exec chgrp "$g" {} + -exec chmod g+rw,o= {} +
+  usermod -a -G "$g" "$SVC_USER"
 }
 
 write_dropin() { # write_dropin <group or empty>
@@ -163,6 +181,18 @@ write_dropin() { # write_dropin <group or empty>
 
 case "$verb" in
 
+store)
+  # 2a, after `zylch -p <uid> memory-relocate-store` with every daemon of
+  # the company stopped: group, setgid dir, file group + g+rw, mrcalld in
+  # the group. Migrates nobody; start the company's daemons afterwards so
+  # the unmigrated ones pick up the new supplementary group.
+  key=$(profile_key); [ -n "$key" ] || die "profile has no MEMORY_KEY"
+  g=$(group_of_key "$key")
+  [ -f "$MEMORY/$key.db" ] && die "legacy store still present; run memory-relocate-store first"
+  ensure_company_store "$g"
+  log "company store ready: $g"
+  ;;
+
 names)
   echo "user:  $user"
   g=$(company_group_for_profile); echo "group: ${g:-(no MEMORY_KEY)}"
@@ -193,9 +223,8 @@ create)
   group=""
   if [ -n "$key" ]; then
     group=$(group_of_key "$key")
-    getent group "$group" >/dev/null || { groupadd --system "$group"; log "created group $group"; }
+    ensure_company_store "$group"
     usermod -a -G "$group" "$user"
-    install -d -m 2770 -o "$SVC_USER" -g "$group" "$MEMORY/$group"
   fi
   # 5. per-profile encryption key (root-only file read by systemd before
   #    dropping privileges). Never printed.
@@ -235,8 +264,7 @@ join)
     [ "$(group_of_key "$MRCALL_JOIN_KEY")" = "$g" ] || die "MRCALL_JOIN_KEY does not derive to $g"
     require_relocated "$MRCALL_JOIN_KEY"
   fi
-  getent group "$g" >/dev/null || { groupadd --system "$g"; log "created group $g"; }
-  install -d -m 2770 -o "$SVC_USER" -g "$g" "$MEMORY/$g"
+  ensure_company_store "$g"
   usermod -a -G "$g" "$user"
   log "$user is now in $g (keep the old group until the join finished, then unjoin)"
   ;;
@@ -272,7 +300,8 @@ delete)
   group=$(company_group_for_profile)
   last=""
   if [ -n "$group" ] && getent group "$group" >/dev/null; then
-    others=$(getent group "$group" | awk -F: '{print $4}' | tr ',' '\n' | grep -v "^$user$" | grep -c . || true)
+    # mrcalld is in every company group during the transition; it is not a key holder
+    others=$(getent group "$group" | awk -F: '{print $4}' | tr ',' '\n' | grep -v -e "^$user$" -e "^$SVC_USER$" | grep -c . || true)
     [ "$others" = 0 ] && last="--last-holder"
   fi
   if id "$user" >/dev/null 2>&1 && [ -f "$profile_dir/.env" ]; then
