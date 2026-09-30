@@ -354,6 +354,34 @@ releases it. Record results in this plan. Then write
 `app/CLAUDE.md` and `docs/README.md`, and set this plan `completed` or
 record what remains.
 
+**M7 local checks (2026-09-30).** Migration of a real single-mailbox
+profile, run on a private copy with the branch's engine: 995 rows kept
+their ids, one active primary row with a NULL secret, every row stamped,
+unique index `(owner_id, mailbox_id, gmail_id)` and the
+`message_id_header` index present, second boot a no-op, one backup
+written, no `MAILBOX_SECRET_KEY` written because no mailbox was added.
+The original profile was not touched. Observed and left as is, outside
+this plan: the migration runner writes backups with mode 0644 in a 0775
+directory, so a mail database and any stored ciphertext are readable by
+other local users; a one-line `chmod 0600` in `backup_sqlite` would
+close it. Pending the CTO: the live PEC.net acceptance list, the marker
+confirmation on a real envelope, the Playwright settings script on a
+machine that has Playwright, and the hosted rollout.
+
+**Final end-to-end review (2026-09-30): APPROVED** on the second pass.
+The first pass found that archiving a thread with a row in a removed
+mailbox always failed; `get_thread_message_id_headers` now applies the
+active-mailbox filter, with a test. Added: a three-mailbox test with a
+restart between two syncs. Docs corrected: `last_error` is the raw
+exception message; a `zylch.db` restore leaves the company memory store
+untouched and re-extracts the restored rows; the hosted rollout uses
+`sudo systemctl` and a per-unit drop-in with a second checkout at the
+tag. The reviewer also merged `main` (seven commits ahead) in a scratch
+tree with no conflict: 1422 passed, the same two pre-existing failures.
+The plan stays `active` until the live PEC.net acceptance, the marker
+confirmation and the hosted rollout are done; the acceptance matrix is
+in the session record.
+
 ## Risks
 
 - The hosted daemon reads `.env` at start; the generated

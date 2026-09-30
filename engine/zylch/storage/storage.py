@@ -1632,15 +1632,17 @@ class Storage:
 
         Used by `emails.archive` to look up IMAP UIDs via HEADER SEARCH
         before issuing the MOVE; the mailbox says which server holds the
-        copy. Only returns non-empty, non-archived, non-deleted rows —
-        archiving twice is a no-op, and deleted rows should never be
-        touched on the server.
+        copy. Only returns non-empty, non-archived, non-deleted rows of
+        the owner's active mailboxes — archiving twice is a no-op, deleted
+        rows should never be touched on the server, and a row of a removed
+        mailbox is out of every query (D3), so it is never asked for.
         """
         with get_session() as session:
             rows = (
                 session.query(Email.mailbox_id, Email.message_id_header)
                 .filter(
                     Email.owner_id == owner_id,
+                    Email.mailbox_id.in_(_active_mailboxes(owner_id)),
                     Email.thread_id == thread_id,
                     Email.archived_at.is_(None),
                     Email.deleted_at.is_(None),

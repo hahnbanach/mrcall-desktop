@@ -170,6 +170,21 @@ private. Profile databases retain mailbox data, tokens and cursors. See
 [project memory](features/project-memory.md) and `MEMORY_TABLE_NAMES` in
 `zylch/storage/database.py` for the storage binding.
 
+A profile holds N IMAP mailboxes.
+The `mailboxes` table carries the primary row materialised from `.env` and
+every added mailbox with its hosts and a Fernet-encrypted password under
+the engine-written `MAILBOX_SECRET_KEY`; `emails` rows name their mailbox
+and are unique on `(owner_id, mailbox_id, gmail_id)`; sync, cursors, date
+floor and dedup are per mailbox, one mailbox's failure never stops the
+others; a message in two mailboxes is two rows processed once; removal
+hides rows and keeps memory; every active mailbox address is the user's;
+PEC transport envelopes store the original with the envelope id as server
+identity; archive moves each copy on its own server; `mailboxes.*` is on
+the RPC surface. The destructive step `0003_emails_mailbox` backs up the
+store before rebuilding `emails`. Focused suites pass (856, one
+pre-existing `llm.models` failure). Contract:
+[additional mailboxes](features/mailboxes.md). Not released; hosted units not migrated.
+
 Authenticated RPC serves setup evidence, identity, catalogs and billing policy.
 `setup.state` describes preparation evidence, not reply quality. Firebase ID
 tokens stay in memory. Claude Code headless runs in a clone and is outside engine
@@ -177,6 +192,11 @@ API budgets; see [control boundaries](../../docs/operator-setup.md#ai-execution-
 
 ## Unresolved
 
+- Additional mailboxes: live PEC.net acceptance on the supervised account and
+  confirmation of the PEC marker list against a live envelope are pending;
+  the Playwright settings script (`test-settings-recovery.mjs`) is pending
+  where Playwright exists; hosted rollout of step `0003_emails_mailbox` is
+  pending (procedure in [remote-backend.md](../../docs/remote-backend.md)).
 - The remaining three profiles await a billing choice; funded credit acceptance
   remains open. No backlog resumption is part of model configuration.
 - Incident checkpoint counts and project inventories in dated records are

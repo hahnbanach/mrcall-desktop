@@ -2,7 +2,7 @@
 
 **Stack**: Electron + React (app), Python 3.11+ (engine), SQLite
 **Entry point**: `engine/` (Python sidecar) and `app/` (Electron + React) — each has its own CLAUDE.md
-**Do not break**: The Firebase ID token is never persisted to disk; profiles are keyed by the immutable Firebase UID (`~/.zylch/profiles/<firebase_uid>/`), never by email; the company memory key (`MEMORY_KEY`) is a capability — never logged, never in git, written only by `memory.join`
+**Do not break**: The Firebase ID token is never persisted to disk; profiles are keyed by the immutable Firebase UID (`~/.zylch/profiles/<firebase_uid>/`), never by email; the company memory key (`MEMORY_KEY`) is a capability — never logged, never in git, written only by `memory.join`; the mailbox secret key (`MAILBOX_SECRET_KEY`) follows the same rule — never logged, never in git, written only by the engine
 
 <!-- orientation ends -->
 

@@ -9,9 +9,9 @@ environment at every boot by :func:`ensure_primary_mailbox`. Additional
 mailboxes carry their own hosts and an encrypted password
 (:mod:`zylch.email.mailbox_secrets`).
 
-Every ``emails`` row and every sync cursor names its mailbox. Writers that
-do not yet pass one (marked ``# M2: pass the mailbox`` at the call site)
-get :func:`resolve_default_mailbox_id`: the owner's primary row when it
+Every ``emails`` row and every sync cursor names its mailbox. The sync
+always does; the send mirrors and a row built without one get
+:func:`resolve_default_mailbox_id`: the owner's primary row when it
 exists or can be materialised from ``EMAIL_ADDRESS``, otherwise an active
 row keyed by the owner itself, which is also how the migration treats a
 profile whose owner is ``local-user``.

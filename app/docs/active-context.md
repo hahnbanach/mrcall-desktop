@@ -24,12 +24,22 @@ Errors survive refresh; older engines cannot fall back to unbounded analysis.
 Automatic analysis defaults off. Resume starts one batch without enabling
 recurring work. Setup retains the engine/operator handoff and saved billing state.
 
+Settings carries a Mailboxes card (list with state, Add with preset and a
+connection test before Save, Edit, Remove; the primary is read-only) and the
+Email view a mailbox filter and per-message chip with more than one active
+mailbox; archive reads the engine's `ok` and rolls back on a per-mailbox
+failure. Typecheck, build, onboarding and `scripts/test-mailboxes-ui.mjs`
+pass. Not released; hosted units not migrated.
+
 React component journeys use fake RPCs; their successful results, typecheck and
 build are source checks, not live GUI acceptance. Current hosted deployment and
 model selection are owned by [cross-cutting state](../../docs/active-context.md).
 
 ## Unresolved
 
+- Additional mailboxes: `scripts/test-settings-recovery.mjs` (Playwright) has
+  not run against the Mailboxes card; live PEC.net acceptance through the GUI
+  and the hosted rollout are pending.
 - Reopen Settings after a connection change: reloading identical settings does
   not refetch the catalog. Stale choices remain disabled.
 - Installation, fresh-device sign-in and personal-key entry on the CTO's Mac

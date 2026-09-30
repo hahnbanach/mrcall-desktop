@@ -254,3 +254,29 @@ def test_a_non_ok_search_is_a_protocol_failure_not_a_missing_message(env, monkey
     error = result["mailboxes"][0]["error"]
     assert "SEARCH" in error and "not found" not in error
     assert _archived(env["db"])[(prim, "<in@x>")] is False
+
+
+def test_a_thread_with_a_row_in_a_removed_mailbox_archives_its_visible_rows(env, monkeypatch):
+    """A removed mailbox's row is out of every query (D3): the archive moves the
+    visible copies, answers ok, and never opens the removed mailbox's server."""
+    when = datetime.now(timezone.utc) - timedelta(days=1)
+    servers = _servers(
+        monkeypatch,
+        env,
+        {1: build_raw_message("<a1@x>", date=when)},
+        {1: build_raw_message("<a2@x>", date=when)},
+    )
+    prim, second = env["primary"].id, env["second"].id
+    _store(env, prim, "<a1@x>", "A")
+    _store(env, second, "<a2@x>", "A", 1)
+    assert mailboxes.remove_mailbox(OWNER, second) is not None
+
+    result = _archive("A")
+    assert result["ok"] is True and result["archived"] == 1
+    assert result["mailboxes"] == [{"mailbox_id": prim, "attempted": 1, "moved": 1, "error": None}]
+    assert _moved(servers, OWNER) == {"<a1@x>"} and _moved(servers, SECOND) == set()
+    assert not _touched(servers, SECOND)  # the removed mailbox's server is never opened
+    archived = _archived(env["db"])
+    assert archived[(prim, "<a1@x>")] is True and archived[(second, "<a2@x>")] is False
+    again = _archive("A")  # nothing left to do, still ok
+    assert again["ok"] is True and again["archived"] == 0 and again["mailboxes"] == []

@@ -48,6 +48,7 @@ Complete documentation for Zylch standalone (local CLI sales intelligence tool).
 |------|---------|
 | [features/entity-memory-system.md](features/entity-memory-system.md) | Entity-centric memory with hybrid search |
 | [features/email-archive.md](features/email-archive.md) | Email archive with IMAP sync |
+| [features/mailboxes.md](features/mailboxes.md) | Additional IMAP mailboxes: table, secrets, per-mailbox sync, PEC unwrap, migration |
 | [features/email-triage.md](features/email-triage.md) | Email triage and auto-reply detection |
 | [features/mnemonic-writer-inventory.md](features/mnemonic-writer-inventory.md) | Executable legacy memory writer/call graph freeze |
 | [features/mnemonic-decisions.md](features/mnemonic-decisions.md) | Mnemonic memory events, validator and origin-bound paid admission |

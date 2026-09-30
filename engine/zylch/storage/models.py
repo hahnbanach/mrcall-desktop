@@ -117,8 +117,9 @@ def _default_mailbox_id(context) -> str:
     Resolves the owner's mailbox on the connection running the INSERT
     (same transaction, no second writer on the SQLite file): the primary
     row, materialised from the profile ``.env`` when the owner is its
-    address, otherwise the owner-keyed row. Every writer that relies on
-    this default is marked ``# M2: pass the mailbox``.
+    address, otherwise the owner-keyed row. The sync always names its
+    mailbox; the send mirrors rely on this default (sent mail is the
+    primary's).
     """
     from zylch.email.mailboxes import resolve_default_mailbox_id
 

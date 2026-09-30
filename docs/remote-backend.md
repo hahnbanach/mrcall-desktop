@@ -365,3 +365,59 @@ per UTC day by `LLM_DAILY_BUDGET_USD` (default 10, `0` = no cap; the
 from the budget of the profile whose tick runs it. A large
 backlog is analysed in daily instalments at the cap — raise it for a day
 with a line in `.env` and a restart.
+
+## Additional mailboxes on the host (migration `0003_emails_mailbox`)
+
+A release carrying the `mailboxes` table runs the destructive profile step
+`0003_emails_mailbox` on each daemon's first boot: it backs up `zylch.db`
+to `<profile>/backups/zylch.db.0003_emails_mailbox.<stamp>.bak` through
+the SQLite backup API, then rebuilds `emails` with a `mailbox_id` on every
+row. Contract and data-loss window:
+[additional mailboxes](../engine/docs/features/mailboxes.md).
+
+Rollout is one daemon at a time. The units share the checkout at
+`/home/mrcalld/mrcall-desktop/engine` (the template's `ExecStart` runs its
+`venv/bin/zylch`), and `update-daemons.sh` pulls that checkout and restarts
+every daemon at once, so it is not the tool for a staged migration. One unit
+receives the new release through a second checkout at the release tag and a
+per-unit systemd drop-in that points only that unit at it; the shared
+checkout, and every other unit, stays on the previous release until each
+has been migrated the same way (the Café 124 voice daemon stays pinned
+until its pilot plan releases it):
+
+```bash
+sudo -u mrcalld git -C /home/mrcalld clone --branch <tag> <repo> mrcall-desktop-<tag>
+sudo -u mrcalld python3 -m venv /home/mrcalld/mrcall-desktop-<tag>/engine/venv
+sudo -u mrcalld /home/mrcalld/mrcall-desktop-<tag>/engine/venv/bin/pip install -e /home/mrcalld/mrcall-desktop-<tag>/engine
+sudo mkdir -p /etc/systemd/system/zylch-server@<uid>.service.d
+printf '[Service]\nExecStart=\nExecStart=/home/mrcalld/mrcall-desktop-<tag>/engine/venv/bin/zylch -p %%i serve --unix /run/mrcalld/%%i.sock\n' \
+  | sudo tee /etc/systemd/system/zylch-server@<uid>.service.d/release.conf
+sudo systemctl daemon-reload
+sudo systemctl stop zylch-server@<uid>
+sudo ls -la ~mrcalld/.zylch/profiles/<uid>/backups/      # none yet for 0003
+sudo systemctl start zylch-server@<uid>
+sudo journalctl -u zylch-server@<uid> | grep '\[migrate\]'   # backup, step
+sudo ls -la ~mrcalld/.zylch/profiles/<uid>/backups/      # the 0003 .bak exists
+```
+
+Once every unit is on the release, the shared checkout is moved to the
+same tag and the drop-ins are removed (`sudo systemctl daemon-reload`, one
+restart per unit).
+
+Then, over the daemon's RPC, `mailboxes.list` answers the primary row
+(`is_primary: true`, `configured: true`) and one `sync.run` completes with
+`last_sync_at` set on it. Additional mailboxes added from the desktop app
+store their password under the profile's `MAILBOX_SECRET_KEY`, which
+`mailboxes.add` writes into the profile `.env` before the row; the key is
+never in the company map, never provisioned, never logged.
+
+Restore: `sudo systemctl stop zylch-server@<uid>`, delete `zylch.db-wal`
+and `zylch.db-shm` beside the store, copy the `.bak` over `zylch.db` (or
+call `zylch.storage.migrations.restore_sqlite`), point the unit back at the
+previous release (remove its drop-in, `sudo systemctl daemon-reload`),
+`sudo systemctl start zylch-server@<uid>`. Everything written to `zylch.db`
+after the migration that is not on the IMAP server is lost (pins, read and
+archive flags, tasks); mail re-syncs. The company memory store is a
+separate file the restore does not touch: the restored rows are
+unprocessed again and are re-extracted on the next run, merging into the
+memory already there.
