@@ -149,6 +149,17 @@ async def sync_run(params: Dict[str, Any], notify: NotifyFn) -> Any:
     }
 
 
+def _mailbox_breakdown(owner_id: str) -> list:
+    """Per-mailbox email counts for ``setup.state``; ``[]`` when unavailable."""
+    try:
+        from zylch.storage.storage import Storage
+
+        return Storage.get_instance().email_counts_by_mailbox(owner_id)
+    except Exception as e:
+        logger.warning(f"[setup.state] per-mailbox counts unavailable: {e}")
+        return []
+
+
 async def setup_state(params: Dict[str, Any], notify: NotifyFn) -> Any:
     """setup.state() -> current onboarding state.
 
@@ -231,6 +242,7 @@ async def setup_state(params: Dict[str, Any], notify: NotifyFn) -> Any:
         from sqlalchemy import func
         from zylch.storage.database import get_session
         from zylch.storage.models import Email
+        from zylch.storage.storage import Storage as _Storage
 
         with get_session() as session:
             total, analyzed, last = (
@@ -239,7 +251,7 @@ async def setup_state(params: Dict[str, Any], notify: NotifyFn) -> Any:
                     func.count(Email.memory_processed_at),
                     func.max(Email.memory_processed_at),
                 )
-                .filter(Email.owner_id == owner_id)
+                .filter(Email.owner_id == owner_id, _Storage.active_mailbox_filter(owner_id))
                 .one()
             )
         analyzed_count = int(analyzed)
@@ -258,6 +270,8 @@ async def setup_state(params: Dict[str, Any], notify: NotifyFn) -> Any:
         "emails_analyzed_count": analyzed_count,
         "emails_pending_analysis": pending_count,
         "last_email_analyzed_at": last_analyzed_at,
+        # Per active mailbox (additive): rows held and rows pending analysis.
+        "mailboxes": _mailbox_breakdown(owner_id),
     }
     logger.debug(f"[rpc] setup.state -> {state}")
     return state

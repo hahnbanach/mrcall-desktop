@@ -161,7 +161,7 @@ Methods recorded in this index, with the parameters it declares and the shape it
 returns. `?` and `=default` mark optional parameters; everything else is
 required and its absence is a `-32602`. Transcribed from the engine
 registry on 2026-08-15 (65 methods), plus `emails.needs_reply` added
-2026-08-26.
+2026-08-26 and the six `mailboxes.*` methods added 2026-09-30 (72 methods).
 
 **`account.*`**
 
@@ -211,17 +211,85 @@ registry on 2026-08-15 (65 methods), plus `emails.needs_reply` added
 
 **`emails.*`**
 
+A message is the user's (user-sent, ours) when its `from_email` equals,
+case-insensitively, the primary `EMAIL_ADDRESS`, an address in
+`EMAIL_ALIASES`, or the address of an active mailbox
+(`engine/zylch/email/identity.py:user_addresses`); `emails.needs_reply`
+and `is_user_sent` use only the primary and active mailbox addresses,
+because a declared alias is not verified by a connection. A colleague on
+the same domain is never the user.
+
+Every row belongs to one mailbox (`mailbox_id`, see `mailboxes.*`); rows
+of a removed mailbox are absent from every list, search and count. A
+message delivered to two mailboxes is two rows (one per mailbox) in one
+thread.
+
 | Method | Declared parameters | Returns |
 |---|---|---|
-| `emails.archive` | `thread_id` | {ok, archived, imap} |
+| `emails.archive` | `thread_id` | {ok, archived, mailboxes: [{mailbox_id, attempted, moved, error}]} |
 | `emails.delete` | `thread_id` | {ok, deleted} |
-| `emails.list_by_thread` | `thread_id` | {"emails": [...]} |
-| `emails.list_inbox` | `limit=50, offset=0` | {"threads": [...]} |
-| `emails.list_sent` | `limit=50, offset=0` | {"threads": [...]} |
+| `emails.list_by_thread` | `thread_id` | {"emails": [...]} — rows carry `mailbox_id`, `mailbox_address`, `original_message_id`, `pec_markers` |
+| `emails.list_inbox` | `limit=50, offset=0, mailbox_id?` | {"threads": [...]} — summaries carry `mailbox_ids` |
+| `emails.list_sent` | `limit=50, offset=0, mailbox_id?` | {"threads": [...]} — summaries carry `mailbox_ids` |
 | `emails.mark_read` | `thread_id` | {ok, affected} |
 | `emails.needs_reply` | `thread_ids` | {"threads": {tid: {...}}, asked, note} |
 | `emails.pin` | `thread_id, pinned: bool` | {ok, affected} |
-| `emails.search` | `query?, folder='inbox', limit=50, offset=0` | {"threads": [...]} |
+| `emails.search` | `query?, folder='inbox', limit=50, offset=0, mailbox_id?` | {"threads": [...]} — summaries carry `mailbox_ids` |
+
+`mailbox_id` on the three listers restricts the rows to that mailbox (the
+threads as that mailbox sees them); without it every active mailbox
+contributes. `mailbox_ids` lists the mailboxes holding rows of the
+thread. On `emails.list_by_thread` rows, `original_message_id` and
+`pec_markers` (`{kind: transport|receipt|anomaly, receipt_type,
+reference_message_id, headers}`) are non-null only on PEC rows: the row's
+identity (`id`, Message-ID) is the provider's envelope, the content is the
+wrapped original's, and a reply threads on `original_message_id`.
+
+**`mailboxes.*`**
+
+The profile's IMAP mailboxes. The primary is the sign-up address configured
+in Settings (`EMAIL_ADDRESS`, `EMAIL_PASSWORD`, hosts in `.env`) and is
+read-only here; additional mailboxes are added, tested, changed and removed
+through these methods, their passwords encrypted under the profile's
+`MAILBOX_SECRET_KEY` (never a Settings key, never returned, never echoed).
+Refusals are answers (`{ok: false, status, message}`), not errors.
+
+| Method | Declared parameters | Returns |
+|---|---|---|
+| `mailboxes.add` | `address, password, imap_host?, imap_port?, smtp_host?, smtp_port?, preset?` | {ok, status, message?, mailbox?} |
+| `mailboxes.list` | — | {mailboxes: [{id, address, imap_host, imap_port, smtp_host, smtp_port, preset, is_primary, configured, state, last_sync_at, last_error, created_at}]} |
+| `mailboxes.presets` | — | {presets: [{id, label, domains, imap_host, imap_port, imap_security, smtp_host, smtp_port, smtp_security, username, password_label}]} |
+| `mailboxes.remove` | `mailbox_id` | {ok, status, message?, mailbox?} |
+| `mailboxes.test` | `address, password, imap_host?, imap_port?, smtp_host?, smtp_port?` | {ok, status, message} |
+| `mailboxes.update` | `mailbox_id, imap_host?, imap_port?, smtp_host?, smtp_port?, password?, preset?` | {ok, status, message?, mailbox?} |
+
+`mailboxes.list` returns every active mailbox, the primary first, without
+secrets; `configured` is false for a primary whose address or
+`EMAIL_PASSWORD` is empty and for an additional mailbox without a stored
+password; `state` is `ok` (last sync succeeded), `error` (`last_error`
+set, the message names the failure) or `never`. `mailboxes.presets` is the
+engine's provider table plus `PEC.net (Register.it)` (`imap.pec-email.com:993`
+SSL, `smtp.pec-email.com:465` SSL, username = full address, password label
+"PEC mailbox password"). `mailboxes.test` logs in, LISTs, opens INBOX
+read-only and the Sent and archive folders discovery finds (absent ones
+count as absent) and answers `status` `ok`, `auth`, `unreachable`, `tls`,
+`folder` (a found folder cannot be selected) or `invalid` (an address
+without `@`, an unusable port); nothing is stored, and no message ever
+carries the password. `mailboxes.add` runs that test first and refuses on
+its failure with the same `status`, refuses an active duplicate address —
+compared case-insensitively, the primary's included — with `duplicate`,
+answers `secret` when the profile's key cannot be written or the password
+cannot be stored, and revives a removed row with its id, rows and cursors.
+`mailboxes.update` re-tests when a host, port or password changes (same
+statuses as the test, plus `secret`), answers `unknown` for an id without
+an active row and `primary` for the primary. `mailboxes.remove` sets
+`removed_at` (rows, cursors and extracted memory are kept; the sync stops
+covering it) and answers `unknown` or `primary` the same way.
+
+Complete `status` set per method: `test` → `ok | auth | unreachable | tls |
+folder | invalid`; `add` → those plus `duplicate | secret`; `update` → `ok |
+auth | unreachable | tls | folder | invalid | secret | unknown | primary`;
+`remove` → `ok | unknown | primary`.
 
 **`google.*`**
 
@@ -537,7 +605,7 @@ onto the same row. This is a direct user action (typed + sent), so it is
 **not** approval-gated — unlike the LLM-initiated `send_whatsapp` inside
 `tasks.solve`. Preload binding has a 30 s timeout.
 
-### `emails.search(query?, folder?, limit?, offset?)`
+### `emails.search(query?, folder?, limit?, offset?, mailbox_id?)`
 
 | Param | Type | Required | Notes |
 |-------|------|----------|-------|
@@ -545,6 +613,7 @@ onto the same row. This is a direct user action (typed + sent), so it is
 | `folder` | `"inbox" \| "sent" \| "all"` | no | Default `"inbox"`. Same coarse filter the listing endpoints use; `all` searches both directions. |
 | `limit` | int | no | Default 50. |
 | `offset` | int | no | Default 0. Pagination is over the matching thread list, not over messages. |
+| `mailbox_id` | string | no | Restricts the rows to one mailbox (the threads as that mailbox sees them); absent, every active mailbox contributes. Summaries carry `mailbox_ids`. |
 
 Returns `{ threads: InboxThread[] }` — same dict shape as
 `emails.list_inbox` / `emails.list_sent`, so the renderer reuses the
@@ -587,7 +656,7 @@ far they reach:
 
 | Method | Reach | Returns |
 |---|---|---|
-| `emails.archive` | IMAP MOVE of every row of the thread to the archive folder, **then** the local flag. If IMAP fails the local flag is NOT set and the error surfaces to the caller, so the UI can show it. | `{ok, archived, imap}` |
+| `emails.archive` | Per mailbox of the thread's rows: IMAP MOVE of that mailbox's Message-IDs from INBOX to its archive folder over its own client, **then** `archived_at` on the rows whose copy moved. A Message-ID not in INBOX but held by the archive or Sent folder (the user's own reply, a message archived from another client) is already where it belongs and counts as moved; a Message-ID absent from all of them is a named failure (its row stays visible), a non-OK SEARCH a protocol failure; a connection or login failure is the mailbox's `error` with nothing moved. `ok` is true only when every mailbox moved everything; `archived` counts the rows stamped. The primary's connection is never used for another mailbox's messages. | `{ok, archived, mailboxes: [{mailbox_id, attempted, moved, error}]}` |
 | `emails.delete` | **Local-only soft delete** — `deleted_at = now()` on every row so the thread drops out of inbox/sent views. Deliberately does NOT touch IMAP: the server copy is preserved so any `TaskItem` pointing at these emails stays resolvable. | `{ok, deleted}` |
 | `emails.mark_read` | `read_at = now()` on every row that lacks one. Idempotent; fire-and-forget from the renderer when the user opens a thread. | `{ok, affected}` |
 | `emails.pin` | Thread-level flag written as `pinned_at` on every row. `affected` counts rows whose value actually changed — re-pinning an already-pinned thread returns `0`. | `{ok, affected}` |
@@ -1053,9 +1122,17 @@ Returns:
   "agents_trained": ["memory_message", "task_email", "emailer"],
   "emails_analyzed_count": 1200,         // this owner's rows with memory_processed_at
   "emails_pending_analysis": 34,         // this owner's rows without that marker
-  "last_email_analyzed_at": "2026-09-10T08:00:00"
+  "last_email_analyzed_at": "2026-09-10T08:00:00",
+  "mailboxes": [                         // per active mailbox (additive)
+    {"mailbox_id": "…", "address": "support@example.test",
+     "emails_count": 1200, "emails_pending_analysis": 34}
+  ]
 }
 ```
+
+Every email count covers the active mailboxes only: the rows of a removed
+mailbox are not counted. `mailboxes` is empty when the breakdown cannot be
+queried.
 
 Per-profile (driven by the active SQLite DB), so a brand-new profile
 starts gated even if a sibling profile on the same machine is fully

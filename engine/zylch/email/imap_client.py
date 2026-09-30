@@ -118,6 +118,40 @@ class IMAPSearchError(IMAPError):
     """A SEARCH command returned a non-OK status or an unparsable result."""
 
 
+class IMAPMessageNotFound(IMAPError):
+    """A Message-ID the source folder does not hold (D3: a named failure)."""
+
+
+def _scrub_secret(text: str, secret: str) -> str:
+    """Remove every printed form of ``secret`` from ``text``.
+
+    An error built from a bytes payload prints the credential escaped
+    (``\\`` for a backslash, ``\'`` for a quote, ``\xc3\xa4`` for a
+    non-ASCII byte), so the plain form, the ``str`` escaped form and the
+    ``bytes`` escaped form are all replaced.
+    """
+    if not secret or not text:
+        return text
+    forms = {secret, repr(secret)[1:-1], str(secret.encode("utf-8"))[2:-1]}
+    for form in forms:
+        if form:
+            text = text.replace(form, "***")
+    return text
+
+
+def _safe_login_error(error: BaseException) -> str:
+    """A login failure's description without the server's text.
+
+    The server's reply can echo the credential (a fake or a broken
+    provider): only the classification survives; the exception chain
+    keeps the original for the error classifier.
+    """
+    text = str(error).upper()
+    if "AUTHENTICATIONFAILED" in text or "INVALID CREDENTIALS" in text or "LOGIN" in text:
+        return "the server rejected the username or password"
+    return "the server refused the login"
+
+
 # IMAP date literals are `dd-Mon-yyyy` with ENGLISH month abbreviations
 # (RFC 3501). `strftime("%b")` is locale-dependent — under it_IT it emits
 # "ago" for August and the server rejects the search — so the month names
@@ -651,13 +685,19 @@ class IMAPClient:
             # and reconnect around it, leaking the socket.
             self._discard_connection(conn)
             raise IMAPError(
-                f"IMAP connect to {self.imap_host}:{self.imap_port} failed after "
-                f"{IMAP_CONNECT_TIMEOUT_SECONDS}s: {type(e).__name__}: {e}"
+                _scrub_secret(
+                    f"IMAP connect to {self.imap_host}:{self.imap_port} failed after "
+                    f"{IMAP_CONNECT_TIMEOUT_SECONDS}s: {type(e).__name__}: {e}",
+                    self.password,
+                )
             ) from e
         except Exception as e:
             self._discard_connection(conn)
+            # Never the server's text here: it could echo the credential. The
+            # cause keeps it for the classifier; the message stays safe.
             raise IMAPError(
-                f"IMAP login for {self.email_addr} failed: {type(e).__name__}: {e}"
+                f"IMAP login for {self.email_addr} failed: {type(e).__name__}: "
+                f"{_safe_login_error(e)}"
             ) from e
 
         self._conn = conn
@@ -933,9 +973,14 @@ class IMAPClient:
 
         Uses IMAP UID SEARCH on the Message-ID header, then UID MOVE
         (preferred) or UID COPY+EXPUNGE as fallback for servers without
-        RFC 6851 MOVE. Returns True iff at least one message was moved
-        or the source message was not present (already moved is a no-op
-        success). Returns False on protocol errors.
+        RFC 6851 MOVE. Returns True iff at least one message was moved;
+        returns False on protocol errors.
+
+        Raises:
+            IMAPMessageNotFound: the source folder holds no message with
+                that Message-ID. Named, never a silent success (D3): the
+                caller must not flag a row archived whose copy this
+                mailbox never moved.
 
         `dest_folder` must already be IMAP-quoted if it contains spaces
         or brackets — use `find_archive_folder()` output directly.
@@ -963,23 +1008,17 @@ class IMAPClient:
                 message_id_header,
             )
         except Exception as e:
-            logger.warning(f"[IMAP] move: UID SEARCH failed: {e}")
-            return False
+            raise IMAPSearchError(f"UID SEARCH in {source_folder} raised: {e}") from e
 
-        if status != "OK" or not data or not data[0]:
-            # Not found in source folder. This is common when the user
-            # already archived from another client, or the message was
-            # only ever in Sent. Treat as success — the local flag is
-            # what the UI reads.
-            logger.debug(
-                f"[IMAP] move: message-id {message_id_header} not in "
-                f"{source_folder} (already moved?)"
+        if status != "OK":
+            # A protocol failure is not "the message is not here".
+            raise IMAPSearchError(f"UID SEARCH in {source_folder} -> status={status!r}")
+        if not data or not data[0] or not data[0].split():
+            raise IMAPMessageNotFound(
+                f"message {message_id_header} not found in {source_folder} of {self.email_addr}"
             )
-            return True
 
         uids = data[0].split()
-        if not uids:
-            return True
 
         uid_set = b",".join(uids).decode("ascii")
 
@@ -1010,6 +1049,30 @@ class IMAPClient:
         except Exception as e:
             logger.warning(f"[IMAP] COPY+EXPUNGE failed: {e}")
             return False
+
+    @_imap_serialized
+    def find_message_folder(self, message_id_header: str, folders: List[str]) -> Optional[str]:
+        """The first of ``folders`` holding ``message_id_header``, or ``None``.
+
+        Read-only SELECT plus ``UID SEARCH HEADER Message-ID``; a folder
+        that cannot be selected is skipped, a SEARCH that answers non-OK
+        is a protocol failure (``IMAPSearchError``), never "not here".
+        """
+        conn = self._ensure_connected()
+        for folder in folders:
+            try:
+                status, _ = conn.select(folder, readonly=True)
+            except Exception as e:
+                logger.debug(f"[IMAP] find_message_folder: select {folder} raised: {e}")
+                continue
+            if status != "OK":
+                continue
+            status, data = conn.uid("SEARCH", None, "HEADER", "Message-ID", message_id_header)
+            if status != "OK":
+                raise IMAPSearchError(f"UID SEARCH in {folder} -> status={status!r}")
+            if data and data[0] and data[0].split():
+                return folder
+        return None
 
     @_imap_serialized
     def sync_folders(self) -> List[str]:

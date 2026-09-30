@@ -52,8 +52,19 @@ def ensure_secret_key() -> str:
     key = current_secret_key()
     if key:
         return key
-    from zylch.services.settings_io import update_env
+    from zylch.services.settings_io import read_env, update_env
 
+    # Two processes adding their first mailbox at the same moment would
+    # each mint a key and the later write would win, orphaning the other's
+    # row. Re-read the file right before writing: a key another process
+    # persisted meanwhile is adopted, never overwritten.
+    try:
+        persisted = (read_env().get(SETTING) or "").strip()
+    except Exception as e:
+        raise MailboxSecretError(f"cannot read the profile .env for {SETTING}: {e}") from e
+    if persisted:
+        os.environ[SETTING] = persisted
+        return persisted
     key = Fernet.generate_key().decode("ascii")
     try:
         update_env({SETTING: key})

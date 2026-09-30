@@ -79,7 +79,7 @@ def test_fresh_db_has_the_new_shape_and_the_primary_from_env(booted):
     assert mailboxes.for_owner(OWNER) == [prim]
     assert mailboxes.by_id(OWNER, prim.id) == prim
     assert mailboxes.by_address(OWNER, OWNER) == prim
-    assert mailboxes.by_address(OWNER, f" {OWNER} ") is None  # exact, like the runtime owner
+    assert mailboxes.by_address(OWNER, f" {OWNER.upper()} ") == prim  # trimmed, case-insensitive
     assert mailboxes.active_mailbox_ids(OWNER) == [prim.id]
 
 

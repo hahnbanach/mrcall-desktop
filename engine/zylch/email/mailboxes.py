@@ -174,12 +174,21 @@ def by_id(owner_id: str, mailbox_id: str) -> MailboxInfo | None:
 
 
 def by_address(owner_id: str, address: str, include_removed: bool = False) -> MailboxInfo | None:
-    """One mailbox by address (exact match); removed rows only on request."""
+    """One mailbox by address, case-insensitively; removed rows only on request.
+
+    Addresses are compared lower-cased and trimmed: ``Owner@Company.test``
+    and ``owner@company.test`` are one account.
+    """
+    from sqlalchemy import func
+
     from zylch.storage.database import get_session
     from zylch.storage.models import Mailbox
 
+    wanted = (address or "").strip().lower()
     with get_session() as session:
-        q = session.query(Mailbox).filter(Mailbox.owner_id == owner_id, Mailbox.address == address)
+        q = session.query(Mailbox).filter(
+            Mailbox.owner_id == owner_id, func.lower(Mailbox.address) == wanted
+        )
         if not include_removed:
             q = q.filter(Mailbox.removed_at.is_(None))
         row = q.first()
@@ -356,13 +365,17 @@ def add_mailbox(
     from zylch.storage.database import get_session
     from zylch.storage.models import Mailbox
 
-    address = (address or "").strip()
+    from sqlalchemy import func
+    from sqlalchemy.exc import IntegrityError
+
+    # Stored and compared lower-cased: one account, whatever its casing.
+    address = (address or "").strip().lower()
     if not address:
         raise ValueError("a mailbox needs an address")
     token = encrypt_secret(password)
     with get_session() as session:
         rows = session.query(Mailbox).filter(
-            Mailbox.owner_id == owner_id, Mailbox.address == address
+            Mailbox.owner_id == owner_id, func.lower(Mailbox.address) == address
         )
         active = rows.filter(Mailbox.removed_at.is_(None)).first()
         if active is not None:
@@ -379,10 +392,155 @@ def add_mailbox(
         row.preset = preset
         row.secret = token
         row.last_error = None
-        session.flush()
+        try:
+            session.flush()
+        except IntegrityError as e:
+            # Another process stored the same address meanwhile. Never let
+            # the driver's text out: its parameters include the ciphertext.
+            session.rollback()
+            logger.info(f"[mailboxes] {address}: stored concurrently ({type(e).__name__})")
+            raise ValueError(f"mailbox {address} is already configured") from None
         info = _info(row)
     logger.info(f"[mailboxes] stored mailbox {address} for {owner_id} (secret present)")
     return info
+
+
+def update_mailbox(
+    owner_id: str,
+    mailbox_id: str,
+    *,
+    imap_host: str | None = None,
+    imap_port: int | None = None,
+    smtp_host: str | None = None,
+    smtp_port: int | None = None,
+    password: str | None = None,
+    preset: str | None = None,
+) -> MailboxInfo | None:
+    """Change an additional mailbox's hosts, ports, preset or password.
+
+    ``None`` leaves a field as it is. A new password is encrypted under
+    the profile's key. Returns the row, or ``None`` when the owner has no
+    such active row. The primary is refused (its settings live in
+    ``.env``): ``ValueError``.
+    """
+    from zylch.storage.database import get_session
+    from zylch.storage.models import Mailbox
+
+    token = encrypt_secret(password) if password is not None else None
+    with get_session() as session:
+        row = (
+            session.query(Mailbox)
+            .filter(
+                Mailbox.owner_id == owner_id,
+                Mailbox.id == mailbox_id,
+                Mailbox.removed_at.is_(None),
+            )
+            .first()
+        )
+        if row is None:
+            return None
+        if row.is_primary:
+            raise ValueError("the primary mailbox is configured in Settings, not here")
+        if imap_host is not None:
+            row.imap_host = imap_host or None
+        if imap_port is not None:
+            row.imap_port = imap_port or None
+        if smtp_host is not None:
+            row.smtp_host = smtp_host or None
+        if smtp_port is not None:
+            row.smtp_port = smtp_port or None
+        if preset is not None:
+            row.preset = preset or None
+        if token is not None:
+            row.secret = token
+            row.last_error = None
+        session.flush()
+        info = _info(row)
+    logger.info(f"[mailboxes] updated mailbox {info.address} for {owner_id}")
+    return info
+
+
+def remove_mailbox(owner_id: str, mailbox_id: str) -> MailboxInfo | None:
+    """Hide a mailbox: ``removed_at`` set, rows and cursors kept (D3).
+
+    Sync skips it from the next run and every list, search and picker
+    stops seeing its rows; re-adding the address revives the row with
+    its id. Returns the row, ``None`` when there is no such active row.
+    The primary is refused: ``ValueError``.
+    """
+    from zylch.storage.database import get_session
+    from zylch.storage.models import Mailbox
+
+    with get_session() as session:
+        row = (
+            session.query(Mailbox)
+            .filter(
+                Mailbox.owner_id == owner_id,
+                Mailbox.id == mailbox_id,
+                Mailbox.removed_at.is_(None),
+            )
+            .first()
+        )
+        if row is None:
+            return None
+        if row.is_primary:
+            raise ValueError("the primary mailbox cannot be removed")
+        row.removed_at = datetime.now(UTC).replace(tzinfo=None)
+        session.flush()
+        info = _info(row)
+    logger.info(f"[mailboxes] removed mailbox {info.address} for {owner_id} (rows kept)")
+    return info
+
+
+# ─── Presets ──────────────────────────────────────────────────
+
+PEC_NET_PRESET = {
+    "id": "pec.net",
+    "label": "PEC.net (Register.it)",
+    "domains": ["pec.net"],
+    "imap_host": "imap.pec-email.com",
+    "imap_port": 993,
+    "imap_security": "ssl",
+    "smtp_host": "smtp.pec-email.com",
+    "smtp_port": 465,
+    "smtp_security": "ssl",
+    "username": "full_address",
+    "password_label": "PEC mailbox password",
+}
+
+
+def presets() -> list[dict]:
+    """The provider presets an app can offer: the engine's tables plus PEC.net.
+
+    One entry per provider (domains grouped), each with IMAP and SMTP
+    host, port and security, the username rule and the label the
+    password field should carry.
+    """
+    from zylch.email.imap_client import IMAP_PRESETS, SMTP_PRESETS
+
+    by_host: dict[tuple, dict] = {}
+    for domain, (imap_host, imap_port) in IMAP_PRESETS.items():
+        smtp_host, smtp_port = SMTP_PRESETS.get(domain, (None, None))
+        key = (imap_host, smtp_host)
+        entry = by_host.get(key)
+        if entry is None:
+            entry = by_host[key] = {
+                "id": domain,
+                "label": domain,
+                "domains": [],
+                "imap_host": imap_host,
+                "imap_port": imap_port,
+                "imap_security": "ssl",
+                "smtp_host": smtp_host,
+                "smtp_port": smtp_port,
+                "smtp_security": "starttls",
+                "username": "full_address",
+                "password_label": "App password",
+            }
+        entry["domains"].append(domain)
+    out = list(by_host.values())
+    out.append(dict(PEC_NET_PRESET))
+    return out
 
 
 # ─── IMAP client per mailbox ──────────────────────────────────
@@ -426,6 +584,27 @@ def _stored_secret(owner_id: str, mailbox_id: str) -> str | None:
             .first()
         )
         return row[0] if row else None
+
+
+def client_for_row(owner_id: str, row: dict) -> IMAPClient:
+    """The client of the mailbox an ``emails`` row belongs to.
+
+    A row without a known mailbox (a legacy dict from a tool) falls back to
+    the primary: the mail is the profile's own either way.
+    """
+    mailbox = None
+    mailbox_id = (row or {}).get("mailbox_id")
+    if mailbox_id:
+        mailbox = by_id(owner_id, mailbox_id)
+        if mailbox is not None and mailbox.removed:
+            # `get_email_by_supabase_id` is not filtered by mailbox: a row of
+            # a removed mailbox must never log into it.
+            raise MailboxSecretError(f"mailbox {mailbox.address} was removed from this profile")
+    if mailbox is None:
+        mailbox = primary(owner_id)
+    if mailbox is None:
+        raise MailboxSecretError("no mailbox is configured for this profile")
+    return build_imap_client(mailbox)
 
 
 def build_imap_client(mailbox: MailboxInfo) -> IMAPClient:

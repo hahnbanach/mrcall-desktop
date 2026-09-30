@@ -4,11 +4,11 @@ Kept separate from `rpc/methods.py` (1500+ lines) so the email-action
 surface stays small and self-contained. Two methods exposed:
 
   emails.archive(thread_id)
-      IMAP MOVE every row of the thread to the provider's archive folder
-      (Gmail `[Gmail]/All Mail` via \\All flag; Outlook/iCloud `Archive`
-      via \\Archive flag), then stamp `archived_at` locally so the row
-      drops out of inbox/sent views. IMAP failure surfaces as an error —
-      never silently only-flag-locally.
+      Per mailbox of the thread's rows: IMAP MOVE that mailbox's
+      Message-IDs to its archive folder (Gmail `[Gmail]/All Mail` via
+      \\All flag; Outlook/iCloud `Archive` via \\Archive flag) over its
+      own client, then stamp `archived_at` on the rows whose copy moved.
+      A failure is named per mailbox; the rows it concerns stay visible.
 
   emails.delete(thread_id)
       Local-only soft delete: stamp `deleted_at` so the row is hidden
@@ -20,7 +20,6 @@ from __future__ import annotations
 
 import asyncio
 import logging
-import os
 from typing import Any, Awaitable, Callable, Dict
 
 logger = logging.getLogger(__name__)
@@ -35,74 +34,112 @@ def _owner_id() -> str:
     return get_owner_id()
 
 
-def _build_imap_client():
-    """Instantiate an IMAPClient from the active profile's .env.
+def _archive_mailbox(mailbox, message_ids: list) -> Dict[str, Any]:
+    """The IMAP side of ``emails.archive`` for ONE mailbox, synchronously.
 
-    Mirrors `zylch.cli.commands.sync_emails` so host/port overrides and
-    presets match whatever the sync pipeline uses. Raises a
-    ValueError with a user-facing message if credentials are missing —
-    the RPC wire surfaces this via the normal error path.
+    Opens that mailbox's own client (never another's), moves each
+    Message-ID from INBOX to the archive folder, and reports:
+    ``{attempted, moved, moved_ids, error}``. A Message-ID not in INBOX but
+    held by the archive or Sent folder (the user's own reply, a message
+    archived from another client) is already where it belongs and counts
+    as moved; a Message-ID absent from all of them is a named failure
+    (``IMAPMessageNotFound``), a non-OK SEARCH a protocol failure — never
+    a success. A connection, login or folder-discovery failure is the
+    mailbox's ``error`` with nothing moved. Never raises.
     """
-    from zylch.email.imap_client import IMAPClient
+    from zylch.email.imap_client import IMAPMessageNotFound
+    from zylch.email.mailboxes import build_imap_client
 
-    email_addr = os.environ.get("EMAIL_ADDRESS", "")
-    email_pass = os.environ.get("EMAIL_PASSWORD", "")
-    if not email_addr or not email_pass:
-        raise ValueError("Email not configured. Run 'zylch init'.")
-    return IMAPClient(
-        email_addr=email_addr,
-        password=email_pass,
-        imap_host=os.environ.get("IMAP_HOST") or None,
-        imap_port=(int(os.environ.get("IMAP_PORT", "0")) or None),
-        smtp_host=os.environ.get("SMTP_HOST") or None,
-        smtp_port=(int(os.environ.get("SMTP_PORT", "0")) or None),
-    )
-
-
-def _archive_on_imap(thread_id: str, message_ids: list[str]) -> Dict[str, Any]:
-    """Perform the IMAP side of `emails.archive` synchronously.
-
-    Returned dict shape:
-      {
-        "folder": "<archive folder name used>",
-        "moved":  <int count of message_ids for which MOVE reported OK>,
-        "attempted": <int count of message_ids we tried>,
-      }
-
-    Raises on unrecoverable IMAP failures (connection, auth, folder
-    discovery). Per-message failures are counted but don't raise — the
-    caller can compare `moved` vs `attempted` to decide what to surface.
-    """
-    client = _build_imap_client()
-    client.connect()
+    out: Dict[str, Any] = {
+        "mailbox_id": mailbox.id,
+        "attempted": len(message_ids),
+        "moved": 0,
+        "moved_ids": [],
+        "error": None,
+    }
+    failures: list = []
+    try:
+        client = build_imap_client(mailbox)
+        client.connect()
+    except Exception as e:
+        out["error"] = f"{mailbox.address}: {e}"
+        return out
     try:
         folder = client.find_archive_folder()
         if not folder:
-            raise RuntimeError(
-                "IMAP archive folder not found (looked for \\All and "
-                "\\Archive special-use flags, plus common fallbacks)."
+            out["error"] = (
+                f"{mailbox.address}: IMAP archive folder not found (looked for \\All and "
+                "\\Archive special-use flags, plus common fallbacks)"
             )
-        moved = 0
+            return out
+        elsewhere = [folder]
+        sent = client._find_sent_folder()
+        if sent and sent not in elsewhere:
+            elsewhere.append(sent)
         for mid in message_ids:
             try:
-                ok = client.move_message_by_message_id(mid, folder)
-                if ok:
-                    moved += 1
+                if client.move_message_by_message_id(mid, folder):
+                    out["moved"] += 1
+                    out["moved_ids"].append(mid)
+                else:
+                    failures.append(f"{mid}: move failed")
+            except IMAPMessageNotFound:
+                # Not in INBOX: already archived, or the user's own reply in
+                # Sent — at its destination either way. Absent everywhere is
+                # the named failure.
+                holder = client.find_message_folder(mid, elsewhere)
+                if holder:
+                    logger.info(
+                        f"[rpc:emails.archive] {mid} already in {holder} of {mailbox.address}"
+                    )
+                    out["moved"] += 1
+                    out["moved_ids"].append(mid)
+                else:
+                    searched = ", ".join(["INBOX", *elsewhere])
+                    failures.append(f"{mid}: not found in {searched} of {mailbox.address}")
             except Exception as e:
-                logger.warning(
-                    f"[rpc:emails.archive] move_message failed for " f"message_id={mid}: {e}"
-                )
-        return {"folder": folder, "moved": moved, "attempted": len(message_ids)}
+                failures.append(f"{mid}: {e}")
+        if failures:
+            out["error"] = "; ".join(failures)
+        return out
     finally:
-        client.disconnect()
+        try:
+            client.disconnect()
+        except Exception as e:
+            logger.debug(f"[rpc:emails.archive] disconnect {mailbox.address}: {e}")
+
+
+def _archive_on_imap(owner_id: str, groups: Dict[str, list]) -> list:
+    """One ``_archive_mailbox`` per mailbox id in ``groups``; a removed or unknown mailbox is an error entry."""
+    from zylch.email.mailboxes import by_id
+
+    results = []
+    for mailbox_id, mids in groups.items():
+        mailbox = by_id(owner_id, mailbox_id)
+        if mailbox is None or mailbox.removed:
+            results.append(
+                {
+                    "mailbox_id": mailbox_id,
+                    "attempted": len(mids),
+                    "moved": 0,
+                    "moved_ids": [],
+                    "error": "mailbox is unknown or removed",
+                }
+            )
+            continue
+        results.append(_archive_mailbox(mailbox, mids))
+    return results
 
 
 async def emails_archive(params: Dict[str, Any], notify: NotifyFn) -> Any:
-    """emails.archive(thread_id) -> {ok, archived, imap}.
+    """emails.archive(thread_id) -> {ok, archived, mailboxes: [{mailbox_id, attempted, moved, error}]}.
 
-    IMAP MOVE every row of the thread to the archive folder, then mark
-    the local DB. If the IMAP side fails the local flag is NOT set —
-    we surface the error to the caller so the desktop UI can show it.
+    Groups the thread's rows by mailbox, opens each mailbox's own client
+    and IMAP-MOVEs that mailbox's Message-IDs to its archive folder; the
+    primary's connection is never used for another mailbox's messages.
+    Rows whose copy moved get ``archived_at``; a Message-ID the source
+    mailbox does not hold is a named failure and its row stays visible.
+    ``ok`` is true only when every mailbox moved everything it was asked.
     """
     from zylch.storage.storage import Storage
 
@@ -114,28 +151,36 @@ async def emails_archive(params: Dict[str, Any], notify: NotifyFn) -> Any:
     logger.debug(f"[rpc:emails.archive] archive(thread_id={thread_id}, " f"owner_id={owner_id})")
 
     store = Storage.get_instance()
-    # M5 groups these pairs by mailbox and opens one client per mailbox;
-    # until then the primary's connection handles every Message-ID as before.
-    message_ids = [
-        mid for _mailbox_id, mid in store.get_thread_message_id_headers(owner_id, thread_id)
-    ]
+    groups: Dict[str, list] = {}
+    for mailbox_id, mid in store.get_thread_message_id_headers(owner_id, thread_id):
+        groups.setdefault(mailbox_id, []).append(mid)
     logger.debug(
-        f"[rpc:emails.archive] resolved {len(message_ids)} "
-        f"message_id headers for thread={thread_id}"
+        f"[rpc:emails.archive] resolved {sum(len(v) for v in groups.values())} "
+        f"message_id headers in {len(groups)} mailbox(es) for thread={thread_id}"
     )
 
-    # IMAP first — no partial local flag if the network side blows up.
-    imap_result = await asyncio.to_thread(_archive_on_imap, thread_id, message_ids)
+    # IMAP first — the local flag follows only the copies that moved.
+    results = await asyncio.to_thread(_archive_on_imap, owner_id, groups)
 
-    affected = store.set_thread_archived(owner_id=owner_id, thread_id=thread_id, archived=True)
+    moved_pairs = [(r["mailbox_id"], mid) for r in results for mid in r.get("moved_ids", [])]
+    affected = store.set_rows_archived(owner_id=owner_id, thread_id=thread_id, moved=moved_pairs)
+    ok = all(r["error"] is None for r in results)
     logger.debug(
-        f"[rpc:emails.archive] set_thread_archived(thread_id={thread_id}) "
-        f"-> affected={affected} imap={imap_result}"
+        f"[rpc:emails.archive] set_rows_archived(thread_id={thread_id}) "
+        f"-> affected={affected} ok={ok} mailboxes={[(r['mailbox_id'], r['moved'], r['attempted']) for r in results]}"
     )
     return {
-        "ok": True,
+        "ok": ok,
         "archived": int(affected),
-        "imap": imap_result,
+        "mailboxes": [
+            {
+                "mailbox_id": r["mailbox_id"],
+                "attempted": r["attempted"],
+                "moved": r["moved"],
+                "error": r["error"],
+            }
+            for r in results
+        ],
     }
 
 

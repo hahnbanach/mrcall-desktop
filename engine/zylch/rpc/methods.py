@@ -1617,7 +1617,9 @@ async def emails_list_by_thread(
     """emails.list_by_thread(thread_id) -> {"emails": [...]}.
 
     Returns the full thread in chronological order (date ASC) with a
-    provider-uniform shape. Dispatch:
+    provider-uniform shape; each row carries `mailbox_id`,
+    `mailbox_address`, `original_message_id` and `pec_markers` (the last
+    two non-null only on PEC rows). Dispatch:
       - provider == 'imap'      -> local DB (Email table)
       - provider == 'google'    -> GmailClient.threads.get (not available
                                     in standalone repo; returns error)
@@ -1648,8 +1650,11 @@ async def emails_list_by_thread(
     )
 
     if provider == "imap":
+        from zylch.email.mailboxes import for_owner
+
         store = Storage.get_instance()
         rows = store.get_thread_emails(owner_id=owner_id, thread_id=thread_id)
+        addresses = {m.id: m.address for m in for_owner(owner_id, include_removed=True)}
         out = []
         for r in rows:
             from_email = (r.get("from_email") or "").strip()
@@ -1697,6 +1702,12 @@ async def emails_list_by_thread(
                     "is_user_sent": from_email.lower() in user_set,
                     "has_attachments": bool(r.get("has_attachments")) or bool(attach_names),
                     "attachment_filenames": attach_names,
+                    # The mailbox this copy came from, and the PEC original
+                    # behind an envelope (both None-safe, additive).
+                    "mailbox_id": r.get("mailbox_id"),
+                    "mailbox_address": addresses.get(r.get("mailbox_id")),
+                    "original_message_id": r.get("original_message_id"),
+                    "pec_markers": r.get("pec_markers"),
                 }
             )
         logger.debug(
@@ -1725,12 +1736,14 @@ async def emails_list_inbox(
     params: Dict[str, Any],
     notify: NotifyFn,
 ) -> Any:
-    """emails.list_inbox(limit=50, offset=0) -> {"threads": [...]}.
+    """emails.list_inbox(limit=50, offset=0, mailbox_id?) -> {"threads": [...]}.
 
     Returns thread summaries for the desktop Email tab's Inbox. See
     `Storage.list_inbox_threads` for the precise grouping/filtering
     rules. Each thread dict carries the latest message's metadata plus
-    `pinned`, `unread`, `message_count`.
+    `pinned`, `unread`, `message_count` and `mailbox_ids` (the mailboxes
+    holding rows of the thread). `mailbox_id` restricts the rows to one
+    mailbox: the threads as that mailbox sees them.
     """
     from zylch.api.token_storage import get_email
     from zylch.storage.storage import Storage
@@ -1749,6 +1762,7 @@ async def emails_list_inbox(
         user_email=user_email,
         limit=limit,
         offset=offset,
+        mailbox_id=str(params.get("mailbox_id") or "") or None,
     )
     logger.debug(f"[rpc] emails.list_inbox -> {len(threads)} threads")
     return {"threads": threads}
@@ -1758,11 +1772,12 @@ async def emails_list_sent(
     params: Dict[str, Any],
     notify: NotifyFn,
 ) -> Any:
-    """emails.list_sent(limit=50, offset=0) -> {"threads": [...]}.
+    """emails.list_sent(limit=50, offset=0, mailbox_id?) -> {"threads": [...]}.
 
     Symmetric to `emails.list_inbox` but filters for threads whose
     latest email was sent from any address the user writes from (the
-    primary, declared aliases, active mailboxes).
+    primary, declared aliases, active mailboxes). `mailbox_id` restricts
+    the rows to one mailbox; summaries carry `mailbox_ids`.
     """
     from zylch.api.token_storage import get_email
     from zylch.storage.storage import Storage
@@ -1781,6 +1796,7 @@ async def emails_list_sent(
         user_email=user_email,
         limit=limit,
         offset=offset,
+        mailbox_id=str(params.get("mailbox_id") or "") or None,
     )
     logger.debug(f"[rpc] emails.list_sent -> {len(threads)} threads")
     return {"threads": threads}
@@ -1790,7 +1806,7 @@ async def emails_search(
     params: Dict[str, Any],
     notify: NotifyFn,
 ) -> Any:
-    """emails.search(query?, folder='inbox', limit=50, offset=0) -> {"threads": [...]}.
+    """emails.search(query?, folder='inbox', limit=50, offset=0, mailbox_id?) -> {"threads": [...]}.
 
     Gmail-style query language. Supported operators:
     ``from:`` / ``to:`` / ``cc:`` / ``subject:`` / ``body:``,
@@ -1802,7 +1818,8 @@ async def emails_search(
 
     ``query`` is optional: an absent or empty query is an unfiltered
     browse of ``folder``, which is what the renderer's "clear search"
-    already sends.
+    already sends. ``mailbox_id`` restricts the rows to one mailbox;
+    summaries carry ``mailbox_ids``.
     """
     from zylch.api.token_storage import get_email
     from zylch.storage.storage import Storage
@@ -1828,6 +1845,7 @@ async def emails_search(
         folder=folder,
         limit=limit,
         offset=offset,
+        mailbox_id=str(params.get("mailbox_id") or "") or None,
     )
     logger.debug(f"[rpc] emails.search -> {len(threads)} threads")
     return {"threads": threads}
@@ -2362,6 +2380,15 @@ from zylch.rpc.mrcall_actions import METHODS as _MRCALL_METHODS  # noqa: E402
 for _name, _fn in _MRCALL_METHODS.items():
     if _name in METHODS:
         raise RuntimeError(f"Duplicate RPC method name: {_name}")
+    METHODS[_name] = _fn
+
+# The profile's mailboxes (list, presets, test, add, update, remove): the
+# additional-mailbox surface, passwords encrypted under MAILBOX_SECRET_KEY.
+from zylch.rpc.mailboxes import METHODS as _MAILBOX_METHODS  # noqa: E402
+
+for _name, _fn in _MAILBOX_METHODS.items():
+    if _name in METHODS:
+        raise RuntimeError(f"RPC method name collision: {_name}")
     METHODS[_name] = _fn
 
 # Outreach campaigns — durable state for operator-driven outreach

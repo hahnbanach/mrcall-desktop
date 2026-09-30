@@ -153,13 +153,11 @@ class DownloadAttachmentTool(Tool):
         )
 
         try:
-            from zylch.email.imap_client import IMAPClient
+            from zylch.email.mailboxes import client_for_row
 
-            client = IMAPClient(
-                email_addr=email_addr,
-                password=email_pass,
-                imap_host=os.environ.get("IMAP_HOST") or None,
-            )
+            # The row's own mailbox holds the message: its client, never
+            # the primary's for another mailbox's mail.
+            client = client_for_row(owner_id, email)
             attachments = client.fetch_attachments(message_id, save_dir=save_dir)
             if not attachments:
                 result = ToolResult(

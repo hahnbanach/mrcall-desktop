@@ -212,7 +212,6 @@ def _download_attachment(
     owner_id: str,
 ) -> str:
     """Download attachments from an email."""
-    import os
 
     email_id = args.get("email_id", "")
     if not email_id:
@@ -235,13 +234,11 @@ def _download_attachment(
     message_id = email.get("message_id") or email.get("message_id_header") or email_id
 
     try:
-        from zylch.email.imap_client import IMAPClient
+        from zylch.email.mailboxes import client_for_row
 
-        client = IMAPClient(
-            email_addr=os.environ.get("EMAIL_ADDRESS", ""),
-            password=os.environ.get("EMAIL_PASSWORD", ""),
-            imap_host=os.environ.get("IMAP_HOST") or None,
-        )
+        # The row's own mailbox holds the message (never the primary's
+        # client for another mailbox's mail).
+        client = client_for_row(owner_id, email)
         attachments = client.fetch_attachments(message_id)
         if not attachments:
             return "No attachments found in this email"

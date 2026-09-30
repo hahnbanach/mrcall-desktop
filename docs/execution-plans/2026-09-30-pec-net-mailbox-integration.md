@@ -293,6 +293,17 @@ connection is never used for the other mailbox's messages;
 contract-boundary test for the archive result; `pytest tests/rpc
 tests/email`; docstring signatures pass the param-spec dispatcher.
 
+**M5 integration review (2026-09-30): APPROVED** on the second pass; IPC
+contract review APPROVED. Fixed on the way: archive treats a copy found
+in the archive or Sent folder as already at its destination and names a
+protocol failure separately; a login failure never carries server text,
+and the scrub covers escaped forms of the password; addresses are stored
+and compared lower-cased; a cross-process duplicate add answers
+`duplicate` without driver text; a removed mailbox is refused by the
+attachment tools. Suites: 856 passed, one pre-existing `llm.models`
+failure. The `imap` field of `emails.archive` is gone; no consumer read
+it, and M6 must read `ok` and roll back on failure.
+
 ## M6 — App (Electron)
 
 **Dependency:** M5. `MailboxesCard` in Settings on the `MemoryCard`
@@ -301,8 +312,11 @@ password with a label that names the provider's credential, hosts, Test
 before Save), Edit, Remove. Preload bindings and
 `types.ts` entries for `mailboxes.*` and the changed `emails.*` shapes.
 Email view: per-message mailbox chip in the reading pane, mailbox filter in
-the toolbar, archive result handling that shows a named per-mailbox
-refusal. `StageErrors` titles name the mailbox. `ApprovalCard` shows a
+the toolbar, archive result handling that reads `ok` (the engine now
+answers `ok: false` with per-mailbox `error` instead of throwing), rolls
+the optimistic removal back on failure and shows the named per-mailbox
+refusal; the archive types in preload and `types.ts` follow the new
+result. `StageErrors` titles name the mailbox. `ApprovalCard` shows a
 read-only From line for `send_email`/`send_draft` with the primary
 address.
 

@@ -148,9 +148,32 @@ class FakeIMAPConn:
         if command.upper() == "SEARCH":
             if folder.search_fails:
                 return "NO", [b"SEARCH failed: server error"]
+            if len(args) >= 3 and str(args[-3]).upper() == "HEADER":
+                # `UID SEARCH HEADER <name> <value>`: the archive's lookup.
+                name, value = str(args[-2]), str(args[-1]).strip()
+                pattern = re.compile(rb"^" + re.escape(name.encode()) + rb":\s*(.+)$", re.M | re.I)
+                uids = [
+                    uid
+                    for uid, raw in sorted(folder.messages.items())
+                    if uid not in folder.expunged
+                    and (m := pattern.search(raw)) is not None
+                    and m.group(1).decode().strip() == value
+                ]
+                return "OK", [" ".join(str(u) for u in uids).encode()]
             criteria = args[-1]
             uids = self._apply_criteria(folder, criteria)
             return "OK", [" ".join(str(u) for u in uids).encode()]
+
+        if command.upper() == "MOVE":
+            uid_set, dest = args[0], args[1]
+            target = self._folder(str(dest))
+            if target is None:
+                return "NO", [b"[TRYCREATE] No such mailbox"]
+            for uid in [int(tok) for tok in str(uid_set).split(",") if tok]:
+                raw = folder.messages.pop(uid, None)
+                if raw is not None:
+                    target.add(target.uidnext, raw)
+            return "OK", [b"MOVE completed"]
 
         if command.upper() == "FETCH":
             uid_set, items = args[0], args[1]

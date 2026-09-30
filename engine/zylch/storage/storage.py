@@ -140,6 +140,11 @@ def _active_mailboxes(owner_id: str):
     return select(Mailbox.id).where(Mailbox.owner_id == owner_id, Mailbox.removed_at.is_(None))
 
 
+def _mailbox_filter(mailbox_id: Optional[str]) -> list:
+    """An optional ``mailbox_id`` filter for the thread listers (``[]`` = every mailbox)."""
+    return [Email.mailbox_id == mailbox_id] if mailbox_id else []
+
+
 def _first_copy_only(owner_id: str):
     """Predicate: this row is the first stored copy of its message (D2).
 
@@ -718,6 +723,7 @@ class Storage:
         user_email: str,
         limit: int = 50,
         offset: int = 0,
+        mailbox_id: Optional[str] = None,
     ) -> List[Dict[str, Any]]:
         """Return inbox threads for the desktop Email tab.
 
@@ -751,6 +757,7 @@ class Storage:
                 .filter(
                     Email.owner_id == owner_id,
                     Email.mailbox_id.in_(_active_mailboxes(owner_id)),
+                    *_mailbox_filter(mailbox_id),
                     Email.archived_at.is_(None),
                     Email.deleted_at.is_(None),
                 )
@@ -774,10 +781,12 @@ class Storage:
                         "has_non_user": not is_user,
                         "pinned": r.pinned_at is not None,
                         "message_count": 1,
+                        "mailbox_ids": {r.mailbox_id},
                     }
                     threads[tid] = bucket
                 else:
                     bucket["message_count"] += 1
+                    bucket["mailbox_ids"].add(r.mailbox_id)
                     if r.pinned_at is not None:
                         bucket["pinned"] = True
                     if not is_user and bucket["latest_non_user"] is None:
@@ -830,6 +839,7 @@ class Storage:
                         "has_attachments": bool(latest.has_attachments),
                         "pinned": bool(b["pinned"]),
                         "message_count": int(b["message_count"]),
+                        "mailbox_ids": sorted(b["mailbox_ids"]),
                         "last_email_id": latest.id,
                     }
                 )
@@ -841,6 +851,7 @@ class Storage:
         user_email: str,
         limit: int = 50,
         offset: int = 0,
+        mailbox_id: Optional[str] = None,
     ) -> List[Dict[str, Any]]:
         """Return threads whose most recent message was sent by the user.
 
@@ -857,6 +868,7 @@ class Storage:
                 .filter(
                     Email.owner_id == owner_id,
                     Email.mailbox_id.in_(_active_mailboxes(owner_id)),
+                    *_mailbox_filter(mailbox_id),
                     Email.archived_at.is_(None),
                     Email.deleted_at.is_(None),
                 )
@@ -878,10 +890,12 @@ class Storage:
                         "latest_is_user": is_user,
                         "pinned": r.pinned_at is not None,
                         "message_count": 1,
+                        "mailbox_ids": {r.mailbox_id},
                     }
                     threads[tid] = bucket
                 else:
                     bucket["message_count"] += 1
+                    bucket["mailbox_ids"].add(r.mailbox_id)
                     if r.pinned_at is not None:
                         bucket["pinned"] = True
 
@@ -913,6 +927,7 @@ class Storage:
                         "has_attachments": bool(latest.has_attachments),
                         "pinned": bool(b["pinned"]),
                         "message_count": int(b["message_count"]),
+                        "mailbox_ids": sorted(b["mailbox_ids"]),
                         "last_email_id": latest.id,
                     }
                 )
@@ -926,6 +941,7 @@ class Storage:
         folder: str = "inbox",
         limit: int = 50,
         offset: int = 0,
+        mailbox_id: Optional[str] = None,
     ) -> List[Dict[str, Any]]:
         """Gmail-style thread search backing ``emails.search`` RPC.
 
@@ -953,6 +969,7 @@ class Storage:
                 .filter(
                     Email.owner_id == owner_id,
                     Email.mailbox_id.in_(_active_mailboxes(owner_id)),
+                    *_mailbox_filter(mailbox_id),
                     Email.archived_at.is_(None),
                     Email.deleted_at.is_(None),
                 )
@@ -984,10 +1001,12 @@ class Storage:
                         "has_non_user": not is_user,
                         "pinned": r.pinned_at is not None,
                         "message_count": 1,
+                        "mailbox_ids": {r.mailbox_id},
                     }
                     threads[tid] = bucket
                 else:
                     bucket["message_count"] += 1
+                    bucket["mailbox_ids"].add(r.mailbox_id)
                     if r.pinned_at is not None:
                         bucket["pinned"] = True
                     if not is_user and bucket["latest_non_user"] is None:
@@ -1045,6 +1064,7 @@ class Storage:
                         "has_attachments": bool(latest.has_attachments),
                         "pinned": bool(b["pinned"]),
                         "message_count": int(b["message_count"]),
+                        "mailbox_ids": sorted(b["mailbox_ids"]),
                         "last_email_id": latest.id,
                     }
                 )
@@ -1663,6 +1683,36 @@ class Storage:
             session.flush()
             return affected
 
+    def set_rows_archived(self, owner_id: str, thread_id: str, moved: List[tuple]) -> int:
+        """Stamp ``archived_at`` on the rows whose server copy moved (D3).
+
+        ``moved`` is a list of ``(mailbox_id, message_id_header)`` pairs;
+        every other row of the thread stays visible. Returns the number of
+        rows stamped (already-archived rows count zero).
+        """
+        wanted = {(m, h) for m, h in moved if h}
+        if not wanted:
+            return 0
+        with get_session() as session:
+            rows = (
+                session.query(Email)
+                .filter(
+                    Email.owner_id == owner_id,
+                    Email.thread_id == thread_id,
+                    Email.archived_at.is_(None),
+                    Email.message_id_header.in_([h for _m, h in wanted]),
+                )
+                .all()
+            )
+            now = datetime.now(timezone.utc)
+            affected = 0
+            for r in rows:
+                if (r.mailbox_id, r.message_id_header) in wanted:
+                    r.archived_at = now
+                    affected += 1
+            session.flush()
+            return affected
+
     def set_thread_deleted(
         self,
         owner_id: str,
@@ -1697,15 +1747,35 @@ class Storage:
             session.flush()
             return affected
 
-    def get_email_by_id(self, owner_id: str, gmail_id: str) -> Optional[Dict[str, Any]]:
-        """Get a single email by Gmail ID."""
+    def get_email_by_id(
+        self, owner_id: str, gmail_id: str, mailbox_id: Optional[str] = None
+    ) -> Optional[Dict[str, Any]]:
+        """One row by its Message-ID (``gmail_id``), across the active mailboxes.
+
+        With ``mailbox_id`` the lookup is exact. Without it: the unique
+        match; when several mailboxes hold the message, the first stored
+        copy if they are copies of one message (same
+        ``message_id_header``), otherwise ``ValueError`` naming the
+        mailboxes — the caller must say which one it means.
+        """
         with get_session() as session:
-            row = (
-                session.query(Email)
-                .filter(Email.owner_id == owner_id, Email.gmail_id == gmail_id)
-                .first()
+            q = session.query(Email).filter(
+                Email.owner_id == owner_id,
+                Email.gmail_id == gmail_id,
+                Email.mailbox_id.in_(_active_mailboxes(owner_id)),
             )
-            return row.to_dict() if row else None
+            if mailbox_id:
+                row = q.filter(Email.mailbox_id == mailbox_id).first()
+                return row.to_dict() if row else None
+            rows = q.order_by(Email.created_at.asc(), Email.id.asc()).all()
+            if not rows:
+                return None
+            if len(rows) > 1 and len({r.message_id_header for r in rows}) > 1:
+                raise ValueError(
+                    f"email {gmail_id} is ambiguous across mailboxes "
+                    f"{sorted(r.mailbox_id for r in rows)}: pass mailbox_id"
+                )
+            return rows[0].to_dict()
 
     def get_email_by_supabase_id(self, owner_id: str, supabase_id: str) -> Optional[Dict[str, Any]]:
         """Get a single email by internal UUID (id column)."""
@@ -2407,30 +2477,33 @@ class Storage:
             return None
 
     def get_email_stats(self, owner_id: str) -> Dict[str, Any]:
-        """Get email archive statistics."""
+        """Email archive statistics over the owner's active mailboxes."""
         with get_session() as session:
             total_emails = (
-                session.query(func.count(Email.id)).filter(Email.owner_id == owner_id).scalar() or 0
+                session.query(func.count(Email.id))
+                .filter(Email.owner_id == owner_id, self.active_mailbox_filter(owner_id))
+                .scalar()
+                or 0
             )
 
             if total_emails > 0:
                 earliest = (
                     session.query(Email.date)
-                    .filter(Email.owner_id == owner_id)
+                    .filter(Email.owner_id == owner_id, self.active_mailbox_filter(owner_id))
                     .order_by(Email.date_timestamp.asc())
                     .first()
                 )
 
                 latest = (
                     session.query(Email.date)
-                    .filter(Email.owner_id == owner_id)
+                    .filter(Email.owner_id == owner_id, self.active_mailbox_filter(owner_id))
                     .order_by(Email.date_timestamp.desc())
                     .first()
                 )
 
                 unique_threads = (
                     session.query(func.count(func.distinct(Email.thread_id)))
-                    .filter(Email.owner_id == owner_id)
+                    .filter(Email.owner_id == owner_id, self.active_mailbox_filter(owner_id))
                     .scalar()
                     or 0
                 )
@@ -2448,6 +2521,32 @@ class Storage:
                 "earliest_date": None,
                 "latest_date": None,
             }
+
+    def email_counts_by_mailbox(self, owner_id: str) -> List[Dict[str, Any]]:
+        """Per active mailbox: rows held and rows still pending memory processing."""
+        with get_session() as session:
+            rows = (
+                session.query(
+                    Mailbox.id,
+                    Mailbox.address,
+                    func.count(Email.id),
+                    func.count(Email.memory_processed_at),
+                )
+                .outerjoin(Email, and_(Email.mailbox_id == Mailbox.id, Email.owner_id == owner_id))
+                .filter(Mailbox.owner_id == owner_id, Mailbox.removed_at.is_(None))
+                .group_by(Mailbox.id, Mailbox.address)
+                .order_by(Mailbox.is_primary.desc(), Mailbox.created_at)
+                .all()
+            )
+            return [
+                {
+                    "mailbox_id": r[0],
+                    "address": r[1],
+                    "emails_count": int(r[2] or 0),
+                    "emails_pending_analysis": int((r[2] or 0) - (r[3] or 0)),
+                }
+                for r in rows
+            ]
 
     # ==========================================
     # CALENDAR EVENTS
