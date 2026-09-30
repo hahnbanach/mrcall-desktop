@@ -23,9 +23,33 @@ _INSTRUCTION = re.compile(
     r"(?i)\b(?:disregard|ignore|forget|override|bypass|pretend|obey|"
     r"tell\s+(?:callers?|customers?|people|the\s+caller)|"
     r"say\s+(?:to|that)|do\s+not\s+(?:tell|mention|disclose)|"
+    r"(?:how\s+to|come)\s+(?:handle|manage|process|gestire|trattare)|"
+    r"(?:do\s+not|don't|non)\s+(?:invent|reuse|inventare|riusare|riutilizzare|riciclare)|"
+    r"(?:explain|spiega(?:re)?)\s+(?:that|che)|"
+    r"(?:first|then|prima|poi|quindi)\s+(?:gather|collect|propose|explain|enter|insert|"
+    r"raccogli(?:ere)?|proponi|proporre|spiega(?:re)?|inserisci|inserire)|"
     r"ignora|fingi|devi|dovete|clicca|cliccare|seleziona|tocca|"
     r"tap|click|naviga|carrello|menu|non\s+(?:dire|menzionare)|"
-    r"d[iì]\s+(?:al|ai|alla|alle))\b"
+    r"d[iì]\s+(?:al|ai|alla|alle)|"
+    r"(?:create|open|assign|track|update|close|complete|record|creare|crea|aprire|apri|"
+    r"assegnare|assegna|tracciare|registrare|aggiornare|chiudere|completare)"
+    r"\b[^.!?\n]{0,60}\b(?:tasks?|work[- ]?items?|to[- ]?do)|"
+    r"(?:tasks?|work[- ]?items?|to[- ]?do)\b[^.!?\n]{0,60}\b"
+    r"(?:created|assigned|tracked|updated|closed|completed|creat[oaie]|assegnat[oaie]|"
+    r"tracciat[oaie]|registrat[oaie]|aggiornat[oaie]|chius[oaie]|completat[oaie])|"
+    r"(?:operator[si]?|operatore|operatori|staff)\s+(?:must|should|shall|deve|devono)|"
+    r"(?:mark(?:ed)?|flag(?:ged)?|consider(?:ed)?|record(?:ed)?|set)\b"
+    r"[^.!?\n]{0,80}\b(?:complete|completed|closed)|"
+    r"(?:considerat[oaie]|considera(?:no)?|considerare|segnat[oaie]|registrat[oaie])"
+    r"\b[^.!?\n]{0,40}\b"
+    r"(?:completat[oaie]|conclus[oaie]|chius[oaie])|"
+    r"(?:must|should|shall|need\s+to)\s+(?:check|verify|record|track|update|close|complete)|"
+    r"(?:bisogna|occorre|deve|devono|va|vanno)\s+(?:verificar[ei]|controllar[ei]|"
+    r"registrar[ei]|tracciar[ei]|aggiornar[ei]|chiuder[ei]|completar[ei]))\b|"
+    r"(?:^|[.!?:]\s+|\n\s*[-*]?\s*)(?:check|verify|record|track|update|assign|close|"
+    r"complete|gather|collect|propose|explain|enter|insert|verificare|controllare|"
+    r"registrare|tracciare|aggiornare|assegnare|chiudere|completare|ricontattare|"
+    r"archiviare|raccogli(?:ere)?|proponi|proporre|spiega(?:re)?|inserisci|inserire)\b"
 )
 _GAPS = {
     "price": "Public price unavailable",
@@ -33,6 +57,7 @@ _GAPS = {
     "lead_time": "Lead time unavailable",
     "service": "Service details unavailable",
     "qualification": "Qualification unavailable",
+    "exclusion": "Service exclusions unavailable in initial context",
     "action": "Available action unclear",
     "ambiguous": "Some source details are ambiguous",
 }
@@ -44,16 +69,38 @@ _GENERIC = frozenset(
     "a ad ai al alla alle con da dal della delle di e ed il la le lo per un una uno "
     "che cosa quali quale quando come dove quanto informazioni informazione dettaglio dettagli "
     "servizio servizi offerta offerte offrite offre offrono fate fai azienda aziendale "
-    "voi voi vostra vostro vostri vostre mi me si i "
+    "voi voi vostra vostro vostri vostre mi me si i posso possiamo puoi potete "
+    "potrei potrebbe vorrei voglio avere ricevo ricevere richiedere richiesta "
     "what which when how where who why do does you your yours we our of the a an "
     "to for from in on with about any all more information detail details "
-    "service services offer offers offered offering company business available provide".split()
+    "service services offer offers offered offering company business available provide "
+    "can could would should want get have receive request".split()
 )
+_TIMING_QUESTION = re.compile(
+    r"\b(?:when|quando|how long|quanto tempo|in quanto|arrival (?:time|date)|"
+    r"delivery date)\b"
+)
+_TIMING_EVIDENCE = re.compile(
+    r"\b(?:daily|weekly|monthly|yearly|hourly|weekdays?|weekends?|"
+    r"quotidian[oaie]|settimanale|mensile|annuale|ogni (?:giorno|settimana|mese)|"
+    r"every (?:day|week|month)|monday|tuesday|wednesday|thursday|friday|saturday|sunday|"
+    r"lunedi|martedi|mercoledi|giovedi|venerdi|sabato|domenica)\b"
+)
+_ARRIVAL = re.compile(r"\b(?:arriv[a-z]*|receiv[a-z]*|ricev[a-z]*)\b")
 
 
 def _specific_phrase(value: str) -> bool:
     tokens = _normalize(value).split()
     return len(tokens) >= 2 and any(token not in _GENERIC for token in tokens)
+
+
+def _timing_alias_supported(alias: str, claim: "Claim") -> bool:
+    question, evidence = _normalize(alias), _normalize(claim.text)
+    if not _TIMING_QUESTION.search(question):
+        return True
+    return bool(_TIMING_EVIDENCE.search(evidence)) and (
+        not _ARRIVAL.search(question) or bool(_ARRIVAL.search(evidence))
+    )
 
 
 class _Strict(BaseModel):
@@ -103,7 +150,7 @@ class Selection(_Strict):
     exclusions: list[SourceGroup] = Field(max_length=3)
     actions: list[SourceGroup] = Field(max_length=3)
     details: list[SelectedDetail] = Field(max_length=8)
-    missing: list[str] = Field(max_length=7)
+    missing: list[str] = Field(max_length=8)
 
 
 def _units(source: str) -> tuple[Claim, ...]:
@@ -161,10 +208,15 @@ def _materialize(selection: Selection, units: tuple[Claim, ...], source: str) ->
     for item in selection.details:
         claim = select(item.ids)
         if claim is not None:
-            details.append(
-                Detail(category=item.category, key=item.key, aliases=item.aliases, claim=claim)
-            )
+            aliases = [alias for alias in item.aliases if _timing_alias_supported(alias, claim)]
+            skipped |= len(aliases) != len(item.aliases)
+            if aliases:
+                details.append(
+                    Detail(category=item.category, key=item.key, aliases=aliases, claim=claim)
+                )
     missing = list(dict.fromkeys([*selection.missing, "price", "minimum_volume", "lead_time"]))
+    if not exclusions and "exclusion" not in missing:
+        missing.append("exclusion")
     if skipped and "ambiguous" not in missing:
         missing.append("ambiguous")
     return Notes(
@@ -209,6 +261,7 @@ def _validate(notes: Notes, source: str) -> None:
             or not _specific_phrase(alias)
             or _DENIED.search(alias)
             or _INSTRUCTION.search(alias)
+            or not _timing_alias_supported(alias, detail.claim)
             for alias in detail.aliases
         ):
             raise ValueError("Restricted voice-note alias")
@@ -216,6 +269,8 @@ def _validate(notes: Notes, source: str) -> None:
         raise ValueError("Duplicate voice-note detail")
     if any(item not in _GAPS for item in notes.missing):
         raise ValueError("Restricted voice-note omission")
+    if not notes.exclusions and "exclusion" not in notes.missing:
+        raise ValueError("Missing voice-note exclusion gap")
     if not notes.services:
         raise ValueError("No supported service")
     _context(notes)

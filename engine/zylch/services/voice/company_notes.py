@@ -79,7 +79,8 @@ Detail categories: service,process,qualification,exclusion,action,contact,locati
 Keys use lowercase ASCII letters, digits, underscores, spaces or hyphens, start
 with a letter, max 64 characters. Aliases are specific natural question phrases,
 including useful ordinary Italian paraphrases: 2 or more words, max 64 characters,
-max 8 phrases. Do not use generic service/offer words as aliases. Every alias must
+max 8 phrases. Include direct and polite question variants and ordinary synonyms
+for the same supported intent. Do not use generic service/offer words as aliases. Every alias must
 ask a question answerable from the full selected span. A completion rule or request
 procedure supplies no arrival time, schedule, price or availability unless that
 fact is explicitly stated. Do not use arrival-time questions for untimed process
