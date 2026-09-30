@@ -75,6 +75,19 @@ Resolve an exact eligible category/key from the current structured `USER_NOTES` 
 
 **M3 reopened during M4:** The later sentence-ID converter replaced model-selected detail categories and phrases with `other` and automatic single-word aliases. Independent review and private Italian query probes found irrelevant matches and missed paraphrases. The original M3 verdict does not approve this changed lookup behavior; category/key/phrase integrity and query tests must be restored before M3 can close again.
 
+**Corrected M2/M3 code review — 2026-09-30: APPROVED.** Commit `d284414`
+uses prompt/schema 5/3, contiguous source-ID groups locally materialized as
+exact source spans, selected detail categories/keys and specific Italian
+phrases. Generic aliases do not select details; exact category/key follow-ups
+retain identity. Mid-call freshness also pins the converter cache key, so a
+same-source model/version rebuild cannot replace the selected view silently.
+The old prompt-4/schema-2 uncertain key is quarantined privately; new requests
+carry exact-key ledger tags and refuse same-key uncertainty. Combined converter,
+runtime and conversation tests passed 66 cases; the final notes/recovery suite
+passed 39. The independent reviewer ran 53 focused tests plus the two final
+regressions and approved the code for a real source trial. This closes the
+code-level detail mapping findings; real-source semantics remain an M4 gate.
+
 ## M4 — Validate answer quality, evidence and latency
 
 **Dependency:** M1–M3 integration reviews. Establish same-window baseline timing for existing carrier acceptance → first audible greeting and question end → first useful answer. In a fixed network/location, measure at least 20 controlled turns per direct and retrieval path; report p50/p95 and outliers. Acceptance: greeting p95 increase ≤250 ms; direct service answer p95 increase ≤300 ms; retrieved detail p95 ≤2.5 s from question end. If the baseline cannot be measured or noise dominates, do not claim latency acceptance. These are experience criteria, not call/duration/spend caps.
@@ -87,6 +100,38 @@ Correlate private call/delegation IDs, admitted source IDs/revisions, context/re
 
 **Current execution work:** Preserve the old uncertain OpenRouter reservation unless provider evidence settles it; never manually erase or release it. Existing budget behavior reports unsettled reservations older than one hour as stale liability and excludes them from current daily admission, so retention does not mean that amount stays charged against today's allowance. The privately verified pending row is the legacy `voice.company_notes.v4_trial`, without a cache-key tag or provider generation ID. Before new dispatch, compute the old prompt-4/schema-2 key from the unchanged inspected source/model/binding and retain a service-owned `0600` deny marker for that key; do not replay its direct trial. The corrected converter increments both versions, verifies its key differs from that quarantined key, and uses existing budget admission. New requests carry their exact cache key in the call-site tag; an unsettled request for that same key blocks replay, while different source/converter work may proceed. Test quarantine, same-key pending, distinct-key pending, and retention of the old reservation. Restore model-selected exact detail category/key and useful Italian question phrases, backed by locally materialized source-unit IDs; generic single-word aliases must not select unrelated facts. Correct source selection and continuation handling, repeat private real-model source evaluation and M3/code review, then review and activate the targeted production trial with rollback before requesting the owner's call. Do not change USER_NOTES or company-store records to make a test pass. No isolated-route blocker remains under the operator's explicit production test choice.
 
+**Real conversion and preparation — 2026-09-30:** The exact production profile
+passed fresh headless authenticated business readback, with voice revision 6
+and no active calls. The unchanged source hash matches the admitted inventory.
+A new prompt-5/schema-3 conversion reached OpenRouter through normal budget
+admission but received HTTP 402 in 5.637 seconds, with no model output or
+artifact. Authenticated credit readback found USD0.20872263 account balance;
+the API key's separate limit still had USD90.20872263 available. Independent
+verification established this HTTP refusal preceded inference; only this new
+request's reservation was settled at zero through `budget.settle`, with private
+evidence retained. The older uncertain request and its quarantine are unchanged.
+Archive the new key's failed-attempt marker only after funding confirmation
+and zero-settlement readback, then perform one deliberate conversion retry.
+No prompt/version bump is used to bypass uncertainty or retry controls.
+
+Release `/home/mrcalld/releases/mrcall-voice-cafe124-d284414` is built from the
+committed engine tree with the existing dependency environment copied and only
+the engine package reinstalled without dependency changes. New voice modules
+import from this release and their hashes match the commit. Root-protected
+activation/rollback files under
+`/etc/mrcalld/rollback-cafe124-company-notes-20260930/` contain the old files and
+the proposed delta: add only the company switch and replace only ExecStart's
+release path. Activation checks revision, zero active calls, unchanged current
+config/drop-in hashes, authenticated binding and a current supported cached
+view before cutover; failure restores the prior release/config. Script syntax
+passes. A fresh independent reviewer approved this exact deployment delta,
+including the guarded cutover and automatic restoration, on September 30.
+Its service-user read-only probe correctly refuses activation without a current
+supported artifact. The live daemon/config remain unchanged; independent
+approval of a successful real source result still precedes activation.
+Funding was requested from the operator; the latest authenticated readback
+still shows USD0.20872263 available.
+
 ## M5 — Activate narrowly and retain rollback
 
 **Trial activation prerequisite (before handset M4):** independent approval of corrected M2/M3 code, privately validated real source-to-view result and exact release/config/rollback delta. Verify compatibility with the actual pinned release/host schema, preserve binding/headless auth/voice/greeting, ensure no active call, and retain the known-good release/config and approved source revision. The operator's production-test instruction authorizes the targeted reversible trial activation. Change only that instance through its existing release/drop-in path; never touch other profiles, mal's profile, number/tunnel or `update-daemons.sh`. Check imported release, effective switch, health, negative binding probes and current selected-context readback before reporting ready to call.
@@ -97,4 +142,4 @@ On wrong binding, private disclosure, invented service, stale view, failed retri
 
 ## Plan review
 
-The amended brief and this plan have separate independent **APPROVED** reviews dated 2026-09-28; the plan reviewer used `gpt-6-sol` at high effort. The September 30 production-trial brief amendment and plan amendment each passed a separate fresh `gpt-6-sol` high review after their concrete REVISE findings were resolved. Execution has resumed: historical M1–M2 passed, changed M3 and M4 remain REVISE, and no production trial activation is yet claimed.
+The amended brief and this plan have separate independent **APPROVED** reviews dated 2026-09-28; the plan reviewer used `gpt-6-sol` at high effort. The September 30 production-trial brief amendment and plan amendment each passed a separate fresh `gpt-6-sol` high review after their concrete REVISE findings were resolved. Revised M2/M3 code and the prepared exact deployment delta each passed a fresh milestone review. M4 real-source, spoken behavior and latency remain open; no production trial activation is yet claimed.
