@@ -8,8 +8,8 @@
 # `token.uid == OWNER_ID`.
 #
 # Multi-profile routing: each profile's daemon (zylch-server@<uid>, run by the
-# `mc-<hash>` tenant user since plan M2) listens on its own Unix socket
-# /run/mrcalld/<uid>/ws.sock.
+# `mc-<hash>` tenant user since plan M2) listens on its own Unix socket,
+# reachable as /run/mrcalld/<uid>.sock (a symlink to <uid>/ws.sock once migrated).
 # The uid captured from the path selects the socket, so every user shares this
 # one URL — no per-user port. A uid with no running daemon → 502 (nothing
 # exposed). Security is the per-daemon JWT gate (token.uid == OWNER_ID); a
@@ -27,27 +27,15 @@
 # engine/scripts/server/README-provisiond.md.
 
 desktop.mrcall.ai {
-	# Migrated daemons (plan M2) bind /run/mrcalld/<uid>/ws.sock; unmigrated
-	# ones still bind the flat /run/mrcalld/<uid>.sock. The layout is chosen
-	# per request by the socket's existence (`file` matcher), NOT by lb
-	# failover: passive health state is keyed by the templated upstream, so
-	# it is shared by every uid — one request for a missing uid marked both
-	# upstreams down and every customer got 503 for fail_duration (scratch
-	# VM probe 2026-09-30). Drop the flat fallback after profile six.
-	@ws_new {
-		path_regexp ^/ws/[^/]+$
-		file {
-			root /run/mrcalld
-			try_files /{http.request.uri.path.1}/ws.sock
-		}
-	}
+	# One static upstream for both layouts. Unmigrated daemons bind the flat
+	# /run/mrcalld/<uid>.sock; a migrated one (plan M2) binds
+	# /run/mrcalld/<uid>/ws.sock and its tmpfiles fragment (written by
+	# `mrcall-tenant create`) makes the flat name a symlink to it. Do NOT
+	# route with lb failover here: passive health state is keyed by the
+	# templated upstream, so it is shared by every uid, and one request for
+	# a missing uid 503'd every customer (scratch VM probe 2026-09-30).
 	@ws path_regexp uid ^/ws/([^/]+)$
-	handle @ws_new {
-		reverse_proxy unix//run/mrcalld/{http.request.uri.path.1}/ws.sock
-	}
-	handle @ws {
-		reverse_proxy unix//run/mrcalld/{re.uid.1}.sock
-	}
+	reverse_proxy @ws unix//run/mrcalld/{re.uid.1}.sock
 
 	@provision path /api/provision*
 	reverse_proxy @provision unix//run/mrcalld/provisiond.sock

@@ -239,7 +239,14 @@ create)
   # 7. runtime socket dir: per-uid 2750 <user>:caddy so the socket inherits
   #    the proxy's group and server_ws.py's chmod(0o660) lets Caddy connect.
   #    The parent comes from tmpfiles.d/mrcalld.conf (2751 mrcalld:caddy).
-  printf 'd %s/%s 2750 %s %s -\n' "$RUN_ROOT" "$uid" "$user" "$PROXY_GROUP" > "$fragment"
+  #    The flat name becomes a symlink to the new socket, so Caddy's one
+  #    static upstream `/run/mrcalld/<uid>.sock` serves migrated and
+  #    unmigrated daemons alike: no failover, no shared health state (the
+  #    dual-upstream variant 503'd every uid after one missing one).
+  {
+    printf 'd %s/%s 2750 %s %s -\n' "$RUN_ROOT" "$uid" "$user" "$PROXY_GROUP"
+    printf 'L+ %s/%s.sock - - - - %s/%s/ws.sock\n' "$RUN_ROOT" "$uid" "$RUN_ROOT" "$uid"
+  } > "$fragment"
   systemd-tmpfiles --create "$fragment"
   # 8. profile tree: subdirs, then ownership — LAST, so any -wal/-shm a
   #    root-run rekey left behind is re-owned (plan M2.7).
@@ -285,6 +292,7 @@ unmigrate)
   # shared key while the unit was stopped.
   systemctl stop "$unit" >/dev/null 2>&1 || true
   rm -rf "$dropin_d" "$RUN_ROOT/$uid"; rm -f "$fragment"
+  [ -L "$RUN_ROOT/$uid.sock" ] && rm -f "$RUN_ROOT/$uid.sock"
   [ -d "$profile_dir" ] && chown -R --no-dereference "$SVC_USER:$SVC_USER" "$profile_dir"
   # a -wal/-shm the tenant left on the relocated store is 0660 <tenant>:<group>;
   # give the returning mrcalld daemon the group so it can write it
@@ -313,6 +321,7 @@ delete)
   rm -rf "$profile_dir"
   rm -f "$keyfile" "$fragment"
   rm -rf "$dropin_d" "$RUN_ROOT/$uid"
+  [ -L "$RUN_ROOT/$uid.sock" ] && rm -f "$RUN_ROOT/$uid.sock"
   if id "$user" >/dev/null 2>&1; then userdel "$user"; log "removed user $user"; fi
   if [ -n "$last" ] && [ -n "$group" ]; then
     rm -rf "$MEMORY/$group"; groupdel "$group" >/dev/null 2>&1 || true
