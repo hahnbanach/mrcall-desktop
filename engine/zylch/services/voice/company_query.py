@@ -62,7 +62,14 @@ class CompanyQuery:
         if self.view.status != "supported":
             return True
         current = current_company_notes(self.profile, self.snapshot)
-        return current.status == "supported" and current.source_hash == self.view.source_hash
+        return (
+            current.status == "supported"
+            and current.source_hash == self.view.source_hash
+            and (
+                not self.view.cache_key
+                or current.cache_key == self.view.cache_key
+            )
+        )
 
     def __call__(self, question):
         followup = bool(_DEICTIC_FOLLOWUP.fullmatch(question))
