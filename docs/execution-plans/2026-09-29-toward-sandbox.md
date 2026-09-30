@@ -503,7 +503,7 @@ earlier commits are marked with the commit and why they still hold.
   `readonly`/`locked` lines. **Mixed state, Café124's four days** (D4,
   final code): D1 migrated, D2 still `mrcalld`; both stopped, sidecars
   removed (none open — a probe-only step, never on a live store), the
-  tenant daemon started first so it created `-wal`/-shm`
+  tenant daemon started first so it created `-wal`/`-shm`
   (`0660 mc-15e7bf74266b:mc-c-2734b77bf2a1`), then the `mrcalld` daemon; 150
   writes each concurrently, 300 seen by both, 0 error lines. Third user:
   B's user cannot list A's store dir or `memory/`, `sqlite3` refused.
