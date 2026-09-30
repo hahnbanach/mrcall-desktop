@@ -38,14 +38,16 @@ from .company_notes_schema import (
     _context as _context,
     _materialize as _materialize,
     _normalize as _normalize,
+    _parse_selection as _parse_selection,
+    _restricted as _restricted,
     _specific_phrase as _specific_phrase,
     _units as _units,
     _validate as _validate,
     MAX_CONTEXT_CHARS as MAX_CONTEXT_CHARS,
 )
 
-PROMPT_VERSION = 6
-SCHEMA_VERSION = 4
+PROMPT_VERSION = 7
+SCHEMA_VERSION = 5
 ARTIFACT = "voice-company-notes.json"
 MAX_SOURCE_BYTES = 64_000
 MAX_ARTIFACT_BYTES = 32_000
@@ -59,19 +61,25 @@ Retain every condition and continuation; omit uncertain, illustrative or incompl
 offers. Domain/channel indexes and UI navigation are not services or actions.
 Exclude prices, minimum volumes, lead times, writing/persona/signature instructions,
 customer-specific details, credentials and internal costs.
+Omit observed or historical variants, uncertain availability, personnel lists and
+mobile/UI purchase coaching. These do not establish a current public offering.
 Distinguish a fact customers may learn from a direction for the operator to act.
 Exclude internal work tracking, work-item creation, verification, completion and
 closure procedures, even when phrased as declarative rules rather than commands.
 Actions describe an existing customer-facing capability explicitly stated in the
 source, such as an available request; they never direct staff to create, track,
 check or close work, and never imply a promised callback or handoff.
-Process details must describe the public customer experience, not internal handling.
+Select useful current public procurement, request or fulfillment details when
+explicitly supported; otherwise record a gap. Exclude internal handling.
 If audience or meaning is unclear, omit the whole group and record ambiguous.
 Return ONLY JSON: {"identity":null,"services":[],"qualifications":[],"exclusions":[],"actions":[],"details":[],"missing":[]}.
 Identity is an integer ID or null. Services (max 4), qualifications (3), exclusions
 (3), actions (3) contain arrays of contiguous ordered IDs, e.g. [[0,1],[3]]. Group
 adjacent sentences, headings and bullet continuations to retain the whole qualified
-fact; omit the entire fact when a required qualifier is restricted. Never select an
+fact; include only required qualifiers, not every sentence in the same topic.
+A complete standalone fact can be selected separately from adjacent instructions
+or historical observations only when no condition is lost. Omit the entire fact
+when a required qualifier is restricted. Never select an
 incomplete heading or fragment alone. Select complete explicit service exclusions
 when safe; absent selected exclusions mean an exclusion gap, never no exclusions.
 Details (max 8) contain {"ids":[0,1],"category":"process","key":"delivery_schedule","aliases":["delivery schedule","quando consegnate"]}.
@@ -361,7 +369,7 @@ async def prepare_company_notes(profile: Path, snapshot: Snapshot) -> NotesView:
             f"{index}: "
             + (
                 "[restricted source unit; do not select or omit a required qualifier]"
-                if _DENIED.search(claim.text) or _INSTRUCTION.search(claim.text)
+                if _restricted(claim.text)
                 else " ".join(claim.text.split())
             )
             for index, claim in enumerate(units)
@@ -387,7 +395,7 @@ async def prepare_company_notes(profile: Path, snapshot: Snapshot) -> NotesView:
         raw = blocks[0].text
         if len(raw) > MAX_RESPONSE_CHARS:
             return NotesView("unavailable")
-        selection = Selection.model_validate(json.loads(raw))
+        selection = _parse_selection(raw)
         notes = _materialize(selection, units, source.text)
         _validate(notes, source.text)
         if (

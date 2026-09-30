@@ -1,5 +1,6 @@
 """Validated source selections for company telephone notes."""
 
+import json
 import re
 import unicodedata
 from typing import Annotated, Literal
@@ -23,6 +24,11 @@ _INSTRUCTION = re.compile(
     r"(?i)\b(?:disregard|ignore|forget|override|bypass|pretend|obey|"
     r"tell\s+(?:callers?|customers?|people|the\s+caller)|"
     r"say\s+(?:to|that)|do\s+not\s+(?:tell|mention|disclose)|"
+    r"(?:reply|response|answer|risposta|replica)\b[^.!?\n]{0,50}\b"
+    r"(?:brief|short|concise|breve|corta|sintetica|concisa)|"
+    r"(?:suggest|recommend|advise|sugger\w*|consigli\w*|raccomand\w*)"
+    r"\b[^.!?\n]{0,100}\b(?:scroll\w*|select(?:ing)?|choose|scorr\w*|"
+    r"selezion\w*|scegl\w*)|"
     r"(?:how\s+to|come)\s+(?:handle|manage|process|gestire|trattare)|"
     r"(?:do\s+not|don't|non)\s+(?:invent|reuse|inventare|riusare|riutilizzare|riciclare)|"
     r"(?:explain|spiega(?:re)?)\s+(?:that|che)|"
@@ -50,6 +56,19 @@ _INSTRUCTION = re.compile(
     r"complete|gather|collect|propose|explain|enter|insert|verificare|controllare|"
     r"registrare|tracciare|aggiornare|assegnare|chiudere|completare|ricontattare|"
     r"archiviare|raccogli(?:ere)?|proponi|proporre|spiega(?:re)?|inserisci|inserire)\b"
+)
+_NONPUBLIC = re.compile(
+    r"(?i)\b(?:(?:co[- ]?)?founders?|staff|personnel|fondator[ei]|fondatric[ei]|"
+    r"soci(?:\s+fondatori)?|titolari)\s*:|"
+    r"\b(?:variants?|options?|offers?|services?|products?|varianti|opzioni|offerte|"
+    r"servizi|prodotti|formati)\s+(?:observed|seen|recorded|historical|previous|past|"
+    r"vist[oaie]|osservat[oaie]|riscontrat[oaie]|precedent[ei]|storic[oaie])\b|"
+    r"\b(?:observed|seen|recorded|historical|previous|past|vist[oaie]|osservat[oaie]|"
+    r"precedent[ei]|storic[oaie])\s+(?:variants?|options?|offers?|services?|products?|"
+    r"varianti|opzioni|offerte|servizi|prodotti|formati)\b|"
+    r"\b(?:previously|historically|formerly)\s+(?:offered|supplied|provided|available)\b|"
+    r"\b(?:might|may|could)\s+be\s+(?:offered|available|provided)\b|"
+    r"\b(?:forse|eventualmente)\s+(?:disponibile|disponibili|offerto|offerti)\b"
 )
 _GAPS = {
     "price": "Public price unavailable",
@@ -103,6 +122,13 @@ def _timing_alias_supported(alias: str, claim: "Claim") -> bool:
     )
 
 
+def _restricted(text: str) -> bool:
+    return any(
+        _DENIED.search(value) or _INSTRUCTION.search(value) or _NONPUBLIC.search(value)
+        for value in (text, " ".join(text.split()))
+    )
+
+
 class _Strict(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True)
 
@@ -153,6 +179,16 @@ class Selection(_Strict):
     missing: list[str] = Field(max_length=8)
 
 
+def _parse_selection(raw: str) -> Selection:
+    value = raw.strip()
+    if value.startswith("```"):
+        fenced = re.fullmatch(r"```json[ \t]*\r?\n([^`]*?)\r?\n```", value, re.DOTALL)
+        if fenced is None:
+            raise ValueError("Invalid voice-note JSON fence")
+        value = fenced.group(1)
+    return Selection.model_validate(json.loads(value))
+
+
 def _units(source: str) -> tuple[Claim, ...]:
     """Give the model IDs while retaining exact source offsets locally."""
     cursor = 0
@@ -191,7 +227,7 @@ def _materialize(selection: Selection, units: tuple[Claim, ...], source: str) ->
             if source[unit.start : unit.end] != unit.text:
                 raise ValueError("Unsupported voice-note source unit")
         claim = Claim(text=source[start:end], start=start, end=end)
-        if _DENIED.search(claim.text) or _INSTRUCTION.search(claim.text):
+        if _restricted(claim.text):
             skipped = True
             return None
         return claim
@@ -217,6 +253,8 @@ def _materialize(selection: Selection, units: tuple[Claim, ...], source: str) ->
     missing = list(dict.fromkeys([*selection.missing, "price", "minimum_volume", "lead_time"]))
     if not exclusions and "exclusion" not in missing:
         missing.append("exclusion")
+    if not details and "service" not in missing:
+        missing.append("service")
     if skipped and "ambiguous" not in missing:
         missing.append("ambiguous")
     return Notes(
@@ -244,8 +282,7 @@ def _validate(notes: Notes, source: str) -> None:
         if claim.start >= claim.end or source[claim.start : claim.end] != claim.text:
             raise ValueError("Unsupported voice-note evidence")
         if (
-            _DENIED.search(claim.text)
-            or _INSTRUCTION.search(claim.text)
+            _restricted(claim.text)
             or any(ord(char) < 32 and char not in "\n\r\t" for char in claim.text)
         ):
             raise ValueError("Restricted voice-note claim")
@@ -271,6 +308,8 @@ def _validate(notes: Notes, source: str) -> None:
         raise ValueError("Restricted voice-note omission")
     if not notes.exclusions and "exclusion" not in notes.missing:
         raise ValueError("Missing voice-note exclusion gap")
+    if not notes.details and "service" not in notes.missing:
+        raise ValueError("Missing voice-note detail gap")
     if not notes.services:
         raise ValueError("No supported service")
     _context(notes)

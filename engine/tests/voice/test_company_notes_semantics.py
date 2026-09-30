@@ -2,6 +2,7 @@
 
 import asyncio
 import json
+from types import SimpleNamespace
 
 import pytest
 
@@ -22,6 +23,13 @@ from zylch.services.voice import company_notes as notes
         "How to handle inquiries: First gather the request fields, then propose a next step.",
         "DO NOT invent or reuse an inquiry-specific document.",
         "Explain that, after registration, enter the reference field.",
+        "If the request is unsupported, make the reply brief: thank, decline, close.",
+        "If the request is unsupported, the response should be brief: decline and close.",
+        "If the request is unsupported, the response is\nshort: thank, decline, close.",
+        "Founders: Person A and Person B.",
+        "If the purchase control is hidden, suggest scrolling and selecting the item.",
+        "Variants observed: compact; large.",
+        "Observed variants: compact; large.",
     ],
 )
 @pytest.mark.parametrize("section", ["actions", "details"])
@@ -234,7 +242,7 @@ def test_modal_request_without_subject_is_not_a_specific_alias(tmp_path, monkeyp
     assert asyncio.run(notes.prepare_company_notes(profile, snapshot)).status == "unavailable"
 
 
-@pytest.mark.parametrize("tampering", ["instruction", "timing_alias", "exclusion_gap"])
+@pytest.mark.parametrize("tampering", ["instruction", "timing_alias", "exclusion_gap", "detail_gap"])
 def test_cached_artifact_revalidates_semantic_filters(tmp_path, monkeypatch, tampering):
     directive = "Each request is considered completed once confirmation is recorded."
     source = SOURCE + " " + directive
@@ -248,6 +256,8 @@ def test_cached_artifact_revalidates_semantic_filters(tmp_path, monkeypatch, tam
     elif tampering == "timing_alias":
         payload["notes"]["details"][0]["claim"] = notes._units(source)[1].model_dump()
         payload["notes"]["details"][0]["aliases"] = ["when will widgets arrive"]
+    elif tampering == "detail_gap":
+        payload["notes"]["details"] = []
     else:
         payload["notes"]["missing"].remove("exclusion")
     artifact.write_text(json.dumps(payload))
@@ -259,8 +269,8 @@ def test_prompt_and_schema_change_invalidate_previous_view(tmp_path, monkeypatch
     profile, snapshot = setup(tmp_path, monkeypatch)
     provider(monkeypatch, output())
     with monkeypatch.context() as previous:
-        previous.setattr(notes, "PROMPT_VERSION", 5)
-        previous.setattr(notes, "SCHEMA_VERSION", 3)
+        previous.setattr(notes, "PROMPT_VERSION", 6)
+        previous.setattr(notes, "SCHEMA_VERSION", 4)
         old = asyncio.run(notes.prepare_company_notes(profile, snapshot))
     assert old.status == "supported"
     assert notes.current_company_notes(profile, snapshot).status == "unavailable"
@@ -268,3 +278,90 @@ def test_prompt_and_schema_change_invalidate_previous_view(tmp_path, monkeypatch
     assert new.status == "supported"
     assert old.source_hash == new.source_hash
     assert old.cache_key != new.cache_key
+
+
+@pytest.mark.parametrize("include_history", [False, True])
+def test_only_required_qualifiers_join_current_service_group(
+    tmp_path, monkeypatch, include_history
+):
+    source = (
+        SOURCE + " Acme repairs green widgets. Green widgets require an appointment. "
+        "Variants observed: compact; large."
+    )
+    profile, snapshot = setup(tmp_path, monkeypatch, source)
+    payload = output(source)
+    payload["services"].append([3, 4, 5] if include_history else [3, 4])
+    provider(monkeypatch, payload)
+    view = asyncio.run(notes.prepare_company_notes(profile, snapshot))
+    assert view.status == "supported"
+    assert ("Acme repairs green widgets." in view.context) is not include_history
+    assert ("Green widgets require an appointment." in view.context) is not include_history
+    assert "Variants observed" not in view.context
+    assert ("Some source details are ambiguous" in view.omissions) is include_history
+
+
+@pytest.mark.parametrize(
+    "wrapper, supported",
+    [
+        ("{}", True),
+        ("```json\n{}\n```", True),
+        (" \n```json\r\n{}\r\n```\n ", True),
+        ("Here is the result:\n```json\n{}\n```", False),
+        ("```json\n{}\n```\nExplanation follows.", False),
+        ("```\n{}\n```", False),
+        ("```javascript\n{}\n```", False),
+        ("```json\n{}\n```\n```json\n{{}}\n```", False),
+        ("```json\n{}", False),
+    ],
+)
+def test_single_json_fence_uses_normal_preparation_and_validation(
+    tmp_path, monkeypatch, wrapper, supported
+):
+    source = SOURCE + " Founders: Person A and Person B."
+    profile, snapshot = setup(tmp_path, monkeypatch, source)
+    payload = output(source)
+    payload["actions"] = [[3]]
+    raw = wrapper.format(json.dumps(payload))
+    calls = []
+
+    class Client:
+        async def create_message(self, **kwargs):
+            calls.append(kwargs)
+            return SimpleNamespace(
+                stop_reason="end_turn", content=[SimpleNamespace(type="text", text=raw)]
+            )
+
+    monkeypatch.setattr(notes, "make_llm_client", lambda model: Client())
+    view = asyncio.run(notes.prepare_company_notes(profile, snapshot))
+    assert view.status == ("supported" if supported else "unavailable")
+    assert len(calls) == 1
+    if supported:
+        assert "Founders" not in view.context
+        assert "Some source details are ambiguous" in view.omissions
+        assert notes.current_company_notes(profile, snapshot) == view
+    else:
+        assert not (profile / notes.ARTIFACT).exists()
+
+
+@pytest.mark.parametrize("filtered", [False, True])
+def test_zero_materialized_details_always_report_gap(tmp_path, monkeypatch, filtered):
+    source = SOURCE + " Founders: Person A and Person B."
+    profile, snapshot = setup(tmp_path, monkeypatch, source)
+    payload = output(source)
+    payload["details"] = []
+    if filtered:
+        payload["details"] = [
+            {
+                "ids": [3],
+                "category": "other",
+                "key": "founder_list",
+                "aliases": ["founder list"],
+            }
+        ]
+    provider(monkeypatch, payload)
+    view = asyncio.run(notes.prepare_company_notes(profile, snapshot))
+    assert view.status == "supported"
+    assert "Acme sells blue widgets." in view.context
+    assert "Service details unavailable" in view.context
+    assert "Service details unavailable" in view.omissions
+    assert notes.company_note_detail(profile, snapshot, "weekly delivery").status == "missing"
