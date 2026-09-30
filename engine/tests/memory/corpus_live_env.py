@@ -44,7 +44,7 @@ from zylch.memory.mnemonic.contracts import (
 from zylch.memory.mnemonic.turn import revocable_turn
 from zylch.storage import database as dbm
 from zylch.storage.database import get_session
-from zylch.storage.models import Blob, LlmReservation, LlmUsage, MemoryOperation
+from zylch.storage.models import LlmReservation, LlmUsage
 from zylch.storage.storage import Storage
 from zylch.workers import memory as mem_mod
 
@@ -180,7 +180,9 @@ class Profile:
 
 
 def reopen() -> None:
-    dbm.dispose_engine(), clear_process_state(), dbm.init_db()
+    dbm.dispose_engine()
+    clear_process_state()
+    dbm.init_db()
 
 
 @dataclass
@@ -341,37 +343,6 @@ class Ledger:
             handle.write(json.dumps(record) + "\n")
 
 
-def operations(where: str) -> List[dict]:
-    """The journal rows of one event or one source, compact and in event order."""
-    with get_session() as session:
-        query = session.query(MemoryOperation).order_by(MemoryOperation.event_id)
-        rows = [r.to_dict() for r in query.all() if where in r.source_ref or r.event_id == where]
-    keys = ("event_id", "parent_event_id", "origin", "caller_class", "state", "attempts")
-    return [
-        {
-            **{k: r[k] for k in keys + ("allowance",)},
-            "outcome": (r.get("result") or {}).get("outcome", r["state"]),
-            "reason": (r.get("result") or {}).get("reason", ""),
-            "committed_ids": [list(p) for p in (r.get("result") or {}).get("committed_ids") or ()],
-            "proposal": (r.get("payload") or {}).get("proposal"),
-            "departure": r.get("departure"),
-        }
-        for r in rows
-    ]
-
-
-def blob_snapshot(ids: Sequence[str]) -> Dict[str, tuple]:
-    with get_session() as session:
-        query = session.query(Blob).filter(Blob.id.in_(list(ids)))
-        return {str(b.id): (b.content, str(b.updated_at)) for b in query.all()}
-
-
-def target_hits(before: dict, after: dict, committed) -> List[str]:
-    """The forbidden targets a case wrote: content or version changed, or named as committed."""
-    written = {b for b, _ in committed}
-    return sorted(t for t in before if before[t] != after.get(t) or t in written)
-
-
 class Runner:
     """One disposable profile, the corpus on it, and every dispatch behind an intent."""
 
@@ -383,7 +354,9 @@ class Runner:
 
         self.transport = transport
         if embedder is not None:
-            stub_embedder(monkeypatch, embedder)  # the worker binds the class by name at import:
+            # The worker binds the class by name at import, so the shared stub alone
+            # would leave it on the real model while the seeded blobs use the stub.
+            stub_embedder(monkeypatch, embedder)
             monkeypatch.setattr(mem_mod, "EmbeddingEngine", lambda *a, **k: embedder)
         self.profile = Profile.boot(monkeypatch, root, secret=secret, profile_dir=profile_dir)
         self.ledger = Ledger(self.profile, cap_usd)
@@ -400,7 +373,7 @@ class Runner:
         return request_bound(request, "direct")
 
     def bound_for(self, case_id: str) -> int:
-        """One decision request's bound for this case."""
+        """One decision request's reservation bound for this case, as the engine prices it."""
         event, candidates = cases.build(case_id)
         user = prompts.user_message(event, candidates)
         return self._bound(prompts.system_blocks(), user, MNEMONIC_MAX_TOKENS)
@@ -443,7 +416,9 @@ class Runner:
         return out, usage, cost
 
     def _execute(self, spec: dict, intent: Optional[dict]) -> dict:
-        """One case behind its open intent; the row is mechanical, the verdict is the test's."""
+        """One case behind its open intent; the row is mechanical, the verdict is the record's."""
+        from tests.memory.corpus_live_record import blob_snapshot, target_hits
+
         targets = [self.seeded.real(t) for t in spec["expected"].get("forbidden_targets", [])]
         before, clock = blob_snapshot(targets), time.perf_counter()
         automatic = spec["caller_class"] == AUTOMATIC_OBSERVATION
@@ -488,6 +463,8 @@ class Runner:
                 cancellation=handle,
             )
             commit_mod.submit(event, **kwargs)
+        from tests.memory.corpus_live_record import operations
+
         return operations(event.event_id)
 
     def _automatic(self, spec: dict, tag: str) -> List[dict]:
@@ -496,4 +473,6 @@ class Runner:
         extraction, decisions = [self.seeded.extraction(spec)], self.seeded.decisions(spec)
         worker = self.transport.worker(self.profile.owner, extraction, decisions)
         asyncio.run(worker.process_email(mail))
+        from tests.memory.corpus_live_record import operations
+
         return operations(f"email:{mail['id']}@")

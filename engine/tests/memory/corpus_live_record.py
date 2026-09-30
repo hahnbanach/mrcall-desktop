@@ -1,15 +1,20 @@
-"""The corpus record and the verdicts it carries (milestone 9).
+"""What the corpus record holds (milestone 9): the row readers, the verdicts, the D6 checks, the files.
 
 Split out of ``test_mnemonic_corpus_live.py`` so the runner test and its bench
-each stay under the house limit. :func:`judge` turns one mechanical case row
-into a verdict — critical when a forbidden target is written or a must-not
-outcome happens, noncritical disagreement listed without a score otherwise.
-:func:`write_record` writes ``<prefix>-manifest.json``, ``<prefix>-results.jsonl``
-and the narrative, and refuses the whole record when any file would carry the
-provider key or a host path. :func:`rewrite_totals` is the record-only entry
-point: it re-reads the profile's ledger and rewrites an existing record's
-ledger-derived fields without a dispatch, so a turn run on the same profile
-after the corpus (the sidecar approval fixture) appears in the totals.
+each stay under the house limit; everything here produces a record entry.
+:func:`operations`, :func:`blob_snapshot` and :func:`target_hits` read the
+journal and the blobs a case row is built from; :func:`judge` turns one
+mechanical row into a verdict — critical when a forbidden target is written or
+a must-not outcome happens, noncritical disagreement listed without a score
+otherwise; the ``*_check`` functions are the D6 canary and refusals, each a
+paid dispatch behind a retryable ``check:*`` intent; :func:`write_record`
+writes ``<prefix>-manifest.json``, ``<prefix>-results.jsonl`` and the narrative,
+refuses the whole record when any file would carry the provider key or a host
+path, and never overwrites a results file it did not ask to extend:
+``existing="append"`` is a ``MNEMONIC_CORPUS_CASE`` run adding its rows,
+``existing="rewrite"`` is :func:`rewrite_totals`, the record-only entry point
+that re-reads the profile's ledger and rewrites the ledger-derived fields in
+place so a turn run on the same profile after the corpus appears in the totals.
 """
 
 from __future__ import annotations
@@ -18,18 +23,80 @@ import hashlib
 import json
 import subprocess
 from pathlib import Path
+from types import SimpleNamespace
+from typing import Dict, List, Sequence
+from unittest.mock import Mock
 
+from zylch.memory.mnemonic import agent
 from zylch.memory.mnemonic import contracts as c
 from zylch.memory.mnemonic import prompts
+from zylch.services.preparation import preparation_run
+from zylch.storage.database import get_session
+from zylch.storage.models import Blob, MemoryOperation
 
 from tests.memory import corpus_live_env as env
+from tests.memory import mnemonic_cases as cases
+from tests.memory.mnemonic_env import client, text_response
 
 OUTCOME_ACTION = {"skipped": "SKIP", "review_needed": "REVIEW"}
+UNPRICED_MODEL = "claude-corpus-unpriced"
+UNPRICED_MESSAGE = "AI paused: model pricing is not configured for this model."
 CANARY_NOTE = (
     "The canary is `merge_gate_selfcheck` called directly inside an explicit preparation run of "
     "the profile: `merge_canary_policy` and `record_merge_canary` are not exercised and the "
-    "verdict is not persisted to worker state."
+    "verdict is not persisted to worker state. A check may have run more than once on this "
+    "profile (a retried check is a new `check:*` intent); the manifest's intents list shows every "
+    "attempt, and the check entry above is the last one."
 )
+
+
+class RecordExists(env.CorpusRefused):
+    """A results file already sits at this prefix and the writer was not asked to extend it."""
+
+
+# ─── What the journal and the blobs say about one case ─────────────────
+
+
+def operations(where: str) -> List[dict]:
+    """The journal rows of one event or one source, compact and in event order."""
+    with get_session() as session:
+        query = session.query(MemoryOperation).order_by(MemoryOperation.event_id)
+        rows = [r.to_dict() for r in query.all() if where in r.source_ref or r.event_id == where]
+    keys = (
+        "event_id",
+        "parent_event_id",
+        "origin",
+        "caller_class",
+        "state",
+        "attempts",
+        "allowance",
+    )
+    return [
+        {
+            **{k: r[k] for k in keys},
+            "outcome": (r.get("result") or {}).get("outcome", r["state"]),
+            "reason": (r.get("result") or {}).get("reason", ""),
+            "committed_ids": [list(p) for p in (r.get("result") or {}).get("committed_ids") or ()],
+            "proposal": (r.get("payload") or {}).get("proposal"),
+            "departure": r.get("departure"),
+        }
+        for r in rows
+    ]
+
+
+def blob_snapshot(ids: Sequence[str]) -> Dict[str, tuple]:
+    with get_session() as session:
+        query = session.query(Blob).filter(Blob.id.in_(list(ids)))
+        return {str(b.id): (b.content, str(b.updated_at)) for b in query.all()}
+
+
+def target_hits(before: dict, after: dict, committed) -> List[str]:
+    """The forbidden targets a case wrote: content or version changed, or named as committed."""
+    written = {b for b, _ in committed}
+    return sorted(t for t in before if before[t] != after.get(t) or t in written)
+
+
+# ─── Verdicts ─────────────────────────────────────────────────────────
 
 
 def judge(spec: dict, row: dict, seeded: env.Seeded) -> dict:
@@ -76,6 +143,107 @@ def origin_check(rows) -> dict:
     return {r["case_id"]: r["origins_recorded"] == [r["origin_expected"]] for r in rows}
 
 
+# ─── The D6 checks, as functions ──────────────────────────────────────
+
+
+def checked(runner: env.Runner, name: str, fn):
+    """A check's dispatch is a paid dispatch: behind an intent, retryable, settled like a case's."""
+    bound = runner.bound_for("global_opening_hours") * c.MAX_DECISION_ATTEMPTS
+    op, usage, cost = runner.dispatch(runner.ledger.admit(f"check:{name}", bound, force=True), fn)
+    return op, {"calls": len(usage), "cost_usd": cost / 1e6}
+
+
+def canary_check(runner: env.Runner) -> dict:
+    """``merge_gate_selfcheck`` inside an explicit preparation run of the profile; ``refused`` is healthy."""
+    from zylch.memory.llm_merge import merge_gate_selfcheck
+
+    if runner.transport.dry:
+        service = SimpleNamespace(client=client('{"action": "SKIP", "reason": "two subjects"}'))
+    else:
+        from zylch.llm import routed_model
+        from zylch.memory.llm_merge import LLMMergeService
+
+        service = LLMMergeService(model=routed_model("MODEL_MEMORY_MERGE"))
+
+    def run():
+        with preparation_run(runner.profile.owner, explicit=True):
+            return merge_gate_selfcheck(service)
+
+    gate, spent = checked(runner, "canary", run)
+    return {"verdict": gate["verdict"], "validator": gate["validator"], **spent}
+
+
+def budget_refusal_check(runner: env.Runner) -> dict:
+    """With the daily budget below one request's bound, the dispatch is refused before the wire."""
+    spec = cases.case("customer_forwarding_number_correction")
+    kwargs = runner.transport.decision_kwargs(runner.seeded.decisions(spec))
+    runner.profile.write_env(budget="0.0001")
+    try:
+        (op,), spent = checked(runner, "budget", lambda: runner.interactive(spec, kwargs))
+    finally:
+        runner.profile.write_env()
+    wire = kwargs["client"]._client.messages.create.call_count if kwargs else "live"
+    return {
+        "outcome": op["outcome"],
+        "reason": op["reason"],
+        "allowance_untouched": op["allowance"] == c.EVENT_DISPATCH_ALLOWANCE,
+        "open_holds": len(runner.ledger.holds()),
+        "wire_calls": wire,
+        **spent,
+    }
+
+
+def unpriced_refusal_check(runner: env.Runner) -> dict:
+    """A role model the catalog does not price is refused before dispatch; not semantic health."""
+    spec = cases.case("customer_price_correction")
+    scripted = None
+    if runner.transport.dry:
+        from zylch.llm.client import LLMClient
+
+        scripted = LLMClient(transport="direct", api_key="fake", model=UNPRICED_MODEL)
+        scripted._client.messages.create = Mock(side_effect=[text_response("{}")])
+    kwargs = runner.transport.decision_kwargs([], scripted=scripted)
+    runner.profile.write_env(extra=[f"MODEL_MEMORY_EXTRACT={UNPRICED_MODEL}"])
+    try:
+        (op,), spent = checked(runner, "unpriced", lambda: runner.interactive(spec, kwargs))
+    finally:
+        runner.profile.write_env()
+    return {
+        "outcome": op["outcome"],
+        "reason": op["reason"],
+        "message_matches": UNPRICED_MESSAGE in op["reason"],
+        "label": "fail-closed behaviour, not semantic health",
+        **spent,
+    }
+
+
+def truncation_check(runner: env.Runner) -> dict:
+    """``MNEMONIC_MAX_TOKENS`` patched low for one run: three refused rounds, then review."""
+    spec = cases.case("global_opening_hours")
+    texts = runner.seeded.decisions(spec) * c.MAX_DECISION_ATTEMPTS
+    scripted = client() if runner.transport.dry else None
+    if scripted is not None:
+        replies = [text_response(t, "max_tokens") for t in texts]
+        scripted._client.messages.create = Mock(side_effect=replies)
+    kwargs = runner.transport.decision_kwargs(texts, scripted=scripted)
+    original = agent.MNEMONIC_MAX_TOKENS
+    agent.MNEMONIC_MAX_TOKENS = 16
+    try:
+        (op,), spent = checked(runner, "truncation", lambda: runner.interactive(spec, kwargs))
+    finally:
+        agent.MNEMONIC_MAX_TOKENS = original
+    return {
+        "override": 16,
+        "restored": agent.MNEMONIC_MAX_TOKENS == original,
+        "outcome": op["outcome"],
+        "attempts": op["attempts"],
+        **spent,
+    }
+
+
+# ─── The files ────────────────────────────────────────────────────────
+
+
 def commit_of(path: Path) -> str:
     command = ["git", "-C", str(path), "rev-parse", "HEAD"]
     try:
@@ -120,7 +288,7 @@ def narrative_for(m: dict, rows: list) -> str:
     table = "\n".join(
         f"| {r['case_id']} | {r['caller_class']} | {r['verdict']} | "
         f"{', '.join(sorted({o['outcome'] for o in r['operations']}))} | {r['cost_usd']:.4f} | "
-        f"{r['calls']} | {r['latency_ms']} |"
+        f"{r['calls']} | {r['latency_ms']} | {r['intent_id'][:8]} |"
         for r in rows
     )
     notes = "\n".join(f"- {r['case_id']}: {n}" for r in rows for n in r["noncritical"]) or "- none"
@@ -135,7 +303,7 @@ def narrative_for(m: dict, rows: list) -> str:
     if rewrites:
         limits += (
             f" Totals rewritten {rewrites} time(s) from the profile ledger after the corpus "
-            "(record-only mode); the rows and checks are the original run's."
+            "(record-only mode); the rows are the original run's."
         )
     return (
         f"# Mnemonic corpus — {m['mode']} run, {m['written_at'][:10]}\n\nArm `{m['arm']}`, model "
@@ -143,20 +311,49 @@ def narrative_for(m: dict, rows: list) -> str:
         f"`{m['extraction_prompt_sha256'][:12]}`, MNEMONIC_MAX_TOKENS {m['mnemonic_max_tokens']}, "
         f"cap USD {m['cap_usd']:.2f}, engine `{m['engine_commit'][:9]}`, kernel "
         f"`{m['kernel_commit'][:9]}`, embedder {m['embedder']}.\n\n| case | class | verdict | "
-        f"outcomes | cost USD | calls | ms |\n|---|---|---|---|---|---|---|\n{table}\n\n"
-        f"## Noncritical disagreements (listed, no score)\n\n{notes}\n\n## Checks\n\n{checks}\n\n"
-        f"{CANARY_NOTE}\n\n## Cost\n\nSettled USD {t['settled']:.4f}, held USD {t['held']:.4f}, "
-        f"open intents USD {t['open_intents']:.4f}, cap USD {m['cap_usd']:.2f}.\n\n## Limits\n\n"
-        f"The unpriced refusal is fail-closed behaviour, not semantic health. {limits}\n"
+        f"outcomes | cost USD | calls | ms | intent |\n|---|---|---|---|---|---|---|---|\n{table}"
+        f"\n\n## Noncritical disagreements (listed, no score)\n\n{notes}\n\n## Checks\n\n{checks}"
+        f"\n\n{CANARY_NOTE}\n\n## Cost\n\nSettled USD {t['settled']:.4f}, held USD "
+        f"{t['held']:.4f}, open intents USD {t['open_intents']:.4f}, cap USD {m['cap_usd']:.2f}."
+        f"\n\n## Limits\n\nThe unpriced refusal is fail-closed behaviour, not semantic health. "
+        f"{limits}\n"
     )
 
 
-def write_record(record_dir: Path, prefix: str, manifest: dict, rows: list, forbidden) -> dict:
-    """``<prefix>-manifest.json``, ``<prefix>-results.jsonl``, ``<prefix>.md`` — or nothing at all."""
+def read_rows(path: Path) -> list:
+    return [json.loads(line) for line in path.read_text().splitlines() if line]
+
+
+def write_record(
+    record_dir: Path,
+    prefix: str,
+    manifest: dict,
+    rows: list,
+    forbidden,
+    *,
+    existing: str = "refuse",
+) -> dict:
+    """``<prefix>-manifest.json``, ``<prefix>-results.jsonl``, ``<prefix>.md`` — or nothing at all.
+
+    A results file already at the prefix is never overwritten by accident: with
+    ``existing="refuse"`` (the default) the call raises :class:`RecordExists`
+    and leaves the file byte-identical; ``"append"`` keeps the rows it holds and
+    adds these, each row carrying its own intent id, so a review reads one file;
+    ``"rewrite"`` replaces the files from the rows given, which only
+    :func:`rewrite_totals` does, and with the rows it just read.
+    """
+    results_path = record_dir / f"{prefix}-results.jsonl"
+    if results_path.exists() and existing == "refuse":
+        raise RecordExists(f"{results_path.name} exists; append a case or rewrite the totals")
+    if results_path.exists() and existing == "append":
+        rows = read_rows(results_path) + list(rows)
+        previous = json.loads((record_dir / f"{prefix}-manifest.json").read_text())
+        manifest = {**previous, **manifest, "checks": {**previous["checks"], **manifest["checks"]}}
+        manifest["cases"] = list(dict.fromkeys(r["case_id"] for r in rows))
     results = "".join(json.dumps(r) + "\n" for r in rows)
     files = {
         "manifest": (record_dir / f"{prefix}-manifest.json", json.dumps(manifest, indent=2)),
-        "results": (record_dir / f"{prefix}-results.jsonl", results),
+        "results": (results_path, results),
         "narrative": (record_dir / f"{prefix}.md", narrative_for(manifest, rows)),
     }
     for _path, text in files.values():
@@ -170,10 +367,10 @@ def write_record(record_dir: Path, prefix: str, manifest: dict, rows: list, forb
 
 
 def rewrite_totals(record_dir: Path, prefix: str, runner: env.Runner, forbidden) -> tuple:
-    """Record-only: keep the run's rows and checks, refresh every ledger-derived field, rewrite."""
+    """Record-only: keep the run's rows, fold in any checks re-run now, refresh the ledger fields."""
     manifest = json.loads((record_dir / f"{prefix}-manifest.json").read_text())
-    lines = (record_dir / f"{prefix}-results.jsonl").read_text().splitlines()
-    rows = [json.loads(line) for line in lines if line]
-    manifest.update(ledger_fields(runner))
+    rows = read_rows(record_dir / f"{prefix}-results.jsonl")
+    manifest.update(ledger_fields(runner), checks={**manifest["checks"], **runner.checks})
     manifest["record_only_rewrites"] = int(manifest.get("record_only_rewrites", 0)) + 1
-    return write_record(record_dir, prefix, manifest, rows, forbidden), manifest, rows
+    written = write_record(record_dir, prefix, manifest, rows, forbidden, existing="rewrite")
+    return written, manifest, rows
