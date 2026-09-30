@@ -4,14 +4,17 @@ Analogous to zylch/tools/email_sync.py for email.
 Handles HistorySyncEv (initial) and MessageEv (ongoing).
 """
 
+import hashlib
 import logging
 import os
+import re
 import threading
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Dict, Optional
 
 from zylch.storage.database import get_session
+from zylch.utils.safe_paths import confine
 
 logger = logging.getLogger(__name__)
 
@@ -28,6 +31,25 @@ def _wa_media_dir() -> str:
     media_dir = os.path.join(base, "wa_media")
     Path(media_dir).mkdir(parents=True, exist_ok=True)
     return media_dir
+
+
+# The message id is chosen by the sender's client, so it names a media file
+# only when it is a plain token (real ids are hex-like).
+_SAFE_MEDIA_STEM = re.compile(r"[A-Za-z0-9_-]{1,128}")
+
+
+def _media_stem(msg_id: str) -> str:
+    """Filename stem for a message's downloaded media.
+
+    The id itself when it fully matches ``_SAFE_MEDIA_STEM``; any other id
+    (separators, ``..``, empty, over-long) becomes ``wa_`` plus the first
+    32 hex digits of its SHA-256 — deterministic, and distinct ids get
+    distinct stems.
+    """
+    if _SAFE_MEDIA_STEM.fullmatch(msg_id):
+        return msg_id
+    digest = hashlib.sha256(msg_id.encode("utf-8", "surrogatepass")).hexdigest()
+    return f"wa_{digest[:32]}"
 
 
 class WhatsAppSyncService:
@@ -512,10 +534,12 @@ class WhatsAppSyncService:
             return False
 
     def _download_audio(self, msg_id: str, unwrapped) -> Optional[str]:
-        """Download a voice/audio blob to ``<wa_media>/<msg_id>.ogg``.
+        """Download a voice/audio blob to ``<wa_media>/<stem>.ogg``.
 
         Args:
-            msg_id: Protocol message id, used as the filename stem.
+            msg_id: Protocol message id, chosen by the sender's client. The
+                filename stem is ``_media_stem(msg_id)`` and the final path
+                is confined to ``wa_media`` in every mode.
             unwrapped: The unwrapped Message proto carrying audioMessage —
                 what neonize's ``download_any`` expects.
 
@@ -529,7 +553,8 @@ class WhatsAppSyncService:
             if not data:
                 logger.warning(f"[wa-sync] _download_audio(msg_id={msg_id}) -> no bytes")
                 return None
-            path = os.path.join(_wa_media_dir(), f"{msg_id}.ogg")
+            media_dir = _wa_media_dir()
+            path = confine(os.path.join(media_dir, f"{_media_stem(msg_id)}.ogg"), [media_dir])
             with open(path, "wb") as fh:
                 fh.write(data)
             logger.info(
