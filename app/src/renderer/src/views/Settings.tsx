@@ -9,6 +9,8 @@ import ConnectWhatsApp from './ConnectWhatsApp'
 import { performSignOut } from '../App'
 import { auth } from '../firebase/config'
 import { ensureEngineSession } from '../firebase/authUtils'
+import type { Mailbox, MailboxPreset, MailboxStatus } from '../types'
+import { MAILBOXES_CHANGED_EVENT } from '../lib/mailboxes'
 
 type FieldType = 'text' | 'password' | 'number' | 'select' | 'textarea' | 'model'
 
@@ -314,6 +316,7 @@ export default function Settings(): JSX.Element {
                 isDirty={f.key in edits && edits[f.key] !== (loaded[f.key] ?? '')}
               />
             ))}
+            {group === 'Email' && <MailboxesCard />}
           </div>
         </section>
       ))}
@@ -1237,6 +1240,662 @@ function MemoryCard(): JSX.Element {
           <p className={`text-xs mt-2 ${joinMsg.kind === 'err' ? 'text-brand-danger' : 'text-brand-success'}`}>
             {joinMsg.text}
           </p>
+        )}
+      </div>
+    </div>
+  )
+}
+
+// ─── Mailboxes ─────────────────────────────────────────────────────
+// Additional IMAP mailboxes next to the primary (the sign-up address,
+// whose EMAIL_* fields stay in the schema form above). Own state, own
+// RPCs, no shared Save bar: every gesture is one `mailboxes.*` call and
+// every refusal is an answer with a `status`, shown inline. The
+// password is typed into a masked field, sent once to test/add/update,
+// and never stored, echoed or logged on this side.
+
+const MAILBOX_STATUS_LABEL: Record<MailboxStatus, string> = {
+  ok: 'Connection OK',
+  auth: 'Login refused',
+  unreachable: 'Server unreachable',
+  tls: 'TLS error',
+  folder: 'Folder cannot be opened',
+  invalid: 'Not a valid mailbox',
+  duplicate: 'Already configured',
+  secret: 'Password could not be stored',
+  unknown: 'Mailbox not found',
+  primary: 'Primary mailbox'
+}
+
+function mailboxStatusText(status: string, message?: string): string {
+  const label = MAILBOX_STATUS_LABEL[status as MailboxStatus] ?? status
+  return message ? `${label}: ${message}` : label
+}
+
+/** Sends a port only when the field holds a number; an empty field
+ *  leaves the engine's default in place. */
+function portValue(raw: string): number | undefined {
+  const trimmed = raw.trim()
+  if (!trimmed) return undefined
+  const n = Number(trimmed)
+  return Number.isInteger(n) && n > 0 ? n : undefined
+}
+
+function formatSyncTime(iso: string | null): string {
+  if (!iso) return 'never'
+  const d = new Date(iso)
+  return isNaN(d.getTime()) ? iso : d.toLocaleString()
+}
+
+const CUSTOM_PRESET = 'custom'
+
+interface MailboxForm {
+  preset: string
+  address: string
+  password: string
+  imap_host: string
+  imap_port: string
+  smtp_host: string
+  smtp_port: string
+}
+
+const EMPTY_MAILBOX_FORM: MailboxForm = {
+  preset: CUSTOM_PRESET,
+  address: '',
+  password: '',
+  imap_host: '',
+  imap_port: '',
+  smtp_host: '',
+  smtp_port: ''
+}
+
+function MailboxesCard(): JSX.Element {
+  const [mailboxes, setMailboxes] = useState<Mailbox[] | null>(null)
+  const [presets, setPresets] = useState<MailboxPreset[]>([])
+  const [loadError, setLoadError] = useState<string | null>(null)
+
+  // Add form. `tested` is true only after `mailboxes.test` answered ok
+  // for the values currently in the form; any edit clears it, and Save
+  // stays disabled until the next successful test.
+  const [addOpen, setAddOpen] = useState(false)
+  const [form, setForm] = useState<MailboxForm>(EMPTY_MAILBOX_FORM)
+  const [test, setTest] = useState<{ kind: 'idle' | 'busy' | 'ok' | 'err'; text: string }>({
+    kind: 'idle',
+    text: ''
+  })
+  const [tested, setTested] = useState(false)
+  // Bumped on every edit and every test: a test answer older than the
+  // latest edit is ignored, so an edited form never inherits an ok.
+  const testRequest = useRef(0)
+  const [saving, setSaving] = useState(false)
+  const [saveMsg, setSaveMsg] = useState<{ kind: 'idle' | 'ok' | 'err'; text: string }>({
+    kind: 'idle',
+    text: ''
+  })
+
+  // Edit / remove of one row at a time.
+  const [editingId, setEditingId] = useState<string | null>(null)
+  const [edit, setEdit] = useState<Omit<MailboxForm, 'preset' | 'address'>>({
+    password: '',
+    imap_host: '',
+    imap_port: '',
+    smtp_host: '',
+    smtp_port: ''
+  })
+  const [editBusy, setEditBusy] = useState(false)
+  const [editMsg, setEditMsg] = useState<{ kind: 'idle' | 'ok' | 'err'; text: string }>({
+    kind: 'idle',
+    text: ''
+  })
+  const [confirmRemoveId, setConfirmRemoveId] = useState<string | null>(null)
+  const [removeBusy, setRemoveBusy] = useState(false)
+  const [rowMsg, setRowMsg] = useState<{ id: string; kind: 'ok' | 'err'; text: string } | null>(
+    null
+  )
+
+  // Answers from a previous engine (restart, backend switch) are dropped:
+  // every refresh bumps the generation and only the latest one lands.
+  const generation = useRef(0)
+  const refresh = async (): Promise<void> => {
+    const request = ++generation.current
+    try {
+      const r = await window.zylch.mailboxes.list()
+      if (request !== generation.current) return
+      setMailboxes(Array.isArray(r.mailboxes) ? r.mailboxes : [])
+      setLoadError(null)
+    } catch (e) {
+      if (request !== generation.current) return
+      setLoadError(errorMessage(e))
+      setMailboxes([])
+    }
+  }
+  const loadPresets = (): void => {
+    const request = generation.current
+    window.zylch.mailboxes
+      .presets()
+      .then((r) => {
+        if (request === generation.current) setPresets(Array.isArray(r.presets) ? r.presets : [])
+      })
+      .catch(() => {
+        if (request === generation.current) setPresets([])
+      })
+  }
+  // Tells the Email view (always mounted) to re-read the list.
+  const announceChange = (): void => {
+    window.dispatchEvent(new Event(MAILBOXES_CHANGED_EVENT))
+  }
+
+  useEffect(() => {
+    void refresh()
+    loadPresets()
+    const off = window.zylch.onSidecarStatus((status) => {
+      generation.current++
+      if (!status.alive || !status.ready) {
+        setMailboxes(null)
+        return
+      }
+      setEditingId(null)
+      setConfirmRemoveId(null)
+      setRowMsg(null)
+      void refresh()
+      loadPresets()
+    })
+    return () => {
+      generation.current++
+      off()
+    }
+  }, [])
+
+  const selectedPreset = presets.find((p) => p.id === form.preset) ?? null
+  const passwordLabel = selectedPreset?.password_label || 'Password'
+
+  const setFormField = (key: keyof MailboxForm, value: string): void => {
+    testRequest.current++
+    setForm((prev) => ({ ...prev, [key]: value }))
+    setTested(false)
+    setTest({ kind: 'idle', text: '' })
+    setSaveMsg({ kind: 'idle', text: '' })
+  }
+
+  const applyPreset = (id: string): void => {
+    const preset = presets.find((p) => p.id === id)
+    setForm((prev) => ({
+      ...prev,
+      preset: id,
+      imap_host: preset?.imap_host ?? prev.imap_host,
+      imap_port: preset?.imap_port != null ? String(preset.imap_port) : prev.imap_port,
+      smtp_host: preset?.smtp_host ?? prev.smtp_host,
+      smtp_port: preset?.smtp_port != null ? String(preset.smtp_port) : prev.smtp_port
+    }))
+    testRequest.current++
+    setTested(false)
+    setTest({ kind: 'idle', text: '' })
+    setSaveMsg({ kind: 'idle', text: '' })
+  }
+
+  // Typing an address whose domain a preset covers selects that preset
+  // while the user has not picked one; the hosts stay editable.
+  const onAddressChange = (value: string): void => {
+    setFormField('address', value)
+    if (form.preset !== CUSTOM_PRESET) return
+    const domain = value.split('@')[1]?.trim().toLowerCase()
+    if (!domain) return
+    const match = presets.find((p) => p.domains.includes(domain))
+    if (match) applyPreset(match.id)
+  }
+
+  const formParams = (): {
+    address: string
+    password: string
+    imap_host?: string
+    imap_port?: number
+    smtp_host?: string
+    smtp_port?: number
+  } => ({
+    address: form.address.trim(),
+    password: form.password,
+    imap_host: form.imap_host.trim() || undefined,
+    imap_port: portValue(form.imap_port),
+    smtp_host: form.smtp_host.trim() || undefined,
+    smtp_port: portValue(form.smtp_port)
+  })
+
+  const canTest =
+    form.address.includes('@') && form.password.length > 0 && test.kind !== 'busy' && !saving
+
+  const handleTest = async (): Promise<void> => {
+    const request = ++testRequest.current
+    setTest({ kind: 'busy', text: 'Connecting…' })
+    setTested(false)
+    try {
+      const r = await window.zylch.mailboxes.test(formParams())
+      if (request !== testRequest.current) return
+      setTest({ kind: r.ok ? 'ok' : 'err', text: mailboxStatusText(r.status, r.message) })
+      setTested(r.ok)
+    } catch (e) {
+      if (request !== testRequest.current) return
+      setTest({ kind: 'err', text: errorMessage(e) })
+    }
+  }
+
+  const handleAdd = async (): Promise<void> => {
+    setSaving(true)
+    setSaveMsg({ kind: 'idle', text: '' })
+    try {
+      const r = await window.zylch.mailboxes.add({
+        ...formParams(),
+        preset: form.preset !== CUSTOM_PRESET ? form.preset : undefined
+      })
+      if (!r.ok) {
+        setSaveMsg({ kind: 'err', text: mailboxStatusText(r.status, r.message) })
+        setTested(false)
+        return
+      }
+      setForm(EMPTY_MAILBOX_FORM)
+      setTest({ kind: 'idle', text: '' })
+      setTested(false)
+      setAddOpen(false)
+      setSaveMsg({ kind: 'ok', text: `Added ${r.mailbox?.address ?? 'mailbox'}.` })
+      await refresh()
+      announceChange()
+    } catch (e) {
+      setSaveMsg({ kind: 'err', text: errorMessage(e) })
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const startEdit = (m: Mailbox): void => {
+    setEditingId(m.id)
+    setConfirmRemoveId(null)
+    setRowMsg(null)
+    setEditMsg({ kind: 'idle', text: '' })
+    setEdit({
+      password: '',
+      imap_host: m.imap_host ?? '',
+      imap_port: m.imap_port != null ? String(m.imap_port) : '',
+      smtp_host: m.smtp_host ?? '',
+      smtp_port: m.smtp_port != null ? String(m.smtp_port) : ''
+    })
+  }
+
+  const handleUpdate = async (m: Mailbox): Promise<void> => {
+    setEditBusy(true)
+    setEditMsg({ kind: 'idle', text: '' })
+    try {
+      const params: Parameters<typeof window.zylch.mailboxes.update>[0] = { mailbox_id: m.id }
+      const imapHost = edit.imap_host.trim()
+      const smtpHost = edit.smtp_host.trim()
+      if (imapHost !== (m.imap_host ?? '')) params.imap_host = imapHost
+      if (smtpHost !== (m.smtp_host ?? '')) params.smtp_host = smtpHost
+      const imapPort = portValue(edit.imap_port)
+      const smtpPort = portValue(edit.smtp_port)
+      if (imapPort !== undefined && imapPort !== m.imap_port) params.imap_port = imapPort
+      if (smtpPort !== undefined && smtpPort !== m.smtp_port) params.smtp_port = smtpPort
+      if (edit.password) params.password = edit.password
+      if (Object.keys(params).length === 1) {
+        setEditMsg({ kind: 'err', text: 'Nothing changed.' })
+        return
+      }
+      const r = await window.zylch.mailboxes.update(params)
+      if (!r.ok) {
+        setEditMsg({ kind: 'err', text: mailboxStatusText(r.status, r.message) })
+        return
+      }
+      setEditingId(null)
+      setEdit((prev) => ({ ...prev, password: '' }))
+      setRowMsg({ id: m.id, kind: 'ok', text: 'Saved and tested.' })
+      await refresh()
+      announceChange()
+    } catch (e) {
+      setEditMsg({ kind: 'err', text: errorMessage(e) })
+    } finally {
+      setEditBusy(false)
+    }
+  }
+
+  const handleRemove = async (m: Mailbox): Promise<void> => {
+    setRemoveBusy(true)
+    setRowMsg(null)
+    try {
+      const r = await window.zylch.mailboxes.remove(m.id)
+      if (!r.ok) {
+        setRowMsg({ id: m.id, kind: 'err', text: mailboxStatusText(r.status, r.message) })
+        return
+      }
+      setConfirmRemoveId(null)
+      await refresh()
+      announceChange()
+    } catch (e) {
+      setRowMsg({ id: m.id, kind: 'err', text: errorMessage(e) })
+    } finally {
+      setRemoveBusy(false)
+    }
+  }
+
+  const hostFields = (
+    values: Pick<MailboxForm, 'imap_host' | 'imap_port' | 'smtp_host' | 'smtp_port'>,
+    onChange: (key: 'imap_host' | 'imap_port' | 'smtp_host' | 'smtp_port', value: string) => void,
+    idPrefix: string
+  ): JSX.Element => (
+    <div className="grid grid-cols-[1fr_88px] gap-2">
+      <label className="text-xs text-brand-grey-80">
+        IMAP host
+        <input
+          id={`${idPrefix}-imap-host`}
+          type="text"
+          value={values.imap_host}
+          onChange={(e) => onChange('imap_host', e.target.value)}
+          spellCheck={false}
+          className="mt-0.5 w-full text-xs font-mono border border-brand-mid-grey rounded px-2 py-1"
+        />
+      </label>
+      <label className="text-xs text-brand-grey-80">
+        Port
+        <input
+          id={`${idPrefix}-imap-port`}
+          type="number"
+          min={1}
+          max={65535}
+          value={values.imap_port}
+          onChange={(e) => onChange('imap_port', e.target.value)}
+          className="mt-0.5 w-full text-xs font-mono border border-brand-mid-grey rounded px-2 py-1"
+        />
+      </label>
+      <label className="text-xs text-brand-grey-80">
+        SMTP host
+        <input
+          id={`${idPrefix}-smtp-host`}
+          type="text"
+          value={values.smtp_host}
+          onChange={(e) => onChange('smtp_host', e.target.value)}
+          spellCheck={false}
+          className="mt-0.5 w-full text-xs font-mono border border-brand-mid-grey rounded px-2 py-1"
+        />
+      </label>
+      <label className="text-xs text-brand-grey-80">
+        Port
+        <input
+          id={`${idPrefix}-smtp-port`}
+          type="number"
+          min={1}
+          max={65535}
+          value={values.smtp_port}
+          onChange={(e) => onChange('smtp_port', e.target.value)}
+          className="mt-0.5 w-full text-xs font-mono border border-brand-mid-grey rounded px-2 py-1"
+        />
+      </label>
+    </div>
+  )
+
+  return (
+    <div className="bg-white border border-brand-mid-grey rounded-lg shadow-sm p-4 space-y-4">
+      <div>
+        <div className="text-sm font-semibold text-brand-black">Mailboxes</div>
+        <p className="text-xs text-brand-grey-80 mt-1">
+          Every mailbox listed here is synced, and its messages feed memory and tasks like the
+          primary&apos;s. Outgoing mail always leaves from the primary mailbox, the address above.
+        </p>
+      </div>
+
+      {loadError && <p className="text-xs text-brand-danger">Mailboxes unavailable: {loadError}</p>}
+      {mailboxes === null && !loadError && (
+        <p className="text-xs text-brand-grey-80">Loading mailboxes…</p>
+      )}
+
+      {mailboxes && mailboxes.length > 0 && (
+        <ul className="divide-y divide-brand-mid-grey border border-brand-mid-grey rounded">
+          {mailboxes.map((m) => {
+            const isEditing = editingId === m.id
+            const isConfirming = confirmRemoveId === m.id
+            return (
+              <li key={m.id} className="px-3 py-2 text-xs" data-mailbox-id={m.id}>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="font-mono text-brand-black break-all">{m.address}</span>
+                  {m.is_primary && (
+                    <span className="px-1.5 py-0.5 rounded bg-brand-blue/10 text-brand-grey-80 border border-brand-blue/30">
+                      Primary
+                    </span>
+                  )}
+                  <span
+                    className={
+                      'px-1.5 py-0.5 rounded border ' +
+                      (m.state === 'ok'
+                        ? 'bg-brand-light-grey text-brand-grey-80 border-brand-mid-grey'
+                        : m.state === 'error'
+                          ? 'bg-brand-danger/10 text-brand-danger border-brand-danger/30'
+                          : 'bg-brand-orange/10 text-brand-orange border-brand-orange/40')
+                    }
+                  >
+                    {m.state === 'ok' ? 'ok' : m.state === 'error' ? 'error' : 'never synced'}
+                  </span>
+                  {!m.configured && (
+                    <span className="text-brand-danger">no password stored</span>
+                  )}
+                  {!m.is_primary && (
+                    <span className="ml-auto flex items-center gap-1">
+                      <button
+                        type="button"
+                        onClick={() => (isEditing ? setEditingId(null) : startEdit(m))}
+                        disabled={editBusy || removeBusy}
+                        className="px-2 py-0.5 border rounded text-brand-grey-80 hover:text-brand-black disabled:opacity-50"
+                      >
+                        {isEditing ? 'Close' : 'Edit'}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setConfirmRemoveId(isConfirming ? null : m.id)
+                          setEditingId(null)
+                          setRowMsg(null)
+                        }}
+                        disabled={editBusy || removeBusy}
+                        className="px-2 py-0.5 border rounded text-brand-danger border-brand-danger/30 hover:bg-brand-danger/10 disabled:opacity-50"
+                      >
+                        Remove
+                      </button>
+                    </span>
+                  )}
+                </div>
+                <div className="text-brand-grey-80 mt-0.5">
+                  Last sync: {formatSyncTime(m.last_sync_at)}
+                  {m.imap_host && (
+                    <span>
+                      {' '}
+                      · {m.imap_host}
+                      {m.imap_port ? `:${m.imap_port}` : ''}
+                    </span>
+                  )}
+                </div>
+                {m.last_error && (
+                  <div className="text-brand-danger mt-0.5 break-words">{m.last_error}</div>
+                )}
+                {rowMsg && rowMsg.id === m.id && (
+                  <div
+                    className={
+                      'mt-1 ' + (rowMsg.kind === 'err' ? 'text-brand-danger' : 'text-brand-grey-80')
+                    }
+                  >
+                    {rowMsg.text}
+                  </div>
+                )}
+                {isConfirming && (
+                  <div
+                    role="dialog"
+                    aria-label={`Remove ${m.address}`}
+                    className="mt-2 p-2 rounded border border-brand-danger/30 bg-brand-danger/10 text-brand-black"
+                  >
+                    <div>
+                      Remove {m.address}? Its messages leave the inbox, search and tasks; what
+                      memory already learned from them is kept. Adding the address again brings
+                      them back.
+                    </div>
+                    <div className="mt-2 flex gap-2">
+                      <button
+                        type="button"
+                        onClick={() => void handleRemove(m)}
+                        disabled={removeBusy}
+                        className="px-2 py-0.5 rounded bg-brand-danger text-white disabled:opacity-50"
+                      >
+                        {removeBusy ? 'Removing…' : 'Remove mailbox'}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setConfirmRemoveId(null)}
+                        disabled={removeBusy}
+                        className="px-2 py-0.5 border rounded text-brand-grey-80"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  </div>
+                )}
+                {isEditing && (
+                  <div className="mt-2 space-y-2">
+                    {hostFields(edit, (key, value) => setEdit((prev) => ({ ...prev, [key]: value })), `edit-${m.id}`)}
+                    <label className="block text-xs text-brand-grey-80">
+                      New password (leave empty to keep the stored one)
+                      <input
+                        id={`edit-${m.id}-password`}
+                        type="password"
+                        autoComplete="new-password"
+                        value={edit.password}
+                        onChange={(e) => setEdit((prev) => ({ ...prev, password: e.target.value }))}
+                        className="mt-0.5 w-full text-xs border border-brand-mid-grey rounded px-2 py-1"
+                      />
+                    </label>
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => void handleUpdate(m)}
+                        disabled={editBusy}
+                        className="px-3 py-1 text-xs bg-brand-black text-white rounded disabled:bg-brand-mid-grey"
+                      >
+                        {editBusy ? 'Testing and saving…' : 'Save changes'}
+                      </button>
+                      <span className="text-brand-grey-80">
+                        The connection is tested before the change is stored.
+                      </span>
+                    </div>
+                    {editMsg.text && (
+                      <p className={editMsg.kind === 'err' ? 'text-brand-danger' : 'text-brand-grey-80'}>
+                        {editMsg.text}
+                      </p>
+                    )}
+                  </div>
+                )}
+              </li>
+            )
+          })}
+        </ul>
+      )}
+
+      <div className="border-t pt-3">
+        {!addOpen ? (
+          <div className="flex items-center gap-3">
+            <button
+              type="button"
+              onClick={() => {
+                setAddOpen(true)
+                setSaveMsg({ kind: 'idle', text: '' })
+              }}
+              className="px-3 py-1 text-xs bg-brand-black text-white rounded"
+            >
+              Add mailbox
+            </button>
+            {saveMsg.text && (
+              <span className={`text-xs ${saveMsg.kind === 'err' ? 'text-brand-danger' : 'text-brand-grey-80'}`}>
+                {saveMsg.text}
+              </span>
+            )}
+          </div>
+        ) : (
+          <div className="space-y-2">
+            <div className="text-xs font-semibold text-brand-black">Add mailbox</div>
+            <label className="block text-xs text-brand-grey-80">
+              Provider
+              <select
+                id="mailbox-add-preset"
+                value={form.preset}
+                onChange={(e) => applyPreset(e.target.value)}
+                className="mt-0.5 w-full text-xs border border-brand-mid-grey rounded px-2 py-1 bg-white"
+              >
+                <option value={CUSTOM_PRESET}>Custom (enter the servers below)</option>
+                {presets.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="block text-xs text-brand-grey-80">
+              Email address
+              <input
+                id="mailbox-add-address"
+                type="email"
+                value={form.address}
+                onChange={(e) => onAddressChange(e.target.value)}
+                spellCheck={false}
+                autoComplete="off"
+                className="mt-0.5 w-full text-xs font-mono border border-brand-mid-grey rounded px-2 py-1"
+              />
+            </label>
+            <label className="block text-xs text-brand-grey-80">
+              {passwordLabel}
+              <input
+                id="mailbox-add-password"
+                type="password"
+                autoComplete="new-password"
+                value={form.password}
+                onChange={(e) => setFormField('password', e.target.value)}
+                className="mt-0.5 w-full text-xs border border-brand-mid-grey rounded px-2 py-1"
+              />
+            </label>
+            {hostFields(form, (key, value) => setFormField(key, value), 'mailbox-add')}
+            <div className="flex items-center gap-2 flex-wrap">
+              <button
+                type="button"
+                onClick={() => void handleTest()}
+                disabled={!canTest}
+                className="px-2 py-1 text-xs border rounded text-brand-grey-80 hover:text-brand-black disabled:opacity-50"
+              >
+                {test.kind === 'busy' ? 'Testing…' : 'Test connection'}
+              </button>
+              <button
+                type="button"
+                onClick={() => void handleAdd()}
+                disabled={!tested || saving}
+                title={tested ? undefined : 'Test the connection first'}
+                className="px-3 py-1 text-xs bg-brand-black text-white rounded disabled:bg-brand-mid-grey"
+              >
+                {saving ? 'Saving…' : 'Save'}
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setAddOpen(false)
+                  setForm(EMPTY_MAILBOX_FORM)
+                  setTest({ kind: 'idle', text: '' })
+                  setTested(false)
+                  setSaveMsg({ kind: 'idle', text: '' })
+                }}
+                disabled={saving}
+                className="px-2 py-1 text-xs border rounded text-brand-grey-80"
+              >
+                Cancel
+              </button>
+            </div>
+            {test.text && (
+              <p className={`text-xs ${test.kind === 'err' ? 'text-brand-danger' : 'text-brand-grey-80'}`}>
+                {test.text}
+              </p>
+            )}
+            {saveMsg.text && (
+              <p className={`text-xs ${saveMsg.kind === 'err' ? 'text-brand-danger' : 'text-brand-grey-80'}`}>
+                {saveMsg.text}
+              </p>
+            )}
+          </div>
         )}
       </div>
     </div>

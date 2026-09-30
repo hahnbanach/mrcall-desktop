@@ -685,6 +685,29 @@ function ApprovalCard({
     setEdited((prev) => ({ ...prev, [k]: v }))
   }
 
+  // Sending always goes through the primary mailbox (the sign-up
+  // address), whatever mailbox the thread arrived in. An outgoing email
+  // card shows that address as a read-only From line so the user knows
+  // which identity the message leaves with. Read once per card from
+  // `settings.get` (EMAIL_ADDRESS is not a secret, so it comes in clear).
+  const showFrom = approval.name === 'send_email' || approval.name === 'send_draft'
+  const [fromAddress, setFromAddress] = useState<string | null>(null)
+  useEffect(() => {
+    if (!showFrom) return
+    let cancelled = false
+    window.zylch.settings
+      .get()
+      .then((r) => {
+        if (!cancelled) setFromAddress(r.values?.EMAIL_ADDRESS || null)
+      })
+      .catch(() => {
+        /* the card still works without the line */
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [showFrom, approval.toolUseId])
+
   return (
     <div className="border border-brand-orange bg-brand-orange/10 rounded-lg p-4 mr-12">
       <div className="flex items-center gap-2 mb-2">
@@ -701,6 +724,17 @@ function ApprovalCard({
         </div>
       )}
       <div className="bg-white border border-brand-orange/30 rounded p-3 mb-3 space-y-2">
+        {showFrom && fromAddress && (
+          <div>
+            <div className="text-xs font-semibold uppercase tracking-wide text-brand-grey-80 mb-0.5">
+              From
+            </div>
+            <div className="text-sm text-brand-black break-words">
+              {fromAddress}{' '}
+              <span className="text-xs text-brand-grey-80">(primary mailbox)</span>
+            </div>
+          </div>
+        )}
         {Object.entries(edited).map(([k, v]) => {
           const label = (
             <div className="text-xs font-semibold uppercase tracking-wide text-brand-grey-80 mb-0.5">

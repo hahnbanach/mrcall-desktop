@@ -325,6 +325,16 @@ test:onboarding`; `node scripts/test-settings-recovery.mjs` with the fake
 bridge extended for `mailboxes.*`; a react-test-renderer script for the
 Email view chip and filter modelled on `test-spending-ui.mjs`.
 
+**M6 integration review (2026-09-30): APPROVED** on the second pass. The
+first pass found that the always-mounted Email view read the mailbox
+list once; it now refreshes on activation, on a window event fired by
+the Settings card after add, update or remove, and on sidecar ready,
+and drops a filter whose mailbox is gone. Typecheck, build, onboarding
+and the two react-test-renderer scripts pass. The Playwright settings
+script did not run: Playwright is not installed on this machine, and
+M7 runs it where it exists. The card sits inside the Email settings
+group; the chip and filter appear only with more than one mailbox.
+
 ## M7 — Live acceptance and docs
 
 **Dependency:** M6. Run the brief's acceptance list on the supervised
