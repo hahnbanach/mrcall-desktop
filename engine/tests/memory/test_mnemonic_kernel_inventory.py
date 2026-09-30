@@ -53,6 +53,23 @@ def _allow_descriptor(node: ast.AST | None) -> str:
     return ast.dump(node, include_attributes=False)
 
 
+def _cron_deny_section(source: str) -> str:
+    """The cron template's deny list, whichever of its two forms the kernel carries.
+
+    Up to kernel ``258c927`` the denials were the argument of a literal
+    ``--disallowed-tools``; since ``74ea403`` they are a bash array,
+    ``DENIED=( … )``, that ``cs.operator_recovery`` hands to Claude under the
+    same flag. The array's first ``)`` sits inside its first entry
+    (``"Bash(… draft-send:*)"``), so the section ends at the line that is
+    only ``)``. A template carrying neither form, or both, is refused: the
+    audit must know which list it is counting.
+    """
+    array = re.search(r"^DENIED=\(\n(.*?)^\)\s*$", source, re.MULTILINE | re.DOTALL)
+    flag = "--disallowed-tools" in source
+    assert bool(array) != flag, "cron template must carry exactly one deny-list form"
+    return array.group(1) if array else source.split("--disallowed-tools", 1)[1]
+
+
 def _exact_bash_effect_count(source: str, command: str) -> int:
     pattern = re.compile(r'"Bash\([^"\n]*' + re.escape(command) + r':\*\)"')
     return len(pattern.findall(source))
@@ -216,7 +233,7 @@ def test_scheduled_rpc_and_permission_templates_match_the_frozen_audit():
             section_source = json.dumps(template["permissions"][row["section"]])
         else:
             assert row["section"] == "deny"
-            section_source = source.split("--disallowed-tools", 1)[1]
+            section_source = _cron_deny_section(source)
         assert _exact_bash_effect_count(section_source, row["command"]) == row["count"], row
         assert 1 <= row["milestone"] <= 8
 
@@ -280,3 +297,15 @@ def test_chat_slash_effects_are_routed_and_owned_by_a_later_milestone():
             assert selector in constants, row
         assert row["commands"]
         assert 1 <= row["milestone"] <= 8
+
+
+def test_the_deny_section_parser_refuses_a_template_with_neither_or_both_forms():
+    """The audit must know which deny list it counts: one form, never zero or two."""
+    entries = '    "Bash(cs chat:*)" \\\n    "Bash(cs draft-send:*)" \\\n'
+    array_form = f'# tick\nDENIED=(\n{entries})\nrun "${{DENIED[@]}}"\n'
+    flag_form = f'"$CLAUDE_BIN" -p "/x" --disallowed-tools \\\n{entries}'
+    assert _exact_bash_effect_count(_cron_deny_section(array_form), "cs chat") == 1
+    assert _exact_bash_effect_count(_cron_deny_section(flag_form), "cs chat") == 1
+    for template in ("# no deny list at all\n", array_form + flag_form):
+        with pytest.raises(AssertionError, match="exactly one deny-list form"):
+            _cron_deny_section(template)
