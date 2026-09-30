@@ -10,7 +10,7 @@ from pydantic import BaseModel, ConfigDict, Field
 MAX_CONTEXT_CHARS = 2_000
 
 _DENIED = re.compile(
-    r"(?i)(?:@|https?://|\b(?:e-?mail|firma|signature|persona|prompt|system|"
+    r"(?i)(?:@|https?://|\b(?:e-?mail|firma|signature|persona\b|prompt|system|"
     r"instruction|istruzion|scrivi|rispondi|password|secret|token|"
     r"api.?key|credential|credenzial|\bcost\b|\bcost[oi]\b|margin|margine|"
     r"prezz|price|"
@@ -30,7 +30,7 @@ _INSTRUCTION = re.compile(
     r"\b[^.!?\n]{0,100}\b(?:scroll\w*|select(?:ing)?|choose|scorr\w*|"
     r"selezion\w*|scegl\w*)|"
     r"(?:how\s+to|come)\s+(?:handle|manage|process|gestire|trattare)|"
-    r"(?:do\s+not|don't|non)\s+(?:invent|reuse|inventare|riusare|riutilizzare|riciclare)|"
+    r"(?:do\s+not|don't|non)\s+(?:invent|reuse|inventare|inventarne|riusare|riutilizzare|riciclare)|"
     r"(?:explain|spiega(?:re)?)\s+(?:that|che)|"
     r"(?:first|then|prima|poi|quindi)\s+(?:gather|collect|propose|explain|enter|insert|"
     r"raccogli(?:ere)?|proponi|proporre|spiega(?:re)?|inserisci|inserire)|"
@@ -106,6 +106,14 @@ _TIMING_EVIDENCE = re.compile(
     r"lunedi|martedi|mercoledi|giovedi|venerdi|sabato|domenica)\b"
 )
 _ARRIVAL = re.compile(r"\b(?:arriv[a-z]*|receiv[a-z]*|ricev[a-z]*)\b")
+_META_HEADING = re.compile(
+    r"(?i)\A#{1,6}[ \t]+(?:products?|services?|specifications|details|options|"
+    r"prodotto|prodotti|servizio|servizi|specifiche|dettagli|opzioni)[ \t]+"
+    r"\((?:facts?|data|details|information|fatti|dati|dettagli|informazioni),[ \t]*"
+    r"(?:(?:do not|don't) invent (?:others|(?:other|additional|extra) "
+    r"(?:facts|data|details|information))|non inventar(?:e|ne) altr[ioe])\)"
+    r"[ \t]*(?:#+[ \t]*)?\r?\n[ \t]*(?=[-*][ \t]+\S)"
+)
 
 
 def _specific_phrase(value: str) -> bool:
@@ -200,6 +208,16 @@ def _units(source: str) -> tuple[Claim, ...]:
         start = source.find(value, cursor)
         if start < 0 or len(value) > 600:
             raise ValueError("Voice-note source cannot be segmented")
+        heading = _META_HEADING.match(value)
+        line_start = source.rfind("\n", 0, start) + 1
+        if (
+            heading
+            and value.endswith((".", "!", "?"))
+            and start - line_start <= 3
+            and not source[line_start:start].strip()
+        ):
+            start += heading.end()
+            value = value[heading.end() :]
         result.append(Claim(text=value, start=start, end=start + len(value)))
         cursor = start + len(value)
         if len(result) > 500:

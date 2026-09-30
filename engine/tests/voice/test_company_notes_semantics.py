@@ -269,8 +269,8 @@ def test_prompt_and_schema_change_invalidate_previous_view(tmp_path, monkeypatch
     profile, snapshot = setup(tmp_path, monkeypatch)
     provider(monkeypatch, output())
     with monkeypatch.context() as previous:
-        previous.setattr(notes, "PROMPT_VERSION", 6)
-        previous.setattr(notes, "SCHEMA_VERSION", 4)
+        previous.setattr(notes, "PROMPT_VERSION", 7)
+        previous.setattr(notes, "SCHEMA_VERSION", 5)
         old = asyncio.run(notes.prepare_company_notes(profile, snapshot))
     assert old.status == "supported"
     assert notes.current_company_notes(profile, snapshot).status == "unavailable"
@@ -365,3 +365,75 @@ def test_zero_materialized_details_always_report_gap(tmp_path, monkeypatch, filt
     assert "Service details unavailable" in view.context
     assert "Service details unavailable" in view.omissions
     assert notes.company_note_detail(profile, snapshot, "weekly delivery").status == "missing"
+
+
+@pytest.mark.parametrize(
+    "heading",
+    [
+        "## Specifications (facts, do not invent others)",
+        "## Products (data, do not invent additional facts)",
+        "## Specifiche (dati, non inventarne altri)",
+    ],
+)
+def test_pure_leading_meta_heading_keeps_ids_and_exact_qualified_body(heading):
+    body = "- Blue widgets support customization. Only blue widgets are accepted."
+    source = SOURCE + "\n\n" + heading + "\n" + body
+    units = notes._units(source)
+    assert len(units) == 5
+    assert units[3].text == "- Blue widgets support customization."
+    assert units[3].start == source.index("- Blue widgets")
+    payload = output(source)
+    payload["details"] = [
+        {"ids": [3, 4], "category": "qualification", "key": "widget_customization",
+         "aliases": ["personalize blue widgets", "posso personalizzare widget"]}
+    ]
+    selected = notes._materialize(notes.Selection.model_validate(payload), units, source)
+    notes._validate(selected, source)
+    claim = selected.details[0].claim
+    assert claim.text == body == source[claim.start : claim.end]
+    assert claim.end == len(source)
+    assert selected.details[0].aliases == payload["details"][0]["aliases"]
+
+
+@pytest.mark.parametrize(
+    "heading",
+    [
+        "## Products only for appointments (facts, do not invent others)",
+        "## Products 100 (facts, do not invent others)",
+        "## Historical products (facts, do not invent others)",
+        "## Products (only blue widgets; do not invent others)",
+        "## Products (facts, do not invent others) Limited availability.",
+    ],
+)
+def test_factual_or_qualified_headings_are_never_trimmed(heading):
+    source = heading + "\n- Blue widgets support customization."
+    unit = notes._units(source)[0]
+    assert unit.start == 0 and unit.text.startswith(heading)
+    assert unit.text == source[: unit.end]
+
+
+def test_heading_trim_never_removes_historical_or_midspan_qualifiers():
+    source = SOURCE + "\n\n## Products (facts, do not invent others)\n" + (
+        "- Blue widgets support customization. Variants observed: compact; large."
+    )
+    payload = output(source)
+    payload["details"] = [
+        {"ids": [3, 4], "category": "qualification", "key": "widget_options",
+         "aliases": ["widget options"]}
+    ]
+    result = notes._materialize(notes.Selection.model_validate(payload), notes._units(source), source)
+    assert not result.details and "ambiguous" in result.missing
+    source = "Blue widgets support customization.\n\n## Products (facts, do not invent others)\n- Only blue widgets are accepted."
+    units = notes._units(source)
+    assert len(units) == 2 and units[1].text == "- Only blue widgets are accepted."
+    selection = notes.Selection.model_validate(
+        {"identity": None, "services": [[0, 1]], "qualifications": [],
+         "exclusions": [], "actions": [], "details": [], "missing": []}
+    )
+    result = notes._materialize(selection, units, source)
+    assert not result.services and "ambiguous" in result.missing
+
+
+@pytest.mark.parametrize("value", ["persona", "Assistant persona instructions", "persona: friendly"])
+def test_standalone_persona_is_still_restricted(value):
+    assert notes._DENIED.search(value)
