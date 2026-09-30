@@ -158,12 +158,14 @@ turning source text into a bounded, structured representation while preserving
 source/entity boundaries, exact identifiers and explicit missing information.
 `MODEL_MEMORY_MERGE` decides how an extracted item changes existing memory;
 `MODEL_TASK_DETECTION` decides whether source text contains an actionable task.
-The planned offline conversion of the stored `phone.md` instructions into telephone notes
-is source-to-structured extraction, so it uses `MODEL_MEMORY_EXTRACT` rather
-than a hard-coded model ID or the merge/task role. This is a role choice, not a
-claim that the current model has been validated for telephone disclosure. The
-conversion is not implemented; the [voice knowledge plan](../../../docs/execution-plans/2026-09-28-voice-company-knowledge.md)
-defines its source, refresh and acceptance gates.
+The offline telephone-note converter is implemented in the checkout and uses
+`MODEL_MEMORY_EXTRACT` for source-to-structured extraction, rather than a
+hard-coded model ID or the merge/task role. Current main reads the stored
+`phone.md` instructions; the scoped Café 124 trial preserves its previously
+admitted USER_NOTES reader through the frozen release composition. Model-role
+selection does not establish telephone disclosure quality. The
+[voice knowledge plan](../../../docs/execution-plans/2026-09-28-voice-company-knowledge.md)
+defines source, refresh, independent output review and activation gates.
 
 See [bounded preparation](bounded-preparation.md) for batch/retry controls and
 [model evaluation](../qa/preparation-model-evaluation.md) for offline comparisons.

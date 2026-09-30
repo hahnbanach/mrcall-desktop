@@ -19,8 +19,16 @@ what is *current*, targeting ≤ ~120 lines.
 
 ## State now
 
+Main's operator-instruction source is the reserved company-document project;
+this voice trial retains production USER_NOTES. Main's separate source retirement
+is excluded from the scoped trial. Its durable contract is
+[standing instructions](../engine/docs/features/project-memory.md).
+Local retirement commits and the rebased origin equivalents leave main diverged;
+publication needs a merge. Retirement deployment claims require their own review.
+
 Three Café124 engines import pinned release `8d83193`; production runs the
-separate voice release `8fb21d3` through its systemd drop-in. The
+separate voice release `c3f95bb` (since 2026-09-30 14:16 UTC) through its
+systemd drop-in. The
 billing server is `prod-99091c35`. Production uses K3 max through its personal OpenRouter key,
 with a USD20/day limit. The other three profiles retain their previous billing
 and model choices and USD5/day limits. All four have automatic processing off
@@ -43,34 +51,26 @@ The engine owns mailbox processing and shared memory; the clone owns operator
 procedures. Claude Code headless and kernel direct classifiers have separate
 billing and pause controls. See [operator setup](operator-setup.md#ai-execution-and-controls).
 
-GPT-Live M4 is phone-accepted for the isolated fixture. The Café 124 production
-daemon serves both its Desktop socket and +390250552776 through the existing
-Cloudflare tunnel and URL. StarChat readback binds business
-`d44a1864-23cc-34f9-aec5-6e04bb2fd2ef-desktop`, UID
-`Gn9IcuWzYyY7DBMHkVUGB7bIiTp2` and `starter`. Pinned release `8fb21d3`
-and voice config revision 6 are live; health and negative
-webhook probes pass. The caller policy validates incoming numbers with
-libphonenumber and allows on-demand filtered history only for a uniquely
-matched selected contact. Eight funded calls have closed ledgers with
-provisional exposure reconciliation. Private `sessions.db` (0600) has eight
-matching rows: three historical `legacy_no_text` rows and five reconstructed
-from received deltas. The two post-release calls match their private delta
-sources exactly. Local archive acceptance is independently APPROVED. StarChat
-transcript upload is cancelled; possible missing words before attachment are
-permanently accepted. The latest call contains invented business services
-without delegation or a fact lookup. Overall acceptance is REVISE and the
+GPT-Live is the sole telephone model. The Café 124 production daemon serves its
+Desktop socket and +390250552776 through the existing tunnel. Authenticated
+readback binds business `d44a1864-23cc-34f9-aec5-6e04bb2fd2ef-desktop`, UID
+`Gn9IcuWzYyY7DBMHkVUGB7bIiTp2` and `starter`; voice config remains revision 6.
+Caller history is disclosed only for a uniquely matched selected contact.
+Local archive acceptance is independently APPROVED: eight private matching rows,
+three legacy and five reconstructed; September 28 archive calls need no repeat.
+StarChat transcript upload is cancelled. Overall acceptance remains REVISE after
+invented services in the prior call; the
 [pilot plan](execution-plans/2026-09-27-cafe124-voice-daemon.md) remains active.
 The [voice knowledge plan](execution-plans/2026-09-28-voice-company-knowledge.md)
-is active. Corrected M2/M3 code in `d284414` has independent approval; prompt/schema
-5/3 preserve qualified source spans and specific detail phrases. Its release and
-rollback have independent approval, while production remains on `8fb21d3` with the company
-path off. Real K3 conversion remains unavailable with no artifact. The latest
-actual retry received HTTP402 with `limit_source: openrouter_credits`; its maximum
-request cost exceeds provider admission credit. Both known refusals are settled
-at zero; the older uncertain request remains quarantined. The owner explicitly
-uses Café 124 production for handset trials after source/delta review and targeted
-activation. Real-source semantics, spoken behavior and latency remain open.
-No company-store revision is admitted.
+is active. Prompt/schema 8/6, bounded recovery and actual source/query semantics
+are independently APPROVED. The private 270-character initial view and one detail
+reuse an already-paid K3 response. The trial preserves USER_NOTES and excludes
+main's source retirement; the live
+`c3f95bb-m1-53df502` import tree preserves prior path-confinement hotfixes.
+Guarded targeted activation passed health, current-source readback and unsigned
+webhook probes; binding and revision 6 are retained. Spoken behavior and latency remain open. Known credit
+refusals are settled at zero; old uncertainty stays quarantined. No company-store
+revision is admitted. Independent trial readiness is APPROVED; the owner can now perform the supervised call.
 
 The hosted engine is being isolated per tenant
 ([toward-sandbox](execution-plans/2026-09-29-toward-sandbox.md)): M1 (tool
@@ -128,14 +128,13 @@ Refresh button only lists threads. See the archived
 - Historical task-mode/import and legacy transport issues need verification
   before their paths are restored.
 - Café 124's overall acceptance remains open after archive approval. Voice
-  knowledge needs funded real-source conversion, semantic review and supervised
-  production answer/latency evidence. Eight voice reserves remain provisional.
+  knowledge needs supervised production answer/latency evidence; source/query
+  semantics are approved. Eight voice reserves remain provisional.
 
 ## Next
 
-1. Finish the real-source conversion after OpenRouter funding, review its output,
-   then use the approved deployment delta to activate the targeted Café 124 trial
-   and request the owner's concrete services/detail call.
+1. Complete supervised Café 124 services/detail answers and latency acceptance
+   after independently reviewed trial readiness; keep both voice plans open.
 2. Resolve the remaining billing choices and funded credit acceptance. Keep
    preparation paused until the CTO explicitly requests a bounded run.
 3. Verify the installed applications through their GUI: the Mac one with

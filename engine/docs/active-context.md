@@ -36,20 +36,19 @@ in the [completed plan](../../docs/execution-plans/2026-09-23-gpt-live-engine-in
 The isolated ledger retains 41 closed historical smoke calls and 41 carrier
 receipts, but its service is currently absent. Its saved provider endpoint now
 reaches the production listener, so it is not an isolated route for new tests.
-The production listener remains pinned to `8fb21d3`.
+The production listener uses the scoped company-knowledge trial; handset acceptance remains open.
 
-Company-knowledge prompt/schema 5/3 in `d284414` has code-milestone approval:
-contiguous qualified source spans, specific detail categories/Italian phrases,
-cache-key-pinned call views, exact-key uncertainty gates and private quarantine.
-The corrected release and targeted rollback have independent approval; production still uses
-`8fb21d3` and the company path is off. Real conversion remains unavailable with
-no artifact. The latest actual retry received HTTP402 with
-`limit_source: openrouter_credits`; its maximum request cost exceeds provider
-admission credit. Both known refusals are settled at zero; the older uncertain
-request remains quarantined. The
-owner's existing production number is the authorized handset trial route after
-real-source and deployment-delta review. See the
-[active plan](../../docs/execution-plans/2026-09-28-voice-company-knowledge.md).
+Company-knowledge prompt/schema 8/6, bounded recovery and actual source/query
+semantics have independent approval. The reviewed private artifact has a
+270-character initial view and one detail, recovered without a new provider
+request. The scoped `c3f95bb` voice release preserves production USER_NOTES and
+excludes main's source retirement. The `c3f95bb-m1-53df502` composed import tree
+also preserves the prior path-confinement overlay and is live after the guarded
+targeted restart. Health and unsigned webhook probes pass. Authenticated source readback
+is supported at voice revision 6. Spoken behavior and latency remain open;
+credit refusals are settled at zero and old uncertainty remains quarantined.
+See the [active plan](../../docs/execution-plans/2026-09-28-voice-company-knowledge.md)
+for APPROVED trial readiness and the two supervised-call questions.
 
 Engine chat now supports negotiated read-only policy version 1. The policy is
 enforced before slash/semantic/task routing and again at assistant and task
@@ -209,7 +208,8 @@ automatic diagnostic scripting is not configured. The restoration is committed a
 [outbound contract](features/outbound-calls.md) and
 [verification/rollback](../../docs/execution-plans/2026-09-17-mrcall-outbound.md).
 
-Four Café124 units run isolated release `8d83193`; the billing server runs
+Three Café124 units retain the `8d83193` release family; production runs the
+scoped `c3f95bb` voice trial with the prior hotfix overlay. The billing server runs
 `prod-99091c35`. Production selects personal OpenRouter/custom K3 for its base
 model, five worker roles and reply classification. The other three profiles
 retain their previous billing/model settings. Production's daily cap is USD20;
@@ -256,8 +256,8 @@ API budgets; see [control boundaries](../../docs/operator-setup.md#ai-execution-
   remains open. No backlog resumption is part of model configuration.
 - Incident checkpoint counts and project inventories in dated records are
   historical; re-read current state before a cleanup or backlog operation.
-- Voice knowledge needs OpenRouter funding, real-source conversion/review and
-  the prepared production trial before spoken-answer and latency acceptance.
+- Voice knowledge source/query review is approved and the guarded trial is
+  active; supervised spoken-answer and latency acceptance remain open.
 - Desktop v0.1.49 installation and personal-key entry on the CTO's Mac remain
   unverified. Saved-prompt format repairs have no new business-quality result.
 - The Desktop app does not read `memory.status`'s `joining` or
@@ -276,5 +276,5 @@ API budgets; see [control boundaries](../../docs/operator-setup.md#ai-execution-
 3. Merge `mnemonic-m9` as is (decision taken; workflow green on the pushed
    branch first); re-measure AC 5 in milestone 10 on the resolver-chosen
    model; deploy only through the rollout plan.
-4. Resolve the voice knowledge M4 findings under its active plan before M5.
+4. Complete supervised voice knowledge answer/latency acceptance under its active plan.
 5. Continue other workstreams under their existing plans.

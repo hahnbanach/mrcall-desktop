@@ -6,7 +6,7 @@ date: 2026-09-28
 # Shared company knowledge for GPT-Live — execution plan
 
 <!-- doc-scope:start -->
-Scope: milestone plan for implementing and verifying the approved shared-company-knowledge brief. Source admission, behavior, latency and activation remain future gates; this document does not approve deployment.
+Scope: milestone plan for implementing and verifying the approved shared-company-knowledge brief. Records source admission, implementation, reviewed trial activation, and the remaining spoken-behavior and latency gates; trial readiness does not approve overall acceptance.
 <!-- doc-scope:end -->
 
 The [brief](../briefs/2026-09-28-voice-company-knowledge.md) was independently **APPROVED** in `67a7fbf` and its later `USER_NOTES` amendment passed a fresh review on 2026-09-28. The Café 124 [pilot plan](2026-09-27-cafe124-voice-daemon.md) stays `active`: local archive **APPROVED**, overall behavior **REVISE**. The 14:33 and 14:34 calls already proved archive correlation; do not request calls to repeat that check.
@@ -147,14 +147,194 @@ live daemon and configuration are unchanged. No further retry or activation was
 performed; successful conversion and source review
 remain prerequisites for trial activation.
 
+**Next real conversion — 2026-09-30; source review REVISE:** The explicitly
+requested retry completed through the unchanged K3 route in 286.857 seconds.
+It returned `end_turn`, a supported cached readback, a 343-character initial
+view and two detail items. The ordinary ledger settled reservation
+`870e5c51-1823-4713-afbd-6f74dc6fa80b` at USD0.107489 from the provider receipt
+(2,688 input and 7,771 output tokens). The converter requests 4,096 output
+tokens; the existing K3 max adapter applies an effective 8,192-token ceiling.
+Independent real-source review rejected an instruction-bearing action and
+detail, an arrival-time alias without arrival-time evidence, an omitted
+exclusion without an explicit gap, and two missed Italian paraphrases. The
+rejected cache is retained privately outside the active profile. Source text,
+voice revision, live daemon and configuration are unchanged. M2/M3 selection
+and alias contracts are reopened for a focused correction and fresh code
+review, then real regeneration and review with the same source reviewer.
+Funding is no longer the current gate; successful source semantics are.
+
+**Second source correction — 2026-09-30; code review APPROVED:** Prompt/schema
+6/4 exclude workflow headings, internal coaching and instructions, reject timing
+aliases lacking timing evidence, require an explicit exclusion gap when none is
+selected, and request ordinary and polite Italian paraphrases. The independent
+reviewer verified the frozen candidate and its hashes; the candidate-focused
+suite passed 104 tests (413 existing warnings). Real regenerated output still
+requires the same M4 source review.
+
+The trial release is a reproducible composition: base commit
+`64d7cc5c9a5f5e1920b47ee1774edef5b57c5a7b` plus
+`engine/release-patches/cafe124-company-notes-v6.patch` committed in `5ee4171`.
+Patch SHA256 is `4174a0dddab460b83ff2152084caf389730a37684edb781f6d0ffcd2251d65c3`;
+apply with `patch --batch -p1`, then verify the four manifest file hashes.
+Release `/home/mrcalld/releases/mrcall-voice-cafe124-5ee4171` preserves the
+approved production USER_NOTES reader and existing dependencies. It is not a
+full deployment of current main: concurrent USER_NOTES-retirement commits
+`f8c1301` and `95e2340` introduce a company-document reader whose phone document
+is absent in production. Their code and source migration are excluded from this
+trial; no company document or source setting is created or altered. Current
+main retains that separate work. Its future rollout requires its own source
+admission and compatibility verification. The trial's manifest records the base,
+patch commit, patch digest and exact converter/schema/test digests.
+
+**V6 real conversion — 2026-09-30; validation unavailable:** The unchanged
+production source was submitted once through the ordinary K3 extraction route.
+It returned `end_turn` after 212.840 seconds, without a provider exception, but
+local validation produced no supported context or artifact. Reservation
+`f424bb12-866a-4adf-8b07-a3d7706b0500` settled normally at USD0.085587
+(2,844 input, 6,049 output tokens). The private captured response is available
+to the same independent source reviewer. It found a Markdown JSON fence
+causing the parser refusal. Removing that fence privately passes shape/span
+validation but leaves historical/uncertain offers, internal response-writing,
+personnel provenance and mobile UI navigation selected as telephone facts.
+Conservative whole-group omission leaves no useful detail, so fence handling
+alone cannot make this response eligible. Source review remains REVISE; no
+active artifact was written. A focused code/prompt correction and independent
+code review must precede another deliberate conversion. Source text, services
+and production configuration remain unchanged.
+
+**V7 correction — 2026-09-30; code review APPROVED:** Commit `ef7bb06`
+adds generic historical/uncertain-offer, personnel, response-writing and UI
+filters; the source prefilter, materializer and cache validator share the same
+predicate. One anchored JSON fence is accepted without accepting surrounding
+prose. Prompt/schema 7/5 distinguish standalone current facts from adjacent
+instructions or historical observations; no-detail results require an explicit
+detail gap. The source reviewer privately verified the known unsafe units are
+restricted and the eligible current detail remains available. No source-specific
+IDs or business facts are encoded in the filters.
+
+The frozen pre-gap suite passed 129 tests; final changed-branch checks passed
+8 tests, with Ruff clean. The same independent code reviewer approved the final
+candidate, patch hashes and preserved base USER_NOTES reader. The final trial
+release is `/home/mrcalld/releases/mrcall-voice-cafe124-ef7bb06`, composed from
+base `64d7cc5` and committed
+`engine/release-patches/cafe124-company-notes-v7.patch`; patch SHA256 is
+`4aa60b99a7e51f91c42c8c17e5c185e5b39ca56050dfbef88ca855bda537209d`.
+Forward `git apply --check` and actual application to a clean base archive pass,
+and all four overlay hashes match the release manifest. Existing dependencies
+are retained. Redundant unused staging dependency copies were removed or moved
+to resolve local disk exhaustion; the live release, sources and receipts remain
+intact. A new normal K3 conversion is running on the unchanged production source.
+
+The updated protected activation bundle points only to this release. It refuses
+pending source review and pins the approved artifact SHA256 in addition to source,
+cache key, authenticated binding, revision, active-call and configuration checks.
+A fresh reviewer is checking this exact prepared delta. No activation is claimed.
+
+**V7 real conversion and recovery diagnosis — 2026-09-30:** The normal K3
+request returned `end_turn` after 186.079 seconds but validation remained
+unavailable. Reservation `4d399bfe-f696-468d-9649-7508e21b2ae2` settled normally
+at USD0.075988 (2,807 input, 5,315 output tokens). The three completed requests
+have actual total cost USD0.269064; refusals and old uncertain liability remain
+separate. The source reviewer confirmed bare JSON and materialization pass;
+validation falsely matches `persona` inside a legitimate personalization word.
+The selected useful detail also includes a leading meta-instruction Markdown
+heading in the same source unit as its factual bullet. The complete body retains
+all conditions and supports all six aliases. Narrow generic source segmentation
+and word-boundary corrections can revalidate this already-paid selection; they
+must receive code review, a new converter/cache version, preserved producer
+provenance, private source/query review and exact artifact pinning before use.
+No hand-authored business claim or source change is permitted. The operator
+prioritizes elapsed time and authorizes more expensive offline extractors when
+needed; the existing useful selection can be recovered without another request.
+GPT-Live remains the sole telephone model.
+
+**Prepared delta refreshed — 2026-09-30: APPROVED conditionally.** A fresh
+review found that the live drop-in had acquired an explicit old-release
+PYTHONPATH pin. The protected backup now exactly matches that current drop-in;
+the original backup is retained privately. The candidate replaces the release
+path in both ExecStart and PYTHONPATH, preserving every other line; candidate
+configuration adds only the company switch. The same reviewer verified reverse
+replacement is byte-identical to live and approved the prepared reversible
+delta. Source verdict remains PENDING, so no activation is authorized by this
+conditional review alone. Any corrected release path/hash must be rechecked.
+
+**V8 recovery — 2026-09-30; code/procedure APPROVED:** Commit `c3f95bb`
+uses prompt/schema 8/6, a standalone `persona` word boundary and narrow removal
+of a leading generic ATX metadata heading. Source-unit IDs remain stable and
+only the exact factual body offset changes; qualified, historical, ordinary or
+mid-span headings are retained. Both future model input and materialization use
+the same source units. Frozen semantic tests passed 77 cases; the independent
+code reviewer ran 39 notes/recovery tests and approved code plus the bounded
+recovery procedure.
+
+Release `/home/mrcalld/releases/mrcall-voice-cafe124-c3f95bb` combines base
+`64d7cc5` with committed `engine/release-patches/cafe124-company-notes-v8.patch`,
+SHA256 `7b49c7121a02983ff11be4b8186e8795c6b0cc30f432545668ac63dcd67210ca`.
+Four manifest file hashes and clean-base patch application match the candidate.
+The existing v7 response was revalidated under this release without a new model
+request. The procedure authenticated the exact business, opened company SQLite
+in `mode=ro` without migrations, recomputed the original 7/5 cache key, and
+matched capture model and all four token counts to the settled receipt. Its
+origin link is corroborated by that metadata; no unique provider generation ID
+is available. Protected provenance binds original request/capture hash to new
+source/cache/version/release and candidate artifact hash.
+
+The recovered artifact has a 270-character initial view, one useful detail,
+six aliases and an explicit exclusion gap. The same independent source reviewer
+returned **APPROVED** after actual staged readback, direct/polite Italian size
+queries, exact follow-up, unrelated/generic queries, stale source and wrong
+binding checks. Evidence is protected outside git at
+`/tmp/mrcall-ai-kit/voice-source-semantics-v8/staged-review.log`.
+The reviewed artifact was promoted byte-for-byte to the production profile
+(SHA256 `5e66264cbf9d6c28dc6011ccd9f1645b4d0193fb8b63cd6e30bf3a8b95284516`).
+Authenticated current-source readback reports supported, source unchanged,
+revision 6 and cache key
+`dd31f56c8ade31aebf7610f517c0f36d6069c63f5136273df7d1a928eaf0e9f8`.
+Finite aliases do not cover every paraphrase: the prior Italian wording using
+“dimensioni” misses. The reviewed detail question is the localized test input
+“Che misure di lattina avete?”. Caller lookup can still add wait time to that
+query; neither cached preparation time nor source review proves handset latency.
+The operator prioritizes elapsed time and permits a more expensive offline
+extractor when needed; this recovery requires no extra paid generation.
+
 ## M5 — Activate narrowly and retain rollback
 
 **Trial activation prerequisite (before handset M4):** independent approval of corrected M2/M3 code, privately validated real source-to-view result and exact release/config/rollback delta. Verify compatibility with the actual pinned release/host schema, preserve binding/headless auth/voice/greeting, ensure no active call, and retain the known-good release/config and approved source revision. The operator's production-test instruction authorizes the targeted reversible trial activation. Change only that instance through its existing release/drop-in path; never touch other profiles, mal's profile, number/tunnel or `update-daemons.sh`. Check imported release, effective switch, health, negative binding probes and current selected-context readback before reporting ready to call.
 
+**Actual trial activation — 2026-09-30:** Independent source approval,
+exact artifact promotion/readback and prepared deployment-delta approval preceded
+targeted activation. An inherited PYTHONPATH suffix pointed to a nonexistent
+import tree; the corrective delta retains all 20 previously-live path-confinement
+hotfix Python files over the scoped v8 release. Its independent full-tree review
+verified 624 file hashes, no unexpected deletions and all four v8 voice hashes.
+The helper preserves the original `8fb21d3` release/config/overlay rollback,
+refuses changed config/artifact/revision or active calls, and checks authenticated
+current-source notes before and after the targeted restart.
+
+Actual process imports
+`/home/mrcalld/releases/mrcall-voice-cafe124-c3f95bb-m1-53df502/engine`;
+the directory exists and its runtime module is recorded in the selected journal.
+Health reports `engine_listener`, calls available and no test limits. Current
+notes are supported at revision 6 with the exact reviewed cache key, 270 context
+characters and one detail. Both loopback and public unsigned Vonage answer/event
+probes return 401, and OpenAI webhook probes return 400. The existing binding,
+voice/greeting, headless authentication, telephone model and number are retained.
+No company source, caller archive, other profile or tunnel was modified.
+Safe activation evidence:
+`/tmp/mrcall-ai-kit/voice-source-semantics-v8/activation-final.json`.
+Fresh independent M5 trial-readiness integration review returned **APPROVED**.
+It verified the restarted process, composed imports and hashes, exact binding,
+revision 6, health, no local test limits, zero active calls and authenticated
+reviewed-artifact readback. Evidence:
+`/tmp/mrcall-ai-kit/voice-source-semantics-v8/trial-readiness-review.log`.
+The supervised trial is ready at +390250552776. Its two localized questions are
+“Che servizi offrite?” and “Che misure di lattina avete?”. This verdict does not
+approve handset behavior, interruption or latency.
+
 **Continued acceptance dependency:** final supervised M4 real-model behavior and latency review. Until those pass, M5 remains in trial state and both plans remain open. The Café 124 pilot needs its own independent final behavior review before its overall status can change.
 
-On wrong binding, private disclosure, invented service, stale view, failed retrieval containment or material latency regression, disable the new company path or restore the prior production release/config for that instance. Do not restore a withdrawn source. Stop new admission and preserve private evidence for affected in-flight calls; rollback cannot retract speech already heard. Keep ledger/archive intact; rerun source and behavior gates before re-enabling. No activation or rollback is performed in this session.
+On wrong binding, private disclosure, invented service, stale view, failed retrieval containment or material latency regression, disable the new company path or restore the prior production release/config for that instance. Do not restore a withdrawn source. Stop new admission and preserve private evidence for affected in-flight calls; rollback cannot retract speech already heard. Keep ledger/archive intact; rerun source and behavior gates before re-enabling. The targeted production trial was activated; overall acceptance remains open. The original release/config rollback is retained; no rollback has been performed.
 
 ## Plan review
 
-The amended brief and this plan have separate independent **APPROVED** reviews dated 2026-09-28; the plan reviewer used `gpt-6-sol` at high effort. The September 30 production-trial brief amendment and plan amendment each passed a separate fresh `gpt-6-sol` high review after their concrete REVISE findings were resolved. Revised M2/M3 code and the prepared exact deployment delta each passed a fresh milestone review. M4 real-source, spoken behavior and latency remain open; no production trial activation is yet claimed.
+The amended brief and this plan have separate independent **APPROVED** reviews dated 2026-09-28; the plan reviewer used `gpt-6-sol` at high effort. The September 30 production-trial brief amendment and plan amendment each passed a separate fresh `gpt-6-sol` high review after their concrete REVISE findings were resolved. Revised M2/M3 code and the prepared exact deployment delta each passed a fresh milestone review. M4 real-source semantics are independently APPROVED. Production trial activation has succeeded; spoken behavior and latency remain open, so both plans retain active status.
