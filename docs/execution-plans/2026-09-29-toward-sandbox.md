@@ -563,7 +563,10 @@ earlier commits are marked with the commit and why they still hold.
 **Runbook M2 as proven here** (supersedes the lists above).
 `VENV=/home/mrcalld/mrcall-desktop/engine/venv`, `Z=/home/mrcalld/.zylch`.
 
-*Once per host, before anything:* the installed Caddyfile keeps the pre-M2
+*Once per host, before anything:* after the branch is deployed,
+`systemctl is-active zylch-provisiond` and a `GET /api/provision/status`
+for an unmigrated uid answering as before (not exercised on the VM); the
+installed Caddyfile keeps the pre-M2
 single upstream; `python3 --version` ≥ 3.11 in the venv; warm the
 embedding cache as `mrcalld` (`sudo -u mrcalld env HOME=/home/mrcalld
 ZYLCH_HOME=$Z bash -c 'umask 022; $VENV/bin/python -c "from
@@ -585,8 +588,9 @@ empty (D5: 0).
 7. per uid: `sudo -u mrcalld env HOME=/home/mrcalld $VENV/bin/zylch -p
    <uid> memory-names` shows `store in use: derived`; each daemon active;
    the company's users see their memory.
-Rollback, same lock, all stopped: `mrcall-tenant unstore <uid>`; start all;
-`memory-names` shows `legacy`. Afterwards `mrcall-tenant orphans` (listing
+Rollback, in the same window (lock held, all stopped): `mrcall-tenant
+unstore <uid>` (it does not take the lock itself); start all; release the
+lock; `memory-names` shows `legacy`. Afterwards `mrcall-tenant orphans` (listing
 only) and, once the backup window has passed, `--archive`.
 
 *2b, per profile U, one per day, after its company's 2a:* steps 1–6 of the

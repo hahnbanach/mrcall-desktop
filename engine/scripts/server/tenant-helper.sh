@@ -233,8 +233,8 @@ unstore)
   # Rollback of 2a for the company of <uid>: every daemon of the company
   # stopped, none of its profiles migrated. Derived store back to the
   # legacy name, files back to mrcalld:mrcalld, mrcalld out of the group,
-  # empty dir and group removed. Reconcile lock held.
-  exec 9>"$RUN_ROOT/reconcile.lock"; flock 9
+  # empty dir and group removed. Like `store`, it does NOT take the
+  # reconcile lock: the operator holds it for the whole window (runbook).
   key=$(profile_key); [ -n "$key" ] || die "profile has no MEMORY_KEY"
   g=$(group_of_key "$key"); h=$(sha32 "$key")
   for e in "$PROFILES"/*/.env; do
