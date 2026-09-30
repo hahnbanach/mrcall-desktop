@@ -5,6 +5,27 @@ That file is a living snapshot and carries only `State now` / `Unresolved` /
 `Next`; anything chronological lands here instead. Newest section first.
 Nothing is discarded — only relocated, verbatim.
 
+## 2026-09-30 — Voice knowledge before production trial resume
+
+The [voice knowledge plan](execution-plans/2026-09-28-voice-company-knowledge.md)
+is blocked. Its `USER_NOTES` only path is built locally, but M3 detail mapping
+has REVISE and the new path is absent from
+the pinned production release. A real derived view failed independent source
+review and was removed from the production profile. The new company path is
+disabled by default, and its semantic and spoken behavior has not passed M4.
+The saved isolated fixture currently routes to production and cannot support
+phone trials. No company-store revision has been admitted for disclosure.
+
+- Café 124's overall plan acceptance remains open after the local archive passed
+  independent review. The changed detail mapping reopens voice knowledge M3;
+  M4 needs a safe source-backed conversion, an isolated provider route,
+  spoken-answer review and latency evidence.
+  Eight reserves remain held with provisional exposure, not settled invoices.
+
+1. Reconcile the uncertain note-conversion reservation, establish a separately
+   routed isolated telephone fixture and restore approved source/detail mapping
+   before spoken and latency trials. Keep M5 activation closed.
+
 ## 2026-09-28 — Voice knowledge planning snapshot before implementation
 
 Three Café124 engines import pinned release `8d83193`; production runs the

@@ -4,6 +4,21 @@ Historical snapshots preserved verbatim when the living context is consolidated.
 Dated deployment claims and incident counts below are historical observations,
 not current operational state; use [active-context.md](active-context.md).
 
+## 2026-09-30 — Voice knowledge before production trial resume
+
+The company-knowledge notes-only path is built locally on `main`: an offline
+`MODEL_MEMORY_EXTRACT` converter, versioned private artifact, failed-request
+cooldown, short initial context and distinct company-detail delegation. It is
+not deployed; the protected company switch defaults off. A real K3 conversion
+produced an exact-span artifact, but independent source review rejected its
+selected facts and Italian detail matching. The artifact was removed from the
+production profile. M3 detail mapping is reopened, and M4 has no spoken-answer
+or latency acceptance; see the [blocked plan](../../docs/execution-plans/2026-09-28-voice-company-knowledge.md).
+
+- Voice knowledge M3 detail mapping and M4 source selection need repair and
+  private semantic review. M4 also needs a separately routed isolated fixture
+  and supervised answer/latency evidence before any production activation.
+
 ## 2026-09-28 — Isolated voice listener before route recheck
 
 The isolated service now starts from the merged `main` checkout. Its runtime

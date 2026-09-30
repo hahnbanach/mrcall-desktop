@@ -61,13 +61,15 @@ permanently accepted. The latest call contains invented business services
 without delegation or a fact lookup. Overall acceptance is REVISE and the
 [pilot plan](execution-plans/2026-09-27-cafe124-voice-daemon.md) remains active.
 The [voice knowledge plan](execution-plans/2026-09-28-voice-company-knowledge.md)
-is blocked. Its `USER_NOTES` only path is built locally, but M3 detail mapping
-has REVISE and the new path is absent from
-the pinned production release. A real derived view failed independent source
-review and was removed from the production profile. The new company path is
-disabled by default, and its semantic and spoken behavior has not passed M4.
-The saved isolated fixture currently routes to production and cannot support
-phone trials. No company-store revision has been admitted for disclosure.
+is active. Corrected M2/M3 code in `d284414` has independent approval; prompt/schema
+5/3 preserve qualified source spans and specific detail phrases. Its release and
+rollback have independent approval, while production remains on `8fb21d3` with the company
+path off. A real K3 conversion received HTTP 402 with no artifact; the checked
+OpenRouter account balance is about USD0.21. This known refusal was reconciled
+at zero; the older uncertain request remains quarantined. The owner explicitly
+uses Café 124 production for handset trials after source/delta review and targeted
+activation. Real-source semantics, spoken behavior and latency remain open.
+No company-store revision is admitted.
 
 The hosted engine is being isolated per tenant
 ([toward-sandbox](execution-plans/2026-09-29-toward-sandbox.md)): M1 (tool
@@ -124,17 +126,15 @@ Refresh button only lists threads. See the archived
   installer coverage and multi-window auth checks retain their existing owners.
 - Historical task-mode/import and legacy transport issues need verification
   before their paths are restored.
-- Café 124's overall plan acceptance remains open after the local archive passed
-  independent review. The changed detail mapping reopens voice knowledge M3;
-  M4 needs a safe source-backed conversion, an isolated provider route,
-  spoken-answer review and latency evidence.
-  Eight reserves remain held with provisional exposure, not settled invoices.
+- Café 124's overall acceptance remains open after archive approval. Voice
+  knowledge needs funded real-source conversion, semantic review and supervised
+  production answer/latency evidence. Eight voice reserves remain provisional.
 
 ## Next
 
-1. Reconcile the uncertain note-conversion reservation, establish a separately
-   routed isolated telephone fixture and restore approved source/detail mapping
-   before spoken and latency trials. Keep M5 activation closed.
+1. Finish the real-source conversion after OpenRouter funding, review its output,
+   then use the approved deployment delta to activate the targeted Café 124 trial
+   and request the owner's concrete services/detail call.
 2. Resolve the remaining billing choices and funded credit acceptance. Keep
    preparation paused until the CTO explicitly requests a bounded run.
 3. Verify the installed applications through their GUI: the Mac one with

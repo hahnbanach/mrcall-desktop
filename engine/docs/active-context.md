@@ -38,14 +38,16 @@ receipts, but its service is currently absent. Its saved provider endpoint now
 reaches the production listener, so it is not an isolated route for new tests.
 The production listener remains pinned to `8fb21d3`.
 
-The company-knowledge notes-only path is built locally on `main`: an offline
-`MODEL_MEMORY_EXTRACT` converter, versioned private artifact, failed-request
-cooldown, short initial context and distinct company-detail delegation. It is
-not deployed; the protected company switch defaults off. A real K3 conversion
-produced an exact-span artifact, but independent source review rejected its
-selected facts and Italian detail matching. The artifact was removed from the
-production profile. M3 detail mapping is reopened, and M4 has no spoken-answer
-or latency acceptance; see the [blocked plan](../../docs/execution-plans/2026-09-28-voice-company-knowledge.md).
+Company-knowledge prompt/schema 5/3 in `d284414` has code-milestone approval:
+contiguous qualified source spans, specific detail categories/Italian phrases,
+cache-key-pinned call views, exact-key uncertainty gates and private quarantine.
+The corrected release and targeted rollback have independent approval; production still uses
+`8fb21d3` and the company path is off. Real conversion received HTTP 402 with no
+artifact, and the checked OpenRouter account has about USD0.21. Its known refusal
+was reconciled at zero; the older uncertain request remains quarantined. The
+owner's existing production number is the authorized handset trial route after
+real-source and deployment-delta review. See the
+[active plan](../../docs/execution-plans/2026-09-28-voice-company-knowledge.md).
 
 Engine chat now supports negotiated read-only policy version 1. The policy is
 enforced before slash/semantic/task routing and again at assistant and task
@@ -252,9 +254,8 @@ API budgets; see [control boundaries](../../docs/operator-setup.md#ai-execution-
   remains open. No backlog resumption is part of model configuration.
 - Incident checkpoint counts and project inventories in dated records are
   historical; re-read current state before a cleanup or backlog operation.
-- Voice knowledge M3 detail mapping and M4 source selection need repair and
-  private semantic review. M4 also needs a separately routed isolated fixture
-  and supervised answer/latency evidence before any production activation.
+- Voice knowledge needs OpenRouter funding, real-source conversion/review and
+  the prepared production trial before spoken-answer and latency acceptance.
 - Desktop v0.1.49 installation and personal-key entry on the CTO's Mac remain
   unverified. Saved-prompt format repairs have no new business-quality result.
 - The Desktop app does not read `memory.status`'s `joining` or
