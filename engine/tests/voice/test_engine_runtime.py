@@ -341,6 +341,16 @@ def test_watchdog_cancels_lookup_and_keeps_ledger(fixture_db, tmp_path, monkeypa
     asyncio.run(scenario())
 
 
+def test_company_query_rejects_changed_converter_view(monkeypatch):
+    original = NotesView("supported", source_hash="same-source", cache_key="old-converter")
+    rebuilt = NotesView("supported", source_hash="same-source", cache_key="new-converter")
+    monkeypatch.setattr(company_query, "current_company_notes", lambda *_: rebuilt)
+    resolver = CompanyQuery(None, object(), original)
+    assert not resolver.current()
+    monkeypatch.setattr(company_query, "current_company_notes", lambda *_: original)
+    assert resolver.current()
+
+
 def test_company_query_uses_bound_detail_and_exact_missing_state(monkeypatch):
     view = NotesView("supported", "Services: Acme sells blue widgets.", "f" * 64)
     observed = []
