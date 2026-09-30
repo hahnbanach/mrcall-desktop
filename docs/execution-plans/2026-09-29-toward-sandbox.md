@@ -403,136 +403,230 @@ from the read-only cache without writing; the two-user WAL test.
 ### M2 record — scratch VM probe (2026-09-30)
 
 Host: Ubuntu 22.04.5, systemd 249, Caddy 2.11.4, 2 vCPU / 2 GB, root, no
-customers. B.1 as written, with two deviations: the distro ships Python
+customers. B.1 as written, with these deviations: the distro ships Python
 3.10 and the engine needs ≥3.11, so the venv is built with `python3.11`
 from the deadsnakes PPA (3.11.16) — **check the VPS's `python3 --version`
-before any rebuild there**; the Caddy site address is
-`http://localhost:8080`. Checkout `068b520`, then this session's branch
-`claude/m2-scratch-probe`. Four scratch profiles, built as production
-has them (created and seeded by `mrcalld` under the shared
-`/etc/mrcalld/env` key, legacy `<key>.db` stores, started by
-`update-daemons.sh` on the transitional template): `scrA1…1` and
-`scrA2…2` (company A, `mc-c-9ebd4ee0176e`; A2 joined A1 as `mrcalld`
-before M2, as Café124 did), `scrB1…1` (company B, `mc-c-c90a4f1c7b19`),
-and later `scrC1…1` (own company, then joined to A, then deleted). The full
-command log is kept with the session; every result below names its command.
+before any venv rebuild there**; Caddy serves `http://localhost:8080`, not
+the real hostname; the VM checkout follows a local bundle of branch
+`claude/m2-scratch-probe` (no GitHub credentials on the VM); provisiond and
+the `zylch-reconcile.path`/`.timer` units were **not** installed, so the
+reconcile lock against the path unit and provisiond's socket and 409
+behaviour under `/run/mrcalld 2751` were not exercised. Scratch profiles
+were built as production has them (created and seeded by `mrcalld` under
+the shared `/etc/mrcalld/env` key, legacy `<key>.db` stores, a second
+profile joined to the first as `mrcalld`, started by `update-daemons.sh`
+on the transitional template): company A `scrA1…1`+`scrA2…2`
+(`mc-c-9ebd4ee0176e`), company B `scrB1…1` (`mc-c-c90a4f1c7b19`), company D
+`scrD1…1`+`scrD2…2` (`mc-c-2734b77bf2a1`, the mixed-state company), and
+`scrC1…1` (own company, joined to A, deleted). Command log with outputs:
+`/root/m2-probe.log` on the VM (a few set-up commands were not tee'd; the
+record says which).
 
-Four defects found and fixed on the branch (the first two would have taken
-Café124 down on the day):
+**Defects found and fixed on the branch** (1, 2 and 6 would each have taken
+Café124 down or lost its memory):
 
-1. **Caddy dual upstream shared its health state across uids.** Passive
-   health is keyed by the *templated* upstream, so one unauthenticated
-   request to `/ws/<missing uid>` gave the next requests for live A1 and B1
-   503 (recorded: missing 502, A1 503, B1 503). A `file` matcher does not
-   match a Unix socket (every migrated uid then fell through to 502). Fix:
-   Caddy is back to the pre-M2 single static upstream
-   `unix//run/mrcalld/{re.uid.1}.sock`, and the tenant's tmpfiles fragment
-   adds `L+ /run/mrcalld/<uid>.sock -> <uid>/ws.sock`; `unmigrate`/`delete`
-   remove the link. Retest: migrated A1/A2/B1 401 without a token, 403 with
-   another uid's token, a missing uid 502 with no effect on the others.
-2. **Relocated store unreadable by tenants.** 2a moved `<key>.db`
-   (`0640 mrcalld:mrcalld`, lock files `0660 mrcalld:mrcalld`) into the
-   setgid dir, whose group does not reach existing files: the first
-   migrated daemon died with `PermissionError … .db.migrate.lock`. Fix:
-   helper `ensure_company_store` (used by `create`, `join` and a new 2a verb
-   `mrcall-tenant store <uid>`) creates the group and `2770` dir, `chgrp`s the
-   files to the company group with `g+rw,o=`, and adds `mrcalld` to the
-   group, because an unmigrated daemon of the same company must write the
-   `-wal`/`-shm` a tenant created (Café124 will be mixed for four days).
-   `delete` no longer counts `mrcalld` as a key holder.
-3. **Tenant CLI runs outside the unit could not resolve `-p`.**
-   `select_profile` listed `profiles/`, which is traverse-only (0711) for
-   tenant users, so `join-company.sh` and the offboard inside
-   `mrcall-tenant delete` died with EACCES. Fix: an explicit exact name is
-   checked directly (`engine/zylch/cli/profiles.py`, test
-   `tests/utils/test_select_profile_unlistable.py`).
-4. **`delete` continued after a failed offboard,** which would orphan the
-   owned rule rows with no profile left to remove them. It now stops before
-   deleting anything.
+1. **Caddy dual upstream shared its health state across uids**
+   (`657deae`, `6e28123`). Passive health is keyed by the templated
+   upstream: one unauthenticated request to `/ws/<missing uid>` gave live
+   A1 and B1 503. A `file` matcher does not match a Unix socket. Now: Caddy
+   keeps the pre-M2 single static upstream `/run/mrcalld/{uid}.sock`, and
+   the tenant's tmpfiles fragment adds `L+ /run/mrcalld/<uid>.sock ->
+   <uid>/ws.sock`; `unmigrate`/`delete` remove it; `check_uid` refuses
+   `provisiond`. **The installed Caddyfile needs no change for M2** — keep
+   the pre-M2 rule (do not install the dual-upstream version of `54c503f`).
+2. **Relocated store unreadable by tenants** (`657deae`, `30f2eef`): 2a
+   moves `0640 mrcalld:mrcalld` files into the setgid dir, whose group does
+   not reach existing files; the first tenant daemon died with EACCES on
+   `.db.migrate.lock`. Now the 2a verb `mrcall-tenant store` chgrps them to
+   the company group with `g+rw` **as `mrcalld`** (owned regular files with
+   one link only — review A showed a root chgrp in a tenant-writable dir
+   could be raced onto `/etc/passwd`), and puts `mrcalld` in the group so
+   an unmigrated daemon can write sidecars a tenant created. Only `store`
+   adds `mrcalld`; the reconcile no longer re-adds it (R8).
+3. **Tenant CLI outside the unit could not resolve `-p`** (`2a8e805`,
+   `30f2eef`): `profiles/` is traverse-only for tenants, so
+   `join-company.sh` and the offboard in `delete` died with EACCES.
+   `select_profile` now lists first and, only on `PermissionError`, checks
+   an explicit name directly (exact on the case-sensitive host; a
+   case-insensitive local disk always lists). Tests in
+   `tests/utils/test_select_profile_unlistable.py`.
+4. **`delete` continued after a failed offboard** (`2a8e805`, `30f2eef`).
+   It now holds the reconcile lock, writes a root `.deleting` marker that
+   `update-daemons.sh` skips, and stops before deleting anything.
+5. **2a had no rollback, and orphan stores had no disposition**
+   (`30f2eef`): verbs `mrcall-tenant unstore <uid>` and
+   `mrcall-tenant orphans [--archive]`.
+6. **`delete` decided "last holder" from group membership only**
+   (`30f2eef`): an unmigrated profile runs as `mrcalld` and is in no
+   group, so deleting a migrated Café124 profile mid-migration would have
+   deleted the store the other three use. It now also requires that no
+   other profile's `.env` holds the key (D6).
 
-Results (all on the fixed branch, real units, real Caddy):
+**Results.** Unless marked, on final code `30f2eef`. Results obtained on
+earlier commits are marked with the commit and why they still hold.
 
-- **Unit start under the drop-in:** A1, A2, B1, C1 active as
-  `mc-<sha12(uid)>`, socket `srw-rw---- <tenant> caddy` in
-  `/run/mrcalld/<uid>/`; `systemd-analyze verify` clean,
-  `security` 4.4. Reboot simulated (`rm -rf /run/mrcalld`,
-  `systemd-tmpfiles --create`, start): dirs and links recreated, all 401.
-  `update-daemons.sh` with three tenants in the table re-applies `create`,
-  restarts nothing, users unchanged.
-- **Probe harness.** Brief criteria that need an authenticated client
-  used a wrapper drop-in (`zz-probe.conf`, removed afterwards) whose only
-  change is that Google's signing certs are replaced by a local key, so a
-  locally signed token for the profile's uid passes the real
-  `token.uid == OWNER_ID` gate; in-sandbox probes ran through
-  `systemd-run` with every property of the unit's `tenant.conf`.
-- **fastembed:** as A1 inside the sandbox, the model loaded from the
-  read-only bound cache (dim 384); files in the cache newer than a marker
-  taken before: 0.
-- **Criterion 1:** `read_document` of B's `.env` by absolute path refused
-  ("outside the allowed folders"), `*.env`, `sub/../../../<B>/.env` and
-  `../.env` not found; inside A's sandbox `profiles/` lists only A and
-  `memory/` only A's group dir; over WS `settings.update
-  DOCUMENT_PATHS=<profiles root>` is stored and `settings.get` reports it in
-  `ignored`, `search_paths()` unchanged (A's downloads and scratch);
-  B's search set is B's own two folders; from a host shell as A's user,
-  `cat` of B's `.env`, `zylch.db`, key file and `/etc/mrcalld/env`, and
-  `ls profiles/`, all `Permission denied`.
-- **Criterion 2:** a locally built message with attachments `/etc/passwd`,
-  `../../x`, `.env`, `sub/dir.pdf`, `<B>/.env` saved by `save_attachments`
-  as `passwd`, `x`, `.env`, `dir.pdf` under A's `downloads/`; A's own `.env`
-  unchanged; `resolve_download_target` refuses A's root, B's root, `/tmp`,
-  the checkout; writes into the checkout are EROFS in the sandbox and
-  `Permission denied` from a host shell as A's user, likewise B's profile.
-  (A `.env` attachment keeps its name inside `downloads/`; the brief's
-  criterion holds, the M1 test text said `attachment_<n>`.)
-- **Criterion 4:** A1 and A2 (two Unix users) ran 150 `projects.create`
-  each over WS at the same time on one store: both see 300 projects, zero
-  `readonly`/`locked` lines in either journal, `-wal`/`-shm`
-  `0660 … mc-c-9ebd4ee0176e`. B's user: `ls` of A's store dir and of
-  `memory/` denied, `sqlite3` open refused. B's daemon
-  `memory.join_preview(A's key)` → `exists: false` (it cannot see A's
-  store) and `memory.join` → `operator_action`; the hosted join
-  `join-company.sh C1 <A's key> --yes` ran as C1's tenant user, found the
-  renamed store, regenerated the drop-in, `unjoin` dropped the old group,
-  and C1 then saw A's 300 projects over WS.
-- **Criterion 5:** `rekey --verify` 2/2 rows for each of A1, A2, B1, C1;
-  `verify` under its own key from inside each sandbox 2 ok 0 failed; key
-  files `0400 root`, A's user `cat` of B's key denied; B started without
+- **Unit start under the drop-in, without the probe harness** (R1, R5,
+  D5): tenants active as `mc-<sha12(uid)>`, socket
+  `srw-rw---- <tenant> caddy` in `/run/mrcalld/<uid>/`,
+  `systemd-analyze verify` clean, `security` 4.4. Reboot simulated
+  (`rm -rf /run/mrcalld; systemd-tmpfiles --create`; start): dirs and links
+  recreated, all 401 (on `6e28123`; later commits do not touch tmpfiles).
+  `update-daemons.sh` with three tenants in the table and one unmigrated
+  profile re-applies `create`, restarts nothing, keeps users (R5 redo).
+- **Caddy** (P1 on `6e28123`, unchanged since): migrated uids 401 without
+  a token, 403 with another uid's token, a missing uid 502 with no effect
+  on the others; after the rollback, the unmigrated flat socket 401.
+- **fastembed** (P2 on `6e28123`; later fixes do not touch the cache or
+  the drop-in): as A1 in its sandbox the model loaded from the read-only
+  bound cache (dim 384); files newer than a marker: 0.
+- **Criterion 1** (on `6e28123`; the later `select_profile` change only
+  adds a fallback on `PermissionError`, which the daemon never hits since
+  its sandbox lists its own profile): `read_document` of B's `.env` by
+  absolute path refused ("outside the allowed folders"); `*.env`,
+  `sub/../../../<B>/.env`, `../.env` not found; in A's sandbox `profiles/`
+  lists only A and `memory/` only A's group dir; over WS `settings.update
+  DOCUMENT_PATHS=<profiles root>` is stored and `settings.get` lists it in
+  `ignored`, `search_paths()` stays A's downloads and scratch; B's search
+  set is B's own; from a host shell as A's user `cat` of B's `.env`,
+  `zylch.db`, key file, `/etc/mrcalld/env`, and `ls profiles/`, all
+  `Permission denied` (again on final code in D5).
+- **Criterion 2** (on `6e28123`, same reasoning): attachments `/etc/passwd`,
+  `../../x`, `.env`, `sub/dir.pdf`, `<B>/.env` in a locally built message,
+  through `save_attachments`, land as `passwd`, `x`, `.env`, `dir.pdf` in
+  A's `downloads/`; A's `.env` unchanged; `resolve_download_target` (the
+  function `download_attachment` calls for `target_dir`; the RPC path
+  itself needs an IMAP mailbox) refuses A's root, B's root, `/tmp`, the
+  checkout; checkout writes EROFS in the sandbox and `Permission denied`
+  from a host shell as A's user, likewise B's profile.
+- **Criterion 4.** A1 and A2, both migrated (on `6e28123`), 150
+  `projects.create` each concurrently: 300 seen by both, 0
+  `readonly`/`locked` lines. **Mixed state, Café124's four days** (D4,
+  final code): D1 migrated, D2 still `mrcalld`; both stopped, sidecars
+  removed (none open — a probe-only step, never on a live store), the
+  tenant daemon started first so it created `-wal`/-shm`
+  (`0660 mc-15e7bf74266b:mc-c-2734b77bf2a1`), then the `mrcalld` daemon; 150
+  writes each concurrently, 300 seen by both, 0 error lines. Third user:
+  B's user cannot list A's store dir or `memory/`, `sqlite3` refused.
+  B's daemon `memory.join_preview(A's key)` → `exists: false`,
+  `memory.join` → `operator_action`. `join-company.sh C1 <A's key> --yes`
+  as C1's tenant found the renamed store, `unjoin` dropped the old group, C1
+  saw A's 300 projects (final C7 run, `2a8e805`; `30f2eef` did not touch
+  `join`/`unjoin`/`create`'s store handling beyond moving the chgrp out).
+- **Criterion 5** (on `6e28123`; `rekey`/key handling untouched since, and
+  every later migration — C1, D1 — repeated `rekey --verify` 2/2):
+  in-sandbox `verify` under its own key 2 ok 0 failed for A1, A2, B1;
+  key files `0400 root`, A's user `cat` of B's key denied; B started without
   its key file → "Failed to load environment files", never active; with
   A's key → "encryption self-check failed: a stored credential does not
-  decrypt under this key", restart loop, never serving.
-- **Criterion 7:** C1 and A1 each wrote a company fact, a `template:` and a
-  `prefs:` row into A's store; `mrcall-tenant delete C1` removed 2 owned
-  rule rows (C1's), kept C1's company fact and all of A1's rows; afterwards
-  no user, profile dir, key, drop-in, fragment, run dir, link, table row or
-  unowned file on the host, unit disabled.
-- **Rollback:** `rekey` back + `mrcall-tenant unmigrate` on A1 (before the
-  fixes) and B1 (after): daemon back as `mrcalld` on the flat socket, link
-  gone, Caddy 401, table row gone; B1 then re-migrated forward with the kept
-  user and key.
+  decrypt under this key", never serving.
+- **Criterion 7** (final C7 run, `2a8e805`; re-confirmed for the lock,
+  marker and last-holder in D6 on `30f2eef`): C1 and A1 each wrote a
+  company fact, a `template:` and a `prefs:` row into A's store;
+  `mrcall-tenant delete C1` removed C1's 2 rule rows, kept C1's fact and all
+  of A1's rows; afterwards no user, profile dir, key, drop-in, fragment, run
+  dir, link, table row or unowned file on the host. D6: with D1's `.env`
+  unreadable the offboard failed, `delete` stopped, profile and `.deleting`
+  kept, unit disabled, a reconcile skipped it; after the fix `delete` ran,
+  and because D2 (unmigrated) still holds the key the store was **kept**
+  and D2 kept serving 300 projects. **Exception, stated:** the store of the
+  company C1 had *left* by joining A stayed behind (by design of join);
+  `orphans --archive` (D7) moved it and two pre-join legacy `<key>.db`
+  files to `/root/mrcall-orphan-stores/<ts>/` (root 0700) and dropped the
+  empty groups; the memory root then holds no key-named file.
+- **Rollbacks.** 2b: `rekey` back + `unmigrate` on A1 (before the fixes)
+  and B1 (R3, `6e28123`) — daemon back as `mrcalld` on the flat socket,
+  link gone, Caddy 401 — then B1 re-migrated with the kept user and key
+  (R4). 2a: `unstore` (D2, final code) — store back to its legacy name,
+  group and dir removed, both daemons active on `legacy`, data intact.
+- **Early C1 failures in the log** (09:26, 09:28): the probe's 2b script
+  sourced its helper by a relative path, so step 5 (`rekey`) never ran and
+  the unit started under the new key with rows still under the shared one;
+  it refused to serve with "encryption self-check failed" — criterion 5's
+  behaviour, not a defect. The script was fixed and every later run shows
+  `rewritten: 2 … verify: 2`.
+- **Probe harness limits.** Authenticated WebSocket results used a
+  probe-only drop-in (`zz-probe.conf`, removed afterwards) whose one change
+  replaces Google's signing certs with a local key, so a locally signed
+  token for the profile's uid passes the real `uid == OWNER_ID` gate; the
+  authenticated path on production is proven only by a real client
+  reconnecting (runbook step 7). In-sandbox probes ran through
+  `systemd-run` with the non-empty, non-Exec lines of the unit's
+  `tenant.conf` — the tenant's identity and whole sandbox, but not the
+  template's own lines (`Restart`, `StartLimit*`, which do not change
+  access). A `.env`-named attachment keeps its name inside `downloads/`;
+  the brief's criterion holds, M1's test text said `attachment_<n>`.
+- Engine tests: 1148 passed; the 3 failures (`test_contract_boundaries`,
+  `test_memory_readonly`, and
+  `test_local_document_paths_at_profiles_root_does_find_the_file`, whose
+  glob order differs on this filesystem) fail identically on `main`.
 
-Left on disk by design, for the operator: a joined-away company's store and
-its group (`mrcalld` its only member), and the pre-join legacy store of a
-profile that joined another company before M2 (`0640 mrcalld`, unreachable
-by tenants). Runbook check "checkout world-readable" must exclude
-`__pycache__`: the unmigrated daemons write it `0660` under `UMask=0007`;
-harmless, since the tenant units run with `PYTHONDONTWRITEBYTECODE` and
-Python falls back to the source.
+**Runbook M2 as proven here** (supersedes the lists above).
+`VENV=/home/mrcalld/mrcall-desktop/engine/venv`, `Z=/home/mrcalld/.zylch`.
 
-**Runbook M2 as proven here** (supersedes the list above where they differ):
+*Once per host, before anything:* the installed Caddyfile keeps the pre-M2
+single upstream; `python3 --version` ≥ 3.11 in the venv; warm the
+embedding cache as `mrcalld` (`sudo -u mrcalld env HOME=/home/mrcalld
+ZYLCH_HOME=$Z bash -c 'umask 022; $VENV/bin/python -c "from
+zylch.memory.config import MemoryConfig; from zylch.memory.embeddings
+import get_shared_engine; get_shared_engine(MemoryConfig())"'`); `find
+/home/mrcalld/mrcall-desktop ! -perm -o+r ! -path '*/__pycache__*'` is
+empty (D5: 0).
 
-- **2a, per company, all its daemons stopped, reconcile lock held:**
-  `sudo -u mrcalld env HOME=/home/mrcalld $VENV/bin/zylch -p <any uid of the
-  company> memory-relocate-store`; `mrcall-tenant store <that uid>`; start
-  all the company's daemons (they must restart to pick up `mrcalld`'s new
-  group); `memory-names` for each shows `store in use: derived`.
-- **2b per profile:** steps 0–7 above unchanged, except step 0's check is
-  `find /home/mrcalld/mrcall-desktop ! -perm -o+r ! -path '*/__pycache__*'`.
-  Caddy needs no change for M2: the installed Caddyfile is the single
-  upstream, reached through the link.
-- **After the last profile of the host is migrated:** remove `mrcalld`
-  from the company groups (`gpasswd -d mrcalld <group>`), fold the drop-in
-  into the template, drop the probe-only helpers.
+*2a, per company, one window (Café124: its four daemons):*
+1. `exec 9>/run/mrcalld/reconcile.lock; flock 9`;
+2. `systemctl stop` every daemon of the company;
+3. `install -d -m 0700 /root/backup-2a-<co>; cp -a $Z/memory/<key>.db*
+   /root/backup-2a-<co>/` (the key comes from `join-company.sh table`);
+4. `sudo -u mrcalld env HOME=/home/mrcalld bash -c 'cd /home/mrcalld &&
+   umask 007 && $VENV/bin/zylch -p <one uid> memory-relocate-store'`;
+5. `mrcall-tenant store <that uid>`;
+6. `systemctl start` every daemon of the company; release the lock
+   (`exec 9>&-`);
+7. per uid: `sudo -u mrcalld env HOME=/home/mrcalld $VENV/bin/zylch -p
+   <uid> memory-names` shows `store in use: derived`; each daemon active;
+   the company's users see their memory.
+Rollback, same lock, all stopped: `mrcall-tenant unstore <uid>`; start all;
+`memory-names` shows `legacy`. Afterwards `mrcall-tenant orphans` (listing
+only) and, once the backup window has passed, `--archive`.
+
+*2b, per profile U, one per day, after its company's 2a:* steps 1–6 of the
+list above, unchanged (the step 0 check as above). Step 7, exactly:
+- `systemctl start zylch-server@U`; release the lock;
+- `systemctl is-active zylch-server@U` and `journalctl -u
+  zylch-server@U --since -2min | grep -c 'self-check failed'` → `active`, 0
+  (the start-time decrypt self-check is criterion 5 on the live rows);
+- `curl -s -o /dev/null -w '%{http_code}' -H 'Connection: Upgrade' -H
+  'Upgrade: websocket' -H 'Sec-WebSocket-Version: 13' -H
+  'Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==' https://<host>/ws/U` → 401;
+- as the tenant: `sudo -u <mc-user> env HOME=$Z/profiles/U ZYLCH_HOME=$Z
+  MEMORY_DB_DIR=$Z/memory bash -c 'umask 007; exec $VENV/bin/zylch -p U
+  memory-status'` → `available: True`;
+- `sudo -u <mc-user> cat $Z/profiles/<another uid>/.env` and
+  `/etc/mrcalld/keys/<another uid>` → `Permission denied` (criterion 1/5);
+- `stat -c '%U:%G %a %n' $Z/profiles/U/zylch.db* $Z/memory/<group>/*.db-wal
+  $Z/memory/<group>/*.db-shm`: the profile's files owned by the tenant; the
+  store's sidecars `0660` with the company group (their owner is whichever
+  daemon opened the store first, which is fine);
+- the customer's app reconnects and shows mail — the only real
+  authenticated check;
+- never run `rekey --verify-only` or any `zylch` command as root while the
+  unit runs (root-owned `-wal`/`-shm`).
+2b rollback as above (stop; `rekey` with the files swapped, as root;
+`mrcall-tenant unmigrate U`; start). When the company's last profile is
+migrated: `gpasswd -d mrcalld <group>` (R8: the reconcile does not re-add
+it). When the rollback window closes (the plan keeps the shared key until
+then): `shred -u /root/oldkey.U /root/stat.U`, remove `/root/backup.U.tgz`
+and `/root/backup-2a-<co>`.
+
+*Offboarding:* `mrcall-tenant delete U` only (lock, marker, offboard as
+the tenant, last holder derived from group members **and** other
+profiles' keys); if it stops on an offboard error, fix and re-run.
+
+**Still open, not blocking Café124** (review A): `mrcalld` owns
+`/run/mrcalld`, the company store dirs and `reconcile.lock`; after the
+last migration those parents should move to root ownership so a
+compromised provisiond cannot swap links or stores. Provisiond and the
+reconcile path unit are to be exercised on the VPS itself.
 
 ## M3 — Egress bound per daemon
 
