@@ -75,6 +75,14 @@ env_value() { # env_value <file> <KEY>
   printf '%s' "$line"
 }
 
+# The reconcile lock: reuse fd 9 when the caller (an operator window, or
+# join-company.sh) already holds it — flock on the inherited descriptor
+# succeeds at once; a second open would wait on ourselves forever.
+take_lock() {
+  [ "$(readlink /proc/$$/fd/9 2>/dev/null)" = "$RUN_ROOT/reconcile.lock" ] || exec 9>"$RUN_ROOT/reconcile.lock"
+  flock 9
+}
+
 ensure_table() { [ -f "$TABLE" ] || install -m 600 -o root -g root /dev/null "$TABLE"; chmod 600 "$TABLE"; }
 table_has() { awk -F'\t' -v u="$1" '$1==u {found=1} END {exit !found}' "$TABLE" 2>/dev/null; }
 table_drop() { awk -F'\t' -v u="$1" '$1!=u' "$TABLE" > "$TABLE.tmp" && mv "$TABLE.tmp" "$TABLE" && chmod 600 "$TABLE"; }
@@ -107,7 +115,7 @@ if [ "$verb" = orphans ]; then
   is_held_group() { local h; for h in "${held[@]:-}"; do [ -n "$h" ] && [ "$(group_of_key "$h")" = "$1" ] && return 0; done; return 1; }
   dest=""
   if [ "${2:-}" = "--archive" ]; then
-    exec 9>"$RUN_ROOT/reconcile.lock"; flock 9
+    take_lock
     dest="/root/mrcall-orphan-stores/$(date -u +%FT%H%M%SZ)"; install -d -m 0700 -o root -g root "$dest"
   fi
   for f in "$MEMORY"/*.db; do
@@ -371,7 +379,7 @@ delete)
   # hold the reconcile lock (as join-company.sh does) and mark the profile,
   # so no reconcile re-enables the unit while offboarding or after a
   # failed offboard (update-daemons.sh skips a profile with .deleting)
-  exec 9>"$RUN_ROOT/reconcile.lock"; flock 9
+  take_lock
   [ -d "$profile_dir" ] && [ ! -L "$profile_dir" ] && install -m 0600 -o root -g root /dev/null "$profile_dir/.deleting"
   systemctl disable --now "$unit" >/dev/null 2>&1 || true
   group=$(company_group_for_profile)
