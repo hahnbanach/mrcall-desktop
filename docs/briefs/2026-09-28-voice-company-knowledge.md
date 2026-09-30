@@ -3,8 +3,9 @@
 <!-- doc-scope:start -->
 Scope: product decision, information boundaries and acceptance criteria for
 giving GPT-Live verified company knowledge through the engine. This brief
-extends the active Café 124 pilot's answer-quality work; it does not authorize
-a deployment, certify model infallibility, or reopen the accepted local archive.
+extends the active Café 124 pilot's answer-quality work; deployment follows the
+reviewed trial flow below. It does not certify model infallibility or reopen
+the accepted local archive.
 <!-- doc-scope:end -->
 
 ## Problem and verified starting point
@@ -223,8 +224,9 @@ not an assumption that the current transport already supports it.
    define the acceptable change in the reviewed plan before implementation.
 7. **Real model and handset:** local retrieval tests and mocked dialogue alone
    do not establish Live behavior. The plan defines reproducible real GPT-Live
-   trials before a production activation, including repeated failure-triggering
-   cases and their pass rule. Final supervised listening checks spoken accuracy,
+   trials before continued production acceptance, including repeated failure-triggering
+   cases and their pass rule. An owner-supervised production trial follows the
+   reviewed preparation and reversible activation gates below. Final listening checks spoken accuracy,
    interruption and usefulness. It establishes the tested cases, not a general
    production error rate. Reuse the already accepted archive evidence.
 
@@ -241,15 +243,31 @@ not an assumption that the current transport already supports it.
   company capability or unselected facts in logs, repository or model input.
   Firebase ID tokens stay in memory. Company/profile binding is enforced before
   both initial context and later tool results leave the engine.
-- No new local call-count, duration or spending ceilings. Future implementation
-  may run the budgeted offline `USER_NOTES` conversion. This planning session
-  authorizes no paid preparation, memory writes, test calls or service changes.
+- No new local call-count, duration or spending ceilings. Implementation
+  uses the budgeted offline `USER_NOTES` conversion. The September 28 planning
+  session authorized no paid preparation, memory writes, calls or service
+  changes; the September 30 resume amendment authorizes reviewed preparation
+  and the targeted production trial. Company source writes remain excluded.
 - Work on `main`, without branches/worktrees. Preserve unrelated untracked
   files, especially `DUPLEX.md`; do not use `update-daemons.sh`.
 - No full kernel port, second telephone agent, automatic catalog inference,
   raw-memory dump, new Desktop settings UI or general-availability claim.
 
 ## Handoff and source anchors
+
+**Operator amendment — 2026-09-30:** Café 124 is the operator's own business,
+and the operator explicitly chooses its existing production number for handset
+tests and requests execution to resume. A dedicated test number/application is
+not a prerequisite. Prepare and independently review the corrected converter,
+detail retrieval, real source-to-view result and exact release/config/rollback
+delta first. Then perform targeted reversible activation only on the bound
+Café 124 instance so the operator can make a useful supervised call. Activation
+for that trial is distinct from acceptance for continued operation: retain the
+known-good release/config, enforce binding and source selection, inspect the
+new call's evidence, and disable the company path on a failed behavior gate.
+The accepted automatic conversion risk remains unchanged. The lead owns the
+technical preparation and reports the number and concrete questions only after
+readback proves the new path is ready; no archive-repeat call is requested.
 
 The [reviewed execution plan](../execution-plans/2026-09-28-voice-company-knowledge.md)
 sets source inventory, authority/disclosure, revision freshness, delegation,
