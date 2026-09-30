@@ -214,6 +214,20 @@ as needing a reply; `pytest tests/workers tests/rpc`. The IPC contract
 reviewer reviews this milestone too, because it changes what
 `emails.needs_reply` and `is_user_sent` mean for cs-kernel.
 
+**M3 integration review (2026-09-30): APPROVED** on the second pass; IPC
+contract review APPROVED. `identity.user_addresses` (primary, aliases,
+active mailboxes) feeds lists, search, tasks, trainers and memory;
+`identity.verified_user_addresses` (primary and active mailboxes, no
+aliases) feeds `emails.needs_reply` and `is_user_sent`, because a
+declared alias is not verified by a connection. `is_user_sender` is one
+shared function for the trainers and the CLI. Suites: 802 passed, one
+pre-existing `llm.models` failure. Recorded for later: the memory worker
+now skips body extraction of the user's own sent mail (a lossless
+follow-up adds to/cc to the picker and uses the first non-user recipient
+as the contact); cs-kernel clones must list aliases and additional
+mailbox addresses in `config.self_emails`; the IPC contract doc gets a
+"the user's message" definition in M7.
+
 ## M4 — PEC envelope unwrap (engine)
 
 **Dependency:** M2 (both milestones edit `_convert_message` and

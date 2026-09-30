@@ -397,6 +397,22 @@ class Storage:
         return Email.mailbox_id.in_(_active_mailboxes(owner_id))
 
     @staticmethod
+    def user_set(owner_id: str, user_email: str = "") -> frozenset:
+        """Every address the user writes from, plus the one the caller named.
+
+        The caller's ``user_email`` (the primary, as every RPC passes it)
+        is always in the set, so a profile whose identity module cannot
+        read the database still recognises its own mail.
+        """
+        from zylch.email.identity import user_addresses
+
+        out = set(user_addresses(owner_id))
+        me = (user_email or "").strip().lower()
+        if me:
+            out.add(me)
+        return frozenset(out)
+
+    @staticmethod
     def first_copy_filter(owner_id: str):
         """Only the first stored copy of a message held by several mailboxes."""
         return _first_copy_only(owner_id)
@@ -717,8 +733,10 @@ class Storage:
             than the most recent user reply AND that message has no
             read_at timestamp.
           - pinned: True iff any email in the thread has pinned_at.
+        A message is the user's when its sender is any address the user
+        writes from (primary, aliases, active mailboxes).
         """
-        me = (user_email or "").lower()
+        users = self.user_set(owner_id, user_email)
         with get_session() as session:
             # Pull every email for this owner ordered newest-first, then
             # fold them into thread buckets in Python. The mailbox fits
@@ -746,7 +764,7 @@ class Storage:
                     continue
                 bucket = threads.get(tid)
                 from_addr = (r.from_email or "").lower()
-                is_user = bool(me) and from_addr == me
+                is_user = from_addr in users
                 if bucket is None:
                     bucket = {
                         "thread_id": tid,
@@ -826,11 +844,12 @@ class Storage:
     ) -> List[Dict[str, Any]]:
         """Return threads whose most recent message was sent by the user.
 
-        Symmetric to `list_inbox_threads` but filters by
-        `from_email == user_email` on the latest row of each thread.
+        Symmetric to `list_inbox_threads` but keeps a thread whose latest
+        row was sent from any of the user's addresses (primary, aliases,
+        active mailboxes).
         """
-        me = (user_email or "").lower()
-        if not me:
+        users = self.user_set(owner_id, user_email)
+        if not users:
             return []
         with get_session() as session:
             rows = (
@@ -851,7 +870,7 @@ class Storage:
                     continue
                 bucket = threads.get(tid)
                 from_addr = (r.from_email or "").lower()
-                is_user = from_addr == me
+                is_user = from_addr in users
                 if bucket is None:
                     bucket = {
                         "thread_id": tid,
@@ -924,6 +943,7 @@ class Storage:
         """
         from zylch.services.email_search import email_matches, parse_query
 
+        users = self.user_set(owner_id, user_email)
         me = (user_email or "").lower()
         parsed = parse_query(query)
 
@@ -944,7 +964,7 @@ class Storage:
             for r in rows:
                 if not r.thread_id:
                     continue
-                if email_matches(r, parsed, user_email=me):
+                if email_matches(r, parsed, user_email=me, user_addresses=users):
                     matching_thread_ids.add(r.thread_id)
 
             threads: Dict[str, Dict[str, Any]] = {}
@@ -954,7 +974,7 @@ class Storage:
                     continue
                 bucket = threads.get(tid)
                 from_addr = (r.from_email or "").lower()
-                is_user = bool(me) and from_addr == me
+                is_user = from_addr in users
                 if bucket is None:
                     bucket = {
                         "thread_id": tid,
@@ -983,7 +1003,7 @@ class Storage:
                         continue
                 elif folder == "sent":
                     latest_addr = (b["latest"].from_email or "").lower()
-                    if not me or latest_addr != me:
+                    if latest_addr not in users:
                         continue
                 candidates.append(b)
 
@@ -1428,7 +1448,7 @@ class Storage:
             "mailer-daemon",
         ):
             return []
-        user_low = (user_email or "").strip().lower()
+        users = self.user_set(owner_id, user_email)
         cutoff_ts = int((datetime.now(timezone.utc) - timedelta(days=days)).timestamp())
 
         with get_session() as session:
@@ -1456,7 +1476,7 @@ class Storage:
             qualifies = False
             if from_addr == contact_low:
                 qualifies = True
-            elif user_low and from_addr == user_low:
+            elif from_addr in users:
                 recipients = ((r.to_email or "") + "," + (r.cc_email or "")).lower()
                 if contact_low in recipients:
                     qualifies = True
@@ -1488,6 +1508,7 @@ class Storage:
         """
         from zylch.services.email_search import email_matches, parse_query
 
+        users = self.user_set(owner_id, user_email)
         me = (user_email or "").lower()
         parsed = parse_query(query)
         with get_session() as session:
@@ -1504,10 +1525,10 @@ class Storage:
             )
             out: List[Dict[str, Any]] = []
             for r in rows:
-                if not email_matches(r, parsed, user_email=me):
+                if not email_matches(r, parsed, user_email=me, user_addresses=users):
                     continue
                 from_addr = (r.from_email or "").lower()
-                is_user = bool(me) and from_addr == me
+                is_user = from_addr in users
                 if folder == "inbox" and is_user:
                     continue
                 if folder == "sent" and not is_user:

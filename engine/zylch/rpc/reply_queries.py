@@ -58,6 +58,7 @@ async def emails_needs_reply(params: Dict[str, Any], notify: NotifyFn) -> Any:
     method existed. `note` is set when some thread could not be read at all.
     """
     from zylch.api.token_storage import get_email, get_provider
+    from zylch.email.identity import verified_user_addresses
     from zylch.storage.storage import Storage
     from zylch.utils.reply_need import classify
 
@@ -88,6 +89,17 @@ async def emails_needs_reply(params: Dict[str, Any], notify: NotifyFn) -> Any:
 
     user_email = (get_email(owner_id) or "").lower()
     store = Storage.get_instance()
+    # Ours = the primary plus the active mailboxes' addresses: an address a
+    # mailbox logs in with is verified by its connection. Declared aliases
+    # are deliberately NOT folded in: counting more messages as ours would
+    # make more conversations eligible to be called settled, and that is
+    # the direction that loses a customer. An answer sent from an alias
+    # simply leaves the conversation looking unanswered, which is the safe
+    # reading (D2). `emails.list_by_thread` reports `is_user_sent` from the
+    # same set, so what is ours here is ours there.
+    ours = set(verified_user_addresses(owner_id))
+    if user_email:
+        ours.add(user_email)
 
     candidates: List[Dict[str, Any]] = []
     keys: List[str] = []
@@ -109,13 +121,7 @@ async def emails_needs_reply(params: Dict[str, Any], notify: NotifyFn) -> Any:
         answered_before = False
         for r in rows:
             from_email = (r.get("from_email") or "").strip().lower()
-            # Strict primary-address match, exactly as `emails.list_by_thread`
-            # reports `is_user_sent`. Aliases are deliberately NOT folded in:
-            # counting more messages as ours would make more conversations
-            # eligible to be called settled, and that is the direction that
-            # loses a customer. An answer sent from an alias simply leaves the
-            # conversation looking unanswered, which is the safe reading.
-            is_ours = bool(user_email) and from_email == user_email
+            is_ours = from_email in ours
             if is_ours:
                 if not r.get("is_auto_reply"):
                     # Our own autoresponder is not an answer — the engine has

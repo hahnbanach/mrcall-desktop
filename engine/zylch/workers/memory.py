@@ -447,6 +447,16 @@ class MemoryWorker:
                 logger.warning(f"No contact email for {email_id}")
                 self.storage.mark_email_processed(self.owner_id, email_id)
                 return True
+            # The user's own mail (from the primary, an alias or another of
+            # the profile's mailboxes) never makes the user a contact. The
+            # picker hands over no recipients, so there is no other party
+            # to extract for: mark it processed and spend nothing.
+            from zylch.email.identity import is_user_address
+
+            if is_user_address(self.owner_id, contact_email):
+                logger.info(f"[memory] email {email_id} is the user's own mail: no contact entity")
+                self.storage.mark_email_processed(self.owner_id, email_id)
+                return True
 
             source = self._source(
                 "email", email_id, self._format_email_data(email, contact_email), "memory:email"

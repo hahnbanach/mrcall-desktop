@@ -1041,11 +1041,11 @@ async def handle_email(args: List[str], config: ToolConfig, owner_id: str) -> st
             days = int(parse_flag("--days", "7"))
             since_date = (datetime.now(timezone.utc) - timedelta(days=days)).isoformat()
 
-            # Get user's email domain to filter out sent emails
+            # The user's mail: the primary's domain, or any address the user
+            # writes from (the same rule the trainers apply).
+            from zylch.email.identity import is_user_sender
+
             user_email = get_email(owner_id) or ""
-            user_domain = (
-                user_email.split("@")[1].lower() if user_email and "@" in user_email else ""
-            )
 
             # Fetch more emails to allow filtering, then group by thread
             with get_session() as session:
@@ -1086,7 +1086,7 @@ async def handle_email(args: List[str], config: ToolConfig, owner_id: str) -> st
             received_emails = []
             for email in emails:
                 from_email_addr = (email.get("from_email") or "").lower()
-                if user_domain and user_domain in from_email_addr:
+                if is_user_sender(owner_id, from_email_addr, user_email):
                     continue  # Skip emails sent by user
                 received_emails.append(email)
 

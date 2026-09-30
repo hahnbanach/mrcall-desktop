@@ -39,7 +39,9 @@ async def analyze_recent_email_events(
     totals. See the module docstring for the history of fixes folded
     into this branch.
     """
-    user_emails = {worker.user_email} if worker.user_email else set()
+    user_emails = set(worker.user_aliases)
+    if worker.user_email:
+        user_emails.add(worker.user_email)
     logger.debug(
         f"[TASK] _analyze_recent_events" f" user_emails={user_emails}",
     )

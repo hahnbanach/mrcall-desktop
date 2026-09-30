@@ -15,6 +15,7 @@ import logging
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Tuple
 
+from zylch.email.identity import is_user_sender
 from zylch.llm import make_llm_client
 from zylch.storage import Storage
 from zylch.memory import HybridSearchEngine, EmbeddingEngine, MemoryConfig
@@ -318,8 +319,8 @@ class EmailTaskAgentTrainer:
         for thread in threads:
             for email in thread.get("emails", []):
                 from_email = email.get("from_email", "").lower()
-                # Exclude user's own domain
-                if from_email and self.user_domain and self.user_domain not in from_email:
+                # Exclude the user (primary domain, or any address they write from)
+                if from_email and not is_user_sender(self.owner_id, from_email, self.user_email):
                     contacts.add(from_email)
 
         return list(contacts)
@@ -375,7 +376,7 @@ class EmailTaskAgentTrainer:
             if len(body) > MAX_EMAIL_BODY_CHARS:
                 body = body[:MAX_EMAIL_BODY_CHARS] + "...[truncated]"
 
-            is_user = self.user_domain and self.user_domain in from_email.lower()
+            is_user = is_user_sender(self.owner_id, from_email, self.user_email)
             sender_label = f"{from_email} [USER]" if is_user else from_email
 
             thread_text = f"""

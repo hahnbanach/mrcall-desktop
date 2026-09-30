@@ -93,28 +93,20 @@ def parse_user_aliases(raw: Optional[str]) -> "frozenset[str]":
 
 
 def load_user_aliases_for_owner(owner_id: str) -> "frozenset[str]":
-    """Best-effort fetch of the user's ``EMAIL_ALIASES`` setting.
+    """Every address the user writes from, besides being the profile's primary.
 
-    Reads from the same Settings layer the renderer writes through.
-    Never raises — a missing setting / unbootable Settings object just
-    means no aliases (degrades to the pre-2026-05-28 strict-match
-    behaviour). Caller passes the result to ``build_thread_history`` /
-    ``_is_user_email`` so all turns Jane sent from a secondary identity
-    are marked ``USER REPLY ✓``.
+    Delegates to :func:`zylch.email.identity.user_addresses`: declared
+    ``EMAIL_ALIASES`` plus the addresses of the profile's active
+    mailboxes (and the primary itself). Never raises. Callers pass the
+    result to ``build_thread_history`` / ``_is_user_email`` so every turn
+    the user sent from a secondary identity is marked ``USER REPLY ✓``.
     """
     try:
-        import os
+        from zylch.email.identity import user_addresses
 
-        from zylch.config import settings as _settings
-
-        raw = (
-            os.environ.get("EMAIL_ALIASES")
-            or getattr(_settings, "email_aliases", "")
-            or ""
-        )
-        return parse_user_aliases(raw)
+        return user_addresses(owner_id)
     except Exception:
-        logger.debug("[thread_presenter] could not load EMAIL_ALIASES — degrading to strict match")
+        logger.debug("[thread_presenter] could not load user addresses — degrading to strict match")
         return frozenset()
 
 

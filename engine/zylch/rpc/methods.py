@@ -1634,6 +1634,14 @@ async def emails_list_by_thread(
     owner_id = _owner_id()
     provider = get_provider(owner_id)
     user_email = (get_email(owner_id) or "").lower()
+    # Ours = the primary plus the active mailboxes' addresses (verified by
+    # their connections); declared aliases are not, exactly as
+    # `emails.needs_reply` reads it (D2), so the two never disagree.
+    from zylch.email.identity import verified_user_addresses
+
+    user_set = set(verified_user_addresses(owner_id))
+    if user_email:
+        user_set.add(user_email)
     logger.debug(
         f"[rpc] emails.list_by_thread owner_id={owner_id} "
         f"provider={provider} thread_id={thread_id}"
@@ -1686,7 +1694,7 @@ async def emails_list_by_thread(
                     "body_plain": body_clean,
                     "body_html": body_html_raw,
                     "is_auto_reply": bool(r.get("is_auto_reply")),
-                    "is_user_sent": bool(user_email and from_email.lower() == user_email),
+                    "is_user_sent": from_email.lower() in user_set,
                     "has_attachments": bool(r.get("has_attachments")) or bool(attach_names),
                     "attachment_filenames": attach_names,
                 }
@@ -1753,8 +1761,8 @@ async def emails_list_sent(
     """emails.list_sent(limit=50, offset=0) -> {"threads": [...]}.
 
     Symmetric to `emails.list_inbox` but filters for threads whose
-    latest email was sent by the profile owner (from_email ==
-    owner_email).
+    latest email was sent from any address the user writes from (the
+    primary, declared aliases, active mailboxes).
     """
     from zylch.api.token_storage import get_email
     from zylch.storage.storage import Storage
