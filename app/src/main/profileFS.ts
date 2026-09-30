@@ -56,7 +56,6 @@ export const KNOWN_KEYS: ReadonlySet<string> = new Set([
   'USER_FULL_NAME',
   'USER_IBAN',
   'USER_LANGUAGE',
-  'USER_NOTES',
   'USER_PHONE',
   'USER_SECRET_INSTRUCTIONS',
   'USER_VAT_NUMBER'
