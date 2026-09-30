@@ -83,8 +83,11 @@ instructions: no profile setting, no fallback.
 | `instructions.store` | `space_id`, `path`, `content_base64`, `expected_revision` | Document metadata (as `projects.write`) |
 | `instructions.preview` | — | `{space_id, documents: [{path, revision, sha256, content_base64}], block}` for the calling profile; read-only, no LLM call |
 
-`instructions.store` is the only writer: `projects.write` and
-`projects.create` refuse the reserved slug with `-32046`. Authorisation is
+`instructions.store` is the only RPC that writes these documents:
+`projects.write` and `projects.create` refuse the reserved slug with
+`-32046`. The one other path that can add revisions is `memory.join`, which
+merges a joined company's whole project history including this project; it
+needs the company key and the scheduled operator is denied it. Authorisation is
 derived from the profile's provenance, never from a setting: the profile
 that minted the company memory (`MEMORY_KEY_SOURCE=mint`) may store any of
 the three paths; any other profile may store only its own `mail/<mailbox>.md`
