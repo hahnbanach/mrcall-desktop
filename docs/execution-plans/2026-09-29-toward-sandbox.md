@@ -42,8 +42,12 @@ findings are folded in below.
 - Host: units and tmpfiles as `docs/remote-backend.md` B.1 installs them;
   `update-daemons.sh` restarts every daemon when the checkout changes and is
   run by the reconcile path/timer; `zylch-provisiond.service` runs as
-  `mrcalld`. Six live profiles, four of them one company (Café124). Pinned
-  release `8d83193`.
+  `mrcalld`. Seven live daemons, four of them one company (Café124). The
+  four Café124 daemons run pinned releases: their drop-ins set `PYTHONPATH`
+  (and, for production@, `ExecStart`) to a directory under
+  `/home/mrcalld/releases`. The other three run the service checkout, which
+  the nightly `zylch-reconcile.timer` pulls from origin/main, restarting
+  every daemon on any new commit.
 
 ## M1 — Hotfix: close the tenant boundary in code
 
@@ -91,7 +95,9 @@ yields nothing outside the profile; `send_email` with a sibling-profile
 `.env` in `attachment_paths` refused before any SMTP call; a locally built
 message with attachments
 named `/etc/passwd`, `../../x`, `.env`, `sub/dir.pdf` lands as `passwd`, `x`,
-`attachment_<n>`, `dir.pdf` under `downloads/`; `target_dir=<profile root>`
+`.env`, `dir.pdf` under `downloads/` (a dotfile name stays itself inside
+`downloads/`, never the profile root; only empty or dot-only names become
+`attachment_<n>`); `target_dir=<profile root>`
 refused; `run_python` refused with the flag and working without; `ZYLCH_SERVE`
 refused by `settings.update`; existing `tests/tools`, `tests/email`,
 `tests/rpc` green; `ruff` clean. Live on a scratch profile: the same probes
@@ -152,7 +158,37 @@ absolute path refused ("outside the allowed folders"), by name and by
 B, A's root, `~`, `/tmp` and accepts `downloads/sub`. B's files unchanged
 after the run. Not probed live: `download_attachment` end to end (needs an
 IMAP mailbox; covered by `save_attachments` tests on a local message).
-Deploy to the VPS is still to do.
+Deployed 2026-09-30 to all seven daemons.
+- The three unpinned ones run the service checkout at `ee4df02`: M1, the M2
+  host-independent code, the logrotate stanza with `su` and the WhatsApp fix
+  below.
+- The four Café124 daemons get M1 as backports onto the code they already
+  ran: `hotfix/m1-wa-on-k3` (`f342c5c` = 8d83193 + M1 + the WhatsApp fix) for
+  C06xH, YZNI2 and ZwpLe, and `hotfix/m1-wa-on-voice` (`53df502` = voice
+  release 8fb21d3 + the same) for production@. The voice-line base is not on
+  origin, so `53df502` exists only in the host's development repository.
+- Each backport is a read-only tree `/home/mrcalld/releases/<release>-m1-<sha>`
+  selected by the `Environment=PYTHONPATH=` line of the unit's pinning
+  drop-in. Units were switched one at a time by a script that verifies and
+  rolls back; for production@ it is gated on the call ledger and never
+  restarts with a call in flight.
+- Integration review of both backports and of the switch: APPROVED.
+  Rollback: `/etc/mrcalld/rollback-toward-sandbox-20260930/ROLLBACK.txt`.
+- Post-switch evidence per unit: the process `PYTHONPATH` and the import
+  resolve to the release, `serving JSON-RPC` with no error, socket
+  `660 mrcalld:caddy`, Caddy 401 without a token. production@ also answers
+  `/healthz` `calls_available: true` locally and through the tunnel, and
+  unsigned Vonage answer/event and OpenAI webhooks get 401/401/400. A host
+  probe of each release with the unit's own interpreter passed 17/17.
+- The Café124 users were not asked about `run_python` or absolute paths:
+  DEBUG engine logs record every tool input (`full_input=`), and the four
+  profiles' full history has no `run_python` call and no absolute read path
+  outside the tool's own download folder.
+- Extension beyond the enumeration above: `_download_audio` named WhatsApp
+  voice notes `wa_media/<message id>.ogg` with the sender-chosen id. The id
+  now names the file only when it matches `[A-Za-z0-9_-]{1,128}`, otherwise
+  `wa_<sha256[:32]>`, and the path is confined to `wa_media` in every mode
+  (`ee4df02`). Production had no unsafe id among 22,464 stored messages.
 
 ## M2 — Per-profile OS identity and read-only code
 
@@ -334,8 +370,9 @@ Caddy tries the new socket path then the flat one during the window.
 tenant run outside the unit goes through `umask 007`. `create` refuses
 while the company's legacy store exists (2a first). `delete` derives
 last-holder from group membership and removes the empty group and dir.
-logrotate no longer uses `su`; provisiond's status treats the drop-in as
-proof a migrated profile exists.
+logrotate keeps `su mrcalld mrcalld`: the unmigrated profile dirs are
+`0770 mrcalld`, and root's logrotate skips their logs without it.
+provisiond's status treats the drop-in as proof a migrated profile exists.
 
 Reviews: A (plan conformance + Python) REVISE → APPROVED at `3ce1928`
 (legacy path echoed; `.env` key beating the unit's; bare-string rekey;
@@ -369,7 +406,12 @@ binary reported) and `security` exposure 4.4.
 
 **Left for the host session (VM scratch first):** unit start under the
 drop-in (`systemd-run` proof), Caddy reaching the new socket, the two-user
-WAL test on one store, criteria 1 (all clauses), 2, 4, 5, 7; then 2a for
+WAL test on one store, criteria 1 (all clauses), 2, 4, 5, 7; log rotation
+for a migrated profile (the shared stanza's `su mrcalld` cannot write into a
+tenant-owned dir); on every host, `/etc/systemd`, `/etc/systemd/system`,
+`systemd-networkd.service.d` and `/etc/qemu` at `0755` before any tenant
+user exists (the provider image ships them `0777`, which lets any local user
+plant a unit drop-in that root runs; done on desktop.mrcall.ai); then 2a for
 Café124 in one all-stopped window, then 2b one profile per day. Runbook
 M2.7 as the scripts now are, per profile U, after its company's 2a:
 0. once per host: warm the embedding cache as `mrcalld`
