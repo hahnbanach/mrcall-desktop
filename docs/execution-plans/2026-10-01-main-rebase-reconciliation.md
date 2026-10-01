@@ -1,5 +1,5 @@
 ---
-status: active
+status: completed
 ---
 
 # Desktop main rebase reconciliation
@@ -74,6 +74,13 @@ completed plan and final approval, then publish by regular push to `origin/main`
 If fetched `origin/main` has advanced, integrate and review the additional
 changes before pushing. Verify remote `main` equals local `HEAD`; leave all
 original untracked files and stash intact.
+
+Final gate: separate fresh reviewer APPROVED exact candidate
+`15429f86b50949e4fc022474cd56d99b2823ddb2`. Regular push succeeded from
+`19639d2` to `15429f8`; subsequent `git ls-remote origin refs/heads/main`
+matched local `HEAD` exactly. The tracked working tree was clean, with only the
+original untracked entries retained. This completion update is a documentation
+receipt after verified publication; no runtime or deployment changes are added.
 
 ## Risk and recovery
 
