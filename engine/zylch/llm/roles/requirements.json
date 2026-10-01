@@ -333,12 +333,12 @@
       }
     },
     "claude-fable-5-1": {
-      "sampling": null,
+      "sampling": "drop",
       "forced_tool_choice": "auto",
       "thinking_off": null
     },
     "anthropic/claude-fable-5.1": {
-      "sampling": null,
+      "sampling": "drop",
       "forced_tool_choice": "auto",
       "thinking_off": null
     }

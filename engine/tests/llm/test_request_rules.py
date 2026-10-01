@@ -10,7 +10,7 @@ for every model the resolved table or the allowlist names, with the
 dispatch captured. The forbidden fields below are written from Anthropic's
 model reference, independently of `requirements.json`'s `request_rules`:
 
-- any sampling field: Opus 4.7 and later, Sonnet 5;
+- any sampling field: Opus 4.7 and later, Sonnet 5, Fable 5 and 5.1;
 - a non-default sampling value: Sonnet 5.5;
 - a forced tool_choice (`any` / `tool`): Fable 5.1, Opus 5.5, Sonnet 5.5;
 - thinking on by default when omitted: Sonnet 5 / 5.5, Opus 5 / 5.5; Sonnet
@@ -36,7 +36,7 @@ from zylch.llm.client import LLMClient
 from zylch.llm.openrouter_client import OpenRouterClient
 
 ROLES = Path(__file__).resolve().parents[2] / "zylch" / "llm" / "roles"
-ANY_SAMPLING = {"opus-4-7", "opus-4-8", "opus-5", "opus-5-5", "sonnet-5"}
+ANY_SAMPLING = {"opus-4-7", "opus-4-8", "opus-5", "opus-5-5", "sonnet-5", "fable-5-1"}
 NON_DEFAULT_SAMPLING = {"sonnet-5-5"}
 FORCED_TOOL = {"fable-5-1", "opus-5-5", "sonnet-5-5"}
 THINKS_BY_DEFAULT = {"sonnet-5", "sonnet-5-5", "opus-5", "opus-5-5"}

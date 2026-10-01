@@ -76,8 +76,8 @@ def apply(
     if not thinking:
         return out
     if "thinking" not in out:
-        # Default thinking could exhaust a short budget, and a model that
-        # thinks may not be forced to call a tool.
+        # Default thinking could exhaust a short budget; with a forced tool it
+        # is turned off too (required on Bedrock, harmless on the Claude API).
         if thinking_off and (out.get("max_tokens", 0) <= SHORT_OUTPUT or forced):
             out["thinking"] = dict(thinking_off)
     elif out["thinking"] == DISABLED and thinking_off != DISABLED:
