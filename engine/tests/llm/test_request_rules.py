@@ -36,7 +36,7 @@ from zylch.llm.client import LLMClient
 from zylch.llm.openrouter_client import OpenRouterClient
 
 ROLES = Path(__file__).resolve().parents[2] / "zylch" / "llm" / "roles"
-ANY_SAMPLING = {"opus-4-7", "opus-4-8", "opus-5", "opus-5-5", "sonnet-5", "fable-5-1"}
+ANY_SAMPLING = {"opus-4-7", "opus-4-8", "opus-5", "opus-5-5", "sonnet-5", "fable-5", "fable-5-1"}
 NON_DEFAULT_SAMPLING = {"sonnet-5-5"}
 FORCED_TOOL = {"fable-5-1", "opus-5-5", "sonnet-5-5"}
 THINKS_BY_DEFAULT = {"sonnet-5", "sonnet-5-5", "opus-5", "opus-5-5"}

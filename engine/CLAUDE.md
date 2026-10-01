@@ -16,6 +16,7 @@ All knowledge lives in `./docs/`. This file is the index.
 | [guides/cli-commands.md](docs/guides/cli-commands.md) | CLI and slash command reference |
 | [guides/quick-start.md](docs/guides/quick-start.md) | Install, setup, first use |
 | [features/daily-llm-budget.md](docs/features/daily-llm-budget.md) | Per-request spending admission, supported billing and recovery |
+| [features/model-selection.md](docs/features/model-selection.md) | Roles, requirements, the resolver and the resolved table as the model and price source |
 | [features/gpt-live-smoke.md](docs/features/gpt-live-smoke.md) | Isolated GPT-Live M1 runner; live smoke and integration review passed |
 | [features/voice-agent-configuration.md](docs/features/voice-agent-configuration.md) | Operator RPC settings, selected caller facts and the opt-in M3 engine listener |
 | [features/project-memory.md](docs/features/project-memory.md) | Shared authored project documents, revisions and RPC contract |
@@ -93,17 +94,20 @@ that process or the kernel's direct classifiers. See
 
 Saved `LLM_PROVIDER` selects Anthropic BYOK, OpenRouter BYOK or MrCall credits.
 An unset selector preserves legacy saved-key routing. All paid calls go through
-`zylch/llm/client.py` and the durable daily reservation ledger. Default models
-are inexpensive; saved explicit models remain until changed deliberately.
+`zylch/llm/client.py` and the durable daily reservation ledger. No model is a
+default in code: each role's model comes from the resolved table
+([model selection](docs/features/model-selection.md)); saved explicit models
+remain until changed deliberately.
 
-- `llm/model_policy.py`: saved provider, economy/balanced/custom role defaults.
+- `llm/model_policy.py`: saved provider; explicit `MODEL_<ROLE>`, else the table's pick for economy/balanced, else custom's base model (economy when none).
+- `llm/roles/`: `requirements.json`, `resolved.json`, the resolver, the table reader, the one price source and per-model request rules.
 - `llm/bounded_proxy.py`: quoted maximum debit and actual receipt protocol;
   old unbounded proxy servers refuse. Firebase JWT remains in memory.
 - `llm/openrouter_client.py`: Claude/GLM Messages and K3 max Chat adapters with provider price caps; see
   [K3 reasoning](docs/features/k3-reasoning.md).
 - `rpc/usage_queries.py`: spending, effective models, `llm.models` catalog and paged receipt recovery.
 - `MRCALL_PROXY_URL`: default `https://zylch.mrcall.ai`.
-- `MRCALL_CREDITS_MODEL`: explicit custom model; unset defaults to Haiku.
+- `MRCALL_CREDITS_MODEL`: explicit custom model; unset resolves each role's `mrcall` pick under economy.
 
 [Spending protection](docs/features/daily-llm-budget.md) specifies scope,
 pricing, uncertainty and recovery. [Bounded preparation](docs/features/bounded-preparation.md)

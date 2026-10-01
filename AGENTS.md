@@ -129,14 +129,18 @@ The engine reserves each request's maximum cost against the saved daily USD
 budget before dispatch. Uncertain requests retain their holds across restarts
 and UTC midnight. MrCall calls use the versioned bounded quote/execute/status
 contract; an older server without that contract refuses paid work. OpenRouter
-supports an explicitly priced Claude/GLM/K3 catalog with provider price caps,
+supports an explicitly priced catalog (the resolved table plus an allowlist of
+every model billed before it) with provider price caps,
 through either personal keys or MrCall credits. Payment and model selection
-are separate; `llm.models` discovers available models. Economy, balanced and
-custom presets expose effective role models; a small synthetic comparison
+are separate; `llm.models` discovers available models. Economy and balanced
+are output-price ceilings: each role's model is resolved from requirements
+into a committed table, and no model is a default in code. Explicit
+`MODEL_<ROLE>` overrides win under every preset. A small synthetic comparison
 does not certify production quality. Automatic preparation is off by default and explicit runs have
 a saved batch limit (default 25 steps).
 
-Engine contracts: [`engine/docs/features/daily-llm-budget.md`](engine/docs/features/daily-llm-budget.md)
+Engine contracts: [`engine/docs/features/daily-llm-budget.md`](engine/docs/features/daily-llm-budget.md),
+[`engine/docs/features/model-selection.md`](engine/docs/features/model-selection.md)
 and [`engine/docs/features/bounded-preparation.md`](engine/docs/features/bounded-preparation.md).
 `MRCALL_PROXY_URL` selects the billing server (default `https://zylch.mrcall.ai`).
 App behavior: [`app/docs/bounded-preparation.md`](app/docs/bounded-preparation.md).

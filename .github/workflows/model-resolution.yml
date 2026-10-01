@@ -1,0 +1,54 @@
+name: Model resolution drift
+
+# The role table (milestone 10a, brief D5): engine/zylch/llm/roles/resolved.json
+# is what the resolver chose from OpenRouter's catalogue and benchmarks when
+# it was last applied. This job re-runs the resolver against the live sources
+# WITHOUT --apply and fails when the committed table would change, so drift is
+# visible, never silent, and never applied unreviewed: a red run is answered
+# by running `python engine/scripts/resolve_models.py --apply` by hand and
+# committing the reviewed diff. The script loads the resolver by file path and
+# uses the standard library alone, so nothing is installed. The report (the
+# table and its diff) is uploaded as an artifact on every run.
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '17 6 * * 1'  # Mondays 06:17 UTC
+
+permissions:
+  contents: read
+
+jobs:
+  drift:
+    name: Resolver --check against live sources
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Require the OpenRouter key
+        env:
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+        run: |
+          if [ -z "$OPENROUTER_API_KEY" ]; then
+            echo "::error::OPENROUTER_API_KEY secret is not set; add it in the repository's Actions secrets"
+            exit 1
+          fi
+
+      - name: Resolve and compare with the committed table
+        env:
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+        run: |
+          set -o pipefail
+          python -I engine/scripts/resolve_models.py --check 2>&1 | tee model-resolution-report.txt
+
+      - name: Upload the report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: model-resolution-report
+          path: model-resolution-report.txt
+          if-no-files-found: warn

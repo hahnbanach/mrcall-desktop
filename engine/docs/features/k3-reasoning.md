@@ -20,8 +20,10 @@ retains its reservation for reconciliation. The timeout is 600 seconds for K3
 max (reasoning is slower than the legacy disabled-reasoning transport).
 
 Auxiliary narration, correction learning, compaction and solve helpers follow
-the configured model instead of pinning Anthropic. An explicit
-`ZYLCH_COMPACTION_MODEL` override is preserved. Reply classification uses K3's
+the configured model instead of pinning Anthropic. Since milestone 10a
+compaction is the `COMPACTION` role: `ZYLCH_COMPACTION_MODEL` is no longer read,
+and an explicit override is `MODEL_COMPACTION` ([model selection](model-selection.md)).
+Reply classification uses K3's
 supported default sampling when K3 is selected.
 
 Saved memory extraction prompts receive a final serialization-only instruction:

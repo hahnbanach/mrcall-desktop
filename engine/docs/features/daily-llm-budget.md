@@ -100,8 +100,10 @@ committed credit consumption can settle the reservation. Legacy proxy servers
 refuse with upgrade guidance. Lost answers can recover their billing receipt
 through read-only status without repeating inference or consumption.
 
-OpenRouter supports GLM 5.2, Kimi K3 and namespaced Claude Opus 5, Sonnet 5
-and Haiku 4.5. Legacy requests use the Messages API with thinking disabled;
+OpenRouter supports the models the resolved table picks plus the allowlisted
+GLM 5.2, Kimi K3 and namespaced Claude Opus 5, Sonnet 5 and Haiku 4.5
+([model selection](model-selection.md)). Legacy requests use the Messages API
+with thinking disabled where the model allows it (per-model request rules);
 [K3 max](k3-reasoning.md) uses Chat completions with maximum reasoning. Both
 adapters send decimal price caps, disable fallbacks and validate the
 actual charge returned in `usage.cost`. Missing or invalid receipts keep holds.
@@ -145,10 +147,13 @@ Implementation evidence: [incident](../investigations/2026-09-11-llm-spend-incid
 `LLM_PROVIDER` selects `anthropic`, `openrouter` or `mrcall`, even when more than
 one credential is stored. Only an unset selector uses legacy saved-Anthropic-key
 routing; an ambient key cannot override an active profile. `LLM_MODEL_PRESET`
-selects economy (Haiku/GLM), balanced (Sonnet5/GLM) or custom. Saved explicit
+selects economy (output-price ceiling USD 10 per million tokens), balanced
+(USD 20) or custom; each role's model under a ceiling comes from the resolved
+table ([model selection](model-selection.md)). Saved explicit
 role models take priority; the Desktop preset gesture clears individual overrides
 when saved. Existing explicit models are preserved until such a deliberate edit.
-Unconfigured models default to inexpensive Haiku or GLM. Model choice never
+No model is a default in code: a custom profile with no saved model resolves
+each role under economy. Model choice never
 changes billing provider. Long-lived clients refuse dispatch after relevant
 saved settings change; start a new run or conversation to create fresh clients.
 
@@ -170,6 +175,24 @@ The OpenRouter rates frozen on 2026-09-13 are GLM 0.6/2, Kimi K3
 million input/output tokens. Each request enforces these provider ceilings;
 actual accounting still uses `usage.cost`. Anthropic models reserve twice the
 input ceiling to cover possible upstream one-hour cache writes.
+
+### Where prices come from (since milestone 10a)
+
+One price source, `zylch/llm/roles/prices.py`, reads two committed files: the
+resolved table (`roles/resolved.json`, every pick, Anthropic fallback and
+MrCall id at the price the resolver recorded) and the allowlist of
+`roles/requirements.json` (every model billed before the table existed, at the
+rate above and the eleven direct rates). Where an id is in both, the
+allowlist's billed price wins, so a resolver run never moves the rate an
+existing profile is held and capped at; two table rows naming one id keep the
+higher price. `budget_pricing.PRICES` (direct) and `openrouter_pricing.RATES`
+read it; the snapshot-id map and the K3 and Sonnet 5 adapters stay. A test
+holds the direct Anthropic rates equal to OpenRouter's `anthropic/*` rates.
+`usage.py`'s estimate prices a listed id at its own rate (so a GLM or MiMo pick
+is not counted at Opus rates) and keeps the family fallback, Opus when
+unmatched, for an unlisted one. The reservation, settlement, unpriced refusal
+and corpus cap contracts above are unchanged; only the source of the numbers
+moved. See [model selection](model-selection.md).
 
 Settings exposes `ANTHROPIC_MODEL`, `OPENROUTER_MODEL` and
 `MRCALL_CREDITS_MODEL` separately. Selecting a default model explicitly sets

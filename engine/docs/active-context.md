@@ -129,8 +129,8 @@ statement built from strings ([what it cannot see](features/mnemonic-writer-inve
 `memory_operations.approval` column is removed by a table rebuild. Merged into
 `main` (`71bbc21`); **not deployed**. A store it migrates cannot be opened by a milestone 5–7 build.
 
-**2026-09-30 — Milestone 9, on branch `mnemonic-m9`, not merged, not deployed.**
-On the branch: the kernel template audit reads the cron deny list in either of
+**2026-09-30 — Milestone 9, merged into `main` (`19639d2`), not deployed.**
+In it: the kernel template audit reads the cron deny list in either of
 its two forms and refuses neither/both, so it passes against `cs-kernel`
 `258c927` and against current kernel `main` (`ba79cc1`) with every inventory
 count unchanged; the installed-client journey — the real `cs` entry point of an
@@ -182,11 +182,32 @@ the extraction worker raises on an answer that is neither bare `SKIP` nor an
 translated the Italian corrections into English (seven `must_preserve`
 misses). The journey workflow is green on every run of the pushed branch
 (runs 2 to 8, the pinned kernel cloned with the workflow's own token).
-Still pending: the merge; and the rollout, which
+Still pending: the rollout, which
 is the CTO's step-by-step decision on the hb plan
 `docs/execution-plans/2026-09-30-mnemonic-rollout.md`, with a migration
 rehearsal on a store copy before any live step. The hosted engines still run
 pre-milestone-5 code.
+
+**2026-10-01 — Milestone 10a, on branch `model-selection-m10a`, not merged,
+not deployed.** No model is a default in engine code any more: every paid
+call site names one of sixteen roles; `zylch/llm/roles/requirements.json`
+declares each role's rule (maximise or satisfice), index and floor, and the
+`economy` (USD 10) and `balanced` (USD 20) output-price ceilings;
+`scripts/resolve_models.py`, ported from `mrcall-ai-kit`, resolves them from
+OpenRouter's catalogue and benchmarks into the committed
+`roles/resolved.json` (main pick, Anthropic fallback, MrCall column), which
+is the one model source and, with the allowlist of every model billed
+before, the one price source; Haiku is excluded from every pool and stays
+only as a priced custom choice. Per-model request rules keep the new picks
+from refusing old request shapes; a name boundary and a role inventory test
+freeze both. Contract: [model selection](features/model-selection.md).
+Reviews: brief and plan APPROVED (round 2 each); integration reviews 1
+(slices 0–2) and 2 (slices 3–4) REVISE, repaired, then APPROVED. On the
+2026-10-01 table the `economy` `MNEMONIC` pick is
+`anthropic/claude-sonnet-5.5`. Pending: the CTO's ceilings and floors, the
+`OPENROUTER_API_KEY` repository secret for the drift workflow
+(`model-resolution.yml`), the final review, the merge; then milestone 10b,
+the one paid re-measure of milestone 9's AC 5 on the resolver's pick.
 
 Support's engine exposes approval-gated `initiate_call` through the dashboard's
 Firebase atom API, with an explicit calling assistant ID. A live request on
@@ -260,7 +281,7 @@ API budgets; see [control boundaries](../../docs/operator-setup.md#ai-execution-
    uncertain requests. Keep automatic processing and preparation paused.
 2. Verify the Mac application through its GUI; start a bounded batch only when
    requested and review its role-specific outputs.
-3. Merge `mnemonic-m9` as is (decision taken; workflow green on the pushed
-   branch first); re-measure AC 5 in milestone 10 on the resolver-chosen
+3. `mnemonic-m9` is merged (`19639d2`). Finish milestone 10a (final review,
+   merge), then re-measure AC 5 in milestone 10b on the resolver-chosen
    model; deploy only through the rollout plan.
 4. Continue other workstreams under their existing plans.

@@ -13,6 +13,7 @@ from functools import lru_cache
 from pathlib import Path
 
 from ..budget_pricing import BudgetError
+from . import label
 
 HERE = Path(__file__).resolve().parent
 PRESETS = ("economy", "balanced")
@@ -63,7 +64,8 @@ def pick(preset: str, role: str, provider: str) -> str:
 
 def listed(provider: str) -> list[tuple[str, str]]:
     """``(id, label)`` for every model the table picks on `provider` plus the
-    allowlist rows of its transport; labels come from the catalogue id."""
+    allowlist rows of its transport; labels come from the catalogue id
+    through `roles.label` (the rule is in the package docstring)."""
     transport = {"anthropic": "direct", "openrouter": "openrouter"}[provider]
     key = "direct_id" if provider == "anthropic" else "catalogue_id"
     found: dict[str, str] = {}
@@ -75,4 +77,4 @@ def listed(provider: str) -> list[tuple[str, str]]:
     for model, row in _load("requirements.json").get("allowlist", {}).items():
         if row.get("transport") == transport:
             found.setdefault(model, row.get("catalogue_id") or model)
-    return [(model, catalogue.rsplit("/", 1)[-1]) for model, catalogue in found.items()]
+    return [(model, label(catalogue)) for model, catalogue in found.items()]

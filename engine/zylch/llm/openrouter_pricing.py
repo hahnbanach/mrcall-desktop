@@ -10,13 +10,14 @@ from decimal import ROUND_CEILING
 
 from .budget_pricing import PRICES, BudgetError, micro_usd
 from .budget_pricing import request_bound as validate_direct
+from .roles import label
 from .roles.prices import priced
 
 # Rates and labels come from the price source (`roles/prices.py`): the resolved table plus the allowlist's billed
 # OpenRouter rows. RATES stays a plain dict because reviewed evaluation runs
 # (`scripts/evaluate_model_quality.py`) override a rate in place.
 RATES = dict(priced("openrouter"))
-LABELS = {model: model.rsplit("/", 1)[-1] for model in RATES}
+LABELS = {model: label(model) for model in RATES}
 
 
 def request_bound(request):

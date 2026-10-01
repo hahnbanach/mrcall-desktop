@@ -31,8 +31,6 @@ export default function ModelPolicy({ provider, values, refreshKey, onChange }: 
   }, [provider, refreshKey])
   const base = BASE_KEYS[provider]
   const preset = values.LLM_MODEL_PRESET || 'custom'
-  const activePresetModel = provider === 'openrouter' ? 'GLM 5.2'
-    : preset === 'balanced' ? 'Claude Sonnet 5' : 'Claude Haiku 4.5'
   const overrides = Object.keys(ROLES).filter(key => values[key])
   const control = (key: string, label: string) => {
     const value = values[key] || ''
@@ -55,7 +53,7 @@ export default function ModelPolicy({ provider, values, refreshKey, onChange }: 
       : 'Paid directly using the personal API key saved on your engine.'}</p>
     {reason && <p role="status" className="text-sm">{reason}</p>}
     {preset !== 'custom' && <p role="status" className="text-sm font-medium">
-      {preset} preset controls the default: {activePresetModel}. The saved custom model below is inactive.
+      {preset} preset is a price ceiling: the engine resolves each job's model within it (Saved models shows the result after Save). The saved custom model below is inactive.
     </p>}
     {control(base, preset === 'custom' ? 'Default model' : 'Saved custom model — inactive while preset is selected')}
     {overrides.length > 0 && <p className="text-sm">{overrides.length} saved job override(s) remain active and take priority over the default. Review Advanced job models.</p>}

@@ -96,6 +96,13 @@ shows the active preset, and preserves explicit advanced role overrides. Cross-c
 [`../AGENTS.md`](../AGENTS.md), engine plumbing in
 [`../engine/CLAUDE.md`](../engine/CLAUDE.md).
 
+Model names and labels come from the engine (`llm.models`, the effective role
+models of `usage.today`, the settings schema); the app hard-codes none. The
+presets are price ceilings within which the engine resolves each job's model
+([model selection](../engine/docs/features/model-selection.md)).
+`npm run check:models` (`scripts/check-no-model-labels.mjs`) fails when a model
+name or id appears in `src/` outside a comment.
+
 ## Company memory — onboarding field and Settings card (since 2026-09)
 
 The memory key is one settings field, `MEMORY_KEY`, declared in the engine
