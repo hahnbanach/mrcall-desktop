@@ -98,17 +98,18 @@ engine detail in [`engine/docs/features/entity-memory-system.md`](engine/docs/fe
 ("Scope"); host operations in [`docs/remote-backend.md`](docs/remote-backend.md)
 ("Shared company memory on the host"); app surface in [`app/CLAUDE.md`](app/CLAUDE.md).
 
-## Hosted engines: one Unix user per profile (since 2026-09)
+## Hosted engines: one Unix user per profile (in rollout since 2026-09)
 
 A hosted engine (`zylch serve`) is multi-tenant on one host, and the
-boundary between tenants is the operating system, not the model: each
-migrated profile's daemon runs as its own Unix user `mc-<sha256(uid)[:12]>`
+boundary between tenants is the operating system, not the model. The code
+is on `main`; **nothing is migrated on the VPS yet** (state in the plan).
+Each migrated profile's daemon runs as its own Unix user `mc-<sha256(uid)[:12]>`
 inside a systemd sandbox, with the engine checkout read-only and its own
 root-only `ENCRYPTION_KEY`; its tools read and write only the profile's
 `downloads/` and `scratch/` folders, `run_python` is refused, and
 `DOCUMENT_PATHS`/`DOWNLOADS_DIR` are ignored (`settings.get` reports them
-under `ignored`). Model code and attachment filenames are confined on every
-engine, local included. Threat model and criteria:
+under `ignored`). On a local engine only the profile root is refused as a
+write target and attachment filenames are reduced to a basename. Threat model and criteria:
 [`docs/briefs/2026-09-29-toward-sandbox.md`](docs/briefs/2026-09-29-toward-sandbox.md);
 rollout state and runbook:
 [`docs/execution-plans/2026-09-29-toward-sandbox.md`](docs/execution-plans/2026-09-29-toward-sandbox.md);

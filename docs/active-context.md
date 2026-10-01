@@ -58,8 +58,8 @@ path confinement, `run_python` refused when serving) and the host-independent
 part of M2 (per-profile Unix user, dual-name company store, `rekey`,
 `mrcall-tenant` helper, transitional unit template) are on `main` at
 `c2b3ca5` and reviewed, **not yet deployed**: the VPS still runs every daemon
-as `mrcalld`, and M2 must first pass the scratch-unit probes on the
-`claude-mrcall-scratch` VM (`51.15.246.183`). Self-serve provisioning stays
+as `mrcalld`, and M2 must first pass the scratch-unit probes on a scratch
+VM (the operator keeps its address outside the repo). Self-serve provisioning stays
 closed until M2b is on all six profiles.
 
 Settings supports independent provider/model selection, daily budgets and bounded
@@ -119,8 +119,8 @@ from a quiet one.
   reload gap; reopen Settings after connection changes. See [backlog](harness-backlog.md).
 - Toward-sandbox: deploy M1 on the VPS, run the M2 scratch-unit probes on the
   VM, then 2a (Café124 store relocation, all four stopped) and 2b (one
-  profile per day); M3 egress and the operational floor (backups, pinned
-  rollout) follow. Both need a session with a shell on the host.
+  profile per day); M3 egress and the brief's parked operational floor
+  (backups, pinned rollout) follow. All need a session with a shell on the host.
 - Product chat, delegated sending, approval isolation and a comprehensive security
   review are deferred. Calendar integration, raw RPC errors,
   installer coverage and multi-window auth checks retain their existing owners.

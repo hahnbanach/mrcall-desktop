@@ -92,10 +92,13 @@ The model:
   shares `wss://<host>`; the app already appends `/ws/<uid>`.
 - Security over the network is the per-daemon Firebase-JWT gate
   (`token.uid == OWNER_ID`); a mis-route just fails `403`, so the routing is
-  a hint, not the boundary. Security **on the host** is the per-profile Unix
-  user: another company's daemon cannot read or write this profile's files,
-  and the engine's own tools are confined to the profile's `downloads/` and
-  `scratch/` folders on a hosted engine (M1, deployed with `main` ≥ `c2b3ca5`).
+  a hint, not the boundary. Security **on the host**, once a profile is
+  migrated, is its Unix user: another company's daemon cannot read or write
+  this profile's files; and the engine's own tools are confined to the
+  profile's `downloads/` and `scratch/` folders on a hosted engine (M1, on
+  `main` since `c2b3ca5`). **As of 2026-10-01 nothing is deployed to the
+  VPS yet**: every daemon there still runs as `mrcalld` on the pre-M1 release;
+  the rollout state is in the plan.
 - One idempotent **`sudo update-daemons.sh`** is the operational entry-point:
   pull code, discover profiles, re-apply the identity of already-migrated
   profiles, ensure one daemon each, prune orphans. It never migrates a
@@ -126,7 +129,8 @@ sudo caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile && sudo sy
 
 > **Confirm two assumptions for your box.** The unit template hard-codes user
 > `mrcalld` and `/home/mrcalld/mrcall-desktop/engine`. The tmpfiles entry
-> (`d /run/mrcalld 2750 mrcalld caddy -`) assumes **Caddy's group is `caddy`**
+> (`d /run/mrcalld 2751 mrcalld caddy -`; the other-execute bit lets a
+> migrated profile's user traverse to its own socket dir) assumes **Caddy's group is `caddy`**
 > — check with `id caddy`; if it differs (e.g. `www-data`), edit
 > `scripts/tmpfiles.d/mrcalld.conf` before installing. The setgid dir + the
 > daemon's `chmod(0o660)` on its socket are what let Caddy connect.
@@ -166,7 +170,7 @@ Then run the updater:
 rsync -az ~/.zylch/profiles/<uid>/ user@server:/tmp/<uid>/
 ssh user@server 'sudo mkdir -p /home/mrcalld/.zylch/profiles \
   && sudo mv /tmp/<uid> /home/mrcalld/.zylch/profiles/ \
-  && sudo chown -R mrcalld:mrcalld /home/mrcalld/.zylch'
+  && sudo chown -R mrcalld:mrcalld /home/mrcalld/.zylch/profiles/<uid>'   # only this dir: never -R the whole tree on a host with migrated profiles (`mrcall-tenant list`)
 # discover + start every profile
 ssh user@server 'sudo /home/mrcalld/mrcall-desktop/engine/scripts/server/update-daemons.sh'
 ```
@@ -195,7 +199,7 @@ then a single updater run picks them all up (use real disk, not `/tmp` if it's
 # server) into a staging dir under your own home, then move + chown as root:
 rsync -az --exclude='<uid-already-on-server>' ~/.zylch/profiles/ user@server:_stage/profiles/
 ssh user@server 'sudo mv ~/_stage/profiles/* /home/mrcalld/.zylch/profiles/ \
-  && sudo chown -R mrcalld:mrcalld /home/mrcalld/.zylch \
+  && sudo chown -R mrcalld:mrcalld /home/mrcalld/.zylch/profiles/$PROF \   # never the whole tree once `mrcall-tenant list` is non-empty
   && sudo /home/mrcalld/mrcall-desktop/engine/scripts/server/update-daemons.sh \
   && rm -rf ~/_stage'
 ```
@@ -229,9 +233,10 @@ sudo /home/mrcalld/mrcall-desktop/engine/scripts/server/update-daemons.sh --prun
   [the toward-sandbox brief](briefs/2026-09-29-toward-sandbox.md); the
   migration runbook (M2.7) and its rollback (`mrcall-tenant unmigrate`)
   in [the plan](execution-plans/2026-09-29-toward-sandbox.md). Root
-  executes two things from the `mrcalld`-writable checkout: the unit
-  files it installs and the helper it copies to `/usr/local/sbin`
-  (`install -m 750`, the only path a sudoers rule may name).
+  executes, from the `mrcalld`-writable checkout, the unit, tmpfiles and
+  logrotate files `update-daemons.sh` installs and the helper it copies to
+  `/usr/local/sbin` (`install -m 750`, the only path a sudoers rule may
+  name).
 - **WhatsApp is per profile.** The neonize session lives at
   `<profile>/whatsapp.db`; the global `~/.zylch/whatsapp.db` is a legacy
   fallback the daemons never use (`ZYLCH_PROFILE_DIR` is always set).
@@ -247,9 +252,10 @@ sudo /home/mrcalld/mrcall-desktop/engine/scripts/server/update-daemons.sh --prun
   copy the DB out first, or read via `sudo -u <daemon user> sqlite3 <db>`
   (`mrcalld` unmigrated, `mc-…` migrated; `mrcall-tenant names <uid>` prints
   it; `?immutable=1` only on a copy — it ignores the WAL, so it shows a stale
-  snapshot of a live DB). Every operator command that touches a tenant's
-  files goes through the helper's `as_tenant` pattern with `umask 007`.
-  Recovery: `chown <daemon user>` the `-wal`/`-shm` (safe when `-wal` is
+  snapshot of a live DB). Every store-touching operator command runs as the
+  tenant with `umask 007` (the helper's `as_tenant`, `join-company.sh`);
+  `rekey` is the one root step, followed by `mrcall-tenant create` to re-own
+  what root created. Recovery: `chown <daemon user>` the `-wal`/`-shm` (safe when `-wal` is
   0 bytes = nothing pending) and `systemctl restart` the unit.
 
 ## Agent runbook — exact commands
@@ -298,11 +304,11 @@ rsync -az ~/.zylch/profiles/"$PROF"/ "$SSH:/tmp/$PROF/"
 ssh "$SSH" "sudo mkdir -p /home/mrcalld/.zylch/profiles \
   && sudo rm -rf /home/mrcalld/.zylch/profiles/$PROF \
   && sudo mv /tmp/$PROF /home/mrcalld/.zylch/profiles/ \
-  && sudo chown -R mrcalld:mrcalld /home/mrcalld/.zylch \
+  && sudo chown -R mrcalld:mrcalld /home/mrcalld/.zylch/profiles/$PROF \   # never the whole tree once `mrcall-tenant list` is non-empty
   && sudo /home/mrcalld/mrcall-desktop/engine/scripts/server/update-daemons.sh"
 
 # verify
-ssh "$SSH" "systemctl is-active zylch-server@$PROF; sudo ls -l /run/mrcalld/$PROF.sock"
+ssh "$SSH" "systemctl is-active zylch-server@$PROF; sudo ls -l /run/mrcalld/$PROF.sock /run/mrcalld/$PROF/ws.sock 2>/dev/null"   # flat = unmigrated, <uid>/ws.sock = migrated
 curl -s -o /dev/null -w 'gate %{http_code}\n' https://<host>/ws/$PROF   # expect 401 (no token)
 ```
 
@@ -313,7 +319,8 @@ curl -s -o /dev/null -w 'gate %{http_code}\n' https://<host>/ws/$PROF   # expect
 - **The "[ws] serving" line is INFO**, which lands in
   `~mrcalld/.zylch/profiles/<uid>/zylch.log`, not the console. An empty console
   after start is normal — check `systemctl is-active zylch-server@<uid>` and
-  `sudo ls -l /run/mrcalld/<uid>.sock` (expect `srw-rw---- mrcalld caddy`).
+  `sudo ls -l /run/mrcalld/<uid>.sock` (expect `srw-rw---- mrcalld caddy`;
+  a migrated profile has `/run/mrcalld/<uid>/ws.sock`, `srw-rw---- mc-… caddy`).
 - **`/run/mrcalld` is on tmpfs** → recreated at boot by `systemd-tmpfiles`; the
   daemons re-bind their sockets on start, so a reboot self-heals.
 - **The server clock must be roughly correct** (token `exp` check); `timedatectl`
