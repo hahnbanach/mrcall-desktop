@@ -1521,7 +1521,7 @@ async def narration_summarize(
     """narration.summarize(lines?, context="") -> {"text": str}.
 
     Summarizes recent sidecar stderr lines into a short first-person
-    Italian sentence using Haiku, for display while a chat.send is
+    Italian sentence using the NARRATION role's model, while a chat.send is
     in flight. Never raises; returns {"text": ""} on any failure —
     including the no-`lines` call, which is why `lines` is optional.
     """
@@ -1533,7 +1533,7 @@ async def narration_summarize(
         return {"text": ""}
 
     # Layer 1 — pre-filter locally: drop init/startup/technical log lines
-    # before paying for a Haiku call. These produce narrations like "Sto
+    # before paying for a model call. These produce narrations like "Sto
     # inizializzando il client LLM…" which are noise to the user.
     init_patterns = [
         re.compile(r"initiali[sz]ing", re.IGNORECASE),
@@ -1563,7 +1563,7 @@ async def narration_summarize(
         return {"text": ""}
 
     joined = "\n".join(cleaned)
-    # Layer 2 — tighter Haiku prompt: explicitly tell the model to ignore
+    # Layer 2 — tighter narration prompt: explicitly tell the model to ignore
     # any remaining setup/SQL/startup noise and only narrate user-visible
     # actions.
     system = (

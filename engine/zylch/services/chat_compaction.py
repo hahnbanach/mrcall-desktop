@@ -87,7 +87,7 @@ def _narrate_block(block: Any) -> str:
         except Exception:
             inp = str(block.get("input", {}))
         # Keep payload bounded so one huge tool_use doesn't dominate the
-        # summarizer input. This trims the PROMPT to Haiku, not what the
+        # summarizer input. This trims the PROMPT to the summarizer, not what the
         # main chat LLM sees — per project rules, no [:N] on the main
         # LLM inputs.
         if len(inp) > 2000:

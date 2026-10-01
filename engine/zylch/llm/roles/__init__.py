@@ -117,6 +117,7 @@ def preset_help() -> str:
     return (
         f"Presets are price ceilings on output per million tokens ({ceilings}); "
         "the engine resolves each job's model within the ceiling. Custom uses "
-        "the models you choose. Explicit role overrides remain active. Model "
+        "the models you choose, and the economy models for any job you leave "
+        "blank. Explicit role overrides remain active. Model "
         "quality on your work is not measured by price."
     )

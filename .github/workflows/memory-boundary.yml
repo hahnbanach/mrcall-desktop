@@ -4,7 +4,9 @@ name: Memory write boundary
 # milestone 8): the frozen writer inventory and the boundary test must pass
 # on every change to the engine. Both are static scans of engine/zylch and
 # engine/scripts plus a few run-time checks, so the job installs the engine's
-# requirements and runs only those two files.
+# requirements and runs only those files. Milestone 10a adds the model-name
+# boundary, the role inventory and the resolved table's tie to its fixture
+# and requirements.
 
 on:
   push:
@@ -41,4 +43,7 @@ jobs:
         run: |
           python -m pytest -q -p no:cacheprovider \
             tests/memory/test_mnemonic_inventory.py \
-            tests/memory/test_mnemonic_write_boundary.py
+            tests/memory/test_mnemonic_write_boundary.py \
+            tests/llm/test_model_name_boundary.py \
+            tests/llm/test_role_inventory.py \
+            tests/llm/test_resolved_table.py
