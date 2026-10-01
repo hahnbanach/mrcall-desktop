@@ -437,7 +437,7 @@ class LLMClient:
         # Admission uses the final provider-visible payload, including kwargs.
         # A cancellation/timeout never releases a possibly dispatched request.
         check_dispatch()
-        quote = self._client.quote(request_kwargs) if self.transport == "proxy" else None
+        quote = self._client.quote(request_kwargs := sdk_request(request_kwargs, "proxy")) if self.transport == "proxy" else None
         reservation = reserve(request_kwargs, self.transport, quote=quote)
         try:
             record_dispatch()

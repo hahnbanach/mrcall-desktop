@@ -24,6 +24,8 @@ from __future__ import annotations
 
 from typing import Any, Dict
 
+from .roles.request_rules import apply as apply_request_rules
+
 SAMPLING_KEYS = ("temperature", "top_p", "top_k")
 SAMPLING_DEFAULTS: Dict[str, Any] = {"temperature": 1.0}
 
@@ -33,8 +35,16 @@ def sdk_request(request_kwargs: Dict[str, Any], transport: str) -> Dict[str, Any
 
     Only the ``direct`` transport talks to the official SDK; every other
     transport builds its own HTTP body from the full dict and is returned
-    the dict unchanged.
+    the dict unchanged, except ``proxy``, whose body the credits server
+    quotes: there the model's request rules apply before the quote, so the
+    quote, the reservation and the executed body are the same request. On
+    ``direct`` the model's request rules (``roles/request_rules.py``) apply
+    last.
     """
+    if transport == "proxy":
+        # The credits server quotes and runs this body: sampling and a forced
+        # tool_choice the model refuses go before the quote, thinking is left.
+        return apply_request_rules(request_kwargs, thinking=False)
     if transport != "direct":
         return request_kwargs
     kwargs = dict(request_kwargs)
@@ -47,4 +57,6 @@ def sdk_request(request_kwargs: Dict[str, Any], transport: str) -> Dict[str, Any
             extra[key] = value
     if extra:
         kwargs["extra_body"] = extra
-    return kwargs
+    # Then the fields this model refuses (roles/request_rules.py): after the
+    # reservation, which priced the dict the caller still holds.
+    return apply_request_rules(kwargs)

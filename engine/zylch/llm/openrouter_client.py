@@ -12,6 +12,7 @@ import httpx
 
 from .budget_pricing import BudgetError
 from .openrouter_pricing import provider_policy, request_bound
+from .roles.request_rules import apply as apply_request_rules
 
 
 def _without_cache(request):
@@ -49,13 +50,13 @@ class OpenRouterClient:
             return self._create_k3(request)
         body = _without_cache(deepcopy(request))
         body.pop("service_tier", None)
-        if body["model"] == "anthropic/claude-sonnet-5":
-            # Validated default-only above. Current Sonnet endpoints do not
-            # accept sampling controls when require_parameters is enabled.
-            body.pop("temperature", None)
         body.update(
             provider=provider_policy(body["model"]), thinking={"type": "disabled"}, stream=False
         )
+        # After the reservation (request_bound above prices `request`): drop or
+        # relax what this model refuses — sampling, a forced tool_choice, a
+        # disabled thinking it cannot take (roles/request_rules.py).
+        body = apply_request_rules(body)
 
         def dispatch(client):
             return client.post(

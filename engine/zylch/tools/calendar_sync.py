@@ -42,7 +42,10 @@ class CalendarSyncManager:
             raise ValueError("owner_id and supabase_storage are required")
 
         self.calendar = calendar_client
-        self.llm_client = try_make_llm_client(model=routed_model("MODEL_SYNC_ANALYSIS"))
+        try:  # LLM is optional here — sync still works without analysis.
+            self.llm_client = try_make_llm_client(model=routed_model("MODEL_SYNC_ANALYSIS"))
+        except RuntimeError:  # BudgetError: unreadable AI settings mean no LLM, as before
+            self.llm_client = None
         self.days_back = days_back
         self.days_forward = days_forward
         self.my_emails = my_emails or []

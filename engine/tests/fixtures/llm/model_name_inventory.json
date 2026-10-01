@@ -16,7 +16,6 @@
     {"file": "zylch/llm/k3_reasoning.py", "line": 11, "literal": "moonshotai/kimi-k3", "purpose": "adapter", "note": "K3 reasoning contract MODEL"},
     {"file": "zylch/llm/openai_voice.py", "line": 17, "literal": "gpt-6-sol", "purpose": "voice", "note": "out of scope"},
     {"file": "zylch/llm/openrouter_client.py", "line": 48, "literal": "moonshotai/kimi-k3", "purpose": "adapter", "note": "K3 reasoning dispatch"},
-    {"file": "zylch/llm/openrouter_client.py", "line": 52, "literal": "anthropic/claude-sonnet-5", "purpose": "adapter", "note": "Sonnet 5 sampling rule"},
     {"file": "zylch/llm/openrouter_pricing.py", "line": 26, "literal": "moonshotai/kimi-k3", "purpose": "adapter", "note": "K3 reasoning bound"},
     {"file": "zylch/llm/openrouter_pricing.py", "line": 32, "literal": "anthropic/claude-sonnet-5", "purpose": "adapter", "note": "Sonnet 5 sampling rule"},
     {"file": "zylch/llm/roles/resolver.py", "line": 32, "literal": "anthropic/claude-haiku", "purpose": "doc", "note": "module docstring: the excluded_prefixes example"},
