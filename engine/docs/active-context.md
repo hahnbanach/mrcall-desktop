@@ -152,8 +152,8 @@ statement built from strings ([what it cannot see](features/mnemonic-writer-inve
 `memory_operations.approval` column is removed by a table rebuild. Merged into
 `main` (`71bbc21`); **not deployed**. A store it migrates cannot be opened by a milestone 5–7 build.
 
-**2026-09-30 — Milestone 9, on branch `mnemonic-m9`, not merged, not deployed.**
-On the branch: the kernel template audit reads the cron deny list in either of
+**Milestone 9 is integrated on `main` through `19639d2`; deployment is unverified.**
+The kernel template audit reads the cron deny list in either of
 its two forms and refuses neither/both, so it passes against `cs-kernel`
 `258c927` and against current kernel `main` (`ba79cc1`) with every inventory
 count unchanged; the installed-client journey — the real `cs` entry point of an
@@ -205,11 +205,11 @@ the extraction worker raises on an answer that is neither bare `SKIP` nor an
 translated the Italian corrections into English (seven `must_preserve`
 misses). The journey workflow is green on every run of the pushed branch
 (runs 2 to 8, the pinned kernel cloned with the workflow's own token).
-Still pending: the merge; and the rollout, which
-is the CTO's step-by-step decision on the hb plan
-`docs/execution-plans/2026-09-30-mnemonic-rollout.md`, with a migration
-rehearsal on a store copy before any live step. The hosted engines still run
-pre-milestone-5 code.
+Rollout remains pending. The previously referenced hb plan
+`docs/execution-plans/2026-09-30-mnemonic-rollout.md` is absent from this workspace;
+a reviewed rollout plan and migration rehearsal on a store copy are required
+before any live step. The latest recorded hosted releases use pre-milestone-5
+code; this source reconciliation does not recheck their runtime.
 
 Support's engine exposes approval-gated `initiate_call` through the dashboard's
 Firebase atom API, with an explicit calling assistant ID. A live request on
@@ -287,8 +287,7 @@ API budgets; see [control boundaries](../../docs/operator-setup.md#ai-execution-
    uncertain requests. Keep automatic processing and preparation paused.
 2. Verify the Mac application through its GUI; start a bounded batch only when
    requested and review its role-specific outputs.
-3. Merge `mnemonic-m9` as is (decision taken; workflow green on the pushed
-   branch first); re-measure AC 5 in milestone 10 on the resolver-chosen
-   model; deploy only through the rollout plan.
+3. Re-measure AC 5 in milestone 10 on the resolver-chosen model; deploy
+   only through a reviewed rollout plan.
 4. Continue the knowledge plan from untested detail and broader behavior/latency gates.
 5. Continue other workstreams under their existing plans.

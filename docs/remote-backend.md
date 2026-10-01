@@ -419,12 +419,12 @@ from the budget of the profile whose tick runs it. A large
 backlog is analysed in daily instalments at the cap — raise it for a day
 with a line in `.env` and a restart.
 
-**Upgrading to the mnemonic harness (milestones 5–9).** The step-by-step
-document, with the gate of each step, the queries that read it and the two
-rollback stages, is the `hb` plan
-[`docs/execution-plans/2026-09-30-mnemonic-rollout.md`](../../hb/docs/execution-plans/2026-09-30-mnemonic-rollout.md);
-every step there is the CTO's decision, and nothing below is a step. Three
-things it needs from this host:
+**Upgrading to the mnemonic harness (milestones 5–9).** Design and milestone
+acceptance are tracked in the
+[cross-repository harness plan](../../docs/execution-plans/2026-09-20-mnemonic-harness.md).
+The previously referenced `2026-09-30-mnemonic-rollout.md` is absent from this
+workspace. Its detailed rollout gates and rollback stages cannot be verified;
+a reviewed rollout plan is required before any live upgrade. Host prerequisites:
 
 - *The per-unit pin.* This guide documents one checkout that
   `update-daemons.sh` pulls and one `ExecStart` for every instance, so before

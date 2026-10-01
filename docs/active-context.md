@@ -1,6 +1,6 @@
 ---
-doc_baseline_commit: 65659b3be482fa1782c26f4e8f6f8a9eae12e8e4
-doc_baseline_date: 2026-09-30
+doc_baseline_commit: 33e157ecc04673859972f5beaeabc0e77c4843eb
+doc_baseline_date: 2026-10-01
 ---
 
 # Active Context — Cross-cutting
@@ -18,6 +18,12 @@ what is *current*, targeting ≤ ~120 lines.
 <!-- doc-scope:end -->
 
 ## State now
+
+Mnemonic M9 source is integrated on `main` through fetched commit `19639d2`.
+The recorded Haiku corpus failed AC 5; the CTO's decision defers its
+re-measurement to M10 on the resolver-selected model. This reconciliation
+does not establish deployment or change the rollout gates. Engine details are
+in [the memory snapshot](../engine/docs/active-context.md).
 
 Main and the Café 124 production voice release read standing instructions from
 the reserved company-document project. Telephone conversion reads `phone.md`;
