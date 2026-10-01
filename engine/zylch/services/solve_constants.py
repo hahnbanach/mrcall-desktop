@@ -405,7 +405,7 @@ def get_user_language_directive() -> str:
 
 
 def get_personal_data_section(owner_id: Optional[str] = None) -> str:
-    """Build personal data + notes + secret + learned-prefs section.
+    """Build personal data + standing instructions + secret + learned-prefs section.
 
     `owner_id` enables the `OPERATING RULES` block, pulled from blobs
     with `namespace == f"prefs:{owner_id}"`. The block is placed FIRST and
@@ -452,22 +452,16 @@ def get_personal_data_section(owner_id: Optional[str] = None) -> str:
     if data:
         parts.append("USER PERSONAL DATA:\n" + "\n".join(data))
 
-    # USER_NOTES gets the same binding-imperative framing as the learned
-    # OPERATING RULES, and is placed at the TOP of the section. A plain
-    # trailing "USER NOTES:" block loses to urgency salience ("VIP wrote
-    # 2 minutes ago!") and to style imitated from the contact's blob
-    # history — observed: drafts signed as a person and promising instant
-    # action despite explicit notes forbidding both.
-    notes = os.environ.get("USER_NOTES", "")
-    notes_block = (
-        "USER NOTES — standing instructions from the operator. They are "
-        "BINDING and override your defaults, any urgency you perceive, and "
-        "any style or behaviour inferred from past emails or memory: when a "
-        "note conflicts with sounding helpful, accommodating, or with how "
-        "things were done before, follow the note.\n" + notes
-        if notes
-        else ""
-    )
+    # The operator's standing instructions (company procedures + this
+    # mailbox's identity) come from the revisioned company documents stored
+    # through `instructions.store`, with binding-imperative framing, placed
+    # at the TOP of the section. A plain trailing block loses to urgency
+    # salience ("VIP wrote 2 minutes ago!") and to style imitated from the
+    # contact's blob history — observed: drafts signed as a person and
+    # promising instant action despite explicit instructions forbidding both.
+    from zylch.services.operator_instructions import block as instructions_block
+
+    notes_block = instructions_block()
 
     secret = os.environ.get("USER_SECRET_INSTRUCTIONS", "")
     if secret:

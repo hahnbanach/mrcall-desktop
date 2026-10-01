@@ -125,7 +125,7 @@ def _redact_params(method: Optional[str], params: Dict[str, Any]) -> Dict[str, A
     extra = _SECRET_PARAM_KEYS_BY_METHOD.get(method or "", set())
     allowed = _NON_SECRET_PARAM_KEYS_BY_METHOD.get(method or "", set())
 
-    if method in {"projects.write", "projects.create"}:
+    if method in {"projects.write", "projects.create", "instructions.store"}:
         params = dict(params)
         for payload in ("content_base64", "files"):
             if payload in params:
@@ -238,7 +238,11 @@ async def dispatch_raw(raw: str, notify: NotifyFn) -> Optional[Dict[str, Any]]:
         # Only our dedicated safe exception may cross this boundary verbatim.
         from zylch.services.project_store import ProjectError
 
-        if method.startswith("projects.") or method == "memory.join":
+        if (
+            method.startswith("projects.")
+            or method.startswith("instructions.")
+            or method == "memory.join"
+        ):
             code = e.code if isinstance(e, ProjectError) else INTERNAL_ERROR
             message = str(e) if isinstance(e, ProjectError) else "Project storage operation failed"
             logger.warning("[rpc] project operation failed code=%s", code)

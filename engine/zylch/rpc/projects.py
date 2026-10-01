@@ -4,6 +4,7 @@ from collections.abc import Callable
 from typing import Any
 
 from zylch.services import project_store as store
+from zylch.services.operator_instructions import PROJECT as RESERVED_PROJECT
 
 
 def author() -> str:
@@ -30,6 +31,7 @@ async def projects_read(params: dict[str, Any], notify: Callable[..., None]) -> 
 
 async def projects_write(params: dict[str, Any], notify: Callable[..., None]) -> dict[str, Any]:
     """projects.write(space_id, project, path, content_base64, expected_revision) -> document metadata."""
+    _refuse_reserved(params.get("project"))
     return store.write(**params, author=author())
 
 
@@ -42,7 +44,16 @@ async def projects_history(params: dict[str, Any], notify: Callable[..., None]) 
 
 async def projects_create(params: dict[str, Any], notify: Callable[..., None]) -> dict[str, Any]:
     """projects.create(space_id, project, files) -> project metadata and initial files."""
+    _refuse_reserved(params.get("project"))
     return store.create(**params, author=author())
+
+
+def _refuse_reserved(project: Any) -> None:
+    """The standing-instructions project is written only through `instructions.store`."""
+    if project == RESERVED_PROJECT:
+        raise store.ProjectError(
+            -32046, "Reserved project; use instructions.store for standing instructions"
+        )
 
 
 METHODS = {

@@ -431,26 +431,9 @@ def _run_wizard(env: dict, profile_name: str | None):
     else:
         doc_paths = _prompt_document_paths()
 
-    # ─── 8. Personal notes ──────────────────────────────────
+    # ─── 8. Secret instructions ───────────────────────────────
 
-    click.echo("\n8. Personal Notes (optional)")
-    click.echo(
-        "   Anything you want Zylch to know about you.\n" "   e.g. preferences, context, style.\n",
-    )
-
-    existing_notes = env.get("USER_NOTES", "")
-    if existing_notes:
-        click.echo(f"  Current: {existing_notes[:80]}...")
-        if click.confirm("  Keep?", default=True):
-            user_notes = existing_notes
-        else:
-            user_notes = _prompt_multiline("  Notes")
-    else:
-        user_notes = _prompt_multiline("  Notes")
-
-    # ─── 9. Secret instructions ───────────────────────────────
-
-    click.echo("\n9. Secret Instructions (optional)")
+    click.echo("\n8. Secret Instructions (optional)")
     click.echo(
         "   Instructions Zylch will follow but NEVER"
         " reveal in any output.\n"
@@ -542,12 +525,6 @@ def _run_wizard(env: dict, profile_name: str | None):
         lines.append("# Document Folders")
         lines.append(f"DOCUMENT_PATHS={doc_paths}")
 
-    # Personal notes
-    if user_notes:
-        lines.append("")
-        lines.append("# Personal Notes")
-        lines.append(f"USER_NOTES={user_notes}")
-
     # Secret instructions
     if user_secret:
         lines.append("")
@@ -555,29 +532,7 @@ def _run_wizard(env: dict, profile_name: str | None):
         lines.append(f"USER_SECRET_INSTRUCTIONS={user_secret}")
 
     # Preserve extra vars from existing .env
-    known_keys = {
-        "ANTHROPIC_API_KEY",
-        "EMAIL_ADDRESS",
-        "EMAIL_PASSWORD",
-        "IMAP_HOST",
-        "IMAP_PORT",
-        "SMTP_HOST",
-        "SMTP_PORT",
-        "TELEGRAM_BOT_TOKEN",
-        "TELEGRAM_ALLOWED_USER_ID",
-        "MRCALL_BASE_URL",
-        "MRCALL_REALM",
-        "DOCUMENT_PATHS",
-        "USER_NOTES",
-        "USER_SECRET_INSTRUCTIONS",
-        *personal_data.keys(),
-    }
-    extra = {k: v for k, v in env.items() if k not in known_keys}
-    if extra:
-        lines.append("")
-        lines.append("# Other")
-        for k, v in extra.items():
-            lines.append(f"{k}={v}")
+    lines.extend(_preserved_lines(env, _wizard_known_keys(personal_data)))
 
     lines.append("")
 
@@ -587,12 +542,12 @@ def _run_wizard(env: dict, profile_name: str | None):
 
     logger.info(f"[init] Profile saved to {env_path}")
 
-    # ─── 10. Automatic updates (crontab) ─────────────────────
+    # ─── 9. Automatic updates (crontab) ─────────────────────
 
     import sys
 
     if sys.platform == "win32":
-        click.echo("\n10. Automatic Updates")
+        click.echo("\n9. Automatic Updates")
         click.echo(
             "   Not available on Windows yet." " Run 'zylch update' manually.",
         )
@@ -644,6 +599,43 @@ def _run_wizard(env: dict, profile_name: str | None):
 
 
 # ─── Channel-specific helpers ─────────────────────────────────
+
+
+_WIZARD_KEYS = frozenset(
+    {
+        "ANTHROPIC_API_KEY",
+        "EMAIL_ADDRESS",
+        "EMAIL_PASSWORD",
+        "IMAP_HOST",
+        "IMAP_PORT",
+        "SMTP_HOST",
+        "SMTP_PORT",
+        "TELEGRAM_BOT_TOKEN",
+        "TELEGRAM_ALLOWED_USER_ID",
+        "MRCALL_BASE_URL",
+        "MRCALL_REALM",
+        "DOCUMENT_PATHS",
+        "USER_SECRET_INSTRUCTIONS",
+    }
+)
+
+
+def _wizard_known_keys(personal_data: dict) -> frozenset:
+    """The keys the wizard rewrites itself; every other key is preserved as found."""
+    return _WIZARD_KEYS | frozenset(personal_data.keys())
+
+
+def _preserved_lines(env: dict, known_keys: frozenset) -> list:
+    """`KEY=value` lines for every key the wizard does not own, raw and in file order.
+
+    A key the wizard no longer knows (a retired setting, a key another tool
+    wrote) survives a wizard run byte-for-byte, so a previous engine build can
+    still read it after a rollback.
+    """
+    extra = {k: v for k, v in env.items() if k not in known_keys}
+    if not extra:
+        return []
+    return ["", "# Other", *[f"{k}={v}" for k, v in extra.items()]]
 
 
 def _prompt_multiline(label: str) -> str:

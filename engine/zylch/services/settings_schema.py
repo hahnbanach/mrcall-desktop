@@ -460,14 +460,6 @@ SETTINGS_SCHEMA: List[SettingsField] = [
         "picker": "directory",
     },
     {
-        "key": "USER_NOTES",
-        "label": "Personal notes",
-        "type": "textarea",
-        "group": "Documents & notes",
-        "optional": True,
-        "help": "Free-form context Zylch can use.",
-    },
-    {
         "key": "USER_SECRET_INSTRUCTIONS",
         "label": "Secret instructions",
         "type": "textarea",

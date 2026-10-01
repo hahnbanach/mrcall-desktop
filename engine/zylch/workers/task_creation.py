@@ -375,7 +375,7 @@ class TaskWorker:
         # data lives ONLY in user_content; the system block is byte-identical
         # across events for this owner so the ephemeral cache actually hits
         # (support-llm-cost-fix P4 / FIX 1). The personal-data section
-        # (OPERATING RULES + USER_NOTES + secret instructions) stays inside
+        # (OPERATING RULES + standing instructions + secret instructions) stays inside
         # the cached block — it changes only when the user edits Settings.
         try:
             from zylch.services.solve_constants import get_personal_data_section
