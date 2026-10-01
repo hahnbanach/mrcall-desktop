@@ -426,6 +426,7 @@ class LLMClient:
             f"messages={len(coerced)} tools={num_tools}"
         )
         from zylch.llm.budget import reserve, settle
+        from zylch.llm.sdk_request import sdk_request
         from zylch.memory.mnemonic.authorization import MnemonicAuthorizationError, assert_no_tools
         from zylch.services.preparation import check_dispatch, company_fenced, record_dispatch
 
@@ -450,7 +451,7 @@ class LLMClient:
             if self.transport == "proxy":
                 raw, receipt = self._client.execute(request_kwargs, quote, reservation)
             else:
-                raw = self._client.messages.create(**request_kwargs)
+                raw = self._client.messages.create(**sdk_request(request_kwargs, self.transport))
         except BaseException as exc:
             # A dispatch that raises leaves the hold open, and on the direct
             # transport nothing can ever close it: there is no receipt, so
