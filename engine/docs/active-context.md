@@ -36,19 +36,27 @@ in the [completed plan](../../docs/execution-plans/2026-09-23-gpt-live-engine-in
 The isolated ledger retains 41 closed historical smoke calls and 41 carrier
 receipts, but its service is currently absent. Its saved provider endpoint now
 reaches the production listener, so it is not an isolated route for new tests.
-The production listener uses the scoped company-knowledge trial; handset acceptance remains open.
+The production listener uses the scoped company-knowledge trial; the owner accepts the October 1 handset trial.
 
-Company-knowledge prompt/schema 8/6, bounded recovery and actual source/query
-semantics have independent approval. The reviewed private artifact has a
-270-character initial view and one detail, recovered without a new provider
-request. The scoped `c3f95bb` voice release preserves production USER_NOTES and
-excludes main's source retirement. The `c3f95bb-m1-53df502` composed import tree
-also preserves the prior path-confinement overlay and is live after the guarded
-targeted restart. Health and unsigned webhook probes pass. Authenticated source readback
-is supported at voice revision 6. Spoken behavior and latency remain open;
-credit refusals are settled at zero and old uncertainty remains quarantined.
-See the [active plan](../../docs/execution-plans/2026-09-28-voice-company-knowledge.md)
-for APPROVED trial readiness and the two supervised-call questions.
+Company-knowledge conversion reads stored `operator-instructions/phone.md`
+revision 1, SHA256 `cf61cd70…`, through the M1 operator-instructions reader.
+Production imports `mrcall-voice-cafe124-phone-md-5ebe3fa`: origin `706fe2a`
+plus the reviewed voice/confinement patch. Prompt/schema remain 8/6 and voice
+configuration revision 6. The reviewed artifact has a 270-character initial
+view and one complete detail with the six prior approved aliases, rebased to
+current source offsets after one K3 conversion. Source/query review passes;
+active readback, authenticated binding, health and unsigned callbacks pass.
+Production instruction preview matches its unchanged revision-1 mailbox and
+procedures documents. All six stored documents remain unchanged at revision 1.
+`124-cs` is resumed; Mario remains paused because his separate daemon still
+returns -32601 for instruction preview. See the [source migration plan](../../docs/execution-plans/2026-10-01-telephone-notes-source-is-phone-md.md).
+
+The owner accepted the October 1 handset trial; independent review approved its
+direct service answer against the prior USER_NOTES artifact. The manual pilot
+is completed. The [knowledge plan](../../docs/execution-plans/2026-09-28-voice-company-knowledge.md)
+retains spoken detail, broader-case and quantitative-latency acceptance gates;
+no new handset call certified this source migration. Credit refusals are settled
+at zero and old uncertainty remains quarantined.
 
 Engine chat now supports negotiated read-only policy version 1. The policy is
 enforced before slash/semantic/task routing and again at assistant and task
@@ -209,7 +217,7 @@ automatic diagnostic scripting is not configured. The restoration is committed a
 [verification/rollback](../../docs/execution-plans/2026-09-17-mrcall-outbound.md).
 
 Three Café124 units retain the `8d83193` release family; production runs the
-scoped `c3f95bb` voice trial with the prior hotfix overlay. The billing server runs
+M1-based `phone-md-5ebe3fa` voice release with confinement protections. The billing server runs
 `prod-99091c35`. Production selects personal OpenRouter/custom K3 for its base
 model, five worker roles and reply classification. The other three profiles
 retain their previous billing/model settings. Production's daily cap is USD20;
@@ -257,7 +265,8 @@ API budgets; see [control boundaries](../../docs/operator-setup.md#ai-execution-
 - Incident checkpoint counts and project inventories in dated records are
   historical; re-read current state before a cleanup or backlog operation.
 - Voice knowledge source/query review is approved and the guarded trial is
-  active; supervised spoken-answer and latency acceptance remain open.
+  active after approved direct-service handset acceptance. Spoken company detail,
+  broader adverse/repeated cases and quantitative latency remain open.
 - Desktop v0.1.49 installation and personal-key entry on the CTO's Mac remain
   unverified. Saved-prompt format repairs have no new business-quality result.
 - The Desktop app does not read `memory.status`'s `joining` or
@@ -276,5 +285,5 @@ API budgets; see [control boundaries](../../docs/operator-setup.md#ai-execution-
 3. Merge `mnemonic-m9` as is (decision taken; workflow green on the pushed
    branch first); re-measure AC 5 in milestone 10 on the resolver-chosen
    model; deploy only through the rollout plan.
-4. Complete supervised voice knowledge answer/latency acceptance under its active plan.
+4. Continue the knowledge plan from untested detail and broader behavior/latency gates.
 5. Continue other workstreams under their existing plans.

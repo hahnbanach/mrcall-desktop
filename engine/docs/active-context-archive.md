@@ -4,6 +4,41 @@ Historical snapshots preserved verbatim when the living context is consolidated.
 Dated deployment claims and incident counts below are historical observations,
 not current operational state; use [active-context.md](active-context.md).
 
+## 2026-10-01 — Before production phone-document migration
+
+Company-knowledge prompt/schema 8/6, bounded recovery and actual source/query
+semantics have independent approval. The reviewed private artifact has a
+270-character initial view and one detail, recovered without a new provider
+request. The scoped `c3f95bb` voice release preserves production USER_NOTES and
+excludes main's source retirement. The `c3f95bb-m1-53df502` composed import tree
+also preserves the prior path-confinement overlay and is live after the guarded
+targeted restart. Health and unsigned webhook probes pass. Authenticated source readback
+is supported at voice revision 6. The owner accepts the October 1 handset
+trial and independent final review approves its direct service answer. The
+manual pilot is completed; company-detail retrieval, broader cases and
+quantitative latency acceptance remain open in the active knowledge plan;
+credit refusals are settled at zero and old uncertainty remains quarantined.
+See the [active plan](../../docs/execution-plans/2026-09-28-voice-company-knowledge.md)
+for the accepted handset call and remaining acceptance criteria.
+
+Three Café124 units retain the `8d83193` release family; production runs the
+scoped `c3f95bb` voice trial with the prior hotfix overlay.
+
+## 2026-10-01 — Before owner handset acceptance
+
+Company-knowledge prompt/schema 8/6, bounded recovery and actual source/query
+semantics have independent approval. The reviewed private artifact has a
+270-character initial view and one detail, recovered without a new provider
+request. The scoped `c3f95bb` voice release preserves production USER_NOTES and
+excludes main's source retirement. The `c3f95bb-m1-53df502` composed import tree
+also preserves the prior path-confinement overlay and is live after the guarded
+targeted restart. Health and unsigned webhook probes pass. Authenticated source readback
+is supported at voice revision 6. Spoken behavior and latency remain open;
+credit refusals are settled at zero and old uncertainty remains quarantined.
+See the [active plan](../../docs/execution-plans/2026-09-28-voice-company-knowledge.md)
+for APPROVED trial readiness and the two supervised-call questions.
+
+
 ## 2026-09-30 — V8 staged recovery before activation
 
 Company-knowledge prompt/schema 8/6 and bounded recovery have independent code

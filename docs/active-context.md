@@ -19,17 +19,13 @@ what is *current*, targeting ≤ ~120 lines.
 
 ## State now
 
-Main's operator-instruction source is the reserved company-document project;
-this voice trial retains production USER_NOTES. Main's separate source retirement
-is excluded from the scoped trial. Its durable contract is
-[standing instructions](../engine/docs/features/project-memory.md).
-Local retirement commits and the rebased origin equivalents leave main diverged;
-publication needs a merge. Retirement deployment claims require their own review.
+Main and the Café 124 production voice release read standing instructions from
+the reserved company-document project. Telephone conversion reads `phone.md`;
+USER_NOTES is retired. See [standing instructions](../engine/docs/features/project-memory.md).
 
-Three Café124 engines import pinned release `8d83193`; production runs the
-separate voice release `c3f95bb` (since 2026-09-30 14:16 UTC) through its
-systemd drop-in. The
-billing server is `prod-99091c35`. Production uses K3 max through its personal OpenRouter key,
+Three Café124 engines retain the `8d83193` release family; production runs
+`phone-md-5ebe3fa` through its systemd drop-in. The billing server is
+`prod-99091c35`. Production uses K3 max through its personal OpenRouter key,
 with a USD20/day limit. The other three profiles retain their previous billing
 and model choices and USD5/day limits. All four have automatic processing off
 and preparation paused. Adding a saved Anthropic key does not change the selected
@@ -51,26 +47,31 @@ The engine owns mailbox processing and shared memory; the clone owns operator
 procedures. Claude Code headless and kernel direct classifiers have separate
 billing and pause controls. See [operator setup](operator-setup.md#ai-execution-and-controls).
 
-GPT-Live is the sole telephone model. The Café 124 production daemon serves its
-Desktop socket and +390250552776 through the existing tunnel. Authenticated
-readback binds business `d44a1864-23cc-34f9-aec5-6e04bb2fd2ef-desktop`, UID
-`Gn9IcuWzYyY7DBMHkVUGB7bIiTp2` and `starter`; voice config remains revision 6.
-Caller history is disclosed only for a uniquely matched selected contact.
-Local archive acceptance is independently APPROVED: eight private matching rows,
-three legacy and five reconstructed; September 28 archive calls need no repeat.
-StarChat transcript upload is cancelled. Overall acceptance remains REVISE after
-invented services in the prior call; the
-[pilot plan](execution-plans/2026-09-27-cafe124-voice-daemon.md) remains active.
-The [voice knowledge plan](execution-plans/2026-09-28-voice-company-knowledge.md)
-is active. Prompt/schema 8/6, bounded recovery and actual source/query semantics
-are independently APPROVED. The private 270-character initial view and one detail
-reuse an already-paid K3 response. The trial preserves USER_NOTES and excludes
-main's source retirement; the live
-`c3f95bb-m1-53df502` import tree preserves prior path-confinement hotfixes.
-Guarded targeted activation passed health, current-source readback and unsigned
-webhook probes; binding and revision 6 are retained. Spoken behavior and latency remain open. Known credit
-refusals are settled at zero; old uncertainty stays quarantined. No company-store
-revision is admitted. Independent trial readiness is APPROVED; the owner can now perform the supervised call.
+GPT-Live is the sole telephone model. Café 124 serves its Desktop socket and
++390250552776 through the existing tunnel, bound to business
+`d44a1864-23cc-34f9-aec5-6e04bb2fd2ef-desktop`, UID
+`Gn9IcuWzYyY7DBMHkVUGB7bIiTp2`, starter and voice configuration revision 6.
+Production imports `mrcall-voice-cafe124-phone-md-5ebe3fa`, built from M1 base
+`706fe2a` plus the reviewed voice/confinement patch. Conversion uses stored
+`operator-instructions/phone.md` revision 1 (`cf61cd70…`), prompt/schema 8/6.
+The reviewed derived view retains 270 initial characters, one complete detail
+and six approved aliases. One K3 conversion settled; recovery preserved the
+same selected facts at current source offsets. Production preview matches the
+mailbox document and procedures; all six stored documents remain revision 1.
+Health, authenticated binding and unsigned callback checks pass. `124-cs` is
+resumed; `mario124-cs` remains paused pending its separate daemon's M1 reader.
+See the [source migration](execution-plans/2026-10-01-telephone-notes-source-is-phone-md.md).
+
+The [pilot](execution-plans/2026-09-27-cafe124-voice-daemon.md) is completed;
+the [knowledge plan](execution-plans/2026-09-28-voice-company-knowledge.md) remains
+active. The owner accepted the October 1 handset call; independent review
+approved its source-grounded direct service answer against the prior source.
+That historical call does not certify the new conversion. Spoken company-detail
+retrieval, broader repeated cases, later caller-history entailment and quantitative
+latency remain open. Caller history requires a unique selected-contact match.
+Archive acceptance remains APPROVED with nine funded private call archives;
+StarChat transcript upload is cancelled. Old uncertain credit holds remain
+quarantined. No further handset call was made for source migration.
 
 The hosted engine is being isolated per tenant
 ([toward-sandbox](execution-plans/2026-09-29-toward-sandbox.md)): M1 (tool
@@ -127,14 +128,15 @@ Refresh button only lists threads. See the archived
   installer coverage and multi-window auth checks retain their existing owners.
 - Historical task-mode/import and legacy transport issues need verification
   before their paths are restored.
-- Café 124's overall acceptance remains open after archive approval. Voice
-  knowledge needs supervised production answer/latency evidence; source/query
-  semantics are approved. Eight voice reserves remain provisional.
+- Café 124's manual pilot is approved. The broader knowledge plan still needs
+  spoken detail retrieval, adverse/repetition coverage and quantitative latency
+  evidence. Voice reserves remain provisional.
 
 ## Next
 
-1. Complete supervised Café 124 services/detail answers and latency acceptance
-   after independently reviewed trial readiness; keep both voice plans open.
+1. Resolve Mario’s separate M1 reader before lifting its clone pause. Continue
+   the active knowledge plan from its untested company-detail and
+   broader case/quantitative latency gates; do not repeat archive acceptance.
 2. Resolve the remaining billing choices and funded credit acceptance. Keep
    preparation paused until the CTO explicitly requests a bounded run.
 3. Verify the installed applications through their GUI: the Mac one with

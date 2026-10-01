@@ -1,5 +1,5 @@
 ---
-status: active
+status: blocked
 date: 2026-10-01
 ---
 
@@ -120,4 +120,52 @@ commits, and no inclusion of unrelated untracked files or company content.
   Patch SHA256 `388d08340aad494bdd1597e6493af845ecf12625b6b58b06deb5770ef273c3fb`.
   Evidence: `/tmp/mrcall-ai-kit/phone-source-20261001/candidate-manifest.json`.
   The staging helper's explicit voice-revision-6 assertion was added and reread
-  by the same reviewer before approval. Paid preparation is the next gate.
+  by the same reviewer before approval.
+
+- M3 preparation: one settled K3 request, 64.318 seconds; local usage ledger
+  USD 0.043383 (estimated usage cost), reservation settled. No balance query or
+  additional paid attempt. Initial review returned REVISE: the two selected
+  detail spans partitioned the prior approved detail but changed all six aliases.
+  The M2 reviewer approved a bounded artifact recovery: prove identical initial
+  context/gaps and exact whitespace-normalized detail equivalence, join only
+  contiguous current-source spans with whitespace between them, and preserve
+  the prior approved grouping/category/key/aliases. This adds no selected facts
+  and uses current phone-source offsets. It is a one-off migration recovery,
+  not a general extractor behavior change. Original paid response/artifact and
+  recovery provenance are retained privately. Recovery checks passed; active
+  production artifact remained unchanged. Same-reviewer M3 re-review APPROVED: 12 direct/polite queries and 12 exact
+  follow-ups passed, with unrelated/history/stale/binding containment.
+  Recovered staged SHA256:
+  `61cf7ac377f9c390061a774b8cdd008598802a684db8309ddb5a232d9efd6280`.
+
+- M4 prepared helper: REVISE fixed by comparing preview documents to the frozen
+  source metadata; same reviewer APPROVED before activation. Activation passed:
+  actual imports from `mrcall-voice-cafe124-phone-md-5ebe3fa`, supported current
+  phone cache, unchanged voice revision 6, authenticated binding, health and
+  local/public unsigned callbacks (401/401/400). Before/after all six compiled
+  documents were unchanged, with revision 1 as their only history. Production
+  preview returned exact mailbox/procedures metadata and block.
+- `124-cs` pause removed after checks. Mario remains paused: its separate daemon
+  uses the `8d83193-m1-f342c5c` family and returns -32601 for instructions.preview.
+  The staff M1 rollout tracked in `~/hb/docs/execution-plans/2026-09-30-retire-user-notes.md`
+  must supply his reader before resume; no other profile unit was changed here.
+- Protected rollback: `/etc/mrcalld/rollback-cafe124-phone-md-20261001/`, including
+  old release drop-in/config/artifact and both original clone pauses. `deploy.py
+  rollback` restores that legacy state; rollback execution was not exercised.
+  Activation evidence: `activation-result.json`; resume: `clone-resume-result.json`.
+- M4 actual integration: independent APPROVED. Protected configuration remains
+  byte-identical, live process/health/artifact and actual pause states verified.
+- M5: fresh independent final review APPROVED for production source migration.
+  Actual production preview/readback, all 653 release hashes, imported runtime,
+  protected configuration and reviewed artifact passed. Both-clone completion
+  is not approved: the plan is blocked solely on Mario's separate M1 reader and
+  subsequent verified resume. No new-source handset or rollback execution is
+  claimed. Evidence: `/tmp/mrcall-ai-kit/phone-source-20261001/final-review.log`.
+- Documentation consolidation: root/engine living state, source role guidance,
+  knowledge-plan amendment and indexes updated; prior state archived verbatim.
+  Mechanical gate clean; keyword coverage 44/44. Doc-critic: zero remaining
+  STALE findings after the source-role correction; root living shape passes.
+  Two prior foreign-retirement lifecycle claims remain UNVERIFIABLE, so the
+  documentation baseline stays at `65659b3`. Evidence:
+  `/tmp/mrcall-ai-kit/phone-source-20261001/doc-critic.log`. Documentation is
+  consolidated for an exact-path commit; unrelated untracked files are excluded.

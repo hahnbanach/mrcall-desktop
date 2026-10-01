@@ -160,10 +160,9 @@ source/entity boundaries, exact identifiers and explicit missing information.
 `MODEL_TASK_DETECTION` decides whether source text contains an actionable task.
 The offline telephone-note converter is implemented in the checkout and uses
 `MODEL_MEMORY_EXTRACT` for source-to-structured extraction, rather than a
-hard-coded model ID or the merge/task role. Current main reads the stored
-`phone.md` instructions; the scoped Café 124 trial preserves its previously
-admitted USER_NOTES reader through the frozen release composition. Model-role
-selection does not establish telephone disclosure quality. The
+hard-coded model ID or the merge/task role. The checkout and Café 124 production
+read the stored `phone.md` instructions through the operator-instructions
+reader. Model-role selection does not establish telephone disclosure quality. The
 [voice knowledge plan](../../../docs/execution-plans/2026-09-28-voice-company-knowledge.md)
 defines source, refresh, independent output review and activation gates.
 

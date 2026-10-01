@@ -9,7 +9,19 @@ date: 2026-09-28
 Scope: milestone plan for implementing and verifying the approved shared-company-knowledge brief. Records source admission, implementation, reviewed trial activation, and the remaining spoken-behavior and latency gates; trial readiness does not approve overall acceptance.
 <!-- doc-scope:end -->
 
-The [brief](../briefs/2026-09-28-voice-company-knowledge.md) was independently **APPROVED** in `67a7fbf` and its later `USER_NOTES` amendment passed a fresh review on 2026-09-28. The Café 124 [pilot plan](2026-09-27-cafe124-voice-daemon.md) stays `active`: local archive **APPROVED**, overall behavior **REVISE**. The 14:33 and 14:34 calls already proved archive correlation; do not request calls to repeat that check.
+The [brief](../briefs/2026-09-28-voice-company-knowledge.md) was independently **APPROVED** in `67a7fbf` and its later `USER_NOTES` amendment passed a fresh review on 2026-09-28. The Café 124 [pilot plan](2026-09-27-cafe124-voice-daemon.md) is `completed` after independent October 1 approval of its last source-grounded service-answer gate; local archive approval remains in force. This knowledge plan stays `active` for its remaining acceptance criteria. The 14:33 and 14:34 calls already proved archive correlation; do not request calls to repeat that check.
+
+**Current source amendment — 2026-10-01:** Production now uses stored
+`operator-instructions/phone.md` revision 1 (`cf61cd70…`) through the M1 reader,
+not USER_NOTES. The separately reviewed [migration](2026-10-01-telephone-notes-source-is-phone-md.md)
+records one paid conversion, current-source semantic/query approval, preserved
+complete detail/aliases and guarded activation. The initial view and selected
+facts are equivalent to the prior approved artifact, with current source offsets.
+Below, USER_NOTES and the old release describe the original implementation and
+historical handset evidence; this amendment governs the current source contract.
+Future source revision changes invalidate the conversion cache. The October 1
+handset result remains historical; no additional call closed this plan's remaining
+spoken-detail, adverse/repetition or quantitative-latency gates.
 
 **Resume decision — 2026-09-30:** The operator owns Café 124 and explicitly
 uses the existing production number for supervised handset tests. Prepare the
@@ -297,6 +309,26 @@ query; neither cached preparation time nor source review proves handset latency.
 The operator prioritizes elapsed time and permits a more expensive offline
 extractor when needed; this recovery requires no extra paid generation.
 
+**Production handset report — 2026-10-01:** The owner reports the supervised
+production call was perfect. The new funded call
+`live_u1_EU7v0p3oMt4QrU2z1xQ9EH9kpecoaRVS` is closed and has a matching private
+archive row under the exact production UID/business. Archive timestamps are
+10:03:07.856608–10:04:26.895472 UTC, with 11 assembled messages.
+Fresh independent final review returned **APPROVED** for the actual direct
+service answer: the admitted service claim is present before any delegation,
+without an extra offer, and source/artifact hashes match the approved version.
+175 private deltas assemble the 11 archived messages. The call's two later
+delegations are caller-history lookups, not company-detail retrieval; exact
+entailment of those later answers was not independently checked in this review.
+Evidence: `/tmp/mrcall-ai-kit/voice-handset-20261001/reviewer.log`.
+This closes the separate Café 124 pilot's last service-grounding gate, not this
+plan's M4/M5. Spoken company-detail retrieval, the five-repeat case matrix,
+adverse/correction coverage and same-window 20-turn p50/p95 criteria remain open.
+Single-call telemetry is 2,375 ms to first output audio and 713 ms from caller
+transcript end to first service-answer transcript; neither measures audible
+answer latency nor proves the planned p95 bounds.
+No additional call is requested to repeat the already-approved archive gate.
+
 ## M5 — Activate narrowly and retain rollback
 
 **Trial activation prerequisite (before handset M4):** independent approval of corrected M2/M3 code, privately validated real source-to-view result and exact release/config/rollback delta. Verify compatibility with the actual pinned release/host schema, preserve binding/headless auth/voice/greeting, ensure no active call, and retain the known-good release/config and approved source revision. The operator's production-test instruction authorizes the targeted reversible trial activation. Change only that instance through its existing release/drop-in path; never touch other profiles, mal's profile, number/tunnel or `update-daemons.sh`. Check imported release, effective switch, health, negative binding probes and current selected-context readback before reporting ready to call.
@@ -331,10 +363,10 @@ The supervised trial is ready at +390250552776. Its two localized questions are
 “Che servizi offrite?” and “Che misure di lattina avete?”. This verdict does not
 approve handset behavior, interruption or latency.
 
-**Continued acceptance dependency:** final supervised M4 real-model behavior and latency review. Until those pass, M5 remains in trial state and both plans remain open. The Café 124 pilot needs its own independent final behavior review before its overall status can change.
+**Continued acceptance dependency:** final supervised M4 real-model behavior and latency review. Until those pass, this plan remains active and M5 remains in trial state. The Café 124 pilot is completed after its independent October 1 service-grounding review; that scoped approval does not close this plan.
 
 On wrong binding, private disclosure, invented service, stale view, failed retrieval containment or material latency regression, disable the new company path or restore the prior production release/config for that instance. Do not restore a withdrawn source. Stop new admission and preserve private evidence for affected in-flight calls; rollback cannot retract speech already heard. Keep ledger/archive intact; rerun source and behavior gates before re-enabling. The targeted production trial was activated; overall acceptance remains open. The original release/config rollback is retained; no rollback has been performed.
 
 ## Plan review
 
-The amended brief and this plan have separate independent **APPROVED** reviews dated 2026-09-28; the plan reviewer used `gpt-6-sol` at high effort. The September 30 production-trial brief amendment and plan amendment each passed a separate fresh `gpt-6-sol` high review after their concrete REVISE findings were resolved. Revised M2/M3 code and the prepared exact deployment delta each passed a fresh milestone review. M4 real-source semantics are independently APPROVED. Production trial activation has succeeded; spoken behavior and latency remain open, so both plans retain active status.
+The amended brief and this plan have separate independent **APPROVED** reviews dated 2026-09-28; the plan reviewer used `gpt-6-sol` at high effort. The September 30 production-trial brief amendment and plan amendment each passed a separate fresh `gpt-6-sol` high review after their concrete REVISE findings were resolved. Revised M2/M3 code and the prepared exact deployment delta each passed a fresh milestone review. M4 real-source semantics are independently APPROVED. Production trial activation and the October 1 direct-service handset case are independently APPROVED. This plan stays active for the remaining detail, adverse/repetition and quantitative latency criteria; the separately reviewed Café 124 pilot is completed.

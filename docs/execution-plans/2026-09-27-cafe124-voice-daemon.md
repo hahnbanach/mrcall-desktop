@@ -1,20 +1,18 @@
 ---
-status: active
+status: completed
 date: 2026-09-27
 ---
 
 # Café 124: put GPT-Live in the production profile daemon
 
 <!-- doc-scope:start -->
-Scope: development, verification and one-number cutover plan for the manual
-Café 124 alpha on +390250552776. Paired with the
-[brief](../briefs/2026-09-27-cafe124-voice-daemon.md). A supervised second
-cutover serves the production daemon with the known caller's name. The
-supervised per-question memory review is active. The independent review passed
-the manual handset and identity gates before the local archive release. The
-operator permanently accepts possible missing words before transcript attach.
-The local `sessions` table is deployed; post-release final acceptance remains open.
-No upload of call transcripts to StarChat is planned.
+Scope: completed development, verification and one-number cutover plan for the
+manual Café 124 alpha on +390250552776, paired with the
+[brief](../briefs/2026-09-27-cafe124-voice-daemon.md). Independent reviews accept
+the manual handset, identity, local archive and final source-grounded service
+answer gates. The operator permanently accepts possible pre-attachment gaps.
+No transcript upload to StarChat is planned. Broader company-knowledge behavior
+and quantitative latency acceptance belong to the separate active knowledge plan.
 <!-- doc-scope:end -->
 
 ## Fixed boundary and observed starting point
@@ -1033,3 +1031,28 @@ must include a real business-services question with verified source evidence
 and a spoken answer that neither invents services nor exposes unselected or
 private facts. Do not repeat the already completed archive correlation merely
 to satisfy that new behavioral gate.
+
+## Company-knowledge handset report — 2026-10-01
+
+The owner reports the supervised production call was perfect after the reviewed
+company-knowledge trial activation. The call
+`live_u1_EU7v0p3oMt4QrU2z1xQ9EH9kpecoaRVS` is funded and closed, and its private
+archive row matches the production owner/business. The row starts at
+10:03:07.856608 UTC and ends at 10:04:26.895472 UTC, with 11 assembled messages.
+The earlier archive correlation is already APPROVED and is not being repeated.
+Fresh independent final review returned **APPROVED** for the new call's direct,
+source-grounded service answer: it contains the current admitted service claim
+before any delegation, with no additional offer. The exact source/artifact
+hashes match the previously reviewed version; 175 private deltas assemble the
+11 archived messages. The positive owner report supplies handset listening
+evidence. The review passes this pilot's last reopened service-grounding gate,
+so this plan is `completed`; the earlier manual/identity/archive acceptances
+remain in force.
+
+The new call's two later delegations query caller history, not company details.
+Their answer entailment was not independently checked in this final review.
+No spoken company-detail retrieval, new interruption/correction test, repeated
+adverse cases or audible p95 acceptance is claimed. Those broader criteria
+remain in the separate active company-knowledge plan. The review does not
+establish a general error rate or waive that plan's criteria.
+Safe review evidence: `/tmp/mrcall-ai-kit/voice-handset-20261001/reviewer.log`.

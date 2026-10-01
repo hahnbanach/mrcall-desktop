@@ -5,6 +5,67 @@ That file is a living snapshot and carries only `State now` / `Unresolved` /
 `Next`; anything chronological lands here instead. Newest section first.
 Nothing is discarded — only relocated, verbatim.
 
+## 2026-10-01 — Previous production release reference
+
+Three Café124 engines import pinned release `8d83193`; production runs the
+separate voice release `c3f95bb` (since 2026-09-30 14:16 UTC) through its
+systemd drop-in. The
+billing server is `prod-99091c35`.
+
+## 2026-10-01 — Before production phone-document migration
+
+Main's operator-instruction source is the reserved company-document project;
+this voice trial retains production USER_NOTES. Main's separate source retirement
+is excluded from the scoped trial. Its durable contract is
+[standing instructions](../engine/docs/features/project-memory.md).
+Local retirement commits and the rebased origin equivalents leave main diverged;
+publication needs a merge. Retirement deployment claims require their own review.
+
+GPT-Live is the sole telephone model. The Café 124 production daemon serves its
+Desktop socket and +390250552776 through the existing tunnel. Authenticated
+binding remains business `d44a1864-23cc-34f9-aec5-6e04bb2fd2ef-desktop`, UID
+`Gn9IcuWzYyY7DBMHkVUGB7bIiTp2`, `starter` and voice config revision 6.
+Caller history is restricted to a uniquely matched selected contact. Archive
+acceptance remains APPROVED; nine funded calls have private archive rows,
+including the October 1 closed call. StarChat transcript upload is cancelled.
+The [pilot](execution-plans/2026-09-27-cafe124-voice-daemon.md) is completed;
+the [knowledge plan](execution-plans/2026-09-28-voice-company-knowledge.md) stays
+active for its broader acceptance criteria. Source/query semantics, prompt/schema 8/6, bounded recovery and trial
+readiness are independently APPROVED. The private 270-character initial view
+and one detail reuse the paid K3 result. Live imports `c3f95bb-m1-53df502`,
+preserving USER_NOTES and prior path-confinement hotfixes; main's separate source
+retirement is excluded. Binding, health and unsigned webhook probes pass.
+The owner accepts the October 1 handset call as perfect; independent final
+review approves the source-grounded direct service answer. Company-detail
+retrieval was not exercised; broader case repetitions, later caller-history
+answer entailment and quantitative latency acceptance remain open. No company-store revision is
+admitted. Known credit refusals are settled at zero; old uncertainty remains
+quarantined.
+
+## 2026-10-01 — Before owner handset acceptance
+
+GPT-Live is the sole telephone model. The Café 124 production daemon serves its
+Desktop socket and +390250552776 through the existing tunnel. Authenticated
+readback binds business `d44a1864-23cc-34f9-aec5-6e04bb2fd2ef-desktop`, UID
+`Gn9IcuWzYyY7DBMHkVUGB7bIiTp2` and `starter`; voice config remains revision 6.
+Caller history is disclosed only for a uniquely matched selected contact.
+Local archive acceptance is independently APPROVED: eight private matching rows,
+three legacy and five reconstructed; September 28 archive calls need no repeat.
+StarChat transcript upload is cancelled. Overall acceptance remains REVISE after
+invented services in the prior call; the
+[pilot plan](execution-plans/2026-09-27-cafe124-voice-daemon.md) remains active.
+The [voice knowledge plan](execution-plans/2026-09-28-voice-company-knowledge.md)
+is active. Prompt/schema 8/6, bounded recovery and actual source/query semantics
+are independently APPROVED. The private 270-character initial view and one detail
+reuse an already-paid K3 response. The trial preserves USER_NOTES and excludes
+main's source retirement; the live
+`c3f95bb-m1-53df502` import tree preserves prior path-confinement hotfixes.
+Guarded targeted activation passed health, current-source readback and unsigned
+webhook probes; binding and revision 6 are retained. Spoken behavior and latency remain open. Known credit
+refusals are settled at zero; old uncertainty stays quarantined. No company-store
+revision is admitted. Independent trial readiness is APPROVED; the owner can now perform the supervised call.
+
+
 ## 2026-09-30 — Source recovery and import-pin observations
 
 - **USER_NOTES is retired (2026-09-30, cs-kernel v0.49.0 + engine `706fe2a` on
