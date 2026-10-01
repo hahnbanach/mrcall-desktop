@@ -5,6 +5,17 @@ That file is a living snapshot and carries only `State now` / `Unresolved` /
 `Next`; anything chronological lands here instead. Newest section first.
 Nothing is discarded — only relocated, verbatim.
 
+## 2026-10-01 — Before Mario instruction-write denial repair
+
+1. Close Mario’s headless instruction-write permission gap. Continue the active
+   knowledge plan from its untested company-detail and
+   broader case/quantitative latency gates; do not repeat archive acceptance.
+
+## 2026-10-01 — Before Mario instruction-write denial repair
+
+[Astra's review](evaluations/2026-10-01-astra-company-instructions-migration-review.md)
+requires denying `instructions.store` in Mario's headless wrapper before safe resume.
+
 ## 2026-10-01 — Before Astra headless and scheduling review
 
 Health, authenticated binding and unsigned callback checks pass. Both `124-cs`

@@ -4,6 +4,14 @@ Historical snapshots preserved verbatim when the living context is consolidated.
 Dated deployment claims and incident counts below are historical observations,
 not current operational state; use [active-context.md](active-context.md).
 
+## 2026-10-01 — Before Mario instruction-write denial repair
+
+Both clone pause files are absent. Mario imports `bbde719` with the same
+executable/socket and reads his revision-1 mailbox/procedures. His legacy
+headless wrapper still permits `instructions.store`: safe headless resume is
+REVISE pending a supported instruction-write denial. No Mario operator schedule
+exists; 124's schedule only reads his inbox. Other staff overlays retain f342c5c.
+
 ## 2026-10-01 — Before Astra headless and scheduling review
 
 Both `124-cs` and `mario124-cs` are resumed. Mario imports the `bbde719` staff

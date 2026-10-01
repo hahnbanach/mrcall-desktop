@@ -106,3 +106,24 @@ Retain a protected rollback of the current drop-in and pause state; failed
 activation restores the old daemon and keeps the clone paused. Do not modify
 company documents, upgrade Mario's kernel, run drafts/LLMs/calls or change
 production voice configuration. Main only; no new branch or worktree.
+
+## Authorized P1 correction — effective Mario instruction-write denial
+
+The operator explicitly requested fixing Astra's P1 and applying the av stance.
+Astra identified an M1 write surface reachable through Mario's legacy headless
+RPC allowance. Close it through supported project-local Claude Code permission
+settings, preserving the legacy kernel and its template-owned files. Mario's
+clone routes instruction authoring to the owning 124 clone and must not edit its
+own instructions; project-local denial applies to both headless and interactive
+Mario sessions. Owning-clone authoring remains available.
+
+Acceptance: deny the six supported raw-RPC spellings of `instructions.store`
+and the six instruction-compiler spellings (future-proof if that verb becomes
+available), even with the existing broad RPC allow. Confirm the real wrapper
+starts in the Mario clone and loads project-local configuration, rules are valid
+to the installed Claude Code, preview and the engine drafting reader remain
+available, and current company document revisions/hashes remain unchanged. Use
+synthetic/stub probes rather than a model invocation or live write. Preserve
+existing local settings and a private rollback. The same Astra reviewer must
+re-review until APPROVED. No kernel upgrade, cron creation, service restart,
+pause change, company write, draft, paid request or telephone call is required.

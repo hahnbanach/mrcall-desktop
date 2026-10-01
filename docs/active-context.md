@@ -62,8 +62,9 @@ Health, authenticated binding and unsigned callback checks pass. Both clone
 pause files are absent. Mario imports `bbde719` through his unchanged executable
 and socket; actual preview matches his mailbox/procedures revision 1. Mario has
 no operator schedule; 124's scheduled operator reads his inbox without drafting.
-[Astra's review](evaluations/2026-10-01-astra-company-instructions-migration-review.md)
-requires denying `instructions.store` in Mario's headless wrapper before safe resume.
+Mario's project-local permissions deny instruction writes in twelve supported
+command spellings, including raw `instructions.store`. Read access is preserved;
+the same [Astra reviewer approved the P1 repair](evaluations/2026-10-01-astra-instruction-write-denial-rereview.md).
 See the [source migration](execution-plans/2026-10-01-telephone-notes-source-is-phone-md.md).
 
 The [pilot](execution-plans/2026-09-27-cafe124-voice-daemon.md) is completed;
@@ -138,8 +139,7 @@ Refresh button only lists threads. See the archived
 
 ## Next
 
-1. Close Mario’s headless instruction-write permission gap. Continue the active
-   knowledge plan from its untested company-detail and
+1. Continue the active knowledge plan from its untested company-detail and
    broader case/quantitative latency gates; do not repeat archive acceptance.
 2. Resolve the remaining billing choices and funded credit acceptance. Keep
    preparation paused until the CTO explicitly requests a bounded run.

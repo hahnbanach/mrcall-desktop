@@ -49,9 +49,10 @@ active readback, authenticated binding, health and unsigned callbacks pass.
 Production instruction preview matches its unchanged revision-1 mailbox and
 procedures documents. All six stored documents remain unchanged at revision 1.
 Both clone pause files are absent. Mario imports `bbde719` with the same
-executable/socket and reads his revision-1 mailbox/procedures. His legacy
-headless wrapper still permits `instructions.store`: safe headless resume is
-REVISE pending a supported instruction-write denial. No Mario operator schedule
+executable/socket and reads his revision-1 mailbox/procedures. His
+project-local permissions deny instruction writes, including `instructions.store`,
+in twelve supported command spellings. Astra's P1 re-review is APPROVED;
+read-only preview and the engine drafting reader remain available. No Mario operator schedule
 exists; 124's schedule only reads his inbox. Other staff overlays retain f342c5c.
 See the [source migration plan](../../docs/execution-plans/2026-10-01-telephone-notes-source-is-phone-md.md).
 

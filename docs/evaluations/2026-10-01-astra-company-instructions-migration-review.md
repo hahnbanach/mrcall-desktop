@@ -1,7 +1,9 @@
 # Independent Astra review of company-instruction migration
 
 Read-only post-delivery review on 2026-10-01. Reviewer: GPT-6 Astra.
-Verdict: **REVISE**. No repair or live mutation was performed.
+Verdict at initial review: **REVISE**. No repair or live mutation was performed
+in that review. The later [P1 repair re-review](2026-10-01-astra-instruction-write-denial-rereview.md)
+is **APPROVED**; the initial findings below are preserved as historical evidence.
 
 ## Done
 - Verdict: REVISE

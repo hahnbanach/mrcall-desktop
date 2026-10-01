@@ -1,5 +1,5 @@
 ---
-status: active
+status: completed
 date: 2026-10-01
 ---
 
@@ -273,3 +273,84 @@ Astra independently verified actual production/Mario source readbacks, all
 and preserved profile/other-unit fingerprints. Production source migration is
 verified; safe Mario headless resume is REVISE. The broader knowledge plan's
 spoken-detail and latency gates remain open. Baseline hold remains unchanged.
+
+## M7 — Authorized P1 repair through Mario project-local permissions
+
+The operator requested fixing P1 and invoked av. The separate brief amendment
+received fresh independent APPROVED review. Mario's real git root is his clone
+(an unborn main with untracked authored files); project-local settings are
+already excluded by the global git-ignore rule. No clone commit is required.
+
+1. Record existing Mario local-settings presence/hash/mode and a private backup.
+   Preserve every existing key/rule. Prepare additive permission denials for
+   `rpc instructions.store` and `instructions`, each in the six established
+   command spellings. Apply only `.claude/settings.local.json` atomically with
+   mode 0600 after the plan review. Template-owned wrapper/settings, kernel pin,
+   company files, services, pauses and cron remain untouched.
+2. Validate the installed client's settings using read-only `claude doctor`
+   without a model request. Capture any diagnostics privately. Execute the
+   actual wrapper with a stub CLAUDE_BIN and isolated HOME so it performs no
+   actual operator work. The stub records argv/cwd and effective project/local
+   deny rules. Require the real Mario cwd, no setting-source override excluding
+   local settings, all twelve deny rules and unchanged existing wrapper denials.
+   Check all supported command spellings, including no-argument and argument
+   forms. Read-only preview and the draft reader command must remain permitted
+   by this correction. Supported deny semantics are documented in Claude Code
+   settings/permissions; this is an enumeration boundary, not a sandbox.
+3. Recheck actual Mario instructions.preview and owning-clone six document
+   hashes/histories at revision 1; no live writes or generated drafts are allowed.
+   Verify template/kernel/service/profile and pause/cron fingerprints remain
+   unchanged. A failed verification restores only the prior local settings.
+4. The same Astra reviewer re-reviews P1's effective-denial fix until APPROVED;
+   resolve concrete REVISE findings. A fresh final review checks the deployed
+   configuration and retained read path. Reconcile docs and doc-end, then commit
+   exact repository-owned documentation paths only. Preserve the historical
+   Astra REVISE report and add the actual repair verdict/evidence. Mark this
+   migration plan completed after P1 closure. Mario has no scheduled operator;
+   this repair does not create one or certify scheduled execution.
+
+Ownership: lead applies/verifies the local settings; reviewers gate this plan,
+Astra P1 closure and the final integration. Private rollback/probe evidence stays
+under the Mario state directory and session scratch area.
+
+### M7 execution evidence
+
+- Brief and plan amendments received separate fresh APPROVED reviews.
+- Applied twelve additive denies in Mario's project-local settings (0600),
+  preserving existing keys; private rollback under
+  `/home/mal/.mario124-cs/security-backups/20261001-instruction-write-denial/`.
+- Installed Claude Code doctor accepted the actual configuration. A synthetic
+  invalid project-local settings fixture was detected, confirming that this
+  client reads the local source. The actual wrapper ran with a stub agent and
+  isolated HOME: correct clone cwd/default settings sources, twelve effective
+  deny rules, 24 denied standard argument/no-argument forms, twelve unaffected
+  reader command forms and unchanged existing wrapper denials. This is a
+  documented prefix-policy enumeration check; no model or live mutation was run.
+- Before/after snapshots are equal: actual Mario preview, all six revision-1
+  company histories/hashes, template/kernel/profile/service fingerprints, other
+  staff/production state, pause presence and actual crontab hash are unchanged.
+- Evidence: `/tmp/mrcall-ai-kit/mario-p1-20261001/`. Same-Astra P1 re-review
+  is APPROVED; separate final review is APPROVED.
+- Permission contract references: Claude Code's [settings documentation](https://code.claude.com/docs/en/settings)
+  describes project-local settings and permission-list merging; its
+  [permission documentation](https://code.claude.com/docs/en/permissions)
+  defines deny precedence over allow. The real wrapper retains these setting
+  sources. Explicit local denial also applies to interactive Mario sessions,
+  consistent with routing instruction authoring to the owning 124 clone.
+- Same Astra reviewer independently reran doctor and current snapshots and
+  approved the effective-denial fix. The historical initial REVISE is retained;
+  [repair re-review](../evaluations/2026-10-01-astra-instruction-write-denial-rereview.md)
+  records P1 closure. No live model execution or attempted mutation was used to
+  prove this enumerated permission boundary. Kernel/template files, company
+  documents, services, pauses and schedules remain unchanged.
+- Separate fresh final review APPROVED: deployed configuration/hash/mode and
+  private rollback metadata verified; an independent preservation snapshot
+  matches both earlier snapshots exactly. Evidence:
+  `/tmp/mrcall-ai-kit/mario-p1-20261001/final-review.md`. P1 is closed and the
+  source-migration plan is completed. Knowledge-plan handset/detail/latency
+  acceptance remains separate and active. Doc-end mechanical gate is clean,
+  keyword coverage 55/55, independent doc-critic has zero STALE and root living
+  shape passes. Its archive precision correction was applied and the lead
+  verified the complete prior engine paragraph is preserved verbatim. Two
+  prior foreign lifecycle claims remain unverified; baseline stays 65659b3.
+  Evidence: `/tmp/mrcall-ai-kit/mario-p1-20261001/doc-critic.md`.
