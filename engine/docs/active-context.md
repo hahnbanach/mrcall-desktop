@@ -48,8 +48,10 @@ current source offsets after one K3 conversion. Source/query review passes;
 active readback, authenticated binding, health and unsigned callbacks pass.
 Production instruction preview matches its unchanged revision-1 mailbox and
 procedures documents. All six stored documents remain unchanged at revision 1.
-`124-cs` is resumed; Mario remains paused because his separate daemon still
-returns -32601 for instruction preview. See the [source migration plan](../../docs/execution-plans/2026-10-01-telephone-notes-source-is-phone-md.md).
+Both `124-cs` and `mario124-cs` are resumed. Mario imports the `bbde719` staff
+M1 overlay with the same executable/socket; his actual preview returns his
+revision-1 mailbox and procedures. The other two staff overlays retain f342c5c.
+See the [source migration plan](../../docs/execution-plans/2026-10-01-telephone-notes-source-is-phone-md.md).
 
 The owner accepted the October 1 handset trial; independent review approved its
 direct service answer against the prior USER_NOTES artifact. The manual pilot

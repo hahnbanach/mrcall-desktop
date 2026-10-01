@@ -5,6 +5,17 @@ That file is a living snapshot and carries only `State now` / `Unresolved` /
 `Next`; anything chronological lands here instead. Newest section first.
 Nothing is discarded — only relocated, verbatim.
 
+## 2026-10-01 — Before Mario instruction-reader migration
+
+1. Resolve Mario’s separate M1 reader before lifting its clone pause. Continue
+   the active knowledge plan from its untested company-detail and
+   broader case/quantitative latency gates; do not repeat archive acceptance.
+
+## 2026-10-01 — Before Mario instruction-reader migration
+
+Health, authenticated binding and unsigned callback checks pass. `124-cs` is
+resumed; `mario124-cs` remains paused pending its separate daemon's M1 reader.
+
 ## 2026-10-01 — Previous production release reference
 
 Three Café124 engines import pinned release `8d83193`; production runs the

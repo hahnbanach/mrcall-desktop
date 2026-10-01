@@ -84,3 +84,25 @@ rollback for the current release, configuration, private notes and clone pause
 state. The earlier USER_NOTES-based handset acceptance is historical evidence;
 it does not certify the new source conversion or close the knowledge plan's
 remaining spoken-detail and quantitative-latency gates.
+
+## Authorized completion — Mario's daemon and clone resume
+
+On October 1 the operator requested updating his paused operator. Production's
+source migration is already activated and independently APPROVED. The remaining
+work is a targeted deployment of the prepared staff M1 lineage to Mario's
+Café 124 daemon (`C06xHKoRcfdz94FaLPKuJuo0xVo1`) and verified clone resume.
+The current daemon imports `f342c5c`; prepared immutable `bbde719` adds the M1
+instruction reader to that lineage. Preserve the current executable environment,
+profile, authentication, company membership, settings and confinement protections.
+Other staff units and the production telephone daemon are outside this amendment.
+
+Acceptance: independently review compatibility and the prepared unit-path delta;
+confirm all six company documents unchanged with only revision 1 before restart;
+verify the actual daemon imports the prepared M1 artifact, remains reachable
+through its existing socket and returns exactly `mail/mario.alemi@cafe124.it.md`
+and `procedures.md`, revision 1 and matching stored hashes/block. Remove Mario's
+original CS_PAUSE only after those checks and independent integration approval.
+Retain a protected rollback of the current drop-in and pause state; failed
+activation restores the old daemon and keeps the clone paused. Do not modify
+company documents, upgrade Mario's kernel, run drafts/LLMs/calls or change
+production voice configuration. Main only; no new branch or worktree.

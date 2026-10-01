@@ -1,5 +1,5 @@
 ---
-status: blocked
+status: completed
 date: 2026-10-01
 ---
 
@@ -157,9 +157,9 @@ commits, and no inclusion of unrelated untracked files or company content.
   byte-identical, live process/health/artifact and actual pause states verified.
 - M5: fresh independent final review APPROVED for production source migration.
   Actual production preview/readback, all 653 release hashes, imported runtime,
-  protected configuration and reviewed artifact passed. Both-clone completion
-  is not approved: the plan is blocked solely on Mario's separate M1 reader and
-  subsequent verified resume. No new-source handset or rollback execution is
+  protected configuration and reviewed artifact passed. At that review, both-clone completion
+  was not approved: the plan was blocked solely on Mario's separate M1 reader
+  and subsequent verified resume; M6 below resolves that dependency. No new-source handset or rollback execution is
   claimed. Evidence: `/tmp/mrcall-ai-kit/phone-source-20261001/final-review.log`.
 - Documentation consolidation: root/engine living state, source role guidance,
   knowledge-plan amendment and indexes updated; prior state archived verbatim.
@@ -169,3 +169,82 @@ commits, and no inclusion of unrelated untracked files or company content.
   documentation baseline stays at `65659b3`. Evidence:
   `/tmp/mrcall-ai-kit/phone-source-20261001/doc-critic.log`. Documentation is
   consolidated for an exact-path commit; unrelated untracked files are excluded.
+
+## M6 — Authorized Mario daemon migration and resume
+
+The operator requested updating his paused operator. The brief amendment passed
+a fresh independent APPROVED review. This milestone supersedes the earlier
+no-staff-deployment boundary only for Mario's UID `C06xHKoRcfdz94FaLPKuJuo0xVo1`.
+
+1. Export immutable `bbde719eed50b356fc6eb1124865c2b04d6d7030` engine into
+   `/home/mrcalld/releases/mrcall-desktop-k3-8d83193-m1-bbde719`. Verify the
+   exported files against git and preserve the existing shared executable/venv.
+   Read-only comparison proves a 19-file M1 delta from `f342c5c` (17 engine
+   files and two app files; only engine is exported); no dependency,
+   storage schema, CLI serve, project-store or WhatsApp implementation changes.
+   Run the five focused instruction/env/hosted/confinement test files with
+   synthetic fixtures. If failures occur, compare only those to old f342c5c;
+   unexplained new failures block activation. This lineage preserves the old
+   protection level; it does not add origin706's newer key pin/startup selfcheck.
+2. Prepare a root-only rollback bundle for Mario's current drop-in and original
+   pause, plus metadata hashes. Change only the PYTHONPATH release path in
+   `90-daily-budget.conf`. A fresh integration reviewer gates the concrete
+   artifact/tests/helper before restart. Capture fingerprints of all other
+   Café 124 unit paths/PIDs and production voice config/artifact to prove scope.
+3. Before mutation require Mario active/current old import path, pause unchanged,
+   drop-in hash unchanged, artifact verified. From owning `124-cs`, require all
+   six compiled documents unchanged with revision 1 as their only history; pin
+   the current hashes, including Mario identity and procedures. Restart only
+   Mario. Verify actual import path/executable, UID/socket and active state;
+   run actual `mario124-cs` instructions.preview and compare ordered document
+   paths/revisions/hashes and assembled block to the frozen originals. Repeat
+   owning-clone document/history checks and scope fingerprints. Never print
+   document contents or secret environment values. Failure restores the old
+   drop-in, restarts only Mario and preserves/restores his pause.
+4. Independent integration review of actual activation precedes removing the
+   unchanged original Mario pause. Fresh final review verifies the clone's
+   actual read path and unpaused state; no draft/LLM/call is required. Update
+   root/engine living contexts and archive superseded passages verbatim, mark
+   source migration completed only after both named clones are resumed, then
+   doc-end and exact-path commit. The broader knowledge plan remains active.
+
+Ownership: lead owns prepared deployment and reconciliation; independent
+reviewers gate plan, prepared/actual activation, final integration and doc-critic.
+No new branch/worktree, kernel upgrade, company write or other profile deployment.
+
+### M6 execution record
+
+- Brief amendment: fresh independent APPROVED; plan amendment: another fresh
+  independent APPROVED.
+- Export: 470 git blobs match immutable bbde719 exactly. Five focused test files:
+  53 passed in 4.45 seconds. Tests used the repository test venv with isolated
+  synthetic HOME/profile because the retained live venv lacks pytest. The live
+  venv separately imports the candidate M1 modules and registers instruction
+  preview/store. No installed package or live profile changed during testing.
+- Protected Mario-only rollback/prepared delta:
+  `/etc/mrcalld/rollback-mario-m1-20261001/`. Only his PYTHONPATH changes; the
+  shared executable environment is retained. Prepared activation review APPROVED.
+  Evidence: `/tmp/mrcall-ai-kit/mario-resume-20261001/`.
+- Guarded activation passed: Mario PID 2636458 imports bbde719 through the
+  unchanged executable/UID/socket. Actual clone preview matches the frozen
+  Mario mailbox document and procedures at revision 1, including the assembled
+  block. All six documents remain unchanged with revision 1 only; other staff
+  and production fingerprints and Mario's profile environment are unchanged.
+  Original pause remains until independent actual-integration approval.
+- M6 actual integration: independent APPROVED. The reviewed resume helper
+  rechecked preview, document histories and unchanged other-unit fingerprints
+  before removing Mario's original pause. Both named clones are now unpaused.
+  Legacy Mario kernel remains unchanged; no scheduled operator run, draft or
+  model request was triggered to test resume. Fresh final review APPROVED:
+  actual user-path preview, all artifact hashes, source histories, unchanged
+  profile/other-unit fingerprints and both unpaused clones independently checked.
+  Evidence: `/tmp/mrcall-ai-kit/mario-resume-20261001/final-review.log`.
+  This closes the source migration and Mario resume dependency; the separate
+  knowledge plan retains its spoken-detail and broader latency gates.
+- M6 doc-end: mechanical gate clean, keyword coverage 47/47; independent
+  doc-critic verified 14 scoped claims with zero STALE and living shape OK.
+  Both superseded pause-state passages are preserved verbatim in archives.
+  Two prior foreign-retirement lifecycle claims remain unverified, so the
+  documentation baseline remains 65659b3. Scheduled execution, rollback
+  execution and new-source handset behavior are not certified by this closure.
+  Evidence: `/tmp/mrcall-ai-kit/mario-resume-20261001/doc-critic.log`.

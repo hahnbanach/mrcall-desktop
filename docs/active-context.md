@@ -58,8 +58,10 @@ The reviewed derived view retains 270 initial characters, one complete detail
 and six approved aliases. One K3 conversion settled; recovery preserved the
 same selected facts at current source offsets. Production preview matches the
 mailbox document and procedures; all six stored documents remain revision 1.
-Health, authenticated binding and unsigned callback checks pass. `124-cs` is
-resumed; `mario124-cs` remains paused pending its separate daemon's M1 reader.
+Health, authenticated binding and unsigned callback checks pass. Both `124-cs`
+and `mario124-cs` are resumed. Mario imports the prepared `bbde719` staff M1
+overlay through his unchanged executable/socket; his actual instruction preview
+matches his mailbox and procedures at revision 1.
 See the [source migration](execution-plans/2026-10-01-telephone-notes-source-is-phone-md.md).
 
 The [pilot](execution-plans/2026-09-27-cafe124-voice-daemon.md) is completed;
@@ -134,8 +136,7 @@ Refresh button only lists threads. See the archived
 
 ## Next
 
-1. Resolve Mario’s separate M1 reader before lifting its clone pause. Continue
-   the active knowledge plan from its untested company-detail and
+1. Continue the active knowledge plan from its untested company-detail and
    broader case/quantitative latency gates; do not repeat archive acceptance.
 2. Resolve the remaining billing choices and funded credit acceptance. Keep
    preparation paused until the CTO explicitly requests a bounded run.

@@ -4,6 +4,11 @@ Historical snapshots preserved verbatim when the living context is consolidated.
 Dated deployment claims and incident counts below are historical observations,
 not current operational state; use [active-context.md](active-context.md).
 
+## 2026-10-01 — Before Mario instruction-reader migration
+
+`124-cs` is resumed; Mario remains paused because his separate daemon still
+returns -32601 for instruction preview. See the [source migration plan](../../docs/execution-plans/2026-10-01-telephone-notes-source-is-phone-md.md).
+
 ## 2026-10-01 — Before production phone-document migration
 
 Company-knowledge prompt/schema 8/6, bounded recovery and actual source/query
