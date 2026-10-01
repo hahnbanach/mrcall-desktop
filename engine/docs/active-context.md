@@ -176,8 +176,9 @@ stay `pending` with no child, `attempts` 0 and no reason in the journal when
 the extraction worker raises on an answer that is neither bare `SKIP` nor an
 `#IDENTIFIERS` block, so the same answer is re-paid on every run; the role
 translated the Italian corrections into English (seven `must_preserve`
-misses). Still pending: the workflow green on the pushed branch (a pinned
-clone cannot be exercised before the push); the merge; and the rollout, which
+misses). The journey workflow is green on every run of the pushed branch
+(runs 2 to 8, the pinned kernel cloned with the workflow's own token).
+Still pending: the merge; and the rollout, which
 is the CTO's step-by-step decision on the hb plan
 `docs/execution-plans/2026-09-30-mnemonic-rollout.md`, with a migration
 rehearsal on a store copy before any live step. The hosted engines still run
@@ -256,6 +257,5 @@ API budgets; see [control boundaries](../../docs/operator-setup.md#ai-execution-
 2. Verify the Mac application through its GUI; start a bounded batch only when
    requested and review its role-specific outputs.
 3. Obtain the CTO's decision on the corpus's critical failure; merge
-   `mnemonic-m9` only after it and after the workflow is green on the pushed
-   branch; deploy only through the rollout plan.
+   `mnemonic-m9` only after it; deploy only through the rollout plan.
 4. Continue other workstreams under their existing plans.
