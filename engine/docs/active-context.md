@@ -163,9 +163,13 @@ turn included; the profile deleted. **AC 5 is not met**:
 `customer_price_correction` CREATEd a new Boreale COMPANY blob and left the
 seeded required target untouched, with the seeded legacy candidate shown first
 to the role; model behaviour on the arm, correctly flagged by the harness, not
-a seeding defect. Whether to accept that finding against a legacy-shaped
-candidate or hold is the CTO's open decision; the rollout's step-1 exit is not
-reached by this run. The run found that a fresh install resolves the Anthropic
+a seeding defect. The CTO's decision (2026-10-01): the `claude-haiku-4-5`
+arm is rejected as a product choice, Haiku is not a default or an arm
+anywhere; AC 5 is re-measured in milestone 10 on the model a
+requirements-based resolver chooses for the mnemonic role; milestone 9's
+model-agnostic code merges into `main` as is, the Haiku run kept in the record
+as the measure of a rejected arm. The rollout's step-1 exit waits for that
+re-measurement. The run found that a fresh install resolves the Anthropic
 SDK to 1.x, whose `messages.create()` refuses sampling keywords; the direct
 transport drops them (`88e2370`, `zylch/llm/sdk_request.py`) and both
 dependency files now pin `anthropic<2`. Known issues from the run: the record
@@ -256,6 +260,7 @@ API budgets; see [control boundaries](../../docs/operator-setup.md#ai-execution-
    uncertain requests. Keep automatic processing and preparation paused.
 2. Verify the Mac application through its GUI; start a bounded batch only when
    requested and review its role-specific outputs.
-3. Obtain the CTO's decision on the corpus's critical failure; merge
-   `mnemonic-m9` only after it; deploy only through the rollout plan.
+3. Merge `mnemonic-m9` as is (decision taken; workflow green on the pushed
+   branch first); re-measure AC 5 in milestone 10 on the resolver-chosen
+   model; deploy only through the rollout plan.
 4. Continue other workstreams under their existing plans.
