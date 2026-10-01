@@ -57,10 +57,13 @@ The hosted engine is being isolated per tenant
 path confinement, `run_python` refused when serving) and the host-independent
 part of M2 (per-profile Unix user, dual-name company store, `rekey`,
 `mrcall-tenant` helper, transitional unit template) are on `main` at
-`c2b3ca5` and reviewed, **not yet deployed**: the VPS still runs every daemon
-as `mrcalld`, and M2 must first pass the scratch-unit probes on a scratch
-VM (the operator keeps its address outside the repo). Self-serve provisioning stays
-closed until M2b is on all six profiles.
+`c2b3ca5` and reviewed. **M1 is deployed to all seven daemons** (2026-09-30:
+the three unpinned ones on the service checkout, the four Café124 ones as
+backports onto their pinned releases, rollback recorded in the plan). **No
+profile is migrated to its own Unix user yet**: M2 must first pass the
+scratch-unit probes on a scratch VM (the operator keeps its address outside
+the repo). Self-serve provisioning stays closed until M2b is on all seven
+profiles.
 
 Settings supports independent provider/model selection, daily budgets and bounded
 preparation. It remains reachable with an unavailable engine; stale connection
@@ -117,10 +120,11 @@ from a quiet one.
 - Remote provisioning needs host UID-to-company membership; an endpoint alone
   does not establish membership. Settings catalog refresh has a known same-value
   reload gap; reopen Settings after connection changes. See [backlog](harness-backlog.md).
-- Toward-sandbox: deploy M1 on the VPS, run the M2 scratch-unit probes on the
-  VM, then 2a (Café124 store relocation, all four stopped) and 2b (one
-  profile per day); M3 egress and the brief's parked operational floor
-  (backups, pinned rollout) follow. All need a session with a shell on the host.
+- Toward-sandbox: run the M2 scratch-unit probes on the VM, then 2a (Café124
+  store relocation, all four stopped) and 2b (one profile per day); M3 egress
+  and the brief's parked operational floor (backups, pinned rollout) follow.
+  All need a session with a shell on the host; the cloud session only reads
+  what those sessions commit.
 - Product chat, delegated sending, approval isolation and a comprehensive security
   review are deferred. Calendar integration, raw RPC errors,
   installer coverage and multi-window auth checks retain their existing owners.

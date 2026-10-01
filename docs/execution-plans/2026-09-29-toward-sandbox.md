@@ -370,9 +370,12 @@ Caddy tries the new socket path then the flat one during the window.
 tenant run outside the unit goes through `umask 007`. `create` refuses
 while the company's legacy store exists (2a first). `delete` derives
 last-holder from group membership and removes the empty group and dir.
-logrotate keeps `su mrcalld mrcalld`: the unmigrated profile dirs are
-`0770 mrcalld`, and root's logrotate skips their logs without it.
-provisiond's status treats the drop-in as proof a migrated profile exists.
+logrotate keeps `su mrcalld mrcalld` (the VPS session's `068b520`): the
+unmigrated profile dirs are `0770 mrcalld`, and root's logrotate skips
+their logs without it — which means the shared stanza cannot rotate a
+*migrated* profile's log; a per-tenant stanza (or a `su` per profile) is a
+host item for 2b, listed below. provisiond's status treats the drop-in as
+proof a migrated profile exists.
 
 Reviews: A (plan conformance + Python) REVISE → APPROVED at `3ce1928`
 (legacy path echoed; `.env` key beating the unit's; bare-string rekey;
