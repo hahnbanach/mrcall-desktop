@@ -70,19 +70,37 @@ In the app: **Settings → Backend location → Remote**, URL `ws://127.0.0.1:51
 
 The model:
 
-- A dedicated **system user `mrcalld`** owns the engine checkout, **all**
-  profiles, and runs **all** daemons (system-level systemd — no per-human
-  `systemctl --user` / linger).
-- One daemon per profile on a **per-uid Unix socket**
-  `/run/mrcalld/<uid>.sock` (`serve --unix …`). No TCP ports to assign or
-  remember, no collisions.
+- A dedicated **system user `mrcalld`** owns the engine checkout and the venv
+  (the **deploy identity**) and runs provisiond and every **unmigrated**
+  daemon (system-level systemd — no per-human `systemctl --user` / linger).
+- **One Unix user per profile** (since plan
+  [toward-sandbox](execution-plans/2026-09-29-toward-sandbox.md) M2, in
+  rollout): a migrated profile's daemon runs as `mc-<sha256(uid)[:12]>`,
+  owns only its profile directory, is a member of its company's group
+  `mc-c-<sha256(key)[:12]>` for the shared memory store, and runs inside a
+  systemd sandbox (read-only checkout, `ProtectHome=tmpfs`, private `/tmp`,
+  no capabilities) written as a per-instance drop-in by
+  `mrcall-tenant create <uid>`. Names never carry the uid or the key. The
+  template `zylch-server@.service` stays transitional (an unmigrated
+  instance behaves exactly as before) until every profile is migrated.
+- One daemon per profile on a **per-uid Unix socket**: migrated
+  `/run/mrcalld/<uid>/ws.sock`, unmigrated `/run/mrcalld/<uid>.sock`
+  (`serve --unix …`). No TCP ports to assign or remember, no collisions.
 - **Caddy** routes `/ws/<uid>` → that socket with one **static** rule
-  (`path_regexp`), so adding/removing profiles never touches Caddy. Every user
+  (`path_regexp`, trying the migrated path first with passive health
+  checks), so adding/removing profiles never touches Caddy. Every user
   shares `wss://<host>`; the app already appends `/ws/<uid>`.
-- Security is the per-daemon Firebase-JWT gate (`token.uid == OWNER_ID`); a
-  mis-route just fails `403`, so the routing is a hint, not the boundary.
+- Security over the network is the per-daemon Firebase-JWT gate
+  (`token.uid == OWNER_ID`); a mis-route just fails `403`, so the routing is
+  a hint, not the boundary. Security **on the host** is the per-profile Unix
+  user: another company's daemon cannot read or write this profile's files,
+  and the engine's own tools are confined to the profile's `downloads/` and
+  `scratch/` folders on a hosted engine (M1, deployed with `main` ≥ `c2b3ca5`).
 - One idempotent **`sudo update-daemons.sh`** is the operational entry-point:
-  pull code, discover profiles, ensure one daemon each, prune orphans.
+  pull code, discover profiles, re-apply the identity of already-migrated
+  profiles, ensure one daemon each, prune orphans. It never migrates a
+  profile by itself: migration is the operator's explicit `mrcall-tenant
+  create <uid>`, one profile per day, per the plan's runbook.
 
 ### B.1 · One-time server setup
 
@@ -140,8 +158,8 @@ uid, under the service user — it's private data, not in git. Note: a profile
 runs **either** locally **or** remotely, never both at once (the fcntl lock
 enforces it), and there is **no two-way sync** — once a profile is served from
 the server, the server copy is the source of truth; don't keep running that same
-profile locally against the old Mac copy, the two SQLite DBs would diverge. (And
-≤1 WhatsApp profile per server — see Caveats.) Then run the updater:
+profile locally against the old Mac copy, the two SQLite DBs would diverge.
+Then run the updater:
 
 ```bash
 # from your Mac: profile data -> server (rsync to /tmp, then move as root)
@@ -203,27 +221,36 @@ sudo /home/mrcalld/mrcall-desktop/engine/scripts/server/update-daemons.sh --prun
 
 ## Caveats
 
-- **Single-operator trust.** `mrcalld` owns the code and every profile; this is
-  fine for your own server. Hostile multi-tenancy (untrusted Linux users sharing
-  the box) would need per-tenant isolation — a separate design.
-- **WhatsApp is global, not per-profile.** `~/.zylch/whatsapp.db` (the neonize
-  session) is shared across **all** of `mrcalld`'s daemons. Until it's made
-  per-profile, run **at most one** profile with WhatsApp; two WhatsApp profiles
-  under one `mrcalld` will conflict (`<conflict type="replaced"/>`, wrong-account
-  data).
+- **This host is multi-tenant, and the boundary between tenants is the
+  per-profile Unix user.** Until a profile is migrated (`mrcall-tenant
+  create`), its daemon still runs as `mrcalld` next to every other
+  unmigrated one, with only the M1 tool confinement between them. The
+  threat model, the evidence and the acceptance criteria are in
+  [the toward-sandbox brief](briefs/2026-09-29-toward-sandbox.md); the
+  migration runbook (M2.7) and its rollback (`mrcall-tenant unmigrate`)
+  in [the plan](execution-plans/2026-09-29-toward-sandbox.md). Root
+  executes two things from the `mrcalld`-writable checkout: the unit
+  files it installs and the helper it copies to `/usr/local/sbin`
+  (`install -m 750`, the only path a sudoers rule may name).
+- **WhatsApp is per profile.** The neonize session lives at
+  `<profile>/whatsapp.db`; the global `~/.zylch/whatsapp.db` is a legacy
+  fallback the daemons never use (`ZYLCH_PROFILE_DIR` is always set).
 - **Server clock must be ~correct.** Firebase ID-token verification checks
   `exp`; a skewed clock rejects valid tokens. `timedatectl` should report
   synchronized.
-- **Never open a live profile DB as a non-`mrcalld` user — not even
-  read-only.** `sqlite3 'file:.../zylch.db?mode=ro'` run as your login user
+- **Never open a live profile DB or company store as any user but the
+  daemon's — not even read-only.** `sqlite3 'file:.../zylch.db?mode=ro'` run
+  as your login user (or as root, or as `mrcalld` on a migrated profile)
   creates a `zylch.db-shm` owned by *you*; the daemon then can't write the
   WAL and every write dies with `attempt to write a readonly database` (the
   `.db` itself looks fine — check the `-wal`/`-shm` owners). For diagnostics,
-  copy the DB out first, or read via `sudo -u mrcalld sqlite3 <db>`
-  (`?immutable=1` only on a copy — it ignores the WAL, so it shows a stale
-  snapshot of a live DB). Recovery: `chown mrcalld:mrcalld` the `-wal`/`-shm`
-  (safe when `-wal` is 0 bytes = nothing pending) and `systemctl restart` the
-  unit.
+  copy the DB out first, or read via `sudo -u <daemon user> sqlite3 <db>`
+  (`mrcalld` unmigrated, `mc-…` migrated; `mrcall-tenant names <uid>` prints
+  it; `?immutable=1` only on a copy — it ignores the WAL, so it shows a stale
+  snapshot of a live DB). Every operator command that touches a tenant's
+  files goes through the helper's `as_tenant` pattern with `umask 007`.
+  Recovery: `chown <daemon user>` the `-wal`/`-shm` (safe when `-wal` is
+  0 bytes = nothing pending) and `systemctl restart` the unit.
 
 ## Agent runbook — exact commands
 
@@ -295,8 +322,16 @@ curl -s -o /dev/null -w 'gate %{http_code}\n' https://<host>/ws/$PROF   # expect
 ## Shared company memory on the host (since 2026-09)
 
 The six original entity-memory tables no longer live in a profile's `zylch.db`: each
-company has one SQLite store, `~mrcalld/.zylch/memory/<MEMORY_KEY>.db`,
-and every profile holding that key shares it. The key is a 128-bit
+company has one SQLite store under `~mrcalld/.zylch/memory/`, and every
+profile holding that key shares it. Its file is named after a hash of the
+key, in a per-company subdirectory owned by the company group
+(`mc-c-<sha256(key)[:12]>/<sha256(key)[:32]>.db`, mode `2770`); stores
+created before the toward-sandbox plan still carry the legacy name
+`<MEMORY_KEY>.db` until the operator relocates them (`zylch -p <uid>
+memory-relocate-store`, with **all** of the company's daemons stopped —
+plan step 2a), and the engine opens whichever exists, never creating a
+second one. `zylch -p <uid> memory-names` prints the derived names; the
+legacy path is never printed because it is the key. The key is a 128-bit
 capability in the profile `.env` (`MEMORY_KEY`, with `MEMORY_KEY_SOURCE`
 saying how it was obtained: `mint`, `provision`, `join`). The company store
 also owns its metadata/history tables and the three authored-project tables;
