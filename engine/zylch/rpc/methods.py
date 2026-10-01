@@ -2490,6 +2490,14 @@ for _name, _fn in _PROJECT_METHODS.items():
         raise RuntimeError(f"duplicate RPC method registration: {_name}")
     METHODS[_name] = _fn
 
+# Standing operator instructions: one write door + read-only preview.
+from zylch.rpc.instructions import METHODS as _INSTRUCTION_METHODS  # noqa: E402
+
+for _name, _fn in _INSTRUCTION_METHODS.items():
+    if _name in METHODS:
+        raise RuntimeError(f"duplicate RPC method registration: {_name}")
+    METHODS[_name] = _fn
+
 from zylch.rpc.preparation import METHODS as _PREPARATION_METHODS  # noqa: E402
 
 for _name, _fn in _PREPARATION_METHODS.items():

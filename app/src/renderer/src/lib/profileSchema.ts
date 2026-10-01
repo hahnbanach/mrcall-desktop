@@ -170,14 +170,6 @@ export const PROFILE_SCHEMA: SchemaField[] = [
     picker: 'directory'
   },
   {
-    key: 'USER_NOTES',
-    label: 'Personal notes',
-    type: 'textarea',
-    group: 'Documents & notes',
-    optional: true,
-    help: 'Free-form context the assistant can use.'
-  },
-  {
     key: 'USER_SECRET_INSTRUCTIONS',
     label: 'Secret instructions',
     type: 'textarea',

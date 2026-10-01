@@ -15,8 +15,9 @@ ran always. This module makes cost scale with information change:
   changed since the last sweep. Any create/close/update changes the
   fingerprint, so reactivity to real changes stays at one tick.
 - **Daily full pass** (:func:`daily_pass_due`): once per 24h everything
-  is forced — the safety net for changes the gates can't see (e.g. a
-  USER_NOTES edit that should rewrite suggested_actions).
+  is forced — the safety net for changes the gates can't see (e.g. a new
+  revision of the standing instructions that should rewrite
+  suggested_actions).
 - **FORCE_FULL_SWEEPS** env: emergency bypass — every tick behaves like
   the daily pass, restoring the pre-gating cost profile.
 

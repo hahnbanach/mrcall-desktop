@@ -65,9 +65,9 @@ def test_quoting_matches_settings_io_quote(profiles_root):
     # A value that forces quoting (whitespace) proves byte-compatibility
     # with the app's own dotenv quoting, not just plain-value passthrough.
     tricky = "hello world # not a comment"
-    handler.handle_provision(_claims("uid-quote"), {"USER_NOTES": tricky})
+    handler.handle_provision(_claims("uid-quote"), {"USER_SECRET_INSTRUCTIONS": tricky})
     content = (profiles_root / "uid-quote" / ".env").read_text()
-    assert f"USER_NOTES={handler._quote(tricky)}\n" in content
+    assert f"USER_SECRET_INSTRUCTIONS={handler._quote(tricky)}\n" in content
     assert handler._quote(tricky).startswith('"')  # sanity: this value DOES need quoting
 
 

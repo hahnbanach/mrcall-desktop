@@ -17,7 +17,10 @@
     compress
     delaycompress
     copytruncate
-    # No `su`: since plan M2 each profile dir is owned by its tenant user;
-    # logrotate runs as root and the 0711 parents are not group/other
-    # writable, so its parent-directory check passes.
+    # Required while profiles are unmigrated: their dirs are 0770
+    # mrcalld:mrcalld, and root's logrotate skips a log whose parent is
+    # writable by a non-root group unless `su` is set. A migrated profile's
+    # dir (plan M2, owned by its tenant user) is not writable by mrcalld, so
+    # this stanza cannot rotate that profile's log.
+    su mrcalld mrcalld
 }

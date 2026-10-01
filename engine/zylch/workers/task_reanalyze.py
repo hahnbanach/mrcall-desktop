@@ -403,9 +403,9 @@ async def reanalyze_task(
         "thread history to decide."
     )
     # Same personal-data section task_creation appends (OPERATING RULES +
-    # USER_NOTES + secret instructions). Without it, a reanalysis evaluates
+    # standing instructions + secret instructions). Without it, a reanalysis evaluates
     # and REWRITES suggested_action blind to the operator's standing
-    # instructions — the user edits USER_NOTES, clicks update on a task,
+    # instructions — the operator stores a new instructions revision, clicks update on a task,
     # and nothing changes (observed 2026-06-11 on support@).
     try:
         from zylch.services.solve_constants import get_personal_data_section
