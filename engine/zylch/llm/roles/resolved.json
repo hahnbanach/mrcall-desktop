@@ -1,0 +1,1080 @@
+{
+  "as_of": {
+    "benchmarks": "2026-10-01T16:17:32.289Z",
+    "catalogue": "2026-10-01T16:52:23Z"
+  },
+  "presets": {
+    "economy": {
+      "ceiling": 10,
+      "raised_to": null,
+      "anthropic_raised_to": null,
+      "mrcall_raised_to": null,
+      "roles": {
+        "MNEMONIC": {
+          "rule": "maximise",
+          "index": "intelligence",
+          "catalogue_id": "anthropic/claude-sonnet-5.5",
+          "direct_id": "claude-sonnet-5-5",
+          "score": 56,
+          "scores": {
+            "intelligence": 56,
+            "coding": null,
+            "agentic": null
+          },
+          "price": {
+            "input": 2,
+            "output": 10
+          },
+          "below_floor": false,
+          "anthropic_fallback": {
+            "catalogue_id": "anthropic/claude-sonnet-5.5",
+            "direct_id": "claude-sonnet-5-5",
+            "score": 56,
+            "scores": {
+              "intelligence": 56,
+              "coding": null,
+              "agentic": null
+            },
+            "price": {
+              "input": 2,
+              "output": 10
+            },
+            "below_floor": false
+          },
+          "mrcall": "claude-sonnet-5"
+        },
+        "MEMORY_EXTRACT": {
+          "rule": "satisfice",
+          "index": "intelligence",
+          "catalogue_id": "z-ai/glm-5.3-flash",
+          "direct_id": null,
+          "score": 41.8,
+          "scores": {
+            "intelligence": 41.8,
+            "coding": 71.5,
+            "agentic": 50.9
+          },
+          "price": {
+            "input": 0.15,
+            "output": 0.5
+          },
+          "below_floor": false,
+          "anthropic_fallback": {
+            "catalogue_id": "anthropic/claude-sonnet-5.5",
+            "direct_id": "claude-sonnet-5-5",
+            "score": 56,
+            "scores": {
+              "intelligence": 56,
+              "coding": null,
+              "agentic": null
+            },
+            "price": {
+              "input": 2,
+              "output": 10
+            },
+            "below_floor": false
+          },
+          "mrcall": "claude-sonnet-5"
+        },
+        "MEMORY_MERGE": {
+          "rule": "maximise",
+          "index": "intelligence",
+          "catalogue_id": "anthropic/claude-sonnet-5.5",
+          "direct_id": "claude-sonnet-5-5",
+          "score": 56,
+          "scores": {
+            "intelligence": 56,
+            "coding": null,
+            "agentic": null
+          },
+          "price": {
+            "input": 2,
+            "output": 10
+          },
+          "below_floor": false,
+          "anthropic_fallback": {
+            "catalogue_id": "anthropic/claude-sonnet-5.5",
+            "direct_id": "claude-sonnet-5-5",
+            "score": 56,
+            "scores": {
+              "intelligence": 56,
+              "coding": null,
+              "agentic": null
+            },
+            "price": {
+              "input": 2,
+              "output": 10
+            },
+            "below_floor": false
+          },
+          "mrcall": "claude-sonnet-5"
+        },
+        "TASK_DETECTION": {
+          "rule": "satisfice",
+          "index": "intelligence",
+          "catalogue_id": "z-ai/glm-5.3-flash",
+          "direct_id": null,
+          "score": 41.8,
+          "scores": {
+            "intelligence": 41.8,
+            "coding": 71.5,
+            "agentic": 50.9
+          },
+          "price": {
+            "input": 0.15,
+            "output": 0.5
+          },
+          "below_floor": false,
+          "anthropic_fallback": {
+            "catalogue_id": "anthropic/claude-sonnet-5.5",
+            "direct_id": "claude-sonnet-5-5",
+            "score": 56,
+            "scores": {
+              "intelligence": 56,
+              "coding": null,
+              "agentic": null
+            },
+            "price": {
+              "input": 2,
+              "output": 10
+            },
+            "below_floor": false
+          },
+          "mrcall": "claude-sonnet-5"
+        },
+        "REANALYZE": {
+          "rule": "satisfice",
+          "index": "intelligence",
+          "catalogue_id": "z-ai/glm-5.3-flash",
+          "direct_id": null,
+          "score": 41.8,
+          "scores": {
+            "intelligence": 41.8,
+            "coding": 71.5,
+            "agentic": 50.9
+          },
+          "price": {
+            "input": 0.15,
+            "output": 0.5
+          },
+          "below_floor": false,
+          "anthropic_fallback": {
+            "catalogue_id": "anthropic/claude-sonnet-5.5",
+            "direct_id": "claude-sonnet-5-5",
+            "score": 56,
+            "scores": {
+              "intelligence": 56,
+              "coding": null,
+              "agentic": null
+            },
+            "price": {
+              "input": 2,
+              "output": 10
+            },
+            "below_floor": false
+          },
+          "mrcall": "claude-sonnet-5"
+        },
+        "DEDUP": {
+          "rule": "satisfice",
+          "index": "intelligence",
+          "catalogue_id": "xiaomi/mimo-v2.6-flash",
+          "direct_id": null,
+          "score": 37.9,
+          "scores": {
+            "intelligence": 37.9,
+            "coding": null,
+            "agentic": null
+          },
+          "price": {
+            "input": 0.14,
+            "output": 0.28
+          },
+          "below_floor": false,
+          "anthropic_fallback": {
+            "catalogue_id": "anthropic/claude-sonnet-5.5",
+            "direct_id": "claude-sonnet-5-5",
+            "score": 56,
+            "scores": {
+              "intelligence": 56,
+              "coding": null,
+              "agentic": null
+            },
+            "price": {
+              "input": 2,
+              "output": 10
+            },
+            "below_floor": false
+          },
+          "mrcall": "claude-sonnet-5"
+        },
+        "REPLY_NEED": {
+          "rule": "satisfice",
+          "index": "intelligence",
+          "catalogue_id": "xiaomi/mimo-v2.6-flash",
+          "direct_id": null,
+          "score": 37.9,
+          "scores": {
+            "intelligence": 37.9,
+            "coding": null,
+            "agentic": null
+          },
+          "price": {
+            "input": 0.14,
+            "output": 0.28
+          },
+          "below_floor": false,
+          "anthropic_fallback": {
+            "catalogue_id": "anthropic/claude-sonnet-5.5",
+            "direct_id": "claude-sonnet-5-5",
+            "score": 56,
+            "scores": {
+              "intelligence": 56,
+              "coding": null,
+              "agentic": null
+            },
+            "price": {
+              "input": 2,
+              "output": 10
+            },
+            "below_floor": false
+          },
+          "mrcall": "claude-sonnet-5"
+        },
+        "INTENT": {
+          "rule": "satisfice",
+          "index": "intelligence",
+          "catalogue_id": "xiaomi/mimo-v2.6-flash",
+          "direct_id": null,
+          "score": 37.9,
+          "scores": {
+            "intelligence": 37.9,
+            "coding": null,
+            "agentic": null
+          },
+          "price": {
+            "input": 0.14,
+            "output": 0.28
+          },
+          "below_floor": false,
+          "anthropic_fallback": {
+            "catalogue_id": "anthropic/claude-sonnet-5.5",
+            "direct_id": "claude-sonnet-5-5",
+            "score": 56,
+            "scores": {
+              "intelligence": 56,
+              "coding": null,
+              "agentic": null
+            },
+            "price": {
+              "input": 2,
+              "output": 10
+            },
+            "below_floor": false
+          },
+          "mrcall": "claude-sonnet-5"
+        },
+        "CHAT": {
+          "rule": "maximise",
+          "index": "agentic",
+          "catalogue_id": "qwen/qwen3.8-max-0902",
+          "direct_id": null,
+          "score": 56,
+          "scores": {
+            "intelligence": 45.4,
+            "coding": 76.2,
+            "agentic": 56
+          },
+          "price": {
+            "input": 2,
+            "output": 6
+          },
+          "below_floor": false,
+          "anthropic_fallback": {
+            "catalogue_id": "anthropic/claude-sonnet-5",
+            "direct_id": "claude-sonnet-5",
+            "score": 43.6,
+            "scores": {
+              "intelligence": 38.2,
+              "coding": 71.5,
+              "agentic": 43.6
+            },
+            "price": {
+              "input": 2,
+              "output": 10
+            },
+            "below_floor": false
+          },
+          "mrcall": "claude-sonnet-5"
+        },
+        "TASK_SOLVE": {
+          "rule": "maximise",
+          "index": "agentic",
+          "catalogue_id": "qwen/qwen3.8-max-0902",
+          "direct_id": null,
+          "score": 56,
+          "scores": {
+            "intelligence": 45.4,
+            "coding": 76.2,
+            "agentic": 56
+          },
+          "price": {
+            "input": 2,
+            "output": 6
+          },
+          "below_floor": false,
+          "anthropic_fallback": {
+            "catalogue_id": "anthropic/claude-sonnet-5",
+            "direct_id": "claude-sonnet-5",
+            "score": 43.6,
+            "scores": {
+              "intelligence": 38.2,
+              "coding": 71.5,
+              "agentic": 43.6
+            },
+            "price": {
+              "input": 2,
+              "output": 10
+            },
+            "below_floor": false
+          },
+          "mrcall": "claude-sonnet-5"
+        },
+        "TRAIN": {
+          "rule": "satisfice",
+          "index": "intelligence",
+          "catalogue_id": "z-ai/glm-5.3-flash",
+          "direct_id": null,
+          "score": 41.8,
+          "scores": {
+            "intelligence": 41.8,
+            "coding": 71.5,
+            "agentic": 50.9
+          },
+          "price": {
+            "input": 0.15,
+            "output": 0.5
+          },
+          "below_floor": false,
+          "anthropic_fallback": {
+            "catalogue_id": "anthropic/claude-sonnet-5.5",
+            "direct_id": "claude-sonnet-5-5",
+            "score": 56,
+            "scores": {
+              "intelligence": 56,
+              "coding": null,
+              "agentic": null
+            },
+            "price": {
+              "input": 2,
+              "output": 10
+            },
+            "below_floor": false
+          },
+          "mrcall": "claude-sonnet-5"
+        },
+        "COMPACTION": {
+          "rule": "satisfice",
+          "index": "intelligence",
+          "catalogue_id": "xiaomi/mimo-v2.6-flash",
+          "direct_id": null,
+          "score": 37.9,
+          "scores": {
+            "intelligence": 37.9,
+            "coding": null,
+            "agentic": null
+          },
+          "price": {
+            "input": 0.14,
+            "output": 0.28
+          },
+          "below_floor": false,
+          "anthropic_fallback": {
+            "catalogue_id": "anthropic/claude-sonnet-5.5",
+            "direct_id": "claude-sonnet-5-5",
+            "score": 56,
+            "scores": {
+              "intelligence": 56,
+              "coding": null,
+              "agentic": null
+            },
+            "price": {
+              "input": 2,
+              "output": 10
+            },
+            "below_floor": false
+          },
+          "mrcall": "claude-sonnet-5"
+        },
+        "SYNC_ANALYSIS": {
+          "rule": "satisfice",
+          "index": "intelligence",
+          "catalogue_id": "xiaomi/mimo-v2.6-flash",
+          "direct_id": null,
+          "score": 37.9,
+          "scores": {
+            "intelligence": 37.9,
+            "coding": null,
+            "agentic": null
+          },
+          "price": {
+            "input": 0.14,
+            "output": 0.28
+          },
+          "below_floor": false,
+          "anthropic_fallback": {
+            "catalogue_id": "anthropic/claude-sonnet-5.5",
+            "direct_id": "claude-sonnet-5-5",
+            "score": 56,
+            "scores": {
+              "intelligence": 56,
+              "coding": null,
+              "agentic": null
+            },
+            "price": {
+              "input": 2,
+              "output": 10
+            },
+            "below_floor": false
+          },
+          "mrcall": "claude-sonnet-5"
+        },
+        "WEB_SEARCH": {
+          "rule": "satisfice",
+          "index": "intelligence",
+          "catalogue_id": "xiaomi/mimo-v2.6-flash",
+          "direct_id": null,
+          "score": 37.9,
+          "scores": {
+            "intelligence": 37.9,
+            "coding": null,
+            "agentic": null
+          },
+          "price": {
+            "input": 0.14,
+            "output": 0.28
+          },
+          "below_floor": false,
+          "anthropic_fallback": {
+            "catalogue_id": "anthropic/claude-sonnet-5.5",
+            "direct_id": "claude-sonnet-5-5",
+            "score": 56,
+            "scores": {
+              "intelligence": 56,
+              "coding": null,
+              "agentic": null
+            },
+            "price": {
+              "input": 2,
+              "output": 10
+            },
+            "below_floor": false
+          },
+          "mrcall": "claude-sonnet-5"
+        },
+        "CORRECTION_LEARNING": {
+          "rule": "satisfice",
+          "index": "intelligence",
+          "catalogue_id": "z-ai/glm-5.3-flash",
+          "direct_id": null,
+          "score": 41.8,
+          "scores": {
+            "intelligence": 41.8,
+            "coding": 71.5,
+            "agentic": 50.9
+          },
+          "price": {
+            "input": 0.15,
+            "output": 0.5
+          },
+          "below_floor": false,
+          "anthropic_fallback": {
+            "catalogue_id": "anthropic/claude-sonnet-5.5",
+            "direct_id": "claude-sonnet-5-5",
+            "score": 56,
+            "scores": {
+              "intelligence": 56,
+              "coding": null,
+              "agentic": null
+            },
+            "price": {
+              "input": 2,
+              "output": 10
+            },
+            "below_floor": false
+          },
+          "mrcall": "claude-sonnet-5"
+        },
+        "NARRATION": {
+          "rule": "satisfice",
+          "index": "intelligence",
+          "catalogue_id": "xiaomi/mimo-v2.6-flash",
+          "direct_id": null,
+          "score": 37.9,
+          "scores": {
+            "intelligence": 37.9,
+            "coding": null,
+            "agentic": null
+          },
+          "price": {
+            "input": 0.14,
+            "output": 0.28
+          },
+          "below_floor": false,
+          "anthropic_fallback": {
+            "catalogue_id": "anthropic/claude-sonnet-5.5",
+            "direct_id": "claude-sonnet-5-5",
+            "score": 56,
+            "scores": {
+              "intelligence": 56,
+              "coding": null,
+              "agentic": null
+            },
+            "price": {
+              "input": 2,
+              "output": 10
+            },
+            "below_floor": false
+          },
+          "mrcall": "claude-sonnet-5"
+        }
+      }
+    },
+    "balanced": {
+      "ceiling": 20,
+      "raised_to": null,
+      "anthropic_raised_to": null,
+      "mrcall_raised_to": null,
+      "roles": {
+        "MNEMONIC": {
+          "rule": "maximise",
+          "index": "intelligence",
+          "catalogue_id": "anthropic/claude-opus-5.5",
+          "direct_id": "claude-opus-5-5",
+          "score": 57.6,
+          "scores": {
+            "intelligence": 57.6,
+            "coding": null,
+            "agentic": null
+          },
+          "price": {
+            "input": 4,
+            "output": 20
+          },
+          "below_floor": false,
+          "anthropic_fallback": {
+            "catalogue_id": "anthropic/claude-opus-5.5",
+            "direct_id": "claude-opus-5-5",
+            "score": 57.6,
+            "scores": {
+              "intelligence": 57.6,
+              "coding": null,
+              "agentic": null
+            },
+            "price": {
+              "input": 4,
+              "output": 20
+            },
+            "below_floor": false
+          },
+          "mrcall": "moonshotai/kimi-k3"
+        },
+        "MEMORY_EXTRACT": {
+          "rule": "satisfice",
+          "index": "intelligence",
+          "catalogue_id": "z-ai/glm-5.3-flash",
+          "direct_id": null,
+          "score": 41.8,
+          "scores": {
+            "intelligence": 41.8,
+            "coding": 71.5,
+            "agentic": 50.9
+          },
+          "price": {
+            "input": 0.15,
+            "output": 0.5
+          },
+          "below_floor": false,
+          "anthropic_fallback": {
+            "catalogue_id": "anthropic/claude-sonnet-5.5",
+            "direct_id": "claude-sonnet-5-5",
+            "score": 56,
+            "scores": {
+              "intelligence": 56,
+              "coding": null,
+              "agentic": null
+            },
+            "price": {
+              "input": 2,
+              "output": 10
+            },
+            "below_floor": false
+          },
+          "mrcall": "moonshotai/kimi-k3"
+        },
+        "MEMORY_MERGE": {
+          "rule": "maximise",
+          "index": "intelligence",
+          "catalogue_id": "anthropic/claude-opus-5.5",
+          "direct_id": "claude-opus-5-5",
+          "score": 57.6,
+          "scores": {
+            "intelligence": 57.6,
+            "coding": null,
+            "agentic": null
+          },
+          "price": {
+            "input": 4,
+            "output": 20
+          },
+          "below_floor": false,
+          "anthropic_fallback": {
+            "catalogue_id": "anthropic/claude-opus-5.5",
+            "direct_id": "claude-opus-5-5",
+            "score": 57.6,
+            "scores": {
+              "intelligence": 57.6,
+              "coding": null,
+              "agentic": null
+            },
+            "price": {
+              "input": 4,
+              "output": 20
+            },
+            "below_floor": false
+          },
+          "mrcall": "moonshotai/kimi-k3"
+        },
+        "TASK_DETECTION": {
+          "rule": "satisfice",
+          "index": "intelligence",
+          "catalogue_id": "z-ai/glm-5.3-flash",
+          "direct_id": null,
+          "score": 41.8,
+          "scores": {
+            "intelligence": 41.8,
+            "coding": 71.5,
+            "agentic": 50.9
+          },
+          "price": {
+            "input": 0.15,
+            "output": 0.5
+          },
+          "below_floor": false,
+          "anthropic_fallback": {
+            "catalogue_id": "anthropic/claude-sonnet-5.5",
+            "direct_id": "claude-sonnet-5-5",
+            "score": 56,
+            "scores": {
+              "intelligence": 56,
+              "coding": null,
+              "agentic": null
+            },
+            "price": {
+              "input": 2,
+              "output": 10
+            },
+            "below_floor": false
+          },
+          "mrcall": "moonshotai/kimi-k3"
+        },
+        "REANALYZE": {
+          "rule": "satisfice",
+          "index": "intelligence",
+          "catalogue_id": "z-ai/glm-5.3-flash",
+          "direct_id": null,
+          "score": 41.8,
+          "scores": {
+            "intelligence": 41.8,
+            "coding": 71.5,
+            "agentic": 50.9
+          },
+          "price": {
+            "input": 0.15,
+            "output": 0.5
+          },
+          "below_floor": false,
+          "anthropic_fallback": {
+            "catalogue_id": "anthropic/claude-sonnet-5.5",
+            "direct_id": "claude-sonnet-5-5",
+            "score": 56,
+            "scores": {
+              "intelligence": 56,
+              "coding": null,
+              "agentic": null
+            },
+            "price": {
+              "input": 2,
+              "output": 10
+            },
+            "below_floor": false
+          },
+          "mrcall": "moonshotai/kimi-k3"
+        },
+        "DEDUP": {
+          "rule": "satisfice",
+          "index": "intelligence",
+          "catalogue_id": "xiaomi/mimo-v2.6-flash",
+          "direct_id": null,
+          "score": 37.9,
+          "scores": {
+            "intelligence": 37.9,
+            "coding": null,
+            "agentic": null
+          },
+          "price": {
+            "input": 0.14,
+            "output": 0.28
+          },
+          "below_floor": false,
+          "anthropic_fallback": {
+            "catalogue_id": "anthropic/claude-sonnet-5.5",
+            "direct_id": "claude-sonnet-5-5",
+            "score": 56,
+            "scores": {
+              "intelligence": 56,
+              "coding": null,
+              "agentic": null
+            },
+            "price": {
+              "input": 2,
+              "output": 10
+            },
+            "below_floor": false
+          },
+          "mrcall": "claude-sonnet-5"
+        },
+        "REPLY_NEED": {
+          "rule": "satisfice",
+          "index": "intelligence",
+          "catalogue_id": "xiaomi/mimo-v2.6-flash",
+          "direct_id": null,
+          "score": 37.9,
+          "scores": {
+            "intelligence": 37.9,
+            "coding": null,
+            "agentic": null
+          },
+          "price": {
+            "input": 0.14,
+            "output": 0.28
+          },
+          "below_floor": false,
+          "anthropic_fallback": {
+            "catalogue_id": "anthropic/claude-sonnet-5.5",
+            "direct_id": "claude-sonnet-5-5",
+            "score": 56,
+            "scores": {
+              "intelligence": 56,
+              "coding": null,
+              "agentic": null
+            },
+            "price": {
+              "input": 2,
+              "output": 10
+            },
+            "below_floor": false
+          },
+          "mrcall": "claude-sonnet-5"
+        },
+        "INTENT": {
+          "rule": "satisfice",
+          "index": "intelligence",
+          "catalogue_id": "xiaomi/mimo-v2.6-flash",
+          "direct_id": null,
+          "score": 37.9,
+          "scores": {
+            "intelligence": 37.9,
+            "coding": null,
+            "agentic": null
+          },
+          "price": {
+            "input": 0.14,
+            "output": 0.28
+          },
+          "below_floor": false,
+          "anthropic_fallback": {
+            "catalogue_id": "anthropic/claude-sonnet-5.5",
+            "direct_id": "claude-sonnet-5-5",
+            "score": 56,
+            "scores": {
+              "intelligence": 56,
+              "coding": null,
+              "agentic": null
+            },
+            "price": {
+              "input": 2,
+              "output": 10
+            },
+            "below_floor": false
+          },
+          "mrcall": "claude-sonnet-5"
+        },
+        "CHAT": {
+          "rule": "maximise",
+          "index": "agentic",
+          "catalogue_id": "qwen/qwen3.8-max-0902",
+          "direct_id": null,
+          "score": 56,
+          "scores": {
+            "intelligence": 45.4,
+            "coding": 76.2,
+            "agentic": 56
+          },
+          "price": {
+            "input": 2,
+            "output": 6
+          },
+          "below_floor": false,
+          "anthropic_fallback": {
+            "catalogue_id": "anthropic/claude-sonnet-5",
+            "direct_id": "claude-sonnet-5",
+            "score": 43.6,
+            "scores": {
+              "intelligence": 38.2,
+              "coding": 71.5,
+              "agentic": 43.6
+            },
+            "price": {
+              "input": 2,
+              "output": 10
+            },
+            "below_floor": false
+          },
+          "mrcall": "moonshotai/kimi-k3"
+        },
+        "TASK_SOLVE": {
+          "rule": "maximise",
+          "index": "agentic",
+          "catalogue_id": "qwen/qwen3.8-max-0902",
+          "direct_id": null,
+          "score": 56,
+          "scores": {
+            "intelligence": 45.4,
+            "coding": 76.2,
+            "agentic": 56
+          },
+          "price": {
+            "input": 2,
+            "output": 6
+          },
+          "below_floor": false,
+          "anthropic_fallback": {
+            "catalogue_id": "anthropic/claude-sonnet-5",
+            "direct_id": "claude-sonnet-5",
+            "score": 43.6,
+            "scores": {
+              "intelligence": 38.2,
+              "coding": 71.5,
+              "agentic": 43.6
+            },
+            "price": {
+              "input": 2,
+              "output": 10
+            },
+            "below_floor": false
+          },
+          "mrcall": "moonshotai/kimi-k3"
+        },
+        "TRAIN": {
+          "rule": "satisfice",
+          "index": "intelligence",
+          "catalogue_id": "z-ai/glm-5.3-flash",
+          "direct_id": null,
+          "score": 41.8,
+          "scores": {
+            "intelligence": 41.8,
+            "coding": 71.5,
+            "agentic": 50.9
+          },
+          "price": {
+            "input": 0.15,
+            "output": 0.5
+          },
+          "below_floor": false,
+          "anthropic_fallback": {
+            "catalogue_id": "anthropic/claude-sonnet-5.5",
+            "direct_id": "claude-sonnet-5-5",
+            "score": 56,
+            "scores": {
+              "intelligence": 56,
+              "coding": null,
+              "agentic": null
+            },
+            "price": {
+              "input": 2,
+              "output": 10
+            },
+            "below_floor": false
+          },
+          "mrcall": "moonshotai/kimi-k3"
+        },
+        "COMPACTION": {
+          "rule": "satisfice",
+          "index": "intelligence",
+          "catalogue_id": "xiaomi/mimo-v2.6-flash",
+          "direct_id": null,
+          "score": 37.9,
+          "scores": {
+            "intelligence": 37.9,
+            "coding": null,
+            "agentic": null
+          },
+          "price": {
+            "input": 0.14,
+            "output": 0.28
+          },
+          "below_floor": false,
+          "anthropic_fallback": {
+            "catalogue_id": "anthropic/claude-sonnet-5.5",
+            "direct_id": "claude-sonnet-5-5",
+            "score": 56,
+            "scores": {
+              "intelligence": 56,
+              "coding": null,
+              "agentic": null
+            },
+            "price": {
+              "input": 2,
+              "output": 10
+            },
+            "below_floor": false
+          },
+          "mrcall": "claude-sonnet-5"
+        },
+        "SYNC_ANALYSIS": {
+          "rule": "satisfice",
+          "index": "intelligence",
+          "catalogue_id": "xiaomi/mimo-v2.6-flash",
+          "direct_id": null,
+          "score": 37.9,
+          "scores": {
+            "intelligence": 37.9,
+            "coding": null,
+            "agentic": null
+          },
+          "price": {
+            "input": 0.14,
+            "output": 0.28
+          },
+          "below_floor": false,
+          "anthropic_fallback": {
+            "catalogue_id": "anthropic/claude-sonnet-5.5",
+            "direct_id": "claude-sonnet-5-5",
+            "score": 56,
+            "scores": {
+              "intelligence": 56,
+              "coding": null,
+              "agentic": null
+            },
+            "price": {
+              "input": 2,
+              "output": 10
+            },
+            "below_floor": false
+          },
+          "mrcall": "claude-sonnet-5"
+        },
+        "WEB_SEARCH": {
+          "rule": "satisfice",
+          "index": "intelligence",
+          "catalogue_id": "xiaomi/mimo-v2.6-flash",
+          "direct_id": null,
+          "score": 37.9,
+          "scores": {
+            "intelligence": 37.9,
+            "coding": null,
+            "agentic": null
+          },
+          "price": {
+            "input": 0.14,
+            "output": 0.28
+          },
+          "below_floor": false,
+          "anthropic_fallback": {
+            "catalogue_id": "anthropic/claude-sonnet-5.5",
+            "direct_id": "claude-sonnet-5-5",
+            "score": 56,
+            "scores": {
+              "intelligence": 56,
+              "coding": null,
+              "agentic": null
+            },
+            "price": {
+              "input": 2,
+              "output": 10
+            },
+            "below_floor": false
+          },
+          "mrcall": "claude-sonnet-5"
+        },
+        "CORRECTION_LEARNING": {
+          "rule": "satisfice",
+          "index": "intelligence",
+          "catalogue_id": "z-ai/glm-5.3-flash",
+          "direct_id": null,
+          "score": 41.8,
+          "scores": {
+            "intelligence": 41.8,
+            "coding": 71.5,
+            "agentic": 50.9
+          },
+          "price": {
+            "input": 0.15,
+            "output": 0.5
+          },
+          "below_floor": false,
+          "anthropic_fallback": {
+            "catalogue_id": "anthropic/claude-sonnet-5.5",
+            "direct_id": "claude-sonnet-5-5",
+            "score": 56,
+            "scores": {
+              "intelligence": 56,
+              "coding": null,
+              "agentic": null
+            },
+            "price": {
+              "input": 2,
+              "output": 10
+            },
+            "below_floor": false
+          },
+          "mrcall": "moonshotai/kimi-k3"
+        },
+        "NARRATION": {
+          "rule": "satisfice",
+          "index": "intelligence",
+          "catalogue_id": "xiaomi/mimo-v2.6-flash",
+          "direct_id": null,
+          "score": 37.9,
+          "scores": {
+            "intelligence": 37.9,
+            "coding": null,
+            "agentic": null
+          },
+          "price": {
+            "input": 0.14,
+            "output": 0.28
+          },
+          "below_floor": false,
+          "anthropic_fallback": {
+            "catalogue_id": "anthropic/claude-sonnet-5.5",
+            "direct_id": "claude-sonnet-5-5",
+            "score": 56,
+            "scores": {
+              "intelligence": 56,
+              "coding": null,
+              "agentic": null
+            },
+            "price": {
+              "input": 2,
+              "output": 10
+            },
+            "below_floor": false
+          },
+          "mrcall": "claude-sonnet-5"
+        }
+      }
+    }
+  }
+}
