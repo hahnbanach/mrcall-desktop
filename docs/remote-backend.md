@@ -198,8 +198,9 @@ then a single updater run picks them all up (use real disk, not `/tmp` if it's
 # from your Mac — rsync the profiles you want remote (exclude any already on the
 # server) into a staging dir under your own home, then move + chown as root:
 rsync -az --exclude='<uid-already-on-server>' ~/.zylch/profiles/ user@server:_stage/profiles/
-ssh user@server 'sudo mv ~/_stage/profiles/* /home/mrcalld/.zylch/profiles/ \
-  && sudo chown -R mrcalld:mrcalld /home/mrcalld/.zylch/profiles/$PROF \   # never the whole tree once `mrcall-tenant list` is non-empty
+# chown only the dirs just moved — never the whole tree once `mrcall-tenant list` is non-empty
+ssh user@server 'for d in ~/_stage/profiles/*/; do u=$(basename "$d"); sudo mv "$d" /home/mrcalld/.zylch/profiles/ \
+  && sudo chown -R mrcalld:mrcalld "/home/mrcalld/.zylch/profiles/$u"; done \
   && sudo /home/mrcalld/mrcall-desktop/engine/scripts/server/update-daemons.sh \
   && rm -rf ~/_stage'
 ```
@@ -301,10 +302,11 @@ ssh "$SSH" 'set -e
 
 # per profile: PRIVATE data up (rsync, not git), then discover + start
 rsync -az ~/.zylch/profiles/"$PROF"/ "$SSH:/tmp/$PROF/"
+# chown only this profile dir — never the whole tree once `mrcall-tenant list` is non-empty
 ssh "$SSH" "sudo mkdir -p /home/mrcalld/.zylch/profiles \
   && sudo rm -rf /home/mrcalld/.zylch/profiles/$PROF \
   && sudo mv /tmp/$PROF /home/mrcalld/.zylch/profiles/ \
-  && sudo chown -R mrcalld:mrcalld /home/mrcalld/.zylch/profiles/$PROF \   # never the whole tree once `mrcall-tenant list` is non-empty
+  && sudo chown -R mrcalld:mrcalld /home/mrcalld/.zylch/profiles/$PROF \
   && sudo /home/mrcalld/mrcall-desktop/engine/scripts/server/update-daemons.sh"
 
 # verify
