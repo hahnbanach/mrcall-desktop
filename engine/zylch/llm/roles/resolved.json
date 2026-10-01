@@ -1,7 +1,7 @@
 {
   "as_of": {
     "benchmarks": "2026-10-01T16:17:32.289Z",
-    "catalogue": "2026-10-01T16:52:23Z"
+    "catalogue": "2026-10-01T16:29:47Z"
   },
   "presets": {
     "economy": {
@@ -41,7 +41,22 @@
             },
             "below_floor": false
           },
-          "mrcall": "claude-sonnet-5"
+          "mrcall": {
+            "id": "claude-sonnet-5",
+            "catalogue_id": "anthropic/claude-sonnet-5",
+            "direct_id": "claude-sonnet-5",
+            "score": 38.2,
+            "scores": {
+              "intelligence": 38.2,
+              "coding": 71.5,
+              "agentic": 43.6
+            },
+            "price": {
+              "input": 2,
+              "output": 10
+            },
+            "below_floor": false
+          }
         },
         "MEMORY_EXTRACT": {
           "rule": "satisfice",
@@ -74,7 +89,22 @@
             },
             "below_floor": false
           },
-          "mrcall": "claude-sonnet-5"
+          "mrcall": {
+            "id": "claude-sonnet-5",
+            "catalogue_id": "anthropic/claude-sonnet-5",
+            "direct_id": "claude-sonnet-5",
+            "score": 38.2,
+            "scores": {
+              "intelligence": 38.2,
+              "coding": 71.5,
+              "agentic": 43.6
+            },
+            "price": {
+              "input": 2,
+              "output": 10
+            },
+            "below_floor": true
+          }
         },
         "MEMORY_MERGE": {
           "rule": "maximise",
@@ -107,7 +137,22 @@
             },
             "below_floor": false
           },
-          "mrcall": "claude-sonnet-5"
+          "mrcall": {
+            "id": "claude-sonnet-5",
+            "catalogue_id": "anthropic/claude-sonnet-5",
+            "direct_id": "claude-sonnet-5",
+            "score": 38.2,
+            "scores": {
+              "intelligence": 38.2,
+              "coding": 71.5,
+              "agentic": 43.6
+            },
+            "price": {
+              "input": 2,
+              "output": 10
+            },
+            "below_floor": false
+          }
         },
         "TASK_DETECTION": {
           "rule": "satisfice",
@@ -140,7 +185,22 @@
             },
             "below_floor": false
           },
-          "mrcall": "claude-sonnet-5"
+          "mrcall": {
+            "id": "claude-sonnet-5",
+            "catalogue_id": "anthropic/claude-sonnet-5",
+            "direct_id": "claude-sonnet-5",
+            "score": 38.2,
+            "scores": {
+              "intelligence": 38.2,
+              "coding": 71.5,
+              "agentic": 43.6
+            },
+            "price": {
+              "input": 2,
+              "output": 10
+            },
+            "below_floor": true
+          }
         },
         "REANALYZE": {
           "rule": "satisfice",
@@ -173,7 +233,22 @@
             },
             "below_floor": false
           },
-          "mrcall": "claude-sonnet-5"
+          "mrcall": {
+            "id": "claude-sonnet-5",
+            "catalogue_id": "anthropic/claude-sonnet-5",
+            "direct_id": "claude-sonnet-5",
+            "score": 38.2,
+            "scores": {
+              "intelligence": 38.2,
+              "coding": 71.5,
+              "agentic": 43.6
+            },
+            "price": {
+              "input": 2,
+              "output": 10
+            },
+            "below_floor": true
+          }
         },
         "DEDUP": {
           "rule": "satisfice",
@@ -206,7 +281,22 @@
             },
             "below_floor": false
           },
-          "mrcall": "claude-sonnet-5"
+          "mrcall": {
+            "id": "claude-sonnet-5",
+            "catalogue_id": "anthropic/claude-sonnet-5",
+            "direct_id": "claude-sonnet-5",
+            "score": 38.2,
+            "scores": {
+              "intelligence": 38.2,
+              "coding": 71.5,
+              "agentic": 43.6
+            },
+            "price": {
+              "input": 2,
+              "output": 10
+            },
+            "below_floor": false
+          }
         },
         "REPLY_NEED": {
           "rule": "satisfice",
@@ -239,7 +329,22 @@
             },
             "below_floor": false
           },
-          "mrcall": "claude-sonnet-5"
+          "mrcall": {
+            "id": "claude-sonnet-5",
+            "catalogue_id": "anthropic/claude-sonnet-5",
+            "direct_id": "claude-sonnet-5",
+            "score": 38.2,
+            "scores": {
+              "intelligence": 38.2,
+              "coding": 71.5,
+              "agentic": 43.6
+            },
+            "price": {
+              "input": 2,
+              "output": 10
+            },
+            "below_floor": false
+          }
         },
         "INTENT": {
           "rule": "satisfice",
@@ -272,7 +377,22 @@
             },
             "below_floor": false
           },
-          "mrcall": "claude-sonnet-5"
+          "mrcall": {
+            "id": "claude-sonnet-5",
+            "catalogue_id": "anthropic/claude-sonnet-5",
+            "direct_id": "claude-sonnet-5",
+            "score": 38.2,
+            "scores": {
+              "intelligence": 38.2,
+              "coding": 71.5,
+              "agentic": 43.6
+            },
+            "price": {
+              "input": 2,
+              "output": 10
+            },
+            "below_floor": false
+          }
         },
         "CHAT": {
           "rule": "maximise",
@@ -305,7 +425,22 @@
             },
             "below_floor": false
           },
-          "mrcall": "claude-sonnet-5"
+          "mrcall": {
+            "id": "claude-sonnet-5",
+            "catalogue_id": "anthropic/claude-sonnet-5",
+            "direct_id": "claude-sonnet-5",
+            "score": 43.6,
+            "scores": {
+              "intelligence": 38.2,
+              "coding": 71.5,
+              "agentic": 43.6
+            },
+            "price": {
+              "input": 2,
+              "output": 10
+            },
+            "below_floor": false
+          }
         },
         "TASK_SOLVE": {
           "rule": "maximise",
@@ -338,7 +473,22 @@
             },
             "below_floor": false
           },
-          "mrcall": "claude-sonnet-5"
+          "mrcall": {
+            "id": "claude-sonnet-5",
+            "catalogue_id": "anthropic/claude-sonnet-5",
+            "direct_id": "claude-sonnet-5",
+            "score": 43.6,
+            "scores": {
+              "intelligence": 38.2,
+              "coding": 71.5,
+              "agentic": 43.6
+            },
+            "price": {
+              "input": 2,
+              "output": 10
+            },
+            "below_floor": false
+          }
         },
         "TRAIN": {
           "rule": "satisfice",
@@ -371,7 +521,22 @@
             },
             "below_floor": false
           },
-          "mrcall": "claude-sonnet-5"
+          "mrcall": {
+            "id": "claude-sonnet-5",
+            "catalogue_id": "anthropic/claude-sonnet-5",
+            "direct_id": "claude-sonnet-5",
+            "score": 38.2,
+            "scores": {
+              "intelligence": 38.2,
+              "coding": 71.5,
+              "agentic": 43.6
+            },
+            "price": {
+              "input": 2,
+              "output": 10
+            },
+            "below_floor": true
+          }
         },
         "COMPACTION": {
           "rule": "satisfice",
@@ -404,7 +569,22 @@
             },
             "below_floor": false
           },
-          "mrcall": "claude-sonnet-5"
+          "mrcall": {
+            "id": "claude-sonnet-5",
+            "catalogue_id": "anthropic/claude-sonnet-5",
+            "direct_id": "claude-sonnet-5",
+            "score": 38.2,
+            "scores": {
+              "intelligence": 38.2,
+              "coding": 71.5,
+              "agentic": 43.6
+            },
+            "price": {
+              "input": 2,
+              "output": 10
+            },
+            "below_floor": false
+          }
         },
         "SYNC_ANALYSIS": {
           "rule": "satisfice",
@@ -437,7 +617,22 @@
             },
             "below_floor": false
           },
-          "mrcall": "claude-sonnet-5"
+          "mrcall": {
+            "id": "claude-sonnet-5",
+            "catalogue_id": "anthropic/claude-sonnet-5",
+            "direct_id": "claude-sonnet-5",
+            "score": 38.2,
+            "scores": {
+              "intelligence": 38.2,
+              "coding": 71.5,
+              "agentic": 43.6
+            },
+            "price": {
+              "input": 2,
+              "output": 10
+            },
+            "below_floor": false
+          }
         },
         "WEB_SEARCH": {
           "rule": "satisfice",
@@ -470,7 +665,22 @@
             },
             "below_floor": false
           },
-          "mrcall": "claude-sonnet-5"
+          "mrcall": {
+            "id": "claude-sonnet-5",
+            "catalogue_id": "anthropic/claude-sonnet-5",
+            "direct_id": "claude-sonnet-5",
+            "score": 38.2,
+            "scores": {
+              "intelligence": 38.2,
+              "coding": 71.5,
+              "agentic": 43.6
+            },
+            "price": {
+              "input": 2,
+              "output": 10
+            },
+            "below_floor": false
+          }
         },
         "CORRECTION_LEARNING": {
           "rule": "satisfice",
@@ -503,7 +713,22 @@
             },
             "below_floor": false
           },
-          "mrcall": "claude-sonnet-5"
+          "mrcall": {
+            "id": "claude-sonnet-5",
+            "catalogue_id": "anthropic/claude-sonnet-5",
+            "direct_id": "claude-sonnet-5",
+            "score": 38.2,
+            "scores": {
+              "intelligence": 38.2,
+              "coding": 71.5,
+              "agentic": 43.6
+            },
+            "price": {
+              "input": 2,
+              "output": 10
+            },
+            "below_floor": true
+          }
         },
         "NARRATION": {
           "rule": "satisfice",
@@ -536,7 +761,22 @@
             },
             "below_floor": false
           },
-          "mrcall": "claude-sonnet-5"
+          "mrcall": {
+            "id": "claude-sonnet-5",
+            "catalogue_id": "anthropic/claude-sonnet-5",
+            "direct_id": "claude-sonnet-5",
+            "score": 38.2,
+            "scores": {
+              "intelligence": 38.2,
+              "coding": 71.5,
+              "agentic": 43.6
+            },
+            "price": {
+              "input": 2,
+              "output": 10
+            },
+            "below_floor": false
+          }
         }
       }
     },
@@ -577,7 +817,26 @@
             },
             "below_floor": false
           },
-          "mrcall": "moonshotai/kimi-k3"
+          "mrcall": {
+            "id": "moonshotai/kimi-k3",
+            "catalogue_id": "moonshotai/kimi-k3",
+            "direct_id": null,
+            "score": 43.6,
+            "scores": {
+              "intelligence": 43.6,
+              "coding": 76.2,
+              "agentic": 50
+            },
+            "price": {
+              "input": 2.648138063,
+              "output": 13.28272425
+            },
+            "below_floor": false,
+            "catalogue_price": {
+              "input": 0.6635,
+              "output": 10
+            }
+          }
         },
         "MEMORY_EXTRACT": {
           "rule": "satisfice",
@@ -610,7 +869,26 @@
             },
             "below_floor": false
           },
-          "mrcall": "moonshotai/kimi-k3"
+          "mrcall": {
+            "id": "moonshotai/kimi-k3",
+            "catalogue_id": "moonshotai/kimi-k3",
+            "direct_id": null,
+            "score": 43.6,
+            "scores": {
+              "intelligence": 43.6,
+              "coding": 76.2,
+              "agentic": 50
+            },
+            "price": {
+              "input": 2.648138063,
+              "output": 13.28272425
+            },
+            "below_floor": false,
+            "catalogue_price": {
+              "input": 0.6635,
+              "output": 10
+            }
+          }
         },
         "MEMORY_MERGE": {
           "rule": "maximise",
@@ -643,7 +921,26 @@
             },
             "below_floor": false
           },
-          "mrcall": "moonshotai/kimi-k3"
+          "mrcall": {
+            "id": "moonshotai/kimi-k3",
+            "catalogue_id": "moonshotai/kimi-k3",
+            "direct_id": null,
+            "score": 43.6,
+            "scores": {
+              "intelligence": 43.6,
+              "coding": 76.2,
+              "agentic": 50
+            },
+            "price": {
+              "input": 2.648138063,
+              "output": 13.28272425
+            },
+            "below_floor": false,
+            "catalogue_price": {
+              "input": 0.6635,
+              "output": 10
+            }
+          }
         },
         "TASK_DETECTION": {
           "rule": "satisfice",
@@ -676,7 +973,26 @@
             },
             "below_floor": false
           },
-          "mrcall": "moonshotai/kimi-k3"
+          "mrcall": {
+            "id": "moonshotai/kimi-k3",
+            "catalogue_id": "moonshotai/kimi-k3",
+            "direct_id": null,
+            "score": 43.6,
+            "scores": {
+              "intelligence": 43.6,
+              "coding": 76.2,
+              "agentic": 50
+            },
+            "price": {
+              "input": 2.648138063,
+              "output": 13.28272425
+            },
+            "below_floor": false,
+            "catalogue_price": {
+              "input": 0.6635,
+              "output": 10
+            }
+          }
         },
         "REANALYZE": {
           "rule": "satisfice",
@@ -709,7 +1025,26 @@
             },
             "below_floor": false
           },
-          "mrcall": "moonshotai/kimi-k3"
+          "mrcall": {
+            "id": "moonshotai/kimi-k3",
+            "catalogue_id": "moonshotai/kimi-k3",
+            "direct_id": null,
+            "score": 43.6,
+            "scores": {
+              "intelligence": 43.6,
+              "coding": 76.2,
+              "agentic": 50
+            },
+            "price": {
+              "input": 2.648138063,
+              "output": 13.28272425
+            },
+            "below_floor": false,
+            "catalogue_price": {
+              "input": 0.6635,
+              "output": 10
+            }
+          }
         },
         "DEDUP": {
           "rule": "satisfice",
@@ -742,7 +1077,22 @@
             },
             "below_floor": false
           },
-          "mrcall": "claude-sonnet-5"
+          "mrcall": {
+            "id": "claude-sonnet-5",
+            "catalogue_id": "anthropic/claude-sonnet-5",
+            "direct_id": "claude-sonnet-5",
+            "score": 38.2,
+            "scores": {
+              "intelligence": 38.2,
+              "coding": 71.5,
+              "agentic": 43.6
+            },
+            "price": {
+              "input": 2,
+              "output": 10
+            },
+            "below_floor": false
+          }
         },
         "REPLY_NEED": {
           "rule": "satisfice",
@@ -775,7 +1125,22 @@
             },
             "below_floor": false
           },
-          "mrcall": "claude-sonnet-5"
+          "mrcall": {
+            "id": "claude-sonnet-5",
+            "catalogue_id": "anthropic/claude-sonnet-5",
+            "direct_id": "claude-sonnet-5",
+            "score": 38.2,
+            "scores": {
+              "intelligence": 38.2,
+              "coding": 71.5,
+              "agentic": 43.6
+            },
+            "price": {
+              "input": 2,
+              "output": 10
+            },
+            "below_floor": false
+          }
         },
         "INTENT": {
           "rule": "satisfice",
@@ -808,7 +1173,22 @@
             },
             "below_floor": false
           },
-          "mrcall": "claude-sonnet-5"
+          "mrcall": {
+            "id": "claude-sonnet-5",
+            "catalogue_id": "anthropic/claude-sonnet-5",
+            "direct_id": "claude-sonnet-5",
+            "score": 38.2,
+            "scores": {
+              "intelligence": 38.2,
+              "coding": 71.5,
+              "agentic": 43.6
+            },
+            "price": {
+              "input": 2,
+              "output": 10
+            },
+            "below_floor": false
+          }
         },
         "CHAT": {
           "rule": "maximise",
@@ -841,7 +1221,26 @@
             },
             "below_floor": false
           },
-          "mrcall": "moonshotai/kimi-k3"
+          "mrcall": {
+            "id": "moonshotai/kimi-k3",
+            "catalogue_id": "moonshotai/kimi-k3",
+            "direct_id": null,
+            "score": 50,
+            "scores": {
+              "intelligence": 43.6,
+              "coding": 76.2,
+              "agentic": 50
+            },
+            "price": {
+              "input": 2.648138063,
+              "output": 13.28272425
+            },
+            "below_floor": false,
+            "catalogue_price": {
+              "input": 0.6635,
+              "output": 10
+            }
+          }
         },
         "TASK_SOLVE": {
           "rule": "maximise",
@@ -874,7 +1273,26 @@
             },
             "below_floor": false
           },
-          "mrcall": "moonshotai/kimi-k3"
+          "mrcall": {
+            "id": "moonshotai/kimi-k3",
+            "catalogue_id": "moonshotai/kimi-k3",
+            "direct_id": null,
+            "score": 50,
+            "scores": {
+              "intelligence": 43.6,
+              "coding": 76.2,
+              "agentic": 50
+            },
+            "price": {
+              "input": 2.648138063,
+              "output": 13.28272425
+            },
+            "below_floor": false,
+            "catalogue_price": {
+              "input": 0.6635,
+              "output": 10
+            }
+          }
         },
         "TRAIN": {
           "rule": "satisfice",
@@ -907,7 +1325,26 @@
             },
             "below_floor": false
           },
-          "mrcall": "moonshotai/kimi-k3"
+          "mrcall": {
+            "id": "moonshotai/kimi-k3",
+            "catalogue_id": "moonshotai/kimi-k3",
+            "direct_id": null,
+            "score": 43.6,
+            "scores": {
+              "intelligence": 43.6,
+              "coding": 76.2,
+              "agentic": 50
+            },
+            "price": {
+              "input": 2.648138063,
+              "output": 13.28272425
+            },
+            "below_floor": false,
+            "catalogue_price": {
+              "input": 0.6635,
+              "output": 10
+            }
+          }
         },
         "COMPACTION": {
           "rule": "satisfice",
@@ -940,7 +1377,22 @@
             },
             "below_floor": false
           },
-          "mrcall": "claude-sonnet-5"
+          "mrcall": {
+            "id": "claude-sonnet-5",
+            "catalogue_id": "anthropic/claude-sonnet-5",
+            "direct_id": "claude-sonnet-5",
+            "score": 38.2,
+            "scores": {
+              "intelligence": 38.2,
+              "coding": 71.5,
+              "agentic": 43.6
+            },
+            "price": {
+              "input": 2,
+              "output": 10
+            },
+            "below_floor": false
+          }
         },
         "SYNC_ANALYSIS": {
           "rule": "satisfice",
@@ -973,7 +1425,22 @@
             },
             "below_floor": false
           },
-          "mrcall": "claude-sonnet-5"
+          "mrcall": {
+            "id": "claude-sonnet-5",
+            "catalogue_id": "anthropic/claude-sonnet-5",
+            "direct_id": "claude-sonnet-5",
+            "score": 38.2,
+            "scores": {
+              "intelligence": 38.2,
+              "coding": 71.5,
+              "agentic": 43.6
+            },
+            "price": {
+              "input": 2,
+              "output": 10
+            },
+            "below_floor": false
+          }
         },
         "WEB_SEARCH": {
           "rule": "satisfice",
@@ -1006,7 +1473,22 @@
             },
             "below_floor": false
           },
-          "mrcall": "claude-sonnet-5"
+          "mrcall": {
+            "id": "claude-sonnet-5",
+            "catalogue_id": "anthropic/claude-sonnet-5",
+            "direct_id": "claude-sonnet-5",
+            "score": 38.2,
+            "scores": {
+              "intelligence": 38.2,
+              "coding": 71.5,
+              "agentic": 43.6
+            },
+            "price": {
+              "input": 2,
+              "output": 10
+            },
+            "below_floor": false
+          }
         },
         "CORRECTION_LEARNING": {
           "rule": "satisfice",
@@ -1039,7 +1521,26 @@
             },
             "below_floor": false
           },
-          "mrcall": "moonshotai/kimi-k3"
+          "mrcall": {
+            "id": "moonshotai/kimi-k3",
+            "catalogue_id": "moonshotai/kimi-k3",
+            "direct_id": null,
+            "score": 43.6,
+            "scores": {
+              "intelligence": 43.6,
+              "coding": 76.2,
+              "agentic": 50
+            },
+            "price": {
+              "input": 2.648138063,
+              "output": 13.28272425
+            },
+            "below_floor": false,
+            "catalogue_price": {
+              "input": 0.6635,
+              "output": 10
+            }
+          }
         },
         "NARRATION": {
           "rule": "satisfice",
@@ -1072,7 +1573,22 @@
             },
             "below_floor": false
           },
-          "mrcall": "claude-sonnet-5"
+          "mrcall": {
+            "id": "claude-sonnet-5",
+            "catalogue_id": "anthropic/claude-sonnet-5",
+            "direct_id": "claude-sonnet-5",
+            "score": 38.2,
+            "scores": {
+              "intelligence": 38.2,
+              "coding": 71.5,
+              "agentic": 43.6
+            },
+            "price": {
+              "input": 2,
+              "output": 10
+            },
+            "below_floor": false
+          }
         }
       }
     }

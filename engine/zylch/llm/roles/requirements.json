@@ -243,6 +243,7 @@
       }
     }
   },
+  "_about_mrcall_served": "A client-side copy of the MrCall credits server's model catalogue as of 2026-10-01: the direct ids of budget_pricing.PRICES plus K3. An assumption about the server, not read from it; the mrcall column is chosen only among these ids.",
   "mrcall_served": [
     "claude-opus-5",
     "claude-opus-4-7",

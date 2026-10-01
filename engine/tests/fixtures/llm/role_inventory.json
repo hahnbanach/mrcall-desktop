@@ -1,5 +1,5 @@
 {
-  "_doc": "Milestone 10a slice 0/1 role inventory, derived by tests/llm/model_inventory_scan.py (AST: client_sites, routed_sites) over engine/zylch/. tests/llm/test_role_inventory.py freezes per-file counts of constructors by kind and of routed_model sites by env key; line, role and note are informational. role is the plan's roster column 'Owns' (PROBE for probes, FACTORY for the factory's own delegation). default_readers is inventory only.",
+  "_doc": "Milestone 10a slice 0/1 role inventory, derived by tests/llm/model_inventory_scan.py (AST: client_sites \u2014 the two factories and direct LLMClient constructions, import aliases and rebindings resolved \u2014 and routed_sites) over engine/zylch/. tests/llm/test_role_inventory.py freezes per-file counts of constructors by kind and of routed_model sites by env key; line, role and note are informational. role is the plan's roster column 'Owns' (PROBE for probes, FACTORY for the factory's own delegation). default_readers is inventory only.",
   "scope": "zylch",
   "constructors": [
     {"file": "zylch/agents/base_agent.py", "line": 38, "call": "make_llm_client", "kind": "caller", "role": "CHAT", "note": "SpecializedAgent, base of the runtime EmailerAgent (not a trainer); coordinator reassigned to CHAT after the slice 0 inventory"},
@@ -9,6 +9,8 @@
     {"file": "zylch/agents/trainers/task_email.py", "line": 236, "call": "make_llm_client", "kind": "caller", "role": "TRAIN"},
     {"file": "zylch/assistant/core.py", "line": 165, "call": "make_llm_client", "kind": "caller", "role": "CHAT"},
     {"file": "zylch/cli/chat.py", "line": 519, "call": "try_make_llm_client", "kind": "caller", "role": "CHAT"},
+    {"file": "zylch/llm/client.py", "line": 572, "call": "LLMClient", "kind": "caller_with_model", "model": "selected_model", "role": "FACTORY", "note": "direct LLMClient construction inside make_llm_client (the factory itself); any LLMClient( elsewhere is a new caller"},
+    {"file": "zylch/llm/client.py", "line": 582, "call": "LLMClient", "kind": "caller_with_model", "model": "selected_model", "role": "FACTORY", "note": "direct LLMClient construction inside make_llm_client (the factory itself); any LLMClient( elsewhere is a new caller"},
     {"file": "zylch/llm/client.py", "line": 596, "call": "make_llm_client", "kind": "caller_with_model", "model": "model", "role": "FACTORY", "note": "try_make_llm_client delegating to make_llm_client; not a call site of a role"},
     {"file": "zylch/memory/consolidation.py", "line": 213, "call": "try_make_llm_client", "kind": "probe", "role": "PROBE"},
     {"file": "zylch/memory/llm_merge.py", "line": 34, "call": "make_llm_client", "kind": "caller_with_model", "model": "model", "role": "MEMORY_MERGE", "note": "LLMMergeService(model=...): its model comes from routed_model at llm_merge.py:136, consolidation.py:307, workers/memory.py:323; not in the plan's table as a construction site"},

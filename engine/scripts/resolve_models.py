@@ -138,7 +138,7 @@ def differences(committed: dict | bool, table: dict) -> list[str]:
                 now = (after or {}).get("catalogue_id", "-")
                 lines.append(
                     f"{preset} / {role}: {was} -> {now}"
-                    + ("" if was != now else " (scores, price or fallback changed)")
+                    + ("" if was != now else " (scores, price, fallback or mrcall changed)")
                 )
     return lines
 
@@ -170,7 +170,9 @@ def report(req: dict, result: dict, table: dict) -> list[str]:
             pick = f"{row['catalogue_id']} ({dollars(row['price']['output'])})"
             fallback = f"fallback {fb['direct_id']} ({dollars(fb['price']['output'])})"
             fallback += " below floor" * fb["below_floor"]
-            mrcall = f"mrcall {row['mrcall']}" if row["mrcall"] else "not served by credits"
+            mc = row["mrcall"] or {}
+            mrcall = f"mrcall {mc['id']} ({dollars(mc['price']['output'])})" if mc else ""
+            mrcall = (mrcall + " below floor" * mc.get("below_floor", 0)) or "not served by credits"
             rows.append((role, pick, note, f"{fallback}  {mrcall}"))
         widths = [max(len(r[i]) for r in rows) for i in range(3)]
         lines += ["", head]

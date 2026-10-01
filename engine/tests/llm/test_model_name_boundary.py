@@ -11,8 +11,10 @@ company memory:
   ``claude-``, the OpenRouter vendor prefixes, ``gpt-``, dated snapshot ids)
   on a non-comment line must be covered by a row of
   ``tests/fixtures/llm/model_name_inventory.json`` with the same file and
-  literal — or lie under a prefix allowance, the role files the resolver
-  writes. Rows match by ``(file, literal)`` with multiplicity; their line is
+  literal — or lie in one of the two files allowed whole by exact path, the
+  role files the resolver reads and writes (``requirements.json``,
+  ``resolved.json``); the resolver's code beside them is held to rows like any
+  other file, docstrings included. Rows match by ``(file, literal)`` with multiplicity; their line is
   informational, so an edit elsewhere in a file does not break the test, but
   a second copy of an allowed name in the same file does;
 - every row must be exercised: its literal still occurs in its file as often
@@ -25,6 +27,23 @@ rows are today's names and are expected to go as the roster lands; the
 ``adapter`` and ``snapshot`` rows are the per-model protocol rules the brief
 keeps. The voice module and ``openai_voice`` are out of scope by rule: listed
 with purpose ``voice``, never scanned. Adding a row is a reviewed change.
+
+The vendor prefixes are every ``<vendor>/`` of the OpenRouter catalogue
+fixture the resolver reads (``tests/fixtures/llm/resolver/models.json``),
+plus the seven the engine named before it, so a refreshed fixture with a new
+vendor extends the guard by itself.
+
+Known limits — this guards against accidents, not deliberate evasion:
+
+- matching is by ``(file, literal, count)``: a row's purpose is not bound to
+  its line, so a ``doc`` name moved into code in the same file, or a retired
+  default replaced by the same name elsewhere in the file, still passes;
+- the scan is case-sensitive and textual: ``CLAUDE-HAIKU-4-5``, a name built
+  by string concatenation or formatting (``"claude-" + "haiku-4-5"``), read
+  from an environment variable or a file outside ``zylch/``, or under a
+  vendor neither known nor in the fixture, is not seen;
+- a comment-only line is skipped, so a name there is invisible, which is
+  harmless only because a comment cannot choose a model.
 """
 
 from __future__ import annotations
@@ -35,15 +54,22 @@ from pathlib import Path
 
 import pytest
 
-from .model_inventory_scan import MODEL_NAME, model_names, text_files
+from .model_inventory_scan import (
+    KNOWN_VENDORS,
+    MODEL_NAME,
+    catalogue_vendors,
+    model_name_pattern,
+    model_names,
+    text_files,
+)
 
 ENGINE_ROOT = Path(__file__).resolve().parents[2]
 MANIFEST = ENGINE_ROOT / "tests" / "fixtures" / "llm" / "model_name_inventory.json"
 PURPOSES = frozenset(
     {"default", "adapter", "price", "snapshot", "placeholder", "label", "doc", "voice"}
 )
-# The prefix allowance the brief names: the requirements and the resolved table.
-ROLE_FILES = ("zylch/llm/roles/",)
+# The two files the brief allows whole: the requirements and the resolved table.
+ROLE_FILES = ("zylch/llm/roles/requirements.json", "zylch/llm/roles/resolved.json")
 # Out of scope by rule; their rows are listed with purpose ``voice``.
 VOICE = ("zylch/services/voice/", "zylch/llm/openai_voice.py")
 
@@ -61,7 +87,7 @@ def _occurrences(manifest: dict) -> list[tuple[str, int, str]]:
     found: list[tuple[str, int, str]] = []
     for path in text_files(ENGINE_ROOT / manifest["scope"]):
         rel = path.relative_to(ENGINE_ROOT).as_posix()
-        if _out_of_scope(rel, manifest) or rel.startswith(tuple(manifest["prefix_allowances"])):
+        if _out_of_scope(rel, manifest) or rel in manifest["path_allowances"]:
             continue
         found.extend((rel, line, literal) for line, literal in model_names(path))
     return found
@@ -78,7 +104,7 @@ def _allowed(manifest: dict) -> Counter:
 def test_the_manifest_states_the_reviewed_scope():
     manifest = _manifest()
     assert manifest["scope"] == "zylch"
-    assert tuple(manifest["prefix_allowances"]) == ROLE_FILES
+    assert tuple(manifest["path_allowances"]) == ROLE_FILES
     assert tuple(manifest["out_of_scope"]) == VOICE
 
 
@@ -139,9 +165,36 @@ def test_every_allowance_is_exercised():
         ('"""Run the bounded GPT-Live SIP test (Google/Microsoft)."""', []),
         ("    # default = 'claude-haiku-4-5'", []),
         ("x = pick()  # was claude-haiku-4-5", ["claude-haiku-4-5"]),
+        (
+            '"xiaomi/mimo-v2.6-flash", "deepseek/deepseek-v4"',
+            ["xiaomi/mimo-v2.6-flash", "deepseek/deepseek-v4"],
+        ),
+        (
+            '"bytedance-seed/seed-2.0", "~anthropic/claude-opus-latest"',
+            ["bytedance-seed/seed-2.0", "~anthropic/claude-opus-latest"],
+        ),
     ],
 )
 def test_the_scanner_finds_ids_and_skips_prose_paths_and_comment_lines(tmp_path, line, names):
     path = tmp_path / "probe.py"
     path.write_text(line + "\n")
     assert [literal for _, literal in model_names(path)] == names
+
+
+def test_every_vendor_of_the_catalogue_fixture_is_guarded():
+    vendors = catalogue_vendors()
+    assert len(vendors) >= 20, "the catalogue fixture lost its vendors"
+    for vendor in sorted(vendors | KNOWN_VENDORS):
+        literal = f"{vendor}/some-model-1.0"
+        assert MODEL_NAME.fullmatch(literal), f"vendor not matched by the scanner: {vendor}"
+
+
+def test_a_vendor_added_to_a_refreshed_fixture_extends_the_guard(tmp_path):
+    fixture = tmp_path / "models.json"
+    fixture.write_text(
+        json.dumps({"data": [{"id": "newlab/frontier-9"}, {"id": "openrouter-auto"}]})
+    )
+    vendors = catalogue_vendors(fixture)
+    assert vendors == {"newlab"}
+    assert not MODEL_NAME.search('"newlab/frontier-9"')
+    assert model_name_pattern(vendors).search('"newlab/frontier-9"').group(0) == "newlab/frontier-9"

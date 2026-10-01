@@ -1,8 +1,8 @@
 {
-  "_doc": "Milestone 10a slice 0/1 manifest of model-name allowances under engine/zylch/ (scanned by tests/llm/model_inventory_scan.py:MODEL_NAME, case-sensitive, comment-only lines skipped). tests/llm/test_model_name_boundary.py matches occurrences to rows by (file, literal) with multiplicity; line is informational. Purposes: default (a model chosen by code), adapter (per-model protocol rule kept by the brief), price, snapshot, placeholder, label (display), doc, voice (listed, out of scope, not scanned). Adding a row is a reviewed change. app/src rows are inventory only (no ids; display strings).",
+  "_doc": "Milestone 10a slice 0/1 manifest of model-name allowances under engine/zylch/ (scanned by tests/llm/model_inventory_scan.py:MODEL_NAME, case-sensitive, comment-only lines skipped). tests/llm/test_model_name_boundary.py matches occurrences to rows by (file, literal) with multiplicity; line is informational. Purposes: default (a model chosen by code), adapter (per-model protocol rule kept by the brief), price, snapshot, placeholder, label (display), doc, voice (listed, out of scope, not scanned). path_allowances are the two role files, allowed whole by exact path; any other file under zylch/llm/roles/ needs rows. Adding a row is a reviewed change. app/src rows are inventory only (no ids; display strings).",
   "scope": "zylch",
   "out_of_scope": ["zylch/services/voice/", "zylch/llm/openai_voice.py"],
-  "prefix_allowances": ["zylch/llm/roles/"],
+  "path_allowances": ["zylch/llm/roles/requirements.json", "zylch/llm/roles/resolved.json"],
   "allowances": [
     {"file": "zylch/assistant/models.py", "line": 16, "literal": "claude-opus-4-6-20260205", "purpose": "default", "note": "ModelSelector default; only logged by assistant/core.py:274, never sent"},
     {"file": "zylch/config.py", "line": 88, "literal": "z-ai/glm-5.2", "purpose": "default", "note": "Settings.openrouter_model; no code reads the attribute (OPENROUTER_MODEL is read from profile values in model_policy.py)"},
@@ -48,6 +48,9 @@
     {"file": "zylch/llm/openrouter_pricing.py", "line": 32, "literal": "moonshotai/kimi-k3", "purpose": "adapter", "note": "K3 reasoning bound"},
     {"file": "zylch/llm/openrouter_pricing.py", "line": 38, "literal": "anthropic/claude-sonnet-5", "purpose": "adapter", "note": "Sonnet 5 sampling rule"},
     {"file": "zylch/llm/openrouter_pricing.py", "line": 44, "literal": "claude-haiku-4-5", "purpose": "placeholder", "note": "feature validation reuses the direct bound with a stand-in id"},
+    {"file": "zylch/llm/roles/resolver.py", "line": 32, "literal": "anthropic/claude-haiku", "purpose": "doc", "note": "module docstring: the excluded_prefixes example"},
+    {"file": "zylch/llm/roles/resolver.py", "line": 234, "literal": "anthropic/claude-opus-5.5", "purpose": "doc", "note": "direct_id docstring example"},
+    {"file": "zylch/llm/roles/resolver.py", "line": 235, "literal": "claude-opus-5-5", "purpose": "doc", "note": "direct_id docstring example"},
     {"file": "zylch/memory/config.py", "line": 58, "literal": "claude-opus-4-6-20260205", "purpose": "default", "note": "MemoryConfig.llm_merge_model; no code reads the attribute"},
     {"file": "zylch/rpc/usage_queries.py", "line": 141, "literal": "claude-opus-5", "purpose": "label", "note": "llm.models catalog for the anthropic provider (ids with display labels)"},
     {"file": "zylch/rpc/usage_queries.py", "line": 141, "literal": "claude-sonnet-5", "purpose": "label", "note": "llm.models catalog for the anthropic provider (ids with display labels)"},

@@ -4,12 +4,15 @@ Milestone 10 gives every paid call site a role whose model the resolver
 chooses. That only holds while the set of sites is known, so this file freezes
 it, as ``tests/memory/test_mnemonic_inventory.py`` freezes the memory writers:
 
-- every call of ``make_llm_client`` / ``try_make_llm_client`` under ``zylch/``
-  is classified by ``model_inventory_scan.client_sites`` — ``caller`` (no
+- every call of ``make_llm_client`` / ``try_make_llm_client`` under ``zylch/``,
+  and every direct ``LLMClient(...)`` construction (which bypasses the
+  factory's policy; today only the factory's own two), is found under its own
+  name or a module's alias for it — ``from zylch.llm import make_llm_client
+  as m``, a rebinding ``_f = make_llm_client`` — and classified by ``model_inventory_scan.client_sites`` — ``caller`` (no
   model: the factory's base model decides, the sites the roster must name),
   ``caller_with_model`` (a model passed) or ``probe`` (built only to test
   ``is None``, client discarded — the sites ``llm_available()`` replaces) —
-  and the per-file count of each kind must equal
+  and the count of each kind per file and builder must equal
   ``tests/fixtures/llm/role_inventory.json``. A new bare ``make_llm_client()``
   fails with its file named; a removed or converted one fails until the
   inventory is updated, in review;
@@ -20,7 +23,10 @@ it, as ``tests/memory/test_mnemonic_inventory.py`` freezes the memory writers:
   the probes number fourteen, as the plan counts them.
 
 Line numbers in the inventory are informational; counts are what is frozen,
-so an edit elsewhere in a file does not break the test.
+so an edit elsewhere in a file does not break the test. Known limits: a
+builder reached through ``getattr``, ``functools.partial``, a container, a
+parameter or another module's re-export under a new name is not seen; like
+the name boundary, this guards against accidents, not deliberate evasion.
 """
 
 from __future__ import annotations
@@ -69,10 +75,12 @@ def _diff(found: Counter, frozen: Counter) -> str:
 
 
 @pytest.mark.parametrize("kind", KINDS)
-def test_client_constructions_per_file_match_the_inventory(kind):
+def test_client_constructions_per_file_and_builder_match_the_inventory(kind):
     inventory = _inventory()
-    found = counted([s for s in _scanned_constructors(inventory) if s["kind"] == kind], "file")
-    frozen = counted([s for s in inventory["constructors"] if s["kind"] == kind], "file")
+    found = counted(
+        [s for s in _scanned_constructors(inventory) if s["kind"] == kind], "file", "call"
+    )
+    frozen = counted([s for s in inventory["constructors"] if s["kind"] == kind], "file", "call")
     assert found == frozen, (
         f"{kind} sites differ from tests/fixtures/llm/role_inventory.json "
         "(a client built without a model must name a role; update the inventory in review):\n  "
@@ -111,6 +119,20 @@ SYNTHETIC = {
     "probe bare test": ("if try_make_llm_client():\n    pass\n", "probe"),
     "model keyword": ('c = make_llm_client(model=routed_model("MODEL_X"))\n', "caller_with_model"),
     "model positional": ("c = llm.make_llm_client(name)\n", "caller_with_model"),
+    "import alias": ("from zylch.llm import make_llm_client as m\n\nc = m()\n", "caller"),
+    "module rebinding": (
+        "from zylch.llm import make_llm_client\n\n_f = make_llm_client\nc = _f()\n",
+        "caller",
+    ),
+    "chained attribute rebinding": (
+        "import zylch.llm as llm\n\n_g = llm.try_make_llm_client\n_h = _g\nif _h() is None:\n    pass\n",
+        "probe",
+    ),
+    "direct construction": ('c = LLMClient(transport="direct", api_key=k)\n', "caller"),
+    "direct construction with model": (
+        'c = llm.LLMClient("direct", model="m")\n',
+        "caller_with_model",
+    ),
 }
 
 
@@ -120,3 +142,9 @@ def test_each_spelling_is_classified(tmp_path, name):
     path = tmp_path / "site.py"
     path.write_text("# make_llm_client() in a comment is not a call\n" + source)
     assert [s["kind"] for s in client_sites(path)] == [kind]
+
+
+def test_an_aliased_site_names_the_builder_and_the_alias(tmp_path):
+    path = tmp_path / "alias.py"
+    path.write_text("from zylch.llm import LLMClient as Raw\n\nc = Raw(transport='direct')\n")
+    assert client_sites(path) == [{"line": 3, "call": "LLMClient", "kind": "caller", "via": "Raw"}]

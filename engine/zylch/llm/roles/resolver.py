@@ -369,20 +369,21 @@ def _pick(rule: dict, picked: dict) -> dict:
 
 def document(req: dict, result: dict) -> dict:
     """What resolved.json holds: per preset and role the pick, its Anthropic
-    fallback, the MrCall id (null when no served model fits), and what the
-    choice was made on."""
+    fallback, the MrCall pick (its `id` the one the credits server is sent;
+    null when no served model fits), and what each choice was made on."""
     presets = {}
     for preset, outcome in result["presets"].items():
         roles = {}
         for role, picked in outcome["roles"].items():
             rule = req["roles"][role]
             fallback = _pick(rule, picked["fallback"])
+            served = picked["mrcall"] and _pick(rule, picked["mrcall"])
             roles[role] = {
                 "rule": rule["rule"],
                 "index": rule["index"],
                 **_pick(rule, picked),
                 "anthropic_fallback": fallback,
-                "mrcall": picked["mrcall"] and served_id(picked["mrcall"]["candidate"]["id"]),
+                "mrcall": served and {"id": served_id(served["catalogue_id"]), **served},
             }
         presets[preset] = {
             "ceiling": outcome["ceiling"],

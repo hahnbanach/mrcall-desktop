@@ -229,7 +229,8 @@ def mrcall(served, presets=None):
     req["mrcall_served"] = served
     req["presets"] = presets or req["presets"]
     doc = table(req)
-    return doc, {k: doc["presets"][k[0]]["roles"][k[1]]["mrcall"] for k in picks(doc)}
+    rows = {k: doc["presets"][k[0]]["roles"][k[1]]["mrcall"] for k in picks(doc)}
+    return doc, {k: row and row["id"] for k, row in rows.items()}
 
 
 def test_the_mrcall_column_is_chosen_over_the_served_subset():
