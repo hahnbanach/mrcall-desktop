@@ -293,3 +293,23 @@ def test_no_mailbox_row_still_reports_the_email_stage(env, monkeypatch):
     entries = sync_failure_entries(e.value)
     assert len(entries) == 1 and entries[0]["stage"] == "email_sync"
     assert entries[0]["error"] is e.value and entries[0].get("mailbox") is None
+
+
+def test_restoring_the_first_copy_after_its_twin_keeps_its_id_and_birth(env):
+    """The upsert never rewrites `id` or `created_at`: a re-stored first copy
+    stays the first copy, so exactly one row is picked and links still hold."""
+    store, db = env["store"], env["db"]
+    second = mailboxes.add_mailbox(OWNER, SECOND, secrets.token_urlsafe(12))
+    store.store_emails_batch(OWNER, [_row("<m@client.test>")], mailbox_id=env["primary"].id)
+    first_id, first_born = _rows(
+        db, "SELECT id, created_at FROM emails WHERE mailbox_id = ?", (env["primary"].id,)
+    )[0]
+    store.store_emails_batch(OWNER, [_row("<m@client.test>")], mailbox_id=second.id)
+    store.store_emails_batch(
+        OWNER, [dict(_row("<m@client.test>"), subject="edited")], mailbox_id=env["primary"].id
+    )
+    assert _rows(
+        db, "SELECT id, created_at, subject FROM emails WHERE mailbox_id = ?", (env["primary"].id,)
+    ) == [(first_id, first_born, "edited")]
+    assert [e["id"] for e in store.get_unprocessed_emails(OWNER)] == [first_id]
+    assert [e["id"] for e in store.get_unprocessed_emails_for_task(OWNER)] == [first_id]

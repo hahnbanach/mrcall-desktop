@@ -4,10 +4,15 @@ A PEC provider never delivers the sender's message as is. What lands in
 the mailbox is a transport envelope — a message from the provider whose
 body is a notice and whose ``message/rfc822`` part, named
 ``postacert.eml``, is the original — plus receipts (acceptance, delivery,
-non-delivery and the like) that carry no human message at all, and, on
-failure, an anomaly wrapper. The archive wants the original's sender,
-subject, body, attachments and threading, while keeping the envelope's
-Message-ID as the row's identity, because that is what the server holds.
+non-delivery and the like) that carry no human message at all, and the
+anomaly wrapper (``busta di anomalia``): the same shape as the transport
+envelope, with ``X-Trasporto: errore`` and an ``ANOMALIA MESSAGGIO``
+subject, which is how every ordinary, non-certified message reaches a
+PEC mailbox that accepts ordinary mail. The archive wants the original's
+sender, subject, body, attachments and threading, while keeping the
+envelope's Message-ID as the row's identity, because that is what the
+server holds; ``pec_markers.kind`` keeps ``anomaly`` for the wrapper, so a
+later delivery can derive that the message was not certified.
 
 Markers (D4). Standard-derived from the PEC technical rules (DPCM
 2 November 2005, AgID): ``X-Trasporto: posta-certificata`` on a transport
@@ -164,9 +169,8 @@ def find_original(msg: Message) -> Message | None:
     for part in envelope_parts(msg):
         if part.get_content_type() != "message/rfc822":
             continue
-        payload = part.get_payload()
-        inner = payload[0] if isinstance(payload, list) and payload else None
-        if not isinstance(inner, Message):
+        inner = _inner_message(part)
+        if inner is None:
             continue
         if (part.get_filename() or "").strip().lower() == ORIGINAL_PART_NAME:
             return inner
@@ -175,20 +179,62 @@ def find_original(msg: Message) -> Message | None:
     return fallback
 
 
+def _inner_message(part: Message) -> Message | None:
+    """The message inside an ``rfc822`` part, decoding a base64/QP-encoded one.
+
+    The parser nests the inner message as the part's payload when the part
+    is sent verbatim; a provider that transfer-encodes the part leaves a
+    string payload, decoded here into a message of its own.
+    """
+    import base64
+    import quopri
+    from email import message_from_bytes
+
+    def _looks_like_mail(candidate: Message) -> bool:
+        return bool(
+            candidate.get("From") or candidate.get("Message-ID") or candidate.get("Subject")
+        )
+
+    payload = part.get_payload()
+    nested = payload[0] if isinstance(payload, list) and payload else None
+    if isinstance(nested, Message) and _looks_like_mail(nested):
+        return nested
+    # A transfer-encoded part: the parser nested a header-less pseudo-message
+    # whose body is the encoded text. Decode it into the message it is.
+    encoding = (part.get("Content-Transfer-Encoding") or "").strip().lower()
+    text = nested.get_payload() if isinstance(nested, Message) else payload
+    if not isinstance(text, str) or not text.strip():
+        return None
+    try:
+        if encoding == "base64":
+            raw = base64.b64decode("".join(text.split()))
+        elif encoding == "quoted-printable":
+            raw = quopri.decodestring(text.encode("utf-8", errors="replace"))
+        else:
+            raw = text.encode("utf-8", errors="replace")
+    except Exception as e:
+        logger.debug(f"[pec] rfc822 part could not be decoded ({encoding}): {e}")
+        return None
+    inner = message_from_bytes(raw)
+    return inner if _looks_like_mail(inner) else None
+
+
 def pec_original(msg: Message) -> PecUnwrap | None:
     """Unwrap a PEC message: ``None`` for ordinary mail (forwards included).
 
-    A transport envelope yields its original; a receipt or anomaly
-    wrapper yields the envelope alone; a transport envelope without an
-    ``rfc822`` part yields the envelope alone too, logged, never raised.
+    A transport envelope and an anomaly wrapper yield their original (the
+    wrapper carries the ordinary message it delivers); a receipt yields
+    the envelope alone; an envelope or wrapper without an ``rfc822``
+    part yields the envelope alone too, logged, never raised.
     """
     envelope = detect_envelope(msg)
     if envelope is None:
         return None
-    original = find_original(msg) if envelope.kind == KIND_TRANSPORT else None
-    if envelope.kind == KIND_TRANSPORT and original is None:
+    wraps = envelope.kind in (KIND_TRANSPORT, KIND_ANOMALY)
+    original = find_original(msg) if wraps else None
+    if wraps and original is None:
         logger.warning(
-            f"[pec] transport envelope {_header(msg, 'Message-ID')} carries no "
+            f"[pec] {envelope.kind} envelope {_header(msg, 'Message-ID')} carries no "
             f"message/rfc822 part; stored as is"
         )
     return PecUnwrap(envelope=envelope, original=original)

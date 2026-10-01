@@ -597,7 +597,11 @@ class Storage:
                     f"[store_emails_batch] {marked} copy(ies) already held by another mailbox: "
                     f"stored, not processed again"
                 )
-            skip = _EMAIL_IDENTITY + _PROCESSING_MARKS
+            # A re-stored row keeps its identity and its birth: `id` is what
+            # tasks and memory links point at, `created_at` is what the
+            # first-copy rule orders twins by (a fresh default on every
+            # upsert would make a re-stored first copy the "later" one).
+            skip = _EMAIL_IDENTITY + _PROCESSING_MARKS + ("id", "created_at")
             for i in range(0, len(records), chunk_size):
                 chunk = records[i : i + chunk_size]
                 stmt = sqlite_insert(Email).values(chunk)
@@ -686,6 +690,7 @@ class Storage:
                 session.query(Email)
                 .filter(
                     Email.owner_id == owner_id,
+                    Email.mailbox_id.in_(_active_mailboxes(owner_id)),
                     Email.date_timestamp > since_ts,
                 )
                 .order_by(Email.date_timestamp.desc())

@@ -382,6 +382,17 @@ The plan stays `active` until the live PEC.net acceptance, the marker
 confirmation and the hosted rollout are done; the acceptance matrix is
 in the session record.
 
+**Independent review (2026-10-01): APPROVED** on the second pass. The
+first pass found that PEC anomaly envelopes, the wrapper every ordinary
+message receives in a PEC mailbox that accepts ordinary mail, kept the
+provider as sender; they now unwrap like transport envelopes with
+`kind: anomaly` retained. Also fixed: the batch upsert no longer
+rewrites `id` and `created_at` on a re-store, four more owner-scoped
+queries filter active mailboxes, the parser decodes an encoded
+`message/rfc822` part and falls back to `X-Riferimento-Message-ID`, and
+the migration runner writes backups with mode 0600. Suites: 1338
+passed, the same two pre-existing failures.
+
 ## Risks
 
 - The hosted daemon reads `.env` at start; the generated

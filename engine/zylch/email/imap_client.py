@@ -429,7 +429,13 @@ def _parse_message_bytes(raw: Any) -> Optional[Dict[str, Any]]:
         pec_markers = unwrap.envelope.to_markers()
         if unwrap.original is not None:
             source = unwrap.original
-            original_message_id = " ".join(str(source.get("Message-ID", "")).split()) or None
+            # An original without a Message-ID: the envelope's reference
+            # header names it, when the provider set one.
+            original_message_id = (
+                " ".join(str(source.get("Message-ID", "")).split())
+                or unwrap.envelope.reference_message_id
+                or None
+            )
 
     # Decode headers
     subject = _decode_header_value(source.get("Subject"))

@@ -14,6 +14,13 @@ from zylch.tools.config import ToolConfig
 logger = logging.getLogger(__name__)
 
 
+def _active_mailboxes(owner_id: str):
+    """Rows of a removed mailbox are out of every count and list (lazy: no import cycle)."""
+    from zylch.storage.storage import Storage
+
+    return Storage.active_mailbox_filter(owner_id)
+
+
 def format_relative_date(date_str: str) -> str:
     """Format a date string as relative time (e.g., '3 days ago', 'today').
 
@@ -251,7 +258,7 @@ async def handle_sync(args: List[str], config, owner_id: str) -> str:
             with get_session() as session:
                 email_count = (
                     session.query(sa_func.count(Email.id))
-                    .filter(Email.owner_id == owner_id)
+                    .filter(Email.owner_id == owner_id, _active_mailboxes(owner_id))
                     .scalar()
                     or 0
                 )
@@ -1060,7 +1067,11 @@ async def handle_email(args: List[str], config: ToolConfig, owner_id: str) -> st
                         Email.body_plain,
                         Email.date,
                     )
-                    .filter(Email.owner_id == owner_id, Email.date >= since_date)
+                    .filter(
+                        Email.owner_id == owner_id,
+                        _active_mailboxes(owner_id),
+                        Email.date >= since_date,
+                    )
                     .order_by(Email.date.desc())
                     .limit(limit * 3)
                     .all()
@@ -1599,7 +1610,10 @@ Shows statistics about your synced emails:
         with get_session() as session:
             # Count total emails
             total_emails = (
-                session.query(func.count(Email.id)).filter(Email.owner_id == owner_id).scalar() or 0
+                session.query(func.count(Email.id))
+                .filter(Email.owner_id == owner_id, _active_mailboxes(owner_id))
+                .scalar()
+                or 0
             )
 
             # Count unique threads

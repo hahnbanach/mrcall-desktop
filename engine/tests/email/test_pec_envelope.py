@@ -267,12 +267,40 @@ def test_receipt_is_stored_as_is_with_its_markers(kind):
     assert markers["headers"]["X-Ricevuta"] == kind
 
 
-def test_anomaly_wrapper_is_stored_as_is_with_its_markers():
+def test_anomaly_wrapper_without_an_original_is_stored_as_is_with_its_markers():
     parsed = _parse_message_bytes(_envelope(None, marker="X-Trasporto: errore"))
     assert parsed["from_email"] == PROVIDER
     assert parsed["pec_markers"]["kind"] == "anomaly"
     assert parsed["original_message_id"] is None
     assert parsed["attachment_filenames"] == []  # daticert.xml is the provider's
+
+
+def test_anomaly_wrapper_delivers_the_ordinary_message_it_carries():
+    """The "busta di anomalia": an ordinary, non-certified message reaching a
+    PEC mailbox. The original is the row's content; the markers say anomaly."""
+    parsed = _parse_message_bytes(
+        _envelope(_inner(references="<thread-root@x>"), marker="X-Trasporto: errore")
+    )
+    assert parsed["message_id"] == "<env-1@pec-provider.test>"  # the wrapper stays the identity
+    assert parsed["original_message_id"] == "<orig-1@studio-legale.test>"
+    assert parsed["from_email"] == SENDER and parsed["subject"] == "Contratto firmato"
+    assert parsed["body_plain"].strip() == "In allegato il contratto firmato."
+    assert parsed["thread_id"] == "<thread-root@x>"
+    assert parsed["attachment_filenames"] == ["contratto.pdf"]
+    assert parsed["pec_markers"]["kind"] == "anomaly"  # not certified
+
+
+def test_signed_anomaly_wrapper_delivers_the_ordinary_message_it_carries():
+    parsed = _parse_message_bytes(_signed_envelope(_inner(), marker="X-Trasporto: errore"))
+    assert (
+        parsed["from_email"] == SENDER
+        and parsed["original_message_id"] == "<orig-1@studio-legale.test>"
+    )
+    assert parsed["pec_markers"]["kind"] == "anomaly" and parsed["attachment_filenames"] == [
+        "contratto.pdf"
+    ]
+    msg = email_lib.message_from_bytes(_signed_envelope(_inner(), marker="X-Trasporto: errore"))
+    assert [p.get_filename() for p in user_attachments(msg)] == ["contratto.pdf"]
 
 
 def test_transport_marker_without_an_rfc822_part_does_not_crash():
@@ -419,3 +447,52 @@ def test_sync_stores_the_unwrapped_original_with_its_markers(storage):
     fwd = rows["<fwd-1@example.com>"]
     assert fwd[2] == "forwarder@example.com" and fwd[5] is None and fwd[6] is None
     assert rows["<plain@example.com>"][6] is None
+
+
+# ─── live-sample robustness ───────────────────────────────────
+
+
+def test_a_base64_encoded_rfc822_part_still_yields_the_original():
+    """A provider that transfer-encodes postacert.eml leaves a string payload."""
+    import base64
+
+    inner = _inner()
+    encoded = base64.encodebytes(inner).decode("ascii")
+    raw = (
+        (
+            f"Message-ID: <env-b64@pec-provider.test>\r\n"
+            f'From: "Per conto di: {SENDER}" <{PROVIDER}>\r\n'
+            f"To: {OWNER}\r\n"
+            f"Subject: POSTA CERTIFICATA: Contratto firmato\r\n"
+            f"Date: Tue, 29 Jul 2026 19:34:00 +0200\r\n"
+            f"X-Trasporto: posta-certificata\r\n"
+            f'Content-Type: multipart/mixed; boundary="{BOUNDARY}"\r\n'
+            f"\r\n"
+            f"--{BOUNDARY}\r\n"
+            f"Content-Type: text/plain; charset=utf-8\r\n"
+            f"\r\n"
+            f"Messaggio di posta certificata\r\n"
+            f"--{BOUNDARY}\r\n"
+            f'Content-Type: message/rfc822; name="postacert.eml"\r\n'
+            f'Content-Disposition: attachment; filename="postacert.eml"\r\n'
+            f"Content-Transfer-Encoding: base64\r\n"
+            f"\r\n"
+        ).encode("utf-8")
+        + encoded.encode("ascii")
+        + f"--{BOUNDARY}--\r\n".encode("utf-8")
+    )
+    parsed = _parse_message_bytes(raw)
+    assert parsed["original_message_id"] == "<orig-1@studio-legale.test>"
+    assert parsed["from_email"] == SENDER and parsed["attachment_filenames"] == ["contratto.pdf"]
+    assert parsed["message_id"] == "<env-b64@pec-provider.test>"
+
+
+def test_an_original_without_message_id_takes_the_envelope_reference():
+    inner = _inner().replace(b"Message-ID: <orig-1@studio-legale.test>\r\n", b"")
+    assert b"Message-ID" not in inner.split(b"\r\n\r\n", 1)[0]
+    raw = _envelope(inner, extra_headers="X-Riferimento-Message-ID: <ref-1@provider.test>\r\n")
+    parsed = _parse_message_bytes(raw)
+    assert parsed["from_email"] == SENDER
+    assert parsed["original_message_id"] == "<ref-1@provider.test>"
+    assert parsed["pec_markers"]["reference_message_id"] == "<ref-1@provider.test>"
+    assert parsed["thread_id"] == "<ref-1@provider.test>"  # threads by what it has

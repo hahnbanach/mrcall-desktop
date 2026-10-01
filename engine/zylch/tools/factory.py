@@ -323,9 +323,10 @@ class ToolFactory:
         One client is cached per purpose for the env-built primary and per
         ``(purpose, mailbox id)`` for a mailbox row, and reused for every
         later call with the same credentials, so a chat turn does not pay
-        for a fresh IMAP login and two mailboxes never share a connection. The client is NOT connected here: every IMAP entry
-        point goes through `IMAPClient._ensure_connected`, so the login
-        happens on first actual use — off the turn's preamble.
+        for a fresh IMAP login and two mailboxes never share a connection.
+        The client is NOT connected here: every IMAP entry point goes
+        through `IMAPClient._ensure_connected`, so the login happens on
+        first actual use — off the turn's preamble.
 
         Args:
             config: Tool configuration

@@ -241,9 +241,14 @@ threads as that mailbox sees them); without it every active mailbox
 contributes. `mailbox_ids` lists the mailboxes holding rows of the
 thread. On `emails.list_by_thread` rows, `original_message_id` and
 `pec_markers` (`{kind: transport|receipt|anomaly, receipt_type,
-reference_message_id, headers}`) are non-null only on PEC rows: the row's
-identity (`id`, Message-ID) is the provider's envelope, the content is the
-wrapped original's, and a reply threads on `original_message_id`.
+reference_message_id, headers}`) are non-null only on PEC rows. For a
+transport envelope and for an anomaly wrapper (the "busta di anomalia"
+that delivers an ordinary, non-certified message to a PEC mailbox) the
+row's identity (`id`, Message-ID) is the provider's envelope, the content
+(sender, subject, body, attachments, threading) is the wrapped original's,
+and a reply threads on `original_message_id`; `kind: anomaly` says the
+message was not certified. A receipt, and an envelope without a wrapped
+original, keep the provider as sender.
 
 **`mailboxes.*`**
 

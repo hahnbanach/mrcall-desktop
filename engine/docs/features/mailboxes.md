@@ -197,8 +197,12 @@ reference_message_id, headers}`. A reply to a PEC row uses
 `original_message_id` for `In-Reply-To` and `References`, because the
 correspondent threads on the original.
 
-Receipts, anomaly wrappers and a transport envelope without an rfc822
-part are stored as they are, provider sender included, with their markers.
+An anomaly wrapper (`X-Trasporto: errore`, the "busta di anomalia" that
+delivers every ordinary, non-certified message to a PEC mailbox accepting
+ordinary mail) unwraps the same way, its markers keeping `kind: anomaly`
+so a later delivery can derive that the message was not certified.
+Receipts, and an envelope or wrapper without an rfc822 part, are stored
+as they are, provider sender included, with their markers.
 `postacert.eml`, `daticert.xml` and `smime.p7s` are never user attachments
 on a PEC-marked message; `fetch_attachments` reads the original's parts.
 A message forwarded as an attachment carries no marker and keeps its

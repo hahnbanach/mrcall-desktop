@@ -324,3 +324,30 @@ def test_factory_caches_one_client_per_mailbox(env):
     assert a1 is a2
     assert b1 is not a1 and b1.email_addr == SECOND
     assert env_client is not b1 and env_client.email_addr == OWNER
+
+
+def test_get_emails_since_skips_a_removed_mailbox(env):
+    store = env["store"]
+    when = datetime.now(timezone.utc) - timedelta(days=1)
+
+    def row(mid):
+        return {
+            "id": mid,
+            "thread_id": mid,
+            "from_email": "customer@client.test",
+            "subject": "invoice",
+            "date": when.isoformat(),
+            "date_timestamp": int(when.timestamp()),
+            "message_id_header": mid,
+        }
+
+    store.store_emails_batch(OWNER, [row("<p@x>")], mailbox_id=env["primary"].id)
+    store.store_emails_batch(OWNER, [row("<s@x>")], mailbox_id=env["second"].id)
+    since = when - timedelta(days=2)
+    assert {e["gmail_id"] for e in store.get_emails_since(OWNER, since)} == {"<p@x>", "<s@x>"}
+    with dbm.get_engine().begin() as conn:
+        conn.exec_driver_sql(
+            "UPDATE mailboxes SET removed_at = '2026-09-30 00:00:00' WHERE id = ?",
+            (env["second"].id,),
+        )
+    assert {e["gmail_id"] for e in store.get_emails_since(OWNER, since)} == {"<p@x>"}
