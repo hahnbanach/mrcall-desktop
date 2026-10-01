@@ -18,13 +18,9 @@ from __future__ import annotations
 
 import json
 import logging
-import os
 from typing import Any, Dict, List
 
 logger = logging.getLogger(__name__)
-
-# Respect an explicit override; otherwise follow the profile model policy.
-_COMPACTION_MODEL = os.environ.get("ZYLCH_COMPACTION_MODEL")
 
 # Trigger threshold in tokens. Anthropic 1M context is the hard ceiling;
 # 80K keeps plenty of headroom for the system prompt, tools, and the
@@ -136,9 +132,9 @@ async def _summarize(middle_text: str) -> str:
     Returns the summary string on success, raises on failure — callers
     handle the exception.
     """
-    from zylch.llm import make_llm_client
+    from zylch.llm import make_llm_client, routed_model
 
-    client = make_llm_client(model=_COMPACTION_MODEL)
+    client = make_llm_client(model=routed_model("MODEL_COMPACTION"))
     system = (
         "You are a conversation summarizer. Produce a concise, faithful "
         "summary of the CHAT HISTORY below. Keep the same language as the "
@@ -149,7 +145,7 @@ async def _summarize(middle_text: str) -> str:
         "headings, no lists unless the original had lists."
     )
     resp = await client.create_message(
-        model=_COMPACTION_MODEL,
+        model=client.model,
         max_tokens=4096,
         system=system,
         messages=[

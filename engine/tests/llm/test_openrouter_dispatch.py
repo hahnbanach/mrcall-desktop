@@ -7,7 +7,7 @@ import pytest
 from zylch.llm.budget import BudgetError, budget_snapshot
 from zylch.llm.client import LLMClient
 from zylch.llm.openrouter_client import OpenRouterClient
-from zylch.llm.openrouter_pricing import MODEL
+MODEL = "z-ai/glm-5.2"  # an allowlisted OpenRouter model, billed at 0.6/2
 from zylch.storage import database
 from zylch.storage.models import LlmReservation, LlmUsage
 

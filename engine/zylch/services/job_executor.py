@@ -1078,7 +1078,7 @@ class JobExecutor:
         Only chains if the memory agent is trained, there are unprocessed
         items, and an LLM transport is available.
         """
-        from zylch.llm import try_make_llm_client
+        from zylch.llm import llm_available
 
         storage = self.storage
 
@@ -1101,7 +1101,7 @@ class JobExecutor:
 
         # Check that an LLM transport is available before starting
         # LLM-dependent processing.
-        if try_make_llm_client() is None:
+        if not llm_available():
             logger.debug(
                 f"[SYNC-CHAIN] No LLM transport for {owner_id},"
                 f" skipping processing"
@@ -1138,11 +1138,11 @@ class JobExecutor:
         self, owner_id: str, user_email: str
     ) -> None:
         """Chain task processing (called after memory processing completes)."""
-        from zylch.llm import try_make_llm_client
+        from zylch.llm import llm_available
 
         storage = self.storage
 
-        if try_make_llm_client() is None:
+        if not llm_available():
             logger.debug(
                 f"[SYNC-CHAIN] No LLM transport for {owner_id},"
                 f" skipping task prompt refresh"

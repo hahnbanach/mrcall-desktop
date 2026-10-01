@@ -13,7 +13,7 @@ import logging
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Tuple
 
-from zylch.llm import LLMClient, make_llm_client
+from zylch.llm import LLMClient, make_llm_client, routed_model
 from zylch.storage import Storage
 from zylch.storage.database import get_session
 from zylch.storage.models import Blob
@@ -34,7 +34,7 @@ class BaseAgentTrainer:
         """
         self.storage = storage
         self.owner_id = owner_id
-        self.client: LLMClient = make_llm_client()
+        self.client: LLMClient = make_llm_client(model=routed_model("MODEL_TRAIN"))
         self.model = self.client.model
         self.user_email = user_email.lower() if user_email else ""
         self.user_domain = (

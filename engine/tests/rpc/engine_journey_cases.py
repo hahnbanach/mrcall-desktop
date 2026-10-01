@@ -256,7 +256,7 @@ def script_worker(monkeypatch, extractions: Sequence[Any], decisions: Sequence[A
     )
     monkeypatch.setattr(client_mod, "make_llm_client", lambda *a, **k: mnemonic_env.client("pong"))
     monkeypatch.setattr(merge_canary_gate, "merge_canary_policy", lambda owner: {"run": False})
-    monkeypatch.setattr(consolidation, "try_make_llm_client", lambda *a, **k: None)
+    monkeypatch.setattr(consolidation, "llm_available", lambda: False)
     return extraction_client, decision_client
 
 

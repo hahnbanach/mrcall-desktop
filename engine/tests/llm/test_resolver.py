@@ -401,8 +401,8 @@ def test_the_key_comes_from_the_environment_only(rig, tmp_path, monkeypatch, cap
 
 
 def test_the_committed_requirements_carry_the_roster_and_today_s_prices():
-    from zylch.llm.budget_pricing import PRICES
-    from zylch.llm.openrouter_pricing import RATES
+    from .test_price_source import TODAY_DIRECT as PRICES
+    from .test_price_source import TODAY_OPENROUTER as RATES
 
     req = resolver.validate_requirements(
         json.loads((script.REQUIREMENTS).read_text(encoding="utf-8"))

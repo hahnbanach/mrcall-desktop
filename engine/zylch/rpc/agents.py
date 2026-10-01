@@ -85,14 +85,14 @@ async def agents_train_all(params: Dict[str, Any], notify: NotifyFn) -> Any:
         EmailTaskAgentTrainer,
         MessageMemoryAgentTrainer,
     )
-    from zylch.llm import try_make_llm_client
+    from zylch.llm import llm_available
     from zylch.storage import Storage
 
     owner_id = _owner_id()
     user_email = os.environ.get("EMAIL_ADDRESS", "")
     logger.info(f"[rpc] agents.train_all owner_id={owner_id} user_email={user_email}")
 
-    if try_make_llm_client() is None:
+    if not llm_available():
         msg = (
             "No LLM configured. Set ANTHROPIC_API_KEY in the profile .env "
             "or sign in with Firebase to use MrCall credits."

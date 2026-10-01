@@ -20,7 +20,13 @@ it, as ``tests/memory/test_mnemonic_inventory.py`` freezes the memory writers:
   way, so a role routed from a new place, or a role key renamed, is a
   reviewed change;
 - every model-less caller carries the role the plan's roster assigns it, and
-  the probes number fourteen, as the plan counts them.
+  the probes number fourteen, as the plan counts them;
+- a site that passes ``routed_model("MODEL_<ROLE>")`` is counted with that
+  model expression, and its row's ``role`` must be ``<ROLE>`` (so must every
+  ``routed_model`` row's): a call site routed to another role's key — the
+  ``MODEL_CHAT`` of a chat turn on a dedup worker — fails against the frozen
+  expression and the frozen env key, and a row edited to match still fails
+  until its role names the same role.
 
 Line numbers in the inventory are informational; counts are what is frozen,
 so an edit elsewhere in a file does not break the test. Known limits: a
@@ -32,6 +38,7 @@ the name boundary, this guards against accidents, not deliberate evasion.
 from __future__ import annotations
 
 import json
+import re
 from collections import Counter
 from pathlib import Path
 
@@ -77,10 +84,10 @@ def _diff(found: Counter, frozen: Counter) -> str:
 @pytest.mark.parametrize("kind", KINDS)
 def test_client_constructions_per_file_and_builder_match_the_inventory(kind):
     inventory = _inventory()
-    found = counted(
-        [s for s in _scanned_constructors(inventory) if s["kind"] == kind], "file", "call"
-    )
-    frozen = counted([s for s in inventory["constructors"] if s["kind"] == kind], "file", "call")
+    # A model passed is frozen with its source text, so the routed role is part of the count.
+    fields = ("file", "call", "model") if kind == "caller_with_model" else ("file", "call")
+    found = counted([s for s in _scanned_constructors(inventory) if s["kind"] == kind], *fields)
+    frozen = counted([s for s in inventory["constructors"] if s["kind"] == kind], *fields)
     assert found == frozen, (
         f"{kind} sites differ from tests/fixtures/llm/role_inventory.json "
         "(a client built without a model must name a role; update the inventory in review):\n  "
@@ -107,7 +114,21 @@ def test_every_site_names_a_roster_role():
 def test_the_probes_are_the_plans_fourteen():
     probes = [s for s in _inventory()["constructors"] if s["kind"] == "probe"]
     assert len(probes) == PLAN_PROBES
-    assert all(s["call"] == "try_make_llm_client" for s in probes)
+    # Slice 3: every probe asks llm_available(), which builds no client.
+    assert all(s["call"] == "llm_available" for s in probes)
+
+
+ROUTED_EXPRESSION = re.compile(r'^routed_model\("MODEL_([A-Z_]+)"\)$')
+
+
+def test_a_routed_rows_role_is_the_role_its_key_names():
+    inventory = _inventory()
+    for row in inventory["constructors"]:
+        match = ROUTED_EXPRESSION.match(row.get("model", ""))
+        if match:
+            assert row["role"] == match.group(1), f"row role and routed key disagree: {row}"
+    for row in inventory["routed_model"]:
+        assert row["env_key"] == f"MODEL_{row['role']}", f"row role and env key disagree: {row}"
 
 
 SYNTHETIC = {
@@ -117,6 +138,12 @@ SYNTHETIC = {
     "probe is not None": ("ok = try_make_llm_client() is not None\n", "probe"),
     "probe not": ("if not try_make_llm_client():\n    pass\n", "probe"),
     "probe bare test": ("if try_make_llm_client():\n    pass\n", "probe"),
+    "availability": ("if not llm_available():\n    pass\n", "probe"),
+    "availability kept": ("ok = llm_available()\n", "probe"),
+    "availability alias": (
+        "from zylch.llm import llm_available as ready\n\nif ready():\n    pass\n",
+        "probe",
+    ),
     "model keyword": ('c = make_llm_client(model=routed_model("MODEL_X"))\n', "caller_with_model"),
     "model positional": ("c = llm.make_llm_client(name)\n", "caller_with_model"),
     "import alias": ("from zylch.llm import make_llm_client as m\n\nc = m()\n", "caller"),

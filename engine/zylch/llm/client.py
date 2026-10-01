@@ -281,10 +281,10 @@ class LLMClient:
             if not api_key:
                 raise ValueError("api_key is required for transport='openrouter'")
             from .openrouter_client import OpenRouterClient
-            from .openrouter_pricing import MODEL
+            from .roles.table import pick
 
             self._client = OpenRouterClient(api_key=api_key)
-            self.model = model or MODEL
+            self.model = model or pick("economy", "CHAT", "openrouter")
         elif transport == "proxy":
             if firebase_session is None:
                 raise ValueError(

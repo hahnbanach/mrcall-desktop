@@ -10,7 +10,7 @@ runs OpenAI-shaped paths.
 import logging
 from typing import Any, Dict, Optional
 
-from zylch.llm import try_make_llm_client
+from zylch.llm import routed_model, try_make_llm_client
 from .base import Tool, ToolResult, ToolStatus
 
 logger = logging.getLogger(__name__)
@@ -41,7 +41,7 @@ class WebSearchTool(Tool):
     def _get_client(self):
         if self._client is not None:
             return self._client
-        self._client = try_make_llm_client()
+        self._client = try_make_llm_client(model=routed_model("MODEL_WEB_SEARCH"))
         return self._client
 
     async def execute(

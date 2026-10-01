@@ -8,7 +8,7 @@ the constructor uses the standard LLM factory so it stays buildable.
 import json
 from typing import Dict, Any, List, Optional
 
-from zylch.llm import LLMClient, make_llm_client
+from zylch.llm import LLMClient, make_llm_client, routed_model
 
 
 class IntentRouter:
@@ -20,7 +20,7 @@ class IntentRouter:
         Args:
             skill_registry: Registry of available skills
         """
-        self.client: LLMClient = make_llm_client()
+        self.client: LLMClient = make_llm_client(model=routed_model("MODEL_INTENT"))
         self.router_model = self.client.model
         self.skill_registry = skill_registry
 

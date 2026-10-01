@@ -6,14 +6,15 @@ from pathlib import Path
 from dotenv import dotenv_values
 
 from .budget_pricing import BudgetError
+from .roles import table
 
-ROLES = (
-    "MODEL_MEMORY_EXTRACT",
-    "MODEL_MEMORY_MERGE",
-    "MODEL_TASK_DETECTION",
-    "MODEL_REANALYZE",
-    "MODEL_DEDUP",
-)
+# One MODEL_<ROLE> profile key per role of the roster in roles/requirements.json.
+ROLES = tuple("MODEL_" + role for role in table.roles())
+BASE_KEYS = {
+    "anthropic": "ANTHROPIC_MODEL",
+    "mrcall": "MRCALL_CREDITS_MODEL",
+    "openrouter": "OPENROUTER_MODEL",
+}
 
 
 def profile_values():
@@ -53,27 +54,28 @@ def resolve_provider(values=None):
 
 
 def resolve_model(role=None, model=None, *, values=None):
+    """The model a call runs: an explicit model, else the saved MODEL_<ROLE>
+    under every preset, else the role's pick in the table for `economy` /
+    `balanced` on the saved provider. `custom` keeps the provider's base key
+    (or DEFAULT_MODEL) and, with none saved, resolves the role under
+    `economy`, so nobody is left model-less. No role means the base model,
+    resolved as role CHAT."""
     values = profile_values() if values is None else values
     provider = resolve_provider(values)
     if model and model.strip():
         return model.strip()
-    if role and str(values.get(role) or "").strip():
+    role = role or "MODEL_CHAT"
+    if str(values.get(role) or "").strip():
         return str(values[role]).strip()
     preset = str(values.get("LLM_MODEL_PRESET") or "custom").strip()
     if preset not in ("economy", "balanced", "custom"):
         raise BudgetError("AI paused: select a supported model preset.")
     if preset == "custom":
-        key = {
-            "anthropic": "ANTHROPIC_MODEL",
-            "mrcall": "MRCALL_CREDITS_MODEL",
-            "openrouter": "OPENROUTER_MODEL",
-        }[provider]
-        explicit = values.get(key) or values.get("DEFAULT_MODEL")
+        explicit = values.get(BASE_KEYS[provider]) or values.get("DEFAULT_MODEL")
         if explicit and str(explicit).strip():
             return str(explicit).strip()
-    if provider == "openrouter":
-        return "z-ai/glm-5.2"
-    return "claude-sonnet-5" if preset == "balanced" else "claude-haiku-4-5"
+        preset = "economy"
+    return table.pick(preset, role.removeprefix("MODEL_"), provider)
 
 
 def policy_snapshot():
@@ -82,11 +84,13 @@ def policy_snapshot():
     return {
         "provider": provider,
         "preset": str(values.get("LLM_MODEL_PRESET") or "custom"),
-        "model": resolve_model(values=values),
-        "roles": {role: resolve_model(role, values=values) for role in ROLES},
-        "quality_status": "OpenRouter memory/task quality has not been measured."
-        if provider == "openrouter"
-        else "No new task-quality benchmark performed.",
+        "model": _snapshot_model(None, values),
+        "roles": {role: _snapshot_model(role, values) for role in ROLES},
+        "quality_status": (
+            "OpenRouter memory/task quality has not been measured."
+            if provider == "openrouter"
+            else "No new task-quality benchmark performed."
+        ),
         "credential_configured": provider == "mrcall"
         or bool(
             str(
@@ -99,15 +103,34 @@ def policy_snapshot():
     }
 
 
+def _snapshot_model(role, values):
+    """A role the table cannot serve on this provider reads as None, not a crash."""
+    try:
+        return resolve_model(role, values=values)
+    except BudgetError:
+        return None
+
+
 def policy_fingerprint(values=None):
     """In-memory digest only: refuse stale clients without storing credentials."""
     import hashlib
     import json
+
     values = profile_values() if values is None else values
-    keys = (*ROLES, "LLM_PROVIDER", "LLM_MODEL_PRESET", "ANTHROPIC_MODEL",
-            "MRCALL_CREDITS_MODEL", "OPENROUTER_MODEL", "DEFAULT_MODEL",
-            "ANTHROPIC_API_KEY", "OPENROUTER_API_KEY", "MRCALL_PROXY_URL", "SMS_BUSINESS_ID",
-            "VOICE_ENGINE_PROVIDER", "OPENAI_API_KEY", "OPENAI_PROJECT_ID")
+    keys = (
+        *ROLES,
+        "LLM_PROVIDER",
+        "LLM_MODEL_PRESET",
+        *BASE_KEYS.values(),
+        "DEFAULT_MODEL",
+        "ANTHROPIC_API_KEY",
+        "OPENROUTER_API_KEY",
+        "MRCALL_PROXY_URL",
+        "SMS_BUSINESS_ID",
+        "VOICE_ENGINE_PROVIDER",
+        "OPENAI_API_KEY",
+        "OPENAI_PROJECT_ID",
+    )
     selected = {key: values.get(key) for key in keys}
     return hashlib.sha256(json.dumps(selected, sort_keys=True).encode()).digest()
 
@@ -126,7 +149,9 @@ def isolated_voice_profile(values=None, directory=None):
     values = profile_values() if values is None else values
     uid = Path(directory).name
     return (
-        all(values.get(key) == uid for key in (
-            "OWNER_ID", "VOICE_SMOKE_TEST_PROFILE", "VOICE_ENGINE_ISOLATED_PROFILE"))
+        all(
+            values.get(key) == uid
+            for key in ("OWNER_ID", "VOICE_SMOKE_TEST_PROFILE", "VOICE_ENGINE_ISOLATED_PROFILE")
+        )
         and not (Path(directory) / "zylch.db").exists()
     )

@@ -14,14 +14,16 @@ import logging
 from datetime import datetime
 from typing import Any, Dict, Tuple
 
+from .roles.prices import price as listed_price
+
 logger = logging.getLogger(__name__)
 
 # Default daily cap when LLM_DAILY_BUDGET_USD is unset; zero pauses AI.
 DEFAULT_DAILY_BUDGET_USD = 10.0
 
-# Price table, $ per million tokens, (input, output). Matched by
-# substring against the model id (see _price_for). Keep the tiers here
-# aligned with Anthropic's published list pricing.
+# Family fallback, $ per million tokens, (input, output), for an id the
+# price source (`roles/prices.py`) does not price: matched by substring
+# against the model id (see _price_for).
 _PRICES: Dict[str, Tuple[float, float]] = {
     "opus": (5.0, 25.0),
     "sonnet": (3.0, 15.0),
@@ -77,11 +79,17 @@ def _utc_midnight() -> datetime:
 
 
 def _price_for(model: str) -> Tuple[float, float]:
-    """``(input, output)`` $/MTok for ``model``, matched by substring.
+    """``(input, output)`` $/MTok for ``model``.
 
-    Unknown model ids fall back to Opus — the most expensive tier — so
-    the estimate can only ever be an over-count, never an under-count.
+    A priced id (direct or OpenRouter, from ``roles/prices.py``) is
+    estimated at its own price, so a GLM or MiMo pick is not counted at
+    Opus rates. An unpriced id keeps the family estimate: matched by
+    substring (opus/sonnet/haiku, case-insensitive), else Opus — the most
+    expensive tier — so the estimate can only ever be an over-count.
     """
+    rate = listed_price(model, "direct") or listed_price(model, "openrouter")
+    if rate:
+        return float(rate[0]), float(rate[1])
     m = (model or "").lower()
     for key, price in _PRICES.items():
         if key in m:
@@ -103,7 +111,7 @@ def estimate_cost_usd(model: str, usage_dict: Dict[str, Any]) -> float:
     ``input_tokens`` are the plain (uncached) input tokens.
     ``cache_creation_input_tokens`` bill at 1.25x the input rate and
     ``cache_read_input_tokens`` at 0.10x; ``output_tokens`` bill at the
-    output rate. Unknown model → Opus pricing (see :func:`_price_for`).
+    output rate. Unpriced model → family estimate (see :func:`_price_for`).
     """
     in_rate, out_rate = _price_for(model)
 

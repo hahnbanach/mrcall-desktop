@@ -4,7 +4,7 @@ import logging
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional, TYPE_CHECKING
 
-from zylch.llm import try_make_llm_client
+from zylch.llm import routed_model, try_make_llm_client
 
 if TYPE_CHECKING:
     from zylch.storage import Storage
@@ -42,7 +42,7 @@ class CalendarSyncManager:
             raise ValueError("owner_id and supabase_storage are required")
 
         self.calendar = calendar_client
-        self.llm_client = try_make_llm_client()
+        self.llm_client = try_make_llm_client(model=routed_model("MODEL_SYNC_ANALYSIS"))
         self.days_back = days_back
         self.days_forward = days_forward
         self.my_emails = my_emails or []

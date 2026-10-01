@@ -64,6 +64,9 @@ CLIENT_FACTORIES = frozenset({"make_llm_client", "try_make_llm_client"})
 # A direct construction bypasses the factory's policy; it counts as a caller.
 CLIENT_CLASS = "LLMClient"
 CLIENT_BUILDERS = CLIENT_FACTORIES | {CLIENT_CLASS}
+# Builds no client: an availability test, so every call of it is a probe.
+AVAILABILITY = "llm_available"
+SCANNED = CLIENT_BUILDERS | {AVAILABILITY}
 
 
 def text_files(root: Path) -> list[Path]:
@@ -131,11 +134,11 @@ def builder_aliases(tree: ast.AST) -> dict[str, str]:
     ``_f = make_llm_client`` / ``self._f = llm.try_make_llm_client`` (at any
     level, chained rebindings followed) map the new name back to the builder.
     """
-    aliases = {name: name for name in CLIENT_BUILDERS}
+    aliases = {name: name for name in SCANNED}
     for node in ast.walk(tree):
         if isinstance(node, ast.ImportFrom):
             for item in node.names:
-                if item.name in CLIENT_BUILDERS:
+                if item.name in SCANNED:
                     aliases[item.asname or item.name] = item.name
     assignments = [
         (target, node.value)
@@ -172,7 +175,8 @@ def client_sites(path: Path) -> list[dict]:
     (availability test, client discarded), ``caller_with_model`` (a model
     passed — by keyword, or for the factories by position; ``model`` is the
     argument's source text) or ``caller`` (no model: the factory's base model
-    decides).
+    decides). A call of ``llm_available()`` builds no client and is always a
+    ``probe`` with ``call`` ``llm_available``.
     """
     source = path.read_text()
     tree = ast.parse(source, filename=str(path))
@@ -189,7 +193,9 @@ def client_sites(path: Path) -> list[dict]:
         model = next((k.value for k in node.keywords if k.arg == "model"), None)
         if model is None and node.args and builder in CLIENT_FACTORIES:
             model = node.args[0]
-        if _is_probe(node, parents):
+        if builder == AVAILABILITY:
+            model, kind = None, "probe"
+        elif _is_probe(node, parents):
             kind = "probe"
         elif model is not None:
             kind = "caller_with_model"

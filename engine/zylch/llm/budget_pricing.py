@@ -1,30 +1,24 @@
 """Explicit prices and conservative admission for supported text Messages calls.
 
-USD per million tokens; verified against Anthropic's pricing page 2026-09-11.
+USD per million tokens, from `roles/prices.py` (the eleven direct ids were
+verified against Anthropic's pricing page 2026-09-11).
 Unknown billing shapes refuse admission. This does not model invoices or taxes.
 """
 
 import json
 from decimal import ROUND_CEILING, Decimal
 
+from .roles.prices import priced
+
 
 class BudgetError(RuntimeError):
     """Paid work is paused; callers must preserve unfinished work."""
 
 
-PRICES = {
-    "claude-opus-5": (5, 25),
-    "claude-opus-4-7": (5, 25),
-    "claude-opus-4-6": (5, 25),
-    "claude-opus-4-5": (5, 25),
-    "claude-opus-4-5-20251101": (5, 25),
-    "claude-sonnet-5": (2, 10),
-    "claude-sonnet-4-6": (3, 15),
-    "claude-sonnet-4-5": (3, 15),
-    "claude-sonnet-4-5-20250929": (3, 15),
-    "claude-haiku-4-5": (1, 5),
-    "claude-haiku-4-5-20251001": (1, 5),
-}
+# Direct-transport prices come from the one price source (the resolved table
+# plus the allowlist's billed rows; `roles/prices.py` says which wins). A
+# read-only mapping, so `from budget_pricing import PRICES` keeps working.
+PRICES = priced("direct")
 # Input plus output tokens one request may occupy. This is the smallest
 # window among the priced models — exact for Haiku 4.5, Sonnet 4.5 and
 # Opus 4.5, and well inside the 1M the Opus 4.6+ and Sonnet 4.6+ families
@@ -173,7 +167,8 @@ def request_bound(request, transport):
         raise BudgetError("AI paused: request exceeds the supported 200000-token context window.")
     in_rate, out_rate = PRICES[model]
     # All input at one-hour cache-write rate: no assumed cache hit savings.
-    return input_bound * in_rate * 2 + output * out_rate
+    bound = input_bound * in_rate * 2 + output * out_rate
+    return int(bound.to_integral_value(rounding=ROUND_CEILING))
 
 
 def usage_cost(model, usage):

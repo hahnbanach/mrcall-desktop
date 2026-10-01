@@ -181,7 +181,8 @@ def offline_engine(tmp_path, monkeypatch):
 
     monkeypatch.setattr(llm_mod, "make_llm_client", _no_network)
     monkeypatch.setattr(llm_mod, "try_make_llm_client", lambda *a, **k: None)
-    monkeypatch.setattr(consolidation, "try_make_llm_client", lambda *a, **k: None)
+    monkeypatch.setattr(llm_mod, "llm_available", lambda: False)
+    monkeypatch.setattr(consolidation, "llm_available", lambda: False)
     monkeypatch.setattr(llm_merge, "make_llm_client", _no_network)
     monkeypatch.setattr(profiles_mod, "_active_profile", "contract-probe")
     monkeypatch.setattr(profiles_mod, "_active_profile_dir", str(profile))

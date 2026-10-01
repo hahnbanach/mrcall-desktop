@@ -9,7 +9,7 @@ from typing import Any, Dict, List, Optional, TYPE_CHECKING
 
 from bs4 import BeautifulSoup
 
-from zylch.llm import try_make_llm_client
+from zylch.llm import routed_model, try_make_llm_client
 
 if TYPE_CHECKING:
     from zylch.storage import Storage
@@ -79,7 +79,7 @@ class EmailSyncManager:
 
         self.archive = email_archive
         # LLM is optional here — sync still works without analysis.
-        self.llm_client = try_make_llm_client()
+        self.llm_client = try_make_llm_client(model=routed_model("MODEL_SYNC_ANALYSIS"))
         self.days_back = 30  # Fixed: always 1 month intelligence window
         self.owner_id = owner_id
         self.supabase = supabase_storage

@@ -85,7 +85,7 @@ class Settings(BaseSettings):
     openrouter_api_key: str = Field(
         default="", description="OpenRouter API key for the selected provider"
     )
-    openrouter_model: str = Field(default="z-ai/glm-5.2", description="Explicit OpenRouter model")
+    openrouter_model: str | None = Field(default=None, description="Explicit OpenRouter model")
     preparation_batch_size: int = Field(
         default=25,
         ge=1,
@@ -120,10 +120,10 @@ class Settings(BaseSettings):
             "An owner with a single business can leave it blank."
         ),
     )
-    mrcall_credits_model: str = Field(
-        default="claude-haiku-4-5",
+    mrcall_credits_model: str | None = Field(
+        default=None,
         env="MRCALL_CREDITS_MODEL",
-        description="Model used by the MrCall-credits proxy transport",
+        description="Model used by the MrCall-credits proxy transport; blank resolves per role",
     )
 
     # Firebase identity — the project whose ID tokens the cross-machine
@@ -147,13 +147,13 @@ class Settings(BaseSettings):
     )
 
     # LLM models
-    default_model: str = Field(
-        default="claude-haiku-4-5",
-        description="Default model for all AI operations",
+    default_model: str | None = Field(
+        default=None,
+        description="Default model for all AI operations; blank resolves per role",
     )
-    anthropic_model: str = Field(
-        default="claude-haiku-4-5",
-        description="Anthropic model used for the BYOK transport",
+    anthropic_model: str | None = Field(
+        default=None,
+        description="Anthropic model used for the BYOK transport; blank resolves per role",
     )
 
     # IMAP/SMTP Email

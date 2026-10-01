@@ -88,9 +88,9 @@ class ChatService:
 
         # Verify an LLM transport is available — either a BYOK
         # Anthropic key in .env or a live Firebase session for credits.
-        from zylch.llm import try_make_llm_client
+        from zylch.llm import llm_available
 
-        if try_make_llm_client() is None:
+        if not llm_available():
             raise ValueError(
                 "No LLM configured. Set ANTHROPIC_API_KEY in the profile "
                 ".env, or sign in with Firebase to use MrCall credits."

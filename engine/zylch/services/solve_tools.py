@@ -619,9 +619,9 @@ def _web_search(args: Dict) -> str:
         return "No query provided"
 
     try:
-        from zylch.llm import try_make_llm_client
+        from zylch.llm import routed_model, try_make_llm_client
 
-        client = try_make_llm_client()
+        client = try_make_llm_client(model=routed_model("MODEL_WEB_SEARCH"))
         if client is None:
             return (
                 "No LLM configured for web search. Set ANTHROPIC_API_KEY "

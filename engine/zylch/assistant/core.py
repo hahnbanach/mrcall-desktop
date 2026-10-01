@@ -11,7 +11,7 @@ from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 from typing import Any, Awaitable, Callable, Dict, List, Optional, Tuple
 
-from ..llm import LLMClient, make_llm_client
+from ..llm import LLMClient, make_llm_client, routed_model
 from ..llm.exceptions import LLMPromptTooLargeError
 from .budget import (
     PROMPT_TOKEN_BUDGET,
@@ -162,7 +162,7 @@ class ZylchAIAgent(BaseConversationalAgent):
         self.unlimited_voice = (
             customer_service_instructions is not None and isolated_voice_unlimited()
         )
-        self.client: LLMClient = client if client is not None else make_llm_client()
+        self.client: LLMClient = client if client is not None else make_llm_client(model=routed_model("MODEL_CHAT"))
         self.tools = tools
         self.tool_map = {tool.name: tool for tool in tools}
         self.model_selector = model_selector or ModelSelector()

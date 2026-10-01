@@ -354,9 +354,9 @@ async def _run_pipeline(
         # the budget gate above already tripped — no ping, no attempt.
         if llm_ok:
             try:
+                from zylch.llm import routed_model
                 from zylch.llm.client import make_llm_client
-
-                _probe = make_llm_client()
+                _probe = make_llm_client(model=routed_model("MODEL_SYNC_ANALYSIS"))
                 with call_site("preflight"):
                     await _probe.create_message(
                         messages=[{"role": "user", "content": "ping"}],

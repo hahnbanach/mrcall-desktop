@@ -584,7 +584,7 @@ async def tasks_solve(params: Dict[str, Any], notify: NotifyFn) -> Any:
     notifications; pauses on tool approval (waits for tasks.solve.approve).
     Returns {ok, result} when done.
     """
-    from zylch.llm import make_llm_client
+    from zylch.llm import make_llm_client, routed_model
     from zylch.services.solve_constants import (
         SOLVE_SYSTEM_PROMPT,
         SOLVE_TOOLS,
@@ -668,7 +668,7 @@ async def tasks_solve(params: Dict[str, Any], notify: NotifyFn) -> Any:
             user_email = os.environ.get("EMAIL_ADDRESS", "")
             user_name = user_email.split("@")[0] if user_email else "the user"
 
-            client = make_llm_client()
+            client = make_llm_client(model=routed_model("MODEL_TASK_SOLVE"))
             system = SOLVE_SYSTEM_PROMPT.format(
                 user_name=user_name,
                 personal_data_section=get_personal_data_section(owner_id=owner_id),
@@ -1586,11 +1586,11 @@ async def narration_summarize(
         user = f"Ultime righe di log:\n{joined}"
 
     try:
-        from zylch.llm import try_make_llm_client
+        from zylch.llm import routed_model, try_make_llm_client
 
         # Narration is a "nice to have" — silently skip if no LLM is
         # configured rather than surfacing an error toast.
-        client = try_make_llm_client()
+        client = try_make_llm_client(model=routed_model("MODEL_NARRATION"))
         if client is None:
             return {"text": ""}
 
@@ -1924,9 +1924,9 @@ async def narration_predict(
     fallback = "Sto pensando alla tua richiesta."
 
     try:
-        from zylch.llm import try_make_llm_client
+        from zylch.llm import routed_model, try_make_llm_client
 
-        client = try_make_llm_client()
+        client = try_make_llm_client(model=routed_model("MODEL_NARRATION"))
         if client is None:
             return {"text": ""}
 

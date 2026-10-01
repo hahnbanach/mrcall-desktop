@@ -76,14 +76,20 @@ async def usage_today(params: Dict[str, Any], notify: NotifyFn) -> Any:
     from zylch.llm.model_policy import policy_snapshot
 
     policy = policy_snapshot()
-    supported = policy["provider"] in {"anthropic", "openrouter"} and policy["credential_configured"]
+    supported = (
+        policy["provider"] in {"anthropic", "openrouter"} and policy["credential_configured"]
+    )
     reason = ""
     if policy["provider"] == "mrcall":
         try:
             await asyncio.to_thread(_credit_client().capabilities)
             supported = True
         except Exception as exc:
-            reason = str(exc) if isinstance(exc, RuntimeError) else "MrCall billing availability could not be verified."
+            reason = (
+                str(exc)
+                if isinstance(exc, RuntimeError)
+                else "MrCall billing availability could not be verified."
+            )
     result = {
         **state,
         "billing_reason": reason,
@@ -97,17 +103,20 @@ async def usage_today(params: Dict[str, Any], notify: NotifyFn) -> Any:
     return result
 
 
-
 def _credit_client():
     from zylch.auth import get_session
     from zylch.llm.bounded_proxy import BoundedProxyClient
     from zylch.llm.model_policy import profile_value
-    return BoundedProxyClient(profile_value("MRCALL_PROXY_URL") or "https://zylch.mrcall.ai", get_session())
+
+    return BoundedProxyClient(
+        profile_value("MRCALL_PROXY_URL") or "https://zylch.mrcall.ai", get_session()
+    )
 
 
 async def usage_reconcile(params, notify):
     """usage.reconcile(cursor?) -> recovered and unresolved credit reservations."""
     from zylch.llm.billing_reconciliation import reconcile
+
     cursor = params.get("cursor")
     if cursor is not None and not isinstance(cursor, str):
         raise ValueError("cursor must be a string")
@@ -117,7 +126,8 @@ async def usage_reconcile(params, notify):
 async def llm_models(params, notify):
     """Free catalog for a proposed billing selection; never changes saved policy."""
     from zylch.llm.model_policy import resolve_provider
-    from zylch.llm.openrouter_pricing import LABELS
+    from zylch.llm.roles.table import listed
+
     provider = params.get("provider") or resolve_provider()
     if provider not in ("anthropic", "openrouter", "mrcall"):
         raise ValueError("Unsupported billing provider")
@@ -127,19 +137,25 @@ async def llm_models(params, notify):
             models = capabilities.get("models")
             if not isinstance(models, list) or not models:
                 raise ValueError("Billing server does not publish a model catalog; update it.")
-            if any(not isinstance(m, dict) or not all(isinstance(m.get(k), str) and m[k]
-                   for k in ("id", "label", "provider")) for m in models):
+            if any(
+                not isinstance(m, dict)
+                or not all(isinstance(m.get(k), str) and m[k] for k in ("id", "label", "provider"))
+                for m in models
+            ):
                 raise ValueError("Billing server returned an invalid model catalog.")
             models = [{k: m[k] for k in ("id", "label", "provider")} for m in models]
         except Exception as exc:
-            reason = str(exc) if isinstance(exc, (RuntimeError, ValueError)) else "Billing catalog unavailable."
+            reason = (
+                str(exc)
+                if isinstance(exc, (RuntimeError, ValueError))
+                else "Billing catalog unavailable."
+            )
             return {"provider": provider, "models": [], "available": False, "reason": reason}
-    elif provider == "openrouter":
-        models = [{"id": key, "label": label, "provider": "openrouter"} for key, label in LABELS.items()]
     else:
-        models = [{"id": key, "label": label, "provider": "anthropic"} for key, label in (
-            ("claude-opus-5", "Claude Opus 5"), ("claude-sonnet-5", "Claude Sonnet 5"),
-            ("claude-haiku-4-5", "Claude Haiku 4.5"))]
+        # The table's picks and fallbacks plus the allowlist rows of this transport.
+        models = [
+            {"id": key, "label": label, "provider": provider} for key, label in listed(provider)
+        ]
     return {"provider": provider, "models": models, "available": True, "reason": ""}
 
 

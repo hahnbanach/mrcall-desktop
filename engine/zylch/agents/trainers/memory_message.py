@@ -20,7 +20,7 @@ import logging
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Tuple
 
-from zylch.llm import make_llm_client
+from zylch.llm import make_llm_client, routed_model
 from zylch.storage import Storage
 
 logger = logging.getLogger(__name__)
@@ -282,7 +282,7 @@ class MessageMemoryAgentTrainer:
         """
         self.storage = storage
         self.owner_id = owner_id
-        self.client = make_llm_client()
+        self.client = make_llm_client(model=routed_model("MODEL_TRAIN"))
         self.model = self.client.model
         self.user_email = user_email.lower() if user_email else ""
         self.user_domain = (

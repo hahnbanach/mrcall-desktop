@@ -10,17 +10,36 @@ from .client import (
 )
 
 
-def routed_model(env_key: str) -> str | None:
-    """Resolve an explicit role override or the selected provider's preset."""
-    from .model_policy import profile_values, resolve_model
+def routed_model(env_key: str) -> str:
+    """Resolve a role's model: its explicit override, else the selected
+    provider's preset; `custom` with no base model resolves the role under
+    `economy`, so a routed caller never receives None."""
+    from .model_policy import resolve_model
 
-    values = profile_values()
-    explicit = str(values.get(env_key) or "").strip()
-    if explicit:
-        return explicit
-    if str(values.get("LLM_MODEL_PRESET") or "custom").strip() == "custom":
-        return None  # Factory resolves its base model; legacy worker contract.
-    return resolve_model(env_key, values=values)
+    return resolve_model(env_key)
+
+
+def llm_available() -> bool:
+    """True when the saved provider has its credential: a probe for callers
+    that only ask whether AI can run. No model is resolved, no client built,
+    and it never raises (unreadable settings read as unavailable)."""
+    from .budget_pricing import BudgetError
+    from .model_policy import profile_values, resolve_provider
+
+    try:
+        values = profile_values()
+        provider = resolve_provider(values)
+    except BudgetError:
+        return False
+    if provider in ("anthropic", "openrouter"):
+        key = "ANTHROPIC_API_KEY" if provider == "anthropic" else "OPENROUTER_API_KEY"
+        return bool(str(values.get(key) or "").strip())
+    try:
+        from zylch.auth import get_session
+
+        return get_session() is not None
+    except Exception:  # noqa: BLE001 - a probe answers, it does not raise
+        return False
 
 
 __all__ = [
@@ -28,6 +47,7 @@ __all__ = [
     "LLMResponse",
     "TextBlock",
     "ToolUseBlock",
+    "llm_available",
     "make_llm_client",
     "routed_model",
     "try_make_llm_client",
