@@ -1,5 +1,5 @@
 ---
-status: completed
+status: active
 date: 2026-10-01
 ---
 
@@ -248,3 +248,28 @@ No new branch/worktree, kernel upgrade, company write or other profile deploymen
   documentation baseline remains 65659b3. Scheduled execution, rollback
   execution and new-source handset behavior are not certified by this closure.
   Evidence: `/tmp/mrcall-ai-kit/mario-resume-20261001/doc-critic.log`.
+
+## Independent Astra post-delivery review — REVISE
+
+The operator requested a fresh Astra review after M6 completion. The independent
+[report](../evaluations/2026-10-01-astra-company-instructions-migration-review.md)
+reopens this plan for one P1: Mario's legacy headless wrapper allows broad RPC
+commands but does not deny the newly deployed `instructions.store`. The engine
+authorizes his own mailbox-document writes. A headless invocation can therefore
+persistently modify its own instruction document; no actual write was observed
+or attempted. The owning 124 wrapper already denies this surface. Closure
+requires the supported kernel/clone permission path to deny all supported
+headless spellings while preserving preview and the engine drafting reader,
+followed by the same Astra review. No repair was applied in this read-only turn.
+
+Scheduling correction: no Mario operator schedule exists; this predates M1. The
+scheduled 124 operator reads Mario's inbox without drafting. Both pause files
+are absent and the daemon is reachable with its migrated reader, but this is
+unpaused readiness, not evidence of resumed automatic Mario drafting. Adding
+a schedule is outside this review's scope.
+
+Astra independently verified actual production/Mario source readbacks, all
+653/470 release hashes, exact artifact and preview, revision-1 source histories
+and preserved profile/other-unit fingerprints. Production source migration is
+verified; safe Mario headless resume is REVISE. The broader knowledge plan's
+spoken-detail and latency gates remain open. Baseline hold remains unchanged.

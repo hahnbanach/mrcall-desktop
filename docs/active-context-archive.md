@@ -5,6 +5,13 @@ That file is a living snapshot and carries only `State now` / `Unresolved` /
 `Next`; anything chronological lands here instead. Newest section first.
 Nothing is discarded — only relocated, verbatim.
 
+## 2026-10-01 — Before Astra headless and scheduling review
+
+Health, authenticated binding and unsigned callback checks pass. Both `124-cs`
+and `mario124-cs` are resumed. Mario imports the prepared `bbde719` staff M1
+overlay through his unchanged executable/socket; his actual instruction preview
+matches his mailbox and procedures at revision 1.
+
 ## 2026-10-01 — Before Mario instruction-reader migration
 
 1. Resolve Mario’s separate M1 reader before lifting its clone pause. Continue
