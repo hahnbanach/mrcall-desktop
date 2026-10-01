@@ -79,8 +79,11 @@ doc-critic pass).
 
 Memory is per company, not per account. A profile carries `MEMORY_KEY`
 (`secrets.token_urlsafe(16)`, 22 chars) in its `.env`, and every profile on
-the same engine host holding that key reads and writes one SQLite store,
-`~/.zylch/memory/<MEMORY_KEY>.db` (`MEMORY_DB_DIR` overrides the directory);
+the same engine host holding that key reads and writes one SQLite store
+under `~/.zylch/memory/` (`MEMORY_DB_DIR` overrides the directory; `ZYLCH_HOME`
+overrides `~/.zylch` everywhere): on a local engine `<MEMORY_KEY>.db`, on a
+hosted one `mc-c-<sha256(key)[:12]>/<sha256(key)[:32]>.db` so the file name
+never carries the key (legacy-named stores are still opened, never shadowed);
 the profile's `zylch.db` keeps mail, tasks, tokens and sync cursors.
 Company families (`user:<key>`, `facts:<key>`) are visible to every key
 holder; rule families (`template:<owner>`, `prefs:<owner>`) only to their
@@ -94,6 +97,24 @@ runs after each update. Design:
 engine detail in [`engine/docs/features/entity-memory-system.md`](engine/docs/features/entity-memory-system.md)
 ("Scope"); host operations in [`docs/remote-backend.md`](docs/remote-backend.md)
 ("Shared company memory on the host"); app surface in [`app/CLAUDE.md`](app/CLAUDE.md).
+
+## Hosted engines: one Unix user per profile (in rollout since 2026-09)
+
+A hosted engine (`zylch serve`) is multi-tenant on one host, and the
+boundary between tenants is the operating system, not the model. The code
+is on `main`; M1 (tool confinement) is deployed to every daemon, **no
+profile is migrated to its own user yet** (state in the plan).
+Each migrated profile's daemon runs as its own Unix user `mc-<sha256(uid)[:12]>`
+inside a systemd sandbox, with the engine checkout read-only and its own
+root-only `ENCRYPTION_KEY`; its tools read and write only the profile's
+`downloads/` and `scratch/` folders, `run_python` is refused, and
+`DOCUMENT_PATHS`/`DOWNLOADS_DIR` are ignored (`settings.get` reports them
+under `ignored`). On a local engine only the profile root is refused as a
+write target and attachment filenames are reduced to a basename. Threat model and criteria:
+[`docs/briefs/2026-09-29-toward-sandbox.md`](docs/briefs/2026-09-29-toward-sandbox.md);
+rollout state and runbook:
+[`docs/execution-plans/2026-09-29-toward-sandbox.md`](docs/execution-plans/2026-09-29-toward-sandbox.md);
+host operations: [`docs/remote-backend.md`](docs/remote-backend.md).
 
 ## LLM billing and spending controls
 

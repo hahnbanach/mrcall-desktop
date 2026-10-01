@@ -393,7 +393,7 @@ class EmailerAgent(SpecializedAgent):
         # Build prompt context
         context_text = build_prompt_context(context)
 
-        # Always-on binding rules + personal data + USER_NOTES (+ secret
+        # Always-on binding rules + personal data + standing instructions (+ secret
         # instructions) — the SAME section the solve/chat paths inject, so
         # user-level guidance (identity, signature policy, language) cannot
         # drift between generation paths. Placed at the very top so it
