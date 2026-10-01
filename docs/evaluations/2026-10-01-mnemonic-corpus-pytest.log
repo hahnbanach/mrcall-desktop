@@ -1,0 +1,6 @@
+Fetching 5 files:   0%|          | 0/5 [00:00<?, ?it/s]Fetching 5 files:  20%|██        | 1/5 [00:00<00:00,  5.38it/s]Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.
+Fetching 5 files:  40%|████      | 2/5 [00:00<00:00,  3.51it/s]Fetching 5 files:  60%|██████    | 3/5 [00:00<00:00,  4.83it/s]Fetching 5 files:  80%|████████  | 4/5 [00:00<00:00,  4.75it/s]Fetching 5 files: 100%|██████████| 5/5 [00:03<00:00,  1.14s/it]Fetching 5 files: 100%|██████████| 5/5 [00:03<00:00,  1.37it/s]
+...
+corpus record (live): <record-dir>/2026-10-01-mnemonic-corpus.md
+................
+19 passed in 60.14s (0:01:00)
