@@ -619,9 +619,17 @@ single upstream; `python3 --version` ≥ 3.11 in the venv; warm the
 embedding cache as `mrcalld` (`sudo -u mrcalld env HOME=/home/mrcalld
 ZYLCH_HOME=$Z bash -c 'umask 022; $VENV/bin/python -c "from
 zylch.memory.config import MemoryConfig; from zylch.memory.embeddings
-import get_shared_engine; get_shared_engine(MemoryConfig())"'`); `find
+import get_shared_engine; get_shared_engine(MemoryConfig())"'`) **before
+the first `create`** (create's `chmod -R go=rX` on the cache is what makes
+the 0600 file huggingface writes readable; a cold cache cannot be filled
+from inside the sandbox — second pass P2); `find
 /home/mrcalld/mrcall-desktop ! -perm -o+r ! -path '*/__pycache__*'` is
-empty (D5: 0).
+empty (D5: 0); `chmod -R go=rX /home/mrcalld/releases` (the pinned
+Café124 trees; `create` refuses a PYTHONPATH its tenant cannot read —
+second pass PIN-1/2); for production@, whose drop-in sets its own
+`ExecStart`, re-express that command line against
+`/run/mrcalld/<uid>/ws.sock` in one drop-in with no other `ExecStart`
+before its 2b (`create` refuses otherwise — PIN-3).
 
 *2a, per company, one window (Café124: its four daemons):*
 1. `exec 9>/run/mrcalld/reconcile.lock; flock 9`;
@@ -678,15 +686,96 @@ profiles' keys); if it stops on an offboard error, fix and re-run.
 mechanisms: A (adversarial, host scripts) REVISE ×2 → APPROVED at
 `8169522`; B (evidence conformance, runbook) REVISE ×2 → APPROVED at
 `44133f7` (`8169522` only adds the lock reuse A asked for, probed in D8/D9).
-**M2 is ready for Café124:** deploy the branch, the provisiond check, 2a
-for Café124 in one window, then 2b one profile per day with the operator
-present.
+That verdict predates main's record of the pinned Café124 units; the
+second pass below found and fixed two more defects (pinned releases,
+log rotation) and carries its own gate.
 
 **Still open, not blocking Café124** (review A): `mrcalld` owns
 `/run/mrcalld`, the company store dirs and `reconcile.lock`; after the
 last migration those parents should move to root ownership so a
 compromised provisiond cannot swap links or stores. Provisiond and the
 reconcile path unit are to be exercised on the VPS itself.
+
+### M2 record — second scratch pass on main `1c4e2cb` (2026-10-01)
+
+Same VM, **wiped first** (units, drop-ins, tmpfiles, `/etc/mrcalld`, the
+`mc-*` users and groups, `mrcalld` and `/home/mrcalld`, Caddy config;
+python3.11 and Caddy packages kept). B.1 run literally from main
+`1c4e2cb` (only deviation: `python3.11`); three profiles built as
+production has them (`mrcalld`, shared key, legacy stores, A2 joined A1),
+and **A1 pinned like Café124**: a read-only release tree
+`/home/mrcalld/releases/mrcall-desktop-pin-1c4e2cb` selected by an
+`override.conf` with `Environment=PYTHONPATH=…/engine`, whose
+`zylch/__init__.py` prints `PINNED-RELEASE-MARKER` to the journal at import.
+Log: `/root/m2-probe-2026-10-01.log` on the VM.
+
+*Phase 1, main as is.* The two blocking defects of the first pass are
+still on main: Caddy's dual upstream — after one request for a missing
+uid, A1 and B1 503 until `fail_duration` (M-1); 2a by the plan's text then
+`create` — B1 dies on `PermissionError … .db.migrate.lock` (M-2). Rollback
+with main's verbs works (M-3). Main must not be deployed for M2 as is.
+
+*Phase 2, `claude/m2-scratch-probe` merged with main (`227fe07`), then
+these fixes:*
+
+7. **A pinned unit silently stops being pinned once migrated**
+   (`4257253`). `ProtectHome=tmpfs` hides `/home/mrcalld/releases`; Python
+   skips the missing `PYTHONPATH` entry and imports the checkout. Recorded:
+   the migrated A1 process carries the `PYTHONPATH`, the release dir does
+   not exist in its namespace, 0 marker lines from its pid. Now
+   `tenant.conf` binds `-/home/mrcalld/releases` read-only, and `create`
+   refuses (before any chown; a first migration falls back to the
+   template) a `PYTHONPATH` outside the checkout and releases or one the
+   tenant cannot read, and any other drop-in that sets `ExecStart` (it
+   would win or lose against `tenant.conf` by file name). Recorded:
+   PIN-1 refusal on the 0750 tree; PIN-2 after `chmod -R go=rX` the
+   migrated A1 logs the marker, sees the release read-only (EROFS on
+   write); PIN-3 an `ExecStart` drop-in refused, A2 left on the template as
+   `mrcalld`; PIN-4 a `PYTHONPATH` outside the trees refused, nothing
+   chown'ed. A1 stayed pinned through the probe wrapper, the real unit, a
+   reboot and a reconcile.
+8. **Log rotation of a migrated profile** (`4257253`, `e76da7f`). Main's
+   glob stanza with `su mrcalld`: "stat … Permission denied" for the
+   migrated log, rc=1 (LR-1) — every night, and the log never rotates. A
+   second stanza for the same file is a "duplicate log entry" error in
+   either order. Now the helper generates `/etc/logrotate.d/mrcalld`
+   (text fixed in the root-owned helper, never read from the checkout):
+   the unmigrated profiles' logs in one stanza as `mrcalld`, one stanza
+   per tenant with `su <user> <user>`; regenerated by `create`,
+   `unmigrate`, `delete` and `update-daemons.sh`; the static file is gone.
+   Recorded: `logrotate -d` 0 errors; forced runs of the file and of the
+   system's own `logrotate.service` (result `success`) rotated every log
+   as its owner (LR-2b); `unmigrate` moves a profile back under
+   `mrcalld`, `create` back to its own stanza, `delete` drops it (R-2,
+   R-3, LR-4).
+
+Results on the final code (`e76da7f`), real units unless marked:
+
+- **create + unit start under the drop-in:** A1 (pinned), A2, B1 active as
+  `mc-<sha12(uid)>` (R-1); `systemd-analyze security` 4.4; reboot
+  simulation and reconcile with three tenants restart nothing (R-4).
+- **Caddy, single upstream + flat-name link** (P1): a missing uid 502,
+  A1/A2/B1 401 right after; a stopped migrated unit (dangling link) 502
+  with A1 still 401; restarted 401. Main's dual upstream: M-1 above.
+- **fastembed** (P2): with step 0 skipped the tenant cannot load the model
+  ("Could not load model … from any source") — the cache must be warm
+  before; after step 0 and `create` the model loads from the read-only
+  bind, 0 files newer than the marker, no permission warning (P2b).
+- **Two-user WAL test** (C4, probe wrapper): A1 and A2 150
+  `projects.create` each concurrently, 300 seen by both, 0
+  `readonly`/`locked` lines, sidecars `0660 … mc-c-1709443c14c4`.
+- **Criteria 1, 2, 4, 5, 7** re-run as in the first pass, same results:
+  battery (C1, C2, C4, C5) and C7 (C1 joined to A with `join-company.sh` as
+  its tenant; `delete` removed its 2 rule rows, kept its company fact and
+  A1's rows; nothing of C1 left on the host).
+- **rekey --verify and unmigrate** (R-2/R-3): B1 rolled back to `mrcalld`
+  on the flat socket, Caddy 401, then re-migrated; B1 was also migrated and
+  rolled back once with main's verbs (M-2/M-3) and re-migrated with the
+  kept user and key.
+- `/etc/systemd`, `/etc/systemd/system`, `/etc/qemu` are `0755` on this
+  VM (the provider image item is host-specific).
+- Orphans after the pass (a pre-join legacy store, C's joined-away dir)
+  archived with `orphans --archive`.
 
 ## M3 — Egress bound per daemon
 
