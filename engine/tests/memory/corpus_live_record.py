@@ -305,12 +305,14 @@ def narrative_for(m: dict, rows: list) -> str:
             f" Totals rewritten {rewrites} time(s) from the profile ledger after the corpus "
             "(record-only mode); the rows are the original run's."
         )
+    # The corpus does not use the kernel: a checkout that is not there is "not used", not a sha.
+    kernel = "not used" if m["kernel_commit"] == "unavailable" else f"`{m['kernel_commit'][:9]}`"
     return (
         f"# Mnemonic corpus — {m['mode']} run, {m['written_at'][:10]}\n\nArm `{m['arm']}`, model "
         f"`{m['model']}`, prompt version `{m['prompt_version_sha256'][:12]}`, extraction prompt "
         f"`{m['extraction_prompt_sha256'][:12]}`, MNEMONIC_MAX_TOKENS {m['mnemonic_max_tokens']}, "
         f"cap USD {m['cap_usd']:.2f}, engine `{m['engine_commit'][:9]}`, kernel "
-        f"`{m['kernel_commit'][:9]}`, embedder {m['embedder']}.\n\n| case | class | verdict | "
+        f"{kernel}, embedder {m['embedder']}.\n\n| case | class | verdict | "
         f"outcomes | cost USD | calls | ms | intent |\n|---|---|---|---|---|---|---|---|\n{table}"
         f"\n\n## Noncritical disagreements (listed, no score)\n\n{notes}\n\n## Checks\n\n{checks}"
         f"\n\n{CANARY_NOTE}\n\n## Cost\n\nSettled USD {t['settled']:.4f}, held USD "

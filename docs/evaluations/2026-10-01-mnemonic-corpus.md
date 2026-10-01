@@ -1,6 +1,6 @@
 # Mnemonic corpus — live run, 2026-10-01
 
-Arm `anthropic-byok`, model `claude-haiku-4-5`, prompt version `9d4a1fdfe1f5`, extraction prompt `352eaba92e38`, MNEMONIC_MAX_TOKENS 2048, cap USD 10.00, engine `88e2370e6`, kernel `unavailab`, embedder EmbeddingEngine.
+Arm `anthropic-byok`, model `claude-haiku-4-5`, prompt version `9d4a1fdfe1f5`, extraction prompt `352eaba92e38`, MNEMONIC_MAX_TOKENS 2048, cap USD 10.00, engine `88e2370e6`, kernel not used, embedder EmbeddingEngine.
 
 | case | class | verdict | outcomes | cost USD | calls | ms | intent |
 |---|---|---|---|---|---|---|---|
@@ -43,3 +43,13 @@ Settled USD 0.0766, held USD 0.0000, open intents USD 0.0000, cap USD 10.00.
 ## Limits
 
 The unpriced refusal is fail-closed behaviour, not semantic health. Live run on the arm above; every cost is the profile ledger's. Totals rewritten 1 time(s) from the profile ledger after the corpus (record-only mode); the rows are the original run's.
+
+Of the USD 0.0766 settled, USD 0.0560 is attributable to the corpus and check intents above; the remaining USD 0.0206 is the 3 untagged calls of the sidecar approval fixture (`app/scripts/test-sidecar.mjs`, one turn on the same profile before the final ledger read), folded in by the record-only rewrite. The kernel line above reads "not used" because the corpus runs no kernel command; the committed line originally read `unavailab`, the first nine characters of the runner's "unavailable" sentinel, corrected with the runner on 2026-10-01.
+
+**The critical failure (AC 5 not met).** `customer_price_correction` is a `critical_failure`: the role CREATEd a new Boreale COMPANY blob (`5762b8e8…`) and left the seeded required target (`42a35975…`) untouched. The final reviewer's probe showed that `wiring.candidates_for` returns the seeded legacy blob first (source: cosine) for that event, so the role was shown it and chose CREATE over UPDATE on a headerless legacy candidate (`mnemonic_cases.candidate_content` keeps legacy rows headerless by design; `corpus_live_env.py:214-229`). This is model behaviour on the `claude-haiku-4-5` arm, correctly flagged by the harness, not a seeding defect. The rollout's step-1 exit condition ("every critical case passes") is therefore not reached by this run. Open decision for the CTO, not taken here: accept the finding against a legacy-shaped candidate and proceed, or hold.
+
+**Per-round fields not captured (AC 4 partly met).** D4 asks for the proposal of each round, the validator result and reasons per round, the number of rounds, the retained version and the latency per round. Every `.jsonl` row has `proposal` null: the journal prunes the payload at terminal states (`zylch/memory/mnemonic/journal.py:409-411`) and the runner reads only the journal afterwards (`corpus_live_record.py:60-84`), so only the terminal outcome, the terminal reason, `attempts` and the per-case latency survive. The run was not repeated for them; for the one critical case the reviewer's probe above is the per-round evidence this record has.
+
+**The two pending automatic cases.** `planned_not_completed` and `contradictory_legacy_fact_rule` carry reason "" and `attempts` 0: the retryable-failure reason exists only in the worker log and is not captured. The engine settles a zero-entity extraction as `skipped` (`ingestion.py:349-353`), but a parent stays `pending` with no child when `_extract` raised, returned as `RETRYABLE_FAILURE` without a receipt (`ingestion.py:342-345`); the worker raises on any answer that is neither bare `SKIP` nor an `#IDENTIFIERS` block (`workers/memory.py:705-749`, e.g. "SKIP — nothing durable"). A deterministic answer shape is therefore re-paid on every run, `attempts` stays 0 and no reason reaches the journal. Known issue, recorded in the M9 build plan.
+
+**The must_preserve misses are one finding.** The judge is a case-insensitive substring by design. The seven misses above are the role translating every Italian correction into English (e.g. "The company is closed every Saturday", "avoid exclamation marks") and writing "corrected" where the expectation holds "correction". The brief's section 9 asked for original-language corrections; this is a semantic finding on the arm, listed for review without a score.

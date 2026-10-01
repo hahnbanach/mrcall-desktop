@@ -153,10 +153,32 @@ Entry points, from `engine/`: `tests/rpc/test_mnemonic_kernel_journey.py`,
 `CS_PROJECT_KERNEL_PYTHON`); `tests/memory/test_mnemonic_kernel_inventory.py`
 (kernel checkout beside the repository); `tests/memory/test_mnemonic_corpus_live.py`
 (dry by default; `MNEMONIC_CORPUS_EXECUTE=1` plus `ANTHROPIC_API_KEY` pays).
-Pending, none of it proven yet: the paid corpus run on `claude-haiku-4-5`
-and its record under `docs/evaluations/`; the workflow green on the pushed
-branch (a pinned clone cannot be exercised before the push); the merge; and
-the rollout, which is the CTO's step-by-step decision on the hb plan
+The paid corpus ran once on 2026-10-01 (record
+`docs/evaluations/2026-10-01-mnemonic-corpus*`, commit `e5ab75e`): model
+`claude-haiku-4-5`, the real fastembed embedder, ten cases on one disposable
+profile, 4 pass, 5 noncritical, 1 `critical_failure`; the four D6 checks
+(canary `refused`, budget and unpriced refusals before the wire, truncation
+`review_needed`); USD 0.0766 settled of the USD 10 cap, the sidecar fixture
+turn included; the profile deleted. **AC 5 is not met**:
+`customer_price_correction` CREATEd a new Boreale COMPANY blob and left the
+seeded required target untouched, with the seeded legacy candidate shown first
+to the role; model behaviour on the arm, correctly flagged by the harness, not
+a seeding defect. Whether to accept that finding against a legacy-shaped
+candidate or hold is the CTO's open decision; the rollout's step-1 exit is not
+reached by this run. The run found that a fresh install resolves the Anthropic
+SDK to 1.x, whose `messages.create()` refuses sampling keywords; the direct
+transport drops them (`88e2370`, `zylch/llm/sdk_request.py`) and both
+dependency files now pin `anthropic<2`. Known issues from the run: the record
+holds no per-round proposal, validator result or latency (the journal prunes
+the payload at terminal states and the runner reads only the journal); two
+automatic cases (`planned_not_completed`, `contradictory_legacy_fact_rule`)
+stay `pending` with no child, `attempts` 0 and no reason in the journal when
+the extraction worker raises on an answer that is neither bare `SKIP` nor an
+`#IDENTIFIERS` block, so the same answer is re-paid on every run; the role
+translated the Italian corrections into English (seven `must_preserve`
+misses). Still pending: the workflow green on the pushed branch (a pinned
+clone cannot be exercised before the push); the merge; and the rollout, which
+is the CTO's step-by-step decision on the hb plan
 `docs/execution-plans/2026-09-30-mnemonic-rollout.md`, with a migration
 rehearsal on a store copy before any live step. The hosted engines still run
 pre-milestone-5 code.
@@ -233,6 +255,7 @@ API budgets; see [control boundaries](../../docs/operator-setup.md#ai-execution-
    uncertain requests. Keep automatic processing and preparation paused.
 2. Verify the Mac application through its GUI; start a bounded batch only when
    requested and review its role-specific outputs.
-3. Run the paid corpus once, commit its record, merge `mnemonic-m9` after the
-   workflow is green on the pushed branch; deploy only through the rollout plan.
+3. Obtain the CTO's decision on the corpus's critical failure; merge
+   `mnemonic-m9` only after it and after the workflow is green on the pushed
+   branch; deploy only through the rollout plan.
 4. Continue other workstreams under their existing plans.
