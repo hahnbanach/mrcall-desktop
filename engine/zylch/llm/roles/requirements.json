@@ -1,0 +1,260 @@
+{
+  "about": "Requirements the resolver (engine/scripts/resolve_models.py) turns into resolved.json: roles declare a rule, an index and a floor, never a model. Prices are USD per million tokens; a preset ceiling bounds the output price. The allowlist prices every model billed today that a custom profile may name; mrcall_served lists the ids the MrCall credits server serves today.",
+  "common": {
+    "tools": true,
+    "min_context": 200000,
+    "excluded_variants": [
+      ":free",
+      ":batch"
+    ],
+    "excluded_prefixes": [
+      "anthropic/claude-haiku"
+    ],
+    "required_scores": [
+      "intelligence"
+    ]
+  },
+  "presets": {
+    "economy": {
+      "ceiling": 10
+    },
+    "balanced": {
+      "ceiling": 20
+    }
+  },
+  "roles": {
+    "MNEMONIC": {
+      "rule": "maximise",
+      "index": "intelligence"
+    },
+    "MEMORY_EXTRACT": {
+      "rule": "satisfice",
+      "index": "intelligence",
+      "floor": 40
+    },
+    "MEMORY_MERGE": {
+      "rule": "maximise",
+      "index": "intelligence"
+    },
+    "TASK_DETECTION": {
+      "rule": "satisfice",
+      "index": "intelligence",
+      "floor": 40
+    },
+    "REANALYZE": {
+      "rule": "satisfice",
+      "index": "intelligence",
+      "floor": 40
+    },
+    "DEDUP": {
+      "rule": "satisfice",
+      "index": "intelligence",
+      "floor": 35
+    },
+    "REPLY_NEED": {
+      "rule": "satisfice",
+      "index": "intelligence",
+      "floor": 35
+    },
+    "INTENT": {
+      "rule": "satisfice",
+      "index": "intelligence",
+      "floor": 35
+    },
+    "CHAT": {
+      "rule": "maximise",
+      "index": "agentic"
+    },
+    "TASK_SOLVE": {
+      "rule": "maximise",
+      "index": "agentic"
+    },
+    "TRAIN": {
+      "rule": "satisfice",
+      "index": "intelligence",
+      "floor": 40
+    },
+    "COMPACTION": {
+      "rule": "satisfice",
+      "index": "intelligence",
+      "floor": 35
+    },
+    "SYNC_ANALYSIS": {
+      "rule": "satisfice",
+      "index": "intelligence",
+      "floor": 35
+    },
+    "WEB_SEARCH": {
+      "rule": "satisfice",
+      "index": "intelligence",
+      "floor": 35
+    },
+    "CORRECTION_LEARNING": {
+      "rule": "satisfice",
+      "index": "intelligence",
+      "floor": 40
+    },
+    "NARRATION": {
+      "rule": "satisfice",
+      "index": "intelligence",
+      "floor": 30
+    }
+  },
+  "allowlist": {
+    "claude-opus-5": {
+      "transport": "direct",
+      "price": {
+        "input": "5",
+        "output": "25"
+      }
+    },
+    "claude-opus-4-7": {
+      "transport": "direct",
+      "price": {
+        "input": "5",
+        "output": "25"
+      }
+    },
+    "claude-opus-4-6": {
+      "transport": "direct",
+      "price": {
+        "input": "5",
+        "output": "25"
+      }
+    },
+    "claude-opus-4-5": {
+      "transport": "direct",
+      "price": {
+        "input": "5",
+        "output": "25"
+      }
+    },
+    "claude-opus-4-5-20251101": {
+      "transport": "direct",
+      "price": {
+        "input": "5",
+        "output": "25"
+      }
+    },
+    "claude-sonnet-5": {
+      "transport": "direct",
+      "price": {
+        "input": "2",
+        "output": "10"
+      }
+    },
+    "claude-sonnet-4-6": {
+      "transport": "direct",
+      "price": {
+        "input": "3",
+        "output": "15"
+      }
+    },
+    "claude-sonnet-4-5": {
+      "transport": "direct",
+      "price": {
+        "input": "3",
+        "output": "15"
+      }
+    },
+    "claude-sonnet-4-5-20250929": {
+      "transport": "direct",
+      "price": {
+        "input": "3",
+        "output": "15"
+      }
+    },
+    "claude-haiku-4-5": {
+      "transport": "direct",
+      "price": {
+        "input": "1",
+        "output": "5"
+      },
+      "note": "priced custom choice only; never a default or an arm"
+    },
+    "claude-haiku-4-5-20251001": {
+      "transport": "direct",
+      "price": {
+        "input": "1",
+        "output": "5"
+      },
+      "note": "priced custom choice only; never a default or an arm"
+    },
+    "moonshotai/kimi-k3": {
+      "transport": "openrouter",
+      "price": {
+        "input": "2.648138063",
+        "output": "13.28272425"
+      },
+      "reasoning_contract": "k3",
+      "catalogue_price": {
+        "input": "0.6635",
+        "output": "10",
+        "as_of": "2026-10-01T16:29:47Z"
+      }
+    },
+    "z-ai/glm-5.2": {
+      "transport": "openrouter",
+      "price": {
+        "input": "0.6",
+        "output": "2"
+      },
+      "catalogue_price": {
+        "input": "0.41",
+        "output": "3.99",
+        "as_of": "2026-10-01T16:29:47Z"
+      }
+    },
+    "anthropic/claude-sonnet-5": {
+      "transport": "openrouter",
+      "price": {
+        "input": "2",
+        "output": "10"
+      },
+      "catalogue_price": {
+        "input": "2",
+        "output": "10",
+        "as_of": "2026-10-01T16:29:47Z"
+      }
+    },
+    "anthropic/claude-opus-5": {
+      "transport": "openrouter",
+      "price": {
+        "input": "5",
+        "output": "25"
+      },
+      "catalogue_price": {
+        "input": "5",
+        "output": "25",
+        "as_of": "2026-10-01T16:29:47Z"
+      }
+    },
+    "anthropic/claude-haiku-4.5": {
+      "transport": "openrouter",
+      "price": {
+        "input": "1",
+        "output": "5"
+      },
+      "note": "priced custom choice only; never a default or an arm",
+      "catalogue_price": {
+        "input": "1",
+        "output": "5",
+        "as_of": "2026-10-01T16:29:47Z"
+      }
+    }
+  },
+  "mrcall_served": [
+    "claude-opus-5",
+    "claude-opus-4-7",
+    "claude-opus-4-6",
+    "claude-opus-4-5",
+    "claude-opus-4-5-20251101",
+    "claude-sonnet-5",
+    "claude-sonnet-4-6",
+    "claude-sonnet-4-5",
+    "claude-sonnet-4-5-20250929",
+    "claude-haiku-4-5",
+    "claude-haiku-4-5-20251001",
+    "moonshotai/kimi-k3"
+  ]
+}
