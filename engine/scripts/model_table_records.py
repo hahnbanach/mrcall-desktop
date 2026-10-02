@@ -174,7 +174,12 @@ def report(s: dict) -> str:
             f"USD {spend['reserved']} reserved and USD {spend['spent']} spent by it, "
             f"monthly cap USD {spend['cap']}"
         )
-    for title, key in (("Problems (nothing published)", "problems"), ("Notes", "notes")):
+    sections = (
+        ("Problems (nothing published)", "problems"),
+        ("Flags: smokes settled above their expected spend", "flags"),
+        ("Notes", "notes"),
+    )
+    for title, key in sections:
         if s.get(key):
             lines += ["", f"## {title}", ""] + [f"- {line}" for line in s[key]]
     lines += ["", "## Decision record", ""]

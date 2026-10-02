@@ -69,6 +69,7 @@ class Rig:
         self.fake.smoke_fails = set(script.get("smoke_fails", ()))
         self.fake.smoke_errors = set(script.get("smoke_errors", ()))
         self.fake.smoke_unsent = set(script.get("smoke_unsent", ()))
+        self.fake.smoke_costs = dict(script.get("smoke_costs", {}))
         self.fake.measure_fails = set(script.get("measure_fails", ()))
         report = self.tmp / "report.md"
         argv = ["--data", str(self.tmp / "data"), "--report", str(report), *flags]
@@ -144,6 +145,7 @@ def test_a_changed_pick_is_published_only_after_its_smoke_and_measurement_pass(r
         "measured_at": "2026-10-14T05:17:30Z",
     }
     assert f"economy / CHAT / ranking (pick): {SONNET} > " in rig.report
+    assert "## Flags" not in rig.report  # the smoke settled at USD 0.01
 
 
 @pytest.mark.parametrize("failing", ["smoke", "measurement"])
@@ -281,7 +283,7 @@ def test_the_reservation_is_on_the_data_branch_before_the_first_paid_call_and_se
     rig.world.add(GENIUS, **CHALLENGER)
     assert rig.run() == 0  # each fake call checks the pushed reservation covers it
     first, message = rig.fake.pushes[0]
-    assert list(first) == ["ledger.json"] and "reserves USD 0.05" in message
+    assert list(first) == ["ledger.json"] and "reserves USD 0.2" in message  # the smoke's cap
     row = json.loads(first["ledger.json"])["months"]["2026-10"][0]
     assert row["settled_at"] is None and row["spent_usd"] is None
     settled = rig.doc("ledger.json")["months"]["2026-10"][0]
@@ -333,7 +335,7 @@ def test_an_error_is_no_result_counts_at_its_bound_and_never_replaces_a_pick(rig
     assert rig.pushed() == [["ledger.json"], ["ledger.json"]]  # reserved, then settled alone
     assert rig.fake.files["table.json"] == rig.files["table.json"]
     settled = rig.doc("ledger.json")["months"]["2026-10"][0]
-    assert settled["spent_usd"] == "0.05" and "error (ConnectionError)" in str(settled["calls"])
+    assert settled["spent_usd"] == "0.2" and "error (ConnectionError)" in str(settled["calls"])
     assert "its smoke could not run (error: ConnectionError: the provider hung up)" in rig.report
 
 
@@ -343,7 +345,7 @@ def test_a_smoke_its_cap_could_not_send_is_no_result_never_a_failure(rig):
     assert rig.run(smoke_unsent={GENIUS, SONNET}) == 1  # Sonnet's change left unsmoked
     assert rig.fake.measured == []  # no measurement without a smoke that ran
     assert rig.fake.files["table.json"] == rig.files["table.json"]  # Sonnet not replaced
-    assert f"smoke {GENIUS}: not completed: not sent: bound 85808" in rig.report
+    assert f"smoke {GENIUS}: not completed: not sent: bound 250000" in rig.report
     assert f"{SONNET}: metadata changed (models reasoning, direct reasoning) and its smoke" in (
         rig.report
     )
@@ -462,7 +464,7 @@ def test_a_dry_run_pays_nothing_and_pushes_nothing(rig):
     rig.world.add(GENIUS, **CHALLENGER)
     assert rig.run("--dry-run") == 0
     assert rig.fake.smoked == [] and rig.fake.pushes == []
-    assert f"smoke {GENIUS}: dry run (at most USD 0.05)" in rig.report
+    assert f"smoke {GENIUS}: dry run (at most USD 0.2)" in rig.report
     assert "dry run: would publish snapshot.json" in rig.report
 
 
