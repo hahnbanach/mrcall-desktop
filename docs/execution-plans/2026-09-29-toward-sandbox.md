@@ -438,8 +438,9 @@ M2.7 as the scripts now are, per profile U, after its company's 2a:
 7. `systemctl start`; release the lock; `memory-status` as the tenant;
    criteria 1/5; `wss://…/ws/U` through Caddy.
 Rollback (same lock): stop; `rekey` with the two files swapped (root);
-`mrcall-tenant unmigrate U` (drop-in, fragment, run dir, ownership back
-to `mrcalld`, table row; keeps user and key file); start under the
+`mrcall-tenant unmigrate U` (`tenant.conf`, fragment, run dir, ownership
+back to `mrcalld`, table row; keeps user, key file and the operator's own
+drop-ins); start under the
 transitional template, whose flat socket Caddy still serves.
 Scratch-unit probe list, before any customer: unit start under the
 drop-in; Caddy reaching `/run/mrcalld/<uid>/ws.sock`; fastembed loading
@@ -626,10 +627,13 @@ from inside the sandbox — second pass P2); `find
 /home/mrcalld/mrcall-desktop ! -perm -o+r ! -path '*/__pycache__*'` is
 empty (D5: 0); `chmod -R go=rX /home/mrcalld/releases` (the pinned
 Café124 trees; `create` refuses a PYTHONPATH its tenant cannot read —
-second pass PIN-1/2); for production@, whose drop-in sets its own
-`ExecStart`, re-express that command line against
-`/run/mrcalld/<uid>/ws.sock` in one drop-in with no other `ExecStart`
-before its 2b (`create` refuses otherwise — PIN-3).
+second pass PIN-1/2), and every pin names the real path of its tree: no
+symbolic link, no `..`, set with `Environment=PYTHONPATH=` in a drop-in,
+no trailing slash, never through an `EnvironmentFile` (`create` refuses
+each — post-gate record). **production@ is not covered yet:** its drop-in sets its own
+`ExecStart`, and `tenant.conf` carries the only command line a migrated
+unit runs, so `create` refuses it (post-gate record, "Open"). Read
+`systemctl cat zylch-server@<uid>` on the host before its 2b.
 
 *2a, per company, one window (Café124: its four daemons):*
 1. `exec 9>/run/mrcalld/reconcile.lock; flock 9`;
@@ -672,7 +676,12 @@ list above, unchanged (the step 0 check as above). Step 7, exactly:
 - never run `rekey --verify-only` or any `zylch` command as root while the
   unit runs (root-owned `-wal`/`-shm`).
 2b rollback as above (stop; `rekey` with the files swapped, as root;
-`mrcall-tenant unmigrate U`; start). When the company's last profile is
+`mrcall-tenant unmigrate U`; start). `unmigrate` removes `tenant.conf`
+only: a pinning drop-in stays, and after the start the pinned unit's
+`PYTHONPATH` is checked as in step 7 (the helper of `e76da7f` and before
+removed the whole drop-in directory — post-gate record). A drop-in that
+was edited for the migration is put back from the operator's copy before
+the start. When the company's last profile is
 migrated: `gpasswd -d mrcalld <group>` (R8: the reconcile does not re-add
 it). When the rollback window closes (the plan keeps the shared key until
 then): `shred -u /root/oldkey.U /root/stat.U`, remove `/root/backup.U.tgz`
@@ -733,7 +742,8 @@ these fixes:*
    write); PIN-3 an `ExecStart` drop-in refused, A2 left on the template as
    `mrcalld`; PIN-4 a `PYTHONPATH` outside the trees refused, nothing
    chown'ed. A1 stayed pinned through the probe wrapper, the real unit, a
-   reboot and a reconcile.
+   reboot and a reconcile. (On `e76da7f` both refusals could still be
+   walked around, and a rollback lost the pin: post-gate record below.)
 8. **Log rotation of a migrated profile** (`4257253`, `e76da7f`). Main's
    glob stanza with `su mrcalld`: "stat … Permission denied" for the
    migrated log, rc=1 (LR-1) — every night, and the log never rotates. A
@@ -749,7 +759,8 @@ these fixes:*
    `mrcalld`, `create` back to its own stanza, `delete` drops it (R-2,
    R-3, LR-4).
 
-Results on the final code (`e76da7f`), real units unless marked:
+Results on `e76da7f` (the final code is `267e365`, post-gate record
+below), real units unless marked:
 
 - **create + unit start under the drop-in:** A1 (pinned), A2, B1 active as
   `mc-<sha12(uid)>` (R-1); `systemd-analyze security` 4.4; reboot
@@ -776,6 +787,181 @@ Results on the final code (`e76da7f`), real units unless marked:
   VM (the provider image item is host-specific).
 - Orphans after the pass (a pre-join legacy store, C's joined-away dir)
   archived with `orphans --archive`.
+
+### M2 record — post-gate probes and reviews of `4257253`, `e76da7f` (2026-10-02)
+
+The two commits above were made after the gate and had no review. Same
+VM (resized to 8 GB + 4 GB swap — operator note, not in the log),
+installation and scratch profiles of 2026-10-01 kept; one or two daemons
+running at a time, all three only during the reconciles (DEP-4, FINAL-0).
+Log: `/root/m2-probe.log` on the VM, scripts in `/root/m2-probes/`. It
+holds every command with its output, except the `override.conf` rewrites
+of REV-2, REV-3, REV-7 (first case) and REV-8 (FINAL-1 repeats each case with its setup
+logged) and one `orphans --archive` (noted in the log). The log corrects
+itself where a probe proved nothing (LR-4, LR-4b, FIX-6, REV-5 second and
+third command, REV-6, DEP-0..3); those are not cited below.
+
+Final code: **`267e365`** (`f6f5301`, `0eae166`, `267e365` on top of
+`e76da7f`). The helper under test is identified by hash at P0
+(`e76da7f`), FIX-0 (`f6f5301`), REV-0 (a working-tree build, not kept:
+`0eae166` differs from it by the trap's fragment removal), REV-8
+(byte-identical to `267e365`), DEP-4 (`0eae166`) and FINAL-0 (`267e365`,
+deployed by `update-daemons.sh` from origin). **FINAL-1..6 repeat every refusal
+and the pinned start on the committed final helper.**
+
+*What was asked of the two commits, on `e76da7f` as committed:*
+
+- **A pinned profile migrated with `create` imports its release**
+  (PIN-A0, PIN-A3, PIN-A4): A1 rolled back, started as `mrcalld`, migrated
+  again by the runbook. The unit's main process logs the marker of the
+  pinned tree's `zylch/__init__.py`, which prints its own `__file__`
+  (`/home/mrcalld/releases/mrcall-desktop-pin-1c4e2cb/engine/zylch/__init__.py`),
+  attributed to the main pid; an `ExecStartPre` in the same unit prints
+  the same `zylch.__file__` under the tenant uid. Control (REF-0): the
+  unpinned B1 prints the checkout path. Decrypt self-check 0, Caddy 401.
+  Again on `267e365`: FINAL-6.
+- **`create` refuses** a `PYTHONPATH` outside the bound trees (REF-1, a
+  readable tree in `/opt`) and another drop-in that sets `ExecStart`
+  (REF-2), on a first migration — unit left on the template as `mrcalld`,
+  nothing chown'ed, no table row, logrotate file unchanged — and on a
+  migrated profile, whose `tenant.conf` stays (REF-3).
+- **Generated logrotate file** with A1 migrated and B1 not, both running:
+  `logrotate -d` on the file and on `/etc/logrotate.conf` 0 errors, no
+  "duplicate log entry" (LR-2); `logrotate -f` rc=0, each log rotated and
+  truncated by its owner, daemons still serving (LR-3); the nightly
+  `logrotate.service`, forced, under its own sandbox with non-empty logs:
+  result `success`, both logs rotated (LR-5). Regenerated by `unmigrate`
+  (LR-U, FIX-6b: B1 back under `su mrcalld`), by `create`, and by `delete`
+  of an unmigrated and of a migrated throwaway profile (LR-D1, LR-D2).
+  Rotation is by size: `size 50M` overrides `daily`, as in the static
+  file it replaces.
+
+*Defects the probes and the two reviews found; each shown failing on the
+code named, fixed, and probed again* (numbering continues):
+
+9. **Rollback un-pinned a pinned unit** (`e76da7f` and every earlier
+   helper; PIN-A1/A2). `unmigrate` removed the whole drop-in directory,
+   the operator's `override.conf` included: the rolled-back A1 ran the
+   checkout with nothing in the journal. It now removes `tenant.conf`
+   and the directory only when empty (`f6f5301`; FIX-4, FIX-6b).
+10. **The `PYTHONPATH` refusal tested a prefix** (`e76da7f`; EDGE-1,
+    EDGE-2). `releases/../releases-b/engine` and a link inside `releases`
+    pointing out of it were accepted, and the migrated daemon imported the
+    checkout. Two repairs were not enough, each shown by review A:
+    resolving the path first (`f6f5301`) accepts `/home/mrcalld/current ->
+    releases/<tree>`, which resolves into the tree and does not exist in
+    the sandbox (REV-2: checkout imported); comparing with the lexically
+    normalised path (`0eae166`) accepts a `..` hop through a directory
+    the sandbox lacks (REV-7). `267e365` accepts a pin only when the path
+    and its `zylch/__init__.py` **equal their own real path as written**,
+    inside the checkout or `releases`, absolute, readable by the tenant:
+    no link (one inside `releases` included), no `..`, no trailing slash
+    (REV-8, FINAL-1; accepted forms FINAL-4).
+11. **A pin could arrive where the check did not look** (`e76da7f`;
+    EDGE-5). `PYTHONPATH` in an `EnvironmentFile` is invisible to
+    `systemctl show -p Environment`; named by the template or by a drop-in
+    that sorts before `tenant.conf`, it is also dropped by `tenant.conf`'s
+    reset of the list (REV-4: accepted by `f6f5301`). The template and
+    every drop-in are now read before `tenant.conf` is written, and an
+    `EnvironmentFile` that sets `PYTHONPATH` is refused; so is one named
+    with a specifier (`%i`), which the helper cannot follow, and a
+    trailing space no longer hides the file (REV-7: both accepted by
+    `0eae166`; REV-8, FINAL-2). A quoted `PYTHONPATH` entry is refused
+    rather than skipped.
+12. **The `ExecStart` refusal read one directory and one spelling**
+    (`e76da7f`; EDGE-3, EDGE-4). `ExecStart = …` and a drop-in of the
+    template (`zylch-server@.service.d`) were accepted and replaced
+    `tenant.conf`'s command line. Now every path in `DropInPaths` is read
+    (FIX-2, FIX-3, FINAL-3). A second check on the effective `ExecStart`
+    is a backstop no probe reaches: nothing gets past the file check.
+13. **A first migration stopped half-way kept `tenant.conf`** (review A).
+    The fallback to the template ran only on the helper's own refusals.
+    An EXIT trap, armed from the write of `tenant.conf` to the chown, now
+    removes `tenant.conf`, the tmpfiles fragment, the run dir and the
+    flat-name link (the template's daemon binds that name). FINAL-5, on a
+    virgin profile: three refusals, a failing `systemd-tmpfiles` (rc=73)
+    and a stop after the run dir existed each leave no drop-in, fragment,
+    run dir or link, the profile `mrcalld`'s, no table row. The user and
+    key file a stopped first `create` made stay; the next one reuses them
+    (REV-5: "created user" and "minted key file" printed once).
+14. **logrotate temp file** (review A): written to `/etc/logrotate.d/`,
+    where logrotate would read a leftover `.tmp` as a second
+    configuration (its include rule; reproduced by the reviewer outside
+    the host, not in the log). Now under `/etc/mrcalld/` (REV-5b, DEP-4:
+    no `.tmp` in either directory after a regeneration).
+
+*Deploy path.* On `0eae166` (DEP-4, DEP-5): `update-daemons.sh` pulled
+the commit from origin, installed the helper (hash equal to the
+commit's), re-applied `create` to the three migrated units, regenerated
+the logrotate file, started all three — active as their tenant users,
+Caddy 401, A1's main process on the pinned release; a second run
+restarted nothing. On `267e365` (FINAL-0): the same pull, install,
+`create` ×3 and regeneration, the units stopped at once; A1 alone is
+then started and checked (FINAL-6). `create` on a running migrated unit
+keeps its pid (REV-1, DEP-5, FINAL-6).
+
+**Runbook, added to "Runbook M2 as proven"** (its text above is updated):
+
+- *Before 2b of a pinned profile:* `systemctl cat zylch-server@U`. The pin
+  is one `Environment=PYTHONPATH=<real path of the tree>/engine` line in a
+  drop-in; anything else `create` refuses and says why.
+- *2b step 7, for a pinned profile:* the process's `PYTHONPATH` (`tr '\0'
+  '\n' < /proc/<pid>/environ`) is the release **and** `nsenter -t <pid>
+  -m -- test -e <PYTHONPATH>/zylch/__init__.py` succeeds — the tree
+  exists in the daemon's own mount namespace (FINAL-6: rc 0, and 1 for a
+  path that is not bound); the environment alone proved nothing in
+  defect 7. Then `logrotate -d /etc/logrotate.conf 2>&1 | grep -ciE
+  'error|duplicate'` → 0.
+- *Rollback of a pinned profile:* nothing to re-create; the same check
+  after the start.
+
+**Open.**
+
+- **production@ cannot be migrated with this helper.** Its drop-in sets
+  `ExecStart` to a path under `releases`, and `create` refuses any
+  `ExecStart` outside `tenant.conf`. On the scratch VM a unit whose own
+  `ExecStart` was the standard command line migrated once those lines
+  were removed and only the `PYTHONPATH` pin kept, and rolled back with
+  the kept copy restored (PROD-1..4). Whether production@'s command line
+  reduces to that is a fact of the host (its interpreter, its arguments):
+  read its drop-in first; if it does not, the helper needs an explicit,
+  root-only command override before its 2b. It is the last of the Café124
+  2b's; the other three pin by `PYTHONPATH` only. Until it is migrated,
+  `mrcalld` stays in Café124's company group, so every unmigrated daemon
+  can still read and write that store: the `gpasswd -d mrcalld <group>`
+  step is not reached.
+- A refused `create` in the reconcile (3a) is a line on stderr; 3b then
+  restarts that already migrated unit as it is (from the code, review A;
+  not probed, not changed here).
+- A table row whose user was removed by hand gives logrotate "unknown
+  user" for that stanza every night (review A, reproduced outside the
+  host; no helper verb produces that state).
+- Review A's notes on `267e365`, not changed (the gate closed on that
+  commit): `EnvironmentFile=\` continued on the next line is not followed
+  by the helper's reader, so a pin named that way is the one exception to
+  defect 11 (closes by refusing a value that does not start with `/`);
+  a symlinked `scratch` with no `downloads` leaves a root-owned
+  `downloads/` behind the refusal; a `create` that dies between the chown
+  and the table row leaves a tenant-owned profile the undo does not know.
+- Not exercised on the committed final helper: the effective-`ExecStart`
+  backstop (by no probe at all); a `zylch/__init__.py` that is itself a
+  link; the production@-like forward path and rollback (PROD-1..4 ran on
+  the REV-0 build; on `267e365` only its refusal, FINAL-5); a start of
+  the template unit after a stopped first migration (FINAL-5 shows the
+  leftovers gone and `User=mrcalld`, not a bind).
+- The scratch VM's root disk is at 97 % (the 4 GB swap file): clear space
+  before the next session there.
+
+**Gate (post-gate commits).** Two independent reviews of `4257253`,
+`e76da7f` and the probes, continued over the fixes: A (adversarial, host
+scripts) REVISE on `f6f5301` (defects 10 and 11, second halves; 13; 14;
+the production@ step) and on `0eae166` (the `..` hop, the specifier) →
+**APPROVED at `267e365`**; B (evidence conformance, runbook) REVISE on
+`f6f5301` (the record still described `e76da7f`; the production@ step;
+claims wider than the probes) and on `0eae166` (refusals not run on the
+committed hash; `..`) → **APPROVED at `267e365`**, this record included.
+Both judge "production@ open" an acceptable resolution for this gate, not
+a blocker; it blocks production@'s own 2b.
 
 ## M3 — Egress bound per daemon
 
