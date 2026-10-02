@@ -15,6 +15,8 @@ no OpenRouter key, so a real client cannot be built in it: a call site the harne
 reach yields no request and the case is refused, instead of a request reaching a provider.
 Every environment change is undone on exit, so a harness runs inside a pytest test or from a
 script with ``engine/`` on ``sys.path``, and never reaches a real profile.
+
+It also holds :func:`text_language`, the stated method behind a case's ``expect_lang``.
 """
 
 from __future__ import annotations
@@ -22,6 +24,7 @@ from __future__ import annotations
 import importlib.util
 import json
 import os
+import re
 import tempfile
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
@@ -207,3 +210,36 @@ def load_capture(role: str) -> ModuleType:
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module
+
+
+#: The function words the language check counts: frequent in one language and rare in the
+#: other in short business sentences. Left out on purpose: "a", "in", "per" (words in both);
+#: "e" and "all" (fragments of "e-mail" and "all'"); "ai" and "i" ("AI", "I").
+_FUNCTION_WORDS = {
+    "it": frozenset(
+        "il lo la l gli le un una uno di del dell della dello dei degli delle che non con al "
+        "alla alle agli dal dall dalla nel nell nella nelle nei negli sull da su si ci lei "
+        "loro sono è sempre mai solo ogni dopo prima quando anche questo questa nostro "
+        "nostra nostri nostre suo sua".split()
+    ),
+    "en": frozenset(
+        "the of to and is are for with not always never only every after before when also "
+        "as their they them be must should any by on at from our your we you it this that".split()
+    ),
+}
+
+
+def text_language(text: str) -> str | None:
+    """The language a short free text is written in: ``"it"``, ``"en"``, or None if undecided.
+
+    The check behind a case's ``expect_lang``, for answers of one sentence, where a statistical
+    detector is unreliable: lowercase the text, split it into words on anything that is not a
+    letter (accented letters are letters), count the words found in each language's
+    function-word list, and return the language with strictly more hits. A tie, including no
+    hit at all, is None, which fails the bar.
+    """
+    words = re.findall(r"[^\W\d_]+", text.lower())
+    hits = {lang: sum(word in vocab for word in words) for lang, vocab in _FUNCTION_WORDS.items()}
+    if hits["it"] == hits["en"]:
+        return None
+    return "it" if hits["it"] > hits["en"] else "en"

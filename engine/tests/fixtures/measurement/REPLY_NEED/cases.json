@@ -15,6 +15,8 @@
       },
       "label": {"needs_reply": true},
       "critical": true,
+      "critical_on": ["no_reply"],
+      "expect_lang": null,
       "why": "A thank-you that wraps a new request (the August invoice) with no question mark; the request is the content, so a reply is owed and calling it a courtesy silences the customer."
     },
     {
@@ -29,6 +31,8 @@
       },
       "label": {"needs_reply": true},
       "critical": true,
+      "critical_on": ["no_reply"],
+      "expect_lang": null,
       "why": "Polite opening, but it reports that the problem is still not solved, which the prompt lists explicitly as needing a reply."
     },
     {
@@ -43,6 +47,8 @@
       },
       "label": {"needs_reply": true},
       "critical": true,
+      "critical_on": ["no_reply"],
+      "expect_lang": null,
       "why": "Starts like a courtesy, then cancels the agreed day and proposes another without a question mark: an appointment we must confirm."
     },
     {
@@ -57,6 +63,8 @@
       },
       "label": {"needs_reply": true},
       "critical": true,
+      "critical_on": ["no_reply"],
+      "expect_lang": null,
       "why": "Acknowledges, then gives a new delivery address we must act on; the prompt counts new facts we have to process as needing a reply."
     },
     {
@@ -71,6 +79,8 @@
       },
       "label": {"needs_reply": true},
       "critical": true,
+      "critical_on": ["no_reply"],
+      "expect_lang": null,
       "why": "Reads as thanks, but the customer is waiting for a revised quote from us: the ball is with us, which the prompt names as needing a reply."
     },
     {
@@ -85,6 +95,8 @@
       },
       "label": {"needs_reply": true},
       "critical": true,
+      "critical_on": ["no_reply"],
+      "expect_lang": null,
       "why": "An acknowledgement followed by an explicit complaint about repeated failed pickups; dissatisfaction always needs a reply."
     },
     {
@@ -99,6 +111,8 @@
       },
       "label": {"needs_reply": true},
       "critical": true,
+      "critical_on": ["no_reply"],
+      "expect_lang": null,
       "why": "Two courtesy words, then an imperative request for a document; a short polite instruction is still a request."
     },
     {
@@ -113,6 +127,8 @@
       },
       "label": {"needs_reply": true},
       "critical": true,
+      "critical_on": ["no_reply"],
+      "expect_lang": null,
       "why": "Confirms receipt but reports a missing page we must send; something is still open."
     },
     {
@@ -127,6 +143,8 @@
       },
       "label": {"needs_reply": true},
       "critical": true,
+      "critical_on": ["no_reply"],
+      "expect_lang": null,
       "why": "English thanks, Italian request: the certificate is needed by Friday. Mixed languages must not hide the request."
     },
     {
@@ -141,6 +159,8 @@
       },
       "label": {"needs_reply": true},
       "critical": true,
+      "critical_on": ["no_reply"],
+      "expect_lang": null,
       "why": "An instruction to change the order follows the acknowledgement; we must act on it and confirm."
     },
     {
@@ -155,6 +175,8 @@
       },
       "label": {"needs_reply": false},
       "critical": false,
+      "critical_on": [],
+      "expect_lang": null,
       "why": "A pure closing courtesy followed by a signature block with address and phone, which the prompt says to ignore."
     },
     {
@@ -169,6 +191,8 @@
       },
       "label": {"needs_reply": false},
       "critical": false,
+      "critical_on": [],
+      "expect_lang": null,
       "why": "Confirms the fix worked and thanks us; nothing asked, reported or left open."
     },
     {
@@ -183,6 +207,8 @@
       },
       "label": {"needs_reply": false},
       "critical": false,
+      "critical_on": [],
+      "expect_lang": null,
       "why": "Acknowledges receipt; the quoted trailer is our own earlier mail (cut by the engine before the model sees it, its question included), so only a thank-you remains."
     },
     {
@@ -197,6 +223,8 @@
       },
       "label": {"needs_reply": false},
       "critical": false,
+      "critical_on": [],
+      "expect_lang": null,
       "why": "Thanks, says everything is clear and closes with a greeting; nothing is open."
     },
     {
@@ -211,6 +239,8 @@
       },
       "label": {"needs_reply": false},
       "critical": false,
+      "critical_on": [],
+      "expect_lang": null,
       "why": "Confirms the repair and thanks us; the only request-like words sit in a legal confidentiality footer, which the prompt says never makes a message need a reply."
     },
     {
@@ -225,6 +255,8 @@
       },
       "label": {"needs_reply": false},
       "critical": false,
+      "critical_on": [],
+      "expect_lang": null,
       "why": "Confirms receipt of the invoice; the rest is a signature with title and phone number."
     },
     {
@@ -239,6 +271,8 @@
       },
       "label": {"needs_reply": false},
       "critical": false,
+      "critical_on": [],
+      "expect_lang": null,
       "why": "Says the problem is solved and thanks us in two languages; a pure close."
     },
     {
@@ -253,6 +287,8 @@
       },
       "label": {"needs_reply": false},
       "critical": false,
+      "critical_on": [],
+      "expect_lang": null,
       "why": "Informal confirmation that the reset worked plus thanks; nothing open."
     },
     {
@@ -267,6 +303,8 @@
       },
       "label": {"needs_reply": false},
       "critical": false,
+      "critical_on": [],
+      "expect_lang": null,
       "why": "A bare acknowledgement after our answer; the prompt names a bare 'ok' as a possible complete close, and nothing is asked or reported."
     },
     {
@@ -281,6 +319,8 @@
       },
       "label": {"needs_reply": false},
       "critical": false,
+      "critical_on": [],
+      "expect_lang": null,
       "why": "Confirms the refund arrived and says explicitly that no reply is needed."
     }
   ]

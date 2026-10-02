@@ -35,6 +35,8 @@
       "input": {"user_input": "Cosa mi ha scritto Ferretti sull'ordine dei bancali?"},
       "label": {"primary_skill": "email_triage"},
       "critical": false,
+      "critical_on": [],
+      "expect_lang": null,
       "why": "Asks what a sender wrote about a topic: reading mail already received. Near-duplicate of intent-05, which names the same person and order but asks to reply."
     },
     {
@@ -43,6 +45,8 @@
       "input": {"user_input": "Any unread emails from the accountant this week?"},
       "label": {"primary_skill": "email_triage"},
       "critical": false,
+      "critical_on": [],
+      "expect_lang": null,
       "why": "A search over received mail (unread, from one sender, this week); nothing to write or save."
     },
     {
@@ -51,6 +55,8 @@
       "input": {"user_input": "Riassumimi le mail arrivate stamattina"},
       "label": {"primary_skill": "email_triage"},
       "critical": false,
+      "critical_on": [],
+      "expect_lang": null,
       "why": "Summarising emails already received is the first skill's description word for word."
     },
     {
@@ -59,6 +65,8 @@
       "input": {"user_input": "What did Laura say about the invoice?"},
       "label": {"primary_skill": "email_triage"},
       "critical": false,
+      "critical_on": [],
+      "expect_lang": null,
       "why": "Asks what someone said: a read of existing mail. Near-duplicate of intent-06, which writes to Laura about the invoice."
     },
     {
@@ -66,15 +74,19 @@
       "lang": "it",
       "input": {"user_input": "Rispondi a Ferretti che i bancali partono lunedì"},
       "label": {"primary_skill": "draft_composer"},
-      "critical": true,
-      "why": "An instruction to reply with given content; routing it to a read-only skill drops the user's explicit instruction."
+      "critical": false,
+      "critical_on": [],
+      "expect_lang": null,
+      "why": "An instruction to reply with given content: a draft, not a read of existing mail."
     },
     {
       "id": "intent-06",
       "lang": "en",
       "input": {"user_input": "Write to Laura that the invoice was paid yesterday"},
       "label": {"primary_skill": "draft_composer"},
-      "critical": true,
+      "critical": false,
+      "critical_on": [],
+      "expect_lang": null,
       "why": "An explicit request to write a message with stated content."
     },
     {
@@ -82,7 +94,9 @@
       "lang": "it",
       "input": {"user_input": "Prepara una mail per il fornitore degli imballaggi e chiedigli il listino 2027"},
       "label": {"primary_skill": "draft_composer"},
-      "critical": true,
+      "critical": false,
+      "critical_on": [],
+      "expect_lang": null,
       "why": "Asks for a new email to a supplier; 'listino' is the message's subject matter, not a fact to save."
     },
     {
@@ -90,7 +104,9 @@
       "lang": "it",
       "input": {"user_input": "Manda un WhatsApp a Gianni: ci vediamo alle 9 in magazzino"},
       "label": {"primary_skill": "draft_composer"},
-      "critical": true,
+      "critical": false,
+      "critical_on": [],
+      "expect_lang": null,
       "why": "A WhatsApp message to send, which the draft skill covers; the time is the message's content, not a meeting to book."
     },
     {
@@ -98,7 +114,9 @@
       "lang": "it",
       "input": {"user_input": "Ricordami di mandare il preventivo a Bassi entro venerdì"},
       "label": {"primary_skill": "task_manager"},
-      "critical": true,
+      "critical": false,
+      "critical_on": [],
+      "expect_lang": null,
       "why": "'Ricordami di' asks for a reminder to do something, a to-do with a deadline. Near-duplicate of intent-18 ('Ricordati che'), which states a fact to keep."
     },
     {
@@ -107,6 +125,8 @@
       "input": {"user_input": "Show me my open tasks"},
       "label": {"primary_skill": "task_manager"},
       "critical": false,
+      "critical_on": [],
+      "expect_lang": null,
       "why": "Listing the user's own to-do items is the task skill's description."
     },
     {
@@ -114,7 +134,9 @@
       "lang": "it",
       "input": {"user_input": "Segna come fatto il task del preventivo Rossi"},
       "label": {"primary_skill": "task_manager"},
-      "critical": true,
+      "critical": false,
+      "critical_on": [],
+      "expect_lang": null,
       "why": "Closes one of the user's tasks; an update the user explicitly asked for."
     },
     {
@@ -122,7 +144,9 @@
       "lang": "en",
       "input": {"user_input": "Book a call with Marco Bianchi on Tuesday at 3pm"},
       "label": {"primary_skill": "calendar"},
-      "critical": true,
+      "critical": false,
+      "critical_on": [],
+      "expect_lang": null,
       "why": "Booking a call at a date and time is the calendar skill's description."
     },
     {
@@ -131,6 +155,8 @@
       "input": {"user_input": "Che appuntamenti ho domani?"},
       "label": {"primary_skill": "calendar"},
       "critical": false,
+      "critical_on": [],
+      "expect_lang": null,
       "why": "Looks up the user's appointments for a day."
     },
     {
@@ -138,7 +164,9 @@
       "lang": "it",
       "input": {"user_input": "Sposta la riunione di venerdì alle 11"},
       "label": {"primary_skill": "calendar"},
-      "critical": true,
+      "critical": false,
+      "critical_on": [],
+      "expect_lang": null,
       "why": "Moves an existing meeting to a new time; a calendar change the user ordered."
     },
     {
@@ -147,6 +175,8 @@
       "input": {"user_input": "What's the phone number of Example Logistics?"},
       "label": {"primary_skill": "contact_lookup"},
       "critical": false,
+      "critical_on": [],
+      "expect_lang": null,
       "why": "Asks for a company's phone number, a lookup of what is known. Near-duplicate of intent-20, which supplies a new number to save."
     },
     {
@@ -155,6 +185,8 @@
       "input": {"user_input": "Chi è Sara Colombo? Abbiamo già lavorato con lei?"},
       "label": {"primary_skill": "contact_lookup"},
       "critical": false,
+      "critical_on": [],
+      "expect_lang": null,
       "why": "Who a person is and whether there were past dealings is the contact skill's description."
     },
     {
@@ -163,6 +195,8 @@
       "input": {"user_input": "Do we have an email address for the new buyer at Example Retail?"},
       "label": {"primary_skill": "contact_lookup"},
       "critical": false,
+      "critical_on": [],
+      "expect_lang": null,
       "why": "Asks whether an email address is known for a person: a contact lookup, not a mail search or a draft."
     },
     {
@@ -170,15 +204,19 @@
       "lang": "it",
       "input": {"user_input": "Ricordati che da gennaio il prezzo del kit base è 49 euro"},
       "label": {"primary_skill": "memory_notes"},
-      "critical": true,
-      "why": "'Ricordati che' states a price to keep from now on; routing it elsewhere loses a fact the user gave. Near-duplicate of intent-09."
+      "critical": false,
+      "critical_on": [],
+      "expect_lang": null,
+      "why": "'Ricordati che' states a price to keep from now on: a fact to save, not a to-do. Near-duplicate of intent-09."
     },
     {
       "id": "intent-19",
       "lang": "en",
       "input": {"user_input": "From now on, always sign my emails as 'Anna, Example Studio'"},
       "label": {"primary_skill": "memory_notes"},
-      "critical": true,
+      "critical": false,
+      "critical_on": [],
+      "expect_lang": null,
       "why": "A standing rule for every future email, not a message to write now."
     },
     {
@@ -186,7 +224,9 @@
       "lang": "en",
       "input": {"user_input": "Note that Example Logistics changed their phone number to +39 02 0000 0188"},
       "label": {"primary_skill": "memory_notes"},
-      "critical": true,
+      "critical": false,
+      "critical_on": [],
+      "expect_lang": null,
       "why": "The user supplies a new fact to save; the lookup skill only finds what is already known."
     }
   ]

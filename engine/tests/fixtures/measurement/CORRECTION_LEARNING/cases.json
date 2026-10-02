@@ -43,6 +43,8 @@
       },
       "label": {"is_durable_rule": true, "rule_must_contain": [["mail", "scriv", "posta"]]},
       "critical": false,
+      "critical_on": [],
+      "expect_lang": "it",
       "why": "The user removed a callback offer and stated a standing support policy (email only, no phone callbacks), the tool description's own example of a durable rule; the rule must point customers to writing/email."
     },
     {
@@ -59,6 +61,8 @@
       },
       "label": {"is_durable_rule": true, "rule_must_contain": [["courier", "carrier", "collect", "pick", "dispatch", "tracking"]]},
       "critical": false,
+      "critical_on": [],
+      "expect_lang": "en",
       "why": "The edit replaces a promised delivery date with a policy the user states as general ('As a rule'): no delivery date before the courier has the parcel."
     },
     {
@@ -75,6 +79,8 @@
       },
       "label": {"is_durable_rule": true, "rule_must_contain": [["bonifico", "anticipat", "contrassegno"]]},
       "critical": false,
+      "critical_on": [],
+      "expect_lang": "it",
       "why": "The user replaced an offered payment method with a general payment policy ('solo anticipato', 'non accettiamo il contrassegno') that holds for every customer."
     },
     {
@@ -91,6 +97,8 @@
       },
       "label": {"is_durable_rule": true, "rule_must_contain": [["form", "client area", "portal"]]},
       "critical": false,
+      "critical_on": [],
+      "expect_lang": "en",
       "why": "A phone-support offer removed and the user states phone support no longer exists; the general replacement, the help form, is what the rule must carry."
     },
     {
@@ -107,6 +115,8 @@
       },
       "label": {"is_durable_rule": true, "rule_must_contain": [["registr", "rivendit"]]},
       "critical": false,
+      "critical_on": [],
+      "expect_lang": "it",
       "why": "Sending the price list replaced by a general condition ('solo ai rivenditori registrati'), a policy for every future request."
     },
     {
@@ -123,6 +133,8 @@
       },
       "label": {"is_durable_rule": true, "rule_must_contain": [["discount", "sales team", "commercial"]]},
       "critical": false,
+      "critical_on": [],
+      "expect_lang": "en",
       "why": "A discount offer removed and replaced by a policy the user states as general ('we never offer discounts by email')."
     },
     {
@@ -139,6 +151,8 @@
       },
       "label": {"is_durable_rule": false},
       "critical": false,
+      "critical_on": [],
+      "expect_lang": null,
       "why": "A one-letter typo fix ('spedizone'); the tool description says typo fixes are never durable rules."
     },
     {
@@ -155,6 +169,8 @@
       },
       "label": {"is_durable_rule": false},
       "critical": true,
+      "critical_on": ["record"],
+      "expect_lang": null,
       "why": "The added sentence is an arrangement made with this one customer ('as agreed with you'); as a rule it would promise every customer a driver's call."
     },
     {
@@ -165,12 +181,14 @@
         "memory": "tipografia",
         "correction": {
           "tool_name": "send_whatsapp",
-          "proposed": {"phone_number": "+39 333 000 0157", "message": "Grazie per l'ordine dei volantini, buona giornata!"},
-          "edited": {"phone_number": "+39 333 000 0157", "message": "Grazie per l'ordine dei volantini e in bocca al lupo per l'inaugurazione del nuovo negozio! Buona giornata!"}
+          "proposed": {"phone_number": "+39 02 0000 0157", "message": "Grazie per l'ordine dei volantini, buona giornata!"},
+          "edited": {"phone_number": "+39 02 0000 0157", "message": "Grazie per l'ordine dei volantini e in bocca al lupo per l'inaugurazione del nuovo negozio! Buona giornata!"}
         }
       },
       "label": {"is_durable_rule": false},
       "critical": true,
+      "critical_on": ["record"],
+      "expect_lang": null,
       "why": "A personal wish for this customer's shop opening; a personal detail is not a policy, and as a rule it would congratulate every customer on an opening."
     },
     {
@@ -186,8 +204,10 @@
         }
       },
       "label": {"is_durable_rule": false},
-      "critical": true,
-      "why": "The edit only applies the existing rule 'Always sign customer emails as \"The Example Studio team\"'; the tool excludes anything already covered by an existing rule, and recording it would duplicate that rule."
+      "critical": false,
+      "critical_on": [],
+      "expect_lang": null,
+      "why": "The edit only applies the existing rule 'Always sign customer emails as \"The Example Studio team\"'; the tool excludes anything already covered by an existing rule. Recording it would only restate a correct rule (the store routes identical or contained rules to its duplicate check), so the error is not critical."
     },
     {
       "id": "correction_learning-11",
@@ -197,12 +217,14 @@
         "memory": "tipografia",
         "correction": {
           "tool_name": "send_sms",
-          "proposed": {"phone_number": "+39 347 000 0163", "message": "Buongiorno, può ritirare i biglietti da visita martedì dalle 10 in negozio."},
-          "edited": {"phone_number": "+39 347 000 0163", "message": "Buongiorno, può ritirare i biglietti da visita mercoledì dalle 10 in negozio."}
+          "proposed": {"phone_number": "+39 02 0000 0163", "message": "Buongiorno, può ritirare i biglietti da visita martedì dalle 10 in negozio."},
+          "edited": {"phone_number": "+39 02 0000 0163", "message": "Buongiorno, può ritirare i biglietti da visita mercoledì dalle 10 in negozio."}
         }
       },
       "label": {"is_durable_rule": false},
       "critical": true,
+      "critical_on": ["record"],
+      "expect_lang": null,
       "why": "The pickup day of one order moved from Tuesday to Wednesday, a one-off change; as a rule it would send every customer to the shop on Wednesdays."
     },
     {
@@ -219,6 +241,8 @@
       },
       "label": {"is_durable_rule": false},
       "critical": false,
+      "critical_on": [],
+      "expect_lang": null,
       "why": "Grammar fixes only ('your', 'it is'); the tool description says grammar fixes are not durable rules."
     },
     {
@@ -235,6 +259,8 @@
       },
       "label": {"is_fact_change": true, "category": "biglietti da visita", "value_must_contain": [["52"]], "value_must_not_contain": ["45"]},
       "critical": true,
+      "critical_on": ["old_value"],
+      "expect_lang": null,
       "why": "The standard price of 500 business cards, quoted generically, corrected from 45 to 52 EUR + IVA; the existing category 'biglietti da visita' fits, and recording the old figure would be a wrong fact."
     },
     {
@@ -251,6 +277,8 @@
       },
       "label": {"is_fact_change": true, "category": "white-label", "value_must_contain": [["800"]], "value_must_not_contain": ["700"]},
       "critical": true,
+      "critical_on": ["old_value"],
+      "expect_lang": null,
       "why": "The standard white-label day rate corrected from 700 to 800 EUR/day, the tool description's own example; the existing category 'white-label' fits."
     },
     {
@@ -267,6 +295,8 @@
       },
       "label": {"is_fact_change": true, "category": "volantini", "value_must_contain": [["500"]], "value_must_not_contain": ["250"]},
       "critical": true,
+      "critical_on": ["old_value"],
+      "expect_lang": null,
       "why": "The minimum order for flyers corrected from 250 to 500 copies; minimum order is a standard value the tool names, and 'volantini' is an existing category."
     },
     {
@@ -281,8 +311,10 @@
           "edited": {"to": "sam@example-cafe.example", "subject": "Re: Support hours", "body": "Hi Sam,\nour support line is open Monday to Friday, 8:30-17:30.\nBest regards,\nThe Example Studio team"}
         }
       },
-      "label": {"is_fact_change": true, "category": "support", "value_must_contain": [["8:30", "8.30"], ["17:30", "17.30"]], "value_must_not_contain": ["9:00", "18:00"]},
+      "label": {"is_fact_change": true, "category": "support", "value_must_contain": [["8:30", "8.30"], ["17:30", "17.30", "5:30", "5.30"]], "value_must_not_contain": ["9:00", "18:00"]},
       "critical": true,
+      "critical_on": ["old_value"],
+      "expect_lang": null,
       "why": "The support opening hours corrected to 8:30-17:30; hours are a standard value the tool names, and 'support' is an existing category."
     },
     {
@@ -293,12 +325,14 @@
         "memory": "tipografia",
         "correction": {
           "tool_name": "send_whatsapp",
-          "proposed": {"phone_number": "+39 333 000 0142", "message": "Buongiorno! La spedizione in Italia costa 9,90 EUR e arriva in 48 ore."},
-          "edited": {"phone_number": "+39 333 000 0142", "message": "Buongiorno! La spedizione in Italia costa 12,50 EUR e arriva in 48 ore."}
+          "proposed": {"phone_number": "+39 02 0000 0142", "message": "Buongiorno! La spedizione in Italia costa 9,90 EUR e arriva in 48 ore."},
+          "edited": {"phone_number": "+39 02 0000 0142", "message": "Buongiorno! La spedizione in Italia costa 12,50 EUR e arriva in 48 ore."}
         }
       },
-      "label": {"is_fact_change": true, "category": "spedizioni", "value_must_contain": [["12,50", "12.50"]], "value_must_not_contain": ["9,90", "9.90"]},
+      "label": {"is_fact_change": true, "category": "spedizioni", "value_must_contain": [["12,50", "12.50", "12,5", "12.5"]], "value_must_not_contain": ["9,90", "9.90"]},
       "critical": true,
+      "critical_on": ["old_value"],
+      "expect_lang": null,
       "why": "The standard shipping cost for Italy corrected from 9,90 to 12,50 EUR, on WhatsApp; 'spedizioni' is the existing category."
     },
     {
@@ -315,6 +349,8 @@
       },
       "label": {"is_fact_change": true, "category": "workshops", "value_must_contain": [["1,450", "1450", "1.450"]], "value_must_not_contain": ["1,200", "1200", "1.200"]},
       "critical": true,
+      "critical_on": ["old_value"],
+      "expect_lang": null,
       "why": "The standard price of a half-day workshop corrected from 1,200 to 1,450 EUR; 'workshops' is an existing category."
     },
     {
@@ -331,6 +367,8 @@
       },
       "label": {"is_fact_change": false},
       "critical": true,
+      "critical_on": ["record"],
+      "expect_lang": null,
       "why": "A one-off discount for a long-standing customer ('per questa volta'); the tool says a recipient-specific discount is not a standard fact, and recording 38 EUR would misprice every future offer."
     },
     {
@@ -347,6 +385,8 @@
       },
       "label": {"is_fact_change": false},
       "critical": false,
+      "critical_on": [],
+      "expect_lang": null,
       "why": "Only a typo changed ('exlcuded'); the rate stays 700 EUR/day, so no value was corrected. Near-duplicate of correction_learning-14."
     },
     {
@@ -363,6 +403,8 @@
       },
       "label": {"is_fact_change": false},
       "critical": false,
+      "critical_on": [],
+      "expect_lang": null,
       "why": "Only the tone changed, formal to informal; the lead time stays 3 working days, so no business value was corrected."
     },
     {
@@ -379,6 +421,8 @@
       },
       "label": {"is_fact_change": false},
       "critical": true,
+      "critical_on": ["record"],
+      "expect_lang": null,
       "why": "The ship date of one order moved; a date specific to this order is not a standard value, and stored as a fact it would be wrong for every other customer."
     },
     {
@@ -395,6 +439,8 @@
       },
       "label": {"is_fact_change": false},
       "critical": false,
+      "critical_on": [],
+      "expect_lang": null,
       "why": "The customer's quantity doubled and the total with it, at the same unit price; the total of this recipient's order is not a corrected standard value."
     },
     {
@@ -411,6 +457,8 @@
       },
       "label": {"is_fact_change": false},
       "critical": false,
+      "critical_on": [],
+      "expect_lang": null,
       "why": "A personal greeting was added; no business value changed."
     }
   ]

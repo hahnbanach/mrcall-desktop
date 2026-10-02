@@ -13,6 +13,8 @@
       },
       "label": {"needs_action": true, "expected_action": "answer"},
       "critical": true,
+      "critical_on": ["none", "invalid"],
+      "expect_lang": null,
       "why": "A customer asks for a quote and delivery times; someone is waiting for the user's reply, the prompt's first rule."
     },
     {
@@ -26,6 +28,8 @@
       },
       "label": {"needs_action": true, "expected_action": "answer"},
       "critical": true,
+      "critical_on": ["none", "invalid"],
+      "expect_lang": null,
       "why": "After the confirmation, which promised nothing, the customer asks a direct question about the shipping date: 'answer'."
     },
     {
@@ -38,6 +42,8 @@
       },
       "label": {"needs_action": true, "expected_action": "answer"},
       "critical": true,
+      "critical_on": ["none", "invalid"],
+      "expect_lang": null,
       "why": "A request for documents with a deadline; the prompt lists requested documents under 'answer'."
     },
     {
@@ -50,6 +56,8 @@
       },
       "label": {"needs_action": true, "expected_action": "answer"},
       "critical": true,
+      "critical_on": ["none", "invalid"],
+      "expect_lang": null,
       "why": "A meeting proposal with two slots awaiting the user's choice; the prompt puts pending meeting proposals under 'answer'."
     },
     {
@@ -63,6 +71,8 @@
       },
       "label": {"needs_action": true, "expected_action": "answer"},
       "critical": true,
+      "critical_on": ["none", "invalid"],
+      "expect_lang": null,
       "why": "A damaged delivery is reported with a direct question on how to get replacements; the customer waits for the user's reply."
     },
     {
@@ -76,6 +86,8 @@
       },
       "label": {"needs_action": true, "expected_action": "answer"},
       "critical": true,
+      "critical_on": ["none", "invalid"],
+      "expect_lang": null,
       "why": "A polite request for a pro-forma invoice with no question mark; the customer waits for a document from the user."
     },
     {
@@ -88,6 +100,8 @@
       },
       "label": {"needs_action": true, "expected_action": "answer"},
       "critical": true,
+      "critical_on": ["none", "invalid"],
+      "expect_lang": null,
       "why": "Italian and English mixed in one message; the request to send the updated contract by Monday is explicit."
     },
     {
@@ -101,6 +115,8 @@
       },
       "label": {"needs_action": true, "expected_action": "reminder"},
       "critical": true,
+      "critical_on": ["none", "invalid"],
+      "expect_lang": null,
       "why": "The prompt's second example in Italian: the user promised the price list by tonight and the customer only thanked, so the task is keeping the promise, 'reminder'."
     },
     {
@@ -114,6 +130,8 @@
       },
       "label": {"needs_action": true, "expected_action": "reminder"},
       "critical": true,
+      "critical_on": ["none", "invalid"],
+      "expect_lang": null,
       "why": "The user promised to come back with a delivery date and the customer only thanked; what remains is the user's own promise, 'reminder'."
     },
     {
@@ -128,6 +146,8 @@
       },
       "label": {"needs_action": true, "expected_action": "reminder"},
       "critical": true,
+      "critical_on": ["none", "invalid"],
+      "expect_lang": null,
       "why": "The prompt's fourth example in Italian: the user said 'possiamo sistemarlo subito' and the customer thanked; the fix is still owed, 'reminder'."
     },
     {
@@ -141,6 +161,8 @@
       },
       "label": {"needs_action": true, "expected_action": "reminder"},
       "critical": true,
+      "critical_on": ["none", "invalid"],
+      "expect_lang": null,
       "why": "The user's side promised to ship a part on a date and the customer only thanked; shipping it is the pending task, 'reminder'."
     },
     {
@@ -154,6 +176,8 @@
       },
       "label": {"needs_action": true},
       "critical": true,
+      "critical_on": ["none", "invalid"],
+      "expect_lang": null,
       "why": "The customer waits for a confirmation the user promised; the prompt's rules fit both 'answer' (waiting for a confirmation) and 'reminder' (a promise made), so only 'action needed' is labelled."
     },
     {
@@ -166,6 +190,8 @@
       },
       "label": {"needs_action": false, "expected_action": null},
       "critical": false,
+      "critical_on": [],
+      "expect_lang": null,
       "why": "An automated renewal notice, the prompt's fifth example: no task."
     },
     {
@@ -178,6 +204,8 @@
       },
       "label": {"needs_action": false, "expected_action": null},
       "critical": false,
+      "critical_on": [],
+      "expect_lang": null,
       "why": "An automated delivery notification that asks for no response."
     },
     {
@@ -191,6 +219,8 @@
       },
       "label": {"needs_action": false, "expected_action": null},
       "critical": false,
+      "critical_on": [],
+      "expect_lang": null,
       "why": "Same shape as sync_analysis-08 (the customer thanks the user), but the user already delivered the invoice: an exchange of courtesies concluded."
     },
     {
@@ -203,6 +233,8 @@
       },
       "label": {"needs_action": false, "expected_action": null},
       "critical": false,
+      "critical_on": [],
+      "expect_lang": null,
       "why": "A marketing newsletter; nothing is asked of the user."
     },
     {
@@ -216,6 +248,8 @@
       },
       "label": {"needs_action": false, "expected_action": null},
       "critical": false,
+      "critical_on": [],
+      "expect_lang": null,
       "why": "The user sent the invoice and the customer confirmed receipt with a greeting: concluded."
     },
     {
@@ -228,6 +262,8 @@
       },
       "label": {"needs_action": false, "expected_action": null},
       "critical": false,
+      "critical_on": [],
+      "expect_lang": null,
       "why": "An automated notice that an invitee accepted a meeting; no response is needed."
     },
     {
@@ -240,6 +276,8 @@
       },
       "label": {"needs_action": false, "expected_action": null},
       "critical": false,
+      "critical_on": [],
+      "expect_lang": null,
       "why": "Information only, and the sender says explicitly that no reply is needed."
     },
     {
@@ -252,6 +290,8 @@
       },
       "label": {"needs_action": false, "expected_action": null},
       "critical": false,
+      "critical_on": [],
+      "expect_lang": null,
       "why": "A thank-you after a completed delivery; a courtesy with nothing pending."
     }
   ]

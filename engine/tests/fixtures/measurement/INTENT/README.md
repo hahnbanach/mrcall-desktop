@@ -17,6 +17,10 @@ descriptions written so that each message has one right answer —
 `email_triage`, `draft_composer`, `task_manager`, `calendar`,
 `contact_lookup`, `memory_notes`.
 
+The role is measured for completeness: it is in the roster, and a role left
+unmeasured blocks the table's publication (brief D7). Nothing reads its answer
+today, so no case is critical (below).
+
 ## Cases
 
 20 messages, 11 Italian and 9 English: 4 triage, 4 drafting, and 3 each for
@@ -31,15 +35,23 @@ Label: `{"primary_skill": "<one of the registry's names>"}`. Only the primary
 skill is labelled; `context_skills`, `params` and `confidence` depend on taste
 and are not scored.
 
-- Parse the model's text as the router does (strip a ```` ```json ```` fence,
-  `json.loads`), read `primary_skill`, compare it exactly with the label.
-- Unparseable output or a missing `primary_skill` is a failure. Score the
-  model's raw answer, never the router's result: on any error the router
-  returns `email_triage`, which would count a broken answer as right on the
-  triage cases.
-- `critical` is true where the user orders an action (write a message, create
-  or close a task, book or move a meeting, save a fact): a wrong skill there
-  drops the instruction. A wrong skill on a lookup is an ordinary error.
+A model's answer falls in one class: parse its text as the router does (strip
+a ```` ```json ```` fence, `json.loads`) and take `primary_skill` — the class
+is that name — or `invalid` when the text does not parse or has no
+`primary_skill`. The answer is correct when the name equals the label. Score
+the model's raw answer, never the router's result: on any error the router
+returns `email_triage`, which would count a broken answer as right on the
+triage cases.
+
+**Critical answers.** `critical_on` lists the wrong answer classes that are
+critical failures for the case; `[]` means none is, and `critical` is derived
+(`true` exactly when `critical_on` is not empty). Here every case has
+`critical_on: []`: the router has no caller, so no wrong answer reaches anyone.
+
+**Language.** `expect_lang` is the language the role's prompt requires for the
+free text the measurement scores; no language bar applies when it is `null`.
+Here it is `null` on every case: the answer is JSON holding a skill name, with
+no free text to score.
 
 ## Input to builder
 
@@ -49,9 +61,17 @@ builds an `IntentRouter` over a registry whose `list_skills()` returns the
 file's `skills` and runs `classify_intent` (the `builder`).
 
 `build_requests(cases, model=...)` returns `[{"case_id", "request"}]`, the
-keyword arguments `classify_intent` passed, as sent; the request carries
-`model=` because the call site passes it (the client's model: the role's
-`MODEL_INTENT`, a placeholder unless `model` names the arm). Given the case
-list rather than the document, the harness reads `skills` from this directory's
+keyword arguments `classify_intent` passed, as sent. Given the case list rather
+than the document, the harness reads `skills` from this directory's
 `cases.json`. It needs `engine/` on `sys.path`; no network, no key.
 `tests/measurement/test_capture.py` runs it on every case.
+
+## Placeholders in the captured request
+
+The replay rebuilds each request per arm with the M10 request shape; it takes
+`messages` and `max_tokens` from the capture. Not replayed as captured:
+
+- `model: "measurement/capture"` — the call site passes the client's model,
+  which in the capture is the placeholder saved as `MODEL_INTENT` (or the arm
+  named by `build_requests(..., model=...)`); each arm supplies its own.
+- `temperature: 0` — the M10 shape sends no sampling fields.

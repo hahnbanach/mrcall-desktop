@@ -7,6 +7,10 @@ request at the role's call site, carrying the role's tool where it has one, buil
 case's own input; that a case the engine would settle without a model is refused instead of
 silently measuring nothing; and that each case file keeps the label schema its README
 documents, grounded in the input, synthetic, and balanced in classes and languages.
+
+Each case also says which wrong answers are critical (``critical_on``, from which ``critical``
+is derived) and which language its scored free text must be in (``expect_lang``, None where
+no free text is scored); both follow the rules the role's README states, checked here.
 """
 
 from __future__ import annotations
@@ -25,12 +29,13 @@ from tests.measurement.capture_support import (
     disposable_profile,
     load_capture,
     load_cases,
+    text_language,
     the_request,
 )
 
 ROLES = ("REPLY_NEED", "INTENT", "CORRECTION_LEARNING", "SYNC_ANALYSIS")
 JUDGE_TOOLS = {"rule": "record_rule", "fact": "record_fact"}
-CASE_KEYS = {"id", "lang", "input", "label", "critical", "why"}
+CASE_KEYS = {"id", "lang", "input", "label", "critical", "critical_on", "expect_lang", "why"}
 
 
 def expected_tool(role, case):
@@ -151,7 +156,6 @@ def check_label(role, doc, case):
     label, data = case["label"], case["input"]
     if role == "REPLY_NEED":
         assert label.keys() == {"needs_reply"} and isinstance(label["needs_reply"], bool)
-        assert case["critical"] is label["needs_reply"]  # silencing a request is the harm
     elif role == "INTENT":
         assert label.keys() == {"primary_skill"}
         assert label["primary_skill"] in {skill["name"] for skill in doc["skills"]}
@@ -187,6 +191,56 @@ def check_label(role, doc, case):
         assert any(o in drafted for o in old) and not any(o in sent for o in old), case["id"]
 
 
+def wrong_answers(role, doc, case):
+    """The answer classes (README, "Label and scoring") that are wrong for ``case``."""
+    label = case["label"]
+    if role == "REPLY_NEED":
+        return {"needs_reply", "no_reply", "invalid"} - {
+            "needs_reply" if label["needs_reply"] else "no_reply"
+        }
+    if role == "INTENT":
+        return {skill["name"] for skill in doc["skills"]} - {label["primary_skill"]} | {"invalid"}
+    if role == "SYNC_ANALYSIS":
+        if not label["needs_action"]:
+            return {"answer", "reminder", "invalid"}
+        right = label.get("expected_action")
+        return {"none", "invalid"} | ({"answer", "reminder"} - {right} if right else set())
+    if not label.get("is_durable_rule", label.get("is_fact_change")):
+        return {"record", "invalid"}
+    return {"no_record", "invalid"} | ({"old_value"} if case["input"]["judge"] == "fact" else set())
+
+
+def check_critical(role, doc, case):
+    """``critical_on`` lists wrong answers only, ``critical`` is derived, each role's rule holds."""
+    critical_on, label = case["critical_on"], case["label"]
+    assert case["critical"] is bool(critical_on), case["id"]
+    assert len(set(critical_on)) == len(critical_on), case["id"]
+    assert set(critical_on) <= wrong_answers(role, doc, case), case["id"]
+    if role == "REPLY_NEED":  # silencing a request is the harm; a missing verdict degrades safely
+        assert critical_on == (["no_reply"] if label["needs_reply"] else []), case["id"]
+    elif role == "INTENT":  # the router has no caller: no wrong answer reaches anyone
+        assert critical_on == [], case["id"]
+    elif role == "SYNC_ANALYSIS":  # no call falls back to no action, the same miss as "none"
+        assert critical_on == (["none", "invalid"] if label["needs_action"] else []), case["id"]
+    elif label.get("is_durable_rule", label.get("is_fact_change")):
+        # A must-record case: a miss is ordinary; only a fact recorded at its old value harms.
+        fact = case["input"]["judge"] == "fact"
+        assert critical_on == (["old_value"] if fact else []), case["id"]
+    else:
+        assert critical_on in ([], ["record"]), case["id"]
+
+
+def check_expect_lang(role, case):
+    """The language bar applies only to the free text a role scores, in the language it needs."""
+    expect_lang, label = case["expect_lang"], case["label"]
+    if role == "CORRECTION_LEARNING" and label.get("is_durable_rule"):
+        # The rule is learned in the correction's own language, as the user wrote it.
+        sent = edited_text(case["input"]["correction"])
+        assert expect_lang == case["lang"] == text_language(sent), case["id"]
+    else:  # no free text scored: REPLY_NEED's reason, SYNC's summary, facts, intent JSON
+        assert expect_lang is None, case["id"]
+
+
 @pytest.mark.parametrize("role", ROLES)
 def test_the_case_file_keeps_its_schema_and_labels_its_input(role):
     doc = load_cases(role)
@@ -198,6 +252,17 @@ def test_the_case_file_keeps_its_schema_and_labels_its_input(role):
         assert set(case) == CASE_KEYS and case["lang"] in ("it", "en")
         assert isinstance(case["critical"], bool) and case["why"].strip()
         check_label(role, doc, case)
+        check_critical(role, doc, case)
+        check_expect_lang(role, case)
+
+
+def test_the_language_check_reads_the_case_sets_own_sentences():
+    memories = load_cases("CORRECTION_LEARNING")["memories"]
+    assert {text_language(rule) for rule in memories["tipografia"]["rules"]} == {"it"}
+    assert {text_language(rule) for rule in memories["studio"]["rules"]} == {"en"}
+    assert text_language("Per l'assistenza indirizza i clienti all'email.") == "it"
+    assert text_language("Direct customers to the help form.") == "en"
+    assert text_language("Supporto via e-mail, help form") is None  # no function word: undecided
 
 
 @pytest.mark.parametrize("role", ROLES)
@@ -206,8 +271,10 @@ def test_the_case_file_is_synthetic_and_balanced(role):
     text = json.dumps(doc, ensure_ascii=False)
     for address in re.findall(r"[\w.+-]+@([\w-]+(?:\.[\w-]+)+)", text):
         assert address.endswith(".example"), address
-    for phone in re.findall(r"\+\d[\d ]{8,}\d", text):
-        assert "0000" in phone or "000 0" in phone, phone
+    # Only the fictional ranges: Milan or London, then 0000 0xxx. Real mobile ranges such as
+    # +39 333 or +39 347 are refused.
+    for phone in re.findall(r"\+\d[\d ]{6,}\d", text):
+        assert re.fullmatch(r"\+(39 02|44 20) 0000 0\d{3}", phone), phone
     cases = doc["cases"]
     assert len(cases) >= 20
     assert max(Counter(label_class(role, c) for c in cases).values()) <= 0.6 * len(cases)
