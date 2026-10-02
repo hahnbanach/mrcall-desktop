@@ -1320,8 +1320,7 @@ preflight records only the names of `90-…` and `95-…` and the command of
 `99-…`; their contents here are the probe's assumption, taken from the
 voice plan's description: `90-…` and `95-…` pin the older release, `95-…`
 and `99-…` each reset `ExecStart`, `99-…` pins `PYTHONPATH` to the voice
-release, loads the
-voice file as an `EnvironmentFile` and runs `<release>/venv/bin/zylch -p
+release, loads the voice file as an `EnvironmentFile` and runs `<release>/venv/bin/zylch -p
 <uid> serve --unix /run/mrcalld/<uid>.sock --voice-config
 /etc/mrcalld/voice-fake.env`. The release
 `/home/mrcalld/releases/mrcall-voice-fake-499ca09` is main `499ca09b`'s
@@ -1600,8 +1599,8 @@ file stay, and the second forward (TE-F4) repeats TE-F1's results with
 them. One difference from the record taken before: the profile directory
 is `0700`, not `0770` (`create` sets it, `unmigrate` does not put it
 back; `getent group mrcalld` has no member besides the user itself —
-checked on the VM, not in the log — and the unit runs). The rollback is therefore not mode-for-mode until the
-operator restores it.
+checked on the VM, not in the log — and the unit runs). The rollback is
+therefore not mode-for-mode until the operator restores it.
 
 **Delete** (TE-DEL): the declaration, the voice copy, the drop-in
 directory, profile, key, fragment, run dir, link, user and table row are
