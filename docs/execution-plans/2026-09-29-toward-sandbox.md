@@ -1200,6 +1200,231 @@ before start, and rollback by `unstore` / `unmigrate`.
    Two reviewers must pass that probe. Its other drop-ins keep their
    current content.
 
+### M2 record — tenant-exec probe (2026-10-02)
+
+Same scratch VM (root disk 63 % before, 71 % after the fake release; swap
+1 GB, as found — it had already been shrunk). Subject: the operator
+declaration `/etc/mrcalld/tenant-exec/<uid>` (`read_tenant_exec`, commits
+`b6d098f`, `5ee01d4` on main), with which `create` migrates a unit that
+runs its own interpreter and the production voice listener. Log:
+`/root/m2-probe.log` on the VM from `## TE-0`, scripts
+`/root/m2-probes/a0…a9-te-*.sh`. The log corrects itself twice (the first
+two runs of the refusal script are superseded; see its notes); only the
+sections named below are cited.
+
+**The stand-in for production@.** Profile `scrP1…1`, built as production@
+is today: created and seeded by `mrcalld` under the shared key, a holder
+of company A's already relocated store (A1 migrated and running beside
+it), and three operator drop-ins shaped like the VPS preflight's —
+`90-…` and `95-…` pin the older release, `95-…` and `99-…` each reset
+`ExecStart`, `99-…` pins `PYTHONPATH` to the voice release, loads the
+voice file as an `EnvironmentFile` and runs `<release>/venv/bin/zylch -p
+<uid> serve --unix /run/mrcalld/<uid>.sock --voice-config
+/etc/mrcalld/voice-fake.env`. The release
+`/home/mrcalld/releases/mrcall-voice-fake-499ca09` is main `499ca09b`'s
+engine tree with its own venv (`pip install -e`, plus `aiohttp`); its
+`zylch` is pip's console script, shebang `<release>/venv/bin/python3.11`,
+a link to `/usr/bin/python3.11`. The voice file is `0640 root:mrcalld`
+and holds fifteen fake variables, all inside the allowlist: the fourteen
+`load_production_config` reads and the probe's stub switch.
+
+*What is fake, and what that leaves uncovered.* The engine is main's, not
+the voice-line release `5ebe3fa` production@ runs (that commit is not on
+origin). The listener is the real one — real configuration loader, real
+ledger `voice-production.db` in the profile, real aiohttp application on
+`127.0.0.1:8787` — except for **one probe-only change in the fake
+release**: `prepare_carrier` returns at once when
+`VOICE_PROBE_STUB_ADMISSION=1`. Without it the unit cannot start with
+fake credentials: admission asks StarChat and Firebase, logs "admission
+unavailable during preparation" and the listener raises (TE-2b, unit
+`failed`). So **not covered here**: admission, StarChat, Firebase,
+Vonage and OpenAI reachability from inside the sandbox;
+`calls_available: true`; a call; `VOICE_COMPANY_KNOWLEDGE_ENABLED=1`
+(its privacy check on the profile was run by hand as the tenant in the
+daemon's mount namespace and passes — TE-K — the rest needs the remote
+business); the public tunnel; the release's own code. Those are checked
+on production@ itself at its 2b, with the rollback below at hand.
+
+**Defects found in main's helper (`5ee01d4`, sha256 `594b7375…`) and
+fixed** (numbering continues):
+
+15. **The shebang check followed the link and judged only its target**
+    (TE-D15). A console script whose python is a link from a `/home` path
+    the sandbox hides (`#!/home/mrcalld/venv-elsewhere/bin/python →
+    /usr/bin/python3.11`) was accepted; the migrated unit died with
+    `203/EXEC … No such file or directory`. Now every name on the way
+    must be in `/usr` (or `/bin`, `/sbin`, `/lib*`, `/etc/alternatives`),
+    the releases or the checkout, with no link among the directories
+    under the release trees and no `..` (`sandbox_sees`, `ba669ed`).
+16. **A declaration with a misspelt key was a valid empty declaration**
+    (TE-D16). It switched off the refusal of operator `ExecStart`
+    drop-ins and the unit migrated onto the standard command line: active,
+    no `--voice-config`, no listener, nothing in the output. A
+    declaration now holds only `INTERPRETER=` and `VOICE_CONFIG=` lines
+    and comments, each key at most once, at least one of them
+    (`ba669ed`).
+17. **`INTERPRETER` naming a directory** was refused by a failing
+    `head(1)`, exit 1 and no message; now a named refusal (`ba669ed`).
+18. **A refused `create` deleted the voice copy a migrated unit still
+    loads** (TE-D18 on `ba636e8a…`). With the declaration moved away —
+    by hand, or found so by the nightly reconcile's `create` — the copy
+    was removed first and the `ExecStart` refusal came after;
+    `tenant.conf` still named the copy and the next restart failed with
+    "Failed to load environment files". The stale copy is now removed
+    only after `tenant.conf` has been rewritten and verified (`5ab4576`;
+    TE-D18 again on the final helper: copy kept, `tenant.conf` unchanged,
+    restart active, listener up).
+
+Final code: **`5ab4576`** on `claude/m2-scratch-probe` (= main `499ca09b`
++ `ba669ed` + `5ab4576`, the helper only), helper sha256 `23a41e69…`,
+installed on the VM by `update-daemons.sh` from origin (TE-FINAL-0, with
+the migrated declared unit running: `create` re-applied, hash equal to
+the checkout's). **Every result below is from that helper** — the
+sections after the log's "FINAL RUN" note, plus TE-FINAL-0, the second
+TE-D18, TE-V, TE-DEL and TE-K.
+
+**Before migration** (TE-2a): the unit runs as `mrcalld` on the flat
+socket from the release venv; `:8787` is bound by its main pid, `/healthz`
+200 (`calls_available: false`, admission being stubbed), an unsigned
+`POST /openai/live` 400, Caddy 401, the release's marker in the journal.
+
+**Refusals** (TE-N0…N6, 63 cases, the unmigrated unit running
+throughout). Each `create` exits 2 with a named error, and after each:
+no `tenant.conf`, no tmpfiles fragment, no voice copy, no run dir, no
+table row, every file of the profile still `mrcalld`'s, the three
+operator drop-ins byte-identical, the effective `ExecStart` the baseline
+one, **the running process untouched** (same pid, `:8787` still bound).
+The user and the key file a refused first `create` made stay (as in
+defect 13). The cases:
+
+- *no declaration* — the operator `ExecStart` drop-ins are refused as
+  before;
+- *voice file outside the allowlist* (12) — `HOME=`, `ENCRYPTION_KEY=`,
+  `PYTHONPATH=`, `LD_PRELOAD=`, an indented `ZYLCH_HOME=`, `export
+  MEMORY_DB_DIR=`, lower case, `VOICEX=`, `XVOICE_A=`, a quoted
+  two-line value, a backslash continuation, a bad line in the middle;
+- *`INTERPRETER` or `VOICE_CONFIG` systemd would split or expand* (10) —
+  a space, a tab, `%i`, `%%`, `$HOME`, `${X}`, a relative path;
+- *links* (8) — a link to the script, a linked directory on the way, the
+  venv's `python3.11`, `..`, `/./`, `//`, a linked voice file, a linked
+  declaration;
+- *outside the bound trees or not runnable* (14) — `/opt/…`,
+  `/usr/bin/python3.11`, a shebang in `/opt`, a shebang hidden under
+  `/home`, through a linked directory, through two hops, through a
+  relative `../` link, missing, relative, with `..`; a `0700` script; an
+  absent path; a directory; a sibling of `releases`;
+- *ownership and kind* (9) — declaration owned by `mrcalld`, modes
+  `0660 0666 0602 0620 0755`; voice file owned by `mrcalld`, missing, a
+  directory;
+- *a declaration that does not say what it means* (9) — misspelt keys,
+  empty, comment only, a third key, a key twice, an empty value, an
+  indented key, CRLF line ends, a directory.
+
+After the last one the unit is restarted and comes up as before (TE-N9).
+
+**Forward** (TE-F1; runbook 2b unchanged, the declaration written first;
+`/etc/mrcalld/tenant-exec` deliberately created `0700`):
+
+- `systemctl show -p ExecStart` is exactly one command, `<release>/venv/bin/zylch
+  -p <uid> serve --unix /run/mrcalld/<uid>/ws.sock --voice-config
+  /etc/mrcalld/tenant-exec/<uid>.voice.env`; `EnvironmentFiles` are the
+  voice copy, then the per-profile key; the shared `/etc/mrcalld/env` and
+  the operator's voice file are no longer loaded. The three operator
+  drop-ins are byte-identical and still applied before `tenant.conf`.
+- The copy is `0640 root:<tenant>`, identical to the operator's file;
+  the directory is `0711 root`; the declaration `0600 root`. The tenant
+  reads its copy and cannot list the directory, read the declaration or
+  read the operator's file; another tenant (A1's user), `mrcalld` and
+  `caddy` cannot read the copy.
+- `rekey --verify` 2/2; started: active as `mc-cae1364247ca`, 0 restarts,
+  0 "self-check failed"; socket `<uid>/ws.sock` `0660 <tenant>:caddy`
+  behind the flat-name link, Caddy 401.
+- **`:8787` is bound by the unit's main pid inside the sandbox**,
+  `/healthz` 200, unsigned `POST /openai/live` 400; the journal has the
+  release's marker and "production runtime module=<release>/…"; the
+  process environment carries the release `PYTHONPATH`, the 15 voice
+  variables, the operator's `LLM_DAILY_BUDGET_PROBE` from `90-…`, and an
+  `ENCRYPTION_KEY` whose hash is the per-profile key's, not the shared
+  one's. `voice-production.db` is created in the profile as the tenant.
+- In the daemon's mount namespace the release script, its python and the
+  voice copy exist; A1's profile does not; as the tenant there, the copy
+  is readable, the operator's voice file and the key file are not, and a
+  write into the release is `Read-only file system`. `memory-status` as
+  the tenant: `available: True`; A1 stays active; the logrotate stanza is
+  the tenant's and `logrotate -d` reports 0 errors.
+
+**Re-apply and change** (TE-F2, TE-F3, TE-V, TE-D18): `create` on the
+running unit and a full `update-daemons.sh` leave pid and `tenant.conf`
+unchanged. An edit of the operator's voice file reaches the unit by
+`create` then restart; a bad edit is refused, the old copy and the
+running process stay. A declaration with only `INTERPRETER` gives the
+release command without voice (copy removed once `tenant.conf` no longer
+names it), only `VOICE_CONFIG` gives the checkout's `zylch` with
+`--voice-config`; both back gives a byte-identical `tenant.conf`.
+
+**Rollback** (TE-RB): stop, `rekey` back (2/2), `unmigrate`, start. Only
+`tenant.conf`, the fragment, the run dir, the link and the voice copy
+go; the three drop-ins are byte-identical to the copies taken before,
+the effective `ExecStart` is the baseline line, `EnvironmentFiles` are
+again the shared key and the operator's voice file (untouched,
+`0640 root:mrcalld`). The unit runs as `mrcalld` on the flat socket with
+`:8787`, `/healthz` 200, Caddy 401, the shared key in its environment;
+every file is `mrcalld`'s, `voice-production.db` included. The
+declaration, the user and the key file stay, and the second forward
+(TE-F4) repeats TE-F1's results with them. One difference from the
+record taken before: the profile directory is `0700`, not `0770`
+(`create` sets it, `unmigrate` does not put it back; `mrcalld` is alone
+in its group and the unit runs).
+
+**Delete** (TE-DEL): the declaration, the voice copy, the drop-in
+directory, profile, key, fragment, run dir, link, user and table row are
+gone; no unowned file is left; company A's store stays (A1 and A2 hold
+the key) and A1 keeps running. The operator's own voice file is not the
+helper's and stays.
+
+**Runbook, added for production@'s 2b** (it is the last one):
+
+- *On the VPS, before:* `systemctl cat` and `systemctl show -p ExecStart
+  -p EnvironmentFiles` of the unit, copies and `sha256sum` of its three
+  drop-ins under `/root`; `head -1 <release>/venv/bin/zylch` and
+  `readlink -f` of that python — a chain that leaves `/usr`, the
+  releases or the checkout is refused (a venv made by a tool that keeps
+  its python under `/home` cannot be used); `chmod -R go=rX
+  /home/mrcalld/releases`; the release tree has the M2 engine side
+  (`zylch/home.py`, the dual-name store lookup the preflight found); the
+  voice file has only `VOICE_*`, `OPENAI_*`, `VONAGE_*` and
+  `FIREBASE_WEB_API_KEY` lines; the voice baseline: `/healthz` locally
+  and through the tunnel, the unsigned Vonage and OpenAI answers, no call
+  in flight in the ledger.
+- *The declaration:* `/etc/mrcalld/tenant-exec/<uid>`, `0600 root`, two
+  lines — `INTERPRETER=<release>/venv/bin/zylch` and
+  `VOICE_CONFIG=/etc/mrcalld/voice-cafe124.env` — nothing else. The
+  operator's drop-ins are not edited.
+- *2b steps 1–6 unchanged.* After the second `create`, before the start:
+  `systemctl show -p ExecStart` shows one command with the release
+  `zylch`, `<uid>/ws.sock` and `--voice-config
+  /etc/mrcalld/tenant-exec/<uid>.voice.env`.
+- *Step 7, added:* `ss -ltnp 'sport = :8787'` names the unit's pid;
+  `/healthz` says **`calls_available: true`** locally and through the
+  tunnel — the first time the real admission runs as the tenant inside
+  the sandbox, and the one result the VM could not give; the unsigned
+  callbacks answer as in the baseline; the pinned-profile check
+  (`nsenter … test -e <PYTHONPATH>/zylch/__init__.py`). If
+  `calls_available` is not `true` within the baseline's time, roll back.
+- *Afterwards:* a change to the voice file is `mrcall-tenant create
+  <uid>` then a restart, never an edit of the copy. **The declaration is
+  not removed while the unit is migrated** — `create` then refuses and
+  the reconcile reports it every night.
+- *Rollback:* as for any profile; the declaration stays for the next
+  attempt.
+
+**Open, not changed here.** `unmigrate` leaves the profile directory
+`0700` (above). A declared unit depends on the operator's voice file
+staying where the declaration says: if it is removed, `create` fails in
+the reconcile (stderr only, as recorded for any refused `create`) and the
+unit keeps running on its last copy. The fake release, the scratch
+profile `scrP1…1` and `/etc/mrcalld/voice-fake.env` are still on the VM.
+
 ## M3 — Egress bound per daemon
 
 Owner: release-engineer. After M2 is stable on all six; own rollback.
