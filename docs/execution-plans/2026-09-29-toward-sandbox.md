@@ -2639,7 +2639,101 @@ For each of the seven migrated profiles, return these exact destination fields:
 VPS response (reserved for that session; R_4 will not overwrite it):
 
 <!-- r4-vps-destinations:start -->
-Pending read-only VPS inventory.
+Read-only inventory, 2026-10-02 UTC. Profile aliases below are the existing
+seven migrated profiles. Shared entries apply to all seven. Effective profile
+configuration was compared with initial daemon configuration and the running
+source, including production's pinned release; configuration predates daemon
+startup. No connection tests or DNS queries were made; no voice file was read.
+
+1. **Mail:**
+
+   | Profile alias | IMAP host | Port / protocol | SMTP host | Port / protocol |
+   |---|---|---|---|---|
+   | support | imap.gmail.com | 993 IMAPS/TCP/TLS | smtp.gmail.com | 587 SMTP/TCP/STARTTLS |
+   | Mario Cafe124 | imap.gmail.com | 993 IMAPS/TCP/TLS | smtp.gmail.com | 587 SMTP/TCP/STARTTLS |
+   | Mario Gmail | imap.gmail.com | 993 IMAPS/TCP/TLS | smtp.gmail.com | 587 SMTP/TCP/STARTTLS |
+   | Mario MrCall | imap.gmail.com | 993 IMAPS/TCP/TLS | smtp.gmail.com | 587 SMTP/TCP/STARTTLS |
+   | production | imap.gmail.com | 993 IMAPS/TCP/TLS | smtp.gmail.com | 587 SMTP/TCP/STARTTLS |
+   | Ivan | imap.gmail.com | 993 IMAPS/TCP/TLS | smtp.gmail.com | 587 SMTP/TCP/STARTTLS |
+   | Riccardo | imap.gmail.com | 993 IMAPS/TCP/TLS | smtp.gmail.com | 587 SMTP/TCP/STARTTLS |
+
+2. **LLM and billing:** all seven have billing proxy `zylch.mrcall.ai`,
+   443 HTTPS/TCP, and MrCall API `api.mrcall.ai`, 443 HTTPS/TCP.
+
+   | Profile alias | Selected provider | Daemon API host | Port / protocol |
+   |---|---|---|---|
+   | support | anthropic | api.anthropic.com | 443 HTTPS/TCP |
+   | Mario Cafe124 | anthropic | api.anthropic.com | 443 HTTPS/TCP |
+   | Mario Gmail | mrcall | zylch.mrcall.ai | 443 HTTPS/TCP |
+   | Mario MrCall | anthropic | api.anthropic.com | 443 HTTPS/TCP |
+   | production | openrouter | openrouter.ai | 443 HTTPS/TCP |
+   | Ivan | anthropic | api.anthropic.com | 443 HTTPS/TCP |
+   | Riccardo | anthropic | api.anthropic.com | 443 HTTPS/TCP |
+
+   Consumed Anthropic/OpenAI base overrides: `not configured` for all seven.
+   Upstream providers behind MrCall billing are server-side destinations,
+   not additional daemon destinations.
+
+3. **HTTP proxy:** HTTP_PROXY, HTTPS_PROXY, ALL_PROXY and their lowercase
+   equivalents: `not configured` for all seven. No requested destination is
+   routed through an environment-configured HTTP proxy. No proxy endpoint is
+   proposed for admission.
+
+4. **WhatsApp:** support, Mario Cafe124, Mario MrCall, production, Ivan and
+   Riccardo: `not configured` (no session-file metadata). Mario Gmail has
+   session-file metadata; the installed neonize/whatsmeow WebSocket
+   destination is `web.whatsapp.com`, 443 WSS/TCP. Current connected state:
+   `unknown`. Media destinations: `unknown until receipt`. Session contents
+   were not read; the disabled environment flag alone does not prevent the
+   session-based sync path. No wildcard destination is inferred.
+
+5. **Google/Firebase/Calendar:** all seven: Firebase certificate fetch
+   `www.googleapis.com`, 443 HTTPS/TCP; daemon Firebase refresh
+   `securetoken.googleapis.com`, 443 HTTPS/TCP (conditional on a refresh
+   credential; current credential availability `unknown`). Calendar OAuth
+   client: `not configured` in all seven effective profile environments;
+   existing Calendar credential state: `unknown`. Conditional OAuth token
+   destination `oauth2.googleapis.com`, 443 HTTPS/TCP, and userinfo
+   `www.googleapis.com`, 443 HTTPS/TCP, are fixed by code. Calendar
+   API/discovery destination: `unknown` from the running code/installed
+   client inventory. Browser-only Calendar consent: `accounts.google.com`,
+   443 HTTPS/TCP. Renderer-only Firebase sign-in:
+   `identitytoolkit.googleapis.com`, 443 HTTPS/TCP; renderer refresh:
+   `securetoken.googleapis.com`, 443 HTTPS/TCP. Browser/renderer endpoints
+   do not by themselves widen daemon egress.
+
+6. **Embedding downloads:** all seven use the configured default model's
+   installed fastembed manifest, with sources `huggingface.co`, 443 HTTPS/TCP,
+   and fallback `storage.googleapis.com`, 443 HTTPS/TCP. No configured model
+   or source override was found. Cold-download redirect/cache backend
+   destinations: `unknown`; no already-known per-model redirect endpoint
+   was established. Installed constants for other services and a warm cache
+   are not evidence of the required redirect destinations.
+
+7. **CRM and other connectors:** all seven: Pipedrive enabled state `unknown`
+   (credential-backed configuration was not read); its factory-selected
+   base is `api.pipedrive.com`, 443 HTTPS/TCP, conditional on configuration.
+   Telegram: `not configured` in all seven effective daemon environments.
+   MrCall call initiation uses `api.mrcall.ai`, 443 HTTPS/TCP; SMS uses
+   `zylch.mrcall.ai`, 443 HTTPS/TCP. Availability of the authenticated
+   call/SMS session: `unknown`. Other credential-backed connector enabled
+   states/destinations: `unknown`; no credential or OAuth row values were
+   inspected.
+
+8. **Voice:** support, Mario Cafe124, Mario Gmail, Mario MrCall, Ivan and
+   Riccardo: `not configured` as daemon voice listeners. Production has a
+   voice listener enabled; code supplies OpenAI destinations `api.openai.com`,
+   443 HTTPS/TCP and 443 WSS/TCP. Active integration selection and any route
+   requiring voice-file configuration: `unknown`. These code destinations
+   are conditional, not confirmation of a route chosen in the voice file.
+
+9. **DNS and address scope:** all seven use local stub `127.0.0.53`,
+   53 DNS/UDP and DNS/TCP. Configured upstream resolvers: `51.159.69.156`
+   and `51.159.69.162`, each 53 DNS/UDP and DNS/TCP; DNS-over-TLS is disabled.
+   The stub is a loopback literal; both upstream literals are public
+   addresses. Above application destinations are public-domain hostnames,
+   with no configured literal IP or explicitly private/internal hostname
+   identified. Their resolved address scope is `unknown` without DNS queries.
 <!-- r4-vps-destinations:end -->
 
 #### R_4 scratch results — 2026-10-02, final gate open
