@@ -2629,7 +2629,7 @@ next scratch pass; no global resolver service was enabled.
 | Evidence | Result and limits |
 | --- | --- |
 | Compiler tests | 8 PASS: injection, types/system UIDs, overlapping suffixes, endpoint port isolation, tenant isolation, output refusal/redaction and PID-file regression. |
-| Real kernel + DNS, isolated network namespace | PASS: atomic table load, A/AAAA and CNAME set population, changed DNS answer admission, allowed UDP endpoint, unrelated DNS refusal, allowed IPv4/IPv6, denied unrelated IPv4/IPv6, metadata and loopback, pre-opened forbidden connection refused, admitted TCP flow survives accelerated 3-second expiry, new flow denied until DNS refresh, cold table reload/repopulation, external and sibling DNS refused, selected rollback leaves sibling table and admitted connection intact. Synthetic servers never leave the namespace; this is not IMAP/WhatsApp evidence. |
+| Real kernel + DNS, isolated network namespace | PASS: atomic table load, A/AAAA and CNAME set population, changed DNS answer admission, allowed UDP endpoint, unrelated DNS refusal, allowed IPv4/IPv6, denied unrelated IPv4/IPv6, metadata and loopback, pre-opened forbidden connection refused, admitted TCP flow survives both accelerated 3-second and actual 300-second expiry, new flow denied until DNS refresh, cold table reload/repopulation, external and sibling DNS refused, selected rollback leaves sibling table and admitted connection intact. Synthetic servers never leave the namespace; this is not IMAP/WhatsApp evidence. |
 | Actual scratch daemon | A2 (`scrA2aaaaaaaaaaaaaaaaaaaaaaa2`, Unix uid 993) starts with firewall/resolver dependencies. Its mount namespace sees the dedicated resolver. A process in that namespace under the daemon identity resolves www.googleapis.com and fetches the public Firebase certificate endpoint with HTTP 200; unrelated DNS and direct 1.1.1.1:443 fail. Its nft set is populated/readable. Daemon restart succeeds. |
 | Reconcile compatibility | Installed R2 helper `create A2` says ready and keeps the running PID, with the R4 drop-in applied. The helper itself is byte-identical before/after. No full reconcile/pull was run. |
 | Rollback | PASS after every attempt: A2 back to its initial inactive state, generated drop-in/services/binary/config/table removed, selected conntrack mark deleted, host resolver byte-identical. A1 PID 127936 and P1 PID 128040 remain active with NRestarts=0. Host nft table list is empty as before. |
@@ -2637,8 +2637,18 @@ next scratch pass; no global resolver service was enabled.
 | WhatsApp receipt | NOT RUN: none has a WhatsApp session store. |
 | Successful LLM call | NOT RUN: no configured provider key on scratch. CTO now authorizes Mario’s account and real calls with a USD 10 ceiling (target cents), overriding the brief’s no-paid-verification rule. No paid request made yet. |
 | Valid Firebase token verification | NOT RUN: no signed-in scratch client/token supplied. Certificate-fetch 200 is only network reachability, not authentication acceptance. |
-| Other lifecycle/transport requirements | NOT YET PROVED: full five-minute live-channel survival, host reboot/boot-failure path and foreign-mark coexistence refusal. Two-tenant isolation was proved in the namespace, not with two live daemon services. |
+| Other lifecycle/transport requirements | Cold firewall-load failure and resolver-start failure prevent daemon exec; stop of guard retains rules and stops dependent daemon; both recovery paths PASS (18:16:41–18:16:44 UTC). Actual 300-second synthetic TCP run PASS (18:16:14–18:21:16 UTC). NOT YET PROVED: full five-minute authentic live-channel survival, actual host reboot and foreign-mark coexistence refusal. Two-tenant isolation was proved in the namespace, not with two live daemon services. |
 | VPS / criterion 6 for all migrated tenants | NOT STARTED: scratch live-evidence gate is open. Read-only SSH attempt to the documented mal@desktop.mrcall.ai failed public-key authentication before any remote command; no VPS mutation. |
+
+The final CNAME probe uses a distinct alias address: absent from the set and
+refused before lookup, then present only in its intended endpoint set and
+reachable afterwards (18:19:35–18:19:42 UTC; alias admission at 18:19:36 UTC). An earlier version checked only
+answer text for an already-admitted address; reviewer A correctly returned
+REVISE on that evidence, repaired and re-reviewed APPROVED. The separate
+300-second run used the prior alias check; its expiry/connection logic is
+unchanged. Neither run is presented as real IMAP or WhatsApp acceptance. After these
+additions, independent reviewers A and B again returned APPROVED for the
+partial scratch record/tests; the full R_4/VPS verdict remains REVISE.
 
 The real-service attempts retain two failures in the record: (1) PID-file
 configuration defect, fixed after rollback and two code reviews; (2) the
@@ -2650,7 +2660,8 @@ as the DNS/nftset capabilities; final actual-service rerun passed with it.
 
 Reproduce only after obtaining the shared-machine lease: unittest discovery
 under `engine/tests/server` with `-p test_egress_policy.py`; the namespace
-probe takes the nftset-enabled binary path; the actual-daemon probe takes
+probe takes the nftset-enabled binary path (append `--full-timeout` for
+the actual 300-second lifetime); the actual-daemon probe takes
 `--execute-scratch <binary>`. The latter intentionally requires this scratch
 fixture and an empty host nft table list, not an arbitrary production host.
 
@@ -2672,6 +2683,18 @@ all eight pure tests. Neither approved missing live application evidence.
 through the normal scratch setup, the missing matrix rows completed, and
 two independent full-evidence reviews must both return APPROVED before a
 VPS rollout. The compiler and synthetic probes do not waive those conditions.
+
+**Scratch lease released:** scratch VM **rilasciata** da R_4 alle
+2026-10-02 18:23:13 UTC. Final readback: host nft tables empty; A2 inactive;
+A1/P1 still PID 127936/128040 active; approved R2 helper SHA256 unchanged.
+All generated unit files, resolver binding, policy directory and dedicated
+binary are removed, including empty test parent directories. Root package
+installs noted above remain. Build and non-secret probe logs stay locally
+under `engine/scripts/server/.r4-work/` (ignored by git); the reviewed scripts
+and result record are committed. Another host test requires a new published
+lease and conflict check. Destination response block remains pending; next
+step is consume the VPS session's inventory through git, with no VPS access
+from R_4.
 
 ### Approved M3 outline
 

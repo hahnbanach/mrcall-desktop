@@ -48,7 +48,8 @@ def dns_server():
         end += 1
         qtype = struct.unpack("!H", data[end:end + 2])[0]
         question = data[12:end + 4]
-        address = ANSWERS[1 if qtype == 1 else 28]
+        is_alias = data[12:end].startswith(b"\x05alias")
+        address = ("9.9.9.13" if qtype == 1 else "2606:4700::13") if is_alias else ANSWERS[1 if qtype == 1 else 28]
         payload = socket.inet_pton(socket.AF_INET if qtype == 1 else socket.AF_INET6, address)
         if qtype not in (1, 28):
             answer = b""
@@ -56,7 +57,7 @@ def dns_server():
         else:
             answer = b"\xc0\x0c" + struct.pack("!HHIH", qtype, 1, 60, len(payload)) + payload
             count = 1
-            if data[12:end].startswith(b"\x05alias"):
+            if is_alias:
                 cname = b"\x04edge\x07allowed\x07example\x00"
                 alias = b"\xc0\x0c" + struct.pack("!HHIH", 5, 1, 60, len(cname)) + cname
                 answer = alias + cname + struct.pack("!HHIH", qtype, 1, 60, len(payload)) + payload
@@ -131,8 +132,11 @@ def interrupted(signum, frame):
 
 
 def main():
-    if os.geteuid() != 0 or len(sys.argv) != 2:
-        raise SystemExit("run as root with absolute dnsmasq binary path")
+    if os.geteuid() != 0 or len(sys.argv) not in (2, 3):
+        raise SystemExit("run as root with dnsmasq binary path [--full-timeout]")
+    if len(sys.argv) == 3 and sys.argv[2] != "--full-timeout":
+        raise SystemExit("unknown probe option")
+    expiry_seconds = 300 if len(sys.argv) == 3 else 3
     binary = str(Path(sys.argv[1]).resolve(strict=True))
     version = run(binary, "--version")
     if "no-nftset" in version or " nftset " not in version:
@@ -144,15 +148,16 @@ def main():
     if libc.unshare(0x40000000) != 0:  # CLONE_NEWNET
         raise SystemExit("cannot create disposable network namespace")
     run("ip", "link", "set", "lo", "up")
-    for address in ("8.8.8.8/32", "9.9.9.11/32", "9.9.9.12/32", "9.9.9.99/32", "169.254.169.254/32", "2606:4700::11/128", "2606:4700::99/128"):
+    for address in ("8.8.8.8/32", "9.9.9.11/32", "9.9.9.12/32", "9.9.9.13/32", "9.9.9.99/32", "169.254.169.254/32", "2606:4700::11/128", "2606:4700::99/128"):
         run("ip", "address", "add", address, "dev", "lo", "nodad")
     threading.Thread(target=dns_server, daemon=True).start()
     threading.Thread(target=udp_server, daemon=True).start()
-    for address in ("9.9.9.11", "9.9.9.12", "9.9.9.99", "169.254.169.254", "127.0.0.1", "2606:4700::11", "2606:4700::99"):
+    for address in ("9.9.9.11", "9.9.9.12", "9.9.9.13", "9.9.9.99", "169.254.169.254", "127.0.0.1", "2606:4700::11", "2606:4700::99"):
         threading.Thread(target=echo_server, args=(address,), daemon=True).start()
     time.sleep(0.1)
     p = {"profile_uid": "scratchR4A", "unix_uid": 998, "resolver": "127.0.0.54",
-         "upstream": "8.8.8.8", "endpoints": [{"suffix": "allowed.example", "tcp": [443], "udp": [444]}]}
+         "upstream": "8.8.8.8", "endpoints": [{"suffix": "allowed.example", "tcp": [443], "udp": [444]},
+                       {"suffix": "other.example", "tcp": [445], "udp": []}]}
     artifacts = compile_policy(p)
     processes = []
     atexit.register(cleanup, processes)
@@ -162,7 +167,7 @@ def main():
         nft = root / "rules.nft"
         # Accelerated timeout has identical rules/admission logic. The full
         # five-minute live-channel gate remains separate and unproved.
-        nft.write_text(artifacts["firewall.nft"].replace("timeout 5m;", "timeout 3s;"))
+        nft.write_text(artifacts["firewall.nft"].replace("timeout 5m;", f"timeout {expiry_seconds}s;"))
         conf = root / "dnsmasq.conf"
         conf.write_text(artifacts["dnsmasq.conf"])
         preopened = client("9.9.9.99")
@@ -185,8 +190,18 @@ def main():
             assert answer == "9.9.9.11"
             assert query("allowed.example", "AAAA") == "2606:4700::11"
             emit("dns_populates_A_AAAA", "PASS")
-            assert query("alias.allowed.example").splitlines()[-1] == "9.9.9.11"
-            emit("CNAME_address_population", "PASS")
+            own_table = json.loads(artifacts["manifest.json"])["table"]
+            assert "9.9.9.13" not in run("nft", "list", "set", "inet", own_table, "e0_4")
+            blocked_alias = client("9.9.9.13")
+            processes.append(blocked_alias)
+            assert blocked_alias.stdout.readline().strip() == "DENIED"
+            assert query("alias.allowed.example").splitlines()[-1] == "9.9.9.13"
+            assert "9.9.9.13" in run("nft", "list", "set", "inet", own_table, "e0_4")
+            assert "9.9.9.13" not in run("nft", "list", "set", "inet", own_table, "e1_4")
+            admitted_alias = client("9.9.9.13")
+            processes.append(admitted_alias)
+            assert admitted_alias.stdout.readline().strip() == "CONNECTED"
+            emit("CNAME_unique_address_intended_set_only", "PASS")
             udp_code = """import os,socket
 os.setgroups([]);os.setgid(998);os.setuid(998)
 s=socket.socket(socket.AF_INET,socket.SOCK_DGRAM);s.settimeout(1)
@@ -214,7 +229,8 @@ s.connect(('9.9.9.11',444));s.send(b'probe');assert s.recv(5)==b'probe'
             assert proc.stdout.readline().strip() == "CONNECTED"
             proc.stdin.write("probe\n"); proc.stdin.flush()
             assert proc.stdout.readline().strip() == "ECHO"
-            time.sleep(3.2)
+            emit("expiry_wait_seconds", expiry_seconds)
+            time.sleep(expiry_seconds + 0.2)
             proc.stdin.write("probe\n"); proc.stdin.flush()
             result = proc.stdout.readline().strip()
             assert result == "ECHO"

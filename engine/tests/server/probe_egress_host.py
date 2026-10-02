@@ -94,6 +94,35 @@ print('tenant_cert_fetch_and_denials PASS')
  run('systemctl','restart',unit)
  assert show(unit,'ActiveState')=='active'
  emit('daemon_restart_with_filter PASS')
+ # An intentionally failing guard must block the daemon before its exec.
+ run('systemctl','stop',fwunit)
+ assert show(unit,'ActiveState')=='inactive'
+ assert run('nft','list','table','inet',table)
+ emit('guard_stop_keeps_rules_and_stops_dependent_daemon PASS')
+ run('conntrack','-D','--mark',str(uidn),check=False)
+ run('nft','delete','table','inet',table)
+ (root/'firewall.nft').write_text('R4 deliberately invalid firewall input\n')
+ failed=subprocess.run(['systemctl','start',unit],capture_output=True,text=True)
+ assert failed.returncode != 0 and show(unit,'ActiveState')!='active'
+ assert show(unit,'MainPID')=='0'
+ emit('cold_guard_failure_refuses_daemon_start PASS')
+ (root/'firewall.nft').write_text(files['firewall.nft'])
+ run('systemctl','reset-failed',unit,dnsunit,fwunit,check=False)
+ run('systemctl','start',unit)
+ assert show(unit,'ActiveState')=='active'
+ emit('cold_guard_recovery PASS')
+ run('systemctl','stop',dnsunit)
+ assert show(unit,'ActiveState')=='inactive'
+ assert run('nft','list','table','inet',table)
+ (root/'dnsmasq.conf').write_text('R4-deliberately-invalid-option\n')
+ failed=subprocess.run(['systemctl','start',unit],capture_output=True,text=True)
+ assert failed.returncode != 0 and show(unit,'MainPID')=='0'
+ emit('resolver_failure_keeps_rules_and_refuses_daemon_start PASS')
+ (root/'dnsmasq.conf').write_text(files['dnsmasq.conf'])
+ run('systemctl','reset-failed',unit,dnsunit,fwunit,check=False)
+ run('systemctl','start',unit)
+ assert show(unit,'ActiveState')=='active'
+ emit('resolver_recovery PASS')
  emit('authentic_IMAP_WhatsApp_LLM_Firebase NOT_RUN_no_credentials')
 finally:
  run('systemctl','stop',unit,check=False)
