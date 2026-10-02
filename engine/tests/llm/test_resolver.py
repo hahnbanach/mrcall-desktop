@@ -15,41 +15,32 @@ kit differential moved to `resolver_10a.py` and `test_resolver_10a_kit.py`.
 from __future__ import annotations
 
 import copy
-import hashlib
 from decimal import Decimal
 
 import pytest
-from zylch.llm.roles import gates, resolver, snapshot
+from zylch.llm.roles import candidates, gates, resolver, snapshot
 
-from .resolver_fixture import HAIKU, K3, OPUS, QWEN, READ_AT, SONNET, requirements, sources
+from .resolver_fixture import (
+    GLM,
+    GROK,
+    HAIKU,
+    K3,
+    OPUS,
+    QWEN,
+    READ_AT,
+    SHA,
+    SOL,
+    SONNET,
+    measured_all,
+    outcome,
+    requirements,
+    sources,
+)
 
-GLM, GROK, SOL = "z-ai/glm-5.3", "x-ai/grok-4.6", "openai/gpt-6.1-sol"
 ROSTER = (
     "MNEMONIC MEMORY_EXTRACT MEMORY_MERGE TASK_DETECTION REANALYZE DEDUP REPLY_NEED INTENT CHAT"
     " TASK_SOLVE TRAIN COMPACTION SYNC_ANALYSIS WEB_SEARCH CORRECTION_LEARNING NARRATION"
 ).split()
-SHA = hashlib.sha256(b"synthetic").hexdigest()
-
-
-def outcome(passed=(), failed=(), threshold=None, measured_only=False) -> dict:
-    results = {m: {"pass": True} for m in passed} | {m: {"pass": False} for m in failed}
-    return {
-        "threshold": threshold,
-        "measured_only": measured_only,
-        "results": results,
-        "case_set_sha256": SHA,
-        "prompt_sha256": SHA,
-    }
-
-
-def measured_all(req: dict) -> dict:
-    """A synthetic measurement of every role: maximise roles passed by the
-    capture's leaders, satisfice roles at a threshold of 40."""
-    leaders = [SONNET, OPUS, QWEN, GLM, GROK, SOL, K3]
-    roles = {}
-    for role, rule in req["roles"].items():
-        roles[role] = outcome(leaders) if rule["rule"] == "maximise" else outcome(threshold=40)
-    return {"schema": 1, "roles": roles}
 
 
 def capture_pool(req: dict | None = None) -> list[dict]:
@@ -343,7 +334,7 @@ def test_the_table_passes_the_gates_and_its_decision_ignores_prices():
     stamps = dict(resolved_at=READ_AT, catalogue_read_at=READ_AT)
     stamps.update(requirements_sha256=SHA, measured_sha256=SHA)
     table = resolver.document(ranked, stamps)
-    rules = resolver.candidates.policy(req)
+    rules = candidates.policy(req)
     snap = snapshot.build(src["catalogue"], src["endpoints"], rules, src["read_at"])
     gates.check_snapshot(snap)
     gates.check_table(table, req, snap)

@@ -9,12 +9,15 @@ with tools and a 200,000-token context that are no variant and no alias
 `entry()` and `endpoint()` build synthetic catalogue entries and endpoints
 shaped like the real payloads, for the rules no real entry isolates (a
 family matched only through a slug or an alias's target, an endpoint
-refused for one reason alone).
+refused for one reason alone). `outcome()` and `measured_all()` build a
+synthetic `measured.json` in the format the measurement script writes
+(slice S4), since no real measurement exists before the paid run.
 """
 
 from __future__ import annotations
 
 import copy
+import hashlib
 import json
 from functools import lru_cache
 from pathlib import Path
@@ -28,6 +31,8 @@ READ_AT = "2026-10-02T13:36:42Z"
 SONNET, OPUS = "anthropic/claude-sonnet-5.5", "anthropic/claude-opus-5.5"
 QWEN, K3 = "qwen/qwen3.8-max-0902", "moonshotai/kimi-k3"
 HAIKU = "anthropic/claude-haiku-4.5"
+GLM, GROK, SOL = "z-ai/glm-5.3", "x-ai/grok-4.6", "openai/gpt-6.1-sol"
+SHA = hashlib.sha256(b"synthetic").hexdigest()
 
 
 def requirements() -> dict:
@@ -96,3 +101,25 @@ def entry(model: str = "acme/model-1", **fields) -> dict:
         "expiration_date": None,
     }
     return {**base, **fields}
+
+
+def outcome(passed=(), failed=(), threshold=None, measured_only=False) -> dict:
+    """One role's synthetic measurement."""
+    results = {m: {"pass": True} for m in passed} | {m: {"pass": False} for m in failed}
+    return {
+        "threshold": threshold,
+        "measured_only": measured_only,
+        "results": results,
+        "case_set_sha256": SHA,
+        "prompt_sha256": SHA,
+    }
+
+
+def measured_all(req: dict) -> dict:
+    """A synthetic measurement of every role: maximise roles passed by the
+    capture's leaders, satisfice roles at a threshold of 40."""
+    leaders = [SONNET, OPUS, QWEN, GLM, GROK, SOL, K3]
+    roles = {}
+    for role, rule in req["roles"].items():
+        roles[role] = outcome(leaders) if rule["rule"] == "maximise" else outcome(threshold=40)
+    return {"schema": 1, "roles": roles}

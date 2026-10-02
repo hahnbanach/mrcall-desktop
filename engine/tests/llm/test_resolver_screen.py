@@ -25,6 +25,7 @@ from .resolver_fixture import (
     OPUS,
     QWEN,
     READ_AT,
+    SOL,
     SONNET,
     by_id,
     endpoint,
@@ -34,7 +35,6 @@ from .resolver_fixture import (
     sources,
 )
 
-SOL = "openai/gpt-6.1-sol"
 FAMILY = {"vendor": "anthropic", "token": "haiku"}
 
 

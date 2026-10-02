@@ -20,8 +20,7 @@ import sys
 
 import pytest
 
-from .resolver_fixture import ENGINE, FIXTURE, K3, QWEN, SONNET, requirements
-from .test_resolver import measured_all
+from .resolver_fixture import ENGINE, FIXTURE, K3, QWEN, SONNET, measured_all, requirements
 
 SCRIPT = ENGINE / "scripts" / "resolve_models.py"
 NAMES = ("models.json", "benchmarks.json", "endpoints.json", "read-at.txt")
