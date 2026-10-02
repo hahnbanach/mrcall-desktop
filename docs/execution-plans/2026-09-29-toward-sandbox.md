@@ -137,8 +137,21 @@ not started.
      reran the four isolated tests; A also ran syntax/diff checks. B's earlier
      REVISE (short octal modes and repeat rollback) was repaired and verified.
      Their approval closes the scratch gate, not the unobserved VPS gate.
-   - *Done status:* not done. Merge and the VPS's next reconcile evidence
-     (installed helper identity, every migrated unit `ready`) still pending.
+   - *Published:* implementation merged to main as `72719a15` via
+     `git pull --rebase origin main && git push origin HEAD:main`.
+     Afterwards the approved helper was installed on scratch (exact full
+     SHA256 above); all four table tenants re-applied `ready` again. P1
+     remained active, PID 128040 unchanged. No firewall/resolver changes.
+   - *Machine coordination, final:* scratch VM **rilasciata** da R_2 alle
+     2026-10-02T17:43:24Z. R_4 may take it after this record is pushed.
+     Scratch now keeps the approved main helper, not the pre-R2 baseline.
+   - *Done status:* **not done**, only the VPS gate remains: its next
+     reconcile must install the helper from main and report every migrated
+     tenant `ready`. This session has no verified VPS SSH host key/access:
+     BatchMode + StrictHostKeyChecking connection to root@desktop.mrcall.ai
+     refused with host-key verification failure, before any remote command.
+     No VPS mutation attempted; requested the access route or confirmation
+     from the VPS session. Record that evidence here before marking R2 done.
 3. **R3 — Close the rollback window.** *VPS.*
    - *Starts:* seven days after the last 2b with no rollback, and not
      before R1.
