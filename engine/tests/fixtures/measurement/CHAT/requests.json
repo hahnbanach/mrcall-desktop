@@ -2,7 +2,7 @@
  "schema": 1,
  "role": "CHAT",
  "prompt_sha256": "64a1a51744c16169659a534729782f32431c5be8b90748b8980b34e95ca130d3",
- "case_set_sha256": "d2679fdc5c7e7b5ca452327baa27e13cd674955ac0979453b535b88d80f77b9e",
+ "case_set_sha256": "3cd501697fb98ba55af6990690c60086f7b31acd44aff096d8f23f7efa04646a",
  "requests": [
   {
    "case_id": "chat-01",
@@ -3723,7 +3723,7 @@
    "capture_now": "2026-10-05T09:30:00"
   },
   {
-   "case_id": "chat-06",
+   "case_id": "chat-07",
    "request": {
     "messages": [
      {
@@ -3731,7 +3731,7 @@
       "content": [
        {
         "type": "text",
-        "text": "Send a text to +44 20 7946 0321: Hi Tom, the fabric samples arrive Thursday morning. Sarah"
+        "text": "Search the web for how we get an EORI number — we start shipping orders to a client in Switzerland in January."
        },
        {
         "type": "text",

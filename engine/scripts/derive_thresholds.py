@@ -11,15 +11,20 @@ score of every arm). Nothing here calls a model.
 ``passes`` (label matches), ``score`` = passes / n; ``bars_ok`` — every
 mechanical bar met on every row; ``critical`` — any critical failure;
 ``complete`` — a scored row for every case of the role (an error, a cap stop,
-a skip or an interruption leaves the arm incomplete). A cell the provider
-refused before inference twice (or once, the run stopped before its second
-time) is a failed cell like any other: not scored, the arm incomplete; the
-role's ``refused`` lists those cases per arm, so the record names them. The
-reference (``requirements.json``) gives the yardstick from the same run: its
-score p and the binomial standard error ``sqrt(p (1 - p) / n)``. An arm
-**passes** when it is complete, meets every bar, has no critical failure and
-scores at least ``p - se``. A role without a complete reference is
-unmeasured: reported, not written, so the resolver keeps blocking it.
+a skip, a denied key or an interruption leaves the arm incomplete). A cell
+the provider refused before inference twice (or mid-turn, or once with the
+run stopped before its second time) is a failed cell like any other: not
+scored, the arm incomplete. **An incomplete arm is not a measurement**: it
+is kept out of ``results`` and named under the role's ``incomplete``
+(``{arm: why}``, each unscored case under its status, refusals named), so
+the resolver's ``qualifies`` treats the model as unmeasured, as it treats a
+model never measured, instead of as one that failed; thresholds derive from
+complete arms only. The reference (``requirements.json``) gives the
+yardstick from the same run: its score p and the binomial standard error
+``sqrt(p (1 - p) / n)``. An arm **passes** when it is complete, meets every
+bar, has no critical failure and scores at least ``p - se``. A role without
+a complete reference is unmeasured: reported, not written, so the resolver
+keeps blocking it.
 
 **The second repetition** (``measure_roles.py --repeat-disagreements``: the
 reference again, on the cases where an arm's label result differed from its
@@ -50,8 +55,9 @@ pending. A dry record is refused.
 harness role; for the corpus roles ``incidents.json`` and the mnemonic or
 extraction prompt — or the role is refused: a measurement of other prompts or
 cases is not a measurement of these. ``check_measured`` is what the test runs
-on the committed file: S2's reader accepts it, its hashes are today's, and its
-passes and thresholds are the ones these rules derive from its own results.
+on the committed file: S2's reader accepts it, its hashes are today's, no
+result in it is incomplete, and its passes and thresholds are the ones these
+rules derive from its own results.
 
     python scripts/derive_thresholds.py --arms ARMS.json --results OUT/results.jsonl \\
         --corpus REC/2026-10-03-mnemonic-corpus-k3-manifest.json ... [--write]
@@ -207,6 +213,35 @@ def second_answers(rows: list[dict]) -> dict:
     }
 
 
+INCOMPLETE = {
+    "cap": "stopped by the cap",
+    "skipped": "skipped after two failures in a row",
+    "unpriced": "no price",
+    "interrupted": "interrupted after its dispatch",
+    "refused": "refused before inference, not yet sent again",
+    "denied": "the key denied",
+    "error": "failed",
+}
+
+
+def why_incomplete(first: list[dict], cases: list[str]) -> str:
+    """Each case an arm's first repetition did not score, under its status; refusals named."""
+    by_case = {row["case_id"]: row for row in first}
+    groups: dict[str, list[str]] = {}
+    for case in cases:
+        row = by_case.get(case)
+        if row is not None and row["status"] == "scored":
+            continue
+        if row is None:
+            label = "not run"
+        elif row["status"] == "error" and row.get("refusals"):
+            label = str(row.get("error") or "refused").split(":")[0]
+        else:
+            label = INCOMPLETE.get(row["status"], row["status"])
+        groups.setdefault(label, []).append(case)
+    return "; ".join(f"{label}: {', '.join(ids)}" for label, ids in groups.items())
+
+
 def role_entry(role: str, rows: list[dict], cases: list[str], rule: dict, reference: str) -> dict:
     """One role of measured.json from its rows, or Refused."""
     hashes = {(r["case_set_sha256"], r["prompt_sha256"]) for r in rows}
@@ -214,7 +249,7 @@ def role_entry(role: str, rows: list[dict], cases: list[str], rule: dict, refere
         raise Refused(f"{role}: rows from {len(hashes)} different case sets or prompts")
     if hashes != {current_hashes(role)}:
         raise Refused(f"{role}: measured on other cases or prompts than today's")
-    results, second, refused = {}, {}, {}
+    results, second, incomplete = {}, {}, {}
     for arm in sorted({r["arm"] for r in rows}):
         mine = [r for r in rows if r["arm"] == arm]
         # Judged on the first repetition alone (module docstring): a second
@@ -227,10 +262,7 @@ def role_entry(role: str, rows: list[dict], cases: list[str], rule: dict, refere
         again = second_answers(mine)
         if again:
             second[arm] = again
-        failed = [r for r in first if r["status"] != "scored" and r.get("refusals")]
-        if failed:
-            refused[arm] = sorted(r["case_id"] for r in failed)
-        results[arm] = {
+        result = {
             "n": len(scored),
             "passes": sum(bool(r["scoring"]["label_match"]) for r in scored),
             "bars_ok": all(r["scoring"]["bars_ok"] for r in scored),
@@ -240,9 +272,14 @@ def role_entry(role: str, rows: list[dict], cases: list[str], rule: dict, refere
                 (r["arm_score"] for r in mine if r.get("arm_score") is not None), None
             ),
         }
-        results[arm]["score"] = round(results[arm]["passes"] / max(1, results[arm]["n"]), 6)
-    if reference not in results or not results[reference]["complete"]:
-        raise Refused(f"{role}: the reference {reference} is not completely measured")
+        result["score"] = round(result["passes"] / max(1, result["n"]), 6)
+        if complete:
+            results[arm] = result
+        else:  # cut short: no measurement of this model (module docstring)
+            incomplete[arm] = why_incomplete(first, cases)
+    if reference not in results:
+        why = incomplete.get(reference, "no results")
+        raise Refused(f"{role}: the reference {reference} is not completely measured: {why}")
     for result in results.values():
         result["pass"], result["reasons"] = judged(result, results[reference])
     threshold, measured_only = threshold_of(rule["rule"], results)
@@ -256,7 +293,7 @@ def role_entry(role: str, rows: list[dict], cases: list[str], rule: dict, refere
         "results": results,
         "reference": {"id": reference, "score": round(float(p), 6), "se": round(se, 6)},
         "second_repetition": second,
-        "refused": refused,
+        "incomplete": incomplete,
         "case_set_sha256": rows[0]["case_set_sha256"],
         "prompt_sha256": rows[0]["prompt_sha256"],
         "snapshot_version": versions[0] if len(versions) == 1 else versions,
@@ -310,6 +347,8 @@ def check_measured(document: dict) -> list[str]:
             problems.append(f"{role}: no reference result")
             continue
         for arm, result in results.items():
+            if result.get("complete") is False:
+                problems.append(f"{role}: {arm} is incomplete; it belongs under incomplete")
             if result.get("pass") != judged(result, results[reference])[0]:
                 problems.append(f"{role}: {arm}'s pass is not the one its results give")
         rule = requirements["roles"][role]["rule"]

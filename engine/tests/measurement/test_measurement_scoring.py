@@ -5,7 +5,10 @@ each README names fail, critically exactly when ``critical_on`` lists them.
 Also held: Markdown emphasis and non-breaking spaces never hide a fact
 (label review G3), the language bar skips a short answer and fails a long
 one in the other language, the smoke roles' form bars, a CHAT or TASK_SOLVE
-answer that must not be empty, and every tool input checked on its schema.
+answer that must not be empty, every tool input checked on its schema, and
+the non-empty bar failing an empty answer in each of its three readings: a
+tool called with nothing, an agent turn with no call and no text, a text
+answer that is blank.
 """
 
 from __future__ import annotations
@@ -173,3 +176,25 @@ def test_the_schema_subset_checks_types_required_enums_and_closed_objects():
     assert scoring.schema_errors(schema, {"b": "x"})
     assert scoring.schema_errors(schema, {"a": 1, "b": "y"})
     assert scoring.schema_errors(schema, {"a": 1, "c": 2})
+
+
+def empty_answer(role, request):
+    """The empty answer of each reading of the non-empty bar."""
+    tool = scoring.answer_tool(role, request)
+    if tool is not None:  # the role's tool, called with nothing in it
+        return {"calls": [{"name": tool, "input": {}}], "text": "", "stop_reason": "tool_use"}
+    return {"calls": [], "text": " \n ", "first": [], "later": [], "stop_reason": "end_turn"}
+
+
+@pytest.mark.parametrize("role", ["REPLY_NEED", "TASK_SOLVE", "INTENT", "NARRATION"])
+def test_the_non_empty_bar_fails_an_empty_answer_in_each_reading(role):
+    # REPLY_NEED answers through its tool, TASK_SOLVE is an agent turn, INTENT and
+    # NARRATION answer in text: the bar's three branches.
+    document, every = cases(role)
+    case, request = every[0]
+    empty = scored(role, document, case, request, empty_answer(role, request))
+    assert empty["bars"]["non_empty"] is False and not empty["bars_ok"], empty["bars"]
+    given = {"calls": [], "text": "Fatto.", "first": [], "later": [], "stop_reason": "end_turn"}
+    if role in ("REPLY_NEED", "INTENT"):
+        given = right_answer(role, case, request)
+    assert scored(role, document, case, request, given)["bars"]["non_empty"] is True

@@ -20,24 +20,30 @@ each line flushed and fsync'd before the next step:
   (``zylch.llm.client._rejected_before_inference``: a status of no work, such
   as 429, as OpenRouter answers when an upstream provider's pool is
   saturated): nothing was spent, so it is settled at zero.
+- the same with ``"outcome": "denied"`` — a 401 or 403 (``DENIED_STATUSES``):
+  the key itself was refused, so it is settled at zero, never sent again, and
+  ``measure_roles.py`` stops the whole run.
 - ``{"event": "fail", "id", "error", "at"}`` — any other failure (a 5xx, a
   timeout, a lost connection, an answer that cannot be read): whether it cost
   anything is unknown, so the intent stays open at its bound.
 
 **The cap.** Before each dispatch the ledger refuses (``CapExceeded``) when
-the settled costs (a refused settlement counts zero), plus the bound of every
-intent without a settlement, plus this dispatch's bound would exceed the cap.
+the settled costs (a refused or denied settlement counts zero), plus the bound
+of every intent without a settlement, plus this dispatch's bound would exceed
+the cap.
 
 **Attempts** (``next_attempt``). A cell (one arm on one case, one repetition)
 is dispatched at most ``MAX_ATTEMPTS`` (2) times, and a second time only when
-its first attempt ended in a refusal before inference, with every intent of
-the attempt settled: ``measure_roles.py`` sends it once more at the end of
-the role's pass, at least the provider's ``retry_after`` or ``RETRY_WAIT_S``
-seconds after the refusal, whichever is longer. Nothing else is ever
-re-sent: a cell with an open, failed or settled intent, or refused twice, is
-never dispatched again, so a run resumed after an interruption skips it. A
-line that does not parse fails closed — whether it recorded a dispatch cannot
-be known.
+its first attempt was refused before inference at its first dispatch, with
+every intent of the attempt settled: ``measure_roles.py`` sends it once more
+at the end of the role's pass, at least the provider's ``retry_after`` or
+``RETRY_WAIT_S`` seconds after the refusal, whichever is longer. A refusal
+later in an agent turn (CHAT, TASK_SOLVE) is not sent again: the turn's
+earlier dispatches are paid, and a second attempt would repeat them; the cell
+stays incomplete. Nothing else is ever re-sent: a cell with an open, failed,
+settled or denied intent, or refused twice, is never dispatched again, so a
+run resumed after an interruption skips it. A line that does not parse fails
+closed — whether it recorded a dispatch cannot be known.
 """
 
 from __future__ import annotations
@@ -51,7 +57,8 @@ from typing import Any
 
 MAX_ATTEMPTS = 2
 RETRY_WAIT_S = 5.0
-REFUSED = "refused"
+REFUSED, DENIED = "refused", "denied"
+DENIED_STATUSES = frozenset({401, 403})
 
 
 class CapExceeded(RuntimeError):
@@ -107,7 +114,7 @@ class Ledger:
             settlement = settled.get(row["id"])
             if settlement is None or settlement.get("cost_micro_usd") is None:
                 total += int(row["bound_micro_usd"])
-            elif settlement.get("outcome") == REFUSED:
+            elif settlement.get("outcome") in (REFUSED, DENIED):
                 continue  # refused before inference: nothing was spent
             else:
                 total += int(settlement["cost_micro_usd"])
@@ -119,12 +126,13 @@ class Ledger:
             return self._committed()
 
     def attempts(self, cell: str) -> list[dict]:
-        """The cell's attempts, in order: ``{"attempt", "refusal"}``.
+        """The cell's attempts, in order: ``{"attempt", "dispatch", "refusal", "resendable"}``.
 
-        ``refusal`` is the settlement of the attempt's last dispatch when the
-        provider refused it before inference and every dispatch of the attempt
-        is settled; None for any other attempt (an open or failed intent, an
-        answer).
+        ``refusal`` is the settlement of the attempt's last dispatch (number
+        ``dispatch``) when the provider refused it before inference and every
+        dispatch of the attempt is settled; None for any other attempt (an open
+        or failed intent, a denied key, an answer). ``resendable``: refused at
+        its first dispatch, so nothing of the attempt was paid for.
         """
         with self._lock:
             settled = {r["id"]: r for r in self._rows if r["event"] == "settle"}
@@ -137,27 +145,58 @@ class Ledger:
             last = settled.get(intents[-1]["id"]) or {}
             whole = all(intent["id"] in settled for intent in intents)
             refusal = last if whole and last.get("outcome") == REFUSED else None
-            out.append({"attempt": attempt, "refusal": refusal})
+            dispatch = intents[-1].get("dispatch", len(intents) - 1)
+            first = refusal is not None and len(intents) == 1
+            out.append({"attempt": attempt, "dispatch": dispatch, "refusal": refusal})
+            out[-1]["resendable"] = first
         return out
 
     def refusals(self, cell: str) -> list[dict]:
         """The refusals before inference that ended the cell's attempts (for its result)."""
         keep = ("status_code", "retry_after", "error", "at")
         return [
-            {"attempt": made["attempt"], **{k: made["refusal"].get(k) for k in keep}}
+            {"attempt": made["attempt"], "dispatch": made["dispatch"]}
+            | {k: made["refusal"].get(k) for k in keep}
             for made in self.attempts(cell)
             if made["refusal"] is not None
         ]
 
+    def refusal_note(self, cell: str) -> str | None:
+        """Why a cell whose last attempt was refused is not sent again; None if it was not."""
+        made = self.attempts(cell)
+        if not made or made[-1]["refusal"] is None:
+            return None
+        last = made[-1]
+        error = last["refusal"].get("error")
+        if not last["resendable"]:
+            return (
+                f"refused before inference mid-turn (dispatch {last['dispatch']}): the turn's"
+                f" earlier dispatches are paid, so it is not sent again: {error}"
+            )
+        return f"refused twice before inference: {error}"
+
+    def denial(self, cell: str) -> dict | None:
+        """The settlement of the cell's dispatch the provider denied (401, 403), if any."""
+        with self._lock:
+            ids = {r["id"] for r in self._rows if r["event"] == "intent" and r["cell"] == cell}
+            return next(
+                (
+                    r
+                    for r in self._rows
+                    if r["event"] == "settle" and r["id"] in ids and r.get("outcome") == DENIED
+                ),
+                None,
+            )
+
     def next_attempt(self, cell: str) -> int | None:
-        """1 for a cell never dispatched; 2 when its one attempt was refused before inference.
+        """1 for a cell never dispatched; 2 when its one attempt was refused at its first dispatch.
 
         None otherwise: the cell is never dispatched again (module docstring).
         """
         made = self.attempts(cell)
         if not made:
             return 1
-        if len(made) < MAX_ATTEMPTS and all(a["refusal"] is not None for a in made):
+        if len(made) < MAX_ATTEMPTS and all(a["resendable"] for a in made):
             return len(made) + 1
         return None
 
@@ -198,9 +237,11 @@ class Ledger:
     def refuse(
         self, intent: str, error: str, status_code: int | None, retry_after: float | None
     ) -> None:
-        """Settle a dispatch the provider refused before inference: at zero, outcome refused."""
-        row = {"event": "settle", "id": intent, "cost_micro_usd": 0, "source": REFUSED}
-        row.update(outcome=REFUSED, status_code=status_code, retry_after=retry_after)
+        """Settle a dispatch the provider refused before inference: at zero, outcome refused,
+        or ``denied`` for a 401 or 403 (the key refused: never sent again)."""
+        outcome = DENIED if status_code in DENIED_STATUSES else REFUSED
+        row = {"event": "settle", "id": intent, "cost_micro_usd": 0, "source": outcome}
+        row.update(outcome=outcome, status_code=status_code, retry_after=retry_after)
         with self._lock:
             self._append({**row, "error": error, "usage": None, "at": now()})
 

@@ -7,16 +7,20 @@ prompts and case set, and the arithmetic below does not move when the
 committed case set is trimmed (``trim_measurement_cases.py``). These tests
 hold:
 
-- an arm passes only when complete, within every bar, without a critical
-  failure, and at least the reference's score less its binomial standard
-  error from the same run;
+- an arm passes only when within every bar, without a critical failure, and
+  at least the reference's score less its binomial standard error from the
+  same run;
+- an incomplete arm (a case not scored) is no measurement: absent from
+  ``results``, named under ``incomplete``, the threshold derived without it,
+  the model left unmeasured for the resolver's ``qualifies``;
 - a monotone ladder gets the lowest index score at and above which every arm
   passes; a non-monotone one accepts measured models only;
 - a second repetition (the reference again on the disputed cases) is recorded
   and changes no count, pass, yardstick or threshold;
 - a cell refused before inference twice is a failed cell (the arm
-  incomplete), named in the role's ``refused``; one answered on its second
-  attempt counts as answered;
+  incomplete, the refusal named); one answered on its second attempt counts
+  as answered;
+- rows measured on other prompts or cases than today's are refused;
 - the document is what S2's reader (``resolver.validate_measured``) reads;
 - ``check_measured`` refuses a document whose hashes are not today's, whose
   threshold or passes its own results do not give, and the committed
@@ -125,19 +129,44 @@ def test_a_non_monotone_ladder_accepts_measured_models_only(synthetic_role):
     assert role["threshold"] is None and role["measured_only"] is True
 
 
-def test_a_bar_a_critical_failure_or_a_missing_case_fails_an_arm_that_scores_well(synthetic_role):
-    first = case_ids()[0]
+def test_a_bar_or_a_critical_failure_fails_an_arm_that_scores_well(synthetic_role):
     every = ladder()
     every += rows("bars", 50.0, 22, bars_ok=False)
     every += rows("crit", 51.0, 22, critical={case_ids()[-1]})
-    every += rows("gap", 52.0, 22, errors={first})
     _doc, role = entry(every)
-    reasons = {arm: role["results"][arm]["reasons"] for arm in ("bars", "crit", "gap")}
-    assert reasons == {
-        "bars": ["mechanical bar"],
-        "crit": ["critical failure"],
-        "gap": ["incomplete"],
+    reasons = {arm: role["results"][arm]["reasons"] for arm in ("bars", "crit")}
+    assert reasons == {"bars": ["mechanical bar"], "crit": ["critical failure"]}
+
+
+def test_an_incomplete_arm_is_no_measurement_and_leaves_the_threshold_alone(synthetic_role):
+    from zylch.llm.roles import resolver
+
+    ladder_only = ladder(("flash", 24.4, 15), ("mimo", 37.9, 18), ("pro", 46.3, 19))
+    cut = rows("cut", 50.0, 22, errors={case_ids()[2]})  # every scored case right
+    cut[3].update(status="cap")
+    cut[3].pop("scoring")
+    document, role = entry(ladder_only + cut[:-1])  # its last case never ran
+    _doc, without = entry(ladder_only)
+    assert "cut" not in role["results"] and set(role["results"]) == set(without["results"])
+    ids = case_ids()
+    assert role["incomplete"] == {
+        "cut": f"failed: {ids[2]}; stopped by the cap: {ids[3]}; not run: {ids[-1]}"
     }
+    assert (
+        (role["threshold"], role["measured_only"])
+        == (43.6, False)
+        == (
+            without["threshold"],
+            without["measured_only"],
+        )
+    )
+    rule = {"rule": "satisfice", "index": "x"}
+    unmeasured = {"id": "cut", "scores": {"x": 50.0}}  # above the threshold: ranked
+    assert resolver.qualifies(rule, role, unmeasured) is True
+    assert derive.check_measured(document) == []
+    failed = copy.deepcopy(document)
+    failed["roles"][ROLE]["results"]["pro"]["complete"] = False
+    assert any("incomplete" in p for p in derive.check_measured(failed))
 
 
 def test_a_cell_run_again_after_a_resume_counts_once_its_newest_row(synthetic_role):
@@ -148,7 +177,7 @@ def test_a_cell_run_again_after_a_resume_counts_once_its_newest_row(synthetic_ro
     assert role["results"]["pro"]["complete"] and role["results"]["pro"]["n"] == 22
 
 
-def test_a_cell_refused_twice_fails_its_arm_and_the_record_names_it(synthetic_role):
+def test_a_cell_refused_twice_leaves_its_arm_incomplete_and_named(synthetic_role):
     refusals = [{"attempt": 1, "status_code": 429}, {"attempt": 2, "status_code": 429}]
     pro = rows("pro", 46.3, 22, errors={case_ids()[5]})
     pro[5].update(error="refused twice before inference: HTTP 429", refusals=refusals)
@@ -156,9 +185,9 @@ def test_a_cell_refused_twice_fails_its_arm_and_the_record_names_it(synthetic_ro
     late.insert(0, {**late[3], "status": "refused", "refusals": refusals[:1]})
     late[0].pop("scoring")  # refused once, then answered on its second attempt
     _doc, role = entry(rows(K3, 43.6, 20) + pro + late)
-    assert role["results"]["pro"]["reasons"] == ["incomplete"]
+    assert "pro" not in role["results"]
+    assert role["incomplete"] == {"pro": f"refused twice before inference: {case_ids()[5]}"}
     assert role["results"]["mimo"]["complete"] and role["results"]["mimo"]["n"] == 22
-    assert role["refused"] == {"pro": [case_ids()[5]]}
 
 
 def test_a_second_repetition_is_recorded_and_changes_no_pass_or_fail(synthetic_role):
@@ -180,6 +209,16 @@ def test_a_second_repetition_is_recorded_and_changes_no_pass_or_fail(synthetic_r
         },
     }
     assert before["second_repetition"] == {}
+
+
+def test_rows_measured_on_other_prompts_or_cases_are_refused(synthetic_role):
+    stale = [{**row, "prompt_sha256": "e" * 64} for row in ladder(("pro", 46.3, 19))]
+    document, unmeasured = derive.derive(stale, roles={ROLE: {"rule": "satisfice", "index": "x"}})
+    assert ROLE not in document["roles"]
+    assert "other cases or prompts than today's" in unmeasured[ROLE]
+    mixed = ladder() + stale[-22:]
+    document, unmeasured = derive.derive(mixed, roles={ROLE: {"rule": "satisfice", "index": "x"}})
+    assert ROLE not in document["roles"] and "2 different case sets" in unmeasured[ROLE]
 
 
 def test_a_role_without_a_complete_reference_is_reported_unmeasured_not_written(synthetic_role):

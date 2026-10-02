@@ -13,7 +13,11 @@ carries its HTTP status (as the transport's does), these tests hold:
 - a 503 keeps its intent open at its bound and is never sent again;
 - a cell refused twice is not sent a third time: it stays failed, its arm
   incomplete;
-- a resumed run sends a cell refused once its second time, and nothing else.
+- a resumed run sends a cell refused once its second time, and nothing else;
+- an agent turn (CHAT) refused at its first dispatch is sent again; one
+  refused mid-turn is not, since its first dispatch is paid: the cell stays
+  failed;
+- a 401 or 403 stops the run (exit 1) and the denied cell is never sent again.
 """
 
 from __future__ import annotations
@@ -35,11 +39,14 @@ from measurement_runtime import DRY_KEY, measurement_profile  # noqa: E402
 
 from tests.measurement.test_measure_roles import (  # noqa: E402
     FLASH,
+    K3,
     SCRIPT,
     SONNET,
     Crash,
     Wire,
     by_cell,
+    chat_run,
+    chat_turn,
     context,
     runs,
 )
@@ -81,13 +88,13 @@ def run_dir(tmp_path):
     return tmp_path / "run"
 
 
-def measured(run_dir, wire, sleep=None):
+def measured(run_dir, wire, sleep=None, role_runs=None):
     """``run_all`` on the synthetic role; the waits recorded (or ``sleep`` called) instead."""
     slept: list[float] = []
     ctx = context(run_dir, wire)
     ctx.sleep = sleep or slept.append
     with measurement_profile(DRY_KEY, Decimal("20")):
-        code = measure_roles.run_all(ctx, runs(), False)
+        code = measure_roles.run_all(ctx, role_runs or runs(), False)
     return code, ctx, slept
 
 
@@ -178,3 +185,56 @@ def test_a_resumed_run_sends_a_cell_refused_once_its_second_time_and_nothing_els
     third = Wire(run_dir / "ledger.jsonl", script=scripted({}))
     code, ctx, slept = measured(run_dir, third)
     assert code == 0 and third.bodies == [] and slept == []
+
+
+def chat_refusing(refused: dict):
+    """CHAT's scripted turn (search, then answer); ``refused[arm]``: the arm's dispatches,
+    counted over the run, answered 429."""
+    seen: Counter = Counter()
+
+    def answer(cell, body):
+        n = seen[cell.arm]
+        seen[cell.arm] += 1
+        if n in refused.get(cell.arm, ()):
+            raise ProviderError(429)
+        return chat_turn(cell, body)
+
+    return answer
+
+
+def test_an_agent_turn_refused_at_its_first_dispatch_is_sent_again(run_dir):
+    wire = Wire(run_dir / "ledger.jsonl", script=chat_refusing({SONNET: {0}}))
+    code, ctx, _slept = measured(run_dir, wire, role_runs=[chat_run()])
+    cell = f"CHAT|{SONNET}|chat-01|r1"
+    assert code == 0 and sent(wire).count(cell) == 3  # refused, then the whole turn
+    row = by_cell(ctx)[(SONNET, "chat-01", 1)]
+    assert row["status"] == "scored" and row["attempt"] == 2
+    assert row["refusals"][0]["dispatch"] == 0
+
+
+def test_an_agent_turn_refused_mid_turn_is_not_sent_again(run_dir):
+    wire = Wire(run_dir / "ledger.jsonl", script=chat_refusing({SONNET: {1}}))
+    code, ctx, slept = measured(run_dir, wire, role_runs=[chat_run()])
+    cell = f"CHAT|{SONNET}|chat-01|r1"
+    assert code == 0 and sent(wire).count(cell) == 2 and slept == []
+    row = by_cell(ctx)[(SONNET, "chat-01", 1)]
+    assert row["status"] == "error" and "mid-turn" in row["error"]
+    assert row["refusals"][0]["dispatch"] == 1 and ctx.ledger.next_attempt(cell) is None
+    paid = [r for r in ctx.ledger.rows() if r["event"] == "settle" and r["source"] == "receipt"]
+    assert any(r["id"] == f"{cell}#d0" and r["cost_micro_usd"] > 0 for r in paid)
+    assert by_cell(ctx)[(K3, "chat-01", 1)]["status"] == "scored"
+
+
+@pytest.mark.parametrize("status", [401, 403])
+def test_a_denied_key_stops_the_run_and_its_cell_is_never_sent_again(run_dir, status, capsys):
+    wire = Wire(run_dir / "ledger.jsonl", script=scripted({(SONNET, "td-1"): [status]}))
+    code, ctx, slept = measured(run_dir, wire)
+    assert code == measure_roles.EXIT_DENIED == 1 and slept == []
+    assert sent(wire)[-1] == key("td-1") and len(sent(wire)) == 3 + 1  # nothing after it
+    assert "denied the key" in capsys.readouterr().err
+    denial = ctx.ledger.denial(key("td-1"))
+    assert denial["outcome"] == "denied" and denial["cost_micro_usd"] == 0
+    assert by_cell(ctx)[(SONNET, "td-1", 1)]["status"] == "denied"
+    again = Wire(run_dir / "ledger.jsonl", script=scripted({}))
+    code, ctx, _slept = measured(run_dir, again)
+    assert code == 0 and key("td-1") not in sent(again) and len(sent(again)) == 5

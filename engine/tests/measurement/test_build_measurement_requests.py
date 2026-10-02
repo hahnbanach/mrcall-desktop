@@ -8,11 +8,16 @@
   a trainer lists case items (the TRAIN contact set).
 - Every committed ``requests.json`` matches a fresh capture of today's code
   and case set (the measurement replays them; ``--check`` is this test).
+- TRAIN's capture is the same bytes in any process: two processes with
+  different hash seeds capture its committed ``requests.json`` exactly (the
+  harness sorts the trainers' sets; production is unchanged).
 """
 
 from __future__ import annotations
 
 import copy
+import os
+import subprocess
 import sys
 from pathlib import Path
 from types import SimpleNamespace
@@ -117,3 +122,27 @@ def test_every_committed_requests_json_matches_a_fresh_capture():
     for role in common.HARNESS_ROLES:
         problems += builder.drift(role, builder.build(role))
     assert problems == []
+
+
+TRAIN_CAPTURE = (
+    "import sys; sys.path.insert(0, 'scripts'); "
+    "import build_measurement_requests as builder, measurement_common as common; "
+    "sys.stdout.write(common.dump(builder.build('TRAIN')))"
+)
+
+
+def test_train_s_requests_are_the_same_bytes_under_any_hash_seed():
+    engine = SCRIPTS.parent
+    committed = common.requests_path("TRAIN").read_text(encoding="utf-8")
+    for seed in ("1", "2"):
+        env = {**os.environ, "PYTHONHASHSEED": seed, "PYTHONPATH": str(engine)}
+        done = subprocess.run(
+            [sys.executable, "-c", TRAIN_CAPTURE],
+            cwd=engine,
+            env=env,
+            capture_output=True,
+            text=True,
+            timeout=600,
+        )
+        assert done.returncode == 0, done.stderr[-2000:]
+        assert done.stdout == committed, f"PYTHONHASHSEED={seed} captured other bytes"

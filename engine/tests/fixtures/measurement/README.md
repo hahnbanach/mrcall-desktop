@@ -74,6 +74,25 @@ The tool refuses, and writes nothing, when:
 `--plan` prints the moves and, with `--arms`, each arm's projection delta,
 without writing anything. `--restore` gives back the files byte for byte.
 
+A review can replace the rule's choice with an exact kept set:
+`--keep-ids ID,... --chosen-by WHO --why WHY`. The tool refuses one that
+drops a critical case or goes below the floors (the minimum, two of each
+label value), and records it in `reserve.json` (`exception`: who, why, and
+what the rule would have kept). While it stands, `--keep N` is refused
+rather than silently undoing it.
+
+The reviewed exceptions in force:
+
+- **CHAT** (IR2 round 1): chat-07 is kept and chat-06 moved to the reserve.
+  chat-07 is the only case of a web search only when the user asks for one,
+  a decision CHAT's README says its cases test, and chat-03 tests the same
+  send rule as chat-06. The expected spend is unchanged at USD 15.358.
+
+The trims skew the class balance the authored sets keep: REPLY_NEED, for
+one, keeps its 10 critical must-reply cases and 4 no-reply ones. The
+critical cases are all kept by rule, so a trim shifts the measured set
+towards them.
+
 The reserve stays authored and reviewed. The case files' own tests read
 `cases.json` together with `reserve.json` (`tests/measurement/case_sets.py`).
 Captures, replays and hashes read `cases.json` alone.
@@ -89,6 +108,10 @@ strings replaced, so it moves with a prompt and not with case data or the
 order a trainer lists case items in (`scripts/measurement_common.py` says
 exactly what is hashed). `tests/measurement/test_build_measurement_requests.py`
 fails when a committed `requests.json` no longer matches a fresh capture.
+TRAIN's trainers list contacts, greetings and languages from sets, whose
+order follows the process's hash seed. Its capture harness sorts them (in
+the capture only; production is unchanged), and the same test checks that
+two processes with different seeds capture the same bytes.
 
 ## The measurement
 
@@ -111,6 +134,12 @@ a 429 when an upstream provider's shared pool is saturated, which
   longer;
 - if refused a second time, leaves the cell failed and the arm incomplete.
 
+In CHAT and TASK_SOLVE a refusal is sent again only when it hit the turn's
+first dispatch. A refusal later in the turn follows dispatches already paid
+for, which a second attempt would repeat, so the cell stays failed. A 401
+or 403 means the key itself was refused: the run stops with that message,
+and the cell is settled at zero and never sent again.
+
 Every other failure (a 5xx, a timeout, a lost connection, an unreadable
 answer) keeps its intent open at its bound and is never sent again. A resumed
 run skips every cell with an intent, except a cell refused once, which still
@@ -118,8 +147,7 @@ gets its second attempt.
 
 `DIR/results.jsonl` holds per cell the tool calls, text, usage, cost, latency
 and the scoring of `scripts/measurement_scoring.py` (label match, critical,
-mechanical bars). It also names the refusals: `refusals` on the cell's row,
-and each role's `refused` (its cases per arm) in `measured.json`.
+mechanical bars). It also names the refusals: `refusals` on the cell's row.
 `--repeat-disagreements` then runs
 D7's last item: the reference a second time, only on the cases where some
 arm's label result differs from its own. No arm runs again.
@@ -130,7 +158,14 @@ arm's label result differs from its own. No arm runs again.
 binomial standard error, with every mechanical bar met and no critical
 failure; a `satisfice` role's threshold is the lowest index at and above
 which every measured arm passes, or `measured_only` when index and result
-disagree. Everything is judged on the first repetition. The second
+disagree. An arm cut short (a transport failure, a refusal, a skip, the
+cap) is not a measurement. It is kept out of `results` and named in the
+role's `incomplete` (`{arm: why}`), so the resolver treats the model as
+unmeasured rather than failed, and thresholds derive from complete arms
+only. MEMORY_EXTRACT and MEMORY_MERGE are both judged on the corpus's
+joint verdicts: a case fails both roles when either the extraction or the
+decision went wrong, which is conservative for each. Everything is judged
+on the first repetition. The second
 repetition's answers are recorded in the role's `second_repetition`, the first
 and second label result of each repeated case, and change no pass or fail.
 It writes `measured.json` in the shape `resolver.validate_measured`
