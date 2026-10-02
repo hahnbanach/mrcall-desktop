@@ -218,25 +218,58 @@ plain_path() { # plain_path <what> <path>: absolute, no whitespace, no systemd s
   [[ "$2" = /* ]] || die "$1 $2 is not absolute"
   case "$2" in *[[:space:]%\$]*) die "$1 $2 contains whitespace, % or \$ (systemd would expand it); refusing" ;; esac
 }
+# Every name the kernel follows to reach a shebang's interpreter must be in
+# a tree the sandbox has: a venv's `python` is a link, and one that lives
+# (or passes) under a /home path the sandbox hides resolves fine out here
+# and is ENOENT in there — the unit then dies with 203/EXEC (scratch VM
+# probe 2026-10-02). Walks the chain; under the release trees no directory
+# on the way may be a link either.
+sandbox_sees() { # sandbox_sees <absolute path of an executable>
+  local p="$1" n=0 d t
+  while :; do
+    case "$p" in *[[:space:]]*|*/../*|*/./*|*/..|*/.) return 1 ;; esac
+    case "$p" in
+      /usr/*|/bin/*|/sbin/*|/lib/*|/lib64/*|/etc/alternatives/*) ;;
+      "$RELEASES"/*|"$REPO"/*) d=$(dirname -- "$p"); [ "$(realpath -e -- "$d" 2>/dev/null)" = "$d" ] || return 1 ;;
+      *) return 1 ;;
+    esac
+    [ -L "$p" ] || break
+    t=$(readlink -- "$p"); [[ "$t" = /* ]] || t="$(dirname -- "$p")/$t"
+    p=$t; n=$((n + 1)); [ "$n" -lt 16 ] || return 1
+  done
+  [ -f "$p" ] && [ -x "$p" ]
+}
 read_tenant_exec() {
   declared=0
   if [ ! -e "$exec_decl" ] && [ ! -L "$exec_decl" ]; then rm -f "$voice_copy"; return 0; fi
   [ -L "$exec_decl" ] && die "$exec_decl is a symlink; refusing"
+  [ -f "$exec_decl" ] || die "$exec_decl is not a regular file"
   [ "$(stat -c '%U' "$exec_decl")" = root ] || die "$exec_decl must be owned by root"
   case "$(stat -c '%a' "$exec_decl")" in 600|400|640|644) ;; *) die "$exec_decl must not be group/other-writable (0600)";; esac
-  local interp vconf rp shebang sp
+  # A declaration says something or is refused: with a misspelt key the
+  # unit would migrate onto the standard command line, voice silently gone
+  # (scratch VM probe 2026-10-02). Only the two keys, each at most once.
+  if grep -qvE '^([[:space:]]*(#.*)?|(INTERPRETER|VOICE_CONFIG)=.+)$' "$exec_decl"; then
+    die "$exec_decl has a line that is not INTERPRETER=<path>, VOICE_CONFIG=<path> or a comment"
+  fi
+  local interp vconf rp shebang sp k
+  for k in INTERPRETER VOICE_CONFIG; do
+    [ "$(grep -cE "^$k=" "$exec_decl" || true)" -le 1 ] || die "$exec_decl sets $k more than once"
+  done
   interp=$(env_value "$exec_decl" INTERPRETER); vconf=$(env_value "$exec_decl" VOICE_CONFIG)
+  [ -n "$interp" ] || [ -n "$vconf" ] || die "$exec_decl declares neither INTERPRETER nor VOICE_CONFIG; remove it or fill it in"
   if [ -n "$interp" ]; then
     plain_path INTERPRETER "$interp"
     rp=$(realpath -e -- "$interp" 2>/dev/null) || die "INTERPRETER $interp does not exist"
     [ "$rp" = "$interp" ] || die "INTERPRETER $interp is not the real path (it is $rp)"
     case "$rp" in "$RELEASES"/*|"$REPO"/*) ;; *) die "INTERPRETER $interp is outside $RELEASES and $REPO: the sandbox cannot see it";; esac
+    [ -f "$interp" ] || die "INTERPRETER $interp is not a regular file"
     # a console script runs its shebang's python: that must be visible too
     shebang=$(head -c 512 -- "$interp" | head -n 1)
     if [[ "$shebang" == '#!'* ]]; then
-      sp=${shebang#\#!}; sp=${sp%%[[:space:]]*}
-      sp=$(realpath -e -- "$sp" 2>/dev/null) || die "INTERPRETER $interp: its shebang interpreter does not exist"
-      case "$sp" in /usr/*|"$RELEASES"/*|"$REPO"/*) ;; *) die "INTERPRETER $interp runs $sp, outside /usr, $RELEASES and $REPO: the sandbox cannot see it";; esac
+      sp=${shebang#\#!}; sp=${sp#"${sp%%[![:space:]]*}"}; sp=${sp%%[[:space:]]*}
+      [[ "$sp" = /* ]] || die "INTERPRETER $interp: its shebang names no absolute path"
+      sandbox_sees "$sp" || die "INTERPRETER $interp runs $sp, which is missing, or reached through a link or a path outside /usr, $RELEASES and $REPO: the sandbox cannot see it"
     fi
     runuser -u "$user" -- test -x "$interp" || die "$user cannot execute $interp: chmod -R go=rX $RELEASES"
     EXEC_BIN="$interp"
