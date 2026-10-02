@@ -4,6 +4,158 @@ Historical snapshots preserved verbatim when the living context is consolidated.
 Dated deployment claims and incident counts below are historical observations,
 not current operational state; use [active-context.md](active-context.md).
 
+## 2026-10-01 — Before Mario instruction-write denial repair
+
+Both clone pause files are absent. Mario imports `bbde719` with the same
+executable/socket and reads his revision-1 mailbox/procedures. His legacy
+headless wrapper still permits `instructions.store`: safe headless resume is
+REVISE pending a supported instruction-write denial. No Mario operator schedule
+exists; 124's schedule only reads his inbox. Other staff overlays retain f342c5c.
+
+## 2026-10-01 — Before Astra headless and scheduling review
+
+Both `124-cs` and `mario124-cs` are resumed. Mario imports the `bbde719` staff
+M1 overlay with the same executable/socket; his actual preview returns his
+revision-1 mailbox and procedures. The other two staff overlays retain f342c5c.
+
+## 2026-10-01 — Before Mario instruction-reader migration
+
+`124-cs` is resumed; Mario remains paused because his separate daemon still
+returns -32601 for instruction preview. See the [source migration plan](../../docs/execution-plans/2026-10-01-telephone-notes-source-is-phone-md.md).
+
+## 2026-10-01 — Before production phone-document migration
+
+Company-knowledge prompt/schema 8/6, bounded recovery and actual source/query
+semantics have independent approval. The reviewed private artifact has a
+270-character initial view and one detail, recovered without a new provider
+request. The scoped `c3f95bb` voice release preserves production USER_NOTES and
+excludes main's source retirement. The `c3f95bb-m1-53df502` composed import tree
+also preserves the prior path-confinement overlay and is live after the guarded
+targeted restart. Health and unsigned webhook probes pass. Authenticated source readback
+is supported at voice revision 6. The owner accepts the October 1 handset
+trial and independent final review approves its direct service answer. The
+manual pilot is completed; company-detail retrieval, broader cases and
+quantitative latency acceptance remain open in the active knowledge plan;
+credit refusals are settled at zero and old uncertainty remains quarantined.
+See the [active plan](../../docs/execution-plans/2026-09-28-voice-company-knowledge.md)
+for the accepted handset call and remaining acceptance criteria.
+
+Three Café124 units retain the `8d83193` release family; production runs the
+scoped `c3f95bb` voice trial with the prior hotfix overlay.
+
+## 2026-10-01 — Before owner handset acceptance
+
+Company-knowledge prompt/schema 8/6, bounded recovery and actual source/query
+semantics have independent approval. The reviewed private artifact has a
+270-character initial view and one detail, recovered without a new provider
+request. The scoped `c3f95bb` voice release preserves production USER_NOTES and
+excludes main's source retirement. The `c3f95bb-m1-53df502` composed import tree
+also preserves the prior path-confinement overlay and is live after the guarded
+targeted restart. Health and unsigned webhook probes pass. Authenticated source readback
+is supported at voice revision 6. Spoken behavior and latency remain open;
+credit refusals are settled at zero and old uncertainty remains quarantined.
+See the [active plan](../../docs/execution-plans/2026-09-28-voice-company-knowledge.md)
+for APPROVED trial readiness and the two supervised-call questions.
+
+
+## 2026-09-30 — V8 staged recovery before activation
+
+Company-knowledge prompt/schema 8/6 and bounded recovery have independent code
+approval (77 frozen semantic tests; 39 independent notes/recovery tests).
+Trial release `c3f95bb` combines base `64d7cc5` with its tracked converter patch,
+preserving production USER_NOTES and excluding main's document-source retirement.
+The private candidate revalidates the already-paid K3 output: 270-character
+initial view, one detail, no new provider request. Source/query review is pending;
+the v8 exact deployment delta is conditionally approved. Production remains on
+`8fb21d3`, company path off. Credit refusals are settled at zero; old uncertainty
+remains quarantined. Spoken behavior and latency remain open. See the
+[active plan](../../docs/execution-plans/2026-09-28-voice-company-knowledge.md).
+
+
+## 2026-09-30 — V7 conversion and guarded recovery
+
+Company-knowledge prompt/schema 7/5 has independent code approval: generic
+source restrictions, anchored JSON-fence parsing and mandatory detail gaps.
+A frozen suite passed 129 cases before the final gap change; eight final
+regressions and Ruff pass. Trial release `ef7bb06` combines base `64d7cc5` with
+its tracked converter patch and preserves production USER_NOTES. Main's separate
+document-source retirement is excluded. Production remains on `8fb21d3`, company
+path off. New K3 conversion is running; both prior paid selections failed source
+acceptance. Credit refusals are settled at zero; old uncertainty is quarantined.
+The protected activation bundle requires source approval and the exact artifact
+hash; fresh delta review is in progress. Spoken behavior and latency remain
+open. See the
+[active plan](../../docs/execution-plans/2026-09-28-voice-company-knowledge.md).
+
+## 2026-09-30 — V6 validation and source rejection
+
+Company-knowledge prompt/schema 6/4 has independent code approval and 104 passing
+frozen-candidate tests. Trial release `5ee4171` combines base `64d7cc5` with the
+tracked converter patch and preserves the production USER_NOTES reader; current
+main's separate company-document retirement is excluded. Production remains on
+`8fb21d3`, with the company path off. The new K3 result is validation-unavailable
+(USD0.085587); the prior
+USD0.107489 output failed source review and its cache is retained privately.
+Both credit refusals are settled at zero; the older uncertain request remains
+quarantined. The regenerated source and updated deployment delta need independent
+approval before the owner's production handset trial. Spoken behavior and
+latency remain open. See the
+[active plan](../../docs/execution-plans/2026-09-28-voice-company-knowledge.md).
+
+## 2026-09-30 — Source correction before v6 regeneration
+
+Company-knowledge prompt/schema 5/3 in `d284414` has code-milestone approval:
+contiguous qualified source spans, specific detail categories/Italian phrases,
+cache-key-pinned call views, exact-key uncertainty gates and private quarantine.
+The corrected release and targeted rollback have independent approval; production still uses
+`8fb21d3` and the company path is off. Real conversion completed and settled at
+USD0.107489, but independent source review is REVISE: instruction-bearing
+selections, unsupported timing aliases, a missing exclusion gap and missed Italian
+paraphrases need correction and another code/source review. The rejected cache is
+outside the active profile. Both prior credit refusals are settled at zero; the
+older uncertain request remains quarantined. The
+owner's existing production number is the authorized handset trial route after
+real-source and deployment-delta review. See the
+[active plan](../../docs/execution-plans/2026-09-28-voice-company-knowledge.md).
+
+## 2026-09-30 — Before the completed K3 source trial
+
+`8fb21d3` and the company path is off. Real conversion remains unavailable with
+no artifact. The latest actual retry received HTTP402 with
+`limit_source: openrouter_credits`; its maximum request cost exceeds provider
+admission credit. Both known refusals are settled at zero; the older uncertain
+request remains quarantined.
+
+## 2026-09-30 — Before the operator-requested conversion retry
+
+`8fb21d3` and the company path is off. Real conversion received HTTP 402 with no
+artifact, and the checked OpenRouter account has about USD0.21. Its known refusal
+was reconciled at zero; the older uncertain request remains quarantined.
+
+## 2026-09-30 — Voice knowledge before production trial resume
+
+The company-knowledge notes-only path is built locally on `main`: an offline
+`MODEL_MEMORY_EXTRACT` converter, versioned private artifact, failed-request
+cooldown, short initial context and distinct company-detail delegation. It is
+not deployed; the protected company switch defaults off. A real K3 conversion
+produced an exact-span artifact, but independent source review rejected its
+selected facts and Italian detail matching. The artifact was removed from the
+production profile. M3 detail mapping is reopened, and M4 has no spoken-answer
+or latency acceptance; see the [blocked plan](../../docs/execution-plans/2026-09-28-voice-company-knowledge.md).
+
+- Voice knowledge M3 detail mapping and M4 source selection need repair and
+  private semantic review. M4 also needs a separately routed isolated fixture
+  and supervised answer/latency evidence before any production activation.
+
+## 2026-09-28 — Isolated voice listener before route recheck
+
+The isolated service now starts from the merged `main` checkout. Its runtime
+and the existing tunnel remain active with infinite duration. Local and public
+health checks pass; an unsigned public Vonage POST receives 401. The ledger's
+SQLite integrity check passes with 41 closed calls, 41 carrier receipts and
+the retained USD41 in voice reservations. The service has not received a new
+human-listened call since this code-path switch.
+
 
 
 

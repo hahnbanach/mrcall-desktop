@@ -1,8 +1,10 @@
 """Operator settings on the existing owner-authenticated RPC transport."""
 
 import asyncio
+import os
 
 from zylch.services.voice import agent_config
+from zylch.services.voice.business_binding import ExpectedBusiness, verify_business
 
 
 async def config_get(params, notify):
@@ -12,6 +14,21 @@ async def config_get(params, notify):
 
 async def config_update(params, notify):
     """voice.config.update(owner_uid, space_id, expected_revision, config) -> settings."""
+    proposed = agent_config.parse_config(params.get("config"))
+    if proposed.policy == "production" and proposed.enabled:
+        expected = ExpectedBusiness(
+            os.environ.get("VOICE_PRODUCTION_BUSINESS_ID", ""),
+            os.environ.get("VOICE_PRODUCTION_OWNER_UID", ""),
+            os.environ.get("VOICE_PRODUCTION_NUMBER", ""),
+        )
+        if not all((expected.business_id, expected.owner_uid, expected.called_number)):
+            raise agent_config.VoiceError(-32061, "Production voice binding is unavailable")
+        try:
+            await verify_business(expected)
+        except ValueError:
+            raise agent_config.VoiceError(
+                -32061, "Production voice binding is unavailable"
+            ) from None
     return await asyncio.to_thread(agent_config.update_config, **params)
 
 

@@ -19,6 +19,15 @@ def report(path):
                 "SELECT seq,utc,elapsed_ms,kind,data FROM events ORDER BY seq"
             )
         ]
+        has_transcript = db.execute(
+            "SELECT 1 FROM sqlite_master WHERE type='table' AND name='transcript_deltas'"
+        ).fetchone() is not None
+        transcript = (
+            db.execute(
+                "SELECT start_ms,end_ms,role,delta FROM transcript_deltas ORDER BY seq"
+            ).fetchall()
+            if has_transcript else []
+        )
     print("PRIVATE CALL DIAGNOSTIC — handset playback requires caller confirmation")
     if not rows:
         print("Empty trace; incomplete evidence")
@@ -28,16 +37,24 @@ def report(path):
     print("Events:", len(rows), "Trace closed:", rows[-1][3] == "trace_closed")
     print("\nTranscript (delivery order; provider timeline in milliseconds):")
     role, text, start, end = None, "", None, None
-    for _, _, _, kind, data in rows:
-        if kind not in ("session.input_transcript.delta", "session.output_transcript.delta"):
-            continue
-        current = "caller" if kind == "session.input_transcript.delta" else "voice"
+    parts = (
+        [(start_ms, end_ms, current, delta)
+         for start_ms, end_ms, current, delta in transcript]
+        if has_transcript else [
+            (data.get("start_ms"), data.get("end_ms"),
+             "caller" if kind == "session.input_transcript.delta" else "voice",
+             data.get("delta") or "")
+            for _, _, _, kind, data in rows
+            if kind in ("session.input_transcript.delta", "session.output_transcript.delta")
+        ]
+    )
+    for part_start, part_end, current, delta in parts:
         if role != current:
             if role:
                 print(f"[{start}–{end}] {role}: {text}")
-            role, text, start = current, "", data.get("start_ms")
-        text += data.get("delta") or ""
-        end = data.get("end_ms")
+            role, text, start = current, "", part_start
+        text += delta
+        end = part_end
     if role:
         print(f"[{start}–{end}] {role}: {text}")
     print("\nBackend and delivery evidence (local milliseconds since attach):")

@@ -6,7 +6,9 @@ the boundary it describes is sealed. The executable source of truth is
 `tests/memory/test_mnemonic_inventory.py`,
 `tests/memory/test_mnemonic_kernel_inventory.py` and
 `tests/memory/test_mnemonic_write_boundary.py`, which
-`.github/workflows/memory-boundary.yml` runs on every change to `engine/`.
+`.github/workflows/memory-boundary.yml` runs on every change to `engine/`
+(`mnemonic-journey.yml` runs the kernel audit again, against the kernel commit
+it pins).
 Every writer edge in `zylch/` and `scripts/` is either the harness's own
 mechanism (a row with the `milestone`, 1–7, that installed it) or a reviewed
 mechanical primitive (a row with `exempt`: the primitive and the precondition
@@ -165,6 +167,20 @@ raw-RPC list, which the kernel's own gate 17 checks against the verbs it
 expects. The normalized chat-effect inventory covers memory store/force,
 delete/reset, agent memory run/process, jobs resume, update and hard reset;
 each entry is tied to its current slash-command route and engine handler.
+
+The cron template's deny list is read in either of its two forms
+(`_cron_deny_section`, since milestone 9): up to kernel `258c927` the denials
+were the argument of a literal `--disallowed-tools`; since kernel `74ea403`
+they are a bash array, `DENIED=( … )`, that `cs.operator_recovery` hands to
+Claude under the same flag. The array section ends at the line that is only
+`)` — the first `)` sits inside the first entry — and the flag form is the
+text after `--disallowed-tools`. A template carrying neither form, or both, is
+refused: the audit must know which list it is counting. The deny entries and
+every count in `legacy_writer_inventory.json` are unchanged between the two
+forms, and the audit passes against both commits. It is not re-pinned to
+`258c927`: release evidence must audit the kernel the operators run, so the
+journey workflow pins the kernel by commit (`ba79cc1` today) and a kernel
+change reaches this audit only through a reviewed bump of that one line.
 
 The inventory continues to cover kernel permission edges as well as engine
 memory writers.

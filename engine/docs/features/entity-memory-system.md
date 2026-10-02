@@ -68,6 +68,73 @@ The old `store_blob` and `update_blob` methods remain defined in
 `blob_storage.py` but have no production callers. Join, migrations and repair
 scripts still have their separate direct paths.
 
+### The installed-client journey (milestone 9)
+
+The write path above is exercised end to end by the *installed* kernel: the
+real `cs` entry point of a `cs-kernel` installed in its own interpreter, the
+real `rpc.chat` / `EngineClient` over a real WebSocket served by the engine's
+own connection handler (`server_ws._handle_connection`), `dispatch_raw`, the
+real adapters, harness, journal and stores, two accounts on one company key
+with real profile and company SQLite files, the real `LLMClient` and
+reservation ledger. Only the provider transport and the bearer token are
+fixture-controlled. Every case asserts the committed content, the retained
+versions, the namespaces, the operation row's state and `departure`, read
+visibility from each account (the tools' scoped read-back,
+`search_local_memory`, `get_facts_by_category`, hybrid search) and that no
+unrelated blob, version or operation row moved. What it does **not** prove:
+Firebase verification is not in the loop — the handler asserts a fixture
+bearer and sets the claims itself, so nothing in it is a claim about the
+production `server_ws` handshake — nor anything about a deployed host.
+
+The seventeen cases: (1) `cs memory` dispatches nothing; (2) `cs ask` refuses
+every memory-writing verb and "remember that" with zero rows, zero
+reservations and no agent, while a search still answers; (3) `cs chat
+--allow` commits the Acme forwarding correction as one `operator_delegated`
+UPDATE with both numbers retained and the preparation ledger untouched;
+(4) global hours commit a company FACT the second account reads; (5) an
+account rule commits a STYLE the second account cannot see; (6) a task-solve
+correction through `cs rpc tasks.solve` with the typed instruction as
+observation; (7) a changed final proposal recorded as `departure.changed_action`
+on both sides; (8) a tool outside `--allow` is declined, nothing written;
+(9) a dropped socket during a held role decision revokes the grant and commits
+nothing; (10) the second account finds the entity and the FACT, not the STYLE;
+(11) a correction under a paused preparation commits and the pause survives;
+(12) an automatic event outside an admitted item is refused before any
+reservation; (13) a review-restricted legacy FACT is absent from reads while a
+valid one stays; (14) one mail source through `preparation.resume` and then
+the `memory_process` job: one parent, the same children, one checkpoint;
+(15) a crash between two children in a second process, the resume deciding
+only the non-terminal child with one payment each; (16) a join refused with
+`blocking`, settled by a dismiss and a drain, then cut over with the fence
+completed; (17) a consolidation MERGE whose deferred references land on the
+committing profile's ledger only.
+
+Files: `tests/rpc/kernel_journey_env.py` (the server, the kernel bootstrap,
+the profiles, the transports, the unrelated-memory digest),
+`test_mnemonic_kernel_journey.py` / `_b.py` (cases 1–10) and
+`test_mnemonic_engine_journey.py` / `_b.py` (cases 11–17). Locally, from
+`engine/`, with a kernel installed in any interpreter:
+
+```bash
+CS_PROJECT_KERNEL_PYTHON=/path/to/kernel-venv/bin/python \
+  python -m pytest tests/rpc/test_mnemonic_kernel_journey.py tests/rpc/test_mnemonic_kernel_journey_b.py \
+    tests/rpc/test_mnemonic_engine_journey.py tests/rpc/test_mnemonic_engine_journey_b.py
+```
+
+Without the variable the four files skip; with `MNEMONIC_JOURNEY_REQUIRED=1`
+a missing kernel is an error. CI runs them in
+`.github/workflows/mnemonic-journey.yml` on every push or pull request that
+touches `engine/`: it checks out `malemi/cs-kernel` at the commit pinned in
+the file (`KERNEL_REF`, `ba79cc1` today), installs it in its own venv, links
+it as the sibling `../cs-kernel` the audit resolves, sets both variables and
+also runs `test_project_kernel_journey.py`, `test_memory_readonly.py` and
+`test_mnemonic_kernel_inventory.py`; the pytest log is uploaded on failure. A
+kernel change turns this evidence red or green only through a reviewed bump
+of that one line. The priced corpus of the same milestone is the opt-in
+`tests/memory/test_mnemonic_corpus_live.py`, described under
+[bounded preparation](bounded-preparation.md#the-priced-corpus-inside-one-explicit-run)
+and [spending protection](daily-llm-budget.md#the-corpus-runners-second-bound).
+
 ## Key Concepts
 
 ### Hybrid Search

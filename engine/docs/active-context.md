@@ -33,12 +33,35 @@ M4 within the operator-adjusted scope. The hangup trace proves cancellation of
 the in-flight lookup; deterministic tests cover a completed delegated result
 racing with closure. The experiment sequence and private trace references are
 in the [completed plan](../../docs/execution-plans/2026-09-23-gpt-live-engine-integration.md).
-The isolated service now starts from the merged `main` checkout. Its runtime
-and the existing tunnel remain active with infinite duration. Local and public
-health checks pass; an unsigned public Vonage POST receives 401. The ledger's
-SQLite integrity check passes with 41 closed calls, 41 carrier receipts and
-the retained USD41 in voice reservations. The service has not received a new
-human-listened call since this code-path switch.
+The isolated ledger retains 41 closed historical smoke calls and 41 carrier
+receipts, but its service is currently absent. Its saved provider endpoint now
+reaches the production listener, so it is not an isolated route for new tests.
+The production listener uses the scoped company-knowledge trial; the owner accepts the October 1 handset trial.
+
+Company-knowledge conversion reads stored `operator-instructions/phone.md`
+revision 1, SHA256 `cf61cd70…`, through the M1 operator-instructions reader.
+Production imports `mrcall-voice-cafe124-phone-md-5ebe3fa`: origin `706fe2a`
+plus the reviewed voice/confinement patch. Prompt/schema remain 8/6 and voice
+configuration revision 6. The reviewed artifact has a 270-character initial
+view and one complete detail with the six prior approved aliases, rebased to
+current source offsets after one K3 conversion. Source/query review passes;
+active readback, authenticated binding, health and unsigned callbacks pass.
+Production instruction preview matches its unchanged revision-1 mailbox and
+procedures documents. All six stored documents remain unchanged at revision 1.
+Both clone pause files are absent. Mario imports `bbde719` with the same
+executable/socket and reads his revision-1 mailbox/procedures. His
+project-local permissions deny instruction writes, including `instructions.store`,
+in twelve supported command spellings. Astra's P1 re-review is APPROVED;
+read-only preview and the engine drafting reader remain available. No Mario operator schedule
+exists; 124's schedule only reads his inbox. Other staff overlays retain f342c5c.
+See the [source migration plan](../../docs/execution-plans/2026-10-01-telephone-notes-source-is-phone-md.md).
+
+The owner accepted the October 1 handset trial; independent review approved its
+direct service answer against the prior USER_NOTES artifact. The manual pilot
+is completed. The [knowledge plan](../../docs/execution-plans/2026-09-28-voice-company-knowledge.md)
+retains spoken detail, broader-case and quantitative-latency acceptance gates;
+no new handset call certified this source migration. Credit refusals are settled
+at zero and old uncertainty remains quarantined.
 
 Engine chat now supports negotiated read-only policy version 1. The policy is
 enforced before slash/semantic/task routing and again at assistant and task
@@ -129,6 +152,65 @@ statement built from strings ([what it cannot see](features/mnemonic-writer-inve
 `memory_operations.approval` column is removed by a table rebuild. Merged into
 `main` (`71bbc21`); **not deployed**. A store it migrates cannot be opened by a milestone 5–7 build.
 
+**Milestone 9 is integrated on `main` through `19639d2`; deployment is unverified.**
+The kernel template audit reads the cron deny list in either of
+its two forms and refuses neither/both, so it passes against `cs-kernel`
+`258c927` and against current kernel `main` (`ba79cc1`) with every inventory
+count unchanged; the installed-client journey — the real `cs` entry point of an
+installed kernel against the engine's own WebSocket handler, seventeen cases
+([entity memory](features/entity-memory-system.md#the-installed-client-journey-milestone-9)),
+Firebase verification not in the loop; the journey CI,
+`.github/workflows/mnemonic-journey.yml`, which clones the kernel at the commit
+pinned in the file, sets `CS_PROJECT_KERNEL_PYTHON` and
+`MNEMONIC_JOURNEY_REQUIRED=1` so a missing kernel fails rather than skips, and
+runs the journey, `test_project_kernel_journey.py`, `test_memory_readonly.py`
+and the kernel audit; and the priced-corpus runner, dry — ten incidents on one
+disposable profile, six automatic ones as admitted items of one explicit
+preparation run, four interactive ones through a real turn, a durable intent
+before every dispatch, a cumulative cap over settled rows, unsettled holds and
+open intents, the canary, budget, unpriced and truncation checks, a record with
+the key redacted ([bounded preparation](features/bounded-preparation.md#the-priced-corpus-inside-one-explicit-run),
+[spending protection](features/daily-llm-budget.md#the-corpus-runners-second-bound)).
+Entry points, from `engine/`: `tests/rpc/test_mnemonic_kernel_journey.py`,
+`_b.py`, `tests/rpc/test_mnemonic_engine_journey.py`, `_b.py` (skip without
+`CS_PROJECT_KERNEL_PYTHON`); `tests/memory/test_mnemonic_kernel_inventory.py`
+(kernel checkout beside the repository); `tests/memory/test_mnemonic_corpus_live.py`
+(dry by default; `MNEMONIC_CORPUS_EXECUTE=1` plus `ANTHROPIC_API_KEY` pays).
+The paid corpus ran once on 2026-10-01 (record
+`docs/evaluations/2026-10-01-mnemonic-corpus*`, commit `e5ab75e`): model
+`claude-haiku-4-5`, the real fastembed embedder, ten cases on one disposable
+profile, 4 pass, 5 noncritical, 1 `critical_failure`; the four D6 checks
+(canary `refused`, budget and unpriced refusals before the wire, truncation
+`review_needed`); USD 0.0766 settled of the USD 10 cap, the sidecar fixture
+turn included; the profile deleted. **AC 5 is not met**:
+`customer_price_correction` CREATEd a new Boreale COMPANY blob and left the
+seeded required target untouched, with the seeded legacy candidate shown first
+to the role; model behaviour on the arm, correctly flagged by the harness, not
+a seeding defect. The CTO's decision (2026-10-01): the `claude-haiku-4-5`
+arm is rejected as a product choice, Haiku is not a default or an arm
+anywhere; AC 5 is re-measured in milestone 10 on the model a
+requirements-based resolver chooses for the mnemonic role; milestone 9's
+model-agnostic code merges into `main` as is, the Haiku run kept in the record
+as the measure of a rejected arm. The rollout's step-1 exit waits for that
+re-measurement. The run found that a fresh install resolves the Anthropic
+SDK to 1.x, whose `messages.create()` refuses sampling keywords; the direct
+transport drops them (`88e2370`, `zylch/llm/sdk_request.py`) and both
+dependency files now pin `anthropic<2`. Known issues from the run: the record
+holds no per-round proposal, validator result or latency (the journal prunes
+the payload at terminal states and the runner reads only the journal); two
+automatic cases (`planned_not_completed`, `contradictory_legacy_fact_rule`)
+stay `pending` with no child, `attempts` 0 and no reason in the journal when
+the extraction worker raises on an answer that is neither bare `SKIP` nor an
+`#IDENTIFIERS` block, so the same answer is re-paid on every run; the role
+translated the Italian corrections into English (seven `must_preserve`
+misses). The journey workflow is green on every run of the pushed branch
+(runs 2 to 8, the pinned kernel cloned with the workflow's own token).
+Rollout remains pending. The previously referenced hb plan
+`docs/execution-plans/2026-09-30-mnemonic-rollout.md` is absent from this workspace;
+a reviewed rollout plan and migration rehearsal on a store copy are required
+before any live step. The latest recorded hosted releases use pre-milestone-5
+code; this source reconciliation does not recheck their runtime.
+
 Support's engine exposes approval-gated `initiate_call` through the dashboard's
 Firebase atom API, with an explicit calling assistant ID. A live request on
 2026-09-17 returned HTTP 200 / provider `started`; the matching notification at
@@ -139,7 +221,8 @@ automatic diagnostic scripting is not configured. The restoration is committed a
 [outbound contract](features/outbound-calls.md) and
 [verification/rollback](../../docs/execution-plans/2026-09-17-mrcall-outbound.md).
 
-Four Café124 units run isolated release `8d83193`; the billing server runs
+Three Café124 units retain the `8d83193` release family; production runs the
+M1-based `phone-md-5ebe3fa` voice release with confinement protections. The billing server runs
 `prod-99091c35`. Production selects personal OpenRouter/custom K3 for its base
 model, five worker roles and reply classification. The other three profiles
 retain their previous billing/model settings. Production's daily cap is USD20;
@@ -186,14 +269,14 @@ API budgets; see [control boundaries](../../docs/operator-setup.md#ai-execution-
   remains open. No backlog resumption is part of model configuration.
 - Incident checkpoint counts and project inventories in dated records are
   historical; re-read current state before a cleanup or backlog operation.
+- Voice knowledge source/query review is approved and the guarded trial is
+  active after approved direct-service handset acceptance. Spoken company detail,
+  broader adverse/repeated cases and quantitative latency remain open.
 - Desktop v0.1.49 installation and personal-key entry on the CTO's Mac remain
   unverified. Saved-prompt format repairs have no new business-quality result.
 - The Desktop app does not read `memory.status`'s `joining` or
   `memory.join`'s `blocking`: a refused join shows its reason only, and the
   settling commands exist on the engine CLI alone (M8 added no RPC for them).
-- `tests/memory/test_mnemonic_kernel_inventory.py` passes against `cs-kernel`
-  `258c927` and fails against its current `main`: the kernel's cron template
-  no longer carries the `--disallowed-tools` block the audit reads.
 - Calendar token integration, phone memory parity, RPC error humanization and
   WhatsApp multi-profile isolation remain separate [backlog](harness-backlog.md)
   work. Product chat and comprehensive security review remain deferred.
@@ -204,4 +287,7 @@ API budgets; see [control boundaries](../../docs/operator-setup.md#ai-execution-
    uncertain requests. Keep automatic processing and preparation paused.
 2. Verify the Mac application through its GUI; start a bounded batch only when
    requested and review its role-specific outputs.
-3. Continue other workstreams under their existing plans.
+3. Re-measure AC 5 in milestone 10 on the resolver-chosen model; deploy
+   only through a reviewed rollout plan.
+4. Continue the knowledge plan from untested detail and broader behavior/latency gates.
+5. Continue other workstreams under their existing plans.

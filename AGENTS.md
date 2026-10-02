@@ -15,10 +15,7 @@ LLM billing modes, the naming rename in flight). Engine detail is
 [`docs/active-context.md`](docs/active-context.md).
 <!-- doc-scope:end -->
 
-**MrCall Desktop** — local AI assistant for business communication. This
-is a **monorepo**: a Python sidecar (the engine) and an Electron + React
-frontend (the app), shipped together as a single desktop application
-for macOS and Windows.
+**MrCall Desktop** — local AI assistant for business communication. This is a **monorepo**: a Python sidecar (the engine) and an Electron + React frontend (the app), shipped together as a single desktop application for macOS and Windows.
 
 ## Operator versus engine AI
 

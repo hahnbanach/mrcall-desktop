@@ -1,0 +1,89 @@
+name: Mnemonic kernel journey
+
+# The installed-client journey of company memory (mnemonic harness,
+# milestone 9): the kernel CLI, installed from a pinned cs-kernel commit,
+# against this engine over a real WebSocket. The kernel is pinned by commit,
+# not by branch, so a kernel change turns this evidence red or green only
+# through a reviewed bump of KERNEL_REF below. A missing kernel is a failure
+# here, never a skip (MNEMONIC_JOURNEY_REQUIRED=1). A red run is analysed,
+# never re-run: the pytest output is uploaded as an artifact on failure.
+
+on:
+  push:
+    paths:
+      - 'engine/**'
+      - '.github/workflows/mnemonic-journey.yml'
+  pull_request:
+    paths:
+      - 'engine/**'
+      - '.github/workflows/mnemonic-journey.yml'
+
+env:
+  KERNEL_REPO: malemi/cs-kernel
+  KERNEL_REF: ba79cc13f55b5f19b43a98ebdeb7fe1ca6a4704a
+
+jobs:
+  journey:
+    name: Kernel-facing tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check out the pinned kernel
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ env.KERNEL_REPO }}
+          ref: ${{ env.KERNEL_REF }}
+          path: cs-kernel
+          # A private kernel needs a read token in CS_KERNEL_TOKEN; a public
+          # one clones with the workflow's own token.
+          token: ${{ secrets.CS_KERNEL_TOKEN || github.token }}
+
+      - name: Place the kernel where the audit looks for it
+        # The audit and the read-only test resolve the kernel as a sibling
+        # checkout of this repository (`<repo>/../cs-kernel`); a checkout
+        # action cannot write outside the workspace, so the sibling is a link.
+        run: ln -sfn "$GITHUB_WORKSPACE/cs-kernel" "$(dirname "$GITHUB_WORKSPACE")/cs-kernel"
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install the engine
+        working-directory: engine
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e . pytest pytest-asyncio
+
+      - name: Install the kernel in its own interpreter
+        run: |
+          python -m venv "$RUNNER_TEMP/kernel-venv"
+          "$RUNNER_TEMP/kernel-venv/bin/python" -m pip install --upgrade pip
+          "$RUNNER_TEMP/kernel-venv/bin/python" -m pip install -e ./cs-kernel
+          "$RUNNER_TEMP/kernel-venv/bin/python" -c "import cs.cli"
+
+      - name: Journey, read-only policy, audit
+        working-directory: engine
+        env:
+          PYTHONPATH: ${{ github.workspace }}/engine
+          CS_PROJECT_KERNEL_PYTHON: ${{ runner.temp }}/kernel-venv/bin/python
+          MNEMONIC_JOURNEY_REQUIRED: '1'
+        run: |
+          set -o pipefail
+          python -m pytest -q -p no:cacheprovider \
+            tests/rpc/test_mnemonic_kernel_journey.py \
+            tests/rpc/test_mnemonic_kernel_journey_b.py \
+            tests/rpc/test_mnemonic_engine_journey.py \
+            tests/rpc/test_mnemonic_engine_journey_b.py \
+            tests/rpc/test_project_kernel_journey.py \
+            tests/rpc/test_memory_readonly.py \
+            tests/memory/test_mnemonic_kernel_inventory.py \
+            2>&1 | tee "$RUNNER_TEMP/pytest-journey.log"
+
+      - name: Upload the pytest output
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pytest-journey-log
+          path: ${{ runner.temp }}/pytest-journey.log
+          if-no-files-found: ignore

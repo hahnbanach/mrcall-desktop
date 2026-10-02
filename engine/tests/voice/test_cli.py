@@ -1,6 +1,7 @@
 """Exercise the user-facing command without touching real profiles or providers."""
 
 import importlib
+import logging
 
 import pytest
 from click.testing import CliRunner
@@ -27,6 +28,28 @@ def test_requires_explicit_profile(cli):
     result = CliRunner().invoke(cli, ["voice-smoke"])
     assert result.exit_code == 2
     assert "auto-selection is refused" in result.output
+
+
+def test_cli_suppresses_websocket_rpc_frames(monkeypatch):
+    main = importlib.import_module("zylch.cli.main")
+    root = logging.getLogger()
+    original_handlers = tuple(root.handlers)
+    previous_root_level = root.level
+    protocol = logging.getLogger("websockets.server")
+    previous_level = logging.getLogger("websockets").level
+    try:
+        logging.getLogger("websockets").setLevel(logging.DEBUG)
+        monkeypatch.setenv("LOG_LEVEL", "DEBUG")
+        main._configure_logging()
+        assert logging.getLogger("websockets").level == logging.ERROR
+        assert not protocol.isEnabledFor(logging.DEBUG)
+    finally:
+        for handler in tuple(root.handlers):
+            if handler not in original_handlers:
+                root.removeHandler(handler)
+                handler.close()
+        logging.getLogger("websockets").setLevel(previous_level)
+        root.setLevel(previous_root_level)
 
 
 def test_unmarked_profile_cannot_start_server(cli, tmp_path, monkeypatch):

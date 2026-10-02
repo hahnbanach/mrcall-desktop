@@ -4,6 +4,8 @@ import asyncio
 import importlib.util
 import socket
 from pathlib import Path
+from types import SimpleNamespace
+from unittest.mock import AsyncMock
 
 import httpx
 import pytest
@@ -16,6 +18,31 @@ from tests.voice.helpers import config_for, incoming
 from tests.voice.m2_fixture import NUMBER
 from zylch.rpc import server_ws
 from zylch.services.voice import listener, engine_runtime
+
+
+def test_company_notes_refresh_requires_remote_business_check(monkeypatch, tmp_path):
+    snapshot = object()
+    config = SimpleNamespace(
+        test_number="+390250552776", profile=tmp_path, company_knowledge_enabled=True
+    )
+    runtime = SimpleNamespace(_prepare=AsyncMock(side_effect=ValueError("wrong business")))
+    convert = AsyncMock()
+    monkeypatch.setattr(listener, "snapshot_for_call", lambda _: snapshot)
+    monkeypatch.setattr(listener, "prepare_company_notes", convert)
+
+    async def refused():
+        with pytest.raises(ValueError, match="wrong business"):
+            await listener.refresh_company_notes_once(runtime, config)
+
+    asyncio.run(refused())
+    convert.assert_not_awaited()
+    runtime._prepare = AsyncMock(return_value=None)
+    asyncio.run(listener.refresh_company_notes_once(runtime, config))
+    convert.assert_awaited_once_with(tmp_path, snapshot)
+    config.company_knowledge_enabled = False
+    convert.reset_mock()
+    assert asyncio.run(listener.refresh_company_notes_once(runtime, config)) is None
+    convert.assert_not_awaited()
 
 
 def test_listener_shares_daemon_lifecycle(fixture_db, tmp_path, monkeypatch):

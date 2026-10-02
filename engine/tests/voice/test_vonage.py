@@ -41,7 +41,7 @@ def signed(body, **overrides):
 
 
 @pytest.mark.parametrize(
-    "case", ["unsigned", "tampered", "stale", "future", "account", "app", "hash"]
+    "case", ["unsigned", "tampered", "stale", "future", "account", "app", "missing_app", "hash"]
 )
 def test_rejects_untrusted_callbacks(tmp_path, case, caplog):
     async def scenario():
@@ -56,6 +56,14 @@ def test_rejects_untrusted_callbacks(tmp_path, case, caplog):
             "hash": {"payload_hash": "wrong"},
         }.get(case, {})
         headers = {} if case == "unsigned" else signed(body, **changes)
+        if case == "missing_app":
+            claims = {
+                "iat": int(time.time()), "iss": "Vonage", "api_key": CARRIER["vonage_api_key"],
+                "payload_hash": hashlib.sha256(body).hexdigest(),
+            }
+            headers = {"Authorization": "Bearer " + jwt.encode(
+                claims, CARRIER["vonage_signature_secret"], algorithm="HS256"
+            )}
         if case == "tampered":
             body += b" "
         async with TestClient(TestServer(create_app(runtime, lambda *args: {}))) as client:

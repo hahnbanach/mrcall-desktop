@@ -1,5 +1,5 @@
 ---
-status: approved
+status: active
 ---
 
 # Toward a sandbox: execution plan

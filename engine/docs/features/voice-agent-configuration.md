@@ -2,8 +2,10 @@
 
 <!-- doc-scope:start -->
 Scope: authenticated operator configuration, immutable snapshots and read-only
-selected-fact retrieval from M2, the opt-in M3 engine listener and M4 private
-diagnostic capture, the optional clock capability and autonomous diagnostic caller.
+selected-fact retrieval from M2, supervised production on-demand review,
+the opt-in M3 engine listener, M4 private diagnostics and the production
+transcript record,
+the optional clock capability and autonomous diagnostic caller.
 The isolated listener reuses M1's durable admission and
 closure ledger. The milestone plan owns live acceptance evidence and open criteria.
 <!-- doc-scope:end -->
@@ -78,10 +80,11 @@ follow-ups normalize through existing memory-worker rules and reuse
 including unselected customers. Unknown, withheld, ambiguous and unselected
 numbers receive no customer facts.
 
-Retrieval applies existing company scope and selected customer/sentence IDs
-before reading text. Owner rule namespaces cannot be selected. Only approved
-sentence columns enter model input: no complete blob, owner prompt, private note
-or company capability. Fingerprints of text and creation time reject changed or
+In `selected_facts_only` mode, retrieval applies existing company scope and
+selected customer/sentence IDs before reading text. Owner rule namespaces
+cannot be selected. Only approved sentence columns enter model input: no
+complete blob, owner prompt, private note or company capability. Fingerprints
+of text and creation time reject changed or
 replaced sentences; missing/reassigned IDs yield no fact. Keep the fixture frozen
 during demonstrations. A configuration update re-approves the selected sentences'
 then-current content.
@@ -99,6 +102,38 @@ Blocking reads/ranking run in a worker with a three-second default timeout.
 Cancellation/timeout suppress results; a running read may finish but cannot write
 or deliver a late answer. Binding is rechecked before disclosure. This is a
 controlled fixture permission, not a general caller authorization system.
+
+### Production on-demand review (supervised pilot)
+
+`caller_context_policy: "on_demand_review"` is available only in production
+with one configured customer, an approved display name, `caller_memory`, and no
+pinned sentences. The initial lookup resolves recognition and name only. A
+caller utterance and GPT-Live client delegation are required before a history
+read. The server uses the current caller transcript and the carrier-bound
+number; the model cannot supply a different phone, blob or owner.
+
+The read is limited to that uniquely matched contact's company-scoped sentence
+rows. It refuses more than 24 rows or 12,000 bytes rather than returning a
+partial history. Explicit internal/confidential markers and common credential
+formats are excluded;
+email addresses and international phone numbers are replaced before model
+input. Obvious requests for credentials or another person's private data are
+declined before reading memory. GPT-Live receives remaining sentences as
+untrusted historical candidates and decides what relevant, appropriate part
+answers the caller. A broad question such as “what do you know about me?” may
+return several candidates; it does not require a verbatim inventory. This mode
+does not promise that model judgment can reliably classify every mixed note.
+
+The production diagnostic event table records recognition, candidate counts,
+byte lengths and event timing in this mode, without source text, caller
+questions or appended content. A separate private `transcript_deltas` table
+retains exact provider transcription for both sides of the call. It is a call
+record, not a memory candidate or debug event; its text is not scrubbed, and
+the file is mode 0600 under a mode 0700 directory. Selected-fact mode retains
+its original pin behavior. The production binding and config revision are
+rechecked before client commentary leaves the engine; an invalidated call
+suppresses further results. Supervised handset listening is still required to
+assess what GPT-Live actually said.
 
 ## Limits and verification
 
@@ -266,9 +301,38 @@ in the existing milestone plan, not in a passing-test claim here.
 
 Read a trace without activating any profile:
 `python engine/scripts/voice_diagnostic_report.py /private/path/call-uuid.db`.
-Its output includes private dialogue: keep reports outside Git. The renderer
-preserves complete transcript text; the underlying SQLite events retain every
-original fragment and timing for overlap/repetition analysis.
+Its output includes private dialogue: keep reports outside Git. For new calls,
+the renderer reads exact fragments and provider timing from the private
+`transcript_deltas` table. Older isolated traces can still use transcript text
+in diagnostic events. The production capture is prepared before Live accepts a
+call, and Live is instructed to wait for sideband attachment before greeting.
+A failed transcript
+write stops the call and marks capture incomplete. A call with no provider text
+is marked `no_provider_text`, not transcribed. This records provider transcript
+events, not a verified verbatim audio recording. The current Cloudflare route
+does not create a StarChat conversation. Call-transcript upload to StarChat was
+cancelled.
+
+### Local production call sessions
+
+The production profile has a separate `sessions.db` file, mode 0600, with a
+`sessions` table. Its `id` is the voice ledger session ID; `owner` is the
+Firebase UID, `business_id` is the exact approved business, and `data` is
+validated JSON. `data.conversation_transcription` contains ordered
+`{role, content}` entries, using `user` and `assistant`. Adjacent metadata
+records the called number, a nullable validated caller number, observed
+duration, capture status and the accepted possible pre-attachment gap.
+
+Each provider delta is first committed to the existing private per-call
+`transcript_deltas` table with WAL/FULL sync, then replayed into `sessions`
+with a durable SQLite commit. Ordinary diagnostic event metadata retains
+WAL/NORMAL. The row starts before provider accept and is finalized after closure.
+On daemon startup, the archive replays private sources against funded ledger
+IDs. Earlier calls whose trace has no delta table receive `legacy_no_text`
+with an empty transcript; no text is reconstructed from diagnostic counts.
+`recording`, `incomplete`, `no_provider_text` and `deltas_observed` remain
+distinct. Replaying a call updates its row by ID, so restart does not duplicate
+messages or rows. The raw diagnostic files and accounting ledger remain intact.
 
 
 ### Autonomous diagnostic caller

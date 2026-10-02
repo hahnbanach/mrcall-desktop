@@ -51,6 +51,105 @@ def test_defaults_persistence_snapshot_and_additive_schema(fixture_db):
         config.snapshot_for_call("+390200000099")
 
 
+def test_production_policy_requires_exact_binding_and_no_test_limits(fixture_db, monkeypatch):
+    monkeypatch.setenv("VOICE_PRODUCTION_OWNER_UID", OWNER)
+    monkeypatch.setenv("VOICE_PRODUCTION_BUSINESS_ID", "business-1")
+    monkeypatch.setenv("VOICE_PRODUCTION_NUMBER", NUMBER)
+    base = configuration() | {"policy": "production", "business_id": "business-1", "limits": None}
+    saved = save(base)
+    assert saved["config"]["limits"] is None
+    assert config.snapshot_for_call(NUMBER).config.policy == "production"
+    with pytest.raises(config.VoiceError):
+        save(base | {"business_id": "other"})
+    with pytest.raises(config.VoiceError):
+        save(base | {"limits": {"max_calls": 2}})
+    with pytest.raises(config.VoiceError):
+        save(base | {"customers": []})
+
+
+def test_production_allows_approved_name_without_history(fixture_db, monkeypatch):
+    monkeypatch.setenv("VOICE_PRODUCTION_OWNER_UID", OWNER)
+    monkeypatch.setenv("VOICE_PRODUCTION_BUSINESS_ID", "business-1")
+    monkeypatch.setenv("VOICE_PRODUCTION_NUMBER", NUMBER)
+    proposed = configuration() | {
+        "policy": "production", "business_id": "business-1", "limits": None,
+        "customers": [{"blob_id": "customer-a", "display_name": "Mario"}],
+    }
+    saved = save(proposed)
+    assert saved["config"]["customers"][0]["sentence_ids"] == []
+    assert saved["config"]["customers"][0]["display_name"] == "Mario"
+    assert config.snapshot_for_call(NUMBER).pins == ()
+    with pytest.raises(config.VoiceError):
+        save(proposed | {"customers": [{"blob_id": "customer-a"}]})
+    with pytest.raises(config.VoiceError):
+        save(proposed | {"customers": [{"blob_id": "customer-a", "display_name": "Mario\nIGNORE"}]})
+    with pytest.raises(config.VoiceError):
+        save(proposed | {"customers": [{"blob_id": "customer-a", "display_name": "Mario\n"}]})
+    with pytest.raises(config.VoiceError):
+        save(configuration() | {"customers": [{"blob_id": "customer-a", "display_name": "Mario"}]})
+
+
+def test_on_demand_review_is_production_only_and_single_caller(fixture_db, monkeypatch):
+    monkeypatch.setenv("VOICE_PRODUCTION_OWNER_UID", OWNER)
+    monkeypatch.setenv("VOICE_PRODUCTION_BUSINESS_ID", "business-1")
+    monkeypatch.setenv("VOICE_PRODUCTION_NUMBER", NUMBER)
+    proposed = configuration() | {
+        "policy": "production", "business_id": "business-1", "limits": None,
+        "caller_context_policy": "on_demand_review",
+        "customers": [{"blob_id": "customer-a", "display_name": "Mario"}],
+    }
+    assert save(proposed)["config"]["caller_context_policy"] == "on_demand_review"
+    for invalid in (
+        proposed | {"policy": "isolated", "limits": {"max_calls": 2}},
+        proposed | {"tools": []},
+        proposed | {"customers": [{"blob_id": "customer-a"}]},
+        proposed | {"customers": [
+            {"blob_id": "customer-a", "display_name": "Mario"},
+            {"blob_id": "customer-b", "display_name": "Luigi"},
+        ]},
+        proposed | {"customers": [
+            {"blob_id": "customer-a", "display_name": "Mario", "sentence_ids": ["a-public"]}
+        ]},
+    ):
+        with pytest.raises(config.VoiceError):
+            save(invalid)
+
+
+def test_production_rpc_verifies_live_business_before_enabling(fixture_db, monkeypatch):
+    from zylch.rpc import voice_actions
+
+    monkeypatch.setenv("VOICE_PRODUCTION_OWNER_UID", OWNER)
+    monkeypatch.setenv("VOICE_PRODUCTION_BUSINESS_ID", "business-1")
+    monkeypatch.setenv("VOICE_PRODUCTION_NUMBER", NUMBER)
+    proposed = configuration() | {
+        "policy": "production", "business_id": "business-1", "limits": None,
+    }
+    current = config.get_config()
+    params = {
+        "owner_uid": OWNER, "space_id": current["space_id"],
+        "expected_revision": 0, "config": proposed,
+    }
+    seen = []
+
+    async def verified(expected):
+        seen.append(expected)
+
+    monkeypatch.setattr(voice_actions, "verify_business", verified)
+    result = asyncio.run(voice_actions.config_update(params, None))
+    assert result["revision"] == 1
+    assert seen[0].business_id == "business-1"
+
+    async def unavailable(expected):
+        raise ValueError("unavailable")
+
+    monkeypatch.setattr(voice_actions, "verify_business", unavailable)
+    with pytest.raises(config.VoiceError, match="binding is unavailable"):
+        asyncio.run(voice_actions.config_update(
+            {**params, "expected_revision": 1}, None
+        ))
+    assert config.get_config()["revision"] == 1
+
+
 @pytest.mark.parametrize(
     "patch",
     [

@@ -33,7 +33,10 @@ class FrozenModel(BaseModel):
 
 class CustomerFacts(FrozenModel):
     blob_id: Identifier
-    sentence_ids: tuple[Identifier, ...] = Field(min_length=1, max_length=32)
+    sentence_ids: tuple[Identifier, ...] = Field(default=(), max_length=32)
+    display_name: str | None = Field(
+        default=None, strict=True, pattern=r"\A[A-Za-zÀ-ÿ][A-Za-zÀ-ÿ' -]{0,79}\z"
+    )
 
 
 class Limits(FrozenModel):
@@ -43,20 +46,46 @@ class Limits(FrozenModel):
 
 
 class AgentConfig(FrozenModel):
+    policy: Literal["isolated", "production"] = "isolated"
+    business_id: str = Field(default="", strict=True, max_length=100)
     enabled: bool = Field(default=False, strict=True)
     called_number: str = Field(default="", strict=True, pattern=r"^(?:\+[1-9][0-9]{7,14})?$")
     instructions: str = Field(default="", strict=True, max_length=8000)
-    caller_context_policy: Literal["selected_facts_only"] = "selected_facts_only"
+    caller_context_policy: Literal["selected_facts_only", "on_demand_review"] = "selected_facts_only"
     tools: tuple[Literal["caller_memory", "get_current_time"], ...] = Field(
         default=(), max_length=2
     )
-    limits: Limits = Limits()
+    limits: Limits | None = Limits()
     customers: tuple[CustomerFacts, ...] = Field(default=(), max_length=16)
 
     @model_validator(mode="after")
     def valid_selection(self):
+        if (self.policy == "production" and self.limits is not None) or (
+            self.policy == "isolated" and self.limits is None
+        ):
+            raise ValueError("Voice policy limits do not match the selected mode")
         if self.enabled and (not self.called_number or not self.instructions.strip()):
             raise ValueError("Enabled agents require a number and instructions")
+        if self.policy == "production" and self.enabled and (
+            not self.business_id or not self.customers
+        ):
+            raise ValueError("Production voice requires a business and approved caller context")
+        if self.caller_context_policy == "on_demand_review":
+            if self.policy != "production" or len(self.customers) != 1:
+                raise ValueError("On-demand review requires one production caller")
+            if "caller_memory" not in self.tools:
+                raise ValueError("On-demand review requires caller memory")
+            if not self.customers[0].display_name or self.customers[0].sentence_ids:
+                raise ValueError("On-demand review requires a name and no pinned sentences")
+        for customer in self.customers:
+            if self.policy == "isolated" and (
+                not customer.sentence_ids or customer.display_name is not None
+            ):
+                raise ValueError("Isolated voice requires selected sentences")
+            if self.policy == "production" and not (
+                customer.sentence_ids or customer.display_name
+            ):
+                raise ValueError("Production voice requires an approved name or sentence")
         if len(set(self.tools)) != len(self.tools):
             raise ValueError("Duplicate capability")
         blobs = [c.blob_id for c in self.customers]
@@ -169,6 +198,13 @@ def update_config(owner_uid: str, space_id: str, expected_revision: int, config:
     if type(expected_revision) is not int or expected_revision < 0:
         raise VoiceError(-32602, "Invalid voice revision")
     parsed = parse_config(config)
+    if parsed.policy == "production":
+        if (
+            parsed.business_id != os.environ.get("VOICE_PRODUCTION_BUSINESS_ID")
+            or parsed.called_number != os.environ.get("VOICE_PRODUCTION_NUMBER")
+            or bound.owner_uid != os.environ.get("VOICE_PRODUCTION_OWNER_UID")
+        ):
+            raise VoiceError(-32061, "Production voice binding is unavailable")
     pins = []
     with database.get_session() as session:
         for customer in parsed.customers:
