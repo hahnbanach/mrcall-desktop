@@ -8,6 +8,7 @@ Unknown billing shapes refuse admission. This does not model invoices or taxes.
 import json
 from decimal import ROUND_CEILING, Decimal
 
+from .request_shape import EFFORTS
 from .roles.prices import priced
 
 
@@ -41,7 +42,12 @@ _ALLOWED = {
     "stop_sequences",
     "metadata",
     "service_tier",
+    # The one request shape's reasoning (request_shape.py): bounded by max_tokens.
+    "thinking",
+    "output_config",
 }
+_THINKING = ({"type": "adaptive"}, {"type": "disabled"})
+_TOOL_KEYS = {"name", "description", "input_schema", "cache_control", "type", "strict"}
 
 
 def micro_usd(value):
@@ -76,6 +82,17 @@ def _content(content):
             if set(block) - {"type", "tool_use_id", "content", "is_error", "cache_control"}:
                 raise BudgetError("AI paused: unsupported tool result block.")
             _content(block.get("content", ""))
+        elif kind == "thinking":
+            # Replayed reasoning is priced as input like any other history.
+            if (
+                set(block) - {"type", "thinking", "signature"}
+                or not isinstance(block.get("thinking"), str)
+                or not isinstance(block.get("signature", ""), str)
+            ):
+                raise BudgetError("AI paused: unsupported reasoning block.")
+        elif kind == "redacted_thinking":
+            if set(block) - {"type", "data"} or not isinstance(block.get("data"), str):
+                raise BudgetError("AI paused: unsupported reasoning block.")
         else:
             raise BudgetError("AI paused: multimodal or server-tool costs are not supported.")
         cache = block.get("cache_control")
@@ -126,6 +143,11 @@ def request_bound(request, transport):
         )
     if set(request) - _ALLOWED:
         raise BudgetError("AI paused: request includes an unpriced option.")
+    config = request.get("output_config", {"effort": EFFORTS[0]})
+    if request.get("thinking", _THINKING[0]) not in _THINKING or not (
+        isinstance(config, dict) and set(config) == {"effort"} and config["effort"] in EFFORTS
+    ):
+        raise BudgetError("AI paused: unsupported reasoning option.")
     if request.get("service_tier", "standard_only") != "standard_only":
         raise BudgetError("AI paused: only standard service-tier pricing is supported.")
     model = request.get("model")
@@ -148,8 +170,9 @@ def request_bound(request, transport):
     for tool in tools:
         if (
             not isinstance(tool, dict)
-            or set(tool) - {"name", "description", "input_schema", "cache_control", "type"}
+            or set(tool) - _TOOL_KEYS
             or tool.get("type", "custom") != "custom"
+            or type(tool.get("strict", False)) is not bool
         ):
             raise BudgetError("AI paused: server-tool costs require an explicit bound.")
         if "cache_control" in tool:

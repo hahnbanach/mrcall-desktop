@@ -9,9 +9,11 @@ from __future__ import annotations
 import asyncio
 import contextvars
 import logging
-from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any, Dict, List, Literal, Optional, Union
+
+# The response objects live in response.py; callers keep importing them from here.
+from .response import LLMResponse, TextBlock, ToolUseBlock, _coerce_messages  # noqa: F401
 
 logger = logging.getLogger(__name__)
 
@@ -61,165 +63,6 @@ def _with_datetime(
     if isinstance(system, str):
         return f"{system}\n\n{line}"
     return list(system) + [{"type": "text", "text": line}]
-
-
-# ─── Anthropic-shape return objects (kept for backward compat) ────────
-
-
-@dataclass
-class ToolUseBlock:
-    """Tool-use block in Anthropic format."""
-
-    type: str = "tool_use"
-    id: str = ""
-    name: str = ""
-    input: Dict[str, Any] = field(default_factory=dict)
-
-
-@dataclass
-class TextBlock:
-    """Text block in Anthropic format."""
-
-    type: str = "text"
-    text: str = ""
-
-
-class LLMResponse:
-    """Adapter exposing the Anthropic-shape fields callers care about.
-
-    Both transports return Anthropic-shape Message objects (the proxy
-    reconstructs them from SSE), so this adapter only needs the
-    Anthropic branch.
-    """
-
-    def __init__(self, raw_response: Any, *, normalize_tool_completion: bool = True):
-        self._normalize_tool_completion = normalize_tool_completion
-        self._raw = raw_response
-        self._content: List[Union[TextBlock, ToolUseBlock]] = []
-        self._stop_reason: Optional[str] = None
-        self._parse_response()
-
-    def _parse_response(self) -> None:
-        if not (hasattr(self._raw, "stop_reason") and hasattr(self._raw, "content")):
-            return
-        if not isinstance(self._raw.content, list):
-            return
-        for block in self._raw.content:
-            btype = getattr(block, "type", None)
-            if btype == "text":
-                self._content.append(TextBlock(text=getattr(block, "text", "")))
-            elif btype == "tool_use":
-                raw_input = getattr(block, "input", None)
-                inp = raw_input if isinstance(raw_input, dict) else {}
-                self._content.append(
-                    ToolUseBlock(
-                        id=getattr(block, "id", ""),
-                        name=getattr(block, "name", ""),
-                        input=inp,
-                    )
-                )
-        self._stop_reason = self._raw.stop_reason
-        if self._normalize_tool_completion and self._complete_tool_turn():
-            self._stop_reason = "tool_use"
-
-    def _complete_tool_turn(self) -> bool:
-        """Recognize complete tool turns without repairing malformed provider data."""
-        if self._raw.stop_reason != "end_turn" or getattr(self._raw, "refusal", None):
-            return False
-        has_tool = False
-        for block in self._raw.content:
-            if getattr(block, "refusal", None):
-                return False
-            kind = getattr(block, "type", None)
-            if kind == "text":
-                if not isinstance(getattr(block, "text", None), str):
-                    return False
-            elif kind == "tool_use":
-                if not all(
-                    isinstance(getattr(block, field, None), str)
-                    and getattr(block, field).strip()
-                    for field in ("id", "name")
-                ) or not isinstance(getattr(block, "input", None), dict):
-                    return False
-                has_tool = True
-            else:
-                return False
-        return has_tool
-
-    @property
-    def original_stop_reason(self) -> Optional[str]:
-        return getattr(self._raw, "stop_reason", None)
-
-    @property
-    def content(self) -> List[Union[TextBlock, ToolUseBlock]]:
-        return self._content
-
-    @property
-    def stop_reason(self) -> Optional[str]:
-        return self._stop_reason
-
-    @property
-    def model(self) -> str:
-        return getattr(self._raw, "model", "")
-
-    @property
-    def usage(self) -> Dict[str, int]:
-        u = getattr(self._raw, "usage", None)
-        if not u:
-            return {
-                "input_tokens": 0,
-                "output_tokens": 0,
-                "cache_creation_input_tokens": 0,
-                "cache_read_input_tokens": 0,
-            }
-        read = u.get if isinstance(u, dict) else lambda key, default=0: getattr(u, key, default)
-        return {
-            "input_tokens": int(read("input_tokens", 0) or 0),
-            "output_tokens": int(read("output_tokens", 0) or 0),
-            "cache_creation_input_tokens": int(read("cache_creation_input_tokens", 0) or 0),
-            "cache_read_input_tokens": int(read("cache_read_input_tokens", 0) or 0),
-        }
-
-
-# ─── Message coercion helpers ─────────────────────────────────────────
-
-
-def _coerce_block(block: Any) -> Any:
-    """Convert SDK block objects (TextBlock/ToolUseBlock) into plain
-    dicts. Anthropic's request serializer raises on lingering SDK
-    objects, and the proxy's body builder forwards the value verbatim,
-    so we normalise here once.
-    """
-    if isinstance(block, dict):
-        return block
-    btype = getattr(block, "type", None)
-    if btype == "text":
-        return {"type": "text", "text": getattr(block, "text", "")}
-    if btype == "tool_use":
-        return {
-            "type": "tool_use",
-            "id": getattr(block, "id", ""),
-            "name": getattr(block, "name", ""),
-            "input": dict(getattr(block, "input", {}) or {}),
-        }
-    if hasattr(block, "model_dump"):
-        try:
-            return block.model_dump()
-        except Exception:  # noqa: BLE001
-            pass
-    return block
-
-
-def _coerce_messages(messages: List[Any]) -> List[Any]:
-    out: List[Any] = []
-    for m in messages:
-        if isinstance(m, dict):
-            content = m.get("content")
-            if isinstance(content, list):
-                out.append({**m, "content": [_coerce_block(b) for b in content]})
-                continue
-        out.append(m)
-    return out
 
 
 # ─── Client ───────────────────────────────────────────────────────────
