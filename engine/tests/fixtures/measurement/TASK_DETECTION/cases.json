@@ -1,0 +1,404 @@
+{
+  "schema": 1,
+  "role": "TASK_DETECTION",
+  "builder": "zylch.workers.task_creation.TaskWorker._analyze_event",
+  "cases": [
+    {
+      "id": "task_detection-01",
+      "lang": "it",
+      "call_site": "task.detect",
+      "input": {
+        "profile": "it",
+        "now": "2026-10-01T09:00:00Z",
+        "emails": [
+          {"id": "4fd3efce-9d89-4e49-8c06-608c39c9ecfc", "thread_id": "<20260930174800.58508a70@posta.example>", "from": "silvia.marchetti@posta.example", "from_name": "Silvia Marchetti", "to": "giulia@serramentiferraris.example", "subject": "Richiesta preventivo finestre", "date": "2026-09-30T17:48:00Z", "body": "Buonasera,\nabito a Romano di Lombardia, in un appartamento al secondo piano, e vorrei sostituire 5 finestre in legno ormai vecchie con finestre in PVC con doppio vetro (tre da 120x140 e due da 80x140, misure indicative).\nSareste disponibili per un sopralluogo la prossima settimana? Io ci sono tutti i pomeriggi dopo le 14.\nMi può dare anche un'idea dei costi?\nGrazie,\nSilvia Marchetti\ntel. +39 02 0000 0226", "pending": true}
+        ],
+        "open_tasks": [],
+        "memory": []
+      },
+      "label": {"task_action": "create", "action_required": true},
+      "critical": true,
+      "why": "A new private customer explicitly asks for a quote and a site visit and no task exists for her; any decision but create loses the lead."
+    },
+    {
+      "id": "task_detection-02",
+      "lang": "en",
+      "call_site": "task.detect",
+      "input": {
+        "profile": "en",
+        "now": "2026-10-01T09:00:00Z",
+        "emails": [
+          {"id": "f31e1f54-ca46-4ccf-9492-d4096cf72723", "thread_id": "<20260928152000.68e8cd6f@harbourlanedesign.example>", "from": "tom@harbourlanedesign.example", "from_name": "Tom Hale", "to": "priya@nairbakery.example", "subject": "Autumn menus – final files", "date": "2026-09-28T15:20:00Z", "body": "Hi Priya,\nattached are the final autumn menu files (PDF) for the website and the in-store screen.\nTom"},
+          {"id": "9b77b474-722c-407c-b40e-f3cdec9c8a8a", "thread_id": "<20260928152000.68e8cd6f@harbourlanedesign.example>", "from": "priya@nairbakery.example", "from_name": "Priya Nair", "to": "tom@harbourlanedesign.example", "subject": "Re: Autumn menus – final files", "date": "2026-09-30T19:05:00Z", "body": "Hi Tom,\nthanks for the files! I've just heard from the printer (Avon Print): they need the menus as CMYK PDFs with 3mm bleed. The ones you sent are RGB and they can't print them.\nCould you send print-ready versions by Friday? The new menus have to be in the shops on Monday.\nThanks!\nPriya\n\nOn Mon, 28 Sep 2026 at 16:20, Tom Hale wrote:\n> Hi Priya,\n> attached are the final autumn menu files (PDF)", "pending": true}
+        ],
+        "open_tasks": [],
+        "memory": [
+          {"contact": "priya@nairbakery.example", "blob_id": "b3471cd5-46e6-4e1d-8e9b-3840b7dd9605", "content": "#IDENTIFIERS\nEntity type: PERSON\nName: Priya Nair\nEmail: priya@nairbakery.example\nPhone: +44 1632 960 214\nCompany: Nair & Co Bakery\nRole: owner\n#ABOUT\nOwner of Nair & Co Bakery, a bakery with two shops in Bristol; client since 2025 for branding, menus and the website.\n#HISTORY\n- 2026-09: new autumn menus designed by Harbour Lane, printed by Avon Print."}
+        ]
+      },
+      "label": {"task_action": "create", "action_required": true},
+      "critical": true,
+      "why": "Tom delivered the files and closed the matter, then the client asks for new print-ready CMYK versions by Friday; nothing tracks it, so only create keeps the request."
+    },
+    {
+      "id": "task_detection-03",
+      "lang": "it",
+      "call_site": "task.detect",
+      "input": {
+        "profile": "it",
+        "now": "2026-10-01T09:00:00Z",
+        "emails": [
+          {"id": "c843a841-529d-40c3-b296-5273983bee1c", "thread_id": "<20260930060000.3ec63c03@serramentioggi.example>", "from": "news@serramentioggi.example", "from_name": "Serramenti Oggi", "to": "giulia@serramentiferraris.example", "subject": "Serramenti Oggi n. 38 – Bonus casa 2027: cosa cambia per i serramentisti", "date": "2026-09-30T06:00:00Z", "body": "SERRAMENTI OGGI – la newsletter del settore\n\nIn questo numero:\n• Bonus casa 2027: le aliquote previste dalla bozza della legge di bilancio\n• Fiera Finestre Expo (Verona, 12–15 novembre): registrazione aperta, ingresso gratuito per gli operatori\n• Vetri selettivi: il confronto tra tre produttori\n\nLeggi gli articoli sul nostro sito.\n\nRicevi questa email perché sei iscritto alla newsletter di Serramenti Oggi. Per cancellarti clicca qui.", "pending": true}
+        ],
+        "open_tasks": [],
+        "memory": []
+      },
+      "label": {"task_action": "none", "action_required": false},
+      "critical": false,
+      "why": "A trade newsletter the trained prompt lists as noise Giulia ignores; nothing is asked of her."
+    },
+    {
+      "id": "task_detection-04",
+      "lang": "en",
+      "call_site": "task.detect",
+      "input": {
+        "profile": "en",
+        "now": "2026-10-01T09:00:00Z",
+        "emails": [
+          {"id": "f36f9a30-7ba4-4a93-a383-fec12e4d4967", "thread_id": "<20260930230200.25160c35@cloudnest.example>", "from": "billing@cloudnest.example", "from_name": "CloudNest Billing", "to": "tom@harbourlanedesign.example", "subject": "Payment received – invoice CN-2026-09-4471", "date": "2026-09-30T23:02:00Z", "body": "Hi Harbour Lane Design Ltd,\n\nwe've received your payment of £48.00 for invoice CN-2026-09-4471 (Business Hosting, 5 sites, October 2026). The card ending 0000 was charged on 30 Sep 2026.\n\nNo action is needed: your services will continue without interruption.\nYou can download the receipt from your CloudNest dashboard.\n\n— The CloudNest team", "pending": true}
+        ],
+        "open_tasks": [],
+        "memory": []
+      },
+      "label": {"task_action": "none", "action_required": false},
+      "critical": false,
+      "why": "An automatic hosting receipt that says no action is needed; the trained prompt lists such receipts as noise."
+    },
+    {
+      "id": "task_detection-05",
+      "lang": "it",
+      "call_site": "task.detect",
+      "input": {
+        "profile": "it",
+        "now": "2026-10-01T09:00:00Z",
+        "emails": [
+          {"id": "26957a54-7057-4ba2-a93f-70622bbbdc79", "thread_id": "<20260922081200.3a33a27e@edilbassi.example>", "from": "marco.bassi@edilbassi.example", "from_name": "Marco Bassi", "to": "giulia@serramentiferraris.example", "subject": "Preventivo finestre cantiere Via Roma 18", "date": "2026-09-22T08:12:00Z", "body": "Buongiorno Giulia,\nper il cantiere di Via Roma 18 a Treviglio (palazzina di 4 appartamenti) ci serve un preventivo per 12 finestre in PVC bianco, doppio vetro, con tapparelle in alluminio. Le misure sono nel file del geometra che le ho girato la settimana scorsa.\nCi servirebbe entro metà ottobre.\nGrazie,\nMarco Bassi\nEdil Bassi s.r.l."},
+          {"id": "a17eab2e-1ab2-4a6a-a917-c2194ab188b3", "thread_id": "<20260922081200.3a33a27e@edilbassi.example>", "from": "marco.bassi@edilbassi.example", "from_name": "Marco Bassi", "to": "giulia@serramentiferraris.example", "subject": "Re: Preventivo finestre cantiere Via Roma 18", "date": "2026-09-30T16:40:00Z", "body": "Giulia, una correzione importante sul preventivo: le finestre sono 16 e non 12 (il geometra aveva dimenticato il piano terra) e al piano terra servono con vetro antisfondamento. Il resto è invariato, scadenza sempre metà ottobre.\nGrazie,\nMarco\n\nIl giorno 22 set 2026, alle ore 10:12, Marco Bassi ha scritto:\n> Buongiorno Giulia,\n> per il cantiere di Via Roma 18 a Treviglio", "pending": true}
+        ],
+        "open_tasks": [
+          {"id": "04cc7fae-6c32-4cd6-940c-126e5bb759dc", "event_type": "email", "event_id": "26957a54-7057-4ba2-a93f-70622bbbdc79", "contact_email": "marco.bassi@edilbassi.example", "contact_name": "Marco Bassi", "title": "Preventivo 12 finestre Via Roma", "urgency": "medium", "suggested_action": "Preparare e inviare a Edil Bassi il preventivo per 12 finestre in PVC bianco con tapparelle in alluminio per il cantiere di Via Roma 18", "reason": "Marco Bassi chiede il preventivo per il cantiere di Via Roma 18 entro metà ottobre; le misure sono nel file del geometra", "channel": "email", "created_at": "2026-09-22T08:30:00Z", "analyzed_at": "2026-09-22T08:30:00Z", "sources": {"emails": ["26957a54-7057-4ba2-a93f-70622bbbdc79"], "thread_id": "<20260922081200.3a33a27e@edilbassi.example>", "blobs": [], "calendar_events": []}}
+        ],
+        "memory": [
+          {"contact": "marco.bassi@edilbassi.example", "blob_id": "bb738d22-683d-45e4-8578-f0efc4982c06", "content": "#IDENTIFIERS\nEntity type: PERSON\nName: Marco Bassi\nEmail: marco.bassi@edilbassi.example\nPhone: +39 02 0000 0131\nCompany: Edil Bassi s.r.l.\nRole: titolare\n#ABOUT\nTitolare di Edil Bassi s.r.l., impresa edile di Treviglio, cliente abituale per i serramenti dei suoi cantieri.\n#HISTORY\n- 2025-11: ordinati 22 serramenti in PVC per la palazzina di Via Dante, pagati a 60 giorni.\n- 2026-09-22: chiede il preventivo per le finestre del cantiere di Via Roma 18, entro metà ottobre."}
+        ]
+      },
+      "label": {"task_action": "update", "action_required": true, "target_task_id": "04cc7fae-6c32-4cd6-940c-126e5bb759dc"},
+      "critical": true,
+      "why": "The contractor corrects the open quote request (16 windows, safety glass on the ground floor); the existing task says 12, so it must be updated — keeping it, closing it or opening a second task leaves a wrong or duplicated quote."
+    },
+    {
+      "id": "task_detection-06",
+      "lang": "en",
+      "call_site": "task.detect",
+      "input": {
+        "profile": "en",
+        "now": "2026-10-01T09:00:00Z",
+        "emails": [
+          {"id": "30b505c3-2491-445f-8eae-0c58d4db0420", "thread_id": "<20260924091000.1e837d0b@priceplumbing.example>", "from": "owen@priceplumbing.example", "from_name": "Owen Price", "to": "tom@harbourlanedesign.example", "subject": "Van wrap design", "date": "2026-09-24T09:10:00Z", "body": "Hi Tom,\nwe're thinking of getting our three vans wrapped with the new logo. Could you put together a quote for the design? We'd sort the printing and fitting with a local wrap company.\nCheers,\nOwen\nPrice Plumbing & Heating"},
+          {"id": "f426732a-7338-4a00-8391-df9ff867244d", "thread_id": "<20260924091000.1e837d0b@priceplumbing.example>", "from": "owen@priceplumbing.example", "from_name": "Owen Price", "to": "tom@harbourlanedesign.example", "subject": "Re: Van wrap design", "date": "2026-09-30T18:22:00Z", "body": "Hi Tom,\nchange of plan I'm afraid: the boiler season has started and we've decided to keep the vans as they are until spring. So please don't spend any time on the wrap quote for now.\nThanks anyway, and the new logo is still getting loads of compliments!\nOwen", "pending": true}
+        ],
+        "open_tasks": [
+          {"id": "94168032-9186-436e-9216-f2d4f0aef51e", "event_type": "email", "event_id": "30b505c3-2491-445f-8eae-0c58d4db0420", "contact_email": "owen@priceplumbing.example", "contact_name": "Owen Price", "title": "Van wrap quote for Price Plumbing", "urgency": "medium", "suggested_action": "Prepare a quote for the van wrap design (three vans) for Price Plumbing", "reason": "Owen wants the new logo on the three vans and asked for a design quote", "channel": "email", "created_at": "2026-09-24T09:25:00Z", "analyzed_at": "2026-09-24T09:25:00Z", "sources": {"emails": ["30b505c3-2491-445f-8eae-0c58d4db0420"], "thread_id": "<20260924091000.1e837d0b@priceplumbing.example>", "blobs": [], "calendar_events": []}}
+        ],
+        "memory": [
+          {"contact": "owen@priceplumbing.example", "blob_id": "132b587e-ded2-43cc-a838-e2cceac86afc", "content": "#IDENTIFIERS\nEntity type: PERSON\nName: Owen Price\nEmail: owen@priceplumbing.example\nPhone: +44 1632 960 377\nCompany: Price Plumbing & Heating\nRole: owner\n#ABOUT\nOwner of Price Plumbing & Heating, a plumbing and heating firm in Bristol; Harbour Lane designed its new logo in 2026.\n#HISTORY\n- 2026-09: new logo delivered; talking about the vans, an open day flyer and a website refresh."}
+        ]
+      },
+      "label": {"task_action": "close", "action_required": false, "target_task_id": "94168032-9186-436e-9216-f2d4f0aef51e"},
+      "critical": false,
+      "why": "The client explicitly withdraws the van-wrap request the open task tracks and asks for nothing else, so that task is done."
+    },
+    {
+      "id": "task_detection-07",
+      "lang": "it",
+      "call_site": "task.detect",
+      "input": {
+        "profile": "it",
+        "now": "2026-10-01T09:00:00Z",
+        "emails": [
+          {"id": "471a2c51-6be8-4785-9d40-e9b5e5a44102", "thread_id": "<20260923140500.7b2c613e@studiocolombo.example>", "from": "amministrazione@studiocolombo.example", "from_name": "Paola Colombo - Studio Colombo", "to": "giulia@serramentiferraris.example", "subject": "Condominio Via Verdi 12 – certificazioni serramenti", "date": "2026-09-23T14:05:00Z", "body": "Gentile Sig.ra Ferraris,\nper la pratica di detrazione del Condominio Via Verdi 12 ci servono le certificazioni (trasmittanza termica e marcatura CE) dei serramenti installati a luglio. Può inviarcele?\nCordiali saluti,\nPaola Colombo\nStudio Amministrazioni Colombo"},
+          {"id": "6a13b7d4-47fb-4357-ada4-59d9b790a489", "thread_id": "<20260923140500.7b2c613e@studiocolombo.example>", "from": "amministrazione@studiocolombo.example", "from_name": "Paola Colombo - Studio Colombo", "to": "giulia@serramentiferraris.example", "subject": "Re: Condominio Via Verdi 12 – certificazioni serramenti", "date": "2026-09-30T11:30:00Z", "body": "Gentile Sig.ra Ferraris,\nla informo che le certificazioni ci sono state inoltrate ieri dal geom. Locatelli, che le aveva nel fascicolo di cantiere. Non serve quindi più che ce le mandi lei.\nGrazie e buona giornata,\nPaola Colombo", "pending": true}
+        ],
+        "open_tasks": [
+          {"id": "a5e70da4-0b96-4593-9986-e480233da626", "event_type": "email", "event_id": "471a2c51-6be8-4785-9d40-e9b5e5a44102", "contact_email": "amministrazione@studiocolombo.example", "contact_name": "Paola Colombo", "title": "Certificazioni Condominio Via Verdi 12", "urgency": "medium", "suggested_action": "Inviare allo Studio Colombo le certificazioni (trasmittanza e marcatura CE) dei serramenti del Condominio Via Verdi 12", "reason": "Servono per la pratica di detrazione del condominio", "channel": "email", "created_at": "2026-09-23T14:20:00Z", "analyzed_at": "2026-09-23T14:20:00Z", "sources": {"emails": ["471a2c51-6be8-4785-9d40-e9b5e5a44102"], "thread_id": "<20260923140500.7b2c613e@studiocolombo.example>", "blobs": [], "calendar_events": []}}
+        ],
+        "memory": [
+          {"contact": "amministrazione@studiocolombo.example", "blob_id": "ae377741-a6a8-4798-9d8b-61e637a24b53", "content": "#IDENTIFIERS\nEntity type: PERSON\nName: Paola Colombo\nEmail: amministrazione@studiocolombo.example\nCompany: Studio Amministrazioni Colombo\nRole: amministratrice di condominio\n#ABOUT\nAmministratrice dello Studio Amministrazioni Colombo; gestisce tra gli altri il Condominio Via Verdi 12 e il Condominio Via Manzoni 4.\n#HISTORY\n- 2026-07: sostituiti i serramenti delle parti comuni del Condominio Via Verdi 12.\n- 2026-09-23: chiede le certificazioni dei serramenti per la pratica di detrazione."}
+        ]
+      },
+      "label": {"task_action": "close", "action_required": false, "target_task_id": "a5e70da4-0b96-4593-9986-e480233da626"},
+      "critical": false,
+      "why": "The administrator says the certificates arrived from the surveyor and Giulia no longer needs to send them: the open task is resolved."
+    },
+    {
+      "id": "task_detection-08",
+      "lang": "en",
+      "call_site": "task.detect",
+      "input": {
+        "profile": "en",
+        "now": "2026-10-01T09:00:00Z",
+        "emails": [
+          {"id": "04ff0c85-01a8-40a5-8381-72c776fd3f2e", "thread_id": "<20261001074100.87ff91f3@nordlyscoffee.example>", "from": "felix@nordlyscoffee.example", "from_name": "Felix Andersson", "to": "tom@harbourlanedesign.example", "subject": "Checkout broken AGAIN", "date": "2026-10-01T07:41:00Z", "body": "Tom,\nthe checkout on our online shop is broken again: customers get a payment error at the last step. That's the third time since your update in September. We lost every online order over the weekend and again this morning.\nI need this fixed TODAY. If it happens again we'll have to move the shop to another agency.\nFelix\nNordlys Coffee Roasters", "pending": true}
+        ],
+        "open_tasks": [],
+        "memory": [
+          {"contact": "felix@nordlyscoffee.example", "blob_id": "eeedffa6-ecef-45f0-bfe3-ecf5142027ad", "content": "#IDENTIFIERS\nEntity type: PERSON\nName: Felix Andersson\nEmail: felix@nordlyscoffee.example\nCompany: Nordlys Coffee Roasters\nRole: co-founder\n#ABOUT\nCo-founder of Nordlys Coffee Roasters, a speciality roaster in Bristol that sells mostly through the online shop Harbour Lane built.\n#HISTORY\n- 2026-09-08: shop platform updated by Tom.\n- 2026-09-14 and 2026-09-21: checkout errors reported, fixed the same day."}
+        ]
+      },
+      "label": {"task_action": "create", "action_required": true},
+      "critical": true,
+      "why": "An angry client reports the shop checkout down and threatens to leave; no task exists, so any decision but create drops an urgent, explicit request."
+    },
+    {
+      "id": "task_detection-09",
+      "lang": "it",
+      "call_site": "task.detect",
+      "input": {
+        "profile": "it",
+        "now": "2026-10-01T09:00:00Z",
+        "emails": [
+          {"id": "44b9e46b-008a-40a5-9a7f-db3ced3fd5c4", "thread_id": "<20260925093000.9f73a0f0@posta.example>", "from": "anna.pellegrini@posta.example", "from_name": "Anna Pellegrini", "to": "giulia@serramentiferraris.example", "subject": "Posa zanzariere", "date": "2026-09-25T09:30:00Z", "body": "Buongiorno, confermo che lunedì 29 va bene per la posa delle zanzariere.\nAnna Pellegrini"},
+          {"id": "4ca290c4-f5d6-4e90-b9b2-a611000222e7", "thread_id": "<20260925093000.9f73a0f0@posta.example>", "from": "giulia@serramentiferraris.example", "from_name": "Giulia Ferraris", "to": "anna.pellegrini@posta.example", "subject": "Re: Posa zanzariere", "date": "2026-09-25T10:05:00Z", "body": "Perfetto, la squadra arriverà alle 8:30.\nGiulia"},
+          {"id": "1a0ca23d-8ddb-44ad-a48b-32c3fa7a8361", "thread_id": "<20260925093000.9f73a0f0@posta.example>", "from": "anna.pellegrini@posta.example", "from_name": "Anna Pellegrini", "to": "giulia@serramentiferraris.example", "subject": "Re: Posa zanzariere", "date": "2026-09-30T20:15:00Z", "body": "Buonasera Giulia,\nvolevo solo ringraziarvi: lavoro impeccabile, i ragazzi sono stati puntualissimi e hanno lasciato tutto pulito. Lascerò volentieri una recensione.\nUn saluto,\nAnna Pellegrini", "pending": true}
+        ],
+        "open_tasks": [],
+        "memory": [
+          {"contact": "anna.pellegrini@posta.example", "blob_id": "5a978efb-288e-40e3-a232-8ec67315b519", "content": "#IDENTIFIERS\nEntity type: PERSON\nName: Anna Pellegrini\nEmail: anna.pellegrini@posta.example\n#ABOUT\nCliente privata di Caravaggio.\n#HISTORY\n- 2026-09-29: posate le zanzariere a rullo su cinque finestre di casa."}
+        ]
+      },
+      "label": {"task_action": "none", "action_required": false},
+      "critical": false,
+      "why": "After the finished installation the customer only thanks and asks nothing; the trained prompt says a thanks with nothing left to do is NO_ACTION."
+    },
+    {
+      "id": "task_detection-10",
+      "lang": "en",
+      "call_site": "task.detect",
+      "input": {
+        "profile": "en",
+        "now": "2026-10-01T09:00:00Z",
+        "emails": [
+          {"id": "8c87a18a-25f1-444c-8a10-331905d465a3", "thread_id": "<20260930131300.5e10f4f1@freemail.example>", "from": "growth.expert.ranking@freemail.example", "from_name": "Kevin | Growth Expert", "to": "tom@harbourlanedesign.example", "subject": "Your website is not on Google page 1", "date": "2026-09-30T13:13:00Z", "body": "Hello Team,\nI was checking your website harbourlanedesign.example and noticed it is not ranking on the first page of Google for important keywords. We are a team of SEO experts and we guarantee page 1 rankings in 30 days or your money back.\nCan I send you our price list and a free audit report?\nWaiting for your positive reply.\nKevin", "pending": true}
+        ],
+        "open_tasks": [],
+        "memory": []
+      },
+      "label": {"task_action": "none", "action_required": false},
+      "critical": false,
+      "why": "Cold SEO outreach from a free-mail address; the trained prompt lists such offers as noise."
+    },
+    {
+      "id": "task_detection-11",
+      "lang": "it",
+      "call_site": "task.detect",
+      "input": {
+        "profile": "it",
+        "now": "2026-10-01T09:00:00Z",
+        "emails": [
+          {"id": "411a76e6-65a5-4791-b09e-27d8ea0f026f", "thread_id": "<20261001075500.4f2e06f5@serramentiferraris.example>", "from": "davide@serramentiferraris.example", "from_name": "Davide Ferraris", "to": "giulia@serramentiferraris.example", "subject": "Ordine vetri cantiere Bassi – serve ok entro le 16", "date": "2026-10-01T07:55:00Z", "body": "Ciao Giulia,\nmi serve il tuo ok per l'ordine dei vetri del cantiere Bassi (Via Roma 18): 16 vetrocamere, di cui 4 antisfondamento per il piano terra, totale 3.480 € + IVA da Vetreria Orobica.\nSe confermiamo entro oggi alle 16 teniamo il listino attuale, da domani aumentano del 4%.\nMi rispondi appena puoi?\nDavide", "pending": true}
+        ],
+        "open_tasks": [],
+        "memory": [
+          {"contact": "davide@serramentiferraris.example", "blob_id": "cbc30668-48b7-4a4a-acfb-460f2f673821", "content": "#IDENTIFIERS\nEntity type: PERSON\nName: Davide Ferraris\nEmail: davide@serramentiferraris.example\nCompany: Serramenti Ferraris s.r.l.\nRole: responsabile officina e ordini\n#ABOUT\nCollega di Giulia: segue l'officina e gli ordini ai fornitori.\n#HISTORY\n- 2026-09: prepara gli ordini dei materiali per il cantiere di Via Roma 18 di Edil Bassi."}
+        ]
+      },
+      "label": {"task_action": "create", "action_required": true},
+      "critical": true,
+      "why": "The colleague needs Giulia's approval of a supplier order by 16:00 today or the price rises; the trained prompt says his requests with a deadline are actionable, and only create keeps it."
+    },
+    {
+      "id": "task_detection-12",
+      "lang": "en",
+      "call_site": "task.detect",
+      "input": {
+        "profile": "en",
+        "now": "2026-10-01T09:00:00Z",
+        "emails": [
+          {"id": "c83f5f4a-1ed8-407a-8e78-98114440f601", "thread_id": "<20260928100200.5237373e@brooksyoga.example>", "from": "hannah@brooksyoga.example", "from_name": "Hannah Brooks", "to": "tom@harbourlanedesign.example", "subject": "Autumn timetable poster", "date": "2026-09-28T10:02:00Z", "body": "Hi Tom,\ncould you design a poster with our new autumn class timetable? A2 size, for the studio window. Text attached. We'd love it by Wednesday 7 October.\nThanks so much,\nHannah\nBrooks Yoga"},
+          {"id": "72b52237-4411-4438-abc0-2e4e7e736804", "thread_id": "<20260928100200.5237373e@brooksyoga.example>", "from": "hannah@brooksyoga.example", "from_name": "Hannah Brooks", "to": "tom@harbourlanedesign.example", "subject": "Re: Autumn timetable poster", "date": "2026-09-30T21:10:00Z", "body": "Hi Tom,\ntwo changes, sorry! The poster needs to be A3, not A2 (the window frame is smaller than I thought), and the studio is now called \"Brooks Yoga & Pilates\", so please use the new name. Same deadline, Wednesday 7th.\nHannah", "pending": true}
+        ],
+        "open_tasks": [
+          {"id": "9b5c01ae-62a1-4bb7-aaa9-b000f547495f", "event_type": "email", "event_id": "c83f5f4a-1ed8-407a-8e78-98114440f601", "contact_email": "hannah@brooksyoga.example", "contact_name": "Hannah Brooks", "title": "Brooks Yoga autumn timetable poster", "urgency": "medium", "suggested_action": "Design the A2 autumn timetable poster for Brooks Yoga by Wednesday 7 October", "reason": "Hannah sent the timetable text and needs an A2 poster for the studio window", "channel": "email", "created_at": "2026-09-28T10:20:00Z", "analyzed_at": "2026-09-28T10:20:00Z", "sources": {"emails": ["c83f5f4a-1ed8-407a-8e78-98114440f601"], "thread_id": "<20260928100200.5237373e@brooksyoga.example>", "blobs": [], "calendar_events": []}}
+        ],
+        "memory": [
+          {"contact": "hannah@brooksyoga.example", "blob_id": "06164f1f-7d0d-4833-b4ec-285eb9e34f2e", "content": "#IDENTIFIERS\nEntity type: PERSON\nName: Hannah Brooks\nEmail: hannah@brooksyoga.example\nCompany: Brooks Yoga\nRole: owner\n#ABOUT\nOwner of Brooks Yoga, a yoga studio in Bristol; Harbour Lane maintains its website and designs its print materials.\n#HISTORY\n- 2026-09-28: asked for the autumn timetable poster for the studio window."}
+        ]
+      },
+      "label": {"task_action": "update", "action_required": true, "target_task_id": "9b5c01ae-62a1-4bb7-aaa9-b000f547495f"},
+      "critical": true,
+      "why": "The client changes the size (A3) and the studio name of the poster the open task describes as A2; the task must be updated or Tom designs the wrong poster."
+    },
+    {
+      "id": "task_detection-13",
+      "lang": "it",
+      "call_site": "task.detect",
+      "input": {
+        "profile": "it",
+        "now": "2026-10-01T09:00:00Z",
+        "emails": [
+          {"id": "78a1c6c0-0485-4eba-952d-a956777019ae", "thread_id": "<20260930164400.9201b17a@transactional.mrcall.ai>", "from": "notification@transactional.mrcall.ai", "from_name": "MrCall", "to": "giulia@serramentiferraris.example", "subject": "Chiamata persa da Roberto Gatti", "date": "2026-09-30T16:44:00Z", "body": "Nuova chiamata gestita dal tuo assistente MrCall\n\nChiamante: Roberto Gatti\nNumero: +39 02 0000 0147\nData: 30/09/2026 18:42\nMessaggio lasciato: Buonasera, sono Roberto Gatti, ho bisogno di un preventivo per le zanzariere di casa, sono sei finestre. Mi richiami domani mattina per favore, grazie.\nEsito: richiesta di richiamata", "pending": true}
+        ],
+        "open_tasks": [],
+        "memory": []
+      },
+      "label": {"task_action": "create", "action_required": true},
+      "critical": true,
+      "why": "A caller relayed by the MrCall notification asks to be called back about a quote; the trained prompt says a callback request is always a task, and no task exists."
+    },
+    {
+      "id": "task_detection-14",
+      "lang": "en",
+      "call_site": "task.detect",
+      "input": {
+        "profile": "en",
+        "now": "2026-10-01T09:00:00Z",
+        "emails": [
+          {"id": "cd902334-24fc-46ab-b3e4-782e50af84a7", "thread_id": "<20260929083000.351d01b8@priceplumbing.example>", "from": "owen@priceplumbing.example", "from_name": "Owen Price", "to": "tom@harbourlanedesign.example", "subject": "Catch-up on the website refresh", "date": "2026-09-29T08:30:00Z", "body": "Hi Tom, could we meet next week to talk about refreshing our website?\nOwen"},
+          {"id": "01df24d7-9bfb-4a30-932c-a9eee2002534", "thread_id": "<20260929083000.351d01b8@priceplumbing.example>", "from": "tom@harbourlanedesign.example", "from_name": "Tom Hale", "to": "owen@priceplumbing.example", "subject": "Re: Catch-up on the website refresh", "date": "2026-09-29T10:12:00Z", "body": "Hi Owen, happy to. How about Tuesday 6 October at 10:00 at your office?\nTom"},
+          {"id": "3779ad9d-2e8e-4f02-a0f4-e298a14c0936", "thread_id": "<20260929083000.351d01b8@priceplumbing.example>", "from": "owen@priceplumbing.example", "from_name": "Owen Price", "to": "tom@harbourlanedesign.example", "subject": "Re: Catch-up on the website refresh", "date": "2026-09-30T07:58:00Z", "body": "Perfect, Tuesday at 10 works. See you then!\nOwen", "pending": true}
+        ],
+        "open_tasks": [],
+        "memory": [
+          {"contact": "owen@priceplumbing.example", "blob_id": "3989d574-fcef-41ed-a0ca-be40f1cd5fb0", "content": "#IDENTIFIERS\nEntity type: PERSON\nName: Owen Price\nEmail: owen@priceplumbing.example\nPhone: +44 1632 960 377\nCompany: Price Plumbing & Heating\nRole: owner\n#ABOUT\nOwner of Price Plumbing & Heating, a plumbing and heating firm in Bristol; Harbour Lane designed its new logo in 2026.\n#HISTORY\n- 2026-09: new logo delivered; talking about the vans, an open day flyer and a website refresh."}
+        ]
+      },
+      "label": {"task_action": "none", "action_required": false},
+      "critical": false,
+      "why": "The client accepts the meeting Tom proposed and asks nothing else; a confirmation with nothing left to do is NO_ACTION."
+    },
+    {
+      "id": "task_detection-15",
+      "lang": "it",
+      "call_site": "task.detect",
+      "input": {
+        "profile": "it",
+        "now": "2026-10-01T09:00:00Z",
+        "emails": [
+          {"id": "46a2ea42-37ea-4d2c-b0d2-c473101e05d8", "thread_id": "<20260928092000.5919383a@posta.example>", "from": "lucia.rinaldi@posta.example", "from_name": "Lucia Rinaldi", "to": "giulia@serramentiferraris.example", "subject": "Richiesta preventivo finestre", "date": "2026-09-28T09:20:00Z", "body": "Buongiorno,\nvorrei un preventivo per sostituire 4 finestre in legno con finestre in PVC. Sareste disponibili per un sopralluogo martedì 6 ottobre in mattinata?\nLucia Rinaldi"},
+          {"id": "f9a9e794-e937-4236-b044-bf4643a54096", "thread_id": "<20260928092000.5919383a@posta.example>", "from": "lucia.rinaldi@posta.example", "from_name": "Lucia Rinaldi", "to": "giulia@serramentiferraris.example", "subject": "Re: Richiesta preventivo finestre", "date": "2026-09-30T18:05:00Z", "body": "Buonasera,\nmi scusi, martedì mattina non riesco più: potreste venire giovedì 8 ottobre dopo le 15?\nE già che ci siete vorrei aggiungere al preventivo anche la porta-finestra del balcone (circa 90x220).\nGrazie,\nLucia Rinaldi", "pending": true}
+        ],
+        "open_tasks": [
+          {"id": "7bc97976-ab8f-44da-9e83-4db37202d68d", "event_type": "email", "event_id": "46a2ea42-37ea-4d2c-b0d2-c473101e05d8", "contact_email": "lucia.rinaldi@posta.example", "contact_name": "Lucia Rinaldi", "title": "Sopralluogo Lucia Rinaldi", "urgency": "medium", "suggested_action": "Confermare a Lucia Rinaldi il sopralluogo di martedì 6 ottobre in mattinata per il preventivo di 4 finestre in PVC", "reason": "Chiede un preventivo per 4 finestre e propone il sopralluogo martedì mattina", "channel": "email", "created_at": "2026-09-28T09:40:00Z", "analyzed_at": "2026-09-28T09:40:00Z", "sources": {"emails": ["46a2ea42-37ea-4d2c-b0d2-c473101e05d8"], "thread_id": "<20260928092000.5919383a@posta.example>", "blobs": [], "calendar_events": []}}
+        ],
+        "memory": [
+          {"contact": "lucia.rinaldi@posta.example", "blob_id": "e1a8674d-274b-4f89-98bd-894dce4849a5", "content": "#IDENTIFIERS\nEntity type: PERSON\nName: Lucia Rinaldi\nEmail: lucia.rinaldi@posta.example\nPhone: +39 02 0000 0218\n#ABOUT\nPrivata di Treviglio che vuole sostituire le finestre del suo appartamento.\n#HISTORY\n- 2026-09-28: chiede un preventivo per 4 finestre in PVC e un sopralluogo martedì 6 ottobre in mattinata."}
+        ]
+      },
+      "label": {"task_action": "update", "action_required": true, "target_task_id": "7bc97976-ab8f-44da-9e83-4db37202d68d"},
+      "critical": true,
+      "why": "The customer moves the site visit to Thursday afternoon and adds a balcony door to the quote; the open task still says Tuesday morning and four windows, so it must be updated."
+    },
+    {
+      "id": "task_detection-16",
+      "lang": "en",
+      "call_site": "task.detect",
+      "input": {
+        "profile": "en",
+        "now": "2026-10-01T09:00:00Z",
+        "emails": [
+          {"id": "67ed8b8a-7392-4c4c-bf20-cd11fdee1ce4", "thread_id": "<20260929164000.7ec1ea95@nairbakery.example>", "from": "priya@nairbakery.example", "from_name": "Priya Nair", "to": "tom@harbourlanedesign.example", "subject": "Print files for the new menus", "date": "2026-09-29T16:40:00Z", "body": "Hi Tom,\nthe printer needs the menus as CMYK PDFs with 3mm bleed. Could you send them over?\nThanks,\nPriya"},
+          {"id": "e8ebc41f-a0c4-46a7-9143-6c3834ee3e68", "thread_id": "<20260929164000.7ec1ea95@nairbakery.example>", "from": "priya@nairbakery.example", "from_name": "Priya Nair", "to": "tom@harbourlanedesign.example", "subject": "Re: Print files for the new menus", "date": "2026-09-30T17:15:00Z", "body": "Hi Tom,\njust to let you know that Dan sent the CMYK files over this afternoon by WeTransfer and the printer says they're perfect: the menus are being printed now. All sorted on our side, thank you both!\nPriya", "pending": true}
+        ],
+        "open_tasks": [
+          {"id": "f459b26f-5c96-46b3-9c7d-5f3153481585", "event_type": "email", "event_id": "67ed8b8a-7392-4c4c-bf20-cd11fdee1ce4", "contact_email": "priya@nairbakery.example", "contact_name": "Priya Nair", "title": "CMYK menu files for Nair & Co", "urgency": "medium", "suggested_action": "Send Priya the CMYK print files (3mm bleed) for the new menus", "reason": "Avon Print needs CMYK PDFs with bleed to print the autumn menus", "channel": "email", "created_at": "2026-09-29T16:55:00Z", "analyzed_at": "2026-09-29T16:55:00Z", "sources": {"emails": ["67ed8b8a-7392-4c4c-bf20-cd11fdee1ce4"], "thread_id": "<20260929164000.7ec1ea95@nairbakery.example>", "blobs": [], "calendar_events": []}}
+        ],
+        "memory": [
+          {"contact": "priya@nairbakery.example", "blob_id": "12946f20-b56b-4fb5-b7b6-ceae120fa318", "content": "#IDENTIFIERS\nEntity type: PERSON\nName: Priya Nair\nEmail: priya@nairbakery.example\nPhone: +44 1632 960 214\nCompany: Nair & Co Bakery\nRole: owner\n#ABOUT\nOwner of Nair & Co Bakery, a bakery with two shops in Bristol; client since 2025 for branding, menus and the website.\n#HISTORY\n- 2026-09: new autumn menus designed by Harbour Lane, printed by Avon Print."}
+        ]
+      },
+      "label": {"task_action": "close", "action_required": false, "target_task_id": "f459b26f-5c96-46b3-9c7d-5f3153481585"},
+      "critical": false,
+      "why": "The client confirms Tom's colleague Dan already sent the files and the printer accepted them; the open task is resolved."
+    },
+    {
+      "id": "task_detection-17",
+      "lang": "it",
+      "call_site": "task.detect",
+      "input": {
+        "profile": "it",
+        "now": "2026-10-01T09:00:00Z",
+        "emails": [
+          {"id": "f3caec5a-802d-4a81-a426-e0c6798107fe", "thread_id": "<20260930142500.1153d7d5@alutecprofile.example>", "from": "logistics@alutecprofile.example", "from_name": "Alutec Profile AG – Logistics", "to": "giulia@serramentiferraris.example", "subject": "Order AT-2026-311 held at customs – action required", "date": "2026-09-30T14:25:00Z", "body": "Dear Ms Ferraris,\n\nyour shipment of 40 aluminium profiles (order AT-2026-311, 2 pallets) is held at the customs office in Como because the EUR.1 origin declaration signed by the importer is missing.\n\nPlease return the attached EUR.1 form signed and stamped by Monday 5 October. If we do not receive it, the goods will go back to our warehouse in Zürich and the new shipment will be charged.\n\nKind regards,\nSandra Keller\nLogistics, Alutec Profile AG", "pending": true}
+        ],
+        "open_tasks": [],
+        "memory": []
+      },
+      "label": {"task_action": "create", "action_required": true},
+      "critical": true,
+      "why": "A supplier writes in English that the goods are held at customs until Giulia signs a form by Monday; the trained prompt makes customs holds and documents to sign actionable, and no task exists."
+    },
+    {
+      "id": "task_detection-18",
+      "lang": "en",
+      "call_site": "task.detect",
+      "input": {
+        "profile": "en",
+        "now": "2026-10-01T09:00:00Z",
+        "emails": [
+          {"id": "fdcf62c1-f24b-4d6d-b22f-4f82bf3ec1ae", "thread_id": "<20260928100200.dfa01662@brooksyoga.example>", "from": "hannah@brooksyoga.example", "from_name": "Hannah Brooks", "to": "tom@harbourlanedesign.example", "subject": "Autumn timetable poster", "date": "2026-09-28T10:02:00Z", "body": "Hi Tom,\ncould you design an A3 poster with our new autumn timetable for the studio window? By Wednesday 7 October please.\nHannah"},
+          {"id": "ecbc935b-bf34-4a70-8de9-651e08634d67", "thread_id": "<20261001065000.177b92df@brooksyoga.example>", "from": "hannah@brooksyoga.example", "from_name": "Hannah Brooks", "to": "tom@harbourlanedesign.example", "subject": "Website contact form not working?", "date": "2026-10-01T06:50:00Z", "body": "Hi Tom,\na couple of students told me they filled in the contact form on our website this week and never heard back, and I haven't received any of their messages. Could you check whether the form is working? We're getting lots of enquiries for the new Pilates classes.\nThanks,\nHannah", "pending": true}
+        ],
+        "open_tasks": [
+          {"id": "d0fc9b68-17f8-4471-beb7-454e4d81ddc6", "event_type": "email", "event_id": "fdcf62c1-f24b-4d6d-b22f-4f82bf3ec1ae", "contact_email": "hannah@brooksyoga.example", "contact_name": "Hannah Brooks", "title": "Brooks Yoga autumn timetable poster", "urgency": "medium", "suggested_action": "Design the A3 autumn timetable poster for Brooks Yoga by Wednesday 7 October", "reason": "Hannah needs the poster for the studio window", "channel": "email", "created_at": "2026-09-28T10:20:00Z", "analyzed_at": "2026-09-28T10:20:00Z", "sources": {"emails": ["fdcf62c1-f24b-4d6d-b22f-4f82bf3ec1ae"], "thread_id": "<20260928100200.dfa01662@brooksyoga.example>", "blobs": [], "calendar_events": []}}
+        ],
+        "memory": [
+          {"contact": "hannah@brooksyoga.example", "blob_id": "a8149b34-f39c-4eef-ae8c-2c0a401e7f41", "content": "#IDENTIFIERS\nEntity type: PERSON\nName: Hannah Brooks\nEmail: hannah@brooksyoga.example\nCompany: Brooks Yoga\nRole: owner\n#ABOUT\nOwner of Brooks Yoga, a yoga studio in Bristol; Harbour Lane maintains its website and designs its print materials.\n#HISTORY\n- 2026-09-28: asked for the autumn timetable poster for the studio window."}
+        ]
+      },
+      "label": {"task_action": "create", "action_required": true},
+      "critical": true,
+      "why": "A new, unrelated problem (the website contact form) from a client whose only open task is the poster; updating or closing the poster task would corrupt it, and none loses the request."
+    },
+    {
+      "id": "task_detection-19",
+      "lang": "it",
+      "call_site": "task.detect",
+      "input": {
+        "profile": "it",
+        "now": "2026-10-01T09:00:00Z",
+        "emails": [
+          {"id": "697d9273-7533-4bb3-9f96-37ad958a5041", "thread_id": "<20260930100000.8d569904@studiorota.example>", "from": "segreteria@studiorota.example", "from_name": "Studio Rota Commercialisti", "to": "giulia@serramentiferraris.example", "subject": "F24 settembre – pagamento eseguito", "date": "2026-09-30T10:00:00Z", "body": "Gentile cliente,\nle comunichiamo che il modello F24 con scadenza 30 settembre (ritenute e IVA di agosto) è stato pagato regolarmente tramite addebito sul conto corrente aziendale. La quietanza è disponibile nell'area riservata.\nNon è richiesta alcuna azione da parte sua.\nCordiali saluti,\nStudio Rota – Commercialisti associati", "pending": true}
+        ],
+        "open_tasks": [],
+        "memory": []
+      },
+      "label": {"task_action": "none", "action_required": false},
+      "critical": false,
+      "why": "The accountant reports a tax payment already made and states no action is required; the trained prompt lists such notices as noise."
+    },
+    {
+      "id": "task_detection-20",
+      "lang": "en",
+      "call_site": "task.detect",
+      "input": {
+        "profile": "en",
+        "now": "2026-10-01T09:00:00Z",
+        "emails": [
+          {"id": "2a8a03a2-5f4c-4e20-b508-20b1c7f63be4", "thread_id": "<20260925090000.c4bdcc37@priceplumbing.example>", "from": "owen@priceplumbing.example", "from_name": "Owen Price", "to": "tom@harbourlanedesign.example", "subject": "Open day flyer", "date": "2026-09-25T09:00:00Z", "body": "Hi Tom, could you tweak the open day flyer? The date is now Saturday 17 October.\nOwen"},
+          {"id": "7d39921b-cd58-408f-9f4c-5f9258979604", "thread_id": "<20260929083000.e5cc27df@priceplumbing.example>", "from": "owen@priceplumbing.example", "from_name": "Owen Price", "to": "tom@harbourlanedesign.example", "subject": "Website refresh", "date": "2026-09-29T08:30:00Z", "body": "Hi Tom,\nas discussed, could you send me a quote to refresh our website? New photos, a page per service and online booking for boiler services.\nOwen"},
+          {"id": "1c32a778-68ba-4bf8-9b50-ea92fcfd97dc", "thread_id": "<20260929083000.e5cc27df@priceplumbing.example>", "from": "owen@priceplumbing.example", "from_name": "Owen Price", "to": "tom@harbourlanedesign.example", "subject": "Re: Website refresh", "date": "2026-09-30T20:40:00Z", "body": "Hi Tom,\none more thing for the website quote: please include hosting and maintenance for two years. Our budget for the whole thing is up to £3,000.\nCheers,\nOwen", "pending": true}
+        ],
+        "open_tasks": [
+          {"id": "330b9e39-9f55-4346-9a44-86c9376d33de", "event_type": "email", "event_id": "2a8a03a2-5f4c-4e20-b508-20b1c7f63be4", "contact_email": "owen@priceplumbing.example", "contact_name": "Owen Price", "title": "Revised open day flyer for Owen", "urgency": "medium", "suggested_action": "Send Owen the revised open day flyer proof with the new date (Saturday 17 October)", "reason": "Owen moved the open day and needs the flyer updated", "channel": "email", "created_at": "2026-09-25T09:15:00Z", "analyzed_at": "2026-09-25T09:15:00Z", "sources": {"emails": ["2a8a03a2-5f4c-4e20-b508-20b1c7f63be4"], "thread_id": "<20260925090000.c4bdcc37@priceplumbing.example>", "blobs": [], "calendar_events": []}},
+          {"id": "e7eaf510-3bc1-4cee-9b16-fb04e2141499", "event_type": "email", "event_id": "7d39921b-cd58-408f-9f4c-5f9258979604", "contact_email": "owen@priceplumbing.example", "contact_name": "Owen Price", "title": "Website refresh quote for Price Plumbing", "urgency": "medium", "suggested_action": "Prepare a quote for the Price Plumbing website refresh (new photos, service pages, online booking)", "reason": "Owen asked for a quote after the catch-up on the website", "channel": "email", "created_at": "2026-09-29T08:45:00Z", "analyzed_at": "2026-09-29T08:45:00Z", "sources": {"emails": ["7d39921b-cd58-408f-9f4c-5f9258979604"], "thread_id": "<20260929083000.e5cc27df@priceplumbing.example>", "blobs": [], "calendar_events": []}}
+        ],
+        "memory": [
+          {"contact": "owen@priceplumbing.example", "blob_id": "b3b49e6a-43b1-4255-b3dd-29cc476dfa62", "content": "#IDENTIFIERS\nEntity type: PERSON\nName: Owen Price\nEmail: owen@priceplumbing.example\nPhone: +44 1632 960 377\nCompany: Price Plumbing & Heating\nRole: owner\n#ABOUT\nOwner of Price Plumbing & Heating, a plumbing and heating firm in Bristol; Harbour Lane designed its new logo in 2026.\n#HISTORY\n- 2026-09: new logo delivered; talking about the vans, an open day flyer and a website refresh."}
+        ]
+      },
+      "label": {"task_action": "update", "action_required": true, "target_task_id": "e7eaf510-3bc1-4cee-9b16-fb04e2141499"},
+      "critical": true,
+      "why": "New requirements (two years of hosting, a £3,000 budget) for the website quote; the client has two open tasks and only the website one may change — updating the flyer task would corrupt it."
+    }
+  ]
+}

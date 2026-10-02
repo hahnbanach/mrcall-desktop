@@ -1,0 +1,21 @@
+{
+  "about": "Synthetic profile owners for the TASK_DETECTION and REANALYZE cases. environment is the owner's identity as the engine reads it from the profile; trained_prompt_file is the task prompt (agent type task_email) the trainer would have stored for that owner. Every name, address, number and company is invented.",
+  "profiles": {
+    "it": {
+      "environment": {
+        "EMAIL_ADDRESS": "giulia@serramentiferraris.example",
+        "USER_FULL_NAME": "Giulia Ferraris",
+        "USER_COMPANY": "Serramenti Ferraris s.r.l."
+      },
+      "trained_prompt_file": "trained_prompt.it.txt"
+    },
+    "en": {
+      "environment": {
+        "EMAIL_ADDRESS": "tom@harbourlanedesign.example",
+        "USER_FULL_NAME": "Tom Hale",
+        "USER_COMPANY": "Harbour Lane Design Ltd"
+      },
+      "trained_prompt_file": "trained_prompt.en.txt"
+    }
+  }
+}

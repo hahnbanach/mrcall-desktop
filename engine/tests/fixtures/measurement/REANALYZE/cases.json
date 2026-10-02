@@ -1,0 +1,347 @@
+{
+  "schema": 1,
+  "role": "REANALYZE",
+  "builder": "zylch.workers.task_reanalyze.reanalyze_task",
+  "cases": [
+    {
+      "id": "reanalyze-01",
+      "lang": "it",
+      "call_site": "f4.reanalyze",
+      "input": {
+        "profile": "it",
+        "now": "2026-10-01T09:00:00Z",
+        "task": {"id": "fbbfbab0-07d2-421e-9ecf-1a909f33935b", "event_type": "email", "event_id": "fb94c6ee-1ca9-4bed-ac77-a03e0207003d", "contact_email": "paolo.sala@posta.example", "contact_name": "Paolo Sala", "title": "Preventivo scorrevoli Paolo Sala", "urgency": "medium", "suggested_action": "Inviare a Paolo Sala il preventivo per due porte-finestre scorrevoli alzanti in PVC (240x230 circa) e chiedergli le foto se servono", "reason": "Nuovo cliente segnalato da Edil Bassi: vuole sostituire i due scorrevoli in alluminio del soggiorno", "channel": "email", "created_at": "2026-09-30T14:30:00Z", "analyzed_at": "2026-09-30T14:30:00Z", "sources": {"emails": ["fb94c6ee-1ca9-4bed-ac77-a03e0207003d"], "thread_id": "<20260930141000.8734816c@posta.example>", "blobs": [], "calendar_events": []}},
+        "emails": [
+          {"id": "fb94c6ee-1ca9-4bed-ac77-a03e0207003d", "thread_id": "<20260930141000.8734816c@posta.example>", "from": "paolo.sala@posta.example", "from_name": "Paolo Sala", "to": "giulia@serramentiferraris.example", "subject": "Preventivo porte scorrevoli", "date": "2026-09-30T14:10:00Z", "body": "Buongiorno,\nsono Paolo Sala, mi ha dato il vostro contatto l'impresa Bassi. Vorrei un preventivo per due porte-finestre scorrevoli alzanti in PVC (circa 240x230) per il soggiorno, al posto di quelle in alluminio. Posso mandarle delle foto se servono.\nGrazie,\nPaolo Sala\n+39 02 0000 0175"}
+        ]
+      },
+      "label": {"action": "keep"},
+      "critical": false,
+      "why": "Nothing has happened since the task was created yesterday from the customer's only email; the task still describes exactly what is owed."
+    },
+    {
+      "id": "reanalyze-02",
+      "lang": "en",
+      "call_site": "f4.reanalyze",
+      "input": {
+        "profile": "en",
+        "now": "2026-10-01T09:00:00Z",
+        "task": {"id": "720d7d0e-87be-4c4f-8a56-e9df298fb04f", "event_type": "email", "event_id": "17ea3367-7e97-4d4c-8abe-564e72476d22", "contact_email": "priya@nairbakery.example", "contact_name": "Priya Nair", "title": "Fix Nair & Co online cake orders", "urgency": "critical", "suggested_action": "Investigate and fix the error on Nair & Co Bakery's online cake ordering page first thing Thursday morning", "reason": "Since 3pm on Wednesday customers cannot order cakes for collection; Priya asked Tom to look at it first thing Thursday, before the busy Saturday", "channel": "email", "created_at": "2026-09-30T16:35:00Z", "analyzed_at": "2026-09-30T16:35:00Z", "sources": {"emails": ["17ea3367-7e97-4d4c-8abe-564e72476d22"], "thread_id": "<20260930162000.a9be45dd@nairbakery.example>", "blobs": [], "calendar_events": []}},
+        "emails": [
+          {"id": "17ea3367-7e97-4d4c-8abe-564e72476d22", "thread_id": "<20260930162000.a9be45dd@nairbakery.example>", "from": "priya@nairbakery.example", "from_name": "Priya Nair", "to": "tom@harbourlanedesign.example", "subject": "Online orders not working", "date": "2026-09-30T16:20:00Z", "body": "Hi Tom,\nsince about 3pm customers get an error when they try to order cakes for collection on our website: the page just says \"something went wrong\". Saturday is our busiest day for cake orders. Could you look at it first thing tomorrow?\nThanks,\nPriya"}
+        ]
+      },
+      "label": {"action": "keep"},
+      "critical": false,
+      "why": "It is Thursday morning, the client asked for a fix first thing today and nothing has changed; the critical task is still accurate."
+    },
+    {
+      "id": "reanalyze-03",
+      "lang": "it",
+      "call_site": "f4.reanalyze",
+      "input": {
+        "profile": "it",
+        "now": "2026-10-01T09:00:00Z",
+        "task": {"id": "3817ca26-32af-4990-954d-5c201d1d27f2", "event_type": "email", "event_id": "6108cf9c-03f6-4ee2-86ed-f74085b62f04", "contact_email": "chiara.fontana@posta.example", "contact_name": "Chiara Fontana", "title": "Garanzia finestra Chiara Fontana", "urgency": "high", "suggested_action": "Fissare un intervento in garanzia da Chiara Fontana per l'infiltrazione d'acqua dalla finestra della camera installata a giugno", "reason": "La finestra lascia entrare acqua con la pioggia forte; la cliente chiede un tecnico in garanzia", "channel": "email", "created_at": "2026-10-01T07:30:00Z", "analyzed_at": "2026-10-01T07:30:00Z", "sources": {"emails": ["6108cf9c-03f6-4ee2-86ed-f74085b62f04"], "thread_id": "<20261001071200.c426a6c7@posta.example>", "blobs": [], "calendar_events": []}},
+        "emails": [
+          {"id": "6108cf9c-03f6-4ee2-86ed-f74085b62f04", "thread_id": "<20261001071200.c426a6c7@posta.example>", "from": "chiara.fontana@posta.example", "from_name": "Chiara Fontana", "to": "giulia@serramentiferraris.example", "subject": "Infiltrazioni dalla finestra della camera", "date": "2026-10-01T07:12:00Z", "body": "Buongiorno,\nla finestra della camera che ci avete installato a giugno lascia entrare acqua quando piove forte: stanotte sul davanzale interno si è formata una pozza. È ancora in garanzia: quando potete mandare un tecnico?\nChiara Fontana\nVia Mazzini 7, Caravaggio"},
+          {"id": "97c4937c-2136-4c9f-bbdf-86e748d6cdf4", "thread_id": "<20261001071200.c426a6c7@posta.example>", "from": "giulia@serramentiferraris.example", "from_name": "Serramenti Ferraris", "to": "chiara.fontana@posta.example", "subject": "Re: Infiltrazioni dalla finestra della camera", "date": "2026-10-01T07:12:30Z", "body": "Grazie per averci scritto. Abbiamo ricevuto la sua richiesta e le risponderemo al più presto.\nServizio clienti Serramenti Ferraris", "auto_reply": true}
+        ]
+      },
+      "label": {"action": "keep"},
+      "critical": true,
+      "why": "The task was made this morning from the warranty request; the only later message is the mailbox's automatic acknowledgment, which the prompt says is not an answer, so closing would drop an open warranty claim."
+    },
+    {
+      "id": "reanalyze-04",
+      "lang": "en",
+      "call_site": "f4.reanalyze",
+      "input": {
+        "profile": "en",
+        "now": "2026-10-01T09:00:00Z",
+        "task": {"id": "1b5a005f-c6f9-45fe-936f-e16eb2a85c34", "event_type": "email", "event_id": "d3e71686-38b9-4d6d-9ef7-246836a6fb4b", "contact_email": "hannah@brooksyoga.example", "contact_name": "Hannah Brooks", "title": "September invoice for Brooks Yoga", "urgency": "medium", "suggested_action": "Send Hannah the invoice for September's website maintenance", "reason": "Her accountant needs it by the end of next week", "channel": "email", "created_at": "2026-09-30T10:30:00Z", "analyzed_at": "2026-09-30T10:30:00Z", "sources": {"emails": ["d3e71686-38b9-4d6d-9ef7-246836a6fb4b"], "thread_id": "<20260930101200.5e038f6d@brooksyoga.example>", "blobs": [], "calendar_events": []}},
+        "emails": [
+          {"id": "d3e71686-38b9-4d6d-9ef7-246836a6fb4b", "thread_id": "<20260930101200.5e038f6d@brooksyoga.example>", "from": "hannah@brooksyoga.example", "from_name": "Hannah Brooks", "to": "tom@harbourlanedesign.example", "subject": "September invoice", "date": "2026-09-30T10:12:00Z", "body": "Hi Tom,\ncould you send me the invoice for the website maintenance in September? Our accountant needs it by the end of next week.\nThanks,\nHannah"}
+        ]
+      },
+      "label": {"action": "keep"},
+      "critical": false,
+      "why": "The invoice request is from yesterday, nobody has answered and nothing changed; the task is accurate as it stands."
+    },
+    {
+      "id": "reanalyze-05",
+      "lang": "it",
+      "call_site": "f4.reanalyze",
+      "input": {
+        "profile": "it",
+        "now": "2026-10-01T09:00:00Z",
+        "task": {"id": "ddc2307c-f84c-45cf-8e7b-d9b69b63aa3e", "event_type": "email", "event_id": "8f03b55f-9112-46b5-a996-9762d36fbdea", "contact_email": "amministrazione@studiocolombo.example", "contact_name": "Paola Colombo", "title": "Preventivo tapparelle Via Manzoni 4", "urgency": "medium", "suggested_action": "Preparare e inviare allo Studio Colombo il preventivo per sostituire 24 tapparelle in PVC con tapparelle in alluminio coibentato (Condominio Via Manzoni 4) prima dell'assemblea del 20 ottobre", "reason": "L'assemblea del condominio vuole il preventivo prima della riunione del 20 ottobre", "channel": "email", "created_at": "2026-09-25T10:00:00Z", "analyzed_at": "2026-09-25T10:00:00Z", "sources": {"emails": ["8f03b55f-9112-46b5-a996-9762d36fbdea"], "thread_id": "<20260925094000.d9ce110d@studiocolombo.example>", "blobs": [], "calendar_events": []}},
+        "emails": [
+          {"id": "8f03b55f-9112-46b5-a996-9762d36fbdea", "thread_id": "<20260925094000.d9ce110d@studiocolombo.example>", "from": "amministrazione@studiocolombo.example", "from_name": "Paola Colombo - Studio Colombo", "to": "giulia@serramentiferraris.example", "subject": "Preventivo tapparelle Condominio Via Manzoni 4", "date": "2026-09-25T09:40:00Z", "body": "Gentile Sig.ra Ferraris,\nl'assemblea del Condominio Via Manzoni 4 ha chiesto un preventivo per sostituire le 24 tapparelle in PVC del lato strada con tapparelle in alluminio coibentato. L'assemblea si riunirà il 20 ottobre.\nCordiali saluti,\nPaola Colombo"},
+          {"id": "1b89b176-1629-4fc0-93a6-b311d1b3b1b4", "thread_id": "<20260925094000.d9ce110d@studiocolombo.example>", "from": "amministrazione@studiocolombo.example", "from_name": "Paola Colombo - Studio Colombo", "to": "giulia@serramentiferraris.example", "subject": "Re: Preventivo tapparelle Condominio Via Manzoni 4", "date": "2026-09-30T15:10:00Z", "body": "Gentile Sig.ra Ferraris,\nle scrivo solo per dirle che non c'è nessuna fretta: basta che il preventivo ci arrivi qualche giorno prima dell'assemblea del 20 ottobre.\nCordiali saluti,\nPaola Colombo"}
+        ]
+      },
+      "label": {"action": "keep"},
+      "critical": false,
+      "why": "The new message repeats the same ask and the same deadline (before the 20 October meeting) the task already states; with the contact waiting on us the urgency may not be lowered, so nothing changes."
+    },
+    {
+      "id": "reanalyze-06",
+      "lang": "en",
+      "call_site": "f4.reanalyze",
+      "input": {
+        "profile": "en",
+        "now": "2026-10-01T09:00:00Z",
+        "task": {"id": "ced1ffe3-53a6-4b90-849f-1d99379d47f9", "event_type": "email", "event_id": "5c93127e-6d8f-40c3-a0a2-7cf8a96078a1", "contact_email": "owen@priceplumbing.example", "contact_name": "Owen Price", "title": "Confirm 2pm meeting with Owen", "urgency": "medium", "suggested_action": "Reply to Owen to confirm moving Tuesday's website meeting (6 October) from 10:00 to 14:00", "reason": "Owen accepted Tuesday but asked to move the meeting to 2pm because of a morning job", "channel": "email", "created_at": "2026-09-30T18:00:00Z", "analyzed_at": "2026-09-30T18:00:00Z", "sources": {"emails": ["5c93127e-6d8f-40c3-a0a2-7cf8a96078a1"], "thread_id": "<20260929083000.31b48367@priceplumbing.example>", "blobs": [], "calendar_events": []}},
+        "emails": [
+          {"id": "64ea2453-70cb-4f7e-a27a-3c325ef8a00f", "thread_id": "<20260929083000.31b48367@priceplumbing.example>", "from": "owen@priceplumbing.example", "from_name": "Owen Price", "to": "tom@harbourlanedesign.example", "subject": "Catch-up on the website refresh", "date": "2026-09-29T08:30:00Z", "body": "Hi Tom, could we meet next week to talk about the website?\nOwen"},
+          {"id": "d8eccf47-8d20-419c-accd-6a7e129c1a53", "thread_id": "<20260929083000.31b48367@priceplumbing.example>", "from": "tom@harbourlanedesign.example", "from_name": "Tom Hale", "to": "owen@priceplumbing.example", "subject": "Re: Catch-up on the website refresh", "date": "2026-09-29T10:12:00Z", "body": "Hi Owen, how about Tuesday 6 October at 10:00 at your office?\nTom"},
+          {"id": "5c93127e-6d8f-40c3-a0a2-7cf8a96078a1", "thread_id": "<20260929083000.31b48367@priceplumbing.example>", "from": "owen@priceplumbing.example", "from_name": "Owen Price", "to": "tom@harbourlanedesign.example", "subject": "Re: Catch-up on the website refresh", "date": "2026-09-30T17:45:00Z", "body": "Hi Tom, Tuesday works, but could we make it 2pm instead of 10? I've got a boiler install in the morning.\nOwen"}
+        ]
+      },
+      "label": {"action": "keep"},
+      "critical": false,
+      "why": "The task was created from Owen's latest message and already asks Tom to confirm the 2pm slot; no newer message exists."
+    },
+    {
+      "id": "reanalyze-07",
+      "lang": "en",
+      "call_site": "f4.reanalyze",
+      "input": {
+        "profile": "en",
+        "now": "2026-10-01T09:00:00Z",
+        "task": {"id": "7ba9d98f-200c-4409-b99a-1a4d2440ad27", "event_type": "email", "event_id": "4056fdfd-f676-4449-8b6d-f2487be5dc11", "contact_email": "felix@nordlyscoffee.example", "contact_name": "Felix Andersson", "title": "Meeting slots for Nordlys winter campaign", "urgency": "medium", "suggested_action": "Send Felix two or three morning slots next week for a meeting to plan Nordlys Coffee's winter campaign", "reason": "Felix wants to plan the gift boxes, the landing page and the newsletter", "channel": "email", "created_at": "2026-09-30T13:20:00Z", "analyzed_at": "2026-09-30T13:20:00Z", "sources": {"emails": ["4056fdfd-f676-4449-8b6d-f2487be5dc11"], "thread_id": "<20260930130500.b2cf042b@nordlyscoffee.example>", "blobs": [], "calendar_events": []}},
+        "emails": [
+          {"id": "4056fdfd-f676-4449-8b6d-f2487be5dc11", "thread_id": "<20260930130500.b2cf042b@nordlyscoffee.example>", "from": "felix@nordlyscoffee.example", "from_name": "Felix Andersson", "to": "tom@harbourlanedesign.example", "subject": "Winter campaign", "date": "2026-09-30T13:05:00Z", "body": "Hi Tom,\nwe'd like to plan the winter campaign (Christmas gift boxes, a new landing page, the newsletter). Could you suggest two or three slots for a meeting next week? Mornings are best for us.\nFelix"}
+        ]
+      },
+      "label": {"action": "keep"},
+      "critical": false,
+      "why": "Felix asked yesterday for meeting slots and nothing has happened since; the task is still accurate."
+    },
+    {
+      "id": "reanalyze-08",
+      "lang": "it",
+      "call_site": "f4.reanalyze",
+      "input": {
+        "profile": "it",
+        "now": "2026-10-01T09:00:00Z",
+        "task": {"id": "24b9e4f8-2e73-42f7-a06c-17ee13d39859", "event_type": "email", "event_id": "1f06c175-c464-44d4-a932-682533b5aa34", "contact_email": "marco.bassi@edilbassi.example", "contact_name": "Marco Bassi", "title": "Scheda tecnica profili per Edil Bassi", "urgency": "medium", "suggested_action": "Inviare a Marco Bassi la scheda tecnica dei profili in PVC per il direttore lavori del cantiere di Via Roma", "reason": "La chiede il direttore lavori del cantiere", "channel": "email", "created_at": "2026-09-28T08:20:00Z", "analyzed_at": "2026-09-28T08:20:00Z", "sources": {"emails": ["1f06c175-c464-44d4-a932-682533b5aa34"], "thread_id": "<20260928080500.7716dc46@edilbassi.example>", "blobs": [], "calendar_events": []}},
+        "emails": [
+          {"id": "1f06c175-c464-44d4-a932-682533b5aa34", "thread_id": "<20260928080500.7716dc46@edilbassi.example>", "from": "marco.bassi@edilbassi.example", "from_name": "Marco Bassi", "to": "giulia@serramentiferraris.example", "subject": "Scheda tecnica profili", "date": "2026-09-28T08:05:00Z", "body": "Giulia, mi mandi la scheda tecnica dei profili in PVC che usate per il cantiere di Via Roma? La chiede il direttore lavori.\nMarco"},
+          {"id": "18ccfb6e-1af5-4ab0-9025-cf5625af856a", "thread_id": "<20260928080500.7716dc46@edilbassi.example>", "from": "giulia@serramentiferraris.example", "from_name": "Giulia Ferraris", "to": "marco.bassi@edilbassi.example", "subject": "Re: Scheda tecnica profili", "date": "2026-09-28T09:30:00Z", "body": "Ciao Marco, ecco in allegato la scheda tecnica dei profili (sistema da 76 mm, Uw 1,1). Fammi sapere se il direttore lavori ha bisogno d'altro.\nGiulia"},
+          {"id": "b2bcd4e8-35b6-4967-8ba1-eedf5847170b", "thread_id": "<20260928080500.7716dc46@edilbassi.example>", "from": "marco.bassi@edilbassi.example", "from_name": "Marco Bassi", "to": "giulia@serramentiferraris.example", "subject": "Re: Scheda tecnica profili", "date": "2026-09-28T10:02:00Z", "body": "Ricevuta, grazie!\nMarco"}
+        ]
+      },
+      "label": {"action": "close"},
+      "critical": false,
+      "why": "Giulia sent the technical sheet and the contractor confirmed receipt; although he wrote last, nothing remains to be done."
+    },
+    {
+      "id": "reanalyze-09",
+      "lang": "en",
+      "call_site": "f4.reanalyze",
+      "input": {
+        "profile": "en",
+        "now": "2026-10-01T09:00:00Z",
+        "task": {"id": "76bb3952-2c1d-484e-b8e2-f1bc767c1e67", "event_type": "email", "event_id": "e7ceab1c-8983-45f6-ad93-4df0f00b38eb", "contact_email": "hannah@brooksyoga.example", "contact_name": "Hannah Brooks", "title": "Brooks Yoga contact form", "urgency": "high", "suggested_action": "Investigate why the Brooks Yoga website contact form is not sending messages", "reason": "Students' enquiries are not reaching the studio", "channel": "email", "created_at": "2026-09-25T09:30:00Z", "analyzed_at": "2026-09-25T09:30:00Z", "sources": {"emails": ["e7ceab1c-8983-45f6-ad93-4df0f00b38eb"], "thread_id": "<20260925091500.86ff7d8b@brooksyoga.example>", "blobs": [], "calendar_events": []}},
+        "emails": [
+          {"id": "e7ceab1c-8983-45f6-ad93-4df0f00b38eb", "thread_id": "<20260925091500.86ff7d8b@brooksyoga.example>", "from": "hannah@brooksyoga.example", "from_name": "Hannah Brooks", "to": "tom@harbourlanedesign.example", "subject": "Contact form", "date": "2026-09-25T09:15:00Z", "body": "Hi Tom, students say the contact form on our site isn't sending messages. Could you have a look?\nHannah"},
+          {"id": "99584f07-4621-45ba-9207-fd9339b60821", "thread_id": "<20260925091500.86ff7d8b@brooksyoga.example>", "from": "tom@harbourlanedesign.example", "from_name": "Tom Hale", "to": "hannah@brooksyoga.example", "subject": "Re: Contact form", "date": "2026-09-25T15:40:00Z", "body": "Hi Hannah, found it: the email password the form uses had expired. I've updated it and sent a test message, which arrived fine. Could you try it too?\nTom"},
+          {"id": "75cf6ad2-2ad9-4401-a043-3adfd400cf0d", "thread_id": "<20260925091500.86ff7d8b@brooksyoga.example>", "from": "hannah@brooksyoga.example", "from_name": "Hannah Brooks", "to": "tom@harbourlanedesign.example", "subject": "Re: Contact form", "date": "2026-09-25T17:02:00Z", "body": "Just tried: works perfectly. Thank you!\nHannah"}
+        ]
+      },
+      "label": {"action": "close"},
+      "critical": false,
+      "why": "Tom fixed the form and the client confirmed it works; the task is resolved."
+    },
+    {
+      "id": "reanalyze-10",
+      "lang": "it",
+      "call_site": "f4.reanalyze",
+      "input": {
+        "profile": "it",
+        "now": "2026-10-01T09:00:00Z",
+        "task": {"id": "3cb3ad46-5c1e-4805-bf7f-ace87525fc0e", "event_type": "email", "event_id": "acdb1175-5187-494e-9129-7fac84fde28b", "contact_email": "franco.rizzi@posta.example", "contact_name": "Franco Rizzi", "title": "Preventivo portoncino Franco Rizzi", "urgency": "medium", "suggested_action": "Preparare e inviare a Franco Rizzi il preventivo per un portoncino blindato in classe 3", "reason": "Vuole sostituire il portoncino d'ingresso della villetta", "channel": "email", "created_at": "2026-09-21T18:40:00Z", "analyzed_at": "2026-09-21T18:40:00Z", "sources": {"emails": ["acdb1175-5187-494e-9129-7fac84fde28b"], "thread_id": "<20260921182000.824811b1@posta.example>", "blobs": [], "calendar_events": []}},
+        "emails": [
+          {"id": "acdb1175-5187-494e-9129-7fac84fde28b", "thread_id": "<20260921182000.824811b1@posta.example>", "from": "franco.rizzi@posta.example", "from_name": "Franco Rizzi", "to": "giulia@serramentiferraris.example", "subject": "Preventivo portoncino", "date": "2026-09-21T18:20:00Z", "body": "Buonasera, vorrei un preventivo per sostituire il portoncino d'ingresso della villetta con uno blindato in classe 3.\nFranco Rizzi"},
+          {"id": "da873627-8f8d-4a40-a537-624b0d630dcf", "thread_id": "<20260921182000.824811b1@posta.example>", "from": "franco.rizzi@posta.example", "from_name": "Franco Rizzi", "to": "giulia@serramentiferraris.example", "subject": "Re: Preventivo portoncino", "date": "2026-09-30T12:10:00Z", "body": "Buongiorno,\nvi scrivo per dirvi che abbiamo deciso di rimandare i lavori al 2027, quindi per ora il preventivo non ci serve più. Non c'è bisogno di rispondere, vi ricontatterò io l'anno prossimo.\nGrazie e buon lavoro,\nFranco Rizzi"}
+        ]
+      },
+      "label": {"action": "close"},
+      "critical": false,
+      "why": "The customer withdraws the request until 2027 and says explicitly that no reply is needed; the request no longer matters, which the prompt says means CLOSE."
+    },
+    {
+      "id": "reanalyze-11",
+      "lang": "en",
+      "call_site": "f4.reanalyze",
+      "input": {
+        "profile": "en",
+        "now": "2026-10-01T09:00:00Z",
+        "task": {"id": "9408a872-8456-4b89-8ecc-d4bef9756f94", "event_type": "email", "event_id": "b6d1b4f4-e1c4-4855-ac2e-5694a4b4381a", "contact_email": "events@harboursidefoodfest.example", "contact_name": "Harbourside Food Festival", "title": "Food festival poster entry", "urgency": "low", "suggested_action": "Design and submit an entry for the Harbourside Food Festival poster competition (deadline Friday 25 September, 5pm)", "reason": "Optional competition with a £500 fee for the winning studio", "channel": "email", "created_at": "2026-09-10T08:15:00Z", "analyzed_at": "2026-09-10T08:15:00Z", "sources": {"emails": ["b6d1b4f4-e1c4-4855-ac2e-5694a4b4381a"], "thread_id": "<20260910080000.e4a81865@harboursidefoodfest.example>", "blobs": [], "calendar_events": []}},
+        "emails": [
+          {"id": "b6d1b4f4-e1c4-4855-ac2e-5694a4b4381a", "thread_id": "<20260910080000.e4a81865@harboursidefoodfest.example>", "from": "events@harboursidefoodfest.example", "from_name": "Harbourside Food Festival", "to": "tom@harbourlanedesign.example", "subject": "Call for entries: festival poster competition", "date": "2026-09-10T08:00:00Z", "body": "Dear designers,\nthe Harbourside Food Festival invites local studios to submit a design for the 2027 festival poster. Entries must reach this address by Friday 25 September 2026, 5pm. The winning studio receives a £500 fee and credit on all festival materials.\nThe Festival team"}
+        ]
+      },
+      "label": {"action": "close"},
+      "critical": false,
+      "why": "The competition closed on 25 September and today is 1 October; the entry can no longer be submitted, the tool's own example of a task to close."
+    },
+    {
+      "id": "reanalyze-12",
+      "lang": "it",
+      "call_site": "f4.reanalyze",
+      "input": {
+        "profile": "it",
+        "now": "2026-10-01T09:00:00Z",
+        "task": {"id": "8a2ac01a-e2b8-4096-95cf-bb4f5e241110", "event_type": "email", "event_id": "23c5e9c9-2be6-45dc-9d3f-09df2df7575a", "contact_email": "lucia.rinaldi@posta.example", "contact_name": "Lucia Rinaldi", "title": "Sopralluogo Lucia Rinaldi", "urgency": "medium", "suggested_action": "Rispondere a Lucia Rinaldi per fissare il sopralluogo per il preventivo di 4 finestre", "reason": "Chiede un sopralluogo per un preventivo di 4 finestre in PVC", "channel": "email", "created_at": "2026-09-24T10:30:00Z", "analyzed_at": "2026-09-24T10:30:00Z", "sources": {"emails": ["23c5e9c9-2be6-45dc-9d3f-09df2df7575a"], "thread_id": "<20260924101500.bc68c8d1@posta.example>", "blobs": [], "calendar_events": []}},
+        "emails": [
+          {"id": "23c5e9c9-2be6-45dc-9d3f-09df2df7575a", "thread_id": "<20260924101500.bc68c8d1@posta.example>", "from": "lucia.rinaldi@posta.example", "from_name": "Lucia Rinaldi", "to": "giulia@serramentiferraris.example", "subject": "Sopralluogo finestre", "date": "2026-09-24T10:15:00Z", "body": "Buongiorno, vorrei un preventivo per 4 finestre in PVC: quando potreste passare per un sopralluogo?\nLucia Rinaldi"},
+          {"id": "fec84a7e-a9fb-416f-9381-14134e0fc0fb", "thread_id": "<20260924101500.bc68c8d1@posta.example>", "from": "giulia@serramentiferraris.example", "from_name": "Giulia Ferraris", "to": "lucia.rinaldi@posta.example", "subject": "Re: Sopralluogo finestre", "date": "2026-09-25T08:05:00Z", "body": "Buongiorno Sig.ra Rinaldi, possiamo venire giovedì 8 ottobre alle 15. Mi conferma?\nGiulia Ferraris"}
+        ]
+      },
+      "label": {"action": "close"},
+      "critical": false,
+      "why": "Giulia answered with a concrete date and the ball is in the customer's court; the prompt says to CLOSE once the user has replied with the next step."
+    },
+    {
+      "id": "reanalyze-13",
+      "lang": "en",
+      "call_site": "f4.reanalyze",
+      "input": {
+        "profile": "en",
+        "now": "2026-10-01T09:00:00Z",
+        "task": {"id": "82b5357a-c624-461c-970a-d08055a79e49", "event_type": "email", "event_id": "b54cdbd8-3295-4128-aa11-34a993e3a0ec", "contact_email": "owen@priceplumbing.example", "contact_name": "Owen Price", "title": "Quote for polo logo", "urgency": "medium", "suggested_action": "Send Owen a quote for adapting the logo for embroidered work polos", "reason": "Owen wants the logo embroidered on the front and back of work polos", "channel": "email", "created_at": "2026-09-22T09:15:00Z", "analyzed_at": "2026-09-22T09:15:00Z", "sources": {"emails": ["b54cdbd8-3295-4128-aa11-34a993e3a0ec"], "thread_id": "<20260922090000.64608703@priceplumbing.example>", "blobs": [], "calendar_events": []}},
+        "emails": [
+          {"id": "b54cdbd8-3295-4128-aa11-34a993e3a0ec", "thread_id": "<20260922090000.64608703@priceplumbing.example>", "from": "owen@priceplumbing.example", "from_name": "Owen Price", "to": "tom@harbourlanedesign.example", "subject": "Logo for work polos", "date": "2026-09-22T09:00:00Z", "body": "Hi Tom, could you quote for adapting our logo for embroidered work polos (front chest and back)?\nOwen"},
+          {"id": "eebf39d6-2eb4-4509-a7ed-57b5d4228bec", "thread_id": "<20260922090000.64608703@priceplumbing.example>", "from": "tom@harbourlanedesign.example", "from_name": "Tom Hale", "to": "owen@priceplumbing.example", "subject": "Re: Logo for work polos", "date": "2026-09-23T11:20:00Z", "body": "Hi Owen, attached is the quote: £180 for the embroidery-ready logo files (front and back versions), delivered within 3 working days of your go-ahead. Let me know if you'd like to proceed.\nTom"}
+        ]
+      },
+      "label": {"action": "close"},
+      "critical": false,
+      "why": "Tom sent the quote and is waiting for Owen's go-ahead; the task to send the quote is done and the ball is in the client's court."
+    },
+    {
+      "id": "reanalyze-14",
+      "lang": "it",
+      "call_site": "f4.reanalyze",
+      "input": {
+        "profile": "it",
+        "now": "2026-10-01T09:00:00Z",
+        "task": {"id": "2ba99bf9-1991-4763-acd0-47f5c74e9cdd", "event_type": "email", "event_id": "460a330b-c36b-4718-8f8a-46c83de8f008", "contact_email": "sergio.galli@posta.example", "contact_name": "Sergio Galli", "title": "Maniglia bagno Sergio Galli", "urgency": "medium", "suggested_action": "Sostituire la maniglia rotta della finestra del bagno di Sergio Galli", "reason": "La maniglia è rotta e la finestra non si chiude", "channel": "email", "created_at": "2026-09-26T09:00:00Z", "analyzed_at": "2026-09-26T09:00:00Z", "sources": {"emails": ["460a330b-c36b-4718-8f8a-46c83de8f008"], "thread_id": "<20260926084500.cae54ee1@posta.example>", "blobs": [], "calendar_events": []}},
+        "emails": [
+          {"id": "460a330b-c36b-4718-8f8a-46c83de8f008", "thread_id": "<20260926084500.cae54ee1@posta.example>", "from": "sergio.galli@posta.example", "from_name": "Sergio Galli", "to": "giulia@serramentiferraris.example", "subject": "Maniglia finestra bagno", "date": "2026-09-26T08:45:00Z", "body": "Buongiorno, la maniglia della finestra del bagno è rotta e non si chiude più. Potete sostituirla?\nSergio Galli"},
+          {"id": "c199dbed-e1a7-4b1a-a9df-61563f463c69", "thread_id": "<20260928091000.4ae43b81@serramentiferraris.example>", "from": "giulia@serramentiferraris.example", "from_name": "Giulia Ferraris", "to": "sergio.galli@posta.example", "subject": "Intervento sostituzione maniglia", "date": "2026-09-28T09:10:00Z", "body": "Buongiorno Sig. Galli, il nostro tecnico passerà mercoledì 30 settembre alle 9 per sostituire la maniglia della finestra del bagno.\nCordiali saluti,\nGiulia Ferraris"},
+          {"id": "068249cc-e4af-46ce-a669-32ac7b802a83", "thread_id": "<20260928091000.4ae43b81@serramentiferraris.example>", "from": "sergio.galli@posta.example", "from_name": "Sergio Galli", "to": "giulia@serramentiferraris.example", "subject": "Re: Intervento sostituzione maniglia", "date": "2026-09-30T11:35:00Z", "body": "Buongiorno, il tecnico è passato stamattina e ha sostituito la maniglia: ora funziona benissimo. Grazie!\nSergio Galli"}
+        ]
+      },
+      "label": {"action": "close"},
+      "critical": false,
+      "why": "The repair was booked and done, and the customer confirms it on a related thread with the same contact, which the prompt says counts as much as the primary thread."
+    },
+    {
+      "id": "reanalyze-15",
+      "lang": "it",
+      "call_site": "f4.reanalyze",
+      "input": {
+        "profile": "it",
+        "now": "2026-10-01T09:00:00Z",
+        "task": {"id": "6fee9f1c-0614-49f6-86a0-4cd1329617fd", "event_type": "email", "event_id": "a6f6409c-3527-4c74-854e-34804ece648f", "contact_email": "giorgio.valli@posta.example", "contact_name": "Giorgio Valli", "title": "Preventivo zanzariere Giorgio Valli", "urgency": "medium", "suggested_action": "Inviare a Giorgio Valli il preventivo per 6 zanzariere a rullo", "reason": "Chiede zanzariere a rullo per le finestre di casa", "channel": "email", "created_at": "2026-09-27T10:40:00Z", "analyzed_at": "2026-09-27T10:40:00Z", "sources": {"emails": ["a6f6409c-3527-4c74-854e-34804ece648f"], "thread_id": "<20260927102000.cf4e9c46@posta.example>", "blobs": [], "calendar_events": []}},
+        "emails": [
+          {"id": "a6f6409c-3527-4c74-854e-34804ece648f", "thread_id": "<20260927102000.cf4e9c46@posta.example>", "from": "giorgio.valli@posta.example", "from_name": "Giorgio Valli", "to": "giulia@serramentiferraris.example", "subject": "Preventivo zanzariere", "date": "2026-09-27T10:20:00Z", "body": "Buongiorno, mi servirebbe un preventivo per zanzariere a rullo per 6 finestre.\nGiorgio Valli"},
+          {"id": "5a52a5c7-98d1-47b1-971d-7013caeac3d4", "thread_id": "<20260927102000.cf4e9c46@posta.example>", "from": "giorgio.valli@posta.example", "from_name": "Giorgio Valli", "to": "giulia@serramentiferraris.example", "subject": "Re: Preventivo zanzariere", "date": "2026-09-30T19:30:00Z", "body": "Buonasera, ho ricontato: le finestre sono 8, non 6, e ci sono anche 2 porte-finestre per cui vorrei zanzariere plissettate. Mi aggiorna il preventivo?\nGrazie,\nGiorgio Valli"}
+        ]
+      },
+      "label": {"action": "update"},
+      "critical": true,
+      "why": "The customer changed the request (8 roller screens plus 2 pleated ones instead of 6); the task still says 6, so keeping it means a wrong quote and closing it drops the request."
+    },
+    {
+      "id": "reanalyze-16",
+      "lang": "en",
+      "call_site": "f4.reanalyze",
+      "input": {
+        "profile": "en",
+        "now": "2026-10-01T09:00:00Z",
+        "task": {"id": "bd2edc4e-3d1d-4cfe-9be0-ff3d345f6acf", "event_type": "email", "event_id": "813817c7-9e2d-441c-b07c-e651383b0227", "contact_email": "felix@nordlyscoffee.example", "contact_name": "Felix Andersson", "title": "Nordlys autumn sale banner", "urgency": "medium", "suggested_action": "Design the English homepage banner for Nordlys Coffee's autumn sale (20% off all beans, ends 5 October)", "reason": "Felix wants a banner for the autumn sale on the homepage", "channel": "email", "created_at": "2026-09-28T09:45:00Z", "analyzed_at": "2026-09-28T09:45:00Z", "sources": {"emails": ["813817c7-9e2d-441c-b07c-e651383b0227"], "thread_id": "<20260928093000.123a41d3@nordlyscoffee.example>", "blobs": [], "calendar_events": []}},
+        "emails": [
+          {"id": "813817c7-9e2d-441c-b07c-e651383b0227", "thread_id": "<20260928093000.123a41d3@nordlyscoffee.example>", "from": "felix@nordlyscoffee.example", "from_name": "Felix Andersson", "to": "tom@harbourlanedesign.example", "subject": "Autumn sale banner", "date": "2026-09-28T09:30:00Z", "body": "Hi Tom, can you make a homepage banner for our autumn sale (20% off all beans, ends 5 October)? English only.\nFelix"},
+          {"id": "1a130317-428c-4e0f-a4f0-f8af81e74bbf", "thread_id": "<20260928093000.123a41d3@nordlyscoffee.example>", "from": "felix@nordlyscoffee.example", "from_name": "Felix Andersson", "to": "tom@harbourlanedesign.example", "subject": "Re: Autumn sale banner", "date": "2026-09-30T15:50:00Z", "body": "Hi Tom, small change: we need the banner in Swedish as well as English (two versions), and the sale now ends on 10 October, not the 5th.\nFelix"}
+        ]
+      },
+      "label": {"action": "update"},
+      "critical": true,
+      "why": "The client now wants two language versions and a new end date (10 October); the task describes an English-only banner ending on the 5th, so keeping it produces the wrong banner."
+    },
+    {
+      "id": "reanalyze-17",
+      "lang": "it",
+      "call_site": "f4.reanalyze",
+      "input": {
+        "profile": "it",
+        "now": "2026-10-01T09:00:00Z",
+        "task": {"id": "519ff19f-e48f-47dd-8254-cae8801fb669", "event_type": "email", "event_id": "98808c75-94fc-4924-b9b0-7b8940808664", "contact_email": "marta.ruggeri@posta.example", "contact_name": "Marta Ruggeri", "title": "Preventivo portoncino Marta Ruggeri", "urgency": "medium", "suggested_action": "Preparare per Marta Ruggeri il preventivo per un portoncino blindato", "reason": "Vuole sostituire il portoncino d'ingresso", "channel": "email", "created_at": "2026-09-23T17:20:00Z", "analyzed_at": "2026-09-23T17:20:00Z", "sources": {"emails": ["98808c75-94fc-4924-b9b0-7b8940808664"], "thread_id": "<20260923170000.73c01e2b@posta.example>", "blobs": [], "calendar_events": []}},
+        "emails": [
+          {"id": "98808c75-94fc-4924-b9b0-7b8940808664", "thread_id": "<20260923170000.73c01e2b@posta.example>", "from": "marta.ruggeri@posta.example", "from_name": "Marta Ruggeri", "to": "giulia@serramentiferraris.example", "subject": "Preventivo portoncino blindato", "date": "2026-09-23T17:00:00Z", "body": "Buonasera, vorrei un preventivo per sostituire il portoncino d'ingresso con uno blindato.\nMarta Ruggeri"},
+          {"id": "aeab0df4-72c5-4757-a0f2-17be372b6472", "thread_id": "<20260923170000.73c01e2b@posta.example>", "from": "marta.ruggeri@posta.example", "from_name": "Marta Ruggeri", "to": "giulia@serramentiferraris.example", "subject": "Re: Preventivo portoncino blindato", "date": "2026-09-30T08:50:00Z", "body": "Buongiorno, ci abbiamo ripensato: il portoncino lo teniamo, ci servirebbe solo sostituire la serratura con una a cilindro europeo di sicurezza. Mi può dire costi e tempi?\nMarta Ruggeri"}
+        ]
+      },
+      "label": {"action": "update"},
+      "critical": true,
+      "why": "The customer replaces the door request with a lock replacement and asks for cost and timing; the task still asks for a door quote, so it must be rewritten, not kept or closed."
+    },
+    {
+      "id": "reanalyze-18",
+      "lang": "en",
+      "call_site": "f4.reanalyze",
+      "input": {
+        "profile": "en",
+        "now": "2026-10-01T09:00:00Z",
+        "task": {"id": "8aa9621d-6c3b-43a6-9a06-0a4de3cbba89", "event_type": "email", "event_id": "cde4d080-fb71-4eec-8f78-98a56e6b2f27", "contact_email": "owen@priceplumbing.example", "contact_name": "Owen Price", "title": "Price Plumbing open day flyer", "urgency": "medium", "suggested_action": "Design Price Plumbing's A5 double-sided flyer for the open day on Saturday 17 October, by Monday 12 October", "reason": "Owen wants a flyer for the open day", "channel": "email", "created_at": "2026-09-25T09:15:00Z", "analyzed_at": "2026-09-25T09:15:00Z", "sources": {"emails": ["cde4d080-fb71-4eec-8f78-98a56e6b2f27"], "thread_id": "<20260925090000.1e05adfe@priceplumbing.example>", "blobs": [], "calendar_events": []}},
+        "emails": [
+          {"id": "cde4d080-fb71-4eec-8f78-98a56e6b2f27", "thread_id": "<20260925090000.1e05adfe@priceplumbing.example>", "from": "owen@priceplumbing.example", "from_name": "Owen Price", "to": "tom@harbourlanedesign.example", "subject": "Open day flyer", "date": "2026-09-25T09:00:00Z", "body": "Hi Tom, could you design a flyer for our open day on Saturday 17 October? A5, double-sided, I'll send the text. It'd be great to have it by Monday 12 October.\nOwen"},
+          {"id": "f46de917-2e36-4334-8888-3c29b6e57f0d", "thread_id": "<20260925090000.1e05adfe@priceplumbing.example>", "from": "owen@priceplumbing.example", "from_name": "Owen Price", "to": "tom@harbourlanedesign.example", "subject": "Re: Open day flyer", "date": "2026-09-30T16:30:00Z", "body": "Hi Tom, the open day has moved forward to Saturday 10 October, so I'd need the flyer by Monday 5 October instead of the 12th. Text attached.\nOwen"}
+        ]
+      },
+      "label": {"action": "update"},
+      "critical": true,
+      "why": "The open day and the flyer deadline moved a week earlier (deadline Monday 5 October); the task still says 12 October, so keeping it risks missing the real deadline."
+    },
+    {
+      "id": "reanalyze-19",
+      "lang": "it",
+      "call_site": "f4.reanalyze",
+      "input": {
+        "profile": "it",
+        "now": "2026-10-01T09:00:00Z",
+        "task": {"id": "ddd686a5-efc9-4c50-b5b5-144af01ea2a4", "event_type": "email", "event_id": "f3dc8090-3527-475d-9f84-01dcd6c359a1", "contact_email": "amministrazione@studiocolombo.example", "contact_name": "Paola Colombo", "title": "Preventivo vano scala Via Verdi 12", "urgency": "medium", "suggested_action": "Inviare allo Studio Colombo il preventivo per le 10 finestre del vano scala del Condominio Via Verdi 12", "reason": "L'assemblea chiede il preventivo per le finestre delle parti comuni", "channel": "email", "created_at": "2026-09-18T10:15:00Z", "analyzed_at": "2026-09-18T10:15:00Z", "sources": {"emails": ["f3dc8090-3527-475d-9f84-01dcd6c359a1"], "thread_id": "<20260918100000.703ba1c2@studiocolombo.example>", "blobs": [], "calendar_events": []}},
+        "emails": [
+          {"id": "f3dc8090-3527-475d-9f84-01dcd6c359a1", "thread_id": "<20260918100000.703ba1c2@studiocolombo.example>", "from": "amministrazione@studiocolombo.example", "from_name": "Paola Colombo - Studio Colombo", "to": "giulia@serramentiferraris.example", "subject": "Preventivo infissi Condominio Via Verdi 12", "date": "2026-09-18T10:00:00Z", "body": "Gentile Sig.ra Ferraris,\nl'assemblea chiede un preventivo per sostituire le 10 finestre del vano scala.\nCordiali saluti,\nPaola Colombo"},
+          {"id": "472d67bb-df1a-4e59-aa40-128abd694274", "thread_id": "<20260918100000.703ba1c2@studiocolombo.example>", "from": "giulia@serramentiferraris.example", "from_name": "Giulia Ferraris", "to": "amministrazione@studiocolombo.example", "subject": "Re: Preventivo infissi Condominio Via Verdi 12", "date": "2026-09-21T09:00:00Z", "body": "Gentile Sig.ra Colombo,\nle invio in allegato il preventivo per le 10 finestre del vano scala: 6.850 € + IVA, posa inclusa. Resto a disposizione.\nGiulia Ferraris"},
+          {"id": "425411b6-c0da-440a-a348-402ef9f15ad6", "thread_id": "<20260918100000.703ba1c2@studiocolombo.example>", "from": "amministrazione@studiocolombo.example", "from_name": "Paola Colombo - Studio Colombo", "to": "giulia@serramentiferraris.example", "subject": "Re: Preventivo infissi Condominio Via Verdi 12", "date": "2026-09-30T14:20:00Z", "body": "Gentile Sig.ra Ferraris,\ngrazie del preventivo. Prima dell'assemblea del 9 ottobre i condomini chiedono se è possibile pagare in tre rate e se si può applicare l'IVA agevolata al 10%. Ci può rispondere entro lunedì 5 ottobre?\nCordiali saluti,\nPaola Colombo"}
+        ]
+      },
+      "label": {"action": "update"},
+      "critical": true,
+      "why": "The quote was sent, but the administrator now asks two new questions (instalments, 10% VAT) with a deadline of 5 October; the task's action is stale and closing it would leave the questions unanswered."
+    },
+    {
+      "id": "reanalyze-20",
+      "lang": "en",
+      "call_site": "f4.reanalyze",
+      "input": {
+        "profile": "en",
+        "now": "2026-10-01T09:00:00Z",
+        "task": {"id": "6c763d6e-398d-4a4a-82f9-6224d5b0e6b6", "event_type": "email", "event_id": "3ddc4715-39a4-48c5-9c99-c5da63cc06ca", "contact_email": "hannah@brooksyoga.example", "contact_name": "Hannah Brooks", "title": "Brooks Yoga autumn timetable poster", "urgency": "medium", "suggested_action": "Design the A3 autumn timetable poster for Brooks Yoga by Wednesday 7 October", "reason": "Hannah needs the poster for the studio window", "channel": "email", "created_at": "2026-09-28T10:15:00Z", "analyzed_at": "2026-09-28T10:15:00Z", "sources": {"emails": ["3ddc4715-39a4-48c5-9c99-c5da63cc06ca"], "thread_id": "<20260928100200.e28d2e8c@brooksyoga.example>", "blobs": [], "calendar_events": []}},
+        "emails": [
+          {"id": "3ddc4715-39a4-48c5-9c99-c5da63cc06ca", "thread_id": "<20260928100200.e28d2e8c@brooksyoga.example>", "from": "hannah@brooksyoga.example", "from_name": "Hannah Brooks", "to": "tom@harbourlanedesign.example", "subject": "Autumn timetable poster", "date": "2026-09-28T10:02:00Z", "body": "Hi Tom, could you design an A3 poster with our autumn timetable for the studio window? Text attached. By Wednesday 7 October please.\nHannah"},
+          {"id": "144092b3-8d6b-49db-b2e5-9e93ae90a3aa", "thread_id": "<20260928100200.e28d2e8c@brooksyoga.example>", "from": "hannah@brooksyoga.example", "from_name": "Hannah Brooks", "to": "tom@harbourlanedesign.example", "subject": "Re: Autumn timetable poster", "date": "2026-09-30T21:40:00Z", "body": "Hi Tom, change of plan: please don't do the poster after all, one of our members offered to paint the timetable on the window. Could you instead add the autumn timetable to the Classes page of our website by Friday?\nThanks!\nHannah"}
+        ]
+      },
+      "label": {"action": "update"},
+      "critical": true,
+      "why": "The client cancels the poster and asks instead for the timetable on the website by Friday; the task describes the cancelled poster, and closing it would drop the new request."
+    }
+  ]
+}
