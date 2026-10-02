@@ -9,6 +9,7 @@ from __future__ import annotations
 import asyncio
 import contextvars
 import logging
+from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any, Dict, List, Literal, Optional, Union
 
@@ -44,8 +45,22 @@ def current_datetime_line() -> str:
     )
 
 
+@dataclass(frozen=True)
+class RunClock:
+    """The moment of one run: the datetime line every request of its loop carries.
+
+    An agent loop (the chat turn, the task solve) creates one at the start of
+    a turn and passes it with each request, so consecutive requests of one
+    tool loop send a byte-identical ``system`` — the prefix a reasoning block
+    is bound to (brief D3) — even when the minute changes mid-loop.
+    """
+
+    line: str = field(default_factory=lambda: current_datetime_line())
+
+
 def _with_datetime(
     system: Optional[Union[str, List[Dict[str, Any]]]],
+    clock: Optional[RunClock] = None,
 ) -> Union[str, List[Dict[str, Any]]]:
     """Return ``system`` with the current datetime appended.
 
@@ -56,8 +71,12 @@ def _with_datetime(
     prompt-cached (caching needs the blocks + ``cache_control`` form), so
     plain concatenation is safe there too. ``None`` becomes the line on
     its own — so a request with no system prompt still carries the date.
+
+    With a ``clock`` (:class:`RunClock`) the line is the run's, computed
+    once for every request of its loop; without one it is read fresh, as a
+    single call always did.
     """
-    line = current_datetime_line()
+    line = clock.line if clock is not None else current_datetime_line()
     if system is None:
         return line
     if isinstance(system, str):
@@ -164,6 +183,7 @@ class LLMClient:
         tool_choice: Optional[Dict[str, Any]] = None,
         max_tokens: int = 4096,
         model: Optional[str] = None,
+        run_clock: Optional[RunClock] = None,
         **kwargs: Any,
     ) -> LLMResponse:
         """Async wrapper around :meth:`create_message_sync`.
@@ -185,6 +205,7 @@ class LLMClient:
                     tool_choice=tool_choice,
                     max_tokens=max_tokens,
                     model=model,
+                    run_clock=run_clock,
                     **kwargs,
                 )
             ),
@@ -220,10 +241,12 @@ class LLMClient:
         tool_choice: Optional[Dict[str, Any]] = None,
         max_tokens: int = 4096,
         model: Optional[str] = None,
+        run_clock: Optional[RunClock] = None,
         **kwargs: Any,
     ) -> LLMResponse:
         """Send a Messages-API request and return a unified
-        :class:`LLMResponse`."""
+        :class:`LLMResponse`. ``run_clock`` fixes the datetime line for every
+        request of one loop (:class:`RunClock`)."""
         if getattr(self, "_saved_policy_fingerprint", None) is not None:
             from .model_policy import policy_fingerprint
             from .budget_pricing import BudgetError
@@ -240,7 +263,7 @@ class LLMClient:
         }
         # Always inject the current datetime (appended last → cache-safe).
         # Every LLM request carries the real moment; no exceptions.
-        request_kwargs["system"] = _with_datetime(system)
+        request_kwargs["system"] = _with_datetime(system, run_clock)
         if tools:
             request_kwargs["tools"] = tools
         if tool_choice:
