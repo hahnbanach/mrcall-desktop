@@ -9,6 +9,8 @@ measurement of today's prompts and case set. These tests hold:
   error from the same run;
 - a monotone ladder gets the lowest index score at and above which every arm
   passes; a non-monotone one accepts measured models only;
+- a second repetition (the reference again on the disputed cases) is recorded
+  and changes no count, pass, yardstick or threshold;
 - the document is what S2's reader (``resolver.validate_measured``) reads;
 - ``check_measured`` refuses a document whose hashes are not today's, whose
   threshold or passes its own results do not give, and the committed
@@ -116,6 +118,27 @@ def test_a_cell_run_again_after_a_resume_counts_once_its_newest_row():
     stale[0].pop("scoring")
     _doc, role = entry(stale + ladder(("pro", 46.3, 19)))
     assert role["results"]["pro"]["complete"] and role["results"]["pro"]["n"] == 22
+
+
+def test_a_second_repetition_is_recorded_and_changes_no_pass_or_fail():
+    every = ladder(("mimo", 37.9, 18), ("pro", 46.3, 19))
+    _doc, before = entry(every)
+    # The reference again on two disputed cases, both answered otherwise, and an arm's
+    # second answers: pooled, they would lower p and let mimo (18 of 22) pass.
+    again = rows(K3, 43.6, 0)[:2] + rows("mimo", 37.9, 22)[18:20]
+    _doc, after = entry(every + [{**row, "repetition": 2} for row in again])
+    assert {arm: after["results"][arm] for arm in (K3, "mimo", "pro")} == before["results"]
+    assert not after["results"]["mimo"]["pass"] and after["reference"] == before["reference"]
+    assert (after["threshold"], after["measured_only"]) == (before["threshold"], False)
+    ids = case_ids()
+    assert after["second_repetition"] == {
+        K3: {ids[0]: {"first": True, "second": False}, ids[1]: {"first": True, "second": False}},
+        "mimo": {
+            ids[18]: {"first": False, "second": True},
+            ids[19]: {"first": False, "second": True},
+        },
+    }
+    assert before["second_repetition"] == {}
 
 
 def test_a_role_without_a_complete_reference_is_reported_unmeasured_not_written():

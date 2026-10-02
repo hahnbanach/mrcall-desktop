@@ -53,7 +53,9 @@ everything spent or uncertain and written to `DIR/ledger.jsonl` as an
 intent; the receipt settles it. Nothing is retried; a resumed run skips every
 cell with an intent. `DIR/results.jsonl` holds per cell the tool calls, text,
 usage, cost, latency and the scoring of `scripts/measurement_scoring.py`
-(label match, critical, mechanical bars).
+(label match, critical, mechanical bars). `--repeat-disagreements` then runs
+D7's last item: the reference a second time, only on the cases where some
+arm's label result differs from its own. No arm runs again.
 
 ## The thresholds
 
@@ -61,7 +63,10 @@ usage, cost, latency and the scoring of `scripts/measurement_scoring.py`
 binomial standard error, with every mechanical bar met and no critical
 failure; a `satisfice` role's threshold is the lowest index at and above
 which every measured arm passes, or `measured_only` when index and result
-disagree. It writes `measured.json` in the shape `resolver.validate_measured`
+disagree. Everything is judged on the first repetition. The second
+repetition's answers are recorded in the role's `second_repetition`, the first
+and second label result of each repeated case, and change no pass or fail.
+It writes `measured.json` in the shape `resolver.validate_measured`
 reads, with the hashes it measured; `tests/measurement/test_derive_thresholds.py`
 refuses a committed `measured.json` whose hashes are not today's or whose
 thresholds its own results do not give.

@@ -13,8 +13,9 @@ through its Chat adapter, the ledger guard and the scoring. These tests hold:
 - every scoring reading bites: the tool not called, the wrong language, the
   wrong label, a critical outcome, and a case whose ``critical_on`` is empty is
   never critical;
-- ``--repeat-disagreements`` repeats exactly the cells that disagree with the
-  reference, then the reference.
+- ``--repeat-disagreements`` runs the reference a second time on exactly the
+  cases where an arm's label result disagrees with it — not the whole role, and
+  no arm again.
 """
 
 from __future__ import annotations
@@ -301,14 +302,14 @@ def test_each_scoring_reading_bites(run_dir):
     assert not harmless["label_match"] and not harmless["critical"]  # critical_on is empty
 
 
-def test_repeat_disagreements_repeats_the_disagreeing_cells_then_the_reference(run_dir):
-    wire = Wire(run_dir / "ledger.jsonl")
+def test_repeat_disagreements_reruns_only_the_reference_on_the_disputed_cases(run_dir):
+    # td-2: every arm's label agrees with the reference's; td-1 and td-3: Sonnet's does not.
+    script = {**SCRIPT, FLASH: {**SCRIPT[FLASH], "td-2": answer("none", EN_REASON)}}
+    wire = Wire(run_dir / "ledger.jsonl", script=script)
     _code, ctx = measured(run_dir, wire, repeat=True)
     second = sorted((r["arm"], r["case_id"]) for r in ctx.results.rows if r["repetition"] == 2)
-    expected = [(K3, "td-1"), (K3, "td-2"), (K3, "td-3")]
-    expected += [(SONNET, "td-1"), (SONNET, "td-3"), (FLASH, "td-2")]
-    assert second == sorted(expected)
-    assert len(wire.bodies) == 9 + 6
+    assert second == [(K3, "td-1"), (K3, "td-3")]
+    assert len(wire.bodies) == 9 + 2
 
 
 def chat_run():

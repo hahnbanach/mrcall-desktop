@@ -32,9 +32,11 @@ failures in a row skip the rest of that arm in that role.
 **Results** (``<out>/results.jsonl``, one row per cell and repetition): the
 answer's tool calls and text, usage, cost, latency, and the scoring of
 ``measurement_scoring.py`` (label match, critical, mechanical bars).
-``--repeat-disagreements`` then runs a second repetition of every cell whose
-label result differs from the reference's on the same case, and last (D7) the
-reference's second repetition of every case.
+``--repeat-disagreements`` then runs D7's last item, the reference's second
+repetition, only on the cases where some arm's first-repetition label result
+differs from the reference's — never on the whole role, and never an arm
+again. The second answers are recorded beside the first; they change no pass
+or fail (``derive_thresholds.py`` judges the first repetition).
 
     python scripts/measure_roles.py --arms ARMS.json --project            # free projection
     python scripts/measure_roles.py --arms ARMS.json --out DIR --dry-run  # scripted transport
@@ -172,7 +174,8 @@ def measure(
 
 
 def disagreements(rows: list[dict], runs: list[RoleRun]) -> set:
-    """``(role, arm, case_id)`` whose first-repetition label result differs from the reference's."""
+    """``(role, reference, case_id)``: each case where some arm's first-repetition label
+    result differs from the reference's — the cells of the reference's second repetition."""
     first = {
         (r["role"], r["arm"], r["case_id"]): r["scoring"]["label_match"]
         for r in rows
@@ -186,24 +189,16 @@ def disagreements(rows: list[dict], runs: list[RoleRun]) -> set:
             for arm in run.arms:
                 mine = first.get((run.role, arm["id"], case["id"]))
                 if ref is not None and mine is not None and not arm["reference"] and mine != ref:
-                    found.add((run.role, arm["id"], case["id"]))
+                    found.add((run.role, reference, case["id"]))
     return found
 
 
 def run_all(ctx: Context, runs: list[RoleRun], repeat: bool) -> int:
-    """The first repetition, then (``repeat``) the disagreements and the reference's second."""
+    """The first repetition, then (``repeat``) the reference's second on the disagreements."""
     try:
         measure(ctx, runs)
         if repeat:
             measure(ctx, runs, 2, only=disagreements(ctx.results.rows, runs))
-            reference = {
-                (run.role, arm["id"], case["id"])
-                for run in runs
-                for arm in run.arms
-                if arm["reference"]
-                for case in run.document["cases"]
-            }
-            measure(ctx, runs, 2, only=reference)
     except CapExceeded as stop:
         print(f"stopped by the cap: {stop}", file=sys.stderr)
         return EXIT_CAP
@@ -252,7 +247,11 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--roles", help="comma-separated roles (default: every role with cases)")
     parser.add_argument("--out", type=Path, help="output directory (ledger, results; resumable)")
     parser.add_argument("--cap", type=Decimal, default=DEFAULT_CAP, help="hard cap in USD")
-    parser.add_argument("--repeat-disagreements", action="store_true")
+    parser.add_argument(
+        "--repeat-disagreements",
+        action="store_true",
+        help="then the reference again, on the cases where an arm's label disagrees with it",
+    )
     parser.add_argument("--project", action="store_true", help="free cost projection, no call")
     parser.add_argument("--dry-run", action="store_true", help="scripted transport, no network")
     parser.add_argument("--verbose", action="store_true")

@@ -7,7 +7,7 @@ more), ``--corpus`` (the ``<prefix>-manifest.json`` of a corpus record of
 ``-results.jsonl`` beside it) and ``--arms`` (the bootstrap arms: the index
 score of every arm). Nothing here calls a model.
 
-**Per role and arm** (repetitions pooled, ``scored`` rows only): ``n``,
+**Per role and arm** (the first repetition's ``scored`` rows): ``n``,
 ``passes`` (label matches), ``score`` = passes / n; ``bars_ok`` — every
 mechanical bar met on every row; ``critical`` — any critical failure;
 ``complete`` — a scored row for every case of the role (an error, a cap stop,
@@ -17,6 +17,14 @@ the binomial standard error ``sqrt(p (1 - p) / n)``. An arm **passes** when it
 is complete, meets every bar, has no critical failure and scores at least
 ``p - se``. A role without a complete reference is unmeasured: reported, not
 written, so the resolver keeps blocking it.
+
+**The second repetition** (``measure_roles.py --repeat-disagreements``: the
+reference again, on the cases where an arm's label result differed from its
+own) is recorded and never judged: pass, fail, every count, the yardstick and
+the thresholds come from the first repetition alone, and a role's
+``second_repetition`` gives, per arm and case answered twice, the first and
+the second label result (``{arm: {case: {"first", "second"}}}``), for the
+record of the run.
 
 **Thresholds.** A ``maximise`` role gets ``threshold`` null and
 ``measured_only`` false: the resolver ranks only the arms that passed. A
@@ -182,6 +190,20 @@ def threshold_of(rule: str, results: dict) -> tuple[float | None, bool]:
     return threshold, False
 
 
+def second_answers(rows: list[dict]) -> dict:
+    """``{case_id: {"first", "second"}}``: the label results of each case scored twice."""
+    seen: dict = {}
+    for row in rows:
+        if row["status"] == "scored":
+            match = bool(row["scoring"]["label_match"])
+            seen.setdefault(row["case_id"], {})[row.get("repetition", 1)] = match
+    return {
+        case: {"first": both.get(1), "second": both[2]}
+        for case, both in sorted(seen.items())
+        if 2 in both
+    }
+
+
 def role_entry(role: str, rows: list[dict], cases: list[str], rule: dict, reference: str) -> dict:
     """One role of measured.json from its rows, or Refused."""
     hashes = {(r["case_set_sha256"], r["prompt_sha256"]) for r in rows}
@@ -189,16 +211,19 @@ def role_entry(role: str, rows: list[dict], cases: list[str], rule: dict, refere
         raise Refused(f"{role}: rows from {len(hashes)} different case sets or prompts")
     if hashes != {current_hashes(role)}:
         raise Refused(f"{role}: measured on other cases or prompts than today's")
-    results = {}
+    results, second = {}, {}
     for arm in sorted({r["arm"] for r in rows}):
         mine = [r for r in rows if r["arm"] == arm]
-        scored = [r for r in mine if r["status"] == "scored"]
-        # Complete: every case scored in the first repetition. A second
-        # repetition the cap cut short only adds fewer samples.
+        # Judged on the first repetition alone (module docstring): a second
+        # answer is recorded in second_repetition and changes no pass or fail.
         first = [r for r in mine if r.get("repetition", 1) == 1]
+        scored = [r for r in first if r["status"] == "scored"]
         complete = all(r["status"] == "scored" for r in first) and {
             r["case_id"] for r in first
         } >= set(cases)
+        again = second_answers(mine)
+        if again:
+            second[arm] = again
         results[arm] = {
             "n": len(scored),
             "passes": sum(bool(r["scoring"]["label_match"]) for r in scored),
@@ -224,6 +249,7 @@ def role_entry(role: str, rows: list[dict], cases: list[str], rule: dict, refere
         "measured_only": measured_only,
         "results": results,
         "reference": {"id": reference, "score": round(float(p), 6), "se": round(se, 6)},
+        "second_repetition": second,
         "case_set_sha256": rows[0]["case_set_sha256"],
         "prompt_sha256": rows[0]["prompt_sha256"],
         "snapshot_version": versions[0] if len(versions) == 1 else versions,
