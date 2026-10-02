@@ -35,7 +35,11 @@ the HTTP error codes — is v1's.
   `thinking: {"type": "disabled"}` for one that publishes none and whose
   reasoning is optional and on by default; and, in assistant
   turns of the history, reasoning blocks returned earlier (`thinking` with
-  its `signature`, `redacted_thinking` with its `data`), unchanged.
+  its `signature` when the provider sent one — OpenRouter may omit it for
+  a non-Anthropic model, and such a block is replayed without one —
+  `redacted_thinking` with its `data`), unchanged. The server accepts a
+  `thinking` block with or without a `signature`; validating it is the
+  provider's.
 - Responses return reasoning blocks: `message.content` holds `thinking`
   and `redacted_thinking` blocks beside `text` and `tool_use`, in the
   order the model produced them.
