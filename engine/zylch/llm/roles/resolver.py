@@ -42,8 +42,10 @@ margin. What v2 changes:
   contract (`contract/README.md`): rankings only, no price, score or
   metadata, so a refresh that moves no pick or order changes no record.
 
-`allowlist`, `mrcall_served` and `request_rules` of `requirements.json` are
-10a's and are ignored here (they go at the switch-over). Pure: no file,
+`allowlist`, `mrcall_served` and `request_rules` of `requirements.json` were
+10a's and are ignored here: `request_rules` went with the one request shape,
+`mrcall_served` with the credits choice from the billing server's served set
+(slice S6), and the allowlist goes at the switch-over. Pure: no file,
 network or environment access; the caller passes the requirements, the
 measurement and the raw payloads (`engine/scripts/resolve_models.py`).
 """

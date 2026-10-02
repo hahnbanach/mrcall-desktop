@@ -6,7 +6,9 @@ name: Memory write boundary
 # engine/scripts plus a few run-time checks, so the job installs the engine's
 # requirements and runs only those files. Milestone 10a adds the model-name
 # boundary, the role inventory and the resolved table's tie to its fixture
-# and requirements.
+# and requirements; milestone 10 (slice S6) replaces that tie with the model
+# table's (test_model_table.py: the fixture table the tests resolve from, and
+# the build table.json once measured, against the requirements in force).
 
 on:
   push:
@@ -46,4 +48,4 @@ jobs:
             tests/memory/test_mnemonic_write_boundary.py \
             tests/llm/test_model_name_boundary.py \
             tests/llm/test_role_inventory.py \
-            tests/llm/test_resolved_table.py
+            tests/llm/test_model_table.py

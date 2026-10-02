@@ -14,9 +14,10 @@ company memory:
   literal — or lie in one of the two files allowed whole by exact path, the
   role files the resolver reads and writes (``requirements.json``,
   ``resolved.json``), or, since milestone 10's published contract, in the
-  snapshot it writes (``snapshot.json``) or the contract's two examples and
-  protocol document (``contract/``): data and documentation no code takes a
-  model from; the resolver's code beside them is held to rows like any
+  snapshot it writes (``snapshot.json``), the build copy of the decision
+  record it writes and the engine reads at run time (``table.json``, slice
+  S6) or the contract's two examples and protocol document (``contract/``):
+  data and documentation no code takes a model from; the resolver's code beside them is held to rows like any
   other file, docstrings included. Rows match by ``(file, literal)`` with multiplicity; their line is
   informational, so an edit elsewhere in a file does not break the test, but
   a second copy of an allowed name in the same file does;
@@ -72,11 +73,13 @@ PURPOSES = frozenset(
     {"default", "adapter", "price", "snapshot", "placeholder", "label", "doc", "voice"}
 )
 # The two files the brief allows whole: the requirements and the resolved table;
-# and the contract's data: the snapshot, the two examples, the protocol document.
+# and the contract's data: the snapshot, the decision record's build copy, the
+# two examples, the protocol document.
 ROLE_FILES = (
     "zylch/llm/roles/requirements.json",
     "zylch/llm/roles/resolved.json",
     "zylch/llm/roles/snapshot.json",
+    "zylch/llm/roles/table.json",
     "zylch/llm/roles/contract/table.example.json",
     "zylch/llm/roles/contract/snapshot.example.json",
     "zylch/llm/roles/contract/protocol-v2.md",

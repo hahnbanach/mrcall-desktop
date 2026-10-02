@@ -82,8 +82,11 @@ def test_the_committed_requirements_are_v2s():
     quantizations = ["int8", "fp8", "mxfp8", "fp16", "bf16", "fp32", "unknown"]
     assert req["provider_policy"]["quantizations"] == quantizations
     assert req["reference"] == K3
-    # 10a's readers keep their keys until the switch-over; the resolver ignores them.
-    assert req["allowlist"] and req["mrcall_served"]
+    # 10a's keys go at the switch-over (slice S6): mrcall_served with the credits
+    # choice from the server's served set; the allowlist while the price source
+    # still reads it. The resolver ignores both.
+    assert "mrcall_served" not in req and "request_rules" not in req
+    assert req["allowlist"]
 
 
 @pytest.mark.parametrize(
