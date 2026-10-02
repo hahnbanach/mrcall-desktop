@@ -2375,6 +2375,51 @@ R_2's final release at 17:43:24 UTC observed on origin/main. Publish and
 refresh before the first probe. The installed helper is R2's approved main
 version; leave it unchanged.
 
+#### R_4 mechanism revision (two plan reviews APPROVED)
+
+First isolated kernel experiment: dnsmasq 2.91 with nftset, nftables 1.0.2,
+A/AAAA population, unrelated DNS refusal, IPv4/IPv6/private/metadata refusal,
+pre-opened forbidden flow rejection and cold-table repopulation pass.
+An accelerated three-second set expiry kills an already admitted TCP flow:
+**REVISE**, no live daemon rules installed. The initial test fixture used
+RFC5737 addresses, correctly refused by DNS rebinding protection; repaired
+by using public-form addresses bound only inside the disconnected namespace.
+
+Revision: reserve connection-tracking marks for this mechanism on this host.
+Operator preflight must find no foreign ct-mark writer/consumer or unexpected
+use of the selected numeric uid mark. Independently validated rules owned by
+this mechanism for other tenants are permitted; before first apply there
+must be no connections carrying the selected mark; otherwise refuse and
+redesign, never overwrite another firewall's marks. On new admitted outbound
+flows set ct mark to the numeric tenant uid. Only that tenant's established
+flows bearing its mark bypass later set expiry; pre-existing unmarked flows
+still go through the destination check. Private destination denial still
+precedes the established outbound exception. Incoming reply-direction traffic
+retains the separate allowance. This is connection admission: no new flow to
+an expired/unapproved address is allowed. Per-tenant changes stop the daemon
+and clear that tenant's marks before reapply; rollback clears those marks and
+removes only its table, with a sibling retained. No blanket established permit.
+The scratch probe must demonstrate admitted flow survival beyond expiry,
+new-flow denial until DNS refresh, rejection of a pre-opened forbidden flow,
+and two-tenant installation/reapply preserving the sibling rules and its
+already-admitted connection.
+
+Ubuntu's `dnsmasq-base` 2.90 has **no-nftset**. The experiment builds upstream
+2.91 with `COPTS=-DHAVE_NFTSET`; production prerequisites require a reviewed,
+root-owned nftset-enabled binary at `/usr/local/libexec/mrcall-dnsmasq`.
+No distribution daemon or host resolver is enabled. The dependency installs
+and source build on scratch do not establish a production packaging decision.
+
+The revised isolated probe passes expiry survival/new-flow denial and
+sibling preservation. First actual A2 service probe stopped at resolver
+startup: `pid-file=` in the shared dnsmasq config disabled the systemd
+forking service's requested PID file. The probe was cancelled and rolled
+back immediately; A2 is inactive again, host nft tables empty, A1/P1 PIDs,
+host resolver and installed R2 helper unchanged. Fix: PID-file selection
+belongs to the invocation (dedicated runtime file for systemd, disabled
+only in the isolated foreground probe), never shared dnsmasq config.
+Code re-review precedes another host attempt. No VPS action.
+
 #### R_4 detailed plan (APPROVED for compiler and scratch experiment)
 
 Two fresh independent reviewers approved the existing brief and returned
@@ -2405,8 +2450,9 @@ not a claim of completed deployment.
   reject. Permit that tenant's dedicated DNS address on TCP/UDP 53; deny
   external DNS, loopback/private/link-local/metadata targets before the
   destination-set permits. Both IP families are covered. Do not permit
-  arbitrary established outbound flows. Only established reply-direction
-  traffic may bypass destination checks, to preserve inbound voice callbacks.
+  arbitrary established outbound flows. Established reply-direction traffic
+  preserves inbound voice callbacks; the reviewed revision above adds only
+  the tenant-marked, previously admitted outbound exception.
 - Run one dnsmasq instance per tenant, listening only on its dedicated loopback
   address; `no-resolv`, `no-hosts`, `local=/#/`, approved suffix forwarding
   only, rebinding protection, A/AAAA nftset entries. Bind a root-owned resolver
@@ -2487,6 +2533,145 @@ Scratch evidence matrix (each row must name identity, result and timestamp):
 Sources for mechanism semantics: [dnsmasq manual](https://dnsmasq.org/docs/dnsmasq-man.html)
 (`nftset`, domain-scoped upstreams, rebinding) and
 [nftset implementation](https://github.com/imp/dnsmasq/blob/master/src/nftset.c).
+
+#### R_4 request to the VPS session — destination inventory only
+
+**CTO correction:** R_4 must not access desktop.mrcall.ai as any user.
+Mario's profile is on that VPS, not scratch. The previous suggestion to use
+that profile from this session is withdrawn. No further SSH attempts or VPS
+operations by R_4. Continue synthetic/scratch tests here. The prior failed
+SSH attempt authenticated no user and executed no remote command.
+
+The VPS session is authorized to read configuration only and fill the response
+block below, then push. R_4 will consume it through git. **Return only network
+hostnames (or configured address literals), ports and protocol, associated
+with the existing profile UID/alias. Never return complete URLs, URL paths,
+query strings, usernames, passwords, keys, tokens, voice-file values or dumps
+of any environment/process environment.** For a disabled/unconfigured channel,
+write `not configured`; an unavailable field is `unknown`, never guessed.
+No DNS queries, traffic tests, paid calls, service restarts or mutations are
+requested on the VPS for this inventory.
+
+For each of the seven migrated profiles, return these exact destination fields:
+
+1. **Mail:** effective `IMAP_HOST`, `IMAP_PORT`, `SMTP_HOST`, `SMTP_PORT`
+   after the engine's explicit override / email-domain preset / fallback
+   resolution in `email/imap_client.py::_resolve_host`. Do not return the
+   email address or password. Record TLS/STARTTLS protocol if it changes the
+   destination port; no mailbox names.
+2. **LLM and billing:** host + port only extracted from effective
+   `MRCALL_PROXY_URL`, `MRCALL_BASE_URL`, and the selected provider's actual
+   API base (`api.anthropic.com`, `openrouter.ai`, or an override). Include
+   host+port of any `ANTHROPIC_BASE_URL` / `OPENAI_BASE_URL` override actually
+   consumed by the running code. Provider label is optional; no model names,
+   API keys, account identifiers, balances or budgets are needed.
+3. **HTTP proxy:** host + port only for effective `HTTP_PROXY`, `HTTPS_PROXY`,
+   `ALL_PROXY` and lowercase equivalents, if present. Strip userinfo and all
+   paths/queries in memory before output. Do not dump `NO_PROXY`; instead
+   indicate which requested destinations use a proxy, if determinable from
+   configuration/code without traffic. An unrestricted forward proxy cannot
+   be automatically admitted as an egress endpoint.
+4. **WhatsApp:** configured/in-use WebSocket and media destination hostnames
+   and ports from the installed neonize/whatsmeow version or existing
+   non-secret connection metadata. No message content, JIDs, phone numbers,
+   session database or pairing material. If media hosts are runtime-only,
+   record `unknown until receipt`; do not guess a broad wildcard suffix.
+5. **Google/Firebase/Calendar:** configured certificate-fetch, OAuth token,
+   userinfo, Calendar API/discovery and Firebase refresh destination hostnames
+   + ports. Mark renderer-only sign-in endpoints as such so they do not
+   widen daemon egress. No Firebase token or OAuth row values.
+6. **Embedding model downloads:** actual configured model source hostnames
+   and ports from the installed fastembed model manifest and any already
+   known redirect/cache backend hosts. Do not initiate downloads. A warm
+   cache is not evidence that cold-download redirect destinations are known.
+7. **CRM and other enabled connectors:** effective Pipedrive base host+port;
+   any other enabled outbound connector (including Telegram/call initiation)
+   host+port. No CRM data or API tokens.
+8. **Voice:** outbound provider hostnames and ports derived from code and
+   enabled integration names only. **Do not read out or record any value from
+   the voice file**, including its endpoint/configuration values. If deciding
+   the route would require disclosing such a value, record `unknown`.
+9. **DNS:** currently configured upstream resolver address/host and port,
+   plus whether any above destination is a literal IP or private/internal
+   hostname. No host key, firewall dump or account credentials are requested.
+
+VPS response (reserved for that session; R_4 will not overwrite it):
+
+<!-- r4-vps-destinations:start -->
+Pending read-only VPS inventory.
+<!-- r4-vps-destinations:end -->
+
+#### R_4 scratch results — 2026-10-02, final gate open
+
+Implemented in this worktree:
+`engine/scripts/server/egress_policy.py` (pure compiler, never installs),
+`engine/scripts/server/egress_probe.py` (disconnected network namespace),
+`engine/tests/server/test_egress_policy.py` (8 passing unittest cases),
+`engine/tests/server/probe_egress_host.py` (explicit root scratch-only fixture
+probe; refuses without `--execute-scratch`). Generated artifacts declare
+`scratch-experiment-not-production-approved`. Nothing is wired into reconcile.
+
+Compiler review A/B: initially REVISE for scoped IPv6 directive injection and
+excluding system UIDs below 1000; both fixed, re-reviewed APPROVED. Revised
+mark admission and PID-file repair also received both code APPROVED verdicts
+before the host retry. These are code approvals, not the M3/VPS evidence gate.
+
+Environment: systemd 249, nftables 1.0.2; distro dnsmasq-base 2.90 reports
+`no-nftset`. Installed compilation dependencies (gcc, make, pkg-config,
+libnftables-dev) and conntrack; built upstream dnsmasq 2.91 using
+`make -j2 COPTS=-DHAVE_NFTSET`. Source archive from
+`https://thekelleys.org.uk/dnsmasq/dnsmasq-2.91.tar.gz`, SHA256
+`2d26a048df452b3cfa7ba05efbbcdb19b12fe7a0388761eb5d00938624bd76c8`.
+Only dnsmasq-base was installed, not the distribution DNS service. The test's
+root-owned dedicated binary was removed by rollback. Packages remain for the
+next scratch pass; no global resolver service was enabled.
+
+| Evidence | Result and limits |
+| --- | --- |
+| Compiler tests | 8 PASS: injection, types/system UIDs, overlapping suffixes, endpoint port isolation, tenant isolation, output refusal/redaction and PID-file regression. |
+| Real kernel + DNS, isolated network namespace | PASS: atomic table load, A/AAAA and CNAME set population, changed DNS answer admission, allowed UDP endpoint, unrelated DNS refusal, allowed IPv4/IPv6, denied unrelated IPv4/IPv6, metadata and loopback, pre-opened forbidden connection refused, admitted TCP flow survives accelerated 3-second expiry, new flow denied until DNS refresh, cold table reload/repopulation, external and sibling DNS refused, selected rollback leaves sibling table and admitted connection intact. Synthetic servers never leave the namespace; this is not IMAP/WhatsApp evidence. |
+| Actual scratch daemon | A2 (`scrA2aaaaaaaaaaaaaaaaaaaaaaa2`, Unix uid 993) starts with firewall/resolver dependencies. Its mount namespace sees the dedicated resolver. A process in that namespace under the daemon identity resolves www.googleapis.com and fetches the public Firebase certificate endpoint with HTTP 200; unrelated DNS and direct 1.1.1.1:443 fail. Its nft set is populated/readable. Daemon restart succeeds. |
+| Reconcile compatibility | Installed R2 helper `create A2` says ready and keeps the running PID, with the R4 drop-in applied. The helper itself is byte-identical before/after. No full reconcile/pull was run. |
+| Rollback | PASS after every attempt: A2 back to its initial inactive state, generated drop-in/services/binary/config/table removed, selected conntrack mark deleted, host resolver byte-identical. A1 PID 127936 and P1 PID 128040 remain active with NRestarts=0. Host nft table list is empty as before. |
+| Full IMAP sync | NOT RUN: the four scratch profiles have no configured mail password/host; no real mailbox supplied. |
+| WhatsApp receipt | NOT RUN: none has a WhatsApp session store. |
+| Successful LLM call | NOT RUN: no configured provider key on scratch. CTO now authorizes Mario’s account and real calls with a USD 10 ceiling (target cents), overriding the brief’s no-paid-verification rule. No paid request made yet. |
+| Valid Firebase token verification | NOT RUN: no signed-in scratch client/token supplied. Certificate-fetch 200 is only network reachability, not authentication acceptance. |
+| Other lifecycle/transport requirements | NOT YET PROVED: full five-minute live-channel survival, host reboot/boot-failure path and foreign-mark coexistence refusal. Two-tenant isolation was proved in the namespace, not with two live daemon services. |
+| VPS / criterion 6 for all migrated tenants | NOT STARTED: scratch live-evidence gate is open. Read-only SSH attempt to the documented mal@desktop.mrcall.ai failed public-key authentication before any remote command; no VPS mutation. |
+
+The real-service attempts retain two failures in the record: (1) PID-file
+configuration defect, fixed after rollback and two code reviews; (2) the
+probe inspected the mount namespace immediately after Type=simple reported
+active, before namespace setup completed. The second is a probe readiness
+bug: a bounded five-second wait repaired it, and the rerun passed. Final
+resolver service grants CAP_CHOWN for its PID-file ownership change as well
+as the DNS/nftset capabilities; final actual-service rerun passed with it.
+
+Reproduce only after obtaining the shared-machine lease: unittest discovery
+under `engine/tests/server` with `-p test_egress_policy.py`; the namespace
+probe takes the nftset-enabled binary path; the actual-daemon probe takes
+`--execute-scratch <binary>`. The latter intentionally requires this scratch
+fixture and an empty host nft table list, not an arbitrary production host.
+
+**Latest CTO instruction:** use `mario.alemi@gmail.com`; real calls authorized,
+maximum USD 10 for this verification, aiming for cents. This supersedes the
+no-paid-verification condition above and in the brief. Profile discovery found
+no matching Mario profile among the four hosted scratch fixtures or the one
+root-local profile. The documented `mal@desktop.mrcall.ai` SSH route refuses
+public-key authentication from this VM. The CTO subsequently prohibited VPS access from R_4 and requested the
+read-only inventory exchange above instead. No paid call has occurred.
+
+Final reviewers A and B independently returned **APPROVED** for shipping
+this experimental compiler and the accurate partial record, and **REVISE**
+for the full R_4/VPS gate. B inspected the timestamped final evidence
+(2026-10-02 18:11:55–18:11:57 UTC actual-daemon run); both independently ran
+all eight pure tests. Neither approved missing live application evidence.
+
+**R_4 is NOT DONE.** Live credentials/session prerequisites must be provided
+through the normal scratch setup, the missing matrix rows completed, and
+two independent full-evidence reviews must both return APPROVED before a
+VPS rollout. The compiler and synthetic probes do not waive those conditions.
 
 ### Approved M3 outline
 
