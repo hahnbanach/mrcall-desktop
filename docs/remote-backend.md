@@ -100,7 +100,8 @@ The model:
   link or `..`, unreadable by the tenant, or set by an `EnvironmentFile` —
   and any other drop-in that sets `ExecStart`: a migrated unit runs
   `tenant.conf`'s command line only. It also refuses a drop-in that loads
-  an `EnvironmentFile` (a migrated unit reads only its key file), a first
+  an `EnvironmentFile` other than a declared unit's voice file (a migrated
+  unit reads only its key file and, when declared, its voice copy), a first
   migration of a unit that is not stopped, and a result whose user,
   `ProtectHome` or environment files are not `tenant.conf`'s.
 - A unit that needs **its own interpreter or the production voice
@@ -130,7 +131,9 @@ The model:
   pull code, discover profiles, re-apply the identity of already-migrated
   profiles, ensure one daemon each, prune orphans. It never migrates a
   profile by itself: migration is the operator's explicit `mrcall-tenant
-  create <uid>`, one profile per day, per the plan's runbook.
+  create <uid>`, per the plan's runbook (one profile per day as planned;
+  the plan's decision of 2026-10-02 puts this rollout's profiles in one
+  window, each accepted before the next).
 
 ### B.1 · One-time server setup
 

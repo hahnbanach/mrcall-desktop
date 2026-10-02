@@ -665,7 +665,10 @@ only) and, once the backup window has passed, `--archive`.
 
 *2b, per profile U, after its company's 2a (one per day as planned;
 the [CTO decision](#m2-decision--compressed-rollout-2026-10-02-cto) puts
-them in one window, each accepted before the next):* steps 1–6 of the
+them in one window, each accepted before the next; what the helper of
+`0dc122d` additionally refuses for any unit, and the drop-in check before
+each 2b, are under "For every 2b" in the
+[tenant-exec probe](#m2-record--tenant-exec-probe-2026-10-02)):* steps 1–6 of the
 list above, unchanged (the step 0 check as above). Step 7, exactly:
 - `systemctl start zylch-server@U`; release the lock;
 - `systemctl is-active zylch-server@U` and `journalctl -u
@@ -1302,7 +1305,7 @@ declaration `/etc/mrcalld/tenant-exec/<uid>` (`read_tenant_exec`, commits
 `b6d098f`, `5ee01d4` on main), with which `create` migrates a unit that
 runs its own interpreter and the production voice listener. Log:
 `/root/m2-probe.log` on the VM from `## TE-0`, scripts
-`/root/m2-probes/a0…a10-te-*.sh`. The helper changed three times during
+`/root/m2-probes/a0…a13-te-*.sh`. The helper changed three times during
 the probe and the battery was repeated on each build: the log's notes say
 which blocks are superseded, and only the sections named below are
 cited.
@@ -1354,8 +1357,9 @@ self-check, `calls_available` and the journal:
 - `VOICE_COMPANY_KNOWLEDGE_ENABLED=1` (its privacy check on the profile
   was run by hand as the tenant in the daemon's mount namespace and
   passes — TE-K; the rest needs the remote business);
-- the public tunnel and the Vonage callback routes (main's listener
-  registers only `/healthz` and `/openai/live`);
+- the public tunnel, and a signed carrier or OpenAI callback (unsigned,
+  `/vonage/answer`, `/vonage/event` and `/openai/live` answer 401/401/400
+  on the migrated unit — TE-VON; main's listener serves all three);
 - the release `5ebe3fa` itself: any path it writes outside the profile
   and the company store (the sandbox is `ProtectSystem=strict`,
   `ProtectHome=tmpfs`, `PrivateTmp`), and tables only it knows — here
@@ -1440,8 +1444,11 @@ fixed.** 15–18 by the probe, 19–24 by review A on `5ab4576`
     are those of before, with no temporary file left. Of TE-M's six
     refusals on the running migrated unit (all identical before and
     after), M2 restores a replaced copy; M1, M3 and M5 are refused before
-    anything is rewritten, and M3b and M4 rewrite `tenant.conf` with the
-    same content. Review A's second pass repeated it at six points of
+    `tenant.conf` is written (M3 and M5 after the copy was installed
+    again with the same content), and in M3b and M4 the new `tenant.conf`
+    equals the old one, so the helper leaves the file: it replaces it,
+    and prints "wrote", only when the content differs. Review A's second
+    pass repeated it at six points of
     `create` and with thirty runs killed by a signal (B-R3, B-R3b in its
     log).
 23. **Accepted interpreters that cannot run** (A-T4): an `env` shebang,
@@ -1461,10 +1468,12 @@ Final code: **`0dc122d`** on `claude/m2-scratch-probe` (= main `499ca09b`
 re-applied, hash equal to the checkout's). **Every result below is from
 that helper**: TE-FINAL2-0, TE-M, the TE-D18, TE-V and TE-DEL after it,
 the last "FINAL RUN" block (TE-2a … TE-N9, TE-F1 … TE-F4), the last
-TE-K and TE-M7; the log's closing notes say which earlier blocks are
-superseded.
+TE-K, TE-M7, TE-O0 … TE-O4 and TE-VON; the log's notes say which earlier
+blocks are superseded.
 It is **not on main** until this record's gate passes; main's helper
-until then is `594b7375…`.
+until then is `594b7375…`, and that is the one the VPS installed at its
+bootstrap from `499ca09` (VPS rollout record above): the build with
+defects 15–24.
 
 **Before migration** (TE-2a): the unit runs as `mrcalld` on the flat
 socket from the release venv; `:8787` is bound by its main pid, `/healthz`
@@ -1543,7 +1552,9 @@ the last case the unit is started and comes up as before (TE-N9).
   0 "self-check failed"; socket `<uid>/ws.sock` `0660 <tenant>:caddy`
   behind the flat-name link, Caddy 401.
 - **`:8787` is bound by the unit's main pid inside the sandbox**,
-  `/healthz` 200, unsigned `POST /openai/live` 400; the journal has the
+  `/healthz` 200, unsigned `POST /openai/live` 400, unsigned `POST
+  /vonage/answer` and `/vonage/event` 401 (TE-VON, on TE-F4's process;
+  not probed before migration or after rollback); the journal has the
   release's marker and "production runtime module=<release>/…"; the
   process environment carries the release `PYTHONPATH`, the 15 voice
   variables, the operator's `LLM_DAILY_BUDGET_PROBE` from `90-…`, and an
@@ -1599,11 +1610,23 @@ helper's and stays.
 **For every 2b, not only production@'s.** With this helper `create`
 also refuses, for any unit: a first migration while the unit is not
 stopped (the runbook's step 2 comes before step 4, so nothing changes in
-the order); a drop-in that loads an `EnvironmentFile` (move its variables
-to `Environment=` lines first); a result whose `User`, `ProtectHome` or
-environment files are not `tenant.conf`'s. The three already migrated
-scratch tenants were re-applied by the reconcile on it and stayed
-`ready` (TE-FINAL2-0).
+the order); a drop-in that loads an `EnvironmentFile` other than a
+declared unit's voice file (move its variables to `Environment=` lines
+first); a result whose `User`, `ProtectHome` or environment files are
+not `tenant.conf`'s. Before each 2b, `systemctl show -p DropInPaths
+zylch-server@U` lists only files of
+`/etc/systemd/system/zylch-server@U.service.d/` that sort before
+`tenant.conf`: a later drop-in can change what `create` does not verify
+(review A, under "Open"). On an ordinary scratch profile with no
+declaration and no pin (TE-O0 … TE-O4): `create` under the running
+unmigrated unit is refused and the unit, its socket and its files are
+untouched (the user and key file it makes stay, as for any refused first
+`create`); the runbook's forward, a re-apply on the running unit, the
+rollback, a second forward and `delete` go as before. The three already
+migrated scratch tenants were re-applied by the reconcile with no
+`FAILED` line (TE-FINAL2-0, TE-F2 — their own `ready` lines are filtered
+out of that output) and by `create` directly in review A's B-R4 (`ready`
+for each).
 
 **Runbook, added for production@'s 2b** (it is the last one). `U` is its
 uid, `R` its release directory, `VF=/etc/mrcalld/voice-cafe124.env`.
@@ -1614,7 +1637,10 @@ written:*
 1. **The helper.** `sha256sum /usr/local/sbin/mrcall-tenant` starts
    `a90d1bc0` and `cmp` with the checkout's
    `engine/scripts/server/tenant-helper.sh` is silent. A helper installed
-   by hand is replaced by the next reconcile: it must come from main.
+   by hand is replaced by the next reconcile: it must come from main,
+   with the first reconcile after this record is there (the nightly one,
+   or an explicit `systemctl start zylch-reconcile.service`) — which
+   restarts every daemon, production@'s voice listener included.
    `systemctl --version` (249 on the VM), and `systemctl show -p
    EnvironmentFiles --value zylch-server@U` prints one `<path>
    (ignore_errors=…)` per line: step 6b reads that form, and on a systemd
@@ -1654,16 +1680,15 @@ written:*
    VF` → 0; no line other than a comment with an odd number of `"` or
    of `'`. `stat -c %a
    /etc/mrcalld` has the `o+x` bit.
-6. **The voice baseline**, by the commands of the 2026-09-30 switch
-   (M1 record; its directory `/etc/mrcalld/rollback-toward-sandbox-20260930/`
-   is on the VPS and was not seen from here — if the script is not
-   there, the commands are written out and run once before the window):
-   `/healthz` locally and through the tunnel with `calls_available:
-   true`; the unsigned Vonage answer/event and OpenAI webhooks 401/401/400
-   (the Vonage routes are the release's, not main's); no call in flight
-   in the ledger, as that script gates it; the last "company notes
-   preparation status=" line of the journal or the profile's `zylch.log`
-   if `VOICE_COMPANY_KNOWLEDGE_ENABLED=1`.
+6. **The voice baseline**, as the VPS rollout record above took it on
+   2026-10-02 around the bootstrap: production's ledger read as `mrcalld`
+   with SQLite `mode=ro` — no unresolved call; `/healthz` locally and
+   through the public endpoint, 200 with `calls_available=true`; unsigned
+   `POST` to `/vonage/answer`, `/vonage/event` and `/openai/live` → 401,
+   401, 400 on both paths (the same three answers the migrated scratch
+   unit gives locally, TE-VON); the last "company notes preparation
+   status=" line of the journal or the profile's `zylch.log` if
+   `VOICE_COMPANY_KNOWLEDGE_ENABLED=1`.
 
 *The declaration:* `/etc/mrcalld/tenant-exec/U`, `0600 root`, two bare
 lines and nothing else — `INTERPRETER=R/venv/bin/zylch` and
@@ -1736,11 +1761,13 @@ declaration stays for the next attempt.
   `=`; in the declaration, a comment with an apostrophe): the operator
   rewrites the line.
 - Review A's second pass on `0dc122d`, reproduced on the VM, not changed
-  (the gate closed on that commit; each is covered for production@ by a
-  runbook line above):
+  (the gate closed on that commit; the first three are covered for
+  production@ by a runbook line above, the last two are reached by no
+  command of the runbook):
   - the voice check and systemd still disagree on two forms — a quote
     reopened right after a closing one (`VOICE_T1="'"'`), and a
-    form-feed or vertical-tab "comment" holding a quote. Either makes
+    form-feed "comment" holding a quote (a vertical tab is the same case
+    from the code; its log shows the form feed). Either makes
     systemd swallow the following lines into one value: allowed variables
     are lost from the unit's environment, none outside the allowlist can
     arrive (a key starts only after a line end, and a carriage return is
@@ -1755,9 +1782,10 @@ declaration stays for the next attempt.
     Root-written and older than tenant-exec. The fix is one rule: refuse
     any applied drop-in that sorts after `tenant.conf` or lives outside
     the instance's `/etc` directory;
-  - accepted, then unable to start: a `zylch` whose shebang is the system
-    python rather than its own venv's; an empty or comment-only voice
-    file (the engine refuses "voice is disabled");
+  - accepted by `create` (B-R6, B-R1; not started there — that the unit
+    then cannot start is from the code): a `zylch` whose shebang is the
+    system python rather than its own venv's; an empty or comment-only
+    voice file (the engine refuses "voice is disabled");
   - `save_prev` runs before the trap is armed: a failing `cp` there
     leaves a root-only `/etc/mrcalld/.create-prev.*` holding a voice copy
     (from the code);
@@ -1766,6 +1794,26 @@ declaration stays for the next attempt.
     than tenant-exec, same class as defect 24).
 - The fake release, the scratch profile `scrP1…1` (migrated, running)
   and `/etc/mrcalld/voice-fake.env` are still on the VM.
+
+**Gate.** Two independent reviews of the probe, the helper and this
+record, each continued over the fixes. A (adversarial, host scripts; its
+own probes on the VM, `/root/te-reviewA.log`) REVISE on `5ab4576` —
+defects 19–24, no check of the installed helper, the dropped
+`EnvironmentFile` — → **APPROVED at `0dc122d`**, with the follow-ups
+listed under "Open", none of which it judges a blocker for production@.
+B (evidence conformance, runbook) REVISE on the first draft — claims
+wider than the log, an incomplete "not covered" list, a runbook with no
+helper check and no executable rollback trigger — and on three revisions
+— a credential scan that could not pass, the restore shown by no case
+(hence TE-M7), the carrier routes, sections of the log the record did
+not name — → **APPROVED**, this record included.
+
+Both verdicts are on helper `0dc122d` and on what the scratch VM can
+show. **production@ can be migrated with this helper, by the runbook
+above.** What the VM could not show — preparation and a call as the
+tenant inside the sandbox, on the release it really runs — is decided on
+the VPS by step 7: `calls_available: true` within five minutes of the
+start, or the rollback.
 
 ## M3 — Egress bound per daemon
 
