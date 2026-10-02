@@ -209,9 +209,12 @@ EXEC_BIN="$VENV/bin/zylch"; VOICE_ARG=""
 # command line (production@: a release venv and --voice-config). Every
 # value is checked here: a path the sandbox cannot see, a link, a writable
 # file or an environment line outside the voice allowlist is refused
-# rather than run. Sets declared=1 when a declaration exists; without one
-# a stale voice copy is removed. Called plainly (never in `&&`/`||`), so
-# `set -e` holds inside.
+# rather than run. Sets declared=1 when a declaration exists. A voice copy
+# no declaration names any more is NOT removed here: a migrated unit's
+# tenant.conf still loads it until `create` has rewritten that file, and a
+# refusal further down would leave the unit unable to restart (scratch VM
+# probe 2026-10-02); `create` removes it once nothing is left to refuse.
+# Called plainly (never in `&&`/`||`), so `set -e` holds inside.
 declared=0
 VOICE_ALLOWED='^[[:space:]]*((#.*)?|(export[[:space:]]+)?(VOICE_[A-Z0-9_]*|OPENAI_[A-Z0-9_]*|VONAGE_[A-Z0-9_]*|FIREBASE_WEB_API_KEY)[[:space:]]*=.*)$'
 plain_path() { # plain_path <what> <path>: absolute, no whitespace, no systemd specifier or expansion
@@ -241,7 +244,7 @@ sandbox_sees() { # sandbox_sees <absolute path of an executable>
 }
 read_tenant_exec() {
   declared=0
-  if [ ! -e "$exec_decl" ] && [ ! -L "$exec_decl" ]; then rm -f "$voice_copy"; return 0; fi
+  if [ ! -e "$exec_decl" ] && [ ! -L "$exec_decl" ]; then return 0; fi
   [ -L "$exec_decl" ] && die "$exec_decl is a symlink; refusing"
   [ -f "$exec_decl" ] || die "$exec_decl is not a regular file"
   [ "$(stat -c '%U' "$exec_decl")" = root ] || die "$exec_decl must be owned by root"
@@ -289,8 +292,6 @@ read_tenant_exec() {
     install -m 0640 -o root -g "$user" "$vconf" "$voice_copy"
     runuser -u "$user" -- test -r "$voice_copy" || die "$user cannot read $voice_copy (is /etc/mrcalld o+x?)"
     VOICE_ARG=" --voice-config $voice_copy"
-  else
-    rm -f "$voice_copy"
   fi
   declared=1
 }
@@ -532,6 +533,8 @@ create)
     done
     runuser -u "$user" -- test -r "$p/zylch/__init__.py" || die "$user cannot read $p/zylch/__init__.py: chmod -R go=rX $RELEASES (runbook step 0), then create again"
   done
+  # tenant.conf no longer names a voice copy: only now is a stale one removed
+  [ -n "$VOICE_ARG" ] || rm -f "$voice_copy"
   # 7. runtime socket dir: per-uid 2750 <user>:caddy so the socket inherits
   #    the proxy's group and server_ws.py's chmod(0o660) lets Caddy connect.
   #    The parent comes from tmpfiles.d/mrcalld.conf (2751 mrcalld:caddy).
