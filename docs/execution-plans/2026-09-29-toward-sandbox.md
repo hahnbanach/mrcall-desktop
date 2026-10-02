@@ -949,6 +949,10 @@ keeps its pid (REV-1, DEP-5, FINAL-6).
   the REV-0 build; on `267e365` only its refusal, FINAL-5); a start of
   the template unit after a stopped first migration (FINAL-5 shows the
   leftovers gone and `User=mrcalld`, not a bind).
+- `docs/remote-backend.md` on main (mnemonic upgrade, "the per-unit pin")
+  proposes a second checkout with its own venv selected by a drop-in that
+  resets `ExecStart=`. A unit pinned that way is refused by `create`, like
+  production@: pin by `PYTHONPATH`, or extend the helper first.
 - The scratch VM's root disk is at 97 % (the 4 GB swap file): clear space
   before the next session there.
 
@@ -962,6 +966,14 @@ claims wider than the probes) and on `0eae166` (refusals not run on the
 committed hash; `..`) → **APPROVED at `267e365`**, this record included.
 Both judge "production@ open" an acceptable resolution for this gate, not
 a blocker; it blocks production@'s own 2b.
+
+Merged with main `e1e5f79` afterwards (no conflict; main does not touch
+the host scripts). On the merged tree, with the VM's engine interpreter:
+the test files the merge touches plus the tenant, rekey, offboard and
+provisiond ones — 392 passed, 19 skipped, 1 failed
+(`test_contract_boundaries`, `llm.models`), which fails identically on
+main `e1e5f79`. The full suite was not run (it was OOM-killed on this VM
+on 2026-10-01).
 
 ## M3 — Egress bound per daemon
 
