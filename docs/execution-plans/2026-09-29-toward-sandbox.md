@@ -1299,6 +1299,288 @@ the corrected scratch runner and re-establish bootstrap acceptance
 before proceeding in the same authorized order. This record does not
 claim completion of M2 or waive the first-anomaly stop rule.
 
+#### Resume from `aa57697`, clarified stop rule (2026-10-02)
+
+The CTO authorized resuming the same compressed window, now including
+production's final 2b. The stop rule distinguishes a broken operator check
+(import, arguments, parsing) from a real host/daemon/store/app anomaly:
+repair and repeat the same check for the former; stop with the prescribed
+company/profile rollback for the latter. The earlier attempt remains
+historical above. No production test call is authorized; voice acceptance
+uses `calls_available`.
+
+**Bootstrap, 13:53 UTC.** The corrected guarded runner was installed
+under `/root/m2-rollout-20261002/`; its original failed copy was retained.
+Exactly one further reconcile pulled the service checkout to `aa57697`
+and restarted the seven unmigrated daemons. `Result=success`,
+`ExecMainStatus=0`; both the unit and tagged `zylch-reconcile` journal
+show updater exit 0 and seven profiles, `code_changed=1`. Installed helper
+SHA256 is `a90d1bc081978c4716d20d3ecd1f6cd7f5caa78d78283843ae21647e6c2a9eae`,
+matching the checkout, with silent `cmp`. Generated explicit log paths,
+both logrotate debug checks, seven active `mrcalld` units and empty tenant
+list passed. Authenticated provisiond status GET passed on the Unix socket
+and public HTTPS (200, `active`); unauthenticated GETs returned 401.
+Tokens stayed in memory. Production's ledger had ten closed and zero
+unresolved calls; local/public health returned 200 with
+`calls_available=true`, unsigned callbacks 401/401/400.
+
+The first immediate post-restart health request raced listener startup.
+The check gained a bounded readiness wait; the same health/ledger/callback
+check passed without another reconcile. This was not recorded as a daemon
+failure or used to waive a persistently unavailable listener.
+
+**K3, 13:57–13:58 UTC.** The `90-daily-budget.conf` PYTHONPATH drop-ins of
+`C06xHKoRcfdz94FaLPKuJuo0xVo1`, `YZNI2ZLDjFOxcvF0zmptW3vRZxV2` and
+`ZwpLepFDghWhQEBO4WJRIFcEr7p1` were moved intact into root-only
+`/root/k3-pins-backup/<uid>/`, never deleted. After daemon reload and each
+restart: active `mrcalld`, `NRestarts=0`, live `/proc` command from the
+checkout, no release PYTHONPATH, same-environment `zylch.__file__` from
+`/home/mrcalld/mrcall-desktop/engine/zylch/__init__.py`, no startup errors.
+Backup hashes match the original files. Production retained its three
+drop-ins and `mrcall-voice-cafe124-phone-md-5ebe3fa` pin. Its exact-source,
+AST-extracted path functions were probed with synthetic files under its
+actual interpreter: derived present resolves to derived in serving mode;
+legacy is used only when derived is absent. Its `home.py` exists.
+
+**Authenticated-client prerequisite.** The actual app
+`WebSocketRpcClient`, transpiled from repository source, made two real
+Firebase-authenticated opens with a forced reconnect and successful mail
+and `memory.status` reads for support, Mario, production, Hxi… and x59….
+This is headless app transport evidence, not a renderer/GUI observation.
+YZNI… and Zwp… have no local/server descriptor or stored Firebase row:
+read-only queries as their daemon identity found zero OAuth rows. Their
+daemons and memory are healthy; no authenticated request was attempted or
+rejected. The initial checker label `HOST/APP ANOMALY` overstated this
+missing-evidence condition and was corrected. The CTO subsequently
+excluded Riccardo (`YZNI…`) and Ivan (`Zwp…`) from 2b for now. All-company
+2a was still accepted with memory checks as the daemon identity; their
+identity remains `mrcalld`. Production stays last among the selected profiles.
+
+**2a, 14:07–14:08 UTC.** All four companies were relocated under the root
+process's inherited fd 9 on `reconcile.lock`. Each company's full holder
+set was stopped before the root-only backup, ownership record and
+no-open-store-descriptor check. The maintenance CLI ran as `mrcalld`
+with umask 007, then the installed helper's `store`, then all holders
+restarted. The resulting company groups are:
+
+| Company group | Holders | Accepted UTC |
+|---|---|---|
+| `mc-c-556508c0bf3f` | `9nXeYF8OXPetUFsSP4zDC3F2i673` | 14:07:20 |
+| `mc-c-6bf6c0996296` | `x59G6SnymAN2lkFny0JDGJgdFz33` | 14:07:32 |
+| `mc-c-ca1cdaf60f12` | `HxiZhWEBoRUarPzqX8eRWP21FuJ3` | 14:07:50 |
+| `mc-c-7aaa48b3ef85` (Café124) | C06…, Gn9… (production), YZNI…, Zwp… | 14:08:17 |
+
+Café124's four holders were stopped together at 14:07:51 UTC, including
+production; its acceptance finished within the ten-minute decision limit.
+All seven resolved the derived name and reported memory available; legacy
+stores were absent. Database/WAL/SHM files have their company group and
+0660 mode. Actual app-client mail/memory checks passed for the five
+credentialed profiles. Production's original drop-in hashes, pinned
+release, ten-closed/zero-unresolved ledger and local/public health/auth
+baseline remain unchanged.
+
+The first support-store attempt at 14:04 UTC was unnecessarily rolled
+back because the check searched for `available: True` instead of parsing
+CLI whitespace (`available:    True`). Its actual memory and app checks
+were healthy. The parser was corrected, the same status check passed,
+and 2a was repeated from the verified legacy state with a separate backup;
+all four company acceptances above then passed. Original and retry backups
+are retained. No key or legacy capability-bearing filename was printed.
+
+Root-only resumed evidence is in
+`/root/m2-rollout-20261002/resume-rollout.log`; runners and per-company
+`/root/backup-2a-<group>-20261002-resume-retry1/` backups are retained.
+The narrow reviewed resume brief/plan are under
+`/tmp/mrcall-ai-kit/sandbox-resume/`. Independent 2a review also compared
+SQLite integrity and backup counts: all four copies/live stores are valid;
+Café124's stopped backup already held 1,468 blobs, matching immediate
+acceptance. Subsequent automatic consolidation removed 19 live rows with
+19 committed operations, aliases to live keepers and preserved original
+content in `blob_versions`; that change was not relocation loss.
+
+**First 2b attempt: support, 14:14 UTC.** The embedding cache was warmed
+as `mrcalld` (dimension 384) and checkout readability passed. Under fd 9,
+`9nXeYF8OXPetUFsSP4zDC3F2i673` was stopped and backed up root-only;
+first `create` made its tenant/key/drop-in. Root `rekey --verify` exited
+2 after rewriting two rows, reporting seven Google Calendar inner-field
+failures (`access_token`, `refresh_token`, `scope`, `expires_in`,
+`token_type`, `email`, `id_token`). The inverse rekey also exited 2 on
+those fields. With that UID still stopped, the original database and
+its recorded WAL/SHM were restored from the pre-create archive, failed
+versions retained root-only, and `unmigrate` was run for that UID only.
+Its original profile-directory mode was restored. It returned active as
+`mrcalld`, with successful authenticated app mail/memory reconnect and
+zero new startup error lines. No other profile entered 2b; all four
+company stores remain derived and the helper table returned empty.
+Production retained its pin and healthy voice baseline. The new tenant
+user/key remain, as the helper's rollback contract permits.
+
+**Repair decision after recovery.** The CTO asked to fix the blocker and
+continue, rather than end the work at rollback. Read-only independent
+verification proved recovery credentials byte-identical to the original
+backup. Both the original Google Calendar outer JSON and its seven
+`encrypted:`-tagged payloads were plaintext; none was Fernet-shaped.
+The old source key matched the shared host key (boolean comparison only).
+The legacy credential writer prefixes `encrypt()` even when local
+no-key encryption returns plaintext; the current reader supports that
+encoding, but the rekey walker incorrectly assumes every tagged payload
+is Fernet. Wrong-key/corrupt ciphertext must continue to fail.
+
+The reviewed repair brief/plan under the same scratch directory add a
+minimal rekey compatibility fix, regression and backup-copy forward/
+verify/idempotence/reverse proof before deployment. Support is retried
+first, then the remaining selected ordinary profiles, production last
+through the exact tenant-exec runbook. Ivan and Riccardo remain excluded.
+Results of that repair and continuation follow here.
+
+**Published repair and resumed 2b.** Commit `926ef84` adds the narrow
+legacy tagged-plaintext compatibility path. Fernet-shaped payloads that
+cannot decrypt still fail, including truncated ciphertext; verification
+is unchanged. The focused suite passed 15 tests and the complete storage
+suite passed 131 tests. A disposable copy of support's original backup
+passed forward rekey (two rows, zero failures), verify, idempotence,
+reverse rekey and verify, with decoded credentials preserved. Fresh
+milestone and separate final repair reviews approved it before push and
+deployment. The service checkout was pulled to `926ef84` under fd 9;
+the helper still matches silently. That CLI-only deployment did not run
+another reconcile or restart daemons.
+
+The revised runner now tests all credential rows, read-only as the
+current daemon identity, through the corrected pure rekey walker before
+stopping a profile. Each selected ordinary 2b retains its own root-only
+`/root/backup-2b-<uid>-20261002-repaired/` archive and old key. The sequence
+is first `create`, root forward rekey with verification, verify-only,
+second `create`, start and acceptance, all under root fd 9. Accepted
+profiles stay migrated while the next is processed. The rollback window
+and backups remain open.
+
+| Ordinary profile | Accepted UTC | Daemon identity | Rekey verification |
+|---|---|---|---|
+| support@, `9nXeYF8OXPetUFsSP4zDC3F2i673` | 14:29:35 | `mc-16d5836d57be` | 2 rows, zero failures, twice |
+| Mario Café124, `C06xHKoRcfdz94FaLPKuJuo0xVo1` | 14:34:06 | `mc-b75843f3770f` | 1 row, zero failures, twice |
+| Mario Gmail, `HxiZhWEBoRUarPzqX8eRWP21FuJ3` | 14:42:34 | `mc-0c008879b605` | 2 rows, zero failures, twice |
+| Mario MrCall, `x59G6SnymAN2lkFny0JDGJgdFz33` | 14:45:31 | `mc-fd58d04802f1` | 1 row, zero failures, twice |
+
+For these acceptances the actual authenticated app transport opened twice
+with a forced reconnect; both mail and memory RPCs succeeded. Each tenant
+also passed `memory-status`, refusal of another profile's environment/key,
+profile ownership, company-store sidecar permissions, unchanged operator
+drop-ins and zero new startup error lines. Each of the three singleton
+companies has no remaining `mrcalld` holder, so that user's membership in
+its company group was removed after acceptance review. Café124 retains `mrcalld` membership
+for the excluded Ivan/Riccardo daemons. The GUI was not exercised.
+
+**Production, exact tenant-exec runbook.** Fresh preparation review caught
+and repaired errors in the acceptance runner before deployment: operational
+voice/filesystem failures now enter recovery; stop and backup preparation
+are protected; all post-start subprocess and HTTP operations share a
+270-second deadline, leaving 30 seconds before the five-minute decision
+boundary. Read-only company inventory happens before the stop. These
+were check-script defects, not host failures.
+
+The required release credential scan covered 8.7 GB of preserved releases.
+An initial 180-second probe budget was too short; the same ASCII patterns
+were rerun with the C locale and a longer pre-stop budget. The complete
+`grep -rIlE` returned 0 with 68 filenames, comprising 12 distinct file
+contents. Every hit was opened privately: synthetic test fixtures, PEM
+format markers/comments, public case/license identifiers, a documentation
+placeholder and a package checksum; none was a credential. The five
+`find ... -name '.env*' ! -name '.env.example'` hits were identical public
+`.env.example.j2` templates with empty or unexpanded secret fields. Exact
+full-content hashes and classifications are root-only under `/root/prod-2b/`.
+The initial classifier's refusal of public test fixtures was corrected;
+classification resumed from the fresh, complete root-only scan evidence,
+checking every hit again against its approved content hash. Unknown or
+changed matching content is refused. A separate preparation review approved
+the classification before `chmod -R go=rX /home/mrcalld/releases`.
+
+Pre-checks 1–6 passed, recorded from **15:02:05 UTC**, before the declaration:
+
+- Helper SHA and silent checkout comparison passed; systemd 255 prints
+  the expected one-environment-file-per-line format.
+- Root-only `/root/prod-2b/` holds the original unit/show, all three
+  operator drop-ins and hashes, profile mode `0770`, and environment
+  **names**. Effective original files are exactly the shared file and
+  `/etc/mrcalld/voice-cafe124.env`; all drop-in paths/order passed.
+- Absolute voice executable:
+  `/home/mrcalld/releases/mrcall-voice-cafe124-phone-md-5ebe3fa/venv/bin/zylch`.
+  Its shebang and complete interpreter chain passed. The real release has
+  `home.py` and its exact extracted path functions choose the derived store
+  when present, with legacy fallback. No real SQLite store was opened by
+  that root path probe.
+- Voice file root-owned, regular and not a link; CR, trailing-backslash,
+  off-allowlist and odd-quote counts zero. `grep -vE` used the helper's
+  actual `VOICE_ALLOWED` pattern; no nonmatching variable name existed.
+  `/etc/mrcalld` is `0755`, so `o+x` was already present.
+- Read-only ledger as `mrcalld`: ten closed calls, zero unresolved.
+  Local/public health 200, `calls_available=true`; unsigned answer/event/live
+  401/401/400 on both paths. Last company-notes preparation status:
+  `supported`, with company knowledge enabled.
+
+The exact two bare declaration lines were then written `0600 root:root`
+to `/etc/mrcalld/tenant-exec/Gn9IcuWzYyY7DBMHkVUGB7bIiTp2`:
+the absolute `INTERPRETER` above and
+`VOICE_CONFIG=/etc/mrcalld/voice-cafe124.env`. Operator drop-ins were not
+edited. Immediately before stopping, the voice baseline was repeated with
+no call in flight. Under root fd 9, the stopped profile was backed up in
+`/root/prod-2b/migration/`, then `create` → root rekey (one row, zero failures)
+→ verify-only (one row, zero failures) → `create` → start ran successfully.
+Before start, the effective command used the same voice executable, tenant
+`<uid>/ws.sock` and `<uid>.voice.env`; `User=mc-18f855d535e9`,
+`ProtectHome=tmpfs`, with only the voice copy then the tenant key file.
+
+**Production accepted at 15:02:37 UTC, 12.77 seconds after start.**
+The daemon was active with `NRestarts=0`; port 8787 belonged to its main
+PID 3642907. Local/public health and unsigned callbacks matched baseline;
+the ledger was read as the tenant in `mode=ro`, still ten closed and zero
+unresolved. No baseline environment name was lost; only `MEMORY_DB_DIR`,
+`PYTHONDONTWRITEBYTECODE`, `ZYLCH_HOME` were added. The unchanged release pin
+was visible inside the mount namespace. New journal/profile-log error
+matches were zero, and company-notes status remained `supported`. The
+actual authenticated app client connected and reconnected, read mail and
+available company memory (1,397 blobs at acceptance); tenant CLI confirmed
+1,397 blobs and 197 facts. Derived store and sidecars retained `0660` with
+the company group; no legacy store was recreated. All three original
+drop-in hashes matched. No rollback trigger fired and no test call was
+made: voice acceptance is explicitly on `calls_available`.
+
+**Final runtime acceptance, 15:04 UTC.** All seven daemons are active with
+zero restarts: five `mc-…` identities and the two excluded `mrcalld`
+identities. Every profile's daemon-identity `memory-status` is available;
+all four company stores remain derived with group-writable sidecars and
+no recreated legacy. All six nonproduction profiles have no `PYTHONPATH`
+pin. The helper table contains exactly the five selected UIDs; helper
+comparison remains silent. Generated logrotate has one shared stanza for
+the two excluded profiles and one stanza per migrated user. Both per-file
+and global `logrotate -d` exit 0 without errors or duplicate entries;
+no actual rotation was run. Cross-profile environment/key reads are denied
+for all five tenants, production included. Provisiond remains active and
+the voice baseline passes again as the tenant. Authenticated provisiond
+socket/public GET acceptance is recorded in the completed bootstrap above.
+
+The explicitly requested main pull and K3 unpinning also put M5–M9
+mnemonic source in the checkout imported by six nonproduction daemons:
+`19639d2` is an ancestor of deployed `926ef84`. Production voice retains
+its older release. This is verified source presence, not a new mnemonic
+product/corpus acceptance; AC 5 and the separate rollout gates remain open.
+
+The selected rollout is complete; **M2 remains partial** because Ivan
+(`ZwpLepFDghWhQEBO4WJRIFcEr7p1`) and Riccardo
+(`YZNI2ZLDjFOxcvF0zmptW3vRZxV2`) were explicitly excluded from 2b.
+Self-serve provisioning stays closed. Their pins were removed and their
+company's all-holder 2a completed before that exclusion; neither entered
+identity migration. Shared-key/profile/store backups and the production
+declaration remain in place for the rollback window. M3 is unexecuted.
+No secret values or key-bearing legacy filenames are in this record.
+
+Fresh individual acceptance reviews approved all five selected identities;
+a separate final end-to-end review approved the runtime evidence and the
+narrow publication diff. Mechanical documentation checks are clean,
+`git diff --check` passes, and both rekey files pass Black. The remaining
+test diff only formats three assertions; its AST is unchanged. Real
+secret-value and JWT comparisons against the intended diff found zero
+matches. The global documentation baseline and unrelated work are untouched.
+
 ### M2 record — tenant-exec probe (2026-10-02)
 
 Same scratch VM (root disk 63 % before, 71 % after the fake release; swap

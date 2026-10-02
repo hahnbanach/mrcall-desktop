@@ -99,8 +99,8 @@ engine detail in [`engine/docs/features/entity-memory-system.md`](engine/docs/fe
 
 A hosted engine (`zylch serve`) is multi-tenant on one host, and the
 boundary between tenants is the operating system, not the model. The code
-is on `main`; M1 (tool confinement) is deployed to every daemon, **no
-profile is migrated to its own user yet** (state in the plan).
+is on `main`; M1 is deployed to all seven daemons. Five profiles, production
+included, run as their own users; Ivan and Riccardo remain on `mrcalld` (state in the plan).
 Each migrated profile's daemon runs as its own Unix user `mc-<sha256(uid)[:12]>`
 inside a systemd sandbox, with the engine checkout read-only and its own
 root-only `ENCRYPTION_KEY`; its tools read and write only the profile's

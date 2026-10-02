@@ -19,18 +19,21 @@ what is *current*, targeting ≤ ~120 lines.
 
 ## State now
 
-Mnemonic M9 source is integrated on `main` through fetched commit `19639d2`.
-The recorded Haiku corpus failed AC 5; the CTO's decision defers its
-re-measurement to M10 on the resolver-selected model. This reconciliation
-does not establish deployment or change the rollout gates. Engine details are
+Mnemonic M9 source through `19639d2` is included in the service checkout
+imported by six nonproduction daemons. The recorded Haiku corpus failed AC 5;
+the CTO's decision defers its re-measurement to M10 on the resolver-selected
+model. The sandbox window did not perform mnemonic product/corpus acceptance
+or close those rollout gates. Engine details are
 in [the memory snapshot](../engine/docs/active-context.md).
 
 Main and the Café 124 production voice release read standing instructions from
 the reserved company-document project. Telephone conversion reads `phone.md`;
 USER_NOTES is retired. See [standing instructions](../engine/docs/features/project-memory.md).
 
-Three Café124 engines retain the `8d83193` release family; production runs
-`phone-md-5ebe3fa` through its systemd drop-in. The billing server is
+The three former K3-pinned Café124 engines import the service checkout;
+their pins are preserved in root-only backups. Production runs
+`phone-md-5ebe3fa` through its unchanged operator drop-ins and tenant-exec
+declaration. The billing server is
 `prod-99091c35`. Production uses K3 max through its personal OpenRouter key,
 with a USD20/day limit. The other three profiles retain their previous billing
 and model choices and USD5/day limits. All four have automatic processing off
@@ -65,9 +68,9 @@ and six approved aliases. One K3 conversion settled; recovery preserved the
 same selected facts at current source offsets. Production preview matches the
 mailbox document and procedures; all six stored documents remain revision 1.
 Health, authenticated binding and unsigned callback checks pass. Both clone
-pause files are absent. Mario imports `bbde719` through his unchanged executable
-and socket; actual preview matches his mailbox/procedures revision 1. Mario has
-no operator schedule; 124's scheduled operator reads his inbox without drafting.
+pause files are absent. Mario imports the service checkout and uses his tenant
+socket; his accepted source preview is recorded in the source-migration plan.
+Mario has no operator schedule; 124's scheduled operator reads his inbox without drafting.
 Mario's project-local permissions deny instruction writes in twelve supported
 command spellings, including raw `instructions.store`. Read access is preserved;
 the same [Astra reviewer approved the P1 repair](evaluations/2026-10-01-astra-instruction-write-denial-rereview.md).
@@ -91,12 +94,14 @@ part of M2 (per-profile Unix user, dual-name company store, `rekey`,
 `mrcall-tenant` helper, transitional unit template) are on `main` at
 `c2b3ca5` and reviewed. **M1 is deployed to all seven daemons** (2026-09-30:
 the three unpinned ones on the service checkout, the four Café124 ones as
-backports onto their pinned releases, rollback recorded in the plan). **No
-profile was migrated to its own Unix user as of the VPS preflight of
-2026-10-02**; M2's scratch-VM probes have passed and are recorded in the
-plan (the operator keeps the VM's address outside the repo), and the
-migration window belongs to the host session. Self-serve provisioning
-stays closed until M2b is on all seven profiles.
+backports onto their pinned releases, rollback recorded in the plan). All
+four company stores are relocated. **Five profiles run as their own Unix
+users**, including production voice with its release preserved; authenticated
+app reconnect and memory acceptance passed. Voice is accepted on local/public
+`calls_available`, without a test call. Ivan and Riccardo remain on `mrcalld`
+by operator decision. M2's VM probes and the VPS acceptance are recorded in
+the plan; M2 remains partial and M3 is pending. Self-serve provisioning stays
+closed until M2b is on all seven profiles.
 
 Settings supports independent provider/model selection, daily budgets and bounded
 preparation. It remains reachable with an unavailable engine; stale connection
@@ -112,8 +117,8 @@ Runtime contracts are in [IPC](ipc-contract.md),
 [remote backend](remote-backend.md) and per-tree docs.
 
 WhatsApp can silently disconnect when neonize's bundled protocol falls behind.
-The current checkout defines a refresh loop, but the pinned Café 124 releases
-do not contain it. `whatsapp.status` still has no external reader, and the app
+The current checkout defines a refresh loop; only the production voice engine
+retains a release that lacks it. `whatsapp.status` still has no external reader, and the app
 Refresh button only lists threads. See the archived
 [channel details](active-context-archive.md).
 
@@ -130,14 +135,11 @@ Refresh button only lists threads. See the archived
 - Remote provisioning needs host UID-to-company membership; an endpoint alone
   does not establish membership. Settings catalog refresh has a known same-value
   reload gap; reopen Settings after connection changes. See [backlog](harness-backlog.md).
-- Toward-sandbox: the M2 scratch-VM probes are recorded in the plan, the
-  last one for the operator declaration that migrates the voice daemon
-  (tenant-exec, 2026-10-02). Next on the host, per the plan's CTO decision
-  of 2026-10-02: 2a (Café124 store relocation, all four stopped) and 2b in
-  one window, the voice daemon last; M3 egress and the brief's parked
-  operational floor (backups, pinned rollout) follow.
-  All need a session with a shell on the host; the cloud session only reads
-  what those sessions commit.
+- Toward-sandbox: M2's remaining identity migrations are the operator-excluded
+  Ivan and Riccardo profiles, with authenticated app acceptance required when
+  resumed. All company 2a and the five selected 2b acceptances are recorded
+  in the plan. M3 egress and the brief's parked operational floor (backups,
+  pinned rollout) remain pending and require a host session.
 - Product chat, delegated sending, approval isolation and a comprehensive security
   review are deferred. Calendar integration, raw RPC errors,
   installer coverage and multi-window auth checks retain their existing owners.

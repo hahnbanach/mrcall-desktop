@@ -106,7 +106,9 @@ def test_rekey_rewrites_outer_and_inner_then_verifies(db):
     new = Fernet(NEW.encode())
     assert json.loads(new.decrypt(_read("firebase").encode())) == {"refresh_token": "rt"}
     outer = json.loads(new.decrypt(_read("pipedrive").encode()))
-    assert new.decrypt(outer["pipedrive"]["api_token"][len("encrypted:") :].encode()) == b"api-key-123"
+    assert (
+        new.decrypt(outer["pipedrive"]["api_token"][len("encrypted:") :].encode()) == b"api-key-123"
+    )
     assert outer["metadata"] == {"pipedrive": {"a": 1}}
     check = rk.verify(NEW)
     assert check.ok and check.rewritten == 2
@@ -159,7 +161,9 @@ def test_rekey_legacy_tagged_plaintext_round_trip(db):
     assert rk.rekey(NEW, OLD).ok and rk.verify(OLD).ok
     old = Fernet(OLD.encode())
     restored = json.loads(old.decrypt(_read("google_calendar").encode()))
-    assert old.decrypt(restored["google_calendar"]["refresh_token"][10:].encode()) == b"legacy-refresh"
+    assert (
+        old.decrypt(restored["google_calendar"]["refresh_token"][10:].encode()) == b"legacy-refresh"
+    )
 
 
 @pytest.mark.parametrize("truncated", [False, True])
@@ -167,7 +171,9 @@ def test_rekey_refuses_foreign_or_truncated_inner_ciphertext(db, truncated):
     token = Fernet(Fernet.generate_key()).encrypt(b"unavailable-secret").decode()
     if truncated:
         token = token[:20]
-    _row("google_calendar", json.dumps({"google_calendar": {"refresh_token": "encrypted:" + token}}))
+    _row(
+        "google_calendar", json.dumps({"google_calendar": {"refresh_token": "encrypted:" + token}})
+    )
     report = rk.rekey(OLD, NEW)
     assert not report.ok
     assert report.failed == ["google_calendar: inner field refresh_token"]

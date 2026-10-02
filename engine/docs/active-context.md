@@ -48,12 +48,19 @@ current source offsets after one K3 conversion. Source/query review passes;
 active readback, authenticated binding, health and unsigned callbacks pass.
 Production instruction preview matches its unchanged revision-1 mailbox and
 procedures documents. All six stored documents remain unchanged at revision 1.
-Both clone pause files are absent. Mario imports `bbde719` with the same
-executable/socket and reads his revision-1 mailbox/procedures. His
-project-local permissions deny instruction writes, including `instructions.store`,
+Both clone pause files are absent. Mario imports the service checkout on his
+tenant socket; his accepted source preview is recorded in the source-migration
+plan. His project-local permissions deny instruction writes, including `instructions.store`,
 in twelve supported command spellings. Astra's P1 re-review is APPROVED;
 read-only preview and the engine drafting reader remain available. No Mario operator schedule
-exists; 124's schedule only reads his inbox. Other staff overlays retain f342c5c.
+exists; 124's schedule only reads his inbox. The three former K3 pins are in
+root-only backups; those engines import the checkout. All four company stores
+are relocated, and five daemon identities are migrated, production voice
+included with its release unchanged. Ivan and Riccardo remain on `mrcalld`
+by operator decision; self-serve provisioning stays closed. Authenticated
+app reconnect and memory checks passed; voice is accepted on local/public
+`calls_available` without a test call. See the
+[VPS rollout record](../../docs/execution-plans/2026-09-29-toward-sandbox.md#m2-record--vps-rollout-2026-10-02).
 See the [source migration plan](../../docs/execution-plans/2026-10-01-telephone-notes-source-is-phone-md.md).
 
 The owner accepted the October 1 handset trial; independent review approved its
@@ -71,7 +78,8 @@ proves that explicit mutation refusal leaves complete persisted table values
 unchanged and never initializes the agent, creates a background job or requests
 an LLM budget reservation. It also covers a real kernel-client → RPC →
 dispatcher refusal, while help and search tools remain available. This is
-implemented and tested locally, not deployed.
+implemented and tested locally; its source is present in the checkout imported
+by six nonproduction daemons, without a new read-only product acceptance.
 
 The mnemonic decision boundary exists in `zylch/memory/mnemonic/`: frozen memory
 events whose observation, source revision and authority a model cannot reach; a
@@ -136,7 +144,8 @@ reviewed exempt primitives the writer inventory names. Contracts:
 against the frozen milestone 0 incident corpus and real split profile/company
 databases. Milestones 5–7 and the account check that accepts either identity
 of the profile, uid or email ([who the account is](features/mnemonic-decisions.md#who-pays)),
-are on `main` and pushed; **not deployed**.
+are on `main` and present in the checkout imported by six nonproduction
+daemons; mnemonic rollout acceptance remains pending.
 
 Milestone 8 seals the boundary ([join, reviews and maintenance](features/company-memory-join.md)):
 a company-memory join is a fenced, crash-safe cutover that refuses while the
@@ -150,9 +159,12 @@ boundary test and its CI workflow fail on a new scanned writer edge, a new
 caller of the row internals or the permit factory by any spelling, and a new
 statement built from strings ([what it cannot see](features/mnemonic-writer-inventory.md#what-is-scanned)); the inert
 `memory_operations.approval` column is removed by a table rebuild. Merged into
-`main` (`71bbc21`); **not deployed**. A store it migrates cannot be opened by a milestone 5–7 build.
+`main` (`71bbc21`) and present in that deployed checkout. This sandbox window
+does not establish mnemonic product acceptance. A store it migrates cannot
+be opened by a milestone 5–7 build.
 
-**Milestone 9 is integrated on `main` through `19639d2`; deployment is unverified.**
+**Milestone 9 source through `19639d2` is included in the checkout imported
+by six nonproduction daemons; its product rollout acceptance remains open.**
 The kernel template audit reads the cron deny list in either of
 its two forms and refuses neither/both, so it passes against `cs-kernel`
 `258c927` and against current kernel `main` (`ba79cc1`) with every inventory
@@ -208,8 +220,11 @@ misses). The journey workflow is green on every run of the pushed branch
 Rollout remains pending. The previously referenced hb plan
 `docs/execution-plans/2026-09-30-mnemonic-rollout.md` is absent from this workspace;
 a reviewed rollout plan and migration rehearsal on a store copy are required
-before any live step. The latest recorded hosted releases use pre-milestone-5
-code; this source reconciliation does not recheck their runtime.
+for the mnemonic product rollout. The sandbox window explicitly pulled main
+and removed three K3 pins: six nonproduction daemons now import checkout
+`926ef84`, including M5–M9 source. Production voice remains on its older
+release. Source deployment is verified; mnemonic corpus/product acceptance
+and AC 5 re-measurement were not performed in that window.
 
 Support's engine exposes approval-gated `initiate_call` through the dashboard's
 Firebase atom API, with an explicit calling assistant ID. A live request on
@@ -217,17 +232,18 @@ Firebase atom API, with an explicit calling assistant ID. A live request on
 15:30:16 UTC confirms a conversation with Litio's assistant. The caller's saved
 voice configuration initially refused a robot interlocutor, then conversed;
 automatic diagnostic scripting is not configured. The restoration is committed as
-`4cd23b7`, and the engine running on support (`f12ae60`) descends from it. See
+`4cd23b7`; support now imports the service checkout, which retains it. See
 [outbound contract](features/outbound-calls.md) and
 [verification/rollback](../../docs/execution-plans/2026-09-17-mrcall-outbound.md).
 
-Three Café124 units retain the `8d83193` release family; production runs the
-M1-based `phone-md-5ebe3fa` voice release with confinement protections. The billing server runs
+The three formerly pinned Café124 units import the service checkout; production
+runs the M1-based `phone-md-5ebe3fa` voice release with confinement protections
+under its tenant identity. The billing server runs
 `prod-99091c35`. Production selects personal OpenRouter/custom K3 for its base
 model, five worker roles and reply classification. The other three profiles
 retain their previous billing/model settings. Production's daily cap is USD20;
 the other three caps are USD5. Automatic processing is off and preparation is
-paused/not running in all four. Other hosted units retain their own release pins.
+paused/not running in all four. All six nonproduction units import the checkout.
 
 [K3 max](features/k3-reasoning.md) uses Chat completions pinned to DigitalOcean.
 The adapter promotes worker limits to a combined 8192-token reasoning/final cap

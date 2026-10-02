@@ -123,10 +123,13 @@ The model:
   migrated, is its Unix user: another company's daemon cannot read or write
   this profile's files; and the engine's own tools are confined to the
   profile's `downloads/` and `scratch/` folders on a hosted engine (M1, on
-  `main` since `c2b3ca5`). Rollout state (2026-10-01): M1 is deployed to
-  all seven daemons (the four pinned Café124 ones as backports); **no
-  profile is migrated yet**, so every daemon still runs as `mrcalld`. The
-  plan's records are the authority.
+  `main` since `c2b3ca5`). Rollout state (2026-10-02): all four company
+  stores are derived; five profiles run as `mc-…`, including production
+  voice on its unchanged release through a tenant-exec declaration. Ivan
+  and Riccardo remain active as `mrcalld` by operator decision. The three
+  K3 pins are backed up and those engines import the checkout. Self-serve
+  provisioning remains closed pending the two remaining 2b acceptances.
+  The plan's VPS rollout record is the authority.
 - One idempotent **`sudo update-daemons.sh`** is the operational entry-point:
   pull code, discover profiles, re-apply the identity of already-migrated
   profiles, ensure one daemon each, prune orphans. It never migrates a
