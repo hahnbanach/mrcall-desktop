@@ -1,5 +1,5 @@
 {
-  "about": "Requirements the resolver (engine/scripts/resolve_models.py, zylch/llm/roles/resolver.py) turns into the snapshot (snapshot.json: every catalogue model's price and request metadata) and, once measured.json covers every role, the decision record (table.json): roles declare a rule and an index, never a model and never a typed floor (thresholds come from measured.json). Prices are USD per million tokens; a preset ceiling bounds the catalogue output price of every ranked model. reference is the measurement's reference model (brief D7). The allowlist, mrcall_served and request_rules are milestone 10a's, kept only for its readers until the switch-over (allowlist and mrcall_served) or until request_rules.py is deleted (request_rules); the resolver ignores them.",
+  "about": "Requirements the resolver (engine/scripts/resolve_models.py, zylch/llm/roles/resolver.py) turns into the snapshot (snapshot.json: every catalogue model's price and request metadata) and, once measured.json covers every role, the decision record (table.json): roles declare a rule and an index, never a model and never a typed floor (thresholds come from measured.json). Prices are USD per million tokens; a preset ceiling bounds the catalogue output price of every ranked model. reference is the measurement's reference model (brief D7). The allowlist and mrcall_served are milestone 10a's, kept only for its readers until the switch-over; the resolver ignores them.",
   "common": {
     "tools": true,
     "min_context": 200000,
@@ -266,100 +266,5 @@
     "claude-haiku-4-5",
     "claude-haiku-4-5-20251001",
     "moonshotai/kimi-k3"
-  ],
-  "_about_request_rules": "Request shapes a model refuses, from Anthropic's model reference (as of 2026-10-01), applied by zylch/llm/roles/request_rules.py at the client boundary after the budget reservation: keys are model-id prefixes in both forms (direct and OpenRouter catalogue id), the longest prefix wins. sampling: 'drop' removes temperature/top_p/top_k (Opus 4.7 and later, Sonnet 5), 'drop_non_default' only a non-default value (Sonnet 5.5; its OpenRouter id drops all, as Sonnet endpoints refuse sampling under require_parameters); forced_tool_choice 'auto' downgrades tool_choice any/tool (Fable 5.1, Opus 5.5, Sonnet 5.5); thinking_off is what turns default thinking off (Sonnet 5 and Opus 5 think when thinking is omitted; Sonnet 5.5 takes between_tools, not disabled; Opus 5.5 cannot, null). Rules only remove or relax fields, so the reserved bound still holds. The resolver ignores this key.",
-  "request_rules": {
-    "anthropic/claude-fable-5": {
-      "sampling": "drop",
-      "forced_tool_choice": null,
-      "thinking_off": null
-    },
-    "anthropic/claude-fable-5.1": {
-      "sampling": "drop",
-      "forced_tool_choice": "auto",
-      "thinking_off": null
-    },
-    "anthropic/claude-opus-4.7": {
-      "sampling": "drop",
-      "forced_tool_choice": null,
-      "thinking_off": null
-    },
-    "anthropic/claude-opus-4.8": {
-      "sampling": "drop",
-      "forced_tool_choice": null,
-      "thinking_off": null
-    },
-    "anthropic/claude-opus-5": {
-      "sampling": "drop",
-      "forced_tool_choice": null,
-      "thinking_off": {
-        "type": "disabled"
-      }
-    },
-    "anthropic/claude-opus-5.5": {
-      "sampling": "drop",
-      "forced_tool_choice": "auto",
-      "thinking_off": null
-    },
-    "anthropic/claude-sonnet-5": {
-      "sampling": "drop",
-      "forced_tool_choice": null,
-      "thinking_off": {
-        "type": "disabled"
-      }
-    },
-    "anthropic/claude-sonnet-5.5": {
-      "sampling": "drop",
-      "forced_tool_choice": "auto",
-      "thinking_off": {
-        "type": "between_tools"
-      }
-    },
-    "claude-fable-5": {
-      "sampling": "drop",
-      "forced_tool_choice": null,
-      "thinking_off": null
-    },
-    "claude-fable-5-1": {
-      "sampling": "drop",
-      "forced_tool_choice": "auto",
-      "thinking_off": null
-    },
-    "claude-opus-4-7": {
-      "sampling": "drop",
-      "forced_tool_choice": null,
-      "thinking_off": null
-    },
-    "claude-opus-4-8": {
-      "sampling": "drop",
-      "forced_tool_choice": null,
-      "thinking_off": null
-    },
-    "claude-opus-5": {
-      "sampling": "drop",
-      "forced_tool_choice": null,
-      "thinking_off": {
-        "type": "disabled"
-      }
-    },
-    "claude-opus-5-5": {
-      "sampling": "drop",
-      "forced_tool_choice": "auto",
-      "thinking_off": null
-    },
-    "claude-sonnet-5": {
-      "sampling": "drop",
-      "forced_tool_choice": null,
-      "thinking_off": {
-        "type": "disabled"
-      }
-    },
-    "claude-sonnet-5-5": {
-      "sampling": "drop_non_default",
-      "forced_tool_choice": "auto",
-      "thinking_off": {
-        "type": "between_tools"
-      }
-    }
-  }
+  ]
 }

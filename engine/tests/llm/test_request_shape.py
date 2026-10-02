@@ -284,3 +284,29 @@ def test_every_capture_entry_and_an_unseen_id_get_the_one_shape():
         structured = bool(metadata and metadata["structured_outputs"])
         assert out["tools"][0].get("strict") is (True if structured else None), model
     assert all(seen.values()), seen
+
+
+# ─── The seam is strict (IR1 integration) ─────────────────────────────
+
+
+def test_metadata_seam_reads_the_catalogue_and_fails_loudly(monkeypatch):
+    """The seam answers from ``roles/catalogue.py``; a catalogue that cannot be
+    imported or read raises instead of reading every model as unknown, which
+    would silently send requests without their reasoning controls."""
+    import sys
+
+    from zylch.llm.roles import catalogue
+
+    meta = request_shape._metadata("anthropic/claude-sonnet-5.5")
+    assert meta is not None and meta["reasoning"]["mandatory"] is True
+    assert request_shape._metadata(None) is None
+
+    def broken(model_id):
+        raise RuntimeError("snapshot unreadable")
+
+    monkeypatch.setattr(catalogue, "metadata", broken)
+    with pytest.raises(RuntimeError):
+        request_shape._metadata("anthropic/claude-sonnet-5.5")
+    monkeypatch.setitem(sys.modules, "zylch.llm.roles.catalogue", None)
+    with pytest.raises(ImportError):
+        request_shape._metadata("anthropic/claude-sonnet-5.5")

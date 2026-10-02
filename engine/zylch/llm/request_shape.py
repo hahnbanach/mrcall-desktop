@@ -48,12 +48,13 @@ def _metadata(model_id: Optional[str]) -> Optional[dict]:
     """The snapshot's request metadata for ``model_id``, or ``None``.
 
     The one seam to the catalogue reader (``roles/catalogue.py``): tests
-    replace it, and until that reader exists every model reads as unknown.
+    replace it. ``None`` means only that the snapshot does not list the
+    model; a reader that cannot be imported or read raises, so a broken
+    catalogue fails loudly instead of sending every request without its
+    reasoning controls.
     """
-    try:
-        from .roles.catalogue import metadata
-    except ImportError:
-        return None
+    from .roles.catalogue import metadata
+
     return metadata(model_id) if model_id else None
 
 
