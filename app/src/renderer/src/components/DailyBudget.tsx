@@ -6,6 +6,9 @@ const roleNames: Record<string, string> = {
   MODEL_MEMORY_EXTRACT: 'Read messages', MODEL_MEMORY_MERGE: 'Update memory',
   MODEL_TASK_DETECTION: 'Find tasks', MODEL_REANALYZE: 'Review tasks', MODEL_DEDUP: 'Merge duplicate tasks'
 }
+// The engine reports a job it cannot run with this billing choice as null: its
+// table ranks no model the billing provider can run for it (it pauses, naming the job).
+const PAUSED = 'paused: no model available for this job with this billing choice'
 
 export default function DailyBudget(): JSX.Element {
   const [snapshot, setSnapshot] = useState<Snapshot | null>(null)
@@ -64,8 +67,8 @@ export default function DailyBudget(): JSX.Element {
       <p className="text-brand-grey-80">Completed spending resets at 00:00 UTC. In-flight or uncertain requests remain reserved after reset. This limit covers this engine account; other apps using your API key are separate. Direct-provider totals are usage-based estimates; MrCall totals include credit rounding and markup.</p>
       {snapshot.model_policy && <div className="space-y-1">
         <p className="font-medium">Saved models · {snapshot.model_policy.provider} · {snapshot.model_policy.preset}</p>
-        <p>Conversation: {snapshot.model_policy.model}</p>
-        {Object.entries(snapshot.model_policy.roles).map(([role, model]) => <p key={role}>{roleNames[role] || role}: {model}</p>)}
+        <p>Conversation: {snapshot.model_policy.model ?? PAUSED}</p>
+        {Object.entries(snapshot.model_policy.roles).map(([role, model]) => <p key={role}>{roleNames[role] || role}: {model ?? PAUSED}</p>)}
         <p className="text-brand-grey-80">{snapshot.model_policy.quality_status} After changing models or billing, start a new run or conversation.</p>
       </div>}
       {snapshot.reserved_usd > 0 && <button type="button" disabled={checking} onClick={() => void reconcile()} className="underline disabled:opacity-50">{checking ? 'Checking receipts…' : cursor ? 'Check next receipts' : 'Check MrCall receipts'}</button>}
