@@ -13,12 +13,12 @@
  },
  "models": {
   "anthropic/claude-opus-5.5": {
-   "endpoints": [{"pricing": {"cache_read": "0.22", "cache_write": "5.5", "input": "4.4", "output": "22"}, "quantization": "unknown", "tag": "amazon-bedrock/eu-west-1"}, {"pricing": {"cache_read": "0.2", "cache_write": "5", "input": "4", "output": "20"}, "quantization": "unknown", "tag": "anthropic"}, {"pricing": {"cache_read": "0.2", "cache_write": "5", "input": "4", "output": "20"}, "quantization": "unknown", "tag": "google-vertex/global"}],
+   "endpoints": [{"pricing": {"cache_read": "0.2", "cache_write": "5", "input": "4", "output": "20"}, "quantization": "unknown", "tag": "anthropic"}, {"pricing": {"cache_read": "0.2", "cache_write": "5", "input": "4", "output": "20"}, "quantization": "unknown", "tag": "google-vertex/global"}, {"pricing": {"cache_read": "0.22", "cache_write": "5.5", "input": "4.4", "output": "22"}, "quantization": "unknown", "tag": "google-vertex/us"}],
    "metadata": {"context_length": 1000000, "expiration_date": null, "forced_tool": false, "parameters": ["include_reasoning", "max_tokens", "reasoning", "reasoning_effort", "response_format", "stop", "tool_choice", "tools", "verbosity"], "reasoning": {"default_enabled": null, "efforts": ["max", "xhigh", "high", "medium", "low"], "mandatory": true}, "structured_outputs": false},
-   "pricing": {"cache_read": "0.22", "cache_write": "5.5", "input": "4.4", "output": "22"}
+   "pricing": {"cache_read": "0.2", "cache_write": "5", "input": "4", "output": "20"}
   },
   "anthropic/claude-sonnet-5.5": {
-   "endpoints": [{"pricing": {"cache_read": "0.2", "cache_write": "2.5", "input": "2", "output": "10"}, "quantization": "unknown", "tag": "anthropic"}, {"pricing": {"cache_read": "0.2", "cache_write": "2.5", "input": "2", "output": "10"}, "quantization": "unknown", "tag": "claude-on-aws"}, {"pricing": {"cache_read": "0.22", "cache_write": "2.75", "input": "2.2", "output": "11"}, "quantization": "unknown", "tag": "google-vertex/us"}],
+   "endpoints": [{"pricing": {"cache_read": "0.2", "cache_write": "2.5", "input": "2", "output": "10"}, "quantization": "unknown", "tag": "anthropic"}, {"pricing": {"cache_read": "0.22", "cache_write": "2.75", "input": "2.2", "output": "11"}, "quantization": "unknown", "tag": "azure/us"}, {"pricing": {"cache_read": "0.2", "cache_write": "2.5", "input": "2", "output": "10"}, "quantization": "unknown", "tag": "google-vertex/global"}],
    "metadata": {"context_length": 1000000, "expiration_date": null, "forced_tool": false, "parameters": ["include_reasoning", "max_tokens", "reasoning", "reasoning_effort", "response_format", "stop", "tool_choice", "tools", "verbosity"], "reasoning": {"default_enabled": null, "efforts": ["max", "xhigh", "high", "medium", "low"], "mandatory": true}, "structured_outputs": false},
    "pricing": {"cache_read": "0.2", "cache_write": "2.5", "input": "2", "output": "10"}
   },
@@ -46,5 +46,5 @@
  },
  "read_at": "2026-10-02T13:36:42Z",
  "schema": 1,
- "version": "10bfb4b2b340df64a5ae694e4428ef2ef31806099c058590ea3099690c7000eb"
+ "version": "a92577eefb57979bbf1da1b9f560e721dd2e2007f750b1e4b2c687b86af0f0ef"
 }

@@ -2,8 +2,9 @@
 
 `roles/prices.py` reads the snapshot layers in force at every call
 (`catalogue.rates`): a catalogue id at its snapshot price on OpenRouter (its
-reference endpoint's, the lower median of its eligible endpoints, or its
-model-level price when its endpoints were not read or none is eligible), a
+reference price: its model-level price whenever an eligible endpoint is
+priced within it × the margin, else the lower median of its eligible
+endpoints — the fallback, `price_fixture.FALLBACK`), a
 direct id at its `anthropic` endpoint's price, a dated direct id as its alias.
 `budget_pricing.PRICES` and `openrouter_pricing.RATES` / `LABELS` are views
 over it, never copies made at import. On OpenRouter the reservation and
@@ -193,17 +194,17 @@ def test_a_changed_snapshot_price_moves_the_reservation(price_snapshot):
     before = [direct_bound(direct, "direct"), routed_bound(routed), routed_bound(claude)]
     assert before == [
         _direct_hold(direct, D(2), D(10)),
-        _routed_hold(routed, D("1.18"), D("4.4")),
+        _routed_hold(routed, D("0.41"), D("3.99")),
         _routed_hold(claude, D(2), D(10)),
     ]
-    dearer = fx.priced_at(price_snapshot, fx.GLM_5_2, input="1.5", output="5")
+    dearer = fx.priced_at(price_snapshot, fx.GLM_5_2, input="0.9", output="4.5")
     dearer = fx.priced_at(dearer, fx.SONNET, input="3", output="15")
     dearer["direct"]["claude-sonnet-5-5"]["pricing"].update(input="3", output="15")
     catalogue.set_layers(gates.stamped(dearer), build=False)
     after = [direct_bound(direct, "direct"), routed_bound(routed), routed_bound(claude)]
     assert after == [
         _direct_hold(direct, D(3), D(15)),
-        _routed_hold(routed, D("1.5"), D("5")),
+        _routed_hold(routed, D("0.9"), D("4.5")),
         _routed_hold(claude, D(3), D(15)),
     ]
     assert all(a > b for a, b in zip(after, before))
@@ -305,15 +306,17 @@ def test_a_price_read_after_the_snapshot_layer_changes_sees_the_change(price_sna
 
 def test_openrouter_holds_and_caps_at_the_snapshot_price_times_the_margin(price_snapshot):
     assert prices.margin() == D("1.25") == D(str(requirements()["margin"]))
-    assert RATES[fx.GLM_5_2] == (D("1.18"), D("4.4"))
-    assert capped(fx.GLM_5_2) == (D("1.475"), D("5.5"))
+    assert RATES[fx.GLM_5_2] == (D("0.41"), D("3.99"))
+    assert capped(fx.GLM_5_2) == (D("0.5125"), D("4.9875"))
     assert provider_policy(fx.GLM_5_2)["max_price"] == {
-        "prompt": "1.475",
-        "completion": "5.5",
+        "prompt": "0.5125",
+        "completion": "4.9875",
         "request": "0",
     }
     request = {"model": fx.GLM_5_2, "max_tokens": 1000, "messages": MESSAGES}
-    assert routed_bound(request) == _ceil(_payload_tokens(request) * D("1.475") + 1000 * D("5.5"))
+    assert routed_bound(request) == _ceil(
+        _payload_tokens(request) * D("0.5125") + 1000 * D("4.9875")
+    )
     # The direct transport reserves at the list price: no margin there.
     direct = {"model": "claude-sonnet-5-5", "max_tokens": 1000, "messages": MESSAGES}
     assert direct_bound(direct, "direct") == _ceil(
@@ -327,9 +330,9 @@ def test_the_margin_is_requirements_json_s(price_snapshot, monkeypatch):
     monkeypatch.setattr(
         prices, "_load", lambda name: doubled if name == "requirements.json" else real(name)
     )
-    assert RATES[fx.GLM_5_2] == (D("1.18"), D("4.4"))
-    assert capped(fx.GLM_5_2) == (D("2.36"), D("8.8"))
-    assert provider_policy(fx.GLM_5_2)["max_price"]["completion"] == "8.8"
+    assert RATES[fx.GLM_5_2] == (D("0.41"), D("3.99"))
+    assert capped(fx.GLM_5_2) == (D("0.82"), D("7.98"))
+    assert provider_policy(fx.GLM_5_2)["max_price"]["completion"] == "7.98"
 
 
 def test_the_provider_policy_admits_requirements_quantizations_and_the_admitted_endpoints(
@@ -340,7 +343,7 @@ def test_the_provider_policy_admits_requirements_quantizations_and_the_admitted_
         "require_parameters": True,
         "sort": "price",
         "quantizations": ["int8", "fp8", "mxfp8", "fp16", "bf16", "fp32", "unknown"],
-        "max_price": {"prompt": "2.75", "completion": "13.75", "request": "0"},
+        "max_price": {"prompt": "2.5", "completion": "12.5", "request": "0"},
         "only": ["azure", "azure/eu", "azure/us", "openai"],
     }
     assert provider_policy(fx.FLEX)["quantizations"] == (
@@ -366,7 +369,7 @@ def test_the_provider_object_is_the_billing_server_s(price_snapshot):
     2d81bb5's `bounded_openrouter.provider_policy` built from this snapshot."""
     server = json.loads((FIXTURES / "server_provider_2d81bb5.json").read_text(encoding="utf-8"))
     assert server["snapshot_version"] == price_snapshot["version"]
-    assert {fx.FLEX, fx.UNREAD, fx.NONE_ADMITTED} <= set(server["providers"])
+    assert {fx.FLEX, fx.UNREAD, fx.NONE_ADMITTED, fx.FALLBACK} <= set(server["providers"])
     for model, provider in server["providers"].items():
         assert provider_policy(model) == provider, model
 

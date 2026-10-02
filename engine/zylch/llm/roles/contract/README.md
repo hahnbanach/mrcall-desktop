@@ -100,10 +100,11 @@ those are the snapshot's, so a refresh of prices moves no record.
   excluded families included, so a model a profile saved explicitly keeps a
   price), keyed by catalogue id:
   - `pricing`: the model's reference price, `input`, `output`,
-    `cache_read`, `cache_write` (below): for a model whose endpoints were
-    read and one is eligible, its reference endpoint's price (its cache
-    prices where it publishes them, else the model-level ones); for any
-    other entry the model-level catalogue price.
+    `cache_read`, `cache_write` (below): the model-level catalogue price,
+    except for a model whose endpoints were read with one eligible and none
+    priced within the model-level price × `policy.margin` — then its
+    reference endpoint's price (its cache prices where it publishes them,
+    else the model-level ones).
   - `metadata`: `reasoning` (`mandatory`; `efforts`, the published
     `supported_efforts` in the catalogue's order, highest first;
     `default_enabled`, `null` when unpublished), `parameters` (sorted: the
@@ -124,20 +125,28 @@ An endpoint is **eligible** when it is up (status 0), its declared
 quantization is in `policy.quantizations` (an endpoint that declares none is
 `unknown`), it supports tools, no segment of its tag after the provider is
 in `policy.excluded_endpoint_variants` (`<provider>/flex`,
-`<provider>/<region>/flex`), and it has a fixed input and output price. The
-**reference endpoint** is the lower median, index (n − 1) // 2, of the
-eligible endpoints ordered by Artificial Analysis's blended price, (3 ×
-input + output) / 4, a tie by output, then input, then tag; its price is the
-model's **reference price**. An eligible endpoint is **admitted** when its
-input and output prices are at or under the reference price ×
-`policy.margin`, so the reference endpoint always is. When no endpoint is
-eligible (every one fp4, say) or the endpoints were not read, the reference
-price is the model-level catalogue price and no endpoint is admitted. The
-model-level price is not the anchor because OpenRouter computes it over every
-endpoint, those the policy excludes included, and moves it at its own
-discretion: an fp4 endpoint can set it below every endpoint the policy
-admits. The screen still requires a fixed model-level price of any model it
-ranks.
+`<provider>/<region>/flex`), and it has a fixed input and output price. A
+model's **reference price** is its model-level catalogue price, cache prices
+included, when at least one eligible endpoint's input and output prices are
+at or under it × `policy.margin`. The model-level price stays the anchor
+whenever it admits an endpoint because it is the list price OpenRouter
+shows, and a median of the endpoints flips with the count of regional
+premiums (Opus 5.5 on 2026-10-02: five endpoints at Anthropic's list price,
+five regional ones 10% above it; one more region would move the median to
+the premium). Otherwise — OpenRouter computes the model-level price over
+every endpoint, those the policy excludes included, so an fp4 endpoint can
+set it below every eligible one — the reference price is the **reference
+endpoint**'s: the lower median, index (n − 1) // 2, of the eligible
+endpoints ordered by Artificial Analysis's blended price, (3 × input +
+output) / 4, a tie by output, then input, then tag; its cache prices where
+it publishes them, else the model-level ones. A model-level price that is
+not fixed admits no endpoint, so such a model takes the reference
+endpoint's. An eligible endpoint is **admitted** when its input and output
+prices are at or under the reference price × `policy.margin`, so a model
+with an eligible endpoint always admits one. A model with no eligible
+endpoint (every one fp4, say) or whose endpoints were not read keeps the
+model-level price and admits no endpoint. The screen still requires a fixed
+model-level price of any model it ranks.
 
 **Prices in use.** Ceilings compare `models[id].pricing.output`, the
 reference price. On OpenRouter, `max_price` and the reservation (engine) and

@@ -82,11 +82,10 @@ the HTTP error codes — is v1's.
       "provider": "anthropic",
       "price": "15",
       "as_of": "2026-10-02T13:36:42Z",
-      "table_version": "dfa219c5d0c5ed12e883ed1dc7d49ef96d932855aba5975238b2370453cd7445",
+      "table_version": "cd6f17cd6c8262a59a3528b169a26f1aa8d1c5f0dad2021aa29465b71aadaafb",
       "roles": [
         {"preset": "economy", "role": "CHAT", "rank": 1},
-        {"preset": "balanced", "role": "CHAT", "rank": 1},
-        {"preset": "balanced", "role": "MNEMONIC", "rank": 1}
+        {"preset": "balanced", "role": "CHAT", "rank": 2}
       ]
     },
     {
@@ -95,9 +94,9 @@ the HTTP error codes — is v1's.
       "provider": "openrouter",
       "price": "20.25",
       "as_of": "2026-10-02T13:36:42Z",
-      "table_version": "dfa219c5d0c5ed12e883ed1dc7d49ef96d932855aba5975238b2370453cd7445",
+      "table_version": "cd6f17cd6c8262a59a3528b169a26f1aa8d1c5f0dad2021aa29465b71aadaafb",
       "roles": [
-        {"preset": "balanced", "role": "CHAT", "rank": 3},
+        {"preset": "balanced", "role": "CHAT", "rank": 4},
         {"preset": "balanced", "role": "MNEMONIC", "rank": 2}
       ]
     }
@@ -163,7 +162,7 @@ the added fields.
   "markup_factor": "1.5",
   "max_credits": 6,
   "max_debit_micro_usd": 66000,
-  "snapshot_version": "10bfb4b2b340df64a5ae694e4428ef2ef31806099c058590ea3099690c7000eb",
+  "snapshot_version": "a92577eefb57979bbf1da1b9f560e721dd2e2007f750b1e4b2c687b86af0f0ef",
   "quote_hash": "<SHA-256 of this quote without quote_hash>"
 }
 ```
@@ -223,7 +222,7 @@ settlement.
   "markup_factor": "1.5",
   "max_credits": 6,
   "max_debit_micro_usd": 66000,
-  "snapshot_version": "10bfb4b2b340df64a5ae694e4428ef2ef31806099c058590ea3099690c7000eb",
+  "snapshot_version": "a92577eefb57979bbf1da1b9f560e721dd2e2007f750b1e4b2c687b86af0f0ef",
   "quote_hash": "<as in the quote>",
   "request_id": "0b9d6c1e-7c1a-4bd0-9a51-2f3f0e7d9a11",
   "authorized_max_debit_micro_usd": 66000,

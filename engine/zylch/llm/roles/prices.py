@@ -6,10 +6,12 @@ run-time distribution puts in front, newest first, then the build copy
 `snapshot.json` beside this module — never frozen at import:
 
 - on `openrouter` a catalogue id is priced at its snapshot price
-  (`models[id].pricing`): its reference endpoint's — the lower median of its
-  eligible endpoints by Artificial Analysis's blended price — or its
-  model-level catalogue price when its endpoints were not read or none is
-  eligible; what the preset ceilings compare and the margin multiplies into
+  (`models[id].pricing`), its reference price: its model-level catalogue
+  price whenever an eligible endpoint is priced within it × the margin,
+  else its reference endpoint's — the lower median of its eligible
+  endpoints by Artificial Analysis's blended price — and the model-level
+  price too when its endpoints were not read or none is eligible; what
+  the preset ceilings compare and the margin multiplies into
   OpenRouter's `max_price` and the reservation (`openrouter_pricing.py`);
 - on `direct` Anthropic's id is priced at its `anthropic` endpoint's price
   (`direct[id].pricing`, Anthropic's list price), and a dated id

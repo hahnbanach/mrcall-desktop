@@ -22,23 +22,30 @@ declares none is `unknown`, which the list admits: vendors rarely declare
 theirs); it supports tools; no segment of its tag after the provider is an
 excluded service tier (`flex`: discounted, slower tiers that price sorting
 would always pick and whose latency can exceed the client's timeout); and
-it has a fixed input and output price. The *reference endpoint*
-(`reference`) is the lower median, index (n - 1) // 2, of the eligible
-endpoints ordered by Artificial Analysis's blended price, (3 × input +
-output) / 4, a tie going by output, then input, then tag. Its input and
-output prices are the model's *reference price* — its cache prices too,
-where it publishes them, else the model-level ones — which the snapshot
-publishes as the model's `pricing` and the preset ceilings compare. An
-eligible endpoint is *admitted* when its input and output prices are at or
-under the reference price × the margin, the cap OpenRouter's `max_price`
-enforces, so a premium endpoint priced above it is never one a request can
-reach, and the reference endpoint always is. The model-level price is not
-the anchor: OpenRouter computes it over every endpoint, those the policy
-excludes included, and moves it at its own discretion, so an fp4 endpoint
-can set it below every endpoint the policy admits (the live read of
-2026-10-02 17:24Z left GLM 5.3 Flash none). It is the reference price only
-when no endpoint is eligible or the endpoints were not read, and then no
-endpoint is admitted.
+it has a fixed input and output price. The model's *reference price*, which
+the snapshot publishes as its `pricing` and the preset ceilings compare, is
+its model-level price, cache prices included, when at least one eligible
+endpoint's input and output prices are at or under it × the margin (`fits`).
+The model-level price stays the anchor whenever it admits an endpoint
+because it is the list price OpenRouter shows, and a median of the
+endpoints flips with the count of regional premiums (Opus 5.5 on
+2026-10-02: five endpoints at Anthropic's list price, five regional ones
+10% above it). Otherwise — OpenRouter computes the model-level price over
+every endpoint, those the policy excludes included, so an fp4 endpoint can
+set it below every eligible one (the live read of 2026-10-02 17:24Z left
+GLM 5.3 Flash none under it) — the reference price is the *reference
+endpoint*'s (`reference`): the lower median, index (n - 1) // 2, of the
+eligible endpoints ordered by Artificial Analysis's blended price, (3 ×
+input + output) / 4, a tie going by output, then input, then tag; its cache
+prices where it publishes them, else the model-level ones. A model-level
+price that is not fixed admits nothing, so such a model takes the
+reference endpoint's too (the screen never ranks it). An eligible endpoint
+is *admitted* when its input and output prices are at or under the
+reference price × the margin, the cap OpenRouter's `max_price` enforces, so
+a premium endpoint priced above it is never one a request can reach; a
+model with an eligible endpoint therefore always admits one. A model with
+no eligible endpoint, or whose endpoints were not read, keeps its
+model-level price and admits no endpoint.
 
 **The screen** (`screen`, `exclusion`) keeps the catalogue entries any role
 may rank, before scores: not a variant, not an alias, no announced
@@ -279,9 +286,10 @@ def blended(prices: dict) -> Decimal:
 
 
 def reference(rows: list[tuple[dict, dict]]) -> tuple[dict, dict] | None:
-    """The reference endpoint of eligible `rows` (`eligible`): the lower
-    median by blended price, a tie by output, then input, then tag; None
-    when no endpoint is eligible."""
+    """The reference endpoint of eligible `rows` (`eligible`), whose price
+    `anchored` takes when no eligible endpoint fits under the model-level
+    price × the margin: the lower median by blended price, a tie by output,
+    then input, then tag; None when no endpoint is eligible."""
     if not rows:
         return None
     ordered = sorted(
@@ -290,27 +298,41 @@ def reference(rows: list[tuple[dict, dict]]) -> tuple[dict, dict] | None:
     return ordered[(len(ordered) - 1) // 2]
 
 
+def fits(prices: dict, price: dict, margin: Decimal) -> bool:
+    """Whether an endpoint's `prices` are at or under `price` × `margin`,
+    input and output; never under a `price` that is not fixed."""
+    if price["input"] is None or price["output"] is None:
+        return False
+    return (
+        prices["input"] <= price["input"] * margin and prices["output"] <= price["output"] * margin
+    )
+
+
 def anchored(entry: dict, endpoints: list[dict] | None, rules: dict) -> tuple[dict, list | None]:
     """The model's reference price (the four prices per million, None where
     absent) and its admitted endpoints, in the payload's order (see the
-    module docstring). With no eligible endpoint the price is the
-    model-level one and no endpoint is admitted; with its endpoints not read
-    (`endpoints` None) the price is the model-level one and the endpoints
-    None."""
+    module docstring): the model-level price when an eligible endpoint fits
+    under it × the margin, else the reference endpoint's (`reference`, its
+    cache prices where it publishes them, else the model-level ones). With
+    no eligible endpoint the price is the model-level one and no endpoint is
+    admitted; with its endpoints not read (`endpoints` None) the price is the
+    model-level one and the endpoints None."""
     level = prices_of(entry.get("pricing"))
     if endpoints is None:
         return level, None
     rows = eligible(endpoints, rules)
-    anchor = reference(rows)
-    if anchor is None:
-        return level, []
-    prices = anchor[1]
-    price = {side: prices[side] for side in ("input", "output")}
-    for side in ("cache_read", "cache_write"):
-        price[side] = prices[side] if prices[side] is not None else level[side]
-    cap = (price["input"] * rules["margin"], price["output"] * rules["margin"])
-    admitted = [endpoint for endpoint, p in rows if p["input"] <= cap[0] and p["output"] <= cap[1]]
-    return price, admitted
+    margin = rules["margin"]
+    if any(fits(prices, level, margin) for _, prices in rows):
+        price = dict(level)
+    else:
+        anchor = reference(rows)
+        if anchor is None:
+            return level, []
+        price = dict(anchor[1])
+        for side in ("cache_read", "cache_write"):
+            if price[side] is None:
+                price[side] = level[side]
+    return price, [endpoint for endpoint, prices in rows if fits(prices, price, margin)]
 
 
 def admitted(entry: dict, endpoints: list[dict], rules: dict) -> list[dict]:

@@ -22,7 +22,7 @@ from zylch.llm.roles import gates
 
 ROLES = Path(__file__).resolve().parents[2] / "zylch" / "llm" / "roles"
 CONTRACT = ROLES / "contract"
-SONNET = "anthropic/claude-sonnet-5.5"
+OPUS, SONNET = "anthropic/claude-opus-5.5", "anthropic/claude-sonnet-5.5"
 QWEN, K3 = "qwen/qwen3.8-max-0902", "moonshotai/kimi-k3"
 # The requirements the examples are written against (contract/README.md).
 REQUIREMENTS = {
@@ -100,7 +100,7 @@ def schema_breaks(name: str, doc: dict) -> list[dict]:
     broken(lambda d: d.pop("presets" if name == "table" else "models"))
     if name == "table":
         role = ("presets", "balanced", "roles", "CHAT")
-        broken(lambda d: _at(d, role)["ranking"].extend([{"id": "v/x", "direct_id": None}] * 3))
+        broken(lambda d: _at(d, role)["ranking"].extend([{"id": "v/x", "direct_id": None}] * 2))
         broken(lambda d: _at(d, role)["ranking"][0].update(direct_id=7))
         broken(lambda d: _at(d, ("presets", "economy")).update(ceiling="10.0"))
         broken(lambda d: _at(d, ("presets", "economy")).update(ceiling=10))
@@ -323,20 +323,20 @@ def test_direct_ids_follow_the_rule_and_are_priced(table, snapshot):
     rejects(
         table,
         snapshot,
-        lambda t: chat(t)["ranking"][0].update(direct_id="claude-sonnet-5"),
-        f"balanced / CHAT / ranking: {SONNET} carries the direct id claude-sonnet-5,"
-        " not claude-sonnet-5-5",
+        lambda t: chat(t)["ranking"][0].update(direct_id="claude-opus-5"),
+        f"balanced / CHAT / ranking: {OPUS} carries the direct id claude-opus-5,"
+        " not claude-opus-5-5",
     )
     rejects(
         table,
         snapshot,
-        lambda t: chat(t)["ranking"][1].update(direct_id="qwen3.8-max-0902"),
+        lambda t: chat(t)["ranking"][2].update(direct_id="qwen3.8-max-0902"),
         f"balanced / CHAT / ranking: {QWEN} carries the direct id qwen3.8-max-0902, not None",
     )
     unpriced = copy.deepcopy(snapshot)
-    del unpriced["direct"]["claude-sonnet-5-5"]
+    del unpriced["direct"]["claude-opus-5-5"]
     found = violations(gates.check_table, table, REQUIREMENTS, gates.stamped(unpriced))
-    assert f"balanced / CHAT / ranking: {SONNET} has the direct id claude-sonnet-5-5, which" in (
+    assert f"balanced / CHAT / ranking: {OPUS} has the direct id claude-opus-5-5, which the" in (
         found[0]
     )
     dear = copy.deepcopy(snapshot)
@@ -361,7 +361,7 @@ def test_the_anthropic_ranking_holds_only_anthropic_models_with_a_direct_id(tabl
     rejects(
         table,
         snapshot,
-        lambda t: chat(t)["anthropic_ranking"][0].update(direct_id=None),
+        lambda t: chat(t)["anthropic_ranking"][1].update(direct_id=None),
         f"balanced / CHAT / anthropic_ranking: {SONNET} has no direct id in the Anthropic ranking",
     )
 

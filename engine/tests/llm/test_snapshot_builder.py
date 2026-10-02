@@ -152,10 +152,7 @@ def test_direct_ids_are_priced_from_the_anthropic_endpoint_at_the_list_price(bui
     for direct, row in built["direct"].items():
         own = [e for e in src["endpoints"][row["catalogue_id"]] if e["tag"] == "anthropic"]
         assert row["pricing"] == snapshot.pricing(own[0]["pricing"]), direct
-        # The catalogue entry's model-level price (the snapshot publishes the
-        # entry at its reference price, which may be a regional endpoint's).
-        level = by_id(src["catalogue"])[row["catalogue_id"]]["pricing"]
-        assert row["pricing"] == snapshot.pricing(level), direct
+        assert row["pricing"] == built["models"][row["catalogue_id"]]["pricing"], direct
         assert gates.direct_id(row["catalogue_id"]) == direct
     for direct, (prompt, completion) in ANTHROPIC_LIST.items():
         pricing = built["direct"][direct]["pricing"]

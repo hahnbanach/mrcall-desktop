@@ -9,6 +9,8 @@ a model whose cheapest endpoint is a `flex` service tier the policy excludes
 (`openai/gpt-6.1-sol`); one whose endpoints were not read (fewer than
 200,000 tokens of context); one whose endpoints were read and none admitted
 (every endpoint fp4, so none eligible under the reference-price anchor);
+one the fallback prices, no eligible endpoint within its model-level price ×
+the margin (`moonshotai/kimi-k2.6`, at its lower-median eligible endpoint's);
 one with a variable price; and a `:free` variant the catalogue prices at
 0 (`qwen/qwen3.8-27b:free`). It is committed with the tests so a price a
 test pins never moves when the coordinator refreshes the build copy
@@ -45,6 +47,9 @@ FLEX = "openai/gpt-6.1-sol"
 UNREAD = "cohere/command-a-plus"
 # Read, none eligible (its one endpoint is fp4), so none admitted.
 NONE_ADMITTED = "poolside/laguna-s-2.1"
+# Read, eligible endpoints, none within its model-level price × the margin: the
+# fallback prices it at its lower-median eligible endpoint's.
+FALLBACK = "moonshotai/kimi-k2.6"
 VARIABLE = "openrouter/auto"
 FREE = "qwen/qwen3.8-27b:free"
 MODELS = (
@@ -56,6 +61,7 @@ MODELS = (
     FLEX,
     UNREAD,
     NONE_ADMITTED,
+    FALLBACK,
     VARIABLE,
     FREE,
 )
@@ -99,7 +105,7 @@ def fixture() -> dict:
 
 def priced_at(doc: dict, model: str, **prices: str) -> dict:
     """`doc` with `model`'s snapshot `prices` (input, output, ...) replaced: its
-    `pricing`, the reference price since the anchor, no longer the model-level one."""
+    `pricing`, the reference price (the model-level one unless the fallback priced it)."""
     doc = copy.deepcopy(doc)
     doc["models"][model]["pricing"].update(prices)
     return gates.stamped(doc)
@@ -132,10 +138,7 @@ def degraded(doc: dict, model: str, tag: str) -> dict:
 
 def as_billed_by_10a(doc: dict) -> dict:
     """`doc` with `BILLED_10A`'s rates in place of the capture's: the snapshot
-    10a's billing amounts to (every other rate 10a billed is the capture's).
-    The snapshot prices a route at its reference price, so `anthropic/claude-opus-5`,
-    which 10a billed at 5/25, stands at its regional reference endpoint's 5.5/27.5
-    here (test_price_source.MOVED_BY_THE_ANCHOR)."""
+    10a's billing amounts to (every other rate 10a billed is the capture's)."""
     doc = copy.deepcopy(doc)
     for model, (i, o) in BILLED_10A.items():
         doc["models"][model]["pricing"].update(input=i, output=o)

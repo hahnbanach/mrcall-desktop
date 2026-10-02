@@ -59,7 +59,7 @@
           }
         },
         "margin": {
-          "description": "The factor on the reference price (`pricing`) that caps an OpenRouter request (max_price) and its reservation, and on the reference endpoint's price that admits an endpoint.",
+          "description": "The factor on the reference price (`pricing`) that caps an OpenRouter request (max_price) and its reservation and bounds the endpoints admitted (at or under the reference price × margin). The model-level price is the reference price when an eligible endpoint is priced within it × margin.",
           "$ref": "#/$defs/price"
         },
         "quantizations": {
@@ -271,7 +271,7 @@
       "additionalProperties": false,
       "properties": {
         "pricing": {
-          "description": "The reference price: the reference endpoint's (the lower median of the eligible endpoints by Artificial Analysis's blended price; its cache prices where it publishes them, else the model-level ones) for a model whose endpoints were read and one is eligible, else the model-level catalogue price. What ceilings compare and the margin multiplies.",
+          "description": "The reference price: the model-level catalogue price, except for a model whose endpoints were read with one eligible and none priced within the model-level price × margin, which takes its reference endpoint's (the lower median of the eligible endpoints by Artificial Analysis's blended price; its cache prices where it publishes them, else the model-level ones). What ceilings compare and the margin multiplies.",
           "$ref": "#/$defs/pricing"
         },
         "metadata": {
