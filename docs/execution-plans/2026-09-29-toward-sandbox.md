@@ -87,6 +87,8 @@ not started.
      after refresh. No system mutation or probe performed (only systemd
      version/helper-presence inspection). R_4 may use the VM; R_2 continues
      code work and will acquire a new lease after R_4 releases.
+   - *New lease:* scratch VM presa da R_2 dalle 2026-10-02T17:34:59Z.
+     R_4 release observed at origin/main; acquisition pending push/refresh.
 3. **R3 — Close the rollback window.** *VPS.*
    - *Starts:* seven days after the last 2b with no rollback, and not
      before R1.
