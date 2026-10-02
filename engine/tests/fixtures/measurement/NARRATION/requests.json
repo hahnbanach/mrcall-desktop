@@ -1,0 +1,78 @@
+{
+ "schema": 1,
+ "role": "NARRATION",
+ "prompt_sha256": "e073f77edfa189bbf21f8069ad691b6754043d105c45204724a30fb1103249ca",
+ "case_set_sha256": "6ff98e4da9d148b3d534d977a8f6723b6ba644904e11e77acefe21d63fd9ab43",
+ "requests": [
+  {
+   "case_id": "narration-01",
+   "request": {
+    "messages": [
+     {
+      "role": "user",
+      "content": "Contesto utente: Cerca le ultime email di Marco Ferretti e dimmi cosa vuole\n\nUltime righe di log:\n10:02:09 zylch.rpc.server INFO [rpc] chat.send conversation=general history_len=4\n10:02:12 zylch.assistant.core INFO [chat turn=4f2a1c9e step=1] tool=search_local_emails input_keys=['query'] status=executing\n10:02:12 zylch.tools.local_email_search_tool INFO search_local_emails query='from:ferretti' folder=all -> 3 matches\n10:02:13 zylch.assistant.core INFO [chat turn=4f2a1c9e step=1] tool=search_local_emails input_keys=['query'] status=success"
+     }
+    ],
+    "system": "Riassumi in una singola frase in italiano, in prima persona, al presente, max 80 caratteri, cosa Zylch sta facendo adesso in base alle righe di log fornite. Parla come Zylch stesso ('Sto scaricando…', 'Sto cercando…', 'Sto componendo l'email…'). Ignora righe di log di inizializzazione, startup, loading, connessione, query SQL interne. Concentrati SOLO su azioni concrete che l'utente può capire: scaricare, cercare, inviare, leggere, firmare. Se le righe contengono solo setup tecnico, rispondi con 'Sto pensando alla tua richiesta.' (esatto).  Se vedi un errore o warning importante, dillo in modo empatico e breve. Se non c'è niente di significativo, rispondi con una stringa vuota. Non aggiungere virgolette, prefissi, o spiegazioni.",
+    "max_tokens": 60
+   },
+   "capture_now": "2026-10-05T09:30:00"
+  },
+  {
+   "case_id": "narration-02",
+   "request": {
+    "messages": [
+     {
+      "role": "user",
+      "content": "Contesto utente: Open the order form Millbrook sent and tell me the quantities\n\nUltime righe di log:\n15:40:21 zylch.assistant.core INFO [chat turn=9b0e77aa step=1] tool=download_attachment input_keys=['email_id'] status=executing\n15:40:23 zylch.tools.download_attachment_tool INFO saved 1 attachment(s) to downloads: order_form_MB-5512.pdf\n15:40:23 zylch.assistant.core INFO [chat turn=9b0e77aa step=2] tool=read_document input_keys=['filename'] status=executing\n15:40:24 zylch.tools.read_document_tool INFO read_document order_form_MB-5512.pdf -> 2 pages, 3,412 chars"
+     }
+    ],
+    "system": "Riassumi in una singola frase in italiano, in prima persona, al presente, max 80 caratteri, cosa Zylch sta facendo adesso in base alle righe di log fornite. Parla come Zylch stesso ('Sto scaricando…', 'Sto cercando…', 'Sto componendo l'email…'). Ignora righe di log di inizializzazione, startup, loading, connessione, query SQL interne. Concentrati SOLO su azioni concrete che l'utente può capire: scaricare, cercare, inviare, leggere, firmare. Se le righe contengono solo setup tecnico, rispondi con 'Sto pensando alla tua richiesta.' (esatto).  Se vedi un errore o warning importante, dillo in modo empatico e breve. Se non c'è niente di significativo, rispondi con una stringa vuota. Non aggiungere virgolette, prefissi, o spiegazioni.",
+    "max_tokens": 60
+   },
+   "capture_now": "2026-10-05T09:30:00"
+  },
+  {
+   "case_id": "narration-03",
+   "request": {
+    "messages": [
+     {
+      "role": "user",
+      "content": "Contesto utente: Cerca sul server di posta le email vecchie di Studio Galli\n\nUltime righe di log:\n11:15:02 zylch.assistant.core INFO [chat turn=c3d1aa02 step=1] tool=search_provider_emails input_keys=['query'] status=executing\n11:15:32 zylch.email.imap_client WARNING IMAP search failed for query 'FROM galli': timed out after 30s, retrying once\n11:16:02 zylch.email.imap_client WARNING IMAP search failed for query 'FROM galli': timed out after 30s\n11:16:02 zylch.assistant.core INFO [chat turn=c3d1aa02 step=1] tool=search_provider_emails input_keys=['query'] status=error"
+     }
+    ],
+    "system": "Riassumi in una singola frase in italiano, in prima persona, al presente, max 80 caratteri, cosa Zylch sta facendo adesso in base alle righe di log fornite. Parla come Zylch stesso ('Sto scaricando…', 'Sto cercando…', 'Sto componendo l'email…'). Ignora righe di log di inizializzazione, startup, loading, connessione, query SQL interne. Concentrati SOLO su azioni concrete che l'utente può capire: scaricare, cercare, inviare, leggere, firmare. Se le righe contengono solo setup tecnico, rispondi con 'Sto pensando alla tua richiesta.' (esatto).  Se vedi un errore o warning importante, dillo in modo empatico e breve. Se non c'è niente di significativo, rispondi con una stringa vuota. Non aggiungere virgolette, prefissi, o spiegazioni.",
+    "max_tokens": 60
+   },
+   "capture_now": "2026-10-05T09:30:00"
+  },
+  {
+   "case_id": "narration-04",
+   "request": {
+    "messages": [
+     {
+      "role": "user",
+      "content": "Richiesta: Find the last invoice from Kestrel Fasteners and tell me the total"
+     }
+    ],
+    "system": "You predict, in Italian first person, what Zylch is about to do based on the user's request. Respond with EXACTLY ONE Italian sentence, max 80 characters, starting with 'Sto '. Do not explain. Do not warn. Do not comment on the content. Do not analyze phishing/fraud/risk. Do not use markdown, bullets, emoji, or newlines. Do not quote the user's message. If the request is ambiguous, respond exactly: 'Sto pensando alla tua richiesta.'",
+    "max_tokens": 40
+   },
+   "capture_now": "2026-10-05T09:30:00"
+  },
+  {
+   "case_id": "narration-05",
+   "request": {
+    "messages": [
+     {
+      "role": "user",
+      "content": "Richiesta: Manda un WhatsApp a Laura per dirle che i pannelli sono pronti da ritirare"
+     }
+    ],
+    "system": "You predict, in Italian first person, what Zylch is about to do based on the user's request. Respond with EXACTLY ONE Italian sentence, max 80 characters, starting with 'Sto '. Do not explain. Do not warn. Do not comment on the content. Do not analyze phishing/fraud/risk. Do not use markdown, bullets, emoji, or newlines. Do not quote the user's message. If the request is ambiguous, respond exactly: 'Sto pensando alla tua richiesta.'",
+    "max_tokens": 40
+   },
+   "capture_now": "2026-10-05T09:30:00"
+  }
+ ]
+}

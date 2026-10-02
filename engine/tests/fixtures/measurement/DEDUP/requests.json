@@ -1,0 +1,1362 @@
+{
+ "schema": 1,
+ "role": "DEDUP",
+ "prompt_sha256": "04c7bfa9766bc6a42fc2432328b9a222a77ddc832860a0185652784fbaf50176",
+ "case_set_sha256": "e0d25bd308d91a984ef8bf16d8051309888bbed878354507a6456fd741137c55",
+ "requests": [
+  {
+   "case_id": "dedup-01",
+   "request": {
+    "messages": [
+     {
+      "role": "user",
+      "content": "You are reviewing 2 open tasks that the system has tentatively grouped (same contact_email or significant memory-blob overlap). Your job is to decide whether they describe the SAME underlying problem — true duplicates safe to merge — or distinct problems that just happen to share a contact / topic. Answer by calling dedup_decision.\n\nExamples:\n  * Two tasks for the same person about ONE Stripe subscription issue → duplicates (same problem). Merge.\n  * Two tasks for the same person, one about a billing dispute and one about a feature request → distinct, do NOT merge.\n  * 30 tasks for `notification@transactional.mrcall.ai` that are 30 different people the user has not yet called back → distinct (different real-world subjects funnelled through the same notification address). Do NOT merge.\n  * The same customer complaining REPEATEDLY about their assistant misbehaving (\"it messed up again\", new incident mails every day or two) → ONE support workstream, not N tasks. Merge into the most recent / most informative one — handling the latest complaint necessarily handles the relationship.\n\nIf duplicates, pick the keeper:\n  - prefer the most informative reason / suggested_action;\n  - prefer higher urgency;\n  - if otherwise equal, prefer the most recently created.\n\nTASKS IN GROUP:\n  id=45dc5b67-3f3b-408c-b54d-a95ee1abfa49\n    contact=marco.bassi@impresaedileesempio.example\n    urgency=high\n    action: Preparare e inviare all'Impresa Edile Esempio il preventivo per 16 finestre in PVC bianco (4 con vetro antisfondamento al piano terra) per il cantiere di Via Roma 18, entro metà ottobre\n    reason: Marco Bassi ha corretto la richiesta: le finestre sono 16 e non 12 e al piano terra serve vetro antisfondamento; scadenza metà ottobre\n    created=2026-09-30T16:55:00\n  id=61e90ab7-e6a2-4666-8e27-cc7086964f69\n    contact=marco.bassi@impresaedileesempio.example\n    urgency=medium\n    action: Rispondere a Marco Bassi sul preventivo per le finestre del cantiere di Via Roma 18\n    reason: Marco Bassi ha chiesto il preventivo per le finestre del cantiere di Via Roma 18\n    created=2026-09-22T08:30:00"
+     }
+    ],
+    "system": [
+     {
+      "type": "text",
+      "text": "You are a careful arbiter for task deduplication in a personal AI assistant. The user's task list is the core deliverable — false-merge a real distinct task and the user loses information; fail to merge an obvious duplicate and the list stays cluttered. When in doubt, choose is_duplicate_group=false.",
+      "cache_control": {
+       "type": "ephemeral"
+      }
+     }
+    ],
+    "tools": [
+     {
+      "name": "dedup_decision",
+      "description": "Decide whether the cluster of tasks below describes the SAME underlying problem (true duplicates). If so, designate one keeper; the rest will be auto-closed.",
+      "input_schema": {
+       "type": "object",
+       "properties": {
+        "is_duplicate_group": {
+         "type": "boolean",
+         "description": "True if all tasks in the group describe the SAME underlying problem — closing the non-keepers loses no information. False if they happen to share a contact or topic but are distinct issues."
+        },
+        "keeper_id": {
+         "type": "string",
+         "description": "Required when is_duplicate_group=True: full ID of the task to keep open. Must match one of the IDs in the group."
+        },
+        "reason": {
+         "type": "string",
+         "minLength": 10,
+         "description": "Short justification for the decision."
+        }
+       },
+       "required": [
+        "is_duplicate_group",
+        "reason"
+       ]
+      }
+     }
+    ],
+    "tool_choice": {
+     "type": "auto"
+    },
+    "max_tokens": 400
+   },
+   "capture_now": "2026-10-01T09:00:00Z",
+   "call_site": "dedup.f8"
+  },
+  {
+   "case_id": "dedup-02",
+   "request": {
+    "messages": [
+     {
+      "role": "user",
+      "content": "You are reviewing 2 open tasks that the system has tentatively grouped (same contact_email or significant memory-blob overlap). Your job is to decide whether they describe the SAME underlying problem — true duplicates safe to merge — or distinct problems that just happen to share a contact / topic. Answer by calling dedup_decision.\n\nExamples:\n  * Two tasks for the same person about ONE Stripe subscription issue → duplicates (same problem). Merge.\n  * Two tasks for the same person, one about a billing dispute and one about a feature request → distinct, do NOT merge.\n  * 30 tasks for `notification@transactional.mrcall.ai` that are 30 different people the user has not yet called back → distinct (different real-world subjects funnelled through the same notification address). Do NOT merge.\n  * The same customer complaining REPEATEDLY about their assistant misbehaving (\"it messed up again\", new incident mails every day or two) → ONE support workstream, not N tasks. Merge into the most recent / most informative one — handling the latest complaint necessarily handles the relationship.\n\nIf duplicates, pick the keeper:\n  - prefer the most informative reason / suggested_action;\n  - prefer higher urgency;\n  - if otherwise equal, prefer the most recently created.\n\nTASKS IN GROUP:\n  id=6236caf2-4623-448c-a6a6-8befb56aa683\n    contact=hannah@exampleyoga.example\n    urgency=high\n    action: Check why the Example Yoga website contact form is not delivering students' messages\n    reason: Students say their enquiries get no answer and Hannah receives none of them\n    created=2026-10-01T07:05:00\n  id=f829ff5f-9fa1-4280-9901-014839a56ee8\n    contact=hannah@exampleyoga.example\n    urgency=medium\n    action: Design the A3 autumn timetable poster for Example Yoga & Pilates by Wednesday 7 October\n    reason: Hannah sent the timetable text for the studio window poster\n    created=2026-09-28T10:20:00"
+     }
+    ],
+    "system": [
+     {
+      "type": "text",
+      "text": "You are a careful arbiter for task deduplication in a personal AI assistant. The user's task list is the core deliverable — false-merge a real distinct task and the user loses information; fail to merge an obvious duplicate and the list stays cluttered. When in doubt, choose is_duplicate_group=false.",
+      "cache_control": {
+       "type": "ephemeral"
+      }
+     }
+    ],
+    "tools": [
+     {
+      "name": "dedup_decision",
+      "description": "Decide whether the cluster of tasks below describes the SAME underlying problem (true duplicates). If so, designate one keeper; the rest will be auto-closed.",
+      "input_schema": {
+       "type": "object",
+       "properties": {
+        "is_duplicate_group": {
+         "type": "boolean",
+         "description": "True if all tasks in the group describe the SAME underlying problem — closing the non-keepers loses no information. False if they happen to share a contact or topic but are distinct issues."
+        },
+        "keeper_id": {
+         "type": "string",
+         "description": "Required when is_duplicate_group=True: full ID of the task to keep open. Must match one of the IDs in the group."
+        },
+        "reason": {
+         "type": "string",
+         "minLength": 10,
+         "description": "Short justification for the decision."
+        }
+       },
+       "required": [
+        "is_duplicate_group",
+        "reason"
+       ]
+      }
+     }
+    ],
+    "tool_choice": {
+     "type": "auto"
+    },
+    "max_tokens": 400
+   },
+   "capture_now": "2026-10-01T09:00:00Z",
+   "call_site": "dedup.f8"
+  },
+  {
+   "case_id": "dedup-03",
+   "request": {
+    "messages": [
+     {
+      "role": "user",
+      "content": "You are reviewing 2 open tasks that the system has tentatively grouped (same contact_email or significant memory-blob overlap). Your job is to decide whether they describe the SAME underlying problem — true duplicates safe to merge — or distinct problems that just happen to share a contact / topic. Answer by calling dedup_decision.\n\nExamples:\n  * Two tasks for the same person about ONE Stripe subscription issue → duplicates (same problem). Merge.\n  * Two tasks for the same person, one about a billing dispute and one about a feature request → distinct, do NOT merge.\n  * 30 tasks for `notification@transactional.mrcall.ai` that are 30 different people the user has not yet called back → distinct (different real-world subjects funnelled through the same notification address). Do NOT merge.\n  * The same customer complaining REPEATEDLY about their assistant misbehaving (\"it messed up again\", new incident mails every day or two) → ONE support workstream, not N tasks. Merge into the most recent / most informative one — handling the latest complaint necessarily handles the relationship.\n\nIf duplicates, pick the keeper:\n  - prefer the most informative reason / suggested_action;\n  - prefer higher urgency;\n  - if otherwise equal, prefer the most recently created.\n\nTASKS IN GROUP:\n  id=c900f6dc-2f52-4c18-9b7f-9651a757d400\n    contact=amministrazione@amministrazioniesempio.example\n    urgency=high\n    action: Fissare un sopralluogo al Condominio Via Manzoni 4 per le infiltrazioni dai serramenti del terzo piano\n    reason: Amministrazioni Esempio segnala acqua che entra dalle finestre di due appartamenti del terzo piano\n    created=2026-09-29T15:30:00\n  id=0340f0db-8861-4893-b7b4-e13c8b28fb6d\n    contact=amministrazione@amministrazioniesempio.example\n    urgency=medium\n    action: Inviare ad Amministrazioni Esempio il preventivo per le 10 finestre del vano scala del Condominio Via Verdi 12\n    reason: L'assemblea del condominio chiede il preventivo per le parti comuni\n    created=2026-09-18T10:15:00"
+     }
+    ],
+    "system": [
+     {
+      "type": "text",
+      "text": "You are a careful arbiter for task deduplication in a personal AI assistant. The user's task list is the core deliverable — false-merge a real distinct task and the user loses information; fail to merge an obvious duplicate and the list stays cluttered. When in doubt, choose is_duplicate_group=false.",
+      "cache_control": {
+       "type": "ephemeral"
+      }
+     }
+    ],
+    "tools": [
+     {
+      "name": "dedup_decision",
+      "description": "Decide whether the cluster of tasks below describes the SAME underlying problem (true duplicates). If so, designate one keeper; the rest will be auto-closed.",
+      "input_schema": {
+       "type": "object",
+       "properties": {
+        "is_duplicate_group": {
+         "type": "boolean",
+         "description": "True if all tasks in the group describe the SAME underlying problem — closing the non-keepers loses no information. False if they happen to share a contact or topic but are distinct issues."
+        },
+        "keeper_id": {
+         "type": "string",
+         "description": "Required when is_duplicate_group=True: full ID of the task to keep open. Must match one of the IDs in the group."
+        },
+        "reason": {
+         "type": "string",
+         "minLength": 10,
+         "description": "Short justification for the decision."
+        }
+       },
+       "required": [
+        "is_duplicate_group",
+        "reason"
+       ]
+      }
+     }
+    ],
+    "tool_choice": {
+     "type": "auto"
+    },
+    "max_tokens": 400
+   },
+   "capture_now": "2026-10-01T09:00:00Z",
+   "call_site": "dedup.f8"
+  },
+  {
+   "case_id": "dedup-04",
+   "request": {
+    "messages": [
+     {
+      "role": "user",
+      "content": "You are reviewing 3 open tasks that the system has tentatively grouped (same contact_email or significant memory-blob overlap). Your job is to decide whether they describe the SAME underlying problem — true duplicates safe to merge — or distinct problems that just happen to share a contact / topic. Answer by calling dedup_decision.\n\nExamples:\n  * Two tasks for the same person about ONE Stripe subscription issue → duplicates (same problem). Merge.\n  * Two tasks for the same person, one about a billing dispute and one about a feature request → distinct, do NOT merge.\n  * 30 tasks for `notification@transactional.mrcall.ai` that are 30 different people the user has not yet called back → distinct (different real-world subjects funnelled through the same notification address). Do NOT merge.\n  * The same customer complaining REPEATEDLY about their assistant misbehaving (\"it messed up again\", new incident mails every day or two) → ONE support workstream, not N tasks. Merge into the most recent / most informative one — handling the latest complaint necessarily handles the relationship.\n\nIf duplicates, pick the keeper:\n  - prefer the most informative reason / suggested_action;\n  - prefer higher urgency;\n  - if otherwise equal, prefer the most recently created.\n\nTASKS IN GROUP:\n  id=25fa72cb-b14b-44ce-8ce9-74b3611c7b2e\n    contact=alerts@examplehosting.example\n    urgency=high\n    action: Update the expired card in Example Hosting and renew the SSL certificate for examplebakery.example before 10 October\n    reason: Third reminder: automatic renewal failed because the card on file expired; after 10 October the bakery's site shows a security warning\n    created=2026-09-30T07:00:00\n  id=e297fd34-f4ca-4912-bdb3-ea8d54f7b932\n    contact=alerts@examplehosting.example\n    urgency=medium\n    action: Renew the SSL certificate for examplebakery.example before it expires on 10 October\n    reason: Second Example Hosting reminder for the same certificate\n    created=2026-09-25T07:00:00\n  id=a3d0d171-bfa6-4b42-8c98-fe16c8ea0351\n    contact=alerts@examplehosting.example\n    urgency=low\n    action: Renew the SSL certificate for examplebakery.example\n    reason: Example Hosting reminder: the certificate expires on 10 October\n    created=2026-09-20T07:00:00"
+     }
+    ],
+    "system": [
+     {
+      "type": "text",
+      "text": "You are a careful arbiter for task deduplication in a personal AI assistant. The user's task list is the core deliverable — false-merge a real distinct task and the user loses information; fail to merge an obvious duplicate and the list stays cluttered. When in doubt, choose is_duplicate_group=false.",
+      "cache_control": {
+       "type": "ephemeral"
+      }
+     }
+    ],
+    "tools": [
+     {
+      "name": "dedup_decision",
+      "description": "Decide whether the cluster of tasks below describes the SAME underlying problem (true duplicates). If so, designate one keeper; the rest will be auto-closed.",
+      "input_schema": {
+       "type": "object",
+       "properties": {
+        "is_duplicate_group": {
+         "type": "boolean",
+         "description": "True if all tasks in the group describe the SAME underlying problem — closing the non-keepers loses no information. False if they happen to share a contact or topic but are distinct issues."
+        },
+        "keeper_id": {
+         "type": "string",
+         "description": "Required when is_duplicate_group=True: full ID of the task to keep open. Must match one of the IDs in the group."
+        },
+        "reason": {
+         "type": "string",
+         "minLength": 10,
+         "description": "Short justification for the decision."
+        }
+       },
+       "required": [
+        "is_duplicate_group",
+        "reason"
+       ]
+      }
+     }
+    ],
+    "tool_choice": {
+     "type": "auto"
+    },
+    "max_tokens": 400
+   },
+   "capture_now": "2026-10-01T09:00:00Z",
+   "call_site": "dedup.f8"
+  },
+  {
+   "case_id": "dedup-05",
+   "request": {
+    "messages": [
+     {
+      "role": "user",
+      "content": "You are reviewing 3 open tasks that the system has tentatively grouped (same contact_email or significant memory-blob overlap). Your job is to decide whether they describe the SAME underlying problem — true duplicates safe to merge — or distinct problems that just happen to share a contact / topic. Answer by calling dedup_decision.\n\nExamples:\n  * Two tasks for the same person about ONE Stripe subscription issue → duplicates (same problem). Merge.\n  * Two tasks for the same person, one about a billing dispute and one about a feature request → distinct, do NOT merge.\n  * 30 tasks for `notification@transactional.mrcall.ai` that are 30 different people the user has not yet called back → distinct (different real-world subjects funnelled through the same notification address). Do NOT merge.\n  * The same customer complaining REPEATEDLY about their assistant misbehaving (\"it messed up again\", new incident mails every day or two) → ONE support workstream, not N tasks. Merge into the most recent / most informative one — handling the latest complaint necessarily handles the relationship.\n\nIf duplicates, pick the keeper:\n  - prefer the most informative reason / suggested_action;\n  - prefer higher urgency;\n  - if otherwise equal, prefer the most recently created.\n\nTASKS IN GROUP:\n  id=cdea1c4c-6dc5-4674-987e-2221c37ecef3\n    contact=chiara.fontana@posta.example\n    urgency=high\n    action: Mandare un tecnico in garanzia da Chiara Fontana (Via Esempio 7, Caravaggio): la finestra della camera installata a giugno lascia entrare acqua a ogni pioggia forte\n    reason: Terza segnalazione: l'infiltrazione continua e la finestra è in garanzia\n    created=2026-09-30T09:00:00\n  id=faa29570-ab9a-4dae-829f-44f5aa14b6ad\n    contact=chiara.fontana@posta.example\n    urgency=medium\n    action: Richiamare Chiara Fontana: la finestra della camera perde ancora acqua\n    reason: Seconda segnalazione della stessa infiltrazione\n    created=2026-09-26T09:00:00\n  id=edb13887-ad89-4e54-9ec4-ea6416c0e444\n    contact=chiara.fontana@posta.example\n    urgency=medium\n    action: Verificare la finestra della camera di Chiara Fontana che lascia entrare acqua\n    reason: La cliente segnala acqua sul davanzale\n    created=2026-09-22T09:00:00"
+     }
+    ],
+    "system": [
+     {
+      "type": "text",
+      "text": "You are a careful arbiter for task deduplication in a personal AI assistant. The user's task list is the core deliverable — false-merge a real distinct task and the user loses information; fail to merge an obvious duplicate and the list stays cluttered. When in doubt, choose is_duplicate_group=false.",
+      "cache_control": {
+       "type": "ephemeral"
+      }
+     }
+    ],
+    "tools": [
+     {
+      "name": "dedup_decision",
+      "description": "Decide whether the cluster of tasks below describes the SAME underlying problem (true duplicates). If so, designate one keeper; the rest will be auto-closed.",
+      "input_schema": {
+       "type": "object",
+       "properties": {
+        "is_duplicate_group": {
+         "type": "boolean",
+         "description": "True if all tasks in the group describe the SAME underlying problem — closing the non-keepers loses no information. False if they happen to share a contact or topic but are distinct issues."
+        },
+        "keeper_id": {
+         "type": "string",
+         "description": "Required when is_duplicate_group=True: full ID of the task to keep open. Must match one of the IDs in the group."
+        },
+        "reason": {
+         "type": "string",
+         "minLength": 10,
+         "description": "Short justification for the decision."
+        }
+       },
+       "required": [
+        "is_duplicate_group",
+        "reason"
+       ]
+      }
+     }
+    ],
+    "tool_choice": {
+     "type": "auto"
+    },
+    "max_tokens": 400
+   },
+   "capture_now": "2026-10-01T09:00:00Z",
+   "call_site": "dedup.f8"
+  },
+  {
+   "case_id": "dedup-06",
+   "request": {
+    "messages": [
+     {
+      "role": "user",
+      "content": "You are reviewing 2 open tasks that the system has tentatively grouped (same contact_email or significant memory-blob overlap). Your job is to decide whether they describe the SAME underlying problem — true duplicates safe to merge — or distinct problems that just happen to share a contact / topic. Answer by calling dedup_decision.\n\nExamples:\n  * Two tasks for the same person about ONE Stripe subscription issue → duplicates (same problem). Merge.\n  * Two tasks for the same person, one about a billing dispute and one about a feature request → distinct, do NOT merge.\n  * 30 tasks for `notification@transactional.mrcall.ai` that are 30 different people the user has not yet called back → distinct (different real-world subjects funnelled through the same notification address). Do NOT merge.\n  * The same customer complaining REPEATEDLY about their assistant misbehaving (\"it messed up again\", new incident mails every day or two) → ONE support workstream, not N tasks. Merge into the most recent / most informative one — handling the latest complaint necessarily handles the relationship.\n\nIf duplicates, pick the keeper:\n  - prefer the most informative reason / suggested_action;\n  - prefer higher urgency;\n  - if otherwise equal, prefer the most recently created.\n\nTASKS IN GROUP:\n  id=2248e040-1b79-4a95-9d6c-b98f6bb0cd48\n    contact=owen@exampleplumbing.example\n    urgency=high\n    action: Send Owen the revised open day flyer proof with the new date (Saturday 10 October)\n    reason: The open day moved forward and the flyer is needed by Monday 5 October\n    created=2026-09-30T16:45:00\n  id=bd77c444-3ea3-4277-a83b-20698a955a61\n    contact=owen@exampleplumbing.example\n    urgency=medium\n    action: Prepare a quote for the Example Plumbing website refresh (new photos, service pages, online booking) including two years of hosting, budget up to £3,000\n    reason: Owen asked for the quote and added hosting and a budget\n    created=2026-09-29T08:45:00"
+     }
+    ],
+    "system": [
+     {
+      "type": "text",
+      "text": "You are a careful arbiter for task deduplication in a personal AI assistant. The user's task list is the core deliverable — false-merge a real distinct task and the user loses information; fail to merge an obvious duplicate and the list stays cluttered. When in doubt, choose is_duplicate_group=false.",
+      "cache_control": {
+       "type": "ephemeral"
+      }
+     }
+    ],
+    "tools": [
+     {
+      "name": "dedup_decision",
+      "description": "Decide whether the cluster of tasks below describes the SAME underlying problem (true duplicates). If so, designate one keeper; the rest will be auto-closed.",
+      "input_schema": {
+       "type": "object",
+       "properties": {
+        "is_duplicate_group": {
+         "type": "boolean",
+         "description": "True if all tasks in the group describe the SAME underlying problem — closing the non-keepers loses no information. False if they happen to share a contact or topic but are distinct issues."
+        },
+        "keeper_id": {
+         "type": "string",
+         "description": "Required when is_duplicate_group=True: full ID of the task to keep open. Must match one of the IDs in the group."
+        },
+        "reason": {
+         "type": "string",
+         "minLength": 10,
+         "description": "Short justification for the decision."
+        }
+       },
+       "required": [
+        "is_duplicate_group",
+        "reason"
+       ]
+      }
+     }
+    ],
+    "tool_choice": {
+     "type": "auto"
+    },
+    "max_tokens": 400
+   },
+   "capture_now": "2026-10-01T09:00:00Z",
+   "call_site": "dedup.f8"
+  },
+  {
+   "case_id": "dedup-07",
+   "request": {
+    "messages": [
+     {
+      "role": "user",
+      "content": "You are reviewing 2 open tasks that the system has tentatively grouped (same contact_email or significant memory-blob overlap). Your job is to decide whether they describe the SAME underlying problem — true duplicates safe to merge — or distinct problems that just happen to share a contact / topic. Answer by calling dedup_decision.\n\nExamples:\n  * Two tasks for the same person about ONE Stripe subscription issue → duplicates (same problem). Merge.\n  * Two tasks for the same person, one about a billing dispute and one about a feature request → distinct, do NOT merge.\n  * 30 tasks for `notification@transactional.mrcall.ai` that are 30 different people the user has not yet called back → distinct (different real-world subjects funnelled through the same notification address). Do NOT merge.\n  * The same customer complaining REPEATEDLY about their assistant misbehaving (\"it messed up again\", new incident mails every day or two) → ONE support workstream, not N tasks. Merge into the most recent / most informative one — handling the latest complaint necessarily handles the relationship.\n\nIf duplicates, pick the keeper:\n  - prefer the most informative reason / suggested_action;\n  - prefer higher urgency;\n  - if otherwise equal, prefer the most recently created.\n\nTASKS IN GROUP:\n  id=659b7ca2-fd91-4b96-b2ad-040596a42f00\n    contact=ordini@vetreriaesempio.example\n    urgency=high\n    action: Contestare a Vetreria Esempio le 2 lastre arrivate rotte con la bolla n. 498 e chiederne la sostituzione\n    reason: Due vetrocamere della consegna del 29 settembre sono arrivate incrinate\n    created=2026-09-30T08:30:00\n  id=8dbbbb58-dea7-4d7c-beb8-15a6d73f5d4f\n    contact=ordini@vetreriaesempio.example\n    urgency=medium\n    action: Pagare la fattura n. 512 di Vetreria Esempio (vetri cantiere Bassi, 3.480 € + IVA) entro il 15 ottobre\n    reason: Fattura ricevuta per i vetri del cantiere di Via Roma\n    created=2026-09-29T11:00:00"
+     }
+    ],
+    "system": [
+     {
+      "type": "text",
+      "text": "You are a careful arbiter for task deduplication in a personal AI assistant. The user's task list is the core deliverable — false-merge a real distinct task and the user loses information; fail to merge an obvious duplicate and the list stays cluttered. When in doubt, choose is_duplicate_group=false.",
+      "cache_control": {
+       "type": "ephemeral"
+      }
+     }
+    ],
+    "tools": [
+     {
+      "name": "dedup_decision",
+      "description": "Decide whether the cluster of tasks below describes the SAME underlying problem (true duplicates). If so, designate one keeper; the rest will be auto-closed.",
+      "input_schema": {
+       "type": "object",
+       "properties": {
+        "is_duplicate_group": {
+         "type": "boolean",
+         "description": "True if all tasks in the group describe the SAME underlying problem — closing the non-keepers loses no information. False if they happen to share a contact or topic but are distinct issues."
+        },
+        "keeper_id": {
+         "type": "string",
+         "description": "Required when is_duplicate_group=True: full ID of the task to keep open. Must match one of the IDs in the group."
+        },
+        "reason": {
+         "type": "string",
+         "minLength": 10,
+         "description": "Short justification for the decision."
+        }
+       },
+       "required": [
+        "is_duplicate_group",
+        "reason"
+       ]
+      }
+     }
+    ],
+    "tool_choice": {
+     "type": "auto"
+    },
+    "max_tokens": 400
+   },
+   "capture_now": "2026-10-01T09:00:00Z",
+   "call_site": "dedup.f8"
+  },
+  {
+   "case_id": "dedup-08",
+   "request": {
+    "messages": [
+     {
+      "role": "user",
+      "content": "You are reviewing 2 open tasks that the system has tentatively grouped (same contact_email or significant memory-blob overlap). Your job is to decide whether they describe the SAME underlying problem — true duplicates safe to merge — or distinct problems that just happen to share a contact / topic. Answer by calling dedup_decision.\n\nExamples:\n  * Two tasks for the same person about ONE Stripe subscription issue → duplicates (same problem). Merge.\n  * Two tasks for the same person, one about a billing dispute and one about a feature request → distinct, do NOT merge.\n  * 30 tasks for `notification@transactional.mrcall.ai` that are 30 different people the user has not yet called back → distinct (different real-world subjects funnelled through the same notification address). Do NOT merge.\n  * The same customer complaining REPEATEDLY about their assistant misbehaving (\"it messed up again\", new incident mails every day or two) → ONE support workstream, not N tasks. Merge into the most recent / most informative one — handling the latest complaint necessarily handles the relationship.\n\nIf duplicates, pick the keeper:\n  - prefer the most informative reason / suggested_action;\n  - prefer higher urgency;\n  - if otherwise equal, prefer the most recently created.\n\nTASKS IN GROUP:\n  id=aa4b9cf9-b485-45c5-88bd-869d60e83139\n    contact=felix@examplecoffee.example\n    urgency=critical\n    action: Fix the payment error at the last checkout step of the Example Coffee online shop today (third failure since the September update)\n    reason: Felix reports orders lost all weekend and this morning and threatens to move the shop to another agency\n    created=2026-10-01T07:58:00\n  id=0df7fe08-97c2-46de-9939-9040334fe8c7\n    contact=felix@examplecoffee.example\n    urgency=medium\n    action: Reply to Felix about the checkout problem\n    reason: Felix wrote about the online shop\n    created=2026-10-01T07:50:00"
+     }
+    ],
+    "system": [
+     {
+      "type": "text",
+      "text": "You are a careful arbiter for task deduplication in a personal AI assistant. The user's task list is the core deliverable — false-merge a real distinct task and the user loses information; fail to merge an obvious duplicate and the list stays cluttered. When in doubt, choose is_duplicate_group=false.",
+      "cache_control": {
+       "type": "ephemeral"
+      }
+     }
+    ],
+    "tools": [
+     {
+      "name": "dedup_decision",
+      "description": "Decide whether the cluster of tasks below describes the SAME underlying problem (true duplicates). If so, designate one keeper; the rest will be auto-closed.",
+      "input_schema": {
+       "type": "object",
+       "properties": {
+        "is_duplicate_group": {
+         "type": "boolean",
+         "description": "True if all tasks in the group describe the SAME underlying problem — closing the non-keepers loses no information. False if they happen to share a contact or topic but are distinct issues."
+        },
+        "keeper_id": {
+         "type": "string",
+         "description": "Required when is_duplicate_group=True: full ID of the task to keep open. Must match one of the IDs in the group."
+        },
+        "reason": {
+         "type": "string",
+         "minLength": 10,
+         "description": "Short justification for the decision."
+        }
+       },
+       "required": [
+        "is_duplicate_group",
+        "reason"
+       ]
+      }
+     }
+    ],
+    "tool_choice": {
+     "type": "auto"
+    },
+    "max_tokens": 400
+   },
+   "capture_now": "2026-10-01T09:00:00Z",
+   "call_site": "dedup.f8"
+  },
+  {
+   "case_id": "dedup-09",
+   "request": {
+    "messages": [
+     {
+      "role": "user",
+      "content": "You are reviewing 2 open tasks that the system has tentatively grouped (same contact_email or significant memory-blob overlap). Your job is to decide whether they describe the SAME underlying problem — true duplicates safe to merge — or distinct problems that just happen to share a contact / topic. Answer by calling dedup_decision.\n\nExamples:\n  * Two tasks for the same person about ONE Stripe subscription issue → duplicates (same problem). Merge.\n  * Two tasks for the same person, one about a billing dispute and one about a feature request → distinct, do NOT merge.\n  * 30 tasks for `notification@transactional.mrcall.ai` that are 30 different people the user has not yet called back → distinct (different real-world subjects funnelled through the same notification address). Do NOT merge.\n  * The same customer complaining REPEATEDLY about their assistant misbehaving (\"it messed up again\", new incident mails every day or two) → ONE support workstream, not N tasks. Merge into the most recent / most informative one — handling the latest complaint necessarily handles the relationship.\n\nIf duplicates, pick the keeper:\n  - prefer the most informative reason / suggested_action;\n  - prefer higher urgency;\n  - if otherwise equal, prefer the most recently created.\n\nTASKS IN GROUP:\n  id=eeda36ed-665c-4d93-9c31-97827aa98a50\n    contact=sergio.galli@posta.example\n    urgency=medium\n    action: Sostituire la maniglia rotta della finestra del bagno di Sergio Galli\n    reason: La maniglia è rotta e la finestra non si chiude\n    created=2026-09-26T09:00:00\n  id=889ced1b-326d-4466-84a9-c08128643065\n    contact=sergio.galli@posta.example\n    urgency=medium\n    action: Inviare a Sergio Galli la documentazione per la detrazione fiscale (Ecobonus) delle finestre installate a maggio\n    reason: Il suo commercialista la chiede per la dichiarazione\n    created=2026-09-24T10:00:00"
+     }
+    ],
+    "system": [
+     {
+      "type": "text",
+      "text": "You are a careful arbiter for task deduplication in a personal AI assistant. The user's task list is the core deliverable — false-merge a real distinct task and the user loses information; fail to merge an obvious duplicate and the list stays cluttered. When in doubt, choose is_duplicate_group=false.",
+      "cache_control": {
+       "type": "ephemeral"
+      }
+     }
+    ],
+    "tools": [
+     {
+      "name": "dedup_decision",
+      "description": "Decide whether the cluster of tasks below describes the SAME underlying problem (true duplicates). If so, designate one keeper; the rest will be auto-closed.",
+      "input_schema": {
+       "type": "object",
+       "properties": {
+        "is_duplicate_group": {
+         "type": "boolean",
+         "description": "True if all tasks in the group describe the SAME underlying problem — closing the non-keepers loses no information. False if they happen to share a contact or topic but are distinct issues."
+        },
+        "keeper_id": {
+         "type": "string",
+         "description": "Required when is_duplicate_group=True: full ID of the task to keep open. Must match one of the IDs in the group."
+        },
+        "reason": {
+         "type": "string",
+         "minLength": 10,
+         "description": "Short justification for the decision."
+        }
+       },
+       "required": [
+        "is_duplicate_group",
+        "reason"
+       ]
+      }
+     }
+    ],
+    "tool_choice": {
+     "type": "auto"
+    },
+    "max_tokens": 400
+   },
+   "capture_now": "2026-10-01T09:00:00Z",
+   "call_site": "dedup.f8"
+  },
+  {
+   "case_id": "dedup-10",
+   "request": {
+    "messages": [
+     {
+      "role": "user",
+      "content": "You are reviewing 2 open tasks that the system has tentatively grouped (same contact_email or significant memory-blob overlap). Your job is to decide whether they describe the SAME underlying problem — true duplicates safe to merge — or distinct problems that just happen to share a contact / topic. Answer by calling dedup_decision.\n\nExamples:\n  * Two tasks for the same person about ONE Stripe subscription issue → duplicates (same problem). Merge.\n  * Two tasks for the same person, one about a billing dispute and one about a feature request → distinct, do NOT merge.\n  * 30 tasks for `notification@transactional.mrcall.ai` that are 30 different people the user has not yet called back → distinct (different real-world subjects funnelled through the same notification address). Do NOT merge.\n  * The same customer complaining REPEATEDLY about their assistant misbehaving (\"it messed up again\", new incident mails every day or two) → ONE support workstream, not N tasks. Merge into the most recent / most informative one — handling the latest complaint necessarily handles the relationship.\n\nIf duplicates, pick the keeper:\n  - prefer the most informative reason / suggested_action;\n  - prefer higher urgency;\n  - if otherwise equal, prefer the most recently created.\n\nTASKS IN GROUP:\n  id=79132f15-0003-4b5f-ac88-8a5987332a48\n    contact=priya@examplebakery.example\n    urgency=high\n    action: Send Priya print-ready CMYK PDFs (3mm bleed) of the new menus by Friday 2 October; the printer cannot use the RGB files\n    reason: Example Print rejected the RGB files and the new menus must be in the shops on Monday\n    created=2026-09-30T19:20:00\n  id=93565c3b-3715-4d7b-a14b-6f7665908af2\n    contact=priya@examplebakery.example\n    urgency=medium\n    action: Send Priya the print files for the new autumn menus\n    reason: Priya asked for the print files of the new menus for the printer\n    created=2026-09-29T16:50:00"
+     }
+    ],
+    "system": [
+     {
+      "type": "text",
+      "text": "You are a careful arbiter for task deduplication in a personal AI assistant. The user's task list is the core deliverable — false-merge a real distinct task and the user loses information; fail to merge an obvious duplicate and the list stays cluttered. When in doubt, choose is_duplicate_group=false.",
+      "cache_control": {
+       "type": "ephemeral"
+      }
+     }
+    ],
+    "tools": [
+     {
+      "name": "dedup_decision",
+      "description": "Decide whether the cluster of tasks below describes the SAME underlying problem (true duplicates). If so, designate one keeper; the rest will be auto-closed.",
+      "input_schema": {
+       "type": "object",
+       "properties": {
+        "is_duplicate_group": {
+         "type": "boolean",
+         "description": "True if all tasks in the group describe the SAME underlying problem — closing the non-keepers loses no information. False if they happen to share a contact or topic but are distinct issues."
+        },
+        "keeper_id": {
+         "type": "string",
+         "description": "Required when is_duplicate_group=True: full ID of the task to keep open. Must match one of the IDs in the group."
+        },
+        "reason": {
+         "type": "string",
+         "minLength": 10,
+         "description": "Short justification for the decision."
+        }
+       },
+       "required": [
+        "is_duplicate_group",
+        "reason"
+       ]
+      }
+     }
+    ],
+    "tool_choice": {
+     "type": "auto"
+    },
+    "max_tokens": 400
+   },
+   "capture_now": "2026-10-01T09:00:00Z",
+   "call_site": "dedup.f8"
+  },
+  {
+   "case_id": "dedup-11",
+   "request": {
+    "messages": [
+     {
+      "role": "user",
+      "content": "You are reviewing OPEN action items for ONE user.\nToday is 2026-10-01.\n\nGOAL: cluster tasks that are the SAME real-world problem for the SAME party, even when they arrived on different channels or in different threads. Cluster when:\n  - A missed phone call from person P about topic T AND an email task with the SAME person P about topic T → one cluster (same party, two channels).\n  - The user already replied on one of the threads — close the others in that cluster: they're noise about the same event for that party.\n  - Repeated low-balance / low-minutes / quota alerts for the SAME account → one cluster.\n  - Repeated callback requests from the SAME caller → one cluster.\n\nNEVER cluster across parties. Two different customers with the same KIND of problem are two tasks, not one — closing either loses a customer's issue. Each card carries a `party` key: tasks whose `party` differs must NOT be put in the same cluster, and a cluster containing a card with `party = (unknown)` will be rejected.\n\nFor each cluster of size > 1 pick ONE keeper (most informative or most actionable single line) and mark the others duplicates. Singletons MUST be omitted from the output — never emit a cluster of size 1.\n\nTasks (JSON):\n[\n  {\n    \"id\": \"7d863d38-8e05-4e22-b93d-5c40d3d2620b\",\n    \"contact\": \"marco.bassi@impresaedileesempio.example\",\n    \"party\": \"email:marco.bassi@impresaedileesempio.example\",\n    \"channel\": \"email\",\n    \"urgency\": \"high\",\n    \"created\": \"2026-09-30\",\n    \"suggested_action\": \"Preparare e inviare all'Impresa Edile Esempio il preventivo per 16 finestre del cantiere di Via Roma 18\",\n    \"reason\": \"Scadenza metà ottobre\"\n  },\n  {\n    \"id\": \"28dd836c-e6bb-4761-8784-3b173f02839b\",\n    \"contact\": \"chiara.fontana@posta.example\",\n    \"party\": \"email:chiara.fontana@posta.example\",\n    \"channel\": \"email\",\n    \"urgency\": \"high\",\n    \"created\": \"2026-09-30\",\n    \"suggested_action\": \"Mandare un tecnico in garanzia da Chiara Fontana: la finestra della camera installata a giugno lascia entrare acqua a ogni pioggia forte\",\n    \"reason\": \"Seconda segnalazione: l'infiltrazione continua e la finestra è in garanzia\"\n  },\n  {\n    \"id\": \"0ed8c702-85e2-43ce-9341-2af2cc7e9035\",\n    \"contact\": \"anna.pellegrini@posta.example\",\n    \"party\": \"email:anna.pellegrini@posta.example\",\n    \"channel\": \"email\",\n    \"urgency\": \"medium\",\n    \"created\": \"2026-09-29\",\n    \"suggested_action\": \"Verificare la finestra del soggiorno di Anna Pellegrini che lascia entrare acqua quando piove\",\n    \"reason\": \"La cliente segnala un'infiltrazione dopo il temporale di ieri\"\n  },\n  {\n    \"id\": \"61c042d1-3288-4e61-bfde-d6afb1f20c3f\",\n    \"contact\": \"sergio.galli@posta.example\",\n    \"party\": \"email:sergio.galli@posta.example\",\n    \"channel\": \"email\",\n    \"urgency\": \"medium\",\n    \"created\": \"2026-09-26\",\n    \"suggested_action\": \"Sostituire la maniglia rotta della finestra del bagno di Sergio Galli\",\n    \"reason\": \"La maniglia è rotta e la finestra non si chiude\"\n  },\n  {\n    \"id\": \"27305d86-b966-46a4-9f88-d58b5b23e314\",\n    \"contact\": \"chiara.fontana@posta.example\",\n    \"party\": \"email:chiara.fontana@posta.example\",\n    \"channel\": \"email\",\n    \"urgency\": \"medium\",\n    \"created\": \"2026-09-22\",\n    \"suggested_action\": \"Verificare la finestra della camera di Chiara Fontana che lascia entrare acqua\",\n    \"reason\": \"La cliente segnala acqua sul davanzale\"\n  }\n]\n"
+     }
+    ],
+    "system": [
+     {
+      "type": "text",
+      "text": "You are a careful arbiter for task-list cleanup in a personal AI assistant. The list is the core deliverable: false-merge a real distinct task and the user loses information; fail to merge an obvious duplicate and the list stays cluttered. Always emit the topic_dedup_decision tool call exactly once.",
+      "cache_control": {
+       "type": "ephemeral"
+      }
+     }
+    ],
+    "tools": [
+     {
+      "name": "topic_dedup_decision",
+      "description": "Group the user's open tasks by underlying real-world problem. Each group of size > 1 designates one keeper; the rest are auto-closed.",
+      "input_schema": {
+       "type": "object",
+       "properties": {
+        "clusters": {
+         "type": "array",
+         "description": "One entry per cluster of >= 2 tasks that share a single underlying problem. Singletons (no peers) MUST be omitted entirely — never include a cluster of size 1.",
+         "items": {
+          "type": "object",
+          "properties": {
+           "topic": {
+            "type": "string",
+            "description": "Short label for the cluster."
+           },
+           "keeper_id": {
+            "type": "string",
+            "description": "Full task id (UUID) of the task to keep open. Must match one of the IDs in duplicate_ids' surrounding cluster."
+           },
+           "duplicate_ids": {
+            "type": "array",
+            "items": {
+             "type": "string"
+            },
+            "description": "Full task ids (UUIDs) to close. Must NOT include keeper_id. At least 1 entry."
+           },
+           "rationale": {
+            "type": "string",
+            "description": "One sentence explaining why these are the same problem."
+           }
+          },
+          "required": [
+           "topic",
+           "keeper_id",
+           "duplicate_ids",
+           "rationale"
+          ]
+         }
+        }
+       },
+       "required": [
+        "clusters"
+       ]
+      }
+     }
+    ],
+    "tool_choice": {
+     "type": "auto"
+    },
+    "max_tokens": 4000
+   },
+   "capture_now": "2026-10-01T09:00:00Z",
+   "call_site": "dedup.f9"
+  },
+  {
+   "case_id": "dedup-12",
+   "request": {
+    "messages": [
+     {
+      "role": "user",
+      "content": "You are reviewing OPEN action items for ONE user.\nToday is 2026-10-01.\n\nGOAL: cluster tasks that are the SAME real-world problem for the SAME party, even when they arrived on different channels or in different threads. Cluster when:\n  - A missed phone call from person P about topic T AND an email task with the SAME person P about topic T → one cluster (same party, two channels).\n  - The user already replied on one of the threads — close the others in that cluster: they're noise about the same event for that party.\n  - Repeated low-balance / low-minutes / quota alerts for the SAME account → one cluster.\n  - Repeated callback requests from the SAME caller → one cluster.\n\nNEVER cluster across parties. Two different customers with the same KIND of problem are two tasks, not one — closing either loses a customer's issue. Each card carries a `party` key: tasks whose `party` differs must NOT be put in the same cluster, and a cluster containing a card with `party = (unknown)` will be rejected.\n\nFor each cluster of size > 1 pick ONE keeper (most informative or most actionable single line) and mark the others duplicates. Singletons MUST be omitted from the output — never emit a cluster of size 1.\n\nTasks (JSON):\n[\n  {\n    \"id\": \"7cfe63e8-7e53-4ccb-92c5-097fcb287192\",\n    \"contact\": \"hannah@exampleyoga.example\",\n    \"party\": \"email:hannah@exampleyoga.example\",\n    \"channel\": \"email\",\n    \"urgency\": \"high\",\n    \"created\": \"2026-10-01\",\n    \"suggested_action\": \"Check why the Example Yoga website contact form is not delivering messages\",\n    \"reason\": \"Students' enquiries are not reaching the studio\"\n  },\n  {\n    \"id\": \"8c191b13-6b9a-4afb-a147-766c8819f16c\",\n    \"contact\": \"owen@exampleplumbing.example\",\n    \"party\": \"email:owen@exampleplumbing.example\",\n    \"channel\": \"email\",\n    \"urgency\": \"high\",\n    \"created\": \"2026-09-30\",\n    \"suggested_action\": \"Check why the contact form on the Example Plumbing website is not sending enquiries\",\n    \"reason\": \"Owen has had no web enquiries since Monday\"\n  },\n  {\n    \"id\": \"b6812942-0b46-4f32-8e7f-b1d6f7814175\",\n    \"contact\": \"felix@examplecoffee.example\",\n    \"party\": \"email:felix@examplecoffee.example\",\n    \"channel\": \"email\",\n    \"urgency\": \"medium\",\n    \"created\": \"2026-09-30\",\n    \"suggested_action\": \"Send Felix a copy of the August invoice (INV-2026-087)\",\n    \"reason\": \"He cannot find it in his inbox\"\n  },\n  {\n    \"id\": \"081f60cf-cd0b-4582-aea4-b81eec629fc9\",\n    \"contact\": \"priya@examplebakery.example\",\n    \"party\": \"email:priya@examplebakery.example\",\n    \"channel\": \"email\",\n    \"urgency\": \"medium\",\n    \"created\": \"2026-09-29\",\n    \"suggested_action\": \"Send Priya a copy of the August invoice (INV-2026-084)\",\n    \"reason\": \"Her accountant asked for it\"\n  }\n]\n"
+     }
+    ],
+    "system": [
+     {
+      "type": "text",
+      "text": "You are a careful arbiter for task-list cleanup in a personal AI assistant. The list is the core deliverable: false-merge a real distinct task and the user loses information; fail to merge an obvious duplicate and the list stays cluttered. Always emit the topic_dedup_decision tool call exactly once.",
+      "cache_control": {
+       "type": "ephemeral"
+      }
+     }
+    ],
+    "tools": [
+     {
+      "name": "topic_dedup_decision",
+      "description": "Group the user's open tasks by underlying real-world problem. Each group of size > 1 designates one keeper; the rest are auto-closed.",
+      "input_schema": {
+       "type": "object",
+       "properties": {
+        "clusters": {
+         "type": "array",
+         "description": "One entry per cluster of >= 2 tasks that share a single underlying problem. Singletons (no peers) MUST be omitted entirely — never include a cluster of size 1.",
+         "items": {
+          "type": "object",
+          "properties": {
+           "topic": {
+            "type": "string",
+            "description": "Short label for the cluster."
+           },
+           "keeper_id": {
+            "type": "string",
+            "description": "Full task id (UUID) of the task to keep open. Must match one of the IDs in duplicate_ids' surrounding cluster."
+           },
+           "duplicate_ids": {
+            "type": "array",
+            "items": {
+             "type": "string"
+            },
+            "description": "Full task ids (UUIDs) to close. Must NOT include keeper_id. At least 1 entry."
+           },
+           "rationale": {
+            "type": "string",
+            "description": "One sentence explaining why these are the same problem."
+           }
+          },
+          "required": [
+           "topic",
+           "keeper_id",
+           "duplicate_ids",
+           "rationale"
+          ]
+         }
+        }
+       },
+       "required": [
+        "clusters"
+       ]
+      }
+     }
+    ],
+    "tool_choice": {
+     "type": "auto"
+    },
+    "max_tokens": 4000
+   },
+   "capture_now": "2026-10-01T09:00:00Z",
+   "call_site": "dedup.f9"
+  },
+  {
+   "case_id": "dedup-13",
+   "request": {
+    "messages": [
+     {
+      "role": "user",
+      "content": "You are reviewing OPEN action items for ONE user.\nToday is 2026-10-01.\n\nGOAL: cluster tasks that are the SAME real-world problem for the SAME party, even when they arrived on different channels or in different threads. Cluster when:\n  - A missed phone call from person P about topic T AND an email task with the SAME person P about topic T → one cluster (same party, two channels).\n  - The user already replied on one of the threads — close the others in that cluster: they're noise about the same event for that party.\n  - Repeated low-balance / low-minutes / quota alerts for the SAME account → one cluster.\n  - Repeated callback requests from the SAME caller → one cluster.\n\nNEVER cluster across parties. Two different customers with the same KIND of problem are two tasks, not one — closing either loses a customer's issue. Each card carries a `party` key: tasks whose `party` differs must NOT be put in the same cluster, and a cluster containing a card with `party = (unknown)` will be rejected.\n\nFor each cluster of size > 1 pick ONE keeper (most informative or most actionable single line) and mark the others duplicates. Singletons MUST be omitted from the output — never emit a cluster of size 1.\n\nTasks (JSON):\n[\n  {\n    \"id\": \"c7f68c66-7672-4127-b6e8-85b1396b25b7\",\n    \"contact\": \"lucia.rinaldi@posta.example\",\n    \"party\": \"email:lucia.rinaldi@posta.example\",\n    \"channel\": \"email\",\n    \"urgency\": \"medium\",\n    \"created\": \"2026-09-30\",\n    \"suggested_action\": \"Confermare a Lucia Rinaldi il sopralluogo di giovedì 8 ottobre dopo le 15\",\n    \"reason\": \"Ha spostato il sopralluogo e aggiunto la porta-finestra del balcone\"\n  },\n  {\n    \"id\": \"2fb1494d-8c5c-4b03-9e12-f3bd158e4e3a\",\n    \"contact\": \"+390200000147\",\n    \"party\": \"phone:+390200000147\",\n    \"channel\": \"phone\",\n    \"urgency\": \"medium\",\n    \"created\": \"2026-09-30\",\n    \"suggested_action\": \"Richiamare Roberto Gatti (+39 02 0000 0147) domani mattina per il preventivo delle zanzariere di sei finestre\",\n    \"reason\": \"Ha richiamato e lasciato un messaggio: vuole un preventivo per le zanzariere di casa e chiede di essere richiamato in mattinata\"\n  },\n  {\n    \"id\": \"6fe7d3e1-ce8e-4133-b7d9-30cc7b0a063c\",\n    \"contact\": \"+390200000162\",\n    \"party\": \"phone:+390200000162\",\n    \"channel\": \"phone\",\n    \"urgency\": \"medium\",\n    \"created\": \"2026-09-30\",\n    \"suggested_action\": \"Richiamare Elena Moretti per fissare la posa delle tende da sole\",\n    \"reason\": \"Chiamata persa: vuole concordare la data di posa\"\n  },\n  {\n    \"id\": \"fc3590e2-0a31-4b5e-9ac7-cf0fbf847623\",\n    \"contact\": \"+390200000147\",\n    \"party\": \"phone:+390200000147\",\n    \"channel\": \"phone\",\n    \"urgency\": \"medium\",\n    \"created\": \"2026-09-29\",\n    \"suggested_action\": \"Richiamare Roberto Gatti\",\n    \"reason\": \"Chiamata persa: chiede di essere richiamato\"\n  }\n]\n"
+     }
+    ],
+    "system": [
+     {
+      "type": "text",
+      "text": "You are a careful arbiter for task-list cleanup in a personal AI assistant. The list is the core deliverable: false-merge a real distinct task and the user loses information; fail to merge an obvious duplicate and the list stays cluttered. Always emit the topic_dedup_decision tool call exactly once.",
+      "cache_control": {
+       "type": "ephemeral"
+      }
+     }
+    ],
+    "tools": [
+     {
+      "name": "topic_dedup_decision",
+      "description": "Group the user's open tasks by underlying real-world problem. Each group of size > 1 designates one keeper; the rest are auto-closed.",
+      "input_schema": {
+       "type": "object",
+       "properties": {
+        "clusters": {
+         "type": "array",
+         "description": "One entry per cluster of >= 2 tasks that share a single underlying problem. Singletons (no peers) MUST be omitted entirely — never include a cluster of size 1.",
+         "items": {
+          "type": "object",
+          "properties": {
+           "topic": {
+            "type": "string",
+            "description": "Short label for the cluster."
+           },
+           "keeper_id": {
+            "type": "string",
+            "description": "Full task id (UUID) of the task to keep open. Must match one of the IDs in duplicate_ids' surrounding cluster."
+           },
+           "duplicate_ids": {
+            "type": "array",
+            "items": {
+             "type": "string"
+            },
+            "description": "Full task ids (UUIDs) to close. Must NOT include keeper_id. At least 1 entry."
+           },
+           "rationale": {
+            "type": "string",
+            "description": "One sentence explaining why these are the same problem."
+           }
+          },
+          "required": [
+           "topic",
+           "keeper_id",
+           "duplicate_ids",
+           "rationale"
+          ]
+         }
+        }
+       },
+       "required": [
+        "clusters"
+       ]
+      }
+     }
+    ],
+    "tool_choice": {
+     "type": "auto"
+    },
+    "max_tokens": 4000
+   },
+   "capture_now": "2026-10-01T09:00:00Z",
+   "call_site": "dedup.f9"
+  },
+  {
+   "case_id": "dedup-14",
+   "request": {
+    "messages": [
+     {
+      "role": "user",
+      "content": "You are reviewing OPEN action items for ONE user.\nToday is 2026-10-01.\n\nGOAL: cluster tasks that are the SAME real-world problem for the SAME party, even when they arrived on different channels or in different threads. Cluster when:\n  - A missed phone call from person P about topic T AND an email task with the SAME person P about topic T → one cluster (same party, two channels).\n  - The user already replied on one of the threads — close the others in that cluster: they're noise about the same event for that party.\n  - Repeated low-balance / low-minutes / quota alerts for the SAME account → one cluster.\n  - Repeated callback requests from the SAME caller → one cluster.\n\nNEVER cluster across parties. Two different customers with the same KIND of problem are two tasks, not one — closing either loses a customer's issue. Each card carries a `party` key: tasks whose `party` differs must NOT be put in the same cluster, and a cluster containing a card with `party = (unknown)` will be rejected.\n\nFor each cluster of size > 1 pick ONE keeper (most informative or most actionable single line) and mark the others duplicates. Singletons MUST be omitted from the output — never emit a cluster of size 1.\n\nTasks (JSON):\n[\n  {\n    \"id\": \"ab306311-7796-40bc-a886-9b915a55254f\",\n    \"contact\": \"owen@exampleplumbing.example\",\n    \"party\": \"email:owen@exampleplumbing.example\",\n    \"channel\": \"email\",\n    \"urgency\": \"high\",\n    \"created\": \"2026-09-30\",\n    \"suggested_action\": \"Send Owen the revised open day flyer proof with the new date (Saturday 10 October)\",\n    \"reason\": \"The flyer is needed by Monday 5 October\"\n  },\n  {\n    \"id\": \"2204675c-fda5-4e72-ac53-988ca20a7832\",\n    \"contact\": \"owen@exampleplumbing.example\",\n    \"party\": \"email:owen@exampleplumbing.example\",\n    \"channel\": \"email\",\n    \"urgency\": \"medium\",\n    \"created\": \"2026-09-30\",\n    \"suggested_action\": \"Reply to Owen to confirm moving Tuesday's meeting (6 October) from 10:00 to 14:00\",\n    \"reason\": \"He has a boiler install in the morning\"\n  },\n  {\n    \"id\": \"b8f8a2f4-fb37-4173-b5fd-bf2be2934b8b\",\n    \"contact\": \"felix@examplecoffee.example\",\n    \"party\": \"email:felix@examplecoffee.example\",\n    \"channel\": \"email\",\n    \"urgency\": \"medium\",\n    \"created\": \"2026-09-30\",\n    \"suggested_action\": \"Send Felix two or three morning slots next week to plan Example Coffee's winter campaign\",\n    \"reason\": \"Gift boxes, landing page and newsletter\"\n  },\n  {\n    \"id\": \"d27190e8-fde4-44c8-b3cc-441a78bc88f1\",\n    \"contact\": \"owen@exampleplumbing.example\",\n    \"party\": \"email:owen@exampleplumbing.example\",\n    \"channel\": \"email\",\n    \"urgency\": \"medium\",\n    \"created\": \"2026-09-29\",\n    \"suggested_action\": \"Prepare a quote for the Example Plumbing website refresh including two years of hosting\",\n    \"reason\": \"Budget up to £3,000\"\n  }\n]\n"
+     }
+    ],
+    "system": [
+     {
+      "type": "text",
+      "text": "You are a careful arbiter for task-list cleanup in a personal AI assistant. The list is the core deliverable: false-merge a real distinct task and the user loses information; fail to merge an obvious duplicate and the list stays cluttered. Always emit the topic_dedup_decision tool call exactly once.",
+      "cache_control": {
+       "type": "ephemeral"
+      }
+     }
+    ],
+    "tools": [
+     {
+      "name": "topic_dedup_decision",
+      "description": "Group the user's open tasks by underlying real-world problem. Each group of size > 1 designates one keeper; the rest are auto-closed.",
+      "input_schema": {
+       "type": "object",
+       "properties": {
+        "clusters": {
+         "type": "array",
+         "description": "One entry per cluster of >= 2 tasks that share a single underlying problem. Singletons (no peers) MUST be omitted entirely — never include a cluster of size 1.",
+         "items": {
+          "type": "object",
+          "properties": {
+           "topic": {
+            "type": "string",
+            "description": "Short label for the cluster."
+           },
+           "keeper_id": {
+            "type": "string",
+            "description": "Full task id (UUID) of the task to keep open. Must match one of the IDs in duplicate_ids' surrounding cluster."
+           },
+           "duplicate_ids": {
+            "type": "array",
+            "items": {
+             "type": "string"
+            },
+            "description": "Full task ids (UUIDs) to close. Must NOT include keeper_id. At least 1 entry."
+           },
+           "rationale": {
+            "type": "string",
+            "description": "One sentence explaining why these are the same problem."
+           }
+          },
+          "required": [
+           "topic",
+           "keeper_id",
+           "duplicate_ids",
+           "rationale"
+          ]
+         }
+        }
+       },
+       "required": [
+        "clusters"
+       ]
+      }
+     }
+    ],
+    "tool_choice": {
+     "type": "auto"
+    },
+    "max_tokens": 4000
+   },
+   "capture_now": "2026-10-01T09:00:00Z",
+   "call_site": "dedup.f9"
+  },
+  {
+   "case_id": "dedup-15",
+   "request": {
+    "messages": [
+     {
+      "role": "user",
+      "content": "You are reviewing OPEN action items for ONE user.\nToday is 2026-10-01.\n\nGOAL: cluster tasks that are the SAME real-world problem for the SAME party, even when they arrived on different channels or in different threads. Cluster when:\n  - A missed phone call from person P about topic T AND an email task with the SAME person P about topic T → one cluster (same party, two channels).\n  - The user already replied on one of the threads — close the others in that cluster: they're noise about the same event for that party.\n  - Repeated low-balance / low-minutes / quota alerts for the SAME account → one cluster.\n  - Repeated callback requests from the SAME caller → one cluster.\n\nNEVER cluster across parties. Two different customers with the same KIND of problem are two tasks, not one — closing either loses a customer's issue. Each card carries a `party` key: tasks whose `party` differs must NOT be put in the same cluster, and a cluster containing a card with `party = (unknown)` will be rejected.\n\nFor each cluster of size > 1 pick ONE keeper (most informative or most actionable single line) and mark the others duplicates. Singletons MUST be omitted from the output — never emit a cluster of size 1.\n\nTasks (JSON):\n[\n  {\n    \"id\": \"70b8cb0b-f56c-4fc4-9947-218e72e8283e\",\n    \"contact\": \"davide@serramentiesempio.example\",\n    \"party\": \"email:davide@serramentiesempio.example\",\n    \"channel\": \"email\",\n    \"urgency\": \"high\",\n    \"created\": \"2026-10-01\",\n    \"suggested_action\": \"Dare a Davide l'ok per l'ordine dei vetri del cantiere Bassi entro le 16\",\n    \"reason\": \"Da domani il listino di Vetreria Esempio aumenta del 4%\"\n  },\n  {\n    \"id\": \"90941bb7-fdd6-4783-92f5-fdeefdea3b70\",\n    \"contact\": \"avvisi@smsesempio.example\",\n    \"party\": \"email:avvisi@smsesempio.example\",\n    \"channel\": \"email\",\n    \"urgency\": \"high\",\n    \"created\": \"2026-09-30\",\n    \"suggested_action\": \"Ricaricare subito il credito SMS del conto Serramenti Esempio: restano 40 SMS e i promemoria degli appuntamenti di posa si bloccano all'esaurimento\",\n    \"reason\": \"Terzo avviso dello stesso conto, credito quasi finito\"\n  },\n  {\n    \"id\": \"fe260ed2-1bc0-46e8-85b9-436a958f4764\",\n    \"contact\": \"avvisi@smsesempio.example\",\n    \"party\": \"email:avvisi@smsesempio.example\",\n    \"channel\": \"email\",\n    \"urgency\": \"medium\",\n    \"created\": \"2026-09-26\",\n    \"suggested_action\": \"Ricaricare il credito SMS\",\n    \"reason\": \"Secondo avviso: restano meno di 200 SMS\"\n  },\n  {\n    \"id\": \"6e4b3616-f962-4322-9d39-ce72eaa80ec0\",\n    \"contact\": \"avvisi@smsesempio.example\",\n    \"party\": \"email:avvisi@smsesempio.example\",\n    \"channel\": \"email\",\n    \"urgency\": \"low\",\n    \"created\": \"2026-09-20\",\n    \"suggested_action\": \"Ricaricare il credito SMS\",\n    \"reason\": \"Avviso: restano meno di 500 SMS\"\n  }\n]\n"
+     }
+    ],
+    "system": [
+     {
+      "type": "text",
+      "text": "You are a careful arbiter for task-list cleanup in a personal AI assistant. The list is the core deliverable: false-merge a real distinct task and the user loses information; fail to merge an obvious duplicate and the list stays cluttered. Always emit the topic_dedup_decision tool call exactly once.",
+      "cache_control": {
+       "type": "ephemeral"
+      }
+     }
+    ],
+    "tools": [
+     {
+      "name": "topic_dedup_decision",
+      "description": "Group the user's open tasks by underlying real-world problem. Each group of size > 1 designates one keeper; the rest are auto-closed.",
+      "input_schema": {
+       "type": "object",
+       "properties": {
+        "clusters": {
+         "type": "array",
+         "description": "One entry per cluster of >= 2 tasks that share a single underlying problem. Singletons (no peers) MUST be omitted entirely — never include a cluster of size 1.",
+         "items": {
+          "type": "object",
+          "properties": {
+           "topic": {
+            "type": "string",
+            "description": "Short label for the cluster."
+           },
+           "keeper_id": {
+            "type": "string",
+            "description": "Full task id (UUID) of the task to keep open. Must match one of the IDs in duplicate_ids' surrounding cluster."
+           },
+           "duplicate_ids": {
+            "type": "array",
+            "items": {
+             "type": "string"
+            },
+            "description": "Full task ids (UUIDs) to close. Must NOT include keeper_id. At least 1 entry."
+           },
+           "rationale": {
+            "type": "string",
+            "description": "One sentence explaining why these are the same problem."
+           }
+          },
+          "required": [
+           "topic",
+           "keeper_id",
+           "duplicate_ids",
+           "rationale"
+          ]
+         }
+        }
+       },
+       "required": [
+        "clusters"
+       ]
+      }
+     }
+    ],
+    "tool_choice": {
+     "type": "auto"
+    },
+    "max_tokens": 4000
+   },
+   "capture_now": "2026-10-01T09:00:00Z",
+   "call_site": "dedup.f9"
+  },
+  {
+   "case_id": "dedup-16",
+   "request": {
+    "messages": [
+     {
+      "role": "user",
+      "content": "You are reviewing OPEN action items for ONE user.\nToday is 2026-10-01.\n\nGOAL: cluster tasks that are the SAME real-world problem for the SAME party, even when they arrived on different channels or in different threads. Cluster when:\n  - A missed phone call from person P about topic T AND an email task with the SAME person P about topic T → one cluster (same party, two channels).\n  - The user already replied on one of the threads — close the others in that cluster: they're noise about the same event for that party.\n  - Repeated low-balance / low-minutes / quota alerts for the SAME account → one cluster.\n  - Repeated callback requests from the SAME caller → one cluster.\n\nNEVER cluster across parties. Two different customers with the same KIND of problem are two tasks, not one — closing either loses a customer's issue. Each card carries a `party` key: tasks whose `party` differs must NOT be put in the same cluster, and a cluster containing a card with `party = (unknown)` will be rejected.\n\nFor each cluster of size > 1 pick ONE keeper (most informative or most actionable single line) and mark the others duplicates. Singletons MUST be omitted from the output — never emit a cluster of size 1.\n\nTasks (JSON):\n[\n  {\n    \"id\": \"42adfc57-1715-4d20-8ffb-7069fed8ee44\",\n    \"contact\": \"felix@examplecoffee.example\",\n    \"party\": \"email:felix@examplecoffee.example\",\n    \"channel\": \"email\",\n    \"urgency\": \"critical\",\n    \"created\": \"2026-10-01\",\n    \"suggested_action\": \"Fix the payment error at the last checkout step of the Example Coffee online shop today\",\n    \"reason\": \"Orders lost all weekend\"\n  },\n  {\n    \"id\": \"6f24ce7e-f3df-4294-b516-35249da019f2\",\n    \"contact\": \"grace@examplecakeshop.example\",\n    \"party\": \"email:grace@examplecakeshop.example\",\n    \"channel\": \"email\",\n    \"urgency\": \"medium\",\n    \"created\": \"2026-09-30\",\n    \"suggested_action\": \"Update Example Cake Shop's opening hours on the website for the winter schedule\",\n    \"reason\": \"Grace sent the new winter hours\"\n  },\n  {\n    \"id\": \"63ae596a-e826-406e-a7df-90a606f7118a\",\n    \"contact\": \"priya@examplebakery.example\",\n    \"party\": \"email:priya@examplebakery.example\",\n    \"channel\": \"email\",\n    \"urgency\": \"medium\",\n    \"created\": \"2026-09-30\",\n    \"suggested_action\": \"Update Example Bakery's opening hours on the website for the winter schedule\",\n    \"reason\": \"The shops close at 5pm from 1 November\"\n  },\n  {\n    \"id\": \"9b45ee22-6b7c-4760-916f-69fcf942c4e7\",\n    \"contact\": \"hannah@exampleyoga.example\",\n    \"party\": \"email:hannah@exampleyoga.example\",\n    \"channel\": \"email\",\n    \"urgency\": \"medium\",\n    \"created\": \"2026-09-28\",\n    \"suggested_action\": \"Design the A3 autumn timetable poster for Example Yoga & Pilates by Wednesday 7 October\",\n    \"reason\": \"Poster for the studio window\"\n  }\n]\n"
+     }
+    ],
+    "system": [
+     {
+      "type": "text",
+      "text": "You are a careful arbiter for task-list cleanup in a personal AI assistant. The list is the core deliverable: false-merge a real distinct task and the user loses information; fail to merge an obvious duplicate and the list stays cluttered. Always emit the topic_dedup_decision tool call exactly once.",
+      "cache_control": {
+       "type": "ephemeral"
+      }
+     }
+    ],
+    "tools": [
+     {
+      "name": "topic_dedup_decision",
+      "description": "Group the user's open tasks by underlying real-world problem. Each group of size > 1 designates one keeper; the rest are auto-closed.",
+      "input_schema": {
+       "type": "object",
+       "properties": {
+        "clusters": {
+         "type": "array",
+         "description": "One entry per cluster of >= 2 tasks that share a single underlying problem. Singletons (no peers) MUST be omitted entirely — never include a cluster of size 1.",
+         "items": {
+          "type": "object",
+          "properties": {
+           "topic": {
+            "type": "string",
+            "description": "Short label for the cluster."
+           },
+           "keeper_id": {
+            "type": "string",
+            "description": "Full task id (UUID) of the task to keep open. Must match one of the IDs in duplicate_ids' surrounding cluster."
+           },
+           "duplicate_ids": {
+            "type": "array",
+            "items": {
+             "type": "string"
+            },
+            "description": "Full task ids (UUIDs) to close. Must NOT include keeper_id. At least 1 entry."
+           },
+           "rationale": {
+            "type": "string",
+            "description": "One sentence explaining why these are the same problem."
+           }
+          },
+          "required": [
+           "topic",
+           "keeper_id",
+           "duplicate_ids",
+           "rationale"
+          ]
+         }
+        }
+       },
+       "required": [
+        "clusters"
+       ]
+      }
+     }
+    ],
+    "tool_choice": {
+     "type": "auto"
+    },
+    "max_tokens": 4000
+   },
+   "capture_now": "2026-10-01T09:00:00Z",
+   "call_site": "dedup.f9"
+  },
+  {
+   "case_id": "dedup-17",
+   "request": {
+    "messages": [
+     {
+      "role": "user",
+      "content": "You are reviewing OPEN action items for ONE user.\nToday is 2026-10-01.\n\nGOAL: cluster tasks that are the SAME real-world problem for the SAME party, even when they arrived on different channels or in different threads. Cluster when:\n  - A missed phone call from person P about topic T AND an email task with the SAME person P about topic T → one cluster (same party, two channels).\n  - The user already replied on one of the threads — close the others in that cluster: they're noise about the same event for that party.\n  - Repeated low-balance / low-minutes / quota alerts for the SAME account → one cluster.\n  - Repeated callback requests from the SAME caller → one cluster.\n\nNEVER cluster across parties. Two different customers with the same KIND of problem are two tasks, not one — closing either loses a customer's issue. Each card carries a `party` key: tasks whose `party` differs must NOT be put in the same cluster, and a cluster containing a card with `party = (unknown)` will be rejected.\n\nFor each cluster of size > 1 pick ONE keeper (most informative or most actionable single line) and mark the others duplicates. Singletons MUST be omitted from the output — never emit a cluster of size 1.\n\nTasks (JSON):\n[\n  {\n    \"id\": \"589c6427-ca72-4b64-81df-a9cd44c3b91e\",\n    \"contact\": \"marco.bassi@impresaedileesempio.example\",\n    \"party\": \"email:marco.bassi@impresaedileesempio.example\",\n    \"channel\": \"email\",\n    \"urgency\": \"high\",\n    \"created\": \"2026-09-30\",\n    \"suggested_action\": \"Preparare e inviare all'Impresa Edile Esempio il preventivo per 16 finestre del cantiere di Via Roma 18\",\n    \"reason\": \"Scadenza metà ottobre\"\n  },\n  {\n    \"id\": \"adad0578-376f-4beb-be1f-5caf425b1523\",\n    \"contact\": \"chiara.fontana@posta.example\",\n    \"party\": \"email:chiara.fontana@posta.example\",\n    \"channel\": \"email\",\n    \"urgency\": \"high\",\n    \"created\": \"2026-09-30\",\n    \"suggested_action\": \"Mandare un tecnico in garanzia da Chiara Fontana per la finestra della camera che lascia entrare acqua\",\n    \"reason\": \"La finestra installata a giugno è in garanzia\"\n  },\n  {\n    \"id\": \"c7383c1f-ec8a-47cb-9653-9495d68c7908\",\n    \"contact\": \"info@condominiesempio.example\",\n    \"party\": \"email:info@condominiesempio.example\",\n    \"channel\": \"email\",\n    \"urgency\": \"medium\",\n    \"created\": \"2026-09-28\",\n    \"suggested_action\": \"Inviare a Condomini Esempio le certificazioni dei serramenti del Condominio Parco dei Tigli per la detrazione\",\n    \"reason\": \"Le chiede l'amministratore per la pratica fiscale\"\n  },\n  {\n    \"id\": \"1b11ff14-422a-48f9-a8bc-c50d5c62eced\",\n    \"contact\": \"amministrazione@amministrazioniesempio.example\",\n    \"party\": \"email:amministrazione@amministrazioniesempio.example\",\n    \"channel\": \"email\",\n    \"urgency\": \"medium\",\n    \"created\": \"2026-09-23\",\n    \"suggested_action\": \"Inviare ad Amministrazioni Esempio le certificazioni dei serramenti del Condominio Via Verdi 12 per la detrazione\",\n    \"reason\": \"Servono per la pratica di detrazione\"\n  }\n]\n"
+     }
+    ],
+    "system": [
+     {
+      "type": "text",
+      "text": "You are a careful arbiter for task-list cleanup in a personal AI assistant. The list is the core deliverable: false-merge a real distinct task and the user loses information; fail to merge an obvious duplicate and the list stays cluttered. Always emit the topic_dedup_decision tool call exactly once.",
+      "cache_control": {
+       "type": "ephemeral"
+      }
+     }
+    ],
+    "tools": [
+     {
+      "name": "topic_dedup_decision",
+      "description": "Group the user's open tasks by underlying real-world problem. Each group of size > 1 designates one keeper; the rest are auto-closed.",
+      "input_schema": {
+       "type": "object",
+       "properties": {
+        "clusters": {
+         "type": "array",
+         "description": "One entry per cluster of >= 2 tasks that share a single underlying problem. Singletons (no peers) MUST be omitted entirely — never include a cluster of size 1.",
+         "items": {
+          "type": "object",
+          "properties": {
+           "topic": {
+            "type": "string",
+            "description": "Short label for the cluster."
+           },
+           "keeper_id": {
+            "type": "string",
+            "description": "Full task id (UUID) of the task to keep open. Must match one of the IDs in duplicate_ids' surrounding cluster."
+           },
+           "duplicate_ids": {
+            "type": "array",
+            "items": {
+             "type": "string"
+            },
+            "description": "Full task ids (UUIDs) to close. Must NOT include keeper_id. At least 1 entry."
+           },
+           "rationale": {
+            "type": "string",
+            "description": "One sentence explaining why these are the same problem."
+           }
+          },
+          "required": [
+           "topic",
+           "keeper_id",
+           "duplicate_ids",
+           "rationale"
+          ]
+         }
+        }
+       },
+       "required": [
+        "clusters"
+       ]
+      }
+     }
+    ],
+    "tool_choice": {
+     "type": "auto"
+    },
+    "max_tokens": 4000
+   },
+   "capture_now": "2026-10-01T09:00:00Z",
+   "call_site": "dedup.f9"
+  },
+  {
+   "case_id": "dedup-18",
+   "request": {
+    "messages": [
+     {
+      "role": "user",
+      "content": "You are reviewing OPEN action items for ONE user.\nToday is 2026-10-01.\n\nGOAL: cluster tasks that are the SAME real-world problem for the SAME party, even when they arrived on different channels or in different threads. Cluster when:\n  - A missed phone call from person P about topic T AND an email task with the SAME person P about topic T → one cluster (same party, two channels).\n  - The user already replied on one of the threads — close the others in that cluster: they're noise about the same event for that party.\n  - Repeated low-balance / low-minutes / quota alerts for the SAME account → one cluster.\n  - Repeated callback requests from the SAME caller → one cluster.\n\nNEVER cluster across parties. Two different customers with the same KIND of problem are two tasks, not one — closing either loses a customer's issue. Each card carries a `party` key: tasks whose `party` differs must NOT be put in the same cluster, and a cluster containing a card with `party = (unknown)` will be rejected.\n\nFor each cluster of size > 1 pick ONE keeper (most informative or most actionable single line) and mark the others duplicates. Singletons MUST be omitted from the output — never emit a cluster of size 1.\n\nTasks (JSON):\n[\n  {\n    \"id\": \"8a7c496b-fcb4-4869-a5e5-3e554371f326\",\n    \"contact\": \"owen@exampleplumbing.example\",\n    \"party\": \"email:owen@exampleplumbing.example\",\n    \"channel\": \"email\",\n    \"urgency\": \"medium\",\n    \"created\": \"2026-09-30\",\n    \"suggested_action\": \"Reply to Owen to confirm moving Tuesday's meeting (6 October) to 14:00\",\n    \"reason\": \"He has a boiler install in the morning\"\n  },\n  {\n    \"id\": \"8c46bf6e-4c86-4861-a86e-02fe5e63f656\",\n    \"contact\": \"maja@examplecoffee.example\",\n    \"party\": \"email:maja@examplecoffee.example\",\n    \"channel\": \"email\",\n    \"urgency\": \"medium\",\n    \"created\": \"2026-09-30\",\n    \"suggested_action\": \"Reply to Maja about the winter campaign meeting at Example Coffee\",\n    \"reason\": \"Maja asked whether the meeting can include the newsletter plan\"\n  },\n  {\n    \"id\": \"af5e9223-a63d-48e3-8469-95b0d2035cbc\",\n    \"contact\": \"felix@examplecoffee.example\",\n    \"party\": \"email:felix@examplecoffee.example\",\n    \"channel\": \"email\",\n    \"urgency\": \"medium\",\n    \"created\": \"2026-09-30\",\n    \"suggested_action\": \"Send Felix two or three morning slots next week to plan Example Coffee's winter campaign\",\n    \"reason\": \"Felix wants to plan the gift boxes, the landing page and the newsletter\"\n  },\n  {\n    \"id\": \"0c4d83be-e974-4387-86e3-0f7bfd648db8\",\n    \"contact\": \"hannah@exampleyoga.example\",\n    \"party\": \"email:hannah@exampleyoga.example\",\n    \"channel\": \"email\",\n    \"urgency\": \"medium\",\n    \"created\": \"2026-09-30\",\n    \"suggested_action\": \"Send Hannah the invoice for September's website maintenance\",\n    \"reason\": \"Her accountant needs it by the end of next week\"\n  }\n]\n"
+     }
+    ],
+    "system": [
+     {
+      "type": "text",
+      "text": "You are a careful arbiter for task-list cleanup in a personal AI assistant. The list is the core deliverable: false-merge a real distinct task and the user loses information; fail to merge an obvious duplicate and the list stays cluttered. Always emit the topic_dedup_decision tool call exactly once.",
+      "cache_control": {
+       "type": "ephemeral"
+      }
+     }
+    ],
+    "tools": [
+     {
+      "name": "topic_dedup_decision",
+      "description": "Group the user's open tasks by underlying real-world problem. Each group of size > 1 designates one keeper; the rest are auto-closed.",
+      "input_schema": {
+       "type": "object",
+       "properties": {
+        "clusters": {
+         "type": "array",
+         "description": "One entry per cluster of >= 2 tasks that share a single underlying problem. Singletons (no peers) MUST be omitted entirely — never include a cluster of size 1.",
+         "items": {
+          "type": "object",
+          "properties": {
+           "topic": {
+            "type": "string",
+            "description": "Short label for the cluster."
+           },
+           "keeper_id": {
+            "type": "string",
+            "description": "Full task id (UUID) of the task to keep open. Must match one of the IDs in duplicate_ids' surrounding cluster."
+           },
+           "duplicate_ids": {
+            "type": "array",
+            "items": {
+             "type": "string"
+            },
+            "description": "Full task ids (UUIDs) to close. Must NOT include keeper_id. At least 1 entry."
+           },
+           "rationale": {
+            "type": "string",
+            "description": "One sentence explaining why these are the same problem."
+           }
+          },
+          "required": [
+           "topic",
+           "keeper_id",
+           "duplicate_ids",
+           "rationale"
+          ]
+         }
+        }
+       },
+       "required": [
+        "clusters"
+       ]
+      }
+     }
+    ],
+    "tool_choice": {
+     "type": "auto"
+    },
+    "max_tokens": 4000
+   },
+   "capture_now": "2026-10-01T09:00:00Z",
+   "call_site": "dedup.f9"
+  },
+  {
+   "case_id": "dedup-19",
+   "request": {
+    "messages": [
+     {
+      "role": "user",
+      "content": "You are reviewing OPEN action items for ONE user.\nToday is 2026-10-01.\n\nGOAL: cluster tasks that are the SAME real-world problem for the SAME party, even when they arrived on different channels or in different threads. Cluster when:\n  - A missed phone call from person P about topic T AND an email task with the SAME person P about topic T → one cluster (same party, two channels).\n  - The user already replied on one of the threads — close the others in that cluster: they're noise about the same event for that party.\n  - Repeated low-balance / low-minutes / quota alerts for the SAME account → one cluster.\n  - Repeated callback requests from the SAME caller → one cluster.\n\nNEVER cluster across parties. Two different customers with the same KIND of problem are two tasks, not one — closing either loses a customer's issue. Each card carries a `party` key: tasks whose `party` differs must NOT be put in the same cluster, and a cluster containing a card with `party = (unknown)` will be rejected.\n\nFor each cluster of size > 1 pick ONE keeper (most informative or most actionable single line) and mark the others duplicates. Singletons MUST be omitted from the output — never emit a cluster of size 1.\n\nTasks (JSON):\n[\n  {\n    \"id\": \"3b99431c-59ce-4611-9195-a4d80ed293fe\",\n    \"contact\": \"marco.bassi@impresaedileesempio.example\",\n    \"party\": \"email:marco.bassi@impresaedileesempio.example\",\n    \"channel\": \"email\",\n    \"urgency\": \"high\",\n    \"created\": \"2026-09-30\",\n    \"suggested_action\": \"Preparare e inviare all'Impresa Edile Esempio il preventivo per 16 finestre del cantiere di Via Roma 18\",\n    \"reason\": \"Scadenza metà ottobre\"\n  },\n  {\n    \"id\": \"3ee7ee6f-69d5-4dc4-9001-8ace9832467a\",\n    \"contact\": \"+390200000147\",\n    \"party\": \"phone:+390200000147\",\n    \"channel\": \"phone\",\n    \"urgency\": \"medium\",\n    \"created\": \"2026-09-30\",\n    \"suggested_action\": \"Richiamare Roberto Gatti per il preventivo delle zanzariere di sei finestre\",\n    \"reason\": \"Chiamata persa con messaggio\"\n  },\n  {\n    \"id\": \"0e3d9633-938d-4452-9220-a9ca38796475\",\n    \"contact\": \"+390200000162\",\n    \"party\": \"phone:+390200000162\",\n    \"channel\": \"whatsapp\",\n    \"urgency\": \"medium\",\n    \"created\": \"2026-09-30\",\n    \"suggested_action\": \"Inviare a Elena Moretti il preventivo per due tende da sole per il terrazzo (circa 4 m e 3 m), come chiesto su WhatsApp con le foto\",\n    \"reason\": \"Ha mandato su WhatsApp le foto e le misure del terrazzo\"\n  },\n  {\n    \"id\": \"56dcd3b3-e0c1-42a3-9a16-561b53e8887d\",\n    \"contact\": \"+390200000162\",\n    \"party\": \"phone:+390200000162\",\n    \"channel\": \"phone\",\n    \"urgency\": \"medium\",\n    \"created\": \"2026-09-29\",\n    \"suggested_action\": \"Richiamare Elena Moretti\",\n    \"reason\": \"Chiamata persa: chiede informazioni sulle tende da sole\"\n  }\n]\n"
+     }
+    ],
+    "system": [
+     {
+      "type": "text",
+      "text": "You are a careful arbiter for task-list cleanup in a personal AI assistant. The list is the core deliverable: false-merge a real distinct task and the user loses information; fail to merge an obvious duplicate and the list stays cluttered. Always emit the topic_dedup_decision tool call exactly once.",
+      "cache_control": {
+       "type": "ephemeral"
+      }
+     }
+    ],
+    "tools": [
+     {
+      "name": "topic_dedup_decision",
+      "description": "Group the user's open tasks by underlying real-world problem. Each group of size > 1 designates one keeper; the rest are auto-closed.",
+      "input_schema": {
+       "type": "object",
+       "properties": {
+        "clusters": {
+         "type": "array",
+         "description": "One entry per cluster of >= 2 tasks that share a single underlying problem. Singletons (no peers) MUST be omitted entirely — never include a cluster of size 1.",
+         "items": {
+          "type": "object",
+          "properties": {
+           "topic": {
+            "type": "string",
+            "description": "Short label for the cluster."
+           },
+           "keeper_id": {
+            "type": "string",
+            "description": "Full task id (UUID) of the task to keep open. Must match one of the IDs in duplicate_ids' surrounding cluster."
+           },
+           "duplicate_ids": {
+            "type": "array",
+            "items": {
+             "type": "string"
+            },
+            "description": "Full task ids (UUIDs) to close. Must NOT include keeper_id. At least 1 entry."
+           },
+           "rationale": {
+            "type": "string",
+            "description": "One sentence explaining why these are the same problem."
+           }
+          },
+          "required": [
+           "topic",
+           "keeper_id",
+           "duplicate_ids",
+           "rationale"
+          ]
+         }
+        }
+       },
+       "required": [
+        "clusters"
+       ]
+      }
+     }
+    ],
+    "tool_choice": {
+     "type": "auto"
+    },
+    "max_tokens": 4000
+   },
+   "capture_now": "2026-10-01T09:00:00Z",
+   "call_site": "dedup.f9"
+  },
+  {
+   "case_id": "dedup-20",
+   "request": {
+    "messages": [
+     {
+      "role": "user",
+      "content": "You are reviewing OPEN action items for ONE user.\nToday is 2026-10-01.\n\nGOAL: cluster tasks that are the SAME real-world problem for the SAME party, even when they arrived on different channels or in different threads. Cluster when:\n  - A missed phone call from person P about topic T AND an email task with the SAME person P about topic T → one cluster (same party, two channels).\n  - The user already replied on one of the threads — close the others in that cluster: they're noise about the same event for that party.\n  - Repeated low-balance / low-minutes / quota alerts for the SAME account → one cluster.\n  - Repeated callback requests from the SAME caller → one cluster.\n\nNEVER cluster across parties. Two different customers with the same KIND of problem are two tasks, not one — closing either loses a customer's issue. Each card carries a `party` key: tasks whose `party` differs must NOT be put in the same cluster, and a cluster containing a card with `party = (unknown)` will be rejected.\n\nFor each cluster of size > 1 pick ONE keeper (most informative or most actionable single line) and mark the others duplicates. Singletons MUST be omitted from the output — never emit a cluster of size 1.\n\nTasks (JSON):\n[\n  {\n    \"id\": \"423cf7bc-d7c4-433e-b384-bc780e70050a\",\n    \"contact\": \"owen@exampleplumbing.example\",\n    \"party\": \"email:owen@exampleplumbing.example\",\n    \"channel\": \"email\",\n    \"urgency\": \"medium\",\n    \"created\": \"2026-09-30\",\n    \"suggested_action\": \"Reply to Owen to confirm moving Tuesday's website meeting (6 October) from 10:00 to 14:00\",\n    \"reason\": \"Owen accepted Tuesday but asked to move the meeting to 2pm because of a morning job\"\n  },\n  {\n    \"id\": \"94656f58-6c6f-41dd-8fcd-23646897189b\",\n    \"contact\": \"felix@examplecoffee.example\",\n    \"party\": \"email:felix@examplecoffee.example\",\n    \"channel\": \"email\",\n    \"urgency\": \"medium\",\n    \"created\": \"2026-09-30\",\n    \"suggested_action\": \"Send Felix two or three morning slots next week to plan Example Coffee's winter campaign\",\n    \"reason\": \"Gift boxes, landing page and newsletter\"\n  },\n  {\n    \"id\": \"e7b50a8c-8385-45b8-b3b0-128d128e2255\",\n    \"contact\": \"priya@examplebakery.example\",\n    \"party\": \"email:priya@examplebakery.example\",\n    \"channel\": \"email\",\n    \"urgency\": \"medium\",\n    \"created\": \"2026-09-29\",\n    \"suggested_action\": \"Send Priya a copy of the August invoice (INV-2026-084)\",\n    \"reason\": \"Her accountant asked for it\"\n  },\n  {\n    \"id\": \"c0fad896-dc2b-4eb5-bf8a-702b157da2c8\",\n    \"contact\": \"hannah@exampleyoga.example\",\n    \"party\": \"email:hannah@exampleyoga.example\",\n    \"channel\": \"email\",\n    \"urgency\": \"medium\",\n    \"created\": \"2026-09-28\",\n    \"suggested_action\": \"Design the A3 autumn timetable poster for Example Yoga & Pilates by Wednesday 7 October\",\n    \"reason\": \"Poster for the studio window\"\n  },\n  {\n    \"id\": \"b0d7c917-52ad-47e8-8749-7d159aecfd2a\",\n    \"contact\": \"owen@exampleplumbing.example\",\n    \"party\": \"email:owen@exampleplumbing.example\",\n    \"channel\": \"email\",\n    \"urgency\": \"low\",\n    \"created\": \"2026-09-30\",\n    \"suggested_action\": \"Reply to Owen about Tuesday's meeting\",\n    \"reason\": \"Owen asked about the meeting time\"\n  }\n]\n"
+     }
+    ],
+    "system": [
+     {
+      "type": "text",
+      "text": "You are a careful arbiter for task-list cleanup in a personal AI assistant. The list is the core deliverable: false-merge a real distinct task and the user loses information; fail to merge an obvious duplicate and the list stays cluttered. Always emit the topic_dedup_decision tool call exactly once.",
+      "cache_control": {
+       "type": "ephemeral"
+      }
+     }
+    ],
+    "tools": [
+     {
+      "name": "topic_dedup_decision",
+      "description": "Group the user's open tasks by underlying real-world problem. Each group of size > 1 designates one keeper; the rest are auto-closed.",
+      "input_schema": {
+       "type": "object",
+       "properties": {
+        "clusters": {
+         "type": "array",
+         "description": "One entry per cluster of >= 2 tasks that share a single underlying problem. Singletons (no peers) MUST be omitted entirely — never include a cluster of size 1.",
+         "items": {
+          "type": "object",
+          "properties": {
+           "topic": {
+            "type": "string",
+            "description": "Short label for the cluster."
+           },
+           "keeper_id": {
+            "type": "string",
+            "description": "Full task id (UUID) of the task to keep open. Must match one of the IDs in duplicate_ids' surrounding cluster."
+           },
+           "duplicate_ids": {
+            "type": "array",
+            "items": {
+             "type": "string"
+            },
+            "description": "Full task ids (UUIDs) to close. Must NOT include keeper_id. At least 1 entry."
+           },
+           "rationale": {
+            "type": "string",
+            "description": "One sentence explaining why these are the same problem."
+           }
+          },
+          "required": [
+           "topic",
+           "keeper_id",
+           "duplicate_ids",
+           "rationale"
+          ]
+         }
+        }
+       },
+       "required": [
+        "clusters"
+       ]
+      }
+     }
+    ],
+    "tool_choice": {
+     "type": "auto"
+    },
+    "max_tokens": 4000
+   },
+   "capture_now": "2026-10-01T09:00:00Z",
+   "call_site": "dedup.f9"
+  },
+  {
+   "case_id": "dedup-21",
+   "request": {
+    "messages": [
+     {
+      "role": "user",
+      "content": "You are reviewing OPEN action items for ONE user.\nToday is 2026-10-01.\n\nGOAL: cluster tasks that are the SAME real-world problem for the SAME party, even when they arrived on different channels or in different threads. Cluster when:\n  - A missed phone call from person P about topic T AND an email task with the SAME person P about topic T → one cluster (same party, two channels).\n  - The user already replied on one of the threads — close the others in that cluster: they're noise about the same event for that party.\n  - Repeated low-balance / low-minutes / quota alerts for the SAME account → one cluster.\n  - Repeated callback requests from the SAME caller → one cluster.\n\nNEVER cluster across parties. Two different customers with the same KIND of problem are two tasks, not one — closing either loses a customer's issue. Each card carries a `party` key: tasks whose `party` differs must NOT be put in the same cluster, and a cluster containing a card with `party = (unknown)` will be rejected.\n\nFor each cluster of size > 1 pick ONE keeper (most informative or most actionable single line) and mark the others duplicates. Singletons MUST be omitted from the output — never emit a cluster of size 1.\n\nTasks (JSON):\n[\n  {\n    \"id\": \"e31ec337-cd6f-43b5-9565-b49883d283a0\",\n    \"contact\": \"marco.bassi@impresaedileesempio.example\",\n    \"party\": \"email:marco.bassi@impresaedileesempio.example\",\n    \"channel\": \"email\",\n    \"urgency\": \"high\",\n    \"created\": \"2026-09-30\",\n    \"suggested_action\": \"Preparare e inviare all'Impresa Edile Esempio il preventivo per 16 finestre del cantiere di Via Roma 18\",\n    \"reason\": \"Scadenza metà ottobre\"\n  },\n  {\n    \"id\": \"57f5e510-e774-4e86-a00c-f11da29303e2\",\n    \"contact\": \"amministrazione@amministrazioniesempio.example\",\n    \"party\": \"email:amministrazione@amministrazioniesempio.example\",\n    \"channel\": \"email\",\n    \"urgency\": \"high\",\n    \"created\": \"2026-09-29\",\n    \"suggested_action\": \"Fissare un sopralluogo al Condominio Via Manzoni 4 per le infiltrazioni dai serramenti del terzo piano\",\n    \"reason\": \"Amministrazioni Esempio segnala acqua che entra da due appartamenti\"\n  },\n  {\n    \"id\": \"15dc8640-67d8-4af7-839e-5c4ff58eb1d9\",\n    \"contact\": \"amministrazione@amministrazioniesempio.example\",\n    \"party\": \"email:amministrazione@amministrazioniesempio.example\",\n    \"channel\": \"email\",\n    \"urgency\": \"medium\",\n    \"created\": \"2026-09-25\",\n    \"suggested_action\": \"Preparare e inviare ad Amministrazioni Esempio il preventivo per sostituire 24 tapparelle in PVC del Condominio Via Manzoni 4 prima dell'assemblea del 20 ottobre\",\n    \"reason\": \"L'assemblea vuole il preventivo prima della riunione\"\n  },\n  {\n    \"id\": \"8b31fa29-188b-4066-9575-1af15177f499\",\n    \"contact\": \"amministrazione@amministrazioniesempio.example\",\n    \"party\": \"email:amministrazione@amministrazioniesempio.example\",\n    \"channel\": \"email\",\n    \"urgency\": \"medium\",\n    \"created\": \"2026-09-18\",\n    \"suggested_action\": \"Inviare ad Amministrazioni Esempio il preventivo per le 10 finestre del vano scala del Condominio Via Verdi 12\",\n    \"reason\": \"L'assemblea chiede il preventivo per le parti comuni\"\n  }\n]\n"
+     }
+    ],
+    "system": [
+     {
+      "type": "text",
+      "text": "You are a careful arbiter for task-list cleanup in a personal AI assistant. The list is the core deliverable: false-merge a real distinct task and the user loses information; fail to merge an obvious duplicate and the list stays cluttered. Always emit the topic_dedup_decision tool call exactly once.",
+      "cache_control": {
+       "type": "ephemeral"
+      }
+     }
+    ],
+    "tools": [
+     {
+      "name": "topic_dedup_decision",
+      "description": "Group the user's open tasks by underlying real-world problem. Each group of size > 1 designates one keeper; the rest are auto-closed.",
+      "input_schema": {
+       "type": "object",
+       "properties": {
+        "clusters": {
+         "type": "array",
+         "description": "One entry per cluster of >= 2 tasks that share a single underlying problem. Singletons (no peers) MUST be omitted entirely — never include a cluster of size 1.",
+         "items": {
+          "type": "object",
+          "properties": {
+           "topic": {
+            "type": "string",
+            "description": "Short label for the cluster."
+           },
+           "keeper_id": {
+            "type": "string",
+            "description": "Full task id (UUID) of the task to keep open. Must match one of the IDs in duplicate_ids' surrounding cluster."
+           },
+           "duplicate_ids": {
+            "type": "array",
+            "items": {
+             "type": "string"
+            },
+            "description": "Full task ids (UUIDs) to close. Must NOT include keeper_id. At least 1 entry."
+           },
+           "rationale": {
+            "type": "string",
+            "description": "One sentence explaining why these are the same problem."
+           }
+          },
+          "required": [
+           "topic",
+           "keeper_id",
+           "duplicate_ids",
+           "rationale"
+          ]
+         }
+        }
+       },
+       "required": [
+        "clusters"
+       ]
+      }
+     }
+    ],
+    "tool_choice": {
+     "type": "auto"
+    },
+    "max_tokens": 4000
+   },
+   "capture_now": "2026-10-01T09:00:00Z",
+   "call_site": "dedup.f9"
+  }
+ ]
+}
