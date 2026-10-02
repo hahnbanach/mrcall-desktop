@@ -69,7 +69,8 @@ def test_real_adapter_reserves_before_http_and_settles_receipt(ledger, monkeypat
     def upstream(req):
         assert budget_snapshot("uid")["reserved_usd"] > 0
         body = json.loads(req.content)
-        assert body["provider"]["allow_fallbacks"] is False
+        # S3c: fallbacks only within `only`, the endpoints the snapshot admitted.
+        assert body["provider"]["allow_fallbacks"] is True and body["provider"]["only"]
         assert body["provider"]["max_price"]["request"] == "0"
         # Brief D3: the body's reasoning is the model's (no blanket `disabled`).
         assert body["thinking"] == {"type": "adaptive"}
@@ -165,7 +166,8 @@ def test_sonnet_wire_omits_default_sampling_without_weakening_price_policy(ledge
         body = json.loads(req.content)
         assert 'temperature' not in body
         assert body['provider']['require_parameters'] is True
-        assert body['provider']['allow_fallbacks'] is False
+        # S3c: fallbacks only within `only`, the endpoints the snapshot admitted.
+        assert body["provider"]["allow_fallbacks"] is True and body["provider"]["only"]
         # Sonnet 5's 2/10 × the margin 1.25 (brief D5): before slice S3, 2/10.
         assert body["provider"]["max_price"] == {
             "prompt": "2.5",
@@ -203,3 +205,36 @@ def test_sampling_never_reaches_the_network_for_sonnet_5(ledger, sampling):
     with database.get_session() as session:
         assert session.query(LlmReservation).count() == 1
         assert session.query(LlmUsage).count() == 1
+
+
+K3 = "moonshotai/kimi-k3"
+PATHS = {MODEL: "/api/v1/messages", K3: "/api/v1/chat/completions"}
+
+
+@pytest.mark.parametrize("model", [MODEL, K3])
+@pytest.mark.parametrize("status, released", [(429, True), (503, False)])
+def test_a_refused_call_releases_its_hold_and_a_server_error_keeps_it(
+    ledger, model, status, released
+):
+    """S3c: OpenRouter's refusal carries its HTTP status (`status_code`), so a
+    status that proves no work was done, a 429 from a rate-limited endpoint's
+    shared pool, releases the hold, as an SDK refusal does on the direct
+    transport; a 5xx, after which the provider may have worked, keeps it. On
+    the Messages path and on K3's Chat path alike."""
+    calls = []
+
+    def upstream(req):
+        calls.append(req.url.path)
+        assert budget_snapshot("uid")["reserved_usd"] > 0
+        error = {"code": status, "message": "Provider returned error"}
+        return httpx.Response(status, json={"error": error})
+
+    c = client(upstream)
+    c.model = model
+    with pytest.raises(BudgetError, match=f"HTTP {status}") as refused:
+        c.create_message_sync(**ARGS)
+    assert refused.value.status_code == status
+    assert calls == [PATHS[model]]  # one attempt, never retried
+    state = budget_snapshot("uid")
+    assert state["spent_usd"] == 0
+    assert (state["reserved_usd"] == 0) is released

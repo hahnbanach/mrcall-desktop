@@ -15,15 +15,20 @@ price whenever an eligible endpoint is priced within it × the margin, else
 the lower-median eligible endpoint's; the model-level price too when its
 endpoints were not read, none is eligible or that price is not fixed, a
 variable one staying unpriced), and for K3 its pinned endpoint's price
-(`k3_reasoning.rates`). The provider policy also forbids fallbacks,
-requires the request's parameters, sorts by price, admits only the
-quantizations of `requirements.json` and, for a model whose endpoints the
-snapshot read, routes only to the endpoints it admitted (`provider.only`): a
-discounted `flex` service tier, which price sorting would otherwise always
-pick, is never among them. The snapshot lists admitted endpoints only, so
+(`k3_reasoning.rates`). The provider policy also requires the request's
+parameters, sorts by price, admits only the quantizations of
+`requirements.json` and, for a model whose endpoints the snapshot read,
+routes only to the endpoints it admitted (`provider.only`): a discounted
+`flex` service tier, which price sorting would otherwise always pick, is
+never among them. The snapshot lists admitted endpoints only, so
 `provider.ignore` could not name the excluded ones; the billing server
-builds the same object for the same model and snapshot. Settlement stays on
-the provider's `usage.cost`.
+builds the same object for the same model and snapshot. Fallbacks are
+forbidden, except within `only` (milestone 10 S3c): there OpenRouter may
+fall back from one admitted endpoint to the next, all under `max_price` and
+the quantizations, so a rate-limited cheapest endpoint (a 429 from its
+shared pool) does not fail every request while price sorting keeps
+choosing it. K3, pinned to one endpoint, never falls back. Settlement stays
+on the provider's `usage.cost`.
 """
 
 import json
@@ -159,6 +164,10 @@ def provider_policy(model):
     }
     admitted = endpoint_tags(model)
     if admitted:
+        from .k3_reasoning import MODEL as K3
+
+        # Fallbacks within the admitted set only; K3's pin allows none.
+        policy["allow_fallbacks"] = model != K3
         policy["only"] = admitted
     return policy
 

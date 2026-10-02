@@ -237,7 +237,9 @@ def run(cleanup):
                     def post(self, url, *, json, headers):
                         override = routing.get(cell['model'])
                         if override:
+                            # A reviewed pin: those providers alone, no fallback.
                             json['provider']['only'] = override['only']
+                            json["provider"]["allow_fallbacks"] = False
                         response_meta['wire_sha256'] = digest(json)
                         if reasoning is not None:
                             response_meta['reasoning_controls'] = {k: json.get(k) for k in ('thinking', 'output_config', 'reasoning', 'max_tokens')}

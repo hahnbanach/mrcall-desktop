@@ -70,7 +70,8 @@ def test_http_controls_and_no_ambient_credentials(monkeypatch):
     body = json.loads(seen[0].content)
     # 0.6/2 × the margin 1.25 (brief D5): the ceiling before slice S3 was 0.6/2.
     assert body["provider"]["max_price"] == {"prompt": "0.75", "completion": "2.5", "request": "0"}
-    assert body["provider"]["allow_fallbacks"] is False
+    # S3c: fallbacks only within `only`, the endpoints the snapshot admitted.
+    assert body["provider"]["allow_fallbacks"] is True and body["provider"]["only"]
     assert body["provider"]["require_parameters"] is True
     # Brief D3: no blanket `disabled`; the adapter adds no reasoning of its own.
     assert "thinking" not in body and "output_config" not in body

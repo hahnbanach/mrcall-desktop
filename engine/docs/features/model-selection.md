@@ -149,7 +149,11 @@ margin, or its reference price × the margin on a day the snapshot does not
 admit that endpoint. The provider object also carries `requirements.json`'s
 `quantizations` and, where the snapshot read the model's endpoints, `only`
 its admitted ones, so a cheaper `flex` service tier is never routed to; it is
-the object the billing server builds for the same model and snapshot. The
+the object the billing server builds for the same model and snapshot. With
+`only` it allows fallbacks, which stay within those admitted endpoints, so a
+cheapest endpoint answering 429 does not fail every request (K3, pinned to
+one endpoint, never falls back); a refused call (429 or another status that
+proves no work was done) releases its hold, while a 5xx keeps it. The
 direct transport reserves at the list price, without the margin. A `:free`
 catalogue id is priced at 0 like any other snapshot price, deliberately: a
 saved one runs on a personal OpenRouter key with a zero hold and `max_price`
