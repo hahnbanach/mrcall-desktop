@@ -71,6 +71,7 @@ def test_the_default_edges_create_their_work_directory_and_read_the_branch(tmp_p
     (data / "v1" / "ledger.json").write_text("{}\n")
     real = edges.default(data, None, work, Decimal("10"))
     assert work.is_dir() and work.stat().st_mode & 0o777 == 0o700
+    assert real.smoke.cap == job.decide.SMOKE_CAP_USD == Decimal("0.20")  # the smoke's admission
     read = real.read()
     assert read["ledger.json"] == b"{}\n" and read["table.json"] is None
     assert real.now().utcoffset().total_seconds() == 0

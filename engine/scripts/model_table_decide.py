@@ -19,8 +19,10 @@ is verified for that ranking: it was already in the published ranking (it
 was verified when it entered), or it has a passing result for the role under
 the current case-set and prompt hashes — cached from an earlier measurement
 (that costs nothing) or measured in this run after a passing smoke. Any
-other entrant waits for its checks: the smoke (at most USD 0.05) and then
-the role's measurement (at most USD 2). A check the run cannot make (the
+other entrant waits for its checks: the smoke (admitted against USD 0.20,
+`SMOKE_CAP_USD`, and expected to cost at most USD 0.05,
+`SMOKE_EXPECTED_USD`: see `model_table_job.py`) and then the role's
+measurement (at most USD 2). A check the run cannot make (the
 monthly cap, a dry run, no harness for the role) is deferred and the entrant
 is skipped, so the ranking keeps only verified models.
 
@@ -55,7 +57,11 @@ from decimal import Decimal
 import resolve_models as rm
 
 resolver = rm.resolver
-SMOKE_USD = Decimal("0.05")
+# A smoke is admitted (journaled, reserved against the month) against the
+# engine's conservative bound under this cap; D8's USD 0.05 is what a smoke
+# is expected to actually cost, and a settled spend above it is flagged.
+SMOKE_CAP_USD = Decimal("0.20")
+SMOKE_EXPECTED_USD = Decimal("0.05")
 MEASURE_USD = Decimal("2")
 COLUMNS = ("ranking", "anthropic_ranking")
 METADATA = ("reasoning", "parameters", "forced_tool")
@@ -73,7 +79,7 @@ class Check:
     @property
     def bound(self) -> Decimal:
         """The most the check may cost: its own cap."""
-        return SMOKE_USD if self.kind == "smoke" else MEASURE_USD
+        return SMOKE_CAP_USD if self.kind == "smoke" else MEASURE_USD
 
     def __str__(self) -> str:
         return f"smoke {self.model}" if self.kind == "smoke" else f"{self.role} on {self.model}"

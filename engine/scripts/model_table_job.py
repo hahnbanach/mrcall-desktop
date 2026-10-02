@@ -25,10 +25,11 @@ and caps (plan, S5). One run:
    replaced by the first ranked model with a passing result — and the paid
    checks they wait for. The job makes the most urgent check, decides again,
    and repeats until nothing waits: an entrant without a cached result is
-   smoked (at most USD 0.05, `model_smoke.py`) and then measured on the role
-   (at most USD 2, slice S4b's `measure_roles.py`); a cached result, keyed by
-   (model, role, case-set hash, prompt hash), costs nothing; a ranked model
-   whose snapshot metadata changed is smoked before anything is published.
+   smoked (`model_smoke.py`, admitted against USD 0.20: see "The smoke's
+   two figures" below) and then measured on the role (at most USD 2, slice
+   S4b's `measure_roles.py`); a cached result, keyed by (model, role,
+   case-set hash, prompt hash), costs nothing; a ranked model whose snapshot
+   metadata changed is smoked before anything is published.
 4. **The monthly cap** (USD 10, `MONTHLY_CAP_USD`; `--monthly-cap-usd` may
    only lower it), kept in `ledger.json` (`model_table_records.py`): before
    its first paid call the run appends a run-level reservation and pushes it
@@ -50,9 +51,25 @@ and caps (plan, S5). One run:
    ceiling (never published), a failed gate, a changed model left unsmoked —
    exits 1, and the last published record stays.
 
+**The smoke's two figures.** Brief D8's "at most USD 0.05" for a smoke is
+the spend a smoke is expected to settle at (the brief prices a request at
+USD 0.002 to 0.09), not its admission bound: admission must use the
+engine's conservative bound, the full output budget at the model-level
+price times the margin, which for a call of a smoke of a model at the
+balanced ceiling comes to about USD 0.1 (Opus 5.5 on the 2026-10-02 prices:
+0.107, then 0.131; `model_smoke.py`'s journal admits the second call on the
+first's settled spend, not on its bound). A smoke is therefore admitted —
+reserved against the month, each call journaled before it is sent —
+against a per-smoke cap of USD 0.20 (`decide.SMOKE_CAP_USD`): a call whose
+bound would cross it is not sent, and that smoke has no result. The report
+gives each smoke's settled spend and flags any above USD 0.05
+(`decide.SMOKE_EXPECTED_USD`), as does its row in the ledger. The monthly
+cap is unchanged.
+
 The report (markdown, `--report`, also printed) lists the decision and
-snapshot changes, the paid checks and the ones not made, the spend, the
-unscored models and the empty Anthropic rankings.
+snapshot changes, the paid checks and the ones not made with each check's
+settled spend, the flagged smokes, the spend, the unscored models and the
+empty Anthropic rankings.
 
     python engine/scripts/model_table_job.py --data model-table --dry-run  # no paid call, no push
     python engine/scripts/model_table_job.py --data model-table            # paid, publishes
@@ -160,7 +177,7 @@ class Run:
         self.edges, self.roles, self.cap, self.dry_run = edges, roles, cap, dry_run
         self.now = edges.now()
         self.s = {"run": self.now.strftime(STAMP), "status": "failed", "code": 1}
-        self.s.update(problems=[], notes=[], calls=[], deferred=[], resampled=[])
+        self.s.update(problems=[], notes=[], calls=[], deferred=[], resampled=[], flags=[])
         self.state = {"smokes": {}, "deferred": {}, "fresh": set()}
         self.unavailable: str | None = None
         self.spend: Spend | None = None
@@ -331,6 +348,10 @@ class Run:
             "spent_usd": records.usd(spent),
             "outcome": outcome,
         }
+        if check.kind == "smoke" and spent > decide.SMOKE_EXPECTED_USD:
+            expected = records.usd(decide.SMOKE_EXPECTED_USD)
+            call["flag"] = f"settled at USD {records.usd(spent)}, above the USD {expected} expected"
+            self.s["flags"].append(f"{check}: {call['flag']}")
         self.spend.spent(call, spent)
         self.s["calls"].append(call)
 

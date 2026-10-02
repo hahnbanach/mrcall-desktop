@@ -188,6 +188,7 @@ class FakeEdges:
         self.smoke_fails: set[str] = set()
         self.smoke_errors: set[str] = set()
         self.smoke_unsent: set[str] = set()
+        self.smoke_costs: dict[str, Decimal] = {}
         self.measure_fails: set[tuple[str, str]] = set()
         self.violations: list[str] = []
         self.spent = Decimal(0)
@@ -209,16 +210,17 @@ class FakeEdges:
             self.violations.append(f"{what} left before a reservation covering it was pushed")
 
     def smoke(self, model: str) -> dict:
-        self._reserved(f"smoke {model}", Decimal("0.05"))
+        self._reserved(f"smoke {model}", self.job.decide.SMOKE_CAP_USD)
         self.smoked.append(model)
         if model in self.smoke_errors:
             raise ConnectionError("the provider hung up")
         if model in self.smoke_unsent:  # model_smoke refused a call its cap cannot cover
-            unsent = "not sent: bound 85808 + used 0 > cap 50000 micro-USD"
+            unsent = "not sent: bound 250000 + used 0 > cap 200000 micro-USD"
             return {"passed": None, "spent_usd": Decimal(0), "detail": unsent}
-        self.spent += SMOKE_SPENT
+        spent = self.smoke_costs.get(model, SMOKE_SPENT)
+        self.spent += spent
         passed = model not in self.smoke_fails
-        return {"passed": passed, "spent_usd": SMOKE_SPENT, "detail": None if passed else "no call"}
+        return {"passed": passed, "spent_usd": spent, "detail": None if passed else "no call"}
 
     def measure(self, role: str, model: str) -> dict:
         self._reserved(f"{role} on {model}", Decimal("2"))

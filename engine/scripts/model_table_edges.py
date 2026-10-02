@@ -12,8 +12,10 @@ replace every one with a fake and nothing is paid or pushed.
   `concurrency`, and before the desktop merge only the coordinator.
 - `Smoke`: the paid smoke of one model on the engine's real transport — the
   two-turn tool loop of `model_smoke.py`, through its own disposable profile
-  and its own journal with a cap per smoke (USD 0.05), the key from the
-  environment only.
+  and its own journal, which admits each call against the engine's bound
+  under the job's per-smoke cap (USD 0.20, `decide.SMOKE_CAP_USD`; D8's USD
+  0.05 is the expected spend the job flags above, `model_table_job.py`),
+  the key from the environment only.
 - `Measurement`: a role's measurement of one model through slice S4b's
   `measure_roles.run(roles, arms, cap_usd, ledger, transport)` and
   `derive_thresholds.derive(results, cases)`: the arms are the model and the
@@ -216,7 +218,7 @@ def default(data: Path, fixture: Path | None, work: Path | None, budget: Decimal
     work.mkdir(mode=0o700, parents=True, exist_ok=True)
     branch = DataBranch(data)
     reference = json.loads(rm.REQUIREMENTS.read_text(encoding="utf-8"))["reference"]
-    smoke = Smoke(work, decide.SMOKE_USD, budget)
+    smoke = Smoke(work, decide.SMOKE_CAP_USD, budget)
     measure = Measurement(FIXTURES, work, decide.MEASURE_USD, reference)
 
     def preflight() -> None:
