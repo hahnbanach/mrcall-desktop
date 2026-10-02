@@ -51,6 +51,73 @@ not started.
    - *Afterwards:* `gpasswd -d mrcalld mc-c-7aaa48b3ef85`. Café124 then
      has no `mrcalld` holder.
    - *Done:* the helper table lists all seven uids.
+
+   **R1 execution record — 2026-10-02.** Ivan and Riccardo were
+   authorized by the CTO and processed sequentially. Each read-only
+   credential dry run executed as the current daemon identity through the
+   repaired walker: zero OAuth rows, zero failures. Under inherited root
+   fd 9 on `reconcile.lock`: stop, ownership/mode record and root-only
+   backup, `create` → rekey `--verify` → `--verify-only` → `create` → start
+   → acceptance. Both rekey checks reported zero rows and zero failures;
+   boolean comparisons confirmed the daemon adopted its distinct tenant
+   key rather than the shared key.
+
+   | Profile | Accepted UTC | Daemon identity | Memory at acceptance |
+   |---|---|---|---|
+   | Ivan, `ZwpLepFDghWhQEBO4WJRIFcEr7p1` | 17:36:54 | `mc-3a94d888f0a7` | available; 1,415 blobs, 199 facts |
+   | Riccardo, `YZNI2ZLDjFOxcvF0zmptW3vRZxV2` | 17:43:08 | `mc-e00a4971b76c` | available; 1,416 blobs, 199 facts |
+
+   **Check correction and retained rollback.** Ivan's first attempt at
+   17:32 was restored because the immediate process-UID check raced
+   systemd's `Type=simple` identity setup/exec (Started → our Stopping:
+   33.084 ms). Reverse rekey and `unmigrate` succeeded, recorded directory
+   mode was restored, and the original daemon returned active with memory
+   available and zero startup errors. Independent reviews confirmed a
+   check defect, with no daemon failure. The corrected bounded readiness
+   predicate waits for actual UID and command; the approved retry passed.
+   Original `/root/backup-2b-ZwpLepFDghWhQEBO4WJRIFcEr7p1-20261002-r1/`,
+   accepted Ivan
+   `/root/backup-2b-ZwpLepFDghWhQEBO4WJRIFcEr7p1-20261002-r1-retry1/`,
+   Riccardo
+   `/root/backup-2b-YZNI2ZLDjFOxcvF0zmptW3vRZxV2-20261002-r1/`, their
+   old keys, and all preceding rollback material remain root-only.
+
+   **Acceptance.** Each profile was active with `NRestarts=0`, memory
+   available as its daemon identity, correct profile ownership and company
+   store/sidecar group and `0660` mode, unchanged operator drop-ins, denied
+   sibling environment/key reads, Caddy route reachable (unsigned handshake
+   401), and zero new startup-error matches. Other daemon PIDs stayed
+   unchanged during each migration; production voice health stayed 200 with
+   `calls_available=true` locally and publicly. Subsequent budget refusals
+   and worker batch stops match pre-migration behavior. No authenticated app/GUI observation is
+   claimed: the daemon-identity memory check and clean start are R1's
+   explicitly authorized evidence for these two profiles.
+
+   **Closure.** After both fresh Riccardo milestone reviews returned
+   APPROVED, `gpasswd -d mrcalld mc-c-7aaa48b3ef85` succeeded under the
+   reconciliation lock. The helper table contains exactly all seven live
+   UIDs; all seven daemons are active as their derived tenant users, with
+   zero restarts and available memory before and after group removal.
+   Café124 has no remaining `mrcalld` daemon holder or group membership.
+   All four stores remain derived with correct group-writable sidecars;
+   sibling environment/key reads are denied, provisiond is active, both
+   logrotate debug checks pass, and local/public production voice health
+   remains 200 with `calls_available=true`. R1's runtime done condition is
+   met; R3's seven-day rollback window starts from the last 2b acceptance,
+   Riccardo's 2026-10-02 17:43:08 UTC. No backup or shared key was removed.
+
+   **Reviews and publication.** Fresh independent brief and plan pairs
+   returned APPROVED (plan defects were repaired and re-reviewed), as did
+   both fresh milestone reviewers for each profile. Separate final R1
+   reviewers `r1_final_a` and `r1_final_b` both returned APPROVED on the
+   runtime evidence and this R1-only record before publication. Operational
+   evidence and the
+   approved scratch brief/plan are under `/root/r1-20261002/` and
+   `/tmp/mrcall-ai-kit/r1-20261002/`. The service checkout was never edited,
+   pulled or deployed. Automatic reconcile triggers skipped under the held
+   lock; no reconcile work ran. Only this R1 record is changed
+   in the repository; R2/R4 and global reconciliation remain their owners'.
+
 2. **R2 — Helper hardening.** *cloud* for the code, then *scratch* for the
    probe with two independent reviews.
    - *Starts:* any time.
