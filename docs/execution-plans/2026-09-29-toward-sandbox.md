@@ -14,6 +14,91 @@ approved 2026-09-29 by two independent reviews. This plan was revised once on
 two independent plan reviews (conformance; adversarial mechanisms), whose
 findings are folded in below.
 
+## Remaining work (index, as of 2026-10-02 after `35f8840`)
+
+This is the entry point for any session picking this up. Each item names:
+- **where it runs:** *cloud* is a session on this repository with no host
+  access; *scratch* is the Remote Control session on the scratch VM; *VPS*
+  is the Remote Control session on desktop.mrcall.ai;
+- **when it may start;**
+- **when it is done.**
+
+Git is the only channel between sessions. Every session records its
+result in this plan and pushes to `main`. Rules that hold for every item:
+- never print `MEMORY_KEY`, `ENCRYPTION_KEY`, tokens or voice-file values;
+- stop and roll back on a host, daemon, store or app anomaly;
+- a defect in your own check script is fixed and the check re-run (the
+  stop rule in the "VPS rollout" record).
+
+State: five profiles, production@ included, run as their own users. Ivan
+(`ZwpLepFDghWhQEBO4WJRIFcEr7p1`) and Riccardo
+(`YZNI2ZLDjFOxcvF0zmptW3vRZxV2`) are still `mrcalld` on the shared key,
+excluded by the CTO. All four company stores have derived names. M3 has
+not started.
+
+1. **R1 — 2b for Ivan and Riccardo.** *VPS.*
+   - *Starts:* when the CTO says.
+   - *Procedure:* exactly the repaired sequence in "M2 record — VPS
+     rollout", "Published repair and resumed 2b":
+     1. a read-only rekey dry run as the daemon identity;
+     2. backup;
+     3. `create` → rekey with verify → verify-only → `create` → start;
+     4. acceptance.
+
+     Their app acceptance has no Firebase row to use (recorded there): the
+     daemon-identity `memory-status` plus a clean start are the evidence
+     unless the CTO provides a sign-in.
+   - *Afterwards:* `gpasswd -d mrcalld mc-c-7aaa48b3ef85`. Café124 then
+     has no `mrcalld` holder.
+   - *Done:* the helper table lists all seven uids.
+2. **R2 — Helper hardening.** *cloud* for the code, then *scratch* for the
+   probe with two independent reviews.
+   - *Starts:* any time.
+   - *Must finish:* before self-serve provisioning opens (Parked).
+   - *Scope:* the "Open, not changed here" list of "M2 record —
+     tenant-exec probe":
+     - refuse any applied drop-in that sorts after `tenant.conf`, or lives
+       outside the instance's `/etc` directory;
+     - `delete` refuses a uid that is not a Firebase UID (`<uid>.sock`,
+       `reconcile.lock`);
+     - the two voice-file forms the check and systemd read differently;
+     - `save_prev` runs after the trap is armed;
+     - refuse a `zylch` whose shebang is not its own venv's python, and
+       an empty or comment-only voice file;
+     - `unmigrate` restores the recorded profile-directory mode.
+   - *Done:* both reviews APPROVED on the scratch record; merged; the VPS
+     installs it through the next reconcile, and every migrated unit
+     re-applies as `ready`.
+3. **R3 — Close the rollback window.** *VPS.*
+   - *Starts:* seven days after the last 2b with no rollback, and not
+     before R1.
+   - *Removes:*
+     - the root-only `/root/backup-2a-*`, `/root/backup-2b-*`,
+       `/root/prod-2b/migration/` and `/root/k3-pins-backup/`;
+     - the old-key copies (with `shred -u`).
+
+     The record of what existed stays here.
+   - *The shared key:* `ENCRYPTION_KEY` in `/etc/mrcalld/env` stays as
+     long as any unit runs as `mrcalld`, or provisiond creates new
+     profiles under the template before `create`. Establish which from
+     the code before removing it, and record the answer.
+   - *Done:* recorded here.
+4. **R4 — M3, egress bound per daemon** (section below). *scratch* first,
+   then *VPS* one profile at a time, each watched over a full mail sync
+   cycle.
+   - *Starts:* any time on scratch. On the VPS only after a mechanism
+     record on scratch, with two independent reviews, covering every
+     line of the M3 verification.
+   - *Done:* all migrated tenants have their per-user set; criterion 6 is
+     recorded.
+5. **R5 — M4 and the final review** (sections below). *cloud*.
+   - *Starts:* after R1–R4.
+   - *Done:* the final end-to-end review is recorded for all eight
+     criteria, and this plan's `status` is `completed`.
+
+R1, R2 and R4 are independent of each other. R3 waits for R1, and R5
+waits for all of them.
+
 ## Facts the brief does not state
 
 - There is no serve flag: `zylch serve` (`engine/zylch/cli/main.py:434`)
