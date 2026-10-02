@@ -69,6 +69,20 @@ not started.
    - *Done:* both reviews APPROVED on the scratch record; merged; the VPS
      installs it through the next reconcile, and every migrated unit
      re-applies as `ready`.
+   - *R_2 record (2026-10-02):* existing approved brief and R2 scope/plan
+     re-reviewed independently: A (mechanisms) APPROVED; B (conformance)
+     APPROVED. Implementation by this worktree's primary agent; both will
+     separately review the resulting code and scratch evidence.
+     Sequence: implement the six guards; exercise hostile and accepted
+     controls on scratch, including partial-backup failure and mode
+     round-trip; review/fix/re-review; merge; record VPS reconcile evidence.
+     Refusals must preserve existing unit/voice state. Legacy migrations
+     without a recorded original mode must not invent one. Restore the
+     installed helper and test fixtures on an anomaly; do not change R4's
+     firewall/resolver state. No secret or voice value in evidence.
+   - *Machine coordination:* scratch VM presa da R_2 dalle
+     2026-10-02T17:30:52Z. Reservation is effective only after push and a
+     refreshed check that R_4 is not using the machine.
 3. **R3 — Close the rollback window.** *VPS.*
    - *Starts:* seven days after the last 2b with no rollback, and not
      before R1.
