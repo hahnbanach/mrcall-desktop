@@ -19,13 +19,21 @@ engine after each download, the billing server after each load
   priced in `snapshot` with positive input and output prices and an output
   price within its preset's ceiling, and carries the direct id the rule
   gives it — priced under the snapshot's `direct` when it is not null, and
-  never null in an `anthropic_ranking`, whose entries are all `anthropic/*`.
+  never null in an `anthropic_ranking`, whose entries are all `anthropic/*`;
+- `check_table_standalone(table, snapshot)`: the same gates for a consumer
+  without `requirements.json` (the billing server mirrors this one): the
+  roster is every role the table's presets rank and each preset must rank
+  each of them, the ceilings are the table's own (so a raised ceiling cannot
+  be told; the job and the engines catch it with `check_table`), and the
+  excluded families come from the snapshot's `policy.excluded_families`.
 
 A failed gate raises `GateError`; its `violations` name every rule broken.
 The schema is checked first and alone, since the other rules read a
 well-formed document. `requirements` is `requirements.json` as the consumer
 holds it: only its `presets` (ceilings), `roles` and `excluded_families` are
-read, so the billing server can pass the same three keys.
+read, so a consumer holding those three keys can pass them; one holding
+none of them takes the roster and ceilings from the table and the families
+from the snapshot (`check_table_standalone`).
 
 The schemas are read from `contract/` and applied by `_conform`, a small
 interpreter of the JSON Schema keywords they use (`KEYWORDS`); any other
@@ -260,11 +268,11 @@ def _priced(pricing: dict, ceiling: Decimal) -> str | None:
     return None
 
 
-def _entry_violations(entry: dict, ceiling: Decimal, req: dict, snap: dict, anthropic: bool):
+def _entry_violations(entry: dict, ceiling: Decimal, families: list, snap: dict, anthropic: bool):
     model, direct = entry["id"], entry["direct_id"]
     if model.startswith(ALIAS):
         yield "is an alias"
-    family = excluded_family(model, req.get("excluded_families") or [])
+    family = excluded_family(model, families)
     if family:
         yield f"is of the excluded family {family['vendor']} + {family['token']}"
     row = snap["models"].get(model)
@@ -291,6 +299,23 @@ def _entry_violations(entry: dict, ceiling: Decimal, req: dict, snap: dict, anth
         yield "is not an Anthropic model, in the Anthropic ranking"
 
 
+def _ranked_violations(presets: dict, families: list, snapshot: dict) -> list[str]:
+    """The rules every ranked entry of every preset and role must meet."""
+    violations = []
+    for preset, body in presets.items():
+        ceiling = Decimal(body["ceiling"])
+        for role, rankings in body["roles"].items():
+            for column in ("ranking", "anthropic_ranking"):
+                ids = [entry["id"] for entry in rankings[column]]
+                if len(set(ids)) != len(ids):
+                    violations.append(f"{preset} / {role} / {column}: an id is ranked twice")
+                for entry in rankings[column]:
+                    anthropic = column == "anthropic_ranking"
+                    for problem in _entry_violations(entry, ceiling, families, snapshot, anthropic):
+                        violations.append(f"{preset} / {role} / {column}: {entry['id']} {problem}")
+    return violations
+
+
 def check_table(table: object, requirements: dict, snapshot: dict) -> None:
     """Raise GateError unless `table` passes every table gate, against the
     requirements in force and a snapshot that passed `check_snapshot`."""
@@ -307,18 +332,28 @@ def check_table(table: object, requirements: dict, snapshot: dict) -> None:
         for role in requirements["roles"]:
             if not presets[preset]["roles"].get(role, {}).get("ranking"):
                 violations.append(f"coverage: {preset} / {role} has no ranking")
+    families = requirements.get("excluded_families") or []
+    violations += _ranked_violations(presets, families, snapshot)
+    if violations:
+        raise GateError("table.json", violations)
+
+
+def check_table_standalone(table: object, snapshot: dict) -> None:
+    """Raise GateError unless `table` passes every table gate a consumer
+    without `requirements.json` can apply (the billing server mirrors this
+    one), against a snapshot that passed `check_snapshot`: the roster is every
+    role the table's presets rank, and each preset must rank each of them; the
+    ceilings are the table's own, so a raised one cannot be told from them;
+    the excluded families are the snapshot's `policy.excluded_families`."""
+    _well_formed(table, "table")
+    presets = table["presets"]
+    roster = list(dict.fromkeys(role for body in presets.values() for role in body["roles"]))
+    violations = [] if roster else ["coverage: the table ranks no role"]
     for preset, body in presets.items():
-        ceiling = Decimal(body["ceiling"])
-        for role, rankings in body["roles"].items():
-            for column in ("ranking", "anthropic_ranking"):
-                ids = [entry["id"] for entry in rankings[column]]
-                if len(set(ids)) != len(ids):
-                    violations.append(f"{preset} / {role} / {column}: an id is ranked twice")
-                for entry in rankings[column]:
-                    anthropic = column == "anthropic_ranking"
-                    for problem in _entry_violations(
-                        entry, ceiling, requirements, snapshot, anthropic
-                    ):
-                        violations.append(f"{preset} / {role} / {column}: {entry['id']} {problem}")
+        for role in roster:
+            if not body["roles"].get(role, {}).get("ranking"):
+                violations.append(f"coverage: {preset} / {role} has no ranking")
+    families = snapshot["policy"]["excluded_families"]
+    violations += _ranked_violations(presets, families, snapshot)
     if violations:
         raise GateError("table.json", violations)

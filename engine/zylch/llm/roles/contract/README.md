@@ -13,9 +13,9 @@ published contract").
 |---|---|
 | `table.schema.json` | JSON Schema (draft 2020-12) of `table.json` |
 | `snapshot.schema.json` | JSON Schema (draft 2020-12) of `snapshot.json` |
-| `table.example.json`, `snapshot.example.json` | small valid documents; they pass every gate below against the requirements `{presets: economy 10, balanced 20; roles: CHAT, MNEMONIC; excluded_families: anthropic + haiku}` (the snapshot example is cut from the 2026-10-02 read, its endpoint lists trimmed) |
+| `table.example.json`, `snapshot.example.json` | small valid documents; they pass every gate below against the requirements `{presets: economy 10, balanced 20; roles: CHAT, MNEMONIC; excluded_families: anthropic + haiku}`, and the standalone table gate (the snapshot example is cut from the 2026-10-02 read, its endpoint lists trimmed) |
 | `protocol-v2.md` | the credits protocol `mrcall-bounded-v2` |
-| `../gates.py` | the static gates as one pure function per document: the reference implementation of the rules below |
+| `../gates.py` | the static gates as one pure function per document, plus the standalone table gate for a consumer without `requirements.json`: the reference implementation of the rules below |
 
 ## Who writes, who reads, where
 
@@ -85,7 +85,9 @@ those are the snapshot's, so a refresh of prices moves no record.
 `schema`, `version`, `read_at` (when the catalogue was read), and:
 
 - `policy` — the provider policy the endpoints were admitted under:
-  `margin`, `quantizations`, `excluded_endpoint_variants`.
+  `margin`, `quantizations`, `excluded_endpoint_variants`; and
+  `excluded_families` (`[{vendor, token}]`, as `requirements.json` holds
+  them), which a consumer without `requirements.json` applies to a table.
 - `models` — every catalogue entry (aliases, `:free`/`:batch` variants and
   excluded families included, so a model a profile saved explicitly keeps a
   price), keyed by catalogue id:
@@ -125,7 +127,8 @@ naming a dated snapshot of the requested alias settles as the alias.
 ## The static gates
 
 Every consumer applies them after each read, and uses a document only if it
-passes all of them (`gates.check_snapshot`, `gates.check_table`). A failure
+passes all of them (`gates.check_snapshot`, then `gates.check_table` or,
+without `requirements.json`, `gates.check_table_standalone`). A failure
 names every rule broken; the schema is checked first and alone.
 
 Snapshot:
@@ -161,7 +164,22 @@ Table, against the requirements in force and a snapshot that passed:
 
 "The requirements in force" are three keys of the engine's
 `zylch/llm/roles/requirements.json`: `presets` (each `ceiling`), `roles`
-(the roster) and `excluded_families`. The billing server holds the same
-three; they change only with an engine release. The resolver also matches
-the excluded families on an entry's `canonical_slug` and an alias's target,
-which the snapshot does not carry; the gate checks the published ids.
+(the roster) and `excluded_families`. The job and the engines hold them
+(`gates.check_table`). The resolver also matches the excluded families on
+an entry's `canonical_slug` and an alias's target, which the snapshot does
+not carry; the gate checks the published ids.
+
+**A consumer without `requirements.json`** (the billing server) takes the
+roster and the ceilings from the table, and the excluded families, the
+margin, the quantizations and the excluded endpoint variants from the
+snapshot's `policy`; it applies `gates.check_table_standalone(table,
+snapshot)`, which is the table rules above with these changes:
+
+- rule 3 reads: the table ranks at least one role, and every preset of the
+  table has a non-empty `ranking` for every role any preset of the table
+  ranks (the roster is the union of the presets' roles);
+- rule 4 does not apply (the table's own ceilings are the only ones known,
+  so a raised ceiling cannot be told; the job's and the engines'
+  `check_table` refuse it before and after publication);
+- rule 5 matches the families of `policy.excluded_families`, and rules 6
+  and 7 compare with each preset's own `ceiling`.

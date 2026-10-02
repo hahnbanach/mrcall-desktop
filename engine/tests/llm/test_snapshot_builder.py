@@ -69,6 +69,7 @@ def test_the_snapshot_covers_every_entry_and_passes_its_gates(built):
     assert built["policy"]["margin"] == "1.25" and built["policy"][
         "excluded_endpoint_variants"
     ] == ["flex"]
+    assert built["policy"]["excluded_families"] == [{"vendor": "anthropic", "token": "haiku"}]
     read = {m for m, row in built["models"].items() if row["endpoints"] is not None}
     assert read == set(src["endpoints"]) and len(read) == 218
 

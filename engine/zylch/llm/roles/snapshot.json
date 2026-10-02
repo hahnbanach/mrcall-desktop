@@ -482,10 +482,11 @@
  },
  "policy": {
   "excluded_endpoint_variants": ["flex"],
+  "excluded_families": [{"token": "haiku", "vendor": "anthropic"}],
   "margin": "1.25",
   "quantizations": ["int8", "fp8", "mxfp8", "fp16", "bf16", "fp32", "unknown"]
  },
  "read_at": "2026-10-02T13:36:42Z",
  "schema": 1,
- "version": "f04f27349de6020e09f5bc28745af01981b3ff3935c1d594fedf094f211d7fa7"
+ "version": "b8981c0c93638dc90aa875639d5c3d935ac8cf525420ecf99fc20c32f7a11dab"
 }

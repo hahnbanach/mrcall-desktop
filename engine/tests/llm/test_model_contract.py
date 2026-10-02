@@ -67,6 +67,7 @@ def test_the_schemas_accept_the_examples_and_the_build_snapshot():
 def test_the_examples_pass_every_gate(table, snapshot):
     gates.check_snapshot(snapshot)
     gates.check_table(table, REQUIREMENTS, snapshot)
+    gates.check_table_standalone(table, snapshot)
     # An empty Anthropic ranking is allowed; the example holds one.
     assert table["presets"]["economy"]["roles"]["MNEMONIC"]["anthropic_ranking"] == []
 
@@ -118,6 +119,8 @@ def schema_breaks(name: str, doc: dict) -> list[dict]:
         broken(lambda d: _at(d, ("models", QWEN)).update(endpoints={}))
         broken(lambda d: _at(d, ("models",)).update({"has space": d["models"][QWEN]}))
         broken(lambda d: _at(d, ("policy",)).update(margin=1.25))
+        broken(lambda d: _at(d, ("policy",)).pop("excluded_families"))
+        broken(lambda d: _at(d, ("policy",)).update(excluded_families=[{"vendor": "anthropic"}]))
     return out
 
 
