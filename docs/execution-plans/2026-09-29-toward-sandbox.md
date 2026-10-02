@@ -2416,6 +2416,128 @@ R_2's final release at 17:43:24 UTC observed on origin/main. Publish and
 refresh before the first probe. The installed helper is R2's approved main
 version; leave it unchanged.
 
+#### R_4 observe-first amendment — 2026-10-02 (two brief reviews APPROVED)
+
+CTO instruction after inventory `e33c653`: every VPS profile must first run
+observe-only, logging connections outside its candidate sets and blocking
+nothing, for at least one full mail-sync cycle plus several days. Enforcement
+requires the observations to close all unknown destinations. R_4 must prove
+observe → enforce → rollback on scratch before any VPS proposal. R_4 still
+must not access the services VPS; inventory and handoff use git only.
+
+The security brief remains the right artifact and final criterion 6 remains
+unchanged. This is an explicitly unconfined discovery stage, never evidence
+that egress is already bounded. Interpret "a few days" as **at least 72
+continuous hours per profile**, containing at least one accepted full mail
+sync cycle. Missing activity for Calendar, cold embeddings, WhatsApp media,
+CRM or production voice keeps its corresponding unknown open; elapsed time
+alone does not authorize enforcement. A collector outage, unaccounted sample
+loss or material policy change invalidates the observation window and requires
+fresh complete evidence. One tenant's acceptance never authorizes another.
+
+Acceptance for this amendment: observe adds no packet rejection, DNS refusal,
+connection marks, daemon restart dependency or resolver replacement. A known
+candidate destination and an unknown destination both remain usable; the latter
+produces metadata-only evidence. Enforcement denies that unknown destination;
+rollback restores the original behavior and leaves a sibling unaffected.
+No payload, credentials, HTTP headers, raw DNS queries or voice-file values
+are collected. IP/port evidence alone does not prove hostname ownership:
+ambiguous CDN/shared-IP samples remain unknown until explained by trustworthy
+code/configuration or a controlled channel operation. No automatic allowlisting.
+
+Inventory interpretation: all seven use Gmail IMAPS 993 and SMTP STARTTLS 587;
+shared StarChat/billing are api.mrcall.ai / zylch.mrcall.ai:443, providers vary
+as recorded in the preserved inventory block. Only Mario Gmail has WhatsApp
+session metadata; only production has a voice listener. Calendar API,
+embedding redirects, WhatsApp media, Pipedrive/other credential-backed enabled
+states, and voice Vonage/selected routes remain open. Browser-only endpoints
+must not widen daemon policies. Do not infer a wildcard from an unknown.
+
+#### R_4 observe-first implementation plan (review pending)
+
+The two fresh brief reviewers returned APPROVED. This amendment supersedes
+any earlier direct-to-enforcement rollout wording; the preserved inventory
+block is input, not closure of its unknowns. Implementation remains here.
+
+1. Require explicit `mode: observe|enforce` in policy input, reflected in the
+   manifest. Enforcement keeps its existing restrictive resolver and guard.
+   Observe generates only its own all-accept nft table, manifest, independent
+   observation service and candidate-refresh timer. **No daemon drop-in,
+   resolver file/config, DNS service, ct-mark assignment or reject/drop rule
+   in observe mode.** No daemon restart is needed to attach observation.
+2. Observe classifies original-direction IPv4/IPv6 TCP/UDP against the same
+   per-endpoint IP/port sets; reply-direction traffic is excluded. Everything
+   outside is accepted and counted. Kernel `log` uses a fixed tenant prefix,
+   default header-only fields, no payload/option logging or NFLOG packet copy.
+   Logs are rate-limited to 10/second (burst 20); separate total-outside and
+   emitted-log counters expose skipped samples. It samples packets, not a
+   lossless connection ledger. Root journal collection retains only timestamp,
+   tenant prefix, destination IP/port/protocol; never raw packet payload,
+   DNS query names, HTTP headers or voice configuration. Root controls access
+   and retention (at least the active 72-hour window plus its review).
+3. Keep the daemon's existing DNS path unchanged. A separate root timer every
+   60 seconds resolves **only operator-approved candidate hostnames** through
+   the host resolver and atomically refreshes the observe sets. No traffic
+   interception. This is a conservative DNS snapshot: different CDN answers
+   or subdomain lookups may appear outside and require explanation, never
+   automatic allowlisting. A failed/incomplete refresh is visible and prevents
+   acceptance of that window; it cannot block any daemon traffic. The updater
+   reads only a root-owned generated manifest, invokes fixed nft commands,
+   requires observe mode and a matching loaded observe table, and takes a
+   per-policy lock. Promotion stops its timer/service and holds that lock
+   before replacing the table, so a stale updater cannot change enforce sets.
+4. A small root report command exposes candidate-update outcome and nft
+   total/logged/suppressed counts without echoing supplied policy values.
+   Zero nft sample suppression alone is not proof of complete logs: collector
+   continuity, journal retention/rate-loss and valid refresh coverage must
+   also be recorded. IP/port observations need curated hostname attribution
+   backed by code/configuration or controlled channel evidence. Reverse DNS
+   or a quiet interval is insufficient to close an unknown.
+5. Scratch proof: start with a running synthetic daemon and sibling baseline.
+   Attach observe without changing its PID or resolver. An unknown TCP/UDP
+   destination (also loopback/private), external DNS and IPv6 remain usable;
+   verify the unknown event is actually in kernel logs, while a synthetic
+   payload marker is absent. Prove known-set classification and visible
+   suppression under a burst. Prove observer/refresh failure does not stop
+   daemon or block its traffic. Stop timer/observer, stop selected daemon,
+   clear only its conntrack mark, load enforce and its resolver dependency,
+   restart selected daemon: unknown is now refused while known is usable.
+   Roll back only this tenant to its baseline; sibling PID/rules untouched.
+   Retain existing namespace and compiler tests; add mode/refresh/race tests.
+6. Reviews: two independent code/evidence reviews, repair REVISE findings;
+   only then publish the scratch mechanism record as suitable for a proposed
+   **observe-only** VPS phase. No VPS access or deployment from R_4.
+
+VPS handoff gates, separately for each of the seven profiles:
+- An authorized VPS operator records profile identity, policy hash, observation
+  start UTC, journal cursor/retention and candidate-refresh health. Start only
+  observation; keep existing daemon and resolver. Existing host firewall
+  behavior is preserved, not overridden. Record one full accepted mail sync
+  and at least 72 continuous hours with complete usable evidence.
+- Maintain a closure row for Calendar API, embedding redirects, WhatsApp media,
+  Pipedrive/other connectors and production voice/Vonage. For an inapplicable
+  channel require evidence that it is disabled/unconfigured; silence is not
+  proof. For an applicable channel observe a controlled relevant operation
+  (e.g. media receipt/cold model download/voice integration), map destinations
+  to curated hostnames/ports and rerun the window after material policy changes.
+- Log loss/suppression, refresh or collection gaps, unexplained destinations,
+  missing representative channel activity or app/mail anomalies keep the
+  profile in observe; fix and restart a complete window. No "72 hours passed"
+  automatic promotion and no inferred broad suffix to silence an unknown.
+- Only after all closure rows and authentic M3 channel checks have evidence
+  and two reviewers APPROVE the profile's promotion: snapshot/stop selected
+  daemon, stop observer timer/updater under policy lock, clear selected marks,
+  switch to enforce, start, accept a full mail cycle before the next profile.
+  Preserve observation evidence. Any enforcement anomaly rolls that tenant
+  back to its original resolver and unrestricted egress (or reviewed observe
+  configuration); never edit another tenant's table or flush the host ruleset.
+- R_4 done still means every migrated tenant is enforced with criterion 6
+  recorded. Observe-only running for days is deliberately not that condition.
+
+**Scratch coordination:** scratch VM presa da R_4 dalle 2026-10-02 19:58:02 UTC.
+R2's recorded release and this worktree's prior release checked; publish
+and refresh main before any host test. Only scratch is authorized.
+
 #### R_4 mechanism revision (two plan reviews APPROVED)
 
 First isolated kernel experiment: dnsmasq 2.91 with nftset, nftables 1.0.2,
