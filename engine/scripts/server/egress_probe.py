@@ -155,7 +155,7 @@ def main():
     for address in ("9.9.9.11", "9.9.9.12", "9.9.9.13", "9.9.9.99", "169.254.169.254", "127.0.0.1", "2606:4700::11", "2606:4700::99"):
         threading.Thread(target=echo_server, args=(address,), daemon=True).start()
     time.sleep(0.1)
-    p = {"profile_uid": "scratchR4A", "unix_uid": 998, "resolver": "127.0.0.54",
+    p = {"mode": "enforce", "profile_uid": "scratchR4A", "unix_uid": 998, "resolver": "127.0.0.54",
          "upstream": "8.8.8.8", "endpoints": [{"suffix": "allowed.example", "tcp": [443], "udp": [444]},
                        {"suffix": "other.example", "tcp": [445], "udp": []}]}
     artifacts = compile_policy(p)

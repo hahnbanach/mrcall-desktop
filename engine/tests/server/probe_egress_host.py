@@ -30,7 +30,7 @@ siblings=['zylch-server@scrA1aaaaaaaaaaaaaaaaaaaaaaa1.service','zylch-server@scr
 before={u:[show(u,k) for k in ('MainPID','ActiveState','NRestarts')] for u in siblings}
 resolver_before=pathlib.Path('/etc/resolv.conf').read_bytes()
 helper_before=hashlib.sha256(pathlib.Path('/usr/local/sbin/mrcall-tenant').read_bytes()).hexdigest()
-p={'profile_uid':uid,'unix_uid':uidn,'resolver':'127.0.0.54','upstream':'1.1.1.1','endpoints':[{'suffix':'www.googleapis.com','tcp':[443],'udp':[]}]}
+p={'mode':'enforce','profile_uid':uid,'unix_uid':uidn,'resolver':'127.0.0.54','upstream':'1.1.1.1','endpoints':[{'suffix':'www.googleapis.com','tcp':[443],'udp':[]}]}
 files=m.compile_policy(p);manifest=json.loads(files['manifest.json'])
 root=pathlib.Path(manifest['install_directory']);table=manifest['table']
 services=[n for n in files if n.endswith('.service')]

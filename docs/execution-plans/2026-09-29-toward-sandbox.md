@@ -2453,7 +2453,7 @@ embedding redirects, WhatsApp media, Pipedrive/other credential-backed enabled
 states, and voice Vonage/selected routes remain open. Browser-only endpoints
 must not widen daemon policies. Do not infer a wildcard from an unknown.
 
-#### R_4 observe-first implementation plan (review pending)
+#### R_4 observe-first implementation plan (two fresh reviews APPROVED)
 
 The two fresh brief reviewers returned APPROVED. This amendment supersedes
 any earlier direct-to-enforcement rollout wording; the preserved inventory
@@ -2537,6 +2537,152 @@ VPS handoff gates, separately for each of the seven profiles:
 **Scratch coordination:** scratch VM presa da R_4 dalle 2026-10-02 19:58:02 UTC.
 R2's recorded release and this worktree's prior release checked; publish
 and refresh main before any host test. Only scratch is authorized.
+
+#### R_4 observe-first scratch result — 2026-10-02 (two integration reviews APPROVED)
+
+Implementation is in `engine/scripts/server/egress_policy.py` and
+`egress_observe.py`; the repeatable explicit host proof is
+`engine/tests/server/probe_egress_observe_host.py`. Both input modes are now
+mandatory: a policy without `mode` is refused. Observe emits no daemon drop-in
+or DNS configuration. Its candidate timer and service are independent of the
+running daemon. Enforcement retains the restrictive resolver and startup guard.
+Both firewall loaders and the updater serialize on the same root-owned
+`observe.lock`; the updater verifies the live observe policy under that lock.
+On scratch nftables 1.0.2, JSON omits table comments, so the live discriminator
+is the `observe_<policy SHA256>` chain name (present in JSON), not a comment.
+No helper or application code was changed.
+
+Host proof at **20:19:19–20:19:24 UTC**, fixture `scrA2…2` / Unix UID 993:
+- Observe attached to an already running daemon: PID and mounted resolver
+  unchanged. Unknown TCP and UDP echo worked over loopback, private IPv4 and
+  IPv6; direct external UDP/TCP DNS worked. Known HTTPS certificate retrieval
+  worked and matched its candidate set without adding outside counters.
+- Actual kernel journal events identified the unknown UDP destination. The
+  synthetic payload canary was absent from every matching raw kernel record;
+  the export contained only timestamp, tenant, destination IP, port, protocol.
+  A 200-packet burst made sample suppression visible. This intentional burst
+  invalidates any observation-window claim for this short functional test.
+- Failing updater and observer starts left the daemon PID and unknown traffic
+  working. A real updater queued behind the promotion lock refused after the
+  table changed to enforce; a second stale refresh also refused. Neither
+  changed enforcement rules.
+- With enforce and its resolver active, known HTTPS worked; unknown TCP/UDP
+  loopback/private/IPv6 and direct external TCP DNS were refused. Rollback
+  restored unknown reachability and the original resolver. A separate canary
+  table was unchanged; actual A1/P1 sibling PIDs, states and restart counters
+  were unchanged. Cleanup restored A2 inactive, empty host nft tables,
+  original host resolver and the identical installed R2 helper.
+
+Regression evidence: 14 focused unit tests PASS; the prior disconnected
+namespace probe PASS (A/AAAA, CNAME, TTL expiry/admitted connection continuity,
+external DNS denial, per-tenant rollback); the prior real systemd lifecycle
+probe PASS including helper reapply, cold firewall failure and resolver
+failure refusing daemon startup. That regression ran at 20:14:10–20:14:17 UTC
+and cleaned up its host changes. The earlier five-minute timeout proof remains
+in the preceding R4 record; this rerun used the short expiry variant.
+
+Local evidence (ignored build workspace, synthetic metadata only):
+- `observe-host-final.jsonl` SHA256 `71a5be6a37343528b2ad999e751a1846853339dc02e54b4ebe9600c105a05d75`
+- `observe-enforce-regression.txt` SHA256 `828e6d1eb41754cfb5113e098da2107fe1937f13b9b12617413e9d9a9ab8519a`
+- `observe-kernel-regression.jsonl` SHA256 `ef731e9ea4e15d958c0d1ba893c2746e132c2f9b95853111e7e83d23024ebf96`
+- `observe-unit-final.txt` SHA256 `ebf27328d5c60c4bcb12b8847f660f24b6c3b414884da06a1ea6132d0338bb45`
+
+Initial probe repairs, not hidden acceptance: a malformed one-line canary
+nft table was corrected; missing JSON table comments caused safe refresh
+refusal until the chain discriminator replaced it. Periodic DNS refresh can
+legitimately change CDN snapshots; the deterministic known-set assertion now
+stops that timer and pins one independently resolved candidate address.
+Actual automatic refresh success is checked before this controlled assertion.
+All failed attempts also completed cleanup. This reinforces the documented
+conservative-snapshot limitation; it does not close any real CDN unknown.
+
+**Not claimed:** authentic IMAP/WhatsApp/LLM/Firebase acceptance, 72 hours of
+observation, complete service host attribution, any VPS deployment, or R4 done.
+No services VPS access and no paid LLM calls occurred. Two fresh independent
+integration reviewers returned **APPROVED** for this scratch mechanism after
+reading code and the transition/race/regression evidence. Both explicitly kept
+the authentic channel, 72-hour observation and VPS enforcement gates open.
+Separate final end-to-end reviewers also returned **APPROVED** for publication
+of the scratch mechanism and handoff. A final bounded-memory improvement
+streams multi-day journal export rather than buffering it: 14 tests and the
+whole host transition were rerun successfully. Both final reviewers again
+returned **APPROVED**, including the streaming delta, updated evidence hashes
+and explicit incomplete-export handling.
+
+#### R_4 observe-first operator handoff (proposal only; no VPS action here)
+
+For each profile independently, the authorized VPS session must complete the
+following. Inventory `r4-vps-destinations` below remains unchanged input.
+
+1. Map the immutable profile UID to its existing Unix user; verify identity,
+   daemon baseline, existing rules and root ownership. Compile a reviewed
+   candidate policy with `mode: observe` into a new staging directory. Use
+   the inventory's exact service names and port groups, not browser-only
+   domains, guessed wildcards or an unreviewed shared-IP expansion. Resolver
+   fields are still validated policy fields, but observe never applies them.
+   Record the policy hash and open closure rows before installing anything.
+2. Review the generated manifest and all-accept rules. Install the two
+   reviewed Python files under `/usr/local/libexec/mrcall-egress/`, root-owned,
+   not writable by tenants. Install generated artifacts at the manifest's
+   `/etc/mrcalld/egress/mc-<tag>/` (root-owned, no group/world write), with its
+   observer service and refresh service/timer under `/etc/systemd/system/`.
+   Do not install any enforce artifact, daemon drop-in or resolver file.
+   Start only `mrcall-observe-<tag>.service` and
+   `mrcall-observe-refresh-<tag>.timer`; confirm refresh success, unchanged
+   daemon PID/resolver, and no existing host rule was changed. Observe does
+   not override an existing firewall's restrictions. A reboot/restart needs
+   operator reattachment and a new complete observation window; there is no
+   implicit persistence/promotion or automatic acceptance.
+3. Before starting the 72-hour clock, establish root-controlled journal
+   retention for the complete window plus review; record boot ID and journal
+   cursor/start UTC. The kernel journal holds default packet-header metadata
+   only; its root export deliberately retains only the five fields above.
+   Export with `egress_observe.py events <canonical manifest> <UTC-start>`
+   (`YYYY-MM-DDTHH:MM:SSZ`), redirecting to a root-only evidence file. Use
+   `egress_observe.py report <canonical manifest>` to record refresh health
+   and outside/logged/suppressed packet counts. The logged counter counts
+   nft log attempts, **not guaranteed journal delivery**. Reconcile it with
+   retained records, monitor journal/kernel loss and the timer's success
+   history; a currently healthy report cannot certify a gap-free past.
+   `events` streams existing retained records, not a persistent collector;
+   require exit status zero, otherwise its partial export is incomplete.
+   Record periodic cursors/exports and counters throughout the window;
+   archive them before journal rotation. Any unexplained loss, restart,
+   refresh gap or material candidate change restarts the full window.
+4. Keep each profile in observe for **at least 72 continuous hours containing
+   one full accepted mail sync**. Exercise applicable unknown channels and
+   complete destination attribution/disabled-channel evidence from the
+   amendment's closure rows. Initial policy snapshots may report false
+   outside candidates for subdomains/CDNs; investigate them, never silently
+   allow everything. No packet sample or DNS answer proves hostname ownership.
+5. After two independent reviewers approve that profile's complete window,
+   closure rows and authentic M3 channel evidence, stage `mode: enforce` in
+   a separate directory. Snapshot the original files/state; stop only the
+   selected daemon and its observe timer/updater. Keep the policy directory
+   and its lock inode in place; **do not replace or delete `observe.lock`**.
+   Install the reviewed enforce artifacts, DNS binary/service and daemon
+   drop-in; its firewall loader uses the same lock. Clear only the selected
+   tenant's conntrack mark, reload systemd and start that daemon. Preserve
+   observation evidence. A full accepted mail cycle is required before the
+   next tenant's enforcement. No blanket restart or ruleset flush.
+6. On an enforcement anomaly, stop selected daemon, remove only its egress
+   drop-in, stop its DNS/firewall units, clear its selected conntrack mark,
+   and under the same policy lock delete only its nft table. Restore original
+   resolver/configuration and restart selected daemon; verify its functional
+   baseline and sibling invariants. Resume reviewed observe only after its
+   artifacts and independent services are restored; begin a new window.
+
+VPS observation status: **NOT STARTED by this session** for support, Mario
+Cafe124, Mario Gmail, Mario MrCall, production, Ivan and Riccardo. Each requires
+its own timestamps, policy hash, full-sync evidence, >=72h continuity, closure
+rows and review verdicts. Inventory alone and another profile's success do not
+satisfy those gates. No request to access or enforce the VPS is made here.
+
+**Observe-first scratch lease:** scratch VM **rilasciata** da R_4 alle
+2026-10-02T20:20:56Z. Final checks: no host nft table, A2 inactive, A1/P1 active,
+all temporary observer/enforce services and binaries removed; R2 helper hash
+unchanged. No further machine tests under this lease. Publication follows
+`git pull --rebase origin main && git push origin HEAD:main`.
 
 #### R_4 mechanism revision (two plan reviews APPROVED)
 

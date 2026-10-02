@@ -16,7 +16,7 @@ spec.loader.exec_module(policy)
 
 
 def fixture():
-    return {"profile_uid": "scratchR4A", "unix_uid": 2001,
+    return {"mode": "enforce", "profile_uid": "scratchR4A", "unix_uid": 2001,
             "resolver": "127.0.0.54", "upstream": "1.1.1.1",
             "endpoints": [{"suffix": "example.com", "tcp": [443], "udp": []}]}
 

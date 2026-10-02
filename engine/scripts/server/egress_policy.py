@@ -51,7 +51,9 @@ def host(value: object) -> str:
 
 
 def validate(raw: object) -> dict:
-    p = fields(raw, {"profile_uid", "unix_uid", "resolver", "upstream", "endpoints"})
+    p = fields(raw, {"mode", "profile_uid", "unix_uid", "resolver", "upstream", "endpoints"})
+    if p["mode"] not in ("observe", "enforce"):
+        raise PolicyError("explicit observe or enforce mode required")
     uid = p["profile_uid"]
     if not isinstance(uid, str) or not re.fullmatch(r"[A-Za-z0-9]{1,128}", uid):
         raise PolicyError("invalid profile uid")
@@ -93,12 +95,14 @@ def validate(raw: object) -> dict:
         if not rule["tcp"] and not rule["udp"]:
             raise PolicyError("endpoint has no permitted ports")
         clean.append(rule)
-    return dict(profile_uid=uid, unix_uid=unix_uid, resolver=str(resolver),
+    return dict(mode=p["mode"], profile_uid=uid, unix_uid=unix_uid, resolver=str(resolver),
                 upstream=str(upstream), endpoints=sorted(clean, key=lambda x: x["suffix"]))
 
 
 def compile_policy(raw: object) -> dict[str, str]:
     p = validate(raw)
+    if p["mode"] == "observe":
+        return compile_observe(p)
     tag = hashlib.sha256(p["profile_uid"].encode()).hexdigest()[:12]
     name = f"mc-{tag}"
     table = f"mc_egress_{tag}"
@@ -107,7 +111,8 @@ def compile_policy(raw: object) -> dict[str, str]:
     dnsunit = f"mrcall-dns-{tag}.service"
     unit = f"zylch-server@{p['profile_uid']}.service"
     # add/delete/recreate occur in one nft transaction, never a global flush.
-    nft = [f"add table inet {table}", f"delete table inet {table}", f"table inet {table} {{"]
+    nft = [f"add table inet {table}", f"delete table inet {table}", f"table inet {table} {{",
+           ' comment "mrcall mode=enforce"']
     dns = ["# Generated scratch policy; no global resolver changes.",
            "no-resolv", "no-hosts", "bind-interfaces", f"listen-address={p['resolver']}",
            "port=53", "user=nobody", "group=nogroup", "cache-size=0",
@@ -139,7 +144,7 @@ After=nftables.service
 
 [Service]
 Type=oneshot
-ExecStart=/usr/sbin/nft -f {root}/firewall.nft
+ExecStart=/usr/bin/flock -x {root}/observe.lock /usr/sbin/nft -f {root}/firewall.nft
 RemainAfterExit=yes
 # Deliberately no ExecStop: stopping a dependency must never open egress.
 """
@@ -176,6 +181,78 @@ BindReadOnlyPaths={root}/resolv.conf:/etc/resolv.conf
             "resolv.conf": f"nameserver {p['resolver']}\noptions timeout:2 attempts:2\n",
             firewall: firewall_text, dnsunit: dns_text, "50-egress.conf": dropin,
             "manifest.json": json.dumps(manifest, indent=2, sort_keys=True) + "\n"}
+
+
+def compile_observe(p: dict) -> dict[str, str]:
+    """All-accept discovery, independent of daemon and its DNS configuration."""
+    tag = hashlib.sha256(p["profile_uid"].encode()).hexdigest()[:12]
+    name, table = f"mc-{tag}", f"mc_egress_{tag}"
+    root = f"/etc/mrcalld/egress/{name}"
+    observer = f"mrcall-observe-{tag}.service"
+    refresh = f"mrcall-observe-refresh-{tag}.service"
+    timer = refresh.removesuffix(".service") + ".timer"
+    digest = hashlib.sha256(json.dumps(p, sort_keys=True).encode()).hexdigest()
+    marker = f"mrcall mode=observe policy={digest}"
+    nft = [f"add table inet {table}", f"delete table inet {table}",
+           f"table inet {table} {{", f' comment "{marker}"',
+           " counter outside_total { }", " counter outside_logged { }"]
+    for i, _ in enumerate(p["endpoints"]):
+        for family in (4, 6):
+            nft.append(f" set e{i}_{family} {{ type ipv{family}_addr; size 4096; }}")
+    nft.extend([" chain output {", "  type filter hook output priority 10; policy accept;",
+                f"  meta skuid {p['unix_uid']} jump observe_{digest}", " }", f" chain observe_{digest} {{",
+                "  ct direction reply counter accept"])
+    for i, entry in enumerate(p["endpoints"]):
+        for family, selector in ((4, "ip"), (6, "ip6")):
+            for proto in ("tcp", "udp"):
+                if entry[proto]:
+                    ports = ", ".join(map(str, entry[proto]))
+                    nft.append(f"  {selector} daddr @e{i}_{family} {proto} dport {{ {ports} }} counter accept")
+    # All other protocols are accepted too; discovery concerns TCP/UDP only.
+    nft.extend(["  meta l4proto { tcp, udp } counter name outside_total",
+                f'  meta l4proto {{ tcp, udp }} limit rate 10/second burst 20 packets counter name outside_logged log prefix "mc-obs-{tag} " level info',
+                "  counter accept", " }", "}"])
+    manifest = {"status": "scratch-experiment-not-production-approved", "tenant": name,
+                "table": table, "install_directory": root, "policy": p,
+                "observe_marker": marker, "observe_chain": f"observe_{digest}", "log_prefix": f"mc-obs-{tag} "}
+    return {"firewall.nft": "\n".join(nft) + "\n",
+            "manifest.json": json.dumps(manifest, indent=2, sort_keys=True) + "\n",
+            observer: f"""[Unit]
+Description=MrCall tenant observation {name}
+After=nftables.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/flock -x {root}/observe.lock /usr/sbin/nft -f {root}/firewall.nft
+RemainAfterExit=yes
+# No dependency on the daemon; no removal or denial on observer failure.
+""",
+            refresh: f"""[Unit]
+Description=MrCall observation candidate snapshot {name}
+After=network.target {observer}
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/python3 /usr/local/libexec/mrcall-egress/egress_observe.py refresh {root}/manifest.json
+TimeoutStartSec=45
+UMask=0077
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+ReadWritePaths={root}
+""",
+            timer: f"""[Unit]
+Description=MrCall observation candidate refresh timer {name}
+
+[Timer]
+OnActiveSec=1s
+OnUnitActiveSec=60s
+AccuracySec=1s
+Unit={refresh}
+
+[Install]
+WantedBy=timers.target
+"""}
 
 
 def unique_fields(pairs: list) -> dict:
