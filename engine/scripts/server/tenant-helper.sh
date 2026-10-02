@@ -210,7 +210,7 @@ ensure_company_store() { # ensure_company_store <group>
   install -d -m 2770 -o "$SVC_USER" -g "$g" "$MEMORY/$g"
 }
 
-# Refuse a pinned PYTHONPATH: a first migration falls back to the template
+# Refuse a pin or an override: a first migration falls back to the template
 # (tenant.conf removed, nothing chown'ed yet); an already migrated profile
 # keeps its drop-in (its tree is tenant-owned) and only the error stands.
 pin_refuse() {
@@ -362,22 +362,44 @@ create)
   #    Another drop-in that sets ExecStart (a pinned unit with its own
   #    command line) would win or lose against tenant.conf by file name
   #    alone: refuse, it has to be re-expressed by hand against the new
-  #    socket path first.
-  for f in "$dropin_d"/*.conf; do
-    [ -f "$f" ] && [ "$f" != "$dropin" ] || continue
-    grep -qE '^[[:space:]]*ExecStart=' "$f" && die "$f sets ExecStart; fold it into a migrated command line by hand (socket $RUN_ROOT/$uid/ws.sock) before migrating"
-  done
-  write_dropin "$group"
-  # 6b. a pinned PYTHONPATH must be inside the bound trees and readable by
-  #    the tenant, or the daemon would silently import the checkout; on a
-  #    refusal tenant.conf is removed so the unit stays on the template
-  #    (nothing has been chown'ed yet).
+  #    socket path first. Every drop-in systemd applies is read (the
+  #    template's `zylch-server@.service.d` and /run count too), and
+  #    `ExecStart =` is the same assignment to systemd.
   systemctl daemon-reload
-  pp=$(systemctl show -p Environment --value "$unit" | tr ' ' '\n' | sed -n 's/^PYTHONPATH=//p' | tail -n1)
+  while IFS= read -r f; do
+    [ -n "$f" ] && [ "$f" != "$dropin" ] && [ -f "$f" ] || continue
+    grep -qE '^[[:space:]]*ExecStart[[:space:]]*=' "$f" && die "$f sets ExecStart; fold it into a migrated command line by hand (socket $RUN_ROOT/$uid/ws.sock) before migrating"
+  done < <(systemctl show -p DropInPaths --value "$unit" | tr ' ' '\n')
+  write_dropin "$group"
+  # 6b. what systemd will actually run. On a refusal tenant.conf is removed
+  #    so a first migration stays on the template (nothing chown'ed yet).
+  systemctl daemon-reload
+  es=$(systemctl show -p ExecStart --value "$unit")
+  [ "$(grep -o 'argv\[\]=' <<< "$es" | wc -l)" = 1 ] && [[ "$es" == *"argv[]=$VENV/bin/zylch -p $uid serve --unix $RUN_ROOT/$uid/ws.sock ;"* ]] \
+    || pin_refuse "the unit's effective ExecStart is not tenant.conf's: something else overrides it (systemctl cat $unit)"
+  # 6c. a pinned PYTHONPATH must resolve inside the bound trees and be
+  #    readable by the tenant, or the daemon would silently import the
+  #    checkout: the sandbox hides every other path under /home, and
+  #    Python skips a missing entry. Resolved first — `releases/../x` and
+  #    a link out of the tree both start with the right prefix.
+  while IFS= read -r f; do
+    f=${f% (ignore_errors=*}
+    [ -n "$f" ] && [ "$f" != "$keyfile" ] || continue
+    grep -qsE '^[[:space:]]*PYTHONPATH[[:space:]]*=' "$f" && pin_refuse "$f sets PYTHONPATH where it cannot be checked; pin with Environment=PYTHONPATH=… in a drop-in"
+  done < <(systemctl show -p EnvironmentFiles --value "$unit")
+  envs=$(systemctl show -p Environment --value "$unit")
+  # an entry systemd prints quoted (a path with a space) is not split here
+  [ "$(grep -o 'PYTHONPATH=' <<< "$envs" | wc -l)" = "$(tr ' ' '\n' <<< "$envs" | grep -c '^PYTHONPATH=')" ] \
+    || pin_refuse "cannot read the unit's PYTHONPATH (quoted, or a path with a space)"
+  pp=$(tr ' ' '\n' <<< "$envs" | sed -n 's/^PYTHONPATH=//p' | tail -n1)
   IFS=: read -ra pparts <<< "$pp"
   for p in "${pparts[@]}"; do
     [ -n "$p" ] || continue
-    case "$p" in "$REPO"/*|"$RELEASES"/*) ;; *) pin_refuse "PYTHONPATH $p is outside $REPO and $RELEASES: the sandbox cannot see it";; esac
+    [[ "$p" = /* ]] || pin_refuse "PYTHONPATH $p is not absolute"
+    for q in "$p" "$p/zylch/__init__.py"; do
+      rp=$(realpath -e -- "$q" 2>/dev/null) || pin_refuse "PYTHONPATH $p: $q does not exist"
+      case "$rp" in "$REPO"/*|"$RELEASES"/*) ;; *) pin_refuse "PYTHONPATH $p resolves to $rp, outside $REPO and $RELEASES: the sandbox cannot see it";; esac
+    done
     runuser -u "$user" -- test -r "$p/zylch/__init__.py" || { pin_refuse "$user cannot read $p/zylch/__init__.py: chmod -R go=rX $RELEASES (runbook step 0), then create again"; }
   done
   # 7. runtime socket dir: per-uid 2750 <user>:caddy so the socket inherits
@@ -435,7 +457,10 @@ unmigrate)
   # path is repeatable; the caller has already run `rekey` back to the
   # shared key while the unit was stopped.
   systemctl stop "$unit" >/dev/null 2>&1 || true
-  rm -rf "$dropin_d" "$RUN_ROOT/$uid"; rm -f "$fragment"
+  # tenant.conf only: the operator's own drop-ins (a pinned release's
+  # PYTHONPATH) must survive, or the rolled-back unit runs the checkout
+  rm -f "$dropin"; rmdir "$dropin_d" 2>/dev/null || true
+  rm -rf "$RUN_ROOT/$uid"; rm -f "$fragment"
   [ -L "$RUN_ROOT/$uid.sock" ] && rm -f "$RUN_ROOT/$uid.sock"
   [ -d "$profile_dir" ] && chown -R --no-dereference "$SVC_USER:$SVC_USER" "$profile_dir"
   # a -wal/-shm the tenant left on the relocated store is 0660 <tenant>:<group>;
