@@ -1200,6 +1200,87 @@ before start, and rollback by `unstore` / `unmigrate`.
    Two reviewers must pass that probe. Its other drop-ins keep their
    current content.
 
+### M2 record — VPS rollout (2026-10-02)
+
+Executed under the CTO's compressed-rollout decision and explicit
+immediate-window instruction, from `main` **`499ca09`**. The earlier
+Monday proposal, per-day cadence and attendance requirement did not
+apply. This attempt **stopped at its first anomaly during the bootstrap
+verification**, before K3 unpinning or any 2a/2b operation.
+
+**Bootstrap completed.** The two explicit
+`systemctl start zylch-reconcile.service` invocations began at
+**11:50:45 UTC** and **11:51:12 UTC**. After each, `systemctl show`
+returned `Result=success`, `ExecMainStatus=0`; the unit journal was
+read. The first run used the old updater, pulled `e1e5f79` → `499ca09`,
+installed the bootstrap logrotate stub and new helper, and restarted all
+seven daemons. Its captured journal reports updater exit 0 and
+`done. (7 profiles; code_changed=1 dry_run=0 prune=0)`. The second run
+used the new on-disk updater. The immediately captured second journal
+contains successful service completion but lacks the updater's detailed
+summary; an additional tagged-journal check was attempted below.
+
+Before and after each run, production's ledger was read as `mrcalld`
+with SQLite `mode=ro`: ten closed calls and zero unresolved calls.
+Local and public `/healthz` returned HTTP 200,
+`runtime=engine_listener`, `calls_available=true`. Unsigned
+`/vonage/answer`, `/vonage/event`, `/openai/live` returned 401, 401,
+400 respectively on both paths. No paid call was made. Production's
+three operator drop-ins remain byte-identical to the pre-window record;
+its restart was part of the explicitly authorized reconcile, not an
+identity migration.
+
+The post-bootstrap checks actually run and passed:
+
+- Service checkout: `499ca09`; installed helper byte-identical to
+  `engine/scripts/server/tenant-helper.sh` (`cmp` exit 0).
+- `cat /etc/logrotate.d/mrcalld`: generated explicit paths for the seven
+  unmigrated profiles, one `su mrcalld mrcalld` stanza, no old glob.
+- `logrotate -d /etc/logrotate.d/mrcalld` and
+  `logrotate -d /etc/logrotate.conf`: exit 0, no configuration errors or
+  duplicate log entries. Only the normal debug-mode warning and
+  `size`-overrides-`daily` note; no rotation was executed.
+- All seven daemon units active as `mrcalld`; installed helper `list`
+  empty; `systemctl is-active zylch-provisiond` → `active`.
+
+**First anomaly and stop.** The lead's supplemental
+`provision-check.py` exited 1 with
+`STOP AT FIRST ANOMALY: IndexError: list index out of range`. It imports
+the bootstrap runner to reuse safe logging. That runner's top-level
+dispatch reads `sys.argv[1]` without an `if __name__ == '__main__'`
+guard; the supplemental process had no mode argument, so importing it
+triggered the runner before the follow-up journal or authenticated GET
+could execute. This is a probe implementation failure, not evidence of
+a daemon or provisiond failure. The lead stopped runtime work rather
+than bypassing the failed check. The scratch copy of the runner now has
+the `__main__` guard; compilation and an isolated dispatch test pass.
+The installed root runner remains the failed version as evidence: no
+production probe was retried and the rollout did not resume.
+The supplemental tagged-journal check
+and authenticated provisiond GET remain unverified for this attempt;
+the October 2 preflight's earlier authenticated result is not reused as
+post-bootstrap proof.
+
+**State at stop.** A read-only state check still shows all seven units
+active as `mrcalld`, zero tenant-table rows and production's three
+operator drop-in hashes unchanged. The three K3 pins remain in place.
+No drop-in was moved to `/root/k3-pins-backup/`, no company-store
+relocation or `store`/`unstore` ran, and no profile `create`, rekey or
+`unmigrate` ran. Therefore no company/profile rollback was necessary.
+Production was not migrated. Steps 2–5 of the instruction, including
+the read-only voice allowlist/path checks scheduled as step 5, were
+not executed after the stop. No key, credential or token value was
+printed or written into this record.
+
+Evidence: root-only `/root/m2-rollout-20261002/` holds the runner,
+supplemental probe, sanitized `rollout.log`, baseline and anomaly record.
+The narrow delivery brief/plan are under
+`/tmp/mrcall-ai-kit/sandbox-rollout/`; the existing isolation brief and
+this plan remain the repository work trace. The next attempt must install
+the corrected scratch runner and re-establish bootstrap acceptance
+before proceeding in the same authorized order. This record does not
+claim completion of M2 or waive the first-anomaly stop rule.
+
 ## M3 — Egress bound per daemon
 
 Owner: release-engineer. After M2 is stable on all six; own rollback.
