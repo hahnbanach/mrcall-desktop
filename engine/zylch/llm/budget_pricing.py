@@ -22,8 +22,8 @@ class BudgetError(RuntimeError):
 
 
 # Direct-transport prices come from the one price source (`roles/prices.py`:
-# the model snapshot's direct ids, 10a's allowlist only for an id no snapshot
-# prices). A read-only mapping view that looks each id up when asked, so
+# the model snapshot's direct ids, a dated id as its alias; 10a's allowlist
+# went at the switch-over). A read-only mapping view that looks each id up when asked, so
 # `from budget_pricing import PRICES`, `model in PRICES` and `PRICES[model]`
 # keep working and see a snapshot layer installed after import.
 PRICES = priced("direct")

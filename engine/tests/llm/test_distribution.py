@@ -161,6 +161,20 @@ def test_a_blocked_download_uses_the_last_good_copy_then_the_build_copies(build,
     assert cached(other) == {}
 
 
+def test_an_old_table_is_used_while_it_passes_the_gates(build, profile):
+    """The job restamps table.json only when a decision changes: a table resolved
+    long ago, published with today's snapshot, is a valid copy, never refused or
+    replaced by the build copy for its age (a copy's age is its snapshot's read_at)."""
+    old = copy.deepcopy(build["table"])
+    old.update(resolved_at="2020-01-01T00:00:00Z", catalogue_read_at="2020-01-01T00:00:00Z")
+    old = reordered(gates.stamped(old))
+    branch = Published(table_json=(old, '"t1"'), snapshot_json=(build["snapshot"], '"s1"'))
+    assert distribution.refresh(profile, fetch=branch)["table"] == "downloaded"
+    assert table.document() == old
+    restart()
+    assert distribution.load(profile)["table"] == "cached" and table.document() == old
+
+
 def test_loading_a_profile_with_nothing_cached_leaves_the_copies_in_force(build, profile):
     """At engine start that is the build copies; nothing is reset to them later."""
     in_force = reordered(build["table"])

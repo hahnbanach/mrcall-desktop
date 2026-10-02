@@ -11,10 +11,11 @@ company memory:
   ``claude-``, the OpenRouter vendor prefixes, ``gpt-``, dated snapshot ids)
   on a non-comment line must be covered by a row of
   ``tests/fixtures/llm/model_name_inventory.json`` with the same file and
-  literal — or lie in one of the two files allowed whole by exact path, the
-  role files the resolver reads and writes (``requirements.json``,
-  ``resolved.json``), or, since milestone 10's published contract, in the
-  snapshot it writes (``snapshot.json``), the build copy of the decision
+  literal — or lie in one of the files allowed whole by exact path: the role
+  file the resolver reads (``requirements.json``; 10a's ``resolved.json`` was
+  the second until the switch-over deleted it, slice S6), or, since milestone
+  10's published contract, in the snapshot it writes (``snapshot.json``), the
+  build copy of the decision
   record it writes and the engine reads at run time (``table.json``, slice
   S6) or the contract's two examples and protocol document (``contract/``):
   data and documentation no code takes a model from; the resolver's code beside them is held to rows like any
@@ -72,12 +73,12 @@ MANIFEST = ENGINE_ROOT / "tests" / "fixtures" / "llm" / "model_name_inventory.js
 PURPOSES = frozenset(
     {"default", "adapter", "price", "snapshot", "placeholder", "label", "doc", "voice"}
 )
-# The two files the brief allows whole: the requirements and the resolved table;
-# and the contract's data: the snapshot, the decision record's build copy, the
-# two examples, the protocol document.
+# The file the brief allows whole: the requirements (10a's resolved table, the
+# second, is deleted since the switch-over); and the contract's data: the
+# snapshot, the decision record's build copy, the two examples, the protocol
+# document.
 ROLE_FILES = (
     "zylch/llm/roles/requirements.json",
-    "zylch/llm/roles/resolved.json",
     "zylch/llm/roles/snapshot.json",
     "zylch/llm/roles/table.json",
     "zylch/llm/roles/contract/table.example.json",

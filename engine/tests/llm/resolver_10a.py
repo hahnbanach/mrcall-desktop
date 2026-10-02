@@ -7,8 +7,8 @@ slice S2). It is kept only for the one-time differential against the kit
 `fixtures/llm/resolver/requirements-10a.json`). It also backed the check
 that the frozen `roles/resolved.json` followed from those inputs
 (`test_resolved_table.py`), until slice S6 moved every reader of the picks to
-the published `table.json` and replaced that check with `test_model_table.py`.
-Nothing under `zylch/` imports it.
+the published `table.json`, replaced that check with `test_model_table.py`
+and deleted `resolved.json`. Nothing under `zylch/` imports it.
 
 Ported from `malemi/mrcall-ai-kit` (`shared/scripts/resolve-models.py`,
 `c88b024`, MIT), and extended for the engine. A role declares requirements,

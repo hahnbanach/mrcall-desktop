@@ -2,8 +2,8 @@
 
 Moved from `test_resolver.py` with 10a's resolver (`resolver_10a.py`) when
 resolver v2 replaced it (milestone 10, slice S2): the port it proves is the
-10a mechanism v2 builds on, and the frozen `resolved.json` still comes from
-it until the switch-over. It runs the kit's `shared/scripts/resolve-models.py`
+10a mechanism v2 builds on, and the frozen `resolved.json` came from it until
+the switch-over deleted it (slice S6). It runs the kit's `shared/scripts/resolve-models.py`
 and the port on the 2026-10-01 fixture (`fixtures/llm/resolver/`) under the
 kit's own requirements, and is skipped where the kit's checkout is absent.
 """

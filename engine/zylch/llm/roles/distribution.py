@@ -21,7 +21,12 @@ engine:
 - falls back, file by file, to the last good copy, then to the build copies
   beside this module: a blocked or failed download, an HTTP error, a body that
   is not JSON or that fails a gate never replaces what is in force, and is
-  logged; nothing is ever picked by name or at random.
+  logged; nothing is ever picked by name or at random;
+- never refuses a copy for its age: the job stamps `table.json` again only
+  when a decision changes, so a stable table keeps an old `resolved_at` and
+  stays valid as long as it passes the gates against the snapshots it is read
+  with; a copy's age is its snapshot's `read_at`, which only the release gate
+  checks (`contract/README.md`).
 
 What is in force feeds the two readers: `catalogue.set_layers(current,
 previous)` puts the downloaded or last good snapshot, then the one before

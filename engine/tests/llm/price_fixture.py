@@ -61,10 +61,26 @@ MODELS = (
 SUCCESSOR, SUCCESSOR_DIRECT = "anthropic/claude-sonnet-6", "claude-sonnet-6"
 # K3's pinned endpoint (k3_reasoning.ENDPOINT).
 K3_ENDPOINT = "digitalocean"
-# The OpenRouter rates 10a billed (requirements.json's allowlist) where they
-# were not the catalogue's: GLM 5.2's, and K3's provider-pinned rate, which
-# `as_billed_by_10a` writes as K3's model-level price and its pinned endpoint's.
+# The OpenRouter rates 10a billed (requirements.json's allowlist, removed at the
+# switch-over, slice S6) where they were not the catalogue's: GLM 5.2's, and
+# K3's provider-pinned rate, which `as_billed_by_10a` writes as K3's model-level
+# price and its pinned endpoint's.
 BILLED_10A = {GLM_5_2: ("0.6", "2"), K3: ("2.648138063", "13.28272425")}
+# The eleven direct ids 10a billed (the same allowlist) and their rates, which
+# are the catalogue's `anthropic` endpoint prices: the snapshot keeps each one.
+BILLED_10A_DIRECT = {
+    "claude-opus-5": ("5", "25"),
+    "claude-opus-4-7": ("5", "25"),
+    "claude-opus-4-6": ("5", "25"),
+    "claude-opus-4-5": ("5", "25"),
+    "claude-opus-4-5-20251101": ("5", "25"),
+    "claude-sonnet-5": ("2", "10"),
+    "claude-sonnet-4-6": ("3", "15"),
+    "claude-sonnet-4-5": ("3", "15"),
+    "claude-sonnet-4-5-20250929": ("3", "15"),
+    "claude-haiku-4-5": ("1", "5"),
+    "claude-haiku-4-5-20251001": ("1", "5"),
+}
 
 
 def built() -> dict:

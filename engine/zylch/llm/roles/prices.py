@@ -14,13 +14,14 @@ run-time distribution puts in front, newest first, then the build copy
   `<alias>-YYYYMMDD` at its alias's. The direct transport reserves at the
   list price; there is no provider cap to protect, so no margin.
 
-Until the switch-over to the measured table, `requirements.json`'s
-`allowlist` — milestone 10a's billed rows — still answers for an id no
-snapshot layer prices, on its own transport. Every id a snapshot prices is
-priced by the snapshot, so 10a's billed rates that were not catalogue prices
-give way to the catalogue's. The resolved table (`resolved.json`) is no
-longer a price source: the snapshot prices every catalogue model, 10a's
-picks included.
+Milestone 10a's two other price inputs are gone since the switch-over to the
+measured table (slice S6): `requirements.json`'s `allowlist`, the billed rows
+that answered, on their own transport, for an id no snapshot layer priced,
+and the resolved table (`resolved.json`). The snapshot prices every catalogue
+model, 10a's picks and every model its allowlist billed included, so 10a's
+billed rates that were not catalogue prices have given way to the
+catalogue's, and a model a profile saved stays priced as long as one
+snapshot layer lists it.
 
 An id in none of them has no price; callers refuse it with their own message.
 Prices are `Decimal`, read from the JSON text, never from a float.
@@ -36,7 +37,6 @@ from collections.abc import Iterator, Mapping
 from decimal import Decimal
 from functools import lru_cache
 from pathlib import Path
-from types import MappingProxyType
 
 from . import catalogue
 
@@ -52,37 +52,21 @@ def _load(name: str) -> dict:
     return json.loads((HERE / name).read_text(encoding="utf-8"), parse_float=Decimal)
 
 
-def _rate(price: dict) -> Rate:
-    return Decimal(str(price["input"])), Decimal(str(price["output"]))
-
-
-@lru_cache(maxsize=None)
-def _allowlist(transport: str) -> MappingProxyType:
-    """10a's billed rows on `transport`, which answer only for an id no snapshot prices."""
-    rows = _load("requirements.json").get("allowlist", {})
-    return MappingProxyType(
-        {
-            model: _rate(row["price"])
-            for model, row in rows.items()
-            if row.get("transport") == transport
-        }
-    )
-
-
 def price(model: object, transport: str) -> Rate | None:
     """``(input, output)`` per million tokens for `model` on `transport`, or None."""
     if transport not in TRANSPORTS:
         raise ValueError(f"Unknown priced transport {transport!r}")
     if not isinstance(model, str) or not model:
         return None
-    return catalogue.rates(model, transport) or _allowlist(transport).get(model)
+    return catalogue.rates(model, transport)
 
 
 class Priced(Mapping):
     """Read-only ``{id: (input, output)}`` of every priced id on a transport.
 
     Nothing is copied: each lookup asks `price`, and iteration lists the ids
-    of the layers in force, then the allowlist's, each once."""
+    of the layers in force, newest layer first, each id once however many
+    layers list it."""
 
     def __init__(self, transport: str):
         if transport not in TRANSPORTS:
@@ -101,7 +85,7 @@ class Priced(Mapping):
     def __iter__(self) -> Iterator[str]:
         section = SECTIONS[self.transport]
         listed = [model for doc in catalogue.layers() for model in doc.get(section, {})]
-        for model in dict.fromkeys(listed + list(_allowlist(self.transport))):
+        for model in dict.fromkeys(listed):
             if model in self:
                 yield model
 
