@@ -22,6 +22,28 @@
       "ceiling": 20
     }
   },
+  "_about_policy": "Resolver v2 (milestone 10): excluded_families are matched as a vendor (the part of a catalogue id, canonical_slug or alias target before the first '/') plus a token contained in the part after it; margin multiplies the model-level catalogue price into OpenRouter's max_price and the reservation; provider_policy.quantizations admits endpoints by declared quantization (one that declares none is 'unknown'); excluded_endpoint_variants are service tiers never admitted (a segment of the endpoint tag after the provider).",
+  "excluded_families": [
+    {
+      "vendor": "anthropic",
+      "token": "haiku"
+    }
+  ],
+  "margin": 1.25,
+  "provider_policy": {
+    "quantizations": [
+      "int8",
+      "fp8",
+      "mxfp8",
+      "fp16",
+      "bf16",
+      "fp32",
+      "unknown"
+    ]
+  },
+  "excluded_endpoint_variants": [
+    "flex"
+  ],
   "roles": {
     "MNEMONIC": {
       "rule": "maximise",

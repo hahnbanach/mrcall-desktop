@@ -13,7 +13,10 @@ company memory:
   ``tests/fixtures/llm/model_name_inventory.json`` with the same file and
   literal — or lie in one of the two files allowed whole by exact path, the
   role files the resolver reads and writes (``requirements.json``,
-  ``resolved.json``); the resolver's code beside them is held to rows like any
+  ``resolved.json``), or, since milestone 10's published contract, in the
+  snapshot it writes (``snapshot.json``) or the contract's two examples and
+  protocol document (``contract/``): data and documentation no code takes a
+  model from; the resolver's code beside them is held to rows like any
   other file, docstrings included. Rows match by ``(file, literal)`` with multiplicity; their line is
   informational, so an edit elsewhere in a file does not break the test, but
   a second copy of an allowed name in the same file does;
@@ -68,8 +71,16 @@ MANIFEST = ENGINE_ROOT / "tests" / "fixtures" / "llm" / "model_name_inventory.js
 PURPOSES = frozenset(
     {"default", "adapter", "price", "snapshot", "placeholder", "label", "doc", "voice"}
 )
-# The two files the brief allows whole: the requirements and the resolved table.
-ROLE_FILES = ("zylch/llm/roles/requirements.json", "zylch/llm/roles/resolved.json")
+# The two files the brief allows whole: the requirements and the resolved table;
+# and the contract's data: the snapshot, the two examples, the protocol document.
+ROLE_FILES = (
+    "zylch/llm/roles/requirements.json",
+    "zylch/llm/roles/resolved.json",
+    "zylch/llm/roles/snapshot.json",
+    "zylch/llm/roles/contract/table.example.json",
+    "zylch/llm/roles/contract/snapshot.example.json",
+    "zylch/llm/roles/contract/protocol-v2.md",
+)
 # Out of scope by rule; their rows are listed with purpose ``voice``.
 VOICE = ("zylch/services/voice/", "zylch/llm/openai_voice.py")
 
