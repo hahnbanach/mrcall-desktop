@@ -26,6 +26,18 @@ margin, the cap OpenRouter's `max_price` enforces, so a premium endpoint
 priced above it is never one a request can reach. A model with no
 model-level price has no cap and no admitted endpoint.
 
+**The screen** (`screen`, `exclusion`) keeps the catalogue entries any role
+may rank, before scores: not a variant, not an alias, no announced
+`expiration_date`, not of an excluded family (`family_of`: the vendor and
+token matched on the id, on the `canonical_slug` — Haiku's slug puts the
+version first — and on an alias's `alias_target.slug`), tools and the
+minimum context, a fixed model-level input and output price, and at least
+one admitted endpoint. An alias or an entry with an announced expiry stays
+priced in the snapshot (an explicit choice keeps running); it is only
+never ranked, picked or measured. A kept entry carries its direct id when
+one of its endpoints is tagged `anthropic` (the direct transport's), else
+None.
+
 Pure: no file, network or environment access; prices are `Decimal`, read
 from the payloads' decimal strings, never from a float.
 """
@@ -36,10 +48,13 @@ import json
 from collections import Counter
 from decimal import Decimal, InvalidOperation
 
+from .gates import direct_id, excluded_family
+
 MILLION = Decimal(10) ** 6
 ALIAS = "~"
 UP = 0
 UNKNOWN = "unknown"
+DIRECT_TAG = "anthropic"
 
 
 class Refused(Exception):
@@ -227,3 +242,73 @@ def admitted(entry: dict, endpoints: list[dict], rules: dict) -> list[dict]:
             continue
         out.append(endpoint)
     return out
+
+
+def family_of(entry: dict, families: list) -> dict | None:
+    """The excluded family `entry` belongs to through its id, its
+    `canonical_slug` or, for an alias, its target's slug; None when none."""
+    target = entry.get("alias_target") if isinstance(entry.get("alias_target"), dict) else {}
+    for name in (entry.get("id"), entry.get("canonical_slug"), target.get("slug")):
+        family = excluded_family(name, families)
+        if family:
+            return family
+    return None
+
+
+def exclusion(entry: dict, listed: list[dict] | None, req: dict, rules: dict) -> str | None:
+    """Why `entry` can be no candidate, or None when the screen keeps it.
+
+    `listed` is its endpoint list as read (None when its endpoints were not
+    read), `rules` the provider policy."""
+    model, common = entry.get("id"), req["common"]
+    if not isinstance(model, str) or not model:
+        return "no id"
+    if is_variant(model, common):
+        return "a variant"
+    if model.startswith(ALIAS):
+        return "an alias"
+    if entry.get("expiration_date"):
+        return f"expires on {entry['expiration_date']}"
+    family = family_of(entry, req["excluded_families"])
+    if family:
+        return f"of the excluded family {family['vendor']} + {family['token']}"
+    if common["tools"] and "tools" not in strings(entry.get("supported_parameters")):
+        return "no tools"
+    context = score(entry.get("context_length"))
+    if context is None or context < common["min_context"]:
+        return f"a context under {common['min_context']}"
+    if price_cap(entry, rules["margin"]) is None:
+        return "no fixed price"
+    if listed is None:
+        return "its endpoints were not read"
+    if not admitted(entry, listed, rules):
+        return "no admitted endpoint"
+    return None
+
+
+def screen(catalogue: list, endpoints: dict[str, list[dict]], req: dict) -> tuple[list, dict]:
+    """The entries the screen keeps, in catalogue order, as `{entry, id,
+    price, input_price, direct_id}` (prices per million, output and input),
+    and `{id: reason}` for every entry it drops."""
+    rules = policy(req)
+    kept, dropped = [], {}
+    for entry in catalogue:
+        if not isinstance(entry, dict):
+            continue
+        listed = endpoints.get(entry.get("id"))
+        reason = exclusion(entry, listed, req, rules)
+        if reason:
+            dropped[str(entry.get("id"))] = reason
+            continue
+        own = any(endpoint.get("tag") == DIRECT_TAG for endpoint in listed)
+        pricing = entry["pricing"]
+        kept.append(
+            {
+                "entry": entry,
+                "id": entry["id"],
+                "price": per_million(pricing.get("completion")),
+                "input_price": per_million(pricing.get("prompt")),
+                "direct_id": direct_id(entry["id"]) if own else None,
+            }
+        )
+    return kept, dropped

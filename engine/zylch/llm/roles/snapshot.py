@@ -46,7 +46,6 @@ PRICES = (
     ("cache_read", "input_cache_read"),
     ("cache_write", "input_cache_write"),
 )
-DIRECT_TAG = "anthropic"
 
 
 def text(price: Decimal | None) -> str | None:
@@ -135,7 +134,7 @@ def build(catalogue: list, endpoints: dict[str, list[dict]], rules: dict, read_a
             "metadata": metadata(entry, admitted, entry.get("context_length")),
             "endpoints": None if admitted is None else _endpoint_rows(admitted),
         }
-        own = [e for e in listed or [] if e.get("tag") == DIRECT_TAG]
+        own = [e for e in listed or [] if e.get("tag") == candidates.DIRECT_TAG]
         if direct_id(model) and own:
             direct[direct_id(model)] = {
                 "catalogue_id": model,
