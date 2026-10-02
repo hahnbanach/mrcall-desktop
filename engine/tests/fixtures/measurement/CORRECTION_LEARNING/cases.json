@@ -1,0 +1,417 @@
+{
+  "schema": 1,
+  "role": "CORRECTION_LEARNING",
+  "builder": "zylch.services.correction_learning.learn_from_corrections",
+  "memories": {
+    "tipografia": {
+      "rules": [
+        "Dai sempre del Lei ai clienti nelle email.",
+        "Firma le email come \"Lo staff della Tipografia Esempio\"."
+      ],
+      "facts": [
+        {"category": "biglietti da visita", "key": "Prezzo 500 copie", "value": "45 EUR + IVA"},
+        {"category": "biglietti da visita", "key": "Tempi di consegna", "value": "3 giorni lavorativi"},
+        {"category": "volantini", "key": "Ordine minimo", "value": "250 copie"},
+        {"category": "spedizioni", "key": "Costo spedizione Italia", "value": "9,90 EUR"}
+      ]
+    },
+    "studio": {
+      "rules": [
+        "Always sign customer emails as \"The Example Studio team\".",
+        "Never share internal cost breakdowns with customers."
+      ],
+      "facts": [
+        {"category": "white-label", "key": "Day rate", "value": "700 EUR/day"},
+        {"category": "white-label", "key": "Revision rounds", "value": "2 rounds included"},
+        {"category": "workshops", "key": "Half-day workshop", "value": "1,200 EUR"},
+        {"category": "support", "key": "Opening hours", "value": "Mon-Fri 9:00-18:00"}
+      ]
+    }
+  },
+  "cases": [
+    {
+      "id": "correction_learning-01",
+      "lang": "it",
+      "input": {
+        "judge": "rule",
+        "memory": "tipografia",
+        "correction": {
+          "tool_name": "send_email",
+          "proposed": {"to": "s.bellini@example-ristorante.example", "subject": "Re: Problema stampa menu", "body": "Gentile Sig. Bellini,\nci dispiace per il problema con la stampa dei menu. Se preferisce, la richiamiamo noi in giornata per risolverlo.\nCordiali saluti,\nLo staff della Tipografia Esempio"},
+          "edited": {"to": "s.bellini@example-ristorante.example", "subject": "Re: Problema stampa menu", "body": "Gentile Sig. Bellini,\nci dispiace per il problema con la stampa dei menu. Per l'assistenza ci scriva pure a questo indirizzo: non facciamo richiamate telefoniche, ma rispondiamo a tutte le email entro 24 ore.\nCordiali saluti,\nLo staff della Tipografia Esempio"}
+        }
+      },
+      "label": {"is_durable_rule": true, "rule_must_contain": [["mail", "scriv", "posta"]]},
+      "critical": false,
+      "why": "The user removed a callback offer and stated a standing support policy (email only, no phone callbacks), the tool description's own example of a durable rule; the rule must point customers to writing/email."
+    },
+    {
+      "id": "correction_learning-02",
+      "lang": "en",
+      "input": {
+        "judge": "rule",
+        "memory": "studio",
+        "correction": {
+          "tool_name": "send_email",
+          "proposed": {"to": "priya@example-architects.example", "subject": "Re: Printed samples", "body": "Hi Priya,\nyour printed samples will arrive tomorrow.\nBest regards,\nThe Example Studio team"},
+          "edited": {"to": "priya@example-architects.example", "subject": "Re: Printed samples", "body": "Hi Priya,\nyour printed samples are packed. As a rule we only confirm a delivery date once the courier has collected the parcel, so we'll email you the tracking number as soon as it's picked up.\nBest regards,\nThe Example Studio team"}
+        }
+      },
+      "label": {"is_durable_rule": true, "rule_must_contain": [["courier", "carrier", "collect", "pick", "dispatch", "tracking"]]},
+      "critical": false,
+      "why": "The edit replaces a promised delivery date with a policy the user states as general ('As a rule'): no delivery date before the courier has the parcel."
+    },
+    {
+      "id": "correction_learning-03",
+      "lang": "it",
+      "input": {
+        "judge": "rule",
+        "memory": "tipografia",
+        "correction": {
+          "tool_name": "send_email",
+          "proposed": {"to": "ordini@pasticceria-dolce.example", "subject": "Re: Modalità di pagamento", "body": "Gentile cliente,\nil pagamento può avvenire anche in contrassegno alla consegna.\nCordiali saluti,\nLo staff della Tipografia Esempio"},
+          "edited": {"to": "ordini@pasticceria-dolce.example", "subject": "Re: Modalità di pagamento", "body": "Gentile cliente,\nil pagamento è solo anticipato tramite bonifico: non accettiamo il contrassegno.\nCordiali saluti,\nLo staff della Tipografia Esempio"}
+        }
+      },
+      "label": {"is_durable_rule": true, "rule_must_contain": [["bonifico", "anticipat", "contrassegno"]]},
+      "critical": false,
+      "why": "The user replaced an offered payment method with a general payment policy ('solo anticipato', 'non accettiamo il contrassegno') that holds for every customer."
+    },
+    {
+      "id": "correction_learning-04",
+      "lang": "en",
+      "input": {
+        "judge": "rule",
+        "memory": "studio",
+        "correction": {
+          "tool_name": "send_email",
+          "proposed": {"to": "sam@example-cafe.example", "subject": "Re: Login issue", "body": "Hi Sam,\nsorry about the login issue. Feel free to call our support line on +44 20 0000 0456 any time.\nBest regards,\nThe Example Studio team"},
+          "edited": {"to": "sam@example-cafe.example", "subject": "Re: Login issue", "body": "Hi Sam,\nsorry about the login issue. For support, please use the help form in your client area: we no longer offer phone support.\nBest regards,\nThe Example Studio team"}
+        }
+      },
+      "label": {"is_durable_rule": true, "rule_must_contain": [["form", "client area", "portal"]]},
+      "critical": false,
+      "why": "A phone-support offer removed and the user states phone support no longer exists; the general replacement, the help form, is what the rule must carry."
+    },
+    {
+      "id": "correction_learning-05",
+      "lang": "it",
+      "input": {
+        "judge": "rule",
+        "memory": "tipografia",
+        "correction": {
+          "tool_name": "send_email",
+          "proposed": {"to": "info@cartoleria-verdi.example", "subject": "Re: Listino prezzi", "body": "Buongiorno,\nle allego il nostro listino prezzi completo.\nCordiali saluti,\nLo staff della Tipografia Esempio"},
+          "edited": {"to": "info@cartoleria-verdi.example", "subject": "Re: Listino prezzi", "body": "Buongiorno,\nil listino prezzi lo inviamo solo ai rivenditori registrati sul nostro portale: le basta completare la registrazione e lo riceverà subito.\nCordiali saluti,\nLo staff della Tipografia Esempio"}
+        }
+      },
+      "label": {"is_durable_rule": true, "rule_must_contain": [["registr", "rivendit"]]},
+      "critical": false,
+      "why": "Sending the price list replaced by a general condition ('solo ai rivenditori registrati'), a policy for every future request."
+    },
+    {
+      "id": "correction_learning-06",
+      "lang": "en",
+      "input": {
+        "judge": "rule",
+        "memory": "studio",
+        "correction": {
+          "tool_name": "send_email",
+          "proposed": {"to": "laura@example-boutique.example", "subject": "Re: Delayed delivery", "body": "Hi Laura,\nwe're sorry for the delay. As a gesture of goodwill, we can offer you 10% off your next project.\nBest regards,\nThe Example Studio team"},
+          "edited": {"to": "laura@example-boutique.example", "subject": "Re: Delayed delivery", "body": "Hi Laura,\nwe're sorry for the delay. Please note that we never offer discounts by email: any commercial conditions are handled by our sales team.\nBest regards,\nThe Example Studio team"}
+        }
+      },
+      "label": {"is_durable_rule": true, "rule_must_contain": [["discount", "sales team", "commercial"]]},
+      "critical": false,
+      "why": "A discount offer removed and replaced by a policy the user states as general ('we never offer discounts by email')."
+    },
+    {
+      "id": "correction_learning-07",
+      "lang": "it",
+      "input": {
+        "judge": "rule",
+        "memory": "tipografia",
+        "correction": {
+          "tool_name": "send_email",
+          "proposed": {"to": "a.rossi@example-fiori.example", "subject": "Re: Biglietti da visita", "body": "Gentile Sig.ra Rossi,\nle confermiamo la spedizone dei biglietti da visita per domani.\nCordiali saluti,\nLo staff della Tipografia Esempio"},
+          "edited": {"to": "a.rossi@example-fiori.example", "subject": "Re: Biglietti da visita", "body": "Gentile Sig.ra Rossi,\nle confermiamo la spedizione dei biglietti da visita per domani.\nCordiali saluti,\nLo staff della Tipografia Esempio"}
+        }
+      },
+      "label": {"is_durable_rule": false},
+      "critical": false,
+      "why": "A one-letter typo fix ('spedizone'); the tool description says typo fixes are never durable rules."
+    },
+    {
+      "id": "correction_learning-08",
+      "lang": "en",
+      "input": {
+        "judge": "rule",
+        "memory": "studio",
+        "correction": {
+          "tool_name": "send_email",
+          "proposed": {"to": "priya@example-architects.example", "subject": "Re: Display stands", "body": "Hi Priya,\nwe can deliver the display stands on Friday morning.\nBest regards,\nThe Example Studio team"},
+          "edited": {"to": "priya@example-architects.example", "subject": "Re: Display stands", "body": "Hi Priya,\nwe can deliver the display stands on Friday morning. As agreed with you on the phone, the driver will call you 30 minutes before arriving.\nBest regards,\nThe Example Studio team"}
+        }
+      },
+      "label": {"is_durable_rule": false},
+      "critical": true,
+      "why": "The added sentence is an arrangement made with this one customer ('as agreed with you'); as a rule it would promise every customer a driver's call."
+    },
+    {
+      "id": "correction_learning-09",
+      "lang": "it",
+      "input": {
+        "judge": "rule",
+        "memory": "tipografia",
+        "correction": {
+          "tool_name": "send_whatsapp",
+          "proposed": {"phone_number": "+39 333 000 0157", "message": "Grazie per l'ordine dei volantini, buona giornata!"},
+          "edited": {"phone_number": "+39 333 000 0157", "message": "Grazie per l'ordine dei volantini e in bocca al lupo per l'inaugurazione del nuovo negozio! Buona giornata!"}
+        }
+      },
+      "label": {"is_durable_rule": false},
+      "critical": true,
+      "why": "A personal wish for this customer's shop opening; a personal detail is not a policy, and as a rule it would congratulate every customer on an opening."
+    },
+    {
+      "id": "correction_learning-10",
+      "lang": "en",
+      "input": {
+        "judge": "rule",
+        "memory": "studio",
+        "correction": {
+          "tool_name": "send_email",
+          "proposed": {"to": "tom@example-cafe.example", "subject": "Final logo files", "body": "Hi Tom,\nthe final logo files are attached.\nBest regards,\nExample Studio"},
+          "edited": {"to": "tom@example-cafe.example", "subject": "Final logo files", "body": "Hi Tom,\nthe final logo files are attached.\nBest regards,\nThe Example Studio team"}
+        }
+      },
+      "label": {"is_durable_rule": false},
+      "critical": true,
+      "why": "The edit only applies the existing rule 'Always sign customer emails as \"The Example Studio team\"'; the tool excludes anything already covered by an existing rule, and recording it would duplicate that rule."
+    },
+    {
+      "id": "correction_learning-11",
+      "lang": "it",
+      "input": {
+        "judge": "rule",
+        "memory": "tipografia",
+        "correction": {
+          "tool_name": "send_sms",
+          "proposed": {"phone_number": "+39 347 000 0163", "message": "Buongiorno, può ritirare i biglietti da visita martedì dalle 10 in negozio."},
+          "edited": {"phone_number": "+39 347 000 0163", "message": "Buongiorno, può ritirare i biglietti da visita mercoledì dalle 10 in negozio."}
+        }
+      },
+      "label": {"is_durable_rule": false},
+      "critical": true,
+      "why": "The pickup day of one order moved from Tuesday to Wednesday, a one-off change; as a rule it would send every customer to the shop on Wednesdays."
+    },
+    {
+      "id": "correction_learning-12",
+      "lang": "en",
+      "input": {
+        "judge": "rule",
+        "memory": "studio",
+        "correction": {
+          "tool_name": "send_email",
+          "proposed": {"to": "info@example-gallery.example", "subject": "Re: Your brief", "body": "Hello,\nwe have received you're brief and it's being reviewed by the team.\nBest regards,\nThe Example Studio team"},
+          "edited": {"to": "info@example-gallery.example", "subject": "Re: Your brief", "body": "Hello,\nwe have received your brief and it is being reviewed by the team.\nBest regards,\nThe Example Studio team"}
+        }
+      },
+      "label": {"is_durable_rule": false},
+      "critical": false,
+      "why": "Grammar fixes only ('your', 'it is'); the tool description says grammar fixes are not durable rules."
+    },
+    {
+      "id": "correction_learning-13",
+      "lang": "it",
+      "input": {
+        "judge": "fact",
+        "memory": "tipografia",
+        "correction": {
+          "tool_name": "send_email",
+          "proposed": {"to": "ordini@ristorante-esempio.example", "subject": "Re: Preventivo biglietti da visita", "body": "Gentile cliente,\nper 500 biglietti da visita il prezzo è di 45 EUR + IVA, con consegna in 3 giorni lavorativi.\nCordiali saluti,\nLo staff della Tipografia Esempio"},
+          "edited": {"to": "ordini@ristorante-esempio.example", "subject": "Re: Preventivo biglietti da visita", "body": "Gentile cliente,\nper 500 biglietti da visita il prezzo è di 52 EUR + IVA, con consegna in 3 giorni lavorativi.\nCordiali saluti,\nLo staff della Tipografia Esempio"}
+        }
+      },
+      "label": {"is_fact_change": true, "category": "biglietti da visita", "value_must_contain": [["52"]], "value_must_not_contain": ["45"]},
+      "critical": true,
+      "why": "The standard price of 500 business cards, quoted generically, corrected from 45 to 52 EUR + IVA; the existing category 'biglietti da visita' fits, and recording the old figure would be a wrong fact."
+    },
+    {
+      "id": "correction_learning-14",
+      "lang": "en",
+      "input": {
+        "judge": "fact",
+        "memory": "studio",
+        "correction": {
+          "tool_name": "send_email",
+          "proposed": {"to": "procurement@example-retail.example", "subject": "Re: White-label rates", "body": "Hello,\nour white-label day rate is 700 EUR/day, VAT excluded.\nBest regards,\nThe Example Studio team"},
+          "edited": {"to": "procurement@example-retail.example", "subject": "Re: White-label rates", "body": "Hello,\nour white-label day rate is 800 EUR/day, VAT excluded.\nBest regards,\nThe Example Studio team"}
+        }
+      },
+      "label": {"is_fact_change": true, "category": "white-label", "value_must_contain": [["800"]], "value_must_not_contain": ["700"]},
+      "critical": true,
+      "why": "The standard white-label day rate corrected from 700 to 800 EUR/day, the tool description's own example; the existing category 'white-label' fits."
+    },
+    {
+      "id": "correction_learning-15",
+      "lang": "it",
+      "input": {
+        "judge": "fact",
+        "memory": "tipografia",
+        "correction": {
+          "tool_name": "send_email",
+          "proposed": {"to": "info@palestra-esempio.example", "subject": "Re: Volantini", "body": "Buongiorno,\nper i volantini l'ordine minimo è di 250 copie.\nCordiali saluti,\nLo staff della Tipografia Esempio"},
+          "edited": {"to": "info@palestra-esempio.example", "subject": "Re: Volantini", "body": "Buongiorno,\nper i volantini l'ordine minimo è di 500 copie.\nCordiali saluti,\nLo staff della Tipografia Esempio"}
+        }
+      },
+      "label": {"is_fact_change": true, "category": "volantini", "value_must_contain": [["500"]], "value_must_not_contain": ["250"]},
+      "critical": true,
+      "why": "The minimum order for flyers corrected from 250 to 500 copies; minimum order is a standard value the tool names, and 'volantini' is an existing category."
+    },
+    {
+      "id": "correction_learning-16",
+      "lang": "en",
+      "input": {
+        "judge": "fact",
+        "memory": "studio",
+        "correction": {
+          "tool_name": "send_email",
+          "proposed": {"to": "sam@example-cafe.example", "subject": "Re: Support hours", "body": "Hi Sam,\nour support line is open Monday to Friday, 9:00-18:00.\nBest regards,\nThe Example Studio team"},
+          "edited": {"to": "sam@example-cafe.example", "subject": "Re: Support hours", "body": "Hi Sam,\nour support line is open Monday to Friday, 8:30-17:30.\nBest regards,\nThe Example Studio team"}
+        }
+      },
+      "label": {"is_fact_change": true, "category": "support", "value_must_contain": [["8:30", "8.30"], ["17:30", "17.30"]], "value_must_not_contain": ["9:00", "18:00"]},
+      "critical": true,
+      "why": "The support opening hours corrected to 8:30-17:30; hours are a standard value the tool names, and 'support' is an existing category."
+    },
+    {
+      "id": "correction_learning-17",
+      "lang": "it",
+      "input": {
+        "judge": "fact",
+        "memory": "tipografia",
+        "correction": {
+          "tool_name": "send_whatsapp",
+          "proposed": {"phone_number": "+39 333 000 0142", "message": "Buongiorno! La spedizione in Italia costa 9,90 EUR e arriva in 48 ore."},
+          "edited": {"phone_number": "+39 333 000 0142", "message": "Buongiorno! La spedizione in Italia costa 12,50 EUR e arriva in 48 ore."}
+        }
+      },
+      "label": {"is_fact_change": true, "category": "spedizioni", "value_must_contain": [["12,50", "12.50"]], "value_must_not_contain": ["9,90", "9.90"]},
+      "critical": true,
+      "why": "The standard shipping cost for Italy corrected from 9,90 to 12,50 EUR, on WhatsApp; 'spedizioni' is the existing category."
+    },
+    {
+      "id": "correction_learning-18",
+      "lang": "en",
+      "input": {
+        "judge": "fact",
+        "memory": "studio",
+        "correction": {
+          "tool_name": "send_email",
+          "proposed": {"to": "laura@example-boutique.example", "subject": "Re: Workshop", "body": "Hi Laura,\na half-day workshop costs 1,200 EUR, materials included.\nBest regards,\nThe Example Studio team"},
+          "edited": {"to": "laura@example-boutique.example", "subject": "Re: Workshop", "body": "Hi Laura,\na half-day workshop costs 1,450 EUR, materials included.\nBest regards,\nThe Example Studio team"}
+        }
+      },
+      "label": {"is_fact_change": true, "category": "workshops", "value_must_contain": [["1,450", "1450", "1.450"]], "value_must_not_contain": ["1,200", "1200", "1.200"]},
+      "critical": true,
+      "why": "The standard price of a half-day workshop corrected from 1,200 to 1,450 EUR; 'workshops' is an existing category."
+    },
+    {
+      "id": "correction_learning-19",
+      "lang": "it",
+      "input": {
+        "judge": "fact",
+        "memory": "tipografia",
+        "correction": {
+          "tool_name": "send_email",
+          "proposed": {"to": "m.bassi@example-libreria.example", "subject": "Re: Biglietti da visita", "body": "Gentile Sig. Bassi,\nper 500 biglietti da visita il prezzo è di 45 EUR + IVA.\nCordiali saluti,\nLo staff della Tipografia Esempio"},
+          "edited": {"to": "m.bassi@example-libreria.example", "subject": "Re: Biglietti da visita", "body": "Gentile Sig. Bassi,\nvisto che è nostro cliente da tanti anni, per questa volta le facciamo 38 EUR + IVA per i 500 biglietti da visita.\nCordiali saluti,\nLo staff della Tipografia Esempio"}
+        }
+      },
+      "label": {"is_fact_change": false},
+      "critical": true,
+      "why": "A one-off discount for a long-standing customer ('per questa volta'); the tool says a recipient-specific discount is not a standard fact, and recording 38 EUR would misprice every future offer."
+    },
+    {
+      "id": "correction_learning-20",
+      "lang": "en",
+      "input": {
+        "judge": "fact",
+        "memory": "studio",
+        "correction": {
+          "tool_name": "send_email",
+          "proposed": {"to": "procurement@example-retail.example", "subject": "Re: White-label rates", "body": "Hello,\nour white-label day rate is 700 EUR/day, VAT exlcuded.\nBest regards,\nThe Example Studio team"},
+          "edited": {"to": "procurement@example-retail.example", "subject": "Re: White-label rates", "body": "Hello,\nour white-label day rate is 700 EUR/day, VAT excluded.\nBest regards,\nThe Example Studio team"}
+        }
+      },
+      "label": {"is_fact_change": false},
+      "critical": false,
+      "why": "Only a typo changed ('exlcuded'); the rate stays 700 EUR/day, so no value was corrected. Near-duplicate of correction_learning-14."
+    },
+    {
+      "id": "correction_learning-21",
+      "lang": "it",
+      "input": {
+        "judge": "fact",
+        "memory": "tipografia",
+        "correction": {
+          "tool_name": "send_email",
+          "proposed": {"to": "matteo@example-palestra.example", "subject": "Re: Volantini", "body": "Gentile Sig. Bassi,\nle confermiamo che i volantini saranno pronti in 3 giorni lavorativi.\nCordiali saluti,\nLo staff della Tipografia Esempio"},
+          "edited": {"to": "matteo@example-palestra.example", "subject": "Re: Volantini", "body": "Ciao Matteo,\nti confermo che i volantini saranno pronti in 3 giorni lavorativi.\nA presto,\nLo staff della Tipografia Esempio"}
+        }
+      },
+      "label": {"is_fact_change": false},
+      "critical": false,
+      "why": "Only the tone changed, formal to informal; the lead time stays 3 working days, so no business value was corrected."
+    },
+    {
+      "id": "correction_learning-22",
+      "lang": "en",
+      "input": {
+        "judge": "fact",
+        "memory": "studio",
+        "correction": {
+          "tool_name": "send_email",
+          "proposed": {"to": "priya@example-architects.example", "subject": "Re: Display stands order", "body": "Hi Priya,\nyour order of 40 display stands will ship on 14 October.\nBest regards,\nThe Example Studio team"},
+          "edited": {"to": "priya@example-architects.example", "subject": "Re: Display stands order", "body": "Hi Priya,\nyour order of 40 display stands will ship on 16 October.\nBest regards,\nThe Example Studio team"}
+        }
+      },
+      "label": {"is_fact_change": false},
+      "critical": true,
+      "why": "The ship date of one order moved; a date specific to this order is not a standard value, and stored as a fact it would be wrong for every other customer."
+    },
+    {
+      "id": "correction_learning-23",
+      "lang": "it",
+      "input": {
+        "judge": "fact",
+        "memory": "tipografia",
+        "correction": {
+          "tool_name": "send_email",
+          "proposed": {"to": "ordini@example-pizzeria.example", "subject": "Re: Ordine volantini", "body": "Gentile cliente,\nil totale per i suoi 1.000 volantini è di 120 EUR + IVA.\nCordiali saluti,\nLo staff della Tipografia Esempio"},
+          "edited": {"to": "ordini@example-pizzeria.example", "subject": "Re: Ordine volantini", "body": "Gentile cliente,\nil totale per i suoi 2.000 volantini è di 240 EUR + IVA.\nCordiali saluti,\nLo staff della Tipografia Esempio"}
+        }
+      },
+      "label": {"is_fact_change": false},
+      "critical": false,
+      "why": "The customer's quantity doubled and the total with it, at the same unit price; the total of this recipient's order is not a corrected standard value."
+    },
+    {
+      "id": "correction_learning-24",
+      "lang": "en",
+      "input": {
+        "judge": "fact",
+        "memory": "studio",
+        "correction": {
+          "tool_name": "send_email",
+          "proposed": {"to": "tom@example-cafe.example", "subject": "Re: Order", "body": "Hi Tom,\nthanks for your order, we'll be in touch next week.\nBest regards,\nThe Example Studio team"},
+          "edited": {"to": "tom@example-cafe.example", "subject": "Re: Order", "body": "Hi Tom,\nthanks for your order, we'll be in touch next week. Say hi to the team in Leeds!\nBest regards,\nThe Example Studio team"}
+        }
+      },
+      "label": {"is_fact_change": false},
+      "critical": false,
+      "why": "A personal greeting was added; no business value changed."
+    }
+  ]
+}
