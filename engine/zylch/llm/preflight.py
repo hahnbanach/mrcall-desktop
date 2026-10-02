@@ -8,13 +8,20 @@ check is now free:
 - the model is admitted locally, as its first request would be at
   reservation — an unpriced model stops here, with the same ``BudgetError``;
 - the credential is checked by a read that runs no model: Anthropic's
-  ``GET /v1/models``, OpenRouter's ``GET /api/v1/key``, MrCall's bounded
-  ``GET /capabilities`` plus the credit balance ``rpc/account.py`` reads.
+  ``GET /v1/models``, OpenRouter's ``GET /api/v1/key`` plus the account
+  balance ``GET /api/v1/credits``, MrCall's bounded ``GET /capabilities``
+  plus the credit balance ``rpc/account.py`` reads.
 
 A refused key (401) or an exhausted balance (402) raises what the ping raised
 — the SDK's ``AuthenticationError`` on the direct transport, a ``BudgetError``
 naming the status on the others — so the pipeline records it and
-``humanize_error`` reports it exactly as before.
+``humanize_error`` reports it exactly as before. A spent OpenRouter key limit
+or account balance, read from those records, raises a ``BudgetError`` saying
+so (IR1 m2); a key OpenRouter refuses the balance read to (403: documented
+for management keys only) leaves the key's own limit as the only check.
+Anthropic offers a standard key no balance read: a direct key whose
+organisation has no credit passes this check and is refused ("credit balance
+is too low") at its first paid request.
 """
 
 from __future__ import annotations
