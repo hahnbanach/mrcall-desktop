@@ -15,6 +15,10 @@ beside the cases), these tests hold:
   set's); a second trim starts again from every authored case; ``--restore``
   gives back the files byte for byte; a failed capture puts the files back;
 - ``--plan`` writes nothing and prices the delta per arm;
+- ``--keep-ids`` keeps an exact set as a reviewed exception: refused when it
+  drops a critical case, goes below the floors or names no authored case;
+  recorded in ``reserve.json`` (who, why, what the rule would keep); a
+  ``--keep N`` is refused while it stands, ``--restore`` lifts it;
 - every committed case file splits into its cases and back, and each role's
   decision field is the label class its README documents.
 """
@@ -208,3 +212,39 @@ def test_each_role_s_decision_field_is_its_label_class():
     assert values("SYNC_ANALYSIS") == {"answer", "reminder", "unlabelled", "none"}
     assert len(values("INTENT")) == 6
     assert values("CHAT") == values("TASK_SOLVE") == {"None"}
+
+
+WHY = "a synthetic exception: keep reply_need-05 instead of reply_need-04"
+
+
+def test_keep_ids_is_a_recorded_exception_within_the_floors(fixtures):
+    every = cases()
+    swapped = [i.replace("reply_need-04", "reply_need-05") for i in KEPT_12]
+    assert trim.select_ids(ROLE, every, swapped) == sorted(swapped)
+    no_critical = [i for i in swapped if i != "reply_need-20"] + ["reply_need-06"]
+    with pytest.raises(trim.Refused, match="drops critical case"):
+        trim.select_ids(ROLE, every, no_critical)
+    with pytest.raises(trim.Refused, match="below the plan's minimum of 12"):
+        trim.select_ids(ROLE, every, swapped[1:])
+    one_no_reply = [i for i in swapped if i != "reply_need-18"] + ["reply_need-06"]
+    with pytest.raises(trim.Refused, match="holds 1 of False; the rule keeps two"):
+        trim.select_ids(ROLE, every, one_no_reply)
+    with pytest.raises(trim.Refused, match="authored case"):
+        trim.select_ids(ROLE, every, swapped[1:] + ["reply_need-99"])
+    role_dir = with_requests(fixtures)
+    before = files(role_dir)
+    ids = ["--keep-ids", ",".join(swapped)]
+    with pytest.raises(SystemExit):  # a reviewed exception says who chose it and why
+        trim.main(["--role", ROLE, *ids, "--why", WHY])
+    assert trim.main(["--role", ROLE, *ids, "--chosen-by", "IR2 round 1", "--why", WHY]) == 0
+    assert [c["id"] for c in common.load_document(ROLE)["cases"]] == sorted(swapped)
+    reserve = json.loads((role_dir / "reserve.json").read_text(encoding="utf-8"))
+    assert reserve["exception"] == {
+        "chosen_by": "IR2 round 1",
+        "why": WHY,
+        "rule_would_keep": KEPT_12,
+    }
+    assert builder.drift(ROLE, builder.build(ROLE)) == []
+    assert trim.main(["--role", ROLE, "--keep", "12"]) == 1  # not silently undone
+    assert trim.main(["--role", ROLE, "--restore"]) == 0
+    assert files(role_dir) == before

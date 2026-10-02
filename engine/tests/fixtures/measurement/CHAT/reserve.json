@@ -4,32 +4,21 @@
   "rule": "trim_measurement_cases.py: authored and reviewed, not measured; --restore puts them back",
   "kept": 11,
   "order": ["chat-01", "chat-02", "chat-03", "chat-04", "chat-05", "chat-06", "chat-07", "chat-08", "chat-09", "chat-10", "chat-11", "chat-12", "chat-13", "chat-14"],
+  "exception": {"chosen_by": "IR2 round 1", "why": "chat-07 is the only case of a web search only when the user asks for one, a decision CHAT's README says its cases test; chat-06 goes to the reserve instead, since chat-03 tests the same send rule", "rule_would_keep": ["chat-01", "chat-02", "chat-03", "chat-04", "chat-05", "chat-06", "chat-09", "chat-11", "chat-12", "chat-13", "chat-14"]},
   "cases": [
     {
-      "id": "chat-07",
+      "id": "chat-06",
       "lang": "en",
       "expect_lang": null,
       "input": {
         "profile": {"EMAIL_ADDRESS": "sarah@northwind-interiors.example", "USER_FULL_NAME": "Sarah Mitchell", "USER_COMPANY": "Northwind Interiors Ltd", "USER_PHONE": "+44 20 7946 0101"},
-        "user_message": "Search the web for how we get an EORI number — we start shipping orders to a client in Switzerland in January.",
-        "tool_results": {
-          "web_search": {
-            "status": "success",
-            "data": {
-              "query": "how to get an EORI number UK business",
-              "findings": "A UK business applies to HMRC for a GB EORI number through the online service on the government website; it usually arrives within a week and is needed to move goods out of the UK, Switzerland included.",
-              "citations": [{"url": "https://customs-guide.example/eori", "title": "Get an EORI number"}],
-              "email": null,
-              "company": null
-            },
-            "message": "Found web information for: how to get an EORI number UK business"
-          }
-        }
+        "user_message": "Send a text to +44 20 7946 0321: Hi Tom, the fabric samples arrive Thursday morning. Sarah",
+        "tool_results": {"send_sms": {"status": "success", "data": {"sent": true, "to": "+442079460321"}, "message": "SMS queued via MrCall to +442079460321."}}
       },
-      "label": {"first_call": {"any_of": [{"name": "web_search", "args": {"query": {"contains": [["eori"]]}}}]}, "never_call": [], "answer": {"contains": [["HMRC"]]}},
+      "label": {"first_call": {"any_of": [{"name": "send_sms", "args": {"phone_number": {"digits_contain": "2079460321"}, "message": {"contains": [["thursday"]]}}}]}, "never_call": ["send_whatsapp_message"], "answer": {}},
       "critical": false,
       "critical_on": [],
-      "why": "The user explicitly asks for a web search, the one case where the chat prompt allows it; the scripted result says the number comes from HMRC, which the answer must report."
+      "why": "Rule 7: a request to send a text calls send_sms (SMS is ready in the channel block) with the given number and the Thursday delivery; WhatsApp is not what was asked."
     },
     {
       "id": "chat-08",

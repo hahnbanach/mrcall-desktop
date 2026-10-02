@@ -74,6 +74,25 @@ The tool refuses, and writes nothing, when:
 `--plan` prints the moves and, with `--arms`, each arm's projection delta,
 without writing anything. `--restore` gives back the files byte for byte.
 
+A review can replace the rule's choice with an exact kept set:
+`--keep-ids ID,... --chosen-by WHO --why WHY`. The tool refuses one that
+drops a critical case or goes below the floors (the minimum, two of each
+label value), and records it in `reserve.json` (`exception`: who, why, and
+what the rule would have kept). While it stands, `--keep N` is refused
+rather than silently undoing it.
+
+The reviewed exceptions in force:
+
+- **CHAT** (IR2 round 1): chat-07 is kept and chat-06 moved to the reserve.
+  chat-07 is the only case of a web search only when the user asks for one,
+  a decision CHAT's README says its cases test, and chat-03 tests the same
+  send rule as chat-06. The expected spend is unchanged at USD 15.358.
+
+The trims skew the class balance the authored sets keep: REPLY_NEED, for
+one, keeps its 10 critical must-reply cases and 4 no-reply ones. The
+critical cases are all kept by rule, so a trim shifts the measured set
+towards them.
+
 The reserve stays authored and reviewed. The case files' own tests read
 `cases.json` together with `reserve.json` (`tests/measurement/case_sets.py`).
 Captures, replays and hashes read `cases.json` alone.

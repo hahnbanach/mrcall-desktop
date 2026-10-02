@@ -14,6 +14,8 @@ files (``tests/measurement/case_sets.py``).
     python scripts/trim_measurement_cases.py --role REPLY_NEED --keep 14 --plan --arms ARMS.json
     python scripts/trim_measurement_cases.py --role REPLY_NEED --keep 14
     python scripts/trim_measurement_cases.py --role REPLY_NEED --restore
+    python scripts/trim_measurement_cases.py --role CHAT --keep-ids chat-01,chat-02,... \
+        --chosen-by "IR2 round 1" --why "..."
 
 **The selection** depends on the authored cases and N alone: a second trim
 starts again from every authored case, and the same inputs keep the same
@@ -61,6 +63,15 @@ case back and removes ``reserve.json``, as does N equal to the authored count,
 and the files are then byte for byte what they were. If ``requests.json``
 cannot be captured, the three files are put back as they were.
 
+**A reviewed exception** (``--keep-ids``) names the exact kept set when a
+review finds the rule's choice drops a case the role needs; ``--chosen-by``
+and ``--why`` are required. It is refused when it drops a critical case or
+goes below the floors (the plan's minimum, two of each label value), and
+for ids that are not the role's authored cases. ``reserve.json`` records it
+(``exception``: who chose it, why, and what the rule would keep at that
+size), and while it stands a ``--keep N`` is refused rather than silently
+undoing it: ``--restore`` first, or another ``--keep-ids``.
+
 ``--plan`` writes nothing. It prints the cases that would move and, with
 ``--arms``, the projection's delta for every arm of the role: the maximum and
 the expected spend of ``measurement_projection`` over the cases measured now
@@ -85,7 +96,7 @@ import build_measurement_requests as builder  # noqa: E402
 import measurement_common as common  # noqa: E402
 
 common.importable()
-from tests.measurement.case_sets import RESERVE, authored_document  # noqa: E402
+from tests.measurement.case_sets import RESERVE, authored_document, load_reserve  # noqa: E402
 
 logger = logging.getLogger("trim_measurement_cases")
 MINIMUM = {**{role: 12 for role in common.DECISION_ROLES}, "CHAT": 5, "TASK_SOLVE": 5}
@@ -220,22 +231,79 @@ def separator_of(text: str) -> tuple[str, dict, str, str]:
     return prefix, dict(items), gaps[0], suffix
 
 
-def reserve_text(role: str, keep: int, order: list[str], texts: list[str], separator: str) -> str:
-    """``reserve.json`` (``case_sets.py``): the reserve cases as written, the authored order."""
+def reserve_text(
+    role: str,
+    keep: int,
+    order: list[str],
+    texts: list[str],
+    separator: str,
+    exception: dict | None = None,
+) -> str:
+    """``reserve.json`` (``case_sets.py``): the reserve cases as written, the authored order,
+    and the reviewed exception that chose the kept set, if one did."""
     head = {"schema": 1, "role": role, "rule": RULE, "kept": keep, "order": order}
+    if exception is not None:
+        head["exception"] = exception
     lines = "".join(f'  "{k}": {json.dumps(v, ensure_ascii=False)},\n' for k, v in head.items())
     return "{\n" + lines + '  "cases": [' + RESERVE_LEAD + separator.join(texts) + RESERVE_END
 
 
-def plan_of(role: str, keep: int | None) -> dict:
-    """The selection for ``keep`` (every authored case when None) and what it moves."""
+def select_ids(role: str, cases: list[dict], ids: list[str]) -> list[str]:
+    """The exact kept set ``ids`` (authored order), or ``Refused``: authored cases only, every
+    critical case kept, the plan's minimum and two of each label value (the floors)."""
+    if role not in MINIMUM:
+        raise Refused(f"{role}: the plan sets it no minimum; only {', '.join(MINIMUM)} are trimmed")
+    known, wanted = {case["id"] for case in cases}, set(ids)
+    if len(wanted) != len(ids) or wanted - known:
+        raise Refused(f"{role}: not each an authored case once: {sorted(wanted - known) or ids}")
+    dropped = [c["id"] for c in cases if c["critical_on"] and c["id"] not in wanted]
+    if dropped:
+        raise Refused(f"{role}: the kept set drops critical case(s) {', '.join(dropped)}")
+    if len(wanted) < MINIMUM[role]:
+        raise Refused(f"{role}: {len(wanted)} is below the plan's minimum of {MINIMUM[role]}")
+    total = Counter(label_value(role, case) for case in cases)
+    held = Counter(label_value(role, c) for c in cases if c["id"] in wanted)
+    for value, n in total.items():
+        if value is not None and held[value] < min(PER_VALUE, n):
+            raise Refused(
+                f"{role}: the kept set holds {held[value]} of {value}; the rule keeps two"
+            )
+    return [case["id"] for case in cases if case["id"] in wanted]
+
+
+def recorded_exception(role: str) -> dict | None:
+    """The reviewed exception the role's ``reserve.json`` records, if any."""
+    reserve = load_reserve(common.FIXTURES / role)
+    return (reserve or {}).get("exception")
+
+
+def plan_of(
+    role: str, keep: int | None, ids: list[str] | None = None, exception: dict | None = None
+) -> dict:
+    """The selection for ``keep`` (every authored case when None), or the reviewed exception
+    ``ids`` (``exception``: who chose it and why), and what it moves."""
     if role not in MINIMUM:
         raise Refused(f"{role}: the plan sets it no minimum; only {', '.join(MINIMUM)} are trimmed")
     authored = authored_document(common.FIXTURES / role)
     cases = authored["cases"]
-    kept = select(role, cases, len(cases) if keep is None else keep)
+    standing = recorded_exception(role)
+    if ids is None and keep is not None and standing is not None:
+        raise Refused(
+            f"{role}: its kept set is a reviewed exception ({standing.get('chosen_by')}:"
+            f" {standing.get('why')}); --restore first, or pass another --keep-ids"
+        )
+    if ids is not None:
+        kept = select_ids(role, cases, ids)
+        try:
+            rule = select(role, cases, len(kept))
+        except Refused:
+            rule = None
+        exception = {**(exception or {}), "rule_would_keep": rule}
+    else:
+        kept, exception = select(role, cases, len(cases) if keep is None else keep), None
     measured = [case["id"] for case in common.load_document(role)["cases"]]
-    return {"role": role, "authored": authored, "kept": kept, "measured": measured}
+    plan = {"role": role, "authored": authored, "kept": kept, "measured": measured}
+    return {**plan, "exception": exception, "standing": standing}
 
 
 def apply(plan: dict) -> dict:
@@ -254,7 +322,8 @@ def apply(plan: dict) -> dict:
     try:
         paths[0].write_bytes(cases_text.encode("utf-8"))
         if moved:
-            reserve = reserve_text(role, len(kept), order, moved, separator)
+            exception = plan.get("exception")
+            reserve = reserve_text(role, len(kept), order, moved, separator, exception)
             paths[1].write_bytes(reserve.encode("utf-8"))
         else:
             paths[1].unlink(missing_ok=True)
@@ -290,6 +359,13 @@ def describe(plan: dict) -> list[str]:
     for label, ids in (("to the reserve", out), ("back from the reserve", back)):
         named = [f"{i} ({by_id[i]['lang']}, {label_value(role, by_id[i])})" for i in ids]
         lines.append(f"  {label} ({len(ids)}): {', '.join(named) or 'none'}")
+    exception = plan.get("exception")
+    if exception is not None:
+        rule = ", ".join(exception["rule_would_keep"] or ["(none at this size)"])
+        lines.append(
+            f"  a reviewed exception, chosen by {exception['chosen_by']}: {exception['why']}"
+        )
+        lines.append(f"  the rule would keep: {rule}")
     return lines
 
 
@@ -334,12 +410,24 @@ def main(argv: list[str] | None = None) -> int:
     action = parser.add_mutually_exclusive_group(required=True)
     action.add_argument("--keep", type=int, help="the number of cases to measure")
     action.add_argument("--restore", action="store_true", help="measure every authored case")
+    action.add_argument(
+        "--keep-ids", help="a reviewed exception: the exact kept ids, comma-separated"
+    )
+    parser.add_argument("--chosen-by", help="with --keep-ids: who chose the exception")
+    parser.add_argument("--why", help="with --keep-ids: why the rule's choice would not do")
     parser.add_argument("--plan", action="store_true", help="print what would move; write nothing")
     parser.add_argument("--arms", type=Path, help="with --plan: the bootstrap arms, for the delta")
     args = parser.parse_args(argv)
     logging.basicConfig(level=logging.WARNING)
+    ids, exception = None, None
+    if args.keep_ids is not None:
+        if not (args.chosen_by or "").strip() or not (args.why or "").strip():
+            parser.error("--keep-ids is a reviewed exception: --chosen-by and --why are required")
+        ids = [part.strip() for part in args.keep_ids.split(",") if part.strip()]
+        exception = {"chosen_by": args.chosen_by.strip(), "why": args.why.strip()}
     try:
-        plan = plan_of(args.role, None if args.restore else args.keep)
+        keep = None if args.restore or ids is not None else args.keep
+        plan = plan_of(args.role, keep, ids, exception)
     except Refused as refused:
         print(f"refused: {refused}", file=sys.stderr)
         return 1
@@ -350,7 +438,11 @@ def main(argv: list[str] | None = None) -> int:
         return 0
     trimmed = len(plan["kept"]) < len(plan["authored"]["cases"])
     reserve = (common.FIXTURES / args.role / RESERVE).is_file()
-    if plan["kept"] == plan["measured"] and reserve == trimmed:
+    if (
+        plan["kept"] == plan["measured"]
+        and reserve == trimmed
+        and (plan["exception"] == plan["standing"])
+    ):
         print("nothing to move")
         return 0
     fresh = apply(plan)
