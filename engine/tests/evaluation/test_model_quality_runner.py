@@ -214,7 +214,8 @@ def test_reviewed_routing_changes_wire_and_reservation_and_settles(rig):
         assert body["provider"]["allow_fallbacks"] is False
         assert body["provider"]["require_parameters"] is True
         assert request.headers["X-OpenRouter-Metadata"] == "enabled"
-        reserved_request = {k: v for k, v in body.items() if k not in {"provider", "thinking", "stream"}}
+        # The shape's reasoning is reserved (brief D3); only wire additions are not.
+        reserved_request = {k: v for k, v in body.items() if k not in {"provider", "stream"}}
         reserved_request["service_tier"] = "standard_only"
         expected = pricing.request_bound(reserved_request)
         assert pricing.RATES[MODEL] == (Decimal("0.7"), Decimal("2.2"))

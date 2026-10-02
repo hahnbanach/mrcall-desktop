@@ -59,7 +59,7 @@ def pending(tmp_path, monkeypatch):
     database.dispose_engine()
 
 
-def _router(status):
+def _router(status, balance=None):
     from zylch.llm.client import LLMClient
     from zylch.llm.openrouter_client import OpenRouterClient
 
@@ -67,6 +67,8 @@ def _router(status):
 
     def handler(request):
         paths.append((request.method, request.url.path))
+        if balance is not None and request.url.path == "/api/v1/credits":
+            return httpx.Response(200, json={"data": balance})
         return httpx.Response(status, json={"data": {"limit_remaining": None}})
 
     client = LLMClient("openrouter", api_key="synthetic", model="z-ai/glm-5.3-flash")
@@ -109,6 +111,20 @@ async def test_a_refused_key_is_recorded_once_and_skips_the_paid_stages(pending)
 async def test_an_accepted_key_lets_the_paid_stages_run(pending):
     client, paths = _router(200)
     errors, tasks = await _run(client)
-    assert paths == [("GET", "/api/v1/key")]
+    # The key's record, then the account's balance (IR1 m2): free reads only.
+    assert paths == [("GET", "/api/v1/key"), ("GET", "/api/v1/credits")]
     assert not [e for e in errors if e["stage"] == "llm"]
     tasks.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_an_exhausted_account_balance_is_recorded_once_and_skips_the_paid_stages(pending):
+    from zylch.services.error_messages import humanize_error
+
+    client, paths = _router(200, balance={"total_credits": 25, "total_usage": 25.0004})
+    errors, tasks = await _run(client)
+    assert paths == [("GET", "/api/v1/key"), ("GET", "/api/v1/credits")]
+    llm = [e for e in errors if e["stage"] == "llm"]
+    assert len(llm) == 1 and "account has no credit left" in str(llm[0]["error"])
+    assert humanize_error(llm[0]["error"], "llm")["kind"] == "llm_budget"
+    tasks.assert_not_awaited()

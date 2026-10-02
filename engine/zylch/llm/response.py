@@ -9,6 +9,12 @@ reasoning blocks (``thinking``, ``redacted_thinking``) included, as the plain
 dicts a tool loop replays unchanged. Within a tool loop the provider needs
 those blocks back exactly as it sent them; where the engine rewrites history
 instead, :func:`without_reasoning` removes them.
+
+One block is never replayed: a ``thinking`` block without a signature, which
+OpenRouter may return for a non-Anthropic model. The Messages API requires a
+signature on every ``thinking`` block in history (protocol v2), so
+:func:`_coerce_messages` — the history of every request, on every transport
+— leaves it out, while ``assistant_content`` still holds it for the caller.
 """
 
 from __future__ import annotations
@@ -212,13 +218,42 @@ def _coerce_block(block: Any) -> Any:
     return block
 
 
+def _replayable(block: Any) -> bool:
+    """False only for a ``thinking`` block without a signature (a non-empty string).
+
+    The Messages API requires ``signature`` on every ``thinking`` block in
+    history (OpenRouter's request schema marks it required, Anthropic's too),
+    and no provider verifies an unsigned one: a request carrying it does not
+    match the schema, so the request leaves it out instead (protocol v2).
+    Every other block is replayed as the caller holds it.
+    """
+    if _kind(block) != "thinking":
+        return True
+    if isinstance(block, dict):
+        signature = block.get("signature")
+    else:
+        signature = getattr(block, "signature", None)
+    return isinstance(signature, str) and bool(signature)
+
+
 def _coerce_messages(messages: List[Any]) -> List[Any]:
+    """``messages`` as the plain dicts a request carries, on every transport.
+
+    Each block goes through :func:`_coerce_block`; an unsigned ``thinking``
+    block is left out (:func:`_replayable`, protocol v2), and a message that
+    held nothing else goes with it — the API merges the consecutive turns
+    that leaves, as with :func:`without_reasoning`. The caller's history
+    keeps the block: only the request leaves it out. The input is never
+    mutated.
+    """
     out: List[Any] = []
     for m in messages:
         if isinstance(m, dict):
             content = m.get("content")
             if isinstance(content, list):
-                out.append({**m, "content": [_coerce_block(b) for b in content]})
+                kept = [_coerce_block(b) for b in content if _replayable(b)]
+                if kept or not content:
+                    out.append({**m, "content": kept})
                 continue
         out.append(m)
     return out

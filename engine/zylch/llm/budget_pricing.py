@@ -143,6 +143,8 @@ def request_bound(request, transport):
         )
     if set(request) - _ALLOWED:
         raise BudgetError("AI paused: request includes an unpriced option.")
+    # The effort a provider accepts: the shape's vocabulary (low..max), never a
+    # catalogue's `minimal` or `none`, which the Messages API refuses.
     config = request.get("output_config", {"effort": EFFORTS[0]})
     if request.get("thinking", _THINKING[0]) not in _THINKING or not (
         isinstance(config, dict) and set(config) == {"effort"} and config["effort"] in EFFORTS

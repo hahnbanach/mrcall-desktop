@@ -13,7 +13,12 @@ OpenRouter, MrCall credits), set from the model's published metadata
   reasoning at the lowest of them (never ``disabled``, which Opus 5.5 and
   Sonnet 5.5 refuse); where it publishes none, ``disabled`` if reasoning is
   optional and on by default, nothing otherwise; mandatory without efforts,
-  nothing (the provider's default); no metadata at all, nothing;
+  nothing (the provider's default); no metadata at all, nothing. Only the
+  request vocabulary counts as a published effort (``EFFORTS``: ``low``,
+  ``medium``, ``high``, ``xhigh``, ``max``, the values the Messages API
+  accepts on every transport): a catalogue's ``minimal`` or ``none`` is never
+  sent, so a model publishing ``minimal`` and ``low`` gets ``low``, and one
+  publishing only values outside the vocabulary publishes none;
 - ``strict`` on a tool whose schema already closes every object and requires
   every property, when the model supports structured outputs;
 - ``REASONING_HEADROOM`` tokens added to ``max_tokens`` whenever reasoning is
@@ -37,10 +42,13 @@ logger = logging.getLogger(__name__)
 SAMPLING_KEYS = ("temperature", "top_p", "top_k")
 FORCED = ("any", "tool")
 AUTO = {"type": "auto"}
-# The effort vocabulary of the catalogue's `supported_efforts`, lowest first.
-# Lists arrive in any order and may carry values outside it (`none`), which
-# never count as an effort.
-EFFORTS = ("minimal", "low", "medium", "high", "xhigh", "max")
+# The effort vocabulary of the catalogue's `supported_efforts`, lowest first:
+# the values a request's `output_config.effort` may carry — Anthropic's, and
+# OpenRouter's Messages schema (`AnthropicOutputEffort`: low..max, with
+# `additionalProperties: false` on `output_config`). Lists arrive in any order
+# and may carry values outside it (`minimal`, `none`), which never count as an
+# effort; admission (`budget_pricing.py`) refuses any other value.
+EFFORTS = ("low", "medium", "high", "xhigh", "max")
 REASONING_HEADROOM = 1024
 
 
@@ -66,7 +74,11 @@ def is_adapter(model: Optional[str]) -> bool:
 
 
 def lowest_effort(efforts: Optional[Iterable[str]]) -> Optional[str]:
-    """The lowest effort of the vocabulary that ``efforts`` publishes, or ``None``."""
+    """The lowest effort of the vocabulary that ``efforts`` publishes, or ``None``.
+
+    ``None`` also when ``efforts`` holds only values outside the vocabulary
+    (``minimal``, ``none``): such a model is shaped as publishing no effort.
+    """
     published = set(efforts or ())
     return next((effort for effort in EFFORTS if effort in published), None)
 
