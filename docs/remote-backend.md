@@ -99,7 +99,23 @@ The model:
   for — outside the checkout and the releases tree, through a symbolic
   link or `..`, unreadable by the tenant, or set by an `EnvironmentFile` —
   and any other drop-in that sets `ExecStart`: a migrated unit runs
-  `tenant.conf`'s command line only.
+  `tenant.conf`'s command line only. It also refuses a drop-in that loads
+  an `EnvironmentFile` (a migrated unit reads only its key file), a first
+  migration of a unit that is not stopped, and a result whose user,
+  `ProtectHome` or environment files are not `tenant.conf`'s.
+- A unit that needs **its own interpreter or the production voice
+  listener** is declared by the operator in `/etc/mrcalld/tenant-exec/<uid>`
+  (`0600 root`): `INTERPRETER=<release>/venv/bin/zylch` and/or
+  `VOICE_CONFIG=<root-owned voice env file>`, nothing else. `create` then
+  writes that command itself (the operator's command drop-ins stay and
+  are what `unmigrate` returns the unit to), copies the voice file to
+  `<uid>.voice.env` beside the declaration (`0640 root:<tenant>`) and
+  passes the copy as `--voice-config` and `EnvironmentFile`; the voice
+  file may hold only `VOICE_*`, `OPENAI_*`, `VONAGE_*` and
+  `FIREBASE_WEB_API_KEY` lines. A change to the voice file is `create`
+  again, then a restart. What the scratch VM proved of it, what it could
+  not, and the steps for the one unit that uses it:
+  [tenant-exec probe](execution-plans/2026-09-29-toward-sandbox.md#m2-record--tenant-exec-probe-2026-10-02).
 - Security over the network is the per-daemon Firebase-JWT gate
   (`token.uid == OWNER_ID`); a mis-route just fails `403`, so the routing is
   a hint, not the boundary. Security **on the host**, once a profile is

@@ -1262,8 +1262,9 @@ scratch profile has no voice binding, so it may well be the local one.
 With the stub `/healthz` answers `calls_available: false`, for the same
 unrecorded reason.
 
-**Not covered here**, each with its check on production@ in the runbook
-below:
+**Not covered here**; the runbook below has a check on production@ for
+each, except that the release's own tables rest on the start-time
+self-check, `calls_available` and the journal:
 
 - preparation as the tenant inside the sandbox — the voice binding and
   agent configuration read under `HOME=<profile>`, then StarChat,
@@ -1335,6 +1336,10 @@ fixed.** 15–18 by the probe, 19–24 by review A on `5ab4576`
     per-profile one. Only a late `ExecStart` was caught. Step 6b now
     also requires the effective `User`, `ProtectHome=tmpfs` and exactly
     the voice copy then the key file as `EnvironmentFiles` (`0dc122d`).
+    `User` and `ProtectHome` are probed (TE-N7, TE-M); the
+    `EnvironmentFiles` comparison is a backstop no probe reaches, because
+    a drop-in that loads another file is refused earlier by defect 21's
+    check.
     Older than tenant-exec; production@'s `90-/95-/99-` sort before
     `tenant.conf`.
 21. **An operator `EnvironmentFile` other than the voice file was
@@ -1346,9 +1351,18 @@ fixed.** 15–18 by the probe, 19–24 by review A on `5ab4576`
 22. **A refusal on a migrated profile came after `tenant.conf` and the
     copy had been rewritten** (A-T6): the unit would restart onto files
     nobody accepted. `create` now keeps the previous two and puts them
-    back on any refusal (TE-M: six refusals on the running migrated
-    unit, `tenant.conf`, copy, effective command and pid identical after
-    each; `0dc122d`).
+    back on any refusal (`0dc122d`). TE-M7 is the case that shows it: the
+    declaration cut to `VOICE_CONFIG` only and the voice file edited, so
+    both files change, then a pin step 6c refuses — the helper prints
+    "wrote …/tenant.conf", then the error, and afterwards `tenant.conf`,
+    the copy, their owners and modes, the effective command and the pid
+    are those of before, with no temporary file left. Of TE-M's six
+    refusals on the running migrated unit (all identical before and
+    after), M2 restores a replaced copy; M1, M3 and M5 are refused before
+    anything is rewritten, and M3b and M4 rewrite `tenant.conf` with the
+    same content. Review A's second pass repeated it at six points of
+    `create` and with thirty runs killed by a signal (B-R3, B-R3b in its
+    log).
 23. **Accepted interpreters that cannot run** (A-T4): an `env` shebang,
     a `/bin/sh` trampoline, a file with no shebang, the venv's `pip`.
     `INTERPRETER` must now be a file named `zylch` whose shebang is a
@@ -1365,8 +1379,9 @@ Final code: **`0dc122d`** on `claude/m2-scratch-probe` (= main `499ca09b`
 (TE-FINAL2-0, with the migrated declared unit running: `create`
 re-applied, hash equal to the checkout's). **Every result below is from
 that helper**: TE-FINAL2-0, TE-M, the TE-D18, TE-V and TE-DEL after it,
-the last "FINAL RUN" block (TE-2a … TE-N9, TE-F1 … TE-F4) and the last
-TE-K; the log's closing note says which earlier blocks are superseded.
+the last "FINAL RUN" block (TE-2a … TE-N9, TE-F1 … TE-F4), the last
+TE-K and TE-M7; the log's closing notes say which earlier blocks are
+superseded.
 It is **not on main** until this record's gate passes; main's helper
 until then is `594b7375…`.
 
@@ -1383,8 +1398,10 @@ are refused before `tenant.conf` is written the unmigrated unit was
 running, and **the running process is untouched** (same pid, `:8787`
 still bound); the last four are refused after it is written, so the unit
 was stopped for them as the runbook has it, and the undo removes what
-was written. Two of the after-lines differ by the probe's own drop-in
-still being in place when they were printed (the log's closing note).
+was written. Two of the after-lines differ by the probe's own doing (the
+log's closing note): one shows the `EnvironmentFile` line the probe had
+added to the operator's `90-…`, the other the probe's late `ExecStart`
+drop-in still in place when the line was printed.
 The user, its membership of the company group and the key file a refused
 first `create` made stay (as in defect 13). The cases:
 
@@ -1488,8 +1505,8 @@ shared key in its environment; every file is `mrcalld`'s,
 file stay, and the second forward (TE-F4) repeats TE-F1's results with
 them. One difference from the record taken before: the profile directory
 is `0700`, not `0770` (`create` sets it, `unmigrate` does not put it
-back; `getent group mrcalld` has no member besides the user itself, and
-the unit runs). The rollback is therefore not mode-for-mode until the
+back; `getent group mrcalld` has no member besides the user itself —
+checked on the VM, not in the log — and the unit runs). The rollback is therefore not mode-for-mode until the
 operator restores it.
 
 **Delete** (TE-DEL): the declaration, the voice copy, the drop-in
@@ -1497,6 +1514,15 @@ directory, profile, key, fragment, run dir, link, user and table row are
 gone; no unowned file is left; company A's store stays (A1 and A2 hold
 the key) and A1 keeps running. The operator's own voice file is not the
 helper's and stays.
+
+**For every 2b, not only production@'s.** With this helper `create`
+also refuses, for any unit: a first migration while the unit is not
+stopped (the runbook's step 2 comes before step 4, so nothing changes in
+the order); a drop-in that loads an `EnvironmentFile` (move its variables
+to `Environment=` lines first); a result whose `User`, `ProtectHome` or
+environment files are not `tenant.conf`'s. The three already migrated
+scratch tenants were re-applied by the reconcile on it and stayed
+`ready` (TE-FINAL2-0).
 
 **Runbook, added for production@'s 2b** (it is the last one). `U` is its
 uid, `R` its release directory, `VF=/etc/mrcalld/voice-cafe124.env`.
@@ -1508,6 +1534,11 @@ written:*
    `a90d1bc0` and `cmp` with the checkout's
    `engine/scripts/server/tenant-helper.sh` is silent. A helper installed
    by hand is replaced by the next reconcile: it must come from main.
+   `systemctl --version` (249 on the VM), and `systemctl show -p
+   EnvironmentFiles --value zylch-server@U` prints one `<path>
+   (ignore_errors=…)` per line: step 6b reads that form, and on a systemd
+   that prints another every `create` on the host is refused (nothing is
+   changed by a refusal) until the helper is adapted.
 2. **The unit as it is**, kept under `/root/prod-2b/`: `systemctl cat
    zylch-server@U`; `systemctl show zylch-server@U -p ExecStart -p
    EnvironmentFiles -p DropInPaths`; copies and `sha256sum` of every
@@ -1516,8 +1547,12 @@ written:*
    only). `EnvironmentFiles` must be exactly `/etc/mrcalld/env` and
    `VF`: any other file is refused by `create` — move its variables to
    `Environment=` lines in that drop-in first (a change to the running
-   unit: its own restart, before the window). No drop-in name sorts
-   after `tenant.conf` (digits do not).
+   unit: its own restart, before the window). `DropInPaths` lists only
+   files in `/etc/systemd/system/zylch-server@U.service.d/`, each with a
+   name that sorts before `tenant.conf` (digits do): `create` verifies
+   only the command, `User`, `ProtectHome` and the environment files of
+   the result, and a later drop-in, one under `/run` or one of the
+   template's could change anything else (review A).
 3. **The interpreter.** `head -1 R/venv/bin/zylch` is `#!R/venv/bin/python…`;
    `namei -l` of that path shows every hop under `/usr`, `/bin`, `/sbin`,
    `/lib*`, `/etc/alternatives`, the releases or the checkout, and no
@@ -1526,17 +1561,22 @@ written:*
 4. **The release.** `R/engine/zylch/home.py` exists and
    `R/engine/zylch/memory/store.py` has the dual-name lookup (the
    preflight found it). If either is missing: no 2b for production@.
-   `grep -rIl -e 'sk-' -e 'BEGIN .*PRIVATE KEY' /home/mrcalld/releases`
-   and a look for `.env` files there are empty — `chmod -R go=rX
-   /home/mrcalld/releases` (the next line) makes every release readable
-   by every tenant.
+   `chmod -R go=rX /home/mrcalld/releases` makes every release readable
+   by every tenant, so first: `grep -rIlE -e 'sk-[A-Za-z0-9_-]{20,}' -e
+   'BEGIN [A-Z ]*PRIVATE KEY' /home/mrcalld/releases` and `find
+   /home/mrcalld/releases -name '.env*' ! -name '.env.example'` — every
+   hit is opened and is not a credential (a bare `sk-` matches ordinary
+   words in a venv).
 5. **The voice file.** Root-owned, not a link; `grep -c $'\r' VF` → 0;
    `grep -cE '\\$' VF` → 0; `grep -cvE
    '^([[:space:]]*(#.*)?|(VOICE_[A-Z0-9_]*|OPENAI_[A-Z0-9_]*|VONAGE_[A-Z0-9_]*|FIREBASE_WEB_API_KEY)=.*)$'
-   VF` → 0; no line with an odd number of quotes. `stat -c %a
+   VF` → 0; no line other than a comment with an odd number of `"` or
+   of `'`. `stat -c %a
    /etc/mrcalld` has the `o+x` bit.
 6. **The voice baseline**, by the commands of the 2026-09-30 switch
-   script (`/etc/mrcalld/rollback-toward-sandbox-20260930/`, M1 record):
+   (M1 record; its directory `/etc/mrcalld/rollback-toward-sandbox-20260930/`
+   is on the VPS and was not seen from here — if the script is not
+   there, the commands are written out and run once before the window):
    `/healthz` locally and through the tunnel with `calls_available:
    true`; the unsigned Vonage answer/event and OpenAI webhooks 401/401/400
    (the Vonage routes are the release's, not main's); no call in flight
@@ -1575,9 +1615,10 @@ minutes** of the start:*
   is explained or it is a rollback;
 - the pinned-profile check of the post-gate record (`nsenter -t <pid>
   -m -- test -e <PYTHONPATH>/zylch/__init__.py`);
-- no `Read-only file system` or `Permission denied` line in the journal
-  and the profile's `zylch.log` since the start (a path the release
-  writes outside the profile);
+- no `Read-only file system`, `Permission denied`, decrypt or
+  `InvalidToken` line in the journal and the profile's `zylch.log` since
+  the start (a path the release writes outside the profile; a row the
+  checkout's `rekey` did not know);
 - the "company notes preparation status=" line as in the baseline, when
   enabled;
 - the customer's app reconnects — the authenticated check of every 2b.
@@ -1611,7 +1652,37 @@ declaration stays for the next attempt.
   the deploy identity as before; tightening it would break the rollback.
 - Voice-file lines the helper now refuses although both readers agree on
   them (a quoted value holding an apostrophe, a key with a space before
-  `=`): the operator rewrites the line.
+  `=`; in the declaration, a comment with an apostrophe): the operator
+  rewrites the line.
+- Review A's second pass on `0dc122d`, reproduced on the VM, not changed
+  (the gate closed on that commit; each is covered for production@ by a
+  runbook line above):
+  - the voice check and systemd still disagree on two forms — a quote
+    reopened right after a closing one (`VOICE_T1="'"'`), and a
+    form-feed or vertical-tab "comment" holding a quote. Either makes
+    systemd swallow the following lines into one value: allowed variables
+    are lost from the unit's environment, none outside the allowlist can
+    arrive (a key starts only after a line end, and a carriage return is
+    refused). The engine reads the file itself, and step 7 compares the
+    environment names. The commit message of `0dc122d` says more than
+    this ("reads the same to the check and to systemd");
+  - step 6b checks the command, `User`, `ProtectHome` and the
+    environment files; a drop-in that sorts after `tenant.conf` can still
+    set `Group`, `SupplementaryGroups`, `Environment=`, `ProtectSystem`,
+    `BindPaths`, `NoNewPrivileges`, `CapabilityBoundingSet`,
+    `ExecStartPre` or `UnsetEnvironment`, and `create` says "ready".
+    Root-written and older than tenant-exec. The fix is one rule: refuse
+    any applied drop-in that sorts after `tenant.conf` or lives outside
+    the instance's `/etc` directory;
+  - accepted, then unable to start: a `zylch` whose shebang is the system
+    python rather than its own venv's; an empty or comment-only voice
+    file (the engine refuses "voice is disabled");
+  - `save_prev` runs before the trap is armed: a failing `cp` there
+    leaves a root-only `/etc/mrcalld/.create-prev.*` holding a voice copy
+    (from the code);
+  - `delete <uid>.sock` and `delete reconcile.lock` are valid uids and
+    remove another unit's socket or the lock file (from the code; older
+    than tenant-exec, same class as defect 24).
 - The fake release, the scratch profile `scrP1…1` (migrated, running)
   and `/etc/mrcalld/voice-fake.env` are still on the VM.
 
@@ -1659,7 +1730,9 @@ any of it — with recorded evidence for all eight criteria.
 
 - **Live customers.** Scratch first; Café124 store rename in one all-stopped
   window; identity one per day, operator present, `stat` record and backup
-  before each.
+  before each (the cadence is superseded by the
+  [CTO decision](#m2-decision--compressed-rollout-2026-10-02-cto): one
+  window, each profile accepted before the next).
 - **Store fork.** Dual-name code ships before any rename; a restart of an
   unmigrated daemon opens the legacy store, never an empty one.
 - **Token lockout.** `rekey --verify` before the unit starts; the reverse
