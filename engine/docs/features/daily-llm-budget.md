@@ -106,8 +106,14 @@ GLM 5.2, Kimi K3 and namespaced Claude Opus 5, Sonnet 5 and Haiku 4.5
 any model the model snapshot prices, so an explicit choice keeps running. Legacy requests use the Messages API
 with thinking disabled where the model allows it (per-model request rules);
 [K3 max](k3-reasoning.md) uses Chat completions with maximum reasoning. Both
-adapters send decimal price caps, disable fallbacks and validate the
-actual charge returned in `usage.cost`. Missing or invalid receipts keep holds.
+adapters send decimal price caps and validate the actual charge returned in
+`usage.cost`. Fallbacks between providers happen only within the admitted
+set: since milestone 10 (slice S3c) a request whose `only` lists the
+endpoints the snapshot admitted may fall back among them, and no further; a
+request without `only` never falls back, and K3's pin to its one endpoint
+never does (the billing server mirrors this rule in an S7 follow-up). A
+refused call (429, or another status proving no work was done) releases its
+hold. Missing or invalid receipts keep holds.
 Explicit model/feature allowlists apply; this is not unlimited model routing.
 
 The limit covers this engine/profile store. Other hosts, copied databases,
@@ -219,9 +225,11 @@ the resolved table prices nothing. `budget_pricing.PRICES` (direct) and
 `openrouter_pricing.RATES` are views over it, so a snapshot installed later
 reaches every request. OpenRouter holds and `max_price` are the price × the
 margin of `requirements.json` (1.25; K3 from its pinned endpoint's price),
-with the provider policy (no fallbacks, parameters required, price sorting,
-`requirements.json`'s quantizations, and `only` the endpoints the snapshot
-admitted); the direct transport reserves at the list price. The hand-written
+with the provider policy (fallbacks only within the admitted set, `only` the
+endpoints the snapshot admitted, and never for K3's pin, a rule the billing
+server mirrors in an S7 follow-up; parameters required, price sorting,
+`requirements.json`'s quantizations); the direct transport reserves at the
+list price. The hand-written
 snapshot-id map is gone: a response may name the requested id or
 `<requested>-YYYYMMDD`. Tests hold the direct rates equal to the `anthropic`
 endpoint's. `usage.py`'s estimate prices an id at its snapshot rate (so a GLM

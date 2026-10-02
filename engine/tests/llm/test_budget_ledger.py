@@ -173,10 +173,16 @@ def test_missing_identity_refuses(ledger, monkeypatch):
         budget.reserve(request(), "direct")
 
 
-def _process_attempt(database_url, cap, queue):
-    """Independent engine and connection, not an inherited transaction."""
+def _process_attempt(database_url, cap, queue, snapshot):
+    """Independent engine and connection, not an inherited transaction.
+
+    A spawned process inherits no catalogue layer, so it pins the parent's
+    fixture snapshot itself and prices from it, never from the build copy."""
     import os
 
+    from zylch.llm.roles import catalogue
+
+    catalogue.set_layers(snapshot, build=False)
     engine = create_engine(database_url, connect_args={"timeout": 20})
     database.get_engine = lambda: engine
     os.environ["OWNER_ID"] = "immutable-uid"
@@ -190,15 +196,14 @@ def _process_attempt(database_url, cap, queue):
         engine.dispose()
 
 
-def test_independent_processes_share_allowance(ledger):
+def test_independent_processes_share_allowance(ledger, prices):
     import multiprocessing
 
     ctx = multiprocessing.get_context("spawn")
     queue = ctx.Queue()
     cap = str(request_bound(request(), "direct") * 2 / 1e6)
-    processes = [
-        ctx.Process(target=_process_attempt, args=(str(ledger.url), cap, queue)) for _ in range(4)
-    ]
+    args = (str(ledger.url), cap, queue, prices)
+    processes = [ctx.Process(target=_process_attempt, args=args) for _ in range(4)]
     for process in processes:
         process.start()
     outcomes = [queue.get(timeout=30) for _ in processes]
@@ -311,14 +316,14 @@ def test_grounding_prompt_inside_the_window_is_admitted(ledger, monkeypatch):
     )
 
 
-def test_other_process_stale_cap_cannot_override_saved_pause(ledger, monkeypatch, tmp_path):
+def test_other_process_stale_cap_cannot_override_saved_pause(ledger, monkeypatch, tmp_path, prices):
     import multiprocessing
 
     monkeypatch.setenv("ZYLCH_PROFILE_DIR", str(tmp_path))
     (tmp_path / ".env").write_text("LLM_DAILY_BUDGET_USD=0\n")
     ctx = multiprocessing.get_context("spawn")
     queue = ctx.Queue()
-    child = ctx.Process(target=_process_attempt, args=(str(ledger.url), "5", queue))
+    child = ctx.Process(target=_process_attempt, args=(str(ledger.url), "5", queue, prices))
     child.start()
     assert queue.get(timeout=30) is False
     child.join(timeout=30)
