@@ -198,6 +198,7 @@ def test_credits_quote_execute_and_replay_carry_reasoning(ledger):
                 markup_factor="1.5",
                 max_credits=2,
                 max_debit_micro_usd=22000,
+                snapshot_version="0" * 64,  # protocol v2: the snapshot it priced with
             )
             quote["quote_hash"] = digest(quote)
             return httpx.Response(200, json=quote)
@@ -306,6 +307,7 @@ def credits_client(sent):
                 markup_factor="1.5",
                 max_credits=2,
                 max_debit_micro_usd=22000,
+                snapshot_version="0" * 64,  # protocol v2: the snapshot it priced with
             )
             quote["quote_hash"] = digest(quote)
             return httpx.Response(200, json=quote)

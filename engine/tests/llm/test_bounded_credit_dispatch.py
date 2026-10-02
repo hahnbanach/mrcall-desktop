@@ -1,4 +1,11 @@
-"""HTTP debit protocol plus real SQLite. Synthetic receipts; no paid endpoints."""
+"""HTTP debit protocol plus real SQLite. Synthetic receipts; no paid endpoints.
+
+The synthetic server answers in the credits protocol v2 the engine speaks
+since milestone 10 S6 (`zylch/llm/roles/contract/protocol-v2.md`): every
+quote names the snapshot version it priced with (`SNAPSHOT`), and the quote
+and execute bodies carry the protocol marker.
+"""
+import hashlib
 import json
 from types import SimpleNamespace
 
@@ -11,6 +18,8 @@ from zylch.llm.billing_reconciliation import reconcile
 from zylch.llm.client import LLMClient
 from zylch.storage import database
 from zylch.storage.models import LlmReservation, LlmUsage, LlmBillingAuthorization
+
+SNAPSHOT = hashlib.sha256(b"synthetic snapshot").hexdigest()
 
 
 @pytest.fixture
@@ -34,10 +43,12 @@ def protocol(*, lose_response=False, corrupt=None):
             receipt = receipts[http_request.url.path.rsplit('/', 1)[1]]
             return httpx.Response(200, json={'state': 'settled', 'receipt': receipt})
         body = json.loads(http_request.content)
+        assert body['protocol'] == PROTOCOL  # the v2 marker beside `request`
         if http_request.url.path.endswith('/quote'):
             quote = dict(protocol=PROTOCOL, currency='USD', account_id='account', business_id='business',
                 payload_hash=digest(body['request']), tariff_version='test-tariff', model=body['request']['model'],
-                credit_value_micro_usd=11000, markup_factor='1.5', max_credits=2, max_debit_micro_usd=22000)
+                credit_value_micro_usd=11000, markup_factor='1.5', max_credits=2, max_debit_micro_usd=22000,
+                snapshot_version=SNAPSHOT)
             if corrupt == 'quote_account':
                 quote['account_id'] = 'other'
             quote['quote_hash'] = digest(quote)
@@ -159,7 +170,8 @@ def test_selected_business_is_sent_on_quote_and_execute_and_cannot_drift(ledger)
             value = dict(protocol=PROTOCOL, currency="USD", account_id="account",
                 business_id="selected-business", payload_hash=digest(wire_request(body["request"])),
                 tariff_version="fixture", model=body["request"]["model"],
-                credit_value_micro_usd=1000, max_credits=1, max_debit_micro_usd=1000)
+                credit_value_micro_usd=1000, max_credits=1, max_debit_micro_usd=1000,
+                snapshot_version=SNAPSHOT)
             return httpx.Response(200, json=value | {"quote_hash":digest(value)})
         receipt = {**body["quote"], "request_id":body["request_id"],
             "authorized_max_debit_micro_usd":1000,"credits":1,"debit_micro_usd":1000}

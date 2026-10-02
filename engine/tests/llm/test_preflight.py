@@ -164,7 +164,27 @@ def credits(answers, seen):
 
 CAPABILITIES = "/api/desktop/llm/bounded/capabilities"
 BALANCE = "/api/desktop/llm/balance"
-SERVED = {"protocol": "mrcall-bounded-v1", "currency": "USD", "models": []}
+# The engine speaks the credits protocol v2 since milestone 10 S6: a v1 answer pauses.
+SERVED = {"protocol": "mrcall-bounded-v2", "currency": "USD", "models": []}
+
+
+def test_credits_preflight_asks_for_v2_and_a_v1_server_pauses_with_update_the_server():
+    queries = []
+
+    def handler(request):
+        queries.append(dict(request.url.params))
+        return httpx.Response(200, json={**SERVED, "protocol": "mrcall-bounded-v1"})
+
+    session = SimpleNamespace(id_token="synthetic")
+    client = LLMClient("proxy", firebase_session=session, model="claude-sonnet-5-5")
+    client._client = BoundedProxyClient(
+        "https://synthetic.test",
+        session,
+        http_client=httpx.Client(transport=httpx.MockTransport(handler)),
+    )
+    with pytest.raises(BudgetError, match="update the billing server"):
+        check(client)
+    assert queries == [{"protocol": "mrcall-bounded-v2"}]
 
 
 def test_credits_read_capabilities_and_balance_and_surface_401_and_402():

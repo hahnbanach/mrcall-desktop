@@ -1,7 +1,20 @@
-"""Single-attempt MrCall debit contract; never replay inference to recover billing."""
+"""Single-attempt MrCall debit contract; never replay inference to recover billing.
+
+This engine speaks the credits protocol `mrcall-bounded-v2`
+(`roles/contract/protocol-v2.md`): ``"protocol": "mrcall-bounded-v2"`` beside
+``request`` in the quote and execute bodies (outside ``request``, so
+``payload_hash`` is computed as in v1; the server binds an execute replay to
+it) and ``?protocol=mrcall-bounded-v2`` on ``GET /capabilities``. The server
+answers v2 in the capabilities, the quote and the receipt, and the quote names
+the snapshot it priced with (``snapshot_version``), which the receipt repeats.
+A server that answers a marked call in another protocol (a v1 server) makes
+the engine pause with `UPDATE_SERVER`: it never falls back to v1. Released
+engines send no marker and keep v1 on the server.
+"""
 
 import hashlib
 import json
+import re
 from types import SimpleNamespace
 
 import httpx
@@ -9,8 +22,17 @@ import httpx
 from .budget_pricing import BudgetError
 from .response import REASONING
 
-PROTOCOL = "mrcall-bounded-v1"
+PROTOCOL = "mrcall-bounded-v2"
+# What every released engine speaks; a reservation quoted under it before an
+# upgrade still settles from its stored v1 quote (`validate_receipt`).
+V1 = "mrcall-bounded-v1"
 PREFIX = "/api/desktop/llm/bounded"
+# The snapshot `version` a v2 quote names: a SHA-256, lowercase hex.
+SNAPSHOT_VERSION = re.compile(r"[0-9a-f]{64}")
+UPDATE_SERVER = (
+    "AI paused: update the billing server; it does not answer in the credits protocol "
+    "mrcall-bounded-v2 this engine speaks."
+)
 
 
 def digest(value):
@@ -52,6 +74,10 @@ def validate_quote(request, quote, owner):
                 raise ValueError()
         if quote["max_debit_micro_usd"] != quote["max_credits"] * quote["credit_value_micro_usd"]:
             raise ValueError()
+        # v2: the quote names the snapshot it priced with; the receipt repeats it.
+        version = quote["snapshot_version"]
+        if not isinstance(version, str) or not SNAPSHOT_VERSION.fullmatch(version):
+            raise ValueError()
         if quote["quote_hash"] != digest({k: v for k, v in quote.items() if k != "quote_hash"}):
             raise ValueError()
         return quote["max_debit_micro_usd"]
@@ -60,6 +86,10 @@ def validate_quote(request, quote, owner):
 
 
 def validate_receipt(reservation, quote, receipt):
+    """The settled debit, when `receipt` repeats every field of the stored
+    `quote` (a v2 receipt its ``protocol`` and ``snapshot_version`` too; a
+    reservation quoted in v1 before an upgrade settles against its v1 quote)
+    and its amounts stay within the reservation."""
     try:
         if not isinstance(receipt, dict) or any(receipt.get(k) != v for k, v in quote.items()):
             raise ValueError()
@@ -134,13 +164,15 @@ class BoundedProxyClient:
             ) from None
 
     def capabilities(self):
-        result = self._call("GET", "/capabilities")
+        """The server's v2 capabilities; an answer in another protocol (or currency)
+        pauses with `UPDATE_SERVER`. The model list is read by `roles/served.py`."""
+        result = self._call("GET", "/capabilities?protocol=" + PROTOCOL)
         if (
             not isinstance(result, dict)
             or result.get("protocol") != PROTOCOL
             or result.get("currency") != "USD"
         ):
-            raise BudgetError("Update the billing server to support bounded credits.")
+            raise BudgetError(UPDATE_SERVER)
         return result
 
     def check_account(self):
@@ -153,16 +185,21 @@ class BoundedProxyClient:
             raise BudgetError("MrCall credits are exhausted. Top up at dashboard.mrcall.ai/plan.")
 
     def quote(self, request):
-        body = {"request": wire_request(request)}
+        body = {"protocol": PROTOCOL, "request": wire_request(request)}
         if self.business_id:
             body["business_id"] = self.business_id
         quote = self._call("POST", "/quote", body)
+        if not isinstance(quote, dict):
+            raise BudgetError("AI paused: MrCall returned an invalid debit quote.")
         if self.business_id and quote.get("business_id") != self.business_id:
             raise BudgetError("MrCall billing business changed; request refused.")
+        if quote.get("protocol") != PROTOCOL:
+            raise BudgetError(UPDATE_SERVER)  # a v1 answer: never fall back to v1
         return quote
 
     def execute(self, request, quote, reservation):
         body = {
+            "protocol": PROTOCOL,
             "request": wire_request(request),
             "quote": quote,
             "request_id": reservation.id,
