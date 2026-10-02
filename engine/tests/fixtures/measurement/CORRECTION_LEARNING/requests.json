@@ -1,0 +1,1148 @@
+{
+ "schema": 1,
+ "role": "CORRECTION_LEARNING",
+ "prompt_sha256": "3e6e88fecfeb96673b98b1d65243229c0f873778e53bb3e26e7fcb246160717d",
+ "case_set_sha256": "8aa02ae76af52dd8d52787093f5e1449ab28b5f1f506e8036f09553a19fd5da6",
+ "requests": [
+  {
+   "case_id": "correction_learning-01",
+   "request": {
+    "system": "You maintain a small set of operating rules for an assistant that drafts business messages on behalf of a user. You are shown what the assistant DRAFTED and what the user actually SENT after editing. Your job is to decide whether the user's change reveals a DURABLE policy worth applying to every future message, and to avoid duplicating rules that already exist. Be conservative: only record a rule when the edit clearly generalises. Recording a wrong rule is worse than missing one.",
+    "messages": [
+     {
+      "role": "user",
+      "content": "EXISTING RULES:\n- Dai sempre del Lei ai clienti nelle email.\n- Firma le email come \"Lo staff della Tipografia Esempio\".\n\nASSISTANT DRAFTED:\nGentile Sig. Bellini,\nci dispiace per il problema con la stampa dei menu. Se preferisce, la richiamiamo noi in giornata per risolverlo.\nCordiali saluti,\nLo staff della Tipografia Esempio\n\nUSER ACTUALLY SENT:\nGentile Sig. Bellini,\nci dispiace per il problema con la stampa dei menu. Per l'assistenza ci scriva pure a questo indirizzo: non facciamo richiamate telefoniche, ma rispondiamo a tutte le email entro 24 ore.\nCordiali saluti,\nLo staff della Tipografia Esempio\n\nCall record_rule with your judgment."
+     }
+    ],
+    "tools": [
+     {
+      "name": "record_rule",
+      "description": "Record your judgment about whether the user's edit reveals a durable policy worth remembering for all future messages.",
+      "input_schema": {
+       "type": "object",
+       "properties": {
+        "is_durable_rule": {
+         "type": "boolean",
+         "description": "True only if the edit reflects a general policy that should apply to FUTURE messages too (e.g. removing an offer to phone customers because the business never phones for support). False for one-off, recipient-specific tweaks, typo/grammar fixes, added personal details, or anything already covered by an existing rule below."
+        },
+        "rule": {
+         "type": "string",
+         "description": "If durable: a single imperative sentence stating the policy, phrased positively where possible (prefer 'For support, direct customers to email' over 'do not offer calls'). Empty otherwise."
+        },
+        "why": {
+         "type": "string",
+         "description": "If durable: one short clause explaining what edit this was inferred from. Empty otherwise."
+        }
+       },
+       "required": [
+        "is_durable_rule",
+        "rule",
+        "why"
+       ]
+      }
+     }
+    ],
+    "tool_choice": {
+     "type": "auto"
+    },
+    "max_tokens": 300
+   },
+   "capture_now": "2026-10-05T09:30:00"
+  },
+  {
+   "case_id": "correction_learning-02",
+   "request": {
+    "system": "You maintain a small set of operating rules for an assistant that drafts business messages on behalf of a user. You are shown what the assistant DRAFTED and what the user actually SENT after editing. Your job is to decide whether the user's change reveals a DURABLE policy worth applying to every future message, and to avoid duplicating rules that already exist. Be conservative: only record a rule when the edit clearly generalises. Recording a wrong rule is worse than missing one.",
+    "messages": [
+     {
+      "role": "user",
+      "content": "EXISTING RULES:\n- Always sign customer emails as \"The Example Studio team\".\n- Never share internal cost breakdowns with customers.\n\nASSISTANT DRAFTED:\nHi Priya,\nyour printed samples will arrive tomorrow.\nBest regards,\nThe Example Studio team\n\nUSER ACTUALLY SENT:\nHi Priya,\nyour printed samples are packed. As a rule we only confirm a delivery date once the courier has collected the parcel, so we'll email you the tracking number as soon as it's picked up.\nBest regards,\nThe Example Studio team\n\nCall record_rule with your judgment."
+     }
+    ],
+    "tools": [
+     {
+      "name": "record_rule",
+      "description": "Record your judgment about whether the user's edit reveals a durable policy worth remembering for all future messages.",
+      "input_schema": {
+       "type": "object",
+       "properties": {
+        "is_durable_rule": {
+         "type": "boolean",
+         "description": "True only if the edit reflects a general policy that should apply to FUTURE messages too (e.g. removing an offer to phone customers because the business never phones for support). False for one-off, recipient-specific tweaks, typo/grammar fixes, added personal details, or anything already covered by an existing rule below."
+        },
+        "rule": {
+         "type": "string",
+         "description": "If durable: a single imperative sentence stating the policy, phrased positively where possible (prefer 'For support, direct customers to email' over 'do not offer calls'). Empty otherwise."
+        },
+        "why": {
+         "type": "string",
+         "description": "If durable: one short clause explaining what edit this was inferred from. Empty otherwise."
+        }
+       },
+       "required": [
+        "is_durable_rule",
+        "rule",
+        "why"
+       ]
+      }
+     }
+    ],
+    "tool_choice": {
+     "type": "auto"
+    },
+    "max_tokens": 300
+   },
+   "capture_now": "2026-10-05T09:30:00"
+  },
+  {
+   "case_id": "correction_learning-03",
+   "request": {
+    "system": "You maintain a small set of operating rules for an assistant that drafts business messages on behalf of a user. You are shown what the assistant DRAFTED and what the user actually SENT after editing. Your job is to decide whether the user's change reveals a DURABLE policy worth applying to every future message, and to avoid duplicating rules that already exist. Be conservative: only record a rule when the edit clearly generalises. Recording a wrong rule is worse than missing one.",
+    "messages": [
+     {
+      "role": "user",
+      "content": "EXISTING RULES:\n- Dai sempre del Lei ai clienti nelle email.\n- Firma le email come \"Lo staff della Tipografia Esempio\".\n\nASSISTANT DRAFTED:\nGentile cliente,\nil pagamento può avvenire anche in contrassegno alla consegna.\nCordiali saluti,\nLo staff della Tipografia Esempio\n\nUSER ACTUALLY SENT:\nGentile cliente,\nil pagamento è solo anticipato tramite bonifico: non accettiamo il contrassegno.\nCordiali saluti,\nLo staff della Tipografia Esempio\n\nCall record_rule with your judgment."
+     }
+    ],
+    "tools": [
+     {
+      "name": "record_rule",
+      "description": "Record your judgment about whether the user's edit reveals a durable policy worth remembering for all future messages.",
+      "input_schema": {
+       "type": "object",
+       "properties": {
+        "is_durable_rule": {
+         "type": "boolean",
+         "description": "True only if the edit reflects a general policy that should apply to FUTURE messages too (e.g. removing an offer to phone customers because the business never phones for support). False for one-off, recipient-specific tweaks, typo/grammar fixes, added personal details, or anything already covered by an existing rule below."
+        },
+        "rule": {
+         "type": "string",
+         "description": "If durable: a single imperative sentence stating the policy, phrased positively where possible (prefer 'For support, direct customers to email' over 'do not offer calls'). Empty otherwise."
+        },
+        "why": {
+         "type": "string",
+         "description": "If durable: one short clause explaining what edit this was inferred from. Empty otherwise."
+        }
+       },
+       "required": [
+        "is_durable_rule",
+        "rule",
+        "why"
+       ]
+      }
+     }
+    ],
+    "tool_choice": {
+     "type": "auto"
+    },
+    "max_tokens": 300
+   },
+   "capture_now": "2026-10-05T09:30:00"
+  },
+  {
+   "case_id": "correction_learning-04",
+   "request": {
+    "system": "You maintain a small set of operating rules for an assistant that drafts business messages on behalf of a user. You are shown what the assistant DRAFTED and what the user actually SENT after editing. Your job is to decide whether the user's change reveals a DURABLE policy worth applying to every future message, and to avoid duplicating rules that already exist. Be conservative: only record a rule when the edit clearly generalises. Recording a wrong rule is worse than missing one.",
+    "messages": [
+     {
+      "role": "user",
+      "content": "EXISTING RULES:\n- Always sign customer emails as \"The Example Studio team\".\n- Never share internal cost breakdowns with customers.\n\nASSISTANT DRAFTED:\nHi Sam,\nsorry about the login issue. Feel free to call our support line on +44 20 0000 0456 any time.\nBest regards,\nThe Example Studio team\n\nUSER ACTUALLY SENT:\nHi Sam,\nsorry about the login issue. For support, please use the help form in your client area: we no longer offer phone support.\nBest regards,\nThe Example Studio team\n\nCall record_rule with your judgment."
+     }
+    ],
+    "tools": [
+     {
+      "name": "record_rule",
+      "description": "Record your judgment about whether the user's edit reveals a durable policy worth remembering for all future messages.",
+      "input_schema": {
+       "type": "object",
+       "properties": {
+        "is_durable_rule": {
+         "type": "boolean",
+         "description": "True only if the edit reflects a general policy that should apply to FUTURE messages too (e.g. removing an offer to phone customers because the business never phones for support). False for one-off, recipient-specific tweaks, typo/grammar fixes, added personal details, or anything already covered by an existing rule below."
+        },
+        "rule": {
+         "type": "string",
+         "description": "If durable: a single imperative sentence stating the policy, phrased positively where possible (prefer 'For support, direct customers to email' over 'do not offer calls'). Empty otherwise."
+        },
+        "why": {
+         "type": "string",
+         "description": "If durable: one short clause explaining what edit this was inferred from. Empty otherwise."
+        }
+       },
+       "required": [
+        "is_durable_rule",
+        "rule",
+        "why"
+       ]
+      }
+     }
+    ],
+    "tool_choice": {
+     "type": "auto"
+    },
+    "max_tokens": 300
+   },
+   "capture_now": "2026-10-05T09:30:00"
+  },
+  {
+   "case_id": "correction_learning-05",
+   "request": {
+    "system": "You maintain a small set of operating rules for an assistant that drafts business messages on behalf of a user. You are shown what the assistant DRAFTED and what the user actually SENT after editing. Your job is to decide whether the user's change reveals a DURABLE policy worth applying to every future message, and to avoid duplicating rules that already exist. Be conservative: only record a rule when the edit clearly generalises. Recording a wrong rule is worse than missing one.",
+    "messages": [
+     {
+      "role": "user",
+      "content": "EXISTING RULES:\n- Dai sempre del Lei ai clienti nelle email.\n- Firma le email come \"Lo staff della Tipografia Esempio\".\n\nASSISTANT DRAFTED:\nBuongiorno,\nle allego il nostro listino prezzi completo.\nCordiali saluti,\nLo staff della Tipografia Esempio\n\nUSER ACTUALLY SENT:\nBuongiorno,\nil listino prezzi lo inviamo solo ai rivenditori registrati sul nostro portale: le basta completare la registrazione e lo riceverà subito.\nCordiali saluti,\nLo staff della Tipografia Esempio\n\nCall record_rule with your judgment."
+     }
+    ],
+    "tools": [
+     {
+      "name": "record_rule",
+      "description": "Record your judgment about whether the user's edit reveals a durable policy worth remembering for all future messages.",
+      "input_schema": {
+       "type": "object",
+       "properties": {
+        "is_durable_rule": {
+         "type": "boolean",
+         "description": "True only if the edit reflects a general policy that should apply to FUTURE messages too (e.g. removing an offer to phone customers because the business never phones for support). False for one-off, recipient-specific tweaks, typo/grammar fixes, added personal details, or anything already covered by an existing rule below."
+        },
+        "rule": {
+         "type": "string",
+         "description": "If durable: a single imperative sentence stating the policy, phrased positively where possible (prefer 'For support, direct customers to email' over 'do not offer calls'). Empty otherwise."
+        },
+        "why": {
+         "type": "string",
+         "description": "If durable: one short clause explaining what edit this was inferred from. Empty otherwise."
+        }
+       },
+       "required": [
+        "is_durable_rule",
+        "rule",
+        "why"
+       ]
+      }
+     }
+    ],
+    "tool_choice": {
+     "type": "auto"
+    },
+    "max_tokens": 300
+   },
+   "capture_now": "2026-10-05T09:30:00"
+  },
+  {
+   "case_id": "correction_learning-06",
+   "request": {
+    "system": "You maintain a small set of operating rules for an assistant that drafts business messages on behalf of a user. You are shown what the assistant DRAFTED and what the user actually SENT after editing. Your job is to decide whether the user's change reveals a DURABLE policy worth applying to every future message, and to avoid duplicating rules that already exist. Be conservative: only record a rule when the edit clearly generalises. Recording a wrong rule is worse than missing one.",
+    "messages": [
+     {
+      "role": "user",
+      "content": "EXISTING RULES:\n- Always sign customer emails as \"The Example Studio team\".\n- Never share internal cost breakdowns with customers.\n\nASSISTANT DRAFTED:\nHi Laura,\nwe're sorry for the delay. As a gesture of goodwill, we can offer you 10% off your next project.\nBest regards,\nThe Example Studio team\n\nUSER ACTUALLY SENT:\nHi Laura,\nwe're sorry for the delay. Please note that we never offer discounts by email: any commercial conditions are handled by our sales team.\nBest regards,\nThe Example Studio team\n\nCall record_rule with your judgment."
+     }
+    ],
+    "tools": [
+     {
+      "name": "record_rule",
+      "description": "Record your judgment about whether the user's edit reveals a durable policy worth remembering for all future messages.",
+      "input_schema": {
+       "type": "object",
+       "properties": {
+        "is_durable_rule": {
+         "type": "boolean",
+         "description": "True only if the edit reflects a general policy that should apply to FUTURE messages too (e.g. removing an offer to phone customers because the business never phones for support). False for one-off, recipient-specific tweaks, typo/grammar fixes, added personal details, or anything already covered by an existing rule below."
+        },
+        "rule": {
+         "type": "string",
+         "description": "If durable: a single imperative sentence stating the policy, phrased positively where possible (prefer 'For support, direct customers to email' over 'do not offer calls'). Empty otherwise."
+        },
+        "why": {
+         "type": "string",
+         "description": "If durable: one short clause explaining what edit this was inferred from. Empty otherwise."
+        }
+       },
+       "required": [
+        "is_durable_rule",
+        "rule",
+        "why"
+       ]
+      }
+     }
+    ],
+    "tool_choice": {
+     "type": "auto"
+    },
+    "max_tokens": 300
+   },
+   "capture_now": "2026-10-05T09:30:00"
+  },
+  {
+   "case_id": "correction_learning-07",
+   "request": {
+    "system": "You maintain a small set of operating rules for an assistant that drafts business messages on behalf of a user. You are shown what the assistant DRAFTED and what the user actually SENT after editing. Your job is to decide whether the user's change reveals a DURABLE policy worth applying to every future message, and to avoid duplicating rules that already exist. Be conservative: only record a rule when the edit clearly generalises. Recording a wrong rule is worse than missing one.",
+    "messages": [
+     {
+      "role": "user",
+      "content": "EXISTING RULES:\n- Dai sempre del Lei ai clienti nelle email.\n- Firma le email come \"Lo staff della Tipografia Esempio\".\n\nASSISTANT DRAFTED:\nGentile Sig.ra Rossi,\nle confermiamo la spedizone dei biglietti da visita per domani.\nCordiali saluti,\nLo staff della Tipografia Esempio\n\nUSER ACTUALLY SENT:\nGentile Sig.ra Rossi,\nle confermiamo la spedizione dei biglietti da visita per domani.\nCordiali saluti,\nLo staff della Tipografia Esempio\n\nCall record_rule with your judgment."
+     }
+    ],
+    "tools": [
+     {
+      "name": "record_rule",
+      "description": "Record your judgment about whether the user's edit reveals a durable policy worth remembering for all future messages.",
+      "input_schema": {
+       "type": "object",
+       "properties": {
+        "is_durable_rule": {
+         "type": "boolean",
+         "description": "True only if the edit reflects a general policy that should apply to FUTURE messages too (e.g. removing an offer to phone customers because the business never phones for support). False for one-off, recipient-specific tweaks, typo/grammar fixes, added personal details, or anything already covered by an existing rule below."
+        },
+        "rule": {
+         "type": "string",
+         "description": "If durable: a single imperative sentence stating the policy, phrased positively where possible (prefer 'For support, direct customers to email' over 'do not offer calls'). Empty otherwise."
+        },
+        "why": {
+         "type": "string",
+         "description": "If durable: one short clause explaining what edit this was inferred from. Empty otherwise."
+        }
+       },
+       "required": [
+        "is_durable_rule",
+        "rule",
+        "why"
+       ]
+      }
+     }
+    ],
+    "tool_choice": {
+     "type": "auto"
+    },
+    "max_tokens": 300
+   },
+   "capture_now": "2026-10-05T09:30:00"
+  },
+  {
+   "case_id": "correction_learning-08",
+   "request": {
+    "system": "You maintain a small set of operating rules for an assistant that drafts business messages on behalf of a user. You are shown what the assistant DRAFTED and what the user actually SENT after editing. Your job is to decide whether the user's change reveals a DURABLE policy worth applying to every future message, and to avoid duplicating rules that already exist. Be conservative: only record a rule when the edit clearly generalises. Recording a wrong rule is worse than missing one.",
+    "messages": [
+     {
+      "role": "user",
+      "content": "EXISTING RULES:\n- Always sign customer emails as \"The Example Studio team\".\n- Never share internal cost breakdowns with customers.\n\nASSISTANT DRAFTED:\nHi Priya,\nwe can deliver the display stands on Friday morning.\nBest regards,\nThe Example Studio team\n\nUSER ACTUALLY SENT:\nHi Priya,\nwe can deliver the display stands on Friday morning. As agreed with you on the phone, the driver will call you 30 minutes before arriving.\nBest regards,\nThe Example Studio team\n\nCall record_rule with your judgment."
+     }
+    ],
+    "tools": [
+     {
+      "name": "record_rule",
+      "description": "Record your judgment about whether the user's edit reveals a durable policy worth remembering for all future messages.",
+      "input_schema": {
+       "type": "object",
+       "properties": {
+        "is_durable_rule": {
+         "type": "boolean",
+         "description": "True only if the edit reflects a general policy that should apply to FUTURE messages too (e.g. removing an offer to phone customers because the business never phones for support). False for one-off, recipient-specific tweaks, typo/grammar fixes, added personal details, or anything already covered by an existing rule below."
+        },
+        "rule": {
+         "type": "string",
+         "description": "If durable: a single imperative sentence stating the policy, phrased positively where possible (prefer 'For support, direct customers to email' over 'do not offer calls'). Empty otherwise."
+        },
+        "why": {
+         "type": "string",
+         "description": "If durable: one short clause explaining what edit this was inferred from. Empty otherwise."
+        }
+       },
+       "required": [
+        "is_durable_rule",
+        "rule",
+        "why"
+       ]
+      }
+     }
+    ],
+    "tool_choice": {
+     "type": "auto"
+    },
+    "max_tokens": 300
+   },
+   "capture_now": "2026-10-05T09:30:00"
+  },
+  {
+   "case_id": "correction_learning-09",
+   "request": {
+    "system": "You maintain a small set of operating rules for an assistant that drafts business messages on behalf of a user. You are shown what the assistant DRAFTED and what the user actually SENT after editing. Your job is to decide whether the user's change reveals a DURABLE policy worth applying to every future message, and to avoid duplicating rules that already exist. Be conservative: only record a rule when the edit clearly generalises. Recording a wrong rule is worse than missing one.",
+    "messages": [
+     {
+      "role": "user",
+      "content": "EXISTING RULES:\n- Dai sempre del Lei ai clienti nelle email.\n- Firma le email come \"Lo staff della Tipografia Esempio\".\n\nASSISTANT DRAFTED:\nGrazie per l'ordine dei volantini, buona giornata!\n\nUSER ACTUALLY SENT:\nGrazie per l'ordine dei volantini e in bocca al lupo per l'inaugurazione del nuovo negozio! Buona giornata!\n\nCall record_rule with your judgment."
+     }
+    ],
+    "tools": [
+     {
+      "name": "record_rule",
+      "description": "Record your judgment about whether the user's edit reveals a durable policy worth remembering for all future messages.",
+      "input_schema": {
+       "type": "object",
+       "properties": {
+        "is_durable_rule": {
+         "type": "boolean",
+         "description": "True only if the edit reflects a general policy that should apply to FUTURE messages too (e.g. removing an offer to phone customers because the business never phones for support). False for one-off, recipient-specific tweaks, typo/grammar fixes, added personal details, or anything already covered by an existing rule below."
+        },
+        "rule": {
+         "type": "string",
+         "description": "If durable: a single imperative sentence stating the policy, phrased positively where possible (prefer 'For support, direct customers to email' over 'do not offer calls'). Empty otherwise."
+        },
+        "why": {
+         "type": "string",
+         "description": "If durable: one short clause explaining what edit this was inferred from. Empty otherwise."
+        }
+       },
+       "required": [
+        "is_durable_rule",
+        "rule",
+        "why"
+       ]
+      }
+     }
+    ],
+    "tool_choice": {
+     "type": "auto"
+    },
+    "max_tokens": 300
+   },
+   "capture_now": "2026-10-05T09:30:00"
+  },
+  {
+   "case_id": "correction_learning-10",
+   "request": {
+    "system": "You maintain a small set of operating rules for an assistant that drafts business messages on behalf of a user. You are shown what the assistant DRAFTED and what the user actually SENT after editing. Your job is to decide whether the user's change reveals a DURABLE policy worth applying to every future message, and to avoid duplicating rules that already exist. Be conservative: only record a rule when the edit clearly generalises. Recording a wrong rule is worse than missing one.",
+    "messages": [
+     {
+      "role": "user",
+      "content": "EXISTING RULES:\n- Always sign customer emails as \"The Example Studio team\".\n- Never share internal cost breakdowns with customers.\n\nASSISTANT DRAFTED:\nHi Tom,\nthe final logo files are attached.\nBest regards,\nExample Studio\n\nUSER ACTUALLY SENT:\nHi Tom,\nthe final logo files are attached.\nBest regards,\nThe Example Studio team\n\nCall record_rule with your judgment."
+     }
+    ],
+    "tools": [
+     {
+      "name": "record_rule",
+      "description": "Record your judgment about whether the user's edit reveals a durable policy worth remembering for all future messages.",
+      "input_schema": {
+       "type": "object",
+       "properties": {
+        "is_durable_rule": {
+         "type": "boolean",
+         "description": "True only if the edit reflects a general policy that should apply to FUTURE messages too (e.g. removing an offer to phone customers because the business never phones for support). False for one-off, recipient-specific tweaks, typo/grammar fixes, added personal details, or anything already covered by an existing rule below."
+        },
+        "rule": {
+         "type": "string",
+         "description": "If durable: a single imperative sentence stating the policy, phrased positively where possible (prefer 'For support, direct customers to email' over 'do not offer calls'). Empty otherwise."
+        },
+        "why": {
+         "type": "string",
+         "description": "If durable: one short clause explaining what edit this was inferred from. Empty otherwise."
+        }
+       },
+       "required": [
+        "is_durable_rule",
+        "rule",
+        "why"
+       ]
+      }
+     }
+    ],
+    "tool_choice": {
+     "type": "auto"
+    },
+    "max_tokens": 300
+   },
+   "capture_now": "2026-10-05T09:30:00"
+  },
+  {
+   "case_id": "correction_learning-11",
+   "request": {
+    "system": "You maintain a small set of operating rules for an assistant that drafts business messages on behalf of a user. You are shown what the assistant DRAFTED and what the user actually SENT after editing. Your job is to decide whether the user's change reveals a DURABLE policy worth applying to every future message, and to avoid duplicating rules that already exist. Be conservative: only record a rule when the edit clearly generalises. Recording a wrong rule is worse than missing one.",
+    "messages": [
+     {
+      "role": "user",
+      "content": "EXISTING RULES:\n- Dai sempre del Lei ai clienti nelle email.\n- Firma le email come \"Lo staff della Tipografia Esempio\".\n\nASSISTANT DRAFTED:\nBuongiorno, può ritirare i biglietti da visita martedì dalle 10 in negozio.\n\nUSER ACTUALLY SENT:\nBuongiorno, può ritirare i biglietti da visita mercoledì dalle 10 in negozio.\n\nCall record_rule with your judgment."
+     }
+    ],
+    "tools": [
+     {
+      "name": "record_rule",
+      "description": "Record your judgment about whether the user's edit reveals a durable policy worth remembering for all future messages.",
+      "input_schema": {
+       "type": "object",
+       "properties": {
+        "is_durable_rule": {
+         "type": "boolean",
+         "description": "True only if the edit reflects a general policy that should apply to FUTURE messages too (e.g. removing an offer to phone customers because the business never phones for support). False for one-off, recipient-specific tweaks, typo/grammar fixes, added personal details, or anything already covered by an existing rule below."
+        },
+        "rule": {
+         "type": "string",
+         "description": "If durable: a single imperative sentence stating the policy, phrased positively where possible (prefer 'For support, direct customers to email' over 'do not offer calls'). Empty otherwise."
+        },
+        "why": {
+         "type": "string",
+         "description": "If durable: one short clause explaining what edit this was inferred from. Empty otherwise."
+        }
+       },
+       "required": [
+        "is_durable_rule",
+        "rule",
+        "why"
+       ]
+      }
+     }
+    ],
+    "tool_choice": {
+     "type": "auto"
+    },
+    "max_tokens": 300
+   },
+   "capture_now": "2026-10-05T09:30:00"
+  },
+  {
+   "case_id": "correction_learning-12",
+   "request": {
+    "system": "You maintain a small set of operating rules for an assistant that drafts business messages on behalf of a user. You are shown what the assistant DRAFTED and what the user actually SENT after editing. Your job is to decide whether the user's change reveals a DURABLE policy worth applying to every future message, and to avoid duplicating rules that already exist. Be conservative: only record a rule when the edit clearly generalises. Recording a wrong rule is worse than missing one.",
+    "messages": [
+     {
+      "role": "user",
+      "content": "EXISTING RULES:\n- Always sign customer emails as \"The Example Studio team\".\n- Never share internal cost breakdowns with customers.\n\nASSISTANT DRAFTED:\nHello,\nwe have received you're brief and it's being reviewed by the team.\nBest regards,\nThe Example Studio team\n\nUSER ACTUALLY SENT:\nHello,\nwe have received your brief and it is being reviewed by the team.\nBest regards,\nThe Example Studio team\n\nCall record_rule with your judgment."
+     }
+    ],
+    "tools": [
+     {
+      "name": "record_rule",
+      "description": "Record your judgment about whether the user's edit reveals a durable policy worth remembering for all future messages.",
+      "input_schema": {
+       "type": "object",
+       "properties": {
+        "is_durable_rule": {
+         "type": "boolean",
+         "description": "True only if the edit reflects a general policy that should apply to FUTURE messages too (e.g. removing an offer to phone customers because the business never phones for support). False for one-off, recipient-specific tweaks, typo/grammar fixes, added personal details, or anything already covered by an existing rule below."
+        },
+        "rule": {
+         "type": "string",
+         "description": "If durable: a single imperative sentence stating the policy, phrased positively where possible (prefer 'For support, direct customers to email' over 'do not offer calls'). Empty otherwise."
+        },
+        "why": {
+         "type": "string",
+         "description": "If durable: one short clause explaining what edit this was inferred from. Empty otherwise."
+        }
+       },
+       "required": [
+        "is_durable_rule",
+        "rule",
+        "why"
+       ]
+      }
+     }
+    ],
+    "tool_choice": {
+     "type": "auto"
+    },
+    "max_tokens": 300
+   },
+   "capture_now": "2026-10-05T09:30:00"
+  },
+  {
+   "case_id": "correction_learning-13",
+   "request": {
+    "system": "You maintain a store of an organisation's standard business facts (prices, rates, lead times, minimum orders, hours, deliverables), grouped by category. You are shown what an assistant DRAFTED and what the user actually SENT after editing. Decide whether the user's edit corrected a STANDARD value worth reusing in future offers of the same kind. Be conservative: a one-off discount for a single customer is NOT a standard fact. Reuse an existing category when one fits. Recording a wrong fact is worse than missing one.",
+    "messages": [
+     {
+      "role": "user",
+      "content": "EXISTING CATEGORIES:\nbiglietti da visita, spedizioni, volantini\n\nASSISTANT DRAFTED:\nGentile cliente,\nper 500 biglietti da visita il prezzo è di 45 EUR + IVA, con consegna in 3 giorni lavorativi.\nCordiali saluti,\nLo staff della Tipografia Esempio\n\nUSER ACTUALLY SENT:\nGentile cliente,\nper 500 biglietti da visita il prezzo è di 52 EUR + IVA, con consegna in 3 giorni lavorativi.\nCordiali saluti,\nLo staff della Tipografia Esempio\n\nCall record_fact with your judgment."
+     }
+    ],
+    "tools": [
+     {
+      "name": "record_fact",
+      "description": "Record whether the user's edit corrected a concrete, reusable business value that future offers/replies should use.",
+      "input_schema": {
+       "type": "object",
+       "properties": {
+        "is_fact_change": {
+         "type": "boolean",
+         "description": "True ONLY if the edit changed a STANDARD business value (price, rate, lead time, minimum order, hours, deliverable) that should be reused in FUTURE offers of the same kind. False for a discount or figure specific to this one recipient, for typo/grammar fixes, for tone changes, or when no concrete value changed."
+        },
+        "category": {
+         "type": "string",
+         "description": "The kind of offer/topic the value belongs to. Reuse an existing category name from the list when one fits; keep names stable (e.g. 'white-label'). Empty if not a fact change."
+        },
+        "key": {
+         "type": "string",
+         "description": "A short stable name for the value (e.g. 'Day rate', 'Minimum order quantity'). Empty if not a fact change."
+        },
+        "value": {
+         "type": "string",
+         "description": "The corrected value WITH units (e.g. '800 EUR/day'). Empty if not a fact change."
+        }
+       },
+       "required": [
+        "is_fact_change",
+        "category",
+        "key",
+        "value"
+       ]
+      }
+     }
+    ],
+    "tool_choice": {
+     "type": "auto"
+    },
+    "max_tokens": 300
+   },
+   "capture_now": "2026-10-05T09:30:00"
+  },
+  {
+   "case_id": "correction_learning-14",
+   "request": {
+    "system": "You maintain a store of an organisation's standard business facts (prices, rates, lead times, minimum orders, hours, deliverables), grouped by category. You are shown what an assistant DRAFTED and what the user actually SENT after editing. Decide whether the user's edit corrected a STANDARD value worth reusing in future offers of the same kind. Be conservative: a one-off discount for a single customer is NOT a standard fact. Reuse an existing category when one fits. Recording a wrong fact is worse than missing one.",
+    "messages": [
+     {
+      "role": "user",
+      "content": "EXISTING CATEGORIES:\nsupport, white-label, workshops\n\nASSISTANT DRAFTED:\nHello,\nour white-label day rate is 700 EUR/day, VAT excluded.\nBest regards,\nThe Example Studio team\n\nUSER ACTUALLY SENT:\nHello,\nour white-label day rate is 800 EUR/day, VAT excluded.\nBest regards,\nThe Example Studio team\n\nCall record_fact with your judgment."
+     }
+    ],
+    "tools": [
+     {
+      "name": "record_fact",
+      "description": "Record whether the user's edit corrected a concrete, reusable business value that future offers/replies should use.",
+      "input_schema": {
+       "type": "object",
+       "properties": {
+        "is_fact_change": {
+         "type": "boolean",
+         "description": "True ONLY if the edit changed a STANDARD business value (price, rate, lead time, minimum order, hours, deliverable) that should be reused in FUTURE offers of the same kind. False for a discount or figure specific to this one recipient, for typo/grammar fixes, for tone changes, or when no concrete value changed."
+        },
+        "category": {
+         "type": "string",
+         "description": "The kind of offer/topic the value belongs to. Reuse an existing category name from the list when one fits; keep names stable (e.g. 'white-label'). Empty if not a fact change."
+        },
+        "key": {
+         "type": "string",
+         "description": "A short stable name for the value (e.g. 'Day rate', 'Minimum order quantity'). Empty if not a fact change."
+        },
+        "value": {
+         "type": "string",
+         "description": "The corrected value WITH units (e.g. '800 EUR/day'). Empty if not a fact change."
+        }
+       },
+       "required": [
+        "is_fact_change",
+        "category",
+        "key",
+        "value"
+       ]
+      }
+     }
+    ],
+    "tool_choice": {
+     "type": "auto"
+    },
+    "max_tokens": 300
+   },
+   "capture_now": "2026-10-05T09:30:00"
+  },
+  {
+   "case_id": "correction_learning-15",
+   "request": {
+    "system": "You maintain a store of an organisation's standard business facts (prices, rates, lead times, minimum orders, hours, deliverables), grouped by category. You are shown what an assistant DRAFTED and what the user actually SENT after editing. Decide whether the user's edit corrected a STANDARD value worth reusing in future offers of the same kind. Be conservative: a one-off discount for a single customer is NOT a standard fact. Reuse an existing category when one fits. Recording a wrong fact is worse than missing one.",
+    "messages": [
+     {
+      "role": "user",
+      "content": "EXISTING CATEGORIES:\nbiglietti da visita, spedizioni, volantini\n\nASSISTANT DRAFTED:\nBuongiorno,\nper i volantini l'ordine minimo è di 250 copie.\nCordiali saluti,\nLo staff della Tipografia Esempio\n\nUSER ACTUALLY SENT:\nBuongiorno,\nper i volantini l'ordine minimo è di 500 copie.\nCordiali saluti,\nLo staff della Tipografia Esempio\n\nCall record_fact with your judgment."
+     }
+    ],
+    "tools": [
+     {
+      "name": "record_fact",
+      "description": "Record whether the user's edit corrected a concrete, reusable business value that future offers/replies should use.",
+      "input_schema": {
+       "type": "object",
+       "properties": {
+        "is_fact_change": {
+         "type": "boolean",
+         "description": "True ONLY if the edit changed a STANDARD business value (price, rate, lead time, minimum order, hours, deliverable) that should be reused in FUTURE offers of the same kind. False for a discount or figure specific to this one recipient, for typo/grammar fixes, for tone changes, or when no concrete value changed."
+        },
+        "category": {
+         "type": "string",
+         "description": "The kind of offer/topic the value belongs to. Reuse an existing category name from the list when one fits; keep names stable (e.g. 'white-label'). Empty if not a fact change."
+        },
+        "key": {
+         "type": "string",
+         "description": "A short stable name for the value (e.g. 'Day rate', 'Minimum order quantity'). Empty if not a fact change."
+        },
+        "value": {
+         "type": "string",
+         "description": "The corrected value WITH units (e.g. '800 EUR/day'). Empty if not a fact change."
+        }
+       },
+       "required": [
+        "is_fact_change",
+        "category",
+        "key",
+        "value"
+       ]
+      }
+     }
+    ],
+    "tool_choice": {
+     "type": "auto"
+    },
+    "max_tokens": 300
+   },
+   "capture_now": "2026-10-05T09:30:00"
+  },
+  {
+   "case_id": "correction_learning-16",
+   "request": {
+    "system": "You maintain a store of an organisation's standard business facts (prices, rates, lead times, minimum orders, hours, deliverables), grouped by category. You are shown what an assistant DRAFTED and what the user actually SENT after editing. Decide whether the user's edit corrected a STANDARD value worth reusing in future offers of the same kind. Be conservative: a one-off discount for a single customer is NOT a standard fact. Reuse an existing category when one fits. Recording a wrong fact is worse than missing one.",
+    "messages": [
+     {
+      "role": "user",
+      "content": "EXISTING CATEGORIES:\nsupport, white-label, workshops\n\nASSISTANT DRAFTED:\nHi Sam,\nour support line is open Monday to Friday, 9:00-18:00.\nBest regards,\nThe Example Studio team\n\nUSER ACTUALLY SENT:\nHi Sam,\nour support line is open Monday to Friday, 8:30-17:30.\nBest regards,\nThe Example Studio team\n\nCall record_fact with your judgment."
+     }
+    ],
+    "tools": [
+     {
+      "name": "record_fact",
+      "description": "Record whether the user's edit corrected a concrete, reusable business value that future offers/replies should use.",
+      "input_schema": {
+       "type": "object",
+       "properties": {
+        "is_fact_change": {
+         "type": "boolean",
+         "description": "True ONLY if the edit changed a STANDARD business value (price, rate, lead time, minimum order, hours, deliverable) that should be reused in FUTURE offers of the same kind. False for a discount or figure specific to this one recipient, for typo/grammar fixes, for tone changes, or when no concrete value changed."
+        },
+        "category": {
+         "type": "string",
+         "description": "The kind of offer/topic the value belongs to. Reuse an existing category name from the list when one fits; keep names stable (e.g. 'white-label'). Empty if not a fact change."
+        },
+        "key": {
+         "type": "string",
+         "description": "A short stable name for the value (e.g. 'Day rate', 'Minimum order quantity'). Empty if not a fact change."
+        },
+        "value": {
+         "type": "string",
+         "description": "The corrected value WITH units (e.g. '800 EUR/day'). Empty if not a fact change."
+        }
+       },
+       "required": [
+        "is_fact_change",
+        "category",
+        "key",
+        "value"
+       ]
+      }
+     }
+    ],
+    "tool_choice": {
+     "type": "auto"
+    },
+    "max_tokens": 300
+   },
+   "capture_now": "2026-10-05T09:30:00"
+  },
+  {
+   "case_id": "correction_learning-17",
+   "request": {
+    "system": "You maintain a store of an organisation's standard business facts (prices, rates, lead times, minimum orders, hours, deliverables), grouped by category. You are shown what an assistant DRAFTED and what the user actually SENT after editing. Decide whether the user's edit corrected a STANDARD value worth reusing in future offers of the same kind. Be conservative: a one-off discount for a single customer is NOT a standard fact. Reuse an existing category when one fits. Recording a wrong fact is worse than missing one.",
+    "messages": [
+     {
+      "role": "user",
+      "content": "EXISTING CATEGORIES:\nbiglietti da visita, spedizioni, volantini\n\nASSISTANT DRAFTED:\nBuongiorno! La spedizione in Italia costa 9,90 EUR e arriva in 48 ore.\n\nUSER ACTUALLY SENT:\nBuongiorno! La spedizione in Italia costa 12,50 EUR e arriva in 48 ore.\n\nCall record_fact with your judgment."
+     }
+    ],
+    "tools": [
+     {
+      "name": "record_fact",
+      "description": "Record whether the user's edit corrected a concrete, reusable business value that future offers/replies should use.",
+      "input_schema": {
+       "type": "object",
+       "properties": {
+        "is_fact_change": {
+         "type": "boolean",
+         "description": "True ONLY if the edit changed a STANDARD business value (price, rate, lead time, minimum order, hours, deliverable) that should be reused in FUTURE offers of the same kind. False for a discount or figure specific to this one recipient, for typo/grammar fixes, for tone changes, or when no concrete value changed."
+        },
+        "category": {
+         "type": "string",
+         "description": "The kind of offer/topic the value belongs to. Reuse an existing category name from the list when one fits; keep names stable (e.g. 'white-label'). Empty if not a fact change."
+        },
+        "key": {
+         "type": "string",
+         "description": "A short stable name for the value (e.g. 'Day rate', 'Minimum order quantity'). Empty if not a fact change."
+        },
+        "value": {
+         "type": "string",
+         "description": "The corrected value WITH units (e.g. '800 EUR/day'). Empty if not a fact change."
+        }
+       },
+       "required": [
+        "is_fact_change",
+        "category",
+        "key",
+        "value"
+       ]
+      }
+     }
+    ],
+    "tool_choice": {
+     "type": "auto"
+    },
+    "max_tokens": 300
+   },
+   "capture_now": "2026-10-05T09:30:00"
+  },
+  {
+   "case_id": "correction_learning-18",
+   "request": {
+    "system": "You maintain a store of an organisation's standard business facts (prices, rates, lead times, minimum orders, hours, deliverables), grouped by category. You are shown what an assistant DRAFTED and what the user actually SENT after editing. Decide whether the user's edit corrected a STANDARD value worth reusing in future offers of the same kind. Be conservative: a one-off discount for a single customer is NOT a standard fact. Reuse an existing category when one fits. Recording a wrong fact is worse than missing one.",
+    "messages": [
+     {
+      "role": "user",
+      "content": "EXISTING CATEGORIES:\nsupport, white-label, workshops\n\nASSISTANT DRAFTED:\nHi Laura,\na half-day workshop costs 1,200 EUR, materials included.\nBest regards,\nThe Example Studio team\n\nUSER ACTUALLY SENT:\nHi Laura,\na half-day workshop costs 1,450 EUR, materials included.\nBest regards,\nThe Example Studio team\n\nCall record_fact with your judgment."
+     }
+    ],
+    "tools": [
+     {
+      "name": "record_fact",
+      "description": "Record whether the user's edit corrected a concrete, reusable business value that future offers/replies should use.",
+      "input_schema": {
+       "type": "object",
+       "properties": {
+        "is_fact_change": {
+         "type": "boolean",
+         "description": "True ONLY if the edit changed a STANDARD business value (price, rate, lead time, minimum order, hours, deliverable) that should be reused in FUTURE offers of the same kind. False for a discount or figure specific to this one recipient, for typo/grammar fixes, for tone changes, or when no concrete value changed."
+        },
+        "category": {
+         "type": "string",
+         "description": "The kind of offer/topic the value belongs to. Reuse an existing category name from the list when one fits; keep names stable (e.g. 'white-label'). Empty if not a fact change."
+        },
+        "key": {
+         "type": "string",
+         "description": "A short stable name for the value (e.g. 'Day rate', 'Minimum order quantity'). Empty if not a fact change."
+        },
+        "value": {
+         "type": "string",
+         "description": "The corrected value WITH units (e.g. '800 EUR/day'). Empty if not a fact change."
+        }
+       },
+       "required": [
+        "is_fact_change",
+        "category",
+        "key",
+        "value"
+       ]
+      }
+     }
+    ],
+    "tool_choice": {
+     "type": "auto"
+    },
+    "max_tokens": 300
+   },
+   "capture_now": "2026-10-05T09:30:00"
+  },
+  {
+   "case_id": "correction_learning-19",
+   "request": {
+    "system": "You maintain a store of an organisation's standard business facts (prices, rates, lead times, minimum orders, hours, deliverables), grouped by category. You are shown what an assistant DRAFTED and what the user actually SENT after editing. Decide whether the user's edit corrected a STANDARD value worth reusing in future offers of the same kind. Be conservative: a one-off discount for a single customer is NOT a standard fact. Reuse an existing category when one fits. Recording a wrong fact is worse than missing one.",
+    "messages": [
+     {
+      "role": "user",
+      "content": "EXISTING CATEGORIES:\nbiglietti da visita, spedizioni, volantini\n\nASSISTANT DRAFTED:\nGentile Sig. Bassi,\nper 500 biglietti da visita il prezzo è di 45 EUR + IVA.\nCordiali saluti,\nLo staff della Tipografia Esempio\n\nUSER ACTUALLY SENT:\nGentile Sig. Bassi,\nvisto che è nostro cliente da tanti anni, per questa volta le facciamo 38 EUR + IVA per i 500 biglietti da visita.\nCordiali saluti,\nLo staff della Tipografia Esempio\n\nCall record_fact with your judgment."
+     }
+    ],
+    "tools": [
+     {
+      "name": "record_fact",
+      "description": "Record whether the user's edit corrected a concrete, reusable business value that future offers/replies should use.",
+      "input_schema": {
+       "type": "object",
+       "properties": {
+        "is_fact_change": {
+         "type": "boolean",
+         "description": "True ONLY if the edit changed a STANDARD business value (price, rate, lead time, minimum order, hours, deliverable) that should be reused in FUTURE offers of the same kind. False for a discount or figure specific to this one recipient, for typo/grammar fixes, for tone changes, or when no concrete value changed."
+        },
+        "category": {
+         "type": "string",
+         "description": "The kind of offer/topic the value belongs to. Reuse an existing category name from the list when one fits; keep names stable (e.g. 'white-label'). Empty if not a fact change."
+        },
+        "key": {
+         "type": "string",
+         "description": "A short stable name for the value (e.g. 'Day rate', 'Minimum order quantity'). Empty if not a fact change."
+        },
+        "value": {
+         "type": "string",
+         "description": "The corrected value WITH units (e.g. '800 EUR/day'). Empty if not a fact change."
+        }
+       },
+       "required": [
+        "is_fact_change",
+        "category",
+        "key",
+        "value"
+       ]
+      }
+     }
+    ],
+    "tool_choice": {
+     "type": "auto"
+    },
+    "max_tokens": 300
+   },
+   "capture_now": "2026-10-05T09:30:00"
+  },
+  {
+   "case_id": "correction_learning-20",
+   "request": {
+    "system": "You maintain a store of an organisation's standard business facts (prices, rates, lead times, minimum orders, hours, deliverables), grouped by category. You are shown what an assistant DRAFTED and what the user actually SENT after editing. Decide whether the user's edit corrected a STANDARD value worth reusing in future offers of the same kind. Be conservative: a one-off discount for a single customer is NOT a standard fact. Reuse an existing category when one fits. Recording a wrong fact is worse than missing one.",
+    "messages": [
+     {
+      "role": "user",
+      "content": "EXISTING CATEGORIES:\nsupport, white-label, workshops\n\nASSISTANT DRAFTED:\nHello,\nour white-label day rate is 700 EUR/day, VAT exlcuded.\nBest regards,\nThe Example Studio team\n\nUSER ACTUALLY SENT:\nHello,\nour white-label day rate is 700 EUR/day, VAT excluded.\nBest regards,\nThe Example Studio team\n\nCall record_fact with your judgment."
+     }
+    ],
+    "tools": [
+     {
+      "name": "record_fact",
+      "description": "Record whether the user's edit corrected a concrete, reusable business value that future offers/replies should use.",
+      "input_schema": {
+       "type": "object",
+       "properties": {
+        "is_fact_change": {
+         "type": "boolean",
+         "description": "True ONLY if the edit changed a STANDARD business value (price, rate, lead time, minimum order, hours, deliverable) that should be reused in FUTURE offers of the same kind. False for a discount or figure specific to this one recipient, for typo/grammar fixes, for tone changes, or when no concrete value changed."
+        },
+        "category": {
+         "type": "string",
+         "description": "The kind of offer/topic the value belongs to. Reuse an existing category name from the list when one fits; keep names stable (e.g. 'white-label'). Empty if not a fact change."
+        },
+        "key": {
+         "type": "string",
+         "description": "A short stable name for the value (e.g. 'Day rate', 'Minimum order quantity'). Empty if not a fact change."
+        },
+        "value": {
+         "type": "string",
+         "description": "The corrected value WITH units (e.g. '800 EUR/day'). Empty if not a fact change."
+        }
+       },
+       "required": [
+        "is_fact_change",
+        "category",
+        "key",
+        "value"
+       ]
+      }
+     }
+    ],
+    "tool_choice": {
+     "type": "auto"
+    },
+    "max_tokens": 300
+   },
+   "capture_now": "2026-10-05T09:30:00"
+  },
+  {
+   "case_id": "correction_learning-21",
+   "request": {
+    "system": "You maintain a store of an organisation's standard business facts (prices, rates, lead times, minimum orders, hours, deliverables), grouped by category. You are shown what an assistant DRAFTED and what the user actually SENT after editing. Decide whether the user's edit corrected a STANDARD value worth reusing in future offers of the same kind. Be conservative: a one-off discount for a single customer is NOT a standard fact. Reuse an existing category when one fits. Recording a wrong fact is worse than missing one.",
+    "messages": [
+     {
+      "role": "user",
+      "content": "EXISTING CATEGORIES:\nbiglietti da visita, spedizioni, volantini\n\nASSISTANT DRAFTED:\nGentile Sig. Bassi,\nle confermiamo che i volantini saranno pronti in 3 giorni lavorativi.\nCordiali saluti,\nLo staff della Tipografia Esempio\n\nUSER ACTUALLY SENT:\nCiao Matteo,\nti confermo che i volantini saranno pronti in 3 giorni lavorativi.\nA presto,\nLo staff della Tipografia Esempio\n\nCall record_fact with your judgment."
+     }
+    ],
+    "tools": [
+     {
+      "name": "record_fact",
+      "description": "Record whether the user's edit corrected a concrete, reusable business value that future offers/replies should use.",
+      "input_schema": {
+       "type": "object",
+       "properties": {
+        "is_fact_change": {
+         "type": "boolean",
+         "description": "True ONLY if the edit changed a STANDARD business value (price, rate, lead time, minimum order, hours, deliverable) that should be reused in FUTURE offers of the same kind. False for a discount or figure specific to this one recipient, for typo/grammar fixes, for tone changes, or when no concrete value changed."
+        },
+        "category": {
+         "type": "string",
+         "description": "The kind of offer/topic the value belongs to. Reuse an existing category name from the list when one fits; keep names stable (e.g. 'white-label'). Empty if not a fact change."
+        },
+        "key": {
+         "type": "string",
+         "description": "A short stable name for the value (e.g. 'Day rate', 'Minimum order quantity'). Empty if not a fact change."
+        },
+        "value": {
+         "type": "string",
+         "description": "The corrected value WITH units (e.g. '800 EUR/day'). Empty if not a fact change."
+        }
+       },
+       "required": [
+        "is_fact_change",
+        "category",
+        "key",
+        "value"
+       ]
+      }
+     }
+    ],
+    "tool_choice": {
+     "type": "auto"
+    },
+    "max_tokens": 300
+   },
+   "capture_now": "2026-10-05T09:30:00"
+  },
+  {
+   "case_id": "correction_learning-22",
+   "request": {
+    "system": "You maintain a store of an organisation's standard business facts (prices, rates, lead times, minimum orders, hours, deliverables), grouped by category. You are shown what an assistant DRAFTED and what the user actually SENT after editing. Decide whether the user's edit corrected a STANDARD value worth reusing in future offers of the same kind. Be conservative: a one-off discount for a single customer is NOT a standard fact. Reuse an existing category when one fits. Recording a wrong fact is worse than missing one.",
+    "messages": [
+     {
+      "role": "user",
+      "content": "EXISTING CATEGORIES:\nsupport, white-label, workshops\n\nASSISTANT DRAFTED:\nHi Priya,\nyour order of 40 display stands will ship on 14 October.\nBest regards,\nThe Example Studio team\n\nUSER ACTUALLY SENT:\nHi Priya,\nyour order of 40 display stands will ship on 16 October.\nBest regards,\nThe Example Studio team\n\nCall record_fact with your judgment."
+     }
+    ],
+    "tools": [
+     {
+      "name": "record_fact",
+      "description": "Record whether the user's edit corrected a concrete, reusable business value that future offers/replies should use.",
+      "input_schema": {
+       "type": "object",
+       "properties": {
+        "is_fact_change": {
+         "type": "boolean",
+         "description": "True ONLY if the edit changed a STANDARD business value (price, rate, lead time, minimum order, hours, deliverable) that should be reused in FUTURE offers of the same kind. False for a discount or figure specific to this one recipient, for typo/grammar fixes, for tone changes, or when no concrete value changed."
+        },
+        "category": {
+         "type": "string",
+         "description": "The kind of offer/topic the value belongs to. Reuse an existing category name from the list when one fits; keep names stable (e.g. 'white-label'). Empty if not a fact change."
+        },
+        "key": {
+         "type": "string",
+         "description": "A short stable name for the value (e.g. 'Day rate', 'Minimum order quantity'). Empty if not a fact change."
+        },
+        "value": {
+         "type": "string",
+         "description": "The corrected value WITH units (e.g. '800 EUR/day'). Empty if not a fact change."
+        }
+       },
+       "required": [
+        "is_fact_change",
+        "category",
+        "key",
+        "value"
+       ]
+      }
+     }
+    ],
+    "tool_choice": {
+     "type": "auto"
+    },
+    "max_tokens": 300
+   },
+   "capture_now": "2026-10-05T09:30:00"
+  },
+  {
+   "case_id": "correction_learning-23",
+   "request": {
+    "system": "You maintain a store of an organisation's standard business facts (prices, rates, lead times, minimum orders, hours, deliverables), grouped by category. You are shown what an assistant DRAFTED and what the user actually SENT after editing. Decide whether the user's edit corrected a STANDARD value worth reusing in future offers of the same kind. Be conservative: a one-off discount for a single customer is NOT a standard fact. Reuse an existing category when one fits. Recording a wrong fact is worse than missing one.",
+    "messages": [
+     {
+      "role": "user",
+      "content": "EXISTING CATEGORIES:\nbiglietti da visita, spedizioni, volantini\n\nASSISTANT DRAFTED:\nGentile cliente,\nil totale per i suoi 1.000 volantini è di 120 EUR + IVA.\nCordiali saluti,\nLo staff della Tipografia Esempio\n\nUSER ACTUALLY SENT:\nGentile cliente,\nil totale per i suoi 2.000 volantini è di 240 EUR + IVA.\nCordiali saluti,\nLo staff della Tipografia Esempio\n\nCall record_fact with your judgment."
+     }
+    ],
+    "tools": [
+     {
+      "name": "record_fact",
+      "description": "Record whether the user's edit corrected a concrete, reusable business value that future offers/replies should use.",
+      "input_schema": {
+       "type": "object",
+       "properties": {
+        "is_fact_change": {
+         "type": "boolean",
+         "description": "True ONLY if the edit changed a STANDARD business value (price, rate, lead time, minimum order, hours, deliverable) that should be reused in FUTURE offers of the same kind. False for a discount or figure specific to this one recipient, for typo/grammar fixes, for tone changes, or when no concrete value changed."
+        },
+        "category": {
+         "type": "string",
+         "description": "The kind of offer/topic the value belongs to. Reuse an existing category name from the list when one fits; keep names stable (e.g. 'white-label'). Empty if not a fact change."
+        },
+        "key": {
+         "type": "string",
+         "description": "A short stable name for the value (e.g. 'Day rate', 'Minimum order quantity'). Empty if not a fact change."
+        },
+        "value": {
+         "type": "string",
+         "description": "The corrected value WITH units (e.g. '800 EUR/day'). Empty if not a fact change."
+        }
+       },
+       "required": [
+        "is_fact_change",
+        "category",
+        "key",
+        "value"
+       ]
+      }
+     }
+    ],
+    "tool_choice": {
+     "type": "auto"
+    },
+    "max_tokens": 300
+   },
+   "capture_now": "2026-10-05T09:30:00"
+  },
+  {
+   "case_id": "correction_learning-24",
+   "request": {
+    "system": "You maintain a store of an organisation's standard business facts (prices, rates, lead times, minimum orders, hours, deliverables), grouped by category. You are shown what an assistant DRAFTED and what the user actually SENT after editing. Decide whether the user's edit corrected a STANDARD value worth reusing in future offers of the same kind. Be conservative: a one-off discount for a single customer is NOT a standard fact. Reuse an existing category when one fits. Recording a wrong fact is worse than missing one.",
+    "messages": [
+     {
+      "role": "user",
+      "content": "EXISTING CATEGORIES:\nsupport, white-label, workshops\n\nASSISTANT DRAFTED:\nHi Tom,\nthanks for your order, we'll be in touch next week.\nBest regards,\nThe Example Studio team\n\nUSER ACTUALLY SENT:\nHi Tom,\nthanks for your order, we'll be in touch next week. Say hi to the team in Leeds!\nBest regards,\nThe Example Studio team\n\nCall record_fact with your judgment."
+     }
+    ],
+    "tools": [
+     {
+      "name": "record_fact",
+      "description": "Record whether the user's edit corrected a concrete, reusable business value that future offers/replies should use.",
+      "input_schema": {
+       "type": "object",
+       "properties": {
+        "is_fact_change": {
+         "type": "boolean",
+         "description": "True ONLY if the edit changed a STANDARD business value (price, rate, lead time, minimum order, hours, deliverable) that should be reused in FUTURE offers of the same kind. False for a discount or figure specific to this one recipient, for typo/grammar fixes, for tone changes, or when no concrete value changed."
+        },
+        "category": {
+         "type": "string",
+         "description": "The kind of offer/topic the value belongs to. Reuse an existing category name from the list when one fits; keep names stable (e.g. 'white-label'). Empty if not a fact change."
+        },
+        "key": {
+         "type": "string",
+         "description": "A short stable name for the value (e.g. 'Day rate', 'Minimum order quantity'). Empty if not a fact change."
+        },
+        "value": {
+         "type": "string",
+         "description": "The corrected value WITH units (e.g. '800 EUR/day'). Empty if not a fact change."
+        }
+       },
+       "required": [
+        "is_fact_change",
+        "category",
+        "key",
+        "value"
+       ]
+      }
+     }
+    ],
+    "tool_choice": {
+     "type": "auto"
+    },
+    "max_tokens": 300
+   },
+   "capture_now": "2026-10-05T09:30:00"
+  }
+ ]
+}

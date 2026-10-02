@@ -1,0 +1,1048 @@
+{
+ "schema": 1,
+ "role": "SYNC_ANALYSIS",
+ "prompt_sha256": "6e8844194803cfb7b7faa57a3a62731dd50f00ea4bac66f7aa9260a3d9d5a26f",
+ "case_set_sha256": "39f061cb74df0e2e2f235e815b2f9b2923164eea74d94ecd878b2e0e65ab7d10",
+ "requests": [
+  {
+   "case_id": "sync_analysis-01",
+   "request": {
+    "messages": [
+     {
+      "role": "user",
+      "content": "You are an assistant that analyzes email conversations to determine if the user needs to create a TASK.\n\nCONTEXT:\nSubject: Richiesta preventivo olio EVO\nFrom: Giulia Neri <acquisti@bistrot-neri.example>\nNumber of messages in conversation: 1\n\nLAST MESSAGE RECEIVED:\nBuongiorno,\nci servirebbe un preventivo per 300 bottiglie da 0,75 l di olio extravergine, con consegna a Bergamo entro fine ottobre. Potete indicarci anche i tempi di consegna?\n\nGrazie\nGiulia Neri\nBistrot Neri\n\nTHE QUESTION IS SIMPLE:\nDOES THE USER NEED TO CREATE A TASK?\n\nA TASK is needed when the user must do ANYTHING:\n- Reply to a question\n- Send documents/information\n- Keep a promise made (\"I'll send you the pptx by tonight\")\n- Do an action they said they'd do (\"I'll see if we can find a workaround\")\n- Fix something they promised to fix (\"we can do this right away\")\n\nCLASSIFICATION RULES:\n\n1. \"answer\" - User needs to reply because:\n   - Someone asked them a question\n   - Someone requested information, documents, feedback\n   - Someone is waiting for their confirmation or decision\n   - There's a pending meeting/collaboration proposal\n\n2. \"reminder\" - User needs to do something they promised:\n   - They said \"I'll send you X by Y\" and haven't sent it yet\n   - They said \"I'll try to do X\" and haven't done it yet\n   - They promised \"we'll fix this right away\" and haven't fixed it\n   - They're waiting for a reply to their question (reminder to follow up)\n\n3. null - No task needed:\n   - Conversation concluded without pending actions\n   - Automated notification that doesn't require a response\n   - Exchange of courtesies concluded\n\nPRACTICAL EXAMPLES:\n\nExample 1:\nClient: \"Can you send me the quote?\"\n-> open: true, expected_action: \"answer\"\nTASK: Reply with quote\n\nExample 2:\nUser: \"I'll send you the pptx by tonight\"\nClient: \"Perfect, thanks!\"\n-> open: true, expected_action: \"reminder\"\nTASK: Send the promised pptx\n\nExample 3:\nUser: \"I'll see if we can find some workaround\"\n[A week passed, no response]\n-> open: true, expected_action: \"reminder\"\nTASK: Find workaround and respond\n\nExample 4:\nClient: \"I would prefer the assistant not to ask for first and last name right away\"\nUser: \"We can do this right away :-)\"\n[Never responded]\n-> open: true, expected_action: \"reminder\"\nTASK: Fix assistant configuration\n\nExample 5:\nAutomated notification: \"Your subscription has been renewed\"\n-> open: false, expected_action: null\nNO TASK needed\n\nUse the classify_thread tool to provide your analysis.\n"
+     }
+    ],
+    "max_tokens": 800,
+    "tools": [
+     {
+      "name": "classify_thread",
+      "description": "Classify an email thread to determine if user action is needed",
+      "input_schema": {
+       "type": "object",
+       "properties": {
+        "summary": {
+         "type": "string",
+         "description": "Brief summary of what user needs to do (1-2 sentences in English)"
+        },
+        "open": {
+         "type": "boolean",
+         "description": "True if user has a pending task, False if conversation is concluded"
+        },
+        "expected_action": {
+         "type": [
+          "string",
+          "null"
+         ],
+         "enum": [
+          "answer",
+          "reminder",
+          null
+         ],
+         "description": "Type of action: 'answer' if user needs to reply, 'reminder' if user promised something, null if no action needed"
+        }
+       },
+       "required": [
+        "summary",
+        "open",
+        "expected_action"
+       ]
+      }
+     }
+    ],
+    "tool_choice": {
+     "type": "auto"
+    }
+   },
+   "capture_now": "2026-10-05T09:30:00"
+  },
+  {
+   "case_id": "sync_analysis-02",
+   "request": {
+    "messages": [
+     {
+      "role": "user",
+      "content": "You are an assistant that analyzes email conversations to determine if the user needs to create a TASK.\n\nCONTEXT:\nSubject: Re: Order 7781 confirmed\nFrom: Emma Clarke <emma.clarke@example-events.example>\nNumber of messages in conversation: 2\n\nLAST MESSAGE RECEIVED:\nHi Luca, thanks for confirming. Could you tell me whether it ships before Friday? We need the tables for an event on Saturday. Best, Emma On Tue, 29 Sep 2026 at 10:00, Luca Moretti wrote: > Hi Emma, > your order 7781 (12 folding tables) is confirmed. > > Luca\n\nTHE QUESTION IS SIMPLE:\nDOES THE USER NEED TO CREATE A TASK?\n\nA TASK is needed when the user must do ANYTHING:\n- Reply to a question\n- Send documents/information\n- Keep a promise made (\"I'll send you the pptx by tonight\")\n- Do an action they said they'd do (\"I'll see if we can find a workaround\")\n- Fix something they promised to fix (\"we can do this right away\")\n\nCLASSIFICATION RULES:\n\n1. \"answer\" - User needs to reply because:\n   - Someone asked them a question\n   - Someone requested information, documents, feedback\n   - Someone is waiting for their confirmation or decision\n   - There's a pending meeting/collaboration proposal\n\n2. \"reminder\" - User needs to do something they promised:\n   - They said \"I'll send you X by Y\" and haven't sent it yet\n   - They said \"I'll try to do X\" and haven't done it yet\n   - They promised \"we'll fix this right away\" and haven't fixed it\n   - They're waiting for a reply to their question (reminder to follow up)\n\n3. null - No task needed:\n   - Conversation concluded without pending actions\n   - Automated notification that doesn't require a response\n   - Exchange of courtesies concluded\n\nPRACTICAL EXAMPLES:\n\nExample 1:\nClient: \"Can you send me the quote?\"\n-> open: true, expected_action: \"answer\"\nTASK: Reply with quote\n\nExample 2:\nUser: \"I'll send you the pptx by tonight\"\nClient: \"Perfect, thanks!\"\n-> open: true, expected_action: \"reminder\"\nTASK: Send the promised pptx\n\nExample 3:\nUser: \"I'll see if we can find some workaround\"\n[A week passed, no response]\n-> open: true, expected_action: \"reminder\"\nTASK: Find workaround and respond\n\nExample 4:\nClient: \"I would prefer the assistant not to ask for first and last name right away\"\nUser: \"We can do this right away :-)\"\n[Never responded]\n-> open: true, expected_action: \"reminder\"\nTASK: Fix assistant configuration\n\nExample 5:\nAutomated notification: \"Your subscription has been renewed\"\n-> open: false, expected_action: null\nNO TASK needed\n\nUse the classify_thread tool to provide your analysis.\n"
+     }
+    ],
+    "max_tokens": 800,
+    "tools": [
+     {
+      "name": "classify_thread",
+      "description": "Classify an email thread to determine if user action is needed",
+      "input_schema": {
+       "type": "object",
+       "properties": {
+        "summary": {
+         "type": "string",
+         "description": "Brief summary of what user needs to do (1-2 sentences in English)"
+        },
+        "open": {
+         "type": "boolean",
+         "description": "True if user has a pending task, False if conversation is concluded"
+        },
+        "expected_action": {
+         "type": [
+          "string",
+          "null"
+         ],
+         "enum": [
+          "answer",
+          "reminder",
+          null
+         ],
+         "description": "Type of action: 'answer' if user needs to reply, 'reminder' if user promised something, null if no action needed"
+        }
+       },
+       "required": [
+        "summary",
+        "open",
+        "expected_action"
+       ]
+      }
+     }
+    ],
+    "tool_choice": {
+     "type": "auto"
+    }
+   },
+   "capture_now": "2026-10-05T09:30:00"
+  },
+  {
+   "case_id": "sync_analysis-03",
+   "request": {
+    "messages": [
+     {
+      "role": "user",
+      "content": "You are an assistant that analyzes email conversations to determine if the user needs to create a TASK.\n\nCONTEXT:\nSubject: Modello X-200: documentazione\nFrom: Ing. Davide Russo <d.russo@impianti-russo.example>\nNumber of messages in conversation: 1\n\nLAST MESSAGE RECEIVED:\nBuongiorno,\nmi potete inviare la scheda tecnica e la dichiarazione CE del modello X-200? Ci servono per la gara di lunedì.\n\nCordiali saluti\nIng. Davide Russo\nImpianti Russo Srl\n\nTHE QUESTION IS SIMPLE:\nDOES THE USER NEED TO CREATE A TASK?\n\nA TASK is needed when the user must do ANYTHING:\n- Reply to a question\n- Send documents/information\n- Keep a promise made (\"I'll send you the pptx by tonight\")\n- Do an action they said they'd do (\"I'll see if we can find a workaround\")\n- Fix something they promised to fix (\"we can do this right away\")\n\nCLASSIFICATION RULES:\n\n1. \"answer\" - User needs to reply because:\n   - Someone asked them a question\n   - Someone requested information, documents, feedback\n   - Someone is waiting for their confirmation or decision\n   - There's a pending meeting/collaboration proposal\n\n2. \"reminder\" - User needs to do something they promised:\n   - They said \"I'll send you X by Y\" and haven't sent it yet\n   - They said \"I'll try to do X\" and haven't done it yet\n   - They promised \"we'll fix this right away\" and haven't fixed it\n   - They're waiting for a reply to their question (reminder to follow up)\n\n3. null - No task needed:\n   - Conversation concluded without pending actions\n   - Automated notification that doesn't require a response\n   - Exchange of courtesies concluded\n\nPRACTICAL EXAMPLES:\n\nExample 1:\nClient: \"Can you send me the quote?\"\n-> open: true, expected_action: \"answer\"\nTASK: Reply with quote\n\nExample 2:\nUser: \"I'll send you the pptx by tonight\"\nClient: \"Perfect, thanks!\"\n-> open: true, expected_action: \"reminder\"\nTASK: Send the promised pptx\n\nExample 3:\nUser: \"I'll see if we can find some workaround\"\n[A week passed, no response]\n-> open: true, expected_action: \"reminder\"\nTASK: Find workaround and respond\n\nExample 4:\nClient: \"I would prefer the assistant not to ask for first and last name right away\"\nUser: \"We can do this right away :-)\"\n[Never responded]\n-> open: true, expected_action: \"reminder\"\nTASK: Fix assistant configuration\n\nExample 5:\nAutomated notification: \"Your subscription has been renewed\"\n-> open: false, expected_action: null\nNO TASK needed\n\nUse the classify_thread tool to provide your analysis.\n"
+     }
+    ],
+    "max_tokens": 800,
+    "tools": [
+     {
+      "name": "classify_thread",
+      "description": "Classify an email thread to determine if user action is needed",
+      "input_schema": {
+       "type": "object",
+       "properties": {
+        "summary": {
+         "type": "string",
+         "description": "Brief summary of what user needs to do (1-2 sentences in English)"
+        },
+        "open": {
+         "type": "boolean",
+         "description": "True if user has a pending task, False if conversation is concluded"
+        },
+        "expected_action": {
+         "type": [
+          "string",
+          "null"
+         ],
+         "enum": [
+          "answer",
+          "reminder",
+          null
+         ],
+         "description": "Type of action: 'answer' if user needs to reply, 'reminder' if user promised something, null if no action needed"
+        }
+       },
+       "required": [
+        "summary",
+        "open",
+        "expected_action"
+       ]
+      }
+     }
+    ],
+    "tool_choice": {
+     "type": "auto"
+    }
+   },
+   "capture_now": "2026-10-05T09:30:00"
+  },
+  {
+   "case_id": "sync_analysis-04",
+   "request": {
+    "messages": [
+     {
+      "role": "user",
+      "content": "You are an assistant that analyzes email conversations to determine if the user needs to create a TASK.\n\nCONTEXT:\nSubject: Showroom layout review\nFrom: Priya Shah <priya@example-architects.example>\nNumber of messages in conversation: 1\n\nLAST MESSAGE RECEIVED:\nHi Luca,\nwe'd like to review the showroom layout with you before ordering. Would Tuesday 13 October at 10:00 or Wednesday 14 at 15:00 work for a call?\n\nThanks,\nPriya\n\nTHE QUESTION IS SIMPLE:\nDOES THE USER NEED TO CREATE A TASK?\n\nA TASK is needed when the user must do ANYTHING:\n- Reply to a question\n- Send documents/information\n- Keep a promise made (\"I'll send you the pptx by tonight\")\n- Do an action they said they'd do (\"I'll see if we can find a workaround\")\n- Fix something they promised to fix (\"we can do this right away\")\n\nCLASSIFICATION RULES:\n\n1. \"answer\" - User needs to reply because:\n   - Someone asked them a question\n   - Someone requested information, documents, feedback\n   - Someone is waiting for their confirmation or decision\n   - There's a pending meeting/collaboration proposal\n\n2. \"reminder\" - User needs to do something they promised:\n   - They said \"I'll send you X by Y\" and haven't sent it yet\n   - They said \"I'll try to do X\" and haven't done it yet\n   - They promised \"we'll fix this right away\" and haven't fixed it\n   - They're waiting for a reply to their question (reminder to follow up)\n\n3. null - No task needed:\n   - Conversation concluded without pending actions\n   - Automated notification that doesn't require a response\n   - Exchange of courtesies concluded\n\nPRACTICAL EXAMPLES:\n\nExample 1:\nClient: \"Can you send me the quote?\"\n-> open: true, expected_action: \"answer\"\nTASK: Reply with quote\n\nExample 2:\nUser: \"I'll send you the pptx by tonight\"\nClient: \"Perfect, thanks!\"\n-> open: true, expected_action: \"reminder\"\nTASK: Send the promised pptx\n\nExample 3:\nUser: \"I'll see if we can find some workaround\"\n[A week passed, no response]\n-> open: true, expected_action: \"reminder\"\nTASK: Find workaround and respond\n\nExample 4:\nClient: \"I would prefer the assistant not to ask for first and last name right away\"\nUser: \"We can do this right away :-)\"\n[Never responded]\n-> open: true, expected_action: \"reminder\"\nTASK: Fix assistant configuration\n\nExample 5:\nAutomated notification: \"Your subscription has been renewed\"\n-> open: false, expected_action: null\nNO TASK needed\n\nUse the classify_thread tool to provide your analysis.\n"
+     }
+    ],
+    "max_tokens": 800,
+    "tools": [
+     {
+      "name": "classify_thread",
+      "description": "Classify an email thread to determine if user action is needed",
+      "input_schema": {
+       "type": "object",
+       "properties": {
+        "summary": {
+         "type": "string",
+         "description": "Brief summary of what user needs to do (1-2 sentences in English)"
+        },
+        "open": {
+         "type": "boolean",
+         "description": "True if user has a pending task, False if conversation is concluded"
+        },
+        "expected_action": {
+         "type": [
+          "string",
+          "null"
+         ],
+         "enum": [
+          "answer",
+          "reminder",
+          null
+         ],
+         "description": "Type of action: 'answer' if user needs to reply, 'reminder' if user promised something, null if no action needed"
+        }
+       },
+       "required": [
+        "summary",
+        "open",
+        "expected_action"
+       ]
+      }
+     }
+    ],
+    "tool_choice": {
+     "type": "auto"
+    }
+   },
+   "capture_now": "2026-10-05T09:30:00"
+  },
+  {
+   "case_id": "sync_analysis-05",
+   "request": {
+    "messages": [
+     {
+      "role": "user",
+      "content": "You are an assistant that analyzes email conversations to determine if the user needs to create a TASK.\n\nCONTEXT:\nSubject: Re: Spedizione ordine 556\nFrom: Anna Sole <ordini@gastronomia-sole.example>\nNumber of messages in conversation: 2\n\nLAST MESSAGE RECEIVED:\nBuongiorno, la merce è arrivata ieri ma due scatole erano schiacciate e tre vasetti di patè di olive sono rotti. Come procediamo per la sostituzione? Anna Gastronomia Sole Il giorno mar 29 set 2026 alle ore 10:40 Paolo Riva ha scritto: > Buongiorno, > l'ordine 556 è partito oggi con il corriere. > > Cordiali saluti > Paolo Riva\n\nTHE QUESTION IS SIMPLE:\nDOES THE USER NEED TO CREATE A TASK?\n\nA TASK is needed when the user must do ANYTHING:\n- Reply to a question\n- Send documents/information\n- Keep a promise made (\"I'll send you the pptx by tonight\")\n- Do an action they said they'd do (\"I'll see if we can find a workaround\")\n- Fix something they promised to fix (\"we can do this right away\")\n\nCLASSIFICATION RULES:\n\n1. \"answer\" - User needs to reply because:\n   - Someone asked them a question\n   - Someone requested information, documents, feedback\n   - Someone is waiting for their confirmation or decision\n   - There's a pending meeting/collaboration proposal\n\n2. \"reminder\" - User needs to do something they promised:\n   - They said \"I'll send you X by Y\" and haven't sent it yet\n   - They said \"I'll try to do X\" and haven't done it yet\n   - They promised \"we'll fix this right away\" and haven't fixed it\n   - They're waiting for a reply to their question (reminder to follow up)\n\n3. null - No task needed:\n   - Conversation concluded without pending actions\n   - Automated notification that doesn't require a response\n   - Exchange of courtesies concluded\n\nPRACTICAL EXAMPLES:\n\nExample 1:\nClient: \"Can you send me the quote?\"\n-> open: true, expected_action: \"answer\"\nTASK: Reply with quote\n\nExample 2:\nUser: \"I'll send you the pptx by tonight\"\nClient: \"Perfect, thanks!\"\n-> open: true, expected_action: \"reminder\"\nTASK: Send the promised pptx\n\nExample 3:\nUser: \"I'll see if we can find some workaround\"\n[A week passed, no response]\n-> open: true, expected_action: \"reminder\"\nTASK: Find workaround and respond\n\nExample 4:\nClient: \"I would prefer the assistant not to ask for first and last name right away\"\nUser: \"We can do this right away :-)\"\n[Never responded]\n-> open: true, expected_action: \"reminder\"\nTASK: Fix assistant configuration\n\nExample 5:\nAutomated notification: \"Your subscription has been renewed\"\n-> open: false, expected_action: null\nNO TASK needed\n\nUse the classify_thread tool to provide your analysis.\n"
+     }
+    ],
+    "max_tokens": 800,
+    "tools": [
+     {
+      "name": "classify_thread",
+      "description": "Classify an email thread to determine if user action is needed",
+      "input_schema": {
+       "type": "object",
+       "properties": {
+        "summary": {
+         "type": "string",
+         "description": "Brief summary of what user needs to do (1-2 sentences in English)"
+        },
+        "open": {
+         "type": "boolean",
+         "description": "True if user has a pending task, False if conversation is concluded"
+        },
+        "expected_action": {
+         "type": [
+          "string",
+          "null"
+         ],
+         "enum": [
+          "answer",
+          "reminder",
+          null
+         ],
+         "description": "Type of action: 'answer' if user needs to reply, 'reminder' if user promised something, null if no action needed"
+        }
+       },
+       "required": [
+        "summary",
+        "open",
+        "expected_action"
+       ]
+      }
+     }
+    ],
+    "tool_choice": {
+     "type": "auto"
+    }
+   },
+   "capture_now": "2026-10-05T09:30:00"
+  },
+  {
+   "case_id": "sync_analysis-06",
+   "request": {
+    "messages": [
+     {
+      "role": "user",
+      "content": "You are an assistant that analyzes email conversations to determine if the user needs to create a TASK.\n\nCONTEXT:\nSubject: Re: Oak table samples\nFrom: Tom Becker <tom@example-cafe.example>\nNumber of messages in conversation: 2\n\nLAST MESSAGE RECEIVED:\nHi Luca, thanks for the samples, the team liked the oak finish. Please send the pro-forma invoice for the 20 tables so we can pay the deposit this week. Cheers, Tom On Mon, 28 Sep 2026 at 16:00, Luca Moretti wrote: > Hi Tom, > the oak and walnut samples left today, you should have them on Thursday. > > Luca\n\nTHE QUESTION IS SIMPLE:\nDOES THE USER NEED TO CREATE A TASK?\n\nA TASK is needed when the user must do ANYTHING:\n- Reply to a question\n- Send documents/information\n- Keep a promise made (\"I'll send you the pptx by tonight\")\n- Do an action they said they'd do (\"I'll see if we can find a workaround\")\n- Fix something they promised to fix (\"we can do this right away\")\n\nCLASSIFICATION RULES:\n\n1. \"answer\" - User needs to reply because:\n   - Someone asked them a question\n   - Someone requested information, documents, feedback\n   - Someone is waiting for their confirmation or decision\n   - There's a pending meeting/collaboration proposal\n\n2. \"reminder\" - User needs to do something they promised:\n   - They said \"I'll send you X by Y\" and haven't sent it yet\n   - They said \"I'll try to do X\" and haven't done it yet\n   - They promised \"we'll fix this right away\" and haven't fixed it\n   - They're waiting for a reply to their question (reminder to follow up)\n\n3. null - No task needed:\n   - Conversation concluded without pending actions\n   - Automated notification that doesn't require a response\n   - Exchange of courtesies concluded\n\nPRACTICAL EXAMPLES:\n\nExample 1:\nClient: \"Can you send me the quote?\"\n-> open: true, expected_action: \"answer\"\nTASK: Reply with quote\n\nExample 2:\nUser: \"I'll send you the pptx by tonight\"\nClient: \"Perfect, thanks!\"\n-> open: true, expected_action: \"reminder\"\nTASK: Send the promised pptx\n\nExample 3:\nUser: \"I'll see if we can find some workaround\"\n[A week passed, no response]\n-> open: true, expected_action: \"reminder\"\nTASK: Find workaround and respond\n\nExample 4:\nClient: \"I would prefer the assistant not to ask for first and last name right away\"\nUser: \"We can do this right away :-)\"\n[Never responded]\n-> open: true, expected_action: \"reminder\"\nTASK: Fix assistant configuration\n\nExample 5:\nAutomated notification: \"Your subscription has been renewed\"\n-> open: false, expected_action: null\nNO TASK needed\n\nUse the classify_thread tool to provide your analysis.\n"
+     }
+    ],
+    "max_tokens": 800,
+    "tools": [
+     {
+      "name": "classify_thread",
+      "description": "Classify an email thread to determine if user action is needed",
+      "input_schema": {
+       "type": "object",
+       "properties": {
+        "summary": {
+         "type": "string",
+         "description": "Brief summary of what user needs to do (1-2 sentences in English)"
+        },
+        "open": {
+         "type": "boolean",
+         "description": "True if user has a pending task, False if conversation is concluded"
+        },
+        "expected_action": {
+         "type": [
+          "string",
+          "null"
+         ],
+         "enum": [
+          "answer",
+          "reminder",
+          null
+         ],
+         "description": "Type of action: 'answer' if user needs to reply, 'reminder' if user promised something, null if no action needed"
+        }
+       },
+       "required": [
+        "summary",
+        "open",
+        "expected_action"
+       ]
+      }
+     }
+    ],
+    "tool_choice": {
+     "type": "auto"
+    }
+   },
+   "capture_now": "2026-10-05T09:30:00"
+  },
+  {
+   "case_id": "sync_analysis-07",
+   "request": {
+    "messages": [
+     {
+      "role": "user",
+      "content": "You are an assistant that analyzes email conversations to determine if the user needs to create a TASK.\n\nCONTEXT:\nSubject: Contratto distribuzione\nFrom: Marta Villa <marta.villa@example-agency.example>\nNumber of messages in conversation: 1\n\nLAST MESSAGE RECEIVED:\nHi Paolo,\ngrazie per la call di oggi. Can you send me the updated contract by Monday? Così lo firmiamo in settimana.\n\nMarta\n\nTHE QUESTION IS SIMPLE:\nDOES THE USER NEED TO CREATE A TASK?\n\nA TASK is needed when the user must do ANYTHING:\n- Reply to a question\n- Send documents/information\n- Keep a promise made (\"I'll send you the pptx by tonight\")\n- Do an action they said they'd do (\"I'll see if we can find a workaround\")\n- Fix something they promised to fix (\"we can do this right away\")\n\nCLASSIFICATION RULES:\n\n1. \"answer\" - User needs to reply because:\n   - Someone asked them a question\n   - Someone requested information, documents, feedback\n   - Someone is waiting for their confirmation or decision\n   - There's a pending meeting/collaboration proposal\n\n2. \"reminder\" - User needs to do something they promised:\n   - They said \"I'll send you X by Y\" and haven't sent it yet\n   - They said \"I'll try to do X\" and haven't done it yet\n   - They promised \"we'll fix this right away\" and haven't fixed it\n   - They're waiting for a reply to their question (reminder to follow up)\n\n3. null - No task needed:\n   - Conversation concluded without pending actions\n   - Automated notification that doesn't require a response\n   - Exchange of courtesies concluded\n\nPRACTICAL EXAMPLES:\n\nExample 1:\nClient: \"Can you send me the quote?\"\n-> open: true, expected_action: \"answer\"\nTASK: Reply with quote\n\nExample 2:\nUser: \"I'll send you the pptx by tonight\"\nClient: \"Perfect, thanks!\"\n-> open: true, expected_action: \"reminder\"\nTASK: Send the promised pptx\n\nExample 3:\nUser: \"I'll see if we can find some workaround\"\n[A week passed, no response]\n-> open: true, expected_action: \"reminder\"\nTASK: Find workaround and respond\n\nExample 4:\nClient: \"I would prefer the assistant not to ask for first and last name right away\"\nUser: \"We can do this right away :-)\"\n[Never responded]\n-> open: true, expected_action: \"reminder\"\nTASK: Fix assistant configuration\n\nExample 5:\nAutomated notification: \"Your subscription has been renewed\"\n-> open: false, expected_action: null\nNO TASK needed\n\nUse the classify_thread tool to provide your analysis.\n"
+     }
+    ],
+    "max_tokens": 800,
+    "tools": [
+     {
+      "name": "classify_thread",
+      "description": "Classify an email thread to determine if user action is needed",
+      "input_schema": {
+       "type": "object",
+       "properties": {
+        "summary": {
+         "type": "string",
+         "description": "Brief summary of what user needs to do (1-2 sentences in English)"
+        },
+        "open": {
+         "type": "boolean",
+         "description": "True if user has a pending task, False if conversation is concluded"
+        },
+        "expected_action": {
+         "type": [
+          "string",
+          "null"
+         ],
+         "enum": [
+          "answer",
+          "reminder",
+          null
+         ],
+         "description": "Type of action: 'answer' if user needs to reply, 'reminder' if user promised something, null if no action needed"
+        }
+       },
+       "required": [
+        "summary",
+        "open",
+        "expected_action"
+       ]
+      }
+     }
+    ],
+    "tool_choice": {
+     "type": "auto"
+    }
+   },
+   "capture_now": "2026-10-05T09:30:00"
+  },
+  {
+   "case_id": "sync_analysis-08",
+   "request": {
+    "messages": [
+     {
+      "role": "user",
+      "content": "You are an assistant that analyzes email conversations to determine if the user needs to create a TASK.\n\nCONTEXT:\nSubject: Re: Listino 2027\nFrom: Carlo Conti <c.conti@enoteca-conti.example>\nNumber of messages in conversation: 2\n\nLAST MESSAGE RECEIVED:\nPerfetto, grazie mille! Carlo Conti Enoteca Conti Il giorno mer 30 set 2026 alle ore 17:10 Paolo Riva ha scritto: > Gentile Sig. Conti, > le mando il listino aggiornato entro stasera. > > Cordiali saluti > Paolo Riva\n\nTHE QUESTION IS SIMPLE:\nDOES THE USER NEED TO CREATE A TASK?\n\nA TASK is needed when the user must do ANYTHING:\n- Reply to a question\n- Send documents/information\n- Keep a promise made (\"I'll send you the pptx by tonight\")\n- Do an action they said they'd do (\"I'll see if we can find a workaround\")\n- Fix something they promised to fix (\"we can do this right away\")\n\nCLASSIFICATION RULES:\n\n1. \"answer\" - User needs to reply because:\n   - Someone asked them a question\n   - Someone requested information, documents, feedback\n   - Someone is waiting for their confirmation or decision\n   - There's a pending meeting/collaboration proposal\n\n2. \"reminder\" - User needs to do something they promised:\n   - They said \"I'll send you X by Y\" and haven't sent it yet\n   - They said \"I'll try to do X\" and haven't done it yet\n   - They promised \"we'll fix this right away\" and haven't fixed it\n   - They're waiting for a reply to their question (reminder to follow up)\n\n3. null - No task needed:\n   - Conversation concluded without pending actions\n   - Automated notification that doesn't require a response\n   - Exchange of courtesies concluded\n\nPRACTICAL EXAMPLES:\n\nExample 1:\nClient: \"Can you send me the quote?\"\n-> open: true, expected_action: \"answer\"\nTASK: Reply with quote\n\nExample 2:\nUser: \"I'll send you the pptx by tonight\"\nClient: \"Perfect, thanks!\"\n-> open: true, expected_action: \"reminder\"\nTASK: Send the promised pptx\n\nExample 3:\nUser: \"I'll see if we can find some workaround\"\n[A week passed, no response]\n-> open: true, expected_action: \"reminder\"\nTASK: Find workaround and respond\n\nExample 4:\nClient: \"I would prefer the assistant not to ask for first and last name right away\"\nUser: \"We can do this right away :-)\"\n[Never responded]\n-> open: true, expected_action: \"reminder\"\nTASK: Fix assistant configuration\n\nExample 5:\nAutomated notification: \"Your subscription has been renewed\"\n-> open: false, expected_action: null\nNO TASK needed\n\nUse the classify_thread tool to provide your analysis.\n"
+     }
+    ],
+    "max_tokens": 800,
+    "tools": [
+     {
+      "name": "classify_thread",
+      "description": "Classify an email thread to determine if user action is needed",
+      "input_schema": {
+       "type": "object",
+       "properties": {
+        "summary": {
+         "type": "string",
+         "description": "Brief summary of what user needs to do (1-2 sentences in English)"
+        },
+        "open": {
+         "type": "boolean",
+         "description": "True if user has a pending task, False if conversation is concluded"
+        },
+        "expected_action": {
+         "type": [
+          "string",
+          "null"
+         ],
+         "enum": [
+          "answer",
+          "reminder",
+          null
+         ],
+         "description": "Type of action: 'answer' if user needs to reply, 'reminder' if user promised something, null if no action needed"
+        }
+       },
+       "required": [
+        "summary",
+        "open",
+        "expected_action"
+       ]
+      }
+     }
+    ],
+    "tool_choice": {
+     "type": "auto"
+    }
+   },
+   "capture_now": "2026-10-05T09:30:00"
+  },
+  {
+   "case_id": "sync_analysis-09",
+   "request": {
+    "messages": [
+     {
+      "role": "user",
+      "content": "You are an assistant that analyzes email conversations to determine if the user needs to create a TASK.\n\nCONTEXT:\nSubject: Re: Delivery date for order 7790\nFrom: Emma Clarke <emma.clarke@example-events.example>\nNumber of messages in conversation: 2\n\nLAST MESSAGE RECEIVED:\nGreat, thanks Luca. Emma On Tue, 29 Sep 2026 at 15:40, Luca Moretti wrote: > Hi Emma, > I'll check with the warehouse and get back to you tomorrow with the exact delivery date. > > Luca\n\nTHE QUESTION IS SIMPLE:\nDOES THE USER NEED TO CREATE A TASK?\n\nA TASK is needed when the user must do ANYTHING:\n- Reply to a question\n- Send documents/information\n- Keep a promise made (\"I'll send you the pptx by tonight\")\n- Do an action they said they'd do (\"I'll see if we can find a workaround\")\n- Fix something they promised to fix (\"we can do this right away\")\n\nCLASSIFICATION RULES:\n\n1. \"answer\" - User needs to reply because:\n   - Someone asked them a question\n   - Someone requested information, documents, feedback\n   - Someone is waiting for their confirmation or decision\n   - There's a pending meeting/collaboration proposal\n\n2. \"reminder\" - User needs to do something they promised:\n   - They said \"I'll send you X by Y\" and haven't sent it yet\n   - They said \"I'll try to do X\" and haven't done it yet\n   - They promised \"we'll fix this right away\" and haven't fixed it\n   - They're waiting for a reply to their question (reminder to follow up)\n\n3. null - No task needed:\n   - Conversation concluded without pending actions\n   - Automated notification that doesn't require a response\n   - Exchange of courtesies concluded\n\nPRACTICAL EXAMPLES:\n\nExample 1:\nClient: \"Can you send me the quote?\"\n-> open: true, expected_action: \"answer\"\nTASK: Reply with quote\n\nExample 2:\nUser: \"I'll send you the pptx by tonight\"\nClient: \"Perfect, thanks!\"\n-> open: true, expected_action: \"reminder\"\nTASK: Send the promised pptx\n\nExample 3:\nUser: \"I'll see if we can find some workaround\"\n[A week passed, no response]\n-> open: true, expected_action: \"reminder\"\nTASK: Find workaround and respond\n\nExample 4:\nClient: \"I would prefer the assistant not to ask for first and last name right away\"\nUser: \"We can do this right away :-)\"\n[Never responded]\n-> open: true, expected_action: \"reminder\"\nTASK: Fix assistant configuration\n\nExample 5:\nAutomated notification: \"Your subscription has been renewed\"\n-> open: false, expected_action: null\nNO TASK needed\n\nUse the classify_thread tool to provide your analysis.\n"
+     }
+    ],
+    "max_tokens": 800,
+    "tools": [
+     {
+      "name": "classify_thread",
+      "description": "Classify an email thread to determine if user action is needed",
+      "input_schema": {
+       "type": "object",
+       "properties": {
+        "summary": {
+         "type": "string",
+         "description": "Brief summary of what user needs to do (1-2 sentences in English)"
+        },
+        "open": {
+         "type": "boolean",
+         "description": "True if user has a pending task, False if conversation is concluded"
+        },
+        "expected_action": {
+         "type": [
+          "string",
+          "null"
+         ],
+         "enum": [
+          "answer",
+          "reminder",
+          null
+         ],
+         "description": "Type of action: 'answer' if user needs to reply, 'reminder' if user promised something, null if no action needed"
+        }
+       },
+       "required": [
+        "summary",
+        "open",
+        "expected_action"
+       ]
+      }
+     }
+    ],
+    "tool_choice": {
+     "type": "auto"
+    }
+   },
+   "capture_now": "2026-10-05T09:30:00"
+  },
+  {
+   "case_id": "sync_analysis-10",
+   "request": {
+    "messages": [
+     {
+      "role": "user",
+      "content": "You are an assistant that analyzes email conversations to determine if the user needs to create a TASK.\n\nCONTEXT:\nSubject: Re: Configurazione assistente\nFrom: Dott. Marco Ferri <segreteria@studio-ferri.example>\nNumber of messages in conversation: 3\n\nLAST MESSAGE RECEIVED:\nOttimo, grazie mille! Dott. Marco Ferri Il giorno gio 1 ott 2026 alle ore 11:05 Sara - Supporto Centralino Esempio ha scritto: > Buongiorno Dottore, > possiamo sistemarlo subito :-) > > Sara\n\nTHE QUESTION IS SIMPLE:\nDOES THE USER NEED TO CREATE A TASK?\n\nA TASK is needed when the user must do ANYTHING:\n- Reply to a question\n- Send documents/information\n- Keep a promise made (\"I'll send you the pptx by tonight\")\n- Do an action they said they'd do (\"I'll see if we can find a workaround\")\n- Fix something they promised to fix (\"we can do this right away\")\n\nCLASSIFICATION RULES:\n\n1. \"answer\" - User needs to reply because:\n   - Someone asked them a question\n   - Someone requested information, documents, feedback\n   - Someone is waiting for their confirmation or decision\n   - There's a pending meeting/collaboration proposal\n\n2. \"reminder\" - User needs to do something they promised:\n   - They said \"I'll send you X by Y\" and haven't sent it yet\n   - They said \"I'll try to do X\" and haven't done it yet\n   - They promised \"we'll fix this right away\" and haven't fixed it\n   - They're waiting for a reply to their question (reminder to follow up)\n\n3. null - No task needed:\n   - Conversation concluded without pending actions\n   - Automated notification that doesn't require a response\n   - Exchange of courtesies concluded\n\nPRACTICAL EXAMPLES:\n\nExample 1:\nClient: \"Can you send me the quote?\"\n-> open: true, expected_action: \"answer\"\nTASK: Reply with quote\n\nExample 2:\nUser: \"I'll send you the pptx by tonight\"\nClient: \"Perfect, thanks!\"\n-> open: true, expected_action: \"reminder\"\nTASK: Send the promised pptx\n\nExample 3:\nUser: \"I'll see if we can find some workaround\"\n[A week passed, no response]\n-> open: true, expected_action: \"reminder\"\nTASK: Find workaround and respond\n\nExample 4:\nClient: \"I would prefer the assistant not to ask for first and last name right away\"\nUser: \"We can do this right away :-)\"\n[Never responded]\n-> open: true, expected_action: \"reminder\"\nTASK: Fix assistant configuration\n\nExample 5:\nAutomated notification: \"Your subscription has been renewed\"\n-> open: false, expected_action: null\nNO TASK needed\n\nUse the classify_thread tool to provide your analysis.\n"
+     }
+    ],
+    "max_tokens": 800,
+    "tools": [
+     {
+      "name": "classify_thread",
+      "description": "Classify an email thread to determine if user action is needed",
+      "input_schema": {
+       "type": "object",
+       "properties": {
+        "summary": {
+         "type": "string",
+         "description": "Brief summary of what user needs to do (1-2 sentences in English)"
+        },
+        "open": {
+         "type": "boolean",
+         "description": "True if user has a pending task, False if conversation is concluded"
+        },
+        "expected_action": {
+         "type": [
+          "string",
+          "null"
+         ],
+         "enum": [
+          "answer",
+          "reminder",
+          null
+         ],
+         "description": "Type of action: 'answer' if user needs to reply, 'reminder' if user promised something, null if no action needed"
+        }
+       },
+       "required": [
+        "summary",
+        "open",
+        "expected_action"
+       ]
+      }
+     }
+    ],
+    "tool_choice": {
+     "type": "auto"
+    }
+   },
+   "capture_now": "2026-10-05T09:30:00"
+  },
+  {
+   "case_id": "sync_analysis-11",
+   "request": {
+    "messages": [
+     {
+      "role": "user",
+      "content": "You are an assistant that analyzes email conversations to determine if the user needs to create a TASK.\n\nCONTEXT:\nSubject: Re: Replacement hinge\nFrom: David Hughes <d.hughes@example-mail.example>\nNumber of messages in conversation: 2\n\nLAST MESSAGE RECEIVED:\nThanks, appreciated. David Hughes On Mon, 28 Sep 2026 at 10:02, Example Kitchens Support wrote: > Dear Mr Hughes, > we'll ship the replacement hinge on Monday 5 October. > > Kind regards, > Example Kitchens Support\n\nTHE QUESTION IS SIMPLE:\nDOES THE USER NEED TO CREATE A TASK?\n\nA TASK is needed when the user must do ANYTHING:\n- Reply to a question\n- Send documents/information\n- Keep a promise made (\"I'll send you the pptx by tonight\")\n- Do an action they said they'd do (\"I'll see if we can find a workaround\")\n- Fix something they promised to fix (\"we can do this right away\")\n\nCLASSIFICATION RULES:\n\n1. \"answer\" - User needs to reply because:\n   - Someone asked them a question\n   - Someone requested information, documents, feedback\n   - Someone is waiting for their confirmation or decision\n   - There's a pending meeting/collaboration proposal\n\n2. \"reminder\" - User needs to do something they promised:\n   - They said \"I'll send you X by Y\" and haven't sent it yet\n   - They said \"I'll try to do X\" and haven't done it yet\n   - They promised \"we'll fix this right away\" and haven't fixed it\n   - They're waiting for a reply to their question (reminder to follow up)\n\n3. null - No task needed:\n   - Conversation concluded without pending actions\n   - Automated notification that doesn't require a response\n   - Exchange of courtesies concluded\n\nPRACTICAL EXAMPLES:\n\nExample 1:\nClient: \"Can you send me the quote?\"\n-> open: true, expected_action: \"answer\"\nTASK: Reply with quote\n\nExample 2:\nUser: \"I'll send you the pptx by tonight\"\nClient: \"Perfect, thanks!\"\n-> open: true, expected_action: \"reminder\"\nTASK: Send the promised pptx\n\nExample 3:\nUser: \"I'll see if we can find some workaround\"\n[A week passed, no response]\n-> open: true, expected_action: \"reminder\"\nTASK: Find workaround and respond\n\nExample 4:\nClient: \"I would prefer the assistant not to ask for first and last name right away\"\nUser: \"We can do this right away :-)\"\n[Never responded]\n-> open: true, expected_action: \"reminder\"\nTASK: Fix assistant configuration\n\nExample 5:\nAutomated notification: \"Your subscription has been renewed\"\n-> open: false, expected_action: null\nNO TASK needed\n\nUse the classify_thread tool to provide your analysis.\n"
+     }
+    ],
+    "max_tokens": 800,
+    "tools": [
+     {
+      "name": "classify_thread",
+      "description": "Classify an email thread to determine if user action is needed",
+      "input_schema": {
+       "type": "object",
+       "properties": {
+        "summary": {
+         "type": "string",
+         "description": "Brief summary of what user needs to do (1-2 sentences in English)"
+        },
+        "open": {
+         "type": "boolean",
+         "description": "True if user has a pending task, False if conversation is concluded"
+        },
+        "expected_action": {
+         "type": [
+          "string",
+          "null"
+         ],
+         "enum": [
+          "answer",
+          "reminder",
+          null
+         ],
+         "description": "Type of action: 'answer' if user needs to reply, 'reminder' if user promised something, null if no action needed"
+        }
+       },
+       "required": [
+        "summary",
+        "open",
+        "expected_action"
+       ]
+      }
+     }
+    ],
+    "tool_choice": {
+     "type": "auto"
+    }
+   },
+   "capture_now": "2026-10-05T09:30:00"
+  },
+  {
+   "case_id": "sync_analysis-12",
+   "request": {
+    "messages": [
+     {
+      "role": "user",
+      "content": "You are an assistant that analyzes email conversations to determine if the user needs to create a TASK.\n\nCONTEXT:\nSubject: Re: Furgone per sabato\nFrom: Matteo Gallo <matteo.gallo@example-traslochi.example>\nNumber of messages in conversation: 2\n\nLAST MESSAGE RECEIVED:\nOk, aspetto allora la vostra conferma. Matteo Gallo Il giorno gio 1 ott 2026 alle ore 10:00 Noleggi Esempio ha scritto: > Buongiorno, > verifichiamo la disponibilità del furgone per sabato e le confermiamo entro domani. > > Saluti > Noleggi Esempio\n\nTHE QUESTION IS SIMPLE:\nDOES THE USER NEED TO CREATE A TASK?\n\nA TASK is needed when the user must do ANYTHING:\n- Reply to a question\n- Send documents/information\n- Keep a promise made (\"I'll send you the pptx by tonight\")\n- Do an action they said they'd do (\"I'll see if we can find a workaround\")\n- Fix something they promised to fix (\"we can do this right away\")\n\nCLASSIFICATION RULES:\n\n1. \"answer\" - User needs to reply because:\n   - Someone asked them a question\n   - Someone requested information, documents, feedback\n   - Someone is waiting for their confirmation or decision\n   - There's a pending meeting/collaboration proposal\n\n2. \"reminder\" - User needs to do something they promised:\n   - They said \"I'll send you X by Y\" and haven't sent it yet\n   - They said \"I'll try to do X\" and haven't done it yet\n   - They promised \"we'll fix this right away\" and haven't fixed it\n   - They're waiting for a reply to their question (reminder to follow up)\n\n3. null - No task needed:\n   - Conversation concluded without pending actions\n   - Automated notification that doesn't require a response\n   - Exchange of courtesies concluded\n\nPRACTICAL EXAMPLES:\n\nExample 1:\nClient: \"Can you send me the quote?\"\n-> open: true, expected_action: \"answer\"\nTASK: Reply with quote\n\nExample 2:\nUser: \"I'll send you the pptx by tonight\"\nClient: \"Perfect, thanks!\"\n-> open: true, expected_action: \"reminder\"\nTASK: Send the promised pptx\n\nExample 3:\nUser: \"I'll see if we can find some workaround\"\n[A week passed, no response]\n-> open: true, expected_action: \"reminder\"\nTASK: Find workaround and respond\n\nExample 4:\nClient: \"I would prefer the assistant not to ask for first and last name right away\"\nUser: \"We can do this right away :-)\"\n[Never responded]\n-> open: true, expected_action: \"reminder\"\nTASK: Fix assistant configuration\n\nExample 5:\nAutomated notification: \"Your subscription has been renewed\"\n-> open: false, expected_action: null\nNO TASK needed\n\nUse the classify_thread tool to provide your analysis.\n"
+     }
+    ],
+    "max_tokens": 800,
+    "tools": [
+     {
+      "name": "classify_thread",
+      "description": "Classify an email thread to determine if user action is needed",
+      "input_schema": {
+       "type": "object",
+       "properties": {
+        "summary": {
+         "type": "string",
+         "description": "Brief summary of what user needs to do (1-2 sentences in English)"
+        },
+        "open": {
+         "type": "boolean",
+         "description": "True if user has a pending task, False if conversation is concluded"
+        },
+        "expected_action": {
+         "type": [
+          "string",
+          "null"
+         ],
+         "enum": [
+          "answer",
+          "reminder",
+          null
+         ],
+         "description": "Type of action: 'answer' if user needs to reply, 'reminder' if user promised something, null if no action needed"
+        }
+       },
+       "required": [
+        "summary",
+        "open",
+        "expected_action"
+       ]
+      }
+     }
+    ],
+    "tool_choice": {
+     "type": "auto"
+    }
+   },
+   "capture_now": "2026-10-05T09:30:00"
+  },
+  {
+   "case_id": "sync_analysis-13",
+   "request": {
+    "messages": [
+     {
+      "role": "user",
+      "content": "You are an assistant that analyzes email conversations to determine if the user needs to create a TASK.\n\nCONTEXT:\nSubject: Your subscription has been renewed\nFrom: Example Cloud Storage <no-reply@example-cloud.example>\nNumber of messages in conversation: 1\n\nLAST MESSAGE RECEIVED:\nHello,\nyour Example Cloud Storage Plus plan has been renewed for another year. Amount charged: 99.00 EUR to the card ending in 0000.\nThis is an automated message: please do not reply.\n\nTHE QUESTION IS SIMPLE:\nDOES THE USER NEED TO CREATE A TASK?\n\nA TASK is needed when the user must do ANYTHING:\n- Reply to a question\n- Send documents/information\n- Keep a promise made (\"I'll send you the pptx by tonight\")\n- Do an action they said they'd do (\"I'll see if we can find a workaround\")\n- Fix something they promised to fix (\"we can do this right away\")\n\nCLASSIFICATION RULES:\n\n1. \"answer\" - User needs to reply because:\n   - Someone asked them a question\n   - Someone requested information, documents, feedback\n   - Someone is waiting for their confirmation or decision\n   - There's a pending meeting/collaboration proposal\n\n2. \"reminder\" - User needs to do something they promised:\n   - They said \"I'll send you X by Y\" and haven't sent it yet\n   - They said \"I'll try to do X\" and haven't done it yet\n   - They promised \"we'll fix this right away\" and haven't fixed it\n   - They're waiting for a reply to their question (reminder to follow up)\n\n3. null - No task needed:\n   - Conversation concluded without pending actions\n   - Automated notification that doesn't require a response\n   - Exchange of courtesies concluded\n\nPRACTICAL EXAMPLES:\n\nExample 1:\nClient: \"Can you send me the quote?\"\n-> open: true, expected_action: \"answer\"\nTASK: Reply with quote\n\nExample 2:\nUser: \"I'll send you the pptx by tonight\"\nClient: \"Perfect, thanks!\"\n-> open: true, expected_action: \"reminder\"\nTASK: Send the promised pptx\n\nExample 3:\nUser: \"I'll see if we can find some workaround\"\n[A week passed, no response]\n-> open: true, expected_action: \"reminder\"\nTASK: Find workaround and respond\n\nExample 4:\nClient: \"I would prefer the assistant not to ask for first and last name right away\"\nUser: \"We can do this right away :-)\"\n[Never responded]\n-> open: true, expected_action: \"reminder\"\nTASK: Fix assistant configuration\n\nExample 5:\nAutomated notification: \"Your subscription has been renewed\"\n-> open: false, expected_action: null\nNO TASK needed\n\nUse the classify_thread tool to provide your analysis.\n"
+     }
+    ],
+    "max_tokens": 800,
+    "tools": [
+     {
+      "name": "classify_thread",
+      "description": "Classify an email thread to determine if user action is needed",
+      "input_schema": {
+       "type": "object",
+       "properties": {
+        "summary": {
+         "type": "string",
+         "description": "Brief summary of what user needs to do (1-2 sentences in English)"
+        },
+        "open": {
+         "type": "boolean",
+         "description": "True if user has a pending task, False if conversation is concluded"
+        },
+        "expected_action": {
+         "type": [
+          "string",
+          "null"
+         ],
+         "enum": [
+          "answer",
+          "reminder",
+          null
+         ],
+         "description": "Type of action: 'answer' if user needs to reply, 'reminder' if user promised something, null if no action needed"
+        }
+       },
+       "required": [
+        "summary",
+        "open",
+        "expected_action"
+       ]
+      }
+     }
+    ],
+    "tool_choice": {
+     "type": "auto"
+    }
+   },
+   "capture_now": "2026-10-05T09:30:00"
+  },
+  {
+   "case_id": "sync_analysis-14",
+   "request": {
+    "messages": [
+     {
+      "role": "user",
+      "content": "You are an assistant that analyzes email conversations to determine if the user needs to create a TASK.\n\nCONTEXT:\nSubject: La tua spedizione è stata consegnata\nFrom: Corriere Esempio <noreply@corriere-esempio.example>\nNumber of messages in conversation: 1\n\nLAST MESSAGE RECEIVED:\nGentile cliente,\nla spedizione 0000123456 è stata consegnata oggi alle 11:32. Firma del ricevente: MAGAZZINO.\nQuesta è una comunicazione automatica: non rispondere a questa email.\n\nTHE QUESTION IS SIMPLE:\nDOES THE USER NEED TO CREATE A TASK?\n\nA TASK is needed when the user must do ANYTHING:\n- Reply to a question\n- Send documents/information\n- Keep a promise made (\"I'll send you the pptx by tonight\")\n- Do an action they said they'd do (\"I'll see if we can find a workaround\")\n- Fix something they promised to fix (\"we can do this right away\")\n\nCLASSIFICATION RULES:\n\n1. \"answer\" - User needs to reply because:\n   - Someone asked them a question\n   - Someone requested information, documents, feedback\n   - Someone is waiting for their confirmation or decision\n   - There's a pending meeting/collaboration proposal\n\n2. \"reminder\" - User needs to do something they promised:\n   - They said \"I'll send you X by Y\" and haven't sent it yet\n   - They said \"I'll try to do X\" and haven't done it yet\n   - They promised \"we'll fix this right away\" and haven't fixed it\n   - They're waiting for a reply to their question (reminder to follow up)\n\n3. null - No task needed:\n   - Conversation concluded without pending actions\n   - Automated notification that doesn't require a response\n   - Exchange of courtesies concluded\n\nPRACTICAL EXAMPLES:\n\nExample 1:\nClient: \"Can you send me the quote?\"\n-> open: true, expected_action: \"answer\"\nTASK: Reply with quote\n\nExample 2:\nUser: \"I'll send you the pptx by tonight\"\nClient: \"Perfect, thanks!\"\n-> open: true, expected_action: \"reminder\"\nTASK: Send the promised pptx\n\nExample 3:\nUser: \"I'll see if we can find some workaround\"\n[A week passed, no response]\n-> open: true, expected_action: \"reminder\"\nTASK: Find workaround and respond\n\nExample 4:\nClient: \"I would prefer the assistant not to ask for first and last name right away\"\nUser: \"We can do this right away :-)\"\n[Never responded]\n-> open: true, expected_action: \"reminder\"\nTASK: Fix assistant configuration\n\nExample 5:\nAutomated notification: \"Your subscription has been renewed\"\n-> open: false, expected_action: null\nNO TASK needed\n\nUse the classify_thread tool to provide your analysis.\n"
+     }
+    ],
+    "max_tokens": 800,
+    "tools": [
+     {
+      "name": "classify_thread",
+      "description": "Classify an email thread to determine if user action is needed",
+      "input_schema": {
+       "type": "object",
+       "properties": {
+        "summary": {
+         "type": "string",
+         "description": "Brief summary of what user needs to do (1-2 sentences in English)"
+        },
+        "open": {
+         "type": "boolean",
+         "description": "True if user has a pending task, False if conversation is concluded"
+        },
+        "expected_action": {
+         "type": [
+          "string",
+          "null"
+         ],
+         "enum": [
+          "answer",
+          "reminder",
+          null
+         ],
+         "description": "Type of action: 'answer' if user needs to reply, 'reminder' if user promised something, null if no action needed"
+        }
+       },
+       "required": [
+        "summary",
+        "open",
+        "expected_action"
+       ]
+      }
+     }
+    ],
+    "tool_choice": {
+     "type": "auto"
+    }
+   },
+   "capture_now": "2026-10-05T09:30:00"
+  },
+  {
+   "case_id": "sync_analysis-15",
+   "request": {
+    "messages": [
+     {
+      "role": "user",
+      "content": "You are an assistant that analyzes email conversations to determine if the user needs to create a TASK.\n\nCONTEXT:\nSubject: Re: Fattura 233\nFrom: Carlo Conti <c.conti@enoteca-conti.example>\nNumber of messages in conversation: 2\n\nLAST MESSAGE RECEIVED:\nRicevuta, grazie e buona giornata a lei! Carlo Conti Il giorno gio 1 ott 2026 alle ore 09:20 Paolo Riva ha scritto: > Buongiorno, > le ho inviato la fattura n. 233 in allegato. > > Buona giornata > Paolo Riva\n\nTHE QUESTION IS SIMPLE:\nDOES THE USER NEED TO CREATE A TASK?\n\nA TASK is needed when the user must do ANYTHING:\n- Reply to a question\n- Send documents/information\n- Keep a promise made (\"I'll send you the pptx by tonight\")\n- Do an action they said they'd do (\"I'll see if we can find a workaround\")\n- Fix something they promised to fix (\"we can do this right away\")\n\nCLASSIFICATION RULES:\n\n1. \"answer\" - User needs to reply because:\n   - Someone asked them a question\n   - Someone requested information, documents, feedback\n   - Someone is waiting for their confirmation or decision\n   - There's a pending meeting/collaboration proposal\n\n2. \"reminder\" - User needs to do something they promised:\n   - They said \"I'll send you X by Y\" and haven't sent it yet\n   - They said \"I'll try to do X\" and haven't done it yet\n   - They promised \"we'll fix this right away\" and haven't fixed it\n   - They're waiting for a reply to their question (reminder to follow up)\n\n3. null - No task needed:\n   - Conversation concluded without pending actions\n   - Automated notification that doesn't require a response\n   - Exchange of courtesies concluded\n\nPRACTICAL EXAMPLES:\n\nExample 1:\nClient: \"Can you send me the quote?\"\n-> open: true, expected_action: \"answer\"\nTASK: Reply with quote\n\nExample 2:\nUser: \"I'll send you the pptx by tonight\"\nClient: \"Perfect, thanks!\"\n-> open: true, expected_action: \"reminder\"\nTASK: Send the promised pptx\n\nExample 3:\nUser: \"I'll see if we can find some workaround\"\n[A week passed, no response]\n-> open: true, expected_action: \"reminder\"\nTASK: Find workaround and respond\n\nExample 4:\nClient: \"I would prefer the assistant not to ask for first and last name right away\"\nUser: \"We can do this right away :-)\"\n[Never responded]\n-> open: true, expected_action: \"reminder\"\nTASK: Fix assistant configuration\n\nExample 5:\nAutomated notification: \"Your subscription has been renewed\"\n-> open: false, expected_action: null\nNO TASK needed\n\nUse the classify_thread tool to provide your analysis.\n"
+     }
+    ],
+    "max_tokens": 800,
+    "tools": [
+     {
+      "name": "classify_thread",
+      "description": "Classify an email thread to determine if user action is needed",
+      "input_schema": {
+       "type": "object",
+       "properties": {
+        "summary": {
+         "type": "string",
+         "description": "Brief summary of what user needs to do (1-2 sentences in English)"
+        },
+        "open": {
+         "type": "boolean",
+         "description": "True if user has a pending task, False if conversation is concluded"
+        },
+        "expected_action": {
+         "type": [
+          "string",
+          "null"
+         ],
+         "enum": [
+          "answer",
+          "reminder",
+          null
+         ],
+         "description": "Type of action: 'answer' if user needs to reply, 'reminder' if user promised something, null if no action needed"
+        }
+       },
+       "required": [
+        "summary",
+        "open",
+        "expected_action"
+       ]
+      }
+     }
+    ],
+    "tool_choice": {
+     "type": "auto"
+    }
+   },
+   "capture_now": "2026-10-05T09:30:00"
+  },
+  {
+   "case_id": "sync_analysis-16",
+   "request": {
+    "messages": [
+     {
+      "role": "user",
+      "content": "You are an assistant that analyzes email conversations to determine if the user needs to create a TASK.\n\nCONTEXT:\nSubject: October newsletter: 5 ideas for greener shipping boxes\nFrom: Example Packaging News <newsletter@example-packaging.example>\nNumber of messages in conversation: 1\n\nLAST MESSAGE RECEIVED:\nHello Luca,\nthis month: recycled board grades, the new 2027 box sizes and five ideas to cut plastic from your shipments. Read the full articles on our website.\n\nYou receive this newsletter because you subscribed at a trade fair. To unsubscribe, use the link in the footer.\n\nTHE QUESTION IS SIMPLE:\nDOES THE USER NEED TO CREATE A TASK?\n\nA TASK is needed when the user must do ANYTHING:\n- Reply to a question\n- Send documents/information\n- Keep a promise made (\"I'll send you the pptx by tonight\")\n- Do an action they said they'd do (\"I'll see if we can find a workaround\")\n- Fix something they promised to fix (\"we can do this right away\")\n\nCLASSIFICATION RULES:\n\n1. \"answer\" - User needs to reply because:\n   - Someone asked them a question\n   - Someone requested information, documents, feedback\n   - Someone is waiting for their confirmation or decision\n   - There's a pending meeting/collaboration proposal\n\n2. \"reminder\" - User needs to do something they promised:\n   - They said \"I'll send you X by Y\" and haven't sent it yet\n   - They said \"I'll try to do X\" and haven't done it yet\n   - They promised \"we'll fix this right away\" and haven't fixed it\n   - They're waiting for a reply to their question (reminder to follow up)\n\n3. null - No task needed:\n   - Conversation concluded without pending actions\n   - Automated notification that doesn't require a response\n   - Exchange of courtesies concluded\n\nPRACTICAL EXAMPLES:\n\nExample 1:\nClient: \"Can you send me the quote?\"\n-> open: true, expected_action: \"answer\"\nTASK: Reply with quote\n\nExample 2:\nUser: \"I'll send you the pptx by tonight\"\nClient: \"Perfect, thanks!\"\n-> open: true, expected_action: \"reminder\"\nTASK: Send the promised pptx\n\nExample 3:\nUser: \"I'll see if we can find some workaround\"\n[A week passed, no response]\n-> open: true, expected_action: \"reminder\"\nTASK: Find workaround and respond\n\nExample 4:\nClient: \"I would prefer the assistant not to ask for first and last name right away\"\nUser: \"We can do this right away :-)\"\n[Never responded]\n-> open: true, expected_action: \"reminder\"\nTASK: Fix assistant configuration\n\nExample 5:\nAutomated notification: \"Your subscription has been renewed\"\n-> open: false, expected_action: null\nNO TASK needed\n\nUse the classify_thread tool to provide your analysis.\n"
+     }
+    ],
+    "max_tokens": 800,
+    "tools": [
+     {
+      "name": "classify_thread",
+      "description": "Classify an email thread to determine if user action is needed",
+      "input_schema": {
+       "type": "object",
+       "properties": {
+        "summary": {
+         "type": "string",
+         "description": "Brief summary of what user needs to do (1-2 sentences in English)"
+        },
+        "open": {
+         "type": "boolean",
+         "description": "True if user has a pending task, False if conversation is concluded"
+        },
+        "expected_action": {
+         "type": [
+          "string",
+          "null"
+         ],
+         "enum": [
+          "answer",
+          "reminder",
+          null
+         ],
+         "description": "Type of action: 'answer' if user needs to reply, 'reminder' if user promised something, null if no action needed"
+        }
+       },
+       "required": [
+        "summary",
+        "open",
+        "expected_action"
+       ]
+      }
+     }
+    ],
+    "tool_choice": {
+     "type": "auto"
+    }
+   },
+   "capture_now": "2026-10-05T09:30:00"
+  },
+  {
+   "case_id": "sync_analysis-17",
+   "request": {
+    "messages": [
+     {
+      "role": "user",
+      "content": "You are an assistant that analyzes email conversations to determine if the user needs to create a TASK.\n\nCONTEXT:\nSubject: Re: October invoice\nFrom: Tom Becker <tom@example-cafe.example>\nNumber of messages in conversation: 2\n\nLAST MESSAGE RECEIVED:\nReceived, many thanks. Have a good day! Tom On Thu, 1 Oct 2026 at 08:15, Luca Moretti wrote: > Hi Tom, > here's the invoice for the October order. Thanks again for your business! > > Luca\n\nTHE QUESTION IS SIMPLE:\nDOES THE USER NEED TO CREATE A TASK?\n\nA TASK is needed when the user must do ANYTHING:\n- Reply to a question\n- Send documents/information\n- Keep a promise made (\"I'll send you the pptx by tonight\")\n- Do an action they said they'd do (\"I'll see if we can find a workaround\")\n- Fix something they promised to fix (\"we can do this right away\")\n\nCLASSIFICATION RULES:\n\n1. \"answer\" - User needs to reply because:\n   - Someone asked them a question\n   - Someone requested information, documents, feedback\n   - Someone is waiting for their confirmation or decision\n   - There's a pending meeting/collaboration proposal\n\n2. \"reminder\" - User needs to do something they promised:\n   - They said \"I'll send you X by Y\" and haven't sent it yet\n   - They said \"I'll try to do X\" and haven't done it yet\n   - They promised \"we'll fix this right away\" and haven't fixed it\n   - They're waiting for a reply to their question (reminder to follow up)\n\n3. null - No task needed:\n   - Conversation concluded without pending actions\n   - Automated notification that doesn't require a response\n   - Exchange of courtesies concluded\n\nPRACTICAL EXAMPLES:\n\nExample 1:\nClient: \"Can you send me the quote?\"\n-> open: true, expected_action: \"answer\"\nTASK: Reply with quote\n\nExample 2:\nUser: \"I'll send you the pptx by tonight\"\nClient: \"Perfect, thanks!\"\n-> open: true, expected_action: \"reminder\"\nTASK: Send the promised pptx\n\nExample 3:\nUser: \"I'll see if we can find some workaround\"\n[A week passed, no response]\n-> open: true, expected_action: \"reminder\"\nTASK: Find workaround and respond\n\nExample 4:\nClient: \"I would prefer the assistant not to ask for first and last name right away\"\nUser: \"We can do this right away :-)\"\n[Never responded]\n-> open: true, expected_action: \"reminder\"\nTASK: Fix assistant configuration\n\nExample 5:\nAutomated notification: \"Your subscription has been renewed\"\n-> open: false, expected_action: null\nNO TASK needed\n\nUse the classify_thread tool to provide your analysis.\n"
+     }
+    ],
+    "max_tokens": 800,
+    "tools": [
+     {
+      "name": "classify_thread",
+      "description": "Classify an email thread to determine if user action is needed",
+      "input_schema": {
+       "type": "object",
+       "properties": {
+        "summary": {
+         "type": "string",
+         "description": "Brief summary of what user needs to do (1-2 sentences in English)"
+        },
+        "open": {
+         "type": "boolean",
+         "description": "True if user has a pending task, False if conversation is concluded"
+        },
+        "expected_action": {
+         "type": [
+          "string",
+          "null"
+         ],
+         "enum": [
+          "answer",
+          "reminder",
+          null
+         ],
+         "description": "Type of action: 'answer' if user needs to reply, 'reminder' if user promised something, null if no action needed"
+        }
+       },
+       "required": [
+        "summary",
+        "open",
+        "expected_action"
+       ]
+      }
+     }
+    ],
+    "tool_choice": {
+     "type": "auto"
+    }
+   },
+   "capture_now": "2026-10-05T09:30:00"
+  },
+  {
+   "case_id": "sync_analysis-18",
+   "request": {
+    "messages": [
+     {
+      "role": "user",
+      "content": "You are an assistant that analyzes email conversations to determine if the user needs to create a TASK.\n\nCONTEXT:\nSubject: Invito accettato: Riunione trimestrale fornitori (gio 8 ott 2026 10:00)\nFrom: Calendario Esempio <calendar-notification@calendario-esempio.example>\nNumber of messages in conversation: 1\n\nLAST MESSAGE RECEIVED:\nSara Colombo ha accettato questo invito.\n\nRiunione trimestrale fornitori\ngiovedì 8 ottobre 2026, 10:00 - 11:00 (CEST)\nSala riunioni piano terra\n\nTHE QUESTION IS SIMPLE:\nDOES THE USER NEED TO CREATE A TASK?\n\nA TASK is needed when the user must do ANYTHING:\n- Reply to a question\n- Send documents/information\n- Keep a promise made (\"I'll send you the pptx by tonight\")\n- Do an action they said they'd do (\"I'll see if we can find a workaround\")\n- Fix something they promised to fix (\"we can do this right away\")\n\nCLASSIFICATION RULES:\n\n1. \"answer\" - User needs to reply because:\n   - Someone asked them a question\n   - Someone requested information, documents, feedback\n   - Someone is waiting for their confirmation or decision\n   - There's a pending meeting/collaboration proposal\n\n2. \"reminder\" - User needs to do something they promised:\n   - They said \"I'll send you X by Y\" and haven't sent it yet\n   - They said \"I'll try to do X\" and haven't done it yet\n   - They promised \"we'll fix this right away\" and haven't fixed it\n   - They're waiting for a reply to their question (reminder to follow up)\n\n3. null - No task needed:\n   - Conversation concluded without pending actions\n   - Automated notification that doesn't require a response\n   - Exchange of courtesies concluded\n\nPRACTICAL EXAMPLES:\n\nExample 1:\nClient: \"Can you send me the quote?\"\n-> open: true, expected_action: \"answer\"\nTASK: Reply with quote\n\nExample 2:\nUser: \"I'll send you the pptx by tonight\"\nClient: \"Perfect, thanks!\"\n-> open: true, expected_action: \"reminder\"\nTASK: Send the promised pptx\n\nExample 3:\nUser: \"I'll see if we can find some workaround\"\n[A week passed, no response]\n-> open: true, expected_action: \"reminder\"\nTASK: Find workaround and respond\n\nExample 4:\nClient: \"I would prefer the assistant not to ask for first and last name right away\"\nUser: \"We can do this right away :-)\"\n[Never responded]\n-> open: true, expected_action: \"reminder\"\nTASK: Fix assistant configuration\n\nExample 5:\nAutomated notification: \"Your subscription has been renewed\"\n-> open: false, expected_action: null\nNO TASK needed\n\nUse the classify_thread tool to provide your analysis.\n"
+     }
+    ],
+    "max_tokens": 800,
+    "tools": [
+     {
+      "name": "classify_thread",
+      "description": "Classify an email thread to determine if user action is needed",
+      "input_schema": {
+       "type": "object",
+       "properties": {
+        "summary": {
+         "type": "string",
+         "description": "Brief summary of what user needs to do (1-2 sentences in English)"
+        },
+        "open": {
+         "type": "boolean",
+         "description": "True if user has a pending task, False if conversation is concluded"
+        },
+        "expected_action": {
+         "type": [
+          "string",
+          "null"
+         ],
+         "enum": [
+          "answer",
+          "reminder",
+          null
+         ],
+         "description": "Type of action: 'answer' if user needs to reply, 'reminder' if user promised something, null if no action needed"
+        }
+       },
+       "required": [
+        "summary",
+        "open",
+        "expected_action"
+       ]
+      }
+     }
+    ],
+    "tool_choice": {
+     "type": "auto"
+    }
+   },
+   "capture_now": "2026-10-05T09:30:00"
+  },
+  {
+   "case_id": "sync_analysis-19",
+   "request": {
+    "messages": [
+     {
+      "role": "user",
+      "content": "You are an assistant that analyzes email conversations to determine if the user needs to create a TASK.\n\nCONTEXT:\nSubject: Office closed on 2 November\nFrom: Emma Clarke <emma.clarke@example-events.example>\nNumber of messages in conversation: 1\n\nLAST MESSAGE RECEIVED:\nHi Luca,\njust letting you know our office will be closed on Monday 2 November for the holiday. No need to reply.\n\nBest,\nEmma\n\nTHE QUESTION IS SIMPLE:\nDOES THE USER NEED TO CREATE A TASK?\n\nA TASK is needed when the user must do ANYTHING:\n- Reply to a question\n- Send documents/information\n- Keep a promise made (\"I'll send you the pptx by tonight\")\n- Do an action they said they'd do (\"I'll see if we can find a workaround\")\n- Fix something they promised to fix (\"we can do this right away\")\n\nCLASSIFICATION RULES:\n\n1. \"answer\" - User needs to reply because:\n   - Someone asked them a question\n   - Someone requested information, documents, feedback\n   - Someone is waiting for their confirmation or decision\n   - There's a pending meeting/collaboration proposal\n\n2. \"reminder\" - User needs to do something they promised:\n   - They said \"I'll send you X by Y\" and haven't sent it yet\n   - They said \"I'll try to do X\" and haven't done it yet\n   - They promised \"we'll fix this right away\" and haven't fixed it\n   - They're waiting for a reply to their question (reminder to follow up)\n\n3. null - No task needed:\n   - Conversation concluded without pending actions\n   - Automated notification that doesn't require a response\n   - Exchange of courtesies concluded\n\nPRACTICAL EXAMPLES:\n\nExample 1:\nClient: \"Can you send me the quote?\"\n-> open: true, expected_action: \"answer\"\nTASK: Reply with quote\n\nExample 2:\nUser: \"I'll send you the pptx by tonight\"\nClient: \"Perfect, thanks!\"\n-> open: true, expected_action: \"reminder\"\nTASK: Send the promised pptx\n\nExample 3:\nUser: \"I'll see if we can find some workaround\"\n[A week passed, no response]\n-> open: true, expected_action: \"reminder\"\nTASK: Find workaround and respond\n\nExample 4:\nClient: \"I would prefer the assistant not to ask for first and last name right away\"\nUser: \"We can do this right away :-)\"\n[Never responded]\n-> open: true, expected_action: \"reminder\"\nTASK: Fix assistant configuration\n\nExample 5:\nAutomated notification: \"Your subscription has been renewed\"\n-> open: false, expected_action: null\nNO TASK needed\n\nUse the classify_thread tool to provide your analysis.\n"
+     }
+    ],
+    "max_tokens": 800,
+    "tools": [
+     {
+      "name": "classify_thread",
+      "description": "Classify an email thread to determine if user action is needed",
+      "input_schema": {
+       "type": "object",
+       "properties": {
+        "summary": {
+         "type": "string",
+         "description": "Brief summary of what user needs to do (1-2 sentences in English)"
+        },
+        "open": {
+         "type": "boolean",
+         "description": "True if user has a pending task, False if conversation is concluded"
+        },
+        "expected_action": {
+         "type": [
+          "string",
+          "null"
+         ],
+         "enum": [
+          "answer",
+          "reminder",
+          null
+         ],
+         "description": "Type of action: 'answer' if user needs to reply, 'reminder' if user promised something, null if no action needed"
+        }
+       },
+       "required": [
+        "summary",
+        "open",
+        "expected_action"
+       ]
+      }
+     }
+    ],
+    "tool_choice": {
+     "type": "auto"
+    }
+   },
+   "capture_now": "2026-10-05T09:30:00"
+  },
+  {
+   "case_id": "sync_analysis-20",
+   "request": {
+    "messages": [
+     {
+      "role": "user",
+      "content": "You are an assistant that analyzes email conversations to determine if the user needs to create a TASK.\n\nCONTEXT:\nSubject: Grazie!\nFrom: Giulia Neri <acquisti@bistrot-neri.example>\nNumber of messages in conversation: 1\n\nLAST MESSAGE RECEIVED:\nBuongiorno Paolo,\nvolevo solo ringraziarvi per la consegna puntuale, l'olio è piaciuto molto ai nostri clienti. Alla prossima!\n\nGiulia\nBistrot Neri\n\nTHE QUESTION IS SIMPLE:\nDOES THE USER NEED TO CREATE A TASK?\n\nA TASK is needed when the user must do ANYTHING:\n- Reply to a question\n- Send documents/information\n- Keep a promise made (\"I'll send you the pptx by tonight\")\n- Do an action they said they'd do (\"I'll see if we can find a workaround\")\n- Fix something they promised to fix (\"we can do this right away\")\n\nCLASSIFICATION RULES:\n\n1. \"answer\" - User needs to reply because:\n   - Someone asked them a question\n   - Someone requested information, documents, feedback\n   - Someone is waiting for their confirmation or decision\n   - There's a pending meeting/collaboration proposal\n\n2. \"reminder\" - User needs to do something they promised:\n   - They said \"I'll send you X by Y\" and haven't sent it yet\n   - They said \"I'll try to do X\" and haven't done it yet\n   - They promised \"we'll fix this right away\" and haven't fixed it\n   - They're waiting for a reply to their question (reminder to follow up)\n\n3. null - No task needed:\n   - Conversation concluded without pending actions\n   - Automated notification that doesn't require a response\n   - Exchange of courtesies concluded\n\nPRACTICAL EXAMPLES:\n\nExample 1:\nClient: \"Can you send me the quote?\"\n-> open: true, expected_action: \"answer\"\nTASK: Reply with quote\n\nExample 2:\nUser: \"I'll send you the pptx by tonight\"\nClient: \"Perfect, thanks!\"\n-> open: true, expected_action: \"reminder\"\nTASK: Send the promised pptx\n\nExample 3:\nUser: \"I'll see if we can find some workaround\"\n[A week passed, no response]\n-> open: true, expected_action: \"reminder\"\nTASK: Find workaround and respond\n\nExample 4:\nClient: \"I would prefer the assistant not to ask for first and last name right away\"\nUser: \"We can do this right away :-)\"\n[Never responded]\n-> open: true, expected_action: \"reminder\"\nTASK: Fix assistant configuration\n\nExample 5:\nAutomated notification: \"Your subscription has been renewed\"\n-> open: false, expected_action: null\nNO TASK needed\n\nUse the classify_thread tool to provide your analysis.\n"
+     }
+    ],
+    "max_tokens": 800,
+    "tools": [
+     {
+      "name": "classify_thread",
+      "description": "Classify an email thread to determine if user action is needed",
+      "input_schema": {
+       "type": "object",
+       "properties": {
+        "summary": {
+         "type": "string",
+         "description": "Brief summary of what user needs to do (1-2 sentences in English)"
+        },
+        "open": {
+         "type": "boolean",
+         "description": "True if user has a pending task, False if conversation is concluded"
+        },
+        "expected_action": {
+         "type": [
+          "string",
+          "null"
+         ],
+         "enum": [
+          "answer",
+          "reminder",
+          null
+         ],
+         "description": "Type of action: 'answer' if user needs to reply, 'reminder' if user promised something, null if no action needed"
+        }
+       },
+       "required": [
+        "summary",
+        "open",
+        "expected_action"
+       ]
+      }
+     }
+    ],
+    "tool_choice": {
+     "type": "auto"
+    }
+   },
+   "capture_now": "2026-10-05T09:30:00"
+  }
+ ]
+}
