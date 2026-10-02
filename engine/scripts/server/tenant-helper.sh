@@ -220,7 +220,12 @@ ensure_company_store() { # ensure_company_store <group>
 # and only the error stands.
 undo_first_dropin() {
   local rc=$?
-  [ "$rc" = 0 ] || table_has "$uid" || { rm -f "$dropin" "$fragment"; rmdir "$dropin_d" 2>/dev/null; systemctl daemon-reload; } || true
+  if [ "$rc" != 0 ] && ! table_has "$uid"; then
+    rm -f "$dropin" "$fragment"; rmdir "$dropin_d" 2>/dev/null || true
+    # step 7's run dir and flat-name link: the template's daemon binds that name
+    rm -rf "${RUN_ROOT:?}/$uid"; [ -L "$RUN_ROOT/$uid.sock" ] && rm -f "$RUN_ROOT/$uid.sock"
+    systemctl daemon-reload || true
+  fi
   exit "$rc"
 }
 
@@ -381,7 +386,9 @@ create)
     [ -n "$f" ] && [ "$f" != "$dropin" ] && [ -f "$f" ] || continue
     case "$f" in *.d/*) if grep -qE '^[[:space:]]*ExecStart[[:space:]]*=' "$f"; then die "$f sets ExecStart; tenant.conf sets the only command line a migrated unit runs (socket $RUN_ROOT/$uid/ws.sock): remove those lines first and pin a release with Environment=PYTHONPATH=…; a unit that needs another command cannot be migrated yet"; fi ;; esac
     while IFS= read -r ef; do
-      ef=${ef#-}
+      ef=${ef#-}; ef=${ef%"${ef##*[![:space:]]}"}
+      # a specifier (%i) names a file this loop cannot find: refuse it
+      case "$ef" in *%*) die "$f: EnvironmentFile $ef uses a specifier and cannot be checked for PYTHONPATH; pin with Environment=PYTHONPATH=… in a drop-in instead" ;; esac
       if grep -qsE '^[[:space:]]*PYTHONPATH[[:space:]]*=' "$ef"; then die "$f: EnvironmentFile $ef sets PYTHONPATH; pin with Environment=PYTHONPATH=… in a drop-in instead"; fi
     done < <(sed -nE 's/^[[:space:]]*EnvironmentFile[[:space:]]*=[[:space:]]*//p' "$f")
   done < <(systemctl show -p FragmentPath -p DropInPaths --value "$unit" | tr ' ' '\n')
@@ -409,7 +416,7 @@ create)
     [[ "$p" = /* ]] || die "PYTHONPATH $p is not absolute"
     for q in "$p" "$p/zylch/__init__.py"; do
       rp=$(realpath -e -- "$q" 2>/dev/null) || die "PYTHONPATH $p: $q does not exist"
-      [ "$rp" = "$(realpath -m -s -- "$q")" ] || die "PYTHONPATH $p: $q goes through a symbolic link (it is $rp); name the real path"
+      [ "$rp" = "$q" ] || die "PYTHONPATH $p: $q is not the real path (it is $rp): no symbolic link, no \`..\`, no trailing slash"
       case "$rp" in "$REPO"/*|"$RELEASES"/*) ;; *) die "PYTHONPATH $p is $rp, outside $REPO and $RELEASES: the sandbox cannot see it";; esac
     done
     runuser -u "$user" -- test -r "$p/zylch/__init__.py" || die "$user cannot read $p/zylch/__init__.py: chmod -R go=rX $RELEASES (runbook step 0), then create again"
@@ -426,13 +433,13 @@ create)
     printf 'L+ %s/%s.sock - - - - %s/%s/ws.sock\n' "$RUN_ROOT" "$uid" "$RUN_ROOT" "$uid"
   } > "$fragment"
   systemd-tmpfiles --create "$fragment"
-  trap - EXIT
   # 8. profile tree: subdirs, then ownership — LAST, so any -wal/-shm a
   #    root-run rekey left behind is re-owned (plan M2.7).
   for d in downloads scratch; do
     [ -L "$profile_dir/$d" ] && die "$profile_dir/$d is a symlink; refusing"
     [ -d "$profile_dir/$d" ] || mkdir -m 0750 "$profile_dir/$d"
   done
+  trap - EXIT
   chown -R --no-dereference "$user:$user" "$profile_dir"
   chmod 0700 "$profile_dir"; chmod 0600 "$profile_dir/.env"
   # 9. record
