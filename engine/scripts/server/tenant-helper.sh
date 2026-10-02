@@ -208,38 +208,58 @@ EXEC_BIN="$VENV/bin/zylch"; VOICE_ARG=""
 # The operator's declaration for a unit that cannot run the standard
 # command line (production@: a release venv and --voice-config). Every
 # value is checked here: a path the sandbox cannot see, a link, a writable
-# file or an environment line that would override the tenant identity is
-# refused rather than run.
+# file or an environment line outside the voice allowlist is refused
+# rather than run. Sets declared=1 when a declaration exists; without one
+# a stale voice copy is removed. Called plainly (never in `&&`/`||`), so
+# `set -e` holds inside.
+declared=0
+VOICE_ALLOWED='^[[:space:]]*((#.*)?|(export[[:space:]]+)?(VOICE_[A-Z0-9_]*|OPENAI_[A-Z0-9_]*|VONAGE_[A-Z0-9_]*|FIREBASE_WEB_API_KEY)[[:space:]]*=.*)$'
+plain_path() { # plain_path <what> <path>: absolute, no whitespace, no systemd specifier or expansion
+  [[ "$2" = /* ]] || die "$1 $2 is not absolute"
+  case "$2" in *[[:space:]%\$]*) die "$1 $2 contains whitespace, % or \$ (systemd would expand it); refusing" ;; esac
+}
 read_tenant_exec() {
-  [ -e "$exec_decl" ] || return 1
+  declared=0
+  if [ ! -e "$exec_decl" ] && [ ! -L "$exec_decl" ]; then rm -f "$voice_copy"; return 0; fi
   [ -L "$exec_decl" ] && die "$exec_decl is a symlink; refusing"
   [ "$(stat -c '%U' "$exec_decl")" = root ] || die "$exec_decl must be owned by root"
   case "$(stat -c '%a' "$exec_decl")" in 600|400|640|644) ;; *) die "$exec_decl must not be group/other-writable (0600)";; esac
-  local interp vconf rp
+  local interp vconf rp shebang sp
   interp=$(env_value "$exec_decl" INTERPRETER); vconf=$(env_value "$exec_decl" VOICE_CONFIG)
   if [ -n "$interp" ]; then
-    [[ "$interp" = /* ]] || die "INTERPRETER $interp is not absolute"
+    plain_path INTERPRETER "$interp"
     rp=$(realpath -e -- "$interp" 2>/dev/null) || die "INTERPRETER $interp does not exist"
     [ "$rp" = "$interp" ] || die "INTERPRETER $interp is not the real path (it is $rp)"
     case "$rp" in "$RELEASES"/*|"$REPO"/*) ;; *) die "INTERPRETER $interp is outside $RELEASES and $REPO: the sandbox cannot see it";; esac
+    # a console script runs its shebang's python: that must be visible too
+    shebang=$(head -c 512 -- "$interp" | head -n 1)
+    if [[ "$shebang" == '#!'* ]]; then
+      sp=${shebang#\#!}; sp=${sp%%[[:space:]]*}
+      sp=$(realpath -e -- "$sp" 2>/dev/null) || die "INTERPRETER $interp: its shebang interpreter does not exist"
+      case "$sp" in /usr/*|"$RELEASES"/*|"$REPO"/*) ;; *) die "INTERPRETER $interp runs $sp, outside /usr, $RELEASES and $REPO: the sandbox cannot see it";; esac
+    fi
     runuser -u "$user" -- test -x "$interp" || die "$user cannot execute $interp: chmod -R go=rX $RELEASES"
     EXEC_BIN="$interp"
   fi
   if [ -n "$vconf" ]; then
-    [[ "$vconf" = /* ]] || die "VOICE_CONFIG $vconf is not absolute"
+    plain_path VOICE_CONFIG "$vconf"
     [ -L "$vconf" ] && die "VOICE_CONFIG $vconf is a symlink; refusing"
     [ -f "$vconf" ] || die "VOICE_CONFIG $vconf is not a regular file"
     [ "$(stat -c '%U' "$vconf")" = root ] || die "VOICE_CONFIG $vconf must be owned by root"
-    # it is also loaded as an EnvironmentFile: it may not set the tenant's
-    # identity, data root, key or import path
-    if grep -qE '^[[:space:]]*(export[[:space:]]+)?(ENCRYPTION_KEY|PYTHONPATH|HOME|ZYLCH_HOME|MEMORY_DB_DIR|ZYLCH_PROFILE_DIR|ZYLCH_DB_PATH|OWNER_ID)[[:space:]]*=' "$vconf"; then
-      die "VOICE_CONFIG $vconf sets a variable reserved for the tenant identity; remove it"
+    # it is also loaded as an EnvironmentFile: only voice variables, one
+    # per line (no tenant identity, data root, key or import path)
+    if grep -qvE "$VOICE_ALLOWED" "$vconf"; then
+      die "VOICE_CONFIG $vconf has a line outside VOICE_*, OPENAI_*, VONAGE_*, FIREBASE_WEB_API_KEY (or a multi-line value); remove it"
     fi
-    install -d -m 0750 -o root -g root "$EXEC_DIR"
+    # 0711: the tenant reaches its own copy by name, never lists the others
+    install -d -m 0711 -o root -g root "$EXEC_DIR"; chmod 0711 "$EXEC_DIR"
     install -m 0640 -o root -g "$user" "$vconf" "$voice_copy"
+    runuser -u "$user" -- test -r "$voice_copy" || die "$user cannot read $voice_copy (is /etc/mrcalld o+x?)"
     VOICE_ARG=" --voice-config $voice_copy"
+  else
+    rm -f "$voice_copy"
   fi
-  return 0
+  declared=1
 }
 
 profile_key() { env_value "$profile_dir/.env" MEMORY_KEY; }
@@ -439,7 +459,8 @@ create)
   systemctl daemon-reload
   # A declared unit (tenant-exec) keeps its operator command drop-ins:
   # tenant.conf resets ExecStart and 6b verifies what systemd will run.
-  declared=0; read_tenant_exec && declared=1
+  trap undo_first_dropin EXIT
+  read_tenant_exec
   while IFS= read -r f; do
     [ -n "$f" ] && [ "$f" != "$dropin" ] && [ -f "$f" ] || continue
     [ "$declared" = 1 ] || case "$f" in *.d/*) if grep -qE '^[[:space:]]*ExecStart[[:space:]]*=' "$f"; then die "$f sets ExecStart; tenant.conf sets the only command line a migrated unit runs (socket $RUN_ROOT/$uid/ws.sock): remove those lines first and pin a release with Environment=PYTHONPATH=…; a unit that needs another command cannot be migrated yet"; fi ;; esac
@@ -450,7 +471,6 @@ create)
       if grep -qsE '^[[:space:]]*PYTHONPATH[[:space:]]*=' "$ef"; then die "$f: EnvironmentFile $ef sets PYTHONPATH; pin with Environment=PYTHONPATH=… in a drop-in instead"; fi
     done < <(sed -nE 's/^[[:space:]]*EnvironmentFile[[:space:]]*=[[:space:]]*//p' "$f")
   done < <(systemctl show -p FragmentPath -p DropInPaths --value "$unit" | tr ' ' '\n')
-  trap undo_first_dropin EXIT
   write_dropin "$group"
   # 6b. what systemd will actually run
   systemctl daemon-reload
@@ -584,7 +604,7 @@ delete)
     as_tenant "$user" "$profile_dir" -p "$uid" memory-offboard --yes $last || die "offboard failed; nothing deleted (unit disabled, .deleting keeps reconcile off it) — fix and re-run delete"
   fi
   rm -rf "$profile_dir"
-  rm -f "$keyfile" "$fragment" "$voice_copy"
+  rm -f "$keyfile" "$fragment" "$voice_copy" "$exec_decl"
   rm -rf "$dropin_d" "$RUN_ROOT/$uid"
   [ -L "$RUN_ROOT/$uid.sock" ] && rm -f "$RUN_ROOT/$uid.sock"
   if id "$user" >/dev/null 2>&1; then userdel "$user"; log "removed user $user"; fi
