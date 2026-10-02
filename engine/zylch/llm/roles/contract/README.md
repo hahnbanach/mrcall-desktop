@@ -22,9 +22,16 @@ published contract").
 - `engine/scripts/resolve_models.py --apply` writes the build copies
   `engine/zylch/llm/roles/snapshot.json` (always) and `table.json` (only
   when `roles/measured.json` covers every role).
-- The daily job publishes on the orphan branch `model-table` of
-  `hahnbanach/mrcall-desktop`, under `v1/`: `table.json`, `snapshot.json`,
-  `measured.json` and `ledger.json`.
+- The daily job (`engine/scripts/model_table_job.py`) publishes on the
+  orphan branch `model-table` of `hahnbanach/mrcall-desktop`, under `v1/`:
+  `table.json`, `snapshot.json`, `measured.json` and `ledger.json`. It
+  stamps `table.json` again only when a decision changes (a pick or a
+  ranking order) and republishes `snapshot.json` on every run that
+  publishes, so a copy's age is its snapshot's `read_at`. `measured.json`
+  (the measurement the job ranks by; each result it adds carries its own
+  `case_set_sha256`, `prompt_sha256` and `measured_at`) and `ledger.json`
+  (its spend by month) are the job's own records: no engine or server reads
+  them (`engine/scripts/model_table_records.py`).
 - Run-time URL, engine and billing server alike:
   `https://raw.githubusercontent.com/hahnbanach/mrcall-desktop/model-table/v1/<file>`.
 - The engine downloads `table.json` and `snapshot.json` at start and every
@@ -32,7 +39,8 @@ published contract").
   and falls back to the last good copy, then to the build copy. The billing
   server loads them daily, keeps the current and the previous snapshot, and
   falls back to the copy taken at image build. `release.yml` refuses a copy
-  older than 14 days or failing the gates.
+  older than 14 days (its snapshot read more than 14 days ago) or failing
+  the gates (`engine/scripts/model_table_release.py`).
 
 ## Encoding
 
