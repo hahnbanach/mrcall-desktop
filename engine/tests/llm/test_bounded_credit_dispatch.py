@@ -19,6 +19,8 @@ from zylch.llm.client import LLMClient
 from zylch.storage import database
 from zylch.storage.models import LlmReservation, LlmUsage, LlmBillingAuthorization
 
+from . import model_table_fixture as fixture
+
 SNAPSHOT = hashlib.sha256(b"synthetic snapshot").hexdigest()
 
 
@@ -124,6 +126,7 @@ def test_factory_and_status_use_saved_proxy_endpoint(ledger, tmp_path, monkeypat
     monkeypatch.setenv('SMS_BUSINESS_ID', 'ambient-business')
     monkeypatch.setattr(settings, 'mrcall_proxy_url', 'https://startup.example.test')
     monkeypatch.setattr(auth, 'get_session', lambda: SimpleNamespace(id_token='fake'))
+    fixture.serve(fixture.everything(), url='https://saved.example.test')  # the saved server's set
     client = make_llm_client()
     assert client._client.base == 'https://saved.example.test'
     assert client._client.business_id == 'saved-business'
@@ -195,6 +198,7 @@ def test_saved_business_change_invalidates_existing_client(ledger, tmp_path, mon
     path.write_text("LLM_PROVIDER=mrcall\nSMS_BUSINESS_ID=before\n")
     monkeypatch.setenv("ZYLCH_PROFILE_DIR", str(tmp_path))
     set_session(uid="account", email=None, id_token="fake", expires_at_ms=9999999999999)
+    fixture.serve(fixture.everything())  # credits resolve from the served set (milestone 10 S6)
     try:
         client = make_llm_client()
         path.write_text("LLM_PROVIDER=mrcall\nSMS_BUSINESS_ID=after\n")

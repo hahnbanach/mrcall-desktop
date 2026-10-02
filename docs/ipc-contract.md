@@ -665,8 +665,14 @@ caller can log what it retired. Missing `draft_id` is a `-32602`.
 
 Free model discovery for the requested or saved billing provider. Returns
 `{provider, available, models: [{id, label, provider}], reason}`. MrCall mode
-uses authenticated server capabilities; personal OpenRouter mode uses the
-locally priced allowlist. Missing/older server catalogs return unavailable,
+uses the authenticated server's v2 capabilities (`?protocol=mrcall-bounded-v2`,
+read at most once an hour); personal modes propose the rankings of the model
+table in force (the published `table.json` the engine downloads daily, else
+its build copy): the direct ids on a personal Anthropic key, the catalogue ids
+on OpenRouter. No excluded model family is offered. A model the profile saved
+(base model, `DEFAULT_MODEL` or a role override) that can run on the provider
+stays listed after them. Missing/older (v1) or malformed server catalogs, or
+one that serves no model, return unavailable with the reason,
 without altering saved model choices or falling back to another provider.
 The renderer fetches on provider/settings reload changes and invalidates stale
 catalogs on account or connection changes; reopen Settings to fetch again.

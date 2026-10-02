@@ -5,14 +5,22 @@ use, so no model is named where settings are described:
 
 - `label(model)` — a readable name derived from the id itself (rule below);
 - `model_choices()` — what a legacy ``type: "model"`` field offers: the
-  table's picks and the allowlist rows, Anthropic's direct ids first, then
-  the OpenRouter catalogue ids (`table.listed`);
+  models the table in force ranks (both rankings of every preset and role),
+  Anthropic's direct ids first, then the OpenRouter catalogue ids
+  (`table.listed`), never an excluded family;
 - `suggested(role)` — the table's pick for `role` under the suggestion preset
-  on the direct transport, the value a role field greys as recommended;
+  on the direct transport, the value a role field greys as recommended (None
+  when the table ranks no Anthropic model for it, or no table is in force);
 - `default_model(provider)` — the table's CHAT pick under `economy`: what a
-  `custom` profile with no saved base model runs (`model_policy.resolve_model`);
+  `custom` profile with no saved base model runs (`model_policy.resolve_model`),
+  None when the table cannot say;
 - `preset_help()` — the preset help text: the presets are price ceilings
-  (read from the table) and the engine resolves the models; no model named.
+  (read from the table in force, else `requirements.json`) and the engine
+  resolves the models; no model named;
+- `excluded(model)` — the excluded family (`requirements.json`'s
+  `excluded_families`, matched as `gates.excluded_family` matches them) a
+  catalogue id or a direct id belongs to, or None: what `llm.models` and
+  Settings never offer, though a model a profile saved stays listed and runs.
 
 The label rule, deterministic and offline (the engine never reads the
 catalogue fixture at run time, and the table carries no display names): a
@@ -80,6 +88,18 @@ def label(model: str) -> str:
     return f"{text} ({owner})"
 
 
+def excluded(model: str) -> dict | None:
+    """The excluded family `model` belongs to, or None. A direct id (no vendor)
+    is Anthropic's when it starts with ``claude-``, as `label` reads it."""
+    from .gates import excluded_family
+    from .table import requirements
+
+    name = model.strip()
+    if "/" not in name and name.startswith("claude-"):
+        name = "anthropic/" + name
+    return excluded_family(name, requirements().get("excluded_families") or [])
+
+
 def model_choices() -> list[dict]:
     """``{value, label, note}`` for every model a role field may offer."""
     from .table import listed
@@ -91,26 +111,36 @@ def model_choices() -> list[dict]:
     ]
 
 
-def suggested(role: str, provider: str = "anthropic") -> str:
+def suggested(role: str, provider: str = "anthropic") -> str | None:
     """The table's pick for `role` (``MODEL_`` prefix optional) under the
-    suggestion preset on `provider`."""
+    suggestion preset on `provider`, or None when the table cannot say (no
+    table in force, or no model ranked for it on that provider)."""
+    from ..budget_pricing import BudgetError
     from .table import pick
 
-    return pick(SUGGESTION_PRESET, role.removeprefix("MODEL_"), provider)
+    try:
+        return pick(SUGGESTION_PRESET, role.removeprefix("MODEL_"), provider)
+    except BudgetError:
+        return None
 
 
-def default_model(provider: str) -> str:
-    """What a `custom` profile with no base model runs as CHAT on `provider`."""
+def default_model(provider: str) -> str | None:
+    """What a `custom` profile with no base model runs as CHAT on `provider`
+    (`anthropic` or `openrouter`), or None when the table cannot say."""
+    from ..budget_pricing import BudgetError
     from .table import pick
 
-    return pick("economy", "CHAT", provider)
+    try:
+        return pick("economy", "CHAT", provider)
+    except BudgetError:
+        return None
 
 
 def preset_help() -> str:
     """The LLM_MODEL_PRESET help: presets as price ceilings, models resolved."""
-    from .table import PRESETS, _load
+    from .table import PRESETS, document, requirements
 
-    presets = _load("resolved.json")["presets"]
+    presets = (document() or requirements())["presets"]
     ceilings = ", ".join(
         f"{name} up to ${presets[name]['ceiling']}" for name in PRESETS if name in presets
     )

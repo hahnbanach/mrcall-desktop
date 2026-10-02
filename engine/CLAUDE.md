@@ -95,19 +95,20 @@ that process or the kernel's direct classifiers. See
 Saved `LLM_PROVIDER` selects Anthropic BYOK, OpenRouter BYOK or MrCall credits.
 An unset selector preserves legacy saved-key routing. All paid calls go through
 `zylch/llm/client.py` and the durable daily reservation ledger. No model is a
-default in code: each role's model comes from the resolved table
+default in code: each role's model comes from the rankings of the model table
 ([model selection](docs/features/model-selection.md)); saved explicit models
 remain until changed deliberately.
 
-- `llm/model_policy.py`: saved provider; explicit `MODEL_<ROLE>`, else the table's pick for economy/balanced, else custom's base model (economy when none).
-- `llm/roles/`: `requirements.json`, `resolved.json`, the resolver, the table reader, the one price source and per-model request rules.
-- `llm/bounded_proxy.py`: quoted maximum debit and actual receipt protocol;
+- `llm/model_policy.py`: saved provider; explicit `MODEL_<ROLE>`, else the table's pick for economy/balanced (credits: the first ranked id the billing server serves; a personal Anthropic key: the Anthropic ranking, pausing when empty), else custom's base model (economy when none); `policy_fingerprint` over the models each role resolves to.
+- `llm/roles/`: `requirements.json`, the resolver, the published `table.json` and `snapshot.json` (downloaded daily into the profile by `distribution.py`, gated, build copies beside), the table reader, the served set (`served.py`), the one price source.
+- `llm/bounded_proxy.py`: quoted maximum debit and actual receipt protocol
+  (`mrcall-bounded-v2`; a v1 server pauses with "update the billing server");
   old unbounded proxy servers refuse. Firebase JWT remains in memory.
 - `llm/openrouter_client.py`: Claude/GLM Messages and K3 max Chat adapters with provider price caps; see
   [K3 reasoning](docs/features/k3-reasoning.md).
 - `rpc/usage_queries.py`: spending, effective models, `llm.models` catalog and paged receipt recovery.
 - `MRCALL_PROXY_URL`: default `https://zylch.mrcall.ai`.
-- `MRCALL_CREDITS_MODEL`: explicit custom model; unset resolves each role's `mrcall` pick under economy.
+- `MRCALL_CREDITS_MODEL`: explicit custom model; unset resolves each role to the first ranked id the billing server serves, under economy.
 
 [Spending protection](docs/features/daily-llm-budget.md) specifies scope,
 pricing, uncertainty and recovery. [Bounded preparation](docs/features/bounded-preparation.md)

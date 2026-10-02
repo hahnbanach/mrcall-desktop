@@ -1,20 +1,23 @@
-"""The roster in code (milestone 10a slice 3): every role resolves through the table.
+"""The roster in code (milestone 10a slice 3; rankings since milestone 10 S6): every role resolves through the table.
 
 `resolve_model(role)` answers, in order: an explicit model; the saved
 `MODEL_<ROLE>` under every preset; under `economy` / `balanced` the role's
-pick in `zylch/llm/roles/resolved.json` for the saved provider (anthropic:
-the direct id, or the `anthropic_fallback`'s when the pick is not
-Anthropic's; openrouter: the catalogue id; mrcall: the `mrcall` record);
-under `custom` the provider's base key or DEFAULT_MODEL, and with neither
-the role under `economy` — never None, never Haiku. The expected values are
-read here straight from the JSON, not through the module under test.
+pick in the table in force for the saved provider (anthropic: the direct id
+of the first entry of its Anthropic ranking, and a role whose Anthropic
+ranking is empty pauses, naming itself; openrouter: the catalogue id of the
+first entry of its ranking; mrcall: the first ranked id the billing server
+serves, its direct id when the server lists that as Anthropic's —
+`test_served.py` covers the server's answers); under `custom` the provider's
+base key or DEFAULT_MODEL, and with neither the role under `economy` — never
+None, never Haiku. The table in force is the fixture table
+(`tests/fixtures/llm/model-table/table.json`, put in force for every test by
+the root conftest), and the billing server of these cases serves everything it
+ranks (`model_table_fixture.everything`); the expected values are read here
+straight from the fixture's JSON, not through the module under test.
 `llm_available()` checks only the saved provider's credential.
 """
 
 from __future__ import annotations
-
-import json
-from pathlib import Path
 
 import pytest
 
@@ -23,11 +26,11 @@ from zylch.llm import client as llm_client
 from zylch.llm import model_policy
 from zylch.llm.budget_pricing import BudgetError
 from zylch.llm.model_policy import ROLES, policy_fingerprint, resolve_model
-from zylch.llm.roles import table
 
-ROLES_DIR = Path(__file__).resolve().parents[2] / "zylch" / "llm" / "roles"
-RESOLVED = json.loads((ROLES_DIR / "resolved.json").read_text(encoding="utf-8"))
-ROSTER = tuple(json.loads((ROLES_DIR / "requirements.json").read_text(encoding="utf-8"))["roles"])
+from . import model_table_fixture as fixture
+
+TABLE = fixture.doc("table.json")
+ROSTER = tuple(fixture.requirements()["roles"])
 PROVIDERS = ("anthropic", "openrouter", "mrcall")
 BASE_KEYS = {
     "anthropic": "ANTHROPIC_MODEL",
@@ -36,16 +39,24 @@ BASE_KEYS = {
 }
 
 
-def expected(preset: str, role: str, provider: str) -> str:
-    """The table's model for a role, read from resolved.json independently."""
-    record = RESOLVED["presets"][preset]["roles"][role]
+@pytest.fixture(autouse=True)
+def billing_server_serves_everything():
+    """The credits cases run against a server serving every ranked model."""
+    fixture.serve(fixture.everything())
+
+
+def expected(preset: str, role: str, provider: str) -> str | None:
+    """The table's model for a role, read from the fixture JSON independently:
+    None where the provider has nothing ranked (the call pauses). Credits: the
+    first ranked entry's direct id, a server serving everything listing it."""
+    record = TABLE["presets"][preset]["roles"][role]
     if provider == "openrouter":
-        return record["catalogue_id"]
+        return record["ranking"][0]["id"]
     if provider == "anthropic":
-        if record["catalogue_id"].split("/", 1)[0] == "anthropic":
-            return record["direct_id"]
-        return record["anthropic_fallback"]["direct_id"]
-    return record["mrcall"]["id"]
+        ranked = record["anthropic_ranking"]
+        return ranked[0]["direct_id"] if ranked else None
+    first = record["ranking"][0]
+    return first["direct_id"] or first["id"]
 
 
 def saved(provider: str, preset: str, **extra: str) -> dict:
@@ -56,9 +67,12 @@ def saved(provider: str, preset: str, **extra: str) -> dict:
 @pytest.mark.parametrize("preset", ("economy", "balanced"))
 @pytest.mark.parametrize("role", ROSTER)
 def test_every_role_resolves_to_the_tables_pick(role, preset, provider):
-    assert resolve_model("MODEL_" + role, values=saved(provider, preset)) == expected(
-        preset, role, provider
-    )
+    model = expected(preset, role, provider)
+    if model is None:  # nothing ranked on this provider: an explicit pause, never a guess
+        with pytest.raises(BudgetError, match=f"no Anthropic model is ranked for role {role} "):
+            resolve_model("MODEL_" + role, values=saved(provider, preset))
+        return
+    assert resolve_model("MODEL_" + role, values=saved(provider, preset)) == model
 
 
 def test_the_roster_is_the_requirements_roster():
@@ -117,19 +131,47 @@ def test_unknown_role_and_preset_refuse():
         resolve_model("MODEL_CHAT", values=saved("anthropic", "premium"))
 
 
-def test_a_null_mrcall_record_pauses(monkeypatch):
-    doctored = json.loads(json.dumps(RESOLVED))
-    doctored["presets"]["balanced"]["roles"]["DEDUP"]["mrcall"] = None
-    real = table._load
-    monkeypatch.setattr(
-        table, "_load", lambda name: doctored if name == "resolved.json" else real(name)
+def test_a_role_the_billing_server_serves_nothing_of_pauses(monkeypatch):
+    """The 10a `mrcall` column's null record, now: no ranked model of DEDUP
+    under `balanced` is served (the server lists only Opus 5.5, by both ids)."""
+    record = TABLE["presets"]["balanced"]["roles"]["DEDUP"]["ranking"]
+    assert "anthropic/claude-opus-5.5" not in {entry["id"] for entry in record}
+    fixture.serve(
+        [
+            fixture.served_entry("claude-opus-5-5", "anthropic"),
+            fixture.served_entry("anthropic/claude-opus-5.5", "openrouter"),
+        ]
     )
-    with pytest.raises(BudgetError, match="no model the MrCall credits server serves"):
+    with pytest.raises(BudgetError, match="no model served for role DEDUP"):
         resolve_model("MODEL_DEDUP", values=saved("mrcall", "balanced"))
     # The other providers and roles keep resolving; the snapshot reports None.
     assert resolve_model("MODEL_DEDUP", values=saved("openrouter", "balanced"))
+    assert resolve_model("MODEL_CHAT", values=saved("mrcall", "balanced")) == "claude-opus-5-5"
     monkeypatch.setattr(model_policy, "profile_values", lambda: saved("mrcall", "balanced"))
     assert model_policy.policy_snapshot()["roles"]["MODEL_DEDUP"] is None
+
+
+def test_an_empty_anthropic_ranking_pauses_only_the_personal_anthropic_key(monkeypatch):
+    """MNEMONIC under `balanced` ranks no Anthropic model (allowed by the gates):
+    a personal Anthropic key pauses on it, naming it; every other profile runs."""
+    assert TABLE["presets"]["balanced"]["roles"]["MNEMONIC"]["anthropic_ranking"] == []
+    with pytest.raises(BudgetError) as paused:
+        resolve_model("MODEL_MNEMONIC", values=saved("anthropic", "balanced"))
+    assert str(paused.value) == (
+        "AI paused: no Anthropic model is ranked for role MNEMONIC under the balanced "
+        "preset, so a personal Anthropic key cannot run it; choose a model for it in Settings."
+    )
+    assert resolve_model("MODEL_MNEMONIC", values=saved("openrouter", "balanced")) == (
+        "moonshotai/kimi-k3"
+    )
+    assert resolve_model("MODEL_MNEMONIC", values=saved("mrcall", "balanced")) == (
+        "moonshotai/kimi-k3"
+    )
+    assert resolve_model("MODEL_MNEMONIC", values=saved("anthropic", "economy"))
+    assert resolve_model("MODEL_CHAT", values=saved("anthropic", "balanced")) == ("claude-opus-5-5")
+    # An explicit choice for the role still runs on the personal key.
+    values = saved("anthropic", "balanced", MODEL_MNEMONIC="claude-opus-5-5")
+    assert resolve_model("MODEL_MNEMONIC", values=values) == "claude-opus-5-5"
 
 
 def test_policy_snapshot_lists_every_role(monkeypatch):
@@ -139,6 +181,7 @@ def test_policy_snapshot_lists_every_role(monkeypatch):
     for role in ROSTER:
         assert snapshot["roles"]["MODEL_" + role] == expected("balanced", role, "anthropic")
     assert snapshot["model"] == expected("balanced", "CHAT", "anthropic")
+    assert snapshot["roles"]["MODEL_MNEMONIC"] is None  # paused: an empty Anthropic ranking
 
 
 @pytest.mark.parametrize("role", ROSTER)

@@ -75,7 +75,9 @@ async def usage_today(params: Dict[str, Any], notify: NotifyFn) -> Any:
 
     from zylch.llm.model_policy import policy_snapshot
 
-    policy = policy_snapshot()
+    # On credits the snapshot reads the billing server's served set (a 5 s
+    # read, cached one hour): off the event loop.
+    policy = await asyncio.to_thread(policy_snapshot)
     supported = (
         policy["provider"] in {"anthropic", "openrouter"} and policy["credential_configured"]
     )
@@ -106,11 +108,9 @@ async def usage_today(params: Dict[str, Any], notify: NotifyFn) -> Any:
 def _credit_client():
     from zylch.auth import get_session
     from zylch.llm.bounded_proxy import BoundedProxyClient
-    from zylch.llm.model_policy import profile_value
+    from zylch.llm.model_policy import profile_values, proxy_url
 
-    return BoundedProxyClient(
-        profile_value("MRCALL_PROXY_URL") or "https://zylch.mrcall.ai", get_session()
-    )
+    return BoundedProxyClient(proxy_url(profile_values()), get_session())
 
 
 async def usage_reconcile(params, notify):
@@ -124,26 +124,35 @@ async def usage_reconcile(params, notify):
 
 
 async def llm_models(params, notify):
-    """Free catalog for a proposed billing selection; never changes saved policy."""
-    from zylch.llm.model_policy import resolve_provider
+    """Free catalog for a proposed billing selection; never changes saved policy.
+
+    The models proposed are the rankings of the table in force (`roles/table.py`,
+    downloaded daily by `roles/distribution.py`): on a personal Anthropic key
+    their direct ids, on OpenRouter their catalogue ids; on MrCall credits the
+    list of the billing server's v2 capabilities (`roles/served.py`, read at
+    most once an hour: its published rankings plus K3). No excluded family is
+    offered. A model the profile saved (its base model, DEFAULT_MODEL or a role
+    override) that can run on the provider stays listed after them, so a saved
+    choice stays visible and selected; one that cannot run there is not listed,
+    and the Settings view shows it as saved but unavailable."""
+    from zylch.llm.budget_pricing import BudgetError
+    from zylch.llm.model_policy import profile_values, proxy_url, resolve_provider
+    from zylch.llm.roles import excluded, served
     from zylch.llm.roles.table import listed
 
     provider = params.get("provider") or resolve_provider()
     if provider not in ("anthropic", "openrouter", "mrcall"):
         raise ValueError("Unsupported billing provider")
+    try:
+        values = profile_values()
+    except BudgetError:  # unreadable saved settings: the rankings alone
+        values = {}
     if provider == "mrcall":
         try:
-            capabilities = await asyncio.to_thread(_credit_client().capabilities)
-            models = capabilities.get("models")
-            if not isinstance(models, list) or not models:
-                raise ValueError("Billing server does not publish a model catalog; update it.")
-            if any(
-                not isinstance(m, dict)
-                or not all(isinstance(m.get(k), str) and m[k] for k in ("id", "label", "provider"))
-                for m in models
-            ):
-                raise ValueError("Billing server returned an invalid model catalog.")
-            models = [{k: m[k] for k in ("id", "label", "provider")} for m in models]
+            client = _credit_client()
+            entries = await asyncio.to_thread(served.served, proxy_url(values), client=client)
+            if not entries:
+                raise ValueError("The MrCall billing server serves no model at the moment.")
         except Exception as exc:
             reason = (
                 str(exc)
@@ -151,12 +160,43 @@ async def llm_models(params, notify):
                 else "Billing catalog unavailable."
             )
             return {"provider": provider, "models": [], "available": False, "reason": reason}
+        models = [dict(entry) for entry in entries if not excluded(entry["id"])]
     else:
-        # The table's picks and fallbacks plus the allowlist rows of this transport.
         models = [
             {"id": key, "label": label, "provider": provider} for key, label in listed(provider)
         ]
-    return {"provider": provider, "models": models, "available": True, "reason": ""}
+    return {
+        "provider": provider,
+        "models": models + _saved_models(values, provider, {m["id"] for m in models}),
+        "available": True,
+        "reason": "",
+    }
+
+
+def _saved_models(values, provider, listed_ids):
+    """The models the profile saved that can run on `provider` and are not
+    listed yet: on a personal key those its transport prices (the price
+    source, `roles/prices.py`); on credits those the snapshot prices on either
+    transport, since the billing server accepts any model its snapshot prices."""
+    from zylch.llm.model_policy import BASE_KEYS, ROLES
+    from zylch.llm.roles import catalogue, label
+    from zylch.llm.roles.prices import price
+
+    found = []
+    for key in (BASE_KEYS[provider], "DEFAULT_MODEL", *ROLES):
+        model = str(values.get(key) or "").strip()
+        if not model or model in listed_ids:
+            continue
+        if provider == "mrcall":
+            runs = any(catalogue.pricing(model, t) for t in catalogue.TRANSPORTS)
+            owner = "openrouter" if "/" in model else "anthropic"
+        else:
+            runs = price(model, "direct" if provider == "anthropic" else "openrouter")
+            owner = provider
+        if runs:
+            listed_ids.add(model)
+            found.append({"id": model, "label": label(model), "provider": owner})
+    return found
 
 
 METHODS: Dict[str, Callable[[Dict[str, Any], NotifyFn], Awaitable[Any]]] = {

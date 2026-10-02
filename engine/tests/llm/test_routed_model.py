@@ -5,6 +5,9 @@ the role's table pick; under the default `custom` preset with no base model,
 the role under `economy`, never None). The wiring tests assert each worker passes the
 resolved value straight to its client factory, so flipping a knob in the
 profile .env re-routes exactly that worker on its next call — no restart.
+The profile these tests save has no provider and no key, so it bills MrCall
+credits: an unset knob runs the first ranked id the billing server serves
+(milestone 10 S6), here a server serving every model the fixture table ranks.
 """
 
 import types
@@ -14,11 +17,13 @@ import pytest
 
 from zylch.llm import routed_model
 
+from . import model_table_fixture as fixture
 from .test_model_policy_roles import expected
 
 
 @pytest.fixture
 def saved_model(tmp_path, monkeypatch):
+    fixture.serve(fixture.everything())
     monkeypatch.setenv("ZYLCH_PROFILE_DIR", str(tmp_path))
     path = tmp_path / ".env"
     values = {}
