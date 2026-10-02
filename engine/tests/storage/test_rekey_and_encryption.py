@@ -133,6 +133,47 @@ def test_rekey_encrypts_plaintext_rows(db):
     }
 
 
+def test_rekey_legacy_tagged_plaintext_round_trip(db):
+    legacy = {
+        "google_calendar": {
+            "refresh_token": "encrypted:legacy-refresh",
+            "expires_in": "encrypted:3600",
+        },
+        "metadata": {"google_calendar": {"label": "calendar"}},
+    }
+    _row("google_calendar", json.dumps(legacy))
+    report = rk.rekey(OLD, NEW)
+    assert report.ok and report.rewritten == 1 and report.plaintext == 1
+    assert rk.verify(NEW).ok
+
+    new = Fernet(NEW.encode())
+    migrated = _read("google_calendar")
+    outer = json.loads(new.decrypt(migrated.encode()))
+    for field, expected in {"refresh_token": "legacy-refresh", "expires_in": "3600"}.items():
+        assert new.decrypt(outer["google_calendar"][field][10:].encode()).decode() == expected
+    assert outer["metadata"] == legacy["metadata"]
+
+    second = rk.rekey(OLD, NEW)
+    assert second.ok and second.already == 1
+    assert _read("google_calendar") == migrated
+    assert rk.rekey(NEW, OLD).ok and rk.verify(OLD).ok
+    old = Fernet(OLD.encode())
+    restored = json.loads(old.decrypt(_read("google_calendar").encode()))
+    assert old.decrypt(restored["google_calendar"]["refresh_token"][10:].encode()) == b"legacy-refresh"
+
+
+@pytest.mark.parametrize("truncated", [False, True])
+def test_rekey_refuses_foreign_or_truncated_inner_ciphertext(db, truncated):
+    token = Fernet(Fernet.generate_key()).encrypt(b"unavailable-secret").decode()
+    if truncated:
+        token = token[:20]
+    _row("google_calendar", json.dumps({"google_calendar": {"refresh_token": "encrypted:" + token}}))
+    report = rk.rekey(OLD, NEW)
+    assert not report.ok
+    assert report.failed == ["google_calendar: inner field refresh_token"]
+    assert not rk.verify(NEW).ok
+
+
 def test_rekey_reports_a_row_under_neither_key(db):
     other = Fernet.generate_key().decode()
     _row("google_calendar", Fernet(other.encode()).encrypt(b"{}").decode())

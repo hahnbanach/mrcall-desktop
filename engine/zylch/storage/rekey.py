@@ -15,6 +15,9 @@ Rules, each with a test:
   inner fields are re-encrypted too, then the outer.
 - **Plaintext rows.** Hosts that ran without a key stored JSON in clear;
   those are encrypted with the new key and counted separately.
+- **Legacy tagged plaintext.** The no-key credential writer also prefixed
+  plaintext fields with ``encrypted:``. Encrypt those fields; a payload
+  starting with the Fernet marker must still decrypt, even when truncated.
 - **Verify.** ``verify(new)`` decrypts every row (outer and inner) and
   fails loudly on any miss; the runbook runs it before the unit starts.
 - **Reverse.** ``rekey(old=new_key, new=old_key)`` is the rollback.
@@ -68,9 +71,16 @@ def _rekey_inner(obj, old: Fernet, new: Fernet, report: RekeyReport, provider: s
                     continue
                 plain = _try(old, token)
                 if plain is None:
-                    report.failed.append(f"{provider}: inner field {k}")
-                    out[k] = v
-                    continue
+                    if token.startswith("gAAA"):
+                        report.failed.append(f"{provider}: inner field {k}")
+                        out[k] = v
+                        continue
+                    # save_provider_credentials adds the tag even when a
+                    # local no-key encrypt() returns the original text.
+                    # Do not use is_encrypted's length threshold here:
+                    # truncated Fernet must fail rather than be encrypted
+                    # again as if it were a plaintext credential.
+                    plain = token
                 out[k] = INNER_PREFIX + new.encrypt(plain.encode()).decode()
             else:
                 out[k] = _rekey_inner(v, old, new, report, provider)
