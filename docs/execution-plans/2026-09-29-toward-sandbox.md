@@ -2240,6 +2240,117 @@ two independent APPROVED reviews and every migrated VPS tenant has its set
 and a full accepted mail sync cycle. Unavailable service credentials or host
 access are recorded as missing evidence, never replaced by synthetic success.
 
+#### R_4 detailed plan (APPROVED for compiler and scratch experiment)
+
+Two fresh independent reviewers approved the existing brief and returned
+REVISE on the outline as an executable plan: resolver bypass, IPv6, lifecycle,
+rollback isolation and authentic application evidence need explicit checks.
+The index's scratch-now / VPS-after-reviewed-evidence ordering supersedes
+"after M2 is stable on all six" below. Rollout targets all migrated tenants.
+
+Fresh plan reviewers A (mechanism) and B (conformance) both returned
+APPROVED. A requires the expiry probe to include an already-open IMAP or
+WhatsApp connection crossing the five-minute lifetime, not just reconnect.
+
+Implementation belongs to R_4 in this worktree; do not edit R2's helper.
+Build a dependency-free policy compiler plus focused tests, followed by the
+scratch mechanism experiment. No automatic production enablement or change
+to `update-daemons.sh` is part of the experiment. The experiment is a gate,
+not a claim of completed deployment.
+
+- Root supplies an explicit policy: numeric tenant uid, derived tenant name,
+  dedicated 127.0.0.x DNS address, literal upstream resolver, approved DNS
+  suffixes and TCP/UDP ports per suffix. Reject malformed/duplicate fields,
+  unsafe addresses, and non-derived tenant names. Customer Settings never
+  updates this policy automatically. An endpoint change needs operator review.
+- Compile one `inet` table per tenant, separate A/AAAA sets per port group,
+  one output base chain matching only that numeric skuid, counters and final
+  reject. Permit that tenant's dedicated DNS address on TCP/UDP 53; deny
+  external DNS, loopback/private/link-local/metadata targets before the
+  destination-set permits. Both IP families are covered. Do not permit
+  arbitrary established outbound flows. Only established reply-direction
+  traffic may bypass destination checks, to preserve inbound voice callbacks.
+- Run one dnsmasq instance per tenant, listening only on its dedicated loopback
+  address; `no-resolv`, `no-hosts`, `local=/#/`, approved suffix forwarding
+  only, rebinding protection, A/AAAA nftset entries. Bind a root-owned resolver
+  file into that daemon's `/etc/resolv.conf` through an instance drop-in
+  sorting before `tenant.conf`. Do not change the host resolver. Other tenants
+  cannot reach this resolver: their loopback egress is denied. Exact suffix
+  and all its subdomains are authorized; no public-TLD wildcard is allowed.
+- This is address/port enforcement, not HTTPS hostname or payload filtering:
+  another service on an admitted shared IP and port remains reachable. DNS
+  queries under approved suffixes remain possible. Document these limits.
+  DNS cache disabled and answer TTL capped at zero; nft elements expire after
+  five minutes. Test repeated answers, expiry, CNAME and reconnect explicitly:
+  dnsmasq's `add element` does not promise refresh of an existing timeout.
+  A failed reconnect is a failed gate, not permission to add unrestricted
+  established traffic or remove expiration. Long-lived clients which cache
+  beyond the TTL require a revised mechanism before deployment.
+- The scratch operator stops only the selected daemon, atomically loads its
+  table (`nft -c` first), starts its resolver, installs the resolver bind and
+  systemd dependency, then starts the daemon. A oneshot firewall unit loads
+  the same rules before the resolver/daemon on boot, stays active and never
+  removes rules on stop. Guard failure prevents daemon start. No global
+  `flush ruleset`, host resolver change, or service reconcile is permitted.
+  Reload/reapply is tested with tenant stopped, empty sets and a cold resolver.
+- Rollback: stop selected daemon, remove its resolver bind/dependency, stop
+  its resolver, remove only its named table, daemon-reload, start daemon and
+  repeat baseline. Keep another tenant's table/rules and resolver unchanged.
+  Offboarding removes these same owned artifacts before uid reuse. A global
+  firewall flush is outside operator procedure; daemon/service restart and
+  reboot protection must be proved before the VPS gate.
+
+Inventory from repository (host configuration still pending):
+
+| Use | Source / approved endpoint candidate | Transport |
+| --- | --- | --- |
+| Mail | `config.py` IMAP_HOST/SMTP_HOST and actual saved overrides, extracted by name only | configured IMAP/SMTP TCP ports |
+| WhatsApp | neonize/whatsmeow service and media names; enumerate installed dependency and observe scratch receipt before approving suffixes | TCP 443, additional ports only with evidence |
+| StarChat / billing | `config.py`, `api.mrcall.ai`, `zylch.mrcall.ai`, saved MRCALL_PROXY_URL host | TCP 443 or explicitly reviewed override |
+| LLM | `llm/client.py`, `openrouter_client.py`: api.anthropic.com, openrouter.ai | TCP 443 |
+| Firebase | `rpc/firebase_auth.py`: www.googleapis.com certificate URL; securetoken.googleapis.com / identitytoolkit.googleapis.com only where refresh/sign-in actually runs | TCP 443 |
+| Google | `tools/google/calendar_oauth.py`: accounts.google.com, oauth2.googleapis.com, www.googleapis.com; Calendar transport inventory pending | TCP 443 |
+| Embeddings | fastembed installed model manifest: huggingface.co and actual redirect hosts, inventory pending; current hosted cache is read-only | TCP 443 |
+| CRM | `tools/pipedrive.py`: api.pipedrive.com or configured base host when enabled | TCP 443 |
+| Voice | `llm/openai_voice.py`, `services/voice/smoke_transport.py`: api.openai.com | TCP 443 |
+
+The two voice transports explicitly use `trust_env=False`; leave them so.
+Packet filtering also covers their direct sockets. Other clients retain their
+existing proxy behavior; inspect only proxy host/port, never credentials, and
+refuse rollout if a proxy would turn the allowlist into unrestricted forwarding.
+No voice-file values enter output, policy artifacts or git.
+
+Scratch evidence matrix (each row must name identity, result and timestamp):
+
+1. Baseline selected daemon and sibling, unit identities, mail status and
+   restart counters; check dnsmasq >=2.87 with nftset and current firewall.
+2. Real sockets as daemon uid: permitted address/port; denied unrelated
+   IPv4/IPv6, UDP, external DNS, loopback, metadata and a pre-opened disallowed
+   connection. Dedicated DNS refuses unrelated names; approved A/AAAA and
+   CNAME populate only intended sets. Observe counters and `nft list set`.
+3. DNS answer changes/expiry/repeated lookup, resolver restart, cold firewall
+   reload, daemon restart and boot ordering; verify no unfiltered interval.
+4. Full engine IMAP sync with completed result; WhatsApp message receipt;
+   real LLM response through normal budget controls with no paid inference
+   unless CTO explicitly overrides the brief's no-paid-verification rule;
+   valid Firebase ID token verification with cold Google certificate cache.
+   Never persist the ID token. Credentials/session availability is a hard
+   prerequisite. TCP/TLS/401 or mock responses are not these checks.
+5. Rollback restores baseline; sibling table and service state are unchanged.
+   Any daemon/store/app anomaly triggers rollback and halts rollout. A bug in
+   the test itself is fixed and rerun, with both outcomes retained.
+6. Two fresh independent code/evidence reviews must both say APPROVED over
+   every row before VPS. Missing live credentials or inference evidence leave
+   the gate open. No production rule is installed while it is open.
+7. VPS: selective inventory, baseline, one migrated tenant at a time; accept
+   one complete engine mail sync cycle and applicable channel/auth checks
+   before the next. On failure roll back only that tenant, verify recovery,
+   stop. Record each readable set and criterion 6, then R_4 is done.
+
+Sources for mechanism semantics: [dnsmasq manual](https://dnsmasq.org/docs/dnsmasq-man.html)
+(`nftset`, domain-scoped upstreams, rebinding) and
+[nftset implementation](https://github.com/imp/dnsmasq/blob/master/src/nftset.c).
+
 ### Approved M3 outline
 
 Owner: release-engineer. After M2 is stable on all six; own rollback.
