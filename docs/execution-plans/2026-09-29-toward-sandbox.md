@@ -630,12 +630,20 @@ Café124 trees; `create` refuses a PYTHONPATH its tenant cannot read —
 second pass PIN-1/2), and every pin names the real path of its tree: no
 symbolic link, no `..`, set with `Environment=PYTHONPATH=` in a drop-in,
 no trailing slash, never through an `EnvironmentFile` (`create` refuses
-each — post-gate record). **production@ is not covered yet:** its drop-in sets its own
-`ExecStart`, and `tenant.conf` carries the only command line a migrated
-unit runs, so `create` refuses it (post-gate record, "Open"). Read
-`systemctl cat zylch-server@<uid>` on the host before its 2b.
+each — post-gate record). **production@ requires a helper extension before
+its 2b:** its own `ExecStart` also starts voice with `--voice-config`,
+which the helper's command omits. The live command and configuration
+requirements are recorded in [the VPS preflight](#m2-record--vps-preflight-and-proposed-café124-window-2026-10-02).
+Re-read `systemctl cat zylch-server@<uid>` before its 2b.
 
 *2a, per company, one window (Café124: its four daemons):*
+Before the window, verify that **every effective pinned release**, as well
+as the maintenance CLI, supports the dual-name store lookup. Updating the
+service checkout alone does not update a pinned release. The October 2
+VPS preflight below finds this prerequisite missing in three Café124
+releases; no store relocation is authorized until it is closed and the
+operators choose the window.
+
 1. `exec 9>/run/mrcalld/reconcile.lock; flock 9`;
 2. `systemctl stop` every daemon of the company;
 3. `install -d -m 0700 /root/backup-2a-<co>; cp -a $Z/memory/<key>.db*
@@ -922,10 +930,13 @@ keeps its pid (REV-1, DEP-5, FINAL-6).
   `ExecStart` outside `tenant.conf`. On the scratch VM a unit whose own
   `ExecStart` was the standard command line migrated once those lines
   were removed and only the `PYTHONPATH` pin kept, and rolled back with
-  the kept copy restored (PROD-1..4). Whether production@'s command line
-  reduces to that is a fact of the host (its interpreter, its arguments):
-  read its drop-in first; if it does not, the helper needs an explicit,
-  root-only command override before its 2b. It is the last of the Café124
+  the kept copy restored (PROD-1..4). The October 2 VPS preflight below
+  establishes that production@ additionally starts voice: its release
+  venv command carries `--voice-config /etc/mrcalld/voice-cafe124.env`,
+  and its drop-in loads that file as an `EnvironmentFile`. A PYTHONPATH-only
+  conversion is insufficient; an explicit, root-controlled helper
+  extension must preserve that behavior and pass VM forward/rollback
+  probes before its 2b. It is the last of the Café124
   2b's; the other three pin by `PYTHONPATH` only. Until it is migrated,
   `mrcalld` stays in Café124's company group, so every unmigrated daemon
   can still read and write that store: the `gpasswd -d mrcalld <group>`
@@ -974,6 +985,180 @@ provisiond ones — 392 passed, 19 skipped, 1 failed
 (`test_contract_boundaries`, `llm.models`), which fails identically on
 main `e1e5f79`. The full suite was not run (it was OOM-killed on this VM
 on 2026-10-01).
+
+### M2 record — VPS preflight and proposed Café124 window (2026-10-02)
+
+Scope: read-only checks on `desktop.mrcall.ai` from main `a554f5e`.
+No helper deployment, drop-in edit, daemon restart,
+store relocation or profile identity migration was performed. The existing
+brief and plan are the work trace for this follow-up. Secret-free probe
+output is in `/tmp/mrcall-ai-kit/sandbox-preflight/` on the VPS; tokens,
+credentials and the memory capability key are excluded.
+
+**production@ command classification — helper extension required.**
+`systemctl cat zylch-server@Gn9IcuWzYyY7DBMHkVUGB7bIiTp2` and
+`systemctl show … -p ExecStart -p EnvironmentFiles -p DropInPaths`
+show three operator drop-ins: `90-daily-budget.conf`,
+`95-evolution-pilot.conf`, `99-cafe124-voice.conf`. The last overrides
+the earlier pilot command. Its effective command is:
+
+```text
+/home/mrcalld/releases/mrcall-voice-cafe124-phone-md-5ebe3fa/venv/bin/zylch -p Gn9IcuWzYyY7DBMHkVUGB7bIiTp2 serve --unix /run/mrcalld/Gn9IcuWzYyY7DBMHkVUGB7bIiTp2.sock --voice-config /etc/mrcalld/voice-cafe124.env
+```
+
+The same drop-in pins `PYTHONPATH` to that release's `engine` and loads
+`EnvironmentFile=/etc/mrcalld/voice-cafe124.env`, currently
+`0640 root:mrcalld`. This is more than release selection: `serve` uses
+`--voice-config` to construct the production voice listener on port 8787.
+Main's reviewed helper, awaiting installation, writes only
+`serve --unix <uid>/ws.sock`, resets `EnvironmentFile` to the tenant key,
+and refuses the operator `ExecStart` assignments in both the pilot and
+voice drop-ins. The older installed helper lacks that refusal and must
+not be used to attempt this migration. Removing those
+assignments would lose the voice listener; keeping only `PYTHONPATH`
+does not preserve the command.
+
+Before production's own 2b, extend the helper through a separately
+reviewed change and VM forward/rollback probe. It must preserve the
+required interpreter/dependencies and voice argument, use the tenant
+socket, and make the voice configuration readable to the tenant without
+exposing it to sibling users. Review the voice environment-file ordering
+against the mandatory per-profile encryption key. Preserve/restore both
+operator command drop-ins and the release pin on rollback; test voice
+health/callback authentication and the app as well as the socket. No
+conversion or helper extension is implemented here. Production stays
+last in 2b; `mrcalld` stays in the company group until then.
+
+**Provisiond — current-host checks passed, repeat after reconcile.**
+`systemctl is-active zylch-provisiond` → `active`; the process runs as
+`mrcalld`. `/run/mrcalld` is `2751 mrcalld:caddy` and
+`provisiond.sock` is `0660 mrcalld:caddy`. `GET /api/provision/status`
+without a bearer returns `401 {"error":"unauthorized"}` both directly
+on the socket and through `https://desktop.mrcall.ai`. With a real
+Firebase ID token for the unmigrated production UID, both paths return
+`200 {"state":"active"}`. The token was refreshed from the existing
+local descriptor and held only in memory. Its `PROVISIONING` marker was
+absent before the GET, so the status request removed no marker. No
+provisioning POST or 409 probe was performed. These checks precede the
+new helper's installation and do not certify that future state.
+
+**Readiness found on the effective releases.** Comparing profile keys in
+memory confirms exactly the four UIDs below share company group
+`mc-c-7aaa48b3ef85`; the capability itself was not printed. The legacy
+store exists and the derived store does not. All seven daemon units are
+active as `mrcalld`, and the installed helper's `list` is empty.
+
+| Café124 UID | Effective release under `/home/mrcalld/releases/` | Store lookup |
+|---|---|---|
+| `C06xHKoRcfdz94FaLPKuJuo0xVo1` | `mrcall-desktop-k3-8d83193-m1-bbde719` | legacy only |
+| `YZNI2ZLDjFOxcvF0zmptW3vRZxV2` | `mrcall-desktop-k3-8d83193-m1-f342c5c` | legacy only |
+| `ZwpLepFDghWhQEBO4WJRIFcEr7p1` | `mrcall-desktop-k3-8d83193-m1-f342c5c` | legacy only |
+| `Gn9IcuWzYyY7DBMHkVUGB7bIiTp2` (production@) | `mrcall-voice-cafe124-phone-md-5ebe3fa` | derived then legacy |
+
+Evidence: the three K3 trees' `zylch/memory/store.py:memory_db_path`
+unconditionally returns the legacy filename; production's function checks
+`derived_memory_db_path`, then `legacy_memory_db_path`. **2a is not ready:**
+first backport and verify dual-name resolution on each effective K3
+release, keeping the existing release behavior and rollback pins. Do this
+as future reviewed preparation; do not rename the shared store first or
+assume tonight's service-checkout pull updates the pins. No database was
+opened by the preflight, and no backport was made here.
+
+**October 3 morning verification — pending.** At this preflight the service
+checkout is still `e1e5f79`; the installed helper hash differs from main's,
+and `/etc/logrotate.d/mrcalld` still has the old glob stanza with
+`su mrcalld mrcalld`. Today's `logrotate -d /etc/logrotate.d/mrcalld`
+exits 0; it does not validate tomorrow's generated file. The next
+`zylch-reconcile.timer` activation is **2026-10-03 00:00 UTC**.
+
+**First-pull bootstrap blocker:** the VPS's `e1e5f79` updater still runs
+`install -m 644 "$LOGROTATE_SRC" "$LOGROTATE_DST"` before installing the
+helper. Its `git pull` will delete that static source file (removed by
+`4257253`, included in `a554f5e`). The reconcile wrapper invokes this
+updater directly; neither script re-executes the new version after the
+pull. From those scripts, the first run is expected to exit on the
+missing static file before installing the new helper or regenerating
+logrotate. An isolated reproduction with copies of both full updater
+versions, a real Git pull and `install`, and stubbed sudo/systemd commands
+confirmed exit 1 (`cannot stat …/engine/scripts/logrotate.d/mrcalld`)
+and no helper installation; a second invocation of the new on-disk
+updater exited 0 and generated the synthetic logrotate file. This tests
+the bootstrap mechanism, not tomorrow's live outcome; evidence is
+`reconcile-bootstrap-verify.log` in the preflight directory.
+A current checkout SHA alone will therefore not prove a
+successful deployment. This needs a separately reviewed deployment
+follow-up; no updater change or manual reconcile was performed here.
+The checks below must diagnose that transition, not assume the nightly
+upgrade succeeded.
+
+After the timer, the morning operator/session must record:
+
+```bash
+sudo git -C /home/mrcalld/mrcall-desktop log -1 --oneline
+sudo systemctl show zylch-reconcile.service -p Result -p ExecMainStatus
+sudo journalctl -u zylch-reconcile.service --since '2026-10-03 00:00 UTC' --no-pager
+sudo cmp /usr/local/sbin/mrcall-tenant /home/mrcalld/mrcall-desktop/engine/scripts/server/tenant-helper.sh
+sudo cat /etc/logrotate.d/mrcalld
+sudo logrotate -d /etc/logrotate.d/mrcalld
+sudo logrotate -d /etc/logrotate.conf
+sudo systemctl is-active zylch-provisiond
+```
+
+Acceptance after the bootstrap blocker is resolved: successful reconcile,
+helper byte-identical to the pulled
+checkout, generated explicit log paths for the seven unmigrated profiles
+in the `su mrcalld mrcalld` stanza, no old overlapping glob, dry runs exit
+0 with no errors/duplicates. Re-run the authenticated provisiond GET as
+above; all seven profiles must still be active as `mrcalld` and the helper
+table empty. This is a pending handoff, not a completed check or a newly
+scheduled job. No forced rotation or manual reconcile is requested.
+
+**Proposed 2a window — not booked, not authorized, not executed.** Candidate:
+**Monday 2026-10-05, 04:00–04:30 UTC (06:00–06:30 Europe/Rome)**, after
+the October 3 checks and the three K3 release prerequisites pass. The
+operators choose the actual date/time and confirm that it is outside
+Café124's required service hours; this candidate establishes no
+availability. Reserve 30 minutes; target a few minutes of outage, with
+a rollback decision within 10 minutes of the stop. Required presence:
+the named root-shell executor, the CTO who controls go/no-go, and a
+Café124 representative who can reconnect an authenticated app and check
+voice service. Assign names and confirm attendance before booking; no
+messages or calendar invitations were sent.
+
+Execution checklist for that future window only:
+
+1. Re-read units and effective pins; confirm all four releases support
+   both store names, no extra company holder appeared, and the backup
+   destination has space. Stop/coordinate external company writers and
+   operator CLI sessions. Confirm no call is in flight from the voice
+   ledger and arrange with the operator that no new call enters during
+   the outage. If those conditions or attendance fail, defer the window.
+2. From a root shell, hold fd 9 on `reconcile.lock` throughout the stop,
+   backup, relocation and acceptance/rollback. This serializes timer/path
+   reconcile; avoid midnight and do not close fd 9 through `sudo` on the
+   helper. Stop **all four listed daemon units together**, confirm each
+   inactive and no remaining process holds the shared store; no rename
+   while any writer remains.
+3. Follow proven 2a steps 3–5: root-only backup of the store, sidecars and
+   lock files plus ownership record; `memory-relocate-store` as `mrcalld`
+   using the updated maintenance CLI; installed `mrcall-tenant store`.
+   Keep the key and legacy filenames out of command logs. No `create`,
+   rekey or identity change in this window.
+4. Start **all four** with their existing drop-ins/interpreters. Before
+   releasing the lock, verify each unit active, each pinned release
+   unchanged, derived-store use from all four effective release contexts,
+   no recreated legacy store or readonly/locked errors, and company
+   memory plus app reconnect visible to the attending user. Production
+   voice health and unsigned callback authentication must match the
+   pre-window baseline. Release the lock only after acceptance.
+5. On failure or the 10-minute decision limit, keep the lock, stop all
+   four again, and run proven `mrcall-tenant unstore` rollback; start all
+   four with the retained pins, verify legacy use, memory/app/voice, then
+   release the lock. Keep the backup until the rollback window closes.
+
+This 2a proposal leaves every profile as `mrcalld`. Separate 2b windows
+remain one profile per day, production last after its helper gate. The
+operators decide the window; this session publishes the plan and stops.
 
 ## M3 — Egress bound per daemon
 
