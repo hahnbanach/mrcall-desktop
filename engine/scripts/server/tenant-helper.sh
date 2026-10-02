@@ -22,6 +22,17 @@
 #   mrcall-tenant list                         # the migrated uids (tenants table)
 #   mrcall-tenant logrotate                    # regenerate /etc/logrotate.d/mrcalld (per-tenant su)
 #
+# A unit that needs its own interpreter or the production voice listener
+# (production@) declares it in a root-owned file the operator writes,
+# /etc/mrcalld/tenant-exec/<uid> (0600 root):
+#   INTERPRETER=/home/mrcalld/releases/<release>/venv/bin/zylch
+#   VOICE_CONFIG=/etc/mrcalld/<file>.env
+# `create` validates both, copies the voice file to a 0640 root:<tenant>
+# copy the sandboxed daemon can read, and writes the command line itself;
+# the operator's own command drop-ins stay in place (tenant.conf sorts last
+# and its effective ExecStart is verified), so `unmigrate` returns the unit
+# to exactly the command it had.
+#
 # `create` is the operator's explicit migration step (runbook M2.7); the
 # reconcile automation re-runs it ONLY for uids already in the table, so a
 # pull never migrates a running customer by itself. Every verb is
@@ -50,6 +61,7 @@ TMPFILES_DIR=/etc/tmpfiles.d
 RUN_ROOT=/run/mrcalld
 PROXY_GROUP=caddy
 UNIT_PREFIX="zylch-server@"
+EXEC_DIR=/etc/mrcalld/tenant-exec        # operator-declared interpreter/voice per uid
 
 [ "$(id -u)" = 0 ] || { echo "run as root" >&2; exit 1; }
 
@@ -189,6 +201,47 @@ dropin="$dropin_d/tenant.conf"
 fragment="$TMPFILES_DIR/mrcalld-$user.conf"
 keyfile="$KEYS_DIR/$uid"
 
+exec_decl="$EXEC_DIR/$uid"
+voice_copy="$EXEC_DIR/$uid.voice.env"
+EXEC_BIN="$VENV/bin/zylch"; VOICE_ARG=""
+
+# The operator's declaration for a unit that cannot run the standard
+# command line (production@: a release venv and --voice-config). Every
+# value is checked here: a path the sandbox cannot see, a link, a writable
+# file or an environment line that would override the tenant identity is
+# refused rather than run.
+read_tenant_exec() {
+  [ -e "$exec_decl" ] || return 1
+  [ -L "$exec_decl" ] && die "$exec_decl is a symlink; refusing"
+  [ "$(stat -c '%U' "$exec_decl")" = root ] || die "$exec_decl must be owned by root"
+  case "$(stat -c '%a' "$exec_decl")" in 600|400|640|644) ;; *) die "$exec_decl must not be group/other-writable (0600)";; esac
+  local interp vconf rp
+  interp=$(env_value "$exec_decl" INTERPRETER); vconf=$(env_value "$exec_decl" VOICE_CONFIG)
+  if [ -n "$interp" ]; then
+    [[ "$interp" = /* ]] || die "INTERPRETER $interp is not absolute"
+    rp=$(realpath -e -- "$interp" 2>/dev/null) || die "INTERPRETER $interp does not exist"
+    [ "$rp" = "$interp" ] || die "INTERPRETER $interp is not the real path (it is $rp)"
+    case "$rp" in "$RELEASES"/*|"$REPO"/*) ;; *) die "INTERPRETER $interp is outside $RELEASES and $REPO: the sandbox cannot see it";; esac
+    runuser -u "$user" -- test -x "$interp" || die "$user cannot execute $interp: chmod -R go=rX $RELEASES"
+    EXEC_BIN="$interp"
+  fi
+  if [ -n "$vconf" ]; then
+    [[ "$vconf" = /* ]] || die "VOICE_CONFIG $vconf is not absolute"
+    [ -L "$vconf" ] && die "VOICE_CONFIG $vconf is a symlink; refusing"
+    [ -f "$vconf" ] || die "VOICE_CONFIG $vconf is not a regular file"
+    [ "$(stat -c '%U' "$vconf")" = root ] || die "VOICE_CONFIG $vconf must be owned by root"
+    # it is also loaded as an EnvironmentFile: it may not set the tenant's
+    # identity, data root, key or import path
+    if grep -qE '^[[:space:]]*(export[[:space:]]+)?(ENCRYPTION_KEY|PYTHONPATH|HOME|ZYLCH_HOME|MEMORY_DB_DIR|ZYLCH_PROFILE_DIR|ZYLCH_DB_PATH|OWNER_ID)[[:space:]]*=' "$vconf"; then
+      die "VOICE_CONFIG $vconf sets a variable reserved for the tenant identity; remove it"
+    fi
+    install -d -m 0750 -o root -g root "$EXEC_DIR"
+    install -m 0640 -o root -g "$user" "$vconf" "$voice_copy"
+    VOICE_ARG=" --voice-config $voice_copy"
+  fi
+  return 0
+}
+
 profile_key() { env_value "$profile_dir/.env" MEMORY_KEY; }
 company_group_for_profile() { local k; k=$(profile_key); [ -n "$k" ] && group_of_key "$k" || echo ""; }
 
@@ -221,7 +274,7 @@ ensure_company_store() { # ensure_company_store <group>
 undo_first_dropin() {
   local rc=$?
   if [ "$rc" != 0 ] && ! table_has "$uid"; then
-    rm -f "$dropin" "$fragment"; rmdir "$dropin_d" 2>/dev/null || true
+    rm -f "$dropin" "$fragment" "$voice_copy"; rmdir "$dropin_d" 2>/dev/null || true
     # step 7's run dir and flat-name link: the template's daemon binds that name
     rm -rf "${RUN_ROOT:?}/$uid"; [ -L "$RUN_ROOT/$uid.sock" ] && rm -f "$RUN_ROOT/$uid.sock"
     systemctl daemon-reload || true
@@ -246,6 +299,8 @@ write_dropin() { # write_dropin <group or empty>
     # reset the template's shared key, then the root-only per-profile file
     # (no `-`: a missing key FAILS the unit)
     echo "EnvironmentFile="
+    # the voice copy first: the per-profile key file is read last and wins
+    [ -n "$VOICE_ARG" ] && echo "EnvironmentFile=$voice_copy"
     echo "EnvironmentFile=$keyfile"
     echo "ProtectSystem=strict"
     echo "ProtectHome=tmpfs"
@@ -270,7 +325,7 @@ write_dropin() { # write_dropin <group or empty>
     echo "ProtectControlGroups=yes"
     echo "UMask=0007"
     echo "ExecStart="
-    echo "ExecStart=$VENV/bin/zylch -p $uid serve --unix $RUN_ROOT/$uid/ws.sock"
+    echo "ExecStart=$EXEC_BIN -p $uid serve --unix $RUN_ROOT/$uid/ws.sock$VOICE_ARG"
     echo "ExecStopPost="
     echo "ExecStopPost=/bin/rm -f $RUN_ROOT/$uid/ws.sock"
   } > "$dropin.tmp"
@@ -382,9 +437,12 @@ create)
   #    in a file named by the template or by an earlier drop-in would be
   #    dropped without a word, and one named later cannot be checked.
   systemctl daemon-reload
+  # A declared unit (tenant-exec) keeps its operator command drop-ins:
+  # tenant.conf resets ExecStart and 6b verifies what systemd will run.
+  declared=0; read_tenant_exec && declared=1
   while IFS= read -r f; do
     [ -n "$f" ] && [ "$f" != "$dropin" ] && [ -f "$f" ] || continue
-    case "$f" in *.d/*) if grep -qE '^[[:space:]]*ExecStart[[:space:]]*=' "$f"; then die "$f sets ExecStart; tenant.conf sets the only command line a migrated unit runs (socket $RUN_ROOT/$uid/ws.sock): remove those lines first and pin a release with Environment=PYTHONPATH=…; a unit that needs another command cannot be migrated yet"; fi ;; esac
+    [ "$declared" = 1 ] || case "$f" in *.d/*) if grep -qE '^[[:space:]]*ExecStart[[:space:]]*=' "$f"; then die "$f sets ExecStart; tenant.conf sets the only command line a migrated unit runs (socket $RUN_ROOT/$uid/ws.sock): remove those lines first and pin a release with Environment=PYTHONPATH=…; a unit that needs another command cannot be migrated yet"; fi ;; esac
     while IFS= read -r ef; do
       ef=${ef#-}; ef=${ef%"${ef##*[![:space:]]}"}
       # a specifier (%i) names a file this loop cannot find: refuse it
@@ -397,7 +455,7 @@ create)
   # 6b. what systemd will actually run
   systemctl daemon-reload
   es=$(systemctl show -p ExecStart --value "$unit")
-  [ "$(grep -o 'argv\[\]=' <<< "$es" | wc -l)" = 1 ] && [[ "$es" == *"argv[]=$VENV/bin/zylch -p $uid serve --unix $RUN_ROOT/$uid/ws.sock ;"* ]] \
+  [ "$(grep -o 'argv\[\]=' <<< "$es" | wc -l)" = 1 ] && [[ "$es" == *"argv[]=$EXEC_BIN -p $uid serve --unix $RUN_ROOT/$uid/ws.sock$VOICE_ARG ;"* ]] \
     || die "the unit's effective ExecStart is not tenant.conf's: something else overrides it (systemctl cat $unit)"
   # 6c. a pinned PYTHONPATH must be a real path inside the bound trees,
   #    readable by the tenant, or the daemon would silently import the
@@ -480,7 +538,7 @@ unmigrate)
   # tenant.conf only: the operator's own drop-ins (a pinned release's
   # PYTHONPATH) must survive, or the rolled-back unit runs the checkout
   rm -f "$dropin"; rmdir "$dropin_d" 2>/dev/null || true
-  rm -rf "$RUN_ROOT/$uid"; rm -f "$fragment"
+  rm -rf "$RUN_ROOT/$uid"; rm -f "$fragment" "$voice_copy"
   [ -L "$RUN_ROOT/$uid.sock" ] && rm -f "$RUN_ROOT/$uid.sock"
   [ -d "$profile_dir" ] && chown -R --no-dereference "$SVC_USER:$SVC_USER" "$profile_dir"
   # a -wal/-shm the tenant left on the relocated store is 0660 <tenant>:<group>;
@@ -526,7 +584,7 @@ delete)
     as_tenant "$user" "$profile_dir" -p "$uid" memory-offboard --yes $last || die "offboard failed; nothing deleted (unit disabled, .deleting keeps reconcile off it) — fix and re-run delete"
   fi
   rm -rf "$profile_dir"
-  rm -f "$keyfile" "$fragment"
+  rm -f "$keyfile" "$fragment" "$voice_copy"
   rm -rf "$dropin_d" "$RUN_ROOT/$uid"
   [ -L "$RUN_ROOT/$uid.sock" ] && rm -f "$RUN_ROOT/$uid.sock"
   if id "$user" >/dev/null 2>&1; then userdel "$user"; log "removed user $user"; fi
