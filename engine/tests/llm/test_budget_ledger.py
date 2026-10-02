@@ -12,6 +12,13 @@ from zylch.storage import database
 from zylch.storage.models import LlmReservation, LlmUsage
 
 
+@pytest.fixture(autouse=True)
+def prices(price_snapshot):
+    """Milestone 10 S3: prices from the committed fixture snapshot, never the
+    build copy the coordinator refreshes; every expected value is unchanged."""
+    yield price_snapshot
+
+
 @pytest.fixture
 def ledger(tmp_path, monkeypatch):
     path = tmp_path / "profile.db"

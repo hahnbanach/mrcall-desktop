@@ -12,9 +12,11 @@ from pathlib import Path
 
 import httpx
 import pytest
+from tests.llm.price_fixture import as_billed_by_10a, fixture
 from zylch.llm import budget
 from zylch.llm import client as llm
 from zylch.llm import openrouter_pricing as pricing
+from zylch.llm.roles import catalogue
 from zylch.storage import database
 from zylch.storage.models import LlmBillingAuthorization, LlmReservation, LlmUsage
 
@@ -25,6 +27,9 @@ MODEL = 'z-ai/glm-5.2'
 @pytest.fixture
 def rig(tmp_path, monkeypatch):
     spec = importlib.util.spec_from_file_location('quality_runner', SCRIPT)
+    # Milestone 10 S3: rates from the committed fixture snapshot as 10a billed
+    # them (GLM 5.2 at 0.6/2), never from the build copy the coordinator refreshes.
+    catalogue.set_layers(as_billed_by_10a(fixture()), build=False)
     monkeypatch.setattr(pricing, "RATES", dict(pricing.RATES))
     runner = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(runner)
@@ -67,6 +72,7 @@ def rig(tmp_path, monkeypatch):
     database.dispose_engine()
     logging.disable(old_log)
     os.umask(old_umask)
+    catalogue.set_layers()
 
 
 def returned(request):
@@ -209,8 +215,12 @@ def test_reviewed_routing_changes_wire_and_reservation_and_settles(rig):
         body = json.loads(request.content)
         seen.append(body)
         assert body["provider"]["only"] == ["digitalocean"]
+        # The reviewed 0.7/2.2 × the margin 1.25 (brief D5): before slice S3, 0.7/2.2.
         assert body["provider"]["max_price"] == {
-            "prompt": "0.7", "completion": "2.2", "request": "0"}
+            "prompt": "0.875",
+            "completion": "2.75",
+            "request": "0",
+        }
         assert body["provider"]["allow_fallbacks"] is False
         assert body["provider"]["require_parameters"] is True
         assert request.headers["X-OpenRouter-Metadata"] == "enabled"

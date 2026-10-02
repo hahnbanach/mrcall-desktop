@@ -12,6 +12,14 @@ from zylch.storage import database
 from zylch.storage.models import LlmReservation, LlmUsage
 
 
+@pytest.fixture(autouse=True)
+def prices(billed_snapshot):
+    """Milestone 10 S3: prices come from the committed fixture snapshot as 10a
+    billed them, never from the build copy; only the margin (1.25) moves this
+    module's OpenRouter ceilings (brief AC 4)."""
+    yield billed_snapshot
+
+
 @pytest.fixture
 def ledger(tmp_path, monkeypatch):
     monkeypatch.setenv("ZYLCH_DB_PATH", str(tmp_path / "profile.db"))
@@ -158,7 +166,12 @@ def test_sonnet_wire_omits_default_sampling_without_weakening_price_policy(ledge
         assert 'temperature' not in body
         assert body['provider']['require_parameters'] is True
         assert body['provider']['allow_fallbacks'] is False
-        assert body['provider']['max_price'] == {'prompt': '2', 'completion': '10', 'request': '0'}
+        # Sonnet 5's 2/10 × the margin 1.25 (brief D5): before slice S3, 2/10.
+        assert body["provider"]["max_price"] == {
+            "prompt": "2.5",
+            "completion": "12.5",
+            "request": "0",
+        }
         seen.append(body)
         data = response().json()
         data['model'] = 'anthropic/claude-sonnet-5'

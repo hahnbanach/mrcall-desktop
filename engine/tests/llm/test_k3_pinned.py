@@ -10,6 +10,12 @@ body, and the ``request`` part of the MrCall credits quote body (pinning only
 differs by design: the client's ``temperature`` 1.0 default went with the one
 shape, so the Chat body carries the adapter's own default (``1``) and the
 credits request carries none.
+
+Since slice S3 one more value differs, by brief D5: the Chat body's
+``provider.max_price`` is K3's pinned endpoint's price in the model snapshot ×
+the margin (1.25). The prices come from the committed fixture snapshot with
+K3's endpoint at the rate 40b84ed capped it at (``billed_snapshot``), so the
+cap moves by exactly the margin and every other byte of the body is 40b84ed's.
 """
 
 from __future__ import annotations
@@ -79,8 +85,13 @@ SCENARIOS = {
 }
 
 
+# 40b84ed's cap (10a's provider-pinned K3 rate) and the same rate × the margin.
+CAP_40B84ED = {"completion": "13.28272425", "prompt": "2.648138063", "request": "0"}
+CAP = {"prompt": "3.31017257875", "completion": "16.6034053125", "request": "0"}
+
+
 @pytest.fixture
-def pinned(tmp_path, monkeypatch):
+def pinned(tmp_path, monkeypatch, billed_snapshot):
     monkeypatch.setenv("ZYLCH_DB_PATH", str(tmp_path / "profile.db"))
     monkeypatch.setenv("OWNER_ID", "fixture")
     monkeypatch.setenv("LLM_DAILY_BUDGET_USD", "5")
@@ -122,6 +133,8 @@ def test_k3_openrouter_body_is_40b84ed_s(pinned, name):
     body, golden = seen["body"], copy.deepcopy(GOLDEN["bodies"][name]["openrouter"])
     assert golden.pop("temperature") == 1.0
     assert body.pop("temperature") == 1
+    assert golden["provider"].pop("max_price") == CAP_40B84ED
+    assert body["provider"].pop("max_price") == CAP
     assert body == golden
 
 

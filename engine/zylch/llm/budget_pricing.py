@@ -1,7 +1,11 @@
 """Explicit prices and conservative admission for supported text Messages calls.
 
-USD per million tokens, from `roles/prices.py` (the eleven direct ids were
-verified against Anthropic's pricing page 2026-09-11).
+USD per million tokens, from `roles/prices.py`: Anthropic's list prices as the
+model snapshot records them (each direct id at its `anthropic` endpoint's
+price, a dated id at its alias's), read at every call. The eleven direct ids
+billed before the snapshot were verified against Anthropic's pricing page
+2026-09-11 and are unchanged by it. The direct transport reserves at the list
+price, without OpenRouter's margin (brief D5).
 Unknown billing shapes refuse admission. This does not model invoices or taxes.
 """
 
@@ -9,6 +13,7 @@ import json
 from decimal import ROUND_CEILING, Decimal
 
 from .request_shape import EFFORTS
+from .roles.catalogue import DATED
 from .roles.prices import priced
 
 
@@ -16,9 +21,11 @@ class BudgetError(RuntimeError):
     """Paid work is paused; callers must preserve unfinished work."""
 
 
-# Direct-transport prices come from the one price source (the resolved table
-# plus the allowlist's billed rows; `roles/prices.py` says which wins). A
-# read-only mapping, so `from budget_pricing import PRICES` keeps working.
+# Direct-transport prices come from the one price source (`roles/prices.py`:
+# the model snapshot's direct ids, 10a's allowlist only for an id no snapshot
+# prices). A read-only mapping view that looks each id up when asked, so
+# `from budget_pricing import PRICES`, `model in PRICES` and `PRICES[model]`
+# keep working and see a snapshot layer installed after import.
 PRICES = priced("direct")
 # Input plus output tokens one request may occupy. This is the smallest
 # window among the priced models — exact for Haiku 4.5, Sonnet 4.5 and
@@ -132,6 +139,7 @@ def request_bound(request, transport):
     """Return micro-USD hold; bytes + protocol allowance bound text input."""
     if transport == "openai_voice":
         from .openai_voice import request_bound as openai_bound
+
         return openai_bound(request)
     if transport == "openrouter":
         from .openrouter_pricing import request_bound as router_bound
@@ -232,14 +240,17 @@ def usage_cost(model, usage):
     split = usage.get("cache_creation")
     if split is not None:
         if not isinstance(split, dict) or set(split) - {
-            "ephemeral_5m_input_tokens", "ephemeral_1h_input_tokens"
+            "ephemeral_5m_input_tokens",
+            "ephemeral_1h_input_tokens",
         }:
             raise BudgetError("AI paused: invalid cache usage; reservation remains.")
         short = split.get("ephemeral_5m_input_tokens", 0)
         long = split.get("ephemeral_1h_input_tokens", 0)
         if (
-            type(short) is not int or type(long) is not int
-            or short < 0 or long < 0
+            type(short) is not int
+            or type(long) is not int
+            or short < 0
+            or long < 0
             or short + long != counts["cache_creation_input_tokens"]
         ):
             raise BudgetError("AI paused: inconsistent cache usage; reservation remains.")
@@ -254,11 +265,15 @@ def usage_cost(model, usage):
 
 
 def validate_response_model(requested, returned):
-    """Only the admitted model or a vetted same-price snapshot can settle."""
-    snapshots = {
-        "claude-haiku-4-5": "claude-haiku-4-5-20251001",
-        "claude-sonnet-4-5": "claude-sonnet-4-5-20250929",
-        "claude-opus-4-5": "claude-opus-4-5-20251101",
-    }
-    if returned != requested and returned != snapshots.get(requested, requested):
-        raise BudgetError("AI paused: response model differs from the authorized model; reservation retained.")
+    """Only the admitted model or a dated snapshot of it can settle.
+
+    A response may name the requested id or ``<requested>-YYYYMMDD``: a dated
+    snapshot is priced as its alias (brief D5, `roles/catalogue.DATED`), so
+    the reservation taken for the requested id settles it. Any other id keeps
+    the reservation.
+    """
+    dated = DATED.fullmatch(returned) if isinstance(returned, str) else None
+    if returned != requested and not (dated and dated["alias"] == requested):
+        raise BudgetError(
+            "AI paused: response model differs from the authorized model; reservation retained."
+        )

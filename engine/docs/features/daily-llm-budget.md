@@ -102,7 +102,8 @@ through read-only status without repeating inference or consumption.
 
 OpenRouter supports the models the resolved table picks plus the allowlisted
 GLM 5.2, Kimi K3 and namespaced Claude Opus 5, Sonnet 5 and Haiku 4.5
-([model selection](model-selection.md)). Legacy requests use the Messages API
+([model selection](model-selection.md)), and since milestone 10 (slice S3)
+any model the model snapshot prices, so an explicit choice keeps running. Legacy requests use the Messages API
 with thinking disabled where the model allows it (per-model request rules);
 [K3 max](k3-reasoning.md) uses Chat completions with maximum reasoning. Both
 adapters send decimal price caps, disable fallbacks and validate the
@@ -184,29 +185,46 @@ billing server's authenticated capability catalog; absent or malformed catalogs
 return `available=false`, never a fabricated local credit-model list. For BYOK
 it returns the engine's supported provider models, without needing a personal
 key or contacting a paid endpoint. Entries contain `id`, `label`, `provider`.
-The OpenRouter rates frozen on 2026-09-13 are GLM 0.6/2, Kimi K3
+The OpenRouter rates frozen on 2026-09-13 were GLM 0.6/2, Kimi K3
 2.648138063/13.28272425, Opus 5/25, Sonnet 2/10 and Haiku 1/5 USD per
-million input/output tokens. Each request enforces these provider ceilings;
-actual accounting still uses `usage.cost`. Anthropic models reserve twice the
-input ceiling to cover possible upstream one-hour cache writes.
+million input/output tokens. Since milestone 10 (slice S3) no rate is frozen:
+each request is capped at, and reserved at, its model's price in the model
+snapshot × the margin 1.25 (K3: its pinned DigitalOcean endpoint's price ×
+1.25), so GLM 5.2's ceiling follows the catalogue's 0.41/3.99 and K3's its
+endpoint's 2.55/12.95 as read on 2026-10-02. Each request enforces these
+provider ceilings; actual accounting still uses `usage.cost`. Anthropic models
+reserve twice the input ceiling to cover possible upstream one-hour cache writes.
 
 ### Where prices come from (since milestone 10a)
 
-One price source, `zylch/llm/roles/prices.py`, reads two committed files: the
-resolved table (`roles/resolved.json`, every pick, Anthropic fallback and
-MrCall id at the price the resolver recorded) and the allowlist of
-`roles/requirements.json` (every model billed before the table existed, at the
-rate above and the eleven direct rates). Where an id is in both, the
-allowlist's billed price wins, so a resolver run never moves the rate an
-existing profile is held and capped at; two table rows naming one id keep the
-higher price. `budget_pricing.PRICES` (direct) and `openrouter_pricing.RATES`
-read it; the snapshot-id map and the K3 and Sonnet 5 adapters stay. A test
-holds the direct Anthropic rates equal to OpenRouter's `anthropic/*` rates.
-`usage.py`'s estimate prices a listed id at its own rate (so a GLM or MiMo pick
-is not counted at Opus rates) and keeps the family fallback, Opus when
-unmatched, for an unlisted one. The reservation, settlement, unpriced refusal
-and corpus cap contracts above are unchanged; only the source of the numbers
-moved. See [model selection](model-selection.md).
+One price source, `zylch/llm/roles/prices.py`. In milestone 10a it read two
+committed files: the resolved table (`roles/resolved.json`, every pick,
+Anthropic fallback and MrCall id at the price the resolver recorded) and the
+allowlist of `roles/requirements.json` (every model billed before the table
+existed, at the rate above and the eleven direct rates), the allowlist's
+billed price winning where an id was in both.
+
+Since milestone 10 (slice S3, brief D5) it reads the model snapshot
+(`roles/catalogue.py`: the snapshot layers in force, the build copy
+`roles/snapshot.json` last) at every call: a catalogue id at its model-level
+price on OpenRouter, a direct id at its `anthropic` endpoint's price
+(Anthropic's list price), a dated id `<alias>-YYYYMMDD` at its alias's. The
+allowlist answers only for an id no snapshot prices, until the switch-over;
+the resolved table prices nothing. `budget_pricing.PRICES` (direct) and
+`openrouter_pricing.RATES` are views over it, so a snapshot installed later
+reaches every request. OpenRouter holds and `max_price` are the price × the
+margin of `requirements.json` (1.25; K3 from its pinned endpoint's price),
+with the provider policy (no fallbacks, parameters required, price sorting,
+`requirements.json`'s quantizations, and `only` the endpoints the snapshot
+admitted); the direct transport reserves at the list price. The hand-written
+snapshot-id map is gone: a response may name the requested id or
+`<requested>-YYYYMMDD`. Tests hold the direct rates equal to the `anthropic`
+endpoint's. `usage.py`'s estimate prices an id at its snapshot rate (so a GLM
+or MiMo pick is not counted at Opus rates); an unpriced one, which admission
+refuses anyway, at the dearest direct rate the snapshot holds, with no family
+matched by name. The reservation, settlement, unpriced refusal and corpus cap
+contracts above are unchanged; only the source of the numbers and the
+OpenRouter margin moved. See [model selection](model-selection.md).
 
 Settings exposes `ANTHROPIC_MODEL`, `OPENROUTER_MODEL` and
 `MRCALL_CREDITS_MODEL` separately. Selecting a default model explicitly sets
