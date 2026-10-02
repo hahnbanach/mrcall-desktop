@@ -61,6 +61,14 @@ by every transport, so a replay that forgets to set the arm's model fails
 loudly instead of measuring the wrong model.
 """
 
+CLIENT_ONLY = ("run_clock",)
+"""Parameters the client consumes itself, not part of the request a role builds.
+
+``run_clock`` fixes the datetime line the client appends to ``system`` for
+every request of one agent loop; a replay passes its own, set to the entry's
+``capture_now``. Recorded, it would tie the capture to the machine's time zone.
+"""
+
 # Every variable the prompt builders read about the user. All are cleared
 # before a case's persona is applied, so a developer's shell never leaks into
 # a captured prompt and two runs of the same case capture the same bytes.
@@ -147,9 +155,10 @@ def jsonable(value: Any, path: str = "request") -> Any:
 def as_sent(args: tuple, kwargs: Dict[str, Any]) -> Dict[str, Any]:
     """The arguments a call site passed, by the names ``LLMClient`` gives them.
 
-    Only what the caller passed: a parameter left to its default is not part
-    of the request the role builds. The signature is read at call time, so a
-    change to the client's parameters cannot misname a positional argument.
+    Only what the caller passed: a parameter left to its default, or one the
+    client consumes itself (:data:`CLIENT_ONLY`), is not part of the request
+    the role builds. The signature is read at call time, so a change to the
+    client's parameters cannot misname a positional argument.
     """
     from zylch.llm import LLMClient
 
@@ -160,7 +169,7 @@ def as_sent(args: tuple, kwargs: Dict[str, Any]) -> Dict[str, Any]:
         parameter = signature.parameters[name]
         if parameter.kind is inspect.Parameter.VAR_KEYWORD:
             sent.update(value)
-        elif name != "self":
+        elif name not in ("self", *CLIENT_ONLY):
             sent[name] = value
     return jsonable(sent)
 
@@ -204,7 +213,9 @@ class ReplayClient:
     the tool call and, through the role's scripted tools, its result — so the
     request ``inner`` receives first is the one at the case's decision point.
     The tool calls and text of every forwarded answer are kept, for scoring a
-    turn that continues past it.
+    turn that continues past it: ``responses`` holds each answer's calls, the
+    first being the answer to the captured request, and ``texts`` its text —
+    a recap written next to a send is text the user read too.
     """
 
     def __init__(self, replay: Iterable[Dict[str, Any]], inner: Any):
@@ -218,18 +229,31 @@ class ReplayClient:
         ]
         self.replayed = 0
         self.calls: List[Dict[str, Any]] = []
+        self.responses: List[List[Dict[str, Any]]] = []
+        self.texts: List[str] = []
         self.last_text = ""
 
     def _note(self, response: Any) -> Any:
-        texts = []
+        texts, calls = [], []
         for block in getattr(response, "content", None) or []:
             kind = getattr(block, "type", None)
             if kind == "tool_use":
-                self.calls.append({"name": block.name, "input": dict(block.input or {})})
+                calls.append({"name": block.name, "input": dict(block.input or {})})
             elif kind == "text":
                 texts.append(getattr(block, "text", "") or "")
+        self.calls += calls
+        self.responses.append(calls)
         self.last_text = "".join(texts)
+        self.texts.append(self.last_text)
         return response
+
+    def turn(self) -> Dict[str, Any]:
+        """The forwarded answers as a turn to score: first answer's calls, later calls, all text."""
+        return {
+            "first": self.responses[0] if self.responses else [],
+            "later": [call for calls in self.responses[1:] for call in calls],
+            "text": "\n".join(text for text in self.texts if text),
+        }
 
     def create_message_sync(self, *args: Any, **kwargs: Any):
         if self._script:
@@ -296,6 +320,9 @@ def disposable_profile(
     by default, the state of a desktop user who finished setup — through the
     same local signals the chat's channel block reads: an email password, a
     WhatsApp session file, a Firebase session. None of them is real or used.
+    The WhatsApp probe is pinned to the same answer, so an install without
+    the WhatsApp library cannot turn "ready" into "not connected".
+    A real client used in the profile dates its requests at :data:`CAPTURE_NOW`.
     """
     ready = {"email": True, "whatsapp": True, "mrcall": True, **(channels or {})}
     persona = {"EMAIL_ADDRESS": f"{OWNER_A}@company.test", **(profile or {})}
@@ -304,7 +331,9 @@ def disposable_profile(
         pytest.MonkeyPatch.context() as mp,
     ):
         from zylch.auth import session as session_module
+        from zylch.llm import client as llm_client
         from zylch.memory import reset_shared_engines
+        from zylch.services import channel_status
         from zylch.storage import database as dbm
         from zylch.storage import storage as storage_module
         from zylch.tools.factory import ToolFactory
@@ -335,6 +364,9 @@ def disposable_profile(
                 expires_at_ms=_SESSION_EXPIRES_MS,
             )
         mp.setattr(session_module, "_session", signed_in)
+        mp.setattr(channel_status, "_whatsapp_paired", lambda: ready["whatsapp"])
+        if hasattr(llm_client, "datetime"):
+            freeze_clock(mp, llm_client)
         # The factory caches per-process clients and session state on the
         # class; a capture starts from none and leaves the originals behind.
         for name, empty in (
@@ -440,6 +472,16 @@ def scripted_result(spec: Any, args: Dict[str, Any]) -> Any:
         results = {str(k).strip().lower(): v for k, v in spec["results"].items()}
         return results.get(wanted, spec.get("default"))
     return spec
+
+
+def entry(case: Dict[str, Any], request: Dict[str, Any]) -> Dict[str, Any]:
+    """One entry of ``build_requests``: the request, and the moment it was captured at.
+
+    A replay pins its own clock to ``capture_now``, so the date the real client
+    adds agrees with the request and a case naming a weekday reads the same on
+    any later day.
+    """
+    return {"case_id": case["id"], "request": request, "capture_now": CAPTURE_NOW.isoformat()}
 
 
 def load_document(role_dir: Path) -> Dict[str, Any]:

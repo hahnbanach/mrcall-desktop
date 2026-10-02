@@ -6,6 +6,7 @@
     {
       "id": "train-01",
       "lang": "it",
+      "expect_lang": null,
       "input": {
         "profile": {"EMAIL_ADDRESS": "giulia@ferramentaconti.example", "USER_FULL_NAME": "Giulia Conti", "USER_COMPANY": "Ferramenta Conti Srl", "USER_PHONE": "+39 030 0000 0101"},
         "builder": "zylch.agents.trainers.memory_message.MessageMemoryAgentTrainer.build_memory_message_prompt",
@@ -37,7 +38,7 @@
             "to_email": "paolo@rinaldiimpianti.example",
             "subject": "Re: ritiro guaine",
             "date": "2026-10-01T09:05:00+02:00",
-            "body_plain": "Buongiorno Paolo,\npossiamo fare giovedì 8 ottobre alle 10:00? I 20 rotoli di guaina arrivano mercoledì sera.\nCordiali saluti,\nGiulia Conti\nFerramenta Conti Srl – Via Roma 14, 25121 Brescia\nTel. +39 030 0000 0101 – www.ferramentaconti.example",
+            "body_plain": "Buongiorno Paolo,\npossiamo fare giovedì 8 ottobre alle 10:00? I 20 rotoli di guaina arrivano mercoledì sera.\nCordiali saluti,\nGiulia Conti\nFerramenta Conti Srl – Via Fittizia 14, 00000 Brescia\nTel. +39 030 0000 0101 – www.ferramentaconti.example",
             "from_name": "Giulia Conti"
           },
           {
@@ -57,7 +58,7 @@
             "to_email": "chiara@lodiarredamenti.example",
             "subject": "Re: Richiesta preventivo maniglie MX-40",
             "date": "2026-10-02T11:30:00+02:00",
-            "body_plain": "Gentile Chiara,\ncome richiesto le invio il preventivo per 200 maniglie MX-40 in private label con logo inciso: 6,80 € + IVA cad., impianto logo 90 € una tantum, consegna in 4 settimane dall'approvazione del logo.\nResto a disposizione per qualsiasi chiarimento.\nCordiali saluti,\nGiulia Conti\nFerramenta Conti Srl – Via Roma 14, 25121 Brescia\nTel. +39 030 0000 0101 – www.ferramentaconti.example",
+            "body_plain": "Gentile Chiara,\ncome richiesto le invio il preventivo per 200 maniglie MX-40 in private label con logo inciso: 6,80 € + IVA cad., impianto logo 90 € una tantum, consegna in 4 settimane dall'approvazione del logo.\nResto a disposizione per qualsiasi chiarimento.\nCordiali saluti,\nGiulia Conti\nFerramenta Conti Srl – Via Fittizia 14, 00000 Brescia\nTel. +39 030 0000 0101 – www.ferramentaconti.example",
             "from_name": "Giulia Conti"
           },
           {
@@ -76,7 +77,7 @@
             "to_email": "info@bulloneriagatti.example",
             "subject": "Re: rinnovo fornitura viteria inox",
             "date": "2026-09-28T17:10:00+02:00",
-            "body_plain": "Buongiorno,\naccettiamo il rinnovo della fornitura a 1.250 € al mese; vi chiediamo però la consegna settimanale il lunedì anziché il martedì.\nCordiali saluti,\nGiulia Conti\nFerramenta Conti Srl – Via Roma 14, 25121 Brescia\nTel. +39 030 0000 0101 – www.ferramentaconti.example",
+            "body_plain": "Buongiorno,\naccettiamo il rinnovo della fornitura a 1.250 € al mese; vi chiediamo però la consegna settimanale il lunedì anziché il martedì.\nCordiali saluti,\nGiulia Conti\nFerramenta Conti Srl – Via Fittizia 14, 00000 Brescia\nTel. +39 030 0000 0101 – www.ferramentaconti.example",
             "from_name": "Giulia Conti"
           }
         ],
@@ -97,35 +98,26 @@
             "text": "Ciao Luca! Sì, è pronto: abbiamo cambiato spazzole e interruttore, sono 38 €. Siamo aperti fino alle 19.",
             "timestamp": "2026-10-02T09:20:00+02:00"
           },
-          {
-            "id": "wa-g3",
-            "chat_jid": "390200000178@s.whatsapp.net",
-            "sender_name": "Luca Neri",
-            "is_from_me": false,
-            "text": "Perfetto, passo domani mattina. Grazie!",
-            "timestamp": "2026-10-02T09:22:00+02:00"
-          }
+          {"id": "wa-g3", "chat_jid": "390200000178@s.whatsapp.net", "sender_name": "Luca Neri", "is_from_me": false, "text": "Perfetto, passo domani mattina. Grazie!", "timestamp": "2026-10-02T09:22:00+02:00"}
         ]
       },
       "label": {
-        "contains": [["---ENTITY---"], ["#IDENTIFIERS"], ["#ABOUT"], ["#HISTORY"], ["PERSON"], ["COMPANY"], ["STYLE"], ["FACT"], ["USER_COMPANY"], ["Ferramenta Conti"]],
+        "contains": [["---ENTITY---"], ["#IDENTIFIERS"], ["#ABOUT"], ["#HISTORY"], ["STYLE"], ["FACT"], ["USER_COMPANY"], ["Ferramenta Conti"]],
         "min_chars": 1500,
         "complete": true,
+        "matches": ["\\bperson\\b", "\\bcompany\\b"],
         "contains_none": ["{from_email}", "{body}", "{{from_email}}", "{{body}}"]
       },
       "critical": false,
+      "critical_on": [],
       "why": "The meta-prompt requires the four entity types in the #IDENTIFIERS/#ABOUT/#HISTORY format separated by ---ENTITY---, and a do-not-extract section whose USER_COMPANY line the engine reads back; every signature names Ferramenta Conti as the user's company."
     },
     {
       "id": "train-02",
       "lang": "en",
+      "expect_lang": null,
       "input": {
-        "profile": {
-          "EMAIL_ADDRESS": "sarah@northwind-interiors.example",
-          "USER_FULL_NAME": "Sarah Mitchell",
-          "USER_COMPANY": "Northwind Interiors Ltd",
-          "USER_PHONE": "+44 20 7946 0101"
-        },
+        "profile": {"EMAIL_ADDRESS": "sarah@northwind-interiors.example", "USER_FULL_NAME": "Sarah Mitchell", "USER_COMPANY": "Northwind Interiors Ltd", "USER_PHONE": "+44 20 7946 0101"},
         "builder": "zylch.agents.trainers.memory_message.MessageMemoryAgentTrainer.build_memory_message_prompt",
         "emails": [
           {
@@ -145,7 +137,7 @@
             "to_email": "priya@shahco-architects.example",
             "subject": "Invoice NW-2026-0917 – September samples",
             "date": "2026-09-17T10:02:00+01:00",
-            "body_plain": "Hi Priya,\nplease find attached invoice NW-2026-0917 for the fabric and tile samples sent on 15 September: £184.50 including VAT, payable within 30 days.\nBest,\nSarah\n\nSarah Mitchell\nNorthwind Interiors Ltd – 14 Marine Parade, Brighton\n+44 20 7946 0101 – northwind-interiors.example",
+            "body_plain": "Hi Priya,\nplease find attached invoice NW-2026-0917 for the fabric and tile samples sent on 15 September: £184.50 including VAT, payable within 30 days.\nBest,\nSarah\n\nSarah Mitchell\nNorthwind Interiors Ltd – 1 Example Yard, Brighton\n+44 20 7946 0101 – northwind-interiors.example",
             "from_name": "Sarah Mitchell"
           },
           {
@@ -165,7 +157,7 @@
             "to_email": "daniel.price@harborlights.example",
             "subject": "Re: Pendant lamps – delivery date?",
             "date": "2026-09-22T15:30:00+01:00",
-            "body_plain": "Hi Daniel,\nglad you like them! We can deliver all six on 14 October and install them the same afternoon.\nBest,\nSarah\n\nSarah Mitchell\nNorthwind Interiors Ltd – 14 Marine Parade, Brighton\n+44 20 7946 0101 – northwind-interiors.example",
+            "body_plain": "Hi Daniel,\nglad you like them! We can deliver all six on 14 October and install them the same afternoon.\nBest,\nSarah\n\nSarah Mitchell\nNorthwind Interiors Ltd – 1 Example Yard, Brighton\n+44 20 7946 0101 – northwind-interiors.example",
             "from_name": "Sarah Mitchell"
           },
           {
@@ -193,23 +185,26 @@
             "to_email": "orders@kestrel-fasteners.example",
             "subject": "Order: 120 brass cabinet knobs",
             "date": "2026-09-12T11:20:00+01:00",
-            "body_plain": "Hello,\nplease send 120 brass cabinet knobs (ref. BK-30) to our Brighton studio by 30 September.\nThank you,\nBest,\nSarah\n\nSarah Mitchell\nNorthwind Interiors Ltd – 14 Marine Parade, Brighton\n+44 20 7946 0101 – northwind-interiors.example",
+            "body_plain": "Hello,\nplease send 120 brass cabinet knobs (ref. BK-30) to our Brighton studio by 30 September.\nThank you,\nBest,\nSarah\n\nSarah Mitchell\nNorthwind Interiors Ltd – 1 Example Yard, Brighton\n+44 20 7946 0101 – northwind-interiors.example",
             "from_name": "Sarah Mitchell"
           }
         ]
       },
       "label": {
-        "contains": [["---ENTITY---"], ["#IDENTIFIERS"], ["#ABOUT"], ["#HISTORY"], ["PERSON"], ["COMPANY"], ["STYLE"], ["FACT"], ["USER_COMPANY"], ["Northwind Interiors"]],
+        "contains": [["---ENTITY---"], ["#IDENTIFIERS"], ["#ABOUT"], ["#HISTORY"], ["STYLE"], ["FACT"], ["USER_COMPANY"], ["Northwind Interiors"]],
         "min_chars": 1500,
         "complete": true,
+        "matches": ["\\bperson\\b", "\\bcompany\\b"],
         "contains_none": ["{from_email}", "{body}", "{{from_email}}", "{{body}}"]
       },
       "critical": false,
+      "critical_on": [],
       "why": "The same contract as train-01 on an English mailbox with no WhatsApp: the four entity types and format, and Northwind Interiors — the company in every signature — as USER_COMPANY."
     },
     {
       "id": "train-03",
       "lang": "it",
+      "expect_lang": null,
       "input": {
         "profile": {"EMAIL_ADDRESS": "giulia@ferramentaconti.example", "USER_FULL_NAME": "Giulia Conti", "USER_COMPANY": "Ferramenta Conti Srl", "USER_PHONE": "+39 030 0000 0101"},
         "builder": "zylch.agents.trainers.task_email.EmailTaskAgentTrainer.build_task_prompt",
@@ -241,7 +236,7 @@
             "to_email": "paolo@rinaldiimpianti.example",
             "subject": "Re: ritiro guaine",
             "date": "2026-10-01T09:05:00+02:00",
-            "body_plain": "Buongiorno Paolo,\npossiamo fare giovedì 8 ottobre alle 10:00? I 20 rotoli di guaina arrivano mercoledì sera.\nCordiali saluti,\nGiulia Conti\nFerramenta Conti Srl – Via Roma 14, 25121 Brescia\nTel. +39 030 0000 0101 – www.ferramentaconti.example",
+            "body_plain": "Buongiorno Paolo,\npossiamo fare giovedì 8 ottobre alle 10:00? I 20 rotoli di guaina arrivano mercoledì sera.\nCordiali saluti,\nGiulia Conti\nFerramenta Conti Srl – Via Fittizia 14, 00000 Brescia\nTel. +39 030 0000 0101 – www.ferramentaconti.example",
             "from_name": "Giulia Conti"
           },
           {
@@ -261,7 +256,7 @@
             "to_email": "chiara@lodiarredamenti.example",
             "subject": "Re: Richiesta preventivo maniglie MX-40",
             "date": "2026-10-02T11:30:00+02:00",
-            "body_plain": "Gentile Chiara,\ncome richiesto le invio il preventivo per 200 maniglie MX-40 in private label con logo inciso: 6,80 € + IVA cad., impianto logo 90 € una tantum, consegna in 4 settimane dall'approvazione del logo.\nResto a disposizione per qualsiasi chiarimento.\nCordiali saluti,\nGiulia Conti\nFerramenta Conti Srl – Via Roma 14, 25121 Brescia\nTel. +39 030 0000 0101 – www.ferramentaconti.example",
+            "body_plain": "Gentile Chiara,\ncome richiesto le invio il preventivo per 200 maniglie MX-40 in private label con logo inciso: 6,80 € + IVA cad., impianto logo 90 € una tantum, consegna in 4 settimane dall'approvazione del logo.\nResto a disposizione per qualsiasi chiarimento.\nCordiali saluti,\nGiulia Conti\nFerramenta Conti Srl – Via Fittizia 14, 00000 Brescia\nTel. +39 030 0000 0101 – www.ferramentaconti.example",
             "from_name": "Giulia Conti"
           },
           {
@@ -280,7 +275,7 @@
             "to_email": "info@bulloneriagatti.example",
             "subject": "Re: rinnovo fornitura viteria inox",
             "date": "2026-09-28T17:10:00+02:00",
-            "body_plain": "Buongiorno,\naccettiamo il rinnovo della fornitura a 1.250 € al mese; vi chiediamo però la consegna settimanale il lunedì anziché il martedì.\nCordiali saluti,\nGiulia Conti\nFerramenta Conti Srl – Via Roma 14, 25121 Brescia\nTel. +39 030 0000 0101 – www.ferramentaconti.example",
+            "body_plain": "Buongiorno,\naccettiamo il rinnovo della fornitura a 1.250 € al mese; vi chiediamo però la consegna settimanale il lunedì anziché il martedì.\nCordiali saluti,\nGiulia Conti\nFerramenta Conti Srl – Via Fittizia 14, 00000 Brescia\nTel. +39 030 0000 0101 – www.ferramentaconti.example",
             "from_name": "Giulia Conti"
           }
         ],
@@ -289,24 +284,17 @@
           "#IDENTIFIERS\nEntity type: PERSON\nName: Chiara Lodi\nEmail: chiara@lodiarredamenti.example\nCompany: Lodi Arredamenti Srl\n#ABOUT\nUfficio acquisti di Lodi Arredamenti Srl, mobilificio di Lodi.\n#HISTORY\n- 2026-10-02: ricevuto il preventivo per 200 maniglie MX-40 private label."
         ]
       },
-      "label": {
-        "contains": [["NO_ACTION"], ["ACTION:"], ["critical"], ["high"], ["medium"], ["low"], ["{user_email}", "{{user_email}}", "giulia@ferramentaconti.example"]],
-        "min_chars": 1500,
-        "complete": true
-      },
+      "label": {"contains": [["NO_ACTION"], ["ACTION:"], ["critical"], ["medium"], ["{user_email}", "{{user_email}}", "giulia@ferramentaconti.example"]], "min_chars": 1500, "complete": true, "matches": ["\\bhigh\\b", "\\blow\\b"]},
       "critical": false,
+      "critical_on": [],
       "why": "The meta-prompt fixes the output format (ACTION: urgency | action | reason, or NO_ACTION: reason) with all four urgency levels and a rule never to act on the user's own messages; a prompt without them cannot drive task detection."
     },
     {
       "id": "train-04",
       "lang": "en",
+      "expect_lang": null,
       "input": {
-        "profile": {
-          "EMAIL_ADDRESS": "sarah@northwind-interiors.example",
-          "USER_FULL_NAME": "Sarah Mitchell",
-          "USER_COMPANY": "Northwind Interiors Ltd",
-          "USER_PHONE": "+44 20 7946 0101"
-        },
+        "profile": {"EMAIL_ADDRESS": "sarah@northwind-interiors.example", "USER_FULL_NAME": "Sarah Mitchell", "USER_COMPANY": "Northwind Interiors Ltd", "USER_PHONE": "+44 20 7946 0101"},
         "builder": "zylch.agents.trainers.task_email.EmailTaskAgentTrainer.build_task_prompt",
         "emails": [
           {
@@ -326,7 +314,7 @@
             "to_email": "priya@shahco-architects.example",
             "subject": "Invoice NW-2026-0917 – September samples",
             "date": "2026-09-17T10:02:00+01:00",
-            "body_plain": "Hi Priya,\nplease find attached invoice NW-2026-0917 for the fabric and tile samples sent on 15 September: £184.50 including VAT, payable within 30 days.\nBest,\nSarah\n\nSarah Mitchell\nNorthwind Interiors Ltd – 14 Marine Parade, Brighton\n+44 20 7946 0101 – northwind-interiors.example",
+            "body_plain": "Hi Priya,\nplease find attached invoice NW-2026-0917 for the fabric and tile samples sent on 15 September: £184.50 including VAT, payable within 30 days.\nBest,\nSarah\n\nSarah Mitchell\nNorthwind Interiors Ltd – 1 Example Yard, Brighton\n+44 20 7946 0101 – northwind-interiors.example",
             "from_name": "Sarah Mitchell"
           },
           {
@@ -346,7 +334,7 @@
             "to_email": "daniel.price@harborlights.example",
             "subject": "Re: Pendant lamps – delivery date?",
             "date": "2026-09-22T15:30:00+01:00",
-            "body_plain": "Hi Daniel,\nglad you like them! We can deliver all six on 14 October and install them the same afternoon.\nBest,\nSarah\n\nSarah Mitchell\nNorthwind Interiors Ltd – 14 Marine Parade, Brighton\n+44 20 7946 0101 – northwind-interiors.example",
+            "body_plain": "Hi Daniel,\nglad you like them! We can deliver all six on 14 October and install them the same afternoon.\nBest,\nSarah\n\nSarah Mitchell\nNorthwind Interiors Ltd – 1 Example Yard, Brighton\n+44 20 7946 0101 – northwind-interiors.example",
             "from_name": "Sarah Mitchell"
           },
           {
@@ -374,7 +362,7 @@
             "to_email": "orders@kestrel-fasteners.example",
             "subject": "Order: 120 brass cabinet knobs",
             "date": "2026-09-12T11:20:00+01:00",
-            "body_plain": "Hello,\nplease send 120 brass cabinet knobs (ref. BK-30) to our Brighton studio by 30 September.\nThank you,\nBest,\nSarah\n\nSarah Mitchell\nNorthwind Interiors Ltd – 14 Marine Parade, Brighton\n+44 20 7946 0101 – northwind-interiors.example",
+            "body_plain": "Hello,\nplease send 120 brass cabinet knobs (ref. BK-30) to our Brighton studio by 30 September.\nThank you,\nBest,\nSarah\n\nSarah Mitchell\nNorthwind Interiors Ltd – 1 Example Yard, Brighton\n+44 20 7946 0101 – northwind-interiors.example",
             "from_name": "Sarah Mitchell"
           }
         ],
@@ -383,17 +371,15 @@
           "#IDENTIFIERS\nEntity type: PERSON\nName: Daniel Price\nEmail: daniel.price@harborlights.example\nCompany: Harbor Lights Café\n#ABOUT\nOwner of Harbor Lights Café in Brighton; fit-out client since 2025.\n#HISTORY\n- 2026-09-22: lamps approved; delivery promised for 14 October."
         ]
       },
-      "label": {
-        "contains": [["NO_ACTION"], ["ACTION:"], ["critical"], ["high"], ["medium"], ["low"], ["{user_email}", "{{user_email}}", "sarah@northwind-interiors.example"]],
-        "min_chars": 1500,
-        "complete": true
-      },
+      "label": {"contains": [["NO_ACTION"], ["ACTION:"], ["critical"], ["medium"], ["{user_email}", "{{user_email}}", "sarah@northwind-interiors.example"]], "min_chars": 1500, "complete": true, "matches": ["\\bhigh\\b", "\\blow\\b"]},
       "critical": false,
+      "critical_on": [],
       "why": "The same contract as train-03 on an English mailbox: the ACTION/NO_ACTION format, the four urgency levels and the rule about the user's own address."
     },
     {
       "id": "train-05",
       "lang": "it",
+      "expect_lang": null,
       "input": {
         "profile": {"EMAIL_ADDRESS": "giulia@ferramentaconti.example", "USER_FULL_NAME": "Giulia Conti", "USER_COMPANY": "Ferramenta Conti Srl", "USER_PHONE": "+39 030 0000 0101"},
         "builder": "zylch.agents.trainers.emailer.EmailerAgentTrainer.build_emailer_prompt",
@@ -425,7 +411,7 @@
             "to_email": "paolo@rinaldiimpianti.example",
             "subject": "Re: ritiro guaine",
             "date": "2026-10-01T09:05:00+02:00",
-            "body_plain": "Buongiorno Paolo,\npossiamo fare giovedì 8 ottobre alle 10:00? I 20 rotoli di guaina arrivano mercoledì sera.\nCordiali saluti,\nGiulia Conti\nFerramenta Conti Srl – Via Roma 14, 25121 Brescia\nTel. +39 030 0000 0101 – www.ferramentaconti.example",
+            "body_plain": "Buongiorno Paolo,\npossiamo fare giovedì 8 ottobre alle 10:00? I 20 rotoli di guaina arrivano mercoledì sera.\nCordiali saluti,\nGiulia Conti\nFerramenta Conti Srl – Via Fittizia 14, 00000 Brescia\nTel. +39 030 0000 0101 – www.ferramentaconti.example",
             "from_name": "Giulia Conti"
           },
           {
@@ -445,7 +431,7 @@
             "to_email": "chiara@lodiarredamenti.example",
             "subject": "Re: Richiesta preventivo maniglie MX-40",
             "date": "2026-10-02T11:30:00+02:00",
-            "body_plain": "Gentile Chiara,\ncome richiesto le invio il preventivo per 200 maniglie MX-40 in private label con logo inciso: 6,80 € + IVA cad., impianto logo 90 € una tantum, consegna in 4 settimane dall'approvazione del logo.\nResto a disposizione per qualsiasi chiarimento.\nCordiali saluti,\nGiulia Conti\nFerramenta Conti Srl – Via Roma 14, 25121 Brescia\nTel. +39 030 0000 0101 – www.ferramentaconti.example",
+            "body_plain": "Gentile Chiara,\ncome richiesto le invio il preventivo per 200 maniglie MX-40 in private label con logo inciso: 6,80 € + IVA cad., impianto logo 90 € una tantum, consegna in 4 settimane dall'approvazione del logo.\nResto a disposizione per qualsiasi chiarimento.\nCordiali saluti,\nGiulia Conti\nFerramenta Conti Srl – Via Fittizia 14, 00000 Brescia\nTel. +39 030 0000 0101 – www.ferramentaconti.example",
             "from_name": "Giulia Conti"
           },
           {
@@ -464,13 +450,14 @@
             "to_email": "info@bulloneriagatti.example",
             "subject": "Re: rinnovo fornitura viteria inox",
             "date": "2026-09-28T17:10:00+02:00",
-            "body_plain": "Buongiorno,\naccettiamo il rinnovo della fornitura a 1.250 € al mese; vi chiediamo però la consegna settimanale il lunedì anziché il martedì.\nCordiali saluti,\nGiulia Conti\nFerramenta Conti Srl – Via Roma 14, 25121 Brescia\nTel. +39 030 0000 0101 – www.ferramentaconti.example",
+            "body_plain": "Buongiorno,\naccettiamo il rinnovo della fornitura a 1.250 € al mese; vi chiediamo però la consegna settimanale il lunedì anziché il martedì.\nCordiali saluti,\nGiulia Conti\nFerramenta Conti Srl – Via Fittizia 14, 00000 Brescia\nTel. +39 030 0000 0101 – www.ferramentaconti.example",
             "from_name": "Giulia Conti"
           }
         ]
       },
       "label": {"contains": [["write_email"], ["search_memory"], ["get_email"], ["respond_text"], ["italian", "italiano"], ["Giulia"]], "min_chars": 1000, "complete": true},
       "critical": false,
+      "critical_on": [],
       "why": "The meta-prompt requires guidance for its four tools and the user's language and sign-off; all of Giulia's sent mail is Italian and signed Giulia Conti."
     }
   ]

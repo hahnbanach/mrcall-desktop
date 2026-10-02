@@ -88,13 +88,20 @@ def run_case(case: Dict[str, Any], client: Any, *, approve: bool = True) -> Dict
 
     Approval-gated tools are approved (or declined, ``approve=False``) and then
     answer from the script like the others. Returns the final answer, the tool
-    calls of the forwarded answers and how many scripted rounds were replayed.
+    calls of the forwarded answers, how many scripted rounds were replayed, and
+    the turn to score (``ReplayClient.turn``: the first answer's calls, the
+    later calls and all the text the model wrote).
     """
     given = case["input"]
     replay = cc.ReplayClient(given.get("replay") or [], client)
     with cc.disposable_profile(given.get("profile"), given.get("channels")) as profile:
         answer = asyncio.run(_turn(profile, case, replay, approve))
-    return {"answer": answer, "calls": replay.calls, "replayed": replay.replayed}
+    return {
+        "answer": answer,
+        "calls": replay.calls,
+        "replayed": replay.replayed,
+        "turn": replay.turn(),
+    }
 
 
 def build_requests(cases: Any, *, calls: Optional[Dict[str, int]] = None) -> List[Dict[str, Any]]:
@@ -114,5 +121,5 @@ def build_requests(cases: Any, *, calls: Optional[Dict[str, int]] = None) -> Lis
             )
         if calls is not None:
             calls[case["id"]] = len(client.requests)
-        captured.append({"case_id": case["id"], "request": client.requests[-1]})
+        captured.append(cc.entry(case, client.requests[-1]))
     return captured

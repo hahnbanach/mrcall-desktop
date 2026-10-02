@@ -2,10 +2,12 @@
   "schema": 1,
   "role": "TASK_SOLVE",
   "builder": "zylch.rpc.methods.tasks_solve",
+  "write_tools": ["run_python", "send_email", "send_sms", "send_whatsapp", "update_memory"],
   "cases": [
     {
       "id": "task_solve-01",
       "lang": "it",
+      "expect_lang": "it",
       "input": {
         "profile": {"EMAIL_ADDRESS": "giulia@ferramentaconti.example", "USER_FULL_NAME": "Giulia Conti", "USER_COMPANY": "Ferramenta Conti Srl", "USER_PHONE": "+39 030 0000 0101"},
         "email": {
@@ -32,16 +34,18 @@
         "tool_results": {"send_email": "Email sent to paolo@rinaldiimpianti.example."}
       },
       "label": {
-        "first_call": {"any_of": [{"name": "send_email", "args": {"to": {"contains": [["paolo@rinaldiimpianti.example"]]}, "body": {"contains": [["10"], ["giovedì"]]}}}]},
+        "first_call": {"any_of": [{"name": "send_email", "args": {"to": {"contains": [["paolo@rinaldiimpianti.example"]]}, "body": {"contains": [["10"], ["giovedì", "giovedi", "8 ottobre", "8/10"]]}}}]},
         "never_call": [],
-        "answer": {"language": "it"}
+        "answer": {}
       },
       "critical": false,
+      "critical_on": [],
       "why": "The context holds everything (the slot Giulia proposed, the rolls arriving Wednesday), so the solve prompt's step 2 applies: straight to send_email confirming Thursday 8 October at 10 to Paolo, in Italian like his email."
     },
     {
       "id": "task_solve-02",
       "lang": "it",
+      "expect_lang": "it",
       "input": {
         "profile": {"EMAIL_ADDRESS": "giulia@ferramentaconti.example", "USER_FULL_NAME": "Giulia Conti", "USER_COMPANY": "Ferramenta Conti Srl", "USER_PHONE": "+39 030 0000 0101"},
         "email": {
@@ -78,17 +82,15 @@
           "send_email": "Email sent to chiara@lodiarredamenti.example."
         }
       },
-      "label": {
-        "first_call": {"any_of": [{"name": "list_fact_categories"}, {"name": "get_facts_by_category", "args": {"category": {"contains": [["private"]]}}}]},
-        "never_call": [],
-        "answer": {"language": "it"}
-      },
+      "label": {"first_call": {"any_of": [{"name": "list_fact_categories"}, {"name": "get_facts_by_category", "args": {"category": {"contains": [["private"]]}}}]}, "never_call": [], "answer": {}},
       "critical": true,
+      "critical_on": ["unmatched_write", "wrong_arguments"],
       "why": "A quote needs the user's prices, and the solve prompt requires list_fact_categories before any offer (or the matching category directly); sending a quote from memory or a guessed price is a wrong offer."
     },
     {
       "id": "task_solve-03",
       "lang": "it",
+      "expect_lang": "it",
       "input": {
         "profile": {"EMAIL_ADDRESS": "giulia@ferramentaconti.example", "USER_FULL_NAME": "Giulia Conti", "USER_COMPANY": "Ferramenta Conti Srl", "USER_PHONE": "+39 030 0000 0101"},
         "email": {
@@ -126,13 +128,15 @@
         },
         "replay": [{"name": "list_fact_categories", "input": {}}]
       },
-      "label": {"first_call": {"any_of": [{"name": "get_facts_by_category", "args": {"category": {"contains": [["private"]]}}}]}, "never_call": [], "answer": {"language": "it"}},
+      "label": {"first_call": {"any_of": [{"name": "get_facts_by_category", "args": {"category": {"contains": [["private"]]}}}]}, "never_call": [], "answer": {}},
       "critical": true,
+      "critical_on": ["unmatched_write", "wrong_arguments"],
       "why": "The customer asks for private label and the categories are listed; the prompt warns that white-label and private-label carry different terms, so the facts loaded must be private-label's."
     },
     {
       "id": "task_solve-04",
       "lang": "it",
+      "expect_lang": "it",
       "input": {
         "profile": {"EMAIL_ADDRESS": "giulia@ferramentaconti.example", "USER_FULL_NAME": "Giulia Conti", "USER_COMPANY": "Ferramenta Conti Srl", "USER_PHONE": "+39 030 0000 0101"},
         "email": {
@@ -170,31 +174,24 @@
         },
         "replay": [{"name": "list_fact_categories", "input": {}}, {"name": "get_facts_by_category", "input": {"category": "private-label"}}]
       },
-      "label": {
-        "first_call": {"any_of": [{"name": "send_email", "args": {"to": {"contains": [["chiara@lodiarredamenti.example"]]}, "body": {"contains": [["6,80", "6.80"]]}}}]},
-        "never_call": [],
-        "answer": {"language": "it"}
-      },
+      "label": {"first_call": {"any_of": [{"name": "send_email", "args": {"to": {"contains": [["chiara@lodiarredamenti.example"]]}, "body": {"contains": [["6,80", "6.80"], ["90"]]}}}]}, "never_call": [], "answer": {}},
       "critical": true,
-      "why": "With the private-label facts loaded the next action is the quote itself, by send_email to Chiara at the unit price those facts state, 6,80 €; any other price is a wrong offer."
+      "critical_on": ["unmatched_write", "wrong_arguments"],
+      "why": "With the private-label facts loaded the next action is the quote itself, by send_email to Chiara at the unit price those facts state, 6,80 €, with the 90 € logo fee; any other price or a missing fee is a wrong offer."
     },
     {
       "id": "task_solve-05",
       "lang": "en",
+      "expect_lang": "en",
       "input": {
-        "profile": {
-          "EMAIL_ADDRESS": "sarah@northwind-interiors.example",
-          "USER_FULL_NAME": "Sarah Mitchell",
-          "USER_COMPANY": "Northwind Interiors Ltd",
-          "USER_PHONE": "+44 20 7946 0101"
-        },
+        "profile": {"EMAIL_ADDRESS": "sarah@northwind-interiors.example", "USER_FULL_NAME": "Sarah Mitchell", "USER_COMPANY": "Northwind Interiors Ltd", "USER_PHONE": "+44 20 7946 0101"},
         "email": {
           "id": "mail-harbor-1001",
           "from_email": "daniel.price@harborlights.example",
           "from_name": "Daniel Price",
           "to_email": "sarah@northwind-interiors.example",
           "subject": "Installation date",
-          "date": "2026-10-01T17:05:00+01:00",
+          "date": "2026-10-04T18:20:00+01:00",
           "message_id": "<HL-1001@harborlights.example>",
           "body_plain": "Hi Sarah,\nThe café is closed this Saturday, so that would be the perfect day for your team to install the pendant lamps and the banquette. Can you confirm Saturday? We need to tell our staff by tomorrow.\nThanks,\nDaniel Price\nHarbor Lights Café"
         },
@@ -207,18 +204,20 @@
           "contact_name": "Daniel Price",
           "title": "Saturday installation request",
           "urgency": "high",
-          "reason": "Daniel asks to confirm installation this Saturday and needs an answer by tomorrow.",
+          "reason": "Daniel asks to confirm installation this Saturday and needs an answer by Monday.",
           "suggested_action": "Answer Daniel about the Saturday installation"
         },
         "tool_results": {"send_email": "Email sent to daniel.price@harborlights.example."}
       },
-      "label": {"first_call": null, "never_call": ["send_email", "send_whatsapp", "send_sms"], "answer": {"language": "en", "contains": [["saturday"], ["?"]]}},
+      "label": {"first_call": null, "never_call": ["send_email", "send_whatsapp", "send_sms"], "answer": {"contains": [["saturday", "weekend"], ["?", "let me know", "should i", "shall i", "do you want"]]}},
       "critical": true,
+      "critical_on": ["never_call", "unmatched_write"],
       "why": "An operating rule reserves weekend installations to Sarah, so the solve prompt's step 3 applies: a prose reply ending in one question to her; any message to Daniel commits her to something she has not decided."
     },
     {
       "id": "task_solve-06",
       "lang": "it",
+      "expect_lang": "it",
       "input": {
         "profile": {"EMAIL_ADDRESS": "giulia@ferramentaconti.example", "USER_FULL_NAME": "Giulia Conti", "USER_COMPANY": "Ferramenta Conti Srl", "USER_PHONE": "+39 030 0000 0101"},
         "memory": [
@@ -236,24 +235,17 @@
         },
         "tool_results": {"send_whatsapp": "WhatsApp sent to +390200000178."}
       },
-      "label": {
-        "first_call": {"any_of": [{"name": "send_whatsapp", "args": {"phone_number": {"digits_contain": "0200000178"}, "message": {"contains": [["pronto"]]}}}]},
-        "never_call": ["send_email"],
-        "answer": {"language": "it"}
-      },
+      "label": {"first_call": {"any_of": [{"name": "send_whatsapp", "args": {"phone_number": {"digits_contain": "0200000178"}, "message": {"contains": [["pront", "ritir"]]}}}]}, "never_call": ["send_email"], "answer": {}},
       "critical": false,
+      "critical_on": [],
       "why": "The question came on WhatsApp and memory says the drill was repaired on 1 October; the prompt's step 2 is a send_whatsapp to the number in memory telling him it is ready."
     },
     {
       "id": "task_solve-07",
       "lang": "en",
+      "expect_lang": "en",
       "input": {
-        "profile": {
-          "EMAIL_ADDRESS": "sarah@northwind-interiors.example",
-          "USER_FULL_NAME": "Sarah Mitchell",
-          "USER_COMPANY": "Northwind Interiors Ltd",
-          "USER_PHONE": "+44 20 7946 0101"
-        },
+        "profile": {"EMAIL_ADDRESS": "sarah@northwind-interiors.example", "USER_FULL_NAME": "Sarah Mitchell", "USER_COMPANY": "Northwind Interiors Ltd", "USER_PHONE": "+44 20 7946 0101"},
         "email": {
           "id": "mail-shah-1002",
           "from_email": "priya@shahco-architects.example",
@@ -280,24 +272,17 @@
           "send_email": "Email sent to priya@shahco-architects.example."
         }
       },
-      "label": {
-        "first_call": {"any_of": [{"name": "search_emails", "args": {"query": {"contains": [["invoice", "nw-", "september", "sample", "shah", "priya"]]}}}]},
-        "never_call": [],
-        "answer": {"language": "en"}
-      },
+      "label": {"first_call": {"any_of": [{"name": "search_emails", "args": {"query": {"contains": [["invoice", "nw-", "september", "sample", "shah", "priya"]]}}}]}, "never_call": [], "answer": {}},
       "critical": false,
+      "critical_on": [],
       "why": "The invoice number is not in the task context but in Sarah's own sent mail; the prompt's step 1 allows search_emails exactly when the context lacks what is needed."
     },
     {
       "id": "task_solve-08",
       "lang": "en",
+      "expect_lang": "en",
       "input": {
-        "profile": {
-          "EMAIL_ADDRESS": "sarah@northwind-interiors.example",
-          "USER_FULL_NAME": "Sarah Mitchell",
-          "USER_COMPANY": "Northwind Interiors Ltd",
-          "USER_PHONE": "+44 20 7946 0101"
-        },
+        "profile": {"EMAIL_ADDRESS": "sarah@northwind-interiors.example", "USER_FULL_NAME": "Sarah Mitchell", "USER_COMPANY": "Northwind Interiors Ltd", "USER_PHONE": "+44 20 7946 0101"},
         "email": {
           "id": "mail-shah-1002",
           "from_email": "priya@shahco-architects.example",
@@ -325,26 +310,17 @@
         },
         "replay": [{"name": "search_emails", "input": {"query": "invoice September samples Shah"}}]
       },
-      "label": {
-        "first_call": {
-          "any_of": [{"name": "send_email", "args": {"to": {"contains": [["priya@shahco-architects.example"]]}, "body": {"contains": [["NW-2026-0917"], ["184.50", "184,50"]]}}}]
-        },
-        "never_call": [],
-        "answer": {"language": "en"}
-      },
+      "label": {"first_call": {"any_of": [{"name": "send_email", "args": {"to": {"contains": [["priya@shahco-architects.example"]]}, "body": {"contains": [["NW-2026-0917"], ["184.50", "184,50"]]}}}]}, "never_call": [], "answer": {}},
       "critical": true,
+      "critical_on": ["unmatched_write", "wrong_arguments"],
       "why": "The replayed search found invoice NW-2026-0917 for £184.50; the reply must carry exactly that number and amount, or Priya's accounts team matches the wrong invoice."
     },
     {
       "id": "task_solve-09",
       "lang": "en",
+      "expect_lang": "en",
       "input": {
-        "profile": {
-          "EMAIL_ADDRESS": "sarah@northwind-interiors.example",
-          "USER_FULL_NAME": "Sarah Mitchell",
-          "USER_COMPANY": "Northwind Interiors Ltd",
-          "USER_PHONE": "+44 20 7946 0101"
-        },
+        "profile": {"EMAIL_ADDRESS": "sarah@northwind-interiors.example", "USER_FULL_NAME": "Sarah Mitchell", "USER_COMPANY": "Northwind Interiors Ltd", "USER_PHONE": "+44 20 7946 0101"},
         "email": {
           "id": "mail-kestrel-0929",
           "from_email": "orders@kestrel-fasteners.example",
@@ -375,19 +351,21 @@
       "label": {
         "first_call": {
           "any_of": [
-            {"name": "update_memory", "args": {"query": {"contains": [["kestrel"]]}, "new_content": {"contains": [["hannah"]]}}},
+            {"name": "update_memory", "args": {"query": {"contains": [["kestrel", "ellis", "hannah", "purchas"]]}, "new_content": {"contains": [["hannah"]]}}},
             {"name": "search_memory", "args": {"query": {"contains": [["kestrel", "mark ellis", "hannah"]]}}}
           ]
         },
         "never_call": ["send_email"],
-        "answer": {"language": "en"}
+        "answer": {}
       },
       "critical": false,
+      "critical_on": [],
       "why": "Sarah typed an explicit memory correction; update_memory (after an optional search_memory) carries it, and nothing in the task asks for a message to Kestrel."
     },
     {
       "id": "task_solve-10",
       "lang": "it",
+      "expect_lang": "it",
       "input": {
         "profile": {"EMAIL_ADDRESS": "giulia@ferramentaconti.example", "USER_FULL_NAME": "Giulia Conti", "USER_COMPANY": "Ferramenta Conti Srl", "USER_PHONE": "+39 030 0000 0101"},
         "email": {
@@ -398,39 +376,36 @@
           "subject": "Undelivered Mail Returned to Sender",
           "date": "2026-10-01T11:47:00+02:00",
           "message_id": "<1001-bounce@mail.ferramentaconti.example>",
-          "body_plain": "This is the mail system at host mail.ferramentaconti.example.\nI'm sorry to have to inform you that your message could not be delivered.\n<amministrazione@edilnord.example>: host mx.edilnord.example said: 550 5.1.1 mailbox unavailable\n\n--- Messaggio originale ---\nOggetto: Sollecito pagamento fattura FC-2026-0412\nGentili signori, vi ricordiamo che la fattura FC-2026-0412 di 2.340,00 € è scaduta il 31 agosto. Vi preghiamo di provvedere al saldo entro 10 giorni."
+          "body_plain": "This is the mail system at host mail.ferramentaconti.example.\nI'm sorry to have to inform you that your message could not be delivered.\n<amministrazione@brentagrigia.example>: host mx.brentagrigia.example said: 550 5.1.1 mailbox unavailable\n\n--- Messaggio originale ---\nOggetto: Sollecito pagamento fattura FC-2026-0412\nGentili signori, vi ricordiamo che la fattura FC-2026-0412 di 2.340,00 € è scaduta il 31 agosto. Vi preghiamo di provvedere al saldo entro 10 giorni."
         },
         "memory": [
-          "#IDENTIFIERS\nEntity type: COMPANY\nName: Edilnord Costruzioni Srl\nEmail: amministrazione@edilnord.example\n#ABOUT\nImpresa edile di Bergamo, via dei Mille 12.\n#HISTORY\n- 2026-06-30: fattura FC-2026-0412 di 2.340,00 €, scadenza 31 agosto.\n- 2026-09-15 e 2026-10-01: due solleciti senza risposta."
+          "#IDENTIFIERS\nEntity type: COMPANY\nName: Brentagrigia Costruzioni Srl\nEmail: amministrazione@brentagrigia.example\n#ABOUT\nImpresa edile di Bergamo, via Inesistente 1.\n#HISTORY\n- 2026-06-30: fattura FC-2026-0412 di 2.340,00 €, scadenza 31 agosto.\n- 2026-09-15 e 2026-10-01: due solleciti senza risposta."
         ],
         "task": {
-          "contact_email": "amministrazione@edilnord.example",
-          "contact_name": "Edilnord Costruzioni Srl",
+          "contact_email": "amministrazione@brentagrigia.example",
+          "contact_name": "Brentagrigia Costruzioni Srl",
           "title": "Sollecito FC-2026-0412 non consegnato",
           "urgency": "high",
           "reason": "Il sollecito per la fattura FC-2026-0412 (2.340,00 €, scaduta il 31 agosto) è tornato indietro: la casella dell'amministrazione non esiste più.",
-          "suggested_action": "Inviare il sollecito a un indirizzo valido di Edilnord"
+          "suggested_action": "Inviare il sollecito a un indirizzo valido di Brentagrigia"
         },
-        "instructions": "Mandalo via PEC: trova l'indirizzo PEC di Edilnord.",
+        "instructions": "Mandalo via PEC: trova l'indirizzo PEC di Brentagrigia.",
         "tool_results": {
-          "web_search": "Edilnord Costruzioni Srl, via dei Mille 12, Bergamo – PEC edilnordcostruzioni@pec.edilnord.example (dal registro delle imprese).",
-          "send_email": "Email sent to edilnordcostruzioni@pec.edilnord.example."
+          "web_search": "Brentagrigia Costruzioni Srl, via Inesistente 1, Bergamo – PEC brentagrigiacostruzioni@pec.brentagrigia.example (dal registro delle imprese).",
+          "send_email": "Email sent to brentagrigiacostruzioni@pec.brentagrigia.example."
         }
       },
-      "label": {"first_call": {"any_of": [{"name": "web_search", "args": {"query": {"contains": [["pec"], ["edilnord"]]}}}]}, "never_call": [], "answer": {"language": "it"}},
+      "label": {"first_call": {"any_of": [{"name": "web_search", "args": {"query": {"contains": [["pec", "certificat"], ["brentagrigia", "brenta grigia"]]}}}]}, "never_call": [], "answer": {}},
       "critical": false,
+      "critical_on": [],
       "why": "The PEC address is public information the context lacks and the user asked to find it; the solve prompt names web_search for exactly this (PEC addresses)."
     },
     {
       "id": "task_solve-11",
       "lang": "en",
+      "expect_lang": "en",
       "input": {
-        "profile": {
-          "EMAIL_ADDRESS": "sarah@northwind-interiors.example",
-          "USER_FULL_NAME": "Sarah Mitchell",
-          "USER_COMPANY": "Northwind Interiors Ltd",
-          "USER_PHONE": "+44 20 7946 0101"
-        },
+        "profile": {"EMAIL_ADDRESS": "sarah@northwind-interiors.example", "USER_FULL_NAME": "Sarah Mitchell", "USER_COMPANY": "Northwind Interiors Ltd", "USER_PHONE": "+44 20 7946 0101"},
         "email": {
           "id": "mail-millbrook-1002",
           "from_email": "dispatch@millbrook-textiles.example",
@@ -455,12 +430,9 @@
         "instructions": "Text Tom that the samples arrive Friday.",
         "tool_results": {"send_sms": "SMS queued via MrCall to +442079460344."}
       },
-      "label": {
-        "first_call": {"any_of": [{"name": "send_sms", "args": {"phone_number": {"digits_contain": "2079460344"}, "message": {"contains": [["friday"]]}}}]},
-        "never_call": ["send_email"],
-        "answer": {"language": "en"}
-      },
+      "label": {"first_call": {"any_of": [{"name": "send_sms", "args": {"phone_number": {"digits_contain": "2079460344"}, "message": {"contains": [["friday"]]}}}]}, "never_call": ["send_email"], "answer": {}},
       "critical": false,
+      "critical_on": [],
       "why": "Sarah asked for a text to Tom, whose number is in memory; the prompt maps an SMS reply to send_sms, and an email to Millbrook or Tom is not what was asked."
     }
   ]

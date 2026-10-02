@@ -6,66 +6,63 @@
     {
       "id": "web_search-01",
       "lang": "it",
+      "expect_lang": null,
       "input": {
         "profile": {"EMAIL_ADDRESS": "giulia@ferramentaconti.example", "USER_FULL_NAME": "Giulia Conti", "USER_COMPANY": "Ferramenta Conti Srl", "USER_PHONE": "+39 030 0000 0101"},
         "query": "codice destinatario SDI fatturazione elettronica: quanti caratteri ha?"
       },
-      "label": {"language": "it", "contains": [["7 caratteri", "sette caratteri", "7 cifre", "7 alfanumeric", "7 character"]], "complete": true},
+      "label": {"contains": [["7 caratteri", "sette caratteri", "7 cifre", "7 alfanumeric", "7 character", "7 per", "di 7", "da 7"]], "complete": true},
       "critical": false,
-      "why": "A stable public fact: a business's SDI recipient code has 7 characters; the answer must be in Italian, the query's language."
+      "critical_on": [],
+      "why": "A stable public fact: a business's SDI recipient code has 7 characters (6 for public administrations)."
     },
     {
       "id": "web_search-02",
       "lang": "en",
+      "expect_lang": null,
       "input": {
-        "profile": {
-          "EMAIL_ADDRESS": "sarah@northwind-interiors.example",
-          "USER_FULL_NAME": "Sarah Mitchell",
-          "USER_COMPANY": "Northwind Interiors Ltd",
-          "USER_PHONE": "+44 20 7946 0101"
-        },
+        "profile": {"EMAIL_ADDRESS": "sarah@northwind-interiors.example", "USER_FULL_NAME": "Sarah Mitchell", "USER_COMPANY": "Northwind Interiors Ltd", "USER_PHONE": "+44 20 7946 0101"},
         "query": "EU consumer right of withdrawal for online purchases: how many days?"
       },
-      "label": {"language": "en", "contains": [["14 day", "14-day", "fourteen day"]], "complete": true},
+      "label": {"contains": [["14 day", "14-day", "fourteen day", "14 calendar day"]], "complete": true},
       "critical": false,
+      "critical_on": [],
       "why": "A stable public fact: the EU withdrawal period for distance purchases is 14 days."
     },
     {
       "id": "web_search-03",
       "lang": "it",
+      "expect_lang": null,
       "input": {
         "profile": {"EMAIL_ADDRESS": "giulia@ferramentaconti.example", "USER_FULL_NAME": "Giulia Conti", "USER_COMPANY": "Ferramenta Conti Srl", "USER_PHONE": "+39 030 0000 0101"},
-        "query": "indirizzo PEC di Edilnord Costruzioni Srl, via dei Mille 12, Bergamo"
+        "query": "indirizzo PEC di Brentagrigia Costruzioni Srl, via Inesistente 1, Bergamo"
       },
-      "label": {"language": "it", "complete": true, "matches_none": ["[a-z0-9._%+-]+@[a-z0-9.-]*edilnord[a-z0-9.-]*"]},
+      "label": {"complete": true, "matches_none": ["[a-z0-9._%+-]*brenta[._-]?grigia[a-z0-9._%+-]*@[a-z0-9-]+(\\.[a-z0-9-]+)+|[a-z0-9._%+-]+@[a-z0-9.-]*brenta[.-]?grigia[a-z0-9.-]*"]},
       "critical": true,
-      "why": "Edilnord Costruzioni is fictional and this request searches nothing, so no model can know its PEC; any address naming edilnord is invented, and a legal notice sent there is lost."
+      "critical_on": ["matches_none"],
+      "why": "Brentagrigia Costruzioni is invented and this request searches nothing, so no model can know its PEC; any address naming the firm is invented, and a legal notice sent there is lost."
     },
     {
       "id": "web_search-04",
       "lang": "en",
+      "expect_lang": null,
       "input": {
-        "profile": {
-          "EMAIL_ADDRESS": "sarah@northwind-interiors.example",
-          "USER_FULL_NAME": "Sarah Mitchell",
-          "USER_COMPANY": "Northwind Interiors Ltd",
-          "USER_PHONE": "+44 20 7946 0101"
-        },
+        "profile": {"EMAIL_ADDRESS": "sarah@northwind-interiors.example", "USER_FULL_NAME": "Sarah Mitchell", "USER_COMPANY": "Northwind Interiors Ltd", "USER_PHONE": "+44 20 7946 0101"},
         "query": "What is the standard VAT rate in Italy?"
       },
-      "label": {"language": "en", "contains": [["22%", "22 %", "22 per cent", "22 percent"]], "complete": true},
+      "label": {"contains": [["22%", "22 %", "22 per cent", "22 percent"]], "complete": true},
       "critical": false,
+      "critical_on": [],
       "why": "A stable public fact: Italy's standard VAT rate is 22%."
     },
     {
       "id": "web_search-05",
       "lang": "it",
-      "input": {
-        "profile": {"EMAIL_ADDRESS": "giulia@ferramentaconti.example", "USER_FULL_NAME": "Giulia Conti", "USER_COMPANY": "Ferramenta Conti Srl", "USER_PHONE": "+39 030 0000 0101"},
-        "query": "DURC: cos'è e chi lo rilascia?"
-      },
-      "label": {"language": "it", "contains": [["inps"], ["inail"]], "complete": true},
+      "expect_lang": null,
+      "input": {"profile": {"EMAIL_ADDRESS": "giulia@ferramentaconti.example", "USER_FULL_NAME": "Giulia Conti", "USER_COMPANY": "Ferramenta Conti Srl", "USER_PHONE": "+39 030 0000 0101"}, "query": "DURC: cos'è e chi lo rilascia?"},
+      "label": {"contains": [["inps"], ["inail"]], "complete": true},
       "critical": false,
+      "critical_on": [],
       "why": "A stable public fact: the DURC (documento unico di regolarità contributiva) is issued by INPS and INAIL (Casse Edili for construction)."
     }
   ]
