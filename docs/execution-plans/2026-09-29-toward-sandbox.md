@@ -2217,6 +2217,21 @@ keeps `594b7375…` until its next reconcile pulls main.
 
 ## M3 — Egress bound per daemon
 
+### R_4 execution record — 2026-10-02
+
+scratch VM presa da R_4 dalle 17:30:55 UTC (2026-10-02).
+Lease publication precedes any host probe. After push, fetch main again and
+check R2's record for a competing lease; if occupied, do no host work until
+its release. This record is the only plan section edited by R_4.
+
+Scope and acceptance remain the approved sandbox brief, criterion 6, and
+the M3 verification below. R_4 is not done until the scratch evidence has
+two independent APPROVED reviews and every migrated VPS tenant has its set
+and a full accepted mail sync cycle. Unavailable service credentials or host
+access are recorded as missing evidence, never replaced by synthetic success.
+
+### Approved M3 outline
+
 Owner: release-engineer. After M2 is stable on all six; own rollback.
 
 1. Enumerate from code and configuration: IMAP/SMTP hosts per profile,
