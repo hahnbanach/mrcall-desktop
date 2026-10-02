@@ -15,7 +15,10 @@ are. This module answers from it at call time:
   `direct` the direct id's (a dated id as its alias); None when the id is
   not priced there. `pricing` returns all four prices (cache read and write
   too); `endpoint_rates(model_id, tag)` an admitted endpoint's pair (K3's
-  pinned provider caps K3); `policy()` the provider policy with the margin.
+  pinned provider caps K3); `endpoint_tags(model_id)` the tags of the
+  admitted endpoints, the only ones an OpenRouter request may be routed to
+  (`provider.only`; a `flex` service tier is never admitted, so never
+  named); `policy()` the provider policy with the margin.
 
 **Layers.** The build copy beside this module is always the last layer.
 `set_layers(*snapshots)` puts other snapshots in front of it, newest first —
@@ -120,6 +123,16 @@ def endpoint_rates(model_id: object, tag: str) -> tuple[Decimal, Decimal] | None
         if endpoint["tag"] == tag:
             return Decimal(endpoint["pricing"]["input"]), Decimal(endpoint["pricing"]["output"])
     return None
+
+
+def endpoint_tags(model_id: object) -> list[str] | None:
+    """The sorted tags of a catalogue id's admitted endpoints, as the first
+    layer holding the model lists them (an empty list when none is admitted),
+    or None when that layer did not read its endpoints or no layer holds it."""
+    row = _find(model_id, "models")
+    if row is None or row.get("endpoints") is None:
+        return None
+    return sorted(endpoint["tag"] for endpoint in row["endpoints"])
 
 
 def policy() -> dict:

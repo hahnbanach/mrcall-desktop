@@ -8,6 +8,12 @@ Covers (support-llm-cost-fix / T1):
 - budget_state: over-budget -> exceeded; cap 0 -> never exceeded;
   and a live os.environ change flipping the result (proves the budget is
   read at call time, not from a frozen settings snapshot).
+
+Since milestone 10 slice S3 the price table is the model snapshot, read here
+from the committed fixture snapshot (`price_snapshot`), never the build copy;
+and an unpriced id is estimated at the dearest direct price the snapshot
+holds (Fable 5's 10/50 in the fixture) instead of a family matched by name,
+whose Opus fallback (5/25) and substring match the cost tests no longer pin.
 """
 
 from datetime import datetime, timedelta
@@ -19,6 +25,12 @@ from zylch.llm import usage
 # ─────────────────────────────────────────────────────────────────────
 # Fixtures
 # ─────────────────────────────────────────────────────────────────────
+
+
+@pytest.fixture(autouse=True)
+def prices(price_snapshot):
+    """Every estimate below prices from the committed fixture snapshot."""
+    yield price_snapshot
 
 
 @pytest.fixture
@@ -111,27 +123,32 @@ def test_cost_cache_write_and_read_rates_opus():
     assert cost == pytest.approx(0.035)
 
 
-def test_cost_unknown_model_bills_at_opus():
+def test_cost_unknown_model_bills_at_the_dearest_direct_rate():
     usage_dict = {"input_tokens": 1_000_000}
-    unknown = usage.estimate_cost_usd("claude-fable-5", usage_dict)
+    # Fable 5, unknown before the snapshot, is priced at its own 10 now.
+    fable = usage.estimate_cost_usd("claude-fable-5", usage_dict)
+    unknown = usage.estimate_cost_usd("claude-opus-9", usage_dict)
     opus = usage.estimate_cost_usd("claude-opus-4-6", usage_dict)
     sonnet = usage.estimate_cost_usd("claude-sonnet-4-5", usage_dict)
-    # Unknown -> Opus pricing ($5), NOT the cheaper Sonnet ($3).
-    assert unknown == pytest.approx(5.0)
-    assert unknown == pytest.approx(opus)
-    assert unknown != pytest.approx(sonnet)
+    # Unknown -> the dearest direct pricing ($10, Fable 5's), NOT a cheaper one.
+    assert fable == pytest.approx(10.0)
+    assert unknown == pytest.approx(10.0)
+    assert unknown == pytest.approx(fable)
+    assert unknown > opus and unknown != pytest.approx(sonnet)
 
 
 @pytest.mark.parametrize("model", ["", None, "gpt-4o-mini"])
-def test_cost_empty_or_foreign_model_bills_at_opus(model):
-    # Empty / None / non-Anthropic id -> Opus (overestimate, never under).
+def test_cost_empty_or_foreign_model_bills_at_the_dearest_direct_rate(model):
+    # Empty / None / unpriced id -> the dearest direct rate (overestimate, never under).
     cost = usage.estimate_cost_usd(model, {"input_tokens": 1_000_000})
-    assert cost == pytest.approx(5.0)
+    assert cost == pytest.approx(10.0)
 
 
-def test_cost_model_match_is_case_insensitive():
+def test_cost_no_model_family_is_matched_by_name():
+    # An unpriced id that names a family is not priced as that family any
+    # more (the sonnet input rate was 3): it is unpriced, so the dearest rate.
     cost = usage.estimate_cost_usd("Claude-3-5-SONNET", {"input_tokens": 1_000_000})
-    assert cost == pytest.approx(3.0)  # sonnet input rate
+    assert cost == pytest.approx(10.0)
 
 
 def test_cost_empty_usage_is_zero():
