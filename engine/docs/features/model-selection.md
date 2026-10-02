@@ -144,7 +144,12 @@ admit that endpoint. The provider object also carries `requirements.json`'s
 `quantizations` and, where the snapshot read the model's endpoints, `only`
 its admitted ones, so a cheaper `flex` service tier is never routed to; it is
 the object the billing server builds for the same model and snapshot. The
-direct transport reserves at the list price, without the margin.
+direct transport reserves at the list price, without the margin. A `:free`
+catalogue id is priced at 0 like any other snapshot price, deliberately: a
+saved one runs on a personal OpenRouter key with a zero hold and `max_price`
+0, so OpenRouter can route it only to a free endpoint, while the gates never
+rank it (they require positive prices) and the billing server's refusal of
+non-positive prices is its own credits policy.
 
 **The allowlist** priced, in milestone 10a, every model billed before the
 table existed, at the rate it was billed at: the eleven direct Anthropic ids,

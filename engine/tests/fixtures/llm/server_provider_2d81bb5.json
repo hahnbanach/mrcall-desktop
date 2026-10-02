@@ -1,5 +1,5 @@
 {
-  "_doc": "The billing server's OpenRouter `provider` object for each id, captured by running mrcall-agent model-table-m10 2d81bb5eba7ba352531f5107749f2165d140eae2 (mrcall_agent/services/bounded_openrouter.py: provider_policy(model_table.priced(id)), non-K3, not the K3 adapter) over tests/fixtures/llm/snapshot-2026-10-02.json (version 91d29c8f6f69eb1860162b934f116798b03c61e1136b4de57f63bbd12a32cea2). tests/llm/test_snapshot_prices.py holds the engine's openrouter_pricing.provider_policy equal to it for the same ids and snapshot.",
+  "_doc": "The billing server's OpenRouter `provider` object for each id, captured by running mrcall-agent model-table-m10 2d81bb5eba7ba352531f5107749f2165d140eae2 (tree equal to mrcall-agent main 31e83e8) (mrcall_agent/services/bounded_openrouter.py: provider_policy(model_table.priced(id)), non-K3, not the K3 adapter) over tests/fixtures/llm/snapshot-2026-10-02.json (version 2918c4c28c27633657ebd04b043d56375b4b1be40e2cc641f6dc6bddf8b18a1a). tests/llm/test_snapshot_prices.py holds the engine's openrouter_pricing.provider_policy equal to it for the same ids and snapshot.",
   "providers": {
     "anthropic/claude-sonnet-5.5": {
       "allow_fallbacks": false,
@@ -120,5 +120,5 @@
     }
   },
   "server_commit": "2d81bb5eba7ba352531f5107749f2165d140eae2",
-  "snapshot_version": "91d29c8f6f69eb1860162b934f116798b03c61e1136b4de57f63bbd12a32cea2"
+  "snapshot_version": "2918c4c28c27633657ebd04b043d56375b4b1be40e2cc641f6dc6bddf8b18a1a"
 }

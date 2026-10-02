@@ -10,7 +10,8 @@ provider object also carries its quantizations and, where the snapshot read a
 model's endpoints, `only` its admitted ones — the billing server's object for
 the same model and snapshot. K3 is capped at its pinned endpoint's price ×
 the margin, or its model-level price × the margin on a day that endpoint is
-not admitted. The direct transport reserves at the list price.
+not admitted. The direct transport reserves at the list price. A `:free` id
+the catalogue prices at 0 is held at 0 and capped at 0, never refused.
 
 Every price is read from the committed fixture snapshot (`price_fixture`, the
 2026-10-02 capture) or a variant derived from it, never from the build copy.
@@ -26,6 +27,7 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import Mock
 
+import httpx
 import pytest
 from zylch.llm import k3_reasoning as k3
 from zylch.llm import request_shape
@@ -377,6 +379,52 @@ def test_an_unpriced_openrouter_id_is_refused_with_today_s_message(price_snapsho
         with pytest.raises(BudgetError) as refused:
             routed_bound(request)
         assert str(refused.value) == "AI paused: OpenRouter model has no verified price ceiling."
+
+
+def test_a_saved_free_id_is_admitted_with_a_zero_hold_and_a_zero_cap(price_snapshot, ledger):
+    """A `:free` catalogue id is priced at 0 like any snapshot price (the gates
+    never rank it: they require positive prices). A saved one, on the personal
+    OpenRouter key, is held at 0 and capped at `max_price` 0, so OpenRouter can
+    route it only to a free endpoint; the billing server's refusal of
+    non-positive prices is its own credits policy."""
+    from zylch.llm.client import make_llm_client
+    from zylch.llm.openrouter_client import OpenRouterClient
+
+    ledger.write_text(
+        "LLM_DAILY_BUDGET_USD=5\nLLM_PROVIDER=openrouter\nOPENROUTER_API_KEY=fake\n"
+        f"OPENROUTER_MODEL={fx.FREE}\n"
+    )
+    assert price_snapshot["models"][fx.FREE]["pricing"]["output"] == "0"
+    assert RATES[fx.FREE] == (D(0), D(0))
+    seen = []
+
+    def upstream(request):
+        with database.get_session() as session:
+            holds = [row.reserved_micro_usd for row in session.query(LlmReservation)]
+        seen.append((json.loads(request.content), holds))
+        usage = {"input_tokens": 10, "output_tokens": 2, "cost": 0}
+        return httpx.Response(
+            200,
+            json={
+                "id": "free",
+                "model": fx.FREE,
+                "content": [{"type": "text", "text": "ok"}],
+                "stop_reason": "end_turn",
+                "usage": usage,
+            },
+        )
+
+    client = make_llm_client()
+    assert (client.transport, client.model) == ("openrouter", fx.FREE)
+    http = httpx.Client(transport=httpx.MockTransport(upstream))
+    client._client = OpenRouterClient("fake", http_client=http)
+    assert client.create_message_sync(messages=MESSAGES, max_tokens=64).content[0].text == "ok"
+    ((body, holds),) = seen
+    assert holds == [0]  # admitted, held at 0 while the call ran
+    assert body["provider"]["max_price"] == {"prompt": "0", "completion": "0", "request": "0"}
+    assert "only" not in body["provider"]  # a variant's endpoints are not read
+    state = budget_snapshot(OWNER)
+    assert (state["reserved_usd"], state["spent_usd"], state["pricing_fault"]) == (0, 0, False)
 
 
 # ─── K3: its pinned endpoint's price × the margin ─────────────────────
