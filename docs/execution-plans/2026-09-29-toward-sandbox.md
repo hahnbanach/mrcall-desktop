@@ -2220,6 +2220,10 @@ keeps `594b7375…` until its next reconcile pulls main.
 ### R_4 execution record — 2026-10-02
 
 scratch VM presa da R_4 dalle 17:30:55 UTC (2026-10-02).
+**rilasciata** on resumption: refreshed main contains R_2's earlier
+17:30:52 UTC reservation. R_4 has made no host mutation or network probe;
+only read PID 1's command, executable availability and systemd's running
+state. R_4 defers all further host checks until R_2 releases the machine.
 Lease publication precedes any host probe. After push, fetch main again and
 check R2's record for a competing lease; if occupied, do no host work until
 its release. This record is the only plan section edited by R_4.
