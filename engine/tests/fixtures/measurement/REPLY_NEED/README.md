@@ -29,15 +29,29 @@ it; calling a thank-you "needs a reply" costs one line on a list.
 
 Label: `{"needs_reply": true | false}`.
 
-- Read the `reply_need_decision` call's `verdicts`, take the entry with
-  `index` 0 whose `needs_reply` is a boolean, and compare it with the label.
-- No tool call, no verdict for index 0, or a non-boolean value is a mechanical
-  failure. The engine would degrade it to "needs a reply", but the model did not
-  decide, so it never counts as correct.
-- `critical` is true exactly on the cases labelled `needs_reply: true`. A
-  critical failure is answering `false` on one of them. Answering `true` on a
-  courtesy is an ordinary error.
-- `reason` is not scored (the tool asks for it in English).
+A model's answer falls in one class, read from the `reply_need_decision` call's
+`verdicts` entry with `index` 0:
+
+- `needs_reply` — `needs_reply` is `true`;
+- `no_reply` — `needs_reply` is `false`;
+- `invalid` — no tool call, no verdict for index 0, or a value that is not a
+  boolean. The engine degrades this to "needs a reply"; the model did not
+  decide, so it never counts as correct (a mechanical failure).
+
+The answer is correct when its class matches the label. `reason` is not scored.
+
+**Critical answers.** `critical_on` lists the wrong answer classes that are
+critical failures for the case; `[]` means no wrong answer on it is critical,
+and `critical` is derived (`true` exactly when `critical_on` is not empty).
+Here: `["no_reply"]` on every case labelled `needs_reply: true`, because
+silencing a request is the harm; `invalid` is not critical, because the engine
+answers it with "needs a reply". `[]` on the courtesies, where a wrong answer
+costs a line on a list.
+
+**Language.** `expect_lang` is the language the role's prompt requires for the
+free text the measurement scores; no language bar applies when it is `null`.
+Here it is `null` on every case: the only free text, `reason`, is optional,
+asked in English, and not scored.
 
 ## Input to builder
 
@@ -55,6 +69,20 @@ keyword arguments `adjudicate` passed, as sent, from a client built for the
 role's `MODEL_REPLY_NEED` (`model`, default a placeholder). It needs `engine/`
 on `sys.path` (it imports `tests.memory` helpers); no network, no key.
 `tests/measurement/test_capture.py` runs it on every case.
+
+## Placeholders in the captured request
+
+The replay rebuilds each request per arm with the M10 request shape; it takes
+`system`, `messages`, `tools` and `max_tokens` from the capture. Not replayed
+as captured:
+
+- `temperature: 0` — the call site picks it against the client's model (`1`
+  only for `moonshotai/kimi-k3`), and the capture's model is a placeholder;
+  the M10 shape sends no sampling fields.
+- `tool_choice` forcing `reply_need_decision` — the M10 shape sends `auto`
+  with an explicit instruction instead.
+- The model: the request carries none (the client's model, the role's
+  `MODEL_REPLY_NEED`); each arm supplies its own.
 
 ## Engine behaviour found while building the set
 

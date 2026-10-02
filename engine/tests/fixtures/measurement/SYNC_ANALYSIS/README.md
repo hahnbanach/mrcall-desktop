@@ -36,16 +36,29 @@ Label: `{"needs_action": true, "expected_action": "answer" | "reminder"}`,
 `{"needs_action": true}` where the class is not decidable from the prompt's
 rules, or `{"needs_action": false, "expected_action": null}`.
 
-- From the `classify_thread` call: `expected_action` being non-null must equal
-  `needs_action`; where the label names a class, `expected_action` must equal
-  it; `open` must equal `needs_action` (the prompt's examples tie them).
+A model's answer falls in one class, read from its `classify_thread` call:
+`answer`, `reminder`, `none` (`expected_action` null), or `invalid` (no call;
+the engine then falls back to the snippet, `open: true`, no action).
+
+- Correct: on a no-action case, `none`; on an action case, `answer` or
+  `reminder` — the labelled one where the label names a class. `open` must
+  equal `needs_action` (the prompt's examples tie them).
 - `summary` is not scored: the tool asks for English whatever the thread's
   language.
-- No tool call is a mechanical failure (the engine falls back to the snippet,
-  `open: true`, no action).
-- Critical failure: `expected_action` null on a case labelled
-  `needs_action: true` — a missed customer request or a forgotten promise.
-  Marking a no-action thread as open is an ordinary error.
+
+**Critical answers.** `critical_on` lists the wrong answer classes that are
+critical failures for the case; `[]` means none is, and `critical` is derived
+(`true` exactly when `critical_on` is not empty).
+
+- `["none", "invalid"]` on every action case: a missed customer request or a
+  forgotten promise. `invalid` lands on the same fallback, no action.
+- `[]` on the no-action cases: marking such a thread open is an ordinary
+  error, as is the other class on an action case.
+
+**Language.** `expect_lang` is the language the role's prompt requires for the
+free text the measurement scores; no language bar applies when it is `null`.
+Here it is `null` on every case: the only free text, `summary`, is asked in
+English and not scored.
 
 ## Input to builder
 
@@ -63,9 +76,26 @@ keyword arguments `_agent_analyze` passed, as sent, from a client built for
 the role's `MODEL_SYNC_ANALYSIS`. It needs `engine/` on `sys.path`; no
 network, no key. `tests/measurement/test_capture.py` runs it on every case.
 
+## Placeholders in the captured request
+
+The replay rebuilds each request per arm with the M10 request shape; it takes
+`messages`, `tools` and `max_tokens` from the capture. Not replayed as
+captured:
+
+- `tool_choice` forcing `classify_thread` — the M10 shape sends `auto` with an
+  explicit instruction instead.
+- The model: the request carries none (the client's model, the role's
+  `MODEL_SYNC_ANALYSIS`); each arm supplies its own.
+
 ## Engine behaviour found while building the set
 
-`clean_html` parses any body containing `<`, so a plain-text reply whose
-quoted attribution carries `Name <address>` is read as HTML: the address is
-dropped and every newline collapses into a space. The content survives, and
-the cases are labelled on what the model receives.
+- `clean_html` parses any body containing `<`, so a plain-text reply whose
+  quoted attribution carries `Name <address>` is read as HTML: the address is
+  dropped and every newline collapses into a space. The content survives, and
+  the cases are labelled on what the model receives.
+- The analysis is not kept. `_save_analyzed_threads` and `_save_cache` are
+  no-ops, and every reader of the thread cache (`search_threads`, `get_stats`,
+  closing a thread) starts from `_load_cache`, which returns an empty cache.
+  So the role's answers reach no one today (the chat's `sync_emails` tool
+  reports counts only). The critical answers above are the role's own
+  semantics, as reviewed.
