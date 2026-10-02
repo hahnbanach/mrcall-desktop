@@ -2303,6 +2303,11 @@ two independent APPROVED reviews and every migrated VPS tenant has its set
 and a full accepted mail sync cycle. Unavailable service credentials or host
 access are recorded as missing evidence, never replaced by synthetic success.
 
+**New lease:** scratch VM presa da R_4 dalle 17:46:00 UTC (2026-10-02).
+R_2's final release at 17:43:24 UTC observed on origin/main. Publish and
+refresh before the first probe. The installed helper is R2's approved main
+version; leave it unchanged.
+
 #### R_4 detailed plan (APPROVED for compiler and scratch experiment)
 
 Two fresh independent reviewers approved the existing brief and returned
@@ -2324,7 +2329,9 @@ not a claim of completed deployment.
 - Root supplies an explicit policy: numeric tenant uid, derived tenant name,
   dedicated 127.0.0.x DNS address, literal upstream resolver, approved DNS
   suffixes and TCP/UDP ports per suffix. Reject malformed/duplicate fields,
-  unsafe addresses, and non-derived tenant names. Customer Settings never
+  unsafe addresses, and non-derived tenant names. Before installation compare
+  the numeric uid with `id -u` of the derived username and the daemon
+  effective User; a mismatch is a refusal. System uids below 1000 are valid. Customer Settings never
   updates this policy automatically. An endpoint change needs operator review.
 - Compile one `inet` table per tenant, separate A/AAAA sets per port group,
   one output base chain matching only that numeric skuid, counters and final
