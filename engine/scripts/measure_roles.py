@@ -25,9 +25,16 @@ whose scripted tools answer every call.
 **Spend** (``measurement_ledger.py``): before each dispatch the engine's own
 reservation bound of the exact request is checked against ``--cap`` with
 everything spent or uncertain, and written as an intent; the receipt settles
-it after. No retry: a cell with an intent is never dispatched again, so an
-interrupted run resumes with the same ``--out`` and skips it. Two transport
-failures in a row skip the rest of that arm in that role.
+it after. A dispatch the provider refused before inference (a status of no
+work, such as a 429 from a saturated upstream pool) is settled at zero, and
+its cell is sent once more at the end of the role's pass, at least the
+provider's ``retry_after`` or 5 s after the refusal, whichever is longer — a
+second intent, and the last: a cell refused twice stays failed (status
+``error``, its ``refusals`` named), and its arm is incomplete. Nothing else is
+retried: a cell with any other intent is never dispatched again, so an
+interrupted run resumes with the same ``--out`` and skips it, while a cell
+refused once is still sent its second time. Two transport failures in a row
+(refusals aside) skip the rest of that arm in that role.
 
 **Results** (``<out>/results.jsonl``, one row per cell and repetition): the
 answer's tool calls and text, usage, cost, latency, and the scoring of
@@ -77,6 +84,7 @@ from measurement_runtime import (  # noqa: E402
     measurement_profile,
     price_refusal,
     replay_kwargs,
+    wait_out,
 )
 
 logger = logging.getLogger("measure_roles")
@@ -85,14 +93,20 @@ FAILURES_BEFORE_SKIP = 2
 EXIT_CAP = 3
 
 
-def run_cell(ctx: Context, run: RoleRun, arm: dict, case: dict, repetition: int) -> dict:
-    """One arm on one case: dispatch through the guard, then score; returns the result row."""
+def run_cell(
+    ctx: Context, run: RoleRun, arm: dict, case: dict, repetition: int, attempt: int = 1
+) -> dict:
+    """One arm on one case: dispatch through the guard, then score; returns the result row.
+
+    Status ``refused`` when the attempt ended in a refusal before inference and
+    nothing in it failed otherwise.
+    """
     from zylch.llm.usage import call_site
 
     cell = Cell(run.role, arm["id"], case["id"], repetition)
     entry = run.entry(case["id"])
     agent = run.role in common.AGENT_ROLES
-    client, guard = cell_client(ctx, cell, other_profile=agent)
+    client, guard = cell_client(ctx, cell, other_profile=agent, attempt=attempt)
     started, answer, error = time.perf_counter(), None, None
     try:
         with call_site(f"measurement.{run.role.lower()}"):
@@ -114,6 +128,8 @@ def run_cell(ctx: Context, run: RoleRun, arm: dict, case: dict, repetition: int)
     if guard.cap_hit or (error and "daily budget" in error and not failed):
         # The engine's own budget, the backstop, refused before the transport.
         status = "cap"
+    elif failed and all(d.get("refused") for d in failed):
+        status, error = "refused", failed[-1]["error"]
     elif failed or error or answer is None:
         status = "error"
         error = error or failed[0]["error"]
@@ -122,7 +138,9 @@ def run_cell(ctx: Context, run: RoleRun, arm: dict, case: dict, repetition: int)
         status, error = "error", "no request reached the transport"
     else:
         status = "scored"
-    row = base_row(run, arm, case, repetition, status, error)
+    row = base_row(run, arm, case, repetition, status, error, attempt)
+    if ctx.ledger.refusals(cell.key):
+        row["refusals"] = ctx.ledger.refusals(cell.key)
     usage = {"input_tokens": 0, "output_tokens": 0}
     for dispatch in guard.dispatches:
         for side in usage:
@@ -147,10 +165,13 @@ def measure(
 ) -> None:
     """Every (role, arm, case) in priority order, skipping what the ledger already holds.
 
-    ``only`` limits the cells to these ``(role, arm, case_id)`` triples. Raises
+    A cell refused before inference — in this pass or by an earlier run — is
+    sent once more at the end of its role's pass (``resend``). ``only`` limits
+    the cells to these ``(role, arm, case_id)`` triples. Raises
     ``CapExceeded`` after recording the cell the cap stopped.
     """
     for run in runs:
+        refused: list[tuple[dict, dict]] = []
         for arm in run.arms:
             streak, unpriced = 0, price_refusal(arm["id"])
             for case in run.document["cases"]:
@@ -159,8 +180,12 @@ def measure(
                 cell = Cell(run.role, arm["id"], case["id"], repetition)
                 if cell.key in ctx.results.done():
                     continue
-                if cell.key in ctx.ledger.dispatched_cells():
-                    ctx.results.append(base_row(run, arm, case, repetition, "interrupted"))
+                attempt = ctx.ledger.next_attempt(cell.key)
+                if attempt is None:  # a dispatch that may have cost, or two refusals
+                    ctx.results.append(spent_row(ctx, run, arm, case, repetition))
+                    continue
+                if attempt > 1:  # refused once by an earlier run: its second time, last
+                    refused.append((arm, case))
                     continue
                 if unpriced or streak >= FAILURES_BEFORE_SKIP:
                     status = "unpriced" if unpriced else "skipped"
@@ -170,7 +195,43 @@ def measure(
                 ctx.results.append(row)
                 if row["status"] == "cap":
                     raise CapExceeded(row["error"])
+                if row["status"] == "refused":
+                    refused.append((arm, case))
+                    continue
                 streak = streak + 1 if row["status"] == "error" else 0
+        resend(ctx, run, refused, repetition)
+
+
+def resend(ctx: Context, run: RoleRun, refused: list, repetition: int) -> None:
+    """Each refused cell again while the ledger allows (once), ``max(retry_after, 5 s)`` after
+    its refusal; a cell refused on its last attempt stays failed."""
+    for arm, case in refused:
+        cell = Cell(run.role, arm["id"], case["id"], repetition)
+        while (attempt := ctx.ledger.next_attempt(cell.key)) is not None:
+            wait_out(ctx, ctx.ledger.attempts(cell.key)[-1]["refusal"])
+            row = run_cell(ctx, run, arm, case, repetition, attempt)
+            refused_again = row["status"] == "refused"
+            if refused_again and ctx.ledger.next_attempt(cell.key) is None:
+                row.update(status="error", error=f"refused twice before inference: {row['error']}")
+            ctx.results.append(row)
+            if row["status"] == "cap":
+                raise CapExceeded(row["error"])
+            if not refused_again:  # answered, failed or stopped: the cell is done
+                break
+
+
+def spent_row(ctx: Context, run: RoleRun, arm: dict, case: dict, repetition: int) -> dict:
+    """The row of a cell the ledger will not send again and no final row records."""
+    cell = Cell(run.role, arm["id"], case["id"], repetition)
+    made = ctx.ledger.attempts(cell.key)
+    if made and all(a["refusal"] is not None for a in made):
+        error = f"refused twice before inference: {made[-1]['refusal'].get('error')}"
+        row = base_row(run, arm, case, repetition, "error", error, len(made))
+    else:  # an intent the run stopped after: its cost is the ledger's to settle
+        row = base_row(run, arm, case, repetition, "interrupted", None, len(made))
+    if ctx.ledger.refusals(cell.key):
+        row["refusals"] = ctx.ledger.refusals(cell.key)
+    return row
 
 
 def disagreements(rows: list[dict], runs: list[RoleRun]) -> set:
@@ -309,6 +370,8 @@ def main(argv: list[str] | None = None) -> int:
     print("\n".join(summary(results.rows)))
     totals = {k: v / 1e6 for k, v in ledger.totals().items()}
     print(f"ledger (USD): {totals}; cap {args.cap}")
+    refused = [r for r in ledger.rows() if r.get("outcome") == "refused"]
+    print(f"refused before inference (settled at 0): {len(refused)} dispatches")
     return code
 
 

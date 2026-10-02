@@ -14,6 +14,9 @@ hold:
   passes; a non-monotone one accepts measured models only;
 - a second repetition (the reference again on the disputed cases) is recorded
   and changes no count, pass, yardstick or threshold;
+- a cell refused before inference twice is a failed cell (the arm
+  incomplete), named in the role's ``refused``; one answered on its second
+  attempt counts as answered;
 - the document is what S2's reader (``resolver.validate_measured``) reads;
 - ``check_measured`` refuses a document whose hashes are not today's, whose
   threshold or passes its own results do not give, and the committed
@@ -143,6 +146,19 @@ def test_a_cell_run_again_after_a_resume_counts_once_its_newest_row(synthetic_ro
     stale[0].pop("scoring")
     _doc, role = entry(stale + ladder(("pro", 46.3, 19)))
     assert role["results"]["pro"]["complete"] and role["results"]["pro"]["n"] == 22
+
+
+def test_a_cell_refused_twice_fails_its_arm_and_the_record_names_it(synthetic_role):
+    refusals = [{"attempt": 1, "status_code": 429}, {"attempt": 2, "status_code": 429}]
+    pro = rows("pro", 46.3, 22, errors={case_ids()[5]})
+    pro[5].update(error="refused twice before inference: HTTP 429", refusals=refusals)
+    late = rows("mimo", 37.9, 22)
+    late.insert(0, {**late[3], "status": "refused", "refusals": refusals[:1]})
+    late[0].pop("scoring")  # refused once, then answered on its second attempt
+    _doc, role = entry(rows(K3, 43.6, 20) + pro + late)
+    assert role["results"]["pro"]["reasons"] == ["incomplete"]
+    assert role["results"]["mimo"]["complete"] and role["results"]["mimo"]["n"] == 22
+    assert role["refused"] == {"pro": [case_ids()[5]]}
 
 
 def test_a_second_repetition_is_recorded_and_changes_no_pass_or_fail(synthetic_role):
