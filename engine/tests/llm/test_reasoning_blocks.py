@@ -167,6 +167,18 @@ def test_unpriced_reasoning_options_are_refused(override):
         request_bound(admitted(**override), "direct")
 
 
+@pytest.mark.parametrize("effort", ["minimal", "none", "MAX", None])
+def test_an_effort_outside_the_request_vocabulary_is_refused_on_both_transports(effort):
+    """IR1 B1: only `low`..`max` reach a provider; a catalogue's `minimal` is refused."""
+    with pytest.raises(BudgetError, match="unsupported reasoning option"):
+        request_bound(admitted(output_config={"effort": effort}), "direct")
+    routed = admitted(model="anthropic/claude-sonnet-5.5", output_config={"effort": effort})
+    with pytest.raises(BudgetError, match="unsupported reasoning option"):
+        request_bound(routed, "openrouter")
+    for allowed in ("low", "medium", "high", "xhigh", "max"):
+        assert request_bound(admitted(output_config={"effort": allowed}), "direct") > 0
+
+
 @pytest.mark.parametrize(
     "block",
     [

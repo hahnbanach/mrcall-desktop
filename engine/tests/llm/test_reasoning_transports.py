@@ -26,6 +26,7 @@ from zylch.llm.openrouter_client import OpenRouterClient
 from zylch.storage import database
 from zylch.storage.models import LlmBillingAuthorization, LlmReservation, LlmUsage
 
+# Publishes `minimal` beside `low` (as Qwen 3.8 Max does): `low` is sent (IR1 B1).
 MANDATORY = {
     "reasoning": {
         "mandatory": True,
@@ -83,7 +84,7 @@ def loop(client):
 def assert_shaped(sent):
     """The second request: the one shape, the replayed turn unchanged."""
     assert not {"temperature", "top_p", "top_k"} & set(sent)
-    assert sent["output_config"] == {"effort": "minimal"}
+    assert sent["output_config"] == {"effort": "low"}
     assert sent["max_tokens"] == 400 + request_shape.REASONING_HEADROOM
     assert sent["messages"][1] == {"role": "assistant", "content": FIRST}
     assert sent["messages"][2]["content"][0]["tool_use_id"] == "call-1"
