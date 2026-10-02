@@ -19,7 +19,7 @@
       "ceiling": 20
     }
   },
-  "_about_policy": "Resolver v2 (milestone 10): excluded_families are matched as a vendor (the part of a catalogue id, canonical_slug or alias target before the first '/') plus a token contained in the part after it; margin multiplies a model's reference price (the snapshot's pricing: the model-level catalogue price whenever an eligible endpoint is priced within it x margin, else the lower median of its eligible endpoints by Artificial Analysis's blended price) into OpenRouter's max_price and the reservation, and bounds the endpoints admitted; provider_policy.quantizations admits endpoints by declared quantization (one that declares none is 'unknown'); excluded_endpoint_variants are service tiers never admitted (a segment of the endpoint tag after the provider).",
+  "_about_policy": "Resolver v2 (milestone 10): excluded_families are matched as a vendor (the part of a catalogue id, canonical_slug or alias target before the first '/') plus a token contained in the part after it; margin multiplies a model's reference price (the snapshot's pricing: the model-level catalogue price whenever an eligible endpoint is priced within it x margin, else, for a fixed model-level price only, the lower median of its eligible endpoints by Artificial Analysis's blended price) into OpenRouter's max_price and the reservation, and bounds the endpoints admitted; provider_policy.quantizations admits endpoints by declared quantization (one that declares none is 'unknown'); excluded_endpoint_variants are service tiers never admitted (a segment of the endpoint tag after the provider).",
   "excluded_families": [
     {
       "vendor": "anthropic",

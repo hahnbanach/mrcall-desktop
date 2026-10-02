@@ -271,7 +271,7 @@
       "additionalProperties": false,
       "properties": {
         "pricing": {
-          "description": "The reference price: the model-level catalogue price, except for a model whose endpoints were read with one eligible and none priced within the model-level price × margin, which takes its reference endpoint's (the lower median of the eligible endpoints by Artificial Analysis's blended price; its cache prices where it publishes them, else the model-level ones). What ceilings compare and the margin multiplies.",
+          "description": "The reference price: the model-level catalogue price, except for a model with a fixed model-level price whose endpoints were read with one eligible and none priced within it × margin, which takes its reference endpoint's (the lower median of the eligible endpoints by Artificial Analysis's blended price; its cache prices where it publishes them, else the model-level ones). What ceilings compare and the margin multiplies.",
           "$ref": "#/$defs/pricing"
         },
         "metadata": {

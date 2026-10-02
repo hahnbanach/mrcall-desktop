@@ -142,11 +142,9 @@ def test_an_endpoint_down_or_without_tools_or_dear_is_refused():
     at_cap = endpoint("cap", pricing={"prompt": "0.00000125", "completion": "0.0000025"})
     listed = [*anchor, dear_output, dear_input, at_cap]
     assert candidates.admitted(model, listed, rules) == [*anchor, at_cap]
-    # A variable model-level price admits nothing, so the fallback prices the
-    # model (the lower median, 1/2 here); the screen still refuses the model.
     variable = entry(pricing={"prompt": "-1", "completion": "-1"})
-    assert candidates.admitted(variable, listed, rules) == [*anchor, at_cap]
-    assert candidates.exclusion(variable, listed, requirements(), rules) == "no fixed price"
+    assert not candidates.admitted(variable, [endpoint()], rules)
+    assert candidates.exclusion(variable, [endpoint()], requirements(), rules) == "no fixed price"
 
 
 # ---------------------------------------------------------- the screen

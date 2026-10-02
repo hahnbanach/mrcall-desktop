@@ -14,8 +14,8 @@ are. This module answers from it at call time:
   as Decimals: on `openrouter` the catalogue entry's snapshot price (its
   reference price: the model-level price whenever an eligible endpoint is
   priced within it × the margin, else the lower-median eligible endpoint's;
-  the model-level price too when its endpoints were not read or none is
-  eligible), on
+  the model-level price too when its endpoints were not read, none is
+  eligible or that price is not fixed, a variable one staying unpriced), on
   `direct` the direct id's (a dated id as its alias); None when the id is
   not priced there. `pricing` returns all four prices (cache read and write
   too); `endpoint_rates(model_id, tag)` an admitted endpoint's pair (K3's

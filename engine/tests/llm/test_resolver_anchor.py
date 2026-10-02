@@ -17,7 +17,10 @@ blended price (3 × input + output) / 4, a tie by output, then input, then
 tag; its cache prices where it publishes them, else the model-level ones.
 An eligible endpoint is admitted at or under the reference price × the
 margin. A model whose endpoints were not read, or with none eligible, keeps
-the model-level price and admits nothing. Each case isolates one of these
+the model-level price and admits nothing; so does one whose model-level
+price is absent or variable, since the fallback is for a fixed model-level
+price only (OpenRouter itself cannot price `openrouter/auto` and the like,
+which route to a model of their choosing). Each case isolates one of these
 rules, on the 2026-10-02 capture (13:36Z) where it shows one and on
 synthetic endpoints otherwise.
 """
@@ -227,6 +230,23 @@ def test_an_unpooled_model_keeps_its_model_level_price():
     assert by_id(src["catalogue"])[KIMI_K2_6]["pricing"]["completion"] == "0.000001828"
     kimi = built["models"][KIMI_K2_6]
     assert (kimi["pricing"]["input"], kimi["pricing"]["output"]) == ("0.77", "3.4")
+
+
+def test_a_variable_priced_pooled_model_stays_unpriced_and_admits_nothing():
+    listed = [priced(f"acme{n}", "1", "2") for n in range(3)] + [priced("cheap", "0.5", "1")]
+    assert len(candidates.eligible(listed, rules())) == 4
+    variable = entry("router/auto", pricing={"prompt": "-1", "completion": "-1"})
+    half = entry(pricing={"prompt": per_token("1"), "completion": "-1"})
+    absent = entry(pricing={})
+    for model in (variable, half, absent):
+        price, admitted = candidates.anchored(model, listed, rules())
+        assert price == candidates.prices_of(model["pricing"]) and admitted == [], model
+        assert price["output"] is None
+    # Published unpriced, no endpoint admitted: no cap a request could run under.
+    built = snapshot.build([variable], {"router/auto": listed}, rules(), "2026-10-02T13:36:42Z")
+    row = built["models"]["router/auto"]
+    assert (row["pricing"]["input"], row["pricing"]["output"]) == (None, None)
+    assert row["endpoints"] == []
 
 
 def test_an_all_fp4_model_has_no_admitted_endpoint():

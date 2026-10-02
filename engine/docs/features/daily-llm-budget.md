@@ -210,8 +210,8 @@ Since milestone 10 (slice S3, brief D5) it reads the model snapshot
 price on OpenRouter (its reference price: its model-level price whenever an
 eligible endpoint is priced within it × the margin, else the lower median of
 its eligible endpoints by Artificial Analysis's blended price; the
-model-level price too when its endpoints were not read or none is
-eligible), a direct id at its
+model-level price too when its endpoints were not read, none is eligible
+or that price is not fixed, a variable one staying unpriced), a direct id at its
 `anthropic` endpoint's price
 (Anthropic's list price), a dated id `<alias>-YYYYMMDD` at its alias's. The
 allowlist answers only for an id no snapshot prices, until the switch-over;

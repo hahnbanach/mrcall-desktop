@@ -9,12 +9,14 @@ explicit choice keeps running whatever the picks are). Per entry:
   `candidates.anchored`), USD per million tokens as canonical decimal
   strings (`text`), null where there is none. It is the model-level
   catalogue price — the list price OpenRouter shows — unless the entry is of
-  the endpoint pool, has an eligible endpoint and none priced within the
-  model-level price × the margin (an fp4 endpoint, say, set that price);
-  then it is the reference endpoint's — the lower median of the eligible
-  endpoints by Artificial Analysis's blended price, its cache prices where
-  it publishes them, else the model-level ones. An entry whose endpoints
-  were not read, or with none eligible, keeps the model-level price.
+  the endpoint pool, has a fixed model-level input and output price and an
+  eligible endpoint, and none is priced within the model-level price × the
+  margin (an fp4 endpoint, say, set that price); then it is the reference
+  endpoint's — the lower median of the eligible endpoints by Artificial
+  Analysis's blended price, its cache prices where it publishes them, else
+  the model-level ones. An entry whose endpoints were not read, with none
+  eligible, or whose model-level price is absent or variable keeps the
+  model-level price (null for the last, with no endpoint admitted).
   Ceilings compare it, and the margin multiplies it for OpenRouter's
   `max_price` and the reservation.
 - `metadata` (`metadata`): reasoning as published (`mandatory`, the

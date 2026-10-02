@@ -136,7 +136,8 @@ model-level catalogue price (the list price OpenRouter shows) whenever an
 eligible endpoint is priced within it × the margin, else the lower median
 of its eligible endpoints by Artificial Analysis's blended price
 (3 × input + output) / 4; the model-level price too when its
-endpoints were not read or none is eligible — on the direct
+endpoints were not read, none is eligible or that price is not fixed (a
+variable one stays null: no cap, no admitted endpoint) — on the direct
 transport a direct id at its `anthropic` endpoint's price (Anthropic's list
 price), and a dated id `<alias>-YYYYMMDD` at its alias's (a response naming
 `<requested>-YYYYMMDD` settles as the requested id). `budget_pricing.PRICES`

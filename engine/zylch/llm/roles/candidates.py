@@ -37,15 +37,20 @@ GLM 5.3 Flash none under it) — the reference price is the *reference
 endpoint*'s (`reference`): the lower median, index (n - 1) // 2, of the
 eligible endpoints ordered by Artificial Analysis's blended price, (3 ×
 input + output) / 4, a tie going by output, then input, then tag; its cache
-prices where it publishes them, else the model-level ones. A model-level
-price that is not fixed admits nothing, so such a model takes the
-reference endpoint's too (the screen never ranks it). An eligible endpoint
-is *admitted* when its input and output prices are at or under the
-reference price × the margin, the cap OpenRouter's `max_price` enforces, so
-a premium endpoint priced above it is never one a request can reach; a
-model with an eligible endpoint therefore always admits one. A model with
-no eligible endpoint, or whose endpoints were not read, keeps its
-model-level price and admits no endpoint.
+prices where it publishes them, else the model-level ones. The fallback is
+for a model with a fixed model-level input and output price only: one whose
+model-level price is absent or variable (`-1`) keeps it — null, no cap —
+and admits no endpoint, because OpenRouter itself cannot price it
+(OpenRouter's auto router and the like route to a model of their choosing,
+so a median of their endpoints would price an explicit choice no cap
+bounds).
+An eligible endpoint is *admitted* when its input and output prices are at
+or under the reference price × the margin, the cap OpenRouter's
+`max_price` enforces, so a premium endpoint priced above it is never one a
+request can reach; a model with a fixed model-level price and an eligible
+endpoint therefore always admits one. A model with no eligible endpoint,
+or whose endpoints were not read, keeps its model-level price and admits
+no endpoint.
 
 **The screen** (`screen`, `exclusion`) keeps the catalogue entries any role
 may rank, before scores: not a variant, not an alias, no announced
@@ -314,12 +319,16 @@ def anchored(entry: dict, endpoints: list[dict] | None, rules: dict) -> tuple[di
     module docstring): the model-level price when an eligible endpoint fits
     under it × the margin, else the reference endpoint's (`reference`, its
     cache prices where it publishes them, else the model-level ones). With
-    no eligible endpoint the price is the model-level one and no endpoint is
-    admitted; with its endpoints not read (`endpoints` None) the price is the
-    model-level one and the endpoints None."""
+    no eligible endpoint, or a model-level input or output price that is not
+    fixed (absent, or variable: no fallback then), the price is the
+    model-level one and no endpoint is admitted; with its endpoints not read
+    (`endpoints` None) the price is the model-level one and the endpoints
+    None."""
     level = prices_of(entry.get("pricing"))
     if endpoints is None:
         return level, None
+    if level["input"] is None or level["output"] is None:
+        return level, []
     rows = eligible(endpoints, rules)
     margin = rules["margin"]
     if any(fits(prices, level, margin) for _, prices in rows):

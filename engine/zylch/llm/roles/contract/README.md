@@ -101,8 +101,8 @@ those are the snapshot's, so a refresh of prices moves no record.
   price), keyed by catalogue id:
   - `pricing`: the model's reference price, `input`, `output`,
     `cache_read`, `cache_write` (below): the model-level catalogue price,
-    except for a model whose endpoints were read with one eligible and none
-    priced within the model-level price × `policy.margin` — then its
+    except for a model with a fixed model-level price whose endpoints were
+    read with one eligible and none priced within it × `policy.margin` — then its
     reference endpoint's price (its cache prices where it publishes them,
     else the model-level ones).
   - `metadata`: `reasoning` (`mandatory`; `efforts`, the published
@@ -139,11 +139,14 @@ set it below every eligible one — the reference price is the **reference
 endpoint**'s: the lower median, index (n − 1) // 2, of the eligible
 endpoints ordered by Artificial Analysis's blended price, (3 × input +
 output) / 4, a tie by output, then input, then tag; its cache prices where
-it publishes them, else the model-level ones. A model-level price that is
-not fixed admits no endpoint, so such a model takes the reference
-endpoint's. An eligible endpoint is **admitted** when its input and output
-prices are at or under the reference price × `policy.margin`, so a model
-with an eligible endpoint always admits one. A model with no eligible
+it publishes them, else the model-level ones. The fallback applies only to
+a model with a fixed model-level input and output price: one whose
+model-level price is absent or variable (`-1`) keeps it (`pricing` null),
+has no cap and admits no endpoint, since OpenRouter itself cannot price it
+(OpenRouter's auto router and the like route to a model of their choosing). An
+eligible endpoint is **admitted** when its input and output prices are at
+or under the reference price × `policy.margin`, so a model with a fixed
+model-level price and an eligible endpoint always admits one. A model with no eligible
 endpoint (every one fp4, say) or whose endpoints were not read keeps the
 model-level price and admits no endpoint. The screen still requires a fixed
 model-level price of any model it ranks.
