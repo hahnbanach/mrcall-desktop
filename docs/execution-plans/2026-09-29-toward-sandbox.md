@@ -83,6 +83,10 @@ not started.
    - *Machine coordination:* scratch VM presa da R_2 dalle
      2026-10-02T17:30:52Z. Reservation is effective only after push and a
      refreshed check that R_4 is not using the machine.
+     R_2: rilasciata alle 2026-10-02T17:33:04Z; competing R_4 lease observed
+     after refresh. No system mutation or probe performed (only systemd
+     version/helper-presence inspection). R_4 may use the VM; R_2 continues
+     code work and will acquire a new lease after R_4 releases.
 3. **R3 — Close the rollback window.** *VPS.*
    - *Starts:* seven days after the last 2b with no rollback, and not
      before R1.
