@@ -313,15 +313,23 @@ def test_repeat_disagreements_reruns_only_the_reference_on_the_disputed_cases(ru
 
 
 def chat_run():
-    """CHAT's first committed case, its turn continued through the harness's ``run_case``."""
-    document = common.load_document("CHAT")
+    """CHAT's first authored case, its turn continued through the harness's ``run_case``.
+
+    Captured here, so the case need not be among the measured ones (a trim may
+    have moved it to the reserve).
+    """
+    from tests.measurement.case_sets import authored_document
+
+    document = authored_document(common.FIXTURES / "CHAT")
     document["cases"] = [c for c in document["cases"] if c["id"] == "chat-01"]
     arms = [
         {"id": K3, "score": 50.0, "index": "agentic", "reference": True},
         {"id": SONNET, "score": 57.7, "index": "agentic", "reference": False},
     ]
     harness = common.load_harness("CHAT")
-    return RoleRun("CHAT", document, common.load_requests("CHAT"), arms, harness)
+    entries = common.capture("CHAT", document, harness)
+    requests = common.requests_document("CHAT", document, entries, common.canonical(document))
+    return RoleRun("CHAT", document, requests, arms, harness)
 
 
 def chat_turn(cell, body):

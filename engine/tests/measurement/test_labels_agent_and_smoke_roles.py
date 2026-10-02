@@ -23,8 +23,8 @@ from pathlib import Path
 
 import pytest
 
-from tests.measurement import conversation_capture as cc
 from tests.measurement import conversation_judge as judge
+from tests.measurement.case_sets import authored_document
 
 FIXTURES = Path(__file__).resolve().parents[1] / "fixtures" / "measurement"
 ROLES = ("CHAT", "TASK_SOLVE", "COMPACTION", "NARRATION", "WEB_SEARCH", "TRAIN")
@@ -38,7 +38,8 @@ CRITICAL_KINDS = {
 
 
 def document(role):
-    return cc.load_document(FIXTURES / role)
+    # The authored set: cases.json with any reserve a trim moved (case_sets.py).
+    return authored_document(FIXTURES / role)
 
 
 def case_of(case_id):
