@@ -67,6 +67,9 @@ def test_the_daily_job_checks_out_the_data_branch_and_uploads_its_report():
     assert "--dry-run" not in run
     upload = next(s for s in steps if str(s.get("uses", "")).startswith("actions/upload-artifact"))
     assert upload["if"] == "always()" and upload["with"]["path"] == "model-table-report.md"
+    # The memory roles' measurement is the M9 corpus runner: a pytest module.
+    install = next(s for s in steps if s.get("name") == "Install the engine")["run"]
+    assert "pip install -e engine pytest pytest-asyncio" in install
 
 
 def test_a_release_embeds_the_published_table_before_bundling_and_refuses_a_stale_one():
