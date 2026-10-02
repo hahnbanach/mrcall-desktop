@@ -321,7 +321,7 @@ async def _run_pipeline(
         # This early check avoids entering known-paused AI stages. The
         # authoritative reservation gate runs before EVERY transport request.
         from zylch.llm.budget import BudgetError
-        from zylch.llm.usage import budget_state, call_site
+        from zylch.llm.usage import budget_state
 
         try:
             budget = budget_state(owner_id)
@@ -348,20 +348,18 @@ async def _run_pipeline(
         # (402), or no provider configured — the run used to report "0 changes,
         # no errors" while silently doing nothing AND hammering the proxy with
         # hundreds of doomed calls per tick (a profile logged 31k proxy 401s in
-        # a day). One cheap probe turns that into a SINGLE structured, surfaced
-        # error (humanize_error already maps MrCallAuthError / InsufficientCredits
-        # / "no llm") and lets us SKIP the doomed stages. Skipped entirely when
-        # the budget gate above already tripped — no ping, no attempt.
+        # a day). One free check — no inference: the key or session read by the
+        # provider, the model admitted locally (zylch/llm/preflight.py) — turns
+        # that into a SINGLE structured, surfaced error (humanize_error maps the
+        # 401/402 it raises as it mapped the paid ping's) and lets us SKIP the
+        # doomed stages. Skipped entirely when the budget gate above already
+        # tripped — no check, no attempt.
         if llm_ok:
             try:
                 from zylch.llm import routed_model
                 from zylch.llm.client import make_llm_client
                 _probe = make_llm_client(model=routed_model("MODEL_SYNC_ANALYSIS"))
-                with call_site("preflight"):
-                    await _probe.create_message(
-                        messages=[{"role": "user", "content": "ping"}],
-                        max_tokens=1,
-                    )
+                await _probe.check_transport()
             except Exception as e:
                 llm_ok = False
                 logger.warning(f"[/process] LLM preflight failed: {type(e).__name__}: {e}")

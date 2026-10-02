@@ -63,11 +63,36 @@ def test_http_controls_and_no_ambient_credentials(monkeypatch):
     assert body["provider"]["max_price"] == {"prompt": "0.6", "completion": "2", "request": "0"}
     assert body["provider"]["allow_fallbacks"] is False
     assert body["provider"]["require_parameters"] is True
-    assert body["thinking"] == {"type": "disabled"}
+    # Brief D3: no blanket `disabled`; the adapter adds no reasoning of its own.
+    assert "thinking" not in body and "output_config" not in body
     assert "cache_control" not in body["system"][0]
     assert seen[0].headers["authorization"] == "Bearer chosen"
     assert "x-api-key" not in seen[0].headers
     assert usage_cost(MODEL, response.usage)[0] == 20
+
+
+def test_the_shaped_reasoning_is_forwarded_unchanged():
+    seen = []
+
+    def handler(req):
+        seen.append(json.loads(req.content))
+        return httpx.Response(
+            200,
+            json={
+                "model": MODEL,
+                "content": [{"type": "text", "text": "ok"}],
+                "stop_reason": "end_turn",
+                "usage": {"input_tokens": 10, "output_tokens": 2, "cost": 0.00002},
+            },
+        )
+
+    client = OpenRouterClient(
+        "chosen", http_client=httpx.Client(transport=httpx.MockTransport(handler))
+    )
+    shaped = {**request(), "thinking": {"type": "adaptive"}, "output_config": {"effort": "low"}}
+    client.create(**shaped)
+    assert seen[0]["thinking"] == {"type": "adaptive"}
+    assert seen[0]["output_config"] == {"effort": "low"}
 
 
 def test_failure_is_one_attempt():

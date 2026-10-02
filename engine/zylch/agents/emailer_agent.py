@@ -443,7 +443,7 @@ Use the write_email tool to output your composed email."""
         response = await self.llm.create_message(
             messages=[{"role": "user", "content": prompt}],
             tools=[WRITE_EMAIL_TOOL],
-            tool_choice={"type": "tool", "name": "write_email"},
+            tool_choice={"type": "auto"},
             max_tokens=2000,
         )
 

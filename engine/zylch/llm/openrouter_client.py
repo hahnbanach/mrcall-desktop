@@ -2,6 +2,9 @@
 
 Protocol: https://openrouter.ai/docs/api/api-reference/anthropic-messages/create-a-message.md
 Only explicitly priced text/function models are enabled; task quality is unmeasured.
+The body is the request ``LLMClient`` shaped (``request_shape.py``): its reasoning
+fields are the model's, and reasoning blocks come back in the response to be
+replayed in the next request's history.
 """
 
 from copy import deepcopy
@@ -12,7 +15,10 @@ import httpx
 
 from .budget_pricing import BudgetError
 from .openrouter_pricing import provider_policy, request_bound
-from .roles.request_rules import apply as apply_request_rules
+from .response import REASONING
+
+# Anthropic-wire block types a response may carry; anything else is refused.
+BLOCKS = ("text", "tool_use") + REASONING
 
 
 def _without_cache(request):
@@ -50,13 +56,7 @@ class OpenRouterClient:
             return self._create_k3(request)
         body = _without_cache(deepcopy(request))
         body.pop("service_tier", None)
-        body.update(
-            provider=provider_policy(body["model"]), thinking={"type": "disabled"}, stream=False
-        )
-        # After the reservation (request_bound above prices `request`): drop or
-        # relax what this model refuses — sampling, a forced tool_choice, a
-        # disabled thinking it cannot take (roles/request_rules.py).
-        body = apply_request_rules(body)
+        body.update(provider=provider_policy(body["model"]), stream=False)
 
         def dispatch(client):
             return client.post(
@@ -88,7 +88,7 @@ class OpenRouterClient:
             raise BudgetError("OpenRouter returned a different model; reservation retained.")
         blocks = []
         for block in data["content"]:
-            if not isinstance(block, dict) or block.get("type") not in ("text", "tool_use"):
+            if not isinstance(block, dict) or block.get("type") not in BLOCKS:
                 raise BudgetError("OpenRouter returned unsupported content; reservation retained.")
             blocks.append(SimpleNamespace(**block))
         return SimpleNamespace(
@@ -98,6 +98,33 @@ class OpenRouterClient:
             model=data.get("model"),
             id=data.get("id"),
         )
+
+    def check_account(self):
+        """A free read of the key's record (``GET /api/v1/key``): no inference.
+
+        A refused key raises as a refused request does; a key whose credit
+        limit is spent raises before a paid call would be refused for it.
+        """
+
+        def dispatch(client):
+            return client.get(
+                "https://openrouter.ai/api/v1/key",
+                headers={"Authorization": f"Bearer {self._key}"},
+            )
+
+        if self._http is not None:
+            response = dispatch(self._http)
+        else:
+            with httpx.Client(timeout=10, follow_redirects=False) as client:
+                response = dispatch(client)
+        if response.status_code != 200:
+            raise BudgetError(
+                f"OpenRouter request failed (HTTP {response.status_code}); no automatic retry."
+            )
+        data = response.json().get("data")
+        left = data.get("limit_remaining") if isinstance(data, dict) else None
+        if type(left) in (int, float) and left <= 0:
+            raise BudgetError("OpenRouter key has no credit left: its limit is spent.")
 
     def _create_k3(self, request):
         from .k3_reasoning import chat_request, decode_chat_response

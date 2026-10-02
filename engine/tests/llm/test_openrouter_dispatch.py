@@ -41,14 +41,32 @@ def response(cost=0.00002):
 ARGS = {"messages": [{"role": "user", "content": "test fixture"}], "max_tokens": 20}
 
 
-def test_real_adapter_reserves_before_http_and_settles_receipt(ledger):
+# GLM 5.2's reasoning in the 2026-10-02 catalogue capture: optional, on by
+# default, efforts xhigh and high — so the one shape turns it on at `high`.
+GLM_5_2 = {
+    "reasoning": {"mandatory": False, "efforts": ["xhigh", "high"], "default_enabled": True},
+    "parameters": [],
+    "forced_tool": True,
+    "structured_outputs": True,
+    "context_length": 202752,
+    "expiration_date": None,
+}
+
+
+def test_real_adapter_reserves_before_http_and_settles_receipt(ledger, monkeypatch):
+    from zylch.llm import request_shape
+
+    monkeypatch.setattr(request_shape, "_metadata", lambda model: GLM_5_2)
     calls = []
     def upstream(req):
         assert budget_snapshot("uid")["reserved_usd"] > 0
         body = json.loads(req.content)
         assert body["provider"]["allow_fallbacks"] is False
         assert body["provider"]["max_price"]["request"] == "0"
-        assert body["thinking"] == {"type": "disabled"}
+        # Brief D3: the body's reasoning is the model's (no blanket `disabled`).
+        assert body["thinking"] == {"type": "adaptive"}
+        assert body["output_config"] == {"effort": "high"}
+        assert body["max_tokens"] == 20 + request_shape.REASONING_HEADROOM
         assert req.headers["Authorization"] == "Bearer fake-test-key"
         calls.append(body)
         return response()
@@ -152,13 +170,23 @@ def test_sonnet_wire_omits_default_sampling_without_weakening_price_policy(ledge
 
 
 @pytest.mark.parametrize('sampling', [{'temperature': 0.2}, {'temperature': True}, {'top_p': 1}, {'top_k': 1}])
-def test_unsupported_sonnet_sampling_refuses_before_reservation_and_network(ledger, sampling):
-    def forbidden(req):
-        pytest.fail('unsupported sampling reached network')
-    c = client(forbidden)
-    c.model = 'anthropic/claude-sonnet-5'
-    with pytest.raises(BudgetError, match='default sampling'):
-        c.create_message_sync(**ARGS, **sampling)
+def test_sampling_never_reaches_the_network_for_sonnet_5(ledger, sampling):
+    # Brief D3: the one shape drops sampling for every model before admission,
+    # so the Sonnet 5 refusal rule went with it; nothing of it is sent or priced.
+    sent = []
+
+    def upstream(req):
+        body = json.loads(req.content)
+        assert not {"temperature", "top_p", "top_k"} & set(body)
+        sent.append(body)
+        data = response().json()
+        data["model"] = "anthropic/claude-sonnet-5"
+        return httpx.Response(200, json=data)
+
+    c = client(upstream)
+    c.model = "anthropic/claude-sonnet-5"
+    c.create_message_sync(**ARGS, **sampling)
+    assert len(sent) == 1
     with database.get_session() as session:
-        assert session.query(LlmReservation).count() == 0
-        assert session.query(LlmUsage).count() == 0
+        assert session.query(LlmReservation).count() == 1
+        assert session.query(LlmUsage).count() == 1

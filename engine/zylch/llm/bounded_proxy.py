@@ -6,6 +6,7 @@ from types import SimpleNamespace
 import httpx
 
 from .budget_pricing import BudgetError
+from .response import REASONING
 
 PROTOCOL = 'mrcall-bounded-v1'
 PREFIX = '/api/desktop/llm/bounded'
@@ -70,13 +71,14 @@ class BoundedProxyClient:
         self.http = http_client
         self.business_id = business_id or None
 
-    def _call(self, method, path, body=None):
+    def _call(self, method, path, body=None, prefix=PREFIX):
         token = getattr(self.session, 'id_token', None)
         if not isinstance(token, str) or not token:
             raise BudgetError('Sign in again to check MrCall billing.')
         def send(client):
-            response = client.request(method, self.base + PREFIX + path, json=body,
-                                      headers={'auth': token})
+            response = client.request(
+                method, self.base + prefix + path, json=body, headers={"auth": token}
+            )
             if response.status_code != 200:
                 hints = {401: 'Sign in again.', 402: 'Top up at dashboard.mrcall.ai/plan.',
                          404: 'Update the billing server to support bounded credits.',
@@ -102,6 +104,15 @@ class BoundedProxyClient:
             raise BudgetError('Update the billing server to support bounded credits.')
         return result
 
+    def check_account(self):
+        """Free reads before paid work: the bounded capabilities, then the credit
+        balance ``account.balance`` reads; a 401 or an empty balance raises."""
+        self.capabilities()
+        balance = self._call("GET", "/balance", prefix="/api/desktop/llm")
+        credits = balance.get("balance_credits") if isinstance(balance, dict) else None
+        if type(credits) is int and credits <= 0:
+            raise BudgetError("MrCall credits are exhausted. Top up at dashboard.mrcall.ai/plan.")
+
     def quote(self, request):
         body = {'request': wire_request(request)}
         if self.business_id:
@@ -125,7 +136,11 @@ class BoundedProxyClient:
         if not isinstance(message, dict) or not isinstance(message.get('content'), list):
             raise BudgetError('MrCall response unavailable; check billing status without repeating the request.')
         blocks = message['content']
-        if any(not isinstance(b, dict) or b.get('type') not in ('text', 'tool_use') for b in blocks):
+        # Reasoning blocks come back to be replayed within a tool loop (D3).
+        if any(
+            not isinstance(b, dict) or b.get("type") not in ("text", "tool_use") + REASONING
+            for b in blocks
+        ):
             raise BudgetError('MrCall response incomplete; reservation retained.')
         return SimpleNamespace(content=[SimpleNamespace(**b) for b in blocks],
                                model=message.get('model'), stop_reason=message.get('stop_reason'),

@@ -477,7 +477,7 @@ class EmailSyncManager:
                 messages=[{"role": "user", "content": prompt}],
                 max_tokens=800,
                 tools=[classify_tool],
-                tool_choice={"type": "tool", "name": "classify_thread"},
+                tool_choice={"type": "auto"},
             )
 
             # Extract tool use result
@@ -487,7 +487,7 @@ class EmailSyncManager:
                     logger.debug(f"Thread analysis: {result}")
                     return result
 
-            # No tool_use block found - this is an error (shouldn't happen with tool_choice)
+            # No tool_use block: the model answered in text (the tool is named, not forced)
             raise ValueError(
                 f"No tool_use block in LLM response for thread analysis. "
                 f"Response content: {response.content}"

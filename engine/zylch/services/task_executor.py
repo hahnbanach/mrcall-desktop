@@ -33,6 +33,8 @@ import json
 import logging
 from typing import Any, AsyncIterator, Dict, List, Optional
 
+from zylch.llm.client import RunClock
+from zylch.llm.response import assistant_blocks, without_reasoning
 from zylch.memory.mnemonic.turn import revoke
 
 logger = logging.getLogger(__name__)
@@ -195,6 +197,11 @@ class TaskExecutor:
         from zylch.services.solve_tools import execute_tool
 
         loop = asyncio.get_event_loop()
+        # A run is a new turn (brief D3): the earlier runs' reasoning goes from
+        # the history it continues, this run's loop keeps its own; one clock
+        # keeps every request's system byte-identical.
+        self._messages[:] = without_reasoning(self._messages)
+        clock = RunClock()
 
         try:
             for _turn in range(self._max_turns):
@@ -206,6 +213,7 @@ class TaskExecutor:
                         messages=self._messages,
                         tools=self._tools,
                         max_tokens=2000,
+                        run_clock=clock,
                     ),
                 )
 
@@ -248,14 +256,22 @@ class TaskExecutor:
                     return
 
                 tool_results: List[Dict] = []
-                assistant_content: List[Dict] = []
+                # The turn replayed as sent, reasoning blocks included and
+                # unchanged; only empty text blocks go, as they always did.
+                assistant_content: List[Dict] = [
+                    b
+                    for b in assistant_blocks(response)
+                    if not (isinstance(b, dict) and b.get("type") == "text" and not b.get("text"))
+                ]
+                calls = {
+                    b.get("id"): b
+                    for b in assistant_content
+                    if isinstance(b, dict) and b.get("type") == "tool_use"
+                }
 
                 for block in response.content:
                     btype = getattr(block, "type", None)
                     if btype == "text" and getattr(block, "text", ""):
-                        assistant_content.append(
-                            {"type": "text", "text": block.text},
-                        )
                         yield {
                             "type": "thinking",
                             "text": block.text,
@@ -264,14 +280,6 @@ class TaskExecutor:
                         tool_name = block.name
                         tool_input = dict(block.input or {})
                         tool_id = block.id
-                        assistant_content.append(
-                            {
-                                "type": "tool_use",
-                                "id": tool_id,
-                                "name": tool_name,
-                                "input": tool_input,
-                            }
-                        )
 
                         from zylch.services.request_policy import (
                             ReadOnlyViolation,
@@ -332,7 +340,8 @@ class TaskExecutor:
                                 # Reflect the edit in the recorded
                                 # assistant message so the model sees
                                 # what actually ran.
-                                assistant_content[-1]["input"] = tool_input
+                                if tool_id in calls:
+                                    calls[tool_id]["input"] = tool_input
 
                         if not approved:
                             output = "User declined this action."

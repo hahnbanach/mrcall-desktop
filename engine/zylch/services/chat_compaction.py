@@ -12,6 +12,10 @@ rather than blow past the context window.
 
 All failures are swallowed and the original history is returned — a
 compaction bug must never break the user's chat turn.
+
+Compaction rewrites history, so the turns it keeps carry no reasoning blocks
+and the summarizer is shown none (brief D3): a reasoning block is bound to
+the conversation before it, which the summary replaces.
 """
 
 from __future__ import annotations
@@ -19,6 +23,8 @@ from __future__ import annotations
 import json
 import logging
 from typing import Any, Dict, List
+
+from zylch.llm.response import without_reasoning
 
 logger = logging.getLogger(__name__)
 
@@ -202,7 +208,7 @@ async def compact_if_needed(
         return history
 
     try:
-        middle_text = _render_middle_for_summary(middle)
+        middle_text = _render_middle_for_summary(without_reasoning(middle))
         summary = await _summarize(middle_text)
     except Exception as e:
         logger.warning(f"[compaction] summarization failed, returning original history: {e}")
@@ -217,7 +223,7 @@ async def compact_if_needed(
             f"{summary}"
         ),
     }
-    new_history = list(head) + [summary_block] + list(tail)
+    new_history = without_reasoning(head) + [summary_block] + without_reasoning(tail)
     logger.info(
         f"[compaction] done: original_len={len(history)} "
         f"compacted_len={len(new_history)} summary_chars={len(summary)}"
