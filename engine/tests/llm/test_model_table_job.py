@@ -24,6 +24,7 @@ from decimal import Decimal
 
 import pytest
 
+from . import model_table_world as world
 from .model_table_world import (
     CHEAP,
     CS,
@@ -31,17 +32,14 @@ from .model_table_world import (
     GLM,
     K3,
     MODELS,
-    NOW,
     OPUS,
     PH,
     QWEN,
     SONNET,
     FakeEdges,
-    World,
     load_job,
     measured,
     outcome,
-    published,
     requirements,
 )
 
@@ -51,44 +49,12 @@ LAST_DAY = datetime(2026, 10, 31, 5, 17, 30, tzinfo=timezone.utc)
 CHALLENGER = {"in": "1", "out": "8", "intelligence": 62, "agentic": 75}
 
 
-class Rig:
-    """The world, its record resolved by hand, and one run of the job on fakes."""
+class Rig(world.Rig):
+    """The world, its record resolved by hand, and one run of the job on fakes
+    (`model_table_world.Rig`)."""
 
     def __init__(self, tmp_path, req=None, measurement=None):
-        self.tmp, self.req, self.world = tmp_path, req or requirements(), World()
-        self.files = published(job, self.world, self.req, measurement or measured())
-        self.roles = tmp_path / "roles"
-        self.roles.mkdir()
-        (self.roles / "requirements.json").write_text(json.dumps(self.req), encoding="utf-8")
-
-    def run(self, *flags, now=NOW, ledger=None, files=None, **script) -> int:
-        files = dict(self.files if files is None else files)
-        if ledger is not None:
-            files["ledger.json"] = json.dumps(ledger).encode()
-        self.fake = FakeEdges(job, self.world, files, now=now, measurable=script.get("measurable"))
-        self.fake.smoke_fails = set(script.get("smoke_fails", ()))
-        self.fake.smoke_errors = set(script.get("smoke_errors", ()))
-        self.fake.smoke_unsent = set(script.get("smoke_unsent", ()))
-        self.fake.measure_fails = set(script.get("measure_fails", ()))
-        report = self.tmp / "report.md"
-        argv = ["--data", str(self.tmp / "data"), "--report", str(report), *flags]
-        code = job.main(argv, edges=self.fake.edges(), roles=self.roles)
-        self.report = report.read_text(encoding="utf-8")
-        assert self.fake.violations == []
-        return code
-
-    def doc(self, name: str) -> dict:
-        return json.loads(self.fake.files[name])
-
-    def ranking(self, preset: str, role: str, column: str = "ranking") -> list[str]:
-        return [e["id"] for e in self.doc("table.json")["presets"][preset]["roles"][role][column]]
-
-    def pushed(self) -> list[list[str]]:
-        return [sorted(files) for files, _ in self.fake.pushes]
-
-    def pool(self) -> dict:
-        sources = job.rm.resolver.read(self.req, self.world.raw())
-        return {c["id"]: c for c in job.rm.resolver.pool(self.req, sources)["pool"]}
+        super().__init__(job, tmp_path, req, measurement)
 
 
 @pytest.fixture
@@ -136,14 +102,21 @@ def test_a_changed_pick_is_published_only_after_its_smoke_and_measurement_pass(r
     assert table["resolved_at"] == "2026-10-14T05:17:30Z"
     result = rig.doc("measured.json")["roles"]["CHAT"]["results"][GENIUS]
     assert result == {
-        "pass": True,
-        "score": 0.9,
         "n": 20,
+        "passes": 18,
+        "score": 0.9,
+        "bars_ok": True,
+        "critical": False,
+        "complete": True,
+        "index_score": 75,
+        "pass": True,
+        "reasons": [],
         "case_set_sha256": CS,
         "prompt_sha256": PH,
         "measured_at": "2026-10-14T05:17:30Z",
     }
     assert f"economy / CHAT / ranking (pick): {SONNET} > " in rig.report
+    assert "## Flags" not in rig.report  # the smoke settled at USD 0.01
 
 
 @pytest.mark.parametrize("failing", ["smoke", "measurement"])
@@ -179,9 +152,11 @@ def test_a_cached_result_is_reused_at_no_cost(tmp_path):
 
 def test_a_result_under_other_hashes_is_not_cached(tmp_path):
     stale = measured(
-        CHAT=outcome(passed=list(MODELS) + [GENIUS], ph=STALE),  # the prompt changed since
+        CHAT=outcome(passed=list(MODELS) + [GENIUS]),
         TASK_DETECTION=outcome(passed=[GENIUS], threshold=50),
     )
+    for model in (GENIUS, QWEN):  # stamped by an earlier run: the prompt changed since
+        stale["roles"]["CHAT"]["results"][model]["prompt_sha256"] = STALE
     rig = Rig(tmp_path, measurement=stale)
     rig.world.add(GENIUS, **CHALLENGER)
     assert rig.run() == 0
@@ -281,7 +256,7 @@ def test_the_reservation_is_on_the_data_branch_before_the_first_paid_call_and_se
     rig.world.add(GENIUS, **CHALLENGER)
     assert rig.run() == 0  # each fake call checks the pushed reservation covers it
     first, message = rig.fake.pushes[0]
-    assert list(first) == ["ledger.json"] and "reserves USD 0.05" in message
+    assert list(first) == ["ledger.json"] and "reserves USD 0.2" in message  # the smoke's cap
     row = json.loads(first["ledger.json"])["months"]["2026-10"][0]
     assert row["settled_at"] is None and row["spent_usd"] is None
     settled = rig.doc("ledger.json")["months"]["2026-10"][0]
@@ -333,7 +308,7 @@ def test_an_error_is_no_result_counts_at_its_bound_and_never_replaces_a_pick(rig
     assert rig.pushed() == [["ledger.json"], ["ledger.json"]]  # reserved, then settled alone
     assert rig.fake.files["table.json"] == rig.files["table.json"]
     settled = rig.doc("ledger.json")["months"]["2026-10"][0]
-    assert settled["spent_usd"] == "0.05" and "error (ConnectionError)" in str(settled["calls"])
+    assert settled["spent_usd"] == "0.2" and "error (ConnectionError)" in str(settled["calls"])
     assert "its smoke could not run (error: ConnectionError: the provider hung up)" in rig.report
 
 
@@ -343,7 +318,7 @@ def test_a_smoke_its_cap_could_not_send_is_no_result_never_a_failure(rig):
     assert rig.run(smoke_unsent={GENIUS, SONNET}) == 1  # Sonnet's change left unsmoked
     assert rig.fake.measured == []  # no measurement without a smoke that ran
     assert rig.fake.files["table.json"] == rig.files["table.json"]  # Sonnet not replaced
-    assert f"smoke {GENIUS}: not completed: not sent: bound 85808" in rig.report
+    assert f"smoke {GENIUS}: not completed: not sent: bound 250000" in rig.report
     assert f"{SONNET}: metadata changed (models reasoning, direct reasoning) and its smoke" in (
         rig.report
     )
@@ -372,8 +347,15 @@ def test_the_months_last_day_resamples_the_oldest_measured_roles_on_their_picks(
         result["measured_at"] = "2026-09-30T05:17:00Z"
     files = dict(rig.files, **{"measured.json": json.dumps(measured(CHAT=chat)).encode()})
     assert rig.run(now=LAST_DAY, files=files, measure_fails={("CHAT", SONNET)}) == 0
-    # TASK_DETECTION has never been measured by the job: oldest; then CHAT's two picks.
-    assert rig.fake.measured == [("TASK_DETECTION", GLM), ("CHAT", SONNET), ("CHAT", OPUS)]
+    # TASK_DETECTION has never been measured by the job: oldest, its pick then its
+    # reference; then CHAT's two picks and its reference.
+    assert rig.fake.measured == [
+        ("TASK_DETECTION", GLM),
+        ("TASK_DETECTION", K3),
+        ("CHAT", SONNET),
+        ("CHAT", OPUS),
+        ("CHAT", K3),
+    ]
     assert rig.doc("measured.json")["roles"]["TASK_DETECTION"]["results"][GLM]["pass"] is True
     assert rig.ranking("economy", "CHAT") == [QWEN, GLM, CHEAP]  # Sonnet failed its re-sample
     assert "## Monthly re-sampling" in rig.report
@@ -462,7 +444,7 @@ def test_a_dry_run_pays_nothing_and_pushes_nothing(rig):
     rig.world.add(GENIUS, **CHALLENGER)
     assert rig.run("--dry-run") == 0
     assert rig.fake.smoked == [] and rig.fake.pushes == []
-    assert f"smoke {GENIUS}: dry run (at most USD 0.05)" in rig.report
+    assert f"smoke {GENIUS}: dry run (at most USD 0.2)" in rig.report
     assert "dry run: would publish snapshot.json" in rig.report
 
 

@@ -1,0 +1,112 @@
+{
+  "schema": 1,
+  "role": "TASK_DETECTION",
+  "rule": "trim_measurement_cases.py: authored and reviewed, not measured; --restore puts them back",
+  "kept": 16,
+  "order": ["task_detection-01", "task_detection-02", "task_detection-03", "task_detection-04", "task_detection-05", "task_detection-06", "task_detection-07", "task_detection-08", "task_detection-09", "task_detection-10", "task_detection-11", "task_detection-12", "task_detection-13", "task_detection-14", "task_detection-15", "task_detection-16", "task_detection-17", "task_detection-18", "task_detection-19", "task_detection-20", "task_detection-21", "task_detection-22"],
+  "cases": [
+    {
+      "id": "task_detection-03", "lang": "it", "expect_lang": "it", "call_site": "task.detect",
+      "input": {
+        "profile": "it",
+        "now": "2026-10-01T09:00:00Z",
+        "emails": [
+          {"id": "c843a841-529d-40c3-b296-5273983bee1c", "thread_id": "<20260930060000.3ec63c03@infissiesempio.example>", "from": "news@infissiesempio.example", "from_name": "Notiziario Infissi Esempio", "to": "giulia@serramentiesempio.example", "subject": "Notiziario Infissi Esempio n. 38 – Bonus casa 2027: cosa cambia per i serramentisti", "date": "2026-09-30T06:00:00Z", "body": "NOTIZIARIO INFISSI ESEMPIO – la newsletter del settore\n\nIn questo numero:\n• Bonus casa 2027: le aliquote previste dalla bozza della legge di bilancio\n• Fiera Esempio dei Serramenti (Verona, 12–15 novembre): registrazione aperta, ingresso gratuito per gli operatori\n• Vetri selettivi: il confronto tra tre produttori\n\nLeggi gli articoli sul nostro sito.\n\nRicevi questa email perché sei iscritto alla newsletter del Notiziario Infissi Esempio. Per cancellarti clicca qui.", "pending": true}
+        ],
+        "open_tasks": [],
+        "memory": []
+      },
+      "label": {"task_action": "none"},
+      "critical_on": [], "critical": false,
+      "why": "A trade newsletter the trained prompt lists as noise Giulia ignores; nothing is asked of her."
+    },
+    {
+      "id": "task_detection-09", "lang": "it", "expect_lang": "it", "call_site": "task.detect",
+      "input": {
+        "profile": "it",
+        "now": "2026-10-01T09:00:00Z",
+        "emails": [
+          {"id": "44b9e46b-008a-40a5-9a7f-db3ced3fd5c4", "thread_id": "<20260925093000.9f73a0f0@posta.example>", "from": "anna.pellegrini@posta.example", "from_name": "Anna Pellegrini", "to": "giulia@serramentiesempio.example", "subject": "Posa zanzariere", "date": "2026-09-25T09:30:00Z", "body": "Buongiorno, confermo che lunedì 29 va bene per la posa delle zanzariere.\nAnna Pellegrini"},
+          {"id": "4ca290c4-f5d6-4e90-b9b2-a611000222e7", "thread_id": "<20260925093000.9f73a0f0@posta.example>", "from": "giulia@serramentiesempio.example", "from_name": "Giulia Ferraris", "to": "anna.pellegrini@posta.example", "subject": "Re: Posa zanzariere", "date": "2026-09-25T10:05:00Z", "body": "Perfetto, la squadra arriverà alle 8:30.\nGiulia"},
+          {"id": "1a0ca23d-8ddb-44ad-a48b-32c3fa7a8361", "thread_id": "<20260925093000.9f73a0f0@posta.example>", "from": "anna.pellegrini@posta.example", "from_name": "Anna Pellegrini", "to": "giulia@serramentiesempio.example", "subject": "Re: Posa zanzariere", "date": "2026-09-30T20:15:00Z", "body": "Buonasera Giulia,\nvolevo solo ringraziarvi: lavoro impeccabile, i ragazzi sono stati puntualissimi e hanno lasciato tutto pulito. Lascerò volentieri una recensione.\nUn saluto,\nAnna Pellegrini", "pending": true}
+        ],
+        "open_tasks": [],
+        "memory": [
+          {"contact": "anna.pellegrini@posta.example", "blob_id": "5a978efb-288e-40e3-a232-8ec67315b519", "content": "#IDENTIFIERS\nEntity type: PERSON\nName: Anna Pellegrini\nEmail: anna.pellegrini@posta.example\n#ABOUT\nCliente privata di Caravaggio.\n#HISTORY\n- 2026-09-29: posate le zanzariere a rullo su cinque finestre di casa."}
+        ]
+      },
+      "label": {"task_action": "none"},
+      "critical_on": [], "critical": false,
+      "why": "After the finished installation the customer only thanks and asks nothing; the trained prompt says a thanks with nothing left to do is NO_ACTION."
+    },
+    {
+      "id": "task_detection-10", "lang": "en", "expect_lang": "en", "call_site": "task.detect",
+      "input": {
+        "profile": "en",
+        "now": "2026-10-01T09:00:00Z",
+        "emails": [
+          {"id": "8c87a18a-25f1-444c-8a10-331905d465a3", "thread_id": "<20260930131300.5e10f4f1@freemail.example>", "from": "growth.expert.ranking@freemail.example", "from_name": "Kevin | Growth Expert", "to": "tom@exampledesign.example", "subject": "Your website is not on Google page 1", "date": "2026-09-30T13:13:00Z", "body": "Hello Team,\nI was checking your website exampledesign.example and noticed it is not ranking on the first page of Google for important keywords. We are a team of SEO experts and we guarantee page 1 rankings in 30 days or your money back.\nCan I send you our price list and a free audit report?\nWaiting for your positive reply.\nKevin", "pending": true}
+        ],
+        "open_tasks": [],
+        "memory": []
+      },
+      "label": {"task_action": "none"},
+      "critical_on": [], "critical": false,
+      "why": "Cold SEO outreach from a free-mail address; the trained prompt lists such offers as noise."
+    },
+    {
+      "id": "task_detection-14", "lang": "en", "expect_lang": "en", "call_site": "task.detect",
+      "input": {
+        "profile": "en",
+        "now": "2026-10-01T09:00:00Z",
+        "emails": [
+          {"id": "cd902334-24fc-46ab-b3e4-782e50af84a7", "thread_id": "<20260929083000.351d01b8@exampleplumbing.example>", "from": "owen@exampleplumbing.example", "from_name": "Owen Price", "to": "tom@exampledesign.example", "subject": "Catch-up on the website refresh", "date": "2026-09-29T08:30:00Z", "body": "Hi Tom, could we meet next week to talk about refreshing our website?\nOwen"},
+          {"id": "01df24d7-9bfb-4a30-932c-a9eee2002534", "thread_id": "<20260929083000.351d01b8@exampleplumbing.example>", "from": "tom@exampledesign.example", "from_name": "Tom Hale", "to": "owen@exampleplumbing.example", "subject": "Re: Catch-up on the website refresh", "date": "2026-09-29T10:12:00Z", "body": "Hi Owen, happy to. How about Tuesday 6 October at 10:00 at your office?\nTom"},
+          {"id": "3779ad9d-2e8e-4f02-a0f4-e298a14c0936", "thread_id": "<20260929083000.351d01b8@exampleplumbing.example>", "from": "owen@exampleplumbing.example", "from_name": "Owen Price", "to": "tom@exampledesign.example", "subject": "Re: Catch-up on the website refresh", "date": "2026-09-30T07:58:00Z", "body": "Perfect, Tuesday at 10 works. See you then!\nOwen", "pending": true}
+        ],
+        "open_tasks": [],
+        "memory": [
+          {"contact": "owen@exampleplumbing.example", "blob_id": "3989d574-fcef-41ed-a0ca-be40f1cd5fb0", "content": "#IDENTIFIERS\nEntity type: PERSON\nName: Owen Price\nEmail: owen@exampleplumbing.example\nPhone: +44 1632 960 377\nCompany: Example Plumbing & Heating\nRole: owner\n#ABOUT\nOwner of Example Plumbing & Heating, a plumbing and heating firm in Bristol; Example Design designed its new logo in 2026.\n#HISTORY\n- 2026-09: new logo delivered; talking about the vans, an open day flyer and a website refresh."}
+        ]
+      },
+      "label": {"task_action": "none"},
+      "critical_on": [], "critical": false,
+      "why": "The client accepts the meeting Tom proposed and asks nothing else; a confirmation with nothing left to do is NO_ACTION."
+    },
+    {
+      "id": "task_detection-16", "lang": "en", "expect_lang": "en", "call_site": "task.detect",
+      "input": {
+        "profile": "en",
+        "now": "2026-10-01T09:00:00Z",
+        "emails": [
+          {"id": "67ed8b8a-7392-4c4c-bf20-cd11fdee1ce4", "thread_id": "<20260929164000.7ec1ea95@examplebakery.example>", "from": "priya@examplebakery.example", "from_name": "Priya Nair", "to": "tom@exampledesign.example", "subject": "Print files for the new menus", "date": "2026-09-29T16:40:00Z", "body": "Hi Tom,\nthe printer needs the menus as CMYK PDFs with 3mm bleed. Could you send them over?\nThanks,\nPriya"},
+          {"id": "e8ebc41f-a0c4-46a7-9143-6c3834ee3e68", "thread_id": "<20260929164000.7ec1ea95@examplebakery.example>", "from": "priya@examplebakery.example", "from_name": "Priya Nair", "to": "tom@exampledesign.example", "subject": "Re: Print files for the new menus", "date": "2026-09-30T17:15:00Z", "body": "Hi Tom,\njust to let you know that Dan sent the CMYK files over this afternoon by WeTransfer and the printer says they're perfect: the menus are being printed now. All sorted on our side, thank you both!\nPriya", "pending": true}
+        ],
+        "open_tasks": [
+          {"id": "f459b26f-5c96-46b3-9c7d-5f3153481585", "event_type": "email", "event_id": "67ed8b8a-7392-4c4c-bf20-cd11fdee1ce4", "contact_email": "priya@examplebakery.example", "contact_name": "Priya Nair", "title": "CMYK menu files for Example Bakery", "urgency": "medium", "suggested_action": "Send Priya the CMYK print files (3mm bleed) for the new menus", "reason": "Example Print needs CMYK PDFs with bleed to print the autumn menus", "channel": "email", "created_at": "2026-09-29T16:55:00Z", "analyzed_at": "2026-09-29T16:55:00Z", "sources": {"emails": ["67ed8b8a-7392-4c4c-bf20-cd11fdee1ce4"], "thread_id": "<20260929164000.7ec1ea95@examplebakery.example>", "blobs": [], "calendar_events": []}}
+        ],
+        "memory": [
+          {"contact": "priya@examplebakery.example", "blob_id": "12946f20-b56b-4fb5-b7b6-ceae120fa318", "content": "#IDENTIFIERS\nEntity type: PERSON\nName: Priya Nair\nEmail: priya@examplebakery.example\nPhone: +44 1632 960 214\nCompany: Example Bakery\nRole: owner\n#ABOUT\nOwner of Example Bakery, a bakery with two shops in Bristol; client since 2025 for branding, menus and the website.\n#HISTORY\n- 2026-09: new autumn menus designed by Example Design, printed by Example Print."}
+        ]
+      },
+      "label": {"task_action": "close", "target_task_id": "f459b26f-5c96-46b3-9c7d-5f3153481585"},
+      "critical_on": [], "critical": false,
+      "why": "The client confirms Tom's colleague Dan already sent the files and the printer accepted them; the open task is resolved."
+    },
+    {
+      "id": "task_detection-19", "lang": "it", "expect_lang": "it", "call_site": "task.detect",
+      "input": {
+        "profile": "it",
+        "now": "2026-10-01T09:00:00Z",
+        "emails": [
+          {"id": "697d9273-7533-4bb3-9f96-37ad958a5041", "thread_id": "<20260930100000.8d569904@commercialistiesempio.example>", "from": "segreteria@commercialistiesempio.example", "from_name": "Commercialisti Esempio", "to": "giulia@serramentiesempio.example", "subject": "F24 settembre – pagamento eseguito", "date": "2026-09-30T10:00:00Z", "body": "Gentile cliente,\nle comunichiamo che il modello F24 con scadenza 30 settembre (ritenute e IVA di agosto) è stato pagato regolarmente tramite addebito sul conto corrente aziendale. La quietanza è disponibile nell'area riservata.\nNon è richiesta alcuna azione da parte sua.\nCordiali saluti,\nCommercialisti Esempio – Studio associato", "pending": true}
+        ],
+        "open_tasks": [],
+        "memory": []
+      },
+      "label": {"task_action": "none"},
+      "critical_on": [], "critical": false,
+      "why": "The accountant reports a tax payment already made and states no action is required; the trained prompt lists such notices as noise."
+    }
+  ]
+}

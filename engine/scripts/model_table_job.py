@@ -24,11 +24,16 @@ and caps (plan, S5). One run:
    incumbent pick kept unless a challenger beats it, a pick that fails a gate
    replaced by the first ranked model with a passing result — and the paid
    checks they wait for. The job makes the most urgent check, decides again,
-   and repeats until nothing waits: an entrant without a cached result is
-   smoked (at most USD 0.05, `model_smoke.py`) and then measured on the role
-   (at most USD 2, slice S4b's `measure_roles.py`); a cached result, keyed by
-   (model, role, case-set hash, prompt hash), costs nothing; a ranked model
-   whose snapshot metadata changed is smoked before anything is published.
+   and repeats until nothing waits: an entrant without a cached result has
+   its measurement projected (free; over the per-role cap of USD 2 it is
+   deferred and nothing is sent), is smoked (`model_smoke.py`, admitted
+   against USD 0.20: see "The smoke's two figures" below) and then measured
+   on the role (at most USD 2: `measure_roles.py`'s loop, through
+   `model_table_measure.py`; the memory roles through the M9 corpus runner)
+   and judged against the role's reference (below); a cached result, keyed
+   by (model, role, case-set hash, prompt hash), costs nothing; a ranked
+   model whose snapshot metadata changed is smoked before anything is
+   published.
 4. **The monthly cap** (USD 10, `MONTHLY_CAP_USD`; `--monthly-cap-usd` may
    only lower it), kept in `ledger.json` (`model_table_records.py`): before
    its first paid call the run appends a run-level reservation and pushes it
@@ -37,8 +42,8 @@ and caps (plan, S5). One run:
    its check deferred and reported. The reservation is settled with what the
    calls spent (an errored call at its whole bound) and pushed with the
    publication, or alone when the run cannot publish. No call is retried.
-5. **Re-sampling.** On the month's last day (UTC) the roles whose last
-   measurement is oldest are measured again on their current picks, as many
+5. **Re-sampling.** On the month's last day (UTC) each role's current picks
+   and its reference, the oldest-measured first, are measured again, as many
    as the month's remainder covers, and the decisions are made again.
 6. **Publish or fail.** The table must pass its static gates against the
    requirements and the new snapshot. A run that moves no pick and no ranking
@@ -50,9 +55,35 @@ and caps (plan, S5). One run:
    ceiling (never published), a failed gate, a changed model left unsmoked —
    exits 1, and the last published record stays.
 
+**The smoke's two figures.** Brief D8's "at most USD 0.05" for a smoke is
+the spend a smoke is expected to settle at (the brief prices a request at
+USD 0.002 to 0.09), not its admission bound: admission must use the
+engine's conservative bound, the full output budget at the model-level
+price times the margin, which for a call of a smoke of a model at the
+balanced ceiling comes to about USD 0.1 (Opus 5.5 on the 2026-10-02 prices:
+0.107, then 0.131; `model_smoke.py`'s journal admits the second call on the
+first's settled spend, not on its bound). A smoke is therefore admitted —
+reserved against the month, each call journaled before it is sent —
+against a per-smoke cap of USD 0.20 (`decide.SMOKE_CAP_USD`): a call whose
+bound would cross it is not sent, and that smoke has no result. The report
+gives each smoke's settled spend and flags any above USD 0.05
+(`decide.SMOKE_EXPECTED_USD`), as does its row in the ledger. The monthly
+cap is unchanged.
+
+**The reference.** D7's "from the same run" binds the one-off measurement,
+where the reference runs beside every arm. The job reuses the reference's
+recorded result while the role's case-set and prompt hashes are today's and
+measures a challenger alone against it (beside it, K3's USD 1.82 on CHAT
+would leave no CHAT challenger measurable under USD 2); it measures the
+reference again only when they are not, and then the whole role
+(`model_table_measured.py`). Each measurement's own ledger — S4b's, or the
+corpus runner's, whose cap the run's reservation covers before it starts —
+says what it spent, and that settled spend is what the month is charged.
+
 The report (markdown, `--report`, also printed) lists the decision and
-snapshot changes, the paid checks and the ones not made, the spend, the
-unscored models and the empty Anthropic rankings.
+snapshot changes, the paid checks and the ones not made with each check's
+settled spend, the flagged smokes, the spend, the unscored models and the
+empty Anthropic rankings.
 
     python engine/scripts/model_table_job.py --data model-table --dry-run  # no paid call, no push
     python engine/scripts/model_table_job.py --data model-table            # paid, publishes
@@ -68,8 +99,7 @@ import argparse
 import hashlib
 import json
 import sys
-from datetime import datetime
-from decimal import Decimal
+from decimal import ROUND_UP, Decimal
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
@@ -78,66 +108,18 @@ if str(HERE) not in sys.path:
 
 import model_table_decide as decide  # noqa: E402
 import model_table_edges as edges_of  # noqa: E402
+import model_table_measured as measured_of  # noqa: E402
 import model_table_records as records  # noqa: E402
 import resolve_models as rm  # noqa: E402
 
 MONTHLY_CAP_USD = Decimal("10")
-STAMP = "%Y-%m-%dT%H:%M:%SZ"
+STAMP = records.STAMP
 BUILD = ("table.json", "snapshot.json", "measured.json")
 LIMIT = 10_000
 
 
 class Failed(Exception):
     """The run cannot publish; the message says why."""
-
-
-class Spend:
-    """A run's spending under the monthly cap (module docstring, step 4)."""
-
-    def __init__(self, ledger: dict, now: datetime, cap: Decimal, edges: edges_of.Edges):
-        self.ledger, self.cap, self.edges = ledger, cap, edges
-        self.month, self.run = now.strftime("%Y-%m"), now.strftime(STAMP)
-        self.before = records.month_used(ledger, self.month, skip=self.run)
-        self.reserved = self.consumed = Decimal(0)
-        self.calls: list[dict] = []
-
-    def admit(self, bound: Decimal, pending: Decimal) -> str | None:
-        """None when a call of `bound` may be sent — the reservation covering
-        it pushed first — else why it may not."""
-        room = self.cap - self.before
-        need = self.consumed + bound
-        if need > room:
-            left = records.usd(max(room - self.consumed, Decimal(0)))
-            return f"the monthly cap of USD {records.usd(self.cap)} leaves USD {left}"
-        if need > self.reserved:
-            target = min(room, max(need, self.consumed + pending))
-            at = self.edges.now().strftime(STAMP)
-            ledger = records.reserve(self.ledger, self.month, self.run, target, at)
-            message = f"model-table: run {self.run} reserves USD {records.usd(target)}"
-            self.edges.push({"ledger.json": records.dump(ledger)}, message)
-            self.ledger, self.reserved = ledger, target
-        return None
-
-    def spent(self, call: dict, amount: Decimal) -> None:
-        self.consumed += amount
-        self.calls.append(call)
-
-    def settled(self) -> str | None:
-        """The ledger with this run settled, or None when it reserved nothing."""
-        if not self.reserved:
-            return None
-        at = self.edges.now().strftime(STAMP)
-        doc = records.settle(self.ledger, self.month, self.run, self.consumed, self.calls, at)
-        return records.dump(doc)
-
-    def summary(self) -> dict:
-        return {
-            "month": self.month,
-            "cap": records.usd(self.cap),
-            "used_before": records.usd(self.before),
-            "reserved": records.usd(self.reserved),
-            "spent": records.usd(self.consumed),
-        }
 
 
 def _doc(raw: bytes | None, what: str):
@@ -160,10 +142,10 @@ class Run:
         self.edges, self.roles, self.cap, self.dry_run = edges, roles, cap, dry_run
         self.now = edges.now()
         self.s = {"run": self.now.strftime(STAMP), "status": "failed", "code": 1}
-        self.s.update(problems=[], notes=[], calls=[], deferred=[], resampled=[])
-        self.state = {"smokes": {}, "deferred": {}, "fresh": set()}
+        self.s.update(problems=[], notes=[], calls=[], deferred=[], resampled=[], flags=[])
+        self.state = {"smokes": {}, "deferred": {}, "fresh": set(), "projected": {}}
         self.unavailable: str | None = None
-        self.spend: Spend | None = None
+        self.spend: records.Spend | None = None
 
     def __call__(self) -> dict:
         try:
@@ -246,7 +228,9 @@ class Run:
             raise Failed("no measured.json on the data branch and no build copy")
         self.ctx = {
             "req": req,
+            "reference": req["reference"],
             "pool": result["pool"],
+            "by_id": {c["id"]: c for c in result["pool"]},
             "measured": measured,
             "hashes": hashes,
             "measurable": {role for role in req["roles"] if self.edges.measurable(role)},
@@ -254,7 +238,7 @@ class Run:
             "published_snapshot": rec["snapshot"],
             "snapshot": snap,
         }
-        self.spend = Spend(rec["ledger"], self.now, self.cap, self.edges)
+        self.spend = records.Spend(rec["ledger"], self.now, self.cap, self.edges)
         try:
             d = self._verify()
             if not d["problems"] and decide.resample_due(self.now.date()):
@@ -266,8 +250,13 @@ class Run:
 
     def _blocked(self, check: decide.Check, pending: Decimal) -> str | None:
         """Why `check` cannot be made now (None: it may, its reservation pushed)."""
-        if check.kind == "measure" and check.role not in self.ctx["measurable"]:
-            return f"no measurement harness for {check.role} in the daily job"
+        if check.kind == "measure":
+            if check.role not in self.ctx["measurable"]:
+                return f"no measurement harness for {check.role} in the daily job"
+            if (check.role, check.model) not in self.state["projected"]:
+                self._project(check)
+            if check in self.state["deferred"]:
+                return self.state["deferred"][check]
         if self.dry_run:
             return f"dry run (at most USD {records.usd(check.bound)})"
         if self.unavailable is None:
@@ -285,6 +274,9 @@ class Run:
             if d["fatal"] or not d["needs"]:
                 return d
             check, why = d["needs"][0]
+            if check.kind == "project":
+                self._project(check)
+                continue
             pending = sum((c.bound for c, _ in d["needs"]), Decimal(0))
             reason = self._blocked(check, pending)
             if reason:
@@ -307,16 +299,10 @@ class Run:
                     self.state["smokes"][check.model] = passed is True
                     outcome = "passed" if passed is True else f"failed: {detail or 'no detail'}"
             else:
-                out = self.edges.measure(check.role, check.model)
-                spent, result = Decimal(str(out["spent_usd"])), out["result"]
-                if not isinstance(result, dict) or not isinstance(result.get("pass"), bool):
-                    raise ValueError("the measurement gave no pass or fail")
-                hashes = self.ctx["hashes"][check.role]
-                records.record_result(
-                    self.ctx["measured"], check.role, check.model, result, hashes, at
-                )
-                self.state["fresh"].add((check.role, check.model))
-                outcome = "passed" if result["pass"] else "failed"
+                spent, outcome = self._measure(check, at)
+        except edges_of.Incomplete as err:  # its own ledger says what it spent
+            self.state["deferred"][check] = f"not completed: {err}"
+            spent, outcome = err.spent_usd, f"not completed: {err}"
         except Exception as err:  # noqa: BLE001 - recorded; its whole bound counts
             self.state["deferred"][check] = f"error: {type(err).__name__}: {err}"
             spent, outcome = check.bound, f"error ({type(err).__name__}), counted at its bound"
@@ -331,14 +317,67 @@ class Run:
             "spent_usd": records.usd(spent),
             "outcome": outcome,
         }
+        if check.kind == "smoke" and spent > decide.SMOKE_EXPECTED_USD:
+            expected = records.usd(decide.SMOKE_EXPECTED_USD)
+            call["flag"] = f"settled at USD {records.usd(spent)}, above the USD {expected} expected"
+            self.s["flags"].append(f"{check}: {call['flag']}")
         self.spend.spent(call, spent)
         self.s["calls"].append(call)
 
+    def _project(self, check: decide.Check) -> None:
+        """The free projection of a measurement (`edges.project`): one over the
+        per-role cap, or one that cannot be projected, is deferred and nothing
+        is sent for it, not even its smoke."""
+        measure = decide.Check("measure", check.model, check.role)
+        scores = (self.ctx["by_id"].get(check.model) or {}).get("scores", {})
+        try:
+            expected = Decimal(str(self.edges.project(check.role, check.model, scores)))
+        except Exception as err:  # noqa: BLE001 - reported; nothing is sent
+            self.state["projected"][(check.role, check.model)] = None
+            self.state["deferred"][measure] = f"not projected: {type(err).__name__}: {err}"
+            return
+        self.state["projected"][(check.role, check.model)] = expected
+        if expected > decide.MEASURE_USD:
+            # Rounded up: a projection over the cap never reads as the cap itself.
+            shown = expected.quantize(Decimal("0.01"), rounding=ROUND_UP)
+            cap = records.usd(decide.MEASURE_USD)
+            why = f"deferred: over the per-role cap (projected USD {shown}, cap USD {cap})"
+            self.state["deferred"][measure] = why
+
+    def _measure(self, check: decide.Check, at: str) -> tuple[Decimal, str]:
+        """One measurement (a corpus run measures the three memory roles), each
+        role's result judged against its reference and recorded
+        (`model_table_measured.py`); a completed re-measurement replaces its role."""
+        req, reference = self.ctx["req"], self.ctx["reference"]
+        scores = (self.ctx["by_id"].get(check.model) or {}).get("scores", {})
+        out = self.edges.measure(check.role, check.model, scores)
+        spent, verdicts = Decimal(str(out["spent_usd"])), []
+        for role, result in out["results"].items():
+            if role not in req["roles"]:
+                continue
+            hashes, rule = self.ctx["hashes"][role], req["roles"][role]
+            try:
+                where, stored = measured_of.record(
+                    self.ctx["measured"], role, check.model, result, hashes, at, rule, reference
+                )
+            except measured_of.Unjudgeable as err:
+                self.state["deferred"].setdefault(
+                    decide.Check("measure", check.model, role), str(err)
+                )
+                verdicts.append(f"{role}: {err}")
+                continue
+            self.state["fresh"].add((role, check.model))
+            verdicts.append(f"{role}: {'passed' if stored['pass'] else 'failed'}")
+            if where == "stage" and decide.remeasured(self.ctx, role):
+                measured_of.swap(self.ctx["measured"], role, rule, reference)
+                self.s["notes"].append(f"{role} re-measured whole under today's prompt and cases")
+        return spent, "; ".join(verdicts) or "no result"
+
     def _resample(self, d: dict) -> dict:
-        """The month's last day: the oldest-measured roles again on their picks."""
-        for check in decide.resample_order(
-            self.ctx["req"], self.ctx["measured"], d["presets"], self.state
-        ):
+        """The month's last day: the oldest-measured picks and references again."""
+        for check in decide.resample_order(self.ctx, d["presets"], self.state):
+            if (check.role, check.model) in self.state["fresh"]:
+                continue  # measured since (a corpus run measures three roles at once)
             reason = self._blocked(check, check.bound)
             if reason:
                 self.s["notes"].append(f"re-sampling {check} not made: {reason}")

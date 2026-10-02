@@ -14,6 +14,12 @@ engine nothing and lets it build its client from the profile. Every other path
 — the real preparation run, the real ingestion, the real turn, the real
 reservation ledger and the real journal — is the same in both. The verdicts
 and the record are the test module's.
+
+Milestone 10 moved the provider out of this bench (``corpus_live_provider.py``):
+the profile's provider, the secret's name, the arm — read from the
+measurement's arms, written to ``MODEL_MNEMONIC``, ``MODEL_MEMORY_EXTRACT``
+and ``MODEL_MEMORY_MERGE`` — the scripted wire of a dry run and the bound of
+a request are the arm's, OpenRouter by default.
 """
 
 from __future__ import annotations
@@ -32,13 +38,11 @@ from unittest.mock import MagicMock, patch
 
 from sqlalchemy import select
 
-from zylch.llm.budget_pricing import micro_usd, request_bound
+from zylch.llm.budget_pricing import micro_usd
 from zylch.memory.mnemonic import commit as commit_mod
-from zylch.memory.mnemonic import prompts
 from zylch.memory.mnemonic.contracts import (
     AUTOMATIC_OBSERVATION,
     EVENT_DISPATCH_ALLOWANCE,
-    MNEMONIC_MAX_TOKENS,
     REQUIRED_FAMILY,
 )
 from zylch.memory.mnemonic.turn import revocable_turn
@@ -48,16 +52,15 @@ from zylch.storage.models import LlmReservation, LlmUsage
 from zylch.storage.storage import Storage
 from zylch.workers import memory as mem_mod
 
+from tests.memory import corpus_live_provider as provider
 from tests.memory import mnemonic_cases as cases
 from tests.memory import seeding
-from tests.memory.mnemonic_env import clear_process_state, client, stub_embedder
+from tests.memory.mnemonic_env import clear_process_state, stub_embedder
 
 ENGINE_ROOT = Path(__file__).resolve().parents[2]
-ARM_MODEL = "claude-haiku-4-5"
 CAP_USD = "10"
 EXECUTE_FLAG = "MNEMONIC_CORPUS_EXECUTE"
-SECRET_NAME = "ANTHROPIC_API_KEY"
-DRY_SECRET = "sk-ant-corpus-dry-placeholder"
+DRY_SECRET = provider.DRY_SECRET
 EXCLUDED = ("malformed_output",)
 EXTRACTION_PROMPT = (
     "Extract durable business memory from one message: one block per subject, starting with "
@@ -95,12 +98,13 @@ class Transport:
     """The one difference between the dry run and the paid run."""
 
     dry: bool
+    arm: provider.Arm = field(default_factory=provider.dry_arm)
 
     def decision_kwargs(self, texts, *, scripted=None) -> dict:
         """``submit`` arguments: a scripted client when dry (``scripted`` overrides), nothing live."""
         if not self.dry:
             return {}
-        return {"client": scripted or client(*texts)}
+        return {"client": scripted or provider.scripted_client(self.arm, *texts)}
 
     def worker(self, owner: str, extractions, decisions):
         """The real ``MemoryWorker``; dry scripts both of its clients at the wire."""
@@ -108,7 +112,8 @@ class Transport:
             return mem_mod.MemoryWorker(storage=Storage(), owner_id=owner)
         with patch.object(mem_mod, "make_llm_client", return_value=MagicMock()):
             worker = mem_mod.MemoryWorker(storage=Storage(), owner_id=owner)
-        worker.client, worker.decision_client = client(*extractions), client(*decisions)
+        worker.client = provider.scripted_client(self.arm, *extractions)
+        worker.decision_client = provider.scripted_client(self.arm, *decisions)
         return worker
 
 
@@ -119,15 +124,20 @@ class Profile:
     owner: str
     key: str
     secret: str = field(repr=False)
+    arm: provider.Arm = field(default_factory=provider.dry_arm)
 
     @classmethod
-    def boot(cls, monkeypatch, root: Path, *, secret: str, profile_dir: Optional[Path] = None):
+    def boot(cls, monkeypatch, root: Path, *, secret: str, profile_dir=None, arm=None):
         """Mint or reopen the profile; never mint a second one under ``root`` (a second ledger)."""
         if profile_dir is not None and (profile_dir / ".env").exists():
             from dotenv import dotenv_values
 
             saved = dotenv_values(profile_dir / ".env")
             owner, key = str(saved["OWNER_ID"]), str(saved["MEMORY_KEY"])
+            measured = saved.get(provider.ROLE_KEYS[0])
+            if measured and measured != (arm or provider.dry_arm()).model:
+                # One profile, one ledger, one arm: a second arm gets its own profile.
+                raise ProfileExists(f"{profile_dir.name} measures {measured}; boot another")
         else:
             taken = sorted(p.name for p in (root / ".zylch" / "profiles").glob("corpus-*"))
             if taken:
@@ -136,7 +146,7 @@ class Profile:
                 )
             owner, key = "corpus-" + secrets.token_hex(6), secrets.token_urlsafe(16)
             profile_dir = profile_dir or root / ".zylch" / "profiles" / owner
-        profile = cls(root, profile_dir, owner, key, secret)
+        profile = cls(root, profile_dir, owner, key, secret, arm or provider.dry_arm())
         profile.write_env()
         profile.point_at(monkeypatch)
         reopen()
@@ -145,14 +155,19 @@ class Profile:
         return profile
 
     def write_env(self, *, budget: str = CAP_USD, extra: Sequence[str] = ()) -> None:
-        """The saved settings, mode 600; the budget lives here, never in the environment."""
+        """The saved settings, mode 600; the budget lives here, never in the environment.
+
+        The arm's provider and secret, the arm on every memory role key; a later
+        ``extra`` line for the same key wins (the reader keeps the last one).
+        """
         lines = [
             f"EMAIL_ADDRESS={self.owner}@example.invalid",
             f"OWNER_ID={self.owner}",
             f"MEMORY_KEY={self.key}",
             "MEMORY_KEY_SOURCE=mint",
-            "LLM_PROVIDER=anthropic",
-            f"{SECRET_NAME}={self.secret}",
+            f"LLM_PROVIDER={self.arm.provider}",
+            f"{self.arm.secret_name}={self.secret}",
+            *(f"{role_key}={self.arm.model}" for role_key in provider.ROLE_KEYS),
             f"LLM_DAILY_BUDGET_USD={budget}",
             *extra,
         ]
@@ -358,35 +373,28 @@ class Runner:
             # would leave it on the real model while the seeded blobs use the stub.
             stub_embedder(monkeypatch, embedder)
             monkeypatch.setattr(mem_mod, "EmbeddingEngine", lambda *a, **k: embedder)
-        self.profile = Profile.boot(monkeypatch, root, secret=secret, profile_dir=profile_dir)
+        self.profile = Profile.boot(
+            monkeypatch, root, secret=secret, profile_dir=profile_dir, arm=transport.arm
+        )
         self.ledger = Ledger(self.profile, cap_usd)
         self.seeded = Seeded()
         self.storage = BlobStorage(get_session, embedder or EmbeddingEngine(MemoryConfig()))
         self.rows: List[dict] = []
 
-    @staticmethod
-    def _bound(system, content: str, max_tokens: int) -> int:
-        """One request's reservation bound, priced exactly as ``budget.reserve`` prices it."""
-        messages = [{"role": "user", "content": content}]
-        request = {"model": ARM_MODEL, "system": system, "messages": messages}
-        request.update(max_tokens=max_tokens, temperature=1.0, service_tier="standard_only")
-        return request_bound(request, "direct")
+    def _bound(self, request: dict) -> int:
+        """One request's reservation bound, priced exactly as ``budget.reserve`` prices it:
+        the dict the client would send on the arm's transport (``corpus_live_provider``)."""
+        return provider.bound(self.profile.arm, request)
 
     def bound_for(self, case_id: str) -> int:
         """One decision request's reservation bound for this case, as the engine prices it."""
-        event, candidates = cases.build(case_id)
-        user = prompts.user_message(event, candidates)
-        return self._bound(prompts.system_blocks(), user, MNEMONIC_MAX_TOKENS)
+        return self._bound(provider.decision_request(case_id))
 
     def extraction_bound(self, spec: dict) -> int:
         """The worker's extraction call for an automatic case; nothing for an interactive one."""
         if spec["caller_class"] != AUTOMATIC_OBSERVATION:
             return 0
-        system = [
-            {"type": "text", "text": EXTRACTION_PROMPT, "cache_control": {"type": "ephemeral"}}
-        ]
-        user = "Analyze this email:\n\n" + spec["original_observation"]
-        return self._bound(system, user, mem_mod.EMAIL_EXTRACTION_MAX_TOKENS)
+        return self._bound(provider.extraction_request(spec, EXTRACTION_PROMPT))
 
     def intent_bound(self, spec: dict) -> int:
         """One extraction plus the decision allowance per expected child."""

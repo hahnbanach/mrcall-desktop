@@ -611,8 +611,8 @@ def test_an_undispatched_hold_goes_back_only_on_the_unmetered_transports():
         llm = LLMClient(transport=transport, api_key="fake", model="claude-haiku-4-5")
         llm._release_unused_reservation("res-1", spy)
     assert [usage for _res, usage in released] == [
-        {"input_tokens": 0, "output_tokens": 0},
-        {"input_tokens": 0, "output_tokens": 0},
+        {"input_tokens": 0, "output_tokens": 0, "cost": 0},
+        {"input_tokens": 0, "output_tokens": 0, "cost": 0},
     ]
 
     metered = LLMClient.__new__(LLMClient)

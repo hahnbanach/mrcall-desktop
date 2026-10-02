@@ -73,13 +73,31 @@ def test_the_fixture_snapshot_is_cut_from_the_capture():
         assert row == capture["direct"][model], model
 
 
+def test_the_fixture_snapshot_agrees_with_the_price_fixture():
+    """Both fixtures are cuts of the same capture by the same builder (S3's
+    `snapshot-2026-10-02.json` for the price tests): a row they share is equal."""
+    from . import price_fixture
+
+    cut, prices_cut = fixture.doc("snapshot.json"), price_fixture.fixture()
+    assert cut["read_at"] == prices_cut["read_at"] and cut["policy"] == prices_cut["policy"]
+    shared = 0
+    for section in ("models", "direct"):
+        for model, row in cut[section].items():
+            if model in prices_cut[section]:
+                assert row == prices_cut[section][model], (section, model)
+                shared += 1
+    assert shared >= len(cut["models"]) - 1  # every model but the Haiku alias
+
+
 def test_the_build_table_exists_once_measured_and_passes_every_gate_in_force():
+    # A role is covered when measured.json lists it, as resolver.rankings reads it.
     roster = set(load(ROLES / "requirements.json")["roles"])
     covered = MEASURED.is_file() and roster <= set(load(MEASURED).get("roles") or {})
     if not BUILD_TABLE.is_file():
         assert not covered, (
             "measured.json covers every role but no table.json was written: "
-            "run scripts/resolve_models.py --apply and review the table"
+            "run scripts/resolve_models.py --apply and review the table (the "
+            "switch-over commits both; a role that ranks nothing blocks it)"
         )
         return
     record = load(BUILD_TABLE)

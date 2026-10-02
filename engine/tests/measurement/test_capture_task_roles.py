@@ -6,7 +6,8 @@ label. The case sets live in ``tests/fixtures/measurement/<ROLE>/`` with a
 ``capture.py`` harness each. These tests hold the contract the measurement
 relies on, with no network and no key:
 
-- every committed case drives the role's own code path to exactly one
+- every committed case — the authored set, ``cases.json`` with any reserve a
+  trim moved (``case_sets.py``) — drives the role's own code path to exactly one
   request, from the role's call site, routed through the role's model key,
   offering the role's tool;
 - the request is JSON-serialisable and pinned to the case's clock, so it is
@@ -38,11 +39,13 @@ from tests.measurement.task_roles_env import (
     FIXTURES,
     CaptureError,
     fixture_module,
-    load_cases,
+    load_authored,
     parse_instant,
 )
 
 ROLES = ("TASK_DETECTION", "REANALYZE", "DEDUP")
+# The authored set (case_sets.py): the measured cases and any a trim moved to reserve.
+CASE_FILES = ("cases.json", "reserve.json")
 # The call sites of each role and the tool each one offers the model.
 TOOLS = {
     "TASK_DETECTION": {"task.detect": "task_decision"},
@@ -82,7 +85,7 @@ def harness(role: str):
 @functools.cache
 def captured(role: str):
     """Every committed case of ``role`` captured once (shared by the tests below)."""
-    cases = load_cases(role)["cases"]
+    cases = load_authored(role)["cases"]
     return cases, harness(role).build_requests(cases)
 
 
@@ -145,7 +148,7 @@ def _label_class(role, case):
 
 @pytest.mark.parametrize("role", ROLES)
 def test_case_document_is_well_formed(role):
-    document = load_cases(role)
+    document = load_authored(role)
     assert document["schema"] == 1 and document["role"] == role
     builders = document["builder"]
     sites = TOOLS[role]
@@ -168,7 +171,7 @@ def test_case_document_is_well_formed(role):
 
 @pytest.mark.parametrize("role", ROLES)
 def test_expect_lang_follows_the_role_rule(role):
-    for case in load_cases(role)["cases"]:
+    for case in load_authored(role)["cases"]:
         if role == "DEDUP":
             assert case["expect_lang"] is None, case["id"]  # no output language is set
         else:  # the owner's language, whatever the language of the mail
@@ -177,7 +180,7 @@ def test_expect_lang_follows_the_role_rule(role):
 
 @pytest.mark.parametrize("role", ROLES)
 def test_label_classes_and_languages_are_balanced(role):
-    cases = load_cases(role)["cases"]
+    cases = load_authored(role)["cases"]
     assert 18 <= len(cases) <= 24
     classes = Counter(_label_class(role, case) for case in cases)
     assert len(classes) >= 2 and max(classes.values()) <= 0.6 * len(cases)
@@ -191,7 +194,8 @@ def test_label_classes_and_languages_are_balanced(role):
 
 @pytest.mark.parametrize("role", ROLES)
 def test_cases_are_synthetic(role):
-    texts = [(FIXTURES / role / "cases.json").read_text(encoding="utf-8")]
+    files = [FIXTURES / role / name for name in CASE_FILES]
+    texts = [path.read_text(encoding="utf-8") for path in files if path.is_file()]
     if role == "TASK_DETECTION":
         texts += [p.read_text(encoding="utf-8") for p in (FIXTURES / role).glob("*.txt")]
         texts.append((FIXTURES / role / "profiles.json").read_text(encoding="utf-8"))
@@ -249,7 +253,7 @@ def test_capture_restores_the_environment_and_storage():
     from zylch.config import settings
     from zylch.storage import database
 
-    case = load_cases("REANALYZE")["cases"][0]
+    case = load_authored("REANALYZE")["cases"][0]
     before = dict(os.environ)
     identity = (settings.email_address, settings.email_aliases)
     harness("REANALYZE").build_requests([case])
@@ -259,7 +263,7 @@ def test_capture_restores_the_environment_and_storage():
 
 
 def _copy(role, index=0):
-    return json.loads(json.dumps(load_cases(role)["cases"][index]))
+    return json.loads(json.dumps(load_authored(role)["cases"][index]))
 
 
 def test_capture_refuses_a_case_without_its_request():

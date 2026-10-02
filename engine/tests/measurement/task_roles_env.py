@@ -94,6 +94,13 @@ def load_cases(role: str) -> dict[str, Any]:
     return json.loads((FIXTURES / role / "cases.json").read_text(encoding="utf-8"))
 
 
+def load_authored(role: str) -> dict[str, Any]:
+    """The authored case set of ``role``: ``cases.json`` and any trimmed reserve."""
+    from tests.measurement.case_sets import authored_document
+
+    return authored_document(FIXTURES / role)
+
+
 def fixture_module(role: str, name: str):
     """Import ``<ROLE>/<name>.py`` (``capture``, ``score``) by path, as the scripts do."""
     path = FIXTURES / role / f"{name}.py"

@@ -44,6 +44,7 @@ import pytest
 
 from tests.measurement import conversation_capture as cc
 from tests.measurement import conversation_judge as judge
+from tests.measurement.case_sets import authored_document
 
 FIXTURES = Path(__file__).resolve().parents[1] / "fixtures" / "measurement"
 ROLES = ("CHAT", "TASK_SOLVE", "COMPACTION", "NARRATION", "WEB_SEARCH", "TRAIN")
@@ -76,7 +77,8 @@ def harness(role: str):
 
 @lru_cache(maxsize=None)
 def document(role: str) -> Dict[str, Any]:
-    return cc.load_document(FIXTURES / role)
+    # The authored set: cases.json with any reserve a trim moved (case_sets.py).
+    return authored_document(FIXTURES / role)
 
 
 @lru_cache(maxsize=None)

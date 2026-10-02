@@ -90,26 +90,6 @@
       "why": "An explicit request to write a message with stated content."
     },
     {
-      "id": "intent-07",
-      "lang": "it",
-      "input": {"user_input": "Prepara una mail per il fornitore degli imballaggi e chiedigli il listino 2027"},
-      "label": {"primary_skill": "draft_composer"},
-      "critical": false,
-      "critical_on": [],
-      "expect_lang": null,
-      "why": "Asks for a new email to a supplier; 'listino' is the message's subject matter, not a fact to save."
-    },
-    {
-      "id": "intent-08",
-      "lang": "it",
-      "input": {"user_input": "Manda un WhatsApp a Gianni: ci vediamo alle 9 in magazzino"},
-      "label": {"primary_skill": "draft_composer"},
-      "critical": false,
-      "critical_on": [],
-      "expect_lang": null,
-      "why": "A WhatsApp message to send, which the draft skill covers; the time is the message's content, not a meeting to book."
-    },
-    {
       "id": "intent-09",
       "lang": "it",
       "input": {"user_input": "Ricordami di mandare il preventivo a Bassi entro venerdì"},
@@ -128,16 +108,6 @@
       "critical_on": [],
       "expect_lang": null,
       "why": "Listing the user's own to-do items is the task skill's description."
-    },
-    {
-      "id": "intent-11",
-      "lang": "it",
-      "input": {"user_input": "Segna come fatto il task del preventivo Rossi"},
-      "label": {"primary_skill": "task_manager"},
-      "critical": false,
-      "critical_on": [],
-      "expect_lang": null,
-      "why": "Closes one of the user's tasks; an update the user explicitly asked for."
     },
     {
       "id": "intent-12",
@@ -160,16 +130,6 @@
       "why": "Looks up the user's appointments for a day."
     },
     {
-      "id": "intent-14",
-      "lang": "it",
-      "input": {"user_input": "Sposta la riunione di venerdì alle 11"},
-      "label": {"primary_skill": "calendar"},
-      "critical": false,
-      "critical_on": [],
-      "expect_lang": null,
-      "why": "Moves an existing meeting to a new time; a calendar change the user ordered."
-    },
-    {
       "id": "intent-15",
       "lang": "en",
       "input": {"user_input": "What's the phone number of Example Logistics?"},
@@ -190,16 +150,6 @@
       "why": "Who a person is and whether there were past dealings is the contact skill's description."
     },
     {
-      "id": "intent-17",
-      "lang": "en",
-      "input": {"user_input": "Do we have an email address for the new buyer at Example Retail?"},
-      "label": {"primary_skill": "contact_lookup"},
-      "critical": false,
-      "critical_on": [],
-      "expect_lang": null,
-      "why": "Asks whether an email address is known for a person: a contact lookup, not a mail search or a draft."
-    },
-    {
       "id": "intent-18",
       "lang": "it",
       "input": {"user_input": "Ricordati che da gennaio il prezzo del kit base è 49 euro"},
@@ -218,16 +168,6 @@
       "critical_on": [],
       "expect_lang": null,
       "why": "A standing rule for every future email, not a message to write now."
-    },
-    {
-      "id": "intent-20",
-      "lang": "en",
-      "input": {"user_input": "Note that Example Logistics changed their phone number to +39 02 0000 0188"},
-      "label": {"primary_skill": "memory_notes"},
-      "critical": false,
-      "critical_on": [],
-      "expect_lang": null,
-      "why": "The user supplies a new fact to save; the lookup skill only finds what is already known."
     }
   ]
 }

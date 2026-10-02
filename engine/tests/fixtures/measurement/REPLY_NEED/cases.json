@@ -196,22 +196,6 @@
       "why": "Confirms the fix worked and thanks us; nothing asked, reported or left open."
     },
     {
-      "id": "reply_need-13",
-      "lang": "it",
-      "input": {
-        "message": {
-          "from_email": "info@negozio-bellini.example",
-          "subject": "Re: Documenti richiesti",
-          "body_plain": "Ricevuto, grazie mille.\n\nIl giorno mar 29 set 2026 alle ore 10:12 Assistenza Esempio <assistenza@negozio-esempio.example>\nha scritto:\n> Buongiorno, in allegato i documenti richiesti.\n> Le serve altro?\n> Assistenza Esempio"
-        }
-      },
-      "label": {"needs_reply": false},
-      "critical": false,
-      "critical_on": [],
-      "expect_lang": null,
-      "why": "Acknowledges receipt; the quoted trailer is our own earlier mail (cut by the engine before the model sees it, its question included), so only a thank-you remains."
-    },
-    {
       "id": "reply_need-14",
       "lang": "en",
       "input": {
@@ -228,22 +212,6 @@
       "why": "Thanks, says everything is clear and closes with a greeting; nothing is open."
     },
     {
-      "id": "reply_need-15",
-      "lang": "it",
-      "input": {
-        "message": {
-          "from_email": "roberto@sala-impianti.example",
-          "subject": "Re: Intervento caldaia",
-          "body_plain": "Ok, perfetto così, la caldaia ora funziona. Grazie e buon lavoro\n\nRoberto Sala\nSala Impianti Snc\n\nAVVISO DI RISERVATEZZA: questo messaggio e i suoi allegati sono destinati esclusivamente al destinatario indicato. Se lo avete ricevuto per errore, vi preghiamo di cancellarlo e di darne comunicazione al mittente."
-        }
-      },
-      "label": {"needs_reply": false},
-      "critical": false,
-      "critical_on": [],
-      "expect_lang": null,
-      "why": "Confirms the repair and thanks us; the only request-like words sit in a legal confidentiality footer, which the prompt says never makes a message need a reply."
-    },
-    {
       "id": "reply_need-16",
       "lang": "en",
       "input": {
@@ -258,70 +226,6 @@
       "critical_on": [],
       "expect_lang": null,
       "why": "Confirms receipt of the invoice; the rest is a signature with title and phone number."
-    },
-    {
-      "id": "reply_need-17",
-      "lang": "it",
-      "input": {
-        "message": {
-          "from_email": "francesca@example-viaggi.example",
-          "subject": "Re: Accesso al gestionale",
-          "body_plain": "Grazie a voi, tutto risolto! Thanks again\n\nFrancesca"
-        }
-      },
-      "label": {"needs_reply": false},
-      "critical": false,
-      "critical_on": [],
-      "expect_lang": null,
-      "why": "Says the problem is solved and thanks us in two languages; a pure close."
-    },
-    {
-      "id": "reply_need-18",
-      "lang": "en",
-      "input": {
-        "message": {
-          "from_email": "k.walsh@example-gym.example",
-          "subject": "Re: Password reset",
-          "body_plain": "Brilliant, works now. Cheers"
-        }
-      },
-      "label": {"needs_reply": false},
-      "critical": false,
-      "critical_on": [],
-      "expect_lang": null,
-      "why": "Informal confirmation that the reset worked plus thanks; nothing open."
-    },
-    {
-      "id": "reply_need-19",
-      "lang": "it",
-      "input": {
-        "message": {
-          "from_email": "ordini@enoteca-conti.example",
-          "subject": "Re: Spedizione ordine 884",
-          "body_plain": "Ok, grazie"
-        }
-      },
-      "label": {"needs_reply": false},
-      "critical": false,
-      "critical_on": [],
-      "expect_lang": null,
-      "why": "A bare acknowledgement after our answer; the prompt names a bare 'ok' as a possible complete close, and nothing is asked or reported."
-    },
-    {
-      "id": "reply_need-20",
-      "lang": "en",
-      "input": {
-        "message": {
-          "from_email": "l.green@example-mail.example",
-          "subject": "Re: Your refund",
-          "body_plain": "Thanks, I can see the refund on my card now. No need to reply."
-        }
-      },
-      "label": {"needs_reply": false},
-      "critical": false,
-      "critical_on": [],
-      "expect_lang": null,
-      "why": "Confirms the refund arrived and says explicitly that no reply is needed."
     }
   ]
 }

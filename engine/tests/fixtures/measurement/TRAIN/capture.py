@@ -15,6 +15,14 @@ Each makes one ``create_message`` call with its meta-prompt as the only user
 turn and ``max_tokens`` 4000. The harness seeds what the trainer reads —
 ``input.emails``, ``input.whatsapp`` and ``input.memory`` (company memory
 blobs) — under the owner the RPC uses, then runs the builder.
+
+The trainers list the user's contacts (``task_email._extract_contacts``), its
+greetings and its languages (``base._analyze_user_profile``) from sets, whose
+order follows the process's hash seed, so the same case would give another
+prompt in another process. The capture makes that order sorted
+(``SortedSet`` in place of the trainer modules' ``set``), one of the orders
+production can send, and the captured requests are the same in every process.
+Production is unchanged.
 """
 
 from __future__ import annotations
@@ -27,6 +35,13 @@ from typing import Any, Dict, List, Optional
 from tests.measurement import conversation_capture as cc
 
 ROLE = "TRAIN"
+
+
+class SortedSet(set):
+    """A set iterated in sorted order: the trainers' contacts, greetings and languages."""
+
+    def __iter__(self):
+        return iter(sorted(super().__iter__()))
 
 
 def _builder(path: str):
@@ -44,6 +59,8 @@ def run_case(case: Dict[str, Any], client: Any) -> Any:
     with cc.disposable_profile(given.get("profile")) as profile:
         cc.route_llm(profile.mp, client, base, memory_message, task_email)
         profile.mp.setattr(task_email, "EmbeddingEngine", lambda *_a, **_k: profile.embedder)
+        for module in (base, task_email):  # the sets' order, sorted (module docstring)
+            profile.mp.setattr(module, "set", SortedSet, raising=False)
         for email in given.get("emails") or []:
             cc.seed_email(profile.owner, email)
         for message in given.get("whatsapp") or []:

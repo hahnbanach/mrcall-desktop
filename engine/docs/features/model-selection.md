@@ -131,7 +131,13 @@ D5). `zylch/llm/roles/prices.py` answers what a model costs from the snapshot
 layers `roles/catalogue.py` holds — the downloaded and last good copies in
 front once the run-time distribution lands, the build copy
 `roles/snapshot.json` behind — read at every call, never frozen at import: on
-OpenRouter a catalogue id at its model-level catalogue price, on the direct
+OpenRouter a catalogue id at its snapshot price — its reference price: the
+model-level catalogue price (the list price OpenRouter shows) whenever an
+eligible endpoint is priced within it × the margin, else the lower median
+of its eligible endpoints by Artificial Analysis's blended price
+(3 × input + output) / 4; the model-level price too when its
+endpoints were not read, none is eligible or that price is not fixed (a
+variable one stays null: no cap, no admitted endpoint) — on the direct
 transport a direct id at its `anthropic` endpoint's price (Anthropic's list
 price), and a dated id `<alias>-YYYYMMDD` at its alias's (a response naming
 `<requested>-YYYYMMDD` settles as the requested id). `budget_pricing.PRICES`
@@ -139,11 +145,15 @@ and `openrouter_pricing.RATES` / `LABELS` are views over it, and `usage.py`'s
 estimate reads it ([spending protection](daily-llm-budget.md)). An OpenRouter
 request is reserved and capped (`max_price`) at the price × `margin` (1.25,
 `requirements.json`); K3 at its pinned DigitalOcean endpoint's price × the
-margin, or its model-level price × the margin on a day the snapshot does not
+margin, or its reference price × the margin on a day the snapshot does not
 admit that endpoint. The provider object also carries `requirements.json`'s
 `quantizations` and, where the snapshot read the model's endpoints, `only`
 its admitted ones, so a cheaper `flex` service tier is never routed to; it is
-the object the billing server builds for the same model and snapshot. The
+the object the billing server builds for the same model and snapshot. With
+`only` it allows fallbacks, which stay within those admitted endpoints, so a
+cheapest endpoint answering 429 does not fail every request (K3, pinned to
+one endpoint, never falls back); a refused call (429 or another status that
+proves no work was done) releases its hold, while a 5xx keeps it. The
 direct transport reserves at the list price, without the margin. A `:free`
 catalogue id is priced at 0 like any other snapshot price, deliberately: a
 saved one runs on a personal OpenRouter key with a zero hold and `max_price`

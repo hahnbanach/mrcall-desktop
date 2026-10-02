@@ -15,6 +15,14 @@ a later run. Bench: ``corpus_live_env.py``; readers, verdicts, checks and record
 intent on purpose, its row appended to the record), ``MNEMONIC_CORPUS_ROOT``
 (scratch home), ``MNEMONIC_CORPUS_RECORD_DIR``, ``MNEMONIC_CORPUS_RECORD_ONLY=1``
 (rewrite the record's totals from the profile ledger, no dispatch).
+
+Milestone 10 runs it on OpenRouter (``corpus_live_provider.py``): the key is the
+provider's (``OPENROUTER_API_KEY``; ``ANTHROPIC_API_KEY`` with
+``MNEMONIC_CORPUS_PROVIDER=anthropic``), and a live run reads its arm from the
+measurement's arms (``MNEMONIC_CORPUS_ARMS``, ``MNEMONIC_CORPUS_ARM``), never
+from argv; ``MNEMONIC_CORPUS_CAP_USD`` gives the runner its share of the
+measurement's cap. Its record feeds ``MNEMONIC``, ``MEMORY_EXTRACT`` and
+``MEMORY_MERGE`` in ``scripts/derive_thresholds.py``.
 """
 
 from __future__ import annotations
@@ -34,6 +42,7 @@ from zylch.storage.database import get_session
 from zylch.storage.models import Blob, Email, LlmReservation, LlmUsage
 
 from tests.memory import corpus_live_env as env
+from tests.memory import corpus_live_provider as provider
 from tests.memory import corpus_live_record as rec
 from tests.memory import mnemonic_cases as cases
 from tests.memory.mnemonic_env import BagOfWordsEmbedder, clear_process_state
@@ -42,6 +51,7 @@ LIVE = os.environ.get(env.EXECUTE_FLAG) == "1"
 SINGLE_CASE = bool((os.environ.get("MNEMONIC_CORPUS_CASE") or "").strip())
 RECORD_ONLY = os.environ.get("MNEMONIC_CORPUS_RECORD_ONLY") == "1"
 PROFILE_VAR = "MNEMONIC_CORPUS_PROFILE_DIR"
+CAP_VAR = "MNEMONIC_CORPUS_CAP_USD"
 
 
 def selected(environ) -> list:
@@ -51,19 +61,20 @@ def selected(environ) -> list:
     return [chosen] if chosen else every
 
 
-def secret_for(environ) -> str:
+def secret_for(environ, arm) -> str:
     """The key: the environment's on a live run, a placeholder otherwise; no key, no boot.
 
     A live run also names its profile: without ``MNEMONIC_CORPUS_PROFILE_DIR`` a
     second session would mint a second profile, a second ledger and a second cap.
+    The key's name is the arm's provider's (``arm.secret_name``).
     """
     if environ.get(env.EXECUTE_FLAG) != "1":
         return env.DRY_SECRET
     if not (environ.get(PROFILE_VAR) or "").strip():
         raise env.CorpusRefused(f"{env.EXECUTE_FLAG}=1 without {PROFILE_VAR}; nothing booted")
-    key = (environ.get(env.SECRET_NAME) or "").strip()
+    key = (environ.get(arm.secret_name) or "").strip()
     if not key:
-        raise env.CorpusRefused(f"{env.EXECUTE_FLAG}=1 without {env.SECRET_NAME}; nothing booted")
+        raise env.CorpusRefused(f"{env.EXECUTE_FLAG}=1 without {arm.secret_name}; nothing booted")
     return key
 
 
@@ -75,13 +86,16 @@ def close():
 @pytest.fixture(scope="module")
 def corpus(tmp_path_factory):
     """The module's one runner: a fresh disposable profile, or the one the environment names."""
-    secret = secret_for(os.environ)
+    arm = provider.arm_from(os.environ, live=LIVE)
+    secret = secret_for(os.environ, arm)
     root = Path(os.environ.get("MNEMONIC_CORPUS_ROOT") or tmp_path_factory.mktemp("corpus"))
     profile_dir = os.environ.get(PROFILE_VAR)
     stub = not LIVE or bool(os.environ.get("MNEMONIC_CORPUS_STUB_EMBEDDER"))
     embedder, patcher = (BagOfWordsEmbedder() if stub else None), pytest.MonkeyPatch()
-    transport, reopened = env.Transport(dry=not LIVE), Path(profile_dir) if profile_dir else None
-    runner = env.Runner(patcher, root, transport, secret, embedder, profile_dir=reopened)
+    transport = env.Transport(dry=not LIVE, arm=arm)
+    reopened = Path(profile_dir) if profile_dir else None
+    cap = os.environ.get(CAP_VAR) or env.CAP_USD
+    runner = env.Runner(patcher, root, transport, secret, embedder, cap, profile_dir=reopened)
     runner.case_ids, runner.checks = selected(os.environ), {}
     yield runner
     close()
@@ -145,7 +159,7 @@ def test_the_corpus_runs_on_one_profile_behind_intents_and_under_the_cap(live):
     if not LIVE:
         failed = {r["case_id"]: r["critical"] for r in live.rows if r["critical"]}
         assert failed == {}, failed
-        assert all(r["models"] == [env.ARM_MODEL] for r in live.rows)
+        assert all(r["models"] == [live.profile.arm.model] for r in live.rows)
 
 
 def test_a_second_execution_refuses_a_case_that_already_has_an_intent(live):
@@ -205,13 +219,14 @@ def test_the_record_is_written_without_the_key_or_a_host_path(live, tmp_path_fac
 
 
 def test_a_live_run_without_a_key_or_a_profile_dir_is_refused_before_booting(tmp_path):
+    arm = provider.dry_arm()
     with pytest.raises(env.CorpusRefused, match=f"{PROFILE_VAR}; nothing booted"):
-        secret_for({env.EXECUTE_FLAG: "1", env.SECRET_NAME: "sk-ant-x"})
-    with pytest.raises(env.CorpusRefused, match=f"{env.SECRET_NAME}; nothing booted"):
-        secret_for({env.EXECUTE_FLAG: "1", PROFILE_VAR: str(tmp_path / "p")})
-    named = {env.EXECUTE_FLAG: "1", PROFILE_VAR: str(tmp_path / "p"), env.SECRET_NAME: "sk-ant-x"}
-    assert secret_for(named) == "sk-ant-x"
-    assert secret_for({env.SECRET_NAME: "sk-ant-x"}) == env.DRY_SECRET
+        secret_for({env.EXECUTE_FLAG: "1", arm.secret_name: "sk-ant-x"}, arm)
+    with pytest.raises(env.CorpusRefused, match=f"{arm.secret_name}; nothing booted"):
+        secret_for({env.EXECUTE_FLAG: "1", PROFILE_VAR: str(tmp_path / "p")}, arm)
+    named = {env.EXECUTE_FLAG: "1", PROFILE_VAR: str(tmp_path / "p"), arm.secret_name: "sk-ant-x"}
+    assert secret_for(named, arm) == "sk-ant-x"
+    assert secret_for({arm.secret_name: "sk-ant-x"}, arm) == env.DRY_SECRET
     assert not (tmp_path / ".zylch").exists() and not (tmp_path / "p").exists()
 
 
@@ -233,8 +248,10 @@ def test_the_profile_env_is_mode_600_and_holds_the_cap_and_the_arm(sandbox):
     path = runner.profile.profile_dir / ".env"
     text = path.read_text()
     assert path.stat().st_mode & 0o777 == 0o600
-    assert f"{env.SECRET_NAME}={env.DRY_SECRET}" in text and "LLM_DAILY_BUDGET_USD=10" in text
-    assert "LLM_PROVIDER=anthropic" in text and len(runner.profile.key) == 22
+    arm = runner.profile.arm
+    assert f"{arm.secret_name}={env.DRY_SECRET}" in text and "LLM_DAILY_BUDGET_USD=10" in text
+    assert "LLM_PROVIDER=openrouter" in text and len(runner.profile.key) == 22
+    assert all(f"{role_key}={arm.model}" in text for role_key in provider.ROLE_KEYS)
     assert len(selected({})) == 10 and "malformed_output" not in selected({})
     assert selected({"MNEMONIC_CORPUS_CASE": "account_feedback"}) == ["account_feedback"]
 
@@ -281,7 +298,7 @@ def test_settled_rows_from_earlier_days_count_against_the_cumulative_cap(sandbox
         LlmUsage,
         id="settled-yesterday",
         owner_id=runner.profile.owner,
-        model=env.ARM_MODEL,
+        model=runner.profile.arm.model,
         transport="direct",
         call_site="memory.mnemonic",
         est_cost_usd=9.99,
@@ -298,7 +315,7 @@ def test_an_unsettled_hold_from_earlier_days_counts_against_the_cumulative_cap(s
         LlmReservation,
         id="hold-two-days-ago",
         owner_id=runner.profile.owner,
-        model=env.ARM_MODEL,
+        model=runner.profile.arm.model,
         created_at=env.utc_now() - timedelta(days=2),
         transport="direct",
         call_site="memory.mnemonic",
@@ -401,7 +418,7 @@ def test_a_record_only_rewrite_refreshes_the_totals_without_a_dispatch(sandbox, 
         LlmUsage,
         id="sidecar-turn",
         owner_id=runner.profile.owner,
-        model=env.ARM_MODEL,
+        model=runner.profile.arm.model,
         transport="direct",
         call_site="chat",
         est_cost_usd=0.05,
