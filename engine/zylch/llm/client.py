@@ -236,7 +236,9 @@ class LLMClient:
         if self.transport == "proxy":
             return
         try:
-            settle(reservation, {"input_tokens": 0, "output_tokens": 0})
+            # Nothing was sent, so nothing cost anything; OpenRouter settles on a
+            # receipt's `cost`, so the release states it, as `_release_hold` does.
+            settle(reservation, {"input_tokens": 0, "output_tokens": 0, "cost": 0})
         except Exception as exc:  # noqa: BLE001 - never mask the real refusal
             logger.warning(f"[llm] could not release an undispatched reservation: {exc}")
 

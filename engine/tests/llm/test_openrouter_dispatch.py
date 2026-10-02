@@ -238,3 +238,26 @@ def test_a_refused_call_releases_its_hold_and_a_server_error_keeps_it(
     state = budget_snapshot("uid")
     assert state["spent_usd"] == 0
     assert (state["reserved_usd"] == 0) is released
+
+
+def test_a_dispatch_revoked_after_admission_releases_its_openrouter_hold(ledger, monkeypatch):
+    """A hold whose request never left the process goes back on OpenRouter too.
+
+    OpenRouter settles on a receipt's `cost`, so a release that states only
+    token counts is refused by the ledger and the hold stays forever; the
+    release states `cost: 0`, as the release of a refused call does."""
+    from zylch.memory.mnemonic.authorization import MnemonicAuthorizationError
+    from zylch.services import preparation
+
+    def revoked():
+        assert budget_snapshot("uid")["reserved_usd"] > 0  # admitted, then revoked
+        raise MnemonicAuthorizationError("revoked between admission and dispatch")
+
+    monkeypatch.setattr(preparation, "record_dispatch", revoked)
+    calls = []
+    c = client(lambda req: calls.append(req) or response())
+    with pytest.raises(MnemonicAuthorizationError):
+        c.create_message_sync(**ARGS)
+    assert calls == []  # nothing reached the provider
+    state = budget_snapshot("uid")
+    assert state["reserved_usd"] == 0 and state["spent_usd"] == 0
