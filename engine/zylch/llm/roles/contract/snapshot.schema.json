@@ -1,0 +1,292 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "MrCall model snapshot, schema 1: prices and request metadata",
+  "description": "Every entry of OpenRouter's catalogue at one read: its model-level price and its request metadata, plus the endpoints the provider policy admits for the models whose endpoints were read (tools and the minimum context, no variant, no alias), and Anthropic's direct ids priced from the `anthropic` endpoint. No Artificial Analysis score. `version` is the SHA-256 of the canonical JSON of the document without `version` (contract/README.md). Static gates beyond this schema: zylch/llm/roles/gates.py:check_snapshot.",
+  "type": "object",
+  "required": [
+    "schema",
+    "version",
+    "read_at",
+    "policy",
+    "models",
+    "direct"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "schema": {
+      "description": "The contract version of this document.",
+      "const": 1
+    },
+    "version": {
+      "$ref": "#/$defs/sha256"
+    },
+    "read_at": {
+      "description": "When the catalogue was read (UTC).",
+      "$ref": "#/$defs/timestamp"
+    },
+    "policy": {
+      "description": "The provider policy the endpoints were admitted under, as requirements.json held it.",
+      "type": "object",
+      "required": [
+        "margin",
+        "quantizations",
+        "excluded_endpoint_variants"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "margin": {
+          "description": "The factor on the model-level price that caps an OpenRouter request (max_price) and its reservation.",
+          "$ref": "#/$defs/price"
+        },
+        "quantizations": {
+          "description": "The admitted quantizations; an endpoint that declares none is `unknown`.",
+          "$ref": "#/$defs/names"
+        },
+        "excluded_endpoint_variants": {
+          "description": "Service tiers never admitted: an endpoint whose tag has one of them as a segment after the provider.",
+          "$ref": "#/$defs/names"
+        }
+      }
+    },
+    "models": {
+      "description": "Keyed by catalogue id: every catalogue entry, aliases, variants and excluded families included.",
+      "type": "object",
+      "propertyNames": {
+        "pattern": "^\\S+$"
+      },
+      "additionalProperties": {
+        "$ref": "#/$defs/model"
+      }
+    },
+    "direct": {
+      "description": "Keyed by Anthropic's direct id: the anthropic/* entries with an `anthropic` endpoint.",
+      "type": "object",
+      "propertyNames": {
+        "pattern": "^\\S+$"
+      },
+      "additionalProperties": {
+        "$ref": "#/$defs/direct"
+      }
+    }
+  },
+  "$defs": {
+    "sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "timestamp": {
+      "type": "string",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$"
+    },
+    "price": {
+      "description": "USD per million tokens as a canonical decimal string: no sign, exponent, leading zero or trailing fractional zero.",
+      "type": "string",
+      "pattern": "^(0|[1-9][0-9]*)(\\.[0-9]*[1-9])?$"
+    },
+    "maybe_price": {
+      "description": "A price, or null where the source has none (absent, or variable).",
+      "type": [
+        "string",
+        "null"
+      ],
+      "pattern": "^(0|[1-9][0-9]*)(\\.[0-9]*[1-9])?$"
+    },
+    "names": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "pattern": "^\\S+$"
+      }
+    },
+    "pricing": {
+      "type": "object",
+      "required": [
+        "input",
+        "output",
+        "cache_read",
+        "cache_write"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "input": {
+          "$ref": "#/$defs/maybe_price"
+        },
+        "output": {
+          "$ref": "#/$defs/maybe_price"
+        },
+        "cache_read": {
+          "$ref": "#/$defs/maybe_price"
+        },
+        "cache_write": {
+          "$ref": "#/$defs/maybe_price"
+        }
+      }
+    },
+    "endpoint_pricing": {
+      "type": "object",
+      "required": [
+        "input",
+        "output",
+        "cache_read",
+        "cache_write"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "input": {
+          "$ref": "#/$defs/price"
+        },
+        "output": {
+          "$ref": "#/$defs/price"
+        },
+        "cache_read": {
+          "$ref": "#/$defs/maybe_price"
+        },
+        "cache_write": {
+          "$ref": "#/$defs/maybe_price"
+        }
+      }
+    },
+    "metadata": {
+      "type": "object",
+      "required": [
+        "reasoning",
+        "parameters",
+        "forced_tool",
+        "structured_outputs",
+        "context_length",
+        "expiration_date"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "reasoning": {
+          "type": "object",
+          "required": [
+            "mandatory",
+            "efforts",
+            "default_enabled"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "mandatory": {
+              "description": "Reasoning cannot be turned off (false when the catalogue publishes no reasoning).",
+              "type": "boolean"
+            },
+            "efforts": {
+              "description": "The catalogue's supported_efforts in its order, highest first; empty when none is published.",
+              "$ref": "#/$defs/names"
+            },
+            "default_enabled": {
+              "description": "Whether reasoning is on by default, or null when the catalogue does not say.",
+              "type": [
+                "boolean",
+                "null"
+              ]
+            }
+          }
+        },
+        "parameters": {
+          "description": "Sorted. The intersection of the admitted endpoints' supported_parameters when the endpoints were read and one is admitted; the model-level list otherwise.",
+          "$ref": "#/$defs/names"
+        },
+        "forced_tool": {
+          "description": "An admitted endpoint accepts a forced named tool choice (supports_tool_choice.function); false when the endpoints were not read.",
+          "type": "boolean"
+        },
+        "structured_outputs": {
+          "description": "`structured_outputs` is one of the parameters.",
+          "type": "boolean"
+        },
+        "context_length": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "expiration_date": {
+          "description": "The catalogue's announced expiry, or null.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}\\S*$"
+        }
+      }
+    },
+    "endpoint": {
+      "type": "object",
+      "required": [
+        "tag",
+        "quantization",
+        "pricing"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "tag": {
+          "description": "OpenRouter's provider tag (provider/variant), what provider.only and provider.ignore name.",
+          "type": "string",
+          "pattern": "^\\S+$"
+        },
+        "quantization": {
+          "type": "string",
+          "pattern": "^\\S+$"
+        },
+        "pricing": {
+          "$ref": "#/$defs/endpoint_pricing"
+        }
+      }
+    },
+    "model": {
+      "type": "object",
+      "required": [
+        "pricing",
+        "metadata",
+        "endpoints"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "pricing": {
+          "description": "The model-level catalogue price: what ceilings compare and the margin multiplies.",
+          "$ref": "#/$defs/pricing"
+        },
+        "metadata": {
+          "$ref": "#/$defs/metadata"
+        },
+        "endpoints": {
+          "description": "The admitted endpoints, sorted by tag; null when the endpoints were not read.",
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "$ref": "#/$defs/endpoint"
+          }
+        }
+      }
+    },
+    "direct": {
+      "type": "object",
+      "required": [
+        "catalogue_id",
+        "pricing",
+        "metadata"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "catalogue_id": {
+          "type": "string",
+          "pattern": "^\\S+$"
+        },
+        "pricing": {
+          "description": "The `anthropic` endpoint's price (Anthropic's list price).",
+          "$ref": "#/$defs/pricing"
+        },
+        "metadata": {
+          "description": "Reasoning and expiry from the catalogue entry; parameters, forced_tool and context_length from the `anthropic` endpoint.",
+          "$ref": "#/$defs/metadata"
+        }
+      }
+    }
+  }
+}

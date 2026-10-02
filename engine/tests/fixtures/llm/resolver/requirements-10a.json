@@ -1,11 +1,14 @@
 {
-  "about": "Requirements the resolver (engine/scripts/resolve_models.py, zylch/llm/roles/resolver.py) turns into the snapshot (snapshot.json: every catalogue model's price and request metadata) and, once measured.json covers every role, the decision record (table.json): roles declare a rule and an index, never a model and never a typed floor (thresholds come from measured.json). Prices are USD per million tokens; a preset ceiling bounds the catalogue output price of every ranked model. reference is the measurement's reference model (brief D7). The allowlist, mrcall_served and request_rules are milestone 10a's, kept only for its readers until the switch-over (allowlist and mrcall_served) or until request_rules.py is deleted (request_rules); the resolver ignores them.",
+  "about": "Requirements the resolver (engine/scripts/resolve_models.py) turns into resolved.json: roles declare a rule, an index and a floor, never a model. Prices are USD per million tokens; a preset ceiling bounds the output price. The allowlist prices every model billed today that a custom profile may name; mrcall_served lists the ids the MrCall credits server serves today.",
   "common": {
     "tools": true,
     "min_context": 200000,
     "excluded_variants": [
       ":free",
       ":batch"
+    ],
+    "excluded_prefixes": [
+      "anthropic/claude-haiku"
     ],
     "required_scores": [
       "intelligence"
@@ -19,30 +22,6 @@
       "ceiling": 20
     }
   },
-  "_about_policy": "Resolver v2 (milestone 10): excluded_families are matched as a vendor (the part of a catalogue id, canonical_slug or alias target before the first '/') plus a token contained in the part after it; margin multiplies the model-level catalogue price into OpenRouter's max_price and the reservation; provider_policy.quantizations admits endpoints by declared quantization (one that declares none is 'unknown'); excluded_endpoint_variants are service tiers never admitted (a segment of the endpoint tag after the provider).",
-  "excluded_families": [
-    {
-      "vendor": "anthropic",
-      "token": "haiku"
-    }
-  ],
-  "margin": 1.25,
-  "provider_policy": {
-    "quantizations": [
-      "int8",
-      "fp8",
-      "mxfp8",
-      "fp16",
-      "bf16",
-      "fp32",
-      "unknown"
-    ]
-  },
-  "excluded_endpoint_variants": [
-    "flex"
-  ],
-  "_about_reference": "The reference of every role's measurement: the production model, run by its adapter (K3 at max effort); every role's bootstrap arms include it.",
-  "reference": "moonshotai/kimi-k3",
   "roles": {
     "MNEMONIC": {
       "rule": "maximise",
@@ -50,7 +29,8 @@
     },
     "MEMORY_EXTRACT": {
       "rule": "satisfice",
-      "index": "intelligence"
+      "index": "intelligence",
+      "floor": 40
     },
     "MEMORY_MERGE": {
       "rule": "maximise",
@@ -58,23 +38,28 @@
     },
     "TASK_DETECTION": {
       "rule": "satisfice",
-      "index": "intelligence"
+      "index": "intelligence",
+      "floor": 40
     },
     "REANALYZE": {
       "rule": "satisfice",
-      "index": "intelligence"
+      "index": "intelligence",
+      "floor": 40
     },
     "DEDUP": {
       "rule": "satisfice",
-      "index": "intelligence"
+      "index": "intelligence",
+      "floor": 35
     },
     "REPLY_NEED": {
       "rule": "satisfice",
-      "index": "intelligence"
+      "index": "intelligence",
+      "floor": 35
     },
     "INTENT": {
       "rule": "satisfice",
-      "index": "intelligence"
+      "index": "intelligence",
+      "floor": 35
     },
     "CHAT": {
       "rule": "maximise",
@@ -86,27 +71,33 @@
     },
     "TRAIN": {
       "rule": "satisfice",
-      "index": "intelligence"
+      "index": "intelligence",
+      "floor": 40
     },
     "COMPACTION": {
       "rule": "satisfice",
-      "index": "intelligence"
+      "index": "intelligence",
+      "floor": 35
     },
     "SYNC_ANALYSIS": {
       "rule": "satisfice",
-      "index": "intelligence"
+      "index": "intelligence",
+      "floor": 35
     },
     "WEB_SEARCH": {
       "rule": "satisfice",
-      "index": "intelligence"
+      "index": "intelligence",
+      "floor": 35
     },
     "CORRECTION_LEARNING": {
       "rule": "satisfice",
-      "index": "intelligence"
+      "index": "intelligence",
+      "floor": 40
     },
     "NARRATION": {
       "rule": "satisfice",
-      "index": "intelligence"
+      "index": "intelligence",
+      "floor": 30
     }
   },
   "allowlist": {

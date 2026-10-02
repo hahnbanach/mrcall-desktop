@@ -1,0 +1,49 @@
+{
+ "direct": {
+  "claude-opus-5-5": {
+   "catalogue_id": "anthropic/claude-opus-5.5",
+   "metadata": {"context_length": 1000000, "expiration_date": null, "forced_tool": false, "parameters": ["include_reasoning", "max_tokens", "reasoning", "reasoning_effort", "response_format", "stop", "structured_outputs", "tool_choice", "tools", "verbosity"], "reasoning": {"default_enabled": null, "efforts": ["max", "xhigh", "high", "medium", "low"], "mandatory": true}, "structured_outputs": true},
+   "pricing": {"cache_read": "0.2", "cache_write": "5", "input": "4", "output": "20"}
+  },
+  "claude-sonnet-5-5": {
+   "catalogue_id": "anthropic/claude-sonnet-5.5",
+   "metadata": {"context_length": 1000000, "expiration_date": null, "forced_tool": false, "parameters": ["include_reasoning", "max_tokens", "reasoning", "reasoning_effort", "response_format", "stop", "structured_outputs", "tool_choice", "tools", "verbosity"], "reasoning": {"default_enabled": null, "efforts": ["max", "xhigh", "high", "medium", "low"], "mandatory": true}, "structured_outputs": true},
+   "pricing": {"cache_read": "0.2", "cache_write": "2.5", "input": "2", "output": "10"}
+  }
+ },
+ "models": {
+  "anthropic/claude-opus-5.5": {
+   "endpoints": [{"pricing": {"cache_read": "0.2", "cache_write": "5", "input": "4", "output": "20"}, "quantization": "unknown", "tag": "anthropic"}, {"pricing": {"cache_read": "0.2", "cache_write": "5", "input": "4", "output": "20"}, "quantization": "unknown", "tag": "google-vertex/global"}, {"pricing": {"cache_read": "0.22", "cache_write": "5.5", "input": "4.4", "output": "22"}, "quantization": "unknown", "tag": "google-vertex/us"}],
+   "metadata": {"context_length": 1000000, "expiration_date": null, "forced_tool": false, "parameters": ["include_reasoning", "max_tokens", "reasoning", "reasoning_effort", "response_format", "stop", "tool_choice", "tools", "verbosity"], "reasoning": {"default_enabled": null, "efforts": ["max", "xhigh", "high", "medium", "low"], "mandatory": true}, "structured_outputs": false},
+   "pricing": {"cache_read": "0.2", "cache_write": "5", "input": "4", "output": "20"}
+  },
+  "anthropic/claude-sonnet-5.5": {
+   "endpoints": [{"pricing": {"cache_read": "0.2", "cache_write": "2.5", "input": "2", "output": "10"}, "quantization": "unknown", "tag": "anthropic"}, {"pricing": {"cache_read": "0.22", "cache_write": "2.75", "input": "2.2", "output": "11"}, "quantization": "unknown", "tag": "azure/us"}, {"pricing": {"cache_read": "0.2", "cache_write": "2.5", "input": "2", "output": "10"}, "quantization": "unknown", "tag": "google-vertex/global"}],
+   "metadata": {"context_length": 1000000, "expiration_date": null, "forced_tool": false, "parameters": ["include_reasoning", "max_tokens", "reasoning", "reasoning_effort", "response_format", "stop", "tool_choice", "tools", "verbosity"], "reasoning": {"default_enabled": null, "efforts": ["max", "xhigh", "high", "medium", "low"], "mandatory": true}, "structured_outputs": false},
+   "pricing": {"cache_read": "0.2", "cache_write": "2.5", "input": "2", "output": "10"}
+  },
+  "moonshotai/kimi-k3": {
+   "endpoints": [{"pricing": {"cache_read": "0.255", "cache_write": null, "input": "2.55", "output": "12.95"}, "quantization": "unknown", "tag": "digitalocean"}, {"pricing": {"cache_read": "0.29", "cache_write": null, "input": "2", "output": "11.357"}, "quantization": "fp8", "tag": "morph/fp8"}, {"pricing": {"cache_read": "0.27", "cache_write": null, "input": "2.7", "output": "13.5"}, "quantization": "unknown", "tag": "together"}],
+   "metadata": {"context_length": 1048576, "expiration_date": null, "forced_tool": true, "parameters": ["include_reasoning", "max_tokens", "reasoning", "reasoning_effort", "temperature", "tool_choice", "tools", "top_p"], "reasoning": {"default_enabled": true, "efforts": ["max", "high", "low"], "mandatory": false}, "structured_outputs": false},
+   "pricing": {"cache_read": "0.27", "cache_write": null, "input": "2.7", "output": "13.5"}
+  },
+  "qwen/qwen3.8-max-0902": {
+   "endpoints": [{"pricing": {"cache_read": "0.25", "cache_write": "2.5", "input": "2", "output": "6"}, "quantization": "unknown", "tag": "alibaba"}],
+   "metadata": {"context_length": 1000000, "expiration_date": null, "forced_tool": false, "parameters": ["frequency_penalty", "include_reasoning", "logprobs", "max_tokens", "presence_penalty", "reasoning", "reasoning_effort", "response_format", "seed", "stop", "structured_outputs", "temperature", "tool_choice", "tools", "top_k", "top_logprobs", "top_p"], "reasoning": {"default_enabled": true, "efforts": ["xhigh", "high", "medium", "low", "minimal"], "mandatory": true}, "structured_outputs": true},
+   "pricing": {"cache_read": "0.25", "cache_write": "2.5", "input": "2", "output": "6"}
+  },
+  "~anthropic/claude-haiku-latest": {
+   "endpoints": null,
+   "metadata": {"context_length": 200000, "expiration_date": null, "forced_tool": false, "parameters": ["include_reasoning", "max_completion_tokens", "max_tokens", "reasoning", "response_format", "stop", "structured_outputs", "temperature", "tool_choice", "tools", "top_k", "top_p"], "reasoning": {"default_enabled": null, "efforts": [], "mandatory": false}, "structured_outputs": true},
+   "pricing": {"cache_read": "0.1", "cache_write": "1.25", "input": "1", "output": "5"}
+  }
+ },
+ "policy": {
+  "excluded_endpoint_variants": ["flex"],
+  "margin": "1.25",
+  "quantizations": ["int8", "fp8", "mxfp8", "fp16", "bf16", "fp32", "unknown"]
+ },
+ "read_at": "2026-10-02T13:36:42Z",
+ "schema": 1,
+ "version": "90ed5195bae3f5a64e41e64c3e34374cfc4d57307b245ef014ee95b08e6c8a06"
+}

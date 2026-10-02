@@ -9,18 +9,31 @@ without `--apply`, or a hand edit of the table, fails here. It also checks
 that every model the table names (main pick, Anthropic fallback, MrCall
 column; every preset and role) can take the engine's tool calls and its
 admitted context, as the fixture's catalogue states them.
+
+Since resolver v2 (milestone 10, slice S2) `requirements.json` no longer
+holds what 10a resolved from (floors and the prefix exclusion are gone), and
+`resolved.json` is frozen until the switch-over replaces it with
+`table.json`: its inputs are frozen beside the reference fixture
+(`fixtures/llm/resolver/requirements-10a.json`, the 10a requirements as
+committed at `40b84ed`) and resolved with 10a's resolver, kept in
+`tests/llm/resolver_10a.py`. The guard against a roster or ceiling change
+without the table is kept by checking that the frozen requirements carry the
+roster and the ceilings `requirements.json` holds today.
 """
 
 import json
 from pathlib import Path
 
 import pytest
-from zylch.llm.roles import resolver
+
+from . import resolver_10a as resolver
 
 ENGINE = Path(__file__).resolve().parents[2]
 ROLES = ENGINE / "zylch" / "llm" / "roles"
 FIXTURES = ENGINE / "tests" / "fixtures" / "llm"
 REQUIRED_PARAMETERS = {"tools", "tool_choice"}
+# What 10a resolved resolved.json from, frozen at 40b84ed.
+FROZEN = FIXTURES / "resolver" / "requirements-10a.json"
 
 
 def load(path: Path):
@@ -54,7 +67,7 @@ def named_models(table: dict) -> list[tuple[str, str, str, str]]:
 
 def test_the_committed_table_is_what_the_committed_inputs_give():
     committed = load(ROLES / "resolved.json")
-    fresh = resolve_fixture(ROLES / "requirements.json", FIXTURES / "resolver")
+    fresh = resolve_fixture(FROZEN, FIXTURES / "resolver")
     committed.pop("as_of")
     fresh.pop("as_of")
     assert fresh == committed, (
@@ -66,7 +79,7 @@ def test_the_committed_table_is_what_the_committed_inputs_give():
 @pytest.mark.parametrize(
     "requirements, fixture",
     [
-        (ROLES / "requirements.json", FIXTURES / "resolver"),
+        (FROZEN, FIXTURES / "resolver"),
         (FIXTURES / "resolver_small" / "requirements.json", FIXTURES / "resolver_small"),
     ],
     ids=["committed", "small"],
@@ -86,7 +99,7 @@ def test_every_named_model_takes_tool_calls_and_the_admitted_context(requirement
 
 def test_the_mrcall_column_carries_what_the_other_columns_carry():
     table = load(ROLES / "resolved.json")
-    floors = load(ROLES / "requirements.json")["roles"]
+    floors = load(FROZEN)["roles"]
     for outcome in table["presets"].values():
         for role, row in outcome["roles"].items():
             mrcall = row["mrcall"]
@@ -101,3 +114,20 @@ def test_the_mrcall_column_carries_what_the_other_columns_carry():
     economy = table["presets"]["economy"]["roles"]
     short = [r for r, row in economy.items() if row["mrcall"] and row["mrcall"]["below_floor"]]
     assert len(short) == 5 and all(floors[r].get("floor") == 40 for r in short)
+
+
+def test_the_frozen_inputs_carry_the_roster_and_ceilings_in_force():
+    """A role or ceiling changed in requirements.json without the table fails here."""
+    frozen, in_force = load(FROZEN), load(ROLES / "requirements.json")
+    assert list(frozen["roles"]) == list(in_force["roles"])
+    assert {k: v["rule"] for k, v in frozen["roles"].items()} == {
+        k: v["rule"] for k, v in in_force["roles"].items()
+    }
+    assert {k: v["index"] for k, v in frozen["roles"].items()} == {
+        k: v["index"] for k, v in in_force["roles"].items()
+    }
+    assert frozen["presets"] == in_force["presets"]
+    table = load(ROLES / "resolved.json")
+    for preset, body in table["presets"].items():
+        assert list(body["roles"]) == list(in_force["roles"]), preset
+        assert body["ceiling"] == in_force["presets"][preset]["ceiling"], preset

@@ -1,8 +1,8 @@
 {
-  "_doc": "Milestone 10a slice 0/1 manifest of model-name allowances under engine/zylch/ (scanned by tests/llm/model_inventory_scan.py:MODEL_NAME, case-sensitive, comment-only lines skipped). tests/llm/test_model_name_boundary.py matches occurrences to rows by (file, literal) with multiplicity; line is informational. Purposes: default (a model chosen by code), adapter (per-model protocol rule kept by the brief), price, snapshot, placeholder, label (display), doc, voice (listed, out of scope, not scanned). path_allowances are the two role files, allowed whole by exact path; any other file under zylch/llm/roles/ needs rows. Adding a row is a reviewed change. app/src rows are inventory only (no ids; display strings).",
+  "_doc": "Milestone 10a slice 0/1 manifest of model-name allowances under engine/zylch/ (scanned by tests/llm/model_inventory_scan.py:MODEL_NAME, case-sensitive, comment-only lines skipped). tests/llm/test_model_name_boundary.py matches occurrences to rows by (file, literal) with multiplicity; line is informational. Purposes: default (a model chosen by code), adapter (per-model protocol rule kept by the brief), price, snapshot, placeholder, label (display), doc, voice (listed, out of scope, not scanned). path_allowances are the two role files, allowed whole by exact path, and since milestone 10's contract (slice S2) the snapshot the resolver writes and the contract's two examples and protocol document, all data or documentation no code takes a model from; any other file under zylch/llm/roles/ needs rows. Adding a row is a reviewed change. app/src rows are inventory only (no ids; display strings).",
   "scope": "zylch",
   "out_of_scope": ["zylch/services/voice/", "zylch/llm/openai_voice.py"],
-  "path_allowances": ["zylch/llm/roles/requirements.json", "zylch/llm/roles/resolved.json"],
+  "path_allowances": ["zylch/llm/roles/requirements.json", "zylch/llm/roles/resolved.json", "zylch/llm/roles/snapshot.json", "zylch/llm/roles/contract/table.example.json", "zylch/llm/roles/contract/snapshot.example.json", "zylch/llm/roles/contract/protocol-v2.md"],
   "allowances": [
     {"file": "zylch/llm/bounded_proxy.py", "line": 92, "literal": "moonshotai/kimi-k3", "purpose": "adapter", "note": "K3 reasoning: long execute timeout"},
     {"file": "zylch/llm/budget_pricing.py", "line": 234, "literal": "claude-haiku-4-5", "purpose": "snapshot", "note": "validate_response_model snapshot map"},
@@ -18,9 +18,6 @@
     {"file": "zylch/llm/openrouter_client.py", "line": 48, "literal": "moonshotai/kimi-k3", "purpose": "adapter", "note": "K3 reasoning dispatch"},
     {"file": "zylch/llm/openrouter_pricing.py", "line": 26, "literal": "moonshotai/kimi-k3", "purpose": "adapter", "note": "K3 reasoning bound"},
     {"file": "zylch/llm/openrouter_pricing.py", "line": 32, "literal": "anthropic/claude-sonnet-5", "purpose": "adapter", "note": "Sonnet 5 sampling rule"},
-    {"file": "zylch/llm/roles/resolver.py", "line": 32, "literal": "anthropic/claude-haiku", "purpose": "doc", "note": "module docstring: the excluded_prefixes example"},
-    {"file": "zylch/llm/roles/resolver.py", "line": 234, "literal": "anthropic/claude-opus-5.5", "purpose": "doc", "note": "direct_id docstring example"},
-    {"file": "zylch/llm/roles/resolver.py", "line": 235, "literal": "claude-opus-5-5", "purpose": "doc", "note": "direct_id docstring example"},
     {"file": "zylch/services/voice/engine_runtime.py", "line": 116, "literal": "gpt-live-1", "purpose": "voice", "note": "out of scope"},
     {"file": "zylch/services/voice/smoke_transport.py", "line": 109, "literal": "gpt-live-1", "purpose": "voice", "note": "out of scope"},
     {"file": "zylch/utils/reply_need.py", "line": 349, "literal": "moonshotai/kimi-k3", "purpose": "adapter", "note": "K3 temperature rule; not in the brief's named adapter list"}

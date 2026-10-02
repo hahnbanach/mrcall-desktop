@@ -1,499 +1,352 @@
-"""Fixture tests for the role resolver and its script.
+"""Resolver v2: requirements, measurement, rankings, the bootstrap and the record (brief D1, D4, D7, D8).
 
-`zylch/llm/roles/resolver.py` is ported from the kit's
-`shared/scripts/resolve-models.py`; these cases reuse the kit's own tests where
-they apply (the rules, the tie-breaks, the filters, the degrade paths, the
-saved-run replay) and add the engine's extensions (the prefix exclusion, the
-Anthropic fallback and its ceiling, the `mrcall` column, `--check`). They run
-on `fixtures/llm/resolver_small/` (a dozen handcrafted entries shaped like the
-real payloads) and once on the real fixture `fixtures/llm/resolver/`. No case
-reaches the network or writes the engine's own `resolved.json`. The last case
-is the one-time differential against the kit's script, skipped without it.
+`zylch/llm/roles/resolver.py` ranks, per preset and role, the candidates of
+`candidates.py` and `impute.py` that the role's measurement admits: maximise
+roles the models that passed, by their index; satisfice roles the models at
+or above the measured threshold, cheapest first; at most five; the
+Anthropic subset beside. Without the measurement there is no ranking. Before
+any threshold exists the bootstrap chooses the arms to measure. These cases
+run on the 2026-10-02 capture with a synthetic `measured.json` (AC 3's
+ordering) and on small synthetic pools for the rules. The script and its
+exit codes are in `test_resolve_models_script.py`; 10a's resolver and its
+kit differential moved to `resolver_10a.py` and `test_resolver_10a_kit.py`.
 """
 
-import importlib.util
-import io
-import json
-import os
-import subprocess
-import sys
+from __future__ import annotations
+
+import copy
 from decimal import Decimal
-from pathlib import Path
 
 import pytest
-from zylch.llm.roles import resolver
-
-ENGINE = Path(__file__).resolve().parents[2]
-SCRIPT = ENGINE / "scripts" / "resolve_models.py"
-FIXTURES = ENGINE / "tests" / "fixtures" / "llm"
-SMALL, REAL = FIXTURES / "resolver_small", FIXTURES / "resolver"
-KIT = Path("/home/user/malemi/mrcall-ai-kit")
-READ_AT = "2026-10-01T12:00:00Z"
-PRICE_KEYS = (("input", "prompt"), ("output", "completion"))
-
-
-def load_script():
-    spec = importlib.util.spec_from_file_location("resolve_models_under_test", SCRIPT)
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    return module
-
-
-script = load_script()
-
-
-def small_req() -> dict:
-    return json.loads((SMALL / "requirements.json").read_text(encoding="utf-8"))
-
-
-def raw(where: Path = SMALL) -> dict:
-    return {
-        "catalogue": (where / "models.json").read_bytes(),
-        "benchmarks": (where / "benchmarks.json").read_bytes(),
-        "read_at": (where / "read-at.txt").read_text(encoding="utf-8").strip(),
-    }
-
-
-def table(req: dict | None = None, payloads: dict | None = None) -> dict:
-    req = small_req() if req is None else req
-    return resolver.document(req, resolver.resolve(req, raw() if payloads is None else payloads))
-
-
-def picks(doc: dict, column: str = "catalogue_id") -> dict:
-    """{(preset, role): id} for the main pick or, with `fallback`, the fallback."""
-    out = {}
-    for preset, outcome in doc["presets"].items():
-        for role, row in outcome["roles"].items():
-            out[(preset, role)] = (
-                row["anthropic_fallback"]["catalogue_id"] if column == "fallback" else row[column]
-            )
-    return out
-
-
-def pool_ids(req: dict, payloads: dict | None = None) -> set:
-    payloads = raw() if payloads is None else payloads
-    catalogue, _ = resolver.payload_list(payloads["catalogue"], "catalogue")
-    benchmarks, _ = resolver.payload_list(payloads["benchmarks"], "benchmarks")
-    return {c["id"] for c in resolver.candidates(catalogue, benchmarks, req["common"])[0]}
-
-
-# ------------------------------------------------------------ the rules
-
-
-def test_the_rules_on_the_small_fixture():
-    doc = table()
-    assert picks(doc) == {
-        ("economy", "SMART"): "vendor/wise-8",
-        ("economy", "AGENT"): "vendor/agent-max",
-        ("economy", "CHEAP"): "vendor/no-agentic",
-        ("economy", "HIGHFLOOR"): "vendor/wise-8",
-        ("balanced", "SMART"): "anthropic/claude-big-3.1",
-        ("balanced", "AGENT"): "vendor/agent-max",
-        ("balanced", "CHEAP"): "vendor/no-agentic",
-        ("balanced", "HIGHFLOOR"): "anthropic/claude-big-3.1",
-    }
-    economy = doc["presets"]["economy"]
-    assert economy["ceiling"] == 10 and economy["raised_to"] is None
-    assert economy["roles"]["HIGHFLOOR"]["below_floor"] is True
-    assert economy["roles"]["CHEAP"]["below_floor"] is False
-    assert economy["roles"]["SMART"]["price"] == {"input": 1.6, "output": 8}
-    assert economy["roles"]["SMART"]["scores"] == dict(intelligence=52, coding=None, agentic=None)
-    assert doc["as_of"] == dict(benchmarks="2026-10-01T00:00:00.000Z", catalogue=READ_AT)
-
-
-def c(model, price, score):
-    scores = dict(intelligence=score, coding=None, agentic=None)
-    return dict(id=model, price=Decimal(str(price)), input_price=None, scores=scores)
-
-
-def test_maximise_tie_goes_to_the_cheaper_model():
-    # The cheaper one sorts last by name, so only the price can choose it.
-    pool = [c("v/a-dear", 3, 60), c("v/z-cheap", 2, 60)]
-    rule = {"rule": "maximise", "index": "intelligence"}
-    assert resolver.choose(rule, pool)[0]["id"] == "v/z-cheap"
-
-
-def test_satisfice_tie_goes_to_the_higher_score_and_a_full_tie_to_the_id():
-    rule = {"rule": "satisfice", "index": "intelligence", "floor": 40}
-    pool = [c("v/a-41", 1, 41), c("v/z-47", 1, 47), c("v/dear", 5, 90)]
-    assert resolver.choose(rule, pool) == (pool[1], False)
-    assert resolver.choose(rule, [c("v/b", 1, 41), c("v/a", 1, 41)])[0]["id"] == "v/a"
-    # Equal to the floor clears it; nothing clearing takes the best and says so.
-    assert resolver.choose(rule, [c("v/x", 1, 40)])[1] is False
-    assert resolver.choose(rule, [c("v/x", 1, 39), c("v/y", 2, 30)]) == (c("v/x", 1, 39), True)
-
-
-# ---------------------------------------------------------- the filters
-
-
-def test_the_prefix_exclusion_keeps_haiku_out_and_would_otherwise_win():
-    req = small_req()
-    assert "anthropic/claude-haiku-9" not in pool_ids(req)
-    assert "anthropic/claude-haiku-9" not in picks(table(req)).values()
-    req["common"]["excluded_prefixes"] = []
-    assert picks(table(req))[("economy", "SMART")] == "anthropic/claude-haiku-9"
-
-
-def test_variants_tools_context_and_required_scores_filter_the_pool():
-    req = small_req()
-    gone = {f"vendor/{m}" for m in "genius:free genius:batch no-tools short-context".split()}
-    gone.add("vendor/no-intelligence")
-    assert not gone & pool_ids(req)
-    req["common"].update(excluded_variants=[], tools=False, min_context=100000, required_scores=[])
-    assert gone <= pool_ids(req)
-
-
-def test_a_none_score_leaves_only_that_index_pool():
-    doc = table()
-    # no-agentic wins CHEAP on intelligence and is never offered to AGENT.
-    assert doc["presets"]["economy"]["roles"]["CHEAP"]["catalogue_id"] == "vendor/no-agentic"
-    eligible = resolver.eligible_by_role(
-        small_req()["roles"], resolver.resolve(small_req(), raw())["pool"], "test"
-    )
-    assert "vendor/no-agentic" not in {x["id"] for x in eligible["AGENT"]}
-    assert "vendor/no-agentic" in {x["id"] for x in eligible["CHEAP"]}
-
-
-def test_another_source_and_disagreeing_records_score_nothing():
-    payloads = raw()
-    bench = json.loads(payloads["benchmarks"])
-    bench["data"].append({**bench["data"][7], "intelligence_index": 1})  # wise-8 disagrees
-    bench["meta"].pop("model_count")
-    payloads["benchmarks"] = json.dumps(bench).encode()
-    result = resolver.resolve(small_req(), payloads)
-    assert result["ambiguous"] == {"vendor/wise-8-20260101"}
-    assert "vendor/wise-8" not in {x["id"] for x in result["pool"]}
-    assert "vendor/cheap-41" in {x["id"] for x in result["pool"]}  # design-arena ignored
-
-
-# ------------------------------------- the raise, the fallback, the ids
-
-
-def test_the_ceiling_raise_and_raised_to():
-    req = small_req()
-    req["presets"] = {"tight": {"ceiling": 0.4}}
-    tight = table(req)["presets"]["tight"]
-    # No agentic score at or under 0.4: every role chooses under 0.5.
-    assert tight["ceiling"] == 0.4 and tight["raised_to"] == 0.5
-    assert tight["roles"]["AGENT"]["catalogue_id"] == "vendor/cheap-41"
-    assert tight["roles"]["SMART"]["catalogue_id"] == "vendor/no-agentic"
-
-
-def test_the_fallback_is_bounded_by_the_ceiling():
-    fallback = picks(table(), "fallback")
-    assert fallback[("economy", "SMART")] == "anthropic/claude-mid-2"
-    assert fallback[("balanced", "SMART")] == "anthropic/claude-big-3.1"  # huge-4 is $25
-    assert fallback[("balanced", "AGENT")] == "anthropic/claude-mid-2"  # big-3.1 unscored
-    assert set(fallback.values()) <= {"anthropic/claude-mid-2", "anthropic/claude-big-3.1"}
-    doc = table()
-    assert doc["presets"]["economy"]["anthropic_raised_to"] is None
-    assert doc["presets"]["balanced"]["roles"]["HIGHFLOOR"]["anthropic_fallback"]["below_floor"]
-
-
-def test_the_fallback_raises_on_its_own():
-    req = small_req()
-    req["presets"] = {"five": {"ceiling": 5}, "open": {"ceiling": None}}
-    doc = table(req)
-    five = doc["presets"]["five"]
-    assert five["raised_to"] is None and five["anthropic_raised_to"] == 10
-    assert five["roles"]["SMART"]["anthropic_fallback"]["catalogue_id"] == "anthropic/claude-mid-2"
-    unbounded = doc["presets"]["open"]["roles"]["SMART"]["anthropic_fallback"]
-    assert unbounded["catalogue_id"] == "anthropic/claude-huge-4"
-
-
-def test_a_billed_price_above_the_catalogue_s_is_the_one_a_ceiling_compares():
-    req = small_req()  # agent-max lists at $6 and, like K3, is billed above that
-    row = {"transport": "openrouter", "price": dict(input="3", output="12")}
-    req["allowlist"]["vendor/agent-max"] = row
-    doc = table(req)
-    assert doc["presets"]["economy"]["roles"]["AGENT"]["catalogue_id"] == "anthropic/claude-mid-2"
-    balanced = doc["presets"]["balanced"]["roles"]["AGENT"]
-    assert balanced["catalogue_id"] == "vendor/agent-max"
-    assert balanced["price"] == {"input": 3, "output": 12}
-    assert balanced["catalogue_price"] == {"input": 1.2, "output": 6}
-    assert "catalogue_price" not in doc["presets"]["balanced"]["roles"]["SMART"]
-
-
-def test_direct_ids():
-    assert resolver.direct_id("anthropic/claude-sonnet-5") == "claude-sonnet-5"
-    assert resolver.direct_id("anthropic/claude-opus-5.5") == "claude-opus-5-5"
-    assert resolver.direct_id("z-ai/glm-5.3") is None
-    assert resolver.served_id("moonshotai/kimi-k3") == "moonshotai/kimi-k3"
-    for outcome in table()["presets"].values():
-        for row in outcome["roles"].values():
-            assert row["direct_id"] == resolver.direct_id(row["catalogue_id"])
-
-
-def mrcall(served, presets=None):
-    req = small_req()
-    req["mrcall_served"] = served
-    req["presets"] = presets or req["presets"]
-    doc = table(req)
-    rows = {k: doc["presets"][k[0]]["roles"][k[1]]["mrcall"] for k in picks(doc)}
-    return doc, {k: row and row["id"] for k, row in rows.items()}
-
-
-def test_the_mrcall_column_is_chosen_over_the_served_subset():
-    doc, ids = mrcall(["claude-mid-2"])
-    # The fallback takes big-3.1 at $20; the server serves only mid-2.
-    assert doc["presets"]["balanced"]["roles"]["SMART"]["anthropic_fallback"]["direct_id"] == (
-        "claude-big-3-1"
-    )
-    assert set(ids.values()) == {"claude-mid-2"}
-    doc, ids = mrcall(["claude-mid-2", "vendor/agent-max"])  # a served non-Anthropic id
-    assert ids[("economy", "SMART")] == ids[("economy", "AGENT")] == "vendor/agent-max"
-    assert ids[("economy", "CHEAP")] == "vendor/agent-max"  # $6 clears 40, mid-2 is $10
-    assert ids[("balanced", "SMART")] == "vendor/agent-max"  # 45 beats mid-2's 40
-    assert doc["presets"]["economy"]["mrcall_raised_to"] is None
-
-
-def test_a_role_no_served_model_fits_is_null_and_takes_no_part_in_the_raise(rig, capsys):
-    doc, ids = mrcall(["claude-big-3-1"])
-    # big-3.1 has no agentic score: AGENT is null, not refused.
-    assert ids[("economy", "AGENT")] is None and ids[("balanced", "AGENT")] is None
-    assert ids[("economy", "SMART")] == "claude-big-3-1"
-    economy = doc["presets"]["economy"]
-    assert economy["mrcall_raised_to"] == 20 and economy["raised_to"] is None
-    assert doc["presets"]["balanced"]["mrcall_raised_to"] is None
-    run, _, req_path = rig
-    req = small_req()
-    req["mrcall_served"] = ["claude-big-3-1"]
-    req_path.write_text(json.dumps(req), encoding="utf-8")
-    assert run("--fixture", str(SMALL)) == 0
-    out = capsys.readouterr().out
-    assert "not served by credits" in out and "mrcall raised to $20" in out
-
-
-# ---------------------------------------------------------- the refusals
-
-
-def test_refused_on_no_candidate_and_on_a_missing_index():
-    req = small_req()
-    req["common"]["min_context"] = 10**9
-    with pytest.raises(resolver.Refused, match="no candidate at any price for SMART"):
-        resolver.resolve(req, raw())
-    req = small_req()
-    req["roles"]["CODER"] = {"rule": "maximise", "index": "coding"}
-    payloads = raw()
-    bench = json.loads(payloads["benchmarks"])
-    for record in bench["data"]:
-        record["coding_index"] = None
-    payloads["benchmarks"] = json.dumps(bench).encode()
-    with pytest.raises(resolver.Refused, match="every vendor: no candidate .* CODER"):
-        resolver.resolve(req, payloads)
-
-
-def test_refused_when_the_anthropic_subset_cannot_serve_a_role():
-    payloads = raw()
-    bench = json.loads(payloads["benchmarks"])
-    for record in bench["data"]:
-        if record["model_permaslug"].startswith("anthropic/"):
-            record["agentic_index"] = None
-    payloads["benchmarks"] = json.dumps(bench).encode()
-    with pytest.raises(resolver.Refused, match="the Anthropic fallback: .* AGENT"):
-        resolver.resolve(small_req(), payloads)
-
-
-UNREADABLE = [(None, "no payload"), (b"<html>502</html>", "not JSON")]
-UNREADABLE += [
-    (b'{"error": "unauthorized"}', "missing or empty"),
-    (b'{"data": []}', "missing or empty"),
-]
-
-
-@pytest.mark.parametrize("body, says", UNREADABLE)
-def test_refused_on_an_unreadable_payload(body, says):
-    payloads = raw()
-    payloads["benchmarks"] = body
-    with pytest.raises(resolver.Refused, match=says):
-        resolver.resolve(small_req(), payloads)
-
-
-# ----------------------------------------------------------- the script
-
-
-@pytest.fixture
-def rig(tmp_path):
-    """A requirements file and a resolved.json path of its own."""
-    req = tmp_path / "requirements.json"
-    req.write_text((SMALL / "requirements.json").read_text(encoding="utf-8"), encoding="utf-8")
-    resolved = tmp_path / "resolved.json"
-
-    def run(*args):
-        return script.main(list(args), requirements_path=req, resolved_path=resolved)
-
-    return run, resolved, req
-
-
-def test_apply_guard_save_replay_and_check(rig, tmp_path, capsys):
-    run, resolved, _ = rig
-    assert run("--fixture", str(SMALL), "--save", str(tmp_path / "saved")) == 0
-    assert not resolved.exists()  # no --apply, nothing written
-    assert "nothing written" in capsys.readouterr().out
-    assert run("--fixture", str(SMALL), "--check") == 1  # no committed table
-    assert run("--fixture", str(tmp_path / "saved"), "--apply") == 0
-    written = resolved.read_bytes()
-    assert json.loads(written) == table()
-    for name in ("models.json", "benchmarks.json", "read-at.txt"):
-        assert (tmp_path / "saved" / name).read_bytes() == (SMALL / name).read_bytes()
-    assert run("--fixture", str(SMALL), "--check") == 0
-    assert run("--fixture", str(SMALL)) == 0 and resolved.read_bytes() == written
-    drifted = json.loads(written)
-    drifted["presets"]["economy"]["roles"]["SMART"]["catalogue_id"] = "vendor/agent-max"
-    resolved.write_text(json.dumps(drifted), encoding="utf-8")
-    capsys.readouterr()
-    assert run("--fixture", str(SMALL), "--check") == 1
-    assert "economy / SMART: vendor/agent-max -> vendor/wise-8" in capsys.readouterr().out
-
-
-def test_an_unreadable_source_exits_1_and_leaves_the_table(rig, tmp_path, capsys):
-    run, resolved, _ = rig
-    resolved.write_text('{"kept": "byte for byte"}\n', encoding="utf-8")
-    fixture = tmp_path / "fx"
-    fixture.mkdir()
-    (fixture / "models.json").write_bytes((SMALL / "models.json").read_bytes())
-    assert run("--fixture", str(fixture), "--apply") == 1
-    assert "benchmarks.json: no such file" in capsys.readouterr().err
-    for body in (b"<html>502</html>", b'{"data": []}'):
-        (fixture / "benchmarks.json").write_bytes(body)
-        assert run("--fixture", str(fixture), "--apply") == 1
-        assert "resolved.json is unchanged" in capsys.readouterr().err
-    assert resolved.read_text(encoding="utf-8") == '{"kept": "byte for byte"}\n'
-
-
-def test_a_config_error_exits_2(rig):
-    run, resolved, req = rig
-    bad = small_req()
-    del bad["allowlist"]
-    req.write_text(json.dumps(bad), encoding="utf-8")
-    assert run("--fixture", str(SMALL), "--apply") == 2 and not resolved.exists()
-    with pytest.raises(SystemExit) as exit_:
-        run("--apply", "--check")
-    assert exit_.value.code == 2
-
-
-def test_the_key_comes_from_the_environment_only(rig, tmp_path, monkeypatch, capsys):
-    run, resolved, _ = rig
-    seen = {}
-
-    def urlopen(request, timeout):
-        seen[request.full_url] = request.get_header("Authorization")
-        name = "models.json" if request.full_url.endswith("/models") else "benchmarks.json"
-        return io.BytesIO((SMALL / name).read_bytes())  # read() and a context
-
-    monkeypatch.setattr(script.urllib.request, "urlopen", urlopen)
-    monkeypatch.setenv(script.API_ENV, "http://openrouter.test/api/v1")
-    monkeypatch.chdir(tmp_path)
-    (tmp_path / ".env").write_text("OPENROUTER_API_KEY=from-a-file\n", encoding="utf-8")
-    monkeypatch.delenv(script.KEY_ENV, raising=False)
-    assert run("--apply") == 1 and not seen and not resolved.exists()
-    assert "OPENROUTER_API_KEY is not set" in capsys.readouterr().err
-    monkeypatch.setenv(script.KEY_ENV, "from-the-environment")
-    assert run("--apply") == 0
-    assert seen == {
-        "http://openrouter.test/api/v1/models": None,
-        "http://openrouter.test/api/v1/benchmarks": "Bearer from-the-environment",
-    }
-    assert "from-the-environment" not in resolved.read_text(encoding="utf-8")
-
-
-# ------------------------------------------------------- the real data
-
-
-def test_the_committed_requirements_carry_the_roster_and_today_s_prices():
-    from .test_price_source import TODAY_DIRECT as PRICES
-    from .test_price_source import TODAY_OPENROUTER as RATES
-
-    req = resolver.validate_requirements(
-        json.loads((script.REQUIREMENTS).read_text(encoding="utf-8"))
-    )
-    roster = "MNEMONIC MEMORY_EXTRACT MEMORY_MERGE TASK_DETECTION REANALYZE DEDUP REPLY_NEED"
-    roster += " INTENT CHAT TASK_SOLVE TRAIN COMPACTION SYNC_ANALYSIS WEB_SEARCH"
-    assert list(req["roles"]) == (roster + " CORRECTION_LEARNING NARRATION").split()
-    assert req["common"]["excluded_prefixes"] == ["anthropic/claude-haiku"]
-    assert {k: v["ceiling"] for k, v in req["presets"].items()} == {"economy": 10, "balanced": 20}
-    allow = req["allowlist"]
-    billed = {m: ("direct", p) for m, p in PRICES.items()}
-    billed.update({m: ("openrouter", p) for m, p in RATES.items()})
-    for model, (transport, (i, o)) in billed.items():
-        price = allow[model]["price"]
-        assert allow[model]["transport"] == transport, model
-        assert (Decimal(price["input"]), Decimal(price["output"])) == (i, o), model
-    assert len(allow) == len(PRICES) + len(RATES)
-    assert allow["moonshotai/kimi-k3"]["reasoning_contract"] == "k3"
-    haiku = [m for m in allow if "haiku" in m]
-    assert all("never a default or an arm" in allow[m]["note"] for m in haiku) and len(haiku) == 3
-    assert set(req["mrcall_served"]) == set(PRICES) | {"moonshotai/kimi-k3"}
-    real = {e["id"]: e["pricing"] for e in json.loads(raw(REAL)["catalogue"])["data"]}
-    for model, row in allow.items():  # informational: today's catalogue beside the billed price
-        if row["transport"] == "openrouter":
-            listed = {k: resolver.per_million(real[model][v]) for k, v in PRICE_KEYS}
-            assert {k: Decimal(row["catalogue_price"][k]) for k in listed} == listed, model
-
-
-def test_the_real_fixture_resolves_and_haiku_is_in_no_pool():
-    req = json.loads(script.REQUIREMENTS.read_text(encoding="utf-8"))
-    payloads = raw(REAL)
-    catalogue = json.loads(payloads["catalogue"])["data"]
-    assert any(e["id"].startswith("anthropic/claude-haiku") for e in catalogue)
-    result = resolver.resolve(req, payloads)
-    assert not [x for x in result["pool"] if x["id"].startswith("anthropic/claude-haiku")]
-    text = json.dumps(resolver.document(req, result))
-    assert "haiku" not in text
-    loosened = json.loads(json.dumps(req))
-    loosened["common"]["excluded_prefixes"] = []
-    assert "anthropic/claude-haiku-4.5" in pool_ids(loosened, payloads)
-
-
-def test_the_script_runs_from_any_directory_without_writing(tmp_path):
-    before = script.RESOLVED.read_bytes() if script.RESOLVED.exists() else None
-    env = {k: v for k, v in os.environ.items() if k != "OPENROUTER_API_KEY"}
-    run = subprocess.run(
-        [sys.executable, str(SCRIPT), "--fixture", str(REAL)],
-        cwd=tmp_path,
-        capture_output=True,
-        text=True,
-        env=env,
-        timeout=120,
-    )
-    assert run.returncode == 0, run.stderr
-    assert "economy: ceiling $10" in run.stdout and "nothing written" in run.stdout
-    assert (script.RESOLVED.read_bytes() if script.RESOLVED.exists() else None) == before
-
-
-# --------------------------------------------- the differential with the kit
-
-
-@pytest.mark.skipif(
-    not (KIT / "shared/scripts/resolve-models.py").is_file(), reason="the kit's checkout is absent"
+from zylch.llm.roles import candidates, gates, resolver, snapshot
+
+from .resolver_fixture import (
+    GLM,
+    GROK,
+    HAIKU,
+    K3,
+    OPUS,
+    QWEN,
+    READ_AT,
+    SHA,
+    SOL,
+    SONNET,
+    measured_all,
+    outcome,
+    requirements,
+    sources,
 )
-def test_the_port_reproduces_the_kit_on_the_kit_s_rules():
-    """The kit's `claude` runtime is the port's Anthropic fallback; its
-    `opencode` runtime (unfiltered by `opencode models`) is the port's main
-    pick. Same fixture, the kit's requirements, every budget and role."""
-    spec = importlib.util.spec_from_file_location(
-        "kit_resolver", KIT / "shared/scripts/resolve-models.py"
-    )
-    kit = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(kit)
-    kit_req = kit.load_requirements(KIT / "shared/roles/requirements.json")
-    kit_doc = kit.document(kit_req, kit.resolve(kit_req, kit.read_sources(REAL)))["runtimes"]
-    for runtime, column in (("claude", "fallback"), ("opencode", "catalogue_id")):
-        spec_rt = kit_req["runtimes"][runtime]
-        port_req = {
-            "common": {**kit_req["common"], "excluded_prefixes": []},
-            "presets": {b: {"ceiling": v} for b, v in spec_rt["ceilings"].items()},
-            "roles": spec_rt["roles"],
-            "allowlist": {},
-            "mrcall_served": [],
-        }
-        doc = table(resolver.validate_requirements(port_req), raw(REAL))
-        theirs = {
-            (b, r): row["catalogue_id"]
-            for b, o in kit_doc[runtime].items()
-            for r, row in o["roles"].items()
-        }
-        assert picks(doc, column) == theirs, runtime
-        for budget, outcome in kit_doc[runtime].items():
-            raised = "anthropic_raised_to" if runtime == "claude" else "raised_to"
-            assert doc["presets"][budget][raised] == outcome["raised_to"]
+
+ROSTER = (
+    "MNEMONIC MEMORY_EXTRACT MEMORY_MERGE TASK_DETECTION REANALYZE DEDUP REPLY_NEED INTENT CHAT"
+    " TASK_SOLVE TRAIN COMPACTION SYNC_ANALYSIS WEB_SEARCH CORRECTION_LEARNING NARRATION"
+).split()
+
+
+def capture_pool(req: dict | None = None) -> list[dict]:
+    req = req or requirements()
+    return resolver.pool(req, sources())["pool"]
+
+
+def c(model: str, price, score, direct: str | None = None, index: str = "intelligence") -> dict:
+    scores = {"intelligence": None, "coding": None, "agentic": None, index: score}
+    return {
+        "id": model,
+        "price": Decimal(str(price)),
+        "input_price": Decimal("1"),
+        "direct_id": direct,
+        "scores": scores,
+        "imputed": {},
+    }
+
+
+def ids(rows: list[dict]) -> list[str]:
+    return [row["id"] for row in rows]
+
+
+MAX = {"rule": "maximise", "index": "intelligence"}
+SAT = {"rule": "satisfice", "index": "intelligence"}
+
+
+# ------------------------------------------------------- the requirements
+
+
+def test_the_committed_requirements_are_v2s():
+    req = resolver.validate_requirements(requirements())
+    assert list(req["roles"]) == ROSTER
+    assert all(set(rule) == {"rule", "index"} for rule in req["roles"].values())
+    assert {k: v["ceiling"] for k, v in req["presets"].items()} == {"economy": 10, "balanced": 20}
+    assert "excluded_prefixes" not in req["common"]
+    assert req["excluded_families"] == [{"vendor": "anthropic", "token": "haiku"}]
+    assert req["margin"] == 1.25 and req["excluded_endpoint_variants"] == ["flex"]
+    quantizations = ["int8", "fp8", "mxfp8", "fp16", "bf16", "fp32", "unknown"]
+    assert req["provider_policy"]["quantizations"] == quantizations
+    assert req["reference"] == K3
+    # 10a's readers keep their keys until the switch-over; the resolver ignores them.
+    assert req["allowlist"] and req["mrcall_served"]
+
+
+@pytest.mark.parametrize(
+    "change, says",
+    [
+        (lambda r: r["roles"]["CHAT"].update(floor=40), "measured"),
+        (lambda r: r["roles"]["CHAT"].update(index="speed"), "index must be"),
+        (lambda r: r["presets"]["economy"].update(ceiling=None), "must be a price"),
+        (lambda r: r.pop("margin"), "margin"),
+        (lambda r: r.update(margin=0.9), "margin"),
+        (lambda r: r.update(excluded_families=[{"vendor": "anthropic"}]), "excluded_families"),
+        (lambda r: r["provider_policy"].update(quantizations=[]), "quantizations"),
+        (lambda r: r.pop("excluded_endpoint_variants"), "excluded_endpoint_variants"),
+        (lambda r: r.pop("reference"), "reference"),
+        (lambda r: r["common"].update(required_scores=["speed"]), "required_scores"),
+    ],
+)
+def test_requirements_the_resolver_cannot_read_are_refused(change, says):
+    req = requirements()
+    change(req)
+    with pytest.raises(resolver.ConfigError, match=says):
+        resolver.validate_requirements(req)
+
+
+@pytest.mark.parametrize(
+    "change, says",
+    [
+        (lambda m: m.update(schema=2), "schema"),
+        (lambda m: m["roles"].update(SPEED=m["roles"]["CHAT"]), "not a role"),
+        (lambda m: m["roles"]["CHAT"].update(threshold="40"), "threshold"),
+        (lambda m: m["roles"]["CHAT"].pop("measured_only"), "measured_only"),
+        (lambda m: m["roles"]["CHAT"]["results"].update({QWEN: {"pass": 1}}), "results"),
+        (lambda m: m["roles"]["CHAT"].update(prompt_sha256="abc"), "prompt_sha256"),
+    ],
+)
+def test_a_measurement_the_resolver_cannot_read_is_refused(change, says):
+    req = requirements()
+    measured = measured_all(req)
+    resolver.validate_measured(copy.deepcopy(measured), req["roles"])
+    change(measured)
+    with pytest.raises(resolver.ConfigError, match=says):
+        resolver.validate_measured(measured, req["roles"])
+
+
+# ------------------------------------------------- AC 3 on the capture
+
+
+def test_ac_3_the_agentic_order_on_the_capture():
+    req = requirements()
+    ranked = resolver.rankings(req, capture_pool(req), measured_all(req))
+    for role in ("CHAT", "TASK_SOLVE"):
+        economy = ranked["presets"]["economy"]["roles"][role]
+        balanced = ranked["presets"]["balanced"]["roles"][role]
+        assert ids(economy["ranking"]) == [SONNET, QWEN, GLM, GROK, SOL]
+        assert round(economy["ranking"][0]["scores"]["agentic"], 1) == 57.7  # imputed
+        assert economy["ranking"][1]["scores"]["agentic"] == 56
+        assert ids(balanced["ranking"]) == [OPUS, SONNET, QWEN, GLM, GROK]
+        assert round(balanced["ranking"][0]["scores"]["agentic"], 1) == 59.8
+        assert ids(economy["anthropic_ranking"]) == [SONNET]
+        assert ids(balanced["anthropic_ranking"]) == [OPUS, SONNET]
+    assert ranked["blocked"] == [] and resolver.publishable(ranked) == []
+
+
+def test_haiku_is_never_ranked_even_when_it_passes():
+    req = requirements()
+    measured = measured_all(req)
+    measured["roles"]["CHAT"]["results"][HAIKU] = {"pass": True}
+    ranked = resolver.rankings(req, capture_pool(req), measured)
+    for body in ranked["presets"].values():
+        for row in body["roles"].values():
+            assert HAIKU not in ids(row["ranking"]) + ids(row["anthropic_ranking"])
+
+
+# ------------------------------------------------------------- the rules
+
+
+def test_maximise_ranks_only_passing_models_best_first_tie_to_the_cheaper():
+    pool = [
+        c("v/a-dear", 3, 60),
+        c("v/z-cheap", 2, 60),
+        c("v/best", 9, 70),
+        c("v/unmeasured", 1, 99),
+    ]
+    measured = outcome(passed=["v/a-dear", "v/z-cheap", "v/best"], failed=[])
+    assert ids(resolver.rank(MAX, pool, measured, Decimal(10))) == [
+        "v/best",
+        "v/z-cheap",
+        "v/a-dear",
+    ]
+    assert ids(resolver.rank(MAX, pool, measured, Decimal(5))) == ["v/z-cheap", "v/a-dear"]
+    tie = [c("v/b", 2, 60), c("v/a", 2, 60)]
+    assert ids(resolver.rank(MAX, tie, outcome(passed=["v/a", "v/b"]), Decimal(10))) == [
+        "v/a",
+        "v/b",
+    ]
+
+
+def test_satisfice_ranks_cheapest_first_at_or_above_the_threshold():
+    pool = [c("v/below", 0.1, 39), c("v/at", 0.5, 40), c("v/high", 0.5, 47), c("v/dear", 5, 90)]
+    pool.append(c("v/failed", 0.2, 45))
+    measured = outcome(threshold=40, failed=["v/failed"])
+    assert ids(resolver.rank(SAT, pool, measured, Decimal(10))) == ["v/high", "v/at", "v/dear"]
+    only = outcome(passed=["v/dear", "v/below"], measured_only=True)
+    assert ids(resolver.rank(SAT, pool, only, Decimal(10))) == ["v/below", "v/dear"]
+    assert resolver.rank(SAT, pool, outcome(), Decimal(10)) == []  # no threshold, no list
+
+
+def test_a_ranking_holds_at_most_five():
+    pool = [c(f"v/m{n}", n, 50 + n) for n in range(1, 9)]
+    measured = outcome(passed=[m["id"] for m in pool])
+    assert ids(resolver.rank(MAX, pool, measured, Decimal(10))) == [
+        f"v/m{n}" for n in (8, 7, 6, 5, 4)
+    ]
+
+
+def test_the_anthropic_ranking_is_the_direct_subset_and_may_be_empty():
+    req = {"presets": {"low": {"ceiling": 10}}, "roles": {"R": MAX}}
+    pool = [c("v/x", 1, 80), c("anthropic/a-1", 5, 60, "a-1"), c("anthropic/b-1", 5, 70)]
+    passed = {
+        "schema": 1,
+        "roles": {"R": outcome(passed=["v/x", "anthropic/a-1", "anthropic/b-1"])},
+    }
+    row = resolver.rankings(req, pool, passed)["presets"]["low"]["roles"]["R"]
+    assert ids(row["ranking"]) == ["v/x", "anthropic/b-1", "anthropic/a-1"]
+    assert ids(row["anthropic_ranking"]) == ["anthropic/a-1"]
+    none = {"schema": 1, "roles": {"R": outcome(passed=["v/x"])}}
+    ranked = resolver.rankings(req, pool, none)
+    assert ranked["presets"]["low"]["roles"]["R"]["anthropic_ranking"] == []
+    assert resolver.publishable(ranked) == []  # an empty Anthropic ranking is publishable
+
+
+def test_no_ranking_without_the_measurement():
+    req = requirements()
+    ranked = resolver.rankings(req, capture_pool(req), None)
+    assert ranked["blocked"] == ROSTER
+    assert all(body["roles"] == {} for body in ranked["presets"].values())
+    partial = measured_all(req)
+    del partial["roles"]["NARRATION"]
+    ranked = resolver.rankings(req, capture_pool(req), partial)
+    assert ranked["blocked"] == ["NARRATION"]
+    assert resolver.publishable(ranked) == ["measured.json does not cover NARRATION"]
+
+
+def test_the_ceiling_raise_is_reported_and_never_published():
+    req = {
+        "presets": {"low": {"ceiling": 2}, "high": {"ceiling": 20}},
+        "roles": {"R": MAX, "S": SAT},
+    }
+    pool = [c("v/a", 4, 60), c("v/b", 9, 70), c("v/cheap", 1, 41)]
+    measured = {
+        "schema": 1,
+        "roles": {"R": outcome(passed=["v/a", "v/b"]), "S": outcome(threshold=40)},
+    }
+    ranked = resolver.rankings(req, pool, measured)
+    low, high = ranked["presets"]["low"], ranked["presets"]["high"]
+    assert low["raised_to"] == Decimal(4) and high["raised_to"] is None
+    assert ids(low["roles"]["R"]["ranking"]) == ["v/a"]
+    assert resolver.publishable(ranked) == [
+        "low's ceiling of 2 would be raised to 4, and a raised ceiling is never published"
+    ]
+
+
+def test_a_role_no_measured_model_qualifies_for_blocks_the_table():
+    req = {"presets": {"low": {"ceiling": 10}}, "roles": {"R": MAX}}
+    ranked = resolver.rankings(req, [c("v/a", 1, 60)], {"schema": 1, "roles": {"R": outcome()}})
+    assert resolver.publishable(ranked) == ["low: no measured model qualifies for R"]
+
+
+def test_refused_when_a_role_has_no_candidate_at_any_price():
+    req = requirements()
+    req["common"]["min_context"] = 10**9
+    with pytest.raises(resolver.Refused, match="no candidate at any price for MNEMONIC"):
+        resolver.pool(req, sources())
+
+
+# --------------------------------------------------------- the bootstrap
+
+
+def arms(boot: dict, role: str) -> dict:
+    return {arm["id"]: arm["why"] for arm in boot["roles"][role]["arms"]}
+
+
+def test_the_bootstrap_arms_on_the_capture():
+    req = requirements()
+    boot = resolver.bootstrap(req, capture_pool(req))
+    assert boot["reference"] == K3
+    chat = arms(boot, "CHAT")
+    assert list(chat) == [SONNET, QWEN, GLM, OPUS, K3]
+    assert chat[OPUS] == ["top 3 under balanced", "first Anthropic under balanced"]
+    assert chat[K3] == ["reference"]
+    mnemonic = arms(boot, "MNEMONIC")
+    assert list(mnemonic) == [SONNET, SOL, "openai/gpt-6-sol", OPUS, K3]
+    ladder = arms(boot, "MEMORY_EXTRACT")
+    assert len(ladder) == 6 and list(ladder)[-1] == K3
+    assert all(why[0].startswith("ladder step") for model, why in ladder.items() if model != K3)
+    every = {model for role in ROSTER for model in arms(boot, role)}
+    assert not [m for m in every if "haiku" in m]
+
+
+def test_an_excluded_family_is_never_an_arm_even_scored_best():
+    best = sources()
+    for record in best["benchmarks"]:
+        if record.get("model_permaslug") == "anthropic/claude-4.5-haiku-20251001":
+            record["intelligence_index"] = 99
+    req = requirements()
+    boot = resolver.bootstrap(req, resolver.pool(req, best)["pool"])
+    assert HAIKU not in {m for role in ROSTER for m in arms(boot, role)}
+    req["excluded_families"] = []
+    loose = resolver.bootstrap(req, resolver.pool(req, best)["pool"])
+    assert arms(loose, "MNEMONIC")[HAIKU] == [
+        "top 3 under economy",
+        "first Anthropic under economy",
+        "top 3 under balanced",
+        "first Anthropic under balanced",
+    ]
+
+
+def test_the_first_anthropic_candidate_joins_the_maximise_arms():
+    req = {"presets": {"low": {"ceiling": 10}}, "roles": {"R": MAX}, "reference": "v/ref"}
+    pool = [c(f"v/m{n}", 1, 90 - n) for n in range(4)] + [c("anthropic/x-1", 1, 50, "x-1")]
+    boot = resolver.bootstrap(req, pool)
+    assert arms(boot, "R") == {
+        "v/m0": ["top 3 under low"],
+        "v/m1": ["top 3 under low"],
+        "v/m2": ["top 3 under low"],
+        "anthropic/x-1": ["first Anthropic under low"],
+        "v/ref": ["reference"],
+    }
+    assert boot["roles"]["R"]["arms"][-1]["candidate"] is None  # the reference is not in the pool
+
+
+def test_the_ladder_widens_its_step_until_six_models_remain():
+    pool = [c(f"v/s{score}", score / 100, score) for score in range(10, 70, 5)]
+    rungs = resolver.ladder(pool, "intelligence", Decimal(10))
+    assert [floor for _, floor in rungs] == [10, 20, 30, 40, 50, 60]
+    assert [m["id"] for m, _ in rungs] == ["v/s10", "v/s20", "v/s30", "v/s40", "v/s50", "v/s60"]
+    few = [c(f"v/f{score}", score / 100, score) for score in (10, 15, 20)]
+    assert [floor for _, floor in resolver.ladder(few, "intelligence", Decimal(10))] == [10, 15, 20]
+
+
+# ---------------------------------------------------------- the record
+
+
+def test_the_table_passes_the_gates_and_its_decision_ignores_prices():
+    req = requirements()
+    src = sources()
+    ranked = resolver.rankings(req, resolver.pool(req, src)["pool"], measured_all(req))
+    stamps = dict(resolved_at=READ_AT, catalogue_read_at=READ_AT)
+    stamps.update(requirements_sha256=SHA, measured_sha256=SHA)
+    table = resolver.document(ranked, stamps)
+    rules = candidates.policy(req)
+    snap = snapshot.build(src["catalogue"], src["endpoints"], rules, src["read_at"])
+    gates.check_snapshot(snap)
+    gates.check_table(table, req, snap)
+    assert table["presets"]["economy"]["ceiling"] == "10"
+    chat = table["presets"]["economy"]["roles"]["CHAT"]
+    assert chat["ranking"][0] == {"id": SONNET, "direct_id": "claude-sonnet-5-5"}
+    assert chat["ranking"][1] == {"id": QWEN, "direct_id": None}
+    cheaper = sources()
+    k3 = next(e for e in cheaper["catalogue"] if e["id"] == K3)
+    k3["pricing"]["completion"] = "0.0000136"
+    again = resolver.rankings(req, resolver.pool(req, cheaper)["pool"], measured_all(req))
+    assert resolver.decision(resolver.document(again, stamps)) == resolver.decision(table)
+    moved = copy.deepcopy(table)
+    moved["presets"]["economy"]["roles"]["CHAT"]["ranking"].reverse()
+    assert resolver.decision(moved) != resolver.decision(table)
