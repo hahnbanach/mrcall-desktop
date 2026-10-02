@@ -1826,6 +1826,14 @@ true` within five minutes of the start and its other triggers, or the
 rollback. A real call is shown only by the test call the operators may
 make; without it, voice is accepted on `calls_available` alone.
 
+**After the gate.** Merged to main as `2e22bea`, a fast-forward over the
+VPS rollout record (`b29242d`). The VM's checkout was put back on main
+and `update-daemons.sh` pulled it (TE-MAIN): the helper it installed from
+main is `a90d1bc0…`, the four scratch tenants were re-applied `ready` and
+restarted with the code change, and the declared unit is active as its
+tenant with `:8787` up. Nothing was done on the VPS from this session: it
+keeps `594b7375…` until its next reconcile pulls main.
+
 ## M3 — Egress bound per daemon
 
 Owner: release-engineer. After M2 is stable on all six; own rollback.
