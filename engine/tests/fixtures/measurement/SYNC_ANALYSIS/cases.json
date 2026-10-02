@@ -1,0 +1,258 @@
+{
+  "schema": 1,
+  "role": "SYNC_ANALYSIS",
+  "builder": "zylch.tools.email_sync.EmailSyncManager._agent_analyze",
+  "cases": [
+    {
+      "id": "sync_analysis-01",
+      "lang": "it",
+      "input": {
+        "messages": [
+          {"from_name": "Giulia Neri", "from_email": "acquisti@bistrot-neri.example", "to_email": "info@oleificio-riva.example", "subject": "Richiesta preventivo olio EVO", "date": "2026-09-28T08:12:00+00:00", "body_plain": "Buongiorno,\nci servirebbe un preventivo per 300 bottiglie da 0,75 l di olio extravergine, con consegna a Bergamo entro fine ottobre. Potete indicarci anche i tempi di consegna?\n\nGrazie\nGiulia Neri\nBistrot Neri"}
+        ]
+      },
+      "label": {"needs_action": true, "expected_action": "answer"},
+      "critical": true,
+      "why": "A customer asks for a quote and delivery times; someone is waiting for the user's reply, the prompt's first rule."
+    },
+    {
+      "id": "sync_analysis-02",
+      "lang": "en",
+      "input": {
+        "messages": [
+          {"from_name": "Luca Moretti", "from_email": "luca@example-furniture.example", "to_email": "emma.clarke@example-events.example", "subject": "Order 7781 confirmed", "date": "2026-09-29T09:00:00+00:00", "body_plain": "Hi Emma,\nyour order 7781 (12 folding tables) is confirmed.\n\nLuca"},
+          {"from_name": "Emma Clarke", "from_email": "emma.clarke@example-events.example", "to_email": "luca@example-furniture.example", "subject": "Re: Order 7781 confirmed", "date": "2026-09-29T10:30:00+00:00", "body_plain": "Hi Luca,\nthanks for confirming. Could you tell me whether it ships before Friday? We need the tables for an event on Saturday.\n\nBest,\nEmma\n\nOn Tue, 29 Sep 2026 at 10:00, Luca Moretti <luca@example-furniture.example> wrote:\n> Hi Emma,\n> your order 7781 (12 folding tables) is confirmed.\n>\n> Luca"}
+        ]
+      },
+      "label": {"needs_action": true, "expected_action": "answer"},
+      "critical": true,
+      "why": "After the confirmation, which promised nothing, the customer asks a direct question about the shipping date: 'answer'."
+    },
+    {
+      "id": "sync_analysis-03",
+      "lang": "it",
+      "input": {
+        "messages": [
+          {"from_name": "Ing. Davide Russo", "from_email": "d.russo@impianti-russo.example", "to_email": "commerciale@elettro-esempio.example", "subject": "Modello X-200: documentazione", "date": "2026-09-30T07:45:00+00:00", "body_plain": "Buongiorno,\nmi potete inviare la scheda tecnica e la dichiarazione CE del modello X-200? Ci servono per la gara di lunedì.\n\nCordiali saluti\nIng. Davide Russo\nImpianti Russo Srl"}
+        ]
+      },
+      "label": {"needs_action": true, "expected_action": "answer"},
+      "critical": true,
+      "why": "A request for documents with a deadline; the prompt lists requested documents under 'answer'."
+    },
+    {
+      "id": "sync_analysis-04",
+      "lang": "en",
+      "input": {
+        "messages": [
+          {"from_name": "Priya Shah", "from_email": "priya@example-architects.example", "to_email": "luca@example-furniture.example", "subject": "Showroom layout review", "date": "2026-09-30T13:20:00+00:00", "body_plain": "Hi Luca,\nwe'd like to review the showroom layout with you before ordering. Would Tuesday 13 October at 10:00 or Wednesday 14 at 15:00 work for a call?\n\nThanks,\nPriya"}
+        ]
+      },
+      "label": {"needs_action": true, "expected_action": "answer"},
+      "critical": true,
+      "why": "A meeting proposal with two slots awaiting the user's choice; the prompt puts pending meeting proposals under 'answer'."
+    },
+    {
+      "id": "sync_analysis-05",
+      "lang": "it",
+      "input": {
+        "messages": [
+          {"from_name": "Paolo Riva", "from_email": "paolo@oleificio-riva.example", "to_email": "ordini@gastronomia-sole.example", "subject": "Spedizione ordine 556", "date": "2026-09-29T08:40:00+00:00", "body_plain": "Buongiorno,\nl'ordine 556 è partito oggi con il corriere.\n\nCordiali saluti\nPaolo Riva"},
+          {"from_name": "Anna Sole", "from_email": "ordini@gastronomia-sole.example", "to_email": "paolo@oleificio-riva.example", "subject": "Re: Spedizione ordine 556", "date": "2026-10-01T09:05:00+00:00", "body_plain": "Buongiorno,\nla merce è arrivata ieri ma due scatole erano schiacciate e tre vasetti di patè di olive sono rotti. Come procediamo per la sostituzione?\n\nAnna\nGastronomia Sole\n\nIl giorno mar 29 set 2026 alle ore 10:40 Paolo Riva <paolo@oleificio-riva.example> ha scritto:\n> Buongiorno,\n> l'ordine 556 è partito oggi con il corriere.\n>\n> Cordiali saluti\n> Paolo Riva"}
+        ]
+      },
+      "label": {"needs_action": true, "expected_action": "answer"},
+      "critical": true,
+      "why": "A damaged delivery is reported with a direct question on how to get replacements; the customer waits for the user's reply."
+    },
+    {
+      "id": "sync_analysis-06",
+      "lang": "en",
+      "input": {
+        "messages": [
+          {"from_name": "Luca Moretti", "from_email": "luca@example-furniture.example", "to_email": "tom@example-cafe.example", "subject": "Oak table samples", "date": "2026-09-28T15:00:00+00:00", "body_plain": "Hi Tom,\nthe oak and walnut samples left today, you should have them on Thursday.\n\nLuca"},
+          {"from_name": "Tom Becker", "from_email": "tom@example-cafe.example", "to_email": "luca@example-furniture.example", "subject": "Re: Oak table samples", "date": "2026-10-01T16:10:00+00:00", "body_plain": "Hi Luca,\nthanks for the samples, the team liked the oak finish. Please send the pro-forma invoice for the 20 tables so we can pay the deposit this week.\n\nCheers,\nTom\n\nOn Mon, 28 Sep 2026 at 16:00, Luca Moretti <luca@example-furniture.example> wrote:\n> Hi Tom,\n> the oak and walnut samples left today, you should have them on Thursday.\n>\n> Luca"}
+        ]
+      },
+      "label": {"needs_action": true, "expected_action": "answer"},
+      "critical": true,
+      "why": "A polite request for a pro-forma invoice with no question mark; the customer waits for a document from the user."
+    },
+    {
+      "id": "sync_analysis-07",
+      "lang": "en",
+      "input": {
+        "messages": [
+          {"from_name": "Marta Villa", "from_email": "marta.villa@example-agency.example", "to_email": "paolo@oleificio-riva.example", "subject": "Contratto distribuzione", "date": "2026-10-01T15:30:00+00:00", "body_plain": "Hi Paolo,\ngrazie per la call di oggi. Can you send me the updated contract by Monday? Così lo firmiamo in settimana.\n\nMarta"}
+        ]
+      },
+      "label": {"needs_action": true, "expected_action": "answer"},
+      "critical": true,
+      "why": "Italian and English mixed in one message; the request to send the updated contract by Monday is explicit."
+    },
+    {
+      "id": "sync_analysis-08",
+      "lang": "it",
+      "input": {
+        "messages": [
+          {"from_name": "Paolo Riva", "from_email": "paolo@oleificio-riva.example", "to_email": "c.conti@enoteca-conti.example", "subject": "Listino 2027", "date": "2026-09-30T15:10:00+00:00", "body_plain": "Gentile Sig. Conti,\nle mando il listino aggiornato entro stasera.\n\nCordiali saluti\nPaolo Riva"},
+          {"from_name": "Carlo Conti", "from_email": "c.conti@enoteca-conti.example", "to_email": "paolo@oleificio-riva.example", "subject": "Re: Listino 2027", "date": "2026-09-30T15:25:00+00:00", "body_plain": "Perfetto, grazie mille!\n\nCarlo Conti\nEnoteca Conti\n\nIl giorno mer 30 set 2026 alle ore 17:10 Paolo Riva <paolo@oleificio-riva.example> ha scritto:\n> Gentile Sig. Conti,\n> le mando il listino aggiornato entro stasera.\n>\n> Cordiali saluti\n> Paolo Riva"}
+        ]
+      },
+      "label": {"needs_action": true, "expected_action": "reminder"},
+      "critical": true,
+      "why": "The prompt's second example in Italian: the user promised the price list by tonight and the customer only thanked, so the task is keeping the promise, 'reminder'."
+    },
+    {
+      "id": "sync_analysis-09",
+      "lang": "en",
+      "input": {
+        "messages": [
+          {"from_name": "Luca Moretti", "from_email": "luca@example-furniture.example", "to_email": "emma.clarke@example-events.example", "subject": "Delivery date for order 7790", "date": "2026-09-29T14:40:00+00:00", "body_plain": "Hi Emma,\nI'll check with the warehouse and get back to you tomorrow with the exact delivery date.\n\nLuca"},
+          {"from_name": "Emma Clarke", "from_email": "emma.clarke@example-events.example", "to_email": "luca@example-furniture.example", "subject": "Re: Delivery date for order 7790", "date": "2026-09-29T15:02:00+00:00", "body_plain": "Great, thanks Luca.\n\nEmma\n\nOn Tue, 29 Sep 2026 at 15:40, Luca Moretti <luca@example-furniture.example> wrote:\n> Hi Emma,\n> I'll check with the warehouse and get back to you tomorrow with the exact delivery date.\n>\n> Luca"}
+        ]
+      },
+      "label": {"needs_action": true, "expected_action": "reminder"},
+      "critical": true,
+      "why": "The user promised to come back with a delivery date and the customer only thanked; what remains is the user's own promise, 'reminder'."
+    },
+    {
+      "id": "sync_analysis-10",
+      "lang": "it",
+      "input": {
+        "messages": [
+          {"from_name": "Dott. Marco Ferri", "from_email": "segreteria@studio-ferri.example", "to_email": "supporto@centralino-esempio.example", "subject": "Configurazione assistente", "date": "2026-09-30T08:30:00+00:00", "body_plain": "Buongiorno,\npreferirei che l'assistente telefonico non chiedesse subito nome e cognome a chi chiama.\n\nDott. Marco Ferri"},
+          {"from_name": "Sara - Supporto Centralino Esempio", "from_email": "supporto@centralino-esempio.example", "to_email": "segreteria@studio-ferri.example", "subject": "Re: Configurazione assistente", "date": "2026-10-01T09:05:00+00:00", "body_plain": "Buongiorno Dottore,\npossiamo sistemarlo subito :-)\n\nSara"},
+          {"from_name": "Dott. Marco Ferri", "from_email": "segreteria@studio-ferri.example", "to_email": "supporto@centralino-esempio.example", "subject": "Re: Configurazione assistente", "date": "2026-10-01T09:20:00+00:00", "body_plain": "Ottimo, grazie mille!\n\nDott. Marco Ferri\n\nIl giorno gio 1 ott 2026 alle ore 11:05 Sara - Supporto Centralino Esempio <supporto@centralino-esempio.example> ha scritto:\n> Buongiorno Dottore,\n> possiamo sistemarlo subito :-)\n>\n> Sara"}
+        ]
+      },
+      "label": {"needs_action": true, "expected_action": "reminder"},
+      "critical": true,
+      "why": "The prompt's fourth example in Italian: the user said 'possiamo sistemarlo subito' and the customer thanked; the fix is still owed, 'reminder'."
+    },
+    {
+      "id": "sync_analysis-11",
+      "lang": "en",
+      "input": {
+        "messages": [
+          {"from_name": "Example Kitchens Support", "from_email": "support@example-kitchens.example", "to_email": "d.hughes@example-mail.example", "subject": "Replacement hinge", "date": "2026-09-28T09:02:00+00:00", "body_plain": "Dear Mr Hughes,\nwe'll ship the replacement hinge on Monday 5 October.\n\nKind regards,\nExample Kitchens Support"},
+          {"from_name": "David Hughes", "from_email": "d.hughes@example-mail.example", "to_email": "support@example-kitchens.example", "subject": "Re: Replacement hinge", "date": "2026-09-28T10:15:00+00:00", "body_plain": "Thanks, appreciated.\n\nDavid Hughes\n\nOn Mon, 28 Sep 2026 at 10:02, Example Kitchens Support <support@example-kitchens.example> wrote:\n> Dear Mr Hughes,\n> we'll ship the replacement hinge on Monday 5 October.\n>\n> Kind regards,\n> Example Kitchens Support"}
+        ]
+      },
+      "label": {"needs_action": true, "expected_action": "reminder"},
+      "critical": true,
+      "why": "The user's side promised to ship a part on a date and the customer only thanked; shipping it is the pending task, 'reminder'."
+    },
+    {
+      "id": "sync_analysis-12",
+      "lang": "it",
+      "input": {
+        "messages": [
+          {"from_name": "Noleggi Esempio", "from_email": "prenotazioni@noleggi-esempio.example", "to_email": "matteo.gallo@example-traslochi.example", "subject": "Furgone per sabato", "date": "2026-10-01T08:00:00+00:00", "body_plain": "Buongiorno,\nverifichiamo la disponibilità del furgone per sabato e le confermiamo entro domani.\n\nSaluti\nNoleggi Esempio"},
+          {"from_name": "Matteo Gallo", "from_email": "matteo.gallo@example-traslochi.example", "to_email": "prenotazioni@noleggi-esempio.example", "subject": "Re: Furgone per sabato", "date": "2026-10-01T08:30:00+00:00", "body_plain": "Ok, aspetto allora la vostra conferma.\n\nMatteo Gallo\n\nIl giorno gio 1 ott 2026 alle ore 10:00 Noleggi Esempio <prenotazioni@noleggi-esempio.example> ha scritto:\n> Buongiorno,\n> verifichiamo la disponibilità del furgone per sabato e le confermiamo entro domani.\n>\n> Saluti\n> Noleggi Esempio"}
+        ]
+      },
+      "label": {"needs_action": true},
+      "critical": true,
+      "why": "The customer waits for a confirmation the user promised; the prompt's rules fit both 'answer' (waiting for a confirmation) and 'reminder' (a promise made), so only 'action needed' is labelled."
+    },
+    {
+      "id": "sync_analysis-13",
+      "lang": "en",
+      "input": {
+        "messages": [
+          {"from_name": "Example Cloud Storage", "from_email": "no-reply@example-cloud.example", "to_email": "luca@example-furniture.example", "subject": "Your subscription has been renewed", "date": "2026-09-30T02:00:00+00:00", "body_plain": "Hello,\nyour Example Cloud Storage Plus plan has been renewed for another year. Amount charged: 99.00 EUR to the card ending in 0000.\nThis is an automated message: please do not reply."}
+        ]
+      },
+      "label": {"needs_action": false, "expected_action": null},
+      "critical": false,
+      "why": "An automated renewal notice, the prompt's fifth example: no task."
+    },
+    {
+      "id": "sync_analysis-14",
+      "lang": "it",
+      "input": {
+        "messages": [
+          {"from_name": "Corriere Esempio", "from_email": "noreply@corriere-esempio.example", "to_email": "paolo@oleificio-riva.example", "subject": "La tua spedizione è stata consegnata", "date": "2026-10-01T09:32:00+00:00", "body_plain": "Gentile cliente,\nla spedizione 0000123456 è stata consegnata oggi alle 11:32. Firma del ricevente: MAGAZZINO.\nQuesta è una comunicazione automatica: non rispondere a questa email."}
+        ]
+      },
+      "label": {"needs_action": false, "expected_action": null},
+      "critical": false,
+      "why": "An automated delivery notification that asks for no response."
+    },
+    {
+      "id": "sync_analysis-15",
+      "lang": "it",
+      "input": {
+        "messages": [
+          {"from_name": "Paolo Riva", "from_email": "paolo@oleificio-riva.example", "to_email": "c.conti@enoteca-conti.example", "subject": "Fattura 233", "date": "2026-10-01T07:20:00+00:00", "body_plain": "Buongiorno,\nle ho inviato la fattura n. 233 in allegato.\n\nBuona giornata\nPaolo Riva"},
+          {"from_name": "Carlo Conti", "from_email": "c.conti@enoteca-conti.example", "to_email": "paolo@oleificio-riva.example", "subject": "Re: Fattura 233", "date": "2026-10-01T07:45:00+00:00", "body_plain": "Ricevuta, grazie e buona giornata a lei!\n\nCarlo Conti\n\nIl giorno gio 1 ott 2026 alle ore 09:20 Paolo Riva <paolo@oleificio-riva.example> ha scritto:\n> Buongiorno,\n> le ho inviato la fattura n. 233 in allegato.\n>\n> Buona giornata\n> Paolo Riva"}
+        ]
+      },
+      "label": {"needs_action": false, "expected_action": null},
+      "critical": false,
+      "why": "Same shape as sync_analysis-08 (the customer thanks the user), but the user already delivered the invoice: an exchange of courtesies concluded."
+    },
+    {
+      "id": "sync_analysis-16",
+      "lang": "en",
+      "input": {
+        "messages": [
+          {"from_name": "Example Packaging News", "from_email": "newsletter@example-packaging.example", "to_email": "luca@example-furniture.example", "subject": "October newsletter: 5 ideas for greener shipping boxes", "date": "2026-10-01T06:00:00+00:00", "body_plain": "Hello Luca,\nthis month: recycled board grades, the new 2027 box sizes and five ideas to cut plastic from your shipments. Read the full articles on our website.\n\nYou receive this newsletter because you subscribed at a trade fair. To unsubscribe, use the link in the footer."}
+        ]
+      },
+      "label": {"needs_action": false, "expected_action": null},
+      "critical": false,
+      "why": "A marketing newsletter; nothing is asked of the user."
+    },
+    {
+      "id": "sync_analysis-17",
+      "lang": "en",
+      "input": {
+        "messages": [
+          {"from_name": "Luca Moretti", "from_email": "luca@example-furniture.example", "to_email": "tom@example-cafe.example", "subject": "October invoice", "date": "2026-10-01T07:15:00+00:00", "body_plain": "Hi Tom,\nhere's the invoice for the October order. Thanks again for your business!\n\nLuca"},
+          {"from_name": "Tom Becker", "from_email": "tom@example-cafe.example", "to_email": "luca@example-furniture.example", "subject": "Re: October invoice", "date": "2026-10-01T07:40:00+00:00", "body_plain": "Received, many thanks. Have a good day!\n\nTom\n\nOn Thu, 1 Oct 2026 at 08:15, Luca Moretti <luca@example-furniture.example> wrote:\n> Hi Tom,\n> here's the invoice for the October order. Thanks again for your business!\n>\n> Luca"}
+        ]
+      },
+      "label": {"needs_action": false, "expected_action": null},
+      "critical": false,
+      "why": "The user sent the invoice and the customer confirmed receipt with a greeting: concluded."
+    },
+    {
+      "id": "sync_analysis-18",
+      "lang": "it",
+      "input": {
+        "messages": [
+          {"from_name": "Calendario Esempio", "from_email": "calendar-notification@calendario-esempio.example", "to_email": "paolo@oleificio-riva.example", "subject": "Invito accettato: Riunione trimestrale fornitori (gio 8 ott 2026 10:00)", "date": "2026-10-01T10:12:00+00:00", "body_plain": "Sara Colombo ha accettato questo invito.\n\nRiunione trimestrale fornitori\ngiovedì 8 ottobre 2026, 10:00 - 11:00 (CEST)\nSala riunioni piano terra"}
+        ]
+      },
+      "label": {"needs_action": false, "expected_action": null},
+      "critical": false,
+      "why": "An automated notice that an invitee accepted a meeting; no response is needed."
+    },
+    {
+      "id": "sync_analysis-19",
+      "lang": "en",
+      "input": {
+        "messages": [
+          {"from_name": "Emma Clarke", "from_email": "emma.clarke@example-events.example", "to_email": "luca@example-furniture.example", "subject": "Office closed on 2 November", "date": "2026-10-01T12:00:00+00:00", "body_plain": "Hi Luca,\njust letting you know our office will be closed on Monday 2 November for the holiday. No need to reply.\n\nBest,\nEmma"}
+        ]
+      },
+      "label": {"needs_action": false, "expected_action": null},
+      "critical": false,
+      "why": "Information only, and the sender says explicitly that no reply is needed."
+    },
+    {
+      "id": "sync_analysis-20",
+      "lang": "it",
+      "input": {
+        "messages": [
+          {"from_name": "Giulia Neri", "from_email": "acquisti@bistrot-neri.example", "to_email": "info@oleificio-riva.example", "subject": "Grazie!", "date": "2026-10-01T14:30:00+00:00", "body_plain": "Buongiorno Paolo,\nvolevo solo ringraziarvi per la consegna puntuale, l'olio è piaciuto molto ai nostri clienti. Alla prossima!\n\nGiulia\nBistrot Neri"}
+        ]
+      },
+      "label": {"needs_action": false, "expected_action": null},
+      "critical": false,
+      "why": "A thank-you after a completed delivery; a courtesy with nothing pending."
+    }
+  ]
+}

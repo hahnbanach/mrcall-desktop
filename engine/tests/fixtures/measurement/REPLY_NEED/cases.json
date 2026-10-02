@@ -1,0 +1,287 @@
+{
+  "schema": 1,
+  "role": "REPLY_NEED",
+  "builder": "zylch.utils.reply_need.adjudicate",
+  "cases": [
+    {
+      "id": "reply_need-01",
+      "lang": "it",
+      "input": {
+        "message": {
+          "from_email": "amministrazione@cartoleria-esempio.example",
+          "subject": "Re: Fattura n. 412",
+          "body_plain": "Grazie mille per la risposta veloce. Mi mandi anche la fattura di agosto, che non la trovo più.\n\nCordiali saluti\nElena Marchi\nUfficio amministrativo - Cartoleria Esempio Srl"
+        }
+      },
+      "label": {"needs_reply": true},
+      "critical": true,
+      "why": "A thank-you that wraps a new request (the August invoice) with no question mark; the request is the content, so a reply is owed and calling it a courtesy silences the customer."
+    },
+    {
+      "id": "reply_need-02",
+      "lang": "en",
+      "input": {
+        "message": {
+          "from_email": "tom.hughes@example-print.example",
+          "subject": "Re: Printer error E-42",
+          "body_plain": "Thanks for the instructions. I did the reset as you said but the printer still shows error E-42 and won't print.\n\nRegards,\nTom Hughes"
+        }
+      },
+      "label": {"needs_reply": true},
+      "critical": true,
+      "why": "Polite opening, but it reports that the problem is still not solved, which the prompt lists explicitly as needing a reply."
+    },
+    {
+      "id": "reply_need-03",
+      "lang": "it",
+      "input": {
+        "message": {
+          "from_email": "g.bassi@bassi-costruzioni.example",
+          "subject": "Re: Sopralluogo impianto",
+          "body_plain": "Va bene, grazie. Però giovedì non riesco più: possiamo fare martedì mattina, anche presto.\n\nGiorgio Bassi"
+        }
+      },
+      "label": {"needs_reply": true},
+      "critical": true,
+      "why": "Starts like a courtesy, then cancels the agreed day and proposes another without a question mark: an appointment we must confirm."
+    },
+    {
+      "id": "reply_need-04",
+      "lang": "it",
+      "input": {
+        "message": {
+          "from_email": "paola.ferri@ferri-alimentari.example",
+          "subject": "Re: Consegne ottobre",
+          "body_plain": "Ricevuto, grazie. Vi segnalo che da lunedì 12 ottobre il nostro magazzino si sposta in Via dell'Artigianato 7, Lodi: le prossime consegne vanno lì.\n\nBuona giornata\nPaola Ferri"
+        }
+      },
+      "label": {"needs_reply": true},
+      "critical": true,
+      "why": "Acknowledges, then gives a new delivery address we must act on; the prompt counts new facts we have to process as needing a reply."
+    },
+    {
+      "id": "reply_need-05",
+      "lang": "en",
+      "input": {
+        "message": {
+          "from_email": "sarah.collins@example-events.example",
+          "subject": "Re: Quote for 40 chairs",
+          "body_plain": "Great, thanks Marco. I'll wait for your revised quote with delivery included then.\n\nBest,\nSarah Collins\nExample Events Ltd"
+        }
+      },
+      "label": {"needs_reply": true},
+      "critical": true,
+      "why": "Reads as thanks, but the customer is waiting for a revised quote from us: the ball is with us, which the prompt names as needing a reply."
+    },
+    {
+      "id": "reply_need-06",
+      "lang": "it",
+      "input": {
+        "message": {
+          "from_email": "marco.galli@galli-ottica.example",
+          "subject": "Re: Ritiro reso",
+          "body_plain": "Va bene, grazie. Devo però dirvi che sono molto deluso: è la terza volta che il corriere non trova il nostro indirizzo.\n\nMarco Galli"
+        }
+      },
+      "label": {"needs_reply": true},
+      "critical": true,
+      "why": "An acknowledgement followed by an explicit complaint about repeated failed pickups; dissatisfaction always needs a reply."
+    },
+    {
+      "id": "reply_need-07",
+      "lang": "en",
+      "input": {
+        "message": {
+          "from_email": "j.patel@example-dental.example",
+          "subject": "Re: Maintenance contract",
+          "body_plain": "Ok thanks. Send me the signed copy as well, for our records.\n\nJ. Patel"
+        }
+      },
+      "label": {"needs_reply": true},
+      "critical": true,
+      "why": "Two courtesy words, then an imperative request for a document; a short polite instruction is still a request."
+    },
+    {
+      "id": "reply_need-08",
+      "lang": "it",
+      "input": {
+        "message": {
+          "from_email": "luisa.conti@studio-conti.example",
+          "subject": "Re: Contratto di manutenzione",
+          "body_plain": "Grazie, ricevuto. Manca però la pagina 3 del contratto, quella con le condizioni di pagamento.\n\nSaluti\nLuisa Conti"
+        }
+      },
+      "label": {"needs_reply": true},
+      "critical": true,
+      "why": "Confirms receipt but reports a missing page we must send; something is still open."
+    },
+    {
+      "id": "reply_need-09",
+      "lang": "it",
+      "input": {
+        "message": {
+          "from_email": "andrea@example-trading.example",
+          "subject": "Re: Lotto 2207",
+          "body_plain": "Thanks Giulia! Ci serve però anche il certificato di conformità per il lotto 2207, il cliente finale lo chiede entro venerdì.\n\nAndrea"
+        }
+      },
+      "label": {"needs_reply": true},
+      "critical": true,
+      "why": "English thanks, Italian request: the certificate is needed by Friday. Mixed languages must not hide the request."
+    },
+    {
+      "id": "reply_need-10",
+      "lang": "en",
+      "input": {
+        "message": {
+          "from_email": "mira.novak@example-retail.example",
+          "subject": "Re: Order 5531",
+          "body_plain": "Got it, thanks. Please cancel the second pallet from the order, we no longer need it.\n\nKind regards,\nMira Novak\nPurchasing"
+        }
+      },
+      "label": {"needs_reply": true},
+      "critical": true,
+      "why": "An instruction to change the order follows the acknowledgement; we must act on it and confirm."
+    },
+    {
+      "id": "reply_need-11",
+      "lang": "it",
+      "input": {
+        "message": {
+          "from_email": "segreteria@studio-rinaldi.example",
+          "subject": "Re: Pratica 2231",
+          "body_plain": "Va bene, la ringrazio tanto. Buona giornata\n\nDott.ssa Carla Rinaldi\nStudio Dentistico Rinaldi\nVia Esempio 21, 20100 Milano\nTel. +39 02 0000 0141"
+        }
+      },
+      "label": {"needs_reply": false},
+      "critical": false,
+      "why": "A pure closing courtesy followed by a signature block with address and phone, which the prompt says to ignore."
+    },
+    {
+      "id": "reply_need-12",
+      "lang": "en",
+      "input": {
+        "message": {
+          "from_email": "daniel@example-bakery.example",
+          "subject": "Re: Wi-Fi not working",
+          "body_plain": "Perfect, it works now. Thank you so much for the quick help!\n\nDaniel"
+        }
+      },
+      "label": {"needs_reply": false},
+      "critical": false,
+      "why": "Confirms the fix worked and thanks us; nothing asked, reported or left open."
+    },
+    {
+      "id": "reply_need-13",
+      "lang": "it",
+      "input": {
+        "message": {
+          "from_email": "info@negozio-bellini.example",
+          "subject": "Re: Documenti richiesti",
+          "body_plain": "Ricevuto, grazie mille.\n\nIl giorno mar 29 set 2026 alle ore 10:12 Assistenza Esempio <assistenza@negozio-esempio.example>\nha scritto:\n> Buongiorno, in allegato i documenti richiesti.\n> Le serve altro?\n> Assistenza Esempio"
+        }
+      },
+      "label": {"needs_reply": false},
+      "critical": false,
+      "why": "Acknowledges receipt; the quoted trailer is our own earlier mail (cut by the engine before the model sees it, its question included), so only a thank-you remains."
+    },
+    {
+      "id": "reply_need-14",
+      "lang": "en",
+      "input": {
+        "message": {
+          "from_email": "sarah.collins@example-events.example",
+          "subject": "Re: Delivery slot",
+          "body_plain": "Thanks Marco, all clear now. Have a nice weekend.\n\nSarah"
+        }
+      },
+      "label": {"needs_reply": false},
+      "critical": false,
+      "why": "Thanks, says everything is clear and closes with a greeting; nothing is open."
+    },
+    {
+      "id": "reply_need-15",
+      "lang": "it",
+      "input": {
+        "message": {
+          "from_email": "roberto@sala-impianti.example",
+          "subject": "Re: Intervento caldaia",
+          "body_plain": "Ok, perfetto così, la caldaia ora funziona. Grazie e buon lavoro\n\nRoberto Sala\nSala Impianti Snc\n\nAVVISO DI RISERVATEZZA: questo messaggio e i suoi allegati sono destinati esclusivamente al destinatario indicato. Se lo avete ricevuto per errore, vi preghiamo di cancellarlo e di darne comunicazione al mittente."
+        }
+      },
+      "label": {"needs_reply": false},
+      "critical": false,
+      "why": "Confirms the repair and thanks us; the only request-like words sit in a legal confidentiality footer, which the prompt says never makes a message need a reply."
+    },
+    {
+      "id": "reply_need-16",
+      "lang": "en",
+      "input": {
+        "message": {
+          "from_email": "tom.reed@example-logistics.example",
+          "subject": "Re: Invoice 2026-118",
+          "body_plain": "Received, thanks.\n\nAll the best,\nTom Reed\nSales Manager | Example Logistics Ltd\n+44 20 0000 0123"
+        }
+      },
+      "label": {"needs_reply": false},
+      "critical": false,
+      "why": "Confirms receipt of the invoice; the rest is a signature with title and phone number."
+    },
+    {
+      "id": "reply_need-17",
+      "lang": "it",
+      "input": {
+        "message": {
+          "from_email": "francesca@example-viaggi.example",
+          "subject": "Re: Accesso al gestionale",
+          "body_plain": "Grazie a voi, tutto risolto! Thanks again\n\nFrancesca"
+        }
+      },
+      "label": {"needs_reply": false},
+      "critical": false,
+      "why": "Says the problem is solved and thanks us in two languages; a pure close."
+    },
+    {
+      "id": "reply_need-18",
+      "lang": "en",
+      "input": {
+        "message": {
+          "from_email": "k.walsh@example-gym.example",
+          "subject": "Re: Password reset",
+          "body_plain": "Brilliant, works now. Cheers"
+        }
+      },
+      "label": {"needs_reply": false},
+      "critical": false,
+      "why": "Informal confirmation that the reset worked plus thanks; nothing open."
+    },
+    {
+      "id": "reply_need-19",
+      "lang": "it",
+      "input": {
+        "message": {
+          "from_email": "ordini@enoteca-conti.example",
+          "subject": "Re: Spedizione ordine 884",
+          "body_plain": "Ok, grazie"
+        }
+      },
+      "label": {"needs_reply": false},
+      "critical": false,
+      "why": "A bare acknowledgement after our answer; the prompt names a bare 'ok' as a possible complete close, and nothing is asked or reported."
+    },
+    {
+      "id": "reply_need-20",
+      "lang": "en",
+      "input": {
+        "message": {
+          "from_email": "l.green@example-mail.example",
+          "subject": "Re: Your refund",
+          "body_plain": "Thanks, I can see the refund on my card now. No need to reply."
+        }
+      },
+      "label": {"needs_reply": false},
+      "critical": false,
+      "why": "Confirms the refund arrived and says explicitly that no reply is needed."
+    }
+  ]
+}

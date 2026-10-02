@@ -1,0 +1,193 @@
+{
+  "schema": 1,
+  "role": "INTENT",
+  "builder": "zylch.router.intent_classifier.IntentRouter.classify_intent",
+  "skills": [
+    {
+      "name": "email_triage",
+      "description": "Read, search or summarise emails already received or sent: who wrote, what they said, what is unread."
+    },
+    {
+      "name": "draft_composer",
+      "description": "Write a new email, WhatsApp or SMS message, or a reply, for the user to review before it is sent."
+    },
+    {
+      "name": "task_manager",
+      "description": "Show, create, update or close the user's own to-do items and reminders to do something."
+    },
+    {
+      "name": "calendar",
+      "description": "Look up the user's appointments, or book, move or cancel a meeting or call at a date and time."
+    },
+    {
+      "name": "contact_lookup",
+      "description": "Find what is already known about a person or company: phone number, email address, past dealings."
+    },
+    {
+      "name": "memory_notes",
+      "description": "Save a fact, price, preference or standing rule the user states, so that it is used from now on."
+    }
+  ],
+  "cases": [
+    {
+      "id": "intent-01",
+      "lang": "it",
+      "input": {"user_input": "Cosa mi ha scritto Ferretti sull'ordine dei bancali?"},
+      "label": {"primary_skill": "email_triage"},
+      "critical": false,
+      "why": "Asks what a sender wrote about a topic: reading mail already received. Near-duplicate of intent-05, which names the same person and order but asks to reply."
+    },
+    {
+      "id": "intent-02",
+      "lang": "en",
+      "input": {"user_input": "Any unread emails from the accountant this week?"},
+      "label": {"primary_skill": "email_triage"},
+      "critical": false,
+      "why": "A search over received mail (unread, from one sender, this week); nothing to write or save."
+    },
+    {
+      "id": "intent-03",
+      "lang": "it",
+      "input": {"user_input": "Riassumimi le mail arrivate stamattina"},
+      "label": {"primary_skill": "email_triage"},
+      "critical": false,
+      "why": "Summarising emails already received is the first skill's description word for word."
+    },
+    {
+      "id": "intent-04",
+      "lang": "en",
+      "input": {"user_input": "What did Laura say about the invoice?"},
+      "label": {"primary_skill": "email_triage"},
+      "critical": false,
+      "why": "Asks what someone said: a read of existing mail. Near-duplicate of intent-06, which writes to Laura about the invoice."
+    },
+    {
+      "id": "intent-05",
+      "lang": "it",
+      "input": {"user_input": "Rispondi a Ferretti che i bancali partono lunedì"},
+      "label": {"primary_skill": "draft_composer"},
+      "critical": true,
+      "why": "An instruction to reply with given content; routing it to a read-only skill drops the user's explicit instruction."
+    },
+    {
+      "id": "intent-06",
+      "lang": "en",
+      "input": {"user_input": "Write to Laura that the invoice was paid yesterday"},
+      "label": {"primary_skill": "draft_composer"},
+      "critical": true,
+      "why": "An explicit request to write a message with stated content."
+    },
+    {
+      "id": "intent-07",
+      "lang": "it",
+      "input": {"user_input": "Prepara una mail per il fornitore degli imballaggi e chiedigli il listino 2027"},
+      "label": {"primary_skill": "draft_composer"},
+      "critical": true,
+      "why": "Asks for a new email to a supplier; 'listino' is the message's subject matter, not a fact to save."
+    },
+    {
+      "id": "intent-08",
+      "lang": "it",
+      "input": {"user_input": "Manda un WhatsApp a Gianni: ci vediamo alle 9 in magazzino"},
+      "label": {"primary_skill": "draft_composer"},
+      "critical": true,
+      "why": "A WhatsApp message to send, which the draft skill covers; the time is the message's content, not a meeting to book."
+    },
+    {
+      "id": "intent-09",
+      "lang": "it",
+      "input": {"user_input": "Ricordami di mandare il preventivo a Bassi entro venerdì"},
+      "label": {"primary_skill": "task_manager"},
+      "critical": true,
+      "why": "'Ricordami di' asks for a reminder to do something, a to-do with a deadline. Near-duplicate of intent-18 ('Ricordati che'), which states a fact to keep."
+    },
+    {
+      "id": "intent-10",
+      "lang": "en",
+      "input": {"user_input": "Show me my open tasks"},
+      "label": {"primary_skill": "task_manager"},
+      "critical": false,
+      "why": "Listing the user's own to-do items is the task skill's description."
+    },
+    {
+      "id": "intent-11",
+      "lang": "it",
+      "input": {"user_input": "Segna come fatto il task del preventivo Rossi"},
+      "label": {"primary_skill": "task_manager"},
+      "critical": true,
+      "why": "Closes one of the user's tasks; an update the user explicitly asked for."
+    },
+    {
+      "id": "intent-12",
+      "lang": "en",
+      "input": {"user_input": "Book a call with Marco Bianchi on Tuesday at 3pm"},
+      "label": {"primary_skill": "calendar"},
+      "critical": true,
+      "why": "Booking a call at a date and time is the calendar skill's description."
+    },
+    {
+      "id": "intent-13",
+      "lang": "it",
+      "input": {"user_input": "Che appuntamenti ho domani?"},
+      "label": {"primary_skill": "calendar"},
+      "critical": false,
+      "why": "Looks up the user's appointments for a day."
+    },
+    {
+      "id": "intent-14",
+      "lang": "it",
+      "input": {"user_input": "Sposta la riunione di venerdì alle 11"},
+      "label": {"primary_skill": "calendar"},
+      "critical": true,
+      "why": "Moves an existing meeting to a new time; a calendar change the user ordered."
+    },
+    {
+      "id": "intent-15",
+      "lang": "en",
+      "input": {"user_input": "What's the phone number of Example Logistics?"},
+      "label": {"primary_skill": "contact_lookup"},
+      "critical": false,
+      "why": "Asks for a company's phone number, a lookup of what is known. Near-duplicate of intent-20, which supplies a new number to save."
+    },
+    {
+      "id": "intent-16",
+      "lang": "it",
+      "input": {"user_input": "Chi è Sara Colombo? Abbiamo già lavorato con lei?"},
+      "label": {"primary_skill": "contact_lookup"},
+      "critical": false,
+      "why": "Who a person is and whether there were past dealings is the contact skill's description."
+    },
+    {
+      "id": "intent-17",
+      "lang": "en",
+      "input": {"user_input": "Do we have an email address for the new buyer at Example Retail?"},
+      "label": {"primary_skill": "contact_lookup"},
+      "critical": false,
+      "why": "Asks whether an email address is known for a person: a contact lookup, not a mail search or a draft."
+    },
+    {
+      "id": "intent-18",
+      "lang": "it",
+      "input": {"user_input": "Ricordati che da gennaio il prezzo del kit base è 49 euro"},
+      "label": {"primary_skill": "memory_notes"},
+      "critical": true,
+      "why": "'Ricordati che' states a price to keep from now on; routing it elsewhere loses a fact the user gave. Near-duplicate of intent-09."
+    },
+    {
+      "id": "intent-19",
+      "lang": "en",
+      "input": {"user_input": "From now on, always sign my emails as 'Anna, Example Studio'"},
+      "label": {"primary_skill": "memory_notes"},
+      "critical": true,
+      "why": "A standing rule for every future email, not a message to write now."
+    },
+    {
+      "id": "intent-20",
+      "lang": "en",
+      "input": {"user_input": "Note that Example Logistics changed their phone number to +39 02 0000 0188"},
+      "label": {"primary_skill": "memory_notes"},
+      "critical": true,
+      "why": "The user supplies a new fact to save; the lookup skill only finds what is already known."
+    }
+  ]
+}
