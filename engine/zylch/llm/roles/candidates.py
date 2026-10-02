@@ -184,11 +184,16 @@ def endpoints_by_model(raw: bytes | None, wanted: list[str]) -> dict[str, list[d
 
 def policy(req: dict) -> dict:
     """The provider policy of `requirements.json`: the margin as a Decimal, the
-    admitted quantizations and the excluded service tiers."""
+    admitted quantizations and the excluded service tiers; with the excluded
+    families, which the snapshot publishes beside them."""
     return {
         "margin": Decimal(str(req["margin"])),
         "quantizations": list(req["provider_policy"]["quantizations"]),
         "excluded_endpoint_variants": list(req["excluded_endpoint_variants"]),
+        "excluded_families": [
+            {"vendor": family["vendor"], "token": family["token"]}
+            for family in req["excluded_families"]
+        ],
     }
 
 

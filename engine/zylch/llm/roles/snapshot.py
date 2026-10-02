@@ -27,7 +27,9 @@ price (Anthropic's list price), its parameters, forced tool choice and
 context; reasoning and expiry from the catalogue entry. The direct transport
 does not route through OpenRouter, so that endpoint is read whatever its
 status. `policy` records the provider policy the endpoints were admitted
-under, and `version` the content (`gates.stamped`).
+under and the excluded families (a consumer without `requirements.json`,
+the billing server, gates a table with them: `gates.check_table_standalone`),
+and `version` the content (`gates.stamped`).
 
 Pure: the caller passes the parsed catalogue, the endpoint lists of the
 pool, the policy (`candidates.policy`) and the read time.
@@ -145,6 +147,10 @@ def build(catalogue: list, endpoints: dict[str, list[dict]], rules: dict, read_a
         "margin": text(rules["margin"]),
         "quantizations": list(rules["quantizations"]),
         "excluded_endpoint_variants": list(rules["excluded_endpoint_variants"]),
+        "excluded_families": [
+            {"vendor": family["vendor"], "token": family["token"]}
+            for family in rules["excluded_families"]
+        ],
     }
     doc = {"schema": SCHEMA, "read_at": read_at, "policy": policy, "models": models}
     return stamped({**doc, "direct": direct})

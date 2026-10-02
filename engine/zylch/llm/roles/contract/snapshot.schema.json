@@ -25,15 +25,39 @@
       "$ref": "#/$defs/timestamp"
     },
     "policy": {
-      "description": "The provider policy the endpoints were admitted under, as requirements.json held it.",
+      "description": "The provider policy the endpoints were admitted under, and the excluded families, as requirements.json held them: what a consumer without requirements.json applies (contract/README.md).",
       "type": "object",
       "required": [
         "margin",
         "quantizations",
-        "excluded_endpoint_variants"
+        "excluded_endpoint_variants",
+        "excluded_families"
       ],
       "additionalProperties": false,
       "properties": {
+        "excluded_families": {
+          "description": "Never ranked: an id whose part before the first `/` (an alias's `~` dropped) is the vendor and whose part after it contains the token, case-insensitively.",
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "type": "object",
+            "required": [
+              "vendor",
+              "token"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "vendor": {
+                "type": "string",
+                "pattern": "^\\S+$"
+              },
+              "token": {
+                "type": "string",
+                "pattern": "^\\S+$"
+              }
+            }
+          }
+        },
         "margin": {
           "description": "The factor on the model-level price that caps an OpenRouter request (max_price) and its reservation.",
           "$ref": "#/$defs/price"
