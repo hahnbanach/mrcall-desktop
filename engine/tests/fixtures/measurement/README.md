@@ -89,6 +89,10 @@ strings replaced, so it moves with a prompt and not with case data or the
 order a trainer lists case items in (`scripts/measurement_common.py` says
 exactly what is hashed). `tests/measurement/test_build_measurement_requests.py`
 fails when a committed `requests.json` no longer matches a fresh capture.
+TRAIN's trainers list contacts, greetings and languages from sets, whose
+order follows the process's hash seed. Its capture harness sorts them (in
+the capture only; production is unchanged), and the same test checks that
+two processes with different seeds capture the same bytes.
 
 ## The measurement
 
