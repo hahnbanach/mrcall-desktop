@@ -6,7 +6,10 @@ name: Model table
 # publishing it — a smoke on the engine's real transport (admitted against USD
 # 0.20 of the engine's conservative bound, expected to settle at most at USD
 # 0.05, flagged in the report above that) and
-# the role's measurement (at most USD 2), unless a measurement cached by model,
+# the role's measurement (at most USD 2; a challenger projected over it is
+# deferred unpaid; judged against the reference's recorded result, which is
+# measured again only when the role's case-set or prompt hash changes, and
+# then the whole role with it), unless a measurement cached by model,
 # role, case-set hash and prompt hash exists — and smokes a ranked model whose
 # metadata changed; all inside USD 10 a month, kept in v1/ledger.json, the run's
 # reservation pushed to the data branch before its first paid call and settled
@@ -52,11 +55,12 @@ jobs:
         with:
           python-version: '3.11'
 
-      # The smoke and the measurement run the engine's own client and transport.
+      # The smoke and the measurement run the engine's own client and transport;
+      # the memory roles are measured by the M9 corpus runner, a pytest module.
       - name: Install the engine
         run: |
           python -m pip install --upgrade pip
-          pip install -e engine
+          pip install -e engine pytest pytest-asyncio
 
       - name: Require the OpenRouter key
         env:

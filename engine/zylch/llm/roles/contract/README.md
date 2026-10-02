@@ -29,9 +29,12 @@ published contract").
   ranking order) and republishes `snapshot.json` on every run that
   publishes, so a copy's age is its snapshot's `read_at`. `measured.json`
   (the measurement the job ranks by; each result it adds carries its own
-  `case_set_sha256`, `prompt_sha256` and `measured_at`) and `ledger.json`
+  `case_set_sha256`, `prompt_sha256` and `measured_at` and is judged against
+  the reference's recorded result; a role whose hashes changed is measured
+  again whole, its new results waiting under a top-level `remeasure` until
+  every one is in, which the resolver does not read) and `ledger.json`
   (its spend by month) are the job's own records: no engine or server reads
-  them (`engine/scripts/model_table_records.py`).
+  them (`engine/scripts/model_table_records.py`, `model_table_measured.py`).
 - Run-time URL, engine and billing server alike:
   `https://raw.githubusercontent.com/hahnbanach/mrcall-desktop/model-table/v1/<file>`.
 - The engine downloads `table.json` and `snapshot.json` at start and every

@@ -17,9 +17,10 @@ as the engine's own ledger keeps an uncertain hold).
 the job last used it: the measurement's file, with each result the job adds
 stamped with its own `case_set_sha256`, `prompt_sha256` and `measured_at`
 (the resolver ignores extra result fields), so a result stays keyed by
-(model, role, case-set hash, prompt hash) after its role is re-measured
-under new hashes. The job's thresholds are the measurement's: it adds
-pass/fail results, it never re-derives a threshold.
+(model, role, case-set hash, prompt hash). What a result is, how it is
+judged against the role's reference, how the threshold is derived again and
+how a role whose hashes changed is re-measured: `model_table_measured.py`.
+Here: which copy a run starts from (`working_measured`).
 """
 
 from __future__ import annotations
@@ -32,6 +33,7 @@ from decimal import Decimal, InvalidOperation
 import resolve_models as rm
 
 LEDGER_SCHEMA = 1
+STAMP = "%Y-%m-%dT%H:%M:%SZ"
 MONTH = re.compile(r"^[0-9]{4}-[0-9]{2}$")
 
 
@@ -115,6 +117,57 @@ def dump(doc: dict) -> str:
     return json.dumps(doc, indent=2, sort_keys=True, ensure_ascii=False) + "\n"
 
 
+class Spend:
+    """A run's spending under the monthly cap (`model_table_job.py`, step 4):
+    its reservation in `ledger.json`, pushed through `edges.push` before any
+    call it does not cover, and its settlement."""
+
+    def __init__(self, ledger: dict, now, cap: Decimal, edges):
+        self.ledger, self.cap, self.edges = ledger, cap, edges
+        self.month, self.run = now.strftime("%Y-%m"), now.strftime(STAMP)
+        self.before = month_used(ledger, self.month, skip=self.run)
+        self.reserved = self.consumed = Decimal(0)
+        self.calls: list[dict] = []
+
+    def admit(self, bound: Decimal, pending: Decimal) -> str | None:
+        """None when a call of `bound` may be sent — the reservation covering
+        it pushed first — else why it may not."""
+        room = self.cap - self.before
+        need = self.consumed + bound
+        if need > room:
+            left = usd(max(room - self.consumed, Decimal(0)))
+            return f"the monthly cap of USD {usd(self.cap)} leaves USD {left}"
+        if need > self.reserved:
+            target = min(room, max(need, self.consumed + pending))
+            at = self.edges.now().strftime(STAMP)
+            ledger = reserve(self.ledger, self.month, self.run, target, at)
+            message = f"model-table: run {self.run} reserves USD {usd(target)}"
+            self.edges.push({"ledger.json": dump(ledger)}, message)
+            self.ledger, self.reserved = ledger, target
+        return None
+
+    def spent(self, call: dict, amount: Decimal) -> None:
+        self.consumed += amount
+        self.calls.append(call)
+
+    def settled(self) -> str | None:
+        """The ledger with this run settled, or None when it reserved nothing."""
+        if not self.reserved:
+            return None
+        at = self.edges.now().strftime(STAMP)
+        doc = settle(self.ledger, self.month, self.run, self.consumed, self.calls, at)
+        return dump(doc)
+
+    def summary(self) -> dict:
+        return {
+            "month": self.month,
+            "cap": usd(self.cap),
+            "used_before": usd(self.before),
+            "reserved": usd(self.reserved),
+            "spent": usd(self.consumed),
+        }
+
+
 def _key(body: dict) -> tuple[str, str]:
     return body["case_set_sha256"], body["prompt_sha256"]
 
@@ -133,22 +186,11 @@ def working_measured(published: dict | None, build: dict | None, hashes: dict) -
             continue
         if held is None or _key(held) != tuple(want):
             base["roles"][role] = copy.deepcopy(body)
+            # A re-measurement the job had begun is moot: the build copy's is whole.
+            (base.get("remeasure") or {}).pop(role, None)
+    if base.get("remeasure") == {}:
+        del base["remeasure"]
     return base
-
-
-def record_result(measured: dict, role: str, model: str, result: dict, hashes, at: str) -> None:
-    """Record `result` (`{pass, ...}`) for `model` in `role`, measured at `at`
-    under `hashes` (None: the role's recorded ones). When the role's hashes
-    move, every earlier result keeps its own first, so none reads as current."""
-    body = measured["roles"][role]
-    cs, ph = tuple(hashes) if hashes is not None else _key(body)
-    if _key(body) != (cs, ph):
-        for earlier in body["results"].values():
-            earlier.setdefault("case_set_sha256", body["case_set_sha256"])
-            earlier.setdefault("prompt_sha256", body["prompt_sha256"])
-        body["case_set_sha256"], body["prompt_sha256"] = cs, ph
-    stamp = {"case_set_sha256": cs, "prompt_sha256": ph, "measured_at": at}
-    body["results"][model] = {**result, **stamp}
 
 
 def _table(head: tuple, rows: list) -> list[str]:

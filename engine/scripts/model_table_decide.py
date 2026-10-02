@@ -19,12 +19,23 @@ is verified for that ranking: it was already in the published ranking (it
 was verified when it entered), or it has a passing result for the role under
 the current case-set and prompt hashes — cached from an earlier measurement
 (that costs nothing) or measured in this run after a passing smoke. Any
-other entrant waits for its checks: the smoke (admitted against USD 0.20,
-`SMOKE_CAP_USD`, and expected to cost at most USD 0.05,
-`SMOKE_EXPECTED_USD`: see `model_table_job.py`) and then the role's
-measurement (at most USD 2). A check the run cannot make (the
-monthly cap, a dry run, no harness for the role) is deferred and the entrant
-is skipped, so the ranking keeps only verified models.
+other entrant waits for its checks: first the free projection of its
+measurement on the role (a `project` check: one projected over the per-role
+cap of USD 2 is deferred and nothing is sent, not even its smoke), then the
+smoke (admitted against USD 0.20, `SMOKE_CAP_USD`, and expected to cost at
+most USD 0.05, `SMOKE_EXPECTED_USD`: see `model_table_job.py`), then the
+role's measurement (at most USD 2), judged against the role's reference
+result (`model_table_measured.py`). A check the run cannot make (the monthly
+cap, a dry run, no harness for the role) is deferred and the entrant is
+skipped, so the ranking keeps only verified models.
+
+**The reference** (`reference_ready`). A challenger is judged against the
+reference's recorded result while the role's case-set and prompt hashes are
+today's. A role without one — its hashes changed (`stale`), or no complete
+reference result — first measures the reference and, when its hashes
+changed, every model its published rankings name (`remeasure_set`); its
+entrants wait meanwhile, and the published record keeps ranking on the old
+results until the re-measurement is whole.
 
 **The incumbent** (`_incumbent`) is the published pick. It stays the pick
 while it is eligible — in the pool (still in the catalogue, no announced
@@ -54,6 +65,7 @@ from dataclasses import dataclass
 from datetime import date, timedelta
 from decimal import Decimal
 
+import model_table_measured as measured_of
 import resolve_models as rm
 
 resolver = rm.resolver
@@ -65,12 +77,14 @@ SMOKE_EXPECTED_USD = Decimal("0.05")
 MEASURE_USD = Decimal("2")
 COLUMNS = ("ranking", "anthropic_ranking")
 METADATA = ("reasoning", "parameters", "forced_tool")
-VERIFIED = "verified"
+VERIFIED, WAITING = "verified", "waiting"
+BOUNDS = {"smoke": SMOKE_CAP_USD, "measure": MEASURE_USD, "project": Decimal(0)}
 
 
 @dataclass(frozen=True)
 class Check:
-    """One paid check: the smoke of a model, or a role's measurement of it."""
+    """One check: the smoke of a model, a role's measurement of it (both
+    paid), or the free projection of that measurement."""
 
     kind: str
     model: str
@@ -78,11 +92,14 @@ class Check:
 
     @property
     def bound(self) -> Decimal:
-        """The most the check may cost: its own cap."""
-        return SMOKE_CAP_USD if self.kind == "smoke" else MEASURE_USD
+        """The most the check may cost: its own cap (a projection is free)."""
+        return BOUNDS[self.kind]
 
     def __str__(self) -> str:
-        return f"smoke {self.model}" if self.kind == "smoke" else f"{self.role} on {self.model}"
+        if self.kind == "smoke":
+            return f"smoke {self.model}"
+        prefix = "projection of " if self.kind == "project" else ""
+        return f"{prefix}{self.role} on {self.model}"
 
 
 def result_hashes(body: dict, result: dict) -> tuple[str, str]:
@@ -149,33 +166,56 @@ def published_ids(table: dict, preset: str, role: str, column: str) -> list[str]
     return None if row is None else [entry["id"] for entry in row.get(column, [])]
 
 
+def stale(ctx: dict, role: str) -> bool:
+    """Whether the role was measured under other case-set or prompt hashes
+    than today's (unknown hashes: never stale)."""
+    want = ctx["hashes"].get(role)
+    body = ctx["measured"]["roles"][role]
+    return want is not None and (body["case_set_sha256"], body["prompt_sha256"]) != tuple(want)
+
+
+def reference_ready(ctx: dict, role: str) -> bool:
+    """Whether a challenger of the role can be judged now: the role is not
+    stale and holds a complete reference result under today's hashes."""
+    if stale(ctx, role):
+        return False
+    result = current(ctx["measured"], role, ctx["reference"], ctx["hashes"])
+    return isinstance(result, dict) and result.get("complete") is True and "passes" in result
+
+
 def _status(c: dict, role: str, published: list[str] | None, ctx: dict, run: dict):
-    """VERIFIED, or the next Check the entrant `c` waits for (module docstring)."""
+    """VERIFIED, WAITING, or the next Check the entrant `c` waits for (module docstring)."""
     model = c["id"]
     if published is not None and model in published:
         return VERIFIED
     result = current(ctx["measured"], role, model, ctx["hashes"])
     if result is not None and result["pass"] is True:
         return VERIFIED
-    if model in run["smokes"] or role not in ctx["measurable"]:
-        # No smoke for a role the job cannot measure: the measurement is
-        # deferred unpaid, and a smoke alone verifies nothing.
-        return Check("measure", model, role)
-    return Check("smoke", model)
+    measure = Check("measure", model, role)
+    if role not in ctx["measurable"] or measure in run["deferred"]:
+        # Deferred unpaid; no smoke either, a smoke alone verifies nothing.
+        return measure
+    if not reference_ready(ctx, role):
+        return WAITING
+    if (role, model) not in run["projected"]:
+        return Check("project", model, role)
+    return measure if model in run["smokes"] else Check("smoke", model)
 
 
 def _walk(cands: list[dict], published, role: str, ctx: dict, run: dict):
     """(chosen, wants, skipped): the first five verified candidates in order;
     each wanted check of an entrant ahead of the fifth, with whether it stands
-    before the first verified one (the pick's place); the deferred checks of
-    the entrants skipped."""
+    before the first verified one (the pick's place); `(check, why)` of each
+    entrant skipped: its check deferred, or waiting for the role's reference."""
     chosen, wants, skipped = [], [], []
     for c in cands:
         status = _status(c, role, published, ctx, run)
         if status == VERIFIED:
             chosen.append(c)
+        elif status == WAITING:
+            skipped.append((f"{role} on {c['id']}", "waits for the role's reference"))
         elif status in run["deferred"]:
-            skipped.append(status)
+            skipped.append((str(status), run["deferred"][status]))
         else:
             wants.append((status, not chosen))
         if len(chosen) == resolver.RANKED:
@@ -303,7 +343,7 @@ def decide(ctx: dict, run: dict) -> dict:
                     why = f"{'pick' if at_pick else 'ranking'} of {where}"
                     if check not in wanted or key < wanted[check][0]:
                         wanted[check] = (key, why)
-                waiting = "; ".join(f"{check}: {run['deferred'][check]}" for check in skipped)
+                waiting = "; ".join(f"{check}: {why}" for check, why in skipped)
                 if not chosen and column == "ranking":
                     problems.append(
                         f"{where}: no ranked model with a passing result"
@@ -312,6 +352,7 @@ def decide(ctx: dict, run: dict) -> dict:
                 elif not chosen and published and skipped:
                     problems.append(f"{where}: emptied while its checks wait ({waiting})")
         presets[preset] = {"ceiling": ceiling, "raised_to": None, "roles": roles}
+    _reference_needs(ctx, run, wanted)
     _metadata_needs(ctx, run, presets, wanted, problems)
     needs = sorted(wanted.items(), key=lambda item: item[1][0])
     return {
@@ -354,22 +395,68 @@ def resample_due(day: date) -> bool:
     return (day + timedelta(days=1)).month != day.month
 
 
-def resample_order(req: dict, measured: dict, presets: dict, run: dict) -> list[Check]:
-    """The re-sampling checks: the roles whose last measurement is oldest
-    first (a result without `measured_at` counts as oldest; ties in roster
-    order), each on its current pick under every preset, never one measured
-    in this run."""
+def resample_order(ctx: dict, presets: dict, run: dict) -> list[Check]:
+    """The re-sampling checks, oldest first: per role its current pick under
+    every preset and its reference, each pair ordered by its own result's
+    `measured_at` (none counts as oldest; ties in roster order). A role whose
+    reference is not ready is being re-measured instead; a pair measured in
+    this run is not measured again."""
+    roster, pairs = list(ctx["req"]["roles"]), []
+    for role in roster:
+        if not reference_ready(ctx, role):
+            continue
+        picks = [
+            b["roles"][role]["ranking"][0]["id"]
+            for b in presets.values()
+            if b["roles"][role]["ranking"]
+        ]
+        for model in dict.fromkeys(picks + [ctx["reference"]]):
+            result = ctx["measured"]["roles"][role]["results"].get(model) or {}
+            when = result.get("measured_at", "")
+            pairs.append((when, roster.index(role), len(pairs), Check("measure", model, role)))
+    return [c for *_, c in sorted(pairs) if (c.role, c.model) not in run["fresh"]]
 
-    def last(role: str) -> str:
-        results = measured["roles"][role]["results"].values()
-        return max((r.get("measured_at", "") for r in results), default="")
 
-    roster = list(req["roles"])
-    out: list[Check] = []
-    for role in sorted(roster, key=lambda role: (last(role), roster.index(role))):
-        for body in presets.values():
-            ranking = body["roles"][role]["ranking"]
-            check = Check("measure", ranking[0]["id"], role) if ranking else None
-            if check and check not in out and (role, check.model) not in run["fresh"]:
-                out.append(check)
-    return out
+def remeasure_set(ctx: dict, role: str) -> list[str]:
+    """The models a stale role's re-measurement covers after its reference:
+    every one its published rankings name that is still in the pool."""
+    pool, out = {c["id"] for c in ctx["pool"]}, []
+    for body in ctx["table"].get("presets", {}).values():
+        row = body.get("roles", {}).get(role, {})
+        for column in COLUMNS:
+            for entry in row.get(column, []):
+                if entry["id"] in pool and entry["id"] not in out:
+                    out.append(entry["id"])
+    return [model for model in out if model != ctx["reference"]]
+
+
+def remeasured(ctx: dict, role: str) -> bool:
+    """Whether a stale role's re-measurement holds the reference and every
+    model of `remeasure_set`: it can replace the role's entry."""
+    stage = measured_of.staged(ctx["measured"], role, ctx["hashes"][role]) or {"results": {}}
+    wanted = [ctx["reference"], *remeasure_set(ctx, role)]
+    return all(model in stage["results"] for model in wanted)
+
+
+def _reference_needs(ctx: dict, run: dict, wanted: dict) -> None:
+    """The measurements a role without a ready reference waits for (module
+    docstring): the reference first, the others only once it is measured,
+    each after its free projection."""
+    reference, roster = ctx["reference"], list(ctx["req"]["roles"])
+    for rank, role in enumerate(roster):
+        if role not in ctx["measurable"] or reference_ready(ctx, role):
+            continue
+        models, stage = [reference], {"results": {}}
+        if stale(ctx, role):
+            models += remeasure_set(ctx, role)
+            stage = measured_of.staged(ctx["measured"], role, ctx["hashes"][role]) or stage
+        why = f"re-measure {role} under today's prompt and cases"
+        for model in models:
+            measure = Check("measure", model, role)
+            if model in stage["results"] or measure in run["deferred"]:
+                if model == reference and model not in stage["results"]:
+                    break  # the reference could not be measured: nothing to judge against
+                continue
+            need = measure if (role, model) in run["projected"] else Check("project", model, role)
+            # Equal keys keep their order: the reference's check comes before the others'.
+            wanted.setdefault(need, ((1, rank, 0, 0), why))

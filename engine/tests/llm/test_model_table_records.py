@@ -16,10 +16,10 @@ from decimal import Decimal
 
 import pytest
 
-from .model_table_world import CS, PH, QWEN, SONNET, load_job, outcome
+from .model_table_world import CS, K3, PH, QWEN, SONNET, load_job, outcome, result
 
 job = load_job()
-records, decide = job.records, job.decide
+records, decide, measured_of = job.records, job.decide, job.measured_of
 STALE = "0" * 64
 
 
@@ -62,25 +62,34 @@ def test_a_ledger_the_job_cannot_read_is_refused(doc, says):
         records.check_ledger(doc)
 
 
-def test_a_role_measured_again_under_new_hashes_keeps_each_older_result_keyed():
+def test_a_role_measured_again_under_new_hashes_keeps_each_result_keyed_until_it_is_whole():
     measured = {"schema": 1, "roles": {"CHAT": outcome(passed=[SONNET], ph=STALE)}}
-    records.record_result(measured, "CHAT", QWEN, {"pass": True}, (CS, PH), "2026-10-14T05:17:30Z")
+    at, rule, k3 = "2026-10-14T05:17:30Z", {"rule": "maximise", "index": "agentic"}, K3
+    for model in (K3, QWEN):  # the reference first, then a model judged against it
+        fresh = {key: v for key, v in result(model).items() if key not in ("pass", "reasons")}
+        where, _ = measured_of.record(measured, "CHAT", model, fresh, (CS, PH), at, rule, k3)
+        assert where == "stage"
     chat = measured["roles"]["CHAT"]
-    assert (chat["case_set_sha256"], chat["prompt_sha256"]) == (CS, PH)
-    assert chat["results"][SONNET]["prompt_sha256"] == STALE
+    assert (chat["case_set_sha256"], chat["prompt_sha256"]) == (CS, STALE)  # still published
     hashes = {"CHAT": (CS, PH)}
-    assert decide.current(measured, "CHAT", QWEN, hashes)["measured_at"] == "2026-10-14T05:17:30Z"
+    assert decide.current(measured, "CHAT", QWEN, hashes) is None  # staged: not ranked on yet
     assert decide.current(measured, "CHAT", SONNET, hashes) is None  # stale: not a cached result
     assert decide.current(measured, "CHAT", SONNET, {"CHAT": None}) is not None  # hashes unknown
+    measured_of.swap(measured, "CHAT", rule, k3)
+    assert (chat["case_set_sha256"], chat["prompt_sha256"]) == (CS, PH)
+    assert decide.current(measured, "CHAT", QWEN, hashes)["measured_at"] == at
+    assert SONNET not in chat["results"] and "remeasure" not in measured
 
 
 def test_the_working_measurement_takes_a_role_the_build_copy_remeasured():
     published = {"schema": 1, "roles": {"CHAT": outcome(passed=[SONNET], ph=STALE)}}
+    published["remeasure"] = {"CHAT": {"case_set_sha256": CS, "prompt_sha256": PH, "results": {}}}
     build = {"schema": 1, "roles": {"CHAT": outcome(passed=[QWEN])}}
     work = records.working_measured(published, build, {"CHAT": (CS, PH)})
     assert work["roles"]["CHAT"] == build["roles"]["CHAT"] and work is not build
+    assert "remeasure" not in work  # the job's re-measurement is moot: the build copy's is whole
     kept = records.working_measured(published, build, {"CHAT": (STALE, STALE)})
-    assert kept["roles"]["CHAT"] == published["roles"]["CHAT"]
+    assert kept["roles"]["CHAT"] == published["roles"]["CHAT"] and kept["remeasure"]
     assert records.working_measured(None, build, {})["roles"] == build["roles"]
 
 
