@@ -12,6 +12,14 @@ MODEL = "z-ai/glm-5.2"  # an allowlisted OpenRouter model, billed at 0.6/2
 from .test_model_policy_roles import expected
 
 
+@pytest.fixture(autouse=True)
+def prices(billed_snapshot):
+    """Milestone 10 S3: prices come from the committed fixture snapshot as 10a
+    billed them (GLM 5.2 still at 0.6/2), never from the build copy; only the
+    margin (1.25) moves this module's OpenRouter ceilings (brief AC 4)."""
+    yield billed_snapshot
+
+
 def request():
     return {"model": MODEL, "messages": [{"role": "user", "content": "hello"}], "max_tokens": 64}
 
@@ -60,7 +68,8 @@ def test_http_controls_and_no_ambient_credentials(monkeypatch):
     response = client.create(**r)
     assert response.content[0].text == "ok"
     body = json.loads(seen[0].content)
-    assert body["provider"]["max_price"] == {"prompt": "0.6", "completion": "2", "request": "0"}
+    # 0.6/2 × the margin 1.25 (brief D5): the ceiling before slice S3 was 0.6/2.
+    assert body["provider"]["max_price"] == {"prompt": "0.75", "completion": "2.5", "request": "0"}
     assert body["provider"]["allow_fallbacks"] is False
     assert body["provider"]["require_parameters"] is True
     # Brief D3: no blanket `disabled`; the adapter adds no reasoning of its own.
@@ -263,8 +272,10 @@ def test_anthropic_router_reserves_cache_write_upper_bound():
 
     payload = {**request(), "model": "anthropic/claude-sonnet-5"}
     tokens = len(json.dumps(payload, ensure_ascii=False, allow_nan=False).encode()) + 4096 + 1024
+    # Sonnet 5 at 2/10 × the margin 1.25 (brief D5), input doubled for cache
+    # writes: before slice S3, `tokens * 4 + 64 * 10`.
     assert request_bound(payload) == int(
-        (Decimal(tokens) * 4 + 64 * 10).to_integral_value(rounding=ROUND_CEILING)
+        (Decimal(tokens) * 5 + 64 * Decimal("12.5")).to_integral_value(rounding=ROUND_CEILING)
     )
 
 

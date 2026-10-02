@@ -120,26 +120,44 @@ stamps. A changed table is reviewed like code. The committed one came from
 that fixture and `requirements.json` (a hand edit, a floor changed without
 `--apply`).
 
-## The table is the one model and price source
+## The table is the one model source; the snapshot the one price source
 
 `zylch/llm/roles/resolved.json` is generated; nobody edits it by hand.
-`zylch/llm/roles/table.py` reads it to answer which model a role runs.
-`zylch/llm/roles/prices.py` reads it, together with the allowlist, to answer
-what that model costs. `budget_pricing.PRICES`, `openrouter_pricing.RATES` and
-`usage.py`'s estimate all read `prices.py`
-([spending protection](daily-llm-budget.md)).
+`zylch/llm/roles/table.py` reads it to answer which model a role runs (until
+the switch-over to the measured `table.json`).
 
-**The allowlist** prices every model billed before the table existed, at the
-rate it was billed at, so the upgrade moves no profile's price: the eleven
-direct Anthropic ids, and on OpenRouter `moonshotai/kimi-k3`, `z-ai/glm-5.2`,
+**Prices come from the model snapshot** (since milestone 10, slice S3; brief
+D5). `zylch/llm/roles/prices.py` answers what a model costs from the snapshot
+layers `roles/catalogue.py` holds — the downloaded and last good copies in
+front once the run-time distribution lands, the build copy
+`roles/snapshot.json` behind — read at every call, never frozen at import: on
+OpenRouter a catalogue id at its model-level catalogue price, on the direct
+transport a direct id at its `anthropic` endpoint's price (Anthropic's list
+price), and a dated id `<alias>-YYYYMMDD` at its alias's (a response naming
+`<requested>-YYYYMMDD` settles as the requested id). `budget_pricing.PRICES`
+and `openrouter_pricing.RATES` / `LABELS` are views over it, and `usage.py`'s
+estimate reads it ([spending protection](daily-llm-budget.md)). An OpenRouter
+request is reserved and capped (`max_price`) at the price × `margin` (1.25,
+`requirements.json`); K3 at its pinned DigitalOcean endpoint's price × the
+margin, or its model-level price × the margin on a day the snapshot does not
+admit that endpoint. The provider object also carries `requirements.json`'s
+`quantizations` and, where the snapshot read the model's endpoints, `only`
+its admitted ones, so a cheaper `flex` service tier is never routed to; it is
+the object the billing server builds for the same model and snapshot. The
+direct transport reserves at the list price, without the margin.
+
+**The allowlist** priced, in milestone 10a, every model billed before the
+table existed, at the rate it was billed at: the eleven direct Anthropic ids,
+and on OpenRouter `moonshotai/kimi-k3`, `z-ai/glm-5.2`,
 `anthropic/claude-sonnet-5`, `anthropic/claude-opus-5` and
-`anthropic/claude-haiku-4.5`. Haiku 4.5, direct and on OpenRouter, is on the
-allowlist only as a priced choice a `custom` profile may name. It is never a
-default or an arm: the prefix exclusion keeps it out of every pool. When an id
-is in both sources, the allowlist's billed price wins, so a resolver run can
-never move the rate an existing profile is held and capped at. A model in
-neither source is refused before dispatch with the existing messages ("model
-pricing is not configured", "OpenRouter model has no verified price ceiling").
+`anthropic/claude-haiku-4.5`. Until the switch-over it answers only for an id
+no snapshot layer prices; every id the snapshot prices is priced by the
+snapshot (the direct rates are unchanged; GLM 5.2 and K3 moved from 10a's
+billed rates to the catalogue's). Haiku 4.5, direct and on OpenRouter, is a
+priced choice a `custom` profile may name. It is never a default or an arm:
+the excluded families keep it out of every pool. A model in no source is
+refused before dispatch with the existing messages ("model pricing is not
+configured", "OpenRouter model has no verified price ceiling").
 
 **How `resolve_model` decides** (`zylch/llm/model_policy.py`), in order:
 

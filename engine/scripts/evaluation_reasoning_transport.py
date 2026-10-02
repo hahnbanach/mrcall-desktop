@@ -49,7 +49,9 @@ def bound_with_reasoning(request):
     context = payload_bytes + 4096 + 1024 * (len(plain["messages"]) + len(plain.get("tools") or []))
     if context + control_bytes + plain["max_tokens"] > 200000:
         raise BudgetError("Reasoning experiment exceeds supported context bound.")
-    surcharge = (control_bytes * pricing.RATES[MODEL][0]).to_integral_value(rounding=ROUND_CEILING)
+    # The reviewed rate (RATES) × the margin, as every OpenRouter hold since milestone 10.
+    rate = pricing.capped(MODEL)[0]
+    surcharge = (control_bytes * rate).to_integral_value(rounding=ROUND_CEILING)
     return bound + int(surcharge)
 
 
@@ -268,7 +270,7 @@ def bound_chat_reasoning(request):
     )
     if tokens + wire["max_tokens"] > 200000:
         raise BudgetError("Translated Chat request exceeds context bound.")
-    i, o = pricing.RATES[MODEL]
+    i, o = pricing.capped(MODEL)
     translated = int(
         (tokens * i + wire["max_tokens"] * o).to_integral_value(rounding=ROUND_CEILING)
     )

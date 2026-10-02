@@ -1,0 +1,124 @@
+{
+  "_doc": "The billing server's OpenRouter `provider` object for each id, captured by running mrcall-agent model-table-m10 2d81bb5eba7ba352531f5107749f2165d140eae2 (mrcall_agent/services/bounded_openrouter.py: provider_policy(model_table.priced(id)), non-K3, not the K3 adapter) over tests/fixtures/llm/snapshot-2026-10-02.json (version 91d29c8f6f69eb1860162b934f116798b03c61e1136b4de57f63bbd12a32cea2). tests/llm/test_snapshot_prices.py holds the engine's openrouter_pricing.provider_policy equal to it for the same ids and snapshot.",
+  "providers": {
+    "anthropic/claude-sonnet-5.5": {
+      "allow_fallbacks": false,
+      "max_price": {
+        "completion": "12.5",
+        "prompt": "2.5",
+        "request": "0"
+      },
+      "only": [
+        "amazon-bedrock",
+        "anthropic",
+        "azure/global",
+        "azure/us",
+        "claude-on-aws",
+        "google-vertex/europe",
+        "google-vertex/global",
+        "google-vertex/us"
+      ],
+      "quantizations": [
+        "int8",
+        "fp8",
+        "mxfp8",
+        "fp16",
+        "bf16",
+        "fp32",
+        "unknown"
+      ],
+      "require_parameters": true,
+      "sort": "price"
+    },
+    "cohere/command-a-plus": {
+      "allow_fallbacks": false,
+      "max_price": {
+        "completion": "1.875",
+        "prompt": "0.375",
+        "request": "0"
+      },
+      "quantizations": [
+        "int8",
+        "fp8",
+        "mxfp8",
+        "fp16",
+        "bf16",
+        "fp32",
+        "unknown"
+      ],
+      "require_parameters": true,
+      "sort": "price"
+    },
+    "moonshotai/kimi-k2.6": {
+      "allow_fallbacks": false,
+      "max_price": {
+        "completion": "2.285",
+        "prompt": "0.5426875",
+        "request": "0"
+      },
+      "quantizations": [
+        "int8",
+        "fp8",
+        "mxfp8",
+        "fp16",
+        "bf16",
+        "fp32",
+        "unknown"
+      ],
+      "require_parameters": true,
+      "sort": "price"
+    },
+    "openai/gpt-6.1-sol": {
+      "allow_fallbacks": false,
+      "max_price": {
+        "completion": "12.5",
+        "prompt": "2.5",
+        "request": "0"
+      },
+      "only": [
+        "azure",
+        "azure/eu",
+        "azure/us",
+        "openai"
+      ],
+      "quantizations": [
+        "int8",
+        "fp8",
+        "mxfp8",
+        "fp16",
+        "bf16",
+        "fp32",
+        "unknown"
+      ],
+      "require_parameters": true,
+      "sort": "price"
+    },
+    "z-ai/glm-5.2": {
+      "allow_fallbacks": false,
+      "max_price": {
+        "completion": "4.9875",
+        "prompt": "0.5125",
+        "request": "0"
+      },
+      "only": [
+        "baidu/fp8",
+        "morph/fp8",
+        "relace",
+        "wafer"
+      ],
+      "quantizations": [
+        "int8",
+        "fp8",
+        "mxfp8",
+        "fp16",
+        "bf16",
+        "fp32",
+        "unknown"
+      ],
+      "require_parameters": true,
+      "sort": "price"
+    }
+  },
+  "server_commit": "2d81bb5eba7ba352531f5107749f2165d140eae2",
+  "snapshot_version": "91d29c8f6f69eb1860162b934f116798b03c61e1136b4de57f63bbd12a32cea2"
+}
