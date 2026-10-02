@@ -89,6 +89,56 @@ not started.
      code work and will acquire a new lease after R_4 releases.
    - *New lease:* scratch VM presa da R_2 dalle 2026-10-02T17:34:59Z.
      R_4 release observed at origin/main; acquisition pending push/refresh.
+   - *Implementation:* `engine/scripts/server/tenant-helper.sh` now checks
+     applied `DropInPaths` before changing unit/voice files and after reload:
+     C-order at/before `tenant.conf`, real files in the instance `/etc`
+     directory only. Hosted UID subset is 1–128 letters/digits/underscore/
+     hyphen (dots refused, including socket/lock names); this is not a claim
+     about every Firebase custom UID. Voice admission uses single physical
+     assignments, whole-value quotes, no escapes or controls except tab,
+     and at least one assignment. Declared scripts require their own venv's
+     `bin/python[version]` without arguments and `pyvenv.cfg`. EXIT is armed
+     before snapshot; only a complete snapshot may restore live files.
+     Original directory modes live in root-only
+     `/etc/mrcalld/profile-modes/<uid>` (0600), survive reapply, are restored
+     by `unmigrate`, and are removed by successful rollback/delete. Repeated
+     rollback is a no-op. A legacy migrated profile without metadata may
+     reapply, but rollback refuses **before stop**: import its actual recorded
+     pre-migration mode from the operator's backup into that root-owned file;
+     do not infer it from today's 0700. No legacy modes were fabricated.
+   - *Scratch evidence (2026-10-02, systemd 249):* installed baseline
+     SHA256 `a90d1bc081978c4716d20d3ecd1f6cd7f5caa78d78283843ae21647e6c2a9eae`
+     matched main before tests. Candidate installed byte-for-byte, then all
+     four table tenants (A1, A2, B1, P1) returned `ready`. P1's PID, active
+     state, tenant.conf and voice copy stayed identical across reapply and
+     every refusal. No daemon restart was requested for these tests.
+     `/tmp/r2-probe.py` and `/tmp/r2-probe-results.txt` record:
+     late `zz-r2.conf`, `/run` instance and `/etc` template drop-ins refused;
+     `<uid>.sock`, `reconcile.lock`, `provisiond`, traversal refused without
+     changing the lock inode; empty/comment-only voice, reopened quote,
+     FF-comment and VT-comment refused; system python and another venv's
+     python refused. An injected failing `cp` after writing the voice backup
+     left both live files intact and no `.create-prev.*` residue. Legacy
+     missing-mode rollback refused with P1 still running unchanged.
+     `/tmp/r2-mode-probe.py`: fresh disposable profile 0770 → create 0700 →
+     reapply retaining recorded 0770 → unmigrate 0770; rollback retry passed;
+     corrupt mode refused, mode 0070 round-trip passed, second forward/delete
+     removed the metadata and disposable profile. No company store used.
+     `/tmp/r2-env-probe.py`: transient actual systemd EnvironmentFile and
+     engine-venv dotenv agreed on all names and values of the accepted
+     synthetic sample (only PASS emitted). Helper and operator files were
+     restored after each probe; transient unit collected, fixtures removed.
+     Four isolated unittest cases cover grammar, UID collisions, drop-in
+     order/location/symlinks and partial-snapshot failure. `bash -n` passes.
+   - *Review status:* A and B independently **APPROVED** the final code
+     and scratch record on helper SHA256
+     `b5e95bf5f361723dc0429436c1b0be47983d763e37bd8d06ff5d3fbe09b90f10`.
+     Both inspected the three probe scripts and PASS log and independently
+     reran the four isolated tests; A also ran syntax/diff checks. B's earlier
+     REVISE (short octal modes and repeat rollback) was repaired and verified.
+     Their approval closes the scratch gate, not the unobserved VPS gate.
+   - *Done status:* not done. Merge and the VPS's next reconcile evidence
+     (installed helper identity, every migrated unit `ready`) still pending.
 3. **R3 — Close the rollback window.** *VPS.*
    - *Starts:* seven days after the last 2b with no rollback, and not
      before R1.
