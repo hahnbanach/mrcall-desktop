@@ -38,6 +38,9 @@ MEMORY="$ZHOME/memory"
 EMB_CACHE="$ZHOME/fastembed_cache"
 RELEASES="$ROOT/releases"                # pinned read-only release trees (Café124)
 LOGROTATE_CONF=/etc/logrotate.d/mrcalld
+# written here, then renamed: logrotate reads every file in logrotate.d, and
+# a leftover `.tmp` there is a "duplicate log entry" for each stanza
+LOGROTATE_TMP=/etc/mrcalld/logrotate.mrcalld.tmp
 REPO="$ROOT/mrcall-desktop"
 VENV="$REPO/engine/venv"
 KEYS_DIR=/etc/mrcalld/keys
@@ -133,8 +136,8 @@ write_logrotate() {
       [[ "$u" =~ ^[A-Za-z0-9_.-]+$ ]] && [ -d "$PROFILES/$u" ] || continue
       echo "$PROFILES/$u/zylch.log {"; echo "$body"; echo "    su $(user_of "$u") $(user_of "$u")"; echo "}"
     done < "$TABLE"
-  } > "$LOGROTATE_CONF.tmp"
-  chmod 0644 "$LOGROTATE_CONF.tmp"; mv "$LOGROTATE_CONF.tmp" "$LOGROTATE_CONF"
+  } > "$LOGROTATE_TMP"
+  chmod 0644 "$LOGROTATE_TMP"; mv "$LOGROTATE_TMP" "$LOGROTATE_CONF"
 }
 
 verb="${1:-}"
@@ -210,12 +213,15 @@ ensure_company_store() { # ensure_company_store <group>
   install -d -m 2770 -o "$SVC_USER" -g "$g" "$MEMORY/$g"
 }
 
-# Refuse a pin or an override: a first migration falls back to the template
-# (tenant.conf removed, nothing chown'ed yet); an already migrated profile
-# keeps its drop-in (its tree is tenant-owned) and only the error stands.
-pin_refuse() {
-  table_has "$uid" || { rm -f "$dropin"; systemctl daemon-reload; }
-  die "$1"
+# A refused first migration falls back to the template: tenant.conf is
+# removed again (nothing has been chown'ed yet), whatever made `create`
+# stop — a refusal below, or a failing systemctl/tmpfiles under `set -e`.
+# An already migrated profile keeps its drop-in (its tree is tenant-owned)
+# and only the error stands.
+undo_first_dropin() {
+  local rc=$?
+  [ "$rc" = 0 ] || table_has "$uid" || { rm -f "$dropin" "$fragment"; rmdir "$dropin_d" 2>/dev/null; systemctl daemon-reload; } || true
+  exit "$rc"
 }
 
 write_dropin() { # write_dropin <group or empty>
@@ -361,46 +367,52 @@ create)
   # 6. per-instance drop-in: identity, key, data root, socket, sandbox.
   #    Another drop-in that sets ExecStart (a pinned unit with its own
   #    command line) would win or lose against tenant.conf by file name
-  #    alone: refuse, it has to be re-expressed by hand against the new
-  #    socket path first. Every drop-in systemd applies is read (the
+  #    alone: refuse. The operator removes those lines first; a unit that
+  #    cannot run the standard command line is not migrated by this
+  #    helper. Every drop-in systemd applies is read (the
   #    template's `zylch-server@.service.d` and /run count too), and
   #    `ExecStart =` is the same assignment to systemd.
+  #    A PYTHONPATH that arrives through an EnvironmentFile is refused
+  #    too: tenant.conf resets the list (the shared key must go), so a pin
+  #    in a file named by the template or by an earlier drop-in would be
+  #    dropped without a word, and one named later cannot be checked.
   systemctl daemon-reload
   while IFS= read -r f; do
     [ -n "$f" ] && [ "$f" != "$dropin" ] && [ -f "$f" ] || continue
-    grep -qE '^[[:space:]]*ExecStart[[:space:]]*=' "$f" && die "$f sets ExecStart; fold it into a migrated command line by hand (socket $RUN_ROOT/$uid/ws.sock) before migrating"
-  done < <(systemctl show -p DropInPaths --value "$unit" | tr ' ' '\n')
+    case "$f" in *.d/*) if grep -qE '^[[:space:]]*ExecStart[[:space:]]*=' "$f"; then die "$f sets ExecStart; tenant.conf sets the only command line a migrated unit runs (socket $RUN_ROOT/$uid/ws.sock): remove those lines first and pin a release with Environment=PYTHONPATH=…; a unit that needs another command cannot be migrated yet"; fi ;; esac
+    while IFS= read -r ef; do
+      ef=${ef#-}
+      if grep -qsE '^[[:space:]]*PYTHONPATH[[:space:]]*=' "$ef"; then die "$f: EnvironmentFile $ef sets PYTHONPATH; pin with Environment=PYTHONPATH=… in a drop-in instead"; fi
+    done < <(sed -nE 's/^[[:space:]]*EnvironmentFile[[:space:]]*=[[:space:]]*//p' "$f")
+  done < <(systemctl show -p FragmentPath -p DropInPaths --value "$unit" | tr ' ' '\n')
+  trap undo_first_dropin EXIT
   write_dropin "$group"
-  # 6b. what systemd will actually run. On a refusal tenant.conf is removed
-  #    so a first migration stays on the template (nothing chown'ed yet).
+  # 6b. what systemd will actually run
   systemctl daemon-reload
   es=$(systemctl show -p ExecStart --value "$unit")
   [ "$(grep -o 'argv\[\]=' <<< "$es" | wc -l)" = 1 ] && [[ "$es" == *"argv[]=$VENV/bin/zylch -p $uid serve --unix $RUN_ROOT/$uid/ws.sock ;"* ]] \
-    || pin_refuse "the unit's effective ExecStart is not tenant.conf's: something else overrides it (systemctl cat $unit)"
-  # 6c. a pinned PYTHONPATH must resolve inside the bound trees and be
+    || die "the unit's effective ExecStart is not tenant.conf's: something else overrides it (systemctl cat $unit)"
+  # 6c. a pinned PYTHONPATH must be a real path inside the bound trees,
   #    readable by the tenant, or the daemon would silently import the
   #    checkout: the sandbox hides every other path under /home, and
-  #    Python skips a missing entry. Resolved first — `releases/../x` and
-  #    a link out of the tree both start with the right prefix.
-  while IFS= read -r f; do
-    f=${f% (ignore_errors=*}
-    [ -n "$f" ] && [ "$f" != "$keyfile" ] || continue
-    grep -qsE '^[[:space:]]*PYTHONPATH[[:space:]]*=' "$f" && pin_refuse "$f sets PYTHONPATH where it cannot be checked; pin with Environment=PYTHONPATH=… in a drop-in"
-  done < <(systemctl show -p EnvironmentFiles --value "$unit")
+  #    Python skips a missing entry. No `..` and no symbolic link on the
+  #    way: `releases/../x`, a link out of the tree, and a link INTO it
+  #    from a place the sandbox does not have all resolve fine out here.
   envs=$(systemctl show -p Environment --value "$unit")
   # an entry systemd prints quoted (a path with a space) is not split here
-  [ "$(grep -o 'PYTHONPATH=' <<< "$envs" | wc -l)" = "$(tr ' ' '\n' <<< "$envs" | grep -c '^PYTHONPATH=')" ] \
-    || pin_refuse "cannot read the unit's PYTHONPATH (quoted, or a path with a space)"
+  [ "$(grep -oE '(^|[ "])PYTHONPATH=' <<< "$envs" | wc -l)" = "$(tr ' ' '\n' <<< "$envs" | grep -c '^PYTHONPATH=')" ] \
+    || die "cannot read the unit's PYTHONPATH (quoted, or a path with a space)"
   pp=$(tr ' ' '\n' <<< "$envs" | sed -n 's/^PYTHONPATH=//p' | tail -n1)
   IFS=: read -ra pparts <<< "$pp"
   for p in "${pparts[@]}"; do
     [ -n "$p" ] || continue
-    [[ "$p" = /* ]] || pin_refuse "PYTHONPATH $p is not absolute"
+    [[ "$p" = /* ]] || die "PYTHONPATH $p is not absolute"
     for q in "$p" "$p/zylch/__init__.py"; do
-      rp=$(realpath -e -- "$q" 2>/dev/null) || pin_refuse "PYTHONPATH $p: $q does not exist"
-      case "$rp" in "$REPO"/*|"$RELEASES"/*) ;; *) pin_refuse "PYTHONPATH $p resolves to $rp, outside $REPO and $RELEASES: the sandbox cannot see it";; esac
+      rp=$(realpath -e -- "$q" 2>/dev/null) || die "PYTHONPATH $p: $q does not exist"
+      [ "$rp" = "$(realpath -m -s -- "$q")" ] || die "PYTHONPATH $p: $q goes through a symbolic link (it is $rp); name the real path"
+      case "$rp" in "$REPO"/*|"$RELEASES"/*) ;; *) die "PYTHONPATH $p is $rp, outside $REPO and $RELEASES: the sandbox cannot see it";; esac
     done
-    runuser -u "$user" -- test -r "$p/zylch/__init__.py" || { pin_refuse "$user cannot read $p/zylch/__init__.py: chmod -R go=rX $RELEASES (runbook step 0), then create again"; }
+    runuser -u "$user" -- test -r "$p/zylch/__init__.py" || die "$user cannot read $p/zylch/__init__.py: chmod -R go=rX $RELEASES (runbook step 0), then create again"
   done
   # 7. runtime socket dir: per-uid 2750 <user>:caddy so the socket inherits
   #    the proxy's group and server_ws.py's chmod(0o660) lets Caddy connect.
@@ -414,6 +426,7 @@ create)
     printf 'L+ %s/%s.sock - - - - %s/%s/ws.sock\n' "$RUN_ROOT" "$uid" "$RUN_ROOT" "$uid"
   } > "$fragment"
   systemd-tmpfiles --create "$fragment"
+  trap - EXIT
   # 8. profile tree: subdirs, then ownership — LAST, so any -wal/-shm a
   #    root-run rekey left behind is re-owned (plan M2.7).
   for d in downloads scratch; do
