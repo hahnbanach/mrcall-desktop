@@ -5,7 +5,9 @@ unsupported content and never dropped from what a caller keeps. ``content``
 stays text and tool_use (what callers read); ``assistant_content`` is the
 whole turn, in order, as the dicts a tool loop sends back; admission prices
 replayed blocks as input; ``without_reasoning`` is the rewrite that leaves
-none in the turns it retains.
+none in the turns it retains. A ``thinking`` block without a signature stays
+in what the caller keeps but is never sent back: ``_coerce_messages``, the
+history of every request, leaves it out (protocol v2, IR1 m6).
 """
 
 from __future__ import annotations
@@ -16,7 +18,7 @@ from types import SimpleNamespace as NS
 import pytest
 
 from zylch.llm.budget_pricing import BudgetError, request_bound
-from zylch.llm.response import LLMResponse, assistant_blocks, without_reasoning
+from zylch.llm.response import LLMResponse, _coerce_messages, assistant_blocks, without_reasoning
 
 THINKING = NS(type="thinking", thinking="Look the order up first.", signature="sig-1")
 UNSIGNED = NS(type="thinking", thinking="OpenRouter may omit the signature.")
@@ -44,12 +46,38 @@ def test_content_stays_text_and_tool_use_and_assistant_content_keeps_the_whole_t
     assert response.assistant_content == TURN
 
 
-def test_an_unsigned_thinking_block_is_replayed_without_an_invented_signature():
+def test_an_unsigned_thinking_block_is_kept_for_the_caller_without_an_invented_signature():
     response = LLMResponse(raw(UNSIGNED, TOOL))
     assert response.assistant_content[0] == {
         "type": "thinking",
         "thinking": "OpenRouter may omit the signature.",
     }
+
+
+def test_an_unsigned_thinking_block_is_left_out_of_the_history_a_request_carries():
+    """Protocol v2 (IR1 m6): a ``thinking`` block without a signature — absent,
+    None or empty — is never sent back; signed and redacted blocks are, in
+    order; a message it alone made up goes too; the caller's list is untouched."""
+    unsigned = {"type": "thinking", "thinking": "OpenRouter may omit the signature."}
+    history = [
+        {"role": "user", "content": "Find order 7."},
+        {"role": "assistant", "content": [unsigned, *copy.deepcopy(TURN)]},
+        {"role": "user", "content": [{"type": "tool_result", "tool_use_id": "call-1"}]},
+        {"role": "assistant", "content": [UNSIGNED, {**unsigned, "signature": None}]},
+        {"role": "assistant", "content": [{**unsigned, "signature": ""}, TEXT]},
+        {"role": "user", "content": []},
+    ]
+    before = copy.deepcopy(history)
+    sent = _coerce_messages(history)
+    assert history == before
+    assert sent == [
+        history[0],
+        {"role": "assistant", "content": TURN},
+        history[2],
+        {"role": "assistant", "content": [{"type": "text", "text": "Searching."}]},
+        history[5],
+    ]
+    assert LLMResponse(raw(UNSIGNED, TOOL)).assistant_content[0]["type"] == "thinking"
 
 
 def test_sdk_messages_keep_their_reasoning_blocks():

@@ -6,6 +6,9 @@ scripted: the first answer leads its tool call with reasoning blocks, the
 caller appends ``assistant_content`` and the tool result, and the second
 request must carry those blocks unchanged, pass admission and reach the
 provider in the one shape. The metadata comes through the shape's seam.
+
+A ``thinking`` block without a signature is the exception (protocol v2, IR1
+m6): the caller's history keeps it, and no transport sends it back.
 """
 
 from __future__ import annotations
@@ -227,3 +230,119 @@ def test_credits_quote_execute_and_replay_carry_reasoning(ledger):
     assert_shaped(quoted[1])
     assert quoted[1]["thinking"] == {"type": "adaptive"}
     assert budget_snapshot("account")["spent_usd"] == 0.022
+
+
+# ─── An unsigned thinking block is never sent back (protocol v2, IR1 m6) ──
+
+MODEL_QWEN = "qwen/qwen3.8-max-0902"
+UNSIGNED = {"type": "thinking", "thinking": "A non-Anthropic model reasons unsigned."}
+SEARCHING = {"type": "text", "text": "Searching."}
+HISTORY = [
+    {"role": "user", "content": "Where is order 7?"},
+    {"role": "assistant", "content": [UNSIGNED, SEARCHING, CALL]},
+    {"role": "user", "content": [RESULT]},
+    # A turn of nothing else, as a reasoning-only answer leaves: it goes too.
+    {"role": "assistant", "content": [{**UNSIGNED, "signature": ""}]},
+    {"role": "user", "content": "And order 8?"},
+]
+WITHOUT_UNSIGNED = [HISTORY[0], {"role": "assistant", "content": [SEARCHING, CALL]}]
+WITHOUT_UNSIGNED += [HISTORY[2], HISTORY[4]]
+
+
+def direct_client(sent):
+    from anthropic.types import Message
+
+    def create(**kwargs):
+        sent.append(copy.deepcopy(kwargs["messages"]))
+        usage = {"input_tokens": 100, "output_tokens": 20}
+        usage.update(cache_creation_input_tokens=0, cache_read_input_tokens=0)
+        return Message.model_validate(
+            {
+                "id": "msg",
+                "type": "message",
+                "role": "assistant",
+                "model": "claude-sonnet-5-5",
+                "content": FINAL,
+                "stop_reason": "end_turn",
+                "usage": usage,
+            }
+        )
+
+    client = LLMClient("direct", api_key="synthetic", model="claude-sonnet-5-5")
+    client._client = SimpleNamespace(messages=SimpleNamespace(create=create))
+    return client
+
+
+def router_client(sent):
+    def upstream(request):
+        sent.append(json.loads(request.content)["messages"])
+        usage = {"input_tokens": 100, "output_tokens": 20, "cost": "0.0001"}
+        return httpx.Response(
+            200,
+            json={"model": MODEL_QWEN, "content": FINAL, "stop_reason": "end_turn", "usage": usage},
+        )
+
+    client = LLMClient("openrouter", api_key="synthetic", model=MODEL_QWEN)
+    client._client = OpenRouterClient(
+        "synthetic", http_client=httpx.Client(transport=httpx.MockTransport(upstream))
+    )
+    return client
+
+
+def credits_client(sent):
+    def handler(http_request):
+        body = json.loads(http_request.content)
+        if http_request.url.path.endswith("/quote"):
+            sent.append(body["request"]["messages"])
+            quote = dict(
+                protocol=PROTOCOL,
+                currency="USD",
+                account_id="account",
+                business_id="business",
+                payload_hash=digest(body["request"]),
+                tariff_version="test-tariff",
+                model=body["request"]["model"],
+                credit_value_micro_usd=11000,
+                markup_factor="1.5",
+                max_credits=2,
+                max_debit_micro_usd=22000,
+            )
+            quote["quote_hash"] = digest(quote)
+            return httpx.Response(200, json=quote)
+        receipt = {
+            **body["quote"],
+            "request_id": body["request_id"],
+            "authorized_max_debit_micro_usd": body["max_debit_micro_usd"],
+            "credits": 1,
+            "debit_micro_usd": 11000,
+        }
+        message = {
+            "model": body["request"]["model"],
+            "content": FINAL,
+            "stop_reason": "end_turn",
+            "usage": {"input_tokens": 10, "output_tokens": 1},
+        }
+        return httpx.Response(
+            200, json={"state": "settled", "receipt": receipt, "message": message}
+        )
+
+    session = SimpleNamespace(id_token="synthetic")
+    client = LLMClient("proxy", firebase_session=session, model="claude-sonnet-5-5")
+    client._client = BoundedProxyClient(
+        "https://synthetic.test",
+        session,
+        http_client=httpx.Client(transport=httpx.MockTransport(handler)),
+    )
+    return client
+
+
+@pytest.mark.parametrize("make", [direct_client, router_client, credits_client])
+def test_an_unsigned_thinking_block_is_never_sent_back_on_any_transport(ledger, make):
+    """The caller's history keeps the unsigned block; the request leaves it out,
+    with the turn it alone made up, and keeps every other block in order."""
+    sent, history = [], copy.deepcopy(HISTORY)
+    client = make(sent)
+    final = client.create_message_sync(messages=history, tools=[TOOL], max_tokens=400)
+    assert final.content[0].text == "Order 7 shipped."
+    assert history == HISTORY
+    assert sent == [WITHOUT_UNSIGNED]
