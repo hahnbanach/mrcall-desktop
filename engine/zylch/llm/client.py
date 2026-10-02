@@ -211,6 +211,13 @@ class LLMClient:
             ),
         )
 
+    async def check_transport(self) -> None:
+        """The pipeline's free preflight (``preflight.py``): no inference, nothing
+        reserved. Its reads run in a thread, as a request does."""
+        from .preflight import check_transport
+
+        await asyncio.get_event_loop().run_in_executor(None, check_transport, self)
+
     def _release_unused_reservation(self, reservation, settle) -> None:
         """Give back a hold for a call that provably never left this process.
 

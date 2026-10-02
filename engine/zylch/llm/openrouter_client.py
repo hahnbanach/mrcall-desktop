@@ -99,6 +99,33 @@ class OpenRouterClient:
             id=data.get("id"),
         )
 
+    def check_account(self):
+        """A free read of the key's record (``GET /api/v1/key``): no inference.
+
+        A refused key raises as a refused request does; a key whose credit
+        limit is spent raises before a paid call would be refused for it.
+        """
+
+        def dispatch(client):
+            return client.get(
+                "https://openrouter.ai/api/v1/key",
+                headers={"Authorization": f"Bearer {self._key}"},
+            )
+
+        if self._http is not None:
+            response = dispatch(self._http)
+        else:
+            with httpx.Client(timeout=10, follow_redirects=False) as client:
+                response = dispatch(client)
+        if response.status_code != 200:
+            raise BudgetError(
+                f"OpenRouter request failed (HTTP {response.status_code}); no automatic retry."
+            )
+        data = response.json().get("data")
+        left = data.get("limit_remaining") if isinstance(data, dict) else None
+        if type(left) in (int, float) and left <= 0:
+            raise BudgetError("OpenRouter key has no credit left: its limit is spent.")
+
     def _create_k3(self, request):
         from .k3_reasoning import chat_request, decode_chat_response
 

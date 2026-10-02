@@ -240,9 +240,10 @@ def script_worker(monkeypatch, extractions: Sequence[Any], decisions: Sequence[A
     """The next ``MemoryWorker`` the pipeline builds, both transports scripted.
 
     The extraction client answers with entity blocks, the mnemonic role with
-    decisions; the pipeline's one-token preflight gets a client that answers
-    it; the merge canary is not due and the post-update consolidation has no
-    transport, so the only paid calls a run makes are the worker's.
+    decisions; the pipeline's free preflight gets a client whose model list
+    answers it (no network); the merge canary is not due and the post-update
+    consolidation has no transport, so the only paid calls a run makes are
+    the worker's.
     """
     from zylch.llm import client as client_mod
     from zylch.memory import consolidation
@@ -254,7 +255,9 @@ def script_worker(monkeypatch, extractions: Sequence[Any], decisions: Sequence[A
     monkeypatch.setattr(
         mem_mod, "make_llm_client", Mock(side_effect=[extraction_client, decision_client])
     )
-    monkeypatch.setattr(client_mod, "make_llm_client", lambda *a, **k: mnemonic_env.client("pong"))
+    preflight = mnemonic_env.client()
+    preflight._client.models.list = Mock()
+    monkeypatch.setattr(client_mod, "make_llm_client", lambda *a, **k: preflight)
     monkeypatch.setattr(merge_canary_gate, "merge_canary_policy", lambda owner: {"run": False})
     monkeypatch.setattr(consolidation, "llm_available", lambda: False)
     return extraction_client, decision_client
