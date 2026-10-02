@@ -22,7 +22,7 @@ import itertools
 
 import pytest
 
-from tests.measurement.task_roles_env import fixture_module, load_cases
+from tests.measurement.task_roles_env import fixture_module, load_authored
 
 ROLES = ("TASK_DETECTION", "REANALYZE", "DEDUP")
 
@@ -40,7 +40,7 @@ def scorer(role: str):
 
 
 def _case(role, number):
-    return load_cases(role)["cases"][number - 1]
+    return load_authored(role)["cases"][number - 1]
 
 
 def _score(role, case, answer):
@@ -145,7 +145,7 @@ def outcome_answer(role, case, outcome):
 
 @pytest.mark.parametrize("role", ROLES)
 def test_label_answers_pass_and_are_never_critical(role):
-    for case in load_cases(role)["cases"]:
+    for case in load_authored(role)["cases"]:
         for answer in label_answers(role, case):
             result = _score(role, case, answer)
             assert result["passed"] and not result["critical"], (case["id"], answer, result)
@@ -153,7 +153,7 @@ def test_label_answers_pass_and_are_never_critical(role):
 
 @pytest.mark.parametrize("role", ROLES)
 def test_critical_on_lists_reachable_wrong_outcomes(role):
-    for case in load_cases(role)["cases"]:
+    for case in load_authored(role)["cases"]:
         outcomes = scorer(role).OUTCOMES
         outcomes = outcomes[case["call_site"]] if isinstance(outcomes, dict) else outcomes
         tokens = case["critical_on"]
@@ -177,7 +177,7 @@ def test_critical_on_lists_reachable_wrong_outcomes(role):
 
 @pytest.mark.parametrize("role", ROLES)
 def test_no_answer_is_never_critical(role):
-    for case in load_cases(role)["cases"]:
+    for case in load_authored(role)["cases"]:
         result = _score(role, case, None)
         assert result == {"passed": False, "critical": False, "outcome": "invalid"}
 

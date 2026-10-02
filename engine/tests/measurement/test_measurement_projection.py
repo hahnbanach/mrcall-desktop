@@ -4,8 +4,11 @@
   the client would send for each case: for K3, its adapter's 8,192 output
   tokens at max effort, whatever ``max_tokens`` the call site asked for;
 - the expected spend is positive and below the maximum;
-- the report gives the totals, the D7 order with the cumulative expected spend
-  and IR2's comparison with the cap less 20 %.
+- K3's expected spend is priced at the endpoint its adapter pins
+  (``k3_reasoning.rates()``), not at the model-level price;
+- the report gives the totals, the D7 order with the cumulative expected spend,
+  the reference's line of each role for the second repetition (the corpus has
+  none) and IR2's comparison with the cap less 20 %.
 """
 
 from __future__ import annotations
@@ -59,9 +62,27 @@ def test_a_shaped_arm_is_bound_on_the_request_the_client_sends():
     assert Decimal(0) < expected < maximum
 
 
+def test_k3_s_expected_spend_is_priced_at_its_pinned_endpoint(monkeypatch):
+    from zylch.llm import k3_reasoning
+    from zylch.llm.roles import catalogue
+
+    run = reply_need()
+    endpoint = k3_reasoning.rates()
+    assert endpoint != catalogue.rates(K3, "openrouter")  # the snapshot prices them apart
+    expected = projection.role_arm(run, K3)[2]
+    # Twice the pinned endpoint's price is twice K3's expected spend: that is the
+    # price read, whatever the model-level one says.
+    monkeypatch.setattr(k3_reasoning, "rates", lambda: (2 * endpoint[0], 2 * endpoint[1]))
+    assert projection.role_arm(run, K3)[2] == 2 * expected
+
+
 def test_the_report_gives_totals_the_priority_order_and_ir2(capsys):
     assert projection.main([reply_need()], {}, Decimal("20"), corpus_roles=False) == 0
     out = capsys.readouterr().out
     assert "total: maximum USD" in out and "D7 priority, cumulative expected spend" in out
-    assert "the reference second repetition" in out
+    first, second = out.split("the reference's second repetition, last (D7)")
+    reference = next(line for line in first.splitlines() if "(reference)" in line)
+    again = next(line for line in second.splitlines() if "REPLY_NEED" in line)
+    assert again.split()[1] == reference.split()[-1]  # the reference's expected, once more
     assert "IR2: expected one repetition" in out and "USD 16.0 (the cap less 20 %)" in out
+    assert "IR2: expected with the reference's second, at most" in out

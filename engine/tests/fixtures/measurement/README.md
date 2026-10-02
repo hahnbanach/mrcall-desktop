@@ -21,6 +21,7 @@ and for the task roles `score.py`. `MNEMONIC`, `MEMORY_EXTRACT` and
 | Capture the requests with today's prompts | `python scripts/build_measurement_requests.py` (`--check` compares) | no |
 | Choose the arms | `python scripts/resolve_models.py --bootstrap > ARMS.json` | no |
 | Project the cost | `python scripts/measure_roles.py --arms ARMS.json --project` | no |
+| Trim a case set to fit IR2 (below) | `python scripts/trim_measurement_cases.py --role R --keep N` (`--plan --arms ARMS.json` first; `--restore` undoes) | no |
 | Rehearse | `python scripts/measure_roles.py --arms ARMS.json --out DIR --dry-run` | no |
 | Measure the roles with case sets | `python scripts/measure_roles.py --arms ARMS.json --out DIR --cap 20` | yes |
 | Measure the memory roles, one run per arm | `MNEMONIC_CORPUS_EXECUTE=1 MNEMONIC_CORPUS_ARMS=ARMS.json MNEMONIC_CORPUS_ARM=<id> MNEMONIC_CORPUS_PROFILE_DIR=… MNEMONIC_CORPUS_CAP_USD=… pytest tests/memory/test_mnemonic_corpus_live.py` | yes |
@@ -28,6 +29,54 @@ and for the task roles `score.py`. `MNEMONIC`, `MEMORY_EXTRACT` and
 
 Keys come from the environment only (`OPENROUTER_API_KEY`), are written to a
 disposable profile's `.env` (mode 600, deleted after) and never printed.
+
+## Trimming a case set (IR2)
+
+When the projection's expected spend is over USD 16 (the cap less 20 %), the
+plan reduces case counts before any paid call, never below 12 cases for a
+decision role and 5 for CHAT and TASK_SOLVE. The smokes and the corpus
+roles are not trimmed. `scripts/trim_measurement_cases.py --role R --keep N`
+moves the cases that are not kept from `R/cases.json` to `R/reserve.json` and
+captures `R/requests.json` again, so `case_set_sha256` covers the kept set.
+The one-off run and the daily job then measure the same cases.
+
+The selection is deterministic: it depends only on the authored cases and N.
+
+1. Every case with a non-empty `critical_on` is kept.
+2. For each value of the role's decision field, two cases are kept, or all of
+   them when the value has fewer than two. The decision field is the label
+   class the case files' balance tests count:
+   - TASK_DETECTION: `task_action`;
+   - REANALYZE: `action`;
+   - DEDUP: duplicates or distinct, per call site;
+   - REPLY_NEED: `needs_reply`;
+   - INTENT: `primary_skill`;
+   - CORRECTION_LEARNING: the judge and its must-record flag;
+   - SYNC_ANALYSIS: the `expected_action` of a thread that needs action, else
+     none;
+   - CHAT and TASK_SOLVE: none.
+3. The remaining cases are added one at a time until there are N.
+
+Each pick after step 1 takes the input language (`lang`) with fewer cases
+kept so far, and in it the lowest-numbered id. A tie goes to the
+lowest-numbered id of either language. The languages therefore end as near
+equal as the counts allow, and the highest-numbered ids go to the reserve
+first.
+
+The tool refuses, and writes nothing, when:
+
+- N is below the minimum;
+- N is below the number of critical cases;
+- N is below what steps 1 and 2 must keep (the message gives that floor);
+- N is above the number of authored cases;
+- the role has no minimum.
+
+`--plan` prints the moves and, with `--arms`, each arm's projection delta,
+without writing anything. `--restore` gives back the files byte for byte.
+
+The reserve stays authored and reviewed. The case files' own tests read
+`cases.json` together with `reserve.json` (`tests/measurement/case_sets.py`).
+Captures, replays and hashes read `cases.json` alone.
 
 ## Requests and hashes
 
@@ -53,7 +102,9 @@ everything spent or uncertain and written to `DIR/ledger.jsonl` as an
 intent; the receipt settles it. Nothing is retried; a resumed run skips every
 cell with an intent. `DIR/results.jsonl` holds per cell the tool calls, text,
 usage, cost, latency and the scoring of `scripts/measurement_scoring.py`
-(label match, critical, mechanical bars).
+(label match, critical, mechanical bars). `--repeat-disagreements` then runs
+D7's last item: the reference a second time, only on the cases where some
+arm's label result differs from its own. No arm runs again.
 
 ## The thresholds
 
@@ -61,7 +112,10 @@ usage, cost, latency and the scoring of `scripts/measurement_scoring.py`
 binomial standard error, with every mechanical bar met and no critical
 failure; a `satisfice` role's threshold is the lowest index at and above
 which every measured arm passes, or `measured_only` when index and result
-disagree. It writes `measured.json` in the shape `resolver.validate_measured`
+disagree. Everything is judged on the first repetition. The second
+repetition's answers are recorded in the role's `second_repetition`, the first
+and second label result of each repeated case, and change no pass or fail.
+It writes `measured.json` in the shape `resolver.validate_measured`
 reads, with the hashes it measured; `tests/measurement/test_derive_thresholds.py`
 refuses a committed `measured.json` whose hashes are not today's or whose
 thresholds its own results do not give.

@@ -6,7 +6,9 @@ profile, a recording client, no network, no key — and hold that every case yie
 request at the role's call site, carrying the role's tool where it has one, built from that
 case's own input; that a case the engine would settle without a model is refused instead of
 silently measuring nothing; and that each case file keeps the label schema its README
-documents, grounded in the input, synthetic, and balanced in classes and languages.
+documents, grounded in the input, synthetic, and balanced in classes and languages. The
+case file is the authored set (``case_sets.py``): ``cases.json`` with any cases a trim
+moved to ``reserve.json``, so a smaller measured set leaves these checks whole.
 
 Each case also says which wrong answers are critical (``critical_on``, from which ``critical``
 is derived) and which language its scored free text must be in (``expect_lang``, None where
@@ -28,7 +30,7 @@ from tests.measurement.capture_support import (
     CaptureError,
     disposable_profile,
     load_capture,
-    load_cases,
+    load_authored,
     text_language,
     the_request,
 )
@@ -85,7 +87,7 @@ def resolve(dotted):
 
 @pytest.mark.parametrize("role", ROLES)
 def test_every_case_yields_one_request_at_the_role_call_site(role):
-    doc = load_cases(role)
+    doc = load_authored(role)
     out = load_capture(role).build_requests(doc["cases"])
 
     assert [item["case_id"] for item in out] == [case["id"] for case in doc["cases"]]
@@ -102,7 +104,7 @@ def test_every_case_yields_one_request_at_the_role_call_site(role):
 
 
 def test_the_intent_prompt_lists_every_registry_skill():
-    doc = load_cases("INTENT")
+    doc = load_authored("INTENT")
     out = load_capture("INTENT").build_requests(doc)
     for item in out:
         prompt = item["request"]["messages"][0]["content"]
@@ -110,14 +112,14 @@ def test_the_intent_prompt_lists_every_registry_skill():
 
 
 def test_a_reply_need_case_the_screen_answers_is_refused():
-    case = copy.deepcopy(load_cases("REPLY_NEED")["cases"][0])
+    case = copy.deepcopy(load_authored("REPLY_NEED")["cases"][0])
     case["input"]["message"]["body_plain"] += "\nE quando arriva la merce?"
     with pytest.raises(CaptureError, match="0 request"):
         load_capture("REPLY_NEED").build_requests([case])
 
 
 def test_an_unchanged_correction_is_refused():
-    case = copy.deepcopy(load_cases("CORRECTION_LEARNING")["cases"][0])
+    case = copy.deepcopy(load_authored("CORRECTION_LEARNING")["cases"][0])
     case["input"]["correction"]["edited"] = case["input"]["correction"]["proposed"]
     with pytest.raises(CaptureError, match="0 request"):
         load_capture("CORRECTION_LEARNING").build_requests([case])
@@ -243,7 +245,7 @@ def check_expect_lang(role, case):
 
 @pytest.mark.parametrize("role", ROLES)
 def test_the_case_file_keeps_its_schema_and_labels_its_input(role):
-    doc = load_cases(role)
+    doc = load_authored(role)
     assert doc["schema"] == 1 and doc["role"] == role
     assert callable(resolve(doc["builder"]))
     ids = [case["id"] for case in doc["cases"]]
@@ -257,7 +259,7 @@ def test_the_case_file_keeps_its_schema_and_labels_its_input(role):
 
 
 def test_the_language_check_reads_the_case_sets_own_sentences():
-    memories = load_cases("CORRECTION_LEARNING")["memories"]
+    memories = load_authored("CORRECTION_LEARNING")["memories"]
     assert {text_language(rule) for rule in memories["tipografia"]["rules"]} == {"it"}
     assert {text_language(rule) for rule in memories["studio"]["rules"]} == {"en"}
     assert text_language("Per l'assistenza indirizza i clienti all'email.") == "it"
@@ -267,7 +269,7 @@ def test_the_language_check_reads_the_case_sets_own_sentences():
 
 @pytest.mark.parametrize("role", ROLES)
 def test_the_case_file_is_synthetic_and_balanced(role):
-    doc = load_cases(role)
+    doc = load_authored(role)
     text = json.dumps(doc, ensure_ascii=False)
     for address in re.findall(r"[\w.+-]+@([\w-]+(?:\.[\w-]+)+)", text):
         assert address.endswith(".example"), address

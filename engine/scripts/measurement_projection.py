@@ -21,7 +21,11 @@ role's captured requests (or the corpus's requests, for the memory roles):
   or ``TEXT_TOKENS`` — plus the reasoning the request turns on
   (``REASONING_TOKENS``, the headroom the shape reserves; K3 at max effort
   ``K3_REASONING_TOKENS``, the mean of the 2026-09-16 record: 63,756 reasoning
-  tokens over 60 responses); priced at the snapshot's model-level prices.
+  tokens over 60 responses); priced at the price the request reaches
+  (``rates_reached``): the snapshot's model-level price, except a request K3's
+  adapter carries, which its provider pin routes to one endpoint
+  (``k3_reasoning.ENDPOINT``) and is charged that endpoint's price
+  (``k3_reasoning.rates()``).
   CHAT and TASK_SOLVE count one dispatch when the label expects no tool and two
   otherwise (the call, then the answer after its result), each later one
   ``FOLLOW_UP_TOKENS`` longer. A corpus case counts its extraction (automatic
@@ -29,8 +33,11 @@ role's captured requests (or the corpus's requests, for the memory roles):
   intent bound (``EVENT_DISPATCH_ALLOWANCE`` decisions per child).
 
 It prints a table per role and arm, the totals, the D7 priority order with the
-cumulative expected spend, and IR2's rule: the expected total against the cap
-less 20 %.
+cumulative expected spend, then the reference's line of each role for the
+second repetition — D7's last item, which re-runs the reference only on the
+cases where an arm's label result differs from its own, so each line is the
+most it can cost (every case disagreeing); the corpus runner has no second
+repetition — and IR2's rule: the expected total against the cap less 20 %.
 """
 
 from __future__ import annotations
@@ -91,10 +98,27 @@ def reasoning_tokens(model: str, sent: dict) -> int:
     return REASONING_TOKENS if on else 0
 
 
-def expected_usd(model: str, input_tokens: int, output_tokens: int) -> Decimal:
+def rates_reached(model: str, sent: dict) -> tuple[Decimal, Decimal]:
+    """``(input, output)`` per million tokens of the price ``sent`` is charged at.
+
+    A request K3's adapter carries (max effort, as the client promotes every K3
+    request on OpenRouter) is routed to its pinned endpoint alone and charged
+    that endpoint's price (``k3_reasoning.rates()``); any other request the
+    snapshot's model-level price. Zero when neither prices the model.
+    """
+    from zylch.llm import k3_reasoning
     from zylch.llm.roles import catalogue
 
-    rates = catalogue.rates(model, "openrouter") or (Decimal(0), Decimal(0))
+    adapter = (sent.get("output_config") or {}).get("effort") == "max"
+    if model == k3_reasoning.MODEL and adapter:
+        rates = k3_reasoning.rates()
+    else:
+        rates = catalogue.rates(model, "openrouter")
+    return rates or (Decimal(0), Decimal(0))
+
+
+def expected_usd(model: str, sent: dict, input_tokens: int, output_tokens: int) -> Decimal:
+    rates = rates_reached(model, sent)
     return (input_tokens * rates[0] + output_tokens * rates[1]) / Decimal(1_000_000)
 
 
@@ -153,7 +177,7 @@ def harness_cell(run, arm: str, case: dict, client) -> tuple[Decimal, Decimal, b
         dispatches = 2
     tokens = input_tokens(sent)
     expected = sum(
-        expected_usd(arm, tokens + n * FOLLOW_UP_TOKENS, output) for n in range(dispatches)
+        expected_usd(arm, sent, tokens + n * FOLLOW_UP_TOKENS, output) for n in range(dispatches)
     )
     return bound * dispatches, expected, fallback
 
@@ -185,7 +209,7 @@ def corpus_arm(arm: str) -> tuple[int, Decimal, Decimal, bool]:
             decision = n < len(requests) - (spec["caller_class"] == AUTOMATIC_OBSERVATION)
             maximum += bound * (EVENT_DISPATCH_ALLOWANCE if decision else 1)
             output = min(sent["max_tokens"], answer + reasoning_tokens(arm, sent))
-            expected += expected_usd(arm, input_tokens(sent), output)
+            expected += expected_usd(arm, sent, input_tokens(sent), output)
     return len(corpus), maximum, expected, fallback
 
 
@@ -247,11 +271,17 @@ def main(runs: list, arms: dict, cap: Decimal, corpus_roles: bool = True) -> int
         cumulative += spend
         print(f"  {role:42} {spend:9.4f}  cumulative {cumulative:9.4f}")
     first = cumulative
-    second = sum(r[4] for r in rows if r[1] == reference)
-    cumulative += second
-    print(f"  {'the reference second repetition':42} {second:9.4f}  cumulative {cumulative:9.4f}")
+    print(
+        "\nthe reference's second repetition, last (D7): only on the cases where an arm's"
+        "\nlabel result differs from the reference's, so at most the reference's line of each role:"
+    )
+    for run in runs:  # measure_roles.py's roles: the corpus runner has no second repetition
+        line = sum(r[4] for r in rows if r[0] == run.role and r[1] == reference)
+        cumulative += line
+        print(f"  {run.role:42} {line:9.4f}  cumulative {cumulative:9.4f}")
     budget = cap * Decimal("0.8")
-    for label, spend in (("one repetition", first), ("with the reference's second", cumulative)):
+    totals = (("one repetition", first), ("with the reference's second, at most", cumulative))
+    for label, spend in totals:
         verdict = "within" if spend <= budget else "OVER"
         print(f"IR2: expected {label}: USD {spend:.4f}, {verdict} USD {budget} (the cap less 20 %)")
     return 0

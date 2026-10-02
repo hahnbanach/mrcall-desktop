@@ -201,6 +201,13 @@ def load_cases(role: str) -> dict[str, Any]:
     return json.loads((FIXTURES / role / "cases.json").read_text(encoding="utf-8"))
 
 
+def load_authored(role: str) -> dict[str, Any]:
+    """The role's authored case set: ``cases.json`` and any trimmed reserve (``case_sets.py``)."""
+    from tests.measurement.case_sets import authored_document
+
+    return authored_document(FIXTURES / role)
+
+
 def load_capture(role: str) -> ModuleType:
     """The role's ``capture.py``, imported by path (the fixture directories are not packages)."""
     path = FIXTURES / role / "capture.py"
