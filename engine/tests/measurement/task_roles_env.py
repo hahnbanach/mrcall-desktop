@@ -23,6 +23,9 @@ what the three harnesses share:
   the model the role routed to, and answered with a text-only response,
   the shape every task worker treats as "no decision" without writing.
 - seeding helpers for the trained task prompt, emails and open tasks.
+- loaders of the committed cases, the profile owners and a role's
+  ``capture.py`` / ``score.py`` (by path, as the measurement scripts load
+  them).
 
 No network, no key, no paid call: the client is never real.
 """
@@ -31,6 +34,7 @@ from __future__ import annotations
 
 import copy
 import importlib
+import importlib.util
 import inspect
 import json
 import os
@@ -88,6 +92,15 @@ class CaptureError(RuntimeError):
 def load_cases(role: str) -> dict[str, Any]:
     """The committed case document of ``role``."""
     return json.loads((FIXTURES / role / "cases.json").read_text(encoding="utf-8"))
+
+
+def fixture_module(role: str, name: str):
+    """Import ``<ROLE>/<name>.py`` (``capture``, ``score``) by path, as the scripts do."""
+    path = FIXTURES / role / f"{name}.py"
+    spec = importlib.util.spec_from_file_location(f"measurement_{name}_{role.lower()}", path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
 
 
 def load_profiles() -> dict[str, dict[str, Any]]:

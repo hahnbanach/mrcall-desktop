@@ -1,7 +1,7 @@
 # TASK_DETECTION — measurement cases
 
-Scope: the synthetic cases, labels and capture harness of the
-`TASK_DETECTION` role for milestone 10 (brief D7, plan S4a). The
+Scope: the synthetic cases, labels, scoring rules and capture harness of
+the `TASK_DETECTION` role for milestone 10 (brief D7, plan S4a). The
 measurement (S4b/S4c) replays each captured request on several models and
 scores every answer against its label; nothing in this directory calls a
 model or needs a key.
@@ -20,20 +20,22 @@ that builds and sends the request), model key `MODEL_TASK_DETECTION`.
 
 | File | What |
 |------|------|
-| `cases.json` | 20 cases: `{"schema": 1, "role", "builder", "cases": [...]}` |
+| `cases.json` | 22 cases: `{"schema": 1, "role", "builder", "cases": [...]}` |
 | `capture.py` | `build_requests(cases)` → `[{"case_id", "call_site", "request"}]` |
+| `score.py` | `score_answer(case, answer)` → `{"passed", "critical", "outcome"}`, the reference implementation of the rules below |
 | `profiles.json`, `trained_prompt.it.txt`, `trained_prompt.en.txt` | the two synthetic profile owners and the task prompt the trainer would have stored for each; `REANALYZE` uses them too, because both roles send that prompt |
 
 ## A case
 
-`id`, `lang`, `call_site` (`task.detect`), `input`, `label`, `critical`,
-`why` (what the case tests and why the label is right).
+`id`, `lang`, `expect_lang`, `call_site` (`task.detect`), `input`,
+`label`, `critical_on`, `critical`, `why` (what the case tests and why the
+label is right).
 
 `input`:
 
-- `profile` — `it`: Giulia Ferraris, Serramenti Ferraris s.r.l., windows
-  and doors near Bergamo; `en`: Tom Hale, Harbour Lane Design Ltd, a
-  branding and web studio in Bristol.
+- `profile` — `it`: Giulia Ferraris, Serramenti Esempio s.r.l., windows
+  and doors near Bergamo; `en`: Tom Hale, Example Design Ltd, a branding
+  and web studio in Bristol.
 - `now` — when the case happens, `2026-10-01T09:00:00Z` (a Thursday). The
   harness pins the clock the builder reads to it.
 - `emails` — the mailbox: `id`, `thread_id`, `from`, `from_name`, `to`,
@@ -43,49 +45,65 @@ that builds and sends the request), model key `MODEL_TASK_DETECTION`.
   history, which renders every email of the thread.
 - `open_tasks` — open tasks as stored (`id`, contact, `suggested_action`,
   `reason`, `urgency`, `created_at`, `sources` with the source email and
-  `thread_id`). The engine shows the detector those of the same thread or
-  the same contact.
+  `thread_id`). In every case the detector is shown all of them (the
+  tests check their ids reach the request).
 - `memory` — the sender's memory blob (`contact`, `blob_id`, `content` in
   the `#IDENTIFIERS / #ABOUT / #HISTORY` envelope), what the hybrid search
   returns for the sender's address.
 
-`lang` is the profile owner's language: the language the answer's free
-text (title, suggested action, reason) is expected in, as the trained
-prompt asks. `task_detection-17` is an English email to the Italian
-owner, so its `lang` is `it`.
+`lang` is the language of the pending email. `expect_lang` is the language
+the role's prompt requires for the free text of the answer (`title`,
+`suggested_action`, `reason`: `score.FREE_TEXT`): the owner's language,
+because the trained prompt says "Write suggested actions, titles and
+reasons in Italian/English" and the tool asks for the title "in the user's
+language". They differ in `task_detection-17`, an English email to the
+Italian owner: `lang` `en`, `expect_lang` `it`. The tests check that
+`expect_lang` is the language the captured prompt names.
 
 ## Label and scoring
 
-The answer is the input of the model's `task_decision` call.
+The answer is the input of the model's `task_decision` call. `score.py`
+reads it as the engine would and reduces it to one outcome:
 
-| Field | Compared | Label |
-|-------|----------|-------|
-| `task_action` | exactly | always |
-| `action_required` | exactly | always: `true` for `create` and `update` (the owner still has work), `false` for `close` and `none` |
-| `target_task_id` | exactly | only for `update` and `close` |
+| Outcome | When |
+|---------|------|
+| `invalid` | `_analyze_event` drops it (a required field missing, a wrong type or enum value): the email stays pending and is retried |
+| `create` | `create` with `action_required: true` and a suggested action of five characters or more |
+| `none` | `none`; or `create` with `action_required: false` (the engine creates nothing); or `create`/`update` with a suggested action under five characters (the email branch drops it); or `update`/`close` with no target the engine can resolve |
+| `update`, `close` | applied to a target: the given `target_task_id` when it is an open task, else the only open task when there is exactly one (Fix B) |
+| `other_target` | the labelled `update`/`close`, applied to another open task |
 
-A case passes when every labelled field matches. Urgency, title,
-suggested action, reason and the relay contact fields are not scored:
-they are matters of taste or belong to the mechanical bars (the tool
-called, a valid non-empty answer in `lang`).
+The label: `task_action`; `target_task_id` when an `update` or `close` is
+labelled or accepted; `action_required: true` on `create` labels only —
+the engine reads it only there, so it is scored only there; `also_accept`
+lists the other actions that also pass (`-21`: `update`; `-22`: `none`). An
+answer passes when its outcome is the labelled or an accepted action, with
+the labelled target for `update` and `close`. Urgency, title, suggested
+action, reason and the relay contact fields are not scored: they are
+matters of taste or belong to the mechanical bars (the tool called, a
+valid answer in `expect_lang`).
 
-`critical: true` marks the cases where every wrong answer causes real
-harm, so a failed critical case is a critical failure:
+`critical_on` lists the outcomes that are a critical failure on that case
+(`critical` is `true` exactly when the list is not empty, never set by
+hand). A wrong outcome not in the list is an ordinary miss:
 
-- the `create` cases — an explicit request (a new lead, an angry client, a
+- `create` cases — an explicit request (a new lead, an angry client, a
   colleague's approval due today, a callback, a customs form) with no task
-  tracking it: any other action, or `action_required: false`, leaves no
-  task; in `-18` an `update`/`close` would also corrupt the client's
-  unrelated open task;
-- the `update` cases — the new email changes facts the open task states
-  (quantities, size, dates, scope, budget): keeping it leaves a wrong
-  task, `create` duplicates it, `close` drops pending work, and in `-20`
-  the other open task of the same client must not be touched.
+  tracking it: `none` loses it; in `-18`, where the client's only open task
+  is unrelated, `update` and `close` corrupt that task too;
+- `update` cases — the new email changes what the open task states
+  (quantities, size, dates, scope, budget): `none` leaves it stale and
+  `close` drops pending work; in `-20`, `other_target` rewrites or closes
+  the client's other task. `create` is only a miss: on the task's own
+  thread the engine turns it into this same update
+  (`_pick_force_update_target`);
+- `-21` (a courtesy thank-you) and `-22` (a chaser) — a quote is still
+  owed: `close` drops it;
+- `close` and `none` cases have an empty list: their errors leave clutter.
 
-`close` and `none` cases are not critical: their errors leave clutter.
-
-Distribution: create 7, none 6, update 4, close 3; `it` 10, `en` 10;
-11 critical.
+Distribution: create 7, none 7 (one also accepting `update`), update 5
+(one also accepting `none`), close 3; `lang` it 11 / en 11, `expect_lang`
+it 12 / en 10; 13 cases with a non-empty `critical_on`.
 
 ## How the harness drives the builder
 
@@ -113,12 +131,13 @@ sender's address. Everything else is the engine's code.
 
 ## Notes for the measurement
 
-- Usage: load `capture.py` by path (it loads `tests/measurement/task_roles_env.py`
-  beside it, so only `zylch` must be importable) and call
-  `build_requests(cases)` with the `cases` list, from synchronous code. Each
-  case gets its own profile and database; the environment and the storage
-  singletons are restored afterwards, so hold no open engine across the call.
-  `tests/measurement/test_capture_task_roles.py` runs it on every case.
+- Usage: load `capture.py` and `score.py` by path (`capture.py` loads
+  `tests/measurement/task_roles_env.py` beside it, so only `zylch` must be
+  importable) and call `build_requests(cases)` with the `cases` list, from
+  synchronous code. Each case gets its own profile and database; the
+  environment and the storage singletons are restored afterwards, so hold
+  no open engine across the call. `tests/measurement/test_capture_task_roles.py`
+  and `test_scoring_task_roles.py` run them on every case.
 - The captured request is what the worker passes to `create_message`
   (`system`, `messages`, `tools`, `tool_choice`, `max_tokens`). The client
   adds the datetime line and applies the request shape when it sends it:
@@ -126,7 +145,12 @@ sender's address. Everything else is the engine's code.
   `now`, or the datetime line contradicts `Date: 2026-10-01`.
 - Captures follow the engine's code: re-run `build_requests` after any
   prompt change. The same case renders byte-identically on any day.
-- Every address is `*.example` except the product's own call-notification
+- Every business is an obvious invention ("… Esempio", "Example …");
+  every address is `*.example` except the product's own call-notification
   relay (`notification@transactional.mrcall.ai`, case `-13`); every phone
-  number is `+39 02 0000 0xxx` or `+44 1632 960 xxx`. The tests enforce it.
-- Labels are awaiting the independent label review of S4a.
+  number is `+39 02 0000 0xxx` or `+44 1632 960 xxx`. The tests enforce
+  the addresses and numbers.
+- Labels: reviewed independently on 2026-10-02 (ACCEPT_WITH_FIXES); this
+  revision applies the review — `critical_on` per case, `action_required`
+  scored on `create` only, the two pending-work cases `-21` and `-22`,
+  `expect_lang`, invented business names.

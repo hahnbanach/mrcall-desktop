@@ -3,17 +3,17 @@
   "profiles": {
     "it": {
       "environment": {
-        "EMAIL_ADDRESS": "giulia@serramentiferraris.example",
+        "EMAIL_ADDRESS": "giulia@serramentiesempio.example",
         "USER_FULL_NAME": "Giulia Ferraris",
-        "USER_COMPANY": "Serramenti Ferraris s.r.l."
+        "USER_COMPANY": "Serramenti Esempio s.r.l."
       },
       "trained_prompt_file": "trained_prompt.it.txt"
     },
     "en": {
       "environment": {
-        "EMAIL_ADDRESS": "tom@harbourlanedesign.example",
+        "EMAIL_ADDRESS": "tom@exampledesign.example",
         "USER_FULL_NAME": "Tom Hale",
-        "USER_COMPANY": "Harbour Lane Design Ltd"
+        "USER_COMPANY": "Example Design Ltd"
       },
       "trained_prompt_file": "trained_prompt.en.txt"
     }
