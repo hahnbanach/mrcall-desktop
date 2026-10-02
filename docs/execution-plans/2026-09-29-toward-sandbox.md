@@ -1187,8 +1187,10 @@ before start, and rollback by `unstore` / `unmigrate`.
 
 1. **Bootstrap now, not at midnight.** Once `main` carries the bootstrap
    stub (`engine/scripts/logrotate.d/mrcalld`, commit `b6d098f`) and the
-   tenant-exec fixes (`5ee01d4`, then `0dc122d` — tenant-exec probe
-   record below), the VPS operator runs
+   tenant-exec fixes (`5ee01d4`: the bootstrap ran from `499ca09` with
+   that helper — VPS rollout record below; `0dc122d` reaches the host
+   with the first reconcile after the tenant-exec record is on main),
+   the VPS operator runs
    `systemctl start zylch-reconcile.service` twice. That is the timer's
    own path, and it takes the reconcile lock. The first run is the old
    on-disk updater, which the stub lets succeed; the second is the new
@@ -1626,7 +1628,10 @@ rollback, a second forward and `delete` go as before. The three already
 migrated scratch tenants were re-applied by the reconcile with no
 `FAILED` line (TE-FINAL2-0, TE-F2 — their own `ready` lines are filtered
 out of that output) and by `create` directly in review A's B-R4 (`ready`
-for each).
+for each). The helper check of production@'s pre-check 1 below holds
+for every 2b: until a reconcile after this record is on main, the VPS
+runs `594b7375…`, which refuses neither a dropped `EnvironmentFile` nor
+a `create` under a running unit (defects 21, 24).
 
 **Runbook, added for production@'s 2b** (it is the last one). `U` is its
 uid, `R` its release directory, `VF=/etc/mrcalld/voice-cafe124.env`.
@@ -1799,21 +1804,28 @@ declaration stays for the next attempt.
 record, each continued over the fixes. A (adversarial, host scripts; its
 own probes on the VM, `/root/te-reviewA.log`) REVISE on `5ab4576` —
 defects 19–24, no check of the installed helper, the dropped
-`EnvironmentFile` — → **APPROVED at `0dc122d`**, with the follow-ups
-listed under "Open", none of which it judges a blocker for production@.
+`EnvironmentFile` — → **APPROVED at `0dc122d`** (the helper; the runbook
+as of `2df77fa`, which has only gained pre-checks since), with the
+follow-ups listed under "Open", none of which it judges a blocker for
+production@. Its log holds its probes, not its verdicts: those are as
+relayed by the lead.
 B (evidence conformance, runbook) REVISE on the first draft — claims
 wider than the log, an incomplete "not covered" list, a runbook with no
-helper check and no executable rollback trigger — and on three revisions
-— a credential scan that could not pass, the restore shown by no case
-(hence TE-M7), the carrier routes, sections of the log the record did
-not name — → **APPROVED**, this record included.
+helper check and no executable rollback trigger — and on two revisions
+(`2df77fa`, `ba08649`) — a credential scan that could not pass, the
+restore shown by no case (hence TE-M7), the carrier routes (an error of
+B's own first pass, corrected by TE-VON), sections of the log the record
+did not name — → **APPROVED at `997aa65`**, this record included; the
+wording of this paragraph about B, and of the next one, is B's.
 
 Both verdicts are on helper `0dc122d` and on what the scratch VM can
 show. **production@ can be migrated with this helper, by the runbook
-above.** What the VM could not show — preparation and a call as the
-tenant inside the sandbox, on the release it really runs — is decided on
-the VPS by step 7: `calls_available: true` within five minutes of the
-start, or the rollback.
+above.** What the VM could not show — the list under "Not covered here",
+first of all preparation as the tenant inside the sandbox on the release
+it really runs — is decided on the VPS by step 7: `calls_available:
+true` within five minutes of the start and its other triggers, or the
+rollback. A real call is shown only by the test call the operators may
+make; without it, voice is accepted on `calls_available` alone.
 
 ## M3 — Egress bound per daemon
 
