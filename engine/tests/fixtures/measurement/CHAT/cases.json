@@ -1,0 +1,424 @@
+{
+  "schema": 1,
+  "role": "CHAT",
+  "builder": "zylch.assistant.core.ZylchAIAgent.process_message",
+  "cases": [
+    {
+      "id": "chat-01",
+      "lang": "it",
+      "input": {
+        "profile": {"EMAIL_ADDRESS": "giulia@ferramentaconti.example", "USER_FULL_NAME": "Giulia Conti", "USER_COMPANY": "Ferramenta Conti Srl", "USER_PHONE": "+39 030 0000 0101"},
+        "user_message": "Chi è Marco Ferretti? Mi ha scritto stamattina ma non ricordo di che ditta è.",
+        "tool_results": {
+          "search_local_memory": {
+            "status": "success",
+            "data": {
+              "found": true,
+              "count": 1,
+              "query": "Marco Ferretti",
+              "results": [
+                {
+                  "blob_id": "b7c1e2d4-0f3a-4c55-9b1e-5d2a8f6e1a01",
+                  "namespace": "user:company",
+                  "content": "#IDENTIFIERS\nEntity type: PERSON\nName: Marco Ferretti\nEmail: marco@edilferretti.example\nPhone: +39 035 0000 0142\nCompany: Edil Ferretti Snc\n#ABOUT\nTitolare di Edil Ferretti Snc, piccola impresa edile di Bergamo; cliente di Ferramenta Conti dal 2024.\n#HISTORY\n- 2026-09-12: ha ordinato 40 sacchi di cemento rapido e 2 carriole.\n- 2026-09-30: ha chiesto se teniamo i tasselli chimici per calcestruzzo.",
+                  "hybrid_score": 0.91
+                }
+              ]
+            },
+            "message": "Found 1 contacts — full content of each is in data.results:\n- **user:company** (blob_id=b7c1e2d4-0f3a-4c55-9b1e-5d2a8f6e1a01, score: 0.91)"
+          }
+        }
+      },
+      "label": {
+        "first_call": {"any_of": [{"name": "search_local_memory", "args": {"query": {"contains": [["ferretti"]]}}}]},
+        "never_call": ["web_search"],
+        "answer": {"language": "it", "contains": [["Edil Ferretti"]]}
+      },
+      "critical": false,
+      "why": "The chat prompt orders search_local_memory first for any question about a person and allows web search only when asked; the memory result names his firm, so the answer must say Edil Ferretti."
+    },
+    {
+      "id": "chat-02",
+      "lang": "en",
+      "input": {
+        "profile": {
+          "EMAIL_ADDRESS": "sarah@northwind-interiors.example",
+          "USER_FULL_NAME": "Sarah Mitchell",
+          "USER_COMPANY": "Northwind Interiors Ltd",
+          "USER_PHONE": "+44 20 7946 0101"
+        },
+        "user_message": "Morning! What do I need to deal with today? Feels like a lot is piling up.",
+        "tool_results": {
+          "get_tasks": {
+            "status": "success",
+            "data": {"count": 3},
+            "message": "3 open tasks:\n1. [HIGH] Priya Shah (Shah & Co Architects) needs the September invoice number resent\n2. [MEDIUM] Harbor Lights Café asks to confirm the Saturday installation\n3. [LOW] Send the linen samples update to Tom Reed"
+          }
+        }
+      },
+      "label": {"first_call": {"any_of": [{"name": "get_tasks"}]}, "never_call": [], "answer": null},
+      "critical": false,
+      "why": "Rule 6 of the chat prompt: a question about what the user has to do always calls get_tasks and is never answered from history; get_tasks hands its list to the user itself, so there is no model answer to score."
+    },
+    {
+      "id": "chat-03",
+      "lang": "it",
+      "input": {
+        "profile": {"EMAIL_ADDRESS": "giulia@ferramentaconti.example", "USER_FULL_NAME": "Giulia Conti", "USER_COMPANY": "Ferramenta Conti Srl", "USER_PHONE": "+39 030 0000 0101"},
+        "user_message": "Manda un whatsapp a Laura Bassi (+39 02 0000 0187): ciao Laura, ti confermo il ritiro dei pannelli domani alle 15. Giulia",
+        "tool_results": {
+          "send_whatsapp_message": {"status": "success", "data": {"sent": true, "to": "+390200000187"}, "message": "WhatsApp message sent to Laura Bassi (+390200000187)."}
+        }
+      },
+      "label": {
+        "first_call": {
+          "any_of": [
+            {"name": "send_whatsapp_message", "args": {"phone_number": {"digits_contain": "0200000187"}, "message": {"contains": [["15"]]}}},
+            {"name": "send_whatsapp_message", "args": {"contact_name": {"contains": [["laura", "bassi"]]}, "message": {"contains": [["15"]]}}}
+          ]
+        },
+        "never_call": ["send_sms"],
+        "answer": {"language": "it"}
+      },
+      "critical": false,
+      "why": "Rule 8: asked to send a WhatsApp, the assistant calls send_whatsapp_message directly — its approval card is the confirmation — with the number and text the user gave, keeping the 15:00 pickup; an SMS is not what was asked."
+    },
+    {
+      "id": "chat-04",
+      "lang": "it",
+      "input": {
+        "profile": {"EMAIL_ADDRESS": "giulia@ferramentaconti.example", "USER_FULL_NAME": "Giulia Conti", "USER_COMPANY": "Ferramenta Conti Srl", "USER_PHONE": "+39 030 0000 0101"},
+        "user_message": "Trova l'ultima email di Studio Galli e dimmi entro quando vogliono il preventivo",
+        "replay": [{"name": "search_local_emails", "input": {"query": "from:galli"}}],
+        "tool_results": {
+          "search_local_emails": {
+            "status": "success",
+            "data": {
+              "matches": [
+                {
+                  "id": "6c1f0d2e-5a7b-4e21-9d3c-2b8e7f40a911",
+                  "thread_id": "thr-galli-0929",
+                  "date": "2026-09-29T16:42:00",
+                  "from_email": "anna.galli@studiogalli.example",
+                  "from_name": "Anna Galli",
+                  "to_email": "giulia@ferramentaconti.example",
+                  "subject": "Richiesta preventivo scaffalature magazzino",
+                  "has_attachments": true,
+                  "is_user_sent": false,
+                  "body_chars": 588
+                }
+              ],
+              "count": 1,
+              "query": "from:galli",
+              "folder": "all",
+              "next_offset": null
+            },
+            "message": "Found 1 local match(es) for `from:galli` (folder=all):\n  1. [2026-09-29] Anna Galli → giulia@ferramentaconti.example: Richiesta preventivo scaffalature magazzino [attach]\n     id=6c1f0d2e-5a7b-4e21-9d3c-2b8e7f40a911 thread=thr-galli-0929\n     Buongiorno Giulia, come anticipato al telefono vi chiediamo un preventivo per 12 scaffalature metalliche zincate (altezza 250 cm, 5 ripiani, portata 200 kg a ripiano) per il nuovo magazzino di via Lombardia. Vi alleghiamo la piantina con le misure delle pareti. Per la consegna avremmo bisogno di … [preview of 588 chars; read_email id=6c1f0d2e-5a7b-4e21-9d3c-2b8e7f40a911 for the full text]"
+          },
+          "read_email": {
+            "status": "success",
+            "data": {
+              "id": "6c1f0d2e-5a7b-4e21-9d3c-2b8e7f40a911",
+              "thread_id": "thr-galli-0929",
+              "headers": {
+                "from": "anna.galli@studiogalli.example",
+                "from_name": "Anna Galli",
+                "to": "giulia@ferramentaconti.example",
+                "subject": "Richiesta preventivo scaffalature magazzino",
+                "date": "2026-09-29T16:42:00",
+                "message_id": "<0929-galli@studiogalli.example>"
+              },
+              "body_plain": "Buongiorno Giulia,\ncome anticipato al telefono vi chiediamo un preventivo per 12 scaffalature metalliche zincate (altezza 250 cm, 5 ripiani, portata 200 kg a ripiano) per il nuovo magazzino di via Lombardia. Vi alleghiamo la piantina con le misure delle pareti.\nPer la consegna avremmo bisogno di avere tutto montato entro fine novembre, quindi il preventivo ci serve entro venerdì 9 ottobre: lunedì 12 lo portiamo in riunione soci.\nSe possibile indicate a parte anche il costo del montaggio.\nGrazie e buona giornata,\nAnna Galli\nStudio Galli – Architettura e Interni\nTel. +39 02 0000 0163",
+              "has_attachments": true,
+              "attachment_filenames": ["piantina_magazzino.pdf"]
+            },
+            "message": "Loaded email 'Richiesta preventivo scaffalature magazzino' from anna.galli@studiogalli.example (body: 588 chars)."
+          }
+        }
+      },
+      "label": {
+        "first_call": {"any_of": [{"name": "read_email", "args": {"email_id": {"contains": [["6c1f0d2e"]]}}}]},
+        "never_call": ["web_search"],
+        "answer": {"language": "it", "contains": [["9 ottobre", "09/10", "9/10", "venerdì 9"]]}
+      },
+      "critical": false,
+      "why": "The replayed search found the email, but its preview stops before the deadline and says the full text is one read_email away; the answer must give the date the body states, Friday 9 October."
+    },
+    {
+      "id": "chat-05",
+      "lang": "en",
+      "input": {
+        "profile": {
+          "EMAIL_ADDRESS": "sarah@northwind-interiors.example",
+          "USER_FULL_NAME": "Sarah Mitchell",
+          "USER_COMPANY": "Northwind Interiors Ltd",
+          "USER_PHONE": "+44 20 7946 0101"
+        },
+        "user_message": "Can you make this sound less harsh before I send it to a client? \"Your invoice is 30 days overdue. Pay by Friday or we stop all deliveries.\""
+      },
+      "label": {"first_call": null, "never_call": [], "answer": {"language": "en", "contains": [["Friday"]]}},
+      "critical": false,
+      "why": "Rewording a sentence the user typed needs no data and no tool; a softer version still has to carry the Friday deadline, which is the point of the message."
+    },
+    {
+      "id": "chat-06",
+      "lang": "en",
+      "input": {
+        "profile": {
+          "EMAIL_ADDRESS": "sarah@northwind-interiors.example",
+          "USER_FULL_NAME": "Sarah Mitchell",
+          "USER_COMPANY": "Northwind Interiors Ltd",
+          "USER_PHONE": "+44 20 7946 0101"
+        },
+        "user_message": "Send a text to +44 20 7946 0321: Hi Tom, the fabric samples arrive Thursday morning. Sarah",
+        "tool_results": {"send_sms": {"status": "success", "data": {"sent": true, "to": "+442079460321"}, "message": "SMS queued via MrCall to +442079460321."}}
+      },
+      "label": {
+        "first_call": {"any_of": [{"name": "send_sms", "args": {"phone_number": {"digits_contain": "2079460321"}, "message": {"contains": [["thursday"]]}}}]},
+        "never_call": ["send_whatsapp_message"],
+        "answer": {"language": "en"}
+      },
+      "critical": false,
+      "why": "Rule 7: a request to send a text calls send_sms (SMS is ready in the channel block) with the given number and the Thursday delivery; WhatsApp is not what was asked."
+    },
+    {
+      "id": "chat-07",
+      "lang": "en",
+      "input": {
+        "profile": {
+          "EMAIL_ADDRESS": "sarah@northwind-interiors.example",
+          "USER_FULL_NAME": "Sarah Mitchell",
+          "USER_COMPANY": "Northwind Interiors Ltd",
+          "USER_PHONE": "+44 20 7946 0101"
+        },
+        "user_message": "Search the web for how we get an EORI number — we start shipping orders to a client in Switzerland in January.",
+        "tool_results": {
+          "web_search": {
+            "status": "success",
+            "data": {
+              "query": "how to get an EORI number UK business",
+              "findings": "A UK business applies to HMRC for a GB EORI number through the online service on the government website; it usually arrives within a week and is needed to move goods out of the UK, Switzerland included.",
+              "citations": [{"url": "https://customs-guide.example/eori", "title": "Get an EORI number"}],
+              "email": null,
+              "company": null
+            },
+            "message": "Found web information for: how to get an EORI number UK business"
+          }
+        }
+      },
+      "label": {
+        "first_call": {"any_of": [{"name": "web_search", "args": {"query": {"contains": [["eori"]]}}}]},
+        "never_call": [],
+        "answer": {"language": "en", "contains": [["HMRC"]]}
+      },
+      "critical": false,
+      "why": "The user explicitly asks for a web search, the one case where the chat prompt allows it; the scripted result says the number comes from HMRC, which the answer must report."
+    },
+    {
+      "id": "chat-08",
+      "lang": "it",
+      "input": {
+        "profile": {"EMAIL_ADDRESS": "giulia@ferramentaconti.example", "USER_FULL_NAME": "Giulia Conti", "USER_COMPANY": "Ferramenta Conti Srl", "USER_PHONE": "+39 030 0000 0101"},
+        "user_message": "D'ora in poi non proporre mai lo sconto del 10% ai clienti nuovi: solo a chi compra da noi da almeno un anno.",
+        "tool_results": {
+          "search_local_memory": {
+            "status": "success",
+            "data": {"not_found": true, "query": "sconto 10% clienti nuovi"},
+            "message": "No memory blobs ranked above threshold for 'sconto 10% clienti nuovi'."
+          },
+          "create_memory": {"status": "success", "data": {"blob_id": "b0d4e6f8-1a2b-4c3d-8e9f-0a1b2c3d4e5f", "action": "created"}, "message": "Rule saved to the always-on rules."}
+        }
+      },
+      "label": {
+        "first_call": {"any_of": [{"name": "search_local_memory", "args": {"query": {"contains": [["scont", "10%", "10 %", "nuov", "regol", "discount", "rule"]]}}}]},
+        "never_call": ["update_memory"],
+        "answer": {"language": "it"}
+      },
+      "critical": false,
+      "why": "This is a rule about how the assistant should act; the chat prompt says to search memory for a similar rule before creating one, so the first call is search_local_memory, and no existing blob may be overwritten."
+    },
+    {
+      "id": "chat-09",
+      "lang": "it",
+      "input": {
+        "profile": {"EMAIL_ADDRESS": "giulia@ferramentaconti.example", "USER_FULL_NAME": "Giulia Conti", "USER_COMPANY": "Ferramenta Conti Srl", "USER_PHONE": "+39 030 0000 0101"},
+        "user_message": "D'ora in poi non proporre mai lo sconto del 10% ai clienti nuovi: solo a chi compra da noi da almeno un anno.",
+        "replay": [{"name": "search_local_memory", "input": {"query": "sconto 10% clienti nuovi"}}],
+        "tool_results": {
+          "search_local_memory": {
+            "status": "success",
+            "data": {"not_found": true, "query": "sconto 10% clienti nuovi"},
+            "message": "No memory blobs ranked above threshold for 'sconto 10% clienti nuovi'."
+          },
+          "create_memory": {"status": "success", "data": {"blob_id": "b0d4e6f8-1a2b-4c3d-8e9f-0a1b2c3d4e5f", "action": "created"}, "message": "Rule saved to the always-on rules."}
+        }
+      },
+      "label": {
+        "first_call": {"any_of": [{"name": "create_memory", "args": {"entry_type": {"equals": "behavioral_rule"}, "content": {"contains": [["10%", "10 %", "10 per", "dieci"]]}}}]},
+        "never_call": ["update_memory"],
+        "answer": {"language": "it"}
+      },
+      "critical": true,
+      "why": "The replayed search found no similar rule, so the prompt prescribes create_memory with entry_type behavioral_rule; saving it as a contact fact or overwriting a blob puts the rule in the wrong memory."
+    },
+    {
+      "id": "chat-10",
+      "lang": "en",
+      "input": {
+        "profile": {
+          "EMAIL_ADDRESS": "sarah@northwind-interiors.example",
+          "USER_FULL_NAME": "Sarah Mitchell",
+          "USER_COMPANY": "Northwind Interiors Ltd",
+          "USER_PHONE": "+44 20 7946 0101"
+        },
+        "user_message": "Reply to Daniel Price at Harbor Lights: we can deliver the six pendant lamps on 14 October. Save it as a draft, don't send it yet.",
+        "tool_results": {
+          "search_emails": {
+            "status": "success",
+            "data": {
+              "threads": [
+                {
+                  "subject": "Pendant lamps – delivery date?",
+                  "from": "daniel.price@harborlights.example",
+                  "to": "sarah@northwind-interiors.example",
+                  "cc": null,
+                  "date": "2026-09-22T11:05:00",
+                  "body": "Hi Sarah,\nThanks for the photos of the pendant lamps — they look great. When could you deliver all six? We would like them up before the café reopens.\nBest,\nDaniel Price\nHarbor Lights Café",
+                  "message_id": "<HL-2209@harborlights.example>",
+                  "in_reply_to": null,
+                  "references": null,
+                  "thread_id": "thr-harbor-0922",
+                  "gmail_id": "hl-2209",
+                  "score": 0.88
+                }
+              ],
+              "total": 1
+            },
+            "message": "Found 1 emails matching 'Daniel Price Harbor Lights'"
+          },
+          "search_local_emails": {
+            "status": "success",
+            "data": {
+              "matches": [
+                {
+                  "id": "a41d7c9e-2b6f-4e83-9c15-7d0e3f2a6b88",
+                  "thread_id": "thr-harbor-0922",
+                  "date": "2026-09-22T11:05:00",
+                  "from_email": "daniel.price@harborlights.example",
+                  "from_name": "Daniel Price",
+                  "to_email": "sarah@northwind-interiors.example",
+                  "subject": "Pendant lamps – delivery date?",
+                  "has_attachments": false,
+                  "is_user_sent": false,
+                  "body_chars": 188
+                }
+              ],
+              "count": 1,
+              "query": "from:harborlights",
+              "folder": "all",
+              "next_offset": null
+            },
+            "message": "Found 1 local match(es) for `from:harborlights` (folder=all):\n  1. [2026-09-22] Daniel Price → sarah@northwind-interiors.example: Pendant lamps – delivery date?\n     id=a41d7c9e-2b6f-4e83-9c15-7d0e3f2a6b88 thread=thr-harbor-0922\n     Hi Sarah, Thanks for the photos of the pendant lamps — they look great. When could you deliver all six? We would like them up before the café reopens. Best, Daniel Price Harbor Lights Café"
+          },
+          "create_draft": {"status": "success", "data": {"draft_id": "d-5e21c7", "to": "daniel.price@harborlights.example"}, "message": "Draft d-5e21c7 created."}
+        }
+      },
+      "label": {
+        "first_call": {
+          "any_of": [
+            {"name": "search_emails", "args": {"query": {"contains": [["daniel", "price", "harbor"]]}}},
+            {"name": "search_local_emails", "args": {"query": {"contains": [["daniel", "price", "harbor"]]}}},
+            {"name": "search_local_memory", "args": {"query": {"contains": [["daniel", "price", "harbor"]]}}}
+          ]
+        },
+        "never_call": ["send_draft"],
+        "answer": {"language": "en", "contains": [["14"]]}
+      },
+      "critical": true,
+      "why": "A reply that stays in the thread needs the original's message_id, which the prompt says to find by searching first; the user said not to send, so send_draft anywhere in the turn is a critical failure."
+    },
+    {
+      "id": "chat-11",
+      "lang": "en",
+      "input": {
+        "profile": {
+          "EMAIL_ADDRESS": "sarah@northwind-interiors.example",
+          "USER_FULL_NAME": "Sarah Mitchell",
+          "USER_COMPANY": "Northwind Interiors Ltd",
+          "USER_PHONE": "+44 20 7946 0101"
+        },
+        "user_message": "Reply to Daniel Price at Harbor Lights: we can deliver the six pendant lamps on 14 October. Save it as a draft, don't send it yet.",
+        "replay": [{"name": "search_emails", "input": {"query": "Daniel Price Harbor Lights"}}],
+        "tool_results": {
+          "search_emails": {
+            "status": "success",
+            "data": {
+              "threads": [
+                {
+                  "subject": "Pendant lamps – delivery date?",
+                  "from": "daniel.price@harborlights.example",
+                  "to": "sarah@northwind-interiors.example",
+                  "cc": null,
+                  "date": "2026-09-22T11:05:00",
+                  "body": "Hi Sarah,\nThanks for the photos of the pendant lamps — they look great. When could you deliver all six? We would like them up before the café reopens.\nBest,\nDaniel Price\nHarbor Lights Café",
+                  "message_id": "<HL-2209@harborlights.example>",
+                  "in_reply_to": null,
+                  "references": null,
+                  "thread_id": "thr-harbor-0922",
+                  "gmail_id": "hl-2209",
+                  "score": 0.88
+                }
+              ],
+              "total": 1
+            },
+            "message": "Found 1 emails matching 'Daniel Price Harbor Lights'"
+          },
+          "create_draft": {"status": "success", "data": {"draft_id": "d-5e21c7", "to": "daniel.price@harborlights.example"}, "message": "Draft d-5e21c7 created."}
+        }
+      },
+      "label": {
+        "first_call": {
+          "any_of": [
+            {
+              "name": "create_draft",
+              "args": {"to": {"contains": [["daniel.price@harborlights.example"]]}, "body": {"contains": [["14"]]}, "in_reply_to": {"contains": [["HL-2209@harborlights.example"]]}}
+            }
+          ]
+        },
+        "never_call": ["send_draft"],
+        "answer": {"language": "en", "contains": [["14"]]}
+      },
+      "critical": true,
+      "why": "The replayed search returned Daniel's email and its message_id; the prompt requires create_draft with in_reply_to set to it so the draft stays in the thread, and the user asked to save, not send."
+    },
+    {
+      "id": "chat-12",
+      "lang": "it",
+      "input": {
+        "profile": {"EMAIL_ADDRESS": "giulia@ferramentaconti.example", "USER_FULL_NAME": "Giulia Conti", "USER_COMPANY": "Ferramenta Conti Srl", "USER_PHONE": "+39 030 0000 0101"},
+        "history": [
+          {"role": "user", "content": "Prepara una bozza per Chiara Lodi con il preventivo: 250 maniglie MX-40 private label a 6,80 € l'una, più 90 € di impianto logo."},
+          {
+            "role": "assistant",
+            "content": "Bozza salvata (draft_id: d-4c1e9a):\n\n```\nA: chiara@lodiarredamenti.example\nOggetto: Preventivo maniglie MX-40 private label\n\nGentile Chiara,\ncome richiesto le invio il preventivo per 250 maniglie MX-40 in private label con logo inciso: 6,80 € + IVA cad. (1.700,00 €), impianto logo 90 € una tantum, consegna in 4 settimane dall'approvazione del logo.\nResto a disposizione per qualsiasi chiarimento.\nCordiali saluti,\nGiulia Conti\nFerramenta Conti Srl\n```\n\nVuoi che la invii?"
+          }
+        ],
+        "user_message": "Sì, inviala pure",
+        "tool_results": {
+          "send_draft": {
+            "status": "success",
+            "data": {"sent": true, "draft_id": "d-4c1e9a", "to": "chiara@lodiarredamenti.example"},
+            "message": "Email sent to chiara@lodiarredamenti.example."
+          }
+        }
+      },
+      "label": {
+        "first_call": {"any_of": [{"name": "send_draft", "args": {"draft_id": {"contains": [["4c1e9a"]]}}}]},
+        "never_call": ["create_draft", "update_draft"],
+        "answer": {"language": "it"}
+      },
+      "critical": true,
+      "why": "The user approves the draft shown in the previous turn; the prompt says to call send_draft with that draft_id directly, and sending another draft or writing a second one puts a wrong or duplicate quote in front of the customer."
+    }
+  ]
+}
