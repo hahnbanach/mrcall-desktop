@@ -18,15 +18,14 @@ NARRATION writes the one line the desktop shows while a chat turn runs
   characters about the concrete action under way; an important error said
   briefly and kindly. `max_tokens` 60.
 
-Both prompts fix Italian whatever language the user writes in: the expected
-language is `it` in every case, including the two English inputs.
-
 ## Files
 
 - `cases.json` — five smoke cases.
-- `capture.py` — `build_requests(cases)` returns the request of each case's
-  RPC as it passed it to `create_message_sync`; `run_case(case, client)` calls
-  the RPC with any client and returns its result.
+- `capture.py` — `build_requests(cases)` returns, per case,
+  `{"case_id", "request", "capture_now"}`: the request of its RPC as it
+  passed it to `create_message_sync`, and the moment it was captured at;
+  `run_case(case, client)` calls the RPC with any client and returns its
+  result.
 
 ## How a case drives the builder
 
@@ -37,18 +36,26 @@ the renderer sends them (`lines` and `context`; `message` and `context`). The
 log lines use the sidecar's stderr format (`HH:MM:SS logger LEVEL message`).
 `narration_summarize` drops lines it judges noise before calling the model;
 the harness fails a case whose lines would all be dropped rather than capture
-nothing.
+nothing. On replay the client appends its datetime line, set to the entry's
+`capture_now` (label review G5).
+
+## A case
+
+`id`, `lang` (the language of the input), `expect_lang`, `input`, `label`,
+`critical`, `critical_on`, `why`.
 
 ## Label schema and scoring
 
 ```json
-"label": {"language": "it", "contains": [["cerc", "email", "ferretti"]], "max_chars": 80,
+"label": {"contains": [["cerc", "email", "ferretti"]], "max_chars": 80,
           "single_line": true, "starts_with_any": ["Sto "], "not_equal": ["Sto pensando alla tua richiesta."]}
 ```
 
-Scored on the model's answer, stripped of surrounding whitespace and quotes:
+Scored on the model's answer, stripped of surrounding whitespace and quotes,
+and normalised by the measurement (Markdown emphasis stripped, non-breaking
+and thin spaces made plain — review G3):
 
-- non-empty; `language` — Italian;
+- non-empty;
 - `max_chars` — the prompts' 80 characters;
 - `single_line` — no line break;
 - `starts_with_any` (predict only) — begins with "Sto " (case-insensitive);
@@ -58,8 +65,15 @@ Scored on the model's answer, stripped of surrounding whitespace and quotes:
   alternative (case-insensitive substring; stems such as `cerc`, `scaric`
   cover the verb's forms).
 
-No case is critical: a weak narration costs a moment of the user's
-attention, nothing else. Every check is a mechanical bar.
+**Language.** `expect_lang` is `it` on every case, the two English inputs
+included: both prompts fix Italian whatever language the user writes in.
+`lang` is the input's language. A line of fewer than about eight words is too
+short for reliable detection, and the measurement skips the bar there (review
+G3).
+
+**Critical.** No case is critical (`critical_on: []`, `critical: false`): a
+weak narration costs a moment of the user's attention, nothing else. Every
+check is a mechanical bar.
 
 ## Distribution
 

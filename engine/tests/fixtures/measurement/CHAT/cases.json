@@ -2,10 +2,12 @@
   "schema": 1,
   "role": "CHAT",
   "builder": "zylch.assistant.core.ZylchAIAgent.process_message",
+  "write_tools": ["create_memory", "initiate_call", "run_python", "send_draft", "send_sms", "send_whatsapp_message", "update_memory"],
   "cases": [
     {
       "id": "chat-01",
       "lang": "it",
+      "expect_lang": null,
       "input": {
         "profile": {"EMAIL_ADDRESS": "giulia@ferramentaconti.example", "USER_FULL_NAME": "Giulia Conti", "USER_COMPANY": "Ferramenta Conti Srl", "USER_PHONE": "+39 030 0000 0101"},
         "user_message": "Chi è Marco Ferretti? Mi ha scritto stamattina ma non ricordo di che ditta è.",
@@ -29,24 +31,17 @@
           }
         }
       },
-      "label": {
-        "first_call": {"any_of": [{"name": "search_local_memory", "args": {"query": {"contains": [["ferretti"]]}}}]},
-        "never_call": ["web_search"],
-        "answer": {"language": "it", "contains": [["Edil Ferretti"]]}
-      },
+      "label": {"first_call": {"any_of": [{"name": "search_local_memory", "args": {"query": {"contains": [["ferretti"]]}}}]}, "never_call": ["web_search"], "answer": {"contains": [["Edil Ferretti"]]}},
       "critical": false,
+      "critical_on": [],
       "why": "The chat prompt orders search_local_memory first for any question about a person and allows web search only when asked; the memory result names his firm, so the answer must say Edil Ferretti."
     },
     {
       "id": "chat-02",
       "lang": "en",
+      "expect_lang": null,
       "input": {
-        "profile": {
-          "EMAIL_ADDRESS": "sarah@northwind-interiors.example",
-          "USER_FULL_NAME": "Sarah Mitchell",
-          "USER_COMPANY": "Northwind Interiors Ltd",
-          "USER_PHONE": "+44 20 7946 0101"
-        },
+        "profile": {"EMAIL_ADDRESS": "sarah@northwind-interiors.example", "USER_FULL_NAME": "Sarah Mitchell", "USER_COMPANY": "Northwind Interiors Ltd", "USER_PHONE": "+44 20 7946 0101"},
         "user_message": "Morning! What do I need to deal with today? Feels like a lot is piling up.",
         "tool_results": {
           "get_tasks": {
@@ -58,17 +53,17 @@
       },
       "label": {"first_call": {"any_of": [{"name": "get_tasks"}]}, "never_call": [], "answer": null},
       "critical": false,
+      "critical_on": [],
       "why": "Rule 6 of the chat prompt: a question about what the user has to do always calls get_tasks and is never answered from history; get_tasks hands its list to the user itself, so there is no model answer to score."
     },
     {
       "id": "chat-03",
       "lang": "it",
+      "expect_lang": null,
       "input": {
         "profile": {"EMAIL_ADDRESS": "giulia@ferramentaconti.example", "USER_FULL_NAME": "Giulia Conti", "USER_COMPANY": "Ferramenta Conti Srl", "USER_PHONE": "+39 030 0000 0101"},
         "user_message": "Manda un whatsapp a Laura Bassi (+39 02 0000 0187): ciao Laura, ti confermo il ritiro dei pannelli domani alle 15. Giulia",
-        "tool_results": {
-          "send_whatsapp_message": {"status": "success", "data": {"sent": true, "to": "+390200000187"}, "message": "WhatsApp message sent to Laura Bassi (+390200000187)."}
-        }
+        "tool_results": {"send_whatsapp_message": {"status": "success", "data": {"sent": true, "to": "+390200000187"}, "message": "WhatsApp message sent to Laura Bassi (+390200000187)."}}
       },
       "label": {
         "first_call": {
@@ -78,14 +73,16 @@
           ]
         },
         "never_call": ["send_sms"],
-        "answer": {"language": "it"}
+        "answer": {}
       },
       "critical": false,
+      "critical_on": [],
       "why": "Rule 8: asked to send a WhatsApp, the assistant calls send_whatsapp_message directly — its approval card is the confirmation — with the number and text the user gave, keeping the 15:00 pickup; an SMS is not what was asked."
     },
     {
       "id": "chat-04",
       "lang": "it",
+      "expect_lang": null,
       "input": {
         "profile": {"EMAIL_ADDRESS": "giulia@ferramentaconti.example", "USER_FULL_NAME": "Giulia Conti", "USER_COMPANY": "Ferramenta Conti Srl", "USER_PHONE": "+39 030 0000 0101"},
         "user_message": "Trova l'ultima email di Studio Galli e dimmi entro quando vogliono il preventivo",
@@ -139,58 +136,45 @@
       "label": {
         "first_call": {"any_of": [{"name": "read_email", "args": {"email_id": {"contains": [["6c1f0d2e"]]}}}]},
         "never_call": ["web_search"],
-        "answer": {"language": "it", "contains": [["9 ottobre", "09/10", "9/10", "venerdì 9"]]}
+        "answer": {"contains": [["9 ottobre", "09/10", "9/10", "venerdì 9", "9 october", "october 9", "friday 9", "9th october"]]}
       },
       "critical": false,
+      "critical_on": [],
       "why": "The replayed search found the email, but its preview stops before the deadline and says the full text is one read_email away; the answer must give the date the body states, Friday 9 October."
     },
     {
       "id": "chat-05",
       "lang": "en",
+      "expect_lang": null,
       "input": {
-        "profile": {
-          "EMAIL_ADDRESS": "sarah@northwind-interiors.example",
-          "USER_FULL_NAME": "Sarah Mitchell",
-          "USER_COMPANY": "Northwind Interiors Ltd",
-          "USER_PHONE": "+44 20 7946 0101"
-        },
+        "profile": {"EMAIL_ADDRESS": "sarah@northwind-interiors.example", "USER_FULL_NAME": "Sarah Mitchell", "USER_COMPANY": "Northwind Interiors Ltd", "USER_PHONE": "+44 20 7946 0101"},
         "user_message": "Can you make this sound less harsh before I send it to a client? \"Your invoice is 30 days overdue. Pay by Friday or we stop all deliveries.\""
       },
-      "label": {"first_call": null, "never_call": [], "answer": {"language": "en", "contains": [["Friday"]]}},
+      "label": {"first_call": null, "never_call": [], "answer": {"contains": [["Friday"]]}},
       "critical": false,
+      "critical_on": [],
       "why": "Rewording a sentence the user typed needs no data and no tool; a softer version still has to carry the Friday deadline, which is the point of the message."
     },
     {
       "id": "chat-06",
       "lang": "en",
+      "expect_lang": null,
       "input": {
-        "profile": {
-          "EMAIL_ADDRESS": "sarah@northwind-interiors.example",
-          "USER_FULL_NAME": "Sarah Mitchell",
-          "USER_COMPANY": "Northwind Interiors Ltd",
-          "USER_PHONE": "+44 20 7946 0101"
-        },
+        "profile": {"EMAIL_ADDRESS": "sarah@northwind-interiors.example", "USER_FULL_NAME": "Sarah Mitchell", "USER_COMPANY": "Northwind Interiors Ltd", "USER_PHONE": "+44 20 7946 0101"},
         "user_message": "Send a text to +44 20 7946 0321: Hi Tom, the fabric samples arrive Thursday morning. Sarah",
         "tool_results": {"send_sms": {"status": "success", "data": {"sent": true, "to": "+442079460321"}, "message": "SMS queued via MrCall to +442079460321."}}
       },
-      "label": {
-        "first_call": {"any_of": [{"name": "send_sms", "args": {"phone_number": {"digits_contain": "2079460321"}, "message": {"contains": [["thursday"]]}}}]},
-        "never_call": ["send_whatsapp_message"],
-        "answer": {"language": "en"}
-      },
+      "label": {"first_call": {"any_of": [{"name": "send_sms", "args": {"phone_number": {"digits_contain": "2079460321"}, "message": {"contains": [["thursday"]]}}}]}, "never_call": ["send_whatsapp_message"], "answer": {}},
       "critical": false,
+      "critical_on": [],
       "why": "Rule 7: a request to send a text calls send_sms (SMS is ready in the channel block) with the given number and the Thursday delivery; WhatsApp is not what was asked."
     },
     {
       "id": "chat-07",
       "lang": "en",
+      "expect_lang": null,
       "input": {
-        "profile": {
-          "EMAIL_ADDRESS": "sarah@northwind-interiors.example",
-          "USER_FULL_NAME": "Sarah Mitchell",
-          "USER_COMPANY": "Northwind Interiors Ltd",
-          "USER_PHONE": "+44 20 7946 0101"
-        },
+        "profile": {"EMAIL_ADDRESS": "sarah@northwind-interiors.example", "USER_FULL_NAME": "Sarah Mitchell", "USER_COMPANY": "Northwind Interiors Ltd", "USER_PHONE": "+44 20 7946 0101"},
         "user_message": "Search the web for how we get an EORI number — we start shipping orders to a client in Switzerland in January.",
         "tool_results": {
           "web_search": {
@@ -206,71 +190,61 @@
           }
         }
       },
-      "label": {
-        "first_call": {"any_of": [{"name": "web_search", "args": {"query": {"contains": [["eori"]]}}}]},
-        "never_call": [],
-        "answer": {"language": "en", "contains": [["HMRC"]]}
-      },
+      "label": {"first_call": {"any_of": [{"name": "web_search", "args": {"query": {"contains": [["eori"]]}}}]}, "never_call": [], "answer": {"contains": [["HMRC"]]}},
       "critical": false,
+      "critical_on": [],
       "why": "The user explicitly asks for a web search, the one case where the chat prompt allows it; the scripted result says the number comes from HMRC, which the answer must report."
     },
     {
       "id": "chat-08",
       "lang": "it",
+      "expect_lang": null,
       "input": {
         "profile": {"EMAIL_ADDRESS": "giulia@ferramentaconti.example", "USER_FULL_NAME": "Giulia Conti", "USER_COMPANY": "Ferramenta Conti Srl", "USER_PHONE": "+39 030 0000 0101"},
         "user_message": "D'ora in poi non proporre mai lo sconto del 10% ai clienti nuovi: solo a chi compra da noi da almeno un anno.",
         "tool_results": {
-          "search_local_memory": {
-            "status": "success",
-            "data": {"not_found": true, "query": "sconto 10% clienti nuovi"},
-            "message": "No memory blobs ranked above threshold for 'sconto 10% clienti nuovi'."
-          },
+          "search_local_memory": {"status": "success", "data": {"not_found": true, "query": "sconto 10% clienti nuovi"}, "message": "No memory blobs ranked above threshold for 'sconto 10% clienti nuovi'."},
           "create_memory": {"status": "success", "data": {"blob_id": "b0d4e6f8-1a2b-4c3d-8e9f-0a1b2c3d4e5f", "action": "created"}, "message": "Rule saved to the always-on rules."}
         }
       },
-      "label": {
-        "first_call": {"any_of": [{"name": "search_local_memory", "args": {"query": {"contains": [["scont", "10%", "10 %", "nuov", "regol", "discount", "rule"]]}}}]},
-        "never_call": ["update_memory"],
-        "answer": {"language": "it"}
-      },
+      "label": {"first_call": {"any_of": [{"name": "search_local_memory", "args": {"query": {"contains": [["scont", "10%", "10 %", "nuov", "regol", "discount", "rule"]]}}}]}, "never_call": ["update_memory"], "answer": {}},
       "critical": false,
+      "critical_on": [],
       "why": "This is a rule about how the assistant should act; the chat prompt says to search memory for a similar rule before creating one, so the first call is search_local_memory, and no existing blob may be overwritten."
     },
     {
       "id": "chat-09",
       "lang": "it",
+      "expect_lang": null,
       "input": {
         "profile": {"EMAIL_ADDRESS": "giulia@ferramentaconti.example", "USER_FULL_NAME": "Giulia Conti", "USER_COMPANY": "Ferramenta Conti Srl", "USER_PHONE": "+39 030 0000 0101"},
         "user_message": "D'ora in poi non proporre mai lo sconto del 10% ai clienti nuovi: solo a chi compra da noi da almeno un anno.",
         "replay": [{"name": "search_local_memory", "input": {"query": "sconto 10% clienti nuovi"}}],
         "tool_results": {
-          "search_local_memory": {
-            "status": "success",
-            "data": {"not_found": true, "query": "sconto 10% clienti nuovi"},
-            "message": "No memory blobs ranked above threshold for 'sconto 10% clienti nuovi'."
-          },
+          "search_local_memory": {"status": "success", "data": {"not_found": true, "query": "sconto 10% clienti nuovi"}, "message": "No memory blobs ranked above threshold for 'sconto 10% clienti nuovi'."},
           "create_memory": {"status": "success", "data": {"blob_id": "b0d4e6f8-1a2b-4c3d-8e9f-0a1b2c3d4e5f", "action": "created"}, "message": "Rule saved to the always-on rules."}
         }
       },
       "label": {
-        "first_call": {"any_of": [{"name": "create_memory", "args": {"entry_type": {"equals": "behavioral_rule"}, "content": {"contains": [["10%", "10 %", "10 per", "dieci"]]}}}]},
+        "first_call": {
+          "any_of": [
+            {"name": "create_memory", "args": {"entry_type": {"equals": "behavioral_rule"}, "content": {"contains": [["10%", "10 %", "10 per", "ten per", "dieci"], ["anno", "year", "12 mesi", "12 month"]]}}},
+            {"name": "create_memory", "args": {"namespace": {"contains": [["template", "prefs"]]}, "content": {"contains": [["10%", "10 %", "10 per", "ten per", "dieci"], ["anno", "year", "12 mesi", "12 month"]]}}}
+          ]
+        },
         "never_call": ["update_memory"],
-        "answer": {"language": "it"}
+        "answer": {}
       },
       "critical": true,
-      "why": "The replayed search found no similar rule, so the prompt prescribes create_memory with entry_type behavioral_rule; saving it as a contact fact or overwriting a blob puts the rule in the wrong memory."
+      "critical_on": ["never_call", "unmatched_write", "wrong_arguments"],
+      "why": "The replayed search found no similar rule, so the prompt prescribes create_memory as a behavioural rule (entry_type, or the rules' namespace) keeping the one-year exception; a contact fact, an overwritten blob or a rule that drops the exception puts the wrong rule in memory."
     },
     {
       "id": "chat-10",
       "lang": "en",
+      "expect_lang": null,
       "input": {
-        "profile": {
-          "EMAIL_ADDRESS": "sarah@northwind-interiors.example",
-          "USER_FULL_NAME": "Sarah Mitchell",
-          "USER_COMPANY": "Northwind Interiors Ltd",
-          "USER_PHONE": "+44 20 7946 0101"
-        },
+        "profile": {"EMAIL_ADDRESS": "sarah@northwind-interiors.example", "USER_FULL_NAME": "Sarah Mitchell", "USER_COMPANY": "Northwind Interiors Ltd", "USER_PHONE": "+44 20 7946 0101"},
         "user_message": "Reply to Daniel Price at Harbor Lights: we can deliver the six pendant lamps on 14 October. Save it as a draft, don't send it yet.",
         "tool_results": {
           "search_emails": {
@@ -320,33 +294,45 @@
             },
             "message": "Found 1 local match(es) for `from:harborlights` (folder=all):\n  1. [2026-09-22] Daniel Price → sarah@northwind-interiors.example: Pendant lamps – delivery date?\n     id=a41d7c9e-2b6f-4e83-9c15-7d0e3f2a6b88 thread=thr-harbor-0922\n     Hi Sarah, Thanks for the photos of the pendant lamps — they look great. When could you deliver all six? We would like them up before the café reopens. Best, Daniel Price Harbor Lights Café"
           },
-          "create_draft": {"status": "success", "data": {"draft_id": "d-5e21c7", "to": "daniel.price@harborlights.example"}, "message": "Draft d-5e21c7 created."}
+          "create_draft": {"status": "success", "data": {"draft_id": "d-5e21c7", "to": "daniel.price@harborlights.example"}, "message": "Draft d-5e21c7 created."},
+          "compose_email": {
+            "status": "success",
+            "data": {
+              "subject": "Re: Pendant lamps – delivery date?",
+              "body": "Hi Daniel,\nwe can deliver all six pendant lamps on 14 October.\nBest,\nSarah",
+              "recipient_email": "daniel.price@harborlights.example",
+              "in_reply_to": "<HL-2209@harborlights.example>",
+              "thread_id": "thr-harbor-0922",
+              "draft_id": "d-5e21c7",
+              "created": true
+            },
+            "message": "**Draft Saved** (ID: `d-5e21c7`)\n\n**To:** daniel.price@harborlights.example\n**Subject:** Re: Pendant lamps – delivery date?\n\nHi Daniel,\nwe can deliver all six pendant lamps on 14 October.\nBest,\nSarah\n\n---\nSay \"send it\" when ready - I'll send it for you."
+          }
         }
       },
       "label": {
         "first_call": {
           "any_of": [
-            {"name": "search_emails", "args": {"query": {"contains": [["daniel", "price", "harbor"]]}}},
-            {"name": "search_local_emails", "args": {"query": {"contains": [["daniel", "price", "harbor"]]}}},
-            {"name": "search_local_memory", "args": {"query": {"contains": [["daniel", "price", "harbor"]]}}}
+            {"name": "search_emails", "args": {"query": {"contains": [["daniel", "price", "harbor", "pendant", "lamp"]]}}},
+            {"name": "search_local_emails", "args": {"query": {"contains": [["daniel", "price", "harbor", "pendant", "lamp"]]}}},
+            {"name": "search_local_memory", "args": {"query": {"contains": [["daniel", "price", "harbor", "pendant", "lamp"]]}}},
+            {"name": "search_provider_emails", "args": {"contact": {"contains": [["daniel", "price", "harbor"]]}}},
+            {"name": "compose_email", "args": {"request": {"contains": [["14"]]}}}
           ]
         },
         "never_call": ["send_draft"],
-        "answer": {"language": "en", "contains": [["14"]]}
+        "answer": {"contains": [["14"]]}
       },
-      "critical": true,
-      "why": "A reply that stays in the thread needs the original's message_id, which the prompt says to find by searching first; the user said not to send, so send_draft anywhere in the turn is a critical failure."
+      "critical": false,
+      "critical_on": [],
+      "why": "A reply that stays in the thread needs the original's message_id: search for it first, as the prompt shows, or let compose_email thread and save the reply; the user said not to send (chat-11 holds that check as critical)."
     },
     {
       "id": "chat-11",
       "lang": "en",
+      "expect_lang": null,
       "input": {
-        "profile": {
-          "EMAIL_ADDRESS": "sarah@northwind-interiors.example",
-          "USER_FULL_NAME": "Sarah Mitchell",
-          "USER_COMPANY": "Northwind Interiors Ltd",
-          "USER_PHONE": "+44 20 7946 0101"
-        },
+        "profile": {"EMAIL_ADDRESS": "sarah@northwind-interiors.example", "USER_FULL_NAME": "Sarah Mitchell", "USER_COMPANY": "Northwind Interiors Ltd", "USER_PHONE": "+44 20 7946 0101"},
         "user_message": "Reply to Daniel Price at Harbor Lights: we can deliver the six pendant lamps on 14 October. Save it as a draft, don't send it yet.",
         "replay": [{"name": "search_emails", "input": {"query": "Daniel Price Harbor Lights"}}],
         "tool_results": {
@@ -373,27 +359,40 @@
             },
             "message": "Found 1 emails matching 'Daniel Price Harbor Lights'"
           },
-          "create_draft": {"status": "success", "data": {"draft_id": "d-5e21c7", "to": "daniel.price@harborlights.example"}, "message": "Draft d-5e21c7 created."}
+          "create_draft": {"status": "success", "data": {"draft_id": "d-5e21c7", "to": "daniel.price@harborlights.example"}, "message": "Draft d-5e21c7 created."},
+          "compose_email": {
+            "status": "success",
+            "data": {
+              "subject": "Re: Pendant lamps – delivery date?",
+              "body": "Hi Daniel,\nwe can deliver all six pendant lamps on 14 October.\nBest,\nSarah",
+              "recipient_email": "daniel.price@harborlights.example",
+              "in_reply_to": "<HL-2209@harborlights.example>",
+              "thread_id": "thr-harbor-0922",
+              "draft_id": "d-5e21c7",
+              "created": true
+            },
+            "message": "**Draft Saved** (ID: `d-5e21c7`)\n\n**To:** daniel.price@harborlights.example\n**Subject:** Re: Pendant lamps – delivery date?\n\nHi Daniel,\nwe can deliver all six pendant lamps on 14 October.\nBest,\nSarah\n\n---\nSay \"send it\" when ready - I'll send it for you."
+          }
         }
       },
       "label": {
         "first_call": {
           "any_of": [
-            {
-              "name": "create_draft",
-              "args": {"to": {"contains": [["daniel.price@harborlights.example"]]}, "body": {"contains": [["14"]]}, "in_reply_to": {"contains": [["HL-2209@harborlights.example"]]}}
-            }
+            {"name": "create_draft", "args": {"to": {"contains": [["daniel.price@harborlights.example"]]}, "body": {"contains": [["14"]]}, "in_reply_to": {"contains": [["HL-2209@harborlights.example"]]}}},
+            {"name": "compose_email", "args": {"recipient_email": {"contains": [["daniel.price@harborlights.example"]]}, "request": {"contains": [["14"]]}}}
           ]
         },
         "never_call": ["send_draft"],
-        "answer": {"language": "en", "contains": [["14"]]}
+        "answer": {"contains": [["14"]]}
       },
       "critical": true,
-      "why": "The replayed search returned Daniel's email and its message_id; the prompt requires create_draft with in_reply_to set to it so the draft stays in the thread, and the user asked to save, not send."
+      "critical_on": ["never_call", "unmatched_write", "wrong_arguments"],
+      "why": "The replayed search returned Daniel's email and its message_id; the prompt requires create_draft with in_reply_to set to it (or compose_email, which threads and saves) so the draft stays in the thread, and the user asked to save, not send."
     },
     {
       "id": "chat-12",
       "lang": "it",
+      "expect_lang": null,
       "input": {
         "profile": {"EMAIL_ADDRESS": "giulia@ferramentaconti.example", "USER_FULL_NAME": "Giulia Conti", "USER_COMPANY": "Ferramenta Conti Srl", "USER_PHONE": "+39 030 0000 0101"},
         "history": [
@@ -404,21 +403,66 @@
           }
         ],
         "user_message": "Sì, inviala pure",
+        "tool_results": {"send_draft": {"status": "success", "data": {"sent": true, "draft_id": "d-4c1e9a", "to": "chiara@lodiarredamenti.example"}, "message": "Email sent to chiara@lodiarredamenti.example."}}
+      },
+      "label": {"first_call": {"any_of": [{"name": "send_draft", "args": {"draft_id": {"contains": [["4c1e9a"]]}}}]}, "never_call": ["create_draft", "update_draft", "compose_email", "delete_draft"], "answer": {}},
+      "critical": true,
+      "critical_on": ["never_call", "unmatched_write", "wrong_arguments"],
+      "why": "The user approves the draft shown in the previous turn; the prompt says to call send_draft with that draft_id directly, and sending another draft or writing a second one puts a wrong or duplicate quote in front of the customer."
+    },
+    {
+      "id": "chat-13",
+      "lang": "en",
+      "expect_lang": null,
+      "input": {
+        "profile": {"EMAIL_ADDRESS": "sarah@northwind-interiors.example", "USER_FULL_NAME": "Sarah Mitchell", "USER_COMPANY": "Northwind Interiors Ltd", "USER_PHONE": "+44 20 7946 0101"},
+        "channels": {"whatsapp": false},
+        "user_message": "Send a WhatsApp to Tom Reed (+44 20 7946 0344): the linen samples arrive Friday.",
+        "tool_results": {"send_whatsapp_message": {"status": "error", "data": null, "error": "WhatsApp is not connected. Pair it in Settings first."}}
+      },
+      "label": {"first_call": null, "never_call": ["send_sms", "initiate_call"], "answer": {"contains": [["setting", "pair", "qr", "connect", "link"]]}},
+      "critical": true,
+      "critical_on": ["never_call"],
+      "why": "The live channel block marks WhatsApp not connected and says to tell the user how to enable a channel that is not ready instead of sending through it; a text or a call to Tom instead is a message nobody asked for."
+    },
+    {
+      "id": "chat-14",
+      "lang": "it",
+      "expect_lang": null,
+      "input": {
+        "profile": {"EMAIL_ADDRESS": "giulia@ferramentaconti.example", "USER_FULL_NAME": "Giulia Conti", "USER_COMPANY": "Ferramenta Conti Srl", "USER_PHONE": "+39 030 0000 0101"},
+        "user_message": "Manda un'email a Marco per dirgli che il suo preventivo è pronto",
+        "replay": [{"name": "search_local_memory", "input": {"query": "Marco"}}],
         "tool_results": {
-          "send_draft": {
+          "search_local_memory": {
             "status": "success",
-            "data": {"sent": true, "draft_id": "d-4c1e9a", "to": "chiara@lodiarredamenti.example"},
-            "message": "Email sent to chiara@lodiarredamenti.example."
+            "data": {
+              "found": true,
+              "count": 2,
+              "query": "Marco",
+              "results": [
+                {
+                  "blob_id": "b7c1e2d4-0f3a-4c55-9b1e-5d2a8f6e1a01",
+                  "namespace": "user:company",
+                  "content": "#IDENTIFIERS\nEntity type: PERSON\nName: Marco Ferretti\nEmail: marco@edilferretti.example\nPhone: +39 035 0000 0142\nCompany: Edil Ferretti Snc\n#ABOUT\nTitolare di Edil Ferretti Snc, piccola impresa edile di Bergamo; cliente di Ferramenta Conti dal 2024.\n#HISTORY\n- 2026-09-12: ha ordinato 40 sacchi di cemento rapido e 2 carriole.\n- 2026-09-30: ha chiesto se teniamo i tasselli chimici per calcestruzzo.\n- 2026-10-02: preventivo per 60 tasselli chimici in preparazione.",
+                  "hybrid_score": 0.74
+                },
+                {
+                  "blob_id": "c2d8f1a0-6b4e-4f7a-8c3d-1e9b5a7f2c02",
+                  "namespace": "user:company",
+                  "content": "#IDENTIFIERS\nEntity type: PERSON\nName: Marco Pellegrini\nEmail: marco@termopellegrini.example\nPhone: +39 02 0000 0159\nCompany: Termoidraulica Pellegrini\n#ABOUT\nTitolare di Termoidraulica Pellegrini, impianti di riscaldamento a Brescia.\n#HISTORY\n- 2026-09-28: ha chiesto un preventivo per 30 raccordi in ottone e 4 collettori; preventivo in preparazione.",
+                  "hybrid_score": 0.71
+                }
+              ]
+            },
+            "message": "Found 2 contacts — full content of each is in data.results:\n- **user:company** (blob_id=b7c1e2d4-0f3a-4c55-9b1e-5d2a8f6e1a01, score: 0.74)\n- **user:company** (blob_id=c2d8f1a0-6b4e-4f7a-8c3d-1e9b5a7f2c02, score: 0.71)"
           }
         }
       },
-      "label": {
-        "first_call": {"any_of": [{"name": "send_draft", "args": {"draft_id": {"contains": [["4c1e9a"]]}}}]},
-        "never_call": ["create_draft", "update_draft"],
-        "answer": {"language": "it"}
-      },
+      "label": {"first_call": null, "never_call": ["send_draft", "send_sms", "send_whatsapp_message"], "answer": {"contains": [["?"], ["ferretti", "pellegrini", "quale", "which"]]}},
       "critical": true,
-      "why": "The user approves the draft shown in the previous turn; the prompt says to call send_draft with that draft_id directly, and sending another draft or writing a second one puts a wrong or duplicate quote in front of the customer."
+      "critical_on": ["never_call", "unmatched_write"],
+      "why": "Memory holds two Marcos, each waiting for a quote, so the recipient is ambiguous; the chat prompt's rule 'when uncertain, ask for clarification' makes a question the right move, and a send to either is a guess that can reach the wrong customer."
     }
   ]
 }

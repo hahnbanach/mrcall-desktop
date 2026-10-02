@@ -98,7 +98,10 @@ def run_case(case: Dict[str, Any], client: Any, *, approve: bool = True) -> Dict
     approved (or declined, ``approve=False``) and answer from the script. The
     follow-up reanalysis a mutating solve triggers is another role's call
     (REANALYZE) and does not run here. Returns the RPC's result, the final
-    answer, the tool calls of the forwarded answers and the replayed rounds.
+    answer, the tool calls of the forwarded answers, the replayed rounds and
+    the turn to score (``ReplayClient.turn``): the executor shows every text
+    block to the user, so a recap written next to a send is scored with the
+    rest of the turn's text, not lost behind an empty last answer.
     """
     from zylch.rpc import methods
 
@@ -119,6 +122,7 @@ def run_case(case: Dict[str, Any], client: Any, *, approve: bool = True) -> Dict
         "answer": replay.last_text,
         "calls": replay.calls,
         "replayed": replay.replayed,
+        "turn": replay.turn(),
     }
 
 
@@ -137,5 +141,5 @@ def build_requests(cases: Any, *, calls: Optional[Dict[str, int]] = None) -> Lis
             raise RuntimeError(f"{case['id']}: the solve did not run as scripted: {outcome}")
         if calls is not None:
             calls[case["id"]] = len(client.requests)
-        captured.append({"case_id": case["id"], "request": client.requests[-1]})
+        captured.append(cc.entry(case, client.requests[-1]))
     return captured

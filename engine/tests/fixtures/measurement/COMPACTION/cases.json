@@ -6,22 +6,40 @@
     {
       "id": "compaction-01",
       "lang": "it",
+      "expect_lang": "it",
       "input": {
         "profile": {"EMAIL_ADDRESS": "giulia@ferramentaconti.example", "USER_FULL_NAME": "Giulia Conti", "USER_COMPANY": "Ferramenta Conti Srl", "USER_PHONE": "+39 030 0000 0101"},
         "soft_limit": 0,
         "history": [
           {"role": "user", "content": "Ciao, oggi devo chiudere un po' di preventivi."},
           {"role": "user", "content": "Partiamo da Lodi Arredamenti: cosa mi avevano chiesto?"},
-          {
-            "role": "assistant",
-            "content": "Chiara Lodi (Lodi Arredamenti) il 30 settembre ha chiesto un preventivo per 200 maniglie MX-40 in private label con logo inciso, consegna entro metà novembre (email id 6a2e91c0)."
-          },
+          {"role": "assistant", "content": "Chiara Lodi (Lodi Arredamenti) il 30 settembre ha chiesto un preventivo per 200 maniglie MX-40 in private label con logo inciso, consegna entro metà novembre (email id 6a2e91c0)."},
+          {"role": "user", "content": "aspetta un attimo, mi chiamano al telefono"},
+          {"role": "assistant", "content": "Certo, fai pure: riprendiamo quando vuoi."},
+          {"role": "user", "content": "eccomi, scusa"},
+          {"role": "assistant", "content": "Nessun problema, ti ascolto."},
+          {"role": "user", "content": "un secondo che cerco gli occhiali"},
+          {"role": "assistant", "content": "Fai con calma."},
           {"role": "user", "content": "Il prezzo private label è 6,80 € cad. Prepara la bozza."},
           {"role": "assistant", "content": "Bozza creata (draft_id d-4c1e9a): 200 maniglie × 6,80 € = 1.360,00 € + IVA, consegna in 4 settimane dall'approvazione del logo."},
+          {"role": "user", "content": "ok"},
+          {"role": "assistant", "content": "Bene."},
+          {"role": "user", "content": "ci sei?"},
+          {"role": "assistant", "content": "Sì, sono qui."},
+          {"role": "user", "content": "scusa, ho perso il filo"},
+          {"role": "assistant", "content": "Nessun problema, riprendiamo da dove eravamo."},
           {"role": "user", "content": "Aspetta, avevo letto male: le maniglie sono 250, non 200. Correggi."},
           {"role": "assistant", "content": "Corretto: la bozza d-4c1e9a ora indica 250 maniglie a 6,80 € = 1.700,00 € + IVA."},
+          {"role": "user", "content": "niente, lascia stare quello che stavo per dire"},
+          {"role": "assistant", "content": "Va bene."},
+          {"role": "user", "content": "aspetta che finisco il caffè"},
+          {"role": "assistant", "content": "Certo, nessuna fretta."},
+          {"role": "user", "content": "grazie, stamattina sei veloce"},
+          {"role": "assistant", "content": "Grazie a te!"},
           {"role": "user", "content": "Aggiungi anche l'impianto logo, 90 € una tantum."},
           {"role": "assistant", "content": "Fatto: aggiunta la voce impianto logo 90 € una tantum. Totale bozza d-4c1e9a: 1.790,00 € + IVA."},
+          {"role": "user", "content": "mi è caduta la penna, un attimo"},
+          {"role": "assistant", "content": "Fai pure."},
           {"role": "user", "content": "Ora Rinaldi Impianti: cosa mi aveva chiesto?"},
           {"role": "assistant", "content": "Paolo Rinaldi conferma il ritiro di giovedì 8 ottobre alle 10 per i 20 rotoli di guaina."},
           {"role": "user", "content": "Rispondigli che va bene."},
@@ -34,31 +52,48 @@
           {"role": "assistant", "content": "Va bene, te la ricordo dopo pranzo."}
         ]
       },
-      "label": {"language": "it", "contains": [["d-4c1e9a"], ["250"], ["1.790", "1790", "1,790"]], "max_chars": 786, "no_headings": true, "complete": true},
+      "label": {"contains": [["d-4c1e9a"], ["250"], ["1.790", "1790", "1,790"]], "max_chars": 1447, "no_headings": true, "complete": true},
       "critical": true,
+      "critical_on": ["contains"],
       "why": "The summary is what the assistant will remember of this quote: it must keep the draft id, the corrected quantity (250) and the final total (1.790 €); losing any of them makes a later send wrong."
     },
     {
       "id": "compaction-02",
       "lang": "en",
+      "expect_lang": "en",
       "input": {
-        "profile": {
-          "EMAIL_ADDRESS": "sarah@northwind-interiors.example",
-          "USER_FULL_NAME": "Sarah Mitchell",
-          "USER_COMPANY": "Northwind Interiors Ltd",
-          "USER_PHONE": "+44 20 7946 0101"
-        },
+        "profile": {"EMAIL_ADDRESS": "sarah@northwind-interiors.example", "USER_FULL_NAME": "Sarah Mitchell", "USER_COMPANY": "Northwind Interiors Ltd", "USER_PHONE": "+44 20 7946 0101"},
         "soft_limit": 0,
         "history": [
           {"role": "user", "content": "Can you help me clear my inbox this morning?"},
           {"role": "user", "content": "Start with the most urgent one."},
           {"role": "assistant", "content": "Priya Shah (Shah & Co Architects): her accounts team needs the invoice number for the September samples."},
+          {"role": "user", "content": "hang on, someone's at the door"},
+          {"role": "assistant", "content": "Sure, take your time."},
+          {"role": "user", "content": "back, sorry"},
+          {"role": "assistant", "content": "No problem, go ahead."},
+          {"role": "user", "content": "one sec, looking for my glasses"},
+          {"role": "assistant", "content": "Take your time."},
           {"role": "user", "content": "Find it."},
           {"role": "assistant", "content": "Found it in your sent mail (email id 3f8a2c41): invoice NW-2026-0917, £184.50 including VAT, sent on 17 September."},
+          {"role": "user", "content": "ok"},
+          {"role": "assistant", "content": "Great."},
+          {"role": "user", "content": "are you there?"},
+          {"role": "assistant", "content": "Yes, I'm here."},
+          {"role": "user", "content": "sorry, lost my train of thought"},
+          {"role": "assistant", "content": "No worries, we can pick up where we left off."},
           {"role": "user", "content": "Draft a reply with the number and amount, but don't send it — I want to check with accounts first."},
           {"role": "assistant", "content": "Draft saved as d-90aa13 to priya@shahco-architects.example with invoice NW-2026-0917 and £184.50. Not sent."},
+          {"role": "user", "content": "never mind what I was going to say"},
+          {"role": "assistant", "content": "Okay."},
+          {"role": "user", "content": "let me grab a coffee first"},
+          {"role": "assistant", "content": "Sure, no rush."},
+          {"role": "user", "content": "thanks, you're quick this morning"},
+          {"role": "assistant", "content": "Happy to help!"},
           {"role": "user", "content": "Good. Remind me to send it once accounts confirm."},
           {"role": "assistant", "content": "Noted: send draft d-90aa13 after accounts confirm the amount."},
+          {"role": "user", "content": "phone's ringing, give me a minute"},
+          {"role": "assistant", "content": "Of course."},
           {"role": "user", "content": "Next: Harbor Lights."},
           {"role": "assistant", "content": "Daniel Price asks to confirm a Saturday 17 October installation."},
           {"role": "user", "content": "I'll call him myself."},
@@ -71,35 +106,51 @@
           {"role": "assistant", "content": "You're welcome."}
         ]
       },
-      "label": {"language": "en", "contains": [["NW-2026-0917"], ["d-90aa13"]], "max_chars": 654, "no_headings": true, "complete": true},
+      "label": {"contains": [["NW-2026-0917"], ["d-90aa13"], ["accounts", "confirm"]], "max_chars": 1274, "no_headings": true, "complete": true},
       "critical": true,
+      "critical_on": ["contains"],
       "why": "The summary must keep the identifiers the assistant needs later — invoice NW-2026-0917 and draft d-90aa13, which is to be sent only after accounts confirm."
     },
     {
       "id": "compaction-03",
       "lang": "it",
+      "expect_lang": "it",
       "input": {
         "profile": {"EMAIL_ADDRESS": "giulia@ferramentaconti.example", "USER_FULL_NAME": "Giulia Conti", "USER_COMPANY": "Ferramenta Conti Srl", "USER_PHONE": "+39 030 0000 0101"},
         "soft_limit": 0,
         "history": [
           {"role": "user", "content": "Mi aiuti con le richieste dall'estero?"},
           {"role": "user", "content": "Apri il task di Nordhavn."},
-          {
-            "role": "assistant",
-            "content": "Task t-5521: Erik Lindqvist (Nordhavn Yachts) chiede 60 bitte in acciaio inox AISI 316 da 150 mm. Scrive: \"We need them delivered to Gothenburg before 20 November, DAP Incoterms.\""
-          },
+          {"role": "assistant", "content": "Task t-5521: Erik Lindqvist (Nordhavn Yachts) chiede 60 bitte in acciaio inox AISI 316 da 150 mm. Scrive: \"We need them delivered to Gothenburg before 20 November, DAP Incoterms.\""},
+          {"role": "user", "content": "un secondo che cerco gli occhiali"},
+          {"role": "assistant", "content": "Fai con calma."},
+          {"role": "user", "content": "ok"},
+          {"role": "assistant", "content": "Bene."},
+          {"role": "user", "content": "ci sei?"},
+          {"role": "assistant", "content": "Sì, sono qui."},
           {"role": "user", "content": "Che vuol dire DAP?"},
           {"role": "assistant", "content": "DAP (Delivered At Place): il trasporto fino a Göteborg è a nostro carico; dazi e sdoganamento restano a carico di Erik."},
+          {"role": "user", "content": "scusa, ho perso il filo"},
+          {"role": "assistant", "content": "Nessun problema, riprendiamo da dove eravamo."},
+          {"role": "user", "content": "niente, lascia stare quello che stavo per dire"},
+          {"role": "assistant", "content": "Va bene."},
+          {"role": "user", "content": "aspetta che finisco il caffè"},
+          {"role": "assistant", "content": "Certo, nessuna fretta."},
           {"role": "user", "content": "Allora nel preventivo metti trasporto incluso: 340 € per la spedizione. Le bitte costano 24,50 € l'una."},
-          {
-            "role": "assistant",
-            "content": "Annotato per il task t-5521: 60 bitte × 24,50 € = 1.470,00 €, più trasporto 340 €, totale 1.810,00 €, resa DAP Göteborg, consegna entro il 20 novembre."
-          },
+          {"role": "assistant", "content": "Annotato per il task t-5521: 60 bitte × 24,50 € = 1.470,00 €, più trasporto 340 €, totale 1.810,00 €, resa DAP Göteborg, consegna entro il 20 novembre."},
+          {"role": "user", "content": "grazie, stamattina sei veloce"},
+          {"role": "assistant", "content": "Grazie a te!"},
+          {"role": "user", "content": "mi è caduta la penna, un attimo"},
+          {"role": "assistant", "content": "Fai pure."},
+          {"role": "user", "content": "rieccomi"},
+          {"role": "assistant", "content": "Bentornata."},
           {"role": "user", "content": "Scrivi la bozza in inglese per Erik."},
           {
             "role": "assistant",
             "content": "Bozza in inglese salvata (draft_id d-77b0e5): \"Dear Erik, please find our offer for 60 AISI 316 stainless steel cleats, 150 mm: EUR 24.50 each, EUR 1,470.00 in total, plus EUR 340.00 transport, DAP Gothenburg, delivery before 20 November.\""
           },
+          {"role": "user", "content": "perfetto"},
+          {"role": "assistant", "content": "Bene, andiamo avanti."},
           {"role": "user", "content": "Perfetto. Altro da fare oggi?"},
           {"role": "assistant", "content": "Hai la risposta a Bulloneria Gatti sul rinnovo della fornitura."},
           {"role": "user", "content": "Domani."},
@@ -112,27 +163,21 @@
           {"role": "assistant", "content": "Annotato: Erik Lindqvist preferisce scrivere in inglese."}
         ]
       },
-      "label": {"language": "it", "contains": [["t-5521"], ["d-77b0e5"], ["1.810", "1810", "1,810"]], "max_chars": 952, "no_headings": true, "complete": true},
+      "label": {"contains": [["t-5521"], ["d-77b0e5"], ["1.810", "1810", "1,810"]], "max_chars": 1537, "no_headings": true, "complete": true},
       "critical": true,
+      "critical_on": ["contains"],
       "why": "The conversation is in Italian with an English quotation, so the summary is in Italian (the prompt keeps the conversation's language) and keeps the task id, the draft id and the 1.810 € total."
     },
     {
       "id": "compaction-04",
       "lang": "en",
+      "expect_lang": "en",
       "input": {
-        "profile": {
-          "EMAIL_ADDRESS": "sarah@northwind-interiors.example",
-          "USER_FULL_NAME": "Sarah Mitchell",
-          "USER_COMPANY": "Northwind Interiors Ltd",
-          "USER_PHONE": "+44 20 7946 0101"
-        },
+        "profile": {"EMAIL_ADDRESS": "sarah@northwind-interiors.example", "USER_FULL_NAME": "Sarah Mitchell", "USER_COMPANY": "Northwind Interiors Ltd", "USER_PHONE": "+44 20 7946 0101"},
         "soft_limit": 0,
         "history": [
           {"role": "user", "content": "Who do I owe a call back today?"},
-          {
-            "role": "assistant",
-            "content": [{"type": "text", "text": "Let me check your tasks."}, {"type": "tool_use", "id": "toolu_c04_1", "name": "get_tasks", "input": {"days_back": 7}}]
-          },
+          {"role": "assistant", "content": [{"type": "text", "text": "Let me check your tasks."}, {"type": "tool_use", "id": "toolu_c04_1", "name": "get_tasks", "input": {"days_back": 7}}]},
           {
             "role": "user",
             "content": [
@@ -144,6 +189,14 @@
             ]
           },
           {"role": "assistant", "content": "You owe one call: Rosa Bianchi (+44 20 7946 0377) about the curtain fitting (task t-8830)."},
+          {"role": "user", "content": "one sec, looking for my glasses"},
+          {"role": "assistant", "content": "Take your time."},
+          {"role": "user", "content": "ok"},
+          {"role": "assistant", "content": "Great."},
+          {"role": "user", "content": "are you there?"},
+          {"role": "assistant", "content": "Yes, I'm here."},
+          {"role": "user", "content": "sorry, lost my train of thought"},
+          {"role": "assistant", "content": "No worries, we can pick up where we left off."},
           {"role": "user", "content": "What do we know about Rosa?"},
           {"role": "assistant", "content": [{"type": "tool_use", "id": "toolu_c04_2", "name": "search_local_memory", "input": {"query": "Rosa Bianchi"}}]},
           {
@@ -157,8 +210,20 @@
             ]
           },
           {"role": "assistant", "content": "Rosa Bianchi owns a flat in Hove (memory b-3f9d27); she ordered curtains on 12 September and the fitting has been postponed twice."},
+          {"role": "user", "content": "never mind what I was going to say"},
+          {"role": "assistant", "content": "Okay."},
+          {"role": "user", "content": "let me grab a coffee first"},
+          {"role": "assistant", "content": "Sure, no rush."},
+          {"role": "user", "content": "thanks, you're quick this morning"},
+          {"role": "assistant", "content": "Happy to help!"},
+          {"role": "user", "content": "phone's ringing, give me a minute"},
+          {"role": "assistant", "content": "Of course."},
           {"role": "user", "content": "OK, I'll call her at 3 pm. Close the moodboard task, I sent it yesterday."},
           {"role": "assistant", "content": "Task t-8831 closed. Reminder set: call Rosa Bianchi at 3 pm (task t-8830)."},
+          {"role": "user", "content": "right, I'm back"},
+          {"role": "assistant", "content": "Welcome back."},
+          {"role": "user", "content": "perfect"},
+          {"role": "assistant", "content": "Good, let's carry on."},
           {"role": "user", "content": "Anything else urgent?"},
           {"role": "assistant", "content": "No, the rest can wait until tomorrow."},
           {"role": "user", "content": "What's Rosa's address again?"},
@@ -171,33 +236,46 @@
           {"role": "assistant", "content": "Understood, the draft stays unsent."}
         ]
       },
-      "label": {"language": "en", "contains": [["t-8830"], ["t-8831"], ["3 pm", "3pm", "15:00", "15.00", "3 p.m."]], "max_chars": 1028, "no_headings": true, "complete": true},
+      "label": {"contains": [["t-8830"], ["t-8831", "moodboard"], ["3 pm", "3pm", "15:00", "15.00", "3 p.m."]], "max_chars": 1621, "no_headings": true, "complete": true},
       "critical": true,
+      "critical_on": ["contains"],
       "why": "The middle is mostly tool calls and results; the summary must keep what they decided — the call to Rosa at 3 pm on task t-8830 and the moodboard task t-8831 closed."
     },
     {
       "id": "compaction-05",
       "lang": "it",
+      "expect_lang": "it",
       "input": {
         "profile": {"EMAIL_ADDRESS": "giulia@ferramentaconti.example", "USER_FULL_NAME": "Giulia Conti", "USER_COMPANY": "Ferramenta Conti Srl", "USER_PHONE": "+39 030 0000 0101"},
         "soft_limit": 0,
         "history": [
           {"role": "user", "content": "Devo rispondere a Bulloneria Gatti per il rinnovo della fornitura."},
           {"role": "user", "content": "Cosa ci avevano proposto?"},
-          {
-            "role": "assistant",
-            "content": "L'ultima offerta di Bulloneria Gatti (email id 9b3c11d2): rinnovo annuale della fornitura di viteria inox a 1.200 € al mese, consegne settimanali il martedì."
-          },
+          {"role": "assistant", "content": "L'ultima offerta di Bulloneria Gatti (email id 9b3c11d2): rinnovo annuale della fornitura di viteria inox a 1.200 € al mese, consegne settimanali il martedì."},
+          {"role": "user", "content": "eccomi, scusa"},
+          {"role": "assistant", "content": "Nessun problema, ti ascolto."},
+          {"role": "user", "content": "un secondo che cerco gli occhiali"},
+          {"role": "assistant", "content": "Fai con calma."},
+          {"role": "user", "content": "ok"},
+          {"role": "assistant", "content": "Bene."},
+          {"role": "user", "content": "ci sei?"},
+          {"role": "assistant", "content": "Sì, sono qui."},
           {"role": "user", "content": "No, guarda meglio: nella seconda email hanno corretto il prezzo a 1.250 € al mese, perché è aumentato l'acciaio."},
-          {
-            "role": "assistant",
-            "content": "Hai ragione: nell'email del 28 settembre (id 9b3c11d5) Gatti corregge il canone a 1.250 € al mese. Le consegne restano settimanali il martedì."
-          },
+          {"role": "assistant", "content": "Hai ragione: nell'email del 28 settembre (id 9b3c11d5) Gatti corregge il canone a 1.250 € al mese. Le consegne restano settimanali il martedì."},
+          {"role": "user", "content": "scusa, ho perso il filo"},
+          {"role": "assistant", "content": "Nessun problema, riprendiamo da dove eravamo."},
+          {"role": "user", "content": "niente, lascia stare quello che stavo per dire"},
+          {"role": "assistant", "content": "Va bene."},
+          {"role": "user", "content": "aspetta che finisco il caffè"},
+          {"role": "assistant", "content": "Certo, nessuna fretta."},
+          {"role": "user", "content": "grazie, stamattina sei veloce"},
+          {"role": "assistant", "content": "Grazie a te!"},
           {"role": "user", "content": "Accettiamo a 1.250, ma chiediamo la consegna il lunedì invece del martedì."},
-          {
-            "role": "assistant",
-            "content": "Bozza di risposta salvata (draft_id d-2f8b40): accettiamo il rinnovo a 1.250 € al mese con consegna settimanale il lunedì anziché il martedì."
-          },
+          {"role": "assistant", "content": "Bozza di risposta salvata (draft_id d-2f8b40): accettiamo il rinnovo a 1.250 € al mese con consegna settimanale il lunedì anziché il martedì."},
+          {"role": "user", "content": "mi è caduta la penna, un attimo"},
+          {"role": "assistant", "content": "Fai pure."},
+          {"role": "user", "content": "rieccomi"},
+          {"role": "assistant", "content": "Bentornata."},
           {"role": "user", "content": "Mandala."},
           {"role": "assistant", "content": "Inviata a info@bulloneriagatti.example."},
           {"role": "user", "content": "Segnami di controllare la risposta venerdì."},
@@ -210,8 +288,9 @@
           {"role": "assistant", "content": "Va bene."}
         ]
       },
-      "label": {"language": "it", "contains": [["1.250", "1250", "1,250"], ["lunedì"], ["d-2f8b40"]], "max_chars": 712, "no_headings": true, "complete": true},
+      "label": {"contains": [["1.250", "1250", "1,250"], ["lunedì", "lunedi", "monday"], ["d-2f8b40"]], "max_chars": 1309, "no_headings": true, "complete": true},
       "critical": true,
+      "critical_on": ["contains"],
       "why": "The price was corrected from 1.200 to 1.250 € and the delivery day changed to Monday; a faithful summary keeps the corrected price, the new day and the draft id."
     }
   ]

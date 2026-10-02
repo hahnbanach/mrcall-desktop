@@ -43,7 +43,7 @@ def build_requests(cases: Any, *, calls: Optional[Dict[str, int]] = None) -> Lis
             raise RuntimeError(f"{case['id']}: the search did not finish: {answer}")
         if calls is not None:
             calls[case["id"]] = len(client.requests)
-        captured.append({"case_id": case["id"], "request": client.requests[-1]})
+        captured.append(cc.entry(case, client.requests[-1]))
     return captured
 
 

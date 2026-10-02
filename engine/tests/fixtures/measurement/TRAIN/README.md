@@ -2,7 +2,8 @@
 
 Scope: the synthetic smoke cases, labels and capture harness that measure the
 TRAIN role (milestone 10, decision D7: "about five mechanical smokes").
-Everything here is invented: the two mailboxes, their contacts and prices.
+Everything here is invented: the two mailboxes, their contacts, prices and
+addresses ("Via Fittizia 14, 00000 Brescia", "1 Example Yard, Brighton").
 
 ## What the role decides
 
@@ -30,9 +31,11 @@ WhatsApp chats; for the task trainer, the memory blobs of the contacts), with
 ## Files
 
 - `cases.json` — five smoke cases.
-- `capture.py` — `build_requests(cases)` returns each trainer's meta-prompt
-  request as the trainer passed it; `run_case(case, client)` runs the trainer
-  with any client and returns what its builder returns.
+- `capture.py` — `build_requests(cases)` returns, per case,
+  `{"case_id", "request", "capture_now"}`: the trainer's meta-prompt request
+  as the trainer passed it, and the moment it was captured at;
+  `run_case(case, client)` runs the trainer with any client and returns what
+  its builder returns.
 
 ## How a case drives the builder
 
@@ -43,17 +46,24 @@ in a throwaway profile and under the owner the RPC uses, `input.emails`
 (company memory blobs), then constructs the trainer as `agents_train_all`
 does and runs the method. The request carries `model`: the trainers pass the
 client's own, recorded as the placeholder `<role model>` that a measurement
-replaces with the arm's model.
+replaces with the arm's model. On replay the client appends its datetime line,
+set to the entry's `capture_now` (label review G5).
 
 The task trainer lists its contacts from a set, so the order of the memory
 blobs in its meta-prompt can differ between two processes (hash
 randomisation); within one process a capture is reproducible. A prompt hash
 over the captured request should not depend on that order.
 
+## A case
+
+`id`, `lang` (the mailbox's language), `expect_lang`, `input`, `label`,
+`critical`, `critical_on`, `why`.
+
 ## Label schema and scoring
 
 ```json
 "label": {"contains": [["---ENTITY---"], ["#IDENTIFIERS"], ..., ["USER_COMPANY"], ["Ferramenta Conti"]],
+          "matches": ["\\bperson\\b", "\\bcompany\\b"],
           "contains_none": ["{from_email}", "{body}"], "min_chars": 1500, "complete": true}
 ```
 
@@ -63,6 +73,10 @@ Scored on the model's answer, the generated prompt:
 - `contains` — every group matched by one alternative (case-insensitive
   substring): the sections and tokens the meta-prompt requires and the
   engine depends on, and the user's company or language from the samples;
+- `matches` — every regular expression matches (case-insensitive): the words
+  a substring would find inside others — `PERSON` and `COMPANY` as entity
+  types (not inside `USER_PERSON`, `USER_COMPANY`), the urgencies `high` and
+  `low` (not inside "highlight", "follow");
 - `contains_none` — none of these substrings (the memory meta-prompt forbids
   `.format()` placeholders);
 - `min_chars` — long enough to be the "complete, self-contained prompt" the
@@ -70,10 +84,14 @@ Scored on the model's answer, the generated prompt:
 - `complete` — the response did not stop at `max_tokens` (a cut prompt is
   stored cut).
 
-No language is scored: the meta-prompts fix none for the prompt they ask for,
-and an English prompt over Italian samples is as valid as an Italian one. No
-case is critical: a trained prompt is reviewed by running it, and a weak one
-is retrained. Every check is a mechanical bar.
+**Language** is not scored (`expect_lang` `null` on every case): the
+meta-prompts fix none for the prompt they ask for, the prompt is read by a
+model rather than the user, and an English prompt over Italian samples is as
+valid as an Italian one. `lang` is the mailbox's language.
+
+**Critical.** No case is critical (`critical_on: []`, `critical: false`): a
+trained prompt is reviewed by running it, and a weak one is retrained. Every
+check is a mechanical bar.
 
 ## Distribution
 

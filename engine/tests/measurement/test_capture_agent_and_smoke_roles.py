@@ -9,16 +9,24 @@ case — no network, no key, no paid call — and holds what a replay relies on:
 
 - one request per case, from the role's call site and no other, carrying the
   role's tools where it has them and what the case seeded, JSON as sent,
-  nothing left at a default, no real model id in it;
+  nothing left at a default or consumed by the client itself, no real model
+  id in it, with the moment it was captured at;
 - a replayed tool round ends the captured transcript, so the decision the
   label scores is the one the request asks for;
 - the labels of the tool-using roles name tools, arguments and scripted
-  results the captured request actually carries;
+  results the captured request actually carries, and their ``write_tools``
+  are the engine's approval-gated tools among them;
 - the same case captures the same bytes twice (the measurement caches on
-  it), and the environment the capture runs in never reaches the prompt;
-- a turn continued past the capture runs through the scripted tools;
+  it), and the environment the capture runs in never reaches the prompt —
+  neither the shell's settings nor a missing WhatsApp library;
+- a turn continued past the capture runs through the scripted tools, the turn
+  it returns is the one the labels score, and a real client there dates its
+  requests at the capture's moment;
 - the chat's own web search, which the cases cannot measure, is still refused
   by the engine's admission.
+
+The label rules themselves (language, the critical rule) are held by
+``test_labels_agent_and_smoke_roles.py``.
 """
 
 from __future__ import annotations
@@ -26,17 +34,21 @@ from __future__ import annotations
 import importlib.util
 import json
 import re
+import sys
 from functools import lru_cache
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any, Dict, List
 
 import pytest
 
 from tests.measurement import conversation_capture as cc
+from tests.measurement import conversation_judge as judge
 
 FIXTURES = Path(__file__).resolve().parents[1] / "fixtures" / "measurement"
 ROLES = ("CHAT", "TASK_SOLVE", "COMPACTION", "NARRATION", "WEB_SEARCH", "TRAIN")
 TOOL_ROLES = ("CHAT", "TASK_SOLVE")
+CASE_KEYS = ("id", "lang", "expect_lang", "input", "label", "critical", "critical_on", "why")
 
 # What identifies each role's call site in the request it sends: the opening
 # of its system prompt or of its single user turn.
@@ -104,7 +116,7 @@ def test_case_files_follow_the_shared_schema(role):
     assert ids == [f"{prefix}-{n:02d}" for n in range(1, len(ids) + 1)]
     assert {case["lang"] for case in doc["cases"]} == {"it", "en"}
     for case in doc["cases"]:
-        assert set(case) == {"id", "lang", "input", "label", "critical", "why"}, case["id"]
+        assert list(case) == list(CASE_KEYS), case["id"]
         assert isinstance(case["critical"], bool), case["id"]
         assert case["why"].strip(), case["id"]
     assert (FIXTURES / role / "README.md").is_file()
@@ -120,10 +132,13 @@ def test_every_case_captures_exactly_one_request_of_its_role(role):
     assert [item["case_id"] for item in requests] == [case["id"] for case in cases]
     assert calls == {case["id"]: 1 for case in cases}
     for item, case in zip(requests, cases):
+        assert item["capture_now"] == cc.CAPTURE_NOW.isoformat(), case["id"]
         request = item["request"]
         json.dumps(request, allow_nan=False)
-        # Only what the call site passed: no parameter left at its default.
+        # Only what the call site passed: no parameter left at its default, and
+        # none the client consumes itself (the agent loops' run clock).
         assert None not in request.values(), case["id"]
+        assert not set(cc.CLIENT_ONLY) & set(request), case["id"]
         assert request["messages"] and isinstance(request["max_tokens"], int), case["id"]
         assert request.get("model", cc.PLACEHOLDER_MODEL) == cc.PLACEHOLDER_MODEL, case["id"]
         _assert_call_site(role, case, request)
@@ -153,10 +168,12 @@ def _assert_call_site(role: str, case: Dict[str, Any], request: Dict[str, Any]) 
             tool_names(request)
         )
         sent = json.dumps(request["messages"], ensure_ascii=False)
-        # The turn's clock is the capture's, and every channel is set up.
+        # The turn's clock is the capture's, and the channels are the case's.
         assert cc.CAPTURE_NOW.strftime("%B %d, %Y") in sent, case["id"]
-        for channel in ("- Email: ready", "- WhatsApp: ready", "- SMS: ready"):
-            assert channel in sent, case["id"]
+        ready = {"email": True, "whatsapp": True, "mrcall": True, **given.get("channels", {})}
+        assert ("- Email: ready" in sent) == ready["email"], case["id"]
+        assert ("- WhatsApp: ready" in sent) == ready["whatsapp"], case["id"]
+        assert ("- SMS: ready" in sent) == ready["mrcall"], case["id"]
     elif role == "TASK_SOLVE":
         from zylch.services.solve_constants import SOLVE_TOOLS
 
@@ -233,9 +250,13 @@ def test_replayed_rounds_end_the_captured_transcript(role):
 
 @pytest.mark.parametrize("role", TOOL_ROLES)
 def test_labels_name_tools_and_arguments_the_request_carries(role):
+    from zylch.services.task_executor import APPROVAL_TOOLS
+
     requests = by_id(role)
     for case in document(role)["cases"]:
         schemas = {tool["name"]: tool["input_schema"] for tool in requests[case["id"]]["tools"]}
+        # The write and send tools of the critical rule: the engine's approval-gated ones.
+        assert document(role)["write_tools"] == sorted(APPROVAL_TOOLS & set(schemas)), case["id"]
         for name in label_tools(case):
             assert name in schemas, f"{case['id']}: {name} is not a tool of this request"
         for spec in (case["label"].get("first_call") or {}).get("any_of", []):
@@ -268,6 +289,16 @@ def test_the_shell_environment_never_reaches_a_capture(monkeypatch):
     assert "Match the language of the original email" in _system_text(request)
 
 
+def test_the_channel_block_does_not_depend_on_the_whatsapp_library(monkeypatch):
+    # Without the WhatsApp library the engine's own probe reads "NOT
+    # connected", and chat-03's right answer would become not sending; the
+    # profile pins the probe to the case's channels.
+    monkeypatch.setitem(sys.modules, "zylch.whatsapp.client", None)
+    case = next(c for c in document("CHAT")["cases"] if c["id"] == "chat-03")
+    request = harness("CHAT").build_requests([case])[0]["request"]
+    assert "- WhatsApp: ready" in json.dumps(request["messages"], ensure_ascii=False)
+
+
 # ─── A turn continued past the capture ────────────────────────────────
 
 
@@ -283,6 +314,10 @@ def test_a_continued_chat_turn_runs_the_scripted_tool_after_approval():
     assert outcome["calls"] == [{"name": "send_whatsapp_message", "input": call}]
     result = client.requests[-1]["messages"][-1]["content"][0]
     assert result["type"] == "tool_result" and "sent to Laura Bassi" in result["content"]
+    # The turn it hands back is the one the label scores: this one passes it.
+    turn = outcome["turn"]
+    assert turn == {"first": [outcome["calls"][0]], "later": [], "text": "Inviato."}
+    assert judge.failures(case, turn, document("CHAT")["write_tools"]) == []
 
 
 def test_a_continued_solve_runs_the_scripted_tool_after_approval():
@@ -302,6 +337,42 @@ def test_a_continued_solve_runs_the_scripted_tool_after_approval():
         "tool_use_id": "toolu_test_2",
         "content": case["input"]["tool_results"]["send_email"],
     }
+    turn = outcome["turn"]
+    assert turn == {"first": [outcome["calls"][0]], "later": [], "text": "Confermato a Paolo."}
+    assert judge.failures(case, turn, document("TASK_SOLVE")["write_tools"]) == []
+
+
+def test_a_continued_solve_scores_all_the_text_and_the_later_calls_of_the_turn():
+    # The executor shows every text block to the user: a recap written next to
+    # the send is the turn's text even when the closing answer is empty, and
+    # a call made after the first answer is one of the turn's later calls.
+    case = next(c for c in document("TASK_SOLVE")["cases"] if c["id"] == "task_solve-01")
+    send = {"to": "paolo@rinaldiimpianti.example", "subject": "Ritiro", "body": "Giovedì alle 10."}
+    note = {"query": "Rinaldi", "new_content": "Ritiro confermato giovedì alle 10."}
+    recap = SimpleNamespace(type="text", text="Confermo a Paolo giovedì alle 10.")
+    use = SimpleNamespace(type="tool_use", id="toolu_test_3", name="send_email", input=send)
+    script = [cc._response([recap, use], "tool_use")]
+    script.append(cc.tool_use_response("update_memory", note, "toolu_test_4"))
+    outcome = harness("TASK_SOLVE").run_case(case, cc.CapturingClient(answer="", script=script))
+    assert outcome["answer"] == ""
+    assert outcome["turn"] == {
+        "first": [{"name": "send_email", "input": send}],
+        "later": [{"name": "update_memory", "input": note}],
+        "text": "Confermo a Paolo giovedì alle 10.",
+    }
+    assert judge.failures(case, outcome["turn"], document("TASK_SOLVE")["write_tools"]) == []
+
+
+def test_a_real_client_in_the_profile_dates_its_requests_at_the_capture_time():
+    # A turn continued with a real client carries the capture's moment in the
+    # line the client appends, as the captured request does; so does the run
+    # clock an agent loop starts with, which a capture leaves out.
+    from zylch.llm.client import RunClock, current_datetime_line
+
+    with cc.disposable_profile():
+        lines = [current_datetime_line(), RunClock().line]
+    stamp = cc.CAPTURE_NOW.strftime("Datetime=%Y-%m-%dT%H:%M")
+    assert all(line.startswith(stamp) and "(Monday)" in line for line in lines), lines
 
 
 # ─── What the cases cannot measure ────────────────────────────────────
