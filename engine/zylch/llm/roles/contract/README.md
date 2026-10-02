@@ -102,8 +102,12 @@ those are the snapshot's, so a refresh of prices moves no record.
 - `models` — every catalogue entry (aliases, `:free`/`:batch` variants and
   excluded families included, so a model a profile saved explicitly keeps a
   price), keyed by catalogue id:
-  - `pricing`: the model-level catalogue price, `input`, `output`,
-    `cache_read`, `cache_write`.
+  - `pricing`: the model's reference price, `input`, `output`,
+    `cache_read`, `cache_write` (below): the model-level catalogue price,
+    except for a model with a fixed model-level price whose endpoints were
+    read with one eligible and none priced within it × `policy.margin` — then its
+    reference endpoint's price (its cache prices where it publishes them,
+    else the model-level ones).
   - `metadata`: `reasoning` (`mandatory`; `efforts`, the published
     `supported_efforts` in the catalogue's order, highest first;
     `default_enabled`, `null` when unpublished), `parameters` (sorted: the
@@ -120,20 +124,43 @@ those are the snapshot's, so a refresh of prices moves no record.
   that endpoint's parameters, forced tool choice and context; reasoning and
   expiry from the catalogue entry).
 
-An endpoint is **admitted** when it is up (status 0), its declared
+An endpoint is **eligible** when it is up (status 0), its declared
 quantization is in `policy.quantizations` (an endpoint that declares none is
 `unknown`), it supports tools, no segment of its tag after the provider is
 in `policy.excluded_endpoint_variants` (`<provider>/flex`,
-`<provider>/<region>/flex`), and its input and output prices are at or
-under the model-level prices × `policy.margin`.
+`<provider>/<region>/flex`), and it has a fixed input and output price. A
+model's **reference price** is its model-level catalogue price, cache prices
+included, when at least one eligible endpoint's input and output prices are
+at or under it × `policy.margin`. The model-level price stays the anchor
+whenever it admits an endpoint because it is the list price OpenRouter
+shows, and a median of the endpoints flips with the count of regional
+premiums (Opus 5.5 on 2026-10-02: five endpoints at Anthropic's list price,
+five regional ones 10% above it; one more region would move the median to
+the premium). Otherwise — OpenRouter computes the model-level price over
+every endpoint, those the policy excludes included, so an fp4 endpoint can
+set it below every eligible one — the reference price is the **reference
+endpoint**'s: the lower median, index (n − 1) // 2, of the eligible
+endpoints ordered by Artificial Analysis's blended price, (3 × input +
+output) / 4, a tie by output, then input, then tag; its cache prices where
+it publishes them, else the model-level ones. The fallback applies only to
+a model with a fixed model-level input and output price: one whose
+model-level price is absent or variable (`-1`) keeps it (`pricing` null),
+has no cap and admits no endpoint, since OpenRouter itself cannot price it
+(OpenRouter's auto router and the like route to a model of their choosing). An
+eligible endpoint is **admitted** when its input and output prices are at
+or under the reference price × `policy.margin`, so a model with a fixed
+model-level price and an eligible endpoint always admits one. A model with no eligible
+endpoint (every one fp4, say) or whose endpoints were not read keeps the
+model-level price and admits no endpoint. The screen still requires a fixed
+model-level price of any model it ranks.
 
-**Prices in use.** Ceilings compare `models[id].pricing.output`. On
-OpenRouter, `max_price` and the reservation (engine) and the
-pre-authorisation (billing server) use the model-level price × the margin;
+**Prices in use.** Ceilings compare `models[id].pricing.output`, the
+reference price. On OpenRouter, `max_price` and the reservation (engine) and
+the pre-authorisation (billing server) use the reference price × the margin;
 K3's cap is its pinned `digitalocean` endpoint's price × the margin, read
 from its `endpoints` (admitted endpoints only); on a day that endpoint is
 not admitted (degraded, so absent from `endpoints`), K3's cap falls back
-to its model-level price × the margin — K3 stays priced, and a request
+to its reference price × the margin — K3 stays priced, and a request
 that cannot be routed to its pin fails at the provider as it would today. A direct id is priced from `direct`. A dated direct
 id `<alias>-YYYYMMDD` is priced and shaped as its alias, and a response
 naming a dated snapshot of the requested alias settles as the alias.

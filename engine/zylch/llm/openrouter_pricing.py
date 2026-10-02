@@ -10,7 +10,11 @@ A request is reserved, and capped at the provider (`max_price`), at its
 model's rate × the margin (`requirements.json`, brief D5; `capped`): a
 premium endpoint above that is never routed to, and every endpoint the
 snapshot admitted fits under it. `RATES` holds the rate before the margin:
-the catalogue price, and for K3 its pinned endpoint's price
+the snapshot's price (a model's reference price: the model-level catalogue
+price whenever an eligible endpoint is priced within it × the margin, else
+the lower-median eligible endpoint's; the model-level price too when its
+endpoints were not read, none is eligible or that price is not fixed, a
+variable one staying unpriced), and for K3 its pinned endpoint's price
 (`k3_reasoning.rates`). The provider policy also forbids fallbacks,
 requires the request's parameters, sorts by price, admits only the
 quantizations of `requirements.json` and, for a model whose endpoints the

@@ -4,8 +4,10 @@
 alias, announced expiry or excluded family (matched on the id, the
 `canonical_slug` and an alias's target), tools, the context, a fixed price,
 an admitted endpoint — and admits endpoints by the provider policy (up, no
-sub-8-bit quantization, tools, no flex tier, priced within the model-level
-price × the margin). `impute.py` joins the Artificial Analysis records and
+sub-8-bit quantization, tools, no flex tier, priced within the reference
+price × the margin: the model-level price when an eligible endpoint fits
+under it, else the lower-median eligible endpoint's; the anchor's own rules
+are in `test_resolver_anchor.py`). `impute.py` joins the Artificial Analysis records and
 imputes a missing index from intelligence (D2). The capture's own numbers
 are asserted where the brief states them; a synthetic entry isolates each
 rule no real entry isolates.
@@ -126,15 +128,20 @@ def test_an_endpoint_down_or_without_tools_or_dear_is_refused():
         endpoint(status=None),
         endpoint(status=False),
         endpoint(supported_parameters=["max_tokens"]),
-        endpoint(pricing={"prompt": "0.000001", "completion": "0.0000025001"}),
-        endpoint(pricing={"prompt": "0.0000012501", "completion": "0.000002"}),
         endpoint(pricing={"prompt": "-1", "completion": "-1"}),
         endpoint(tag=""),
     ]
-    for one in refused:
+    for one in refused:  # not eligible, so never the reference nor admitted
         assert not candidates.admitted(model, [one], rules), one
-    at_cap = endpoint(pricing={"prompt": "0.00000125", "completion": "0.0000025"})
-    assert candidates.admitted(model, [at_cap], rules) == [at_cap]
+    # Dear against the model-level price (1/2), the reference while an eligible
+    # endpoint fits under it × the margin: three at 1/2 do. A lone dear endpoint
+    # would take the fallback and be its own reference (test_resolver_anchor.py).
+    anchor = [endpoint(f"acme{n}") for n in range(3)]
+    dear_output = endpoint("dear/out", pricing={"prompt": "0.000001", "completion": "0.0000025001"})
+    dear_input = endpoint("dear/in", pricing={"prompt": "0.0000012501", "completion": "0.000002"})
+    at_cap = endpoint("cap", pricing={"prompt": "0.00000125", "completion": "0.0000025"})
+    listed = [*anchor, dear_output, dear_input, at_cap]
+    assert candidates.admitted(model, listed, rules) == [*anchor, at_cap]
     variable = entry(pricing={"prompt": "-1", "completion": "-1"})
     assert not candidates.admitted(variable, [endpoint()], rules)
     assert candidates.exclusion(variable, [endpoint()], requirements(), rules) == "no fixed price"

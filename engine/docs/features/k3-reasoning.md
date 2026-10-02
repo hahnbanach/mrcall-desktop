@@ -7,7 +7,8 @@ before quotation or budget admission. This ceiling includes hidden reasoning;
 actual receipt cost, not the reserved ceiling, is settled after completion.
 Its price cap (`max_price`) and reservation follow the DigitalOcean endpoint's
 price in the model snapshot × the margin 1.25 (`k3_reasoning.rates`), or K3's
-model-level price × 1.25 on a day the snapshot does not admit that endpoint.
+reference price (the snapshot's price for K3) × 1.25 on a day the snapshot
+does not admit that endpoint.
 Other configured models retain their existing transport. There is no automatic
 model/provider fallback or inference retry.
 

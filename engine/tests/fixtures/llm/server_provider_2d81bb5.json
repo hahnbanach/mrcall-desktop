@@ -1,5 +1,5 @@
 {
-  "_doc": "The billing server's OpenRouter `provider` object for each id, captured by running mrcall-agent model-table-m10 2d81bb5eba7ba352531f5107749f2165d140eae2 (tree equal to mrcall-agent main 31e83e8) (mrcall_agent/services/bounded_openrouter.py: provider_policy(model_table.priced(id)), non-K3, not the K3 adapter) over tests/fixtures/llm/snapshot-2026-10-02.json (version 2918c4c28c27633657ebd04b043d56375b4b1be40e2cc641f6dc6bddf8b18a1a). tests/llm/test_snapshot_prices.py holds the engine's openrouter_pricing.provider_policy equal to it for the same ids and snapshot.",
+  "_doc": "The billing server's OpenRouter `provider` object for each id, captured by running mrcall-agent model-table-m10 2d81bb5eba7ba352531f5107749f2165d140eae2 (tree equal to mrcall-agent main 31e83e8) (mrcall_agent/services/bounded_openrouter.py: provider_policy(model_table.priced(id)), non-K3, not the K3 adapter) over tests/fixtures/llm/snapshot-2026-10-02.json (version 2e2f9ebd803d0167dc4bbc1817eefcd562631e35af018619599c62b4ed7384e0). tests/llm/test_snapshot_prices.py holds the engine's openrouter_pricing.provider_policy equal to it for the same ids and snapshot.",
   "providers": {
     "anthropic/claude-sonnet-5.5": {
       "allow_fallbacks": false,
@@ -52,10 +52,19 @@
     "moonshotai/kimi-k2.6": {
       "allow_fallbacks": false,
       "max_price": {
-        "completion": "2.285",
-        "prompt": "0.5426875",
+        "completion": "4.25",
+        "prompt": "0.9625",
         "request": "0"
       },
+      "only": [
+        "cloudflare",
+        "crusoe/bf16",
+        "digitalocean",
+        "gmicloud/fp8",
+        "novita",
+        "siliconflow/fp8",
+        "streamlake/fp8"
+      ],
       "quantizations": [
         "int8",
         "fp8",
@@ -81,6 +90,25 @@
         "azure/us",
         "openai"
       ],
+      "quantizations": [
+        "int8",
+        "fp8",
+        "mxfp8",
+        "fp16",
+        "bf16",
+        "fp32",
+        "unknown"
+      ],
+      "require_parameters": true,
+      "sort": "price"
+    },
+    "poolside/laguna-s-2.1": {
+      "allow_fallbacks": false,
+      "max_price": {
+        "completion": "0.225",
+        "prompt": "0.1125",
+        "request": "0"
+      },
       "quantizations": [
         "int8",
         "fp8",
@@ -120,5 +148,5 @@
     }
   },
   "server_commit": "2d81bb5eba7ba352531f5107749f2165d140eae2",
-  "snapshot_version": "2918c4c28c27633657ebd04b043d56375b4b1be40e2cc641f6dc6bddf8b18a1a"
+  "snapshot_version": "2e2f9ebd803d0167dc4bbc1817eefcd562631e35af018619599c62b4ed7384e0"
 }

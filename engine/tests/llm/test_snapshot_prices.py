@@ -1,7 +1,10 @@
 """Prices from the model snapshot (milestone 10, slice S3; brief D5, AC 4).
 
 `roles/prices.py` reads the snapshot layers in force at every call
-(`catalogue.rates`): a catalogue id at its model-level price on OpenRouter, a
+(`catalogue.rates`): a catalogue id at its snapshot price on OpenRouter (its
+reference price: its model-level price whenever an eligible endpoint is
+priced within it × the margin, else the lower median of its eligible
+endpoints — the fallback, `price_fixture.FALLBACK`), a
 direct id at its `anthropic` endpoint's price, a dated direct id as its alias.
 `budget_pricing.PRICES` and `openrouter_pricing.RATES` / `LABELS` are views
 over it, never copies made at import. On OpenRouter the reservation and
@@ -9,8 +12,8 @@ over it, never copies made at import. On OpenRouter the reservation and
 provider object also carries its quantizations and, where the snapshot read a
 model's endpoints, `only` its admitted ones — the billing server's object for
 the same model and snapshot. K3 is capped at its pinned endpoint's price ×
-the margin, or its model-level price × the margin on a day that endpoint is
-not admitted. The direct transport reserves at the list price. A `:free` id
+the margin, or its snapshot (reference) price × the margin on a day that
+endpoint is not admitted. The direct transport reserves at the list price. A `:free` id
 the catalogue prices at 0 is held at 0 and capped at 0, never refused.
 
 Every price is read from the committed fixture snapshot (`price_fixture`, the
@@ -66,7 +69,7 @@ def _direct_hold(request: dict, i: Decimal, o: Decimal) -> int:
 
 
 def _routed_hold(request: dict, i: Decimal, o: Decimal) -> int:
-    """`openrouter_pricing.request_bound`'s hold at a model-level price × 1.25."""
+    """`openrouter_pricing.request_bound`'s hold at a snapshot price × 1.25."""
     i, o = i * D("1.25"), o * D("1.25")
     if request["model"].startswith("anthropic/"):
         i *= 2
@@ -366,7 +369,7 @@ def test_the_provider_object_is_the_billing_server_s(price_snapshot):
     2d81bb5's `bounded_openrouter.provider_policy` built from this snapshot."""
     server = json.loads((FIXTURES / "server_provider_2d81bb5.json").read_text(encoding="utf-8"))
     assert server["snapshot_version"] == price_snapshot["version"]
-    assert {fx.FLEX, fx.UNREAD, fx.NONE_ADMITTED} <= set(server["providers"])
+    assert {fx.FLEX, fx.UNREAD, fx.NONE_ADMITTED, fx.FALLBACK} <= set(server["providers"])
     for model, provider in server["providers"].items():
         assert provider_policy(model) == provider, model
 
@@ -465,14 +468,14 @@ def test_k3_is_capped_and_held_at_its_pinned_endpoint_s_price_times_the_margin(p
     assert routed_bound(K3_REQUEST) == _k3_hold(D("3.1875"), D("16.1875"))
 
 
-def test_k3_s_cap_falls_back_to_its_model_level_price_when_its_endpoint_is_degraded(
+def test_k3_s_cap_falls_back_to_its_snapshot_price_when_its_endpoint_is_degraded(
     price_snapshot, caplog
 ):
     catalogue.set_layers(fx.degraded(price_snapshot, fx.K3, "digitalocean"), build=False)
     assert catalogue.endpoint_rates(fx.K3, "digitalocean") is None
     with caplog.at_level(logging.WARNING, logger="zylch.llm.k3_reasoning"):
         assert k3.rates() == (D("2.7"), D("13.5"))
-    assert "falls back to the model-level price" in caplog.text
+    assert "falls back to the snapshot's (reference) price" in caplog.text
     assert RATES[fx.K3] == (D("2.7"), D("13.5"))
     assert capped(fx.K3) == (D("3.375"), D("16.875"))
     # Still priced and still pinned: a request its pin cannot route fails at

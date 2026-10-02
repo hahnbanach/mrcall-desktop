@@ -53,10 +53,10 @@ the HTTP error codes — is v1's.
   its pinned provider) and its responses carry no reasoning blocks.
 - On OpenRouter the server applies the snapshot's provider policy (no
   fallbacks, parameters required, price sorting, `policy.quantizations`,
-  the excluded service tiers) and `max_price` = the model-level price ×
+  the excluded service tiers) and `max_price` = the reference price ×
   `policy.margin`; K3's cap is its pinned endpoint's price × the margin,
   or, on a day that endpoint is not admitted (absent from the snapshot's
-  `endpoints`), its model-level price × the margin (README, "Prices in
+  `endpoints`), its reference price × the margin (README, "Prices in
   use").
 - Quote and execute accept any model the snapshot prices, excluded
   families included (an explicit choice keeps running); an unpriced id is a
@@ -162,7 +162,7 @@ the added fields.
   "markup_factor": "1.5",
   "max_credits": 6,
   "max_debit_micro_usd": 66000,
-  "snapshot_version": "f04f27349de6020e09f5bc28745af01981b3ff3935c1d594fedf094f211d7fa7",
+  "snapshot_version": "a92577eefb57979bbf1da1b9f560e721dd2e2007f750b1e4b2c687b86af0f0ef",
   "quote_hash": "<SHA-256 of this quote without quote_hash>"
 }
 ```
@@ -222,7 +222,7 @@ settlement.
   "markup_factor": "1.5",
   "max_credits": 6,
   "max_debit_micro_usd": 66000,
-  "snapshot_version": "f04f27349de6020e09f5bc28745af01981b3ff3935c1d594fedf094f211d7fa7",
+  "snapshot_version": "a92577eefb57979bbf1da1b9f560e721dd2e2007f750b1e4b2c687b86af0f0ef",
   "quote_hash": "<as in the quote>",
   "request_id": "0b9d6c1e-7c1a-4bd0-9a51-2f3f0e7d9a11",
   "authorized_max_debit_micro_usd": 66000,
