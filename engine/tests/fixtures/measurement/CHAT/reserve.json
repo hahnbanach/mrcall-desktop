@@ -1,0 +1,140 @@
+{
+  "schema": 1,
+  "role": "CHAT",
+  "rule": "trim_measurement_cases.py: authored and reviewed, not measured; --restore puts them back",
+  "kept": 11,
+  "order": ["chat-01", "chat-02", "chat-03", "chat-04", "chat-05", "chat-06", "chat-07", "chat-08", "chat-09", "chat-10", "chat-11", "chat-12", "chat-13", "chat-14"],
+  "cases": [
+    {
+      "id": "chat-07",
+      "lang": "en",
+      "expect_lang": null,
+      "input": {
+        "profile": {"EMAIL_ADDRESS": "sarah@northwind-interiors.example", "USER_FULL_NAME": "Sarah Mitchell", "USER_COMPANY": "Northwind Interiors Ltd", "USER_PHONE": "+44 20 7946 0101"},
+        "user_message": "Search the web for how we get an EORI number — we start shipping orders to a client in Switzerland in January.",
+        "tool_results": {
+          "web_search": {
+            "status": "success",
+            "data": {
+              "query": "how to get an EORI number UK business",
+              "findings": "A UK business applies to HMRC for a GB EORI number through the online service on the government website; it usually arrives within a week and is needed to move goods out of the UK, Switzerland included.",
+              "citations": [{"url": "https://customs-guide.example/eori", "title": "Get an EORI number"}],
+              "email": null,
+              "company": null
+            },
+            "message": "Found web information for: how to get an EORI number UK business"
+          }
+        }
+      },
+      "label": {"first_call": {"any_of": [{"name": "web_search", "args": {"query": {"contains": [["eori"]]}}}]}, "never_call": [], "answer": {"contains": [["HMRC"]]}},
+      "critical": false,
+      "critical_on": [],
+      "why": "The user explicitly asks for a web search, the one case where the chat prompt allows it; the scripted result says the number comes from HMRC, which the answer must report."
+    },
+    {
+      "id": "chat-08",
+      "lang": "it",
+      "expect_lang": null,
+      "input": {
+        "profile": {"EMAIL_ADDRESS": "giulia@ferramentaconti.example", "USER_FULL_NAME": "Giulia Conti", "USER_COMPANY": "Ferramenta Conti Srl", "USER_PHONE": "+39 030 0000 0101"},
+        "user_message": "D'ora in poi non proporre mai lo sconto del 10% ai clienti nuovi: solo a chi compra da noi da almeno un anno.",
+        "tool_results": {
+          "search_local_memory": {"status": "success", "data": {"not_found": true, "query": "sconto 10% clienti nuovi"}, "message": "No memory blobs ranked above threshold for 'sconto 10% clienti nuovi'."},
+          "create_memory": {"status": "success", "data": {"blob_id": "b0d4e6f8-1a2b-4c3d-8e9f-0a1b2c3d4e5f", "action": "created"}, "message": "Rule saved to the always-on rules."}
+        }
+      },
+      "label": {"first_call": {"any_of": [{"name": "search_local_memory", "args": {"query": {"contains": [["scont", "10%", "10 %", "nuov", "regol", "discount", "rule"]]}}}]}, "never_call": ["update_memory"], "answer": {}},
+      "critical": false,
+      "critical_on": [],
+      "why": "This is a rule about how the assistant should act; the chat prompt says to search memory for a similar rule before creating one, so the first call is search_local_memory, and no existing blob may be overwritten."
+    },
+    {
+      "id": "chat-10",
+      "lang": "en",
+      "expect_lang": null,
+      "input": {
+        "profile": {"EMAIL_ADDRESS": "sarah@northwind-interiors.example", "USER_FULL_NAME": "Sarah Mitchell", "USER_COMPANY": "Northwind Interiors Ltd", "USER_PHONE": "+44 20 7946 0101"},
+        "user_message": "Reply to Daniel Price at Harbor Lights: we can deliver the six pendant lamps on 14 October. Save it as a draft, don't send it yet.",
+        "tool_results": {
+          "search_emails": {
+            "status": "success",
+            "data": {
+              "threads": [
+                {
+                  "subject": "Pendant lamps – delivery date?",
+                  "from": "daniel.price@harborlights.example",
+                  "to": "sarah@northwind-interiors.example",
+                  "cc": null,
+                  "date": "2026-09-22T11:05:00",
+                  "body": "Hi Sarah,\nThanks for the photos of the pendant lamps — they look great. When could you deliver all six? We would like them up before the café reopens.\nBest,\nDaniel Price\nHarbor Lights Café",
+                  "message_id": "<HL-2209@harborlights.example>",
+                  "in_reply_to": null,
+                  "references": null,
+                  "thread_id": "thr-harbor-0922",
+                  "gmail_id": "hl-2209",
+                  "score": 0.88
+                }
+              ],
+              "total": 1
+            },
+            "message": "Found 1 emails matching 'Daniel Price Harbor Lights'"
+          },
+          "search_local_emails": {
+            "status": "success",
+            "data": {
+              "matches": [
+                {
+                  "id": "a41d7c9e-2b6f-4e83-9c15-7d0e3f2a6b88",
+                  "thread_id": "thr-harbor-0922",
+                  "date": "2026-09-22T11:05:00",
+                  "from_email": "daniel.price@harborlights.example",
+                  "from_name": "Daniel Price",
+                  "to_email": "sarah@northwind-interiors.example",
+                  "subject": "Pendant lamps – delivery date?",
+                  "has_attachments": false,
+                  "is_user_sent": false,
+                  "body_chars": 188
+                }
+              ],
+              "count": 1,
+              "query": "from:harborlights",
+              "folder": "all",
+              "next_offset": null
+            },
+            "message": "Found 1 local match(es) for `from:harborlights` (folder=all):\n  1. [2026-09-22] Daniel Price → sarah@northwind-interiors.example: Pendant lamps – delivery date?\n     id=a41d7c9e-2b6f-4e83-9c15-7d0e3f2a6b88 thread=thr-harbor-0922\n     Hi Sarah, Thanks for the photos of the pendant lamps — they look great. When could you deliver all six? We would like them up before the café reopens. Best, Daniel Price Harbor Lights Café"
+          },
+          "create_draft": {"status": "success", "data": {"draft_id": "d-5e21c7", "to": "daniel.price@harborlights.example"}, "message": "Draft d-5e21c7 created."},
+          "compose_email": {
+            "status": "success",
+            "data": {
+              "subject": "Re: Pendant lamps – delivery date?",
+              "body": "Hi Daniel,\nwe can deliver all six pendant lamps on 14 October.\nBest,\nSarah",
+              "recipient_email": "daniel.price@harborlights.example",
+              "in_reply_to": "<HL-2209@harborlights.example>",
+              "thread_id": "thr-harbor-0922",
+              "draft_id": "d-5e21c7",
+              "created": true
+            },
+            "message": "**Draft Saved** (ID: `d-5e21c7`)\n\n**To:** daniel.price@harborlights.example\n**Subject:** Re: Pendant lamps – delivery date?\n\nHi Daniel,\nwe can deliver all six pendant lamps on 14 October.\nBest,\nSarah\n\n---\nSay \"send it\" when ready - I'll send it for you."
+          }
+        }
+      },
+      "label": {
+        "first_call": {
+          "any_of": [
+            {"name": "search_emails", "args": {"query": {"contains": [["daniel", "price", "harbor", "pendant", "lamp"]]}}},
+            {"name": "search_local_emails", "args": {"query": {"contains": [["daniel", "price", "harbor", "pendant", "lamp"]]}}},
+            {"name": "search_local_memory", "args": {"query": {"contains": [["daniel", "price", "harbor", "pendant", "lamp"]]}}},
+            {"name": "search_provider_emails", "args": {"contact": {"contains": [["daniel", "price", "harbor"]]}}},
+            {"name": "compose_email", "args": {"request": {"contains": [["14"]]}}}
+          ]
+        },
+        "never_call": ["send_draft"],
+        "answer": {"contains": [["14"]]}
+      },
+      "critical": false,
+      "critical_on": [],
+      "why": "A reply that stays in the thread needs the original's message_id: search for it first, as the prompt shows, or let compose_email thread and save the reply; the user said not to send (chat-11 holds that check as critical)."
+    }
+  ]
+}

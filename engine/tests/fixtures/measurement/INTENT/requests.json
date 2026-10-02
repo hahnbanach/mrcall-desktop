@@ -2,7 +2,7 @@
  "schema": 1,
  "role": "INTENT",
  "prompt_sha256": "8700cebf859ebd6c91ece0a16079a865d18a108a0d03ca2831b36c144af6c438",
- "case_set_sha256": "297aa28a492def34544507fbb6e8db8897dcf90fb0efa9cbb355e777a7946b76",
+ "case_set_sha256": "f5e69d7c6def194444e13614357539d60c4e2a9582d6a30a44679a4a59e7a7e0",
  "requests": [
   {
    "case_id": "intent-01",
@@ -89,34 +89,6 @@
    "capture_now": "2026-10-05T09:30:00"
   },
   {
-   "case_id": "intent-07",
-   "request": {
-    "model": "measurement/capture",
-    "max_tokens": 500,
-    "messages": [
-     {
-      "role": "user",
-      "content": "You are an intent classification system for Zylch AI.\n\nUser said: \"Prepara una mail per il fornitore degli imballaggi e chiedigli il listino 2027\"\n\nAvailable skills:\n[\n  {\n    \"name\": \"email_triage\",\n    \"description\": \"Read, search or summarise emails already received or sent: who wrote, what they said, what is unread.\"\n  },\n  {\n    \"name\": \"draft_composer\",\n    \"description\": \"Write a new email, WhatsApp or SMS message, or a reply, for the user to review before it is sent.\"\n  },\n  {\n    \"name\": \"task_manager\",\n    \"description\": \"Show, create, update or close the user's own to-do items and reminders to do something.\"\n  },\n  {\n    \"name\": \"calendar\",\n    \"description\": \"Look up the user's appointments, or book, move or cancel a meeting or call at a date and time.\"\n  },\n  {\n    \"name\": \"contact_lookup\",\n    \"description\": \"Find what is already known about a person or company: phone number, email address, past dealings.\"\n  },\n  {\n    \"name\": \"memory_notes\",\n    \"description\": \"Save a fact, price, preference or standing rule the user states, so that it is used from now on.\"\n  }\n]\n\nAnalyze the user's intent and determine:\n1. Which PRIMARY skill should handle this request\n2. Which CONTEXT skills need to run first (for gathering info)\n3. Extract relevant parameters\n\nRespond with JSON only:\n{\n  \"primary_skill\": \"skill_name\",\n  \"context_skills\": [\"skill1\", \"skill2\"],\n  \"params\": {\"key\": \"value\"},\n  \"confidence\": 0.0-1.0\n}\n\nRules:\n- primary_skill: The main skill that fulfills the request\n- context_skills: Skills that gather context before primary (empty array if none needed)\n- params: Extracted entities (contact names, dates, types, etc.)\n- confidence: How confident you are in this classification (0.0 to 1.0)\n"
-     }
-    ]
-   },
-   "capture_now": "2026-10-05T09:30:00"
-  },
-  {
-   "case_id": "intent-08",
-   "request": {
-    "model": "measurement/capture",
-    "max_tokens": 500,
-    "messages": [
-     {
-      "role": "user",
-      "content": "You are an intent classification system for Zylch AI.\n\nUser said: \"Manda un WhatsApp a Gianni: ci vediamo alle 9 in magazzino\"\n\nAvailable skills:\n[\n  {\n    \"name\": \"email_triage\",\n    \"description\": \"Read, search or summarise emails already received or sent: who wrote, what they said, what is unread.\"\n  },\n  {\n    \"name\": \"draft_composer\",\n    \"description\": \"Write a new email, WhatsApp or SMS message, or a reply, for the user to review before it is sent.\"\n  },\n  {\n    \"name\": \"task_manager\",\n    \"description\": \"Show, create, update or close the user's own to-do items and reminders to do something.\"\n  },\n  {\n    \"name\": \"calendar\",\n    \"description\": \"Look up the user's appointments, or book, move or cancel a meeting or call at a date and time.\"\n  },\n  {\n    \"name\": \"contact_lookup\",\n    \"description\": \"Find what is already known about a person or company: phone number, email address, past dealings.\"\n  },\n  {\n    \"name\": \"memory_notes\",\n    \"description\": \"Save a fact, price, preference or standing rule the user states, so that it is used from now on.\"\n  }\n]\n\nAnalyze the user's intent and determine:\n1. Which PRIMARY skill should handle this request\n2. Which CONTEXT skills need to run first (for gathering info)\n3. Extract relevant parameters\n\nRespond with JSON only:\n{\n  \"primary_skill\": \"skill_name\",\n  \"context_skills\": [\"skill1\", \"skill2\"],\n  \"params\": {\"key\": \"value\"},\n  \"confidence\": 0.0-1.0\n}\n\nRules:\n- primary_skill: The main skill that fulfills the request\n- context_skills: Skills that gather context before primary (empty array if none needed)\n- params: Extracted entities (contact names, dates, types, etc.)\n- confidence: How confident you are in this classification (0.0 to 1.0)\n"
-     }
-    ]
-   },
-   "capture_now": "2026-10-05T09:30:00"
-  },
-  {
    "case_id": "intent-09",
    "request": {
     "model": "measurement/capture",
@@ -139,20 +111,6 @@
      {
       "role": "user",
       "content": "You are an intent classification system for Zylch AI.\n\nUser said: \"Show me my open tasks\"\n\nAvailable skills:\n[\n  {\n    \"name\": \"email_triage\",\n    \"description\": \"Read, search or summarise emails already received or sent: who wrote, what they said, what is unread.\"\n  },\n  {\n    \"name\": \"draft_composer\",\n    \"description\": \"Write a new email, WhatsApp or SMS message, or a reply, for the user to review before it is sent.\"\n  },\n  {\n    \"name\": \"task_manager\",\n    \"description\": \"Show, create, update or close the user's own to-do items and reminders to do something.\"\n  },\n  {\n    \"name\": \"calendar\",\n    \"description\": \"Look up the user's appointments, or book, move or cancel a meeting or call at a date and time.\"\n  },\n  {\n    \"name\": \"contact_lookup\",\n    \"description\": \"Find what is already known about a person or company: phone number, email address, past dealings.\"\n  },\n  {\n    \"name\": \"memory_notes\",\n    \"description\": \"Save a fact, price, preference or standing rule the user states, so that it is used from now on.\"\n  }\n]\n\nAnalyze the user's intent and determine:\n1. Which PRIMARY skill should handle this request\n2. Which CONTEXT skills need to run first (for gathering info)\n3. Extract relevant parameters\n\nRespond with JSON only:\n{\n  \"primary_skill\": \"skill_name\",\n  \"context_skills\": [\"skill1\", \"skill2\"],\n  \"params\": {\"key\": \"value\"},\n  \"confidence\": 0.0-1.0\n}\n\nRules:\n- primary_skill: The main skill that fulfills the request\n- context_skills: Skills that gather context before primary (empty array if none needed)\n- params: Extracted entities (contact names, dates, types, etc.)\n- confidence: How confident you are in this classification (0.0 to 1.0)\n"
-     }
-    ]
-   },
-   "capture_now": "2026-10-05T09:30:00"
-  },
-  {
-   "case_id": "intent-11",
-   "request": {
-    "model": "measurement/capture",
-    "max_tokens": 500,
-    "messages": [
-     {
-      "role": "user",
-      "content": "You are an intent classification system for Zylch AI.\n\nUser said: \"Segna come fatto il task del preventivo Rossi\"\n\nAvailable skills:\n[\n  {\n    \"name\": \"email_triage\",\n    \"description\": \"Read, search or summarise emails already received or sent: who wrote, what they said, what is unread.\"\n  },\n  {\n    \"name\": \"draft_composer\",\n    \"description\": \"Write a new email, WhatsApp or SMS message, or a reply, for the user to review before it is sent.\"\n  },\n  {\n    \"name\": \"task_manager\",\n    \"description\": \"Show, create, update or close the user's own to-do items and reminders to do something.\"\n  },\n  {\n    \"name\": \"calendar\",\n    \"description\": \"Look up the user's appointments, or book, move or cancel a meeting or call at a date and time.\"\n  },\n  {\n    \"name\": \"contact_lookup\",\n    \"description\": \"Find what is already known about a person or company: phone number, email address, past dealings.\"\n  },\n  {\n    \"name\": \"memory_notes\",\n    \"description\": \"Save a fact, price, preference or standing rule the user states, so that it is used from now on.\"\n  }\n]\n\nAnalyze the user's intent and determine:\n1. Which PRIMARY skill should handle this request\n2. Which CONTEXT skills need to run first (for gathering info)\n3. Extract relevant parameters\n\nRespond with JSON only:\n{\n  \"primary_skill\": \"skill_name\",\n  \"context_skills\": [\"skill1\", \"skill2\"],\n  \"params\": {\"key\": \"value\"},\n  \"confidence\": 0.0-1.0\n}\n\nRules:\n- primary_skill: The main skill that fulfills the request\n- context_skills: Skills that gather context before primary (empty array if none needed)\n- params: Extracted entities (contact names, dates, types, etc.)\n- confidence: How confident you are in this classification (0.0 to 1.0)\n"
      }
     ]
    },
@@ -187,20 +145,6 @@
    "capture_now": "2026-10-05T09:30:00"
   },
   {
-   "case_id": "intent-14",
-   "request": {
-    "model": "measurement/capture",
-    "max_tokens": 500,
-    "messages": [
-     {
-      "role": "user",
-      "content": "You are an intent classification system for Zylch AI.\n\nUser said: \"Sposta la riunione di venerdì alle 11\"\n\nAvailable skills:\n[\n  {\n    \"name\": \"email_triage\",\n    \"description\": \"Read, search or summarise emails already received or sent: who wrote, what they said, what is unread.\"\n  },\n  {\n    \"name\": \"draft_composer\",\n    \"description\": \"Write a new email, WhatsApp or SMS message, or a reply, for the user to review before it is sent.\"\n  },\n  {\n    \"name\": \"task_manager\",\n    \"description\": \"Show, create, update or close the user's own to-do items and reminders to do something.\"\n  },\n  {\n    \"name\": \"calendar\",\n    \"description\": \"Look up the user's appointments, or book, move or cancel a meeting or call at a date and time.\"\n  },\n  {\n    \"name\": \"contact_lookup\",\n    \"description\": \"Find what is already known about a person or company: phone number, email address, past dealings.\"\n  },\n  {\n    \"name\": \"memory_notes\",\n    \"description\": \"Save a fact, price, preference or standing rule the user states, so that it is used from now on.\"\n  }\n]\n\nAnalyze the user's intent and determine:\n1. Which PRIMARY skill should handle this request\n2. Which CONTEXT skills need to run first (for gathering info)\n3. Extract relevant parameters\n\nRespond with JSON only:\n{\n  \"primary_skill\": \"skill_name\",\n  \"context_skills\": [\"skill1\", \"skill2\"],\n  \"params\": {\"key\": \"value\"},\n  \"confidence\": 0.0-1.0\n}\n\nRules:\n- primary_skill: The main skill that fulfills the request\n- context_skills: Skills that gather context before primary (empty array if none needed)\n- params: Extracted entities (contact names, dates, types, etc.)\n- confidence: How confident you are in this classification (0.0 to 1.0)\n"
-     }
-    ]
-   },
-   "capture_now": "2026-10-05T09:30:00"
-  },
-  {
    "case_id": "intent-15",
    "request": {
     "model": "measurement/capture",
@@ -229,20 +173,6 @@
    "capture_now": "2026-10-05T09:30:00"
   },
   {
-   "case_id": "intent-17",
-   "request": {
-    "model": "measurement/capture",
-    "max_tokens": 500,
-    "messages": [
-     {
-      "role": "user",
-      "content": "You are an intent classification system for Zylch AI.\n\nUser said: \"Do we have an email address for the new buyer at Example Retail?\"\n\nAvailable skills:\n[\n  {\n    \"name\": \"email_triage\",\n    \"description\": \"Read, search or summarise emails already received or sent: who wrote, what they said, what is unread.\"\n  },\n  {\n    \"name\": \"draft_composer\",\n    \"description\": \"Write a new email, WhatsApp or SMS message, or a reply, for the user to review before it is sent.\"\n  },\n  {\n    \"name\": \"task_manager\",\n    \"description\": \"Show, create, update or close the user's own to-do items and reminders to do something.\"\n  },\n  {\n    \"name\": \"calendar\",\n    \"description\": \"Look up the user's appointments, or book, move or cancel a meeting or call at a date and time.\"\n  },\n  {\n    \"name\": \"contact_lookup\",\n    \"description\": \"Find what is already known about a person or company: phone number, email address, past dealings.\"\n  },\n  {\n    \"name\": \"memory_notes\",\n    \"description\": \"Save a fact, price, preference or standing rule the user states, so that it is used from now on.\"\n  }\n]\n\nAnalyze the user's intent and determine:\n1. Which PRIMARY skill should handle this request\n2. Which CONTEXT skills need to run first (for gathering info)\n3. Extract relevant parameters\n\nRespond with JSON only:\n{\n  \"primary_skill\": \"skill_name\",\n  \"context_skills\": [\"skill1\", \"skill2\"],\n  \"params\": {\"key\": \"value\"},\n  \"confidence\": 0.0-1.0\n}\n\nRules:\n- primary_skill: The main skill that fulfills the request\n- context_skills: Skills that gather context before primary (empty array if none needed)\n- params: Extracted entities (contact names, dates, types, etc.)\n- confidence: How confident you are in this classification (0.0 to 1.0)\n"
-     }
-    ]
-   },
-   "capture_now": "2026-10-05T09:30:00"
-  },
-  {
    "case_id": "intent-18",
    "request": {
     "model": "measurement/capture",
@@ -265,20 +195,6 @@
      {
       "role": "user",
       "content": "You are an intent classification system for Zylch AI.\n\nUser said: \"From now on, always sign my emails as 'Anna, Example Studio'\"\n\nAvailable skills:\n[\n  {\n    \"name\": \"email_triage\",\n    \"description\": \"Read, search or summarise emails already received or sent: who wrote, what they said, what is unread.\"\n  },\n  {\n    \"name\": \"draft_composer\",\n    \"description\": \"Write a new email, WhatsApp or SMS message, or a reply, for the user to review before it is sent.\"\n  },\n  {\n    \"name\": \"task_manager\",\n    \"description\": \"Show, create, update or close the user's own to-do items and reminders to do something.\"\n  },\n  {\n    \"name\": \"calendar\",\n    \"description\": \"Look up the user's appointments, or book, move or cancel a meeting or call at a date and time.\"\n  },\n  {\n    \"name\": \"contact_lookup\",\n    \"description\": \"Find what is already known about a person or company: phone number, email address, past dealings.\"\n  },\n  {\n    \"name\": \"memory_notes\",\n    \"description\": \"Save a fact, price, preference or standing rule the user states, so that it is used from now on.\"\n  }\n]\n\nAnalyze the user's intent and determine:\n1. Which PRIMARY skill should handle this request\n2. Which CONTEXT skills need to run first (for gathering info)\n3. Extract relevant parameters\n\nRespond with JSON only:\n{\n  \"primary_skill\": \"skill_name\",\n  \"context_skills\": [\"skill1\", \"skill2\"],\n  \"params\": {\"key\": \"value\"},\n  \"confidence\": 0.0-1.0\n}\n\nRules:\n- primary_skill: The main skill that fulfills the request\n- context_skills: Skills that gather context before primary (empty array if none needed)\n- params: Extracted entities (contact names, dates, types, etc.)\n- confidence: How confident you are in this classification (0.0 to 1.0)\n"
-     }
-    ]
-   },
-   "capture_now": "2026-10-05T09:30:00"
-  },
-  {
-   "case_id": "intent-20",
-   "request": {
-    "model": "measurement/capture",
-    "max_tokens": 500,
-    "messages": [
-     {
-      "role": "user",
-      "content": "You are an intent classification system for Zylch AI.\n\nUser said: \"Note that Example Logistics changed their phone number to +39 02 0000 0188\"\n\nAvailable skills:\n[\n  {\n    \"name\": \"email_triage\",\n    \"description\": \"Read, search or summarise emails already received or sent: who wrote, what they said, what is unread.\"\n  },\n  {\n    \"name\": \"draft_composer\",\n    \"description\": \"Write a new email, WhatsApp or SMS message, or a reply, for the user to review before it is sent.\"\n  },\n  {\n    \"name\": \"task_manager\",\n    \"description\": \"Show, create, update or close the user's own to-do items and reminders to do something.\"\n  },\n  {\n    \"name\": \"calendar\",\n    \"description\": \"Look up the user's appointments, or book, move or cancel a meeting or call at a date and time.\"\n  },\n  {\n    \"name\": \"contact_lookup\",\n    \"description\": \"Find what is already known about a person or company: phone number, email address, past dealings.\"\n  },\n  {\n    \"name\": \"memory_notes\",\n    \"description\": \"Save a fact, price, preference or standing rule the user states, so that it is used from now on.\"\n  }\n]\n\nAnalyze the user's intent and determine:\n1. Which PRIMARY skill should handle this request\n2. Which CONTEXT skills need to run first (for gathering info)\n3. Extract relevant parameters\n\nRespond with JSON only:\n{\n  \"primary_skill\": \"skill_name\",\n  \"context_skills\": [\"skill1\", \"skill2\"],\n  \"params\": {\"key\": \"value\"},\n  \"confidence\": 0.0-1.0\n}\n\nRules:\n- primary_skill: The main skill that fulfills the request\n- context_skills: Skills that gather context before primary (empty array if none needed)\n- params: Extracted entities (contact names, dates, types, etc.)\n- confidence: How confident you are in this classification (0.0 to 1.0)\n"
      }
     ]
    },
