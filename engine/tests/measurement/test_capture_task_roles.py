@@ -13,15 +13,19 @@ relies on, with no network and no key:
   the same on any day;
 - labels are well formed and refer to tasks the case actually contains;
   the label classes and the two languages are balanced;
+- ``expect_lang`` is the language the captured prompt requires (none for
+  DEDUP, whose prompts set no output language);
 - the cases are synthetic (``*.example`` addresses and fictional numbers);
 - a capture leaves the process environment and the storage singletons as
   it found them, and refuses a case that produces no request.
+
+The scoring rules (``critical_on``, ``score.py``) are tested in
+``test_scoring_task_roles.py``.
 """
 
 from __future__ import annotations
 
 import functools
-import importlib.util
 import json
 import os
 import re
@@ -30,7 +34,13 @@ from datetime import UTC, datetime
 
 import pytest
 
-from tests.measurement.task_roles_env import FIXTURES, CaptureError, load_cases, parse_instant
+from tests.measurement.task_roles_env import (
+    FIXTURES,
+    CaptureError,
+    fixture_module,
+    load_cases,
+    parse_instant,
+)
 
 ROLES = ("TASK_DETECTION", "REANALYZE", "DEDUP")
 # The call sites of each role and the tool each one offers the model.
@@ -39,6 +49,8 @@ TOOLS = {
     "REANALYZE": {"f4.reanalyze": "reanalyze_decision"},
     "DEDUP": {"dedup.f8": "dedup_decision", "dedup.f9": "topic_dedup_decision"},
 }
+CASE_KEYS = {"id", "lang", "expect_lang", "call_site", "input", "label", "critical_on"}
+CASE_KEYS |= {"critical", "why"}
 # The product's own call-notification relay domain (the sender
 # zylch.utils.notifier_senders recognises, and its message ids); every
 # other address is invented, and a WhatsApp chat id is a fictional number
@@ -50,6 +62,9 @@ FICTIONAL_PHONES = (
     re.compile(r"\+390200000\d{3}"),
     re.compile(r"\+44 1632 960 \d{3}"),
 )
+# The trained prompt's language instruction, the one the free text answers to.
+LANGUAGE_RULE = re.compile(r"Write suggested actions, titles and reasons in (Italian|English)")
+LANGUAGES = {"Italian": "it", "English": "en"}
 
 
 @pytest.fixture(autouse=True)
@@ -61,11 +76,7 @@ def cleanup_test_data():
 @functools.cache
 def harness(role: str):
     """Import ``<ROLE>/capture.py`` by path, as the measurement scripts do."""
-    path = FIXTURES / role / "capture.py"
-    spec = importlib.util.spec_from_file_location(f"measurement_capture_{role.lower()}", path)
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    return module
+    return fixture_module(role, "capture")
 
 
 @functools.cache
@@ -85,16 +96,26 @@ def _check_label(role, case):
     label = case["label"]
     ids = _task_ids(case)
     if role == "TASK_DETECTION":
-        assert label["task_action"] in ("create", "update", "close", "none")
-        assert label["action_required"] is (label["task_action"] in ("create", "update"))
-        if label["task_action"] in ("update", "close"):
+        actions = ("create", "update", "close", "none")
+        accepted = (label["task_action"], *label.get("also_accept", ()))
+        assert set(label) <= {"task_action", "action_required", "target_task_id", "also_accept"}
+        assert all(a in actions for a in accepted) and len(set(accepted)) == len(accepted)
+        # action_required is scored on create only, where false suppresses the task.
+        assert ("action_required" in label) is (label["task_action"] == "create")
+        assert label.get("action_required", True) is True
+        if {"update", "close"} & set(accepted):
             assert label["target_task_id"] in ids
         else:
             assert "target_task_id" not in label
         assert sum(1 for mail in case["input"]["emails"] if mail.get("pending")) == 1
     elif role == "REANALYZE":
-        assert set(label) == {"action"}
-        assert label["action"] in ("keep", "close", "update")
+        accepted = (label["action"], *label.get("also_accept", ()))
+        assert set(label) <= {"action", "also_accept", "urgency_at_least"}
+        assert all(a in ("keep", "close", "update") for a in accepted)
+        assert len(set(accepted)) == len(accepted)
+        if "urgency_at_least" in label:
+            assert "update" in accepted
+            assert label["urgency_at_least"] in ("low", "medium", "high", "critical")
     elif case["call_site"] == "dedup.f8":
         assert isinstance(label["is_duplicate_group"], bool)
         if label["is_duplicate_group"]:
@@ -135,13 +156,23 @@ def test_case_document_is_well_formed(role):
     ids = [case["id"] for case in document["cases"]]
     assert len(ids) == len(set(ids))
     for number, case in enumerate(document["cases"], 1):
+        assert set(case) == CASE_KEYS, case["id"]
         assert case["id"] == f"{role.lower()}-{number:02d}"
         assert case["lang"] in ("it", "en")
         assert case["call_site"] in sites
-        assert isinstance(case["critical"], bool)
+        assert case["critical"] is bool(case["critical_on"])  # derived, never set by hand
         assert len(case["why"]) > 40
         parse_instant(case["input"]["now"])
         _check_label(role, case)
+
+
+@pytest.mark.parametrize("role", ROLES)
+def test_expect_lang_follows_the_role_rule(role):
+    for case in load_cases(role)["cases"]:
+        if role == "DEDUP":
+            assert case["expect_lang"] is None, case["id"]  # no output language is set
+        else:  # the owner's language, whatever the language of the mail
+            assert case["expect_lang"] == case["input"]["profile"], case["id"]
 
 
 @pytest.mark.parametrize("role", ROLES)
@@ -183,6 +214,18 @@ def test_each_case_captures_one_request_from_its_call_site(role):
         assert request["max_tokens"] > 0 and request["system"]
         assert [message["role"] for message in request["messages"]] == ["user"]
         json.dumps(request)  # the measurement stores and replays it as JSON
+        if role == "TASK_DETECTION":  # score.py resolves targets among the tasks shown
+            for task_id in _task_ids(case):
+                assert task_id in request["messages"][0]["content"], case["id"]
+
+
+@pytest.mark.parametrize("role", ROLES)
+def test_expect_lang_is_the_language_the_prompt_requires(role):
+    cases, requests = captured(role)
+    for case, item in zip(cases, requests):
+        system = " ".join(block["text"] for block in item["request"]["system"])
+        rules = {LANGUAGES[name] for name in LANGUAGE_RULE.findall(system)}
+        assert rules == ({case["expect_lang"]} if case["expect_lang"] else set()), case["id"]
 
 
 @pytest.mark.parametrize("role", ROLES)
