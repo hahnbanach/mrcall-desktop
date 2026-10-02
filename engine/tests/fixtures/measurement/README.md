@@ -128,8 +128,7 @@ gets its second attempt.
 
 `DIR/results.jsonl` holds per cell the tool calls, text, usage, cost, latency
 and the scoring of `scripts/measurement_scoring.py` (label match, critical,
-mechanical bars). It also names the refusals: `refusals` on the cell's row,
-and each role's `refused` (its cases per arm) in `measured.json`.
+mechanical bars). It also names the refusals: `refusals` on the cell's row.
 `--repeat-disagreements` then runs
 D7's last item: the reference a second time, only on the cases where some
 arm's label result differs from its own. No arm runs again.
@@ -140,7 +139,14 @@ arm's label result differs from its own. No arm runs again.
 binomial standard error, with every mechanical bar met and no critical
 failure; a `satisfice` role's threshold is the lowest index at and above
 which every measured arm passes, or `measured_only` when index and result
-disagree. Everything is judged on the first repetition. The second
+disagree. An arm cut short (a transport failure, a refusal, a skip, the
+cap) is not a measurement. It is kept out of `results` and named in the
+role's `incomplete` (`{arm: why}`), so the resolver treats the model as
+unmeasured rather than failed, and thresholds derive from complete arms
+only. MEMORY_EXTRACT and MEMORY_MERGE are both judged on the corpus's
+joint verdicts: a case fails both roles when either the extraction or the
+decision went wrong, which is conservative for each. Everything is judged
+on the first repetition. The second
 repetition's answers are recorded in the role's `second_repetition`, the first
 and second label result of each repeated case, and change no pass or fail.
 It writes `measured.json` in the shape `resolver.validate_measured`
