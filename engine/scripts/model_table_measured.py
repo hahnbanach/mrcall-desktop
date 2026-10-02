@@ -71,8 +71,10 @@ def aggregate(rows: list[dict], cases: list[str]) -> dict:
     `derive_thresholds.role_entry` aggregates an arm: the latest row per cell;
     `complete` when every case was scored in the first repetition."""
     rows = dt.common.latest_rows(rows)
-    scored = [r for r in rows if r["status"] == "scored"]
     first = [r for r in rows if r.get("repetition", 1) == 1]
+    # Judged on the first repetition alone, as derive_thresholds.role_entry: a
+    # second answer (--repeat-disagreements) changes no pass or fail.
+    scored = [r for r in first if r["status"] == "scored"]
     complete = all(r["status"] == "scored" for r in first) and {r["case_id"] for r in first} >= set(
         cases
     )
