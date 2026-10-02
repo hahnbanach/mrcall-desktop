@@ -54,7 +54,10 @@ the HTTP error codes — is v1's.
 - On OpenRouter the server applies the snapshot's provider policy (no
   fallbacks, parameters required, price sorting, `policy.quantizations`,
   the excluded service tiers) and `max_price` = the model-level price ×
-  `policy.margin`; K3's cap is its pinned endpoint's price × the margin.
+  `policy.margin`; K3's cap is its pinned endpoint's price × the margin,
+  or, on a day that endpoint is not admitted (absent from the snapshot's
+  `endpoints`), its model-level price × the margin (README, "Prices in
+  use").
 - Quote and execute accept any model the snapshot prices, excluded
   families included (an explicit choice keeps running); an unpriced id is a
   400 with its reason. Pre-authorisation prices from the snapshot × the

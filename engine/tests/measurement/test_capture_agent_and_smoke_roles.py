@@ -139,6 +139,7 @@ def test_every_case_captures_exactly_one_request_of_its_role(role):
         # none the client consumes itself (the agent loops' run clock).
         assert None not in request.values(), case["id"]
         assert not set(cc.CLIENT_ONLY) & set(request), case["id"]
+        assert "run_clock" not in request, case["id"]  # literal: not the code's own constant
         assert request["messages"] and isinstance(request["max_tokens"], int), case["id"]
         assert request.get("model", cc.PLACEHOLDER_MODEL) == cc.PLACEHOLDER_MODEL, case["id"]
         _assert_call_site(role, case, request)
