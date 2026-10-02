@@ -8,7 +8,8 @@ with its catalogue entry; milestone 10a's OpenRouter picks and billed models;
 a model whose cheapest endpoint is a `flex` service tier the policy excludes
 (`openai/gpt-6.1-sol`); one whose endpoints were not read (fewer than
 200,000 tokens of context); one whose endpoints were read and none admitted;
-and one with a variable price. It is committed with the tests so a price a
+one with a variable price; and a `:free` variant the catalogue prices at
+0 (`qwen/qwen3.8-27b:free`). It is committed with the tests so a price a
 test pins never moves when the coordinator refreshes the build copy
 (`roles/snapshot.json`) from a live read; `test_snapshot_prices.py` holds it
 equal to a fresh cut of the capture and through the static gates.
@@ -43,6 +44,7 @@ FLEX = "openai/gpt-6.1-sol"
 UNREAD = "cohere/command-a-plus"
 NONE_ADMITTED = "moonshotai/kimi-k2.6"
 VARIABLE = "openrouter/auto"
+FREE = "qwen/qwen3.8-27b:free"
 MODELS = (
     K3,
     GLM_5_2,
@@ -53,6 +55,7 @@ MODELS = (
     UNREAD,
     NONE_ADMITTED,
     VARIABLE,
+    FREE,
 )
 # The newer Sonnet a simulated successor adds, and its direct id.
 SUCCESSOR, SUCCESSOR_DIRECT = "anthropic/claude-sonnet-6", "claude-sonnet-6"
