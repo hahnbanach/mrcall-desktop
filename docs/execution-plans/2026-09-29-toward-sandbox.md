@@ -2420,19 +2420,25 @@ version; leave it unchanged.
 
 CTO instruction after inventory `e33c653`: every VPS profile must first run
 observe-only, logging connections outside its candidate sets and blocking
-nothing, for at least one full mail-sync cycle plus several days. Enforcement
-requires the observations to close all unknown destinations. R_4 must prove
-observe → enforce → rollback on scratch before any VPS proposal. R_4 still
-must not access the services VPS; inventory and handoff use git only.
+nothing. R_4 must prove observe → enforce → rollback on scratch before any VPS
+proposal. R_4 still must not access the services VPS; inventory and handoff
+use git only.
+
+**CTO decision — observation duration and unknown closure (2026-10-02):**
+the observation window is **24 continuous hours per profile**, replacing the
+previous 72-hour interpretation. It must contain at least one accepted full
+mail-sync cycle. **Unknown destinations are closed through controlled tests
+of the applicable channels, not by waiting.** Record each test's outcome and
+destination attribution; for an inapplicable channel record evidence that it
+is disabled/unconfigured.
 
 The security brief remains the right artifact and final criterion 6 remains
 unchanged. This is an explicitly unconfined discovery stage, never evidence
-that egress is already bounded. Interpret "a few days" as **at least 72
-continuous hours per profile**, containing at least one accepted full mail
-sync cycle. Missing activity for Calendar, cold embeddings, WhatsApp media,
-CRM or production voice keeps its corresponding unknown open; elapsed time
-alone does not authorize enforcement. A collector outage, unaccounted sample
-loss or material policy change invalidates the observation window and requires
+that egress is already bounded. Missing controlled-test evidence for Calendar,
+cold embeddings, WhatsApp media, CRM or production voice keeps its corresponding
+unknown open; elapsed time alone does not authorize enforcement. A collector
+outage, unaccounted sample loss or material policy change invalidates the
+observation window and requires
 fresh complete evidence. One tenant's acceptance never authorizes another.
 
 Acceptance for this amendment: observe adds no packet rejection, DNS refusal,
@@ -2474,7 +2480,7 @@ block is input, not closure of its unknowns. Implementation remains here.
    lossless connection ledger. Root journal collection retains only timestamp,
    tenant prefix, destination IP/port/protocol; never raw packet payload,
    DNS query names, HTTP headers or voice configuration. Root controls access
-   and retention (at least the active 72-hour window plus its review).
+   and retention (at least the active 24-hour window plus its review).
 3. Keep the daemon's existing DNS path unchanged. A separate root timer every
    60 seconds resolves **only operator-approved candidate hostnames** through
    the host resolver and atomically refreshes the observe sets. No traffic
@@ -2513,16 +2519,16 @@ VPS handoff gates, separately for each of the seven profiles:
   start UTC, journal cursor/retention and candidate-refresh health. Start only
   observation; keep existing daemon and resolver. Existing host firewall
   behavior is preserved, not overridden. Record one full accepted mail sync
-  and at least 72 continuous hours with complete usable evidence.
+  and 24 continuous hours with complete usable evidence.
 - Maintain a closure row for Calendar API, embedding redirects, WhatsApp media,
   Pipedrive/other connectors and production voice/Vonage. For an inapplicable
   channel require evidence that it is disabled/unconfigured; silence is not
-  proof. For an applicable channel observe a controlled relevant operation
+  proof. For an applicable channel perform a controlled relevant test
   (e.g. media receipt/cold model download/voice integration), map destinations
   to curated hostnames/ports and rerun the window after material policy changes.
 - Log loss/suppression, refresh or collection gaps, unexplained destinations,
   missing representative channel activity or app/mail anomalies keep the
-  profile in observe; fix and restart a complete window. No "72 hours passed"
+  profile in observe; fix and restart a complete window. No "24 hours passed"
   automatic promotion and no inferred broad suffix to silence an unknown.
 - Only after all closure rows and authentic M3 channel checks have evidence
   and two reviewers APPROVE the profile's promotion: snapshot/stop selected
@@ -2532,7 +2538,7 @@ VPS handoff gates, separately for each of the seven profiles:
   back to its original resolver and unrestricted egress (or reviewed observe
   configuration); never edit another tenant's table or flush the host ruleset.
 - R_4 done still means every migrated tenant is enforced with criterion 6
-  recorded. Observe-only running for days is deliberately not that condition.
+  recorded. Completion of the observe-only window is not that condition.
 
 **Scratch coordination:** scratch VM presa da R_4 dalle 2026-10-02 19:58:02 UTC.
 R2's recorded release and this worktree's prior release checked; publish
@@ -2596,12 +2602,14 @@ Actual automatic refresh success is checked before this controlled assertion.
 All failed attempts also completed cleanup. This reinforces the documented
 conservative-snapshot limitation; it does not close any real CDN unknown.
 
-**Not claimed:** authentic IMAP/WhatsApp/LLM/Firebase acceptance, 72 hours of
-observation, complete service host attribution, any VPS deployment, or R4 done.
+**Not claimed:** authentic IMAP/WhatsApp/LLM/Firebase acceptance, a complete
+observation window, complete service host attribution, any VPS deployment,
+or R4 done.
 No services VPS access and no paid LLM calls occurred. Two fresh independent
 integration reviewers returned **APPROVED** for this scratch mechanism after
 reading code and the transition/race/regression evidence. Both explicitly kept
-the authentic channel, 72-hour observation and VPS enforcement gates open.
+the authentic channel, then-proposed 72-hour observation and VPS enforcement
+gates open; the CTO decision above now sets the observation window to 24 hours.
 Separate final end-to-end reviewers also returned **APPROVED** for publication
 of the scratch mechanism and handoff. A final bounded-memory improvement
 streams multi-day journal export rather than buffering it: 14 tests and the
@@ -2633,7 +2641,7 @@ following. Inventory `r4-vps-destinations` below remains unchanged input.
    not override an existing firewall's restrictions. A reboot/restart needs
    operator reattachment and a new complete observation window; there is no
    implicit persistence/promotion or automatic acceptance.
-3. Before starting the 72-hour clock, establish root-controlled journal
+3. Before starting the 24-hour clock, establish root-controlled journal
    retention for the complete window plus review; record boot ID and journal
    cursor/start UTC. The kernel journal holds default packet-header metadata
    only; its root export deliberately retains only the five fields above.
@@ -2649,9 +2657,9 @@ following. Inventory `r4-vps-destinations` below remains unchanged input.
    Record periodic cursors/exports and counters throughout the window;
    archive them before journal rotation. Any unexplained loss, restart,
    refresh gap or material candidate change restarts the full window.
-4. Keep each profile in observe for **at least 72 continuous hours containing
-   one full accepted mail sync**. Exercise applicable unknown channels and
-   complete destination attribution/disabled-channel evidence from the
+4. Keep each profile in observe for **24 continuous hours containing
+   one full accepted mail sync**. Close applicable unknowns through controlled
+   tests, recording destination attribution/disabled-channel evidence from the
    amendment's closure rows. Initial policy snapshots may report false
    outside candidates for subdomains/CDNs; investigate them, never silently
    allow everything. No packet sample or DNS answer proves hostname ownership.
@@ -2674,7 +2682,7 @@ following. Inventory `r4-vps-destinations` below remains unchanged input.
 
 VPS observation status: **NOT STARTED by this session** for support, Mario
 Cafe124, Mario Gmail, Mario MrCall, production, Ivan and Riccardo. Each requires
-its own timestamps, policy hash, full-sync evidence, >=72h continuity, closure
+its own timestamps, policy hash, full-sync evidence, 24h continuity, closure
 rows and review verdicts. Inventory alone and another profile's success do not
 satisfy those gates. No request to access or enforce the VPS is made here.
 
