@@ -1,33 +1,60 @@
-name: Model resolution drift
+name: Model table
 
-# The role table (milestone 10a, brief D5): engine/zylch/llm/roles/resolved.json
-# is what the resolver chose from OpenRouter's catalogue and benchmarks when
-# it was last applied. This job re-runs the resolver against the live sources
-# WITHOUT --apply and fails when the committed table would change, so drift is
-# visible, never silent, and never applied unreviewed: a red run is answered
-# by running `python engine/scripts/resolve_models.py --apply` by hand and
-# committing the reviewed diff. The script loads the resolver by file path and
-# uses the standard library alone, so nothing is installed. The report (the
-# table and its diff) is uploaded as an artifact on every run.
+# The daily model-table job (milestone 10, brief D8): engine/scripts/model_table_job.py
+# resolves each role's rankings per preset from OpenRouter's live catalogue,
+# benchmarks and endpoints; checks every changed pick or ranking order before
+# publishing it — a smoke on the engine's real transport (at most USD 0.05) and
+# the role's measurement (at most USD 2), unless a measurement cached by model,
+# role, case-set hash and prompt hash exists — and smokes a ranked model whose
+# metadata changed; all inside USD 10 a month, kept in v1/ledger.json, the run's
+# reservation pushed to the data branch before its first paid call and settled
+# after. It publishes table.json, snapshot.json, measured.json and ledger.json
+# under v1/ on the model-table data branch, which the engines and the billing
+# server read at run time, so it runs before the billing server's 06:00 UTC
+# refresh. A run that cannot publish (a gate failed, a raised ceiling, a pick
+# with no verified replacement) goes red and the last published record stays;
+# a price-only change updates the snapshot alone. Schedule and dispatch only,
+# never on a push or a pull request: a paid run happens once a day or by hand,
+# and the key never meets code a pull request proposes. The report is uploaded
+# on every run.
 
 on:
-  workflow_dispatch:
   schedule:
-    - cron: '17 6 * * 1'  # Mondays 06:17 UTC
+    - cron: '17 5 * * *'  # daily 05:17 UTC
+  workflow_dispatch:
+
+# One run at a time, and a run in progress is never cancelled: it may hold a
+# reservation it has yet to settle.
+concurrency:
+  group: model-table
+  cancel-in-progress: false
 
 permissions:
-  contents: read
+  contents: write  # push the model-table data branch
 
 jobs:
-  drift:
-    name: Resolver --check against live sources
+  publish:
+    name: Resolve, verify within the caps, publish
     runs-on: ubuntu-latest
+    timeout-minutes: 120
     steps:
       - uses: actions/checkout@v4
+
+      - name: Check out the model-table data branch
+        uses: actions/checkout@v4
+        with:
+          ref: model-table
+          path: model-table
 
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
+
+      # The smoke and the measurement run the engine's own client and transport.
+      - name: Install the engine
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e engine
 
       - name: Require the OpenRouter key
         env:
@@ -38,17 +65,24 @@ jobs:
             exit 1
           fi
 
-      - name: Resolve and compare with the committed table
+      - name: Name the publisher
+        run: |
+          git -C model-table config user.name "github-actions[bot]"
+          git -C model-table config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+      - name: Resolve, verify and publish
         env:
           OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
-        run: |
-          set -o pipefail
-          python -I engine/scripts/resolve_models.py --check 2>&1 | tee model-resolution-report.txt
+        run: >-
+          python engine/scripts/model_table_job.py
+          --data model-table
+          --report model-table-report.md
+          --work "$RUNNER_TEMP/model-table-job"
 
       - name: Upload the report
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: model-resolution-report
-          path: model-resolution-report.txt
+          name: model-table-report
+          path: model-table-report.md
           if-no-files-found: warn
