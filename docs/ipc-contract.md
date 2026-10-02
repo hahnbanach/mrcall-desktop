@@ -672,7 +672,8 @@ its build copy): the direct ids on a personal Anthropic key, the catalogue ids
 on OpenRouter. No excluded model family is offered. A model the profile saved
 (base model, `DEFAULT_MODEL` or a role override) that can run on the provider
 stays listed after them. Missing/older (v1) or malformed server catalogs, or
-one that serves no model, return unavailable with the reason,
+one that serves no model, and a personal catalog with no valid model table in
+force, return unavailable with the reason,
 without altering saved model choices or falling back to another provider.
 The renderer fetches on provider/settings reload changes and invalidates stale
 catalogs on account or connection changes; reopen Settings to fetch again.

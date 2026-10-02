@@ -76,6 +76,26 @@ async def test_personal_anthropic_catalog_is_the_table_s_direct_ids(monkeypatch)
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("provider", ["anthropic", "openrouter"])
+async def test_without_a_model_table_the_personal_catalog_says_so(monkeypatch, provider):
+    from zylch.llm.roles import table
+
+    monkeypatch.setattr(table, "BUILD", table.HERE / "no-such-table.json")
+    table._build.cache_clear()
+    table.set_table(None)
+    try:
+        result = await usage_queries.llm_models({"provider": provider}, None)
+    finally:
+        table._build.cache_clear()
+    assert result == {
+        "provider": provider,
+        "models": [],
+        "available": False,
+        "reason": table.NO_TABLE,
+    }
+
+
+@pytest.mark.asyncio
 async def test_a_saved_model_that_runs_on_the_provider_stays_listed(tmp_path, monkeypatch):
     profile(
         tmp_path,

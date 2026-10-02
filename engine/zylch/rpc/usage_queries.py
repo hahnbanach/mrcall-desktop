@@ -138,7 +138,7 @@ async def llm_models(params, notify):
     from zylch.llm.budget_pricing import BudgetError
     from zylch.llm.model_policy import profile_values, proxy_url, resolve_provider
     from zylch.llm.roles import excluded, served
-    from zylch.llm.roles.table import listed
+    from zylch.llm.roles.table import NO_TABLE, document, listed
 
     provider = params.get("provider") or resolve_provider()
     if provider not in ("anthropic", "openrouter", "mrcall"):
@@ -161,6 +161,8 @@ async def llm_models(params, notify):
             )
             return {"provider": provider, "models": [], "available": False, "reason": reason}
         models = [dict(entry) for entry in entries if not excluded(entry["id"])]
+    elif document() is None:  # no table in force: say so rather than list nothing
+        return {"provider": provider, "models": [], "available": False, "reason": NO_TABLE}
     else:
         models = [
             {"id": key, "label": label, "provider": provider} for key, label in listed(provider)
