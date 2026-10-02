@@ -33,8 +33,14 @@ second intent, and the last: a cell refused twice stays failed (status
 ``error``, its ``refusals`` named), and its arm is incomplete. Nothing else is
 retried: a cell with any other intent is never dispatched again, so an
 interrupted run resumes with the same ``--out`` and skips it, while a cell
-refused once is still sent its second time. Two transport failures in a row
-(refusals aside) skip the rest of that arm in that role.
+refused once is still sent its second time. In CHAT and TASK_SOLVE only a
+refusal at a turn's first dispatch is sent again: one later in the turn
+follows dispatches already paid for, which a second attempt would repeat, so
+the cell stays failed (``error``, the refusal named) and its arm incomplete.
+A 401 or 403 means the key itself was refused: the run stops with that
+message (exit 1), and the denied cell is settled at zero and never sent
+again. Two transport failures in a row (refusals aside) skip the rest of
+that arm in that role.
 
 **Results** (``<out>/results.jsonl``, one row per cell and repetition): the
 answer's tool calls and text, usage, cost, latency, and the scoring of
@@ -49,8 +55,9 @@ or fail (``derive_thresholds.py`` judges the first repetition).
     python scripts/measure_roles.py --arms ARMS.json --out DIR --dry-run  # scripted transport
     python scripts/measure_roles.py --arms ARMS.json --out DIR --cap 20   # paid
 
-Exit codes: 0 done; 1 refused (stale requests, no key, corrupt ledger);
-3 the cap stopped the run (what was measured is recorded).
+Exit codes: 0 done; 1 refused (stale requests, no key, corrupt ledger, or a
+key the provider denies — a 401 or 403 stops the run, and the denied cell is
+never sent again); 3 the cap stopped the run (what was measured is recorded).
 """
 
 from __future__ import annotations
@@ -91,6 +98,11 @@ logger = logging.getLogger("measure_roles")
 DEFAULT_CAP = Decimal("20")
 FAILURES_BEFORE_SKIP = 2
 EXIT_CAP = 3
+EXIT_DENIED = 1
+
+
+class AccessDenied(RuntimeError):
+    """The provider refused the key itself (HTTP 401 or 403): the run stops."""
 
 
 def run_cell(
@@ -128,6 +140,8 @@ def run_cell(
     if guard.cap_hit or (error and "daily budget" in error and not failed):
         # The engine's own budget, the backstop, refused before the transport.
         status = "cap"
+    elif any(d.get("denied") for d in failed):
+        status, error = "denied", next(d["error"] for d in failed if d.get("denied"))
     elif failed and all(d.get("refused") for d in failed):
         status, error = "refused", failed[-1]["error"]
     elif failed or error or answer is None:
@@ -165,10 +179,11 @@ def measure(
 ) -> None:
     """Every (role, arm, case) in priority order, skipping what the ledger already holds.
 
-    A cell refused before inference — in this pass or by an earlier run — is
-    sent once more at the end of its role's pass (``resend``). ``only`` limits
-    the cells to these ``(role, arm, case_id)`` triples. Raises
-    ``CapExceeded`` after recording the cell the cap stopped.
+    A cell refused before inference at its first dispatch — in this pass or by
+    an earlier run — is sent once more at the end of its role's pass
+    (``resend``). ``only`` limits the cells to these ``(role, arm, case_id)``
+    triples. Raises ``CapExceeded`` after recording the cell the cap stopped,
+    ``AccessDenied`` after recording the cell whose key was denied.
     """
     for run in runs:
         refused: list[tuple[dict, dict]] = []
@@ -191,14 +206,12 @@ def measure(
                     status = "unpriced" if unpriced else "skipped"
                     ctx.results.append(base_row(run, arm, case, repetition, status, unpriced))
                     continue
-                row = run_cell(ctx, run, arm, case, repetition)
-                ctx.results.append(row)
-                if row["status"] == "cap":
-                    raise CapExceeded(row["error"])
+                row = finished(ctx, run_cell(ctx, run, arm, case, repetition))
                 if row["status"] == "refused":
                     refused.append((arm, case))
                     continue
-                streak = streak + 1 if row["status"] == "error" else 0
+                failure = row["status"] == "error" and not row.get("refusals")
+                streak = streak + 1 if failure else 0
         resend(ctx, run, refused, repetition)
 
 
@@ -209,23 +222,33 @@ def resend(ctx: Context, run: RoleRun, refused: list, repetition: int) -> None:
         cell = Cell(run.role, arm["id"], case["id"], repetition)
         while (attempt := ctx.ledger.next_attempt(cell.key)) is not None:
             wait_out(ctx, ctx.ledger.attempts(cell.key)[-1]["refusal"])
-            row = run_cell(ctx, run, arm, case, repetition, attempt)
-            refused_again = row["status"] == "refused"
-            if refused_again and ctx.ledger.next_attempt(cell.key) is None:
-                row.update(status="error", error=f"refused twice before inference: {row['error']}")
-            ctx.results.append(row)
-            if row["status"] == "cap":
-                raise CapExceeded(row["error"])
-            if not refused_again:  # answered, failed or stopped: the cell is done
+            row = finished(ctx, run_cell(ctx, run, arm, case, repetition, attempt))
+            if row["status"] != "refused":  # answered, failed or final: the cell is done
                 break
+
+
+def finished(ctx: Context, row: dict) -> dict:
+    """Record ``row``: a refusal the ledger will not send again made final first; the
+    run stopped by the cap (``CapExceeded``) or by a denied key (``AccessDenied``)."""
+    if row["status"] == "refused" and ctx.ledger.next_attempt(row["cell"]) is None:
+        row.update(status="error", error=ctx.ledger.refusal_note(row["cell"]))
+    ctx.results.append(row)
+    if row["status"] == "cap":
+        raise CapExceeded(row["error"])
+    if row["status"] == "denied":
+        raise AccessDenied(row["error"])
+    return row
 
 
 def spent_row(ctx: Context, run: RoleRun, arm: dict, case: dict, repetition: int) -> dict:
     """The row of a cell the ledger will not send again and no final row records."""
     cell = Cell(run.role, arm["id"], case["id"], repetition)
     made = ctx.ledger.attempts(cell.key)
-    if made and all(a["refusal"] is not None for a in made):
-        error = f"refused twice before inference: {made[-1]['refusal'].get('error')}"
+    if ctx.ledger.denial(cell.key) is not None:
+        error = ctx.ledger.denial(cell.key).get("error")
+        row = base_row(run, arm, case, repetition, "denied", error, len(made))
+    elif ctx.ledger.refusal_note(cell.key) is not None:
+        error = ctx.ledger.refusal_note(cell.key)
         row = base_row(run, arm, case, repetition, "error", error, len(made))
     else:  # an intent the run stopped after: its cost is the ledger's to settle
         row = base_row(run, arm, case, repetition, "interrupted", None, len(made))
@@ -263,6 +286,13 @@ def run_all(ctx: Context, runs: list[RoleRun], repeat: bool) -> int:
     except CapExceeded as stop:
         print(f"stopped by the cap: {stop}", file=sys.stderr)
         return EXIT_CAP
+    except AccessDenied as stop:
+        print(
+            f"refused: the provider denied the key ({stop}). Nothing more is sent, and the"
+            f" denied cell never will be; check {KEY_ENV}, then resume with the same --out.",
+            file=sys.stderr,
+        )
+        return EXIT_DENIED
     return 0
 
 

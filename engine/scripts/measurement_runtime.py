@@ -27,7 +27,7 @@ from pathlib import Path
 from typing import Any, Callable
 
 import measurement_common as common
-from measurement_ledger import RETRY_WAIT_S, CapExceeded, Ledger, now
+from measurement_ledger import DENIED_STATUSES, RETRY_WAIT_S, CapExceeded, Ledger, now
 
 logger = logging.getLogger("measure_roles")
 KEY_ENV = "OPENROUTER_API_KEY"
@@ -35,7 +35,7 @@ DRY_KEY = "measurement-dry-run-no-network"
 OWNER = "measurement-owner"
 SAMPLING = ("temperature", "top_p", "top_k")
 # A cell with one of these rows is done; the others never reached a provider.
-FINAL = ("scored", "error", "interrupted")
+FINAL = ("scored", "error", "interrupted", "denied")
 
 
 @dataclass(frozen=True)
@@ -143,9 +143,12 @@ class GuardedTransport:
 
             record["error"] = f"{type(exc).__name__}: {exc}"
             if isinstance(exc, Exception) and _rejected_before_inference(exc):
-                # Refused before inference: nothing spent; the cell may go once more.
+                # Refused before inference: nothing spent. A 429 may go once more; a
+                # denied key (401, 403) stops the run and is never sent again.
                 status, wait = getattr(exc, "status_code", None), retry_after_of(exc)
-                record.update(refused=True, status_code=status, retry_after=wait)
+                denied = status in DENIED_STATUSES
+                record.update(refused=not denied, denied=denied, status_code=status)
+                record["retry_after"] = wait
                 self._ledger.refuse(intent, record["error"], status, wait)
             else:  # uncertain: the bound stays committed, never re-sent
                 self._ledger.fail(intent, record["error"])

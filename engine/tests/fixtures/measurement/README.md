@@ -115,6 +115,12 @@ a 429 when an upstream provider's shared pool is saturated, which
   longer;
 - if refused a second time, leaves the cell failed and the arm incomplete.
 
+In CHAT and TASK_SOLVE a refusal is sent again only when it hit the turn's
+first dispatch. A refusal later in the turn follows dispatches already paid
+for, which a second attempt would repeat, so the cell stays failed. A 401
+or 403 means the key itself was refused: the run stops with that message,
+and the cell is settled at zero and never sent again.
+
 Every other failure (a 5xx, a timeout, a lost connection, an unreadable
 answer) keeps its intent open at its bound and is never sent again. A resumed
 run skips every cell with an intent, except a cell refused once, which still
