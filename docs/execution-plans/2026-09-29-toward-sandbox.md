@@ -212,13 +212,54 @@ not started.
    - *Machine coordination, final:* scratch VM **rilasciata** da R_2 alle
      2026-10-02T17:43:24Z. R_4 may take it after this record is pushed.
      Scratch now keeps the approved main helper, not the pre-R2 baseline.
-   - *Done status:* **not done**, only the VPS gate remains: its next
-     reconcile must install the helper from main and report every migrated
-     tenant `ready`. This session has no verified VPS SSH host key/access:
-     BatchMode + StrictHostKeyChecking connection to root@desktop.mrcall.ai
-     refused with host-key verification failure, before any remote command.
-     No VPS mutation attempted; requested the access route or confirmation
-     from the VPS session. Record that evidence here before marking R2 done.
+   - *Earlier VPS access attempt:* the scratch session had no verified VPS
+     SSH host key/access: BatchMode + StrictHostKeyChecking connection to
+     root@desktop.mrcall.ai refused with host-key verification failure before
+     any remote command. It performed no VPS mutation and handed the gate
+     to the VPS session; the authorized local checks below close that gap.
+   - **VPS gate (2026-10-02, accepted 18:14:28 UTC):** the operator clone's
+     `git pull origin main` included `72719a15`. The authorized
+     `sudo systemctl start zylch-reconcile.service` updated the service
+     checkout from `926ef84` to `ca478a0`; no manual checkout or unit edit
+     was made. Reconcile invocation `23b3f1663b1a40b68de782537e12738e`
+     returned `Result=success`, `ExecMainStatus=0`; unit/tagged journals
+     showed updater exit 0 and seven profiles with `code_changed=1`.
+     Exactly seven `ready` entries matched the helper's seven-UID table;
+     no helper refusal or reconcile error occurred.
+     Installed `sha256sum /usr/local/sbin/mrcall-tenant` was
+     `b5e95bf5f361723dc0429436c1b0be47983d763e37bd8d06ff5d3fbe09b90f10`;
+     `cmp` was silent against both service and operator checkout copies.
+
+     | Tenant | Unix user | Main PID | Daemon/memory |
+     |---|---|---|---|
+     | support@ | `mc-16d5836d57be` | 3751348 | active; available |
+     | Mario Cafe124 | `mc-b75843f3770f` | 3751426 | active; available |
+     | Mario Gmail | `mc-0c008879b605` | 3751598 | active; available |
+     | Mario MrCall | `mc-fd58d04802f1` | 3751862 | active; available |
+     | production@ | `mc-18f855d535e9` | 3751503 | active; available |
+     | Ivan | `mc-3a94d888f0a7` | 3751754 | active; available |
+     | Riccardo | `mc-e00a4971b76c` | 3751676 | active; available |
+
+     All seven restarted through reconcile, then remained active as their
+     own users with `NRestarts=0`; every daemon-identity `memory-status`
+     returned available. Production's local/public `/healthz` returned
+     200 with `calls_available=true`; unsigned `/vonage/answer`,
+     `/vonage/event`, `/openai/live` returned 401/401/400 on both paths.
+     Port 8787 belonged to production's MainPID 3751503. No live call or
+     authenticated GUI acceptance was requested or claimed.
+     Independent VPS milestone reviews `r2_vps_milestone_a` and
+     `r1_final_b` returned APPROVED. The second context was reused from
+     R1 because the session's reviewer-thread limit prevented another fresh
+     context; its R1 verdict was not reused as R2 evidence. This follows
+     CLAUDE.md's explicit separate-review fallback. Separate final passes
+     `r1_final_a` and `r2_vps_milestone_a` also returned APPROVED using
+     available reviewer contexts. Private evidence is under
+     `/root/r2-vps-20261002/`; task and review artifacts are under
+     `/tmp/mrcall-ai-kit/r2-vps-20261002/`. No keys, tokens or voice-file
+     values are in this record. R1/R3/R4/R5 sections are unchanged.
+   - *Done status:* **done** — both scratch reviews APPROVED, implementation
+     merged as `72719a15`, VPS installed the approved helper through
+     reconcile, and all seven migrated tenants re-applied `ready`.
 3. **R3 — Close the rollback window.** *VPS.*
    - *Starts:* seven days after the last 2b with no rollback, and not
      before R1.
