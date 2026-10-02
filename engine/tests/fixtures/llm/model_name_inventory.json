@@ -18,9 +18,6 @@
     {"file": "zylch/llm/openrouter_client.py", "line": 48, "literal": "moonshotai/kimi-k3", "purpose": "adapter", "note": "K3 reasoning dispatch"},
     {"file": "zylch/llm/openrouter_pricing.py", "line": 26, "literal": "moonshotai/kimi-k3", "purpose": "adapter", "note": "K3 reasoning bound"},
     {"file": "zylch/llm/openrouter_pricing.py", "line": 32, "literal": "anthropic/claude-sonnet-5", "purpose": "adapter", "note": "Sonnet 5 sampling rule"},
-    {"file": "zylch/llm/roles/resolver.py", "line": 32, "literal": "anthropic/claude-haiku", "purpose": "doc", "note": "module docstring: the excluded_prefixes example"},
-    {"file": "zylch/llm/roles/resolver.py", "line": 234, "literal": "anthropic/claude-opus-5.5", "purpose": "doc", "note": "direct_id docstring example"},
-    {"file": "zylch/llm/roles/resolver.py", "line": 235, "literal": "claude-opus-5-5", "purpose": "doc", "note": "direct_id docstring example"},
     {"file": "zylch/services/voice/engine_runtime.py", "line": 116, "literal": "gpt-live-1", "purpose": "voice", "note": "out of scope"},
     {"file": "zylch/services/voice/smoke_transport.py", "line": 109, "literal": "gpt-live-1", "purpose": "voice", "note": "out of scope"},
     {"file": "zylch/utils/reply_need.py", "line": 349, "literal": "moonshotai/kimi-k3", "purpose": "adapter", "note": "K3 temperature rule; not in the brief's named adapter list"}
