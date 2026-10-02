@@ -28,8 +28,9 @@ def rates():
 
     Its pinned endpoint's price among the snapshot's admitted endpoints. On a
     day the snapshot does not admit that endpoint (degraded when the catalogue
-    was read, so absent from its `endpoints`), K3's model-level price instead
-    (contract README, "Prices in use"): K3 stays priced, and a request its pin
+    was read, so absent from its `endpoints`), K3's snapshot price instead —
+    its reference price, the lower-median eligible endpoint's (contract
+    README, "Prices in use"): K3 stays priced, and a request its pin
     cannot route fails at the provider as it would today. It is K3's
     `openrouter_pricing.RATES` rate, which `capped` multiplies by the margin
     for `max_price` and the reservation."""
@@ -38,7 +39,7 @@ def rates():
         rate = price(MODEL, "openrouter")
         logger.warning(
             f"[k3] rates(): the snapshot admits no {ENDPOINT} endpoint for K3; "
-            f"its cap falls back to the model-level price -> {rate}"
+            f"its cap falls back to the snapshot's (reference) price -> {rate}"
         )
     return rate
 

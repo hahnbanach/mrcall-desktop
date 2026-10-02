@@ -53,10 +53,10 @@ the HTTP error codes — is v1's.
   its pinned provider) and its responses carry no reasoning blocks.
 - On OpenRouter the server applies the snapshot's provider policy (no
   fallbacks, parameters required, price sorting, `policy.quantizations`,
-  the excluded service tiers) and `max_price` = the model-level price ×
+  the excluded service tiers) and `max_price` = the reference price ×
   `policy.margin`; K3's cap is its pinned endpoint's price × the margin,
   or, on a day that endpoint is not admitted (absent from the snapshot's
-  `endpoints`), its model-level price × the margin (README, "Prices in
+  `endpoints`), its reference price × the margin (README, "Prices in
   use").
 - Quote and execute accept any model the snapshot prices, excluded
   families included (an explicit choice keeps running); an unpriced id is a
@@ -82,10 +82,11 @@ the HTTP error codes — is v1's.
       "provider": "anthropic",
       "price": "15",
       "as_of": "2026-10-02T13:36:42Z",
-      "table_version": "cd6f17cd6c8262a59a3528b169a26f1aa8d1c5f0dad2021aa29465b71aadaafb",
+      "table_version": "dfa219c5d0c5ed12e883ed1dc7d49ef96d932855aba5975238b2370453cd7445",
       "roles": [
         {"preset": "economy", "role": "CHAT", "rank": 1},
-        {"preset": "balanced", "role": "CHAT", "rank": 2}
+        {"preset": "balanced", "role": "CHAT", "rank": 1},
+        {"preset": "balanced", "role": "MNEMONIC", "rank": 1}
       ]
     },
     {
@@ -94,9 +95,9 @@ the HTTP error codes — is v1's.
       "provider": "openrouter",
       "price": "20.25",
       "as_of": "2026-10-02T13:36:42Z",
-      "table_version": "cd6f17cd6c8262a59a3528b169a26f1aa8d1c5f0dad2021aa29465b71aadaafb",
+      "table_version": "dfa219c5d0c5ed12e883ed1dc7d49ef96d932855aba5975238b2370453cd7445",
       "roles": [
-        {"preset": "balanced", "role": "CHAT", "rank": 4},
+        {"preset": "balanced", "role": "CHAT", "rank": 3},
         {"preset": "balanced", "role": "MNEMONIC", "rank": 2}
       ]
     }
@@ -162,7 +163,7 @@ the added fields.
   "markup_factor": "1.5",
   "max_credits": 6,
   "max_debit_micro_usd": 66000,
-  "snapshot_version": "f04f27349de6020e09f5bc28745af01981b3ff3935c1d594fedf094f211d7fa7",
+  "snapshot_version": "10bfb4b2b340df64a5ae694e4428ef2ef31806099c058590ea3099690c7000eb",
   "quote_hash": "<SHA-256 of this quote without quote_hash>"
 }
 ```
@@ -222,7 +223,7 @@ settlement.
   "markup_factor": "1.5",
   "max_credits": 6,
   "max_debit_micro_usd": 66000,
-  "snapshot_version": "f04f27349de6020e09f5bc28745af01981b3ff3935c1d594fedf094f211d7fa7",
+  "snapshot_version": "10bfb4b2b340df64a5ae694e4428ef2ef31806099c058590ea3099690c7000eb",
   "quote_hash": "<as in the quote>",
   "request_id": "0b9d6c1e-7c1a-4bd0-9a51-2f3f0e7d9a11",
   "authorized_max_debit_micro_usd": 66000,

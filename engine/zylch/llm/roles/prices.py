@@ -5,10 +5,12 @@ snapshot, read at each call through `catalogue.py` — the snapshots the
 run-time distribution puts in front, newest first, then the build copy
 `snapshot.json` beside this module — never frozen at import:
 
-- on `openrouter` a catalogue id is priced at its model-level catalogue price
-  (`models[id].pricing`): what the preset ceilings compare and the margin
-  multiplies into OpenRouter's `max_price` and the reservation
-  (`openrouter_pricing.py`);
+- on `openrouter` a catalogue id is priced at its snapshot price
+  (`models[id].pricing`): its reference endpoint's — the lower median of its
+  eligible endpoints by Artificial Analysis's blended price — or its
+  model-level catalogue price when its endpoints were not read or none is
+  eligible; what the preset ceilings compare and the margin multiplies into
+  OpenRouter's `max_price` and the reservation (`openrouter_pricing.py`);
 - on `direct` Anthropic's id is priced at its `anthropic` endpoint's price
   (`direct[id].pricing`, Anthropic's list price), and a dated id
   `<alias>-YYYYMMDD` at its alias's. The direct transport reserves at the
@@ -116,8 +118,9 @@ def priced(transport: str) -> Priced:
 
 
 def margin() -> Decimal:
-    """The factor (`requirements.json`, a spending parameter) on the model-level
-    price that caps an OpenRouter request (`max_price`) and its reservation."""
+    """The factor (`requirements.json`, a spending parameter) on the snapshot's
+    (reference) price that caps an OpenRouter request (`max_price`) and its
+    reservation."""
     return Decimal(str(_load("requirements.json")["margin"]))
 
 

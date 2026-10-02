@@ -11,7 +11,9 @@ are. This module answers from it at call time:
   direct id (`<alias>-YYYYMMDD` resolves to its alias); None for an id no
   snapshot holds. The request shape reads it.
 - `rates(model_id, transport)` — `(input, output)` in USD per million tokens
-  as Decimals: on `openrouter` the catalogue entry's model-level price, on
+  as Decimals: on `openrouter` the catalogue entry's snapshot price (its
+  reference price: the lower-median eligible endpoint's, or the model-level
+  price when its endpoints were not read or none is eligible), on
   `direct` the direct id's (a dated id as its alias); None when the id is
   not priced there. `pricing` returns all four prices (cache read and write
   too); `endpoint_rates(model_id, tag)` an admitted endpoint's pair (K3's

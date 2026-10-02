@@ -103,6 +103,15 @@ def test_check_ignores_a_price_and_catches_a_moved_pick(rig, tmp_path, capsys):
     assert k3["pricing"]["completion"] == "0.0000135"
     k3["pricing"]["completion"] = "0.0000139"
     (repriced / "models.json").write_text(json.dumps(catalogue), encoding="utf-8")
+    # K3 is published at its reference endpoint's price (`together`): move that too.
+    endpoints = json.loads((repriced / "endpoints.json").read_text(encoding="utf-8"))
+    together = next(e for e in endpoints["data"][K3]["endpoints"] if e["tag"] == "together")
+    assert together["pricing"]["completion"] == "0.0000135"
+    together["pricing"]["completion"] = "0.0000139"
+    (repriced / "endpoints.json").write_text(json.dumps(endpoints), encoding="utf-8")
+    listed = script.candidates.endpoints_by_model((repriced / "endpoints.json").read_bytes(), [K3])
+    price, _ = script.candidates.anchored(k3, listed[K3], script.candidates.policy(requirements()))
+    assert price["output"] == script.candidates.per_million("0.0000139")
     capsys.readouterr()
     assert run("--fixture", repriced, "--check") == 0
     assert "no change" in capsys.readouterr().out

@@ -132,18 +132,29 @@ def test_a_measurement_the_resolver_cannot_read_is_refused(change, says):
 
 
 def test_ac_3_the_agentic_order_on_the_capture():
+    """AC 3 at the reference prices (the lower-median eligible endpoint). Its
+    economy clause holds: Sonnet 5.5 (imputed 57.7) ahead of Qwen 3.8 Max (56).
+    Its balanced clause, Opus 5.5 (imputed 59.8) under balanced, does not:
+    Opus 5.5's reference endpoint is a regional one at 4.4/22 — eleven
+    eligible, five at 4/20, five regional at 4.4/22 and `anthropic/fast` at
+    8/40 — above balanced's 20 (and GPT-6.1 Sol's, azure/eu at 2.2/11, is
+    above economy's 10). The brief's AC 3 is restated or the anchor changed
+    by the coordinator; this test pins what the anchor gives."""
     req = requirements()
-    ranked = resolver.rankings(req, capture_pool(req), measured_all(req))
+    pool = capture_pool(req)
+    ranked = resolver.rankings(req, pool, measured_all(req))
+    opus = next(c for c in pool if c["id"] == OPUS)
+    assert (opus["input_price"], opus["price"]) == (Decimal("4.4"), Decimal(22))
+    assert round(opus["scores"]["agentic"], 1) == 59.8
     for role in ("CHAT", "TASK_SOLVE"):
         economy = ranked["presets"]["economy"]["roles"][role]
         balanced = ranked["presets"]["balanced"]["roles"][role]
-        assert ids(economy["ranking"]) == [SONNET, QWEN, GLM, GROK, SOL]
+        assert ids(economy["ranking"]) == [SONNET, QWEN, GLM, GROK]
         assert round(economy["ranking"][0]["scores"]["agentic"], 1) == 57.7  # imputed
         assert economy["ranking"][1]["scores"]["agentic"] == 56
-        assert ids(balanced["ranking"]) == [OPUS, SONNET, QWEN, GLM, GROK]
-        assert round(balanced["ranking"][0]["scores"]["agentic"], 1) == 59.8
-        assert ids(economy["anthropic_ranking"]) == [SONNET]
-        assert ids(balanced["anthropic_ranking"]) == [OPUS, SONNET]
+        assert ids(balanced["ranking"]) == [SONNET, QWEN, GLM, GROK, SOL]
+        assert OPUS not in ids(balanced["ranking"]) + ids(balanced["anthropic_ranking"])
+        assert ids(economy["anthropic_ranking"]) == ids(balanced["anthropic_ranking"]) == [SONNET]
     assert ranked["blocked"] == [] and resolver.publishable(ranked) == []
 
 
@@ -270,12 +281,27 @@ def test_the_bootstrap_arms_on_the_capture():
     req = requirements()
     boot = resolver.bootstrap(req, capture_pool(req))
     assert boot["reference"] == K3
+    # At the reference prices Opus 5.5 (22) is under no ceiling, and the two
+    # GPT Sol models (11 each) are under balanced's only.
     chat = arms(boot, "CHAT")
-    assert list(chat) == [SONNET, QWEN, GLM, OPUS, K3]
-    assert chat[OPUS] == ["top 3 under balanced", "first Anthropic under balanced"]
+    assert list(chat) == [SONNET, QWEN, GLM, K3]
+    assert chat[SONNET] == [
+        "top 3 under economy",
+        "first Anthropic under economy",
+        "top 3 under balanced",
+        "first Anthropic under balanced",
+    ]
     assert chat[K3] == ["reference"]
     mnemonic = arms(boot, "MNEMONIC")
-    assert list(mnemonic) == [SONNET, SOL, "openai/gpt-6-sol", OPUS, K3]
+    assert list(mnemonic) == [
+        SONNET,
+        "x-ai/grok-4.7",
+        "xiaomi/mimo-v2.6-pro",
+        SOL,
+        "openai/gpt-6-sol",
+        K3,
+    ]
+    assert mnemonic[SOL] == ["top 3 under balanced"]
     ladder = arms(boot, "MEMORY_EXTRACT")
     assert len(ladder) == 6 and list(ladder)[-1] == K3
     assert all(why[0].startswith("ladder step") for model, why in ladder.items() if model != K3)

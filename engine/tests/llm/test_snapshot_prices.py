@@ -1,7 +1,9 @@
 """Prices from the model snapshot (milestone 10, slice S3; brief D5, AC 4).
 
 `roles/prices.py` reads the snapshot layers in force at every call
-(`catalogue.rates`): a catalogue id at its model-level price on OpenRouter, a
+(`catalogue.rates`): a catalogue id at its snapshot price on OpenRouter (its
+reference endpoint's, the lower median of its eligible endpoints, or its
+model-level price when its endpoints were not read or none is eligible), a
 direct id at its `anthropic` endpoint's price, a dated direct id as its alias.
 `budget_pricing.PRICES` and `openrouter_pricing.RATES` / `LABELS` are views
 over it, never copies made at import. On OpenRouter the reservation and
@@ -9,8 +11,8 @@ over it, never copies made at import. On OpenRouter the reservation and
 provider object also carries its quantizations and, where the snapshot read a
 model's endpoints, `only` its admitted ones — the billing server's object for
 the same model and snapshot. K3 is capped at its pinned endpoint's price ×
-the margin, or its model-level price × the margin on a day that endpoint is
-not admitted. The direct transport reserves at the list price. A `:free` id
+the margin, or its snapshot (reference) price × the margin on a day that
+endpoint is not admitted. The direct transport reserves at the list price. A `:free` id
 the catalogue prices at 0 is held at 0 and capped at 0, never refused.
 
 Every price is read from the committed fixture snapshot (`price_fixture`, the
@@ -66,7 +68,7 @@ def _direct_hold(request: dict, i: Decimal, o: Decimal) -> int:
 
 
 def _routed_hold(request: dict, i: Decimal, o: Decimal) -> int:
-    """`openrouter_pricing.request_bound`'s hold at a model-level price × 1.25."""
+    """`openrouter_pricing.request_bound`'s hold at a snapshot price × 1.25."""
     i, o = i * D("1.25"), o * D("1.25")
     if request["model"].startswith("anthropic/"):
         i *= 2
@@ -191,17 +193,17 @@ def test_a_changed_snapshot_price_moves_the_reservation(price_snapshot):
     before = [direct_bound(direct, "direct"), routed_bound(routed), routed_bound(claude)]
     assert before == [
         _direct_hold(direct, D(2), D(10)),
-        _routed_hold(routed, D("0.41"), D("3.99")),
+        _routed_hold(routed, D("1.18"), D("4.4")),
         _routed_hold(claude, D(2), D(10)),
     ]
-    dearer = fx.priced_at(price_snapshot, fx.GLM_5_2, input="0.9", output="4.5")
+    dearer = fx.priced_at(price_snapshot, fx.GLM_5_2, input="1.5", output="5")
     dearer = fx.priced_at(dearer, fx.SONNET, input="3", output="15")
     dearer["direct"]["claude-sonnet-5-5"]["pricing"].update(input="3", output="15")
     catalogue.set_layers(gates.stamped(dearer), build=False)
     after = [direct_bound(direct, "direct"), routed_bound(routed), routed_bound(claude)]
     assert after == [
         _direct_hold(direct, D(3), D(15)),
-        _routed_hold(routed, D("0.9"), D("4.5")),
+        _routed_hold(routed, D("1.5"), D("5")),
         _routed_hold(claude, D(3), D(15)),
     ]
     assert all(a > b for a, b in zip(after, before))
@@ -303,17 +305,15 @@ def test_a_price_read_after_the_snapshot_layer_changes_sees_the_change(price_sna
 
 def test_openrouter_holds_and_caps_at_the_snapshot_price_times_the_margin(price_snapshot):
     assert prices.margin() == D("1.25") == D(str(requirements()["margin"]))
-    assert RATES[fx.GLM_5_2] == (D("0.41"), D("3.99"))
-    assert capped(fx.GLM_5_2) == (D("0.5125"), D("4.9875"))
+    assert RATES[fx.GLM_5_2] == (D("1.18"), D("4.4"))
+    assert capped(fx.GLM_5_2) == (D("1.475"), D("5.5"))
     assert provider_policy(fx.GLM_5_2)["max_price"] == {
-        "prompt": "0.5125",
-        "completion": "4.9875",
+        "prompt": "1.475",
+        "completion": "5.5",
         "request": "0",
     }
     request = {"model": fx.GLM_5_2, "max_tokens": 1000, "messages": MESSAGES}
-    assert routed_bound(request) == _ceil(
-        _payload_tokens(request) * D("0.5125") + 1000 * D("4.9875")
-    )
+    assert routed_bound(request) == _ceil(_payload_tokens(request) * D("1.475") + 1000 * D("5.5"))
     # The direct transport reserves at the list price: no margin there.
     direct = {"model": "claude-sonnet-5-5", "max_tokens": 1000, "messages": MESSAGES}
     assert direct_bound(direct, "direct") == _ceil(
@@ -327,9 +327,9 @@ def test_the_margin_is_requirements_json_s(price_snapshot, monkeypatch):
     monkeypatch.setattr(
         prices, "_load", lambda name: doubled if name == "requirements.json" else real(name)
     )
-    assert RATES[fx.GLM_5_2] == (D("0.41"), D("3.99"))
-    assert capped(fx.GLM_5_2) == (D("0.82"), D("7.98"))
-    assert provider_policy(fx.GLM_5_2)["max_price"]["completion"] == "7.98"
+    assert RATES[fx.GLM_5_2] == (D("1.18"), D("4.4"))
+    assert capped(fx.GLM_5_2) == (D("2.36"), D("8.8"))
+    assert provider_policy(fx.GLM_5_2)["max_price"]["completion"] == "8.8"
 
 
 def test_the_provider_policy_admits_requirements_quantizations_and_the_admitted_endpoints(
@@ -340,7 +340,7 @@ def test_the_provider_policy_admits_requirements_quantizations_and_the_admitted_
         "require_parameters": True,
         "sort": "price",
         "quantizations": ["int8", "fp8", "mxfp8", "fp16", "bf16", "fp32", "unknown"],
-        "max_price": {"prompt": "2.5", "completion": "12.5", "request": "0"},
+        "max_price": {"prompt": "2.75", "completion": "13.75", "request": "0"},
         "only": ["azure", "azure/eu", "azure/us", "openai"],
     }
     assert provider_policy(fx.FLEX)["quantizations"] == (
@@ -465,14 +465,14 @@ def test_k3_is_capped_and_held_at_its_pinned_endpoint_s_price_times_the_margin(p
     assert routed_bound(K3_REQUEST) == _k3_hold(D("3.1875"), D("16.1875"))
 
 
-def test_k3_s_cap_falls_back_to_its_model_level_price_when_its_endpoint_is_degraded(
+def test_k3_s_cap_falls_back_to_its_snapshot_price_when_its_endpoint_is_degraded(
     price_snapshot, caplog
 ):
     catalogue.set_layers(fx.degraded(price_snapshot, fx.K3, "digitalocean"), build=False)
     assert catalogue.endpoint_rates(fx.K3, "digitalocean") is None
     with caplog.at_level(logging.WARNING, logger="zylch.llm.k3_reasoning"):
         assert k3.rates() == (D("2.7"), D("13.5"))
-    assert "falls back to the model-level price" in caplog.text
+    assert "falls back to the snapshot's (reference) price" in caplog.text
     assert RATES[fx.K3] == (D("2.7"), D("13.5"))
     assert capped(fx.K3) == (D("3.375"), D("16.875"))
     # Still priced and still pinned: a request its pin cannot route fails at

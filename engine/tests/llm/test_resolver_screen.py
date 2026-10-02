@@ -4,8 +4,9 @@
 alias, announced expiry or excluded family (matched on the id, the
 `canonical_slug` and an alias's target), tools, the context, a fixed price,
 an admitted endpoint — and admits endpoints by the provider policy (up, no
-sub-8-bit quantization, tools, no flex tier, priced within the model-level
-price × the margin). `impute.py` joins the Artificial Analysis records and
+sub-8-bit quantization, tools, no flex tier, priced within the reference
+price × the margin: the lower-median eligible endpoint's, whose own rules
+are in `test_resolver_anchor.py`). `impute.py` joins the Artificial Analysis records and
 imputes a missing index from intelligence (D2). The capture's own numbers
 are asserted where the brief states them; a synthetic entry isolates each
 rule no real entry isolates.
@@ -20,6 +21,7 @@ import pytest
 from zylch.llm.roles import candidates, impute
 
 from .resolver_fixture import (
+    GLM,
     HAIKU,
     K3,
     OPUS,
@@ -126,18 +128,22 @@ def test_an_endpoint_down_or_without_tools_or_dear_is_refused():
         endpoint(status=None),
         endpoint(status=False),
         endpoint(supported_parameters=["max_tokens"]),
-        endpoint(pricing={"prompt": "0.000001", "completion": "0.0000025001"}),
-        endpoint(pricing={"prompt": "0.0000012501", "completion": "0.000002"}),
         endpoint(pricing={"prompt": "-1", "completion": "-1"}),
         endpoint(tag=""),
     ]
-    for one in refused:
+    for one in refused:  # not eligible, so never the reference nor admitted
         assert not candidates.admitted(model, [one], rules), one
-    at_cap = endpoint(pricing={"prompt": "0.00000125", "completion": "0.0000025"})
-    assert candidates.admitted(model, [at_cap], rules) == [at_cap]
+    # Dear against the reference endpoint: three at 1/2 hold the lower median.
+    anchor = [endpoint(f"acme{n}") for n in range(3)]
+    dear_output = endpoint("dear/out", pricing={"prompt": "0.000001", "completion": "0.0000025001"})
+    dear_input = endpoint("dear/in", pricing={"prompt": "0.0000012501", "completion": "0.000002"})
+    at_cap = endpoint("cap", pricing={"prompt": "0.00000125", "completion": "0.0000025"})
+    listed = [*anchor, dear_output, dear_input, at_cap]
+    assert candidates.admitted(model, listed, rules) == [*anchor, at_cap]
+    # A variable model-level price no longer decides admission; the screen refuses the model.
     variable = entry(pricing={"prompt": "-1", "completion": "-1"})
-    assert not candidates.admitted(variable, [endpoint()], rules)
-    assert candidates.exclusion(variable, [endpoint()], requirements(), rules) == "no fixed price"
+    assert candidates.admitted(variable, listed, rules) == [*anchor, at_cap]
+    assert candidates.exclusion(variable, listed, requirements(), rules) == "no fixed price"
 
 
 # ---------------------------------------------------------- the screen
@@ -183,7 +189,9 @@ def test_direct_ids_need_an_endpoint_tagged_anthropic():
     assert rows[SONNET]["direct_id"] == "claude-sonnet-5-5"
     assert rows["anthropic/claude-opus-4.1"]["direct_id"] is None  # Bedrock only
     assert rows[QWEN]["direct_id"] is None
-    assert rows[OPUS]["price"] == Decimal(20) and rows[OPUS]["input_price"] == Decimal(4)
+    # Ranked at the reference price: Opus 5.5's lower-median endpoint is regional.
+    assert (rows[OPUS]["input_price"], rows[OPUS]["price"]) == (Decimal("4.4"), Decimal(22))
+    assert (rows[SONNET]["input_price"], rows[SONNET]["price"]) == (Decimal(2), Decimal(10))
 
 
 def test_a_model_with_no_admitted_endpoint_is_no_candidate():
@@ -219,7 +227,9 @@ def test_the_agentic_order_under_each_ceiling_is_ac_3s():
         return [c["id"] for c in sorted(under, key=lambda c: (-c["scores"]["agentic"], c["price"]))]
 
     assert order(10)[:2] == [SONNET, QWEN]
-    assert order(20)[:3] == [OPUS, SONNET, QWEN]
+    # Opus 5.5 (imputed 59.8) is at its reference price, 22: under no ceiling
+    # (test_resolver.py's AC 3 test says what that does to AC 3).
+    assert order(20)[:3] == [SONNET, QWEN, GLM] and OPUS not in order(20)
 
 
 def test_unscored_models_are_listed_with_their_reason():

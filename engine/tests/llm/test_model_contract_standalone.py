@@ -124,7 +124,7 @@ def test_the_other_table_rules_apply_unchanged(table, snapshot):
     assert len(standalone(table, expiring)) == 3  # Qwen is ranked three times
     twice = restamped(table, lambda t: ranking(t).append(copy.deepcopy(ranking(t)[0])))
     assert standalone(twice, snapshot) == ["balanced / CHAT / ranking: an id is ranked twice"]
-    wrong = restamped(table, lambda t: ranking(t)[2].update(direct_id="qwen3.8-max-0902"))
+    wrong = restamped(table, lambda t: ranking(t)[1].update(direct_id="qwen3.8-max-0902"))
     assert standalone(wrong, snapshot) == [
         f"balanced / CHAT / ranking: {QWEN} carries the direct id qwen3.8-max-0902, not None"
     ]

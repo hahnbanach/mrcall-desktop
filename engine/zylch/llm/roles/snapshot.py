@@ -5,10 +5,16 @@ model a profile names — picked, ranked or saved by hand — so it covers every
 catalogue entry, aliases, variants and excluded families included (an
 explicit choice keeps running whatever the picks are). Per entry:
 
-- `pricing`: the model-level catalogue price (input, output, cache read,
-  cache write), USD per million tokens as canonical decimal strings (`text`),
-  null where the catalogue has none. Ceilings compare it, and the margin
-  multiplies it for OpenRouter's `max_price` and the reservation.
+- `pricing`: the reference price (input, output, cache read, cache write;
+  `candidates.anchored`), USD per million tokens as canonical decimal
+  strings (`text`), null where there is none. For an entry of the endpoint
+  pool with an eligible endpoint it is the reference endpoint's — the lower
+  median of the eligible endpoints by Artificial Analysis's blended price,
+  its cache prices where it publishes them, else the model-level ones — and
+  for any other entry the model-level catalogue price (an entry whose
+  endpoints were not read, or with none eligible). Ceilings compare it, and
+  the margin multiplies it for OpenRouter's `max_price` and the
+  reservation.
 - `metadata` (`metadata`): reasoning as published (`mandatory`, the
   efforts in the catalogue's order, `default_enabled`); `parameters`, the
   intersection of the admitted endpoints' `supported_parameters` when the
@@ -17,9 +23,10 @@ explicit choice keeps running whatever the picks are). Per entry:
   tool choice (`supports_tool_choice.function`); `structured_outputs`;
   `context_length`; `expiration_date`.
 - `endpoints`: for the endpoint pool, the endpoints the provider policy
-  admits (`candidates.admitted`) as `{tag, quantization, pricing}`, sorted by
-  tag and price, exact duplicates once; null for an entry whose endpoints
-  were not read.
+  admits (`candidates.anchored`: eligible, and priced at or under the
+  reference price × the margin) as `{tag, quantization, pricing}`, sorted
+  by tag and price, exact duplicates once; null for an entry whose
+  endpoints were not read.
 
 `direct`, keyed by Anthropic's direct id (`gates.direct_id`), holds the
 `anthropic/*` entries of the pool with an endpoint tagged `anthropic`: its
@@ -42,12 +49,7 @@ from decimal import Decimal
 from . import candidates
 from .gates import SCHEMA, direct_id, stamped
 
-PRICES = (
-    ("input", "prompt"),
-    ("output", "completion"),
-    ("cache_read", "input_cache_read"),
-    ("cache_write", "input_cache_write"),
-)
+PRICES = candidates.PRICE_FIELDS
 
 
 def text(price: Decimal | None) -> str | None:
@@ -62,8 +64,13 @@ def text(price: Decimal | None) -> str | None:
 
 def pricing(raw: object) -> dict:
     """A catalogue or endpoint `pricing` as the snapshot's four prices."""
-    raw = raw if isinstance(raw, dict) else {}
-    return {name: text(candidates.per_million(raw.get(field))) for name, field in PRICES}
+    return written(candidates.prices_of(raw))
+
+
+def written(prices: dict) -> dict:
+    """Four prices per million (`candidates.prices_of`, `candidates.anchored`)
+    as the snapshot writes them."""
+    return {name: text(prices[name]) for name, _ in PRICES}
 
 
 def metadata(entry: dict, endpoints: list[dict] | None, context: object) -> dict:
@@ -130,9 +137,9 @@ def build(catalogue: list, endpoints: dict[str, list[dict]], rules: dict, read_a
         if not isinstance(model, str) or not model:
             continue
         listed = endpoints.get(model)
-        admitted = None if listed is None else candidates.admitted(entry, listed, rules)
+        price, admitted = candidates.anchored(entry, listed, rules)
         models[model] = {
-            "pricing": pricing(entry.get("pricing")),
+            "pricing": written(price),
             "metadata": metadata(entry, admitted, entry.get("context_length")),
             "endpoints": None if admitted is None else _endpoint_rows(admitted),
         }

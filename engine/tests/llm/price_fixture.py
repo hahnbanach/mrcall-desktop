@@ -7,7 +7,8 @@ builder (`roles/snapshot.build`) makes from the committed 2026-10-02 capture
 with its catalogue entry; milestone 10a's OpenRouter picks and billed models;
 a model whose cheapest endpoint is a `flex` service tier the policy excludes
 (`openai/gpt-6.1-sol`); one whose endpoints were not read (fewer than
-200,000 tokens of context); one whose endpoints were read and none admitted;
+200,000 tokens of context); one whose endpoints were read and none admitted
+(every endpoint fp4, so none eligible under the reference-price anchor);
 one with a variable price; and a `:free` variant the catalogue prices at
 0 (`qwen/qwen3.8-27b:free`). It is committed with the tests so a price a
 test pins never moves when the coordinator refreshes the build copy
@@ -42,7 +43,8 @@ SONNET_5 = "anthropic/claude-sonnet-5"
 SONNET = "anthropic/claude-sonnet-5.5"
 FLEX = "openai/gpt-6.1-sol"
 UNREAD = "cohere/command-a-plus"
-NONE_ADMITTED = "moonshotai/kimi-k2.6"
+# Read, none eligible (its one endpoint is fp4), so none admitted.
+NONE_ADMITTED = "poolside/laguna-s-2.1"
 VARIABLE = "openrouter/auto"
 FREE = "qwen/qwen3.8-27b:free"
 MODELS = (
@@ -63,7 +65,8 @@ SUCCESSOR, SUCCESSOR_DIRECT = "anthropic/claude-sonnet-6", "claude-sonnet-6"
 K3_ENDPOINT = "digitalocean"
 # The OpenRouter rates 10a billed (requirements.json's allowlist) where they
 # were not the catalogue's: GLM 5.2's, and K3's provider-pinned rate, which
-# `as_billed_by_10a` writes as K3's model-level price and its pinned endpoint's.
+# `as_billed_by_10a` writes as K3's snapshot price (`pricing`, its reference
+# price) and its pinned endpoint's.
 BILLED_10A = {GLM_5_2: ("0.6", "2"), K3: ("2.648138063", "13.28272425")}
 
 
@@ -95,7 +98,8 @@ def fixture() -> dict:
 
 
 def priced_at(doc: dict, model: str, **prices: str) -> dict:
-    """`doc` with `model`'s model-level `prices` (input, output, ...) replaced."""
+    """`doc` with `model`'s snapshot `prices` (input, output, ...) replaced: its
+    `pricing`, the reference price since the anchor, no longer the model-level one."""
     doc = copy.deepcopy(doc)
     doc["models"][model]["pricing"].update(prices)
     return gates.stamped(doc)
@@ -128,7 +132,10 @@ def degraded(doc: dict, model: str, tag: str) -> dict:
 
 def as_billed_by_10a(doc: dict) -> dict:
     """`doc` with `BILLED_10A`'s rates in place of the capture's: the snapshot
-    10a's billing amounts to (every other rate 10a billed is the capture's)."""
+    10a's billing amounts to (every other rate 10a billed is the capture's).
+    The snapshot prices a route at its reference price, so `anthropic/claude-opus-5`,
+    which 10a billed at 5/25, stands at its regional reference endpoint's 5.5/27.5
+    here (test_price_source.MOVED_BY_THE_ANCHOR)."""
     doc = copy.deepcopy(doc)
     for model, (i, o) in BILLED_10A.items():
         doc["models"][model]["pricing"].update(input=i, output=o)

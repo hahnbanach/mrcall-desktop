@@ -12,6 +12,12 @@ the 2026-10-02 capture, whose rates are 10a's for every id below but two
 OpenRouter rates, put back), never from the build copy. The direct rates and
 holds are unchanged; on OpenRouter the hold and the cap are the rate × the
 margin (1.25), the one change the brief makes to these expected values.
+
+Since the reference-price anchor (2026-10-02) an OpenRouter route is priced at
+its reference endpoint, the lower median of its eligible endpoints: for an Opus
+with more regional (+10%) and premium endpoints than global ones that is a
+regional endpoint, so three routes move above 10a's rate
+(`MOVED_BY_THE_ANCHOR`); every other expected value here is unchanged.
 """
 
 import json
@@ -53,6 +59,12 @@ TODAY_OPENROUTER = {
     "anthropic/claude-opus-5": (D("5"), D("25")),
 }
 TODAY = {"direct": TODAY_DIRECT, "openrouter": TODAY_OPENROUTER}
+# The OpenRouter routes priced at a regional reference endpoint (module docstring).
+MOVED_BY_THE_ANCHOR = {
+    "anthropic/claude-opus-4.8": (D("5.5"), D("27.5")),
+    "anthropic/claude-opus-5": (D("5.5"), D("27.5")),
+    "anthropic/claude-opus-5.5": (D("4.4"), D("22")),
+}
 MESSAGES = [{"role": "user", "content": "Price this request."}]
 
 
@@ -104,11 +116,16 @@ def test_every_model_billed_today_is_priced_at_today_s_rate(transport):
         if row["transport"] == transport
     }
     assert allowlisted == set(TODAY[transport])
-    for model, rate in TODAY[transport].items():
+    moved = MOVED_BY_THE_ANCHOR if transport == "openrouter" else {}
+    expected = {m: moved.get(m, rate) for m, rate in TODAY[transport].items()}
+    assert set(expected.items()) - set(TODAY[transport].items()) == (
+        {("anthropic/claude-opus-5", (D("5.5"), D("27.5")))} if moved else set()
+    )
+    for model, rate in expected.items():
         assert prices.price(model, transport) == rate, model
         assert _bound(model, transport) == _expected_hold(model, transport), model
     module = budget_pricing.PRICES if transport == "direct" else openrouter_pricing.RATES
-    assert {m: module[m] for m in TODAY[transport]} == TODAY[transport]
+    assert {m: module[m] for m in TODAY[transport]} == expected
 
 
 def test_every_resolved_row_prices_a_request_on_its_transport():
@@ -121,6 +138,8 @@ def test_every_resolved_row_prices_a_request_on_its_transport():
         for transport, model in pairs:
             billed = TODAY[transport].get(model)
             table = (D(str(row["price"]["input"])), D(str(row["price"]["output"])))
+            if transport == "openrouter":
+                billed = MOVED_BY_THE_ANCHOR.get(model, billed)
             assert prices.price(model, transport) == (billed or table), where
             hold = _bound(model, transport)
             assert hold == _expected_hold(model, transport) and hold > 0, where
@@ -167,7 +186,12 @@ def _catalogue_form(direct_id):
 
 
 def test_direct_rates_equal_the_openrouter_anthropic_rates():
-    """The brief's assumption 4: a direct id and its `anthropic/*` route cost the same."""
+    """The brief's assumption 4: a direct id and its `anthropic/*` route cost the same.
+
+    Since the reference-price anchor the route is priced at its reference
+    endpoint, so the comparison holds against its `anthropic` endpoint
+    (Anthropic's list price), and the route's own price equals the direct one
+    except for the three routes priced at a regional endpoint."""
     pairs = {(d, _catalogue_form(d)) for d in prices.priced("direct")}
     pairs |= {
         (r["direct_id"], r["catalogue_id"]) for *_, r in _resolved_rows() if r.get("direct_id")
@@ -176,7 +200,13 @@ def test_direct_rates_equal_the_openrouter_anthropic_rates():
     for direct_id, catalogue_id in sorted(pairs):
         routed = prices.price(catalogue_id, "openrouter")
         if routed is not None:
-            assert prices.price(direct_id, "direct") == routed, (direct_id, catalogue_id)
+            own = catalogue.endpoint_rates(catalogue_id, "anthropic")
+            assert prices.price(direct_id, "direct") == own, (direct_id, catalogue_id)
+            direct = prices.price(direct_id, "direct")
+            assert routed == MOVED_BY_THE_ANCHOR.get(catalogue_id, direct), (
+                direct_id,
+                catalogue_id,
+            )
             compared += 1
     assert compared >= 6  # opus-5, sonnet-5, both haiku ids, sonnet-5-5, opus-5-5
 

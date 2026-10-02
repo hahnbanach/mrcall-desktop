@@ -206,8 +206,11 @@ billed price winning where an id was in both.
 
 Since milestone 10 (slice S3, brief D5) it reads the model snapshot
 (`roles/catalogue.py`: the snapshot layers in force, the build copy
-`roles/snapshot.json` last) at every call: a catalogue id at its model-level
-price on OpenRouter, a direct id at its `anthropic` endpoint's price
+`roles/snapshot.json` last) at every call: a catalogue id at its snapshot
+price on OpenRouter (its reference price: the lower median of its eligible
+endpoints by Artificial Analysis's blended price, or its model-level price
+when its endpoints were not read or none is eligible), a direct id at its
+`anthropic` endpoint's price
 (Anthropic's list price), a dated id `<alias>-YYYYMMDD` at its alias's. The
 allowlist answers only for an id no snapshot prices, until the switch-over;
 the resolved table prices nothing. `budget_pricing.PRICES` (direct) and

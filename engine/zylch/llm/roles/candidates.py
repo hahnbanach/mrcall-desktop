@@ -13,18 +13,32 @@ endpoints are read: tools supported, the minimum context, no excluded
 variant (`:free`, `:batch`) and no alias (`~`). Only for them does the
 snapshot record admitted endpoints and the endpoint-level parameters.
 
-**Admission of an endpoint** (`admitted`) applies the provider policy of
-`requirements.json` (`policy`): the endpoint is up (status 0; the capture
-of 2026-10-02 also holds -2 and -5, endpoints whose recent uptime is
+**Admission of an endpoint and the reference price** (`anchored`,
+`admitted`) apply the provider policy of `requirements.json` (`policy`). An
+endpoint is *eligible* (`eligible`) when it is up (status 0; the capture of
+2026-10-02 also holds -2 and -5, endpoints whose recent uptime is
 degraded); its declared quantization is in the allow-list (an endpoint that
 declares none is `unknown`, which the list admits: vendors rarely declare
 theirs); it supports tools; no segment of its tag after the provider is an
 excluded service tier (`flex`: discounted, slower tiers that price sorting
 would always pick and whose latency can exceed the client's timeout); and
-its input and output prices are at or under the model-level price × the
-margin, the cap OpenRouter's `max_price` enforces, so a premium endpoint
-priced above it is never one a request can reach. A model with no
-model-level price has no cap and no admitted endpoint.
+it has a fixed input and output price. The *reference endpoint*
+(`reference`) is the lower median, index (n - 1) // 2, of the eligible
+endpoints ordered by Artificial Analysis's blended price, (3 × input +
+output) / 4, a tie going by output, then input, then tag. Its input and
+output prices are the model's *reference price* — its cache prices too,
+where it publishes them, else the model-level ones — which the snapshot
+publishes as the model's `pricing` and the preset ceilings compare. An
+eligible endpoint is *admitted* when its input and output prices are at or
+under the reference price × the margin, the cap OpenRouter's `max_price`
+enforces, so a premium endpoint priced above it is never one a request can
+reach, and the reference endpoint always is. The model-level price is not
+the anchor: OpenRouter computes it over every endpoint, those the policy
+excludes included, and moves it at its own discretion, so an fp4 endpoint
+can set it below every endpoint the policy admits (the live read of
+2026-10-02 17:24Z left GLM 5.3 Flash none). It is the reference price only
+when no endpoint is eligible or the endpoints were not read, and then no
+endpoint is admitted.
 
 **The screen** (`screen`, `exclusion`) keeps the catalogue entries any role
 may rank, before scores: not a variant, not an alias, no announced
@@ -34,9 +48,9 @@ version first — and on an alias's `alias_target.slug`), tools and the
 minimum context, a fixed model-level input and output price, and at least
 one admitted endpoint. An alias or an entry with an announced expiry stays
 priced in the snapshot (an explicit choice keeps running); it is only
-never ranked, picked or measured. A kept entry carries its direct id when
-one of its endpoints is tagged `anthropic` (the direct transport's), else
-None.
+never ranked, picked or measured. A kept entry is ranked at its reference
+price, and carries its direct id when one of its endpoints is tagged
+`anthropic` (the direct transport's), else None.
 
 Pure: no file, network or environment access; prices are `Decimal`, read
 from the payloads' decimal strings, never from a float.
@@ -55,6 +69,13 @@ ALIAS = "~"
 UP = 0
 UNKNOWN = "unknown"
 DIRECT_TAG = "anthropic"
+# A price as the snapshot names it, and the payload field it is read from.
+PRICE_FIELDS = (
+    ("input", "prompt"),
+    ("output", "completion"),
+    ("cache_read", "input_cache_read"),
+    ("cache_write", "input_cache_write"),
+)
 
 
 class Refused(Exception):
@@ -204,14 +225,20 @@ def is_excluded_tier(tag: str, variants: list[str]) -> bool:
     return any(segment in variants for segment in tag.split("/")[1:])
 
 
-def price_cap(entry: dict, margin: Decimal) -> tuple[Decimal, Decimal] | None:
-    """The model-level input and output prices × the margin, or None when the
+def prices_of(pricing: object) -> dict[str, Decimal | None]:
+    """A catalogue or endpoint `pricing` as the four prices per million
+    (`PRICE_FIELDS`), None where it has none (absent, or variable)."""
+    pricing = pricing if isinstance(pricing, dict) else {}
+    return {name: per_million(pricing.get(field)) for name, field in PRICE_FIELDS}
+
+
+def model_price(entry: dict) -> tuple[Decimal, Decimal] | None:
+    """The model-level input and output prices per million, or None when the
     catalogue gives the model no fixed price."""
-    pricing = entry.get("pricing") if isinstance(entry.get("pricing"), dict) else {}
-    prices = [per_million(pricing.get(field)) for field in ("prompt", "completion")]
-    if None in prices:
+    prices = prices_of(entry.get("pricing"))
+    if prices["input"] is None or prices["output"] is None:
         return None
-    return prices[0] * margin, prices[1] * margin
+    return prices["input"], prices["output"]
 
 
 def quantization(endpoint: dict) -> str:
@@ -220,12 +247,10 @@ def quantization(endpoint: dict) -> str:
     return declared if isinstance(declared, str) and declared else UNKNOWN
 
 
-def admitted(entry: dict, endpoints: list[dict], rules: dict) -> list[dict]:
-    """The endpoints of `entry` the provider policy `rules` admits (see the
-    module docstring), in the order the payload lists them."""
-    cap = price_cap(entry, rules["margin"])
-    if cap is None:
-        return []
+def eligible(endpoints: list[dict], rules: dict) -> list[tuple[dict, dict]]:
+    """The endpoints that pass the provider policy `rules` before price (see
+    the module docstring), each with its four prices (`prices_of`), in the
+    order the payload lists them."""
     out = []
     for endpoint in endpoints:
         tag, status = endpoint.get("tag"), endpoint.get("status")
@@ -241,12 +266,57 @@ def admitted(entry: dict, endpoints: list[dict], rules: dict) -> list[dict]:
             continue
         if "tools" not in strings(endpoint.get("supported_parameters")):
             continue
-        pricing = endpoint.get("pricing") if isinstance(endpoint.get("pricing"), dict) else {}
-        prices = [per_million(pricing.get(field)) for field in ("prompt", "completion")]
-        if None in prices or prices[0] > cap[0] or prices[1] > cap[1]:
+        prices = prices_of(endpoint.get("pricing"))
+        if prices["input"] is None or prices["output"] is None:
             continue
-        out.append(endpoint)
+        out.append((endpoint, prices))
     return out
+
+
+def blended(prices: dict) -> Decimal:
+    """Artificial Analysis's blended price: three parts input to one part output."""
+    return (3 * prices["input"] + prices["output"]) / 4
+
+
+def reference(rows: list[tuple[dict, dict]]) -> tuple[dict, dict] | None:
+    """The reference endpoint of eligible `rows` (`eligible`): the lower
+    median by blended price, a tie by output, then input, then tag; None
+    when no endpoint is eligible."""
+    if not rows:
+        return None
+    ordered = sorted(
+        rows, key=lambda row: (blended(row[1]), row[1]["output"], row[1]["input"], row[0]["tag"])
+    )
+    return ordered[(len(ordered) - 1) // 2]
+
+
+def anchored(entry: dict, endpoints: list[dict] | None, rules: dict) -> tuple[dict, list | None]:
+    """The model's reference price (the four prices per million, None where
+    absent) and its admitted endpoints, in the payload's order (see the
+    module docstring). With no eligible endpoint the price is the
+    model-level one and no endpoint is admitted; with its endpoints not read
+    (`endpoints` None) the price is the model-level one and the endpoints
+    None."""
+    level = prices_of(entry.get("pricing"))
+    if endpoints is None:
+        return level, None
+    rows = eligible(endpoints, rules)
+    anchor = reference(rows)
+    if anchor is None:
+        return level, []
+    prices = anchor[1]
+    price = {side: prices[side] for side in ("input", "output")}
+    for side in ("cache_read", "cache_write"):
+        price[side] = prices[side] if prices[side] is not None else level[side]
+    cap = (price["input"] * rules["margin"], price["output"] * rules["margin"])
+    admitted = [endpoint for endpoint, p in rows if p["input"] <= cap[0] and p["output"] <= cap[1]]
+    return price, admitted
+
+
+def admitted(entry: dict, endpoints: list[dict], rules: dict) -> list[dict]:
+    """The endpoints of `entry` the provider policy `rules` admits (see the
+    module docstring), in the order the payload lists them."""
+    return anchored(entry, endpoints, rules)[1] or []
 
 
 def family_of(entry: dict, families: list) -> dict | None:
@@ -282,7 +352,7 @@ def exclusion(entry: dict, listed: list[dict] | None, req: dict, rules: dict) ->
     context = score(entry.get("context_length"))
     if context is None or context < common["min_context"]:
         return f"a context under {common['min_context']}"
-    if price_cap(entry, rules["margin"]) is None:
+    if model_price(entry) is None:
         return "no fixed price"
     if listed is None:
         return "its endpoints were not read"
@@ -293,8 +363,8 @@ def exclusion(entry: dict, listed: list[dict] | None, req: dict, rules: dict) ->
 
 def screen(catalogue: list, endpoints: dict[str, list[dict]], req: dict) -> tuple[list, dict]:
     """The entries the screen keeps, in catalogue order, as `{entry, id,
-    price, input_price, direct_id}` (prices per million, output and input),
-    and `{id: reason}` for every entry it drops."""
+    price, input_price, direct_id}` (the reference price per million, output
+    and input), and `{id: reason}` for every entry it drops."""
     rules = policy(req)
     kept, dropped = [], {}
     for entry in catalogue:
@@ -306,13 +376,13 @@ def screen(catalogue: list, endpoints: dict[str, list[dict]], req: dict) -> tupl
             dropped[str(entry.get("id"))] = reason
             continue
         own = any(endpoint.get("tag") == DIRECT_TAG for endpoint in listed)
-        pricing = entry["pricing"]
+        price, _ = anchored(entry, listed, rules)
         kept.append(
             {
                 "entry": entry,
                 "id": entry["id"],
-                "price": per_million(pricing.get("completion")),
-                "input_price": per_million(pricing.get("prompt")),
+                "price": price["output"],
+                "input_price": price["input"],
                 "direct_id": direct_id(entry["id"]) if own else None,
             }
         )
