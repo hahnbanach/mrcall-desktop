@@ -64,6 +64,13 @@ def repriced(snap: dict, model: str, output: str) -> dict:
     return gates.stamped(snap)
 
 
+def restart():
+    """What a new engine process starts with: the build copies in force."""
+    table.set_table(None)
+    catalogue.set_layers()
+    distribution._sources.update(snapshot="build", table="build")
+
+
 @pytest.fixture
 def build(monkeypatch, tmp_path):
     """The build copies are the fixture's: the snapshot, and the table in a temp file."""
@@ -72,9 +79,9 @@ def build(monkeypatch, tmp_path):
     built.write_text(json.dumps(record))
     monkeypatch.setattr(catalogue, "_build", lambda: snap)
     monkeypatch.setattr(table, "BUILD", built)
+    monkeypatch.setattr(distribution, "_sources", {"snapshot": "build", "table": "build"})
     table._build.cache_clear()
-    table.set_table(None)
-    catalogue.set_layers()
+    restart()
     yield {"snapshot": snap, "table": record}
     table._build.cache_clear()
 
@@ -135,8 +142,7 @@ def test_a_blocked_download_uses_the_last_good_copy_then_the_build_copies(build,
     branch = Published(table_json=(newer_table, '"t1"'), snapshot_json=(newer_snapshot, '"s1"'))
     distribution.refresh(profile, fetch=branch)
     # A restart: nothing in memory; the last good copy comes back from disk alone.
-    table.set_table(None)
-    catalogue.set_layers()
+    restart()
     assert distribution.load(profile) == {"snapshot": "cached", "table": "cached"}
     assert table.document() == newer_table and catalogue.layers()[0] == newer_snapshot
     # The download is blocked: the last good copy stays in force, untouched.
@@ -144,13 +150,23 @@ def test_a_blocked_download_uses_the_last_good_copy_then_the_build_copies(build,
     before = cached(profile)
     assert distribution.refresh(profile, fetch=branch) == {"snapshot": "cached", "table": "cached"}
     assert cached(profile) == before and table.document() == newer_table
-    # A profile with no last good copy and a blocked download: the build copies.
+    # A profile with no last good copy, after a restart, and a blocked download:
+    # the build copies (loading nothing leaves what the process started with).
     other = tmp_path / "other-profile"
     other.mkdir()
+    restart()
     assert distribution.load(other) == {"snapshot": "build", "table": "build"}
     assert distribution.refresh(other, fetch=branch) == {"snapshot": "build", "table": "build"}
     assert table.document() == build["table"] and catalogue.layers() == (build["snapshot"],)
     assert cached(other) == {}
+
+
+def test_loading_a_profile_with_nothing_cached_leaves_the_copies_in_force(build, profile):
+    """At engine start that is the build copies; nothing is reset to them later."""
+    in_force = reordered(build["table"])
+    table.set_table(in_force)
+    distribution.load(profile)
+    assert table.document() == in_force and cached(profile) == {}
 
 
 def test_without_any_table_every_pick_pauses_rather_than_guessing(build, monkeypatch, profile):

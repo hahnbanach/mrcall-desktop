@@ -171,10 +171,12 @@ def sources() -> dict:
 
 
 def load(profile_dir: str | os.PathLike | None = None) -> dict:
-    """Put the profile's last good copies in force, from disk alone (no network)."""
+    """Put the profile's last good copies in force, from disk alone (no network).
+    With none cached, what is in force stays (at engine start: the build copies)."""
     with _lock:
         current, previous, record = _cached(cache_dir(profile_dir))
-        _apply(current, previous, record, {"snapshot": "cached", "table": "cached"})
+        if current is not None or record is not None:
+            _apply(current, previous, record, {"snapshot": "cached", "table": "cached"})
         return sources()
 
 
