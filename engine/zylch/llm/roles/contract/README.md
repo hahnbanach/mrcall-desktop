@@ -164,6 +164,12 @@ to its reference price × the margin — K3 stays priced, and a request
 that cannot be routed to its pin fails at the provider as it would today. A direct id is priced from `direct`. A dated direct
 id `<alias>-YYYYMMDD` is priced and shaped as its alias, and a response
 naming a dated snapshot of the requested alias settles as the alias.
+OpenRouter may fall back between endpoints only within `provider.only`,
+the admitted endpoints, so still under `max_price` and the quantizations
+(`allow_fallbacks` true with `only`, false without it; K3, pinned to one
+endpoint, never falls back), so that a rate-limited cheapest endpoint, a
+429 from its shared pool, does not fail every request while price sorting
+keeps choosing it.
 
 ## The static gates
 

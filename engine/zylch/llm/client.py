@@ -402,7 +402,9 @@ def _release_hold(reservation, settle) -> None:
     if reservation.transport == "proxy":
         return
     try:
-        settle(reservation, {"input_tokens": 0, "output_tokens": 0})
+        # A refused call cost nothing. OpenRouter settles on a receipt's `cost`,
+        # so the release states it; the other transports price the token counts.
+        settle(reservation, {"input_tokens": 0, "output_tokens": 0, "cost": 0})
     except Exception as release_error:  # noqa: BLE001
         logger.warning(
             "[budget] could not release the hold for a refused dispatch (%s: %s)",

@@ -339,7 +339,7 @@ def test_the_provider_policy_admits_requirements_quantizations_and_the_admitted_
     price_snapshot,
 ):
     assert provider_policy(fx.FLEX) == {
-        "allow_fallbacks": False,
+        "allow_fallbacks": True,  # S3c: within `only`, never beyond it
         "require_parameters": True,
         "sort": "price",
         "quantizations": ["int8", "fp8", "mxfp8", "fp16", "bf16", "fp32", "unknown"],
@@ -361,17 +361,24 @@ def test_the_provider_policy_admits_requirements_quantizations_and_the_admitted_
     assert price_snapshot["models"][fx.NONE_ADMITTED]["endpoints"] == []
     for model in (fx.UNREAD, fx.NONE_ADMITTED):
         assert "only" not in provider_policy(model), model
+        assert provider_policy(model)["allow_fallbacks"] is False, model
         assert provider_policy(model)["quantizations"] == provider_policy(fx.FLEX)["quantizations"]
 
 
 def test_the_provider_object_is_the_billing_server_s(price_snapshot):
     """`server_provider_2d81bb5.json` is what mrcall-agent model-table-m10
-    2d81bb5's `bounded_openrouter.provider_policy` built from this snapshot."""
+    2d81bb5's `bounded_openrouter.provider_policy` built from this snapshot.
+    Since S3c the engine allows fallbacks within `only` (a 429 from the
+    cheapest admitted endpoint must not fail every request); the server's
+    follow-up, S7 mirroring it, is pending, so `allow_fallbacks` is held to
+    the engine's rule and every other key to the server's object."""
     server = json.loads((FIXTURES / "server_provider_2d81bb5.json").read_text(encoding="utf-8"))
     assert server["snapshot_version"] == price_snapshot["version"]
     assert {fx.FLEX, fx.UNREAD, fx.NONE_ADMITTED, fx.FALLBACK} <= set(server["providers"])
     for model, provider in server["providers"].items():
-        assert provider_policy(model) == provider, model
+        engine = provider_policy(model)
+        assert engine.pop("allow_fallbacks") is ("only" in engine), model
+        assert engine == {k: v for k, v in provider.items() if k != "allow_fallbacks"}, model
 
 
 def test_an_unpriced_openrouter_id_is_refused_with_today_s_message(price_snapshot):

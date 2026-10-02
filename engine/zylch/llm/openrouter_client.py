@@ -24,6 +24,16 @@ logger = logging.getLogger(__name__)
 BLOCKS = ("text", "tool_use") + REASONING
 
 
+def refused(what, status):
+    """The error of a request answered with HTTP `status`, carrying it as
+    `status_code`, as the SDK's errors do: `client._rejected_before_inference`
+    reads it, so a status that proves no work was done (a 429, a 4xx refusal)
+    releases the call's hold, while a 5xx keeps it."""
+    error = BudgetError(f"{what} request failed (HTTP {status}); no automatic retry.")
+    error.status_code = status
+    return error
+
+
 def _without_cache(request):
     # Only protocol cache hints are removed. Tool arguments and JSON schemas
     # belong to the user and may legitimately have a "cache_control" property.
@@ -74,9 +84,7 @@ class OpenRouterClient:
             with httpx.Client(timeout=180, follow_redirects=False) as client:
                 response = dispatch(client)
         if response.status_code != 200:
-            raise BudgetError(
-                f"OpenRouter request failed (HTTP {response.status_code}); no automatic retry."
-            )
+            raise refused("OpenRouter", response.status_code)
         # Keep normal JSON types in tool arguments/public responses, but never
         # pass monetary literals through binary float before micro-USD rounding.
         exact = response.json(parse_float=Decimal)
@@ -129,9 +137,7 @@ class OpenRouterClient:
 
         response = read("key")
         if response.status_code != 200:
-            raise BudgetError(
-                f"OpenRouter request failed (HTTP {response.status_code}); no automatic retry."
-            )
+            raise refused("OpenRouter", response.status_code)
         data = response.json().get("data")
         left = data.get("limit_remaining") if isinstance(data, dict) else None
         if type(left) in (int, float) and left <= 0:
@@ -141,9 +147,7 @@ class OpenRouterClient:
             logger.debug("[openrouter] check_account: balance not readable with this key (403)")
             return
         if response.status_code != 200:
-            raise BudgetError(
-                f"OpenRouter request failed (HTTP {response.status_code}); no automatic retry."
-            )
+            raise refused("OpenRouter", response.status_code)
         data = response.json().get("data")
         data = data if isinstance(data, dict) else {}
         total, used = data.get("total_credits"), data.get("total_usage")
@@ -171,7 +175,5 @@ class OpenRouterClient:
             with httpx.Client(timeout=600, follow_redirects=False) as client:
                 response = dispatch(client)
         if response.status_code != 200:
-            raise BudgetError(
-                f"K3 request failed (HTTP {response.status_code}); no automatic retry."
-            )
+            raise refused("K3", response.status_code)
         return decode_chat_response(response)

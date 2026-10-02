@@ -51,8 +51,9 @@ the HTTP error codes — is v1's.
 - K3 is routed to its adapter by its id, not by the presence of
   `thinking`; the adapter is unchanged (adaptive reasoning at `max` effort,
   its pinned provider) and its responses carry no reasoning blocks.
-- On OpenRouter the server applies the snapshot's provider policy (no
-  fallbacks, parameters required, price sorting, `policy.quantizations`,
+- On OpenRouter the server applies the snapshot's provider policy
+  (fallbacks only within the admitted endpoints `only` names, README
+  "Prices in use"; parameters required, price sorting, `policy.quantizations`,
   the excluded service tiers) and `max_price` = the reference price ×
   `policy.margin`; K3's cap is its pinned endpoint's price × the margin,
   or, on a day that endpoint is not admitted (absent from the snapshot's
