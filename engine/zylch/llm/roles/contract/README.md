@@ -120,7 +120,10 @@ under the model-level prices × `policy.margin`.
 OpenRouter, `max_price` and the reservation (engine) and the
 pre-authorisation (billing server) use the model-level price × the margin;
 K3's cap is its pinned `digitalocean` endpoint's price × the margin, read
-from its `endpoints`. A direct id is priced from `direct`. A dated direct
+from its `endpoints` (admitted endpoints only); on a day that endpoint is
+not admitted (degraded, so absent from `endpoints`), K3's cap falls back
+to its model-level price × the margin — K3 stays priced, and a request
+that cannot be routed to its pin fails at the provider as it would today. A direct id is priced from `direct`. A dated direct
 id `<alias>-YYYYMMDD` is priced and shaped as its alias, and a response
 naming a dated snapshot of the requested alias settles as the alias.
 

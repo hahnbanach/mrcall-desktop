@@ -31,15 +31,20 @@ the HTTP error codes — is v1's.
   `top_p` or `top_k`; `tool_choice` never forced (`auto`); `strict: true`
   on a tool whose schema allows it; reasoning from the model's snapshot
   metadata — `thinking: {"type": "adaptive"}` with `output_config:
-  {"effort": <lowest published>}` for a model that publishes efforts, or
-  `thinking: {"type": "disabled"}` for one that publishes none and whose
-  reasoning is optional and on by default; and, in assistant
+  {"effort": <lowest published>}` for a model that publishes efforts, the
+  efforts counted being only the request vocabulary `low`, `medium`,
+  `high`, `xhigh`, `max` (a published `minimal` or `none` is not a value
+  the Messages API accepts, so a model publishing `minimal` and `low` gets
+  `low`), or `thinking: {"type": "disabled"}` for one that publishes none
+  and whose reasoning is optional and on by default; and, in assistant
   turns of the history, reasoning blocks returned earlier (`thinking` with
-  its `signature` when the provider sent one — OpenRouter may omit it for
-  a non-Anthropic model, and such a block is replayed without one —
-  `redacted_thinking` with its `data`), unchanged. The server accepts a
-  `thinking` block with or without a `signature`; validating it is the
-  provider's.
+  its `signature`, `redacted_thinking` with its `data`), unchanged. A
+  `thinking` block that came back without a `signature` (OpenRouter may
+  omit it for a non-Anthropic model) is not replayed: the engine drops it
+  from the history it sends, because the Messages API requires a
+  signature on every replayed `thinking` block and no provider verifies an
+  unsigned one. The server accepts an unsigned `thinking` block in
+  history from a client that sends one and strips it before forwarding.
 - Responses return reasoning blocks: `message.content` holds `thinking`
   and `redacted_thinking` blocks beside `text` and `tool_use`, in the
   order the model produced them.
