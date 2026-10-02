@@ -99,10 +99,28 @@ adapter, the datetime line pinned to the case's `capture_now`. CHAT and
 TASK_SOLVE continue the turn through their harness's `run_case`. Before each
 dispatch the engine's reservation bound is checked against the cap with
 everything spent or uncertain and written to `DIR/ledger.jsonl` as an
-intent; the receipt settles it. Nothing is retried; a resumed run skips every
-cell with an intent. `DIR/results.jsonl` holds per cell the tool calls, text,
-usage, cost, latency and the scoring of `scripts/measurement_scoring.py`
-(label match, critical, mechanical bars). `--repeat-disagreements` then runs
+intent; the receipt settles it.
+
+A provider sometimes refuses a dispatch before doing any work. An example is
+a 429 when an upstream provider's shared pool is saturated, which
+`zylch.llm.client._rejected_before_inference` recognises. Such a dispatch:
+
+- is settled at zero, with outcome `refused`, and the cap counts it at zero;
+- has its cell sent once more at the end of the role's pass, as a second
+  intent, waiting at least the provider's `retry_after` or 5 s, whichever is
+  longer;
+- if refused a second time, leaves the cell failed and the arm incomplete.
+
+Every other failure (a 5xx, a timeout, a lost connection, an unreadable
+answer) keeps its intent open at its bound and is never sent again. A resumed
+run skips every cell with an intent, except a cell refused once, which still
+gets its second attempt.
+
+`DIR/results.jsonl` holds per cell the tool calls, text, usage, cost, latency
+and the scoring of `scripts/measurement_scoring.py` (label match, critical,
+mechanical bars). It also names the refusals: `refusals` on the cell's row,
+and each role's `refused` (its cases per arm) in `measured.json`.
+`--repeat-disagreements` then runs
 D7's last item: the reference a second time, only on the cases where some
 arm's label result differs from its own. No arm runs again.
 

@@ -5,9 +5,10 @@ cell needs beside the run loop: the disposable profile whose ``.env`` (mode
 600, deleted with the profile) holds the provider and the key, the engine's
 client for the cell's arm with its transport behind the ledger
 (:class:`GuardedTransport`: an intent before each dispatch, the receipt
-after), the captured request rebuilt for the arm, the run clock pinned to the
-case's capture moment, the answer read off a response, and the results file
-(:class:`Results`), append-only and fsync'd like the ledger.
+after, a refusal before inference settled at zero), the captured request
+rebuilt for the arm, the run clock pinned to the case's capture moment, the
+answer read off a response, the wait before a refused cell is sent again, and
+the results file (:class:`Results`), append-only and fsync'd like the ledger.
 """
 
 from __future__ import annotations
@@ -20,12 +21,13 @@ import tempfile
 import time
 from contextlib import contextmanager
 from dataclasses import dataclass, field
+from datetime import datetime, timezone
 from decimal import Decimal
 from pathlib import Path
 from typing import Any, Callable
 
 import measurement_common as common
-from measurement_ledger import CapExceeded, Ledger, now
+from measurement_ledger import RETRY_WAIT_S, CapExceeded, Ledger, now
 
 logger = logging.getLogger("measure_roles")
 KEY_ENV = "OPENROUTER_API_KEY"
@@ -97,13 +99,20 @@ class Context:
     snapshot_version: str
     http: Callable[[Cell], Any] | None = None
     clocks: dict = field(default_factory=dict)
+    sleep: Callable[[float], None] = time.sleep
 
 
 class GuardedTransport:
-    """A cell's OpenRouter transport behind the ledger: intent before, receipt after."""
+    """A cell's OpenRouter transport behind the ledger: intent before, receipt after.
 
-    def __init__(self, inner: Any, ledger: Ledger, cell: Cell):
-        self._inner, self._ledger, self._cell = inner, ledger, cell
+    A dispatch the provider refused before inference
+    (``zylch.llm.client._rejected_before_inference``) is settled at zero with
+    outcome ``refused`` and its ``retry_after``; any other failure leaves the
+    intent open at its bound (``measurement_ledger``).
+    """
+
+    def __init__(self, inner: Any, ledger: Ledger, cell: Cell, attempt: int = 1):
+        self._inner, self._ledger, self._cell, self._attempt = inner, ledger, cell, attempt
         self.messages = self
         self.dispatches: list[dict] = []
         self.cap_hit = False
@@ -116,8 +125,11 @@ class GuardedTransport:
             raise RuntimeError(f"{self._cell.key}: a request for {request.get('model')!r}")
         # The engine's own reservation for this exact dict (K3 through its adapter).
         bound = request_bound(request)
+        dispatch = len(self.dispatches)
         try:
-            intent = self._ledger.admit(self._cell.key, len(self.dispatches), bound, self._cell.arm)
+            intent = self._ledger.admit(
+                self._cell.key, dispatch, bound, self._cell.arm, self._attempt
+            )
         except CapExceeded:
             self.cap_hit = True
             raise
@@ -126,9 +138,17 @@ class GuardedTransport:
         started = time.perf_counter()
         try:
             raw = self._inner.create(**request)
-        except BaseException as exc:  # uncertain: the bound stays committed, never retried
+        except BaseException as exc:
+            from zylch.llm.client import _rejected_before_inference
+
             record["error"] = f"{type(exc).__name__}: {exc}"
-            self._ledger.fail(intent, record["error"])
+            if isinstance(exc, Exception) and _rejected_before_inference(exc):
+                # Refused before inference: nothing spent; the cell may go once more.
+                status, wait = getattr(exc, "status_code", None), retry_after_of(exc)
+                record.update(refused=True, status_code=status, retry_after=wait)
+                self._ledger.refuse(intent, record["error"], status, wait)
+            else:  # uncertain: the bound stays committed, never re-sent
+                self._ledger.fail(intent, record["error"])
             raise
         usage = getattr(raw, "usage", None)
         usage = dict(usage) if isinstance(usage, dict) else {}
@@ -182,7 +202,9 @@ def measurement_profile(key: str, cap: Decimal):
         shutil.rmtree(root, ignore_errors=True)
 
 
-def cell_client(ctx: Context, cell: Cell, *, other_profile: bool) -> tuple[Any, GuardedTransport]:
+def cell_client(
+    ctx: Context, cell: Cell, *, other_profile: bool, attempt: int = 1
+) -> tuple[Any, GuardedTransport]:
     """The engine's client for the cell's arm, its transport behind the ledger."""
     from zylch.llm import make_llm_client
 
@@ -194,9 +216,61 @@ def cell_client(ctx: Context, cell: Cell, *, other_profile: bool) -> tuple[Any, 
         client._saved_policy_fingerprint = None
     if ctx.http is not None:
         client._client._http = ctx.http(cell)
-    guard = GuardedTransport(client._client, ctx.ledger, cell)
+    guard = GuardedTransport(client._client, ctx.ledger, cell, attempt)
     client._client = guard
     return client, guard
+
+
+def retry_after_of(exc: BaseException) -> float | None:
+    """The seconds a refusal asks to wait, when it says so; None otherwise.
+
+    Read from ``retry_after`` on the error, a ``retry_after`` field anywhere in
+    its ``body`` (OpenRouter's rate-limit metadata), or the ``Retry-After``
+    header of its response: a number of seconds, or ``"2s"`` / ``"1500ms"``.
+    """
+    headers = getattr(exc, "headers", None) or getattr(
+        getattr(exc, "response", None), "headers", None
+    )
+    header = None
+    if hasattr(headers, "get"):
+        header = headers.get("retry-after") or headers.get("Retry-After")
+    for value in (getattr(exc, "retry_after", None), _field(getattr(exc, "body", None)), header):
+        seconds = _seconds(value)
+        if seconds is not None:
+            return seconds
+    return None
+
+
+def _field(value: Any, name: str = "retry_after") -> Any:
+    """The first ``name`` anywhere in a body of nested objects and lists."""
+    if isinstance(value, dict):
+        if value.get(name) is not None:
+            return value[name]
+        value = list(value.values())
+    if isinstance(value, list):
+        return next((found for item in value if (found := _field(item, name)) is not None), None)
+    return None
+
+
+def _seconds(value: Any) -> float | None:
+    text = str(value).strip().lower() if value is not None else ""
+    scale = 0.001 if text.endswith("ms") else 1.0
+    try:
+        seconds = float(text.removesuffix("ms").removesuffix("s")) * scale
+    except ValueError:
+        return None
+    return seconds if 0 <= seconds < float("inf") else None
+
+
+def wait_out(ctx: Context, refusal: dict) -> float:
+    """Sleep until ``max(retry_after, RETRY_WAIT_S)`` seconds after ``refusal``; the seconds slept."""
+    wait = max(refusal.get("retry_after") or 0.0, RETRY_WAIT_S)
+    elapsed = (datetime.now(timezone.utc) - datetime.fromisoformat(refusal["at"])).total_seconds()
+    remaining = wait - max(0.0, elapsed)
+    if remaining <= 0:
+        return 0.0
+    ctx.sleep(remaining)
+    return remaining
 
 
 def replay_kwargs(entry: dict, arm: str) -> dict:
@@ -245,7 +319,13 @@ def price_refusal(model: str) -> str | None:
 
 
 def base_row(
-    run: RoleRun, arm: dict, case: dict, repetition: int, status: str, error: str | None = None
+    run: RoleRun,
+    arm: dict,
+    case: dict,
+    repetition: int,
+    status: str,
+    error: str | None = None,
+    attempt: int = 1,
 ) -> dict:
     """The fields every result row carries; a cell that sent nothing has only these."""
     return {
@@ -258,6 +338,7 @@ def base_row(
         "arm_score": arm["score"],
         "case_id": case["id"],
         "repetition": repetition,
+        "attempt": attempt,
         "status": status,
         "error": error,
         "case_set_sha256": run.requests["case_set_sha256"],

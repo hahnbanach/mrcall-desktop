@@ -11,12 +11,15 @@ score of every arm). Nothing here calls a model.
 ``passes`` (label matches), ``score`` = passes / n; ``bars_ok`` — every
 mechanical bar met on every row; ``critical`` — any critical failure;
 ``complete`` — a scored row for every case of the role (an error, a cap stop,
-a skip or an interruption leaves the arm incomplete). The reference
-(``requirements.json``) gives the yardstick from the same run: its score p and
-the binomial standard error ``sqrt(p (1 - p) / n)``. An arm **passes** when it
-is complete, meets every bar, has no critical failure and scores at least
-``p - se``. A role without a complete reference is unmeasured: reported, not
-written, so the resolver keeps blocking it.
+a skip or an interruption leaves the arm incomplete). A cell the provider
+refused before inference twice (or once, the run stopped before its second
+time) is a failed cell like any other: not scored, the arm incomplete; the
+role's ``refused`` lists those cases per arm, so the record names them. The
+reference (``requirements.json``) gives the yardstick from the same run: its
+score p and the binomial standard error ``sqrt(p (1 - p) / n)``. An arm
+**passes** when it is complete, meets every bar, has no critical failure and
+scores at least ``p - se``. A role without a complete reference is
+unmeasured: reported, not written, so the resolver keeps blocking it.
 
 **The second repetition** (``measure_roles.py --repeat-disagreements``: the
 reference again, on the cases where an arm's label result differed from its
@@ -211,7 +214,7 @@ def role_entry(role: str, rows: list[dict], cases: list[str], rule: dict, refere
         raise Refused(f"{role}: rows from {len(hashes)} different case sets or prompts")
     if hashes != {current_hashes(role)}:
         raise Refused(f"{role}: measured on other cases or prompts than today's")
-    results, second = {}, {}
+    results, second, refused = {}, {}, {}
     for arm in sorted({r["arm"] for r in rows}):
         mine = [r for r in rows if r["arm"] == arm]
         # Judged on the first repetition alone (module docstring): a second
@@ -224,6 +227,9 @@ def role_entry(role: str, rows: list[dict], cases: list[str], rule: dict, refere
         again = second_answers(mine)
         if again:
             second[arm] = again
+        failed = [r for r in first if r["status"] != "scored" and r.get("refusals")]
+        if failed:
+            refused[arm] = sorted(r["case_id"] for r in failed)
         results[arm] = {
             "n": len(scored),
             "passes": sum(bool(r["scoring"]["label_match"]) for r in scored),
@@ -250,6 +256,7 @@ def role_entry(role: str, rows: list[dict], cases: list[str], rule: dict, refere
         "results": results,
         "reference": {"id": reference, "score": round(float(p), 6), "se": round(se, 6)},
         "second_repetition": second,
+        "refused": refused,
         "case_set_sha256": rows[0]["case_set_sha256"],
         "prompt_sha256": rows[0]["prompt_sha256"],
         "snapshot_version": versions[0] if len(versions) == 1 else versions,
