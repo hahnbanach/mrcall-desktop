@@ -1,3 +1,10 @@
+# BOOTSTRAP ONLY — not read by the current updater.
+# The updater on the VPS before plan M2 (e1e5f79) still runs
+# `install "$LOGROTATE_SRC" /etc/logrotate.d/mrcalld` after its own
+# `git pull`; without this file that first reconcile exits before
+# installing the new helper. The new updater never reads it: the helper
+# generates /etc/logrotate.d/mrcalld (`mrcall-tenant logrotate`). Remove
+# this file once every host has run the new updater once.
 # Rotate the per-profile engine logs of the multi-tenant serve daemons.
 # Installed to /etc/logrotate.d/mrcalld by engine/scripts/server/update-daemons.sh
 # (run by the nightly logrotate.timer).

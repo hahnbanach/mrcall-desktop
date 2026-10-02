@@ -69,7 +69,7 @@ kernel mirrors it as constants.
 | --- | --- | --- |
 | `procedures.md` | one per company | every profile bound to the company memory |
 | `mail/<mailbox>.md` | one per mailbox; `<mailbox>` is the profile `EMAIL_ADDRESS` lower-cased, verbatim | only the profile whose address matches |
-| `phone.md` | one per company | reserved for the telephone company notes; the current engine has no reader for it (the offline company-notes conversion is not in this tree) |
+| `phone.md` | one per company | the telephone company-notes source (`services/voice/company_notes.py`) |
 
 Prompt injection (`get_personal_data_section`): `FRAMING + identity` when
 only the mailbox document exists, `FRAMING + procedures` when only the

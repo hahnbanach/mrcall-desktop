@@ -16,11 +16,13 @@ from tests.voice.m2_fixture import (
     OTHER_FACT,
     PUBLIC,
     SHARED,
+    OWNER,
     configuration,
 )
 from tests.voice.test_agent_config import save
 from zylch.services.voice import agent_config as config
 from zylch.services.voice.caller_memory import CallerMemory
+from zylch.storage.storage import Storage
 from zylch.storage import database as db
 from zylch.storage.models import BlobSentence
 
@@ -76,6 +78,22 @@ def test_no_customer_context_for_unknown_or_ambiguous(fixture_db, phone, state):
     save()
     out = asyncio.run(tool(phone).execute())
     assert out.data["recognition"] == state and out.data["facts"] == []
+
+
+@pytest.mark.parametrize(
+    "phone", [None, "anonymous", "withheld", "12345678", "+393", "+393330000001 ext 1",
+              "++393330000001", "00+393330000001", "+39+3330000001"]
+)
+def test_invalid_incoming_number_never_searches_company_memory(fixture_db, monkeypatch, phone):
+    save()
+
+    def forbidden(*args, **kwargs):
+        raise AssertionError("Invalid caller number searched company memory")
+
+    monkeypatch.setattr(Storage, "find_blobs_by_identifiers", forbidden)
+    out = asyncio.run(tool(phone).execute(query="Sono Mario, cosa sai di me?"))
+    assert out.data["recognition"] == "unknown"
+    assert out.data["facts"] == []
 
 
 @pytest.mark.parametrize("change", ["delete", "text", "customer", "company", "replace"])
@@ -199,3 +217,85 @@ def test_cross_language_query_falls_back_only_to_pinned_selected_facts(fixture_d
     assert not out.data["missing"]
     for forbidden in (INTERNAL, OTHER_FACT, fixture_db, "PRIVATE FULL BLOB"):
         assert forbidden not in json.dumps(out.data)
+
+
+def on_demand_config():
+    return configuration() | {
+        "policy": "production", "business_id": "business-1", "limits": None,
+        "caller_context_policy": "on_demand_review",
+        "customers": [{"blob_id": "customer-a", "display_name": "Mario"}],
+    }
+
+
+def test_on_demand_reads_only_after_question_and_only_scoped_contact(fixture_db, monkeypatch):
+    monkeypatch.setenv("VOICE_PRODUCTION_OWNER_UID", OWNER)
+    monkeypatch.setenv("VOICE_PRODUCTION_BUSINESS_ID", "business-1")
+    monkeypatch.setenv("VOICE_PRODUCTION_NUMBER", NUMBER)
+    save(on_demand_config())
+    with db.get_session() as session:
+        session.get(BlobSentence, "a-public").sentence_text = (
+            PUBLIC + " Contact +393331234567 and someone@example.com."
+        )
+    memory = tool()
+    trace = []
+
+    class Recorder:
+        def record(self, kind, **data):
+            trace.append((kind, data))
+
+    memory.trace = Recorder()
+    greeting = asyncio.run(memory.execute())
+    assert greeting.data["recognition"] == "matched"
+    assert greeting.data["display_name"] == "Mario"
+    assert greeting.data["facts"] == []
+    broad = asyncio.run(memory.execute(query="Cosa sai di me?"))
+    assert len(broad.data["facts"]) == 2
+    assert any(PUBLIC in item["text"] for item in broad.data["facts"])
+    assert any(FOLLOWUP in item["text"] for item in broad.data["facts"])
+    assert "+393331234567" not in json.dumps(broad.data)
+    assert "someone@example.com" not in json.dumps(broad.data)
+    assert "[contact detail omitted]" in json.dumps(broad.data)
+    assert len(asyncio.run(memory.execute(query="Quali informazioni avete su di me?")).data["facts"]) == 2
+    assert "PRIVATE FULL BLOB" not in json.dumps(broad.data)
+    assert INTERNAL not in json.dumps(broad.data)
+    assert OTHER_FACT not in json.dumps(broad.data)
+    assert asyncio.run(memory.execute(query="Qual è il menu?")).data["facts"] == []
+    assert asyncio.run(tool(SHARED).execute(query="Cosa sai di me?")).data["facts"] == []
+    assert asyncio.run(tool(OTHER).execute(query="Cosa sai di me?")).data["facts"] == []
+    assert PUBLIC not in json.dumps(trace) and FOLLOWUP not in json.dumps(trace)
+    assert "Cosa sai di me?" not in json.dumps(trace)
+
+
+def test_on_demand_refuses_oversized_history(fixture_db, monkeypatch):
+    monkeypatch.setenv("VOICE_PRODUCTION_OWNER_UID", OWNER)
+    monkeypatch.setenv("VOICE_PRODUCTION_BUSINESS_ID", "business-1")
+    monkeypatch.setenv("VOICE_PRODUCTION_NUMBER", NUMBER)
+    save(on_demand_config())
+    with db.get_session() as session:
+        session.get(BlobSentence, "a-public").sentence_text = "ordinary note " * 1000
+    out = asyncio.run(tool().execute(query="Cosa sai di me?"))
+    assert out.data["facts"] == []
+    assert out.data["missing"] == ["Caller history exceeds review size"]
+
+
+@pytest.mark.parametrize("credential", [
+    "sk-proj-ABCdef1234567890",
+    "whsec_ABCdef1234567890",
+    "github_pat_ABCdef1234567890ABCdef1234567890",
+    "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.signature123",
+    "-----BEGIN PRIVATE KEY-----",
+])
+def test_on_demand_never_returns_credential_formats(fixture_db, monkeypatch, credential):
+    monkeypatch.setenv("VOICE_PRODUCTION_OWNER_UID", OWNER)
+    monkeypatch.setenv("VOICE_PRODUCTION_BUSINESS_ID", "business-1")
+    monkeypatch.setenv("VOICE_PRODUCTION_NUMBER", NUMBER)
+    save(on_demand_config())
+    with db.get_session() as session:
+        session.get(BlobSentence, "a-public").sentence_text = (
+            "Café 124 account reference " + credential
+        )
+    out = asyncio.run(tool().execute(query="Cosa sai di me?"))
+    assert credential not in json.dumps(out.data)
+    assert not out.data["facts"] or all(
+        credential not in fact["text"] for fact in out.data["facts"]
+    )

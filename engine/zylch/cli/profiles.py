@@ -170,7 +170,19 @@ def select_profile(name: str | None = None) -> str:
     Raises:
         SystemExit: If no profiles exist or name not found.
     """
-    profiles = list_profiles()
+    try:
+        profiles = list_profiles()
+    except PermissionError:
+        # Hosted engine: the profiles dir is traverse-only (0711) for the
+        # tenant users that run join/offboard outside the unit (plan
+        # M2.5/M2.8). Only an explicit name can be resolved there, checked
+        # directly; the host filesystem is case-sensitive, so this stays an
+        # exact match (a case-insensitive Mac/Windows disk always lists).
+        if name and os.sep not in name and name not in (".", "..") and os.path.isfile(
+            os.path.join(PROFILES_DIR, name, ".env")
+        ):
+            return name
+        raise
 
     if not profiles:
         click.echo("No profiles found. Run 'zylch init' to create one.")

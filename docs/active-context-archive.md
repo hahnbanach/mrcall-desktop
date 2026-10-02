@@ -5,6 +5,278 @@ That file is a living snapshot and carries only `State now` / `Unresolved` /
 `Next`; anything chronological lands here instead. Newest section first.
 Nothing is discarded — only relocated, verbatim.
 
+## 2026-10-01 — Before Mario instruction-write denial repair
+
+1. Close Mario’s headless instruction-write permission gap. Continue the active
+   knowledge plan from its untested company-detail and
+   broader case/quantitative latency gates; do not repeat archive acceptance.
+
+## 2026-10-01 — Before Mario instruction-write denial repair
+
+[Astra's review](evaluations/2026-10-01-astra-company-instructions-migration-review.md)
+requires denying `instructions.store` in Mario's headless wrapper before safe resume.
+
+## 2026-10-01 — Before Astra headless and scheduling review
+
+Health, authenticated binding and unsigned callback checks pass. Both `124-cs`
+and `mario124-cs` are resumed. Mario imports the prepared `bbde719` staff M1
+overlay through his unchanged executable/socket; his actual instruction preview
+matches his mailbox and procedures at revision 1.
+
+## 2026-10-01 — Before Mario instruction-reader migration
+
+1. Resolve Mario’s separate M1 reader before lifting its clone pause. Continue
+   the active knowledge plan from its untested company-detail and
+   broader case/quantitative latency gates; do not repeat archive acceptance.
+
+## 2026-10-01 — Before Mario instruction-reader migration
+
+Health, authenticated binding and unsigned callback checks pass. `124-cs` is
+resumed; `mario124-cs` remains paused pending its separate daemon's M1 reader.
+
+## 2026-10-01 — Previous production release reference
+
+Three Café124 engines import pinned release `8d83193`; production runs the
+separate voice release `c3f95bb` (since 2026-09-30 14:16 UTC) through its
+systemd drop-in. The
+billing server is `prod-99091c35`.
+
+## 2026-10-01 — Before production phone-document migration
+
+Main's operator-instruction source is the reserved company-document project;
+this voice trial retains production USER_NOTES. Main's separate source retirement
+is excluded from the scoped trial. Its durable contract is
+[standing instructions](../engine/docs/features/project-memory.md).
+Local retirement commits and the rebased origin equivalents leave main diverged;
+publication needs a merge. Retirement deployment claims require their own review.
+
+GPT-Live is the sole telephone model. The Café 124 production daemon serves its
+Desktop socket and +390250552776 through the existing tunnel. Authenticated
+binding remains business `d44a1864-23cc-34f9-aec5-6e04bb2fd2ef-desktop`, UID
+`Gn9IcuWzYyY7DBMHkVUGB7bIiTp2`, `starter` and voice config revision 6.
+Caller history is restricted to a uniquely matched selected contact. Archive
+acceptance remains APPROVED; nine funded calls have private archive rows,
+including the October 1 closed call. StarChat transcript upload is cancelled.
+The [pilot](execution-plans/2026-09-27-cafe124-voice-daemon.md) is completed;
+the [knowledge plan](execution-plans/2026-09-28-voice-company-knowledge.md) stays
+active for its broader acceptance criteria. Source/query semantics, prompt/schema 8/6, bounded recovery and trial
+readiness are independently APPROVED. The private 270-character initial view
+and one detail reuse the paid K3 result. Live imports `c3f95bb-m1-53df502`,
+preserving USER_NOTES and prior path-confinement hotfixes; main's separate source
+retirement is excluded. Binding, health and unsigned webhook probes pass.
+The owner accepts the October 1 handset call as perfect; independent final
+review approves the source-grounded direct service answer. Company-detail
+retrieval was not exercised; broader case repetitions, later caller-history
+answer entailment and quantitative latency acceptance remain open. No company-store revision is
+admitted. Known credit refusals are settled at zero; old uncertainty remains
+quarantined.
+
+## 2026-10-01 — Before owner handset acceptance
+
+GPT-Live is the sole telephone model. The Café 124 production daemon serves its
+Desktop socket and +390250552776 through the existing tunnel. Authenticated
+readback binds business `d44a1864-23cc-34f9-aec5-6e04bb2fd2ef-desktop`, UID
+`Gn9IcuWzYyY7DBMHkVUGB7bIiTp2` and `starter`; voice config remains revision 6.
+Caller history is disclosed only for a uniquely matched selected contact.
+Local archive acceptance is independently APPROVED: eight private matching rows,
+three legacy and five reconstructed; September 28 archive calls need no repeat.
+StarChat transcript upload is cancelled. Overall acceptance remains REVISE after
+invented services in the prior call; the
+[pilot plan](execution-plans/2026-09-27-cafe124-voice-daemon.md) remains active.
+The [voice knowledge plan](execution-plans/2026-09-28-voice-company-knowledge.md)
+is active. Prompt/schema 8/6, bounded recovery and actual source/query semantics
+are independently APPROVED. The private 270-character initial view and one detail
+reuse an already-paid K3 response. The trial preserves USER_NOTES and excludes
+main's source retirement; the live
+`c3f95bb-m1-53df502` import tree preserves prior path-confinement hotfixes.
+Guarded targeted activation passed health, current-source readback and unsigned
+webhook probes; binding and revision 6 are retained. Spoken behavior and latency remain open. Known credit
+refusals are settled at zero; old uncertainty stays quarantined. No company-store
+revision is admitted. Independent trial readiness is APPROVED; the owner can now perform the supervised call.
+
+
+## 2026-09-30 — Source recovery and import-pin observations
+
+- **USER_NOTES is retired (2026-09-30, cs-kernel v0.49.0 + engine `706fe2a` on
+  `origin/main`).** The prompt section builder reads the reserved
+  `operator-instructions` company documents (`procedures.md`,
+  `mail/<mailbox>.md`); `phone.md` is the telephone-notes source and is
+  already stored for both companies (Café 124: `cf61cd70…`, the playbook
+  text). The shared checkout on the daemon host runs it; the four Café 124
+  daemons still run their pinned pre-M1 overlays (`k3-8d83193-m1-f342c5c`,
+  `voice-cafe124-c3f95bb` with a `PYTHONPATH` overlay that does not exist +
+  `evolution-pilot-340a99d`), so
+  `production@` still reads `USER_NOTES` from its `.env`: its current
+  release `mrcall-voice-cafe124-c3f95bb` is base `64d7cc5` plus a converter
+  patch (no M1, per its `release-manifest.json`), so it needs a new voice
+  release built on a commit that contains M1 (`origin/main` ≥ `706fe2a`). Local `main` on this machine carries cherry-pick copies of the M1
+  commits (`f8c1301`, `95e2340`); `origin/main` has the rebased originals
+  (`333c0c0`…`706fe2a`), so a push of local `main` needs a merge first.
+  Contract: `engine/docs/features/project-memory.md` § Standing operator
+  instructions; plan: `~/hb/docs/execution-plans/2026-09-30-retire-user-notes.md`.
+  Observed 14:25 UTC: its `99-cafe124-voice.conf` sets `PYTHONPATH` to
+  `releases/mrcall-voice-cafe124-c3f95bb-m1-53df502/engine`, which does not
+  exist — the daemon runs without the WhatsApp-confinement hotfix overlay
+  (`53df502`, itself without M1).
+
+
+GPT-Live M4 is phone-accepted for the isolated fixture. The Café 124 production
+daemon serves both its Desktop socket and +390250552776 through the existing
+Cloudflare tunnel and URL. StarChat readback binds business
+`d44a1864-23cc-34f9-aec5-6e04bb2fd2ef-desktop`, UID
+`Gn9IcuWzYyY7DBMHkVUGB7bIiTp2` and `starter`. Pinned release `8fb21d3`
+and voice config revision 6 are live; health and negative
+webhook probes pass. The caller policy validates incoming numbers with
+libphonenumber and allows on-demand filtered history only for a uniquely
+matched selected contact. Eight funded calls have closed ledgers with
+provisional exposure reconciliation. Private `sessions.db` (0600) has eight
+matching rows: three historical `legacy_no_text` rows and five reconstructed
+from received deltas. The two post-release calls match their private delta
+sources exactly. Local archive acceptance is independently APPROVED. StarChat
+transcript upload is cancelled; possible missing words before attachment are
+permanently accepted. The latest call contains invented business services
+without delegation or a fact lookup. Overall acceptance is REVISE and the
+[pilot plan](execution-plans/2026-09-27-cafe124-voice-daemon.md) remains active.
+
+
+is active. Prompt/schema 8/6 and the bounded recovery procedure have independent
+code approval (77 frozen semantic tests and 39 independent notes/recovery tests).
+Trial release `c3f95bb` combines base `64d7cc5` with its tracked converter patch
+and preserves production USER_NOTES; main's separate document retirement is
+excluded. A private candidate revalidates the already-paid K3 output, with a
+270-character initial view and one detail; no additional model request was made.
+Its source/query review is pending. The v8 deployment delta is conditionally
+approved and pins the reviewed artifact. Production remains on `8fb21d3`, company
+path off. Refusals are settled at zero; old uncertainty remains quarantined.
+Spoken behavior and latency remain open. No company-store revision is admitted.
+
+
+## 2026-09-30 — V7 conversion and guarded recovery
+
+is active. Prompt/schema 7/5 corrections have independent code approval, a
+129-case frozen suite before the final gap change and eight final regressions.
+Trial release `ef7bb06` combines base `64d7cc5` with its tracked converter patch;
+it preserves production USER_NOTES and excludes main's separate document-source
+retirement. Production remains on `8fb21d3`, with the company path off. New K3
+conversion is running; both prior paid selections failed source acceptance.
+Known credit refusals are settled at zero; the older uncertain request remains
+quarantined. The guarded activation bundle requires independent source approval
+and the exact reviewed artifact hash; a fresh delta review is in progress.
+Spoken behavior and latency remain open. No company-store revision is admitted.
+
+## 2026-09-30 — V6 validation and source rejection
+
+is active. Prompt/schema 6/4 corrections have independent code approval and
+104 passing frozen-candidate tests. Trial release `5ee4171` combines base
+`64d7cc5` with its tracked converter patch; it preserves the approved production
+USER_NOTES reader and excludes concurrent main company-document retirement.
+Production remains on `8fb21d3`, with the company path off. The new K3 result is
+validation-unavailable (USD0.085587); the prior paid result (USD0.107489) was
+rejected and its cache is
+retained privately outside the active profile. Both credit refusals are settled
+at zero; the older uncertain request remains quarantined. Trial activation needs
+approval of the regenerated source result and updated exact deployment delta.
+Spoken behavior and latency remain open. No company-store revision is admitted.
+
+## 2026-09-30 — Source correction before v6 regeneration
+
+is active. Corrected M2/M3 code in `d284414` has independent approval; prompt/schema
+5/3 preserve qualified source spans and specific detail phrases. Its release and
+rollback have independent approval, while production remains on `8fb21d3` with the company
+path off. Real K3 conversion completed and settled at USD0.107489, but independent
+source review is REVISE: instruction-bearing selections, unsupported timing
+aliases, a missing exclusion gap and missed Italian paraphrases require repair.
+The rejected cache is retained privately outside the active profile. Both prior
+credit refusals are settled at zero; the older uncertain request remains quarantined. The owner explicitly
+uses Café 124 production for handset trials after source/delta review and targeted
+activation. Real-source semantics, spoken behavior and latency remain open.
+No company-store revision is admitted.
+
+## 2026-09-30 — Before the completed K3 source trial
+
+path off. Real K3 conversion remains unavailable with no artifact. The latest
+actual retry received HTTP402 with `limit_source: openrouter_credits`; its maximum
+request cost exceeds provider admission credit. Both known refusals are settled
+at zero; the older uncertain request remains quarantined.
+
+## 2026-09-30 — Before the operator-requested conversion retry
+
+path off. A real K3 conversion received HTTP 402 with no artifact; the checked
+OpenRouter account balance is about USD0.21. This known refusal was reconciled
+at zero; the older uncertain request remains quarantined.
+
+## 2026-09-30 — Voice knowledge before production trial resume
+
+The [voice knowledge plan](execution-plans/2026-09-28-voice-company-knowledge.md)
+is blocked. Its `USER_NOTES` only path is built locally, but M3 detail mapping
+has REVISE and the new path is absent from
+the pinned production release. A real derived view failed independent source
+review and was removed from the production profile. The new company path is
+disabled by default, and its semantic and spoken behavior has not passed M4.
+The saved isolated fixture currently routes to production and cannot support
+phone trials. No company-store revision has been admitted for disclosure.
+
+- Café 124's overall plan acceptance remains open after the local archive passed
+  independent review. The changed detail mapping reopens voice knowledge M3;
+  M4 needs a safe source-backed conversion, an isolated provider route,
+  spoken-answer review and latency evidence.
+  Eight reserves remain held with provisional exposure, not settled invoices.
+
+1. Reconcile the uncertain note-conversion reservation, establish a separately
+   routed isolated telephone fixture and restore approved source/detail mapping
+   before spoken and latency trials. Keep M5 activation closed.
+
+## 2026-09-28 — Voice knowledge planning snapshot before implementation
+
+Three Café124 engines import pinned release `8d83193`; production runs the
+separate evolution-pilot release `340a99d` through its systemd drop-in. The
+billing server is `prod-99091c35`. Production uses K3 max through its personal OpenRouter key,
+with a USD20/day limit. The other three profiles retain their previous billing
+and model choices and USD5/day limits. All four have automatic processing off
+and preparation paused. Adding a saved Anthropic key does not change the selected
+provider or enable fallback. See [K3 adoption](execution-plans/2026-09-16-k3-production.md)
+and [runtime contract](../engine/docs/features/k3-reasoning.md).
+
+The [shared-knowledge brief](briefs/2026-09-28-voice-company-knowledge.md) and
+its `USER_NOTES` amendment have independent approval. The revised
+[execution plan](execution-plans/2026-09-28-voice-company-knowledge.md) routes
+offline telephone-note extraction through `MODEL_MEMORY_EXTRACT`; implementation
+and production activation remain future work. The production company store is
+locally readable as `mrcalld` and contains structured facts and revisioned
+projects; source authority and caller disclosure remain unverified. Initial
+context and company retrieval are unimplemented.
+
+1. On a separately authorized implementation session, inspect eligible
+   production `USER_NOTES` content and any company-store sources to be used,
+   then implement the reviewed voice plan. The local metadata inventory does
+   not establish an approved service catalog.
+
+## 2026-09-27 — WhatsApp channel detail pruned from living context
+
+**WhatsApp is a linked device, and it expires.** whatsmeow's protocol version
+is compiled into neonize; when it falls behind, WhatsApp answers
+`<failure reason="405"/>` and closes the socket, and nothing in the product
+says so. `neonize` is therefore unconstrained in `engine/pyproject.toml`, the
+build installs it with `--upgrade`, and the build fails when what it installed
+is not the newest on PyPI — blocking on macOS, while on Windows
+`continue-on-error` turns it into a release with no Windows installer and no
+red run. Messages themselves arrive by push on
+that socket (`MessageEv`), exactly as they do in WhatsApp Web — nothing polls
+for them. `whatsapp.sync` re-pulls what a linked device may ask for (contacts,
+groups, LID) and does not fetch message history. The protocol has a request for
+it — neonize builds `HISTORY_SYNC_ON_DEMAND` — but whatsmeow sends that as a
+PEER message to your own JID and neonize's `send_message()` exposes no peer
+flag, so it is buildable and unsendable from Python. Reaching it is a neonize
+change, not ours.
+`_whatsapp_refresh_loop` in `serve_ws` reattaches and re-syncs every
+`WHATSAPP_REFRESH_MINUTES` (default 15), skipping silently with no session on
+disk, and is its only caller — the app's Refresh button still calls
+`whatsapp.list_threads`, and `whatsapp.sync` has no preload binding, so the
+renderer cannot reach it yet. All seven daemons run the deployed refresh change
+(`a2b0e66`). What remains is the operator's view: nothing outside this repo
+reads `whatsapp.status`, so a headless caller still cannot tell a dead channel
+from a quiet one.
+
 ## 2026-09-23 — WhatsApp refresh deployment observations
 
 Deployed 2026-09-23 (`a2b0e66`), with all seven daemons restarted onto it;
