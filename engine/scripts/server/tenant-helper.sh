@@ -78,6 +78,8 @@ check_uid() {
   [ "$u" != "." ] && [ "$u" != ".." ] || die "uid may not be . or .."
   # its flat link would replace provisiond's socket in /run/mrcalld
   [ "$u" != "provisiond" ] || die "uid may not be provisiond"
+  # <uid>.voice.env is the name of <uid>'s voice copy in $EXEC_DIR
+  case "$u" in *.voice.env|*.voice.env.new) die "uid may not end in .voice.env" ;; esac
 }
 check_group() { [[ "$1" =~ ^mc-c-[0-9a-f]{12}$ ]] || die "not a derived company group name: $1"; }
 
@@ -215,8 +217,21 @@ EXEC_BIN="$VENV/bin/zylch"; VOICE_ARG=""
 # refusal further down would leave the unit unable to restart (scratch VM
 # probe 2026-10-02); `create` removes it once nothing is left to refuse.
 # Called plainly (never in `&&`/`||`), so `set -e` holds inside.
-declared=0
-VOICE_ALLOWED='^[[:space:]]*((#.*)?|(export[[:space:]]+)?(VOICE_[A-Z0-9_]*|OPENAI_[A-Z0-9_]*|VONAGE_[A-Z0-9_]*|FIREBASE_WEB_API_KEY)[[:space:]]*=.*)$'
+declared=0; VOICE_SRC=""
+VOICE_ALLOWED='^([[:space:]]*(#.*)?|(VOICE_[A-Z0-9_]*|OPENAI_[A-Z0-9_]*|VONAGE_[A-Z0-9_]*|FIREBASE_WEB_API_KEY)=.*)$'
+# The voice file is also an EnvironmentFile, so a line must mean the same
+# to this check and to systemd: a carriage return ends a line for systemd
+# and not for grep (`VOICE_X=1\rHOME=/x` loaded HOME — review 2026-10-02),
+# a trailing backslash joins the next line, an open quote runs on, and
+# `export KEY=` or an indented key is dropped by one reader or the other.
+voice_lines_ok() { # voice_lines_ok <file>
+  local f="$1"
+  if grep -q $'\r' "$f"; then return 1; fi
+  if grep -qE '\\$' "$f"; then return 1; fi
+  if grep -qvE "$VOICE_ALLOWED" "$f"; then return 1; fi
+  # an open quote runs on to the next line (comments are not parsed)
+  awk -v sq="'" '/^[[:space:]]*#/ { next } { l = $0; d = gsub(/"/, "", l); q = gsub(sq, "", l); if (d % 2 || q % 2) exit 1 }' "$f"
+}
 plain_path() { # plain_path <what> <path>: absolute, no whitespace, no systemd specifier or expansion
   [[ "$2" = /* ]] || die "$1 $2 is not absolute"
   case "$2" in *[[:space:]%\$]*) die "$1 $2 contains whitespace, % or \$ (systemd would expand it); refusing" ;; esac
@@ -255,6 +270,9 @@ read_tenant_exec() {
   if grep -qvE '^([[:space:]]*(#.*)?|(INTERPRETER|VOICE_CONFIG)=.+)$' "$exec_decl"; then
     die "$exec_decl has a line that is not INTERPRETER=<path>, VOICE_CONFIG=<path> or a comment"
   fi
+  # a quoted value is unquoted by this reader: `VOICE_CONFIG=""` would be
+  # a valid line that declares nothing
+  if grep -q "[\"']" "$exec_decl"; then die "$exec_decl has a quote; write the two paths bare"; fi
   local interp vconf rp shebang sp k
   for k in INTERPRETER VOICE_CONFIG; do
     [ "$(grep -cE "^$k=" "$exec_decl" || true)" -le 1 ] || die "$exec_decl sets $k more than once"
@@ -267,13 +285,17 @@ read_tenant_exec() {
     [ "$rp" = "$interp" ] || die "INTERPRETER $interp is not the real path (it is $rp)"
     case "$rp" in "$RELEASES"/*|"$REPO"/*) ;; *) die "INTERPRETER $interp is outside $RELEASES and $REPO: the sandbox cannot see it";; esac
     [ -f "$interp" ] || die "INTERPRETER $interp is not a regular file"
-    # a console script runs its shebang's python: that must be visible too
+    # It is a venv's `zylch` console script, whose shebang is that venv's
+    # python: anything else this check cannot follow (`env`, a `/bin/sh`
+    # trampoline, a file with no shebang, `pip`) is refused rather than
+    # found out at start.
+    [ "$(basename -- "$interp")" = zylch ] || die "INTERPRETER $interp is not a venv's zylch script"
     shebang=$(head -c 512 -- "$interp" | head -n 1)
-    if [[ "$shebang" == '#!'* ]]; then
-      sp=${shebang#\#!}; sp=${sp#"${sp%%[![:space:]]*}"}; sp=${sp%%[[:space:]]*}
-      [[ "$sp" = /* ]] || die "INTERPRETER $interp: its shebang names no absolute path"
-      sandbox_sees "$sp" || die "INTERPRETER $interp runs $sp, which is missing, or reached through a link or a path outside /usr, $RELEASES and $REPO: the sandbox cannot see it"
-    fi
+    [[ "$shebang" == '#!'* ]] || die "INTERPRETER $interp has no shebang: it is not a venv's zylch script"
+    sp=${shebang#\#!}; sp=${sp#"${sp%%[![:space:]]*}"}; sp=${sp%%[[:space:]]*}
+    [[ "$sp" = /* ]] || die "INTERPRETER $interp: its shebang names no absolute path"
+    case "$(basename -- "$sp")" in python*) ;; *) die "INTERPRETER $interp: its shebang runs $sp, not a python";; esac
+    sandbox_sees "$sp" || die "INTERPRETER $interp runs $sp, which is missing, or reached through a link or a path outside /usr, $RELEASES and $REPO: the sandbox cannot see it"
     runuser -u "$user" -- test -x "$interp" || die "$user cannot execute $interp: chmod -R go=rX $RELEASES"
     EXEC_BIN="$interp"
   fi
@@ -282,16 +304,22 @@ read_tenant_exec() {
     [ -L "$vconf" ] && die "VOICE_CONFIG $vconf is a symlink; refusing"
     [ -f "$vconf" ] || die "VOICE_CONFIG $vconf is not a regular file"
     [ "$(stat -c '%U' "$vconf")" = root ] || die "VOICE_CONFIG $vconf must be owned by root"
-    # it is also loaded as an EnvironmentFile: only voice variables, one
-    # per line (no tenant identity, data root, key or import path)
-    if grep -qvE "$VOICE_ALLOWED" "$vconf"; then
-      die "VOICE_CONFIG $vconf has a line outside VOICE_*, OPENAI_*, VONAGE_*, FIREBASE_WEB_API_KEY (or a multi-line value); remove it"
-    fi
     # 0711: the tenant reaches its own copy by name, never lists the others
     install -d -m 0711 -o root -g root "$EXEC_DIR"; chmod 0711 "$EXEC_DIR"
-    install -m 0640 -o root -g "$user" "$vconf" "$voice_copy"
-    runuser -u "$user" -- test -r "$voice_copy" || die "$user cannot read $voice_copy (is /etc/mrcalld o+x?)"
-    VOICE_ARG=" --voice-config $voice_copy"
+    # it is also loaded as an EnvironmentFile: only voice variables, one
+    # per line (no tenant identity, data root, key or import path). The
+    # COPY is what is checked, then renamed into place: what was read is
+    # what the unit loads.
+    install -m 0640 -o root -g "$user" "$vconf" "$voice_copy.new"
+    if ! voice_lines_ok "$voice_copy.new"; then
+      rm -f "$voice_copy.new"
+      die "VOICE_CONFIG $vconf has a line outside VOICE_*, OPENAI_*, VONAGE_*, FIREBASE_WEB_API_KEY, or one systemd reads differently (carriage return, trailing backslash, open quote, export, indented key); remove it"
+    fi
+    if ! runuser -u "$user" -- test -r "$voice_copy.new"; then
+      rm -f "$voice_copy.new"; die "$user cannot read $voice_copy (is /etc/mrcalld o+x?)"
+    fi
+    mv -f "$voice_copy.new" "$voice_copy"
+    VOICE_ARG=" --voice-config $voice_copy"; VOICE_SRC="$vconf"
   fi
   declared=1
 }
@@ -323,8 +351,19 @@ ensure_company_store() { # ensure_company_store <group>
 # A refused first migration falls back to the template: tenant.conf is
 # removed again (nothing has been chown'ed yet), whatever made `create`
 # stop — a refusal below, or a failing systemctl/tmpfiles under `set -e`.
-# An already migrated profile keeps its drop-in (its tree is tenant-owned)
-# and only the error stands.
+# An already migrated profile keeps its drop-in (its tree is tenant-owned):
+# tenant.conf and the voice copy are put back as they were before this
+# run — a refusal that came after they were rewritten would otherwise
+# leave a unit that restarts onto a command nobody accepted (review
+# 2026-10-02) — and only the error stands.
+prev=""
+save_prev() { # a migrated profile's tenant.conf and voice copy, before create touches them
+  table_has "$uid" || return 0
+  prev=$(mktemp -d /etc/mrcalld/.create-prev.XXXXXX)
+  if [ -f "$dropin" ]; then cp -p "$dropin" "$prev/tenant.conf"; fi
+  if [ -f "$voice_copy" ]; then cp -p "$voice_copy" "$prev/voice.env"; fi
+}
+drop_prev() { rm -f "$voice_copy.new"; if [ -n "$prev" ]; then rm -rf "$prev"; prev=""; fi; }
 undo_first_dropin() {
   local rc=$?
   if [ "$rc" != 0 ] && ! table_has "$uid"; then
@@ -332,7 +371,12 @@ undo_first_dropin() {
     # step 7's run dir and flat-name link: the template's daemon binds that name
     rm -rf "${RUN_ROOT:?}/$uid"; [ -L "$RUN_ROOT/$uid.sock" ] && rm -f "$RUN_ROOT/$uid.sock"
     systemctl daemon-reload || true
+  elif [ "$rc" != 0 ] && [ -n "$prev" ]; then
+    if [ -f "$prev/tenant.conf" ]; then cp -p "$prev/tenant.conf" "$dropin.tmp" && mv -f "$dropin.tmp" "$dropin"; fi
+    if [ -f "$prev/voice.env" ]; then cp -p "$prev/voice.env" "$voice_copy.new" && mv -f "$voice_copy.new" "$voice_copy"; else rm -f "$voice_copy"; fi
+    systemctl daemon-reload || true
   fi
+  drop_prev
   exit "$rc"
 }
 
@@ -493,6 +537,7 @@ create)
   systemctl daemon-reload
   # A declared unit (tenant-exec) keeps its operator command drop-ins:
   # tenant.conf resets ExecStart and 6b verifies what systemd will run.
+  save_prev
   trap undo_first_dropin EXIT
   read_tenant_exec
   while IFS= read -r f; do
@@ -503,14 +548,30 @@ create)
       # a specifier (%i) names a file this loop cannot find: refuse it
       case "$ef" in *%*) die "$f: EnvironmentFile $ef uses a specifier and cannot be checked for PYTHONPATH; pin with Environment=PYTHONPATH=… in a drop-in instead" ;; esac
       if grep -qsE '^[[:space:]]*PYTHONPATH[[:space:]]*=' "$ef"; then die "$f: EnvironmentFile $ef sets PYTHONPATH; pin with Environment=PYTHONPATH=… in a drop-in instead"; fi
+      # tenant.conf resets the list: an operator's own file would stop
+      # being loaded without a word. Only the declared voice file is
+      # carried over (as its copy).
+      case "$f" in *.d/*) if [ -n "$ef" ] && [ "$ef" != "$VOICE_SRC" ]; then die "$f loads EnvironmentFile $ef, which a migrated unit no longer reads (tenant.conf resets the list): move its variables to Environment= lines in that drop-in first"; fi ;; esac
     done < <(sed -nE 's/^[[:space:]]*EnvironmentFile[[:space:]]*=[[:space:]]*//p' "$f")
   done < <(systemctl show -p FragmentPath -p DropInPaths --value "$unit" | tr ' ' '\n')
+  # A first migration replaces the flat socket by a link and re-owns the
+  # tree: never under a running daemon (runbook: stop first).
+  if ! table_has "$uid"; then
+    case "$(systemctl show -p ActiveState --value "$unit")" in inactive|failed) ;; *) die "$unit is running unmigrated: stop it first (runbook 2b step 2), then create";; esac
+  fi
   write_dropin "$group"
-  # 6b. what systemd will actually run
+  # 6b. what systemd will actually run: the command, the identity, the
+  #    sandbox and the environment files are tenant.conf's — a drop-in
+  #    that sorts after it (or one in /run) would win without a word
   systemctl daemon-reload
   es=$(systemctl show -p ExecStart --value "$unit")
   [ "$(grep -o 'argv\[\]=' <<< "$es" | wc -l)" = 1 ] && [[ "$es" == *"argv[]=$EXEC_BIN -p $uid serve --unix $RUN_ROOT/$uid/ws.sock$VOICE_ARG ;"* ]] \
     || die "the unit's effective ExecStart is not tenant.conf's: something else overrides it (systemctl cat $unit)"
+  [ "$(systemctl show -p User --value "$unit")" = "$user" ] && [ "$(systemctl show -p ProtectHome --value "$unit")" = tmpfs ] \
+    || die "the unit's effective User/ProtectHome are not tenant.conf's: another drop-in overrides them (systemctl cat $unit)"
+  efs=$(systemctl show -p EnvironmentFiles --value "$unit" | sed -E 's/ \(ignore_errors=[a-z]+\)$//' | tr '\n' ' ')
+  [ "$efs" = "${VOICE_ARG:+$voice_copy }$keyfile " ] \
+    || die "the unit's effective EnvironmentFile list is not tenant.conf's (the voice copy, then the key file): another drop-in adds to it (systemctl cat $unit)"
   # 6c. a pinned PYTHONPATH must be a real path inside the bound trees,
   #    readable by the tenant, or the daemon would silently import the
   #    checkout: the sandbox hides every other path under /home, and
@@ -553,7 +614,7 @@ create)
     [ -L "$profile_dir/$d" ] && die "$profile_dir/$d is a symlink; refusing"
     [ -d "$profile_dir/$d" ] || mkdir -m 0750 "$profile_dir/$d"
   done
-  trap - EXIT
+  trap - EXIT; drop_prev
   chown -R --no-dereference "$user:$user" "$profile_dir"
   chmod 0700 "$profile_dir"; chmod 0600 "$profile_dir/.env"
   # 9. record
