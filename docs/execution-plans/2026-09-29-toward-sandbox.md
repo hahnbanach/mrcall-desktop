@@ -1160,6 +1160,46 @@ This 2a proposal leaves every profile as `mrcalld`. Separate 2b windows
 remain one profile per day, production last after its helper gate. The
 operators decide the window; this session publishes the plan and stops.
 
+### M2 decision — compressed rollout (2026-10-02, CTO)
+
+The CTO decided to migrate as soon as possible. The hosted profiles belong
+to the CTO and a few friends, not to production customers. That
+**supersedes** three parts of the proposal above: the
+one-profile-per-day cadence, the Monday window, and the requirement for a
+Café124 representative and service-hours booking. Everything else stands:
+the reconcile lock, backups, the stop-all-holders rule, rekey `--verify`
+before start, and rollback by `unstore` / `unmigrate`.
+
+1. **Bootstrap now, not at midnight.** Once `main` carries the bootstrap
+   stub (`engine/scripts/logrotate.d/mrcalld`, commit `b6d098f`) and the
+   tenant-exec fixes (`5ee01d4`), the VPS operator runs
+   `systemctl start zylch-reconcile.service` twice. That is the timer's
+   own path, and it takes the reconcile lock. The first run is the old
+   on-disk updater, which the stub lets succeed; the second is the new
+   one. Then the operator records the October 3 checklist above. The
+   00:00 UTC run becomes a repeat.
+2. **K3 pins removed.** The three K3 releases
+   (`mrcall-desktop-k3-8d83193-m1-*`) do not look up both store names, and
+   `main` carries their content. Their PYTHONPATH drop-ins are moved aside
+   (backed up under `/root/`, never deleted), so the units run the service
+   checkout. To revert, restore the drop-in, `daemon-reload` and restart.
+3. **One window, same day.** Run 2a for every company (Café124: all four
+   holders stopped together), then 2b for every profile except
+   production@. Each profile is accepted (active as its `mc-…` user,
+   rekey verified, app reconnects, memory visible) before the next
+   starts. A failure stops the window at that profile and rolls it back;
+   the profiles already accepted stay migrated.
+4. **production@ last.** Its migration goes through the operator
+   declaration in `/etc/mrcalld/tenant-exec/<uid>`:
+   - `INTERPRETER` names the voice release's `zylch`.
+   - `VOICE_CONFIG` names `/etc/mrcalld/voice-cafe124.env`.
+
+   It goes ahead only after the scratch VM has proven the declaration
+   forward and back: create, the effective ExecStart, the voice copy
+   readable by the tenant, a refused off-allowlist line, and `unmigrate`.
+   Two reviewers must pass that probe. Its other drop-ins keep their
+   current content.
+
 ## M3 — Egress bound per daemon
 
 Owner: release-engineer. After M2 is stable on all six; own rollback.
