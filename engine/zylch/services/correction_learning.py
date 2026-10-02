@@ -209,7 +209,7 @@ def extract_rule(
             system=_JUDGE_SYSTEM,
             messages=[{"role": "user", "content": prompt}],
             tools=[_RECORD_RULE_TOOL],
-            tool_choice={"type": "tool", "name": "record_rule"},
+            tool_choice={"type": "auto"},
             max_tokens=300,
         )
     except Exception as e:
@@ -276,7 +276,7 @@ def extract_fact(
             system=_FACT_JUDGE_SYSTEM,
             messages=[{"role": "user", "content": prompt}],
             tools=[_RECORD_FACT_TOOL],
-            tool_choice={"type": "tool", "name": "record_fact"},
+            tool_choice={"type": "auto"},
             max_tokens=300,
         )
     except Exception as e:

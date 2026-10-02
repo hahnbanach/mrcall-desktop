@@ -346,9 +346,8 @@ async def adjudicate(messages: Sequence[Dict[str, Any]]) -> List[Verdict]:
                 system=system,
                 messages=[{"role": "user", "content": _render(messages)}],
                 max_tokens=2000,
-                temperature=1 if getattr(client, "model", None) == "moonshotai/kimi-k3" else 0,
                 tools=[REPLY_NEED_TOOL],
-                tool_choice={"type": "tool", "name": "reply_need_decision"},
+                tool_choice={"type": "auto"},
             )
     except Exception as e:  # noqa: BLE001 — degradation is the contract
         logger.warning(

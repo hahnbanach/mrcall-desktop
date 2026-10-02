@@ -453,10 +453,7 @@ class TaskWorker:
                     ],
                     max_tokens=TASK_DETECTION_MAX_TOKENS,
                     tools=[TASK_DECISION_TOOL],
-                    tool_choice={
-                        "type": "tool",
-                        "name": "task_decision",
-                    },
+                    tool_choice={"type": "auto"},
                 )
 
             if response.stop_reason != "tool_use":

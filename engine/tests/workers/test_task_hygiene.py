@@ -377,5 +377,7 @@ async def test_long_task_decision_capacity_preserves_tool_and_checkpoint(fresh_d
     kwargs = worker.client.create_message.call_args.kwargs
     assert kwargs["max_tokens"] == 2048
     assert kwargs["tools"] == [TASK_DECISION_TOOL]
-    assert kwargs["tool_choice"] == {"type": "tool", "name": "task_decision"}
+    # Brief D3: the tool is named in the instruction, never forced.
+    assert kwargs["tool_choice"] == {"type": "auto"}
+    assert "calling the task_decision tool" in kwargs["messages"][-1]["content"]
     assert (_task_processed_at(owner, eid) is not None) == (stop_reason == "tool_use")

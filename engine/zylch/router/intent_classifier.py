@@ -73,7 +73,6 @@ Rules:
             response = await self.client.create_message(
                 model=self.router_model,
                 max_tokens=500,
-                temperature=0,
                 messages=[{"role": "user", "content": classification_prompt}],
             )
 
