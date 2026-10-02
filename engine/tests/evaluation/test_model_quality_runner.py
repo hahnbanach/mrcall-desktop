@@ -259,8 +259,8 @@ def test_concurrent_cases_freeze_independent_wire_clocks_and_bounds(rig):
         assert clocks[i] in system
         assert clocks[1-i] not in system
         assert manifest["as_of"] not in system
-        reserved_request = {k: v for k, v in body.items()
-                            if k not in {"provider", "thinking", "stream"}}
+        # The shape's reasoning is reserved (brief D3); only wire additions are not.
+        reserved_request = {k: v for k, v in body.items() if k not in {"provider", "stream"}}
         reserved_request["service_tier"] = "standard_only"
         expected = pricing.request_bound(reserved_request)
         with database.get_engine().connect() as conn:

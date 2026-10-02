@@ -6,6 +6,7 @@ from types import SimpleNamespace
 import httpx
 
 from .budget_pricing import BudgetError
+from .response import REASONING
 
 PROTOCOL = 'mrcall-bounded-v1'
 PREFIX = '/api/desktop/llm/bounded'
@@ -125,7 +126,11 @@ class BoundedProxyClient:
         if not isinstance(message, dict) or not isinstance(message.get('content'), list):
             raise BudgetError('MrCall response unavailable; check billing status without repeating the request.')
         blocks = message['content']
-        if any(not isinstance(b, dict) or b.get('type') not in ('text', 'tool_use') for b in blocks):
+        # Reasoning blocks come back to be replayed within a tool loop (D3).
+        if any(
+            not isinstance(b, dict) or b.get("type") not in ("text", "tool_use") + REASONING
+            for b in blocks
+        ):
             raise BudgetError('MrCall response incomplete; reservation retained.')
         return SimpleNamespace(content=[SimpleNamespace(**b) for b in blocks],
                                model=message.get('model'), stop_reason=message.get('stop_reason'),

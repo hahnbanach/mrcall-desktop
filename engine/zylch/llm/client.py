@@ -163,7 +163,6 @@ class LLMClient:
         tools: Optional[List[Dict[str, Any]]] = None,
         tool_choice: Optional[Dict[str, Any]] = None,
         max_tokens: int = 4096,
-        temperature: float = 1.0,
         model: Optional[str] = None,
         **kwargs: Any,
     ) -> LLMResponse:
@@ -185,7 +184,6 @@ class LLMClient:
                     tools=tools,
                     tool_choice=tool_choice,
                     max_tokens=max_tokens,
-                    temperature=temperature,
                     model=model,
                     **kwargs,
                 )
@@ -221,7 +219,6 @@ class LLMClient:
         tools: Optional[List[Dict[str, Any]]] = None,
         tool_choice: Optional[Dict[str, Any]] = None,
         max_tokens: int = 4096,
-        temperature: float = 1.0,
         model: Optional[str] = None,
         **kwargs: Any,
     ) -> LLMResponse:
@@ -239,7 +236,6 @@ class LLMClient:
             "model": model_name,
             "messages": coerced,
             "max_tokens": max_tokens,
-            "temperature": temperature,
             "service_tier": "standard_only",
         }
         # Always inject the current datetime (appended last → cache-safe).
@@ -251,6 +247,12 @@ class LLMClient:
             request_kwargs["tool_choice"] = tool_choice
         for key, value in kwargs.items():
             request_kwargs[key] = value
+        if self.transport != "openai_voice":
+            # The one shape (request_shape.py), before quote and admission, so
+            # the reserved dict is the dict sent; adapters come back untouched.
+            from .request_shape import shaped
+
+            request_kwargs = shaped(request_kwargs)
 
         if model_name == "moonshotai/kimi-k3" and self.transport in ("openrouter", "proxy") and not ({"thinking", "output_config"} & request_kwargs.keys()):
             # The combined cap includes reasoning: worker-specific final-output
