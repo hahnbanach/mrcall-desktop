@@ -117,8 +117,39 @@ class PolicyTests(unittest.TestCase):
                              rules[i].replace("counter reject with icmpx type admin-prohibited", "")
                              .replace("counter reject", "").strip())
 
-    def test_dns_refusals_are_logged(self):
-        self.assertIn("log-queries", policy.compile_policy(fixture())["dnsmasq.conf"].splitlines())
+    def test_dns_refusals_are_logged_and_allowed_lookups_are_dropped(self):
+        import re
+        artifacts = policy.compile_policy(fixture())
+        self.assertIn("log-queries", artifacts["dnsmasq.conf"].splitlines())
+        unit = next(v for k, v in artifacts.items() if k.startswith("mrcall-dns-"))
+        line = next(x for x in unit.splitlines() if x.startswith("LogFilterPatterns="))
+        self.assertTrue(line.startswith("LogFilterPatterns=~"))
+        self.assertNotIn("%", line)  # no systemd specifier expansion
+        drop = re.compile(line.split("=~", 1)[1])
+        for allowed in ["dnsmasq[811]: query[A] api.mrcall.ai from 127.0.0.54",
+                        "Oct  3 09:04:01 dnsmasq[811]: reply api.mrcall.ai is 203.0.113.7",
+                        "reply api.mrcall.ai is 203.0.113.7",
+                        "dnsmasq[811]: query[AAAA] api.mrcall.ai from 127.0.0.54",
+                        "dnsmasq[811]: forwarded api.mrcall.ai to 51.159.69.156",
+                        "dnsmasq[811]: reply api.mrcall.ai is 203.0.113.7",
+                        "dnsmasq[811]: cached api.mrcall.ai is 203.0.113.7",
+                        "dnsmasq[811]: nftset add inet t e0_4 203.0.113.7 api.mrcall.ai"]:
+            with self.subTest(dropped=allowed):
+                self.assertIsNotNone(drop.search(allowed))
+        for kept in ["dnsmasq[811]: config evil.example is NXDOMAIN",
+                     "dnsmasq[811]: config evil.reply is NXDOMAIN",
+                     "dnsmasq[811]: config x.forwarded is NXDOMAIN",
+                     "dnsmasq[811]: config x.cached is NXDOMAIN",
+                     "dnsmasq[811]: config queryXaY is NXDOMAIN",
+                     "Oct  3 09:04:01 dnsmasq[811]: config evil.reply is NXDOMAIN",
+                     "config evil.reply is NXDOMAIN",
+                     "dnsmasq[811]: config reply.query.forwarded.cached.example is NXDOMAIN",
+                     "dnsmasq[811]: config query[a].example is NXDOMAIN",
+                     "dnsmasq[811]: config <name unprintable> is NXDOMAIN",
+                     "dnsmasq[811]: possible DNS-rebind attack detected: internal.example",
+                     "dnsmasq[811]: started, version 2.91 cachesize 0"]:
+            with self.subTest(kept=kept):
+                self.assertIsNone(drop.search(kept))
 
     def test_upstream_list_fails_over_and_legacy_string_keeps_its_digest(self):
         raw = fixture()
@@ -127,8 +158,16 @@ class PolicyTests(unittest.TestCase):
         self.assertIn("server=/example.com/51.159.69.156", dns)
         self.assertIn("server=/example.com/51.159.69.162", dns)
         self.assertEqual(policy.validate(fixture())["upstream"], "1.1.1.1")
+        # the legacy single-string form keeps the digest it had before lists
+        legacy = fixture()
+        legacy["mode"] = "observe"
+        self.assertEqual(json.loads(policy.compile_policy(legacy)["manifest.json"])["observe_marker"],
+                         "mrcall mode=observe policy=2187a35462157ed4067de8996ce449769febbefb4448330bfd77363e6feb4c77")
         for bad in [[], ["1.1.1.1", "1.1.1.1"], ["1.1.1.1"] * 5, ["1.1.1.1", "10.0.0.1"],
-                    ["1.1.1.1", "8.8.8.8\nserver=9.9.9.9"], ["1.1.1.1", 16843009], "1.1.1.1 8.8.8.8"]:
+                    ["1.1.1.1", "8.8.8.8\nserver=9.9.9.9"], ["1.1.1.1", 16843009], "1.1.1.1 8.8.8.8",
+                    ["1.1.1.1", True], ["1.1.1.1", ["8.8.8.8"]], ["1.1.1.1", "::ffff:1.1.1.1"],
+                    "::ffff:1.1.1.1", "64:ff9b::a9fe:a9fe", "::a00:1", "64:ff9b:1::808:808",
+                    "2606:4700:4700::1111%eth0"]:
             raw = fixture()
             raw["upstream"] = bad
             with self.subTest(upstream=bad), self.assertRaises(policy.PolicyError):

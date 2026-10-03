@@ -22,7 +22,7 @@ import sys
 from collections import Counter
 
 # dnsmasq: a name answered by local=/#/ ("config"), and a rebind refusal.
-REFUSED = re.compile(r"\bconfig (\S+) is (?:NXDOMAIN|NODATA)")
+REFUSED = re.compile(r"\bconfig (<name unprintable>|\S+) is (?:NXDOMAIN|NODATA)")
 REBIND = re.compile(r"possible DNS-rebind attack detected: (\S+)")
 # netfilter log line fields, after the generated prefix.
 FIELD = re.compile(r"\b(DST|PROTO|DPT)=(\S+)")

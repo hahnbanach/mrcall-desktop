@@ -50,6 +50,20 @@ def host(value: object) -> str:
     return value
 
 
+PRIVATE4 = ("0.0.0.0/8", "10.0.0.0/8", "100.64.0.0/10", "127.0.0.0/8", "169.254.0.0/16",
+            "172.16.0.0/12", "192.168.0.0/16", "224.0.0.0/4", "240.0.0.0/4")
+PRIVATE6 = ("::/96", "::ffff:0:0/96", "64:ff9b::/96", "64:ff9b:1::/48", "100::/64",
+            "fc00::/7", "fe80::/10", "ff00::/8")
+# journald drops these dnsmasq log-queries lines (LogFilterPatterns, systemd
+# 253+): every allowed lookup and its answer. What stays is a refusal
+# ("config <name> is NXDOMAIN"), a rebind refusal, startup and errors. Each
+# alternative starts the message (at the start, or after dnsmasq's "...]: "
+# prefix) and spells out the words after the name; dnsmasq never prints a
+# space inside a name, so a refused name such as "x.reply" cannot match.
+DNS_LOG_DROP = ("(^|: )(query.[A-Za-z0-9]+. [^ ]+ from |forwarded [^ ]+ to |"
+                "reply [^ ]+ is |cached [^ ]+ is |nftset add )")
+
+
 def validate(raw: object) -> dict:
     p = fields(raw, {"mode", "profile_uid", "unix_uid", "resolver", "upstream", "endpoints"})
     if p["mode"] not in ("observe", "enforce"):
@@ -74,7 +88,11 @@ def validate(raw: object) -> dict:
         raise PolicyError("invalid resolver address") from None
     if resolver not in ipaddress.ip_network("127.0.0.0/24") or int(resolver) & 255 not in range(2, 255):
         raise PolicyError("dedicated resolver must be 127.0.0.2 through 127.0.0.254")
-    if any(not x.is_global or x.is_multicast for x in parsed):
+    # The IPv6 prefixes the generated ruleset rejects as private (IPv4-mapped,
+    # -compatible and NAT64 forms included) are refused here too.
+    private6 = [ipaddress.ip_network(x) for x in PRIVATE6]
+    if any(not x.is_global or x.is_multicast
+           or (x.version == 6 and any(x in net for net in private6)) for x in parsed):
         raise PolicyError("upstream resolver must be a public unicast address")
     if len(set(parsed)) != len(parsed):
         raise PolicyError("duplicate upstream resolver")
@@ -128,7 +146,10 @@ def compile_policy(raw: object) -> dict[str, str]:
            ' comment "mrcall mode=enforce"']
     # log-queries: a name outside the policy is refused here (local=/#/), not
     # by the firewall, so only this log shows it ("config <name> is NXDOMAIN";
-    # egress_refused.py lists them). Names and addresses only, no payloads.
+    # egress_refused.py lists them). The DNS unit's LogFilterPatterns drops
+    # every allowed lookup, so the journal keeps refusals only. A refused name
+    # is whatever the tenant asked for, data it tried to send out included:
+    # the journal is root-only, like the keys.
     dns = ["# Generated scratch policy; no global resolver changes.",
            "no-resolv", "no-hosts", "bind-interfaces", f"listen-address={p['resolver']}",
            "port=53", "user=nobody", "group=nogroup", "cache-size=0",
@@ -142,10 +163,11 @@ def compile_policy(raw: object) -> dict[str, str]:
     # Every reject is preceded by its own rate-limited log rule. The log rule
     # never accepts: past its limit it just does not match, and the reject
     # after it still applies. Kernel log prefix: "mc-deny-<tag> ".
-    log = f'limit rate 10/second burst 20 packets log prefix "mc-deny-{tag} " level info'
-    private4 = ("{ 0.0.0.0/8, 10.0.0.0/8, 100.64.0.0/10, 127.0.0.0/8, 169.254.0.0/16, "
-                "172.16.0.0/12, 192.168.0.0/16, 224.0.0.0/4, 240.0.0.0/4 }")
-    private6 = "{ ::/96, ::ffff:0:0/96, 64:ff9b::/96, 64:ff9b:1::/48, 100::/64, fc00::/7, fe80::/10, ff00::/8 }"
+    # Its counter counts the packets logged; the reject's counter counts all of
+    # them, so "rejected minus logged" shows what the rate limit skipped.
+    log = f'limit rate 10/second burst 20 packets counter log prefix "mc-deny-{tag} " level info'
+    private4 = "{ " + ", ".join(PRIVATE4) + " }"
+    private6 = "{ " + ", ".join(PRIVATE6) + " }"
     nft.extend([" chain output {", "  type filter hook output priority 10; policy accept;",
                 f"  meta skuid {p['unix_uid']} jump tenant", " }", " chain tenant {",
                 "  ct direction reply ct state established counter accept",
@@ -192,6 +214,7 @@ NoNewPrivileges=yes
 ProtectSystem=strict
 ProtectHome=yes
 PrivateTmp=yes
+LogFilterPatterns=~{DNS_LOG_DROP}
 """
     dropin = f"""[Unit]
 Requires={firewall} {dnsunit}

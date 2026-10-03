@@ -22,6 +22,7 @@ dnsmasq[811]: query[AAAA] api-eu.vonage.com from 127.0.0.1
 dnsmasq[811]: config api-eu.vonage.com is NXDOMAIN
 dnsmasq[811]: reply typo.mrcall.ai is NXDOMAIN
 dnsmasq[811]: possible DNS-rebind attack detected: internal.example.com
+dnsmasq[811]: config <name unprintable> is NXDOMAIN
 """
 
 KERNEL_LOG = """\
@@ -35,7 +36,8 @@ mc-obs-0123456789ab IN= OUT=eth0 SRC=198.51.100.2 DST=192.0.2.2 PROTO=UDP SPT=1 
 class RefusedTests(unittest.TestCase):
     def test_only_policy_refusals_are_listed_never_resolved_addresses(self):
         names = refused.refused_names(DNS_LOG.splitlines())
-        self.assertEqual(names, {"api-eu.vonage.com": 2, "internal.example.com": 1})
+        self.assertEqual(names, {"api-eu.vonage.com": 2, "internal.example.com": 1,
+                                 "<name unprintable>": 1})
         out = subprocess.run([sys.executable, str(SOURCE), "dns"], input=DNS_LOG,
                              capture_output=True, text=True)
         self.assertEqual(out.returncode, 0)
