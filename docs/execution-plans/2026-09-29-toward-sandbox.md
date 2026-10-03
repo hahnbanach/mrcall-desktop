@@ -297,6 +297,13 @@ not started.
 
    Pipedrive is not used, so it is closed as "not used".
 
+   **Every profile gets all three LLM providers:** `api.anthropic.com`,
+   `openrouter.ai` and `zylch.mrcall.ai`, plus `api.mrcall.ai`. The reason
+   is that `LLM_PROVIDER` can be switched in Settings at any time, and
+   M10 model selection (branch `model-selection-m10a`) uses OpenRouter.
+   With only the provider configured today, a switch would be blocked.
+   Web search is a server-side Anthropic tool and needs no further host.
+
    Before enforcing, each profile's denied connections must be logged, so a
    missing destination shows up instead of failing silently. Acceptance per
    profile:
