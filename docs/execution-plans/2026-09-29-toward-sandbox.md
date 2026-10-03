@@ -2511,9 +2511,9 @@ explicitly; no voice file is read and no app acceptance is fabricated.
 <!-- r4-vps-immediate:start -->
 | Profile | Enforced UTC | Policy SHA256 | Mail / memory | Watch / unexplained denied | App reconnect | Review | Runtime state |
 |---|---|---|---|---|---|---|---|
-| Ivan | 07:42:27 | `06bc4a81d8da53b7e0e295e4a597a70e2f947ad960a55bb5ae93c93529b57149` | passed / available | 164s / 0 | pending | APPROVED | enforced; runtime checks passed |
-| Riccardo | 07:46:26 | `552186a177478acd73ca971d9cc29f7e54fc7a3991f552b7e671c986f05e9a55` | passed / available | 164s / 0 | pending | pending | enforced; runtime checks passed |
-| support | pending | — | — | — | — | pending | pending |
+| Ivan | 07:42:27 | `06bc4a81d8da53b7e0e295e4a597a70e2f947ad960a55bb5ae93c93529b57149` | passed / available | 164s / 0 | unavailable: no non-voice credential | APPROVED | enforced; runtime checks passed |
+| Riccardo | 07:46:26 | `552186a177478acd73ca971d9cc29f7e54fc7a3991f552b7e671c986f05e9a55` | passed / available | 164s / 0 | unavailable: no non-voice credential | APPROVED | enforced; runtime checks passed |
+| support | 07:49:39 | `b8c6ece4d00dac7a2fbfcc84e8f67643d0cc890a004b1d28873319ceb2b34d36` | passed / available | 196s / 0 | passed | pending | enforced; runtime checks passed |
 | Mario MrCall | pending | — | — | — | — | pending | pending |
 | Mario Cafe124 | pending | — | — | — | — | pending | pending |
 | Mario Gmail | pending | — | — | — | — | pending | pending |
