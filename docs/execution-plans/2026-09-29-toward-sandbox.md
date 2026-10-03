@@ -2496,6 +2496,8 @@ existing firewall remain in place. Before activation, each reject receives a
 separate rate-limited metadata-only log rule followed by its unconditional
 reject, so logging throttling never permits rejected traffic. Root retains
 policy, baseline and acceptance evidence under `/root/r4-vps-20261003/`.
+Controlled refused-connection probes verify metadata logging; their explained
+refusals are recorded separately from unexplained denials.
 The reviewed dnsmasq 2.91 source hash matched; the nftset-enabled binary is
 root-owned, SHA256 `42ea9e4a426b424bb75489fa54ff686ac006941f69cd219d59989003eda5e539`.
 
@@ -2507,10 +2509,10 @@ non-voice Firebase credential is available. Missing credentials are recorded
 explicitly; no voice file is read and no app acceptance is fabricated.
 
 <!-- r4-vps-immediate:start -->
-| Profile | Enforced UTC | Policy SHA256 | Mail / memory | Watch / denied | App reconnect | Review | Runtime state |
+| Profile | Enforced UTC | Policy SHA256 | Mail / memory | Watch / unexplained denied | App reconnect | Review | Runtime state |
 |---|---|---|---|---|---|---|---|
-| Ivan | 07:42:27 | `06bc4a81d8da53b7e0e295e4a597a70e2f947ad960a55bb5ae93c93529b57149` | passed / available | 164s / 0 | pending | pending | enforced; runtime checks passed |
-| Riccardo | pending | — | — | — | — | pending | pending |
+| Ivan | 07:42:27 | `06bc4a81d8da53b7e0e295e4a597a70e2f947ad960a55bb5ae93c93529b57149` | passed / available | 164s / 0 | pending | APPROVED | enforced; runtime checks passed |
+| Riccardo | 07:46:26 | `552186a177478acd73ca971d9cc29f7e54fc7a3991f552b7e671c986f05e9a55` | passed / available | 164s / 0 | pending | pending | enforced; runtime checks passed |
 | support | pending | — | — | — | — | pending | pending |
 | Mario MrCall | pending | — | — | — | — | pending | pending |
 | Mario Cafe124 | pending | — | — | — | — | pending | pending |
