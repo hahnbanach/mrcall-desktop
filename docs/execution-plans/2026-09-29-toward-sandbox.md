@@ -2753,6 +2753,65 @@ after rollback. Approval covers the diagnosis and armed DNS capture, with the
 new CTO call and its DNS observations explicitly pending. **Ready for the
 point-4 test call.**
 
+**Point-4 CTO call — 09:36:30 UTC, welcome followed by no response.** The
+CTO reported the symptom after calling. One funded call appeared after query
+logging was armed, correlated by reservation and trace timestamps. It closed
+at trace call_finished 09:36:58.623125 UTC with observed runtime 27.275s,
+provider voice duration 23s, ledger/meter both closed, finalization confirmed,
+sideband_eof and provisionally_covered reconciliation. This confirms closure,
+not successful conversation; the CTO reports that functional acceptance failed.
+
+Sideband attached once at 09:36:33.235346 UTC. The trace contains 116
+input_audio.append events (09:36:33.361052–09:36:56.308035), 114 output_audio
+events, **zero caller transcript deltas**, 15 voice transcript deltas,
+zero delegation events and zero unique client delegations. Voice transcript
+provider timing spans 0.6–5.2 seconds; capture is possible_gap. Memory context
+completed; results_sent is zero. binding_invalidated and exposure are absent
+(not recorded), as are engine_failure and engine_failure_type.
+
+The trace's audio event counts do not measure non-silent input or handset
+playback. Source analysis confirms that audio bytes, amplitude, VAD and speech
+markers are not retained; the event filter would discard other event kinds.
+The greeting is triggered by session.started independently of caller words.
+The observed failure occurs before any caller transcript/delegation is seen;
+whether caller media is silent, lost, or not recognized remains unresolved.
+
+For the correlated **09:36:29–09:37:00 UTC** network window, DNS records 22
+queries: 18 for api.mrcall.ai and four for api.openai.com. Both names were
+forwarded and resolved. No name was refused by local=/#/ and no upstream
+negative answer was observed. The production journal has 48 entries and no
+requested binding/auth/exception-type errors. Packet logging shows two
+production-scoped rejects to **172.66.0.243:443 TCP**:
+
+- 09:36:31.762982 UTC: FIN/ACK, 52 bytes;
+- 09:36:31.763152 UTC: RST/ACK, 52 bytes.
+
+Both use the same source port. The DNS response associates that destination
+with api.openai.com at 09:36:31.768787 UTC; later lookup and the sideband
+attachment succeed. The flags are consistent with connection teardown;
+their cause is not established and they do not demonstrate a failed new
+connection. No further production rejects were observed through call closure.
+They do not explain the lack of caller text after the sideband attaches.
+At diagnosis time production remains active, PID 4126831, NRestarts=0.
+No daemon restart, rollback, allowlist or voice-configuration change was made.
+
+The DNS capture requested in point 4 has now observed the CTO call. Healthy
+closure and resolved DNS do not override the reported conversational failure;
+production's functional call acceptance and R4 completion remain open.
+Sanitized point-4 call, network, DNS-address and rejected-packet metadata are
+retained in root-only production-point4-*.json evidence. A bounded next
+controlled test can compare the caller's speaking interval and microphone/
+handset observations with metadata counts, preferably using another telephone
+path; no spoken words need to be recorded or published.
+
+**Point-4 amendment reviews:** both independent reviewers returned APPROVED
+after reproducing the call counts, 22-query DNS window, two teardown-flagged
+rejects and unchanged production PID. Their approval is for the diagnosis;
+the underlying caller-transcription failure remains unresolved, and neither
+functional call acceptance nor R4 completion is approved. The CTO was asked
+for speaking-interval and alternate-telephone metadata to bound a subsequent
+controlled test without reading or publishing spoken content.
+
 #### R_4 VPS check — all LLM providers (2026-10-03)
 
 `git pull --rebase origin main` included `81c830bd` and reached `1f0b9f2`.
