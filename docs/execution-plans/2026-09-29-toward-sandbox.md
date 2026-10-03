@@ -274,6 +274,47 @@ not started.
      profiles under the template before `create`. Establish which from
      the code before removing it, and record the answer.
    - *Done:* recorded here.
+   **CTO decision, 2026-10-03 07:20 UTC — finish by 09:00 UTC.** This
+   supersedes the observation window for R4 and the seven-day wait for R3.
+   Accepted risk: a destination that has not been seen is blocked until it
+   is added.
+
+   *R4.* Every profile is enforced now, one at a time, in this order:
+   Ivan, Riccardo, support, Mario MrCall, Mario Café124, Mario Gmail,
+   production. Each profile's set is built from three sources:
+   - the VPS inventory;
+   - whatever the observe logs have already recorded;
+   - these explicit additions:
+     - WhatsApp: the `whatsapp.net` and `whatsapp.com` suffixes, Mario Gmail
+       only;
+     - Hugging Face downloads: the `huggingface.co` and `hf.co` suffixes,
+       plus `storage.googleapis.com`;
+     - Calendar: `www.googleapis.com` and `oauth2.googleapis.com`;
+     - production only:
+       - `api.openai.com`;
+       - Vonage `api.nexmo.com`, `rest.nexmo.com`, `api.vonage.com`;
+       - OpenRouter.
+
+   Pipedrive is not used, so it is closed as "not used".
+
+   Before enforcing, each profile's denied connections must be logged, so a
+   missing destination shows up instead of failing silently. Acceptance per
+   profile:
+   - a manual mail sync completes;
+   - the app reconnects;
+   - memory is available;
+   - no unexplained denied connection appears in the first minutes.
+
+   For production, acceptance also requires `calls_available=true` and the
+   CTO's test call, closed in the ledger. Any anomaly rolls back that one
+   tenant's rules and moves on. One reviewer per step replaces two.
+
+   *R3.* Runs after R4. The backups, the old keys and the shared key are
+   removed only if the template or provisiond does not need the shared key;
+   otherwise it stays and is recorded.
+
+   *R5.* The cloud session updates the documents in parallel.
+
 4. **R4 — M3, egress bound per daemon** (section below). *scratch* first,
    then *VPS* one profile at a time, each watched over a full mail sync
    cycle.
