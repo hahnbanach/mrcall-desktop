@@ -61,6 +61,8 @@ try:
  run('systemctl','start',unit)
  assert show(unit,'ActiveState')=='active'
  assert show(dnsunit,'ActiveState')=='active' and show(fwunit,'ActiveState')=='active'
+ # systemd before 253 ignores LogFilterPatterns: every lookup would be journaled
+ assert show(dnsunit,'LogFilterPatterns').strip(),'LogFilterPatterns not in force (systemd < 253?)'
  pid=show(unit,'MainPID')
  for attempt in range(50):
   content=run('nsenter','-t',pid,'-m','--','cat','/etc/resolv.conf',check=False)

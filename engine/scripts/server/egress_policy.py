@@ -55,13 +55,14 @@ PRIVATE4 = ("0.0.0.0/8", "10.0.0.0/8", "100.64.0.0/10", "127.0.0.0/8", "169.254.
 PRIVATE6 = ("::/96", "::ffff:0:0/96", "64:ff9b::/96", "64:ff9b:1::/48", "100::/64",
             "fc00::/7", "fe80::/10", "ff00::/8")
 # journald drops these dnsmasq log-queries lines (LogFilterPatterns, systemd
-# 253+): every allowed lookup and its answer. What stays is a refusal
-# ("config <name> is NXDOMAIN"), a rebind refusal, startup and errors. Each
-# alternative starts the message (at the start, or after dnsmasq's "...]: "
-# prefix) and spells out the words after the name; dnsmasq never prints a
-# space inside a name, so a refused name such as "x.reply" cannot match.
-DNS_LOG_DROP = ("(^|: )(query.[A-Za-z0-9]+. [^ ]+ from |forwarded [^ ]+ to |"
-                "reply [^ ]+ is |cached [^ ]+ is |nftset add )")
+# 253+; older systemd ignores the setting with a warning, so the host probe
+# asserts it is in force): every allowed lookup and its answer. What stays is
+# a refusal ("config <name> is NXDOMAIN"), a rebind refusal, an upstream
+# failure ("reply error is SERVFAIL"), startup and errors. The first word after
+# dnsmasq's own "<timestamp> dnsmasq[<pid>]: " prefix decides: dnsmasq prints
+# spaces and colons inside names, so no word inside a name can be trusted.
+DNS_LOG_DROP = (r"^([A-Z][a-z]{2} [ 0-9][0-9] [0-9:]{8} )?dnsmasq\[[0-9]+\]: "
+                r"(query\[|forwarded |reply (?!error )|cached |nftset add )")
 
 
 def validate(raw: object) -> dict:

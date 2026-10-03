@@ -127,25 +127,26 @@ class PolicyTests(unittest.TestCase):
         self.assertNotIn("%", line)  # no systemd specifier expansion
         drop = re.compile(line.split("=~", 1)[1])
         for allowed in ["dnsmasq[811]: query[A] api.mrcall.ai from 127.0.0.54",
-                        "Oct  3 09:04:01 dnsmasq[811]: reply api.mrcall.ai is 203.0.113.7",
-                        "reply api.mrcall.ai is 203.0.113.7",
                         "dnsmasq[811]: query[AAAA] api.mrcall.ai from 127.0.0.54",
+                        "dnsmasq[811]: query[type=999] api.allowed.example from 127.0.0.54",
                         "dnsmasq[811]: forwarded api.mrcall.ai to 51.159.69.156",
                         "dnsmasq[811]: reply api.mrcall.ai is 203.0.113.7",
+                        "dnsmasq[811]: reply x y.allowed.example is 9.9.9.11",
+                        "Oct  3 09:04:01 dnsmasq[811]: reply api.mrcall.ai is 203.0.113.7",
                         "dnsmasq[811]: cached api.mrcall.ai is 203.0.113.7",
                         "dnsmasq[811]: nftset add inet t e0_4 203.0.113.7 api.mrcall.ai"]:
             with self.subTest(dropped=allowed):
                 self.assertIsNotNone(drop.search(allowed))
+        # the first word after dnsmasq's own prefix decides; a name (which may
+        # hold spaces and colons) never does
         for kept in ["dnsmasq[811]: config evil.example is NXDOMAIN",
+                     "dnsmasq[811]: config x: reply a is b.evil.example is NXDOMAIN",
+                     "dnsmasq[811]: config dnsmasq[1]: query[A] x from y is NXDOMAIN",
                      "dnsmasq[811]: config evil.reply is NXDOMAIN",
-                     "dnsmasq[811]: config x.forwarded is NXDOMAIN",
-                     "dnsmasq[811]: config x.cached is NXDOMAIN",
-                     "dnsmasq[811]: config queryXaY is NXDOMAIN",
                      "Oct  3 09:04:01 dnsmasq[811]: config evil.reply is NXDOMAIN",
-                     "config evil.reply is NXDOMAIN",
-                     "dnsmasq[811]: config reply.query.forwarded.cached.example is NXDOMAIN",
-                     "dnsmasq[811]: config query[a].example is NXDOMAIN",
                      "dnsmasq[811]: config <name unprintable> is NXDOMAIN",
+                     "dnsmasq[811]: reply error is SERVFAIL",
+                     "dnsmasq[811]: reply error is REFUSED",
                      "dnsmasq[811]: possible DNS-rebind attack detected: internal.example",
                      "dnsmasq[811]: started, version 2.91 cachesize 0"]:
             with self.subTest(kept=kept):
