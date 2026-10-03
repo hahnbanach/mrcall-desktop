@@ -330,6 +330,18 @@ not started.
      line of the M3 verification.
    - *Done:* all migrated tenants have their per-user set; criterion 6 is
      recorded.
+   - *M10 (model selection, 2026-10-03):*
+     - Nothing of M10 runs on the VPS, and M10 has installed nothing there:
+       no units, crons or drop-ins.
+     - The paid measurement runs from a cloud session, not from the daemons,
+       and makes no network call from them.
+     - `model-selection-m10a` will not be merged into `main` before 09:00 UTC
+       2026-10-03.
+     - After the merge, every engine downloads the model table once a day from
+       `raw.githubusercontent.com` (`/hahnbanach/mrcall-desktop/model-table/v1/`;
+       GET, ETag). Add that host to each tenant's allow-list. Without it a
+       tenant runs on the build copy and logs one warning a day; nothing
+       breaks.
 5. **R5 — M4 and the final review** (sections below). *cloud*.
    - *Starts:* after R1–R4.
    - *Done:* the final end-to-end review is recorded for all eight
