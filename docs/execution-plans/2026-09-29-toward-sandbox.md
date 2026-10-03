@@ -2861,6 +2861,12 @@ DNS observations and teardown packet flags. The controlled positive result
 is recorded without identifying a telephone or attributing a specific carrier/
 codec cause. The failing originating path and delegated-engine test remain open.
 
+**Repeated functional confirmation — 09:55 UTC CTO report:** the CTO repeated
+the test and reported that it works again. This is a further CTO-confirmed
+positive result; it is not assigned to a caller identity or a ledger row.
+This session made no host changes for the retry. The remaining R4 rollout
+gates are unchanged.
+
 #### R_4 VPS check — all LLM providers (2026-10-03)
 
 `git pull --rebase origin main` included `81c830bd` and reached `1f0b9f2`.
