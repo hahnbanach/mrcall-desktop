@@ -132,6 +132,7 @@ class PolicyTests(unittest.TestCase):
                         "dnsmasq[811]: forwarded api.mrcall.ai to 51.159.69.156",
                         "dnsmasq[811]: reply api.mrcall.ai is 203.0.113.7",
                         "dnsmasq[811]: reply x y.allowed.example is 9.9.9.11",
+                        "dnsmasq[811]: reply error x.allowed.example is 9.9.9.11",
                         "Oct  3 09:04:01 dnsmasq[811]: reply api.mrcall.ai is 203.0.113.7",
                         "dnsmasq[811]: cached api.mrcall.ai is 203.0.113.7",
                         "dnsmasq[811]: nftset add inet t e0_4 203.0.113.7 api.mrcall.ai"]:

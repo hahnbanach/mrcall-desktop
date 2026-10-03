@@ -62,7 +62,7 @@ PRIVATE6 = ("::/96", "::ffff:0:0/96", "64:ff9b::/96", "64:ff9b:1::/48", "100::/6
 # dnsmasq's own "<timestamp> dnsmasq[<pid>]: " prefix decides: dnsmasq prints
 # spaces and colons inside names, so no word inside a name can be trusted.
 DNS_LOG_DROP = (r"^([A-Z][a-z]{2} [ 0-9][0-9] [0-9:]{8} )?dnsmasq\[[0-9]+\]: "
-                r"(query\[|forwarded |reply (?!error )|cached |nftset add )")
+                r"(query\[|forwarded |reply (?!error is [A-Z]+\s*$)|cached |nftset add )")
 
 
 def validate(raw: object) -> dict:
