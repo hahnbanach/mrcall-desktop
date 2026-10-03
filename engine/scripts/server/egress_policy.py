@@ -58,18 +58,27 @@ def validate(raw: object) -> dict:
     if not isinstance(uid, str) or not re.fullmatch(r"[A-Za-z0-9]{1,128}", uid):
         raise PolicyError("invalid profile uid")
     unix_uid = integer(p["unix_uid"], 1, 2147483647)
-    if any(not isinstance(p[k], str) or not re.fullmatch(r"[0-9A-Fa-f:.]+", p[k])
-           for k in ("resolver", "upstream")):
+    # One upstream (the original string form, kept so existing policy digests
+    # do not change) or a list of up to four, which dnsmasq fails over between.
+    single = isinstance(p["upstream"], str)
+    upstreams = [p["upstream"]] if single else p["upstream"]
+    if not isinstance(upstreams, list) or not 1 <= len(upstreams) <= 4:
+        raise PolicyError("expected one through four upstream resolvers")
+    if any(not isinstance(x, str) or not re.fullmatch(r"[0-9A-Fa-f:.]+", x)
+           for x in [p["resolver"], *upstreams]):
         raise PolicyError("resolver addresses must be unscoped IP literals")
     try:
         resolver = ipaddress.IPv4Address(p["resolver"])
-        upstream = ipaddress.ip_address(p["upstream"])
+        parsed = [ipaddress.ip_address(x) for x in upstreams]
     except (ValueError, TypeError):
         raise PolicyError("invalid resolver address") from None
     if resolver not in ipaddress.ip_network("127.0.0.0/24") or int(resolver) & 255 not in range(2, 255):
         raise PolicyError("dedicated resolver must be 127.0.0.2 through 127.0.0.254")
-    if not upstream.is_global or upstream.is_multicast:
+    if any(not x.is_global or x.is_multicast for x in parsed):
         raise PolicyError("upstream resolver must be a public unicast address")
+    if len(set(parsed)) != len(parsed):
+        raise PolicyError("duplicate upstream resolver")
+    upstream = str(parsed[0]) if single else [str(x) for x in parsed]
     endpoints = p["endpoints"]
     if not isinstance(endpoints, list) or not 1 <= len(endpoints) <= 64:
         raise PolicyError("expected 1 through 64 endpoint policies")
@@ -96,7 +105,11 @@ def validate(raw: object) -> dict:
             raise PolicyError("endpoint has no permitted ports")
         clean.append(rule)
     return dict(mode=p["mode"], profile_uid=uid, unix_uid=unix_uid, resolver=str(resolver),
-                upstream=str(upstream), endpoints=sorted(clean, key=lambda x: x["suffix"]))
+                upstream=upstream, endpoints=sorted(clean, key=lambda x: x["suffix"]))
+
+
+def upstream_list(p: dict) -> list[str]:
+    return [p["upstream"]] if isinstance(p["upstream"], str) else list(p["upstream"])
 
 
 def compile_policy(raw: object) -> dict[str, str]:
@@ -113,22 +126,35 @@ def compile_policy(raw: object) -> dict[str, str]:
     # add/delete/recreate occur in one nft transaction, never a global flush.
     nft = [f"add table inet {table}", f"delete table inet {table}", f"table inet {table} {{",
            ' comment "mrcall mode=enforce"']
+    # log-queries: a name outside the policy is refused here (local=/#/), not
+    # by the firewall, so only this log shows it ("config <name> is NXDOMAIN";
+    # egress_refused.py lists them). Names and addresses only, no payloads.
     dns = ["# Generated scratch policy; no global resolver changes.",
            "no-resolv", "no-hosts", "bind-interfaces", f"listen-address={p['resolver']}",
            "port=53", "user=nobody", "group=nogroup", "cache-size=0",
-           "max-ttl=0", "local=/#/", "stop-dns-rebind", "domain-needed", "log-facility=-"]
+           "max-ttl=0", "local=/#/", "stop-dns-rebind", "domain-needed", "log-facility=-",
+           "log-queries"]
     for i, entry in enumerate(p["endpoints"]):
         for family in (4, 6):
             nft.append(f" set e{i}_{family} {{ type ipv{family}_addr; flags timeout; timeout 5m; size 4096; }}")
-        dns.extend([f"server=/{entry['suffix']}/{p['upstream']}",
-                    f"nftset=/{entry['suffix']}/4#inet#{table}#e{i}_4,6#inet#{table}#e{i}_6"])
+        dns.extend(f"server=/{entry['suffix']}/{up}" for up in upstream_list(p))
+        dns.append(f"nftset=/{entry['suffix']}/4#inet#{table}#e{i}_4,6#inet#{table}#e{i}_6")
+    # Every reject is preceded by its own rate-limited log rule. The log rule
+    # never accepts: past its limit it just does not match, and the reject
+    # after it still applies. Kernel log prefix: "mc-deny-<tag> ".
+    log = f'limit rate 10/second burst 20 packets log prefix "mc-deny-{tag} " level info'
+    private4 = ("{ 0.0.0.0/8, 10.0.0.0/8, 100.64.0.0/10, 127.0.0.0/8, 169.254.0.0/16, "
+                "172.16.0.0/12, 192.168.0.0/16, 224.0.0.0/4, 240.0.0.0/4 }")
+    private6 = "{ ::/96, ::ffff:0:0/96, 64:ff9b::/96, 64:ff9b:1::/48, 100::/64, fc00::/7, fe80::/10, ff00::/8 }"
     nft.extend([" chain output {", "  type filter hook output priority 10; policy accept;",
                 f"  meta skuid {p['unix_uid']} jump tenant", " }", " chain tenant {",
                 "  ct direction reply ct state established counter accept",
                 f"  ip daddr {p['resolver']} udp dport 53 counter accept",
                 f"  ip daddr {p['resolver']} tcp dport 53 counter accept",
-                "  ip daddr { 0.0.0.0/8, 10.0.0.0/8, 100.64.0.0/10, 127.0.0.0/8, 169.254.0.0/16, 172.16.0.0/12, 192.168.0.0/16, 224.0.0.0/4, 240.0.0.0/4 } counter reject",
-                "  ip6 daddr { ::/96, ::ffff:0:0/96, 64:ff9b::/96, 64:ff9b:1::/48, 100::/64, fc00::/7, fe80::/10, ff00::/8 } counter reject"])
+                f"  ip daddr {private4} {log}",
+                f"  ip daddr {private4} counter reject",
+                f"  ip6 daddr {private6} {log}",
+                f"  ip6 daddr {private6} counter reject"])
     nft.append(f"  ct state established ct mark {p['unix_uid']} counter accept")
     for i, entry in enumerate(p["endpoints"]):
         for family, selector in ((4, "ip"), (6, "ip6")):
@@ -136,7 +162,7 @@ def compile_policy(raw: object) -> dict[str, str]:
                 if entry[proto]:
                     ports = ", ".join(map(str, entry[proto]))
                     nft.append(f"  {selector} daddr @e{i}_{family} {proto} dport {{ {ports} }} ct mark set {p['unix_uid']} counter accept")
-    nft.extend(["  counter reject with icmpx type admin-prohibited", " }", "}"])
+    nft.extend([f"  {log}", "  counter reject with icmpx type admin-prohibited", " }", "}"])
     firewall_text = f"""[Unit]
 Description=MrCall tenant egress firewall {name}
 Before={dnsunit} {unit}

@@ -101,6 +101,39 @@ class PolicyTests(unittest.TestCase):
         self.assertIn("--pid-file=/run/mrcall-dns-", service)
         self.assertNotIn("pid-file=", artifacts["dnsmasq.conf"])
 
+    def test_every_reject_is_logged_first_and_logging_never_accepts(self):
+        rules = policy.compile_policy(fixture())["firewall.nft"].splitlines()
+        tag = json.loads(policy.compile_policy(fixture())["manifest.json"])["tenant"][3:]
+        rejects = [i for i, r in enumerate(rules) if r.strip().endswith("reject")
+                   or "reject with icmpx" in r]
+        self.assertEqual(len(rejects), 3)
+        for i in rejects:
+            log = rules[i - 1]
+            self.assertIn(f'log prefix "mc-deny-{tag} "', log)
+            self.assertIn("limit rate", log)
+            self.assertNotIn("accept", log)
+            # the log rule and its reject select the same packets
+            self.assertEqual(log.split(" limit rate")[0].strip(),
+                             rules[i].replace("counter reject with icmpx type admin-prohibited", "")
+                             .replace("counter reject", "").strip())
+
+    def test_dns_refusals_are_logged(self):
+        self.assertIn("log-queries", policy.compile_policy(fixture())["dnsmasq.conf"].splitlines())
+
+    def test_upstream_list_fails_over_and_legacy_string_keeps_its_digest(self):
+        raw = fixture()
+        raw["upstream"] = ["51.159.69.156", "51.159.69.162"]
+        dns = policy.compile_policy(raw)["dnsmasq.conf"]
+        self.assertIn("server=/example.com/51.159.69.156", dns)
+        self.assertIn("server=/example.com/51.159.69.162", dns)
+        self.assertEqual(policy.validate(fixture())["upstream"], "1.1.1.1")
+        for bad in [[], ["1.1.1.1", "1.1.1.1"], ["1.1.1.1"] * 5, ["1.1.1.1", "10.0.0.1"],
+                    ["1.1.1.1", "8.8.8.8\nserver=9.9.9.9"], ["1.1.1.1", 16843009], "1.1.1.1 8.8.8.8"]:
+            raw = fixture()
+            raw["upstream"] = bad
+            with self.subTest(upstream=bad), self.assertRaises(policy.PolicyError):
+                policy.compile_policy(raw)
+
     def test_cli_refuses_overwrite_and_does_not_echo_bad_input(self):
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)
