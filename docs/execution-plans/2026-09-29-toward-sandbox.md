@@ -2571,6 +2571,148 @@ app reconnect is also unverified. The two rolled-back profiles and these open
 checks prevent marking R4 done. Healthy daemons and their current policies
 remain running; no further host rollout work continues after the deadline.
 
+#### R_4 production diagnosis — CTO request, 2026-10-03
+
+Production remains enforced: the CTO explicitly forbids its rollback for
+this diagnosis. Scope is metadata only, with no call content, credentials,
+voice-file values or service-checkout edits. The lead owns the following
+operational extension of the approved R4 plan:
+
+1. Read the ledger and trace of the two 09:04 UTC calls and the 07:09 UTC
+   pre-enforcement call using explicit metadata whitelists. Record states,
+   durations, evidence keys and typed binding/exposure/sideband/delegation
+   metadata; assess normal conversation only as far as those facts support.
+2. Filter production and kernel journals for 09:00–09:10 UTC. Publish
+   timestamps, fixed event labels, exception class names and denied network
+   destination/protocol/port metadata; never raw diagnostic messages.
+3. Compare each retained installed egress artifact against the current main
+   compiler using its manifest policy as input. Distinguish retained
+   rolled-back artifacts from live enforcement, and list semantic differences.
+4. Enable query logging only in production's DNS configuration, validate it,
+   assert its firewall is active, and restart only its DNS unit with
+   `systemctl --job-mode=ignore-dependencies restart mrcall-dns-18f855d535e9.service`.
+   The same job mode applies to DNS-only recovery; an ordinary restart is
+   prohibited because the daemon's Requires dependency would propagate it.
+   Capture all daemon PIDs before/after and verify they remain unchanged.
+   Neither policy allowlists nor daemon units are changed. Keep root-only
+   query evidence and report resolved names versus local=/#/ refusals.
+5. Publish the pre-call diagnosis and reviewed readiness; tell the CTO it is
+   ready for the point-4 call. After the CTO call, append the sanitized DNS
+   observations. Pending test evidence remains explicitly pending.
+
+Verification is targeted live metadata inspection plus independent review;
+logger recovery, if needed, restores only that DNS configuration/service.
+Production enforcement and its daemon are not rolled back or restarted.
+
+**Plan review:** APPROVED after correcting the DNS restart job mode to avoid
+Requires propagation. The five diagnostic voice source files inspected in the
+running pinned release match current main byte-for-byte (`9b081f1`):
+engine_runtime, business_binding, listener, diagnostics and smoke_runtime.
+
+**Historical call metadata (2026-10-03 UTC):** queried SQLite in read-only
+mode; no trace event payload, transcript delta or session content was selected.
+Carrier reservation timestamps label the calls; observed runtime duration is
+not reservation-to-end duration. Trace call_finished supplies the end time.
+
+| Start UTC | Ledger / meter | Observed runtime | Provider voice seconds | Trace finished UTC | Sideband attached | Audio events caller / voice | Transcript deltas caller / voice | Delegation events / unique client delegations | Capture |
+|---|---|---|---|---|---|---|---|---|---|
+| 07:09:45 | closed / closed | 35.135s | 30 | 07:10:21.524556 | 1 | 156 / 151 | 13 / 53 | 0 / 0 | deltas_observed |
+| 09:04:00 | closed / closed | 35.704s | 31 | 09:04:36.850428 | 1 | 157 / 151 | 0 / 14 | 0 / 0 | possible_gap |
+| 09:04:44 | closed / closed | 27.028s | 23 | 09:05:11.928744 | 1 | 117 / 113 | 2 / 14 | 0 / 0 | deltas_observed |
+
+All three calls are funded, have `finalization=confirmed`,
+`closure_trigger=sideband_eof`, `diagnostics=complete`, `results_sent=0` and
+meter reconciliation `provisionally_covered`. The keys `binding_invalidated`
+and `exposure` are absent in all three ledger evidence objects: **not
+recorded**, rather than an explicit false/healthy value. `sideband_attached`
+is a trace event, not an evidence key. No engine_failure or engine_failure_type
+is recorded. All three traces contain one call_attached, caller_context_ready,
+memory_started, memory_result, session.started, session.instructions.appended,
+session.thinking.appended (event count only), session.closed,
+conversation_closed, call_finished and trace_closed, plus two append_attempt
+and two append_sent events. None contains session.delegation.created.
+
+The common complete evidence key list is: `events`, `results_sent`,
+`finalization`, `voice_seconds`, `carrier_cost`, `engine_cost_microusd`,
+`config_revision`, `conversational_model`, `delegated_engine_model`,
+`engine_accounting`, `company_note_status`, `company_note_source_hash`,
+`company_note_included_spans`, `company_note_omissions`, `diagnostics`,
+`transcript_capture`, `diagnostic_file`, `caller_recognition`,
+`caller_fact_count`, `caller_lookup_ms`, `first_audio_ms`,
+`first_voice_transcript_ms`, `first_voice_provider_start_ms`,
+`voice_cost_estimate_microusd`, `closure_trigger`, `hangup_confirmed`,
+`observed_elapsed_ms`. This lists names only; configuration/model/company
+note/identity values are not published.
+
+**07:09 assessment:** the pre-enforcement call shows a normal bidirectional
+conversation at the metadata level: caller and voice audio and transcript
+deltas, attached sideband, memory context and confirmed closure. Metadata
+cannot certify conversation quality or handset playback. The first 09:04
+call differs by having no caller transcript and possible_gap capture; the
+second has only two caller deltas. Zero delegation means these three calls
+do not test a delegated engine request.
+
+**Production journal, 09:00–09:10 UTC:** 164 journal entries inspected;
+zero matches for `[voice] active call binding invalidated`,
+`Voice business binding unavailable`, `[auth] ... failed` or websocket/httpx
+error lines. Accordingly there are no exception types to report for that
+window. **Kernel:** zero denied entries from production's scoped rule or
+explicit Unix UID 988 in the same interval. These are logging observations,
+not proof that every dependency succeeded: the running listener suppresses
+httpx/httpcore/aiohttp/auth-refresh logging, business-binding failures are
+collapsed to a generic error, and packet-denial logging is rate-limited.
+DNS names refused by local=/#/ do not require a kernel-denied packet.
+
+**Installed artifacts versus main compiler:** compiled each of the seven
+retained manifest policies with `engine/scripts/server/egress_policy.py` on
+`9b081f1`, without installing regenerated output. For all seven directories:
+
+- `firewall.nft` has exactly three added metadata-only logging rules: before
+  the private IPv4 reject, private IPv6 reject and final unconditional reject.
+  They use the same reject predicate, `limit rate 10/second burst 20 packets`,
+  `log prefix "mc-deny-<tenant-tag> " level info`. No generated line was removed;
+  every unconditional reject remains after its log rule.
+- `manifest.json` differs only in top-level `status`
+  (`cto-authorized-vps-rollout` versus `scratch-experiment-not-production-approved`)
+  and the added `denied_log_prefix`.
+- `resolv.conf`, both generated service files and `50-egress.conf` match
+  byte-for-byte. DNS configs matched before the point-4 change; production's
+  `dnsmasq.conf` now additionally contains exactly `log-queries`.
+- `observe.lock` is an extra operational lock file, outside compiler output.
+
+The compared tags are Ivan `3a94d888f0a7`, Riccardo `e00a4971b76c`, support
+`16d5836d57be`, Mario MrCall `fd58d04802f1`, Café124 `b75843f3770f`, Mario Gmail
+`0c008879b605` and production `18f855d535e9`. Riccardo/Café124 files are retained
+rollback evidence, not live enforcement. No allowlist difference was found.
+
+**Point-4 capture armed at 09:23:04 UTC:** production-only DNS config syntax
+validated, firewall stayed active, and only mrcall-dns-18f855d535e9.service
+was restarted with ignore-dependencies. DNS PID changed 4126830 → 4155073;
+production PID stayed 4126831 and all seven daemon PIDs were unchanged.
+The production daemon and its enforced firewall were not restarted.
+The first metadata snapshot, through 09:24:14 UTC, contains four queries for
+`api.mrcall.ai`, forwarded and resolved; no local-policy refusals or upstream
+negative answers. This is background traffic, not attributed to a CTO test call.
+The new CTO test call and its query/refusal report remain pending.
+
+Root-only sanitized evidence is retained as production-diagnosis-calls,
+production-diagnosis-journal, production-diagnosis-artifacts-before,
+production-diagnosis-source, production-dns-query-capture-start and
+production-dns-query-observations JSON files under `/root/r4-vps-20261003/`.
+The DNS config backup is also root-only. Raw call contents and voice-file
+values are not read or copied for this diagnosis.
+
+**Pre-call final reviews:** two fresh independent reviewers returned
+APPROVED. Their local read-only checks reproduced historical call counts,
+the 164-entry production journal scan, zero kernel denials, exact compiler
+differences and live daemon/DNS/firewall status. Only production enables
+query logging. Copies retained in the egress directories match the compiler
+as described above; active systemd service/drop-in copies match for the five
+enforced tenants, while Riccardo/Café124's active installations remain removed
+after rollback. Approval covers the diagnosis and armed DNS capture, with the
+new CTO call and its DNS observations explicitly pending. **Ready for the
+point-4 test call.**
+
 #### R_4 VPS check — all LLM providers (2026-10-03)
 
 `git pull --rebase origin main` included `81c830bd` and reached `1f0b9f2`.
