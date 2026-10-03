@@ -2702,6 +2702,17 @@ production-dns-query-observations JSON files under `/root/r4-vps-20261003/`.
 The DNS config backup is also root-only. Raw call contents and voice-file
 values are not read or copied for this diagnosis.
 
+**Pre-call final reviews:** two fresh independent reviewers returned
+APPROVED. Their local read-only checks reproduced historical call counts,
+the 164-entry production journal scan, zero kernel denials, exact compiler
+differences and live daemon/DNS/firewall status. Only production enables
+query logging. Copies retained in the egress directories match the compiler
+as described above; active systemd service/drop-in copies match for the five
+enforced tenants, while Riccardo/Café124's active installations remain removed
+after rollback. Approval covers the diagnosis and armed DNS capture, with the
+new CTO call and its DNS observations explicitly pending. **Ready for the
+point-4 test call.**
+
 #### R_4 VPS check — all LLM providers (2026-10-03)
 
 `git pull --rebase origin main` included `81c830bd` and reached `1f0b9f2`.
