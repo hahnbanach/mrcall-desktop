@@ -303,6 +303,9 @@ not started.
    M10 model selection (branch `model-selection-m10a`) uses OpenRouter.
    With only the provider configured today, a switch would be blocked.
    Web search is a server-side Anthropic tool and needs no further host.
+   Every profile also gets `raw.githubusercontent.com:443`, for the M10
+   daily model table (the M10 answer, `1f0b9f26`). It is harmless before
+   M10 merges.
 
    Before enforcing, each profile's denied connections must be logged, so a
    missing destination shows up instead of failing silently. Acceptance per
