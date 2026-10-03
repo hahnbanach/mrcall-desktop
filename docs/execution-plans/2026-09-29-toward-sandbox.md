@@ -2479,6 +2479,45 @@ R_2's final release at 17:43:24 UTC observed on origin/main. Publish and
 refresh before the first probe. The installed helper is R2's approved main
 version; leave it unchanged.
 
+#### R_4 immediate VPS rollout — 2026-10-03 (stop at 08:45 UTC)
+
+Latest CTO instruction authorizes immediate per-profile enforcement, in order
+Ivan, Riccardo, support, Mario MrCall, Mario Cafe124, Mario Gmail, production.
+Target is at most ten minutes each; a tenant anomaly rolls back only that
+tenant and rollout proceeds. One reviewer per step runs in parallel with the
+next tenant. Production pauses at **ready for the test call** until the CTO
+provides the test call; unfinished work stops at 08:45 UTC.
+
+Pulled `b8cd987d`. Every policy includes all three LLM providers, MrCall API
+and `raw.githubusercontent.com`, TCP 443, plus the inventory and CTO's
+explicit additions. Each tenant has its own reviewed-compiler table, marked
+established-flow exception and dedicated DNS resolver; the host resolver and
+existing firewall remain in place. Before activation, each reject receives a
+separate rate-limited metadata-only log rule followed by its unconditional
+reject, so logging throttling never permits rejected traffic. Root retains
+policy, baseline and acceptance evidence under `/root/r4-vps-20261003/`.
+The reviewed dnsmasq 2.91 source hash matched; the nftset-enabled binary is
+root-owned, SHA256 `42ea9e4a426b424bb75489fa54ff686ac006941f69cd219d59989003eda5e539`.
+
+Acceptance uses a manual mail-only sync under the daemon UID, supplementary
+groups, mount/network namespaces and pinned interpreter, followed by company
+memory availability. No paid analysis or new WhatsApp session is initiated.
+The existing actual app transport checks authenticated reconnect where a
+non-voice Firebase credential is available. Missing credentials are recorded
+explicitly; no voice file is read and no app acceptance is fabricated.
+
+<!-- r4-vps-immediate:start -->
+| Profile | Enforced UTC | Policy SHA256 | Mail / memory | Watch / denied | App reconnect | Review | Runtime state |
+|---|---|---|---|---|---|---|---|
+| Ivan | 07:42:27 | `06bc4a81d8da53b7e0e295e4a597a70e2f947ad960a55bb5ae93c93529b57149` | passed / available | 164s / 0 | pending | pending | enforced; runtime checks passed |
+| Riccardo | pending | — | — | — | — | pending | pending |
+| support | pending | — | — | — | — | pending | pending |
+| Mario MrCall | pending | — | — | — | — | pending | pending |
+| Mario Cafe124 | pending | — | — | — | — | pending | pending |
+| Mario Gmail | pending | — | — | — | — | pending | pending |
+| production | pending | — | — | — | — | pending | pending |
+<!-- r4-vps-immediate:end -->
+
 #### R_4 VPS check — all LLM providers (2026-10-03)
 
 `git pull --rebase origin main` included `81c830bd` and reached `1f0b9f2`.
