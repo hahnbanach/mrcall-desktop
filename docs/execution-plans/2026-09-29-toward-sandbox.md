@@ -2525,7 +2525,7 @@ No customer data was deleted to hide or repair the check trace.
 | Mario MrCall | 07:53:56 | `a2cf2c5f5b7bb8138abad634bdaf423086ac33c01047cc4f6500d7756a427acd` | passed / available | 2080s / 0 | passed | APPROVED | enforced; runtime checks passed |
 | Mario Cafe124 | 07:58:44 | `ed7a019e47eeb4ba8a87ea838117231db4b3da37cc5762721dbe300b69517112` | passed at baseline / available | 201s / 0 | passed | APPROVED (rollback) | rolled-back |
 | Mario Gmail | 08:12:03 | `de669d4b1d211644b92818c468192c52da43046aee0829d09deab40d75b77454` | passed / available | 454s / 0 | passed | APPROVED | enforced; runtime checks passed |
-| production | 08:20:46 | `513d32e7767dcf0d83d10b80da00e882a68a1a3df7823b940f71a7d9f76bc8a8` | passed / available | 830s / 0 | passed | pending | enforced; ready for CTO test call |
+| production | 08:20:46 | `513d32e7767dcf0d83d10b80da00e882a68a1a3df7823b940f71a7d9f76bc8a8` | passed / available | 830s / 0 | passed | APPROVED (ready; call pending) | enforced; ready for CTO test call |
 <!-- r4-vps-immediate:end -->
 
 **Production readiness, 08:34:37 UTC:** ready for the test call. Correct UID
