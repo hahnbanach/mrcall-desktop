@@ -325,6 +325,46 @@ not started.
 
    *R5.* The cloud session updates the documents in parallel.
 
+   **R4 compiler fixes, 2026-10-03, cloud session; one independent review,
+   APPROVED after two REVISE rounds.** Code `9f5f069f` + `cc29f30f`
+   (`engine/scripts/server/egress_policy.py`, new `egress_refused.py`,
+   tests). What it fixes:
+   - **A missing host was invisible.** A name outside a tenant's policy is
+     refused by its resolver (`local=/#/`, NXDOMAIN) before any packet
+     exists, so "zero denied connections" proved nothing about missing
+     hosts. dnsmasq now runs `log-queries`. The DNS unit's
+     `LogFilterPatterns` (systemd ≥ 253, asserted by the host probe) drops
+     every allowed lookup. The journal keeps refusals (`config <name> is
+     NXDOMAIN`), rebind refusals, upstream failures, startup and errors.
+     `egress_refused.py dns` lists the refused names. A refused name is
+     whatever the tenant asked for, data it tried to send out included; the
+     journal is root-only, like the keys.
+   - **The host had drifted from git.** The rate-limited log rule before
+     each reject is now generated, prefix `mc-deny-<tag> `, with its own
+     counter (rejected minus logged = rate-limited).
+     `egress_refused.py deny <tag>` lists one tenant's denied destinations.
+   - **One upstream.** `upstream` accepts a list of up to four public
+     resolvers, and dnsmasq fails over between them. The single-string form
+     and its policy digests are unchanged.
+
+   *VPS, to apply:*
+   1. Recompile every enforced tenant from its manifest policy, with
+      `upstream` = both host resolvers.
+   2. Install the result in place of the hand-edited files.
+   3. Restart the tenant's DNS unit with `--job-mode=ignore-dependencies`;
+      reload the firewall unit.
+   4. Check `nft -s list table` against the compiled `firewall.nft`.
+   5. Check that `systemctl show -p LogFilterPatterns` of the DNS unit is
+      not empty.
+
+   **Production call diagnosis so far:** the metadata above does not
+   implicate R4. The engine side of the 09:04 calls matches the working
+   07:09 call, with no binding failure and no denied packet. The call audio
+   runs Vonage → OpenAI SIP directly, not through this host. What differs
+   is the caller transcription: 13 caller deltas at 07:09, 0 and 2 at
+   09:04. The DNS capture of the next call decides whether any name was
+   refused.
+
 4. **R4 — M3, egress bound per daemon** (section below). *scratch* first,
    then *VPS* one profile at a time, each watched over a full mail sync
    cycle.
