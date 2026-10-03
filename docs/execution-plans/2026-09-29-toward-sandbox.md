@@ -2812,6 +2812,55 @@ functional call acceptance nor R4 completion is approved. The CTO was asked
 for speaking-interval and alternate-telephone metadata to bound a subsequent
 controlled test without reading or publishing spoken content.
 
+**Controlled alternate-telephone result — 09:48 UTC CTO report:** the CTO
+retried speaking after five seconds and confirmed that another originating
+telephone works. Its number is not copied into this record; no caller
+identity or spoken content was queried from runtime storage. Two additional
+funded calls appear in the metadata:
+
+| Reservation UTC | Runtime | Ledger / meter | Caller / voice transcript deltas | Sideband | Delegations | Capture |
+|---|---|---|---|---|---|---|
+| 09:46:45 | 15.961s | closed / closed | 3 / 20 | 1 | 0 | deltas_observed |
+| 09:47:10 | 19.054s | closed / closed | 0 / 13 | 1 | 0 | possible_gap |
+
+Both finalize confirmed with sideband_eof and provisionally_covered
+reconciliation; neither records binding_invalidated, exposure or engine
+failure. The first contains 58 input-audio/55 output-audio events and caller
+transcript provider timestamps 6.6–7.4 seconds. Voice transcript timing
+extends to 9.0 seconds. The second contains 78 input-audio/76 output-audio
+events and voice transcript timing ending at 5.2 seconds. Without querying
+caller identities, these timestamps are not assigned to a specific telephone;
+the CTO's report supplies the successful alternate-path observation.
+
+For 09:46:44–09:47:31 UTC there are 40 DNS queries; api.openai.com and
+api.mrcall.ai resolve and no names are refused by local=/#/. The 88-entry
+production journal scan has no requested binding/auth/exception-type errors.
+Two scoped kernel rejects occur at 09:46:47.093994/.094155 UTC to
+162.159.140.245:443 TCP, FIN/ACK and RST/ACK, before the first call's sideband
+attachment. Thus the same teardown-rejection pattern also occurs in the call
+with bidirectional transcript observations; it is not sufficient to explain
+the greeting-only symptom.
+
+The 09:36:30, 09:46:45 and 09:47:10 calls have identical recorded
+config_revision values (compared privately, values not published). Production
+remains PID 4126831, active, NRestarts=0. Installed firewall SHA256 remains
+`7236784127ab3e8b676cb6165a9d8d277c20642f68e380cd07f59d81af435479`.
+No host or voice-configuration change was made for the comparison. This
+supports an originating-telephone/media-path-dependent problem under the same
+enforcement; it does not distinguish handset input, carrier/codec transport
+or provider recognition. The CTO-confirmed successful conversation is retained
+as a controlled positive result, with the failing originating path unresolved.
+The metadata contains no delegated-engine request, so that path remains
+untested. R4 remains open for the outstanding rolled-back profiles and checks.
+Root-only evidence: production-alternate-path-call-metadata.json and
+production-alternate-path-network-metadata.json.
+
+**Alternate-path amendment reviews:** both independent reviewers returned
+APPROVED after verifying the two calls, unchanged production runtime/firewall,
+DNS observations and teardown packet flags. The controlled positive result
+is recorded without identifying a telephone or attributing a specific carrier/
+codec cause. The failing originating path and delegated-engine test remain open.
+
 #### R_4 VPS check — all LLM providers (2026-10-03)
 
 `git pull --rebase origin main` included `81c830bd` and reached `1f0b9f2`.
