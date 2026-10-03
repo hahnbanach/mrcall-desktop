@@ -2519,12 +2519,12 @@ No customer data was deleted to hide or repair the check trace.
 <!-- r4-vps-immediate:start -->
 | Profile | Enforced UTC | Policy SHA256 | Mail / memory | Watch / unexplained denied | App reconnect | Review | Runtime state |
 |---|---|---|---|---|---|---|---|
-| Ivan | 07:42:27 | `06bc4a81d8da53b7e0e295e4a597a70e2f947ad960a55bb5ae93c93529b57149` | passed / available | 164s / 0 | unavailable: no non-voice credential | APPROVED | enforced; runtime checks passed |
+| Ivan | 07:42:27 | `06bc4a81d8da53b7e0e295e4a597a70e2f947ad960a55bb5ae93c93529b57149` | passed / available | 2231s / 0 | unavailable: no non-voice credential | APPROVED | enforced; runtime checks passed |
 | Riccardo | 07:46:26 | `552186a177478acd73ca971d9cc29f7e54fc7a3991f552b7e671c986f05e9a55` | failed | 1599s / 0 | unavailable: no non-voice credential | APPROVED (rollback) | rolled-back |
 | support | 07:49:39 | `b8c6ece4d00dac7a2fbfcc84e8f67643d0cc890a004b1d28873319ceb2b34d36` | passed / available | 1608s / 0 | passed | APPROVED | enforced; runtime checks passed |
-| Mario MrCall | 07:53:56 | `a2cf2c5f5b7bb8138abad634bdaf423086ac33c01047cc4f6500d7756a427acd` | pending | 259s / 0 | passed | APPROVED | enforced |
+| Mario MrCall | 07:53:56 | `a2cf2c5f5b7bb8138abad634bdaf423086ac33c01047cc4f6500d7756a427acd` | passed / available | 1460s / 0 | passed | APPROVED | enforced; runtime checks passed |
 | Mario Cafe124 | 07:58:44 | `ed7a019e47eeb4ba8a87ea838117231db4b3da37cc5762721dbe300b69517112` | passed at baseline / available | 201s / 0 | passed | APPROVED (rollback) | rolled-back |
-| Mario Gmail | 08:12:03 | `de669d4b1d211644b92818c468192c52da43046aee0829d09deab40d75b77454` | passed / available | 172s / 0 | passed | pending | enforced; runtime checks passed |
+| Mario Gmail | 08:12:03 | `de669d4b1d211644b92818c468192c52da43046aee0829d09deab40d75b77454` | passed / available | 454s / 0 | passed | pending | enforced; runtime checks passed |
 | production | pending | — | — | — | — | pending | pending |
 <!-- r4-vps-immediate:end -->
 
