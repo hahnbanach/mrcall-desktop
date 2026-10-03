@@ -2476,6 +2476,25 @@ R_2's final release at 17:43:24 UTC observed on origin/main. Publish and
 refresh before the first probe. The installed helper is R2's approved main
 version; leave it unchanged.
 
+#### R_4 VPS check — all LLM providers (2026-10-03)
+
+`git pull --rebase origin main` included `81c830bd` and reached `1f0b9f2`.
+Every profile's policy must include `api.anthropic.com`, `openrouter.ai`,
+`zylch.mrcall.ai` and `api.mrcall.ai`, each TCP 443 / HTTPS, regardless of its
+currently selected provider. This applies to initial enforcement and updates
+of already-enforced profiles.
+
+Read-only VPS checks at 07:25–07:27 UTC found **zero already-enforced
+profiles**. All seven daemons are active as their own tenant users with
+`NRestarts=0`, in the host network namespace. None has an egress/DNS unit
+dependency, a dedicated resolver bind or a systemd IP-address filter. There
+are no tenant egress tables, owner/cgroup firewall rules, installed egress
+units, policy directory or reviewed DNS binary. An independent verifier
+confirmed the effective daemon/slice and nft/iptables state. Focused final
+review: **APPROVED**. Consequently, there was no existing enforced policy to
+extend; no host rule or daemon was changed. R4 enforcement and its acceptance
+remain pending.
+
 #### R_4 observe-first amendment — 2026-10-02 (two brief reviews APPROVED)
 
 CTO instruction after inventory `e33c653`: every VPS profile must first run
