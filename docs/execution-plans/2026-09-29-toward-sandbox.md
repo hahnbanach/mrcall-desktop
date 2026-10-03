@@ -2525,8 +2525,24 @@ No customer data was deleted to hide or repair the check trace.
 | Mario MrCall | 07:53:56 | `a2cf2c5f5b7bb8138abad634bdaf423086ac33c01047cc4f6500d7756a427acd` | passed / available | 2080s / 0 | passed | APPROVED | enforced; runtime checks passed |
 | Mario Cafe124 | 07:58:44 | `ed7a019e47eeb4ba8a87ea838117231db4b3da37cc5762721dbe300b69517112` | passed at baseline / available | 201s / 0 | passed | APPROVED (rollback) | rolled-back |
 | Mario Gmail | 08:12:03 | `de669d4b1d211644b92818c468192c52da43046aee0829d09deab40d75b77454` | passed / available | 454s / 0 | passed | APPROVED | enforced; runtime checks passed |
-| production | 08:20:46 | `513d32e7767dcf0d83d10b80da00e882a68a1a3df7823b940f71a7d9f76bc8a8` | passed / available | 310s / 0 | passed | pending | enforced; runtime checks passed |
+| production | 08:20:46 | `513d32e7767dcf0d83d10b80da00e882a68a1a3df7823b940f71a7d9f76bc8a8` | passed / available | 830s / 0 | passed | pending | enforced; ready for CTO test call |
 <!-- r4-vps-immediate:end -->
+
+**Production readiness, 08:34:37 UTC:** ready for the test call. Correct UID
+mail sync completed at 08:28:00 UTC (280 new messages), memory is available,
+both authenticated app reconnect checks passed, and local/public health checks
+returned 200 with `calls_available=true`. Production is active with
+`NRestarts=0`; 830 seconds of observation showed no unexplained denied
+connections. The read-only funded-call baseline contains 11 closed calls and
+zero unresolved calls. The CTO test call is pending; readiness does not close
+the funded-call gate. Five profiles remain enforced; Riccardo and Café124
+remain rolled back. Ivan's authenticated app reconnect remains unverified
+because no non-voice credential was available. R4 is not done.
+
+**Review transport deviation:** the Gmail reviewer made two failed SSH
+authentication attempts despite the local-only review instruction. No account
+authenticated and no remote command ran. The reviewer was redirected to local
+read-only checks; the APPROVED verdict is based on those local checks.
 
 #### R_4 VPS check — all LLM providers (2026-10-03)
 
