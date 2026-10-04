@@ -373,6 +373,11 @@ not started.
      line of the M3 verification.
    - *Done:* all migrated tenants have their per-user set; criterion 6 is
      recorded.
+   - *Done status, 2026-10-04:* **done** — all seven VPS tenants are in
+     enforcement with the approved compiler fixes. Each tenant received
+     APPROVED and its record was published; the separate final integration
+     review returned APPROVED. The current CTO acceptance decisions and
+     explained refusals are recorded in the October 4 completion section.
    - *M10 (model selection, 2026-10-03):*
      - Nothing of M10 runs on the VPS, and M10 has installed nothing there:
        no units, crons or drop-ins.
@@ -2557,17 +2562,42 @@ evidence and is explained here; the post-fix interval has zero unexplained
 refusals. Café124 receives the same source-backed dependency at initial
 enforcement. This adds no wildcard or port allowance.
 
+The final watch also identified production DNS requests for
+`mobile.events.data.microsoft.com`. Its installed, loaded ONNX Runtime
+binary contains that telemetry endpoint; telemetry remains denied, without
+widening the policy. The refused-log CLI reports this explained name and
+the controlled negative probe, with no other refused name.
+
+Mario MrCall had six TCP 443 refusals on one tuple to `160.79.104.10`:
+five ACK-only packets about 61 seconds apart, then ACK/RST, with no SYN.
+A controlled lookup and CA-verified HTTPS request from its daemon identity
+confirmed `api.anthropic.com` at that address and returned HTTP 404; that
+exact endpoint was already allowed. These packets are explained traffic
+to an approved endpoint. The previous connection's creation, conntrack
+mark and precise rejection cause are unknown; stale-connection behavior
+is an inference. No allowance or daemon restart was added for these packets.
+
 <!-- r4-vps-compiler-fixes-20261004:start -->
 | Tenant | Deployment | Static nft match | DNS filter / unexplained refusals | Mail / memory | Review |
 |---|---|---|---|---|---|
 | Ivan | 09:00:12 UTC; updated; daemon PID retained | passed | enabled; DNS 0 / packets 0 | CTO daemon acceptance; available | APPROVED |
 | support | 09:05:14 UTC; updated; daemon PID retained | passed | enabled; DNS 0 / packets 0 | prior accepted sync; available | APPROVED |
-| Mario MrCall | 09:08:17 UTC; updated; daemon PID retained | passed | enabled; DNS 0 / packets 3 | prior accepted sync; available | APPROVED |
+| Mario MrCall | 09:08:17 UTC; updated; daemon PID retained | passed | enabled; DNS 0 / packets 0 | prior accepted sync; available | APPROVED |
 | Mario Gmail | 09:12:11 UTC; updated; daemon PID retained | passed | enabled; DNS 0 / packets 0 | prior accepted sync; available | APPROVED |
-| production | 09:13:44 UTC; updated; daemon PID retained | passed | enabled; DNS 6 / packets 0 | CTO functional acceptance; available | APPROVED |
+| production | 09:13:44 UTC; updated; daemon PID retained | passed | enabled; DNS 0 / packets 0 | CTO functional acceptance; available | APPROVED |
 | Riccardo | 09:14:42 UTC; new enforcement; dependency update 09:17:34 UTC | passed | enabled; DNS 0 / packets 0 | sync completed; available | APPROVED |
 | Café124 | 09:18:45 UTC; new enforcement | passed | enabled; DNS 0 / packets 0 | sync completed; available | APPROVED |
 <!-- r4-vps-compiler-fixes-20261004:end -->
+
+**R4 done — 2026-10-04.** All seven tenants are enforced and all seven
+milestone verdicts are APPROVED. The separate final reviewer independently
+checked their live UID, active state, zero restarts, installed compiler
+output, both upstreams, dedicated resolvers, DNS filters, static nft rules,
+and current refusal classifications; result: APPROVED. Reject/log counters
+had no sampling gap. Riccardo and Café124 completed their manual syncs;
+memory is available for all seven. Production health remains HTTP 200 with
+`calls_available=true`; the CTO's accepted call and Ivan's daemon acceptance
+close their functional gates. R3 can now evaluate its conditional cleanup.
 
 #### R_4 immediate VPS rollout — 2026-10-03 (stop at 08:45 UTC)
 
