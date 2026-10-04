@@ -190,3 +190,23 @@ def test_saved_business_change_invalidates_existing_client(ledger, tmp_path, mon
             client.create_message_sync(**ARGS)
     finally:
         clear_session()
+
+
+def test_refused_quote_says_why_and_that_nothing_was_reserved():
+    from zylch.llm.bounded_proxy import BoundedProxyClient
+    from zylch.llm.budget_pricing import BudgetError
+
+    def client(status, body):
+        def handler(request):
+            return httpx.Response(status, json=body)
+        return BoundedProxyClient('https://billing.example', SimpleNamespace(id_token='t'),
+                                  http_client=httpx.Client(transport=httpx.MockTransport(handler)))
+
+    with pytest.raises(BudgetError) as refused:
+        client(400, {'code': 'model_not_allowed'})._call('POST', '/quote', {})
+    assert 'HTTP 400 (model_not_allowed)' in str(refused.value)
+    assert 'Refused before any reservation' in str(refused.value)
+    # a body that is not a short plain reason is never repeated
+    with pytest.raises(BudgetError) as echoed:
+        client(400, {'detail': 'bad <script>' + 'x' * 300})._call('POST', '/execute', {})
+    assert 'script' not in str(echoed.value) and 'check reservations' in str(echoed.value)
