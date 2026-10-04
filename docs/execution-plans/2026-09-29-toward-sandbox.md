@@ -2519,6 +2519,46 @@ R_2's final release at 17:43:24 UTC observed on origin/main. Publish and
 refresh before the first probe. The installed helper is R2's approved main
 version; leave it unchanged.
 
+#### R_4 compiler-fix deployment and completion — 2026-10-04
+
+Current CTO authorization accepts production's functional call under
+enforcement; the original telephone's missing OpenAI transcription is a
+separate voice issue, outside R4. Ivan is accepted on daemon evidence.
+The lead applies the already reviewed compiler fixes to Ivan, support,
+Mario MrCall, Mario Gmail and production, then enforces Riccardo and Café124.
+Every tenant is independently reviewed and published before its step closes.
+
+Each policy is recompiled from its retained manifest, changing upstream to
+the two verified host resolvers. Generated files replace local edits exactly.
+DNS restart uses ignore-dependencies; firewall reload executes the existing
+unit's lock-protected nft loader because the unit has no ExecReload.
+Stateless live table configuration is compared with the same compiled file
+loaded in a disconnected network namespace; dynamic DNS set elements are
+reported separately from static rules. LogFilterPatterns must be populated.
+The reviewed refused-log CLI checks DNS and packet metadata; a controlled
+local .invalid lookup/negative packet probe is explicitly explained.
+
+The five existing daemon PIDs remain unchanged. Only a newly enforced
+tenant's daemon is restarted to bind its dedicated resolver. For Riccardo
+and Café124, acceptance is completed sync or observed UID-scoped database
+progress, memory availability, and no unexplained DNS/packet refusal.
+Duration alone is not an anomaly and does not trigger rollback.
+After seven accepted enforced tenants R4 is marked done, then R3 runs under
+the CTO's conditional shared-key rule. No service-checkout or voice-file edit
+is permitted; private evidence stays root-only.
+
+<!-- r4-vps-compiler-fixes-20261004:start -->
+| Tenant | Deployment | Static nft match | DNS filter / unexplained refusals | Mail / memory | Review |
+|---|---|---|---|---|---|
+| Ivan | 09:00:12 UTC; updated; daemon PID retained | passed | enabled; DNS 0 / packets 0 | CTO daemon acceptance; available | APPROVED |
+| support | pending | — | — | — | pending |
+| Mario MrCall | pending | — | — | — | pending |
+| Mario Gmail | pending | — | — | — | pending |
+| production | pending | — | — | — | pending |
+| Riccardo | pending | — | — | — | pending |
+| Café124 | pending | — | — | — | pending |
+<!-- r4-vps-compiler-fixes-20261004:end -->
+
 #### R_4 immediate VPS rollout — 2026-10-03 (stop at 08:45 UTC)
 
 Latest CTO instruction authorizes immediate per-profile enforcement, in order
