@@ -2553,9 +2553,9 @@ is permitted; private evidence stays root-only.
 | Ivan | 09:00:12 UTC; updated; daemon PID retained | passed | enabled; DNS 0 / packets 0 | CTO daemon acceptance; available | APPROVED |
 | support | 09:05:14 UTC; updated; daemon PID retained | passed | enabled; DNS 0 / packets 0 | prior accepted sync; available | APPROVED |
 | Mario MrCall | 09:08:17 UTC; updated; daemon PID retained | passed | enabled; DNS 0 / packets 0 | prior accepted sync; available | APPROVED |
-| Mario Gmail | pending | — | — | — | pending |
-| production | pending | — | — | — | pending |
-| Riccardo | pending | — | — | — | pending |
+| Mario Gmail | 09:12:11 UTC; updated; daemon PID retained | passed | enabled; DNS 0 / packets 0 | prior accepted sync; available | APPROVED |
+| production | 09:13:44 UTC; updated; daemon PID retained | passed | enabled; DNS 0 / packets 0 | CTO functional acceptance; available | pending |
+| Riccardo | 09:14:42 UTC; new enforcement | passed | enabled; DNS 2 / packets 0 | pending sync; available | pending |
 | Café124 | pending | — | — | — | pending |
 <!-- r4-vps-compiler-fixes-20261004:end -->
 
