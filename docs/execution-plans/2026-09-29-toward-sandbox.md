@@ -2547,6 +2547,16 @@ After seven accepted enforced tenants R4 is marked done, then R3 runs under
 the CTO's conditional shared-key rule. No service-checkout or voice-file edit
 is permitted; private evidence stays root-only.
 
+Riccardo's initial two DNS refusals were `api.github.com`, the HTTPS
+release check in `engine/zylch/cli/main.py`. The policy was regenerated
+with that exact host on TCP 443; a controlled request from the daemon's
+UID and namespaces resolved it and returned HTTPS 200. Only DNS restarted,
+with ignore-dependencies, and the firewall loader ran; every daemon PID
+remained unchanged. The original refusal interval remains in private
+evidence and is explained here; the post-fix interval has zero unexplained
+refusals. Café124 receives the same source-backed dependency at initial
+enforcement. This adds no wildcard or port allowance.
+
 <!-- r4-vps-compiler-fixes-20261004:start -->
 | Tenant | Deployment | Static nft match | DNS filter / unexplained refusals | Mail / memory | Review |
 |---|---|---|---|---|---|
@@ -2555,8 +2565,8 @@ is permitted; private evidence stays root-only.
 | Mario MrCall | 09:08:17 UTC; updated; daemon PID retained | passed | enabled; DNS 0 / packets 0 | prior accepted sync; available | APPROVED |
 | Mario Gmail | 09:12:11 UTC; updated; daemon PID retained | passed | enabled; DNS 0 / packets 0 | prior accepted sync; available | APPROVED |
 | production | 09:13:44 UTC; updated; daemon PID retained | passed | enabled; DNS 0 / packets 0 | CTO functional acceptance; available | APPROVED |
-| Riccardo | 09:14:42 UTC; new enforcement | passed | enabled; DNS 2 / packets 0 | sync completed; available | pending |
-| Café124 | pending | — | — | — | pending |
+| Riccardo | 09:14:42 UTC; new enforcement; dependency update 09:17:34 UTC | passed | enabled; DNS 0 / packets 0 | sync completed; available | APPROVED |
+| Café124 | 09:18:45 UTC; new enforcement | passed | enabled; DNS 0 / packets 0 | sync completed; available | pending |
 <!-- r4-vps-compiler-fixes-20261004:end -->
 
 #### R_4 immediate VPS rollout — 2026-10-03 (stop at 08:45 UTC)
