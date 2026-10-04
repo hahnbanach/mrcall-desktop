@@ -161,9 +161,9 @@
       },
       "label": {"needs_action": true, "expected_action": "reminder"},
       "critical": true,
-      "critical_on": ["none", "invalid"],
+      "critical_on": ["invalid"],
       "expect_lang": null,
-      "why": "The user's side promised to ship a part on a date and the customer only thanked; shipping it is the pending task, 'reminder'."
+      "why": "The user's side promised to ship a part on a date and the customer only thanked; shipping it is the pending task, 'reminder'. 'none' is not critical here (audit C3): the thread never names which side the user is, so reading it as settled is a defensible miss, not a silenced request."
     },
     {
       "id": "sync_analysis-12",

@@ -223,7 +223,10 @@ def check_critical(role, doc, case):
     elif role == "INTENT":  # the router has no caller: no wrong answer reaches anyone
         assert critical_on == [], case["id"]
     elif role == "SYNC_ANALYSIS":  # no call falls back to no action, the same miss as "none"
-        assert critical_on == (["none", "invalid"] if label["needs_action"] else []), case["id"]
+        # sync_analysis-11 keeps only "invalid": the audit of the paid run (C3) found the
+        # thread never names the user's side, so "none" there is no silenced request.
+        rule = ["invalid"] if case["id"] == "sync_analysis-11" else ["none", "invalid"]
+        assert critical_on == (rule if label["needs_action"] else []), case["id"]
     elif label.get("is_durable_rule", label.get("is_fact_change")):
         # A must-record case: a miss is ordinary; only a fact recorded at its old value harms.
         fact = case["input"]["judge"] == "fact"

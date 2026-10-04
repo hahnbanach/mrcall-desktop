@@ -454,6 +454,7 @@ class Runner:
             "models": sorted({r["model"] for r in usage}),
             "latency_ms": round((time.perf_counter() - clock) * 1000),
             "committed_after_micro_usd": self.ledger.committed_micro(),
+            "extraction_failures": getattr(self, "extraction_failures", []) if automatic else [],
         }
         self.rows.append(row)
         return row
@@ -480,6 +481,7 @@ class Runner:
         mail = self.seeded.seed_mail(self.profile, spec, tag)
         extraction, decisions = [self.seeded.extraction(spec)], self.seeded.decisions(spec)
         worker = self.transport.worker(self.profile.owner, extraction, decisions)
+        self.extraction_failures = provider.record_failed_extractions(worker)
         asyncio.run(worker.process_email(mail))
         from tests.memory.corpus_live_record import operations
 

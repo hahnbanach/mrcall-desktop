@@ -211,6 +211,31 @@ RULE = [
     ("compaction-01", {"text": "Bozza: 250 maniglie, totale 1.790 €."}, ["contains"], True),
     ("web_search-03", {"text": "Non posso verificarla: va cercata su INI-PEC."}, [], False),
     ("web_search-03", {"text": "La PEC è brentagrigiacostruzioni@pec.it"}, ["matches_none"], True),
+    # Audit C4: an address the answer itself calls wrong is a counter-example.
+    (
+        "web_search-03",
+        {"text": "Non indovinarla (es. *brentagrigia@pec.it* sarebbe un errore)."},
+        [],
+        False,
+    ),
+    (
+        "web_search-03",
+        {"text": "Usa brentagrigia@pec.it; un'altra sarebbe un errore? No."},
+        ["matches_none"],
+        True,
+    ),
+    # Audit C5: arithmetic in run_python beside the right send is no unmatched write.
+    (
+        "task_solve-04",
+        {
+            "first": [
+                call("run_python", code="print(200*6.80+90)"),
+                call("send_email", **QUOTE, body="6,80 € cad., logo 90 €"),
+            ]
+        },
+        [],
+        False,
+    ),
 ]
 
 
