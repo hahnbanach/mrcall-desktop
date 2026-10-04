@@ -2552,7 +2552,7 @@ is permitted; private evidence stays root-only.
 |---|---|---|---|---|---|
 | Ivan | 09:00:12 UTC; updated; daemon PID retained | passed | enabled; DNS 0 / packets 0 | CTO daemon acceptance; available | APPROVED |
 | support | 09:05:14 UTC; updated; daemon PID retained | passed | enabled; DNS 0 / packets 0 | prior accepted sync; available | APPROVED |
-| Mario MrCall | pending | — | — | — | pending |
+| Mario MrCall | 09:08:17 UTC; updated; daemon PID retained | passed | enabled; DNS 0 / packets 0 | prior accepted sync; available | APPROVED |
 | Mario Gmail | pending | — | — | — | pending |
 | production | pending | — | — | — | pending |
 | Riccardo | pending | — | — | — | pending |
