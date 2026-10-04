@@ -2562,11 +2562,11 @@ enforcement. This adds no wildcard or port allowance.
 |---|---|---|---|---|---|
 | Ivan | 09:00:12 UTC; updated; daemon PID retained | passed | enabled; DNS 0 / packets 0 | CTO daemon acceptance; available | APPROVED |
 | support | 09:05:14 UTC; updated; daemon PID retained | passed | enabled; DNS 0 / packets 0 | prior accepted sync; available | APPROVED |
-| Mario MrCall | 09:08:17 UTC; updated; daemon PID retained | passed | enabled; DNS 0 / packets 0 | prior accepted sync; available | APPROVED |
+| Mario MrCall | 09:08:17 UTC; updated; daemon PID retained | passed | enabled; DNS 0 / packets 3 | prior accepted sync; available | APPROVED |
 | Mario Gmail | 09:12:11 UTC; updated; daemon PID retained | passed | enabled; DNS 0 / packets 0 | prior accepted sync; available | APPROVED |
-| production | 09:13:44 UTC; updated; daemon PID retained | passed | enabled; DNS 0 / packets 0 | CTO functional acceptance; available | APPROVED |
+| production | 09:13:44 UTC; updated; daemon PID retained | passed | enabled; DNS 6 / packets 0 | CTO functional acceptance; available | APPROVED |
 | Riccardo | 09:14:42 UTC; new enforcement; dependency update 09:17:34 UTC | passed | enabled; DNS 0 / packets 0 | sync completed; available | APPROVED |
-| Café124 | 09:18:45 UTC; new enforcement | passed | enabled; DNS 0 / packets 0 | sync completed; available | pending |
+| Café124 | 09:18:45 UTC; new enforcement | passed | enabled; DNS 0 / packets 0 | sync completed; available | APPROVED |
 <!-- r4-vps-compiler-fixes-20261004:end -->
 
 #### R_4 immediate VPS rollout — 2026-10-03 (stop at 08:45 UTC)
