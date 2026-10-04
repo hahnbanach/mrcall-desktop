@@ -602,13 +602,122 @@ not started.
      historical equivalence remain unknown.
 
      Both reviews accept the recorded limitations and retain
-     `status: active`. Closing R5 requires corrected owner selection and
-     a complete scratch lifecycle (including retained company facts,
+     `status: active`. Closing R5 requires acceptance-harness owner
+     correction and a representative complete scratch lifecycle (including
+     retained company facts,
      last-holder deletion and ownership absence), followed by the signed
      app's mail/attachment/document journey on the designated A and
      consistent sibling-B denial evidence. Those repairs and acceptance
      checks are not claimed by this diagnostic record. No deployment or
      production rollback is performed.
+   - **CTO owner correction and authorized repair — 2026-10-04, VPS.**
+     The CTO correction supersedes the earlier interpretation above:
+     native mail ownership is `cli.utils.get_owner_id()` → `EMAIL_ADDRESS`.
+     Firebase UID selects the profile; the acceptance script incorrectly
+     supplied it as the mail owner. No engine/app owner-contract change is
+     required to populate the existing app mailbox. The earlier criterion-7
+     fixture also seeded UID-owned rules; its failure remains unaccepted
+     evidence requiring a representative owner fixture, rather than proof
+     that native owner selection must be changed. R5 remains active until
+     scratch lifecycle and the complete signed-app journey are accepted.
+
+     Repair brief/plan: [brief](../briefs/2026-10-04-r5-mail-owner-cleanup.md),
+     [execution](2026-10-04-r5-mail-owner-cleanup.md). Clone pulled main
+     through `d30e5680`; no direct writes to the service checkout.
+     Native Mario Gmail `-p <uid> sync` executes through the installed CLI
+     as its actual daemon user and groups, preserving the per-unit key.
+     The auxiliary operator uses a fresh private mount namespace and the
+     tenant resolver, host network and unchanged per-UID firewall; this is
+     not a claim of the identical daemon mount sandbox. Only Mario Gmail
+     is stopped for its CLI profile lock, then restarted in `finally`.
+     Incidental update prompts are suppressed; native email code is used.
+
+     The accepted mail stage adds **220 messages**, with zero fetch,
+     folder or storage failures: email-owner count 3,678 → 3,898;
+     UID count 734 unchanged. Full preexisting email/UID row comparisons,
+     memory availability and unit-key preservation pass. Three messages
+     had already committed in an earlier interrupted attempt, so total
+     native additions from the initial 3,675 are **223**. That first attempt
+     lacks full preexisting-row equality proof. Subsequent failed attempts
+     are recorded as SQLite `SQLITE_CANTOPEN` failures, not successes.
+     The accepted auxiliary CLI is bounded after email completion; overall
+     WhatsApp/CLI completion is not asserted. The existing daemon returns
+     active under its own user with `NRestarts=0`. Native milestone review:
+     `r5_owner_native_sync_review`, **APPROVED**.
+
+     Both operational acceptance sync scripts now resolve `get_owner_id()`
+     after profile activation, guard equality with the configured email
+     owner without printing it, and preserve the unit key. Their progress
+     counter also runs as the daemon user and uses a separate email-owner
+     baseline, preserving historical UID counters. All three sources and
+     the embedded counter pass syntax validation; original sources and
+     before/after digests are root-private.
+
+     Backup/provenance: all seven pre-script backups contain zero UID-mail
+     rows; every one of the 3,207 frozen candidate IDs is absent under every
+     prior owner and matches script intervals/counts. Consistent backups
+     are created through SQLite's backup API as each daemon user, copied
+     and verified completely, protected as root-owned 0600 files in a 0700
+     directory, and tenant staging copies removed as their owners. Only
+     proven UID rows are removed following predelete review
+     `r5_owner_predelete_review`, **APPROVED**. The actual guarded
+     transactions delete exactly 3,207 rows. Counts below refer to the
+     immediately pre/post-cleanup state, after native Gmail sync.
+
+     | Profile | UID before → after | Email-owner before → after | Deleted |
+     |---|---:|---:|---:|
+     | Ivan | 499 → 0 | 1,310 → 1,310 | 499 |
+     | Riccardo | 727 → 0 | 3,719 → 3,719 | 727 |
+     | support | 284 → 0 | 2,500 → 2,500 | 284 |
+     | Mario MrCall | 273 → 0 | 1,731 → 1,731 | 273 |
+     | Café124 | 410 → 0 | 1,964 → 1,964 | 410 |
+     | Mario Gmail | 734 → 0 | 3,898 → 3,898 | 734 |
+     | production | 280 → 0 | 520 → 520 | 280 |
+
+     Every deletion runs as the actual daemon user in `BEGIN IMMEDIATE`,
+     matching frozen IDs/timestamps/UID and full candidate-row digests
+     against the verified backup. All full protected email rows, every
+     other profile table, schema and foreign-key checks remain unchanged.
+     No cursor, task, company memory or reference is deleted. Fourteen
+     synthetic transaction tests and eight root-copy guard tests pass.
+     Private evidence: `/root/r5-mail-owner-repair-20261004/`, including
+     `native-sync.json`, `script-fix-summary.json`, `backup-summary.json`,
+     `cleanup-summary.json` and the protected SQLite backup copies.
+     Post-cleanup integration review `r5_owner_postcleanup_review`:
+     **APPROVED**.
+
+     Deployment runs at 15:59:56–16:00:33 UTC through the installed
+     reconcile service: `Result=success`, `ExecMainStatus=0`, seven unique
+     ready tenants, zero helper failures, `code_changed=1`, no skipped
+     lock. Service checkout becomes `d30e5680`; the installed tenant helper
+     matches the clone. All seven main PIDs change and run as their actual
+     own users, active with `NRestarts=0`; memory, DNS, firewall services
+     and DNS log filters pass. Egress configuration digests are unchanged;
+     compiled static firewall rules match the installed tables. Dynamic
+     DNS set elements make five exact stateless dumps differ; these are
+     not configuration drift. Six unpinned runtimes, including Mario Gmail,
+     load the checkout's new billing module. Production remains on its
+     declared voice release: current argv/script interpreter and PYTHONPATH
+     agree with its root-only declaration; declaration and release module
+     predate deployment. A complete before/after pin digest was not taken.
+     No voice file is opened or changed. An initial combined journal
+     unit/tag selector misses updater records; the corrected tag-only
+     query is bounded to this same run and confirms the seven ready rows.
+     No second reconcile is needed.
+
+     Mario Gmail is **ready for the CTO's chat retry** with the new billing
+     rejection reason. No paid retry or successful chat is claimed here.
+     Evidence: `deploy-summary.json` and private bounded journal extracts
+     under the repair evidence directory. Deployment integration review
+     `r5_owner_deploy_review`: **APPROVED**. Fresh final reviewer
+     `r5_owner_repair_final_a`: **APPROVED**, including fresh owner counts
+     as each actual daemon user. The platform rejects a second fresh
+     reviewer with `agent thread limit reached`; an existing reviewer
+     performs the CLAUDE fallback separate independent final pass:
+     `r5_owner_provenance_review`, **APPROVED**. Its reuse is disclosed
+     and is not claimed as a second fresh session.
+     The repair review closure and parent plan remain active.
+
    - **Open after this plan, not part of it:**
      - one handset whose speech the voice provider does not transcribe
        (voice path, not the host; 2026-10-03 diagnosis above);
