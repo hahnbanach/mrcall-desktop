@@ -95,18 +95,22 @@ engine detail in [`engine/docs/features/entity-memory-system.md`](engine/docs/fe
 ("Scope"); host operations in [`docs/remote-backend.md`](docs/remote-backend.md)
 ("Shared company memory on the host"); app surface in [`app/CLAUDE.md`](app/CLAUDE.md).
 
-## Hosted engines: one Unix user per profile (in rollout since 2026-09)
+## Hosted engines: one Unix user per profile (since 2026-10)
 
 A hosted engine (`zylch serve`) is multi-tenant on one host, and the
-boundary between tenants is the operating system, not the model. The code
-is on `main`; M1 is deployed to all seven daemons. Five profiles, production
-included, run as their own users; Ivan and Riccardo remain on `mrcalld` (state in the plan).
+boundary between tenants is the operating system, not the model. All seven
+hosted profiles, production voice included, run as their own users, and each
+has an enforced outbound allow-list (state in the plan).
 Each migrated profile's daemon runs as its own Unix user `mc-<sha256(uid)[:12]>`
 inside a systemd sandbox, with the engine checkout read-only and its own
 root-only `ENCRYPTION_KEY`; its tools read and write only the profile's
 `downloads/` and `scratch/` folders, `run_python` is refused, and
 `DOCUMENT_PATHS`/`DOWNLOADS_DIR` are ignored (`settings.get` reports them
-under `ignored`). On a local engine only the profile root is refused as a
+under `ignored`). Its outbound connections are limited to the hosts in its
+egress policy: a per-tenant nftables table keyed on its Unix user, filled
+by a dedicated resolver that refuses every other name
+(`engine/scripts/server/egress_policy.py`; refusals are listed by
+`egress_refused.py`). On a local engine only the profile root is refused as a
 write target and attachment filenames are reduced to a basename. Threat model and criteria:
 [`docs/briefs/2026-09-29-toward-sandbox.md`](docs/briefs/2026-09-29-toward-sandbox.md);
 rollout state and runbook:

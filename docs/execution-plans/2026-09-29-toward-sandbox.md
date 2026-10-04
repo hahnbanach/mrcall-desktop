@@ -429,6 +429,38 @@ not started.
    - *Starts:* after R1–R4.
    - *Done:* the final end-to-end review is recorded for all eight
      criteria, and this plan's `status` is `completed`.
+   - **M4 record (2026-10-04, cloud session).** The following now describe
+     M1–M3 as deployed: `AGENTS.md`, `docs/remote-backend.md` (the
+     multi-tenant caveat, plus a new egress caveat on how to find a missing
+     host and add one), `docs/active-context.md` and
+     `engine/docs/active-context.md`. Criterion 8 is met on the docs side.
+   - **Final review: pending, VPS session.** It runs once through the user
+     path, on two hosted profiles A and B of different companies. A
+     signed-in app on A:
+     - reads mail;
+     - downloads an attachment;
+     - searches a document.
+
+     Then the eight criteria are re-checked on the live host:
+     1. A's tools refuse B's `.env`; `DOCUMENT_PATHS` is ignored.
+     2. A crafted attachment name stays a basename under A's downloads.
+     3. `run_python` is refused.
+     4. Two holders of one company store write concurrently; a third user
+        cannot list it.
+     5. A's user cannot read B's key file.
+     6. From A's daemon, a host outside its policy is refused (DNS and
+        packet), and `nft list table` shows the set.
+     7. Offboarding is checked on a scratch profile only: never delete a
+        live one.
+     8. The docs above.
+
+     Evidence is recorded here. Two reviewers, then `status: completed`.
+   - **Open after this plan, not part of it:**
+     - one handset whose speech the voice provider does not transcribe
+       (voice path, not the host; 2026-10-03 diagnosis above);
+     - the shared key still loaded by the template and provisiond
+       (R3: kept);
+     - the brief's parked items.
 
 R1, R2 and R4 are independent of each other. R3 waits for R1, and R5
 waits for all of them.

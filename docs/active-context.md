@@ -95,13 +95,15 @@ part of M2 (per-profile Unix user, dual-name company store, `rekey`,
 `c2b3ca5` and reviewed. **M1 is deployed to all seven daemons** (2026-09-30:
 the three unpinned ones on the service checkout, the four Café124 ones as
 backports onto their pinned releases, rollback recorded in the plan). All
-four company stores are relocated. **Five profiles run as their own Unix
-users**, including production voice with its release preserved; authenticated
-app reconnect and memory acceptance passed. Voice is accepted on local/public
-`calls_available`, without a test call. Ivan and Riccardo remain on `mrcalld`
-by operator decision. M2's VM probes and the VPS acceptance are recorded in
-the plan; M2 remains partial and M3 is pending. Self-serve provisioning stays
-closed until M2b is on all seven profiles.
+four company stores are relocated. **All seven profiles run as their own
+Unix users** (M2), production voice included with its release preserved, and
+**all seven have an enforced egress allow-list** (M3, 2026-10-03): refused
+names and packets are logged per tenant. Production voice was accepted under
+enforcement with a real call from a second telephone; one handset's speech is
+not transcribed by the provider, a voice-path issue outside the host. Backups
+and the shared key are kept: the template and provisiond still use the key.
+The final end-to-end review is pending in the plan. Self-serve provisioning
+stays closed.
 
 Settings supports independent provider/model selection, daily budgets and bounded
 preparation. It remains reachable with an unavailable engine; stale connection
@@ -135,11 +137,12 @@ Refresh button only lists threads. See the archived
 - Remote provisioning needs host UID-to-company membership; an endpoint alone
   does not establish membership. Settings catalog refresh has a known same-value
   reload gap; reopen Settings after connection changes. See [backlog](harness-backlog.md).
-- Toward-sandbox: M2's remaining identity migrations are the operator-excluded
-  Ivan and Riccardo profiles, with authenticated app acceptance required when
-  resumed. All company 2a and the five selected 2b acceptances are recorded
-  in the plan. M3 egress and the brief's parked operational floor (backups,
-  pinned rollout) remain pending and require a host session.
+- Toward-sandbox: M1–M3 are deployed to all seven profiles. Open: the final
+  end-to-end review (a host session); the shared key still used by the
+  template and provisiond, so a newly provisioned profile starts as `mrcalld`
+  until `create`; one handset whose speech the voice provider does not
+  transcribe; and the brief's parked operational floor (backups, pinned
+  rollout).
 - Product chat, delegated sending, approval isolation and a comprehensive security
   review are deferred. Calendar integration, raw RPC errors,
   installer coverage and multi-window auth checks retain their existing owners.

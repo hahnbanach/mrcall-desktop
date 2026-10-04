@@ -55,11 +55,10 @@ in twelve supported command spellings. Astra's P1 re-review is APPROVED;
 read-only preview and the engine drafting reader remain available. No Mario operator schedule
 exists; 124's schedule only reads his inbox. The three former K3 pins are in
 root-only backups; those engines import the checkout. All four company stores
-are relocated, and five daemon identities are migrated, production voice
-included with its release unchanged. Ivan and Riccardo remain on `mrcalld`
-by operator decision; self-serve provisioning stays closed. Authenticated
-app reconnect and memory checks passed; voice is accepted on local/public
-`calls_available` without a test call. See the
+are relocated, and all seven daemon identities are migrated, production
+voice included with its release unchanged; all seven run under an enforced
+egress allow-list (M3). Self-serve provisioning stays closed. Production
+voice was accepted under enforcement with a call from a second telephone. See the
 [VPS rollout record](../../docs/execution-plans/2026-09-29-toward-sandbox.md#m2-record--vps-rollout-2026-10-02).
 See the [source migration plan](../../docs/execution-plans/2026-10-01-telephone-notes-source-is-phone-md.md).
 

@@ -260,9 +260,10 @@ sudo /home/mrcalld/mrcall-desktop/engine/scripts/server/update-daemons.sh --prun
 ## Caveats
 
 - **This host is multi-tenant, and the boundary between tenants is the
-  per-profile Unix user.** Until a profile is migrated (`mrcall-tenant
-  create`), its daemon still runs as `mrcalld` next to every other
-  unmigrated one, with only the M1 tool confinement between them. The
+  per-profile Unix user.** Every hosted profile is migrated (2026-10). A
+  newly provisioned profile starts as `mrcalld`, under the shared key the
+  template still loads, until `mrcall-tenant create` migrates it; until
+  then only the M1 tool confinement separates it from the others. The
   threat model, the evidence and the acceptance criteria are in
   [the toward-sandbox brief](briefs/2026-09-29-toward-sandbox.md); the
   migration runbook (M2.7) and its rollback (`mrcall-tenant unmigrate`)
@@ -274,6 +275,18 @@ sudo /home/mrcalld/mrcall-desktop/engine/scripts/server/update-daemons.sh --prun
   (`mrcall-tenant logrotate`, re-run by `create`, `unmigrate`, `delete` and
   every `update-daemons.sh`): unmigrated logs rotate as `mrcalld`, each
   migrated profile's log as its own user. Do not edit it by hand.
+- **Outbound traffic is per-tenant allow-listed (M3).** Each migrated
+  daemon reaches only the hosts in its policy: an nftables table keyed on
+  its Unix user, and a dedicated dnsmasq that refuses every other name
+  (compiler `engine/scripts/server/egress_policy.py`; installed files under
+  `/etc/mrcalld/egress/mc-<tag>/`). A host the code needs but the policy
+  lacks fails as a DNS refusal, not as a denied packet. List both with
+  `egress_refused.py dns` (the DNS unit's journal) and
+  `egress_refused.py deny <tag>` (kernel log). To add a host: edit the
+  manifest policy, recompile, install, restart only the tenant's DNS unit
+  with `--job-mode=ignore-dependencies` and reload its firewall unit.
+  A provider switch in Settings needs no change: every policy carries all
+  three LLM providers.
 - **WhatsApp is per profile.** The neonize session lives at
   `<profile>/whatsapp.db`; the global `~/.zylch/whatsapp.db` is a legacy
   fallback the daemons never use (`ZYLCH_PROFILE_DIR` is always set).
