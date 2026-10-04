@@ -455,6 +455,160 @@ not started.
      8. The docs above.
 
      Evidence is recorded here. Two reviewers, then `status: completed`.
+   - **Final review execution — 2026-10-04, VPS.** Base checkout
+     `0bf8289e` was pulled and verified as an ancestor of HEAD. The host
+     probes use A = Café124, B = support; a private key comparison confirms
+     different companies. Riccardo is a second holder of A's company store.
+     The CTO's signed-app attempt below instead uses Mario Gmail. These
+     are distinct evidence sets, not one completed end-to-end A journey.
+     Production is not a test target.
+
+     Host evidence is root-private in `/root/r5-final-20261004/`:
+     `host-probes.json`, `key-metadata.json` and the executable probe
+     sources with recorded SHA256 provenance. The corrected pass ended
+     at 13:45:39 UTC. These are auxiliary processes using each running
+     daemon's installed interpreter, mount/network namespaces, actual
+     UID, supplementary groups and no-new-privs; they are not authenticated
+     requests to that daemon and are not signed-app evidence. Bytecode
+     writes were disabled on the final pass.
+
+     | Criterion | Fresh VPS evidence | Result |
+     |---|---|---|
+     | 1 | A's actual read tool refuses B's existing environment file; environment glob returns no result. Actual settings update saves the legacy document-path field, but settings get reports it ignored and search roots remain exactly A's downloads/scratch. B cannot find A's synthetic document; OS access to B's environment is denied. | passed |
+     | 2 | Real IMAP attachment parser/save code confines six hostile synthetic MIME names to basenames in A's nonce download directory. Four external download targets and an outgoing cross-profile attachment are refused. OS writes to the checkout and B's profile are denied; profile environments remain unchanged. | passed |
+     | 3 | Both hosted Python entry points return the hosted refusal. A separate local-mode check retains Documents and configured document-path resolution. | passed |
+     | 4 | Café124 and Riccardo, UIDs 994/986, perform concurrent committed no-op updates on the same existing store inode. Both affect one metadata row; the second writer waits 1.031 seconds for the first. No facts, schema or values change. B cannot open or list the store; join preview finds the derived store. | passed |
+     | 5 | Seven distinct root-owned mode-0400 key files; A cannot read B's key. All seven private profile databases are checked as their own daemon users: seven OAuth rows and 21 outer/inner encrypted values, zero decryption failures. Ivan/Riccardo have zero OAuth rows. Both auxiliary no-key initialization and an actual scratch serve startup without a key are refused; the latter exits 3. | passed |
+     | 6 | A's local negative DNS query returns NXDOMAIN and its unapproved TCP attempt is refused. One scoped DNS journal line and one kernel refusal are recorded; the installed table's 28 sets are readable. | passed |
+     | 7 | Installed-helper deletion of the first of two fresh scratch holders removes **zero owned rule rows, expected two**. `memory_offboard` calls `get_owner_id()`, which selects the legacy email identifier or `local-user`, ignoring the immutable `OWNER_ID` used for the fixture's rules. No real profile is deleted. | FAIL |
+     | 8 | The runbook's obsolete five-tenant rollout statement is corrected to all seven. Its unavailable firewall-unit reload instruction is replaced by the exact lock-protected nft loader. Other M4 documents remain reconciled. | review pending |
+
+     The synthetic attachment check supplies only the message transport
+     input locally; it executes the installed confinement/parser code.
+     It does not prove a real mailbox attachment download through the app.
+     A's environment is restored byte-for-byte, test downloads are removed,
+     and all seven live daemon PIDs remain unchanged. Initial harness
+     errors in synthetic address shape, kernel-prefix selection and legacy
+     OAuth-row filtering were repaired before the accepted final pass.
+
+     **Scratch lifecycle details:** the final fixture runs at
+     13:56:56–13:57:17 UTC with two newly created profiles and a wholly new
+     synthetic company. Both scratch daemons run as their own users with
+     private networking. Each seeds two UID-owned rules and one company
+     fact. The first installed-helper deletion reports zero rules removed;
+     the following row-count assertion fails. Exact post-delete counts
+     were not persisted before that assertion, so later lifecycle
+     invariants are not claimed as passed. Fixture SQLite files initially
+     lack group write permission; the owning scratch users grant it to
+     their own fixture DB/WAL/SHM before the test, without ownership or
+     inode transfer. This setup is recorded, not a real-company migration.
+     All six fresh identities from preparation and final attempts are
+     removed, including their units, profiles, keys, principals and private
+     company. Zero residual fixture artifact sets remain. Ownership
+     absence checks cover protected backups, the service home, runtime
+     and helper configuration; a whole-host walk timed out, so global
+     absence is not asserted. All seven real PIDs, key metadata, store
+     inodes and firewall state remain unchanged. The service checkout has
+     zero modified files since the first attempt. Private evidence:
+     `scratch-offboard.json`.
+
+     **Signed-app gate: failed/incomplete.** The CTO reports signed app
+     0.1.52, Remote, Mario Gmail (`mc-0c008879b605`): two chat attempts
+     return `MrCall billing HTTP 400. Request unconfirmed; check
+     reservations`; mail appears only through 2026-09-23. Attachment
+     download and document search are not evidenced. This observation is
+     not replaced by synthetic transport or prior rollout results.
+     The plan remains `status: active`; criterion 7 and the required
+     single-profile signed-app journey prevent completion.
+
+   - **R5 Mario Gmail diagnosis — 2026-10-04, VPS; metadata only.**
+     The CTO's “15:55 CET” is treated as Italian local summer time
+     (CEST, 13:55 UTC): the matching daemon errors are at 13:51:12 and
+     13:55:34–35 UTC. Literal CET would mean 14:55 UTC, later than this
+     investigation. The inspected interval is 13:45–14:02 UTC.
+
+     1. **Request/billing/ledger:** both requests reach the running Mario
+        Gmail daemon. The journal and private `zylch.log` show the billing
+        HTTP 400 and `BudgetError`; balance requests to `zylch.mrcall.ai`
+        also return HTTP 400 (`HTTPStatusError`). Installed client code
+        requests a bounded quote before `reserve()`; its non-200 handler
+        discards the response body and supplies the generic “unconfirmed”
+        text. There are zero reservation rows created in this interval,
+        zero unsettled reservations in this profile, and zero usage rows
+        in the interval. These failed quotes have no new uncertain hold
+        to release. Repeated log/trace representations are not counted as
+        distinct requests.
+     2. **Egress:** the actual `egress_refused.py dns` and `deny
+        0c008879b605` commands both exit 0 and produce zero refused entries
+        for this interval. The billing server is reachable and returns an
+        application-level response.
+     3. **Mail cause:** the app mail RPCs use `cli.utils.get_owner_id()`,
+        which resolves the legacy email owner. The inbox SQL filters that
+        exact owner; there is no September cutoff. Read-only queries as
+        the daemon user find 3,675 legacy-owner messages, newest
+        2026-09-23 22:03:32 UTC, versus 719 immutable-UID messages, newest
+        2026-10-03 07:12:03 UTC. R4's manual sync deliberately uses the
+        immutable UID; those newer rows are hidden from this app query.
+        Before this new manual sync, the UID's last folder checkpoint is
+        2026-10-03 08:16:26 UTC, versus 2026-09-23 22:12:09 UTC for the
+        legacy owner. Checkpoints are per-folder evidence, not whole-run
+        completion. The installed daemon resolves automatic update to
+        **disabled**, with a five-minute interval that is consequently
+        unused. Opening Mail reads cached rows; it does not trigger IMAP.
+        The chat fallback only supports connected Google/Microsoft OAuth,
+        not IMAP credentials alone.
+     4. **Isolation versus billing contract:** 131 matching log mentions
+        of the same billing error start on 2026-09-23 11:17:56 UTC; 126
+        precede 2026-10-02, before this profile's isolation. The same
+        generic error therefore predates isolation; today's requests
+        reach billing and return HTTP 400 without scoped egress refusals.
+        The precise rejection cause and its equivalence to the historical
+        failures remain unverified. Billing uses the
+        verified Firebase WebSocket token in memory, distinct from the
+        encryption key. Business selection is unset, but ambiguous
+        business selection is only a possible server rejection, not a
+        confirmed cause. The exact HTTP 400 validation reason remains
+        unknown because no server rejection-body metadata is available;
+        a fresh outside-sandbox paid request was not performed.
+
+     The lead reported these causes and the remaining billing uncertainty
+     to the CTO before starting the explicitly requested R4-style manual
+     mail-only sync. No provider, identity, key, unit, firewall, reservation
+     or automatic-sync setting is changed. The manual mail-only sync
+     runs at 14:14:15–14:14:29 UTC and completes successfully: **15 new
+     messages**, zero deleted messages, memory available. Immutable-UID
+     rows increase from 719 to 734, newest
+     message 2026-10-04 12:43:35 UTC; the three folder checkpoints advance
+     to 14:14:25–29 UTC. Legacy-owner rows and checkpoints remain unchanged,
+     so this refresh alone does not repair the app's owner filter. The
+     daemon stays active as `mc-0c008879b605`, PID 340803, `NRestarts=0`.
+     The actual DNS/deny parser commands also report zero refused entries
+     throughout the manual-sync interval, with exit status 0.
+     No analysis or paid chat request is made by this sync.
+     Private evidence is under `/root/r5-final-20261004/`:
+     `mario-gmail-diagnosis.json`, `gmail-chat-egress.json`,
+     `gmail-mail-checkpoints-before.json`, `gmail-manual-sync.json` and
+     `gmail-sync-egress.json`.
+   - **Independent final reviews — 2026-10-04, VPS: REVISE / REVISE.**
+     Reviewers `r5_live_checks_reviewer` and `r5_final_independent_b`
+     independently inspect the approved brief, this plan, installed
+     source and private metadata. The second receives no first-review
+     verdict. Both identify the same closure blockers: criterion 7 fails
+     to remove the scratch holder's two UID-owned rules, and the required
+     complete signed-app journey on one designated A is absent. The
+     successful manual sync does not repair the app's legacy-owner filter.
+     The first review's concern about overstating the billing cause is
+     corrected and explicitly rechecked: the exact server reason and
+     historical equivalence remain unknown.
+
+     Both reviews accept the recorded limitations and retain
+     `status: active`. Closing R5 requires corrected owner selection and
+     a complete scratch lifecycle (including retained company facts,
+     last-holder deletion and ownership absence), followed by the signed
+     app's mail/attachment/document journey on the designated A and
+     consistent sibling-B denial evidence. Those repairs and acceptance
+     checks are not claimed by this diagnostic record. No deployment or
+     production rollback is performed.
    - **Open after this plan, not part of it:**
      - one handset whose speech the voice provider does not transcribe
        (voice path, not the host; 2026-10-03 diagnosis above);

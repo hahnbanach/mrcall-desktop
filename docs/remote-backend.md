@@ -123,12 +123,12 @@ The model:
   migrated, is its Unix user: another company's daemon cannot read or write
   this profile's files; and the engine's own tools are confined to the
   profile's `downloads/` and `scratch/` folders on a hosted engine (M1, on
-  `main` since `c2b3ca5`). Rollout state (2026-10-02): all four company
-  stores are derived; five profiles run as `mc-…`, including production
-  voice on its unchanged release through a tenant-exec declaration. Ivan
-  and Riccardo remain active as `mrcalld` by operator decision. The three
-  K3 pins are backed up and those engines import the checkout. Self-serve
-  provisioning remains closed pending the two remaining 2b acceptances.
+  `main` since `c2b3ca5`). Rollout state (2026-10-04): all four company
+  stores are derived; all seven profiles run as `mc-…` and have their own
+  egress enforcement, including production voice on its pinned release
+  through a tenant-exec declaration. Newly provisioned profiles still use
+  the transitional shared-key template until explicit tenant migration.
+  Self-serve provisioning stays closed.
   The plan's VPS rollout record is the authority.
 - One idempotent **`sudo update-daemons.sh`** is the operational entry-point:
   pull code, discover profiles, re-apply the identity of already-migrated
@@ -284,7 +284,15 @@ sudo /home/mrcalld/mrcall-desktop/engine/scripts/server/update-daemons.sh --prun
   `egress_refused.py dns` (the DNS unit's journal) and
   `egress_refused.py deny <tag>` (kernel log). To add a host: edit the
   manifest policy, recompile, install, restart only the tenant's DNS unit
-  with `--job-mode=ignore-dependencies` and reload its firewall unit.
+  with `--job-mode=ignore-dependencies`. The generated firewall unit has
+  no `ExecReload`; reload its table with the same lock-protected loader
+  used by the unit (replace `<tag>` with the tenant tag):
+
+  ```bash
+  sudo flock -x "/etc/mrcalld/egress/mc-<tag>/observe.lock" \
+    nft -f "/etc/mrcalld/egress/mc-<tag>/firewall.nft"
+  ```
+
   A provider switch in Settings needs no change: every policy carries all
   three LLM providers.
 - **WhatsApp is per profile.** The neonize session lives at
