@@ -2551,7 +2551,7 @@ is permitted; private evidence stays root-only.
 | Tenant | Deployment | Static nft match | DNS filter / unexplained refusals | Mail / memory | Review |
 |---|---|---|---|---|---|
 | Ivan | 09:00:12 UTC; updated; daemon PID retained | passed | enabled; DNS 0 / packets 0 | CTO daemon acceptance; available | APPROVED |
-| support | pending | — | — | — | pending |
+| support | 09:05:14 UTC; updated; daemon PID retained | passed | enabled; DNS 0 / packets 0 | prior accepted sync; available | APPROVED |
 | Mario MrCall | pending | — | — | — | pending |
 | Mario Gmail | pending | — | — | — | pending |
 | production | pending | — | — | — | pending |
