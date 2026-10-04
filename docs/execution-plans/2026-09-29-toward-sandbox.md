@@ -274,6 +274,41 @@ not started.
      profiles under the template before `create`. Establish which from
      the code before removing it, and record the answer.
    - *Done:* recorded here.
+   - **Conditional VPS gate — 2026-10-04, after R4 completion.** The
+     shared-key dependency is still present. Active provisiond runs as
+     `mrcalld` with `/etc/mrcalld/env`; its handler creates the preparing
+     marker and profile environment without invoking tenant `create`.
+     Reconcile re-applies `create` only to already migrated profiles, then
+     starts discovered profiles. The installed daemon template therefore
+     still starts a new profile as `mrcalld` with the shared environment
+     until explicit tenant migration. All seven existing migrated daemons
+     use their per-UID key files; that does not remove the provisioning
+     dependency. Sources: `engine/zylch/provisiond/handler.py`,
+     `engine/scripts/server/update-daemons.sh`,
+     `engine/scripts/systemd/zylch-server@.service`, and
+     `engine/scripts/server/tenant-helper.sh`. The relevant installed/live
+     definitions agree with the checked source.
+   - *Retention under the CTO rule below:* the condition for removing
+     backups, old keys and the shared key is false. All remain in place;
+     no deletion or `shred` was executed. The rollback window is not
+     represented as closed. The shared environment remains root-owned,
+     mode 0600; no key value was read into the record.
+   - *Retained inventory:* five `/root/backup-2a-*` directories, eight
+     `/root/backup-2b-*` directories, `/root/prod-2b/migration/`, and
+     `/root/k3-pins-backup/`: 15 root-owned mode-0700 directories,
+     88 regular files, 1,405,209,333 logical bytes. Nine standalone
+     old-key copies remain root-owned, mode 0400, with one hard link each.
+     There are no symlinks or multiply linked regular files in those
+     roots, and no hard links to active keys or live profile/company
+     stores. Individual backup filenames and all file contents are omitted.
+     Active units and provisioning sources contain no backup-path
+     references. No active key, voice file, service checkout, or R4
+     evidence was changed.
+   - *Review:* **APPROVED** — the fresh independent R3 reviewer verified
+     the live provisioning dependency, installed/source agreement, retained
+     inventory and absence of links or references to active files. The
+     conditional gate is completed and recorded; destructive cleanup is
+     not executed because its prerequisite is false.
    **CTO decision, 2026-10-03 07:20 UTC — finish by 09:00 UTC.** This
    supersedes the observation window for R4 and the seven-day wait for R3.
    Accepted risk: a destination that has not been seen is blocked until it
