@@ -746,6 +746,38 @@ not started.
      `/root/r5-mail-owner-repair-20261004/ws-diagnosis-20261005.json`.
      R5 remains active; this diagnostic does not close the signed-app gate.
 
+   - **Mario Gmail relogin returns 403 — 2026-10-05, VPS.**
+     After relogin, the CTO reports the app showing Mario Gmail's identity
+     while refusing the connection as a different remote owner. Mario
+     Gmail's own log records `token uid does not own this profile`, last
+     at **06:38:48 UTC** (two occurrences). No other tenant log records a
+     corresponding forbidden handshake. The flat socket link, active
+     Caddy matcher and UID-derived upstream all select Mario Gmail.
+
+     Its profile has one literal correct `OWNER_ID`, identical inside the
+     daemon namespace. The current PID 827152 started at 00:00:29 UTC;
+     startup logs confirm the correct profile and owner. Replaying its
+     installed startup env-loading code as the actual daemon user also
+     resolves that owner correctly, but this auxiliary check alone is not
+     live-process proof. A separate read-only live check at **06:51:25 UTC**
+     confirms the process's actual `OWNER_ID` and profile directory match
+     Mario Gmail. It reads only those two selected libc environment
+     values, without pausing/injecting into the process or reading token,
+     key, email or voice values. Initial ELF-address attempts fail safely;
+     the executable's absolute EXEC symbol resolves the successful check.
+     Metadata flags only are saved in
+     `/root/r5-mail-owner-repair-20261004/ws-owner-metadata-20261005.json`;
+     reproducible source: `/tmp/r5-runtime-owner-metadata.py`.
+
+     The verified token UID therefore disagrees with this correctly bound
+     backend; which client account supplied it, and why it differs from
+     the app's displayed identity, are not yet known. The app caches
+     handshake tokens per window in its main process; full app exit clears
+     that cache. The CTO is advised to quit with Cmd-Q and reopen Mario
+     Gmail, then repeat Test connection. Result/current app version are
+     pending. No owner, auth check, profile, unit or daemon is changed;
+     no token is extracted. R5 remains active.
+
    - **Open after this plan, not part of it:**
      - one handset whose speech the voice provider does not transcribe
        (voice path, not the host; 2026-10-03 diagnosis above);
