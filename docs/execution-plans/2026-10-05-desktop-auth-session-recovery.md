@@ -1,5 +1,5 @@
 ---
-status: active
+status: completed
 ---
 
 # Desktop authentication session recovery
@@ -103,7 +103,7 @@ Rereview: **APPROVED** before execution.
   Added captured-entry/window-lifetime guards before replacement and after
   waits; actual restart IPC regressions cover logout, different-account rebind
   and window close. All ten main checks pass; rereview **APPROVED**.
-- Next unused patch tag is `v0.1.53` (checked remote tags). Package and lock
+- Selected `v0.1.53` after checking it was unused remotely. Package and lock
   metadata now agree on 0.1.53; `npm run test:auth` runs both focused suites.
   Existing tag workflow builds Apple Silicon only, with Developer ID signing
   and conditional notarization. CI success alone does not prove notarization:
@@ -118,7 +118,29 @@ Rereview: **APPROVED** before execution.
 - Two fresh independent final source/publication-readiness reviews:
   `desktop_auth_final_a` **APPROVED**, `desktop_auth_final_b` **APPROVED**.
   Reviewer A also exercises actual profile bind/rebind and genuine 403 without
-  reconnecting. Signed artifact delivery will receive post-CI rereview; this
-  plan stays active until that delivery is verified.
-- Signed patch delivery: starting. Existing
-  0.1.52 does not contain this source repair. Parent sandbox R5 remains active.
+  reconnecting. Their separate post-CI delivery rereviews also return
+  **APPROVED** after independently checking the published installer pathway.
+- Source published as `6c827e6` after pull with rebase; tag `v0.1.53` points
+  to that exact commit. Unrelated tracked/untracked work is preserved.
+- Signed Apple Silicon patch published at **07:43:57 UTC**, 2026-10-05:
+  [release 0.1.53](https://github.com/hahnbanach/mrcall-desktop/releases/tag/v0.1.53).
+  [CI 37278638471](https://github.com/hahnbanach/mrcall-desktop/actions/runs/37278638471)
+  succeeds with its head matching the tag. Credential validation succeeds,
+  un-notarized fallback is skipped, installer build/upload/release succeed.
+  Selected log metadata confirms Darwin distribution signing with an identity,
+  no signing skip, and the custom notarization hook submission with no skip.
+  The lock-pinned hook waits for Apple `Accepted` and successful app stapling
+  before returning; its completed build proves this pathway, rather than
+  assuming overall green CI alone implies notarization. No raw log values,
+  identity names, Apple account or credentials are emitted.
+- Asset `MrCall.Desktop-0.1.53-arm64.dmg`: 240724629 bytes, uploaded;
+  GitHub digest `sha256:603f936dc4171f391adc77f15d3c72387d284ca20e161d6cb1abd18f5838edbe`.
+  Reproducible selected metadata: `/tmp/desktop-auth-release-metadata-20261005.json`
+  (0600). Native macOS signature inspection and installed-patch GUI acceptance
+  are not performed on the Linux VPS. Existing 0.1.52 remains unpatched;
+  the CTO must install 0.1.53 to receive this repair.
+- Post-CI independent delivery rereviews: `desktop_auth_final_a` **APPROVED**
+  and `desktop_auth_final_b` **APPROVED**. Source and signed installer delivery
+  are complete; this repair plan is completed. Parent sandbox R5 stays active
+  for its separate signed-app mail/attachment/document and representative
+  scratch criteria. Installed-patch acceptance still belongs to the CTO's Mac.

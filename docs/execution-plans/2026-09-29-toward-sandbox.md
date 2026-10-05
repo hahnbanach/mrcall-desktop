@@ -820,9 +820,23 @@ not started.
      replacement stops old polling, and retired transports cannot send events.
      Actual IPC/tailer/window-close regressions pass; rereview is APPROVED.
      Two fresh independent final source/readiness reviews (`desktop_auth_final_a`,
-     `desktop_auth_final_b`) are APPROVED. Signed 0.1.53 delivery and post-CI
-     review are starting; current installed 0.1.52 is not patched. R5 stays
-     active for its remaining independent acceptance criteria.
+     `desktop_auth_final_b`) are APPROVED. Source `6c827e6` and exact tag
+     `v0.1.53` are published after pull with rebase. Apple Silicon
+     [release 0.1.53](https://github.com/hahnbanach/mrcall-desktop/releases/tag/v0.1.53)
+     is published at **07:43:57 UTC**. CI 37278638471 succeeds: signing metadata
+     confirms Darwin distribution signing, credential validation succeeds,
+     un-notarized fallback is skipped, custom notarization submission occurs
+     and installer build/upload/release complete. The lock-pinned hook requires
+     Apple Accepted and app stapling before returning. Selected metadata only:
+     `/tmp/desktop-auth-release-metadata-20261005.json` (0600). Asset
+     `MrCall.Desktop-0.1.53-arm64.dmg`, 240724629 bytes, GitHub digest
+     `sha256:603f936dc4171f391adc77f15d3c72387d284ca20e161d6cb1abd18f5838edbe`.
+     Post-CI independent delivery reviews `desktop_auth_final_a` and
+     `desktop_auth_final_b` both return APPROVED; the auth repair delivery plan
+     is completed. Native macOS signature
+     inspection and the installed patch's GUI journey remain unverified on
+     this Linux VPS; the CTO must install 0.1.53, because existing 0.1.52 is
+     unpatched. R5 stays active for its separate acceptance criteria.
 
    - **Open after this plan, not part of it:**
      - one handset whose speech the voice provider does not transcribe

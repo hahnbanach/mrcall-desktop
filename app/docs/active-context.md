@@ -8,18 +8,20 @@ state lives in ../../docs/active-context.md. Historical snapshots are archived.
 
 ## State now
 
-Desktop v0.1.52 is the current published Apple Silicon release. The CTO confirms
+Desktop v0.1.53 is the current published Apple Silicon release. The CTO confirms
 Remote Mario Gmail reconnects after full app quit/reopen. Fresh-device sign-in
 and personal-key GUI entry remain unverified; engine/API checks do not establish
 those packaged-app journeys.
 
-A session-lifecycle repair passed two independent final source reviews after the CTO's Remote timeout/403
-cleared on full app quit/reopen. Main logout clears per-window credentials and
+The session-lifecycle repair passed two independent final source and delivery
+reviews after the CTO's Remote timeout/403 cleared on full app quit/reopen. Main logout clears per-window credentials and
 cancels refreshes offline; token UID/profile/expiry consistency and guarded
 renderer refresh prevent stale-session reuse. Remote, Test connection and
 provisioning share bounded fresh-token retrieval. Focused synthetic tests execute
 actual App/preload/main IPC paths and a local WebSocket handshake; typecheck/build
-pass. Signed patch delivery and installed-patch GUI acceptance remain pending.
+pass. Signed/notarized Apple Silicon 0.1.53 is published (CI 37278638471;
+source/tag match, signing observed, notarization required and not skipped).
+The CTO must install that patch; installed-patch GUI acceptance remains pending.
 Work trace: [auth recovery](../../docs/execution-plans/2026-10-05-desktop-auth-session-recovery.md).
 
 Settings separates MrCall/Anthropic/OpenRouter billing from model selection.
