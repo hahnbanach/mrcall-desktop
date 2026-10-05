@@ -57,3 +57,28 @@ scoped files are committed. A newly published patch is not an installed-patch
 acceptance result.
 
 Fresh plan reviewer `business_picker_plan_review`: APPROVED.
+
+Implementation baseline correction: the initial isolated worktree inherited the
+other session's unpublished Qonto commit. Only this repair's diff was transplanted
+onto origin/main (`0ab1849`), leaving that session and its commit untouched.
+The picker needs a narrow auth-utils invalidation subscription and active-session
+predicate to enforce the approved logout cancellation requirement even when
+Firebase sign-out fails; these two helpers are included without Qonto features.
+All final checks/reviews target the corrected baseline.
+
+## Source verification and delivery
+
+Integration reviewer `business_picker_integration`: APPROVED after reviewing
+source, auth invalidation hooks and actual synthetic browser/auth logs.
+The final corrected-baseline app typecheck and build pass. Actual-picker browser
+checks pass for name routing/union, explicit selection, empty/error/partial states,
+UI timeout/retry, bounded raw concurrency and stale auth/transport responses.
+Existing Settings cold/reconnect/discard checks pass after stale fixture contracts
+were updated to current provider/key-preservation behavior. Actual renderer auth
+checks: 14 pass, including invalidation notification and unsubscribe cleanup.
+Logs: `/tmp/mrcall-ai-kit/2026-10-05-business-picker-recovery/`.
+No real business data, token, voice value, mail content or paid call is used.
+
+The next unused patch version is 0.1.54; package and lockfile metadata are aligned.
+Two fresh final source reviews, signed CI and post-CI delivery reviews are pending.
+The installed application has not changed; R5 remains active.

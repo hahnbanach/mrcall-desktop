@@ -153,6 +153,31 @@ function fixture() {
   }
 }
 
+await check('explicit auth invalidation notifies subscribers and revokes the current user until a new session', async () => {
+  const f = fixture(); const u = f.user()
+  assert.equal(f.utils.isAuthSessionActive(), false)
+  f.auth.currentUser = u.identity
+  const offAuth = f.utils.setupAuthListener(); await flush()
+  assert.equal(f.utils.isAuthSessionActive(), true)
+  let notifications = 0
+  const offInvalidation = f.utils.onAuthSessionInvalidated(() => {
+    notifications++
+    assert.equal(f.utils.isAuthSessionActive(), false)
+  })
+  f.utils.invalidateAuthSession()
+  assert.equal(notifications, 1)
+  assert.equal(f.auth.currentUser, u.identity)
+  assert.equal(f.utils.isAuthSessionActive(), false)
+  await f.emitUser(u.identity)
+  assert.equal(f.utils.isAuthSessionActive(), false)
+  offInvalidation(); offInvalidation()
+  f.utils.invalidateAuthSession()
+  assert.equal(notifications, 1)
+  await f.emitUser(f.user().identity)
+  assert.equal(f.utils.isAuthSessionActive(), true)
+  offAuth()
+})
+
 await check('on-demand refresh forces Firebase once, uses existing push path, and returns metadata only', async () => {
   const f = fixture(); const u = f.user()
   f.auth.currentUser = u.identity

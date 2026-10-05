@@ -29,6 +29,17 @@ type TokenPusher = (info: {
 let tokenPusher: TokenPusher | null = null
 let authGeneration = 0
 let revokedUser: User | null = null
+const invalidationListeners = new Set<() => void>()
+
+export function onAuthSessionInvalidated(listener: () => void): () => void {
+  invalidationListeners.add(listener)
+  return () => { invalidationListeners.delete(listener) }
+}
+
+export function isAuthSessionActive(): boolean {
+  const user = auth.currentUser
+  return !!user && !user.isAnonymous && revokedUser !== user
+}
 
 export function setTokenPusher(fn: TokenPusher | null): void {
   tokenPusher = fn
@@ -39,6 +50,10 @@ export function invalidateAuthSession(): void {
   revokedUser = auth.currentUser
   tokenPusher = null
   stopProactiveRefresh()
+  // Invalidate outstanding UI lookups even if Firebase sign-out fails offline.
+  for (const listener of invalidationListeners) {
+    try { listener() } catch { console.warn('[firebase/authUtils] session invalidation listener failed') }
+  }
 }
 
 function sessionIsCurrent(user: User, generation: number): boolean {
