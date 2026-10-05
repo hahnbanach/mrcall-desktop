@@ -978,7 +978,7 @@ not started.
      billing pod's configured signing key: Google does not publish that key
      and returns INVALID_CUSTOM_TOKEN. No credentials changed. The planned
      nominal USD0.01 smoke cap is also below the unchanged USD0.011 minimum.
-     No live inference ran; these synthetic checks do not close R5's real
+     No operator inference ran in that FREE check; synthetic tests do not close R5's real
      signed-app mail/attachment/document journey.
      **Delivered at 15:37 UTC:** backend main `45b20e4`; isolated production
      hotfix `546cfb5` through successful
@@ -995,6 +995,37 @@ not started.
      Response compatibility is a separate open defect; the FREE settlement
      now has actual user-originated evidence. Both independent final delivery
      reviewers APPROVED the FREE billing delivery; R5 remains active.
+
+   - **Released response compatibility — 2026-10-05, R5 follow-up.**
+     The CTO's `MrCall response incomplete; reservation retained` originates
+     in the installed v1 decoder, which rejects reasoning blocks. One synthetic
+     provider diagnostic confirmed Opus 5 returns `thinking` plus `text` by
+     default. Isolated backend hotfix `45812bd` disables that optional reasoning
+     for the observed model and validates direct Anthropic answer blocks before
+     debit. Reasoning plus tool_use refuses instead of losing signatures needed
+     by continuation; OpenRouter/K3 remains unchanged.
+     Verification: 182 focused HTTP/PostgreSQL tests, 1065 full-suite tests;
+     actual installed `BoundedProxyClient.execute`, `LLMResponse` projection,
+     quote and receipt checks accept real endpoint text/tool/continuation
+     fixtures at zero FREE debit. Provider metadata is projected exactly into
+     the paired-ID continuation. Two further synthetic provider diagnostics
+     confirmed a tool response without reasoning and a text continuation with
+     canonical synthetic history; that live continuation used an invented paired
+     ID, not the original live response ID. Three diagnostics total, USD0.627
+     nominal maximum, no customer credit consumption or real mail contents.
+     Main integration `895918a` preserves v2/catalog behavior; 299 focused
+     checks pass. Integration and two fresh independent final source reviews
+     APPROVED. Production
+     [pipeline 2914343565](https://gitlab.com/hahnbanach/mrcall-agent/-/pipelines/2914343565)
+     succeeded, deploying only `45812bd` atop the FREE fix. At 16:13 UTC,
+     actual image `prod-45812bd1` has one ready/updated/available replica,
+     zero restarts, public billing `/health` HTTP200. CI: 921 passed,
+     144 PostgreSQL-dependent skips covered by the local full run. The CTO
+     was asked for one signed-app retry after verified rollout; its result is
+     pending. Both independent final delivery reviewers APPROVED; one also
+     rechecked the live deployment and health endpoint.
+     Existing local holds remain untouched. The real signed-app journey and
+     parent R5 remain active.
 
    - **Open after this plan, not part of it:**
      - one handset whose speech the voice provider does not transcribe
