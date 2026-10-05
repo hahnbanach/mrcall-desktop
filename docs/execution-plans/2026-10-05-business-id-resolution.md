@@ -1,5 +1,5 @@
 ---
-status: active
+status: completed
 ---
 
 # Opaque selected-business ID repair
@@ -48,4 +48,29 @@ Fresh independent source reviewers `opaque_id_final_a` and `opaque_id_final_b`
 both return APPROVED for `1c04412`. Both independently execute the browser
 suite successfully. Reviewer A's first run timed out on an existing click case
 while another browser run was active; its retry passed. Signed delivery and
-post-CI rereviews remain pending.
+post-CI verdicts are recorded below.
+
+## Published delivery
+
+Tag/source `v0.1.55` = `cf642ef73f9dba9598a447bdc0e25083aab5162f`.
+CI [37298416013](https://github.com/hahnbanach/mrcall-desktop/actions/runs/37298416013)
+completed successfully for the sidecar, installer and release attachment.
+Notary credential validation succeeds; the un-notarized fallback is skipped.
+Filtered build logs show Darwin distribution signing and custom notarization
+submission without a skip. The awaited pinned notarization library requires
+Apple acceptance and successful stapling before installer success.
+
+[Release 0.1.55](https://github.com/hahnbanach/mrcall-desktop/releases/tag/v0.1.55)
+is published, not draft/prerelease. Apple Silicon asset:
+`MrCall.Desktop-0.1.55-arm64.dmg`, 240742300 bytes; GitHub SHA-256 digest
+`0d9c749865d4fef3eca8e75e9f9e51f4d7039a6120cbac9ae909cf1e2df4e21b`.
+Metadata-only evidence is stored at
+`/home/mal/.cache/mrcall-review/opaque-id-release-20261005.json` (0600).
+The raw logs and signing identities are not recorded. A native Mac signature
+inspection and downloaded-byte digest verification have not been performed.
+
+After the operator's continuation, the original reviewer agents were no longer
+available. Two fresh independent delivery reviewers replace them for this final
+gate: `opaque_id_delivery_a` and `opaque_id_delivery_b` both return APPROVED.
+This repair delivery is completed. Installed-app acceptance and the separate
+sandbox R5 journey remain open.

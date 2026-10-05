@@ -8,7 +8,7 @@ state lives in ../../docs/active-context.md. Historical snapshots are archived.
 
 ## State now
 
-Desktop v0.1.54 is the current published signed/notarized Apple Silicon release. The CTO confirms
+Desktop v0.1.55 is the current published signed/notarized Apple Silicon release. The CTO confirms
 Remote Mario Gmail reconnects after full app quit/reopen. Fresh-device sign-in
 and personal-key GUI entry remain unverified; engine/API checks do not establish
 those packaged-app journeys.
@@ -21,7 +21,7 @@ provisioning share bounded fresh-token retrieval. Focused synthetic tests execut
 actual App/preload/main IPC paths and a local WebSocket handshake; typecheck/build
 pass. Signed/notarized Apple Silicon 0.1.53 is published (CI 37278638471;
 source/tag match, signing observed, notarization required and not skipped).
-Current 0.1.54 includes that repair; installed-patch GUI acceptance remains pending.
+Current 0.1.55 includes that repair; installed-patch GUI acceptance remains pending.
 Work trace: [auth recovery](../../docs/execution-plans/2026-10-05-desktop-auth-session-recovery.md).
 
 The billing-business picker repair is published in 0.1.54 after two independent
@@ -32,10 +32,11 @@ lookups ignore superseded account/transport results. The precise CTO incident
 remains uncorrelated; an installed-patch search is still needed. Work trace:
 [picker recovery](../../docs/execution-plans/2026-10-05-business-picker-recovery.md).
 
-A 0.1.54 follow-up fixes selected non-UUID businesses being re-resolved as
-names and falsely marked invalid. Save already validates exact IDs. The repair
-uses explicit opaque-ID resolution and adds actual-picker numeric/non-UUID
-regressions; signed delivery is pending. Work trace:
+Published 0.1.55 fixes selected non-UUID businesses being re-resolved as
+names and falsely marked invalid in 0.1.54. Save already validates exact IDs.
+Explicit opaque-ID resolution and actual-picker numeric/non-UUID regressions
+pass. Signed CI 37298416013 succeeds; both independent delivery reviews are
+APPROVED. Installed-patch acceptance remains pending. Work trace:
 [opaque IDs](../../docs/execution-plans/2026-10-05-business-id-resolution.md).
 
 Settings separates MrCall/Anthropic/OpenRouter billing from model selection.

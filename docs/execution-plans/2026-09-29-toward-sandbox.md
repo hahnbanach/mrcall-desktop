@@ -887,8 +887,9 @@ not started.
      lookup remains pending; publishing the patch does not close R5.
 
    - **Selected opaque business ID regression — 2026-10-05.**
-     After installing 0.1.54, the CTO selects a listed business and receives a
-     false billing-eligibility warning. Source identifies the regression: the
+     Following 0.1.54 publication, the CTO reports selecting a listed business
+     and receiving a billing-eligibility warning. The app version is not
+     independently confirmed. Source identifies a matching 0.1.54 regression: the
      selected non-UUID ID goes through name-discovery routing instead of an exact
      businessId lookup. The duplicate ID in the trigger is label fallback plus
      its metadata display, not a concatenated saved value. Settings Save already
@@ -902,6 +903,11 @@ not started.
      IDs, selection, remount/reopen, exact Save validation, missing IDs and
      failures. Browser checks, typecheck and build pass. No real business ID,
      live configuration change or paid request is included; R5 stays active.
+     Source passes integration and two independent final reviews. Signed and
+     notarized Apple Silicon 0.1.55 is published from `cf642ef` (CI 37298416013,
+     source/tag aligned). Fresh delivery reviewers `opaque_id_delivery_a` and
+     `opaque_id_delivery_b` both return APPROVED; the repair plan is completed.
+     The CTO's installed-patch acceptance remains pending. R5 remains active.
 
    - **Open after this plan, not part of it:**
      - one handset whose speech the voice provider does not transcribe
