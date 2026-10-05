@@ -24,6 +24,13 @@ source/tag match, signing observed, notarization required and not skipped).
 The CTO must install that patch; installed-patch GUI acceptance remains pending.
 Work trace: [auth recovery](../../docs/execution-plans/2026-10-05-desktop-auth-session-recovery.md).
 
+The billing-business picker repair is undergoing source verification and release
+review. Discovery covers company and personal labels, distinguishes failure from
+empty results, and requires explicit selection even for a sole result. Bounded
+lookups ignore superseded account/transport results. The precise CTO incident
+remains uncorrelated; an installed-patch search is still needed. Work trace:
+[picker recovery](../../docs/execution-plans/2026-10-05-business-picker-recovery.md).
+
 Settings separates MrCall/Anthropic/OpenRouter billing from model selection.
 The free catalog follows the provider; custom defaults and advanced role
 settings are explicit. Keys save on the active engine, including remote profiles.

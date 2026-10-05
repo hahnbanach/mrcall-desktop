@@ -860,6 +860,26 @@ not started.
      or document-search success is claimed. This read-only diagnosis does
      not modify a live profile, unit, key, firewall or service checkout.
 
+   - **Billing-business discovery repair — 2026-10-05, R5 follow-up.**
+     The CTO reports Searching followed by No business found. Source inspection
+     confirms that text discovery only filters companyName, although displayed
+     labels also use nickname and personal names; non-authentication errors are
+     incorrectly rendered as empty results. Initial list lookups appear in
+     daemon metadata, including a slow lookup, but no typed-filter request has
+     been correlated. These source defects do not prove the precise cause of
+     the CTO's particular attempt; app version/connection confirmation is pending.
+
+     The reviewed repair searches companyName, nickname, name and surname with
+     bounded role-scoped calls, preserves UUID/email routing, unions IDs, and
+     distinguishes timeout, authentication, transport and partial failures from
+     successful empty results. Only an explicit result click selects a billing
+     business; sole-result automatic selection is removed. A UI deadline and
+     one active raw batch prevent indefinite loading and overlapping retries.
+     Late account/transport responses are discarded. No live profile or billing
+     choice is changed. Source and delivery evidence is tracked in the
+     [picker repair plan](2026-10-05-business-picker-recovery.md); R5 remains
+     active for its real signed-app journey and scratch lifecycle criteria.
+
    - **Open after this plan, not part of it:**
      - one handset whose speech the voice provider does not transcribe
        (voice path, not the host; 2026-10-03 diagnosis above);

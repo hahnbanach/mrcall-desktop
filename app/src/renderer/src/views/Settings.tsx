@@ -8,7 +8,9 @@ import ConnectGoogleCalendar from './ConnectGoogleCalendar'
 import ConnectWhatsApp from './ConnectWhatsApp'
 import { performSignOut } from '../App'
 import { auth } from '../firebase/config'
-import { ensureEngineSession } from '../firebase/authUtils'
+import { ensureEngineSession, onAuthSessionInvalidated, isAuthSessionActive } from '../firebase/authUtils'
+import { onAuthStateChanged } from 'firebase/auth'
+import { businessQueries, checkedBusinesses, createBusinessLookup, boundedBusinessLookup, businessSearchError, businessSearchMessage, type Business } from '../lib/businessSearch'
 
 type FieldType = 'text' | 'password' | 'number' | 'select' | 'textarea' | 'model'
 
@@ -1408,45 +1410,16 @@ export function ModelSelect({
 // (mirrors mrcall-dashboard's /businesses search) — a bare term is an
 // exact match. That makes it scale to a reseller/admin with ~1000
 // businesses: we never page them all client-side, we `%q%` search.
-interface Business {
-  businessId: string
-  companyName?: string
-  nickname?: string
-  name?: string
-  surname?: string
-  emailAddress?: string
-  businessPhoneNumber?: string
-  totalHits?: number
-}
-
-const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
-
 function bizLabel(b: Business): string {
   const person = [b.name, b.surname].filter(Boolean).join(' ').trim()
   return b.companyName || b.nickname || person || b.businessId
 }
 
-// Wrap a search term for the StarChat LIKE filter: strip stray % then
-// bracket with %...% so "contrast" matches "CONTRAST ARQUITECTURA".
-function likeWrap(q: string): string {
-  return '%' + q.replace(/^%+/, '').replace(/%+$/, '') + '%'
-}
-
-// Route a typed term to the right search filter. Empty → null (caller
-// lists the account's own businesses). A UUID → exact businessId (no
-// wildcards). An '@' → email %substring%. Otherwise company-name
-// %substring%. Exported so the routing is unit-testable without the DOM.
+// Kept for callers of the original routing helper; discovery uses all filters.
 export function businessQuery(query: string): Record<string, string> | null {
-  const q = query.trim()
-  if (!q) return null
-  if (UUID_RE.test(q)) return { businessId: q }
-  if (q.includes('@')) return { emailAddress: likeWrap(q) }
-  return { companyName: likeWrap(q) }
+  return businessQueries(query)[0] ?? null
 }
-
-function asBusinesses(arr: unknown[]): Business[] {
-  return (arr as Business[]).filter((b) => b && typeof b.businessId === 'string')
-}
+const asBusinesses = checkedBusinesses
 
 // Validate a businessId against the caller's visible set (role-scoped by
 // StarChat). Returns true when it resolves, false when it doesn't, and
@@ -1465,89 +1438,110 @@ export function BusinessPicker({
   id,
   value,
   isDirty,
-  onChange
+  onChange,
+  lookupTimeoutMs = 12000
 }: {
   id: string
   value: string
   isDirty: boolean
   onChange: (v: string) => void
+  lookupTimeoutMs?: number
 }): JSX.Element {
   const [open, setOpen] = useState(false)
   const [query, setQuery] = useState('')
   const [results, setResults] = useState<Business[]>([])
-  const [totalHits, setTotalHits] = useState<number | null>(null)
   const [loading, setLoading] = useState(false)
   const [currentLabel, setCurrentLabel] = useState<string | null>(null)
   const [invalid, setInvalid] = useState(false)
-  const [notSignedIn, setNotSignedIn] = useState(false)
+  const [error, setError] = useState<string | null>(() => isAuthSessionActive() ? null : 'Sign in to MrCall again to search for a business.')
+  const [partial, setPartial] = useState(false)
+  const [truncated, setTruncated] = useState(false)
+  const [retry, setRetry] = useState(0)
+  const [context, setContext] = useState(0)
+  const [ready, setReady] = useState(isAuthSessionActive)
   const wrap = useRef<HTMLDivElement>(null)
+  const pending = useRef<AbortController | null>(null)
+  const lookup = useMemo(() => createBusinessLookup(window.zylch.mrcall), [])
 
-  // Resolve the current value's friendly name; "never empty" — if the
-  // account has exactly one business and nothing is set, adopt it.
   useEffect(() => {
-    let cancelled = false
-    void (async () => {
-      try {
-        if (value) {
-          const r = await window.zylch.mrcall.searchBusinesses({ businessId: value, limit: 1 })
-          if (cancelled) return
-          const b = asBusinesses(r.businesses).find((x) => x.businessId === value)
-          setCurrentLabel(b ? bizLabel(b) : null)
-          setInvalid(!b)
-          setNotSignedIn(false)
-        } else {
-          const r = await window.zylch.mrcall.listMyBusinesses({ limit: 2 })
-          if (cancelled) return
-          const b = asBusinesses(r.businesses)
-          const total = b[0]?.totalHits
-          setNotSignedIn(false)
-          if (b.length === 1 && (total == null || total === 1)) {
-            onChange(b[0].businessId) // sole business — populate it, never empty
-          }
-        }
-      } catch (e) {
-        if (cancelled) return
-        if ((e as { code?: number })?.code === -32010) setNotSignedIn(true)
-      }
-    })()
-    return () => {
-      cancelled = true
+    let previousUser = auth.currentUser
+    let authAvailable = isAuthSessionActive()
+    let transportAvailable = true
+    const invalidate = (available: boolean, message: string): void => {
+      pending.current?.abort()
+      setResults([])
+      setCurrentLabel(null)
+      setInvalid(false)
+      setLoading(false)
+      setPartial(false)
+      setTruncated(false)
+      setError(message)
+      setReady(available)
+      setContext(n => n + 1)
     }
-  }, [value]) // eslint-disable-line react-hooks/exhaustive-deps
+    const offAuth = onAuthStateChanged(auth, user => {
+      if (user === previousUser) return
+      previousUser = user
+      authAvailable = isAuthSessionActive()
+      invalidate(authAvailable && transportAvailable, 'The signed-in account changed. Search again.')
+    })
+    const offSession = onAuthSessionInvalidated(() => {
+      authAvailable = false
+      invalidate(false, 'Sign in to MrCall again to search for a business.')
+    })
+    const offStatus = window.zylch.onSidecarStatus(status => {
+      transportAvailable = status.alive
+      invalidate(authAvailable && transportAvailable, authAvailable
+        ? 'The backend connection changed. Search again.'
+        : 'Sign in to MrCall again to search for a business.')
+    })
+    return () => { pending.current?.abort(); offAuth(); offSession(); offStatus() }
+  }, [])
 
-  // Load options when open / query changes. Empty query → the account's
-  // own list; a term → a %substring% search (by businessId if a UUID, by
-  // email if it has an '@', else by company name).
+  // Resolve an existing selection, but never adopt a business without a click.
   useEffect(() => {
-    if (!open) return
+    if (open || !ready) return
+    setCurrentLabel(null)
+    setInvalid(false)
+    if (!value) return
     let cancelled = false
-    const run = async (): Promise<void> => {
-      setLoading(true)
-      try {
-        const bq = businessQuery(query)
-        const r = bq
-          ? await window.zylch.mrcall.searchBusinesses({ ...bq, limit: 25 })
-          : await window.zylch.mrcall.listMyBusinesses({ limit: 25 })
-        if (cancelled) return
-        const b = asBusinesses(r.businesses)
-        setResults(b)
-        setTotalHits(b[0]?.totalHits ?? b.length)
-        setNotSignedIn(false)
-      } catch (e) {
-        if (cancelled) return
-        setResults([])
-        setTotalHits(null)
-        if ((e as { code?: number })?.code === -32010) setNotSignedIn(true)
-      } finally {
-        if (!cancelled) setLoading(false)
-      }
-    }
-    const t = setTimeout(run, query.trim() ? 250 : 0)
-    return () => {
-      cancelled = true
-      clearTimeout(t)
-    }
-  }, [open, query])
+    const controller = new AbortController()
+    pending.current = controller
+    void boundedBusinessLookup(lookup, value, controller, lookupTimeoutMs).then(result => {
+      if (cancelled || controller.signal.aborted) return
+      const business = result.businesses.find(item => item.businessId === value)
+      setCurrentLabel(business ? bizLabel(business) : null)
+      setInvalid(!business && !result.partial)
+      setError(result.partial ? 'Business search is incomplete. Retry the search.' : null)
+    }).catch(reason => {
+      if (!cancelled && businessSearchError(reason).code !== 'cancelled') setError(businessSearchMessage(reason))
+    })
+    return () => { cancelled = true; controller.abort() }
+  }, [value, open, ready, context, lookup, lookupTimeoutMs])
+
+  useEffect(() => {
+    if (!open || !ready) return
+    let cancelled = false
+    const controller = new AbortController()
+    pending.current = controller
+    setLoading(true)
+    setResults([])
+    setError(null)
+    setPartial(false)
+    setTruncated(false)
+    const timer = setTimeout(() => {
+      void boundedBusinessLookup(lookup, query, controller, lookupTimeoutMs).then(result => {
+        if (cancelled || controller.signal.aborted) return
+        setResults(result.businesses)
+        setPartial(result.partial)
+        setTruncated(result.truncated)
+        setError(result.partial ? 'Business search is incomplete. Some searches failed; retry.' : null)
+      }).catch(reason => {
+        if (!cancelled && businessSearchError(reason).code !== 'cancelled') setError(businessSearchMessage(reason))
+      }).finally(() => { if (!cancelled) setLoading(false) })
+    }, query.trim() ? 250 : 0)
+    return () => { cancelled = true; clearTimeout(timer); controller.abort() }
+  }, [open, query, retry, ready, context, lookup, lookupTimeoutMs])
 
   useEffect(() => {
     if (!open) return
@@ -1567,6 +1561,7 @@ export function BusinessPicker({
 
   const pick = (b: Business): void => {
     onChange(b.businessId)
+    setError(null)
     setCurrentLabel(bizLabel(b))
     setInvalid(false)
     setOpen(false)
@@ -1610,6 +1605,7 @@ export function BusinessPicker({
           This business ID isn’t one your account can bill — pick the right one below.
         </div>
       )}
+      {!open && error && <p role="alert" className="text-xs text-brand-danger mt-1">{error}</p>}
       {open && (
         <div className="absolute z-20 mt-1 w-full rounded border border-brand-mid-grey bg-white shadow-lg">
           <div className="p-2 border-b border-brand-light-grey">
@@ -1622,14 +1618,14 @@ export function BusinessPicker({
               className="w-full px-2 py-1.5 border border-brand-mid-grey rounded text-sm focus:outline-none focus:ring-2 focus:ring-brand-mid-grey"
             />
           </div>
+          {error && <div role="alert" className="px-3 py-2 text-sm text-brand-danger">
+            {error}
+            <button type="button" className="ml-2 underline" disabled={!ready || loading} onClick={() => setRetry(n => n + 1)}>Retry search</button>
+          </div>}
           <ul role="listbox" className="max-h-64 overflow-auto py-1">
-            {notSignedIn ? (
-              <li className="px-3 py-2 text-sm text-brand-grey-80">
-                Sign in to MrCall to pick a business.
-              </li>
-            ) : loading ? (
+            {loading ? (
               <li className="px-3 py-2 text-sm text-brand-grey-80">Searching…</li>
-            ) : results.length === 0 ? (
+            ) : !error && results.length === 0 ? (
               <li className="px-3 py-2 text-sm text-brand-grey-80">
                 {query.trim() ? 'No matching business.' : 'No businesses found.'}
               </li>
@@ -1658,9 +1654,9 @@ export function BusinessPicker({
               ))
             )}
           </ul>
-          {totalHits != null && totalHits > results.length && (
+          {(truncated || partial) && (
             <div className="px-3 py-1.5 text-xs text-brand-grey-80 border-t border-brand-light-grey">
-              Showing {results.length} of {totalHits} — refine your search.
+              {truncated ? 'More businesses may match — refine your search.' : 'Results are incomplete.'}
             </div>
           )}
         </div>

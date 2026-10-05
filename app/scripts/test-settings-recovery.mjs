@@ -13,7 +13,7 @@ const output=mkdtempSync(join(tmpdir(),'mrcall-settings-recovery-'))
 await build({entryPoints:[join(app,'scripts/fixtures-settings-preview.tsx')],bundle:true,platform:'browser',format:'iife',jsx:'automatic',outfile:join(output,'preview.js'),plugins:[{
   name:'offline-settings-boundaries',setup(build){
     build.onResolve({filter:/^(\.\.\/App|\.\.\/firebase\/(config|authUtils)|\.\/Connect(GoogleCalendar|WhatsApp))$/},args=>({path:args.path,namespace:'fixture'}))
-    build.onLoad({filter:/.*/,namespace:'fixture'},args=>({contents:args.path.endsWith('/App')?'export const performSignOut=()=>{}':args.path.endsWith('/config')?"export const auth={currentUser:{uid:'fixture',email:'fixture@example.test'}}":args.path.endsWith('/authUtils')?'export const ensureEngineSession=async()=>true':'export default function Integration(){return null}',loader:'js'}))
+    build.onLoad({filter:/.*/,namespace:'fixture'},args=>({contents:args.path.endsWith('/App')?'export const performSignOut=()=>{}':args.path.endsWith('/config')?"export const auth={currentUser:{uid:'fixture',email:'fixture@example.test'}}":args.path.endsWith('/authUtils')?'export const ensureEngineSession=async()=>true; export const isAuthSessionActive=()=>true; export const onAuthSessionInvalidated=()=>()=>{}':'export default function Integration(){return null}',loader:'js'}))
   }
 }]})
 execFileSync(process.execPath,[join(app,'node_modules/tailwindcss/lib/cli.js'),'-i',join(app,'src/renderer/src/index.css'),'-o',join(output,'style.css')],{cwd:app,stdio:'pipe'})
