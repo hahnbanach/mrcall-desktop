@@ -838,6 +838,28 @@ not started.
      this Linux VPS; the CTO must install 0.1.53, because existing 0.1.52 is
      unpatched. R5 stays active for its separate acceptance criteria.
 
+   - **Signed-app retry: billing business missing — 2026-10-05.**
+     The CTO's Mario Gmail chat retry reports `MrCall billing HTTP 400
+     (business_id_required). Refused before any reservation.` A bounded
+     metadata-only journal check finds four matching `POST /quote` refusals
+     in the preceding two hours. The profile has no nonempty
+     `SMS_BUSINESS_ID`; installed checkout `776e3f4` already wires that
+     setting into the bounded client's `business_id` quote field. No request
+     content, credential, business identifier or mail content is recorded.
+
+     The refusal is before the client calls `reserve()`, so this attempt
+     creates no local reservation or paid execute request. This establishes
+     the missing billing-business selection for the current retry, not the
+     precise reason for every historical HTTP 400. The app's signed 0.1.53
+     Settings/LLM field is misleadingly labelled `SMS billing business`,
+     although the engine also uses it for MrCall LLM credits. The CTO must
+     choose the intended chargeable business from that authenticated picker,
+     save, and open a new chat to pick up the changed policy. No business is
+     guessed or assigned by the operator and no paid retry is made here.
+     R5's signed-app journey remains blocked at chat; no further attachment
+     or document-search success is claimed. This read-only diagnosis does
+     not modify a live profile, unit, key, firewall or service checkout.
+
    - **Open after this plan, not part of it:**
      - one handset whose speech the voice provider does not transcribe
        (voice path, not the host; 2026-10-03 diagnosis above);
