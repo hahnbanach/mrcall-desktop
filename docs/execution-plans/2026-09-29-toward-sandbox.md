@@ -718,6 +718,34 @@ not started.
      and is not claimed as a second fresh session.
      The repair review closure and parent plan remain active.
 
+   - **Mario Gmail connection timeout — 2026-10-05, VPS; read-only.**
+     The CTO confirms Mario Gmail and reports `Connection timed out (10s).
+     (timeout)`. At 06:28–06:36 UTC all seven daemons and sockets are active,
+     with `NRestarts=0`; Caddy and provisiond are active. Mario Gmail's
+     unsigned Unix-socket and local Caddy probes return HTTP 401 promptly.
+     On this VPS the hostname resolves through the hosts file to loopback,
+     so a hostname curl alone is not an external reachability check. Public
+     DNS gives the host's actual IPv4; forcing that IP with correct TLS
+     hostname, including an unsigned WebSocket upgrade, also returns 401
+     in about 0.10 seconds. No public AAAA is returned. TCP 443 is listening
+     and the host INPUT policy is ACCEPT. These VPS-originated probes do
+     not prove reachability from the CTO's desktop network.
+
+     Google's public signing-certificate fetch succeeds as Mario Gmail's
+     actual daemon user inside its namespaces: four certificates, 0.89s.
+     Scoped DNS/kernel metadata shows no refusals in the inspected hour.
+     The private daemon log records one rejected handshake because the
+     token expired, at **06:24:18 UTC**; its token value is never read out
+     or persisted. This confirms an expired-token rejection, not that it
+     caused the reported 10-second timeout. The app's Test connection has
+     an independent 10-second deadline. The CTO is advised to sign out and
+     back in to obtain a fresh token, then retry. Current base URL/version,
+     retry time, fresh authenticated success and the desktop network path
+     remain unverified. No daemon/DNS restart or configuration change is
+     made. Metadata-only evidence:
+     `/root/r5-mail-owner-repair-20261004/ws-diagnosis-20261005.json`.
+     R5 remains active; this diagnostic does not close the signed-app gate.
+
    - **Open after this plan, not part of it:**
      - one handset whose speech the voice provider does not transcribe
        (voice path, not the host; 2026-10-03 diagnosis above);
