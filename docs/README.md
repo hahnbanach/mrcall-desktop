@@ -24,6 +24,8 @@ The repo has three parallel doc trees, mirroring the three index files. Each tre
 
 - [Qonto connection](briefs/2026-10-04-qonto-connection.md) — native Desktop setup and engine-owned financial source; [development plan](execution-plans/2026-10-04-qonto-connection.md), including the authorized support-only rollout.
 - [Qonto IPC](qonto-ipc.md) — native bank methods, managed chat history and verification boundaries.
+- [Additional mailboxes and PEC](../engine/docs/features/mailboxes.md) — multiple IMAP sources, PEC envelope extraction and Desktop Settings; [original plan](execution-plans/2026-09-30-pec-net-mailbox-integration.md).
+- [PEC and Qonto next-release integration](execution-plans/2026-10-05-mailboxes-qonto-release-integration.md) — combined source, migration/auth verification and shared-main delivery; no installer or hosted rollout.
 - [GPT-Live customer-service channel](brief/2026-09-23-gpt-live-engine-integration.md) — incoming calls with asynchronous company memory first; agent configured by cs-operator. [Four-milestone plan](execution-plans/2026-09-23-gpt-live-engine-integration.md); repeatable integrations and outbound support follow.
 - [Desktop voice alpha UX](briefs/2026-09-25-desktop-voice-assistant-alpha-ux.md) — customer setup and preview journey; the [original Café 124 pilot plan](execution-plans/2026-09-25-desktop-voice-assistant-alpha-ux.md) is superseded by the existing-business test input.
 - [Café 124 production voice brief](briefs/2026-09-27-cafe124-voice-daemon.md) — one-number GPT-Live alpha in the existing `production@` daemon; [execution plan](execution-plans/2026-09-27-cafe124-voice-daemon.md) completed for the scoped manual/identity/archive and source-grounded service-answer gates.

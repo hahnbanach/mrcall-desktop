@@ -13,7 +13,10 @@ managed-history and publication fixtures. Support now has authenticated hosted b
 account is connected, initial and manual source sync complete across restart,
 and real provider comparisons and a managed assistant balance/source answer
 pass. Engine-formatted UTC retrieval strings now match the actual managed answer.
-Installed Desktop and provider-UI comparison remain unverified. The active
+Installed Desktop and provider-UI comparison remain unverified.
+The next-release source also includes additional mailboxes/PEC. Combined legacy
+migration and restart tests preserve both source families and their separate
+backups. Hosted profiles have not been migrated by this source integration. The active
 [delivery plan](../../docs/execution-plans/2026-10-04-qonto-connection.md) owns
 release, rollback, usage and remaining acceptance state.
 
@@ -283,6 +286,22 @@ private. Profile databases retain mailbox data, tokens and cursors. See
 [project memory](features/project-memory.md) and `MEMORY_TABLE_NAMES` in
 `zylch/storage/database.py` for the storage binding.
 
+A profile holds N IMAP mailboxes.
+The `mailboxes` table carries the primary row materialised from `.env` and
+every added mailbox with its hosts and a Fernet-encrypted password under
+the engine-written `MAILBOX_SECRET_KEY`; `emails` rows name their mailbox
+and are unique on `(owner_id, mailbox_id, gmail_id)`; sync, cursors, date
+floor and dedup are per mailbox, one mailbox's failure never stops the
+others; a message in two mailboxes is two rows processed once; removal
+hides rows and keeps memory; every active mailbox address is the user's;
+PEC transport envelopes store the original with the envelope id as server
+identity; archive moves each copy on its own server; `mailboxes.*` is on
+the RPC surface. The destructive step `0003_emails_mailbox` backs up the
+store before rebuilding `emails`. Combined source regression checks pass;
+the [integration plan](../../docs/execution-plans/2026-10-05-mailboxes-qonto-release-integration.md)
+records exact coverage and reproduced pre-existing RPC contract failures. Contract:
+[additional mailboxes](features/mailboxes.md). Not released; hosted units not migrated.
+
 Authenticated RPC serves setup evidence, identity, catalogs and billing policy.
 `setup.state` describes preparation evidence, not reply quality. Firebase ID
 tokens stay in memory. Claude Code headless runs in a clone and is outside engine
@@ -290,6 +309,10 @@ API budgets; see [control boundaries](../../docs/operator-setup.md#ai-execution-
 
 ## Unresolved
 
+- Additional mailboxes: live PEC.net acceptance on the supervised account and
+  confirmation of the PEC marker list against a live envelope are pending;
+  Settings recovery and the combined native browser journey pass.
+  Hosted rollout of step `0003_emails_mailbox` is pending (procedure in [remote-backend.md](../../docs/remote-backend.md)).
 - The remaining three profiles await a billing choice; funded credit acceptance
   remains open. No backlog resumption is part of model configuration.
 - Incident checkpoint counts and project inventories in dated records are

@@ -271,6 +271,7 @@ PROFILE_STEPS: list = []
 
 def _register_profile_steps() -> None:
     from zylch.storage.step_company_key import STEP as company_key_step
+    from zylch.storage.step_emails_mailbox import STEP as emails_mailbox_step
     from zylch.storage.step_memory_split import STEP as memory_split_step
 
     from zylch.qonto.migration import (
@@ -280,10 +281,28 @@ def _register_profile_steps() -> None:
     )
 
     for step in (
-        company_key_step, memory_split_step, qonto_step, qonto_sync_step, qonto_history_step
+        company_key_step,
+        memory_split_step,
+        emails_mailbox_step,
+        qonto_step,
+        qonto_sync_step,
+        qonto_history_step,
     ):
         if step not in PROFILE_STEPS:
             PROFILE_STEPS.append(step)
+
+
+def _ensure_primary_mailbox(engine: Engine) -> None:
+    """Ensure pass: the primary ``mailboxes`` row exists when ``EMAIL_ADDRESS`` is set.
+
+    Runs on every boot, before the versioned steps, so step
+    ``0003_emails_mailbox`` finds the primary row and every later boot
+    mirrors the environment's hosts onto it. A profile without an address
+    gets no row (see ``zylch.email.mailboxes.ensure_primary_mailbox``).
+    """
+    from zylch.email.mailboxes import ensure_primary_mailbox
+
+    ensure_primary_mailbox(engine)
 
 
 def _ensure_all_tables(engine: Engine) -> None:
@@ -317,7 +336,12 @@ def init_db():
     applied = run_migrations(
         engine,
         _resolve_db_path(),
-        ensure=(backup_before_install, _ensure_all_tables, _apply_column_migrations),
+        ensure=(
+            backup_before_install,
+            _ensure_all_tables,
+            _apply_column_migrations,
+            _ensure_primary_mailbox,
+        ),
         steps=PROFILE_STEPS,
         backfills=(_attach_store_then_backfill,),
     )
@@ -496,6 +520,18 @@ def _apply_column_migrations(engine: Engine) -> None:
             idx_name = f"ix_{table}_{column}"
             try:
                 conn.exec_driver_sql(f"CREATE INDEX IF NOT EXISTS {idx_name} ON {table}({column})")
+            except Exception as e:
+                logger.warning(f"[migrate] Failed to ensure index {idx_name}: {e}")
+        # Composite indexes: (table, name, columns). A file migrated before an
+        # index was declared gets it here; the step creates it on a rebuild.
+        composite_indexes = [
+            ("emails", "ix_emails_owner_message_id_header", "owner_id, message_id_header"),
+        ]
+        for table, idx_name, cols in composite_indexes:
+            if table not in present:
+                continue
+            try:
+                conn.exec_driver_sql(f"CREATE INDEX IF NOT EXISTS {idx_name} ON {table}({cols})")
             except Exception as e:
                 logger.warning(f"[migrate] Failed to ensure index {idx_name}: {e}")
 

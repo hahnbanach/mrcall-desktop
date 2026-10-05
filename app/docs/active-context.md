@@ -8,7 +8,7 @@ state lives in ../../docs/active-context.md. Historical snapshots are archived.
 
 ## State now
 
-Desktop v0.1.53 is the current published Apple Silicon release. The CTO confirms
+Desktop v0.1.55 is the current published signed/notarized Apple Silicon release. The CTO confirms
 Remote Mario Gmail reconnects after full app quit/reopen. Fresh-device sign-in
 and personal-key GUI entry remain unverified; engine/API checks do not establish
 those packaged-app journeys.
@@ -21,8 +21,23 @@ provisioning share bounded fresh-token retrieval. Focused synthetic tests execut
 actual App/preload/main IPC paths and a local WebSocket handshake; typecheck/build
 pass. Signed/notarized Apple Silicon 0.1.53 is published (CI 37278638471;
 source/tag match, signing observed, notarization required and not skipped).
-The CTO must install that patch; installed-patch GUI acceptance remains pending.
+Current 0.1.55 includes that repair; installed-patch GUI acceptance remains pending.
 Work trace: [auth recovery](../../docs/execution-plans/2026-10-05-desktop-auth-session-recovery.md).
+
+The billing-business picker repair is published in 0.1.54 after two independent
+source approvals; signed CI 37289911832 passes and both delivery reviewers
+return APPROVED. Discovery covers company and personal labels, distinguishes failure from
+empty results, and requires explicit selection even for a sole result. Bounded
+lookups ignore superseded account/transport results. The precise CTO incident
+remains uncorrelated; an installed-patch search is still needed. Work trace:
+[picker recovery](../../docs/execution-plans/2026-10-05-business-picker-recovery.md).
+
+Published 0.1.55 fixes selected non-UUID businesses being re-resolved as
+names and falsely marked invalid in 0.1.54. Save already validates exact IDs.
+Explicit opaque-ID resolution and actual-picker numeric/non-UUID regressions
+pass. Signed CI 37298416013 succeeds; both independent delivery reviews are
+APPROVED. Installed-patch acceptance remains pending. Work trace:
+[opaque IDs](../../docs/execution-plans/2026-10-05-business-id-resolution.md).
 
 Settings separates MrCall/Anthropic/OpenRouter billing from model selection.
 The free catalog follows the provider; custom defaults and advanced role
@@ -35,6 +50,15 @@ Preparation separates free sync from bounded analysis and persistent pause.
 Errors survive refresh; older engines cannot fall back to unbounded analysis.
 Automatic analysis defaults off. Resume starts one batch without enabling
 recurring work. Setup retains the engine/operator handoff and saved billing state.
+
+Settings carries a Mailboxes card (list with state, Add with preset and a
+connection test before Save, Edit, Remove; the primary is read-only) and the
+Email view a mailbox filter and per-message chip with more than one active
+mailbox; archive reads the engine's `ok` and rolls back on a per-mailbox
+failure. Typecheck, build, onboarding and `scripts/test-mailboxes-ui.mjs`
+pass. Cancel, account changes and engine changes clear credentials and invalidate
+late tests or mutations. Older engines receive an upgrade instruction.
+Not released; hosted units not migrated.
 
 React component journeys use fake RPCs; their successful results, typecheck and
 build are source checks, not live GUI acceptance. Current hosted deployment and
@@ -49,13 +73,19 @@ review is approved, including company-change consent and late-reply guards.
 Support now has real authenticated banking/source/managed-assistant acceptance;
 its corrected UTC source timestamps match the managed answer. Packaged
 Desktop and provider-UI acceptance remain pending in the delivery plan.
-Qonto is integrated in main's working tree above 0.1.53, pending release.
+Qonto and PEC/additional mailboxes are combined with the 0.1.55 source fixes
+for the next release. Tags 0.1.54 and 0.1.55 contain neither Settings card.
+The [integration plan](../../docs/execution-plans/2026-10-05-mailboxes-qonto-release-integration.md)
+records source delivery and verification; no new installer is published here.
 Explicit logout clears finance state and rejects late responses even if
 Firebase signout fails; same-UID relogin is covered by the combined App/Qonto
 lifecycle regression. The published installer does not yet contain Qonto.
 
 ## Unresolved
 
+- Additional mailboxes: live PEC.net acceptance through the installed GUI
+  and the hosted rollout are pending. Settings recovery and the combined
+  Mailboxes/Qonto native browser journey pass on synthetic profiles.
 - Reopen Settings after a connection change: reloading identical settings does
   not refetch the catalog. Stale choices remain disabled.
 - Fresh-device sign-in and personal-key entry on the CTO's Mac

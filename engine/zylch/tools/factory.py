@@ -315,18 +315,22 @@ class ToolFactory:
     def _create_imap_client(
         config: ToolConfig,
         purpose: str = "interactive",
+        mailbox=None,
     ) -> Optional[IMAPClient]:
-        """Create IMAPClient from config/env.
+        """Create IMAPClient from config/env, or for one mailbox row.
 
-        Reads EMAIL_ADDRESS, EMAIL_PASSWORD from env.
-        Optionally IMAP_HOST, IMAP_PORT, SMTP_HOST,
-        SMTP_PORT.
+        Without ``mailbox``: reads EMAIL_ADDRESS, EMAIL_PASSWORD from env
+        (optionally IMAP_HOST, IMAP_PORT, SMTP_HOST, SMTP_PORT) — the
+        primary. With a ``MailboxInfo``: ``build_imap_client`` resolves
+        that mailbox's password and hosts.
 
-        One client is cached per `purpose` and reused for every later
-        call with the same credentials, so a chat turn does not pay for a
-        fresh IMAP login. The client is NOT connected here: every IMAP
-        entry point goes through `IMAPClient._ensure_connected`, so the
-        login happens on first actual use — off the turn's preamble.
+        One client is cached per purpose for the env-built primary and per
+        ``(purpose, mailbox id)`` for a mailbox row, and reused for every
+        later call with the same credentials, so a chat turn does not pay
+        for a fresh IMAP login and two mailboxes never share a connection.
+        The client is NOT connected here: every IMAP entry point goes
+        through `IMAPClient._ensure_connected`, so the login happens on
+        first actual use — off the turn's preamble.
 
         Args:
             config: Tool configuration
@@ -334,11 +338,32 @@ class ToolFactory:
                 serves chat tools (search, fetch, send); `"sync"` serves
                 the archive/sync chain, whose runs are long enough to
                 monopolise a connection.
+            mailbox: A ``MailboxInfo``; ``None`` is the primary from env.
 
         Returns:
             IMAPClient or None if not configured
         """
         import os
+
+        if mailbox is not None:
+            from zylch.email.mailboxes import build_imap_client, credential_fingerprint
+
+            slot = (purpose, mailbox.id)
+            # The fingerprint hashes address, hosts and the secret ciphertext:
+            # a password change rebuilds the client, the plaintext never sits
+            # in a dict key.
+            key = (mailbox.id, credential_fingerprint(mailbox))
+            cached = ToolFactory._imap_clients.get(slot)
+            if cached is not None and ToolFactory._imap_client_keys.get(slot) == key:
+                logger.debug(f"[IMAP] reusing cached {purpose} client for {mailbox.address}")
+                return cached
+            client = build_imap_client(mailbox)
+            ToolFactory._imap_clients[slot] = client
+            ToolFactory._imap_client_keys[slot] = key
+            logger.info(
+                f"IMAP {purpose} client created for {mailbox.address} (connects on first use)"
+            )
+            return client
 
         email_addr = os.environ.get(
             "EMAIL_ADDRESS",
@@ -364,8 +389,9 @@ class ToolFactory:
         # A settings edit (new mailbox, new app password, new host) makes
         # the key differ and builds a fresh client.
         key = (email_addr, email_pass, imap_host, imap_port, smtp_host, smtp_port)
-        cached = ToolFactory._imap_clients.get(purpose)
-        if cached is not None and ToolFactory._imap_client_keys.get(purpose) == key:
+        slot = purpose  # the env-built primary; mailbox rows use (purpose, mailbox id)
+        cached = ToolFactory._imap_clients.get(slot)
+        if cached is not None and ToolFactory._imap_client_keys.get(slot) == key:
             logger.debug(f"[IMAP] reusing cached {purpose} client for {email_addr}")
             return cached
 
@@ -382,8 +408,8 @@ class ToolFactory:
             smtp_host=smtp_host,
             smtp_port=smtp_port,
         )
-        ToolFactory._imap_clients[purpose] = client
-        ToolFactory._imap_client_keys[purpose] = key
+        ToolFactory._imap_clients[slot] = client
+        ToolFactory._imap_client_keys[slot] = key
         logger.info(f"IMAP {purpose} client created for {email_addr} " f"(connects on first use)")
 
         return client

@@ -860,6 +860,55 @@ not started.
      or document-search success is claimed. This read-only diagnosis does
      not modify a live profile, unit, key, firewall or service checkout.
 
+   - **Billing-business discovery repair — 2026-10-05, R5 follow-up.**
+     The CTO reports Searching followed by No business found. Source inspection
+     confirms that text discovery only filters companyName, although displayed
+     labels also use nickname and personal names; non-authentication errors are
+     incorrectly rendered as empty results. Initial list lookups appear in
+     daemon metadata, including a slow lookup, but no typed-filter request has
+     been correlated. These source defects do not prove the precise cause of
+     the CTO's particular attempt; app version/connection confirmation is pending.
+
+     The reviewed repair searches companyName, nickname, name and surname with
+     bounded role-scoped calls, preserves UUID/email routing, unions IDs, and
+     distinguishes timeout, authentication, transport and partial failures from
+     successful empty results. Only an explicit result click selects a billing
+     business; sole-result automatic selection is removed. A UI deadline and
+     one active raw batch prevent indefinite loading and overlapping retries.
+     Late account/transport responses are discarded. No live profile or billing
+     choice is changed. Source and delivery evidence is tracked in the
+     [picker repair plan](2026-10-05-business-picker-recovery.md); R5 remains
+     active for its real signed-app journey and scratch lifecycle criteria.
+     Source passes integration and two fresh independent final reviews; actual
+     picker/Settings browser checks, 14 renderer-auth checks, typecheck and build
+     pass. Signed/notarized Apple Silicon 0.1.54 is published from `0ab1bd7`
+     (CI 37289911832, source/tag match). Both independent post-CI reviewers
+     return APPROVED; the picker repair plan is completed. The CTO's installed
+     lookup remains pending; publishing the patch does not close R5.
+
+   - **Selected opaque business ID regression — 2026-10-05.**
+     Following 0.1.54 publication, the CTO reports selecting a listed business
+     and receiving a billing-eligibility warning. The app version is not
+     independently confirmed. Source identifies a matching 0.1.54 regression: the
+     selected non-UUID ID goes through name-discovery routing instead of an exact
+     businessId lookup. The duplicate ID in the trigger is label fallback plus
+     its metadata display, not a concatenated saved value. Settings Save already
+     validates by exact businessId; no successful save or chat is claimed here.
+     The previous browser fixture covered only UUID IDs and missed this case.
+
+     The [opaque-ID repair](2026-10-05-business-id-resolution.md) uses an explicit
+     exact-ID request for selected/saved values. Discovery and server scoping,
+     selection authority, serialization and cancellation remain unchanged.
+     Actual-picker regressions now include numeric and other opaque synthetic
+     IDs, selection, remount/reopen, exact Save validation, missing IDs and
+     failures. Browser checks, typecheck and build pass. No real business ID,
+     live configuration change or paid request is included; R5 stays active.
+     Source passes integration and two independent final reviews. Signed and
+     notarized Apple Silicon 0.1.55 is published from `cf642ef` (CI 37298416013,
+     source/tag aligned). Fresh delivery reviewers `opaque_id_delivery_a` and
+     `opaque_id_delivery_b` both return APPROVED; the repair plan is completed.
+     The CTO's installed-patch acceptance remains pending. R5 remains active.
+
    - **Open after this plan, not part of it:**
      - one handset whose speech the voice provider does not transcribe
        (voice path, not the host; 2026-10-03 diagnosis above);

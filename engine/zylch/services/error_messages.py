@@ -55,6 +55,21 @@ def _mk(
     }
 
 
+def humanize_entry(entry: Dict[str, Any]) -> Dict[str, Any]:
+    """Humanize one ``{stage, error, mailbox?}`` pipeline entry.
+
+    A per-mailbox failure carries the mailbox address: the humanized
+    entry gains ``mailbox`` and its ``detail`` is prefixed with the
+    address, so the card names which mailbox failed.
+    """
+    out = humanize_error(entry.get("error"), entry.get("stage"))
+    mailbox = entry.get("mailbox")
+    if mailbox:
+        out["mailbox"] = mailbox
+        out["detail"] = f"{mailbox}: {out.get('detail', '')}".rstrip(": ")
+    return out
+
+
 def humanize_error(error: BaseException, stage: Optional[str] = None) -> Dict[str, Any]:
     """Classify ``error`` into a user-facing ``{stage,kind,severity,title,
     detail,action}`` dict. Defensive: any failure inside classification

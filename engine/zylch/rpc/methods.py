@@ -1179,6 +1179,33 @@ def _task_change_key(task: Dict[str, Any]) -> str:
     return str(task.get("analyzed_at") or "")
 
 
+def _pending_email_counts(owner_id: str) -> Dict[str, int]:
+    """The email counts the ETA is built from, over the owner's active mailboxes.
+
+    ``pending_*`` count only the first stored copy of a message held by
+    several mailboxes (the copy the pickers will process); ``total`` is
+    every row in an active mailbox, for first-sync detection.
+    """
+    from sqlalchemy import or_
+
+    from zylch.storage.database import get_session
+    from zylch.storage.models import Email
+    from zylch.storage.storage import Storage
+
+    active = Storage.active_mailbox_filter(owner_id)
+    first_copy = Storage.first_copy_filter(owner_id)
+    with get_session() as session:
+        pending = session.query(Email).filter(Email.owner_id == owner_id, active, first_copy)
+        return {
+            "pending_memory": pending.filter(Email.memory_processed_at.is_(None)).count(),
+            "pending_tasks": pending.filter(Email.task_processed_at.is_(None)).count(),
+            "pending_any": pending.filter(
+                or_(Email.memory_processed_at.is_(None), Email.task_processed_at.is_(None))
+            ).count(),
+            "total": session.query(Email).filter(Email.owner_id == owner_id, active).count(),
+        }
+
+
 def _estimate_update_eta(store, owner_id: str) -> str:
     """Rough human-readable ETA for update.run.
 
@@ -1197,47 +1224,15 @@ def _estimate_update_eta(store, owner_id: str) -> str:
     have to grind through. Now we sum all three centres and add a
     first-sync bump when the email table is empty.
     """
-    from sqlalchemy import or_
-
-    from zylch.storage.database import get_session
-    from zylch.storage.models import Email
-
     try:
-        with get_session() as session:
-            # Pending memory = not yet memory-extracted
-            pending_mem = (
-                session.query(Email)
-                .filter(Email.owner_id == owner_id)
-                .filter(Email.memory_processed_at.is_(None))
-                .count()
-            )
-            # Pending tasks = not yet task-analyzed
-            pending_tasks = (
-                session.query(Email)
-                .filter(Email.owner_id == owner_id)
-                .filter(Email.task_processed_at.is_(None))
-                .count()
-            )
-            # Pending memory OR task (used as the legacy "any pending"
-            # bucket for first-sync detection).
-            pending_any = (
-                session.query(Email)
-                .filter(Email.owner_id == owner_id)
-                .filter(
-                    or_(
-                        Email.memory_processed_at.is_(None),
-                        Email.task_processed_at.is_(None),
-                    )
-                )
-                .count()
-            )
-            # If the local store is empty this is a first-time sync: IMAP
-            # will pull the whole window (default 60 days) before the
-            # pipeline even starts counting, so nudge the estimate up.
-            total = session.query(Email).filter(Email.owner_id == owner_id).count()
+        counts = _pending_email_counts(owner_id)
     except Exception as e:
         logger.warning(f"[rpc] update ETA calc failed: {e}")
         return "unknown"
+    pending_mem = counts["pending_memory"]
+    pending_tasks = counts["pending_tasks"]
+    pending_any = counts["pending_any"]
+    total = counts["total"]
 
     # Open task count drives F4 + F8 + F9 sweep cost. The sweeps run
     # even when no new emails arrived — this is exactly the case where
@@ -1527,9 +1522,9 @@ async def update_run(params: Dict[str, Any], notify: NotifyFn) -> Any:
     diff = build_update_diff_summary(before_open, after_open_by_id, closed_after)
 
     # Turn any collected stage failures into clear, structured messages.
-    from zylch.services.error_messages import humanize_error
+    from zylch.services.error_messages import humanize_entry
 
-    humanized = [humanize_error(item.get("error"), item.get("stage")) for item in pipeline_errors]
+    humanized = [humanize_entry(item) for item in pipeline_errors]
     fatal = [h for h in humanized if h.get("severity") == "error"]
 
     logger.debug(
@@ -1679,7 +1674,9 @@ async def emails_list_by_thread(
     """emails.list_by_thread(thread_id) -> {"emails": [...]}.
 
     Returns the full thread in chronological order (date ASC) with a
-    provider-uniform shape. Dispatch:
+    provider-uniform shape; each row carries `mailbox_id`,
+    `mailbox_address`, `original_message_id` and `pec_markers` (the last
+    two non-null only on PEC rows). Dispatch:
       - provider == 'imap'      -> local DB (Email table)
       - provider == 'google'    -> GmailClient.threads.get (not available
                                     in standalone repo; returns error)
@@ -1696,14 +1693,25 @@ async def emails_list_by_thread(
     owner_id = _owner_id()
     provider = get_provider(owner_id)
     user_email = (get_email(owner_id) or "").lower()
+    # Ours = the primary plus the active mailboxes' addresses (verified by
+    # their connections); declared aliases are not, exactly as
+    # `emails.needs_reply` reads it (D2), so the two never disagree.
+    from zylch.email.identity import verified_user_addresses
+
+    user_set = set(verified_user_addresses(owner_id))
+    if user_email:
+        user_set.add(user_email)
     logger.debug(
         f"[rpc] emails.list_by_thread owner_id={owner_id} "
         f"provider={provider} thread_id={thread_id}"
     )
 
     if provider == "imap":
+        from zylch.email.mailboxes import for_owner
+
         store = Storage.get_instance()
         rows = store.get_thread_emails(owner_id=owner_id, thread_id=thread_id)
+        addresses = {m.id: m.address for m in for_owner(owner_id, include_removed=True)}
         out = []
         for r in rows:
             from_email = (r.get("from_email") or "").strip()
@@ -1748,9 +1756,15 @@ async def emails_list_by_thread(
                     "body_plain": body_clean,
                     "body_html": body_html_raw,
                     "is_auto_reply": bool(r.get("is_auto_reply")),
-                    "is_user_sent": bool(user_email and from_email.lower() == user_email),
+                    "is_user_sent": from_email.lower() in user_set,
                     "has_attachments": bool(r.get("has_attachments")) or bool(attach_names),
                     "attachment_filenames": attach_names,
+                    # The mailbox this copy came from, and the PEC original
+                    # behind an envelope (both None-safe, additive).
+                    "mailbox_id": r.get("mailbox_id"),
+                    "mailbox_address": addresses.get(r.get("mailbox_id")),
+                    "original_message_id": r.get("original_message_id"),
+                    "pec_markers": r.get("pec_markers"),
                 }
             )
         logger.debug(
@@ -1779,12 +1793,14 @@ async def emails_list_inbox(
     params: Dict[str, Any],
     notify: NotifyFn,
 ) -> Any:
-    """emails.list_inbox(limit=50, offset=0) -> {"threads": [...]}.
+    """emails.list_inbox(limit=50, offset=0, mailbox_id?) -> {"threads": [...]}.
 
     Returns thread summaries for the desktop Email tab's Inbox. See
     `Storage.list_inbox_threads` for the precise grouping/filtering
     rules. Each thread dict carries the latest message's metadata plus
-    `pinned`, `unread`, `message_count`.
+    `pinned`, `unread`, `message_count` and `mailbox_ids` (the mailboxes
+    holding rows of the thread). `mailbox_id` restricts the rows to one
+    mailbox: the threads as that mailbox sees them.
     """
     from zylch.api.token_storage import get_email
     from zylch.storage.storage import Storage
@@ -1803,6 +1819,7 @@ async def emails_list_inbox(
         user_email=user_email,
         limit=limit,
         offset=offset,
+        mailbox_id=str(params.get("mailbox_id") or "") or None,
     )
     logger.debug(f"[rpc] emails.list_inbox -> {len(threads)} threads")
     return {"threads": threads}
@@ -1812,11 +1829,12 @@ async def emails_list_sent(
     params: Dict[str, Any],
     notify: NotifyFn,
 ) -> Any:
-    """emails.list_sent(limit=50, offset=0) -> {"threads": [...]}.
+    """emails.list_sent(limit=50, offset=0, mailbox_id?) -> {"threads": [...]}.
 
     Symmetric to `emails.list_inbox` but filters for threads whose
-    latest email was sent by the profile owner (from_email ==
-    owner_email).
+    latest email was sent from any address the user writes from (the
+    primary, declared aliases, active mailboxes). `mailbox_id` restricts
+    the rows to one mailbox; summaries carry `mailbox_ids`.
     """
     from zylch.api.token_storage import get_email
     from zylch.storage.storage import Storage
@@ -1835,6 +1853,7 @@ async def emails_list_sent(
         user_email=user_email,
         limit=limit,
         offset=offset,
+        mailbox_id=str(params.get("mailbox_id") or "") or None,
     )
     logger.debug(f"[rpc] emails.list_sent -> {len(threads)} threads")
     return {"threads": threads}
@@ -1844,7 +1863,7 @@ async def emails_search(
     params: Dict[str, Any],
     notify: NotifyFn,
 ) -> Any:
-    """emails.search(query?, folder='inbox', limit=50, offset=0) -> {"threads": [...]}.
+    """emails.search(query?, folder='inbox', limit=50, offset=0, mailbox_id?) -> {"threads": [...]}.
 
     Gmail-style query language. Supported operators:
     ``from:`` / ``to:`` / ``cc:`` / ``subject:`` / ``body:``,
@@ -1856,7 +1875,8 @@ async def emails_search(
 
     ``query`` is optional: an absent or empty query is an unfiltered
     browse of ``folder``, which is what the renderer's "clear search"
-    already sends.
+    already sends. ``mailbox_id`` restricts the rows to one mailbox;
+    summaries carry ``mailbox_ids``.
     """
     from zylch.api.token_storage import get_email
     from zylch.storage.storage import Storage
@@ -1882,6 +1902,7 @@ async def emails_search(
         folder=folder,
         limit=limit,
         offset=offset,
+        mailbox_id=str(params.get("mailbox_id") or "") or None,
     )
     logger.debug(f"[rpc] emails.search -> {len(threads)} threads")
     return {"threads": threads}
@@ -2440,6 +2461,15 @@ from zylch.rpc.mrcall_actions import METHODS as _MRCALL_METHODS  # noqa: E402
 for _name, _fn in _MRCALL_METHODS.items():
     if _name in METHODS:
         raise RuntimeError(f"Duplicate RPC method name: {_name}")
+    METHODS[_name] = _fn
+
+# The profile's mailboxes (list, presets, test, add, update, remove): the
+# additional-mailbox surface, passwords encrypted under MAILBOX_SECRET_KEY.
+from zylch.rpc.mailboxes import METHODS as _MAILBOX_METHODS  # noqa: E402
+
+for _name, _fn in _MAILBOX_METHODS.items():
+    if _name in METHODS:
+        raise RuntimeError(f"RPC method name collision: {_name}")
     METHODS[_name] = _fn
 
 # Outreach campaigns — durable state for operator-driven outreach

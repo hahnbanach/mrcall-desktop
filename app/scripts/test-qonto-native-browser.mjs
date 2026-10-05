@@ -69,6 +69,11 @@ try {
   const base = `http://127.0.0.1:${server.address().port}`
   await page.route('**/*', route => route.request().url().startsWith(base) ? route.continue() : route.abort())
   await page.goto(base)
+  await page.getByText('Mailboxes', { exact: true }).waitFor()
+  await page.getByRole('button', { name: 'Add mailbox', exact: true }).click()
+  await page.locator('#mailbox-add-preset').selectOption('pec.net')
+  assert.equal(await page.locator('#mailbox-add-imap-host').inputValue(), 'imap.pec-email.com')
+  await page.getByRole('button', { name: 'Cancel', exact: true }).click()
   const qonto = page.getByRole('region', { name: 'Qonto connection', exact: true })
   await qonto.getByLabel('Qonto API login', { exact: true }).fill('fixture-organization-login')
   await qonto.getByLabel('Qonto API key', { exact: true }).fill('fixture-api-key-secret')

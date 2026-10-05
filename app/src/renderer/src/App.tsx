@@ -725,7 +725,7 @@ function AppInner(): JSX.Element {
                   `taskThreadFilter` on the thread store). The target
                   view is the same whether the thread has 0, 1, or many
                   tasks — no direct-open shortcut. */}
-              <Email onOpenTasks={() => setView('tasks')} />
+              <Email onOpenTasks={() => setView('tasks')} active={view === 'email'} />
             </div>
           )}
           <div

@@ -12,13 +12,14 @@ from sqlalchemy.orm import sessionmaker
 from zylch.rpc.dispatch import dispatch_raw
 from zylch.rpc import setup
 from zylch.storage import database
-from zylch.storage.models import Email, WhatsAppMessage
+from zylch.storage.models import Email, Mailbox, WhatsAppMessage
 from zylch.storage.storage import Storage
 
 
 @pytest.fixture
 def mailbox(tmp_path, monkeypatch):
     engine = create_engine(f"sqlite:///{tmp_path / 'setup.db'}")
+    Mailbox.__table__.create(engine)  # every emails row names its mailbox
     Email.__table__.create(engine)
     WhatsAppMessage.__table__.create(engine)
     sessions = sessionmaker(bind=engine)

@@ -394,6 +394,8 @@ const api = {
           title?: string
           detail?: string
           action?: string
+          /** The mailbox address a per-mailbox sync failure belongs to. */
+          mailbox?: string
         }>
       }>('sync.run', params, 12 * 3600 * 1000)
   },
@@ -411,6 +413,12 @@ const api = {
         emails_analyzed_count?: number | null
         emails_pending_analysis?: number | null
         last_email_analyzed_at?: string | null
+        mailboxes?: Array<{
+          mailbox_id: string
+          address: string
+          emails_count: number
+          emails_pending_analysis: number
+        }>
       }>('setup.state', {})
   },
   workspace: {
@@ -444,16 +452,26 @@ const api = {
   emails: {
     listByThread: (threadId: string) =>
       call<any>('emails.list_by_thread', { thread_id: threadId }, 60000),
-    listInbox: (params: { limit?: number; offset?: number } = {}) =>
+    // `mailbox_id` restricts the rows to one mailbox; absent, every
+    // active mailbox contributes (docs/ipc-contract.md, `emails.*`).
+    listInbox: (params: { limit?: number; offset?: number; mailbox_id?: string } = {}) =>
       call<{ threads: any[] }>(
         'emails.list_inbox',
-        { limit: params.limit ?? 50, offset: params.offset ?? 0 },
+        {
+          limit: params.limit ?? 50,
+          offset: params.offset ?? 0,
+          ...(params.mailbox_id ? { mailbox_id: params.mailbox_id } : {})
+        },
         30000
       ),
-    listSent: (params: { limit?: number; offset?: number } = {}) =>
+    listSent: (params: { limit?: number; offset?: number; mailbox_id?: string } = {}) =>
       call<{ threads: any[] }>(
         'emails.list_sent',
-        { limit: params.limit ?? 50, offset: params.offset ?? 0 },
+        {
+          limit: params.limit ?? 50,
+          offset: params.offset ?? 0,
+          ...(params.mailbox_id ? { mailbox_id: params.mailbox_id } : {})
+        },
         30000
       ),
     search: (params: {
@@ -461,6 +479,7 @@ const api = {
       folder?: 'inbox' | 'sent' | 'all'
       limit?: number
       offset?: number
+      mailbox_id?: string
     }) =>
       // Search scans the entire owner mailbox in-memory on the engine
       // side, so a long mailbox + body matching can take a beat. 30s
@@ -471,7 +490,8 @@ const api = {
           query: params.query,
           folder: params.folder ?? 'inbox',
           limit: params.limit ?? 50,
-          offset: params.offset ?? 0
+          offset: params.offset ?? 0,
+          ...(params.mailbox_id ? { mailbox_id: params.mailbox_id } : {})
         },
         30000
       ),
@@ -488,13 +508,20 @@ const api = {
         15000
       ),
     archive: (threadId: string) =>
-      // IMAP MOVE can take a few seconds (network + folder lookup) so
-      // we give this a comfortable 60s ceiling — the renderer shows a
-      // spinner in the archive button until it resolves.
+      // IMAP MOVE can take a few seconds per mailbox (network + folder
+      // lookup) so we give this a comfortable 60s ceiling — the renderer
+      // shows a spinner in the archive button until it resolves. A
+      // login, connection or missing-message failure is an answer
+      // (`ok: false` with the mailbox's `error`), not a rejection.
       call<{
         ok: boolean
         archived: number
-        imap: { folder: string; moved: number; attempted: number }
+        mailboxes: Array<{
+          mailbox_id: string
+          attempted: number
+          moved: number
+          error: string | null
+        }>
       }>('emails.archive', { thread_id: threadId }, 60000),
     deleteLocal: (threadId: string) =>
       // Local-only soft delete: instant, no network. Method name
@@ -503,6 +530,56 @@ const api = {
       call<{ ok: boolean; deleted: number }>(
         'emails.delete',
         { thread_id: threadId },
+        15000
+      )
+  },
+  // ── Mailboxes (additional IMAP accounts; the primary is read-only here) ──
+  // Refusals are answers ({ok: false, status, message}), never rejections;
+  // no result carries a password. test/add/update log in to the server,
+  // hence the 60s ceiling.
+  mailboxes: {
+    list: () => call<{ mailboxes: any[] }>('mailboxes.list', {}, 30000),
+    presets: () => call<{ presets: any[] }>('mailboxes.presets', {}, 30000),
+    test: (params: {
+      address: string
+      password: string
+      imap_host?: string
+      imap_port?: number
+      smtp_host?: string
+      smtp_port?: number
+    }) => call<{ ok: boolean; status: string; message: string }>('mailboxes.test', params, 60000),
+    add: (params: {
+      address: string
+      password: string
+      imap_host?: string
+      imap_port?: number
+      smtp_host?: string
+      smtp_port?: number
+      preset?: string
+    }) =>
+      call<{ ok: boolean; status: string; message?: string; mailbox?: any }>(
+        'mailboxes.add',
+        params,
+        60000
+      ),
+    update: (params: {
+      mailbox_id: string
+      imap_host?: string
+      imap_port?: number
+      smtp_host?: string
+      smtp_port?: number
+      password?: string
+      preset?: string
+    }) =>
+      call<{ ok: boolean; status: string; message?: string; mailbox?: any }>(
+        'mailboxes.update',
+        params,
+        60000
+      ),
+    remove: (mailboxId: string) =>
+      call<{ ok: boolean; status: string; message?: string; mailbox?: any }>(
+        'mailboxes.remove',
+        { mailbox_id: mailboxId },
         15000
       )
   },

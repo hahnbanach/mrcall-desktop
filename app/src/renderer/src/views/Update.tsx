@@ -32,6 +32,7 @@ type SyncResult = {
     title?: string
     detail?: string
     action?: string
+    mailbox?: string
   }>
 }
 
@@ -60,12 +61,25 @@ function ProgressBlock({ pct, message }: { pct: number; message: string; running
 function StageErrors({
   errors
 }: {
-  errors: Array<{ severity?: string; title?: string; detail?: string; action?: string }>
+  errors: Array<{
+    severity?: string
+    title?: string
+    detail?: string
+    action?: string
+    /** Set on a per-mailbox sync failure: the title names the mailbox. */
+    mailbox?: string
+  }>
 }): JSX.Element {
   return (
     <>
       {errors.map((er, i) => {
         const isErr = er.severity !== 'warning'
+        // The engine already prefixes `detail` with the address on a
+        // per-mailbox failure; the title names it only when it would
+        // otherwise not appear.
+        const namedInDetail = !!er.mailbox && !!er.detail && er.detail.startsWith(er.mailbox)
+        const title =
+          (er.title || 'Error') + (er.mailbox && !namedInDetail ? ` — ${er.mailbox}` : '')
         return (
           <div
             key={i}
@@ -76,7 +90,7 @@ function StageErrors({
                 : 'bg-brand-orange/10 border-brand-orange/40 text-brand-orange')
             }
           >
-            <div className="font-semibold">{'⚠ ' + (er.title || 'Error')}</div>
+            <div className="font-semibold">{'⚠ ' + title}</div>
             {er.detail && <div className="text-sm mt-0.5">{er.detail}</div>}
             {er.action && <div className="text-sm mt-1 font-medium">{'→ ' + er.action}</div>}
           </div>

@@ -69,6 +69,13 @@ def _manager(client, storage):
     return EmailArchiveManager(gmail_client=client, owner_id=OWNER, supabase_storage=storage)
 
 
+def _cursor(folder="INBOX"):
+    """The owner's cursor for the mailbox the manager syncs (its primary)."""
+    from zylch.email.mailboxes import default_mailbox_id
+
+    return sync_cursor.get_cursor(OWNER, folder, default_mailbox_id(OWNER))
+
+
 def _stored_ids(storage):
     return {e["gmail_id"] for e in storage.get_emails(OWNER, limit=500)}
 
@@ -142,7 +149,7 @@ def test_second_run_is_cursor_driven_and_idempotent(storage):
 
     first = manager.incremental_sync()
     assert first["messages_added"] == 2
-    assert sync_cursor.get_cursor(OWNER, "INBOX").last_uid == 42
+    assert _cursor().last_uid == 42
 
     second = manager.incremental_sync()
     assert second["messages_added"] == 0
@@ -164,7 +171,7 @@ def test_cursor_catches_a_new_message_whose_date_is_outside_the_window(storage):
     manager = _manager(client, storage)
 
     manager.incremental_sync()
-    assert sync_cursor.get_cursor(OWNER, "INBOX").last_uid == 41
+    assert _cursor().last_uid == 41
 
     inbox.add(
         42,
@@ -247,7 +254,7 @@ def test_failed_search_does_not_advance_the_cursor_and_logs_error(storage, caplo
     manager = _manager(client, storage)
 
     manager.incremental_sync()
-    assert sync_cursor.get_cursor(OWNER, "INBOX").last_uid == 41
+    assert _cursor().last_uid == 41
 
     inbox.add(42, build_raw_message("<b@example.com>", date=now))
     inbox.search_fails = True
@@ -257,7 +264,7 @@ def test_failed_search_does_not_advance_the_cursor_and_logs_error(storage, caplo
 
     assert result["success"] is False
     assert result["folder_errors"][0]["folder"] == "INBOX"
-    assert sync_cursor.get_cursor(OWNER, "INBOX").last_uid == 41
+    assert _cursor().last_uid == 41
     assert "<b@example.com>" not in _stored_ids(storage)
     assert any("cursor NOT advanced" in r.message for r in caplog.records)
 
@@ -283,13 +290,13 @@ def test_partial_fetch_failure_is_counted_and_holds_the_cursor(storage, caplog):
     assert folder_result["failures"] == 1
     assert 42 in (folder_result["fetch_failed_uids"] + folder_result["unresolved_uids"])
     # The cursor stops below the failure even though uid 43 was stored.
-    assert sync_cursor.get_cursor(OWNER, "INBOX").last_uid == 41
+    assert _cursor().last_uid == 41
     assert any("holding the cursor at 41" in r.message for r in caplog.records)
 
     inbox.fetch_errors = set()
     manager.incremental_sync()
     assert "<broken@example.com>" in _stored_ids(storage)
-    assert sync_cursor.get_cursor(OWNER, "INBOX").last_uid == 43
+    assert _cursor().last_uid == 43
 
 
 def test_store_failure_holds_the_cursor(storage, caplog, monkeypatch):
@@ -308,7 +315,7 @@ def test_store_failure_holds_the_cursor(storage, caplog, monkeypatch):
         result = manager.incremental_sync()
 
     assert result["folders"]["INBOX"]["failures"] == 1
-    assert sync_cursor.get_cursor(OWNER, "INBOX").last_uid == 40
+    assert _cursor().last_uid == 40
     assert any("cursor will not advance past uid 41" in r.message for r in caplog.records)
 
 
@@ -343,7 +350,7 @@ def test_uidvalidity_change_resets_the_cursor_loudly(storage, caplog):
     manager = _manager(client, storage)
 
     manager.incremental_sync()
-    assert sync_cursor.get_cursor(OWNER, "INBOX").uidvalidity == 101
+    assert _cursor().uidvalidity == 101
 
     # The server renumbers: same messages, brand new UID space.
     inbox.uidvalidity = 999
@@ -356,7 +363,7 @@ def test_uidvalidity_change_resets_the_cursor_loudly(storage, caplog):
         result = manager.incremental_sync()
 
     assert any("UIDVALIDITY CHANGED" in r.message for r in caplog.records)
-    cursor = sync_cursor.get_cursor(OWNER, "INBOX")
+    cursor = _cursor()
     assert cursor.uidvalidity == 999
     assert cursor.last_uid == 8
     assert "<after-renumber@example.com>" in _stored_ids(storage)
@@ -369,6 +376,6 @@ def test_empty_folder_anchors_the_cursor_at_uidnext(storage):
     result = _manager(client, storage).incremental_sync()
 
     assert result["success"] is True
-    cursor = sync_cursor.get_cursor(OWNER, "INBOX")
+    cursor = _cursor()
     assert cursor is not None
     assert cursor.last_uid == 0

@@ -65,8 +65,11 @@ written projects are revisioned company records. See
 [operator setup](operator-setup.md#ai-execution-and-controls) and
 [project memory](../engine/docs/features/project-memory.md).
 
-Desktop `v0.1.53` is the published signed/notarized Apple Silicon auth repair.
-Qonto is integrated as unreleased source; installed Qonto acceptance remains open. Windows neonize imports and
+Desktop `v0.1.55` carries the auth and billing-business fixes; its tag and
+`v0.1.54` contain neither Qonto nor PEC Settings. Both are now combined in
+the next-release source with those fixes. No installer or hosted rollout is
+part of this [integration](execution-plans/2026-10-05-mailboxes-qonto-release-integration.md);
+installed Qonto and live PEC acceptance remain open. Windows neonize imports and
 loose-file loading remain unverified. Runtime contracts belong to
 [IPC](ipc-contract.md), [host operations](remote-backend.md) and per-tree docs.
 WhatsApp's protocol can become stale; the checkout has a refresh loop,

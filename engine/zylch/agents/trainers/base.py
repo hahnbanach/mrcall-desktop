@@ -37,9 +37,18 @@ class BaseAgentTrainer:
         self.client: LLMClient = make_llm_client()
         self.model = self.client.model
         self.user_email = user_email.lower() if user_email else ""
+        # The primary's domain is the user's domain; another mailbox's
+        # domain (a PEC provider's, say) never is — those addresses match
+        # exactly, through `user_addresses`.
         self.user_domain = (
             user_email.split("@")[1].lower() if user_email and "@" in user_email else ""
         )
+
+    def _is_user_sender(self, from_email: str | None) -> bool:
+        """The primary's domain rule, plus an exact match on the user's other addresses."""
+        from zylch.email.identity import is_user_sender
+
+        return is_user_sender(self.owner_id, from_email, self.user_email)
 
     def _get_emails(self, limit: int = 100, filter_sent: bool = False) -> List[Dict[str, Any]]:
         """Get emails from storage, optionally filtering for sent only.
@@ -55,12 +64,11 @@ class BaseAgentTrainer:
             self.owner_id, limit=limit * 2 if filter_sent else limit
         )
 
-        if filter_sent and self.user_domain:
+        if filter_sent and (self.user_domain or self.user_email):
             # Filter to only sent emails
             emails = []
             for email in all_emails:
-                from_email = email.get("from_email", "").lower()
-                if self.user_domain in from_email:
+                if self._is_user_sender(email.get("from_email", "")):
                     emails.append(email)
             emails = emails[:limit]
         else:

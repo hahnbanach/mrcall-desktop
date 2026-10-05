@@ -508,3 +508,32 @@ disposable profile under a scratch root, the provider key enters only as
 `ANTHROPIC_API_KEY` in the process environment — never on argv, in a log or
 in the record — is copied once into that profile's `.env` (mode 600), and the
 profile directory is deleted once the record is extracted.
+
+## Additional mailboxes on the host (migration `0003_emails_mailbox`)
+
+A release carrying the `mailboxes` table runs the destructive profile step
+`0003_emails_mailbox` on each daemon's first boot: it backs up `zylch.db`
+to `<profile>/backups/zylch.db.<pending-destructive-step-ids>.<stamp>.bak` through
+the SQLite backup API, then rebuilds `emails` with a `mailbox_id` on every
+row. Contract and data-loss window:
+[additional mailboxes](../engine/docs/features/mailboxes.md).
+
+This source integration does not deploy a hosted engine. Stage any later
+rollout per tenant using the current sandbox and release-pin runbook above;
+retain the tenant Unix user, encryption key, filesystem restrictions and
+egress policy. Rehearse the migration and a second boot on a disposable
+SQLite backup before changing a live unit. Do not repoint a sandboxed unit
+to a shared-user invocation or restart all tenants together.
+
+After an authorized rollout, verify `mailboxes.list` returns the primary
+mailbox and run one bounded sync. Additional passwords use the profile's
+private `MAILBOX_SECRET_KEY`; it is never provisioned or shared with company
+memory. Permit the configured IMAP hostname through that tenant's egress
+policy before testing the provider.
+
+Rollback requires stopping the affected unit, restoring the pre-migration
+profile backup through `restore_sqlite`, and restoring its previous release
+pin while retaining the sandbox. Post-backup local tasks and mail flags are
+lost; server mail can sync again. Company memory is a separate store and is
+not rolled back with the profile. See the mailbox contract for this data-loss
+window.

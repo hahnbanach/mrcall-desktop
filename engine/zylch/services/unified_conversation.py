@@ -8,6 +8,14 @@ import logging
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict
 
+
+def _active_mailboxes(owner_id: str):
+    """Rows of a removed mailbox are out of the timeline (lazy: no import cycle)."""
+    from zylch.storage.storage import Storage
+
+    return Storage.active_mailbox_filter(owner_id)
+
+
 logger = logging.getLogger(__name__)
 
 
@@ -98,6 +106,7 @@ def get_unified_timeline(
                 session.query(Email)
                 .filter(
                     Email.owner_id == owner_id,
+                    _active_mailboxes(owner_id),
                     Email.date >= cutoff,
                     Email.from_email.ilike(f"%{_escape_like(resolved_email)}%", escape="\\")
                     | Email.to_email.ilike(f"%{_escape_like(resolved_email)}%", escape="\\"),
@@ -129,6 +138,7 @@ def get_unified_timeline(
                 session.query(Email)
                 .filter(
                     Email.owner_id == owner_id,
+                    _active_mailboxes(owner_id),
                     Email.date >= cutoff,
                     Email.from_name.ilike(f"%{_escape_like(contact_name)}%", escape="\\"),
                 )

@@ -38,15 +38,15 @@ or automatically a durable entity fact. [Company visibility](../../engine/zylch/
 shares company-family facts with every memory-key holder; profile provenance
 alone does not make a financial fact private.
 
-The [PEC session](../sessions/60548d5d-5dd8-47d2-bdf0-0e2f21dce821.md) records
-seven reviewed milestones on `feat/additional-mailboxes`, in the separate
-`/home/mal/worktrees/mrcall-desktop-mailboxes` worktree. Its actual
-[brief](https://github.com/hahnbanach/mrcall-desktop/blob/feat/additional-mailboxes/docs/briefs/2026-09-30-pec-net-mailbox-integration.md)
-and [plan](https://github.com/hahnbanach/mrcall-desktop/blob/feat/additional-mailboxes/docs/execution-plans/2026-09-30-pec-net-mailbox-integration.md)
-implement Settings `MailboxesCard`, `mailboxes.*` RPC, fail-closed encrypted
-credentials and mailbox-specific rows/cursors feeding memory/tasks. These are patterns; main lacks that feature, and its live PEC
-acceptance and hosted rollout remain open. Its mail extraction policy does
-not establish a policy for publishing banking data.
+The [PEC brief](2026-09-30-pec-net-mailbox-integration.md) and
+[plan](../execution-plans/2026-09-30-pec-net-mailbox-integration.md) describe
+Settings `MailboxesCard`, `mailboxes.*` RPC, encrypted credentials and
+mailbox-specific rows/cursors feeding memory/tasks. At this brief's authoring,
+that implementation lived on `feat/additional-mailboxes` in a separate
+worktree. The [next-release integration](../execution-plans/2026-10-05-mailboxes-qonto-release-integration.md)
+now combines it with Qonto; live PEC acceptance and hosted rollout remain
+open. Its mail extraction policy does not establish a policy for publishing
+banking data.
 
 ## Transport and authentication decision
 

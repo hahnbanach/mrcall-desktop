@@ -98,10 +98,109 @@ export interface ThreadEmail {
   is_user_sent: boolean
   has_attachments: boolean
   attachment_filenames: string[]
+  /** The mailbox this row was synced through (see `Mailbox`). */
+  mailbox_id?: string | null
+  /** Address of that mailbox — the reading pane's per-message chip. */
+  mailbox_address?: string | null
+  /**
+   * PEC rows only: the wrapped original's Message-ID. The row's own
+   * `id` is the provider's envelope; a reply threads on this one.
+   */
+  original_message_id?: string | null
+  /** PEC rows only: the transport markers the envelope carried. */
+  pec_markers?: {
+    kind: 'transport' | 'receipt' | 'anomaly'
+    receipt_type?: string | null
+    reference_message_id?: string | null
+    headers?: Record<string, string>
+  } | null
 }
 
 export interface EmailThreadResult {
   emails: ThreadEmail[]
+}
+
+/** One of the profile's IMAP mailboxes as `mailboxes.list` returns it:
+ *  never a password. The primary is the sign-up address configured in
+ *  Settings (`EMAIL_*`) and is read-only through `mailboxes.*`. */
+export interface Mailbox {
+  id: string
+  address: string
+  imap_host: string | null
+  imap_port: number | null
+  smtp_host: string | null
+  smtp_port: number | null
+  preset: string | null
+  is_primary: boolean
+  /** Whether the mailbox can log in (address plus a stored password). */
+  configured: boolean
+  /** `ok` (last sync succeeded), `error` (`last_error` set) or `never`. */
+  state: 'ok' | 'error' | 'never'
+  last_sync_at: string | null
+  last_error: string | null
+  created_at: string | null
+}
+
+/** A provider preset from `mailboxes.presets`; `password_label` names the
+ *  credential the provider expects (e.g. "PEC mailbox password"). */
+export interface MailboxPreset {
+  id: string
+  label: string
+  domains: string[]
+  imap_host: string
+  imap_port: number
+  imap_security: 'ssl' | 'starttls'
+  smtp_host: string | null
+  smtp_port: number | null
+  smtp_security: 'ssl' | 'starttls'
+  username: 'full_address'
+  password_label: string
+}
+
+/** Every `mailboxes.*` refusal is an answer, never a rejection. Statuses:
+ *  test → ok | auth | unreachable | tls | folder | invalid; add adds
+ *  duplicate | secret; update adds secret | unknown | primary; remove →
+ *  ok | unknown | primary. */
+export type MailboxStatus =
+  | 'ok'
+  | 'auth'
+  | 'unreachable'
+  | 'tls'
+  | 'folder'
+  | 'invalid'
+  | 'duplicate'
+  | 'secret'
+  | 'unknown'
+  | 'primary'
+
+export interface MailboxTestResult {
+  ok: boolean
+  status: MailboxStatus
+  message: string
+}
+
+export interface MailboxMutationResult {
+  ok: boolean
+  status: MailboxStatus
+  message?: string
+  mailbox?: Mailbox
+}
+
+/** Per-mailbox outcome of `emails.archive`; `error` names a login,
+ *  connection or missing-message failure of that mailbox. */
+export interface ArchiveMailboxResult {
+  mailbox_id: string
+  attempted: number
+  moved: number
+  error: string | null
+}
+
+export interface ArchiveResult {
+  /** True only when every mailbox moved everything it held. */
+  ok: boolean
+  /** Rows stamped `archived_at`. */
+  archived: number
+  mailboxes: ArchiveMailboxResult[]
 }
 
 export interface InboxThread {
@@ -117,6 +216,9 @@ export interface InboxThread {
   pinned: boolean
   message_count: number
   last_email_id: string
+  /** Mailboxes holding rows of this thread (a message delivered to two
+   *  mailboxes is two rows in one thread). */
+  mailbox_ids?: string[]
 }
 
 export interface WhatsAppThread {
@@ -396,6 +498,8 @@ export interface ZylchAPI {
         title?: string
         detail?: string
         action?: string
+        /** The mailbox address a per-mailbox sync failure belongs to. */
+        mailbox?: string
       }>
     }>
   }
@@ -415,6 +519,13 @@ export interface ZylchAPI {
       emails_analyzed_count?: number | null
       emails_pending_analysis?: number | null
       last_email_analyzed_at?: string | null
+      /** Per active mailbox (additive); empty when the breakdown cannot be queried. */
+      mailboxes?: Array<{
+        mailbox_id: string
+        address: string
+        emails_count: number
+        emails_pending_analysis: number
+      }>
     }>
   }
   /** Redacted same-machine handoff; never contains descriptor credentials. */
@@ -446,13 +557,17 @@ export interface ZylchAPI {
   }
   emails: {
     listByThread: (threadId: string) => Promise<EmailThreadResult>
+    /** `mailbox_id` restricts the rows to one mailbox; absent, every
+     *  active mailbox contributes. */
     listInbox: (params?: {
       limit?: number
       offset?: number
+      mailbox_id?: string
     }) => Promise<{ threads: InboxThread[] }>
     listSent: (params?: {
       limit?: number
       offset?: number
+      mailbox_id?: string
     }) => Promise<{ threads: InboxThread[] }>
     /**
      * Gmail-style thread search. ``query`` accepts the operators
@@ -469,15 +584,56 @@ export interface ZylchAPI {
       folder?: 'inbox' | 'sent' | 'all'
       limit?: number
       offset?: number
+      mailbox_id?: string
     }) => Promise<{ threads: InboxThread[] }>
     pin: (threadId: string, pinned: boolean) => Promise<{ ok: boolean; affected: number }>
     markRead: (threadId: string) => Promise<{ ok: boolean; affected: number }>
-    archive: (threadId: string) => Promise<{
-      ok: boolean
-      archived: number
-      imap: { folder: string; moved: number; attempted: number }
-    }>
+    /** IMAP MOVE per mailbox of the thread's rows, then the local flag on
+     *  the rows whose copy moved. A failure is an answer (`ok: false`,
+     *  per-mailbox `error`), never a rejection: the caller must read
+     *  `ok` and roll back its optimistic removal. */
+    archive: (threadId: string) => Promise<ArchiveResult>
     deleteLocal: (threadId: string) => Promise<{ ok: boolean; deleted: number }>
+  }
+  /** Additional IMAP mailboxes. The primary is read-only here (it is
+   *  configured through the `EMAIL_*` settings); refusals are answers
+   *  with a `status`, never rejections; no result carries a password. */
+  mailboxes: {
+    list: () => Promise<{ mailboxes: Mailbox[] }>
+    presets: () => Promise<{ presets: MailboxPreset[] }>
+    /** IMAP login plus read-only opens of INBOX, Sent and archive.
+     *  Nothing is stored. */
+    test: (params: {
+      address: string
+      password: string
+      imap_host?: string
+      imap_port?: number
+      smtp_host?: string
+      smtp_port?: number
+    }) => Promise<MailboxTestResult>
+    /** Runs the test first; refuses an active duplicate (`duplicate`). */
+    add: (params: {
+      address: string
+      password: string
+      imap_host?: string
+      imap_port?: number
+      smtp_host?: string
+      smtp_port?: number
+      preset?: string
+    }) => Promise<MailboxMutationResult>
+    /** Re-tests when a host, port or password changes; `primary` for the
+     *  primary, `unknown` for an id without an active row. */
+    update: (params: {
+      mailbox_id: string
+      imap_host?: string
+      imap_port?: number
+      smtp_host?: string
+      smtp_port?: number
+      password?: string
+      preset?: string
+    }) => Promise<MailboxMutationResult>
+    /** Hides the mailbox (rows and memory kept); `primary` is refused. */
+    remove: (mailboxId: string) => Promise<MailboxMutationResult>
   }
   files: {
     select: () => Promise<string[]>

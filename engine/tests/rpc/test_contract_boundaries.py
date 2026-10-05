@@ -188,11 +188,25 @@ def offline_engine(tmp_path, monkeypatch):
     monkeypatch.setattr(
         email_actions,
         "_archive_on_imap",
-        lambda _thread_id, message_ids: {
-            "folder": "Archive",
-            "moved": len(message_ids),
-            "attempted": len(message_ids),
-        },
+        lambda _owner_id, groups: [
+            {
+                "mailbox_id": mailbox_id,
+                "attempted": len(mids),
+                "moved": len(mids),
+                "moved_ids": list(mids),
+                "error": None,
+            }
+            for mailbox_id, mids in groups.items()
+        ],
+    )
+    # `mailboxes.test` / `mailboxes.add` probe a server: answer "ok" offline.
+    from zylch.email.mailbox_probe import ProbeResult
+    from zylch.rpc import mailboxes as mailboxes_rpc
+
+    monkeypatch.setattr(
+        mailboxes_rpc,
+        "probe_mailbox",
+        lambda _client: ProbeResult(True, "ok", "offline probe", ("INBOX",)),
     )
 
     async def _no_process(*_args, **_kwargs):
@@ -217,6 +231,35 @@ def offline_engine(tmp_path, monkeypatch):
         # do not leak it into the rest of the suite.
         clear_session()
         db_mod.dispose_engine()
+
+
+@pytest.mark.asyncio
+async def test_archive_result_has_the_per_mailbox_shape(offline_engine):
+    """`emails.archive` answers `{ok, archived, mailboxes: [...]}` (D3)."""
+    response = await dispatch_raw(_request("emails.archive", {"thread_id": "no-such"}), _notify)
+    assert "error" not in response, response
+    result = response["result"]
+    assert set(result) == {"ok", "archived", "mailboxes"}
+    assert result["ok"] is True and result["archived"] == 0 and result["mailboxes"] == []
+
+
+def test_mailbox_methods_declare_checkable_signatures():
+    for method in (
+        "mailboxes.list",
+        "mailboxes.presets",
+        "mailboxes.test",
+        "mailboxes.add",
+        "mailboxes.update",
+        "mailboxes.remove",
+    ):
+        assert method in METHODS and method not in OPEN_METHODS
+    assert REQUIRED_PARAMS["mailboxes.test"] == {"address", "password"}
+    assert REQUIRED_PARAMS["mailboxes.add"] == {"address", "password"}
+    assert REQUIRED_PARAMS["mailboxes.update"] == {"mailbox_id"}
+    assert REQUIRED_PARAMS["mailboxes.remove"] == {"mailbox_id"}
+    assert "mailbox_id" in ACCEPTED_PARAMS["emails.list_inbox"]
+    assert "mailbox_id" in ACCEPTED_PARAMS["emails.list_sent"]
+    assert "mailbox_id" in ACCEPTED_PARAMS["emails.search"]
 
 
 def test_minimal_payload_exemptions_name_real_methods():
