@@ -1,7 +1,7 @@
 {
   "name": "mrcall-desktop",
   "productName": "MrCall Desktop",
-  "version": "0.1.52",
+  "version": "0.1.53",
   "description": "MrCall Desktop (Electron + React)",
   "main": "out/main/index.js",
   "author": "Alex Doe",
@@ -15,7 +15,8 @@
     "dist": "npm run build && electron-builder --publish never",
     "dist:mac": "npm run build && electron-builder --mac --publish never",
     "dist:win": "npm run build && electron-builder --win --publish never",
-    "test:onboarding": "node scripts/test-onboarding.mjs"
+    "test:onboarding": "node scripts/test-onboarding.mjs",
+    "test:auth": "node scripts/test-auth-main.mjs && node scripts/test-auth-renderer.mjs"
   },
   "dependencies": {
     "@radix-ui/react-slot": "^1.1.0",

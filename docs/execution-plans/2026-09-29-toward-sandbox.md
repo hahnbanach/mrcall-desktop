@@ -778,6 +778,52 @@ not started.
      pending. No owner, auth check, profile, unit or daemon is changed;
      no token is extracted. R5 remains active.
 
+   - **Desktop auth session recovery — 2026-10-05, R5 follow-up.**
+     The CTO confirms Mario Gmail Test connection succeeds after full Cmd-Q
+     and reopen. This closes the immediate connection incident, not the
+     remaining signed-app mail/attachment/document journey. Source inspection
+     finds the main token cache survived signout, Remote/Test connection used
+     it without checking UID/expiry, and asynchronous renderer refreshes lacked
+     session-generation/current-user guards. These defects explain how a stale
+     client identity can survive relogin; the exact original sequence and the
+     incorrectly supplied token subject were not captured. The server's
+     verified-token owner check and correct tenant binding remain unchanged.
+
+     Repair: main signout clears credentials and cancels refresh requests even
+     offline, detaches the old transport, bounds its best-effort logout and
+     stops only that captured transport. Token subject, claimed UID, profile
+     and expiry must agree before use. Live Remote, Test connection and
+     provisioning share bounded/coalesced renderer refresh, with originating
+     window and current-binding checks. Renderer invalidates generation before
+     logout and discards late results, including same-account relogin; both
+     actual App token pushers propagate explicit refusal. New IPC replies carry
+     request ID/success only; no credentials are logged or newly persisted.
+
+     Verification: `node app/scripts/test-auth-renderer.mjs` passes 13 behavior
+     checks; `node app/scripts/test-auth-main.mjs` passes twelve. Tests execute
+     actual App/preload/auth modules and main IPC handlers with synthetic
+     credentials; actual WebSocket transport receives a local 401 followed by
+     a refreshed successful Test connection. They cover offline logout,
+     late refresh, subject/profile mismatch, near expiry, independent windows,
+     sender correlation, bounded cancellation, local-engine forwarding, and
+     logout/rebind/window-close during a delayed transport restart, retiring old
+     log polling/scrollback and suppressing old transport notifications.
+     App typecheck/build pass. Real Firebase and the installed patch's GUI
+     journey are not inferred from these fixtures. No live profile, daemon,
+     DNS, firewall, voice file or service checkout is modified. Repair work
+     trace: [reviewed brief](../briefs/2026-10-05-desktop-auth-session-recovery.md)
+     and [delivery plan](2026-10-05-desktop-auth-session-recovery.md).
+     Integration reviewer first returned REVISE for a delayed restart restoring
+     a logged-out profile; captured-entry/window guards and regression close
+     it, and rereview is APPROVED. One final reviewer returned REVISE because
+     detached log polling remained active; logout now clears it and scrollback,
+     replacement stops old polling, and retired transports cannot send events.
+     Actual IPC/tailer/window-close regressions pass; rereview is APPROVED.
+     Two fresh independent final source/readiness reviews (`desktop_auth_final_a`,
+     `desktop_auth_final_b`) are APPROVED. Signed 0.1.53 delivery and post-CI
+     review are starting; current installed 0.1.52 is not patched. R5 stays
+     active for its remaining independent acceptance criteria.
+
    - **Open after this plan, not part of it:**
      - one handset whose speech the voice provider does not transcribe
        (voice path, not the host; 2026-10-03 diagnosis above);

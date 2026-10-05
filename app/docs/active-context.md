@@ -8,9 +8,19 @@ state lives in ../../docs/active-context.md. Historical snapshots are archived.
 
 ## State now
 
-Desktop v0.1.49 is the recorded Apple Silicon release. Installation and personal-
-key GUI entry on the CTO's Mac remain unverified; engine/API acceptance does not
-establish packaged-app acceptance.
+Desktop v0.1.52 is the current published Apple Silicon release. The CTO confirms
+Remote Mario Gmail reconnects after full app quit/reopen. Fresh-device sign-in
+and personal-key GUI entry remain unverified; engine/API checks do not establish
+those packaged-app journeys.
+
+A session-lifecycle repair passed two independent final source reviews after the CTO's Remote timeout/403
+cleared on full app quit/reopen. Main logout clears per-window credentials and
+cancels refreshes offline; token UID/profile/expiry consistency and guarded
+renderer refresh prevent stale-session reuse. Remote, Test connection and
+provisioning share bounded fresh-token retrieval. Focused synthetic tests execute
+actual App/preload/main IPC paths and a local WebSocket handshake; typecheck/build
+pass. Signed patch delivery and installed-patch GUI acceptance remain pending.
+Work trace: [auth recovery](../../docs/execution-plans/2026-10-05-desktop-auth-session-recovery.md).
 
 Settings separates MrCall/Anthropic/OpenRouter billing from model selection.
 The free catalog follows the provider; custom defaults and advanced role
@@ -32,12 +42,12 @@ model selection are owned by [cross-cutting state](../../docs/active-context.md)
 
 - Reopen Settings after a connection change: reloading identical settings does
   not refetch the catalog. Stale choices remain disabled.
-- Installation, fresh-device sign-in and personal-key entry on the CTO's Mac
+- Fresh-device sign-in and personal-key entry on the CTO's Mac
   still need an application acceptance pass. Synthetic model comparisons do not
   certify task quality.
 
 ## Next
 
-Verify the Mac installation and Settings journey. Keep hosted automatic work
+Verify the signed patch installation and Settings journey. Keep hosted automatic work
 paused until explicitly requested. References: [preparation](bounded-preparation.md)
 and [archive](active-context-archive.md).

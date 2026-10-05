@@ -564,6 +564,7 @@ export interface ZylchAPI {
     >
   }
   account: {
+    onTokenRefreshRequest: (handler: (uid: string) => Promise<boolean>) => () => void
     /** Out-of-band Firebase token push to the MAIN process (canonical
      *  Phase-2 path). Main caches it per window for the remote-WS
      *  handshake AND forwards it into a LOCAL engine via

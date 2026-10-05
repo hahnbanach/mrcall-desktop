@@ -130,6 +130,25 @@ ipcRenderer.on('rpc:notification', (_e, msg: { method: string; params: unknown }
   }
 })
 
+type TokenRefreshHandler = (uid: string) => Promise<boolean>
+let tokenRefreshSubscription: { handler: TokenRefreshHandler } | null = null
+
+ipcRenderer.on('account:requestTokenRefresh', async (_event, payload: unknown) => {
+  if (!payload || typeof payload !== 'object') return
+  const { requestId, uid } = payload as { requestId?: unknown; uid?: unknown }
+  if (typeof requestId !== 'number' || !Number.isSafeInteger(requestId) || requestId < 1) return
+  const subscription = tokenRefreshSubscription
+  let ok = false
+  if (subscription && typeof uid === 'string' && uid.length > 0 && uid.trim() === uid) {
+    try {
+      ok = await subscription.handler(uid) === true && tokenRefreshSubscription === subscription
+    } catch {
+      ok = false
+    }
+  }
+  ipcRenderer.send('account:tokenRefreshResult', { requestId, ok })
+})
+
 const call = <T = unknown>(method: string, params: unknown = {}, timeout?: number): Promise<T> =>
   ipcRenderer.invoke('rpc:call', method, params, timeout) as Promise<T>
 
@@ -593,6 +612,13 @@ const api = {
       >
   },
   account: {
+    onTokenRefreshRequest: (handler: TokenRefreshHandler): (() => void) => {
+      const subscription = { handler }
+      tokenRefreshSubscription = subscription
+      return () => {
+        if (tokenRefreshSubscription === subscription) tokenRefreshSubscription = null
+      }
+    },
     // Out-of-band Firebase token push to the MAIN process (Phase 2,
     // cross-machine transport). This is the CANONICAL token path: main
     // needs a token to open the remote WebSocket handshake BEFORE any RPC

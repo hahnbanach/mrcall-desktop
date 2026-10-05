@@ -5,6 +5,7 @@ import { homedir } from 'os'
 import { randomUUID } from 'crypto'
 import { StdioRpcClient } from './sidecar'
 import { WebSocketRpcClient } from './wsRpcClient'
+import { WindowAuthSessions, TokenRefreshRequests, retireAuthTransport, type CachedToken } from './windowAuth'
 import type { RpcClient, RpcStatusEvent } from './rpcClient'
 import {
   readBackendConfig,
@@ -160,6 +161,8 @@ const windowLogTailers = new Map<number, LogTailer>()
 const INITIAL_TAIL_BYTES = 256 * 1024
 
 function startLogTailer(winId: number, profileUid: string, win: BrowserWindow): void {
+  stopLogTailer(winId)
+  windowLogBuffers.delete(winId)
   const logPath = join(homedir(), '.zylch', 'profiles', profileUid, 'zylch.log')
   let position = 0
 
@@ -196,6 +199,8 @@ function startLogTailer(winId: number, profileUid: string, win: BrowserWindow): 
   }
 
   const poll = setInterval(() => {
+    if (win.isDestroyed() || windowLogTailers.get(winId)?.poll !== poll ||
+        windowEntries.get(winId)?.profile !== profileUid) return
     let stat
     try {
       stat = statSync(logPath)
@@ -245,29 +250,29 @@ function stopLogTailer(winId: number): void {
 // lifetime, including the auth-pending phase when no sidecar is bound.
 const windowPartitions = new Map<number, string>()
 
-// windowId → latest Firebase token payload pushed by the renderer
-// (`account:pushToken`). Kept SEPARATE from `windowEntries` for the same
-// reason `windowPartitions` is: the renderer may push a token while no
-// client is bound yet, and — critically for remote mode — the WS client's
-// `getToken()` must be able to read the freshest token at connect time,
-// which can be before the entry is fully registered. `account:pushToken`
-// writes here unconditionally. The full payload is retained because the
-// LOCAL-mode forward to `account.set_firebase_token` needs uid + expiry,
-// while the REMOTE-mode WS handshake needs only the raw `idToken`. Never
-// persisted to disk.
-interface CachedToken {
-  uid: string
-  email: string | null
-  idToken: string
-  expiresAtMs: number
-  // Firebase REFRESH token (long-lived). Forwarded to the engine so it can
-  // refresh the ID token server-side for headless operation: in REMOTE
-  // mode via the WS `auth.refresh` RPC, in LOCAL mode via
-  // `account.set_firebase_token`. Optional for back-compat with any cached
-  // entry written before this field existed. Never persisted to disk.
-  refreshToken?: string
+// Credentials stay in memory, isolated by window and checked against its profile.
+const windowTokens = new WindowAuthSessions()
+const tokenRefreshRequests = new TokenRefreshRequests()
+
+function detachWindowSession(winId: number): WindowEntry | undefined {
+  windowTokens.delete(winId)
+  stopLogTailer(winId)
+  windowLogBuffers.delete(winId)
+  const entry = windowEntries.get(winId)
+  windowEntries.delete(winId)
+  return entry
 }
-const windowTokens = new Map<number, CachedToken>()
+
+async function freshWindowToken(window: BrowserWindow, profile: string): Promise<CachedToken | null> {
+  if (!profile || window.isDestroyed() || windowEntries.get(window.id)?.profile !== profile) return null
+  const entry = windowEntries.get(window.id)
+  const token = await windowTokens.fresh(window.id, profile, (signal) =>
+    tokenRefreshRequests.request(window.id, profile, signal, (payload) => {
+      window.webContents.send('account:requestTokenRefresh', payload)
+    }))
+  return !window.isDestroyed() && windowEntries.get(window.id) === entry && token?.uid === profile
+    ? token : null
+}
 
 // Returns the Firebase IndexedDB partition for `uid`: if the profile's
 // `.env` already pins one via `FIREBASE_PARTITION`, reuse it (so the
@@ -343,6 +348,7 @@ function makeStdioClient(profile: string, window: BrowserWindow): RpcClient {
   // profile" stretches into tens of seconds.
   const spawnedAtMs = Date.now()
   sidecar.on('notification', (msg) => {
+    if (window.isDestroyed() || windowEntries.get(window.id)?.sidecar !== sidecar) return
     console.log(`[main][w${window.id}] notification method=${msg.method}`)
     if (msg.method === 'engine.ready') {
       const bootMs = Date.now() - spawnedAtMs
@@ -365,6 +371,7 @@ function makeStdioClient(profile: string, window: BrowserWindow): RpcClient {
     }
   })
   sidecar.on('stderr', (chunk: string) => {
+    if (window.isDestroyed() || windowEntries.get(window.id)?.sidecar !== sidecar) return
     // Buffer per-window so the Logs view can fetch scrollback on mount.
     appendLogChunk(window.id, chunk)
     // Forward stderr only to the owning window, never broadcast.
@@ -373,6 +380,7 @@ function makeStdioClient(profile: string, window: BrowserWindow): RpcClient {
     }
   })
   sidecar.on('exit', (info: { code: number | null; signal: NodeJS.Signals | null; classified?: { code: string; message: string; hint?: string } }) => {
+    if (window.isDestroyed() || windowEntries.get(window.id)?.sidecar !== sidecar) return
     console.error(`[main][w${window.id}] sidecar exited profile=${profile} code=${info?.code} signal=${info?.signal}`)
     // Push a structured status event to the renderer so the
     // SidecarStatusBanner can show a friendly explanation. We send the
@@ -391,7 +399,7 @@ function makeStdioClient(profile: string, window: BrowserWindow): RpcClient {
   // Push an "alive" status as soon as the child is spawned so the banner
   // can clear any prior error after a successful restart.
   setTimeout(() => {
-    if (!window.isDestroyed() && sidecar.isAlive()) {
+    if (!window.isDestroyed() && windowEntries.get(window.id)?.sidecar === sidecar && sidecar.isAlive()) {
       window.webContents.send('sidecar:status', { alive: true, profile })
     }
   }, 100)
@@ -417,22 +425,23 @@ function makeWsClient(
     // getToken: read the freshest token the renderer has pushed for this
     // window. Resolves null until the first `account:pushToken`, which the
     // client handles by surfacing "not signed in" and retrying.
-    async () => windowTokens.get(window.id)?.idToken ?? null,
+    async () => (await freshWindowToken(window, profile))?.idToken ?? null,
     profile,
     // getRefreshToken: the long-lived Firebase refresh token, so the WS
     // client can send it on `auth.refresh` and the engine can refresh the
     // ID token server-side for headless operation. Null until the renderer
     // pushes one (older builds didn't include it).
-    async () => windowTokens.get(window.id)?.refreshToken ?? null
+    async () => (await freshWindowToken(window, profile))?.refreshToken ?? null
   )
   client.on('notification', (msg) => {
+    if (window.isDestroyed() || windowEntries.get(window.id)?.sidecar !== client) return
     console.log(`[main][w${window.id}][ws] notification method=${msg.method}`)
     if (!window.isDestroyed()) {
       window.webContents.send('rpc:notification', msg)
     }
   })
   client.on('status', (status: RpcStatusEvent) => {
-    if (!window.isDestroyed()) {
+    if (!window.isDestroyed() && windowEntries.get(window.id)?.sidecar === client) {
       window.webContents.send('sidecar:status', status)
     }
   })
@@ -485,7 +494,7 @@ async function forwardTokenToLocalEngine(
       15000
     )
   } catch (e) {
-    console.warn(`[main][w${entry.window.id}] forwardTokenToLocalEngine failed`, e)
+    console.warn(`[main][w${entry.window.id}] forwardTokenToLocalEngine failed`)
   }
 }
 
@@ -494,10 +503,10 @@ async function forwardTokenToLocalEngine(
 // throwaway client never auto-reconnects past the single attempt we wait
 // on: we resolve on the first `'status'` event (up → probe, down → report
 // the failure) or a hard timeout, then tear it down. The token getter is
-// a fixed snapshot — a test never refreshes.
+// shared with live connections, including bounded renderer refresh.
 async function testBackendConnection(
   url: string,
-  token: CachedToken,
+  window: BrowserWindow,
   profile: string
 ): Promise<
   | { ok: true; signedIn: boolean; uid?: string; email?: string | null }
@@ -505,9 +514,9 @@ async function testBackendConnection(
 > {
   const client = new WebSocketRpcClient(
     url,
-    async () => token.idToken,
+    async () => (await freshWindowToken(window, profile))?.idToken ?? null,
     profile,
-    async () => token.refreshToken ?? null
+    async () => (await freshWindowToken(window, profile))?.refreshToken ?? null
   )
   return new Promise((resolve) => {
     let settled = false
@@ -653,16 +662,13 @@ function createAuthPendingWindow(
   installContextMenu(win)
 
   win.on('closed', () => {
-    const entry = windowEntries.get(win.id)
+    const entry = detachWindowSession(win.id)
     if (entry) {
       console.log(`[main][w${win.id}] auth-pending window closed, stopping sidecar`)
       entry.sidecar.stop()
       windowEntries.delete(win.id)
     }
     windowPartitions.delete(win.id)
-    windowLogBuffers.delete(win.id)
-    windowTokens.delete(win.id)
-    stopLogTailer(win.id)
   })
 
   // `?email=<hint>` lets the SignIn screen pre-fill the email input when
@@ -698,7 +704,7 @@ function createAuthPendingWindow(
 //      and dismisses the "Restarting…" banner.
 async function restartSidecarForWindow(win: BrowserWindow): Promise<boolean> {
   const entry = windowEntries.get(win.id)
-  if (!entry) return false
+  if (!entry || win.isDestroyed()) return false
   console.log(`[main][w${win.id}] restarting sidecar profile=${entry.profile}`)
   if (!win.isDestroyed()) {
     win.webContents.send('sidecar:status', {
@@ -712,10 +718,12 @@ async function restartSidecarForWindow(win: BrowserWindow): Promise<boolean> {
   entry.sidecar.markIntentionalRestart()
   entry.sidecar.stop()
   await new Promise((r) => setTimeout(r, 500))
+  if (win.isDestroyed() || windowEntries.get(win.id) !== entry) return false
   const sidecar = spawnSidecar(entry.profile, win)
-  windowEntries.set(win.id, { ...entry, sidecar })
+  const replacement = { ...entry, sidecar }
+  windowEntries.set(win.id, replacement)
   await new Promise((r) => setTimeout(r, 500))
-  return true
+  return !win.isDestroyed() && windowEntries.get(win.id) === replacement
 }
 
 // Electron ships no right-click menu. The `editMenu` role in
@@ -775,7 +783,18 @@ function buildAppMenu(): void {
 }
 
 function registerIpc(): void {
+  ipcMain.on('account:tokenRefreshResult', (event, payload) => {
+    const win = BrowserWindow.fromWebContents(event.sender)
+    if (win) tokenRefreshRequests.respond(win.id, payload)
+  })
   ipcMain.handle('rpc:call', async (event, method: string, params: unknown, timeout?: number) => {
+    if (method === 'account.sign_out') {
+      const win = BrowserWindow.fromWebContents(event.sender)
+      if (!win) return { ok: false }
+      const old = detachWindowSession(win.id)
+      await retireAuthTransport(old?.sidecar)
+      return { ok: true }
+    }
     const entry = entryFromEvent(event)
     if (!entry) {
       throw new Error('no sidecar for this window')
@@ -932,6 +951,10 @@ function registerIpc(): void {
         return { ok: true, found: false }
       }
       const existing = windowEntries.get(win.id)
+      if (
+        (existing && existing.profile !== trimmed) ||
+        (windowTokens.get(win.id) && windowTokens.get(win.id)?.uid !== trimmed)
+      ) windowTokens.delete(win.id)
       if (existing) {
         if (existing.profile === trimmed) {
           console.log(
@@ -1272,26 +1295,16 @@ function registerIpc(): void {
       ) {
         return { ok: false }
       }
-      const cached: CachedToken = {
-        uid: args.uid,
-        email: typeof args.email === 'string' ? args.email : null,
-        idToken: args.idToken,
-        expiresAtMs:
-          typeof args.expiresAtMs === 'number' && args.expiresAtMs > 0
-            ? args.expiresAtMs
-            : Date.now() + 3600_000,
-        ...(typeof args.refreshToken === 'string' && args.refreshToken
-          ? { refreshToken: args.refreshToken }
-          : {})
-      }
-      windowTokens.set(win.id, cached)
+      const entry = windowEntries.get(win.id)
+      const cached = windowTokens.accept(win.id, args, entry?.profile)
+      if (!cached) return { ok: false }
       // LOCAL mode: forward to the engine so set_firebase_token's effect
       // is preserved. REMOTE mode: forwardTokenToLocalEngine no-ops; the
       // WS handshake/auth.refresh uses the cached token instead.
-      const entry = windowEntries.get(win.id)
-      if (entry) {
+      if (entry && windowEntries.get(win.id) === entry && windowTokens.get(win.id) === cached) {
         await forwardTokenToLocalEngine(entry, cached)
       }
+      if (windowTokens.get(win.id) !== cached || windowEntries.get(win.id) !== entry) return { ok: false }
       // Refresh tokens are what makes headless `cs login` possible — write
       // (or refresh) that profile's cs-descriptor once we have one, but
       // only if this window's bound profile actually belongs to the
@@ -1372,7 +1385,8 @@ function registerIpc(): void {
       if (!u || !/^wss?:\/\//i.test(u)) {
         return { ok: false, code: 'bad_url', message: 'URL must start with ws:// or wss://' }
       }
-      const cached = windowTokens.get(win.id)
+      const profile = windowEntries.get(win.id)?.profile ?? ''
+      const cached = await freshWindowToken(win, profile)
       if (!cached?.idToken) {
         return {
           ok: false,
@@ -1380,7 +1394,7 @@ function registerIpc(): void {
           message: 'Not signed in — sign in before testing a remote backend.'
         }
       }
-      return testBackendConnection(u, cached, windowEntries.get(win.id)?.profile ?? '')
+      return testBackendConnection(u, win, profile)
     }
   )
 
@@ -1396,7 +1410,8 @@ function registerIpc(): void {
   ipcMain.handle('provision:start', async (event): Promise<ProvisionResult> => {
     const win = BrowserWindow.fromWebContents(event.sender)
     if (!win) return { ok: false, code: 'no_window', message: 'No window' }
-    const cached = windowTokens.get(win.id)
+    const profile = windowEntries.get(win.id)?.profile ?? ''
+    const cached = await freshWindowToken(win, profile)
     if (!cached?.idToken) {
       return {
         ok: false,
@@ -1404,7 +1419,6 @@ function registerIpc(): void {
         message: 'Not signed in — sign in before provisioning.'
       }
     }
-    const profile = windowEntries.get(win.id)?.profile
     if (!profile) {
       return { ok: false, code: 'no_profile', message: 'No profile bound to this window.' }
     }
@@ -1433,7 +1447,8 @@ function registerIpc(): void {
   ipcMain.handle('provision:status', async (event): Promise<ProvisionStatusResult> => {
     const win = BrowserWindow.fromWebContents(event.sender)
     if (!win) return { ok: false, code: 'no_window', message: 'No window' }
-    const cached = windowTokens.get(win.id)
+    const profile = windowEntries.get(win.id)?.profile ?? ''
+    const cached = await freshWindowToken(win, profile)
     if (!cached?.idToken) {
       return {
         ok: false,
@@ -1564,6 +1579,9 @@ app.on('window-all-closed', () => {
     } catch {}
   }
   windowEntries.clear()
+  windowTokens.clear()
+  for (const id of windowLogTailers.keys()) stopLogTailer(id)
+  windowLogBuffers.clear()
   if (process.platform !== 'darwin') app.quit()
 })
 
@@ -1574,4 +1592,7 @@ app.on('before-quit', () => {
     } catch {}
   }
   windowEntries.clear()
+  windowTokens.clear()
+  for (const id of windowLogTailers.keys()) stopLogTailer(id)
+  windowLogBuffers.clear()
 })
