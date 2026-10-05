@@ -951,12 +951,50 @@ not started.
      The 402 establishes insufficient available credits for the requested
      maximum, not a measured zero balance. Actual credit balance and the
      installed UI's display of the latest response remain unverified. R5 stays
-     active; the next paid retry needs funded credits for the chosen business
-     or an explicit operator choice of a separately funded provider.
+     active. The CTO subsequently confirmed the selected business is FREE;
+     the inference that it needs funding was incorrect. The server must honor
+     its authoritative FREE status, as recorded below.
      Independent verifier `billing_saved_path_verify`: PASS for the strict
      billing events, daemon-user SQLite counts/amounts and route ordering.
      Each actual billing event is duplicated at the same timestamp in the
      journal; these are two post-save attempts, not four.
+
+   - **FREE business billing correction — 2026-10-05, R5 follow-up.**
+     The CTO confirms the selected business is FREE. The bounded billing server
+     previously discarded subscription status, always checked CALLCREDIT and
+     consumed credits. Thus the post-save 402 was a server defect for FREE,
+     not evidence that the operator should buy credits or change the business.
+     Backend hotfix `546cfb5`, based on deployed `a6d1dd58`, binds exact
+     server-authorized FREE status into the quote, rechecks it at execution,
+     skips balance/consumption, and settles zero credits/debit. Paid checks,
+     provider usage bounds and replay protection remain. Released Desktop v1
+     keeps a positive nominal ceiling and accepts the zero receipt.
+     Verification: 150 focused PostgreSQL/HTTP tests, full suite 1033 passed,
+     Ruff/Black passed. Actual synthetic endpoint output passes the installed
+     engine's quote/receipt validators as its Unix user. Integration and two
+     fresh independent final source reviewers all APPROVED. No tenant setting or
+     business plan changed; no real mail contents or voice values were read.
+     Live operator authentication cannot mint an accepted token with the
+     billing pod's configured signing key: Google does not publish that key
+     and returns INVALID_CUSTOM_TOKEN. No credentials changed. The planned
+     nominal USD0.01 smoke cap is also below the unchanged USD0.011 minimum.
+     No live inference ran; these synthetic checks do not close R5's real
+     signed-app mail/attachment/document journey.
+     **Delivered at 15:37 UTC:** backend main `45b20e4`; isolated production
+     hotfix `546cfb5` through successful
+     [pipeline 2914216277](https://gitlab.com/hahnbanach/mrcall-agent/-/pipelines/2914216277).
+     Actual image `prod-546cfb5f`, one updated/available ready replica,
+     zero restarts; public billing `/health` HTTP200. CI: 921 passed,
+     112 PostgreSQL-dependent skips (covered by the local full suite).
+     Main's unrelated model-table release was excluded.
+     **CTO live retry:** production ledger rows at 15:37:47.681 and
+     15:37:47.976 are both settled, model `claude-opus-5`, FREE, zero credits
+     and zero debit. The app then reports `MrCall response incomplete;
+     reservation retained`: its v1 decoder rejects incompatible response blocks
+     (unsupported type or malformed structure; exact kind not yet observed).
+     Response compatibility is a separate open defect; the FREE settlement
+     now has actual user-originated evidence. Both independent final delivery
+     reviewers APPROVED the FREE billing delivery; R5 remains active.
 
    - **Open after this plan, not part of it:**
      - one handset whose speech the voice provider does not transcribe
