@@ -80,5 +80,7 @@ Logs: `/tmp/mrcall-ai-kit/2026-10-05-business-picker-recovery/`.
 No real business data, token, voice value, mail content or paid call is used.
 
 The next unused patch version is 0.1.54; package and lockfile metadata are aligned.
-Two fresh final source reviews, signed CI and post-CI delivery reviews are pending.
+Fresh independent final source reviewers `business_picker_final_a` and
+`business_picker_final_b` both return APPROVED for `b3023a3`. Signed CI and
+post-CI delivery reviews are pending.
 The installed application has not changed; R5 remains active.
