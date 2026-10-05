@@ -40,6 +40,20 @@ React component journeys use fake RPCs; their successful results, typecheck and
 build are source checks, not live GUI acceptance. Current hosted deployment and
 model selection are owned by [cross-cutting state](../../docs/active-context.md).
 
+The [Qonto Settings and Tasks workflow](qonto.md) has a native browser fixture
+through real preload and Python dispatch, durable SQLite, source reads, task
+actions and priced publication receipts. Process restart preserves pause and
+receipt replay; disconnect/deletion retain edited private shells and historical
+facts. Electron IPC and external providers remain fixture substitutions. M5
+review is approved, including company-change consent and late-reply guards.
+Support now has real authenticated banking/source/managed-assistant acceptance;
+its corrected UTC source timestamps match the managed answer. Packaged
+Desktop and provider-UI acceptance remain pending in the delivery plan.
+Qonto is integrated in main's working tree above 0.1.53, pending release.
+Explicit logout clears finance state and rejects late responses even if
+Firebase signout fails; same-UID relogin is covered by the combined App/Qonto
+lifecycle regression. The published installer does not yet contain Qonto.
+
 ## Unresolved
 
 - Reopen Settings after a connection change: reloading identical settings does

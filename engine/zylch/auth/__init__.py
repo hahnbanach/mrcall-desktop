@@ -1,7 +1,7 @@
 """Firebase auth session held in-memory by the sidecar.
 
-The renderer (Electron + Firebase JS SDK) is the source of truth for the
-user's identity and ID token. The sidecar receives the token over
+The renderer (Electron + Firebase JS SDK) supplies the ID token. The
+engine verifies its signature, UID and expiry before admission over
 JSON-RPC (`account.set_firebase_token`) and caches it for the lifetime of
 the process. We do not persist the token to disk:
 
@@ -12,11 +12,9 @@ the process. We do not persist the token to disk:
   - Persisting would risk leaking a Bearer token if the disk is shared
     or backed up; in-memory keeps the blast radius to a running process.
 
-We do NOT verify the JWT here. StarChat is the authority that verifies
-Firebase tokens (it already does so for the dashboard); the engine only
-forwards the token in `Authorization: Bearer …`. Local verification
-would be defense-in-depth but would require shipping Firebase's public
-keys; it is out of scope for the initial integration.
+Verification uses Firebase's fetched/cached public certificates. Hosted
+sessions must match the immutable profile owner. The engine also forwards
+the token to MrCall services, which retain their own authentication gates.
 """
 
 from .refresh import ensure_fresh_session, exchange_refresh_token

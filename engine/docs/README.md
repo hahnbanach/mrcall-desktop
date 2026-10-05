@@ -49,6 +49,7 @@ Complete documentation for Zylch standalone (local CLI sales intelligence tool).
 | [features/entity-memory-system.md](features/entity-memory-system.md) | Entity-centric memory with hybrid search |
 | [features/email-archive.md](features/email-archive.md) | Email archive with IMAP sync |
 | [features/email-triage.md](features/email-triage.md) | Email triage and auto-reply detection |
+| [features/qonto.md](features/qonto.md) | Native private Qonto source, authority and managed finance history |
 | [features/mnemonic-writer-inventory.md](features/mnemonic-writer-inventory.md) | The sealed memory write boundary: frozen writer graph and exempt primitives |
 | [features/mnemonic-decisions.md](features/mnemonic-decisions.md) | Mnemonic memory events, validator and origin-bound paid admission |
 | [features/mnemonic-commit.md](features/mnemonic-commit.md) | Atomic semantic commit, commit permit and the operation journal |

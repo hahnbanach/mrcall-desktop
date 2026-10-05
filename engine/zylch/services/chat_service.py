@@ -1,6 +1,8 @@
 """Chat service - business logic for conversational AI interactions."""
 
 from typing import Awaitable, Callable, Dict, Any, Optional, List
+from zylch.qonto.task_access import ordinary_tasks
+
 import logging
 import shlex
 import time
@@ -182,6 +184,21 @@ class ChatService:
                 "session_id": str  # Echo back session_id if provided
             }
         """
+        from zylch.qonto import history as finance_history
+
+        if finance_history.is_managed():
+            from zylch.qonto.chat import process
+
+            logger.info("Managed finance turn received")
+            return await process(
+                self,
+                user_message,
+                user_id,
+                conversation_history,
+                session_id,
+                context,
+                approval_callback,
+            )
         start_time = time.time()
         logger.info(f"process_message: user_message={repr(user_message)}, user_id={user_id}")
         # The human's words, before anything in this method rewrites them: the
@@ -275,11 +292,7 @@ class ChatService:
             # conversation the LLM has the task context + send tools, so
             # let natural language go straight to it.
             in_task_conversation = bool(context and context.get("task_id"))
-            if (
-                not is_in_task_mode
-                and not is_send_confirmation
-                and not in_task_conversation
-            ):
+            if not is_in_task_mode and not is_send_confirmation and not in_task_conversation:
                 matched_command = self._match_semantic_command(user_message)
                 if matched_command:
                     logger.info(f"Semantic match: '{user_message}' -> {matched_command}")
@@ -1023,7 +1036,7 @@ What would you like to do?"""
                 # First try exact match
                 task = (
                     session.query(TaskItem)
-                    .filter(TaskItem.owner_id == owner_id, TaskItem.id == task_id_input)
+                    .filter(ordinary_tasks(owner_id), TaskItem.id == task_id_input)
                     .first()
                 )
 
@@ -1034,7 +1047,7 @@ What would you like to do?"""
                 task = (
                     session.query(TaskItem)
                     .filter(
-                        TaskItem.owner_id == owner_id,
+                        ordinary_tasks(owner_id),
                         sa_cast(TaskItem.id, SAText).ilike(f"{task_id_input}%"),
                     )
                     .first()

@@ -3,6 +3,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { errorMessage, isProfileLockedError } from '../lib/errors'
 import Icon from '../components/Icon'
 import DailyBudget from '../components/DailyBudget'
+import QontoCard from '../components/QontoCard'
 import ModelPolicy, { MODEL_FIELDS } from '../components/ModelPolicy'
 import ConnectGoogleCalendar from './ConnectGoogleCalendar'
 import ConnectWhatsApp from './ConnectWhatsApp'
@@ -271,6 +272,7 @@ export default function Settings(): JSX.Element {
         <div className="space-y-3">
           <ConnectGoogleCalendar />
           <ConnectWhatsApp />
+          <QontoCard />
         </div>
       </section>
 
@@ -1133,6 +1135,7 @@ function MemoryCard(): JSX.Element {
 
   const handleJoin = async (): Promise<void> => {
     setJoining(true)
+    window.dispatchEvent(new Event('mrcall:company-changing'))
     setJoinMsg({ kind: 'idle', text: '' })
     try {
       const r = await window.zylch.memory.join(joinKey.trim())
@@ -1155,6 +1158,8 @@ function MemoryCard(): JSX.Element {
     } catch (e) {
       setJoinMsg({ kind: 'err', text: errorMessage(e) })
     } finally {
+      window.dispatchEvent(new Event('mrcall:company-changed'))
+      window.dispatchEvent(new Event('mrcall:qonto-changed'))
       setJoining(false)
     }
   }

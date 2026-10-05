@@ -5,6 +5,8 @@ No Anthropic API calls in these handlers.
 """
 
 import asyncio
+from zylch.qonto.task_access import ordinary_tasks
+
 import logging
 from datetime import datetime, timezone
 from typing import List
@@ -1624,7 +1626,7 @@ Shows statistics about your synced emails:
             # Count open tasks
             open_count = (
                 session.query(func.count(TaskItem.id))
-                .filter(TaskItem.owner_id == owner_id, TaskItem.action_required.is_(True))
+                .filter(ordinary_tasks(owner_id), TaskItem.action_required.is_(True))
                 .scalar()
                 or 0
             )

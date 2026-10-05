@@ -4,6 +4,11 @@ Historical snapshots preserved verbatim when the living context is consolidated.
 Dated deployment claims and incident counts below are historical observations,
 not current operational state; use [active-context.md](active-context.md).
 
+## 2026-10-04 — Sandbox checkout transition narrative
+
+The sandbox window explicitly pulled main
+and removed three K3 pins.
+
 ## 2026-10-01 — Before Mario instruction-write denial repair
 
 Both clone pause files are absent. Mario imports `bbde719` with the same

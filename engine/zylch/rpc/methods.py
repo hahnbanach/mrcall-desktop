@@ -17,6 +17,9 @@ from collections import OrderedDict
 from datetime import datetime, timezone
 from typing import Any, Awaitable, Callable, Dict, Optional
 
+from zylch.qonto.task_access import desktop_task_rpc, ordinary_tasks
+from zylch.rpc.qonto import METHODS as _QONTO_METHODS
+
 logger = logging.getLogger(__name__)
 
 NotifyFn = Callable[[str, Dict[str, Any]], None]
@@ -157,6 +160,9 @@ def _owner_id() -> str:
 # ─── Tasks ───────────────────────────────────────────────────
 
 
+
+
+@desktop_task_rpc
 async def tasks_list(params: Dict[str, Any], notify: NotifyFn) -> Any:
     """tasks.list(include_completed=False, include_skipped=False,
     limit=200, due_filter="all") -> list of task dicts.
@@ -303,6 +309,7 @@ async def tasks_create(params: Dict[str, Any], notify: NotifyFn) -> Any:
     }
 
 
+@desktop_task_rpc
 async def tasks_complete(params: Dict[str, Any], notify: NotifyFn) -> Any:
     """tasks.complete(task_id, note?, actor?, why?) -> {ok: bool}.
 
@@ -365,6 +372,7 @@ async def tasks_complete(params: Dict[str, Any], notify: NotifyFn) -> Any:
     return {"ok": bool(ok)}
 
 
+@desktop_task_rpc
 async def tasks_snooze(params: Dict[str, Any], notify: NotifyFn) -> Any:
     """tasks.snooze(task_id, due_at?, days?, actor?, why?) -> {ok, due_at, …}.
 
@@ -429,6 +437,7 @@ async def tasks_snooze(params: Dict[str, Any], notify: NotifyFn) -> Any:
     return {"ok": True, "task_id": task_id, "due_at": resolved}
 
 
+@desktop_task_rpc
 async def tasks_reopen(params: Dict[str, Any], notify: NotifyFn) -> Any:
     """tasks.reopen(task_id) -> {ok: bool}.
 
@@ -449,6 +458,7 @@ async def tasks_reopen(params: Dict[str, Any], notify: NotifyFn) -> Any:
     return {"ok": bool(ok)}
 
 
+@desktop_task_rpc
 async def tasks_pin(params: Dict[str, Any], notify: NotifyFn) -> Any:
     """tasks.pin(task_id, pinned: bool) -> {ok: bool}.
 
@@ -472,6 +482,7 @@ async def tasks_pin(params: Dict[str, Any], notify: NotifyFn) -> Any:
     return {"ok": bool(ok)}
 
 
+@desktop_task_rpc
 async def tasks_skip(params: Dict[str, Any], notify: NotifyFn) -> Any:
     """tasks.skip(task_id) -> {ok: bool}.
 
@@ -479,7 +490,8 @@ async def tasks_skip(params: Dict[str, Any], notify: NotifyFn) -> Any:
     existing `sources` JSON field. Skipped tasks are filtered out
     of `tasks.list` unless `include_skipped=True`.
     """
-    from zylch.storage.database import get_session
+    from zylch.qonto.task_access import task_session, visible_tasks
+    from zylch.qonto.task_records import user_edit
     from zylch.storage.models import TaskItem
 
     task_id = params.get("task_id")
@@ -489,12 +501,12 @@ async def tasks_skip(params: Dict[str, Any], notify: NotifyFn) -> Any:
     logger.debug(f"[rpc] tasks.skip owner_id={owner_id} task_id={task_id}")
 
     try:
-        with get_session() as session:
+        with task_session() as session:
             task = (
                 session.query(TaskItem)
                 .filter(
                     TaskItem.id == task_id,
-                    TaskItem.owner_id == owner_id,
+                    visible_tasks(owner_id),
                 )
                 .one_or_none()
             )
@@ -503,10 +515,11 @@ async def tasks_skip(params: Dict[str, Any], notify: NotifyFn) -> Any:
             sources = dict(task.sources or {})
             sources["skipped_at"] = datetime.now(timezone.utc).isoformat()
             task.sources = sources
+            user_edit(task, "skipped_at")
             session.flush()
-    except Exception as e:
+    except Exception:
         logger.exception(f"[rpc] tasks.skip failed for {task_id}")
-        return {"ok": False, "error": str(e)}
+        return {"ok": False, "error": "Task operation failed"}
     return {"ok": True}
 
 
@@ -848,7 +861,8 @@ async def tasks_solve_cancel(
 
 async def chat_send(params: Dict[str, Any], notify: NotifyFn) -> Any:
     """chat.send(message, conversation_history=[], conversation_id="general",
-    context={}, mutation_policy?, policy_version?) -> ChatService result dict.
+    context={}, mutation_policy?, policy_version?, history_mode?,
+    history_handle?, history_revision?) -> ChatService result with managed binding fields.
 
     Destructive tools trigger `chat.pending_approval` notifications; the
     client must respond via `chat.approve` to resume.
@@ -887,6 +901,19 @@ async def chat_send(params: Dict[str, Any], notify: NotifyFn) -> Any:
     if existing is not None and not existing.done():
         raise ChatBusyError("chat busy, approve or decline pending action first")
 
+    from zylch.qonto import history as finance_history
+
+    admission_task = asyncio.current_task()
+    _active_chats[conversation_id] = admission_task
+    try:
+        history_guard = await finance_history.admit(params)
+    except BaseException:
+        if _active_chats.get(conversation_id) is admission_task:
+            _active_chats.pop(conversation_id, None)
+        raise
+    if history_guard is not None:
+        conversation_history = history_guard.canonical_history
+
     owner_id = _owner_id()
     logger.debug(
         f"[rpc] chat.send owner_id={owner_id} "
@@ -898,7 +925,7 @@ async def chat_send(params: Dict[str, Any], notify: NotifyFn) -> Any:
 
     # Optional context notification (confirms task scoping to the UI)
     task_id = req_context.get("task_id") if isinstance(req_context, dict) else None
-    if task_id:
+    if task_id and history_guard is None:
         try:
             notify(
                 "chat.context",
@@ -990,8 +1017,6 @@ async def chat_send(params: Dict[str, Any], notify: NotifyFn) -> Any:
         )
         return (bool(approved), edited_input)
 
-    service = ChatService()
-
     # The turn scope, installed by the driver that owns the turn — the same
     # arrangement `tasks.solve` uses.
     #
@@ -1003,14 +1028,41 @@ async def chat_send(params: Dict[str, Any], notify: NotifyFn) -> Any:
     turn = Cancellation()
 
     async def _run():
-        with policy_scope(mutation_policy), revocable_turn(turn):
-            return await service.process_message(
+        from contextlib import nullcontext
+        from zylch.qonto.logging import progress_scope
+
+        progress = (
+            progress_scope(
+                lambda payload: notify(
+                    "chat.progress", {"conversation_id": conversation_id, **payload}
+                )
+            )
+            if history_guard is not None
+            else nullcontext()
+        )
+        with (
+            finance_history.turn_scope(history_guard),
+            progress,
+            policy_scope(mutation_policy),
+            revocable_turn(turn),
+        ):
+            service = ChatService()
+            result = await service.process_message(
                 user_message=message,
                 user_id=owner_id,
                 conversation_history=conversation_history,
                 context=req_context,
                 approval_callback=approval_callback,
             )
+            if history_guard is not None:
+                finance_history.check_before_disclosure()
+                canonical = (
+                    service.agent.get_history()
+                    if service.agent is not None
+                    else history_guard.canonical_history
+                )
+                result = finance_history.finish(history_guard, canonical, result)
+            return result
 
     task = asyncio.create_task(_run())
     _active_chats[conversation_id] = task
@@ -1024,9 +1076,11 @@ async def chat_send(params: Dict[str, Any], notify: NotifyFn) -> Any:
         turn.cancel("the chat turn was cancelled")
         raise
     finally:
+        finance_history.abort(history_guard)
         if _active_chats.get(conversation_id) is task:
             _active_chats.pop(conversation_id, None)
 
+    finance_history.check_delivery(history_guard)
     logger.debug("[rpc] chat.send -> result keys=%s", list(result.keys()))
     return result
 
@@ -1035,7 +1089,7 @@ async def system_capabilities(params: Dict[str, Any], notify: NotifyFn) -> Any:
     """system.capabilities() -> protocol capabilities supported by this engine."""
     from zylch.services.request_policy import READ_ONLY_POLICY_VERSION
 
-    return {"chat_read_only_policy": READ_ONLY_POLICY_VERSION}
+    return {"chat_read_only_policy": READ_ONLY_POLICY_VERSION, "chat_history_binding": 1}
 
 
 async def chat_approve(params: Dict[str, Any], notify: NotifyFn) -> Any:
@@ -1456,7 +1510,7 @@ async def update_run(params: Dict[str, Any], notify: NotifyFn) -> Any:
                 rows = (
                     session.query(TaskItem)
                     .filter(
-                        TaskItem.owner_id == owner_id,
+                        ordinary_tasks(owner_id),
                         TaskItem.id.in_(missing_from_after),
                         TaskItem.completed_at.isnot(None),
                     )
@@ -1527,6 +1581,9 @@ async def narration_summarize(
     """
     import re
 
+    from zylch.qonto.history import reject_known_evidence
+
+    reject_known_evidence(params)
     lines = params.get("lines") or []
     context = params.get("context") or ""
     if not isinstance(lines, list) or not lines:
@@ -1893,6 +1950,9 @@ async def narration_predict(
     Never raises; returns {"text": ""} on any failure — including the
     no-`message` call, which is why `message` is optional.
     """
+    from zylch.qonto.history import reject_known_evidence
+
+    reject_known_evidence(params)
     message = params.get("message") or ""
     context = params.get("context") or ""
     if not isinstance(message, str):
@@ -2004,7 +2064,11 @@ async def settings_get(params: Dict[str, Any], notify: NotifyFn) -> Any:
 
     raw = read_env()
     out: Dict[str, str] = {}
+    from zylch.services.credential_policy import excluded_finance_setting
+
     for key in KNOWN_KEYS:
+        if excluded_finance_setting(key):
+            continue
         value = raw.get(key, "")
         if key in SECRET_KEYS:
             out[key] = "<set>" if value else ""
@@ -2054,6 +2118,10 @@ async def settings_get_secret(params: Dict[str, Any], notify: NotifyFn) -> Any:
     key = str(params.get("key") or "").strip()
     if not key:
         raise ValueError("settings.get_secret requires 'key'")
+    from zylch.services.credential_policy import excluded_finance_setting
+
+    if excluded_finance_setting(key):
+        raise ValueError("Finance credentials are not available through Settings")
     if key not in SECRET_KEYS:
         raise ValueError(
             f"{key!r} is not a secret field — read it with settings.get"
@@ -2130,8 +2198,10 @@ async def profiles_create(params: Dict[str, Any], notify: NotifyFn) -> Any:
     # Validate keys against the known schema.
     cleaned: Dict[str, str] = {}
     unknown: list[str] = []
+    from zylch.services.credential_policy import excluded_finance_setting
+
     for key, value in values.items():
-        if key not in KNOWN_KEYS:
+        if excluded_finance_setting(key) or key not in KNOWN_KEYS:
             unknown.append(key)
             continue
         if not isinstance(value, str):
@@ -2232,8 +2302,10 @@ async def settings_update(params: Dict[str, Any], notify: NotifyFn) -> Any:
     cleaned: Dict[str, str] = {}
     skipped: list[str] = []
     unknown: list[str] = []
+    from zylch.services.credential_policy import excluded_finance_setting
+
     for key, value in updates.items():
-        if key not in KNOWN_KEYS:
+        if excluded_finance_setting(key) or key not in KNOWN_KEYS:
             unknown.append(key)
             continue
         if key == "MEMORY_KEY":
@@ -2508,6 +2580,11 @@ for _name, _fn in _PREPARATION_METHODS.items():
 from zylch.rpc.voice_actions import METHODS as _VOICE_METHODS  # noqa: E402
 
 for _name, _fn in _VOICE_METHODS.items():
+    if _name in METHODS:
+        raise RuntimeError(f"duplicate RPC method registration: {_name}")
+    METHODS[_name] = _fn
+
+for _name, _fn in _QONTO_METHODS.items():
     if _name in METHODS:
         raise RuntimeError(f"duplicate RPC method registration: {_name}")
     METHODS[_name] = _fn

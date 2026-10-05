@@ -87,7 +87,9 @@ def _get_facts_by_category(args: Dict, store, owner_id: str) -> str:
             f"No facts found in category '{category}'. Call "
             f"list_fact_categories to see the available categories."
         )
-    blocks = [f["content"] for f in facts]
+    from zylch.qonto.provenance import guidance
+
+    blocks = [f["content"] + ("\n" + guidance(f) if guidance(f) else "") for f in facts]
     return f"All facts in category '{category}' ({len(facts)}):\n\n" + "\n\n".join(blocks)
 
 
@@ -169,6 +171,17 @@ def _search_memory(
         if not results:
             return f"No memory found for '{query}'"
 
+        from zylch.qonto.provenance import annotation, excluded_blob_ids
+        from zylch.memory.mnemonic.session import company_transaction
+        from zylch.memory.company_key import require_company_key
+
+        from zylch.storage.database import current_memory_engine
+
+        bank_roots = set()
+        company_engine = current_memory_engine()
+        if company_engine is not None:
+            with company_transaction(engine=company_engine) as session:
+                bank_roots = excluded_blob_ids(session, require_company_key())
         lines = [f"Found {len(results)} memory entries:"]
         for r in results:
             content = (
@@ -182,6 +195,10 @@ def _search_memory(
             else:
                 lines.append("---")
             lines.append(content)
+            blob_id = r.blob_id if hasattr(r, "blob_id") else r.get("blob_id", "")
+            note = annotation(blob_id, bank_roots).get("source_guidance")
+            if note:
+                lines.append(note)
         return "\n".join(lines)
     except Exception as e:
         return f"Memory search failed: {e}"

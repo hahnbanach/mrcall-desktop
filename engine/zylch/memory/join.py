@@ -286,6 +286,9 @@ def _cut_over(key: str) -> Dict[str, Any]:
     from zylch.services.settings_io import update_env
     from zylch.storage import database as dbm
 
+    from zylch.qonto.guard import suspend_for_join
+
+    suspend_for_join()
     current = current_company_key()
     source = dbm.current_memory_engine()
     if source is None or not current or not store_exists(current):

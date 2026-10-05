@@ -8,6 +8,15 @@ are preserved in [active-context-archive.md](active-context-archive.md).
 
 ## State now
 
+The native [Qonto source](features/qonto.md) has reviewed source, privacy, tasks,
+managed-history and publication fixtures. Support now has authenticated hosted banking acceptance: a single
+account is connected, initial and manual source sync complete across restart,
+and real provider comparisons and a managed assistant balance/source answer
+pass. Engine-formatted UTC retrieval strings now match the actual managed answer.
+Installed Desktop and provider-UI comparison remain unverified. The active
+[delivery plan](../../docs/execution-plans/2026-10-04-qonto-connection.md) owns
+release, rollback, usage and remaining acceptance state.
+
 GPT-Live M1–M3 remain approved as historical isolated milestones. M4 now runs a
 single conversational model, `gpt-live-1`, in the isolated telephone listener.
 The engine validates carrier admission and company binding, selects pinned
@@ -78,7 +87,8 @@ unchanged and never initializes the agent, creates a background job or requests
 an LLM budget reservation. It also covers a real kernel-client → RPC →
 dispatcher refusal, while help and search tools remain available. This is
 implemented and tested locally; its source is present in the checkout imported
-by six nonproduction daemons, without a new read-only product acceptance.
+by five nonproduction daemons and retained in support's isolated Qonto release,
+without a new read-only product acceptance.
 
 The mnemonic decision boundary exists in `zylch/memory/mnemonic/`: frozen memory
 events whose observation, source revision and authority a model cannot reach; a
@@ -143,8 +153,8 @@ reviewed exempt primitives the writer inventory names. Contracts:
 against the frozen milestone 0 incident corpus and real split profile/company
 databases. Milestones 5–7 and the account check that accepts either identity
 of the profile, uid or email ([who the account is](features/mnemonic-decisions.md#who-pays)),
-are on `main` and present in the checkout imported by six nonproduction
-daemons; mnemonic rollout acceptance remains pending.
+are on `main`, in the five nonproduction checkout daemons and in support's
+isolated Qonto release; mnemonic rollout acceptance remains pending.
 
 Milestone 8 seals the boundary ([join, reviews and maintenance](features/company-memory-join.md)):
 a company-memory join is a fenced, crash-safe cutover that refuses while the
@@ -162,8 +172,8 @@ statement built from strings ([what it cannot see](features/mnemonic-writer-inve
 does not establish mnemonic product acceptance. A store it migrates cannot
 be opened by a milestone 5–7 build.
 
-**Milestone 9 source through `19639d2` is included in the checkout imported
-by six nonproduction daemons; its product rollout acceptance remains open.**
+**Milestone 9 source through `19639d2` is retained in five nonproduction checkout
+daemons and support's isolated release; its product rollout acceptance remains open.**
 The kernel template audit reads the cron deny list in either of
 its two forms and refuses neither/both, so it passes against `cs-kernel`
 `258c927` and against current kernel `main` (`ba79cc1`) with every inventory
@@ -219,10 +229,9 @@ misses). The journey workflow is green on every run of the pushed branch
 Rollout remains pending. The previously referenced hb plan
 `docs/execution-plans/2026-09-30-mnemonic-rollout.md` is absent from this workspace;
 a reviewed rollout plan and migration rehearsal on a store copy are required
-for the mnemonic product rollout. The sandbox window explicitly pulled main
-and removed three K3 pins: six nonproduction daemons now import checkout
-`926ef84`, including M5–M9 source. Production voice remains on its older
-release. Source deployment is verified; mnemonic corpus/product acceptance
+for the mnemonic product rollout. Five nonproduction daemons import the service
+checkout; support's isolated Qonto release retains its current M5–M9 source.
+Production voice remains on its older release. Source deployment is verified; mnemonic corpus/product acceptance
 and AC 5 re-measurement were not performed in that window.
 
 Support's engine exposes approval-gated `initiate_call` through the dashboard's
@@ -231,7 +240,7 @@ Firebase atom API, with an explicit calling assistant ID. A live request on
 15:30:16 UTC confirms a conversation with Litio's assistant. The caller's saved
 voice configuration initially refused a robot interlocutor, then conversed;
 automatic diagnostic scripting is not configured. The restoration is committed as
-`4cd23b7`; support now imports the service checkout, which retains it. See
+`4cd23b7`; support's isolated Qonto release retains that service source. See
 [outbound contract](features/outbound-calls.md) and
 [verification/rollback](../../docs/execution-plans/2026-09-17-mrcall-outbound.md).
 
@@ -242,7 +251,8 @@ under its tenant identity. The billing server runs
 model, five worker roles and reply classification. The other three profiles
 retain their previous billing/model settings. Production's daily cap is USD20;
 the other three caps are USD5. Automatic processing is off and preparation is
-paused/not running in all four. All six nonproduction units import the checkout.
+paused/not running in all four. Five nonproduction units import the checkout;
+support imports its isolated reviewed Qonto release.
 
 [K3 max](features/k3-reasoning.md) uses Chat completions pinned to DigitalOcean.
 The adapter promotes worker limits to a combined 8192-token reasoning/final cap

@@ -1,3 +1,5 @@
+import type { ChatSendOptions, ChatSendResult, QontoAPI } from './finance'
+
 export interface ZylchTask {
   id: string
   owner_id: string
@@ -44,6 +46,7 @@ export interface ZylchTask {
    */
   channel?: 'email' | 'phone' | 'calendar' | 'whatsapp' | string | null
   sources: {
+    qonto?: { source_id: string; source_revision: string }
     emails: string[]
     /**
      * WhatsApp message PKs (UUIDs) attached to this task
@@ -232,6 +235,8 @@ export interface PreparationResult extends PreparationStatus {
 }
 
 export interface ZylchAPI {
+  system: { capabilities: () => Promise<{ chat_history_binding?: number }> }
+  qonto: QontoAPI
   preparation: {
     status: () => Promise<PreparationStatus>
     pause: () => Promise<PreparationStatus>
@@ -360,8 +365,8 @@ export interface ZylchAPI {
     send: (
       message: string,
       conversation_history?: unknown[],
-      opts?: { conversationId?: string; context?: Record<string, unknown> }
-    ) => Promise<any>
+      opts?: ChatSendOptions
+    ) => Promise<ChatSendResult>
     approve: (
       tool_use_id: string,
       approvedOrOpts?:

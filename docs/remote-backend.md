@@ -25,14 +25,14 @@ Two ways to run it remotely:
 Your `<uid>` is the Firebase UID shown next to your email in the app's
 IdentityBanner — it is also the profile directory name.
 
-**Automated provisioning (in progress, branch `phase-b-provisiond`).** A
-vendor-side service, `zylch-provisiond`, is replacing the by-hand rsync
+**Automated provisioning (implemented; self-serve rollout remains closed).** A
+vendor-side service, `zylch-provisiond`, provides the alternative to by-hand rsync
 step in B.2 below with a POST from the desktop app itself, authenticated
 with the same Firebase ID token the app already carries — see
 [`../engine/scripts/server/README-provisiond.md`](../engine/scripts/server/README-provisiond.md)
 for what it does, the install steps, and curl examples for both routes.
-Service-first: not yet wired into the app, so B.2's rsync flow remains
-how profiles actually land on the server today.
+Desktop wires provisioning and its status view. B.2 remains an operator-run
+manual path; client wiring does not open hosted self-serve enrollment.
 
 ---
 
@@ -184,16 +184,15 @@ Day-to-day you don't even need that — admin runs as root: `sudo update-daemons
 
 ### B.2 · Per profile: bring the data, then run the updater
 
-> Being replaced by `zylch-provisiond` (branch `phase-b-provisiond`) —
-> see the note above. This rsync-by-hand flow stays the documented path
-> until that service is wired into the app; nothing below is deleted or
-> deprecated yet.
+> Desktop also wires `zylch-provisiond`; see the note above. This manual
+> operator flow remains documented while self-serve enrollment is closed.
 
 The engine **discovers** profiles; it does not create them. Copy **only the
 profiles you want to run remotely** (not necessarily all of them), one dir per
-uid, under the service user — it's private data, not in git. Note: a profile
-runs **either** locally **or** remotely, never both at once (the fcntl lock
-enforces it), and there is **no two-way sync** — once a profile is served from
+uid, under the service user — it's private data, not in git. Keep one
+authoritative local or remote copy. The fcntl lock serializes processes using
+the same filesystem; it cannot coordinate copies on different hosts.
+There is **no two-way sync** — once a profile is served from
 the server, the server copy is the source of truth; don't keep running that same
 profile locally against the old Mac copy, the two SQLite DBs would diverge.
 Then run the updater:
@@ -469,7 +468,7 @@ session there: mail syncs, but the memory and task stages skip until the
 profile `.env` carries a BYOK key (`LLM_PROVIDER=anthropic` +
 `ANTHROPIC_API_KEY=…`), and the daemon reads `.env` only at start
 (`systemctl restart zylch-server@<uid>`). Spend is capped per profile and
-per UTC day by `LLM_DAILY_BUDGET_USD` (default 10, `0` = no cap; the
+per UTC day by `LLM_DAILY_BUDGET_USD` (default 10; `0` refuses paid work; the
 `[llm-budget]` line of the tick names the numbers); consolidation spends
 from the budget of the profile whose tick runs it. A large
 backlog is analysed in daily instalments at the cap — raise it for a day

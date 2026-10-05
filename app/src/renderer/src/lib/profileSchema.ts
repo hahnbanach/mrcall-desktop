@@ -22,7 +22,7 @@ export interface SchemaField {
   picker?: 'directory' | 'directories'
 }
 
-export const PROFILE_SCHEMA: SchemaField[] = [
+const SETTINGS_FIELDS: SchemaField[] = [
   // ─── LLM ─────────────────────────────────────────────────
   { key: 'LLM_PROVIDER', label: 'AI billing provider', type: 'select', group: 'LLM', optional: true,
     options: ['mrcall', 'anthropic', 'openrouter'], help: 'MrCall credits need no API key. Select a provider explicitly when supplying your own key.' },
@@ -178,3 +178,7 @@ export const PROFILE_SCHEMA: SchemaField[] = [
     help: 'Instructions the assistant follows but never reveals to contacts.'
   }
 ]
+
+export const PROFILE_SCHEMA: SchemaField[] = SETTINGS_FIELDS.filter(
+  field => !field.key.trim().toUpperCase().startsWith('QONTO_')
+)

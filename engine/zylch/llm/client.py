@@ -389,6 +389,11 @@ class LLMClient:
             from .budget_pricing import BudgetError
             if policy_fingerprint() != self._saved_policy_fingerprint:
                 raise BudgetError("AI settings changed. Start a new run or conversation to use the saved provider and models.")
+        from zylch.qonto import history as finance_history
+        from zylch.qonto import publication_guard
+
+        finance_history.check_before_disclosure()
+        publication_guard.check_before_disclosure()
         model_name = model or self.model
         coerced = _coerce_messages(messages)
 
@@ -420,6 +425,10 @@ class LLMClient:
             from .k3_reasoning import request_bound as validate_k3
             validate_k3(request_kwargs)
 
+        publication_guard.constrain_request(request_kwargs)
+        if not finance_history.is_managed():
+            finance_history.reject_known_evidence(request_kwargs)
+
         num_tools = len(tools) if tools else 0
         logger.debug(
             f"llm request: transport={self.transport} model={model_name} "
@@ -437,11 +446,22 @@ class LLMClient:
         # Admission uses the final provider-visible payload, including kwargs.
         # A cancellation/timeout never releases a possibly dispatched request.
         check_dispatch()
+        finance_history.check_before_disclosure()
+        publication_guard.check_before_disclosure()
         quote = self._client.quote(request_kwargs) if self.transport == "proxy" else None
+        finance_history.check_before_disclosure()
+        publication_guard.check_before_disclosure()
         reservation = reserve(request_kwargs, self.transport, quote=quote)
         try:
             record_dispatch()
-        except (MnemonicAuthorizationError, company_fenced()):
+            finance_history.check_before_disclosure()
+            publication_guard.check_before_disclosure()
+        except (
+            MnemonicAuthorizationError,
+            company_fenced(),
+            finance_history.HistoryAuthorizationError,
+            publication_guard.QontoError,
+        ):
             # Revoked or fenced between admission and dispatch: nothing
             # reached a provider, so the hold can go back.
             self._release_unused_reservation(reservation, settle)
@@ -486,6 +506,8 @@ class LLMClient:
             _settle_from_raw(reservation, raw, receipt, settle)
             raise
         settle(reservation, raw_usage, receipt=receipt)
+        finance_history.check_before_disclosure()
+        publication_guard.check_before_disclosure()
 
         return response
 

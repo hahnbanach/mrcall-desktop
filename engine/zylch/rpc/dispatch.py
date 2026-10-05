@@ -52,6 +52,8 @@ def _error(req_id: Optional[Any], code: int, message: str) -> Dict[str, Any]:
 _SECRET_PARAM_KEYS_BY_METHOD: Dict[str, set] = {
     "account.set_firebase_token": {"id_token"},
     "auth.refresh": {"id_token"},
+    "qonto.test": {"login", "api_key"},
+    "qonto.connect": {"login", "api_key"},
 }
 #: Exact key names (compared case-insensitively) that always carry a
 #: secret. Deliberately includes the bare words a caller reaches for when
@@ -74,6 +76,7 @@ _SECRET_PARAM_KEYS_GLOBAL: set = {
     "refresh_token",
     "api_key",
     "client_secret",
+    "qonto_api_login",
 }
 #: Compound shapes: ``firebase_id_token``, ``smtp_password``, ``x_api_key``…
 #: Suffixes are singular on purpose — ``input_tokens`` / ``output_tokens``
@@ -113,7 +116,7 @@ def _is_secret_key(key: Any, extra: set) -> bool:
     name = key.strip().lower()
     if not name:
         return False
-    if name in extra or name in _SECRET_PARAM_KEYS_GLOBAL:
+    if name.startswith("qonto_") or name in extra or name in _SECRET_PARAM_KEYS_GLOBAL:
         return True
     return name.endswith(_SECRET_PARAM_KEY_SUFFIXES)
 
@@ -122,6 +125,12 @@ def _redact_params(method: Optional[str], params: Dict[str, Any]) -> Dict[str, A
     """Return a recursively redacted copy of ``params``."""
     if not isinstance(params, dict) or not params:
         return params
+    if method == "chat.send":
+        return {key: "<redacted chat>" for key in params}
+    if method in {"narration.predict", "narration.summarize"}:
+        return {key: "<redacted narration>" for key in params}
+    if (method or "").startswith(("qonto.", "tasks.")):
+        return {key: "<redacted>" for key in params}
     extra = _SECRET_PARAM_KEYS_BY_METHOD.get(method or "", set())
     allowed = _NON_SECRET_PARAM_KEYS_BY_METHOD.get(method or "", set())
 
@@ -136,6 +145,8 @@ def _redact_params(method: Optional[str], params: Dict[str, Any]) -> Dict[str, A
 
     def redact(value: Any, key: Optional[str] = None) -> Any:
         if key is not None and _is_secret_key(key, extra) and value:
+            if key.strip().lower().startswith("qonto_"):
+                return "<redacted>"
             return f"<redacted len={len(value)}>" if isinstance(value, str) else "<redacted>"
         if isinstance(value, dict):
             return {k: redact(v, k) for k, v in value.items()}
@@ -225,8 +236,47 @@ async def dispatch_raw(raw: str, notify: NotifyFn) -> Optional[Dict[str, Any]]:
 
     logger.debug(f"[rpc] method={method} params={_redact_params(method, params)}")
     try:
-        result = await handler(params, notify)
+        if method.startswith("tasks.") or method in {"narration.predict", "narration.summarize"}:
+            from zylch.qonto.logging import private_scope
+
+            with private_scope():
+                result = await handler(params, notify)
+        else:
+            result = await handler(params, notify)
     except Exception as e:
+        if method.startswith("tasks."):
+            from zylch.qonto.errors import QontoError
+
+            code = e.code if isinstance(e, QontoError) else INTERNAL_ERROR
+            safe_validation = {"actor must be a string when provided", "why must be a string when provided", "note must be a string when provided", "task_id is required", "task_id must be a string", "pinned is required", "contact_email, title and event_id are required", "pass exactly one of due_at (epoch seconds) or days"}
+            message = str(e) if isinstance(e, QontoError) or (isinstance(e, ValueError) and str(e) in safe_validation) else "Task operation failed"
+            logger.warning("[rpc] task operation failed code=%s", code)
+            return None if is_notification else _error(req_id, code, message)
+        if method in {"narration.predict", "narration.summarize"}:
+            from zylch.qonto.errors import QontoError
+
+            code = e.code if isinstance(e, QontoError) else INTERNAL_ERROR
+            message = (
+                f"{type(e).__name__}: {e}"
+                if isinstance(e, QontoError)
+                else "Narration operation failed"
+            )
+            logger.warning("[rpc] narration operation failed code=%s", code)
+            return None if is_notification else _error(req_id, code, message)
+        if method == "chat.send":
+            from zylch.qonto.errors import QontoError
+
+            code = e.code if isinstance(e, QontoError) else INTERNAL_ERROR
+            message = str(e) if isinstance(e, QontoError) else "Chat operation failed"
+            logger.warning("[rpc] chat operation failed code=%s", code)
+            return None if is_notification else _error(req_id, code, message)
+        if method.startswith("qonto."):
+            from zylch.qonto.errors import QontoError
+
+            code = e.code if isinstance(e, QontoError) else INTERNAL_ERROR
+            message = str(e) if isinstance(e, QontoError) else "Qonto operation failed"
+            logger.warning("[rpc] Qonto operation failed code=%s", code)
+            return None if is_notification else _error(req_id, code, message)
         if method.startswith("voice."):
             from zylch.services.voice.agent_config import VoiceError
 

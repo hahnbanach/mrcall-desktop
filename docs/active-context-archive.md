@@ -5,6 +5,320 @@ That file is a living snapshot and carries only `State now` / `Unresolved` /
 `Next`; anything chronological lands here instead. Newest section first.
 Nothing is discarded — only relocated, verbatim.
 
+
+## 2026-10-05 — Qonto rollout and correction evidence before reconciliation
+
+Historical execution record. Current authority and remaining acceptance are in
+the [Qonto plan](execution-plans/2026-10-04-qonto-connection.md). Earlier blocked
+prerequisites and empty-table observations below are superseded.
+
+## Delivery state
+
+- Brief review: APPROVED for native product integration.
+- Plan review: APPROVED after disclosure/logging and legacy-chat compatibility repairs.
+- M1: APPROVED after signed-session repair. Independent foundation/auth suite: 95 passed; real WS expiry-grace bypass refused; focused transport/RPC regressions: 21 passed, known baseline check deselected.
+- M2: APPROVED after scheduling repair. Independent restart fixtures prove initial history decreases while refreshes/repairs progress; full Qonto suite: 147 passed.
+- M3: APPROVED after live history admission, narration redaction and acknowledgement-receipt repairs. Independent source/history/client review and original bypass reproductions passed.
+- M4: APPROVED after journal privacy, historical search metadata and real concurrent publication/pause repairs. Reviewer signed-WebSocket and exact reproductions: 5 passed; settlement/replay: 11 passed. Owner task/regression suite: 514 passed; affected publication suite: 93 passed.
+- M5: APPROVED after company-confirmation and delayed finance-chat repairs. Actual Settings/preload/Python fixture journey and independent company-join closure checks pass. Packaged Electron and live bank UI remain unverified.
+- M6: APPROVED for support-only deployment health and preservation. Real isolated CLI/socket rehearsal preserves old rows and company schema; SQLite restore and unauthenticated 401 admission pass. Authenticated RPC/live bank/UI criteria remain pending.
+- Final focused engine suite: 518 passed; Ruff passes all 97 changed Python files. Independent native browser, company-join and Workspace history journeys pass. M6 and final reviews use fresh reviewers. M5 reused an existing context when fresh spawning was unavailable; its same-gate revisions retained that reviewer.
+- Hosted/live M6 integration review: APPROVED after real authenticated banking and source-answer acceptance.
+- Separate final review: APPROVED for native implementation, fixture user paths and support live banking/RPC acceptance, including the timestamp correction. Installed Desktop and provider-UI acceptance remain pending.
+- Documentation closure: mechanical gate clean; semantic review has zero stale claims and four explicit unverified groups (authenticated RPC, bank acceptance, packaged/provider GUI, unrelated historical acceptance). A redundant verifier test rerun exhausted temporary disk and was stopped; only its attributed fixtures were removed. The original 518-test success evidence is intact.
+
+## Existing evidence and verification limits — planning snapshot, 2026-10-04
+
+Lead-provided host discovery identifies support as UID `9nXeYF8OXPetUFsSP4zDC3F2i673`, tenant `mc-16d5836d57be`, unit `zylch-server@9nXeYF8OXPetUFsSP4zDC3F2i673.service` and `/home/mrcalld/.zylch/profiles/9nXeYF8OXPetUFsSP4zDC3F2i673`. Only `QONTO_API_KEY` is present and it is not combined login:key; live provider authentication therefore awaits the organization API login. Fresh read-only host metadata now shows the serving checkout at `d30e5680f42117516c58333ed01b84050bdc3694`, matching the development base, after a concurrent external update. Earlier discovery found `d7c1e9afe884ca495a8e8f8ccde7f69626095396` with a bounded-proxy source difference. Revalidate checkout/process and unit metadata immediately before deployment; stage from the then-serving tree and preserve its billing code and all concurrent changes. Refuse a stale rollout if those fingerprints change during staging.
+Planning was read-only apart from scratch evidence. Relevant source confirms the profile/company split, email-valued legacy owner, all-tool schema registration, bounded preparation run/item API, mnemonic commit reauthorization, blanket company join import and suffix-based hosted egress. App/engine documentation contains some historical identity assertions; code governs this plan.
+Planning check: engine `venv/bin/python -m pytest -q --disable-warnings tests/services/test_preparation.py tests/memory/test_mnemonic_join_cutover.py tests/storage/test_migration_runner.py tests/rpc/test_contract_boundaries.py` returned **50 passed, 1 failed**; the pre-existing failure is undeclared `llm.models` parameters. Evidence: `/tmp/mrcall-ai-kit/qonto-native-plan/baseline-pytest.log`.
+Planning check: `venv/bin/python -m unittest discover -s tests/server -p test_egress_policy.py` returned **11 tests, OK**. Running this unittest module through repository-wide pytest fixtures instead fails on the legacy absent `Settings.supabase_url`; use its native unittest entry. Evidence: `/tmp/mrcall-ai-kit/qonto-native-plan/baseline-egress.log`.
+Planning check: `node scripts/test-preparation.mjs` passed with the isolated scratch React dependencies: old-engine refusal, bounded action, persistent errors, pause and account-switch journeys. Do not mutate the shared `node_modules`/venv symlinks. Evidence: `/tmp/mrcall-ai-kit/qonto-native-plan/baseline-app.log`. Lead separately observed baseline `make lint` Black failures on 70 files.
+## Support rollout evidence and remaining acceptance
+
+### Firebase default correction checkpoint — 2026-10-05
+
+The stale engine default selected the old referrer-restricted public Firebase
+key while Desktop already selected its replacement for the same project. The
+main development checkout and Qonto worktree now use Desktop's public default;
+explicit environment overrides remain supported. Three focused cross-tree
+contract tests pass in each checkout, checking default project/key alignment
+and override preservation; focused Ruff and Black checks pass. No Firebase
+restrictions, authentication rules, encrypted keys or schema changed.
+
+Fresh plan-amendment and implementation reviews returned APPROVED. The installed
+support release was cloned with all 365 manifest hashes checked; only
+`engine/zylch/config.py` changed, with corrective provenance in the manifest.
+Only support's source pin changed and its daemon restarted. A real refresh with
+no profile, injected-key-file or temporary public-key override verified the
+signed support UID and authenticated `account.who_am_i`/`system.capabilities`.
+The refresh token did not rotate; no ID token was persisted. The six other
+services retained their PIDs, start times and configurations. The shared serving
+checkout, billing sources, all egress policies, profile `.env`, injected key,
+host identity, saved controls, preparation state and all 1,679 current reservation
+rows remained unchanged. The parent release and exact prior drop-in are retained
+for rollback. Evidence: `/tmp/mrcall-ai-kit/firebase-default-fix/`.
+The fresh separate final correction review returned APPROVED. Live bank/Desktop criteria
+remain open. The operator subsequently resumed banking tests; see live acceptance below.
+
+Support imports `/home/mrcalld/releases/mrcall-qonto-support-20261005-utc-c5d2585d4140/engine`
+through its own `90-qonto-native.conf` drop-in. All 365 source-file hashes match
+the rehearsed candidate; the serving checkout and its billing source remain
+unchanged. Its private installation identity is outside the profile at
+`/var/lib/mrcall-qonto/mc-16d5836d57be/engine-instance`, with a writable private
+parent for the lock. The support policy adds only `thirdparty.qonto.com` TCP443;
+the three changed files are its firewall, DNS configuration and manifest.
+
+Initial deployment evidence, 2026-10-04: the tenant's fixed unauthenticated HTTPS request reaches Qonto with TLS
+verification and returns HTTP400. Its owning socket refuses unauthenticated
+WebSocket admission with HTTP401. Eight private finance tables are empty.
+The six other daemon PIDs, start times and configurations are unchanged; only
+systemd's embedded ExecStart bookkeeping resets on daemon reload. Support's
+provider, USD20 budget, preparation state, automatic-update configuration,
+all 1,667 prior reservation rows, profile `.env`, injected key, encrypted OAuth
+rows and company schema are preserved. Protected profile/config/key/policy
+backups are under `/home/mrcalld/qonto-support-backups/20261004-qonto-native`.
+The additional first-migration profile backup is losslessly compressed to
+`backups/zylch.db.qonto-private-v1.20261004T193759922482Z.bak.gz` in support's
+profile; decompression hashes were verified before removing its uncompressed
+duplicate. The protected uncompressed rollout backup and older backups remain.
+
+Authenticated hosted identity RPC now succeeds using the corrected default.
+The previous HTTP403 `API_KEY_HTTP_REFERRER_BLOCKED` was caused by the engine's
+stale public key; the Desktop-compatible default resolves it. This narrow
+check made no bank request and started no paid work.
+
+Both `QONTO_API_LOGIN` and `QONTO_API_KEY` are present in support's bootstrap
+environment. On explicit resumption, authenticated test selected the operator's provider
+organization and its single account for the existing MrCall company. Initial 30-day synchronization completed with 30 requests; subsequent
+manual syncs completed with fresh coverage. The encrypted connection and source
+reads persisted across a support-only restart. Disconnect and same-company
+reconnect retained bootstrap credentials and fenced the old managed history
+before any new paid reservation. The service is left connected.
+
+There are 285 private imported transactions. Seven-day reads returned 79
+movements with full fresh coverage; details and mechanical summaries retained
+source references. Independent raw provider reads matched exact current and
+authorized balances, ten sampled amount/currency/status/side/time records and
+all period aggregate groups. An actual read-only managed assistant question
+used `qonto_accounts`, returned the correct balance/currency and exact opaque
+source citation, and persisted its finance provenance. Its inaccurate calendar
+time conversion triggered the corrective checkpoint below; the first answer
+is not accepted as correct timestamp presentation.
+
+Fresh M6 hosted/live integration review returned APPROVED. The six other
+services, shared serving checkout, billing sources, egress policies, unit
+configuration and saved provider/budget/automatic-update/preparation controls
+were preserved. All 1,679 starting reservation hashes remained unchanged.
+Three new settled reservations appeared during the answer interval: two
+assistant `untagged` calls and one separate `reply-need` classifier; do not
+attribute the latter to finance chat. Total recorded usage for those three
+rows is USD 0.09166. Reads/sync and invalid-history refusal created no paid
+reservations. Finance preparation checkpoints and publication intents remain
+zero. Evidence: `/tmp/mrcall-ai-kit/qonto-live-20261005/`.
+
+Installed/packaged Desktop and Qonto-provider UI comparison remain unverified:
+this environment has no display or signed-in provider UI. The plan stays active
+for those positive criteria and any unresolved source-answer correction.
+
+### Source timestamp presentation correction — 2026-10-05
+
+Live M6 banking acceptance passed, but the assistant converted a correct Unix
+retrieval timestamp to the wrong minute. Under the approved M3 source-grounding
+scope, add engine-formatted `retrieved_at_utc` alongside retained numeric
+`retrieved_at` fields in read responses, balances, movement detail and coverage.
+Tell all finance model tools to cite the supplied UTC string literally, with
+source/account/currency and coverage context; never derive calendar time from
+Unix values. Exclude volatile retrieval strings from account source revisions.
+Focused real RPC regression checks must prove matching numeric/UTC fields,
+unknown-time preservation and stable balance revisions. Stage a clone of the
+current support pin with only the reviewed source changes and updated manifest,
+retain rollback, restart support only, and check one new managed answer against
+its actual tool timestamp. No preparation/publication, changed billing controls,
+bank mutation or other-tenant rollout. Review the plan amendment before editing,
+then implementation before rollout, then resume the separate final gate.
+
+
+Timestamp correction execution: fresh plan-amendment and implementation reviews
+returned APPROVED. The 96 focused amount/read/assistant/history tests passed;
+the stricter RPC timestamp test passed with zero relative and one-microsecond
+absolute tolerance. Focused Ruff passed. The support source pin now selects
+`mrcall-qonto-support-20261005-utc-c5d2585d4140`: all 365 manifest entries verify,
+with exactly three reviewed source changes from the Firebase-corrected parent.
+The prior pin/drop-in remain available. Only support restarted. Its encrypted
+connection, manual sync and source reads remained healthy. An actual new managed
+answer reports the correct balance, selected account, currency, exact source
+citation, coverage and the literal UTC timestamp from its canonical tool result.
+The corrected conversation remains valid and the bank remains connected.
+
+The six other daemon identities/configurations, shared serving checkout, billing
+sources, all egress policies, profile `.env`, injected key, host identity,
+controls/preparation/bootstrap and all 1,684 reservations present immediately
+before this source switch were preserved. Two new assistant reservations settled.
+No finance preparation checkpoint or publication intent exists. Corrective live
+evidence and private audits: `/tmp/mrcall-ai-kit/qonto-live-20261005/utc/`.
+The resumed separate final review returned APPROVED for native implementation,
+fixture paths and support live banking/RPC acceptance. Installed Desktop/provider
+UI acceptance is still unverified in this environment; the plan stays active
+for that remaining work. Banking/source correctness is no longer blocked on
+login, Firebase or timestamp rendering. Across the full captured live window,
+seven new settled reservations record USD 0.196353: four assistant calls and
+three separate `reply-need` classifications. Earlier reservations and saved
+controls are preserved; no finance preparation/publication was invoked.
+
+## 2026-10-04 — Snapshot before native Qonto support rollout
+
+## State now
+
+Mnemonic M9 source through `19639d2` is included in the service checkout
+imported by six nonproduction daemons. The recorded Haiku corpus failed AC 5;
+the CTO's decision defers its re-measurement to M10 on the resolver-selected
+model. The sandbox window did not perform mnemonic product/corpus acceptance
+or close those rollout gates. Engine details are
+in [the memory snapshot](../engine/docs/active-context.md).
+
+Main and the Café 124 production voice release read standing instructions from
+the reserved company-document project. Telephone conversion reads `phone.md`;
+USER_NOTES is retired. See [standing instructions](../engine/docs/features/project-memory.md).
+
+The three former K3-pinned Café124 engines import the service checkout;
+their pins are preserved in root-only backups. Production runs
+`phone-md-5ebe3fa` through its unchanged operator drop-ins and tenant-exec
+declaration. The billing server is
+`prod-99091c35`. Production uses K3 max through its personal OpenRouter key,
+with a USD20/day limit. The other three profiles retain their previous billing
+and model choices and USD5/day limits. All four have automatic processing off
+and preparation paused. Adding a saved Anthropic key does not change the selected
+provider or enable fallback. See [K3 adoption](execution-plans/2026-09-16-k3-production.md)
+and [runtime contract](../engine/docs/features/k3-reasoning.md).
+
+Personal-key K3 transport, reasoning and accounting have a successful synthetic
+live acceptance; production identity, catalog and paused preparation checks pass.
+A funded K3 credit response remains unverified. The separate failed credit smoke
+has a conservative USD0.209 hold; hosted profile budgets are unaffected.
+
+The [reviewed comparison](evaluations/2026-09-16-reviewed-model-comparison.md)
+covers 60 cases and 240 outputs. Its findings do not estimate production error
+rates or establish model equivalence.
+
+Desktop's setup journey configures an engine, verifies its authenticated
+connection, prepares data and hands off a descriptor-based cs-kernel workspace.
+The engine owns mailbox processing and shared memory; the clone owns operator
+procedures. Claude Code headless and kernel direct classifiers have separate
+billing and pause controls. See [operator setup](operator-setup.md#ai-execution-and-controls).
+
+GPT-Live is the sole telephone model. Café 124 serves its Desktop socket and
++390250552776 through the existing tunnel, bound to business
+`d44a1864-23cc-34f9-aec5-6e04bb2fd2ef-desktop`, UID
+`Gn9IcuWzYyY7DBMHkVUGB7bIiTp2`, starter and voice configuration revision 6.
+Production imports `mrcall-voice-cafe124-phone-md-5ebe3fa`, built from M1 base
+`706fe2a` plus the reviewed voice/confinement patch. Conversion uses stored
+`operator-instructions/phone.md` revision 1 (`cf61cd70…`), prompt/schema 8/6.
+The reviewed derived view retains 270 initial characters, one complete detail
+and six approved aliases. One K3 conversion settled; recovery preserved the
+same selected facts at current source offsets. Production preview matches the
+mailbox document and procedures; all six stored documents remain revision 1.
+Health, authenticated binding and unsigned callback checks pass. Both clone
+pause files are absent. Mario imports the service checkout and uses his tenant
+socket; his accepted source preview is recorded in the source-migration plan.
+Mario has no operator schedule; 124's scheduled operator reads his inbox without drafting.
+Mario's project-local permissions deny instruction writes in twelve supported
+command spellings, including raw `instructions.store`. Read access is preserved;
+the same [Astra reviewer approved the P1 repair](evaluations/2026-10-01-astra-instruction-write-denial-rereview.md).
+See the [source migration](execution-plans/2026-10-01-telephone-notes-source-is-phone-md.md).
+
+The [pilot](execution-plans/2026-09-27-cafe124-voice-daemon.md) is completed;
+the [knowledge plan](execution-plans/2026-09-28-voice-company-knowledge.md) remains
+active. The owner accepted the October 1 handset call; independent review
+approved its source-grounded direct service answer against the prior source.
+That historical call does not certify the new conversion. Spoken company-detail
+retrieval, broader repeated cases, later caller-history entailment and quantitative
+latency remain open. Caller history requires a unique selected-contact match.
+Archive acceptance remains APPROVED with nine funded private call archives;
+StarChat transcript upload is cancelled. Old uncertain credit holds remain
+quarantined. No further handset call was made for source migration.
+
+The hosted engine is being isolated per tenant
+([toward-sandbox](execution-plans/2026-09-29-toward-sandbox.md)): M1 (tool
+path confinement, `run_python` refused when serving) and the host-independent
+part of M2 (per-profile Unix user, dual-name company store, `rekey`,
+`mrcall-tenant` helper, transitional unit template) are on `main` at
+`c2b3ca5` and reviewed. **M1 is deployed to all seven daemons** (2026-09-30:
+the three unpinned ones on the service checkout, the four Café124 ones as
+backports onto their pinned releases, rollback recorded in the plan). All
+four company stores are relocated. **All seven profiles run as their own
+Unix users** (M2), production voice included with its release preserved, and
+**all seven have an enforced egress allow-list** (M3, 2026-10-03): refused
+names and packets are logged per tenant. Production voice was accepted under
+enforcement with a real call from a second telephone; one handset's speech is
+not transcribed by the provider, a voice-path issue outside the host. Backups
+and the shared key are kept: the template and provisiond still use the key.
+The final end-to-end review is pending in the plan. Self-serve provisioning
+stays closed.
+
+Settings supports independent provider/model selection, daily budgets and bounded
+preparation. It remains reachable with an unavailable engine; stale connection
+snapshots are invalidated. The workspace handoff exposes a path and command;
+refresh credentials remain in the private descriptor outside the workspace.
+Shared written projects are revisioned company-engine records separate from
+entity blobs; see [project memory](../engine/docs/features/project-memory.md).
+
+Desktop `v0.1.51-win` ships a Windows x64 installer and Apple Silicon dmg.
+Neither has been installed and exercised. Windows runtime import of neonize
+remains unverified; its loose-file loading through `sys._MEIPASS` is a risk.
+Runtime contracts are in [IPC](ipc-contract.md),
+[remote backend](remote-backend.md) and per-tree docs.
+
+WhatsApp can silently disconnect when neonize's bundled protocol falls behind.
+The current checkout defines a refresh loop; only the production voice engine
+retains a release that lacks it. `whatsapp.status` still has no external reader, and the app
+Refresh button only lists threads. See the archived
+[channel details](active-context-archive.md).
+
+## Unresolved
+
+- The three other Café124 profiles await a choice between MrCall credits and
+  personal OpenRouter keys. Funded K3 credit acceptance remains open.
+- Packaged-app/fresh-account acceptance remains separate from source and hosted
+  API checks. Windows now builds (~3 minutes) and ships an installer, but stays
+  opt-in and `continue-on-error`, so a regression would publish a release with
+  no Windows installer and say nothing. Intel remains outside the matrix.
+  Windows has no WhatsApp voice-note transcription: the transcription stack is
+  excluded there to keep it out of the module graph.
+- Remote provisioning needs host UID-to-company membership; an endpoint alone
+  does not establish membership. Settings catalog refresh has a known same-value
+  reload gap; reopen Settings after connection changes. See [backlog](harness-backlog.md).
+- Toward-sandbox: M1–M3 are deployed to all seven profiles. Open: the final
+  end-to-end review (a host session); the shared key still used by the
+  template and provisiond, so a newly provisioned profile starts as `mrcalld`
+  until `create`; one handset whose speech the voice provider does not
+  transcribe; and the brief's parked operational floor (backups, pinned
+  rollout).
+- Product chat, delegated sending, approval isolation and a comprehensive security
+  review are deferred. Calendar integration, raw RPC errors,
+  installer coverage and multi-window auth checks retain their existing owners.
+- Historical task-mode/import and legacy transport issues need verification
+  before their paths are restored.
+- Café 124's manual pilot is approved. The broader knowledge plan still needs
+  spoken detail retrieval, adverse/repetition coverage and quantitative latency
+  evidence. Voice reserves remain provisional.
+
+## Next
+
+1. Continue the active knowledge plan from its untested company-detail and
+   broader case/quantitative latency gates; do not repeat archive acceptance.
+2. Resolve the remaining billing choices and funded credit acceptance. Keep
+   preparation paused until the CTO explicitly requests a bounded run.
+3. Verify the installed applications through their GUI: the Mac one with
+   personal-key entry, and the Windows one at all — install, open, scan the
+   WhatsApp QR. Until that runs, support@ keeps telling customers macOS only.
+4. Give a headless caller a way to see the WhatsApp channel's state —
+   `whatsapp.status` has no reader outside this repo.
+5. Resume deferred product work from its existing briefs when requested.
+   The [thin web/mobile client brief](execution-plans/cross-machine-thin-clients.md)
+   is a parked nice-to-have, not scheduled work; remind the CTO that it already
+   exists rather than analysing it again. Electron remains the primary client.
+
 ## 2026-10-01 — Before Mario instruction-write denial repair
 
 1. Close Mario’s headless instruction-write permission gap. Continue the active

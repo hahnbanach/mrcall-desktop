@@ -258,6 +258,11 @@ registry on 2026-08-15 (65 methods), plus `emails.needs_reply` added
 | `narration.predict` | `message?, context=""` | {"text": str} |
 | `narration.summarize` | `lines?, context=""` | {"text": str} |
 
+**`qonto.*`**
+
+Native bank methods and the additive managed finance-history contract are in
+[Qonto IPC](qonto-ipc.md), with verification and rollout limits in its linked plan.
+
 **`profiles.*`**
 
 | Method | Declared parameters | Returns |

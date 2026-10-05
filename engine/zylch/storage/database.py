@@ -244,7 +244,9 @@ MEMORY_TABLE_NAMES = (
 
 def _tables(names: tuple[str, ...] | None, *, exclude: bool = False):
     from zylch.storage.models import Base as _Base
+    from zylch.qonto import models as _qonto_models
 
+    _ = _qonto_models
     if names is None:
         return list(_Base.metadata.sorted_tables)
     wanted = set(names)
@@ -271,7 +273,15 @@ def _register_profile_steps() -> None:
     from zylch.storage.step_company_key import STEP as company_key_step
     from zylch.storage.step_memory_split import STEP as memory_split_step
 
-    for step in (company_key_step, memory_split_step):
+    from zylch.qonto.migration import (
+        STEP as qonto_step,
+        SYNC_STEP as qonto_sync_step,
+        HISTORY_STEP as qonto_history_step,
+    )
+
+    for step in (
+        company_key_step, memory_split_step, qonto_step, qonto_sync_step, qonto_history_step
+    ):
         if step not in PROFILE_STEPS:
             PROFILE_STEPS.append(step)
 
@@ -300,12 +310,14 @@ def init_db():
     """
     from zylch.storage.migrations import run_migrations
 
+    from zylch.qonto.migration import backup_before_install
+
     _register_profile_steps()
     engine = get_engine()
     applied = run_migrations(
         engine,
         _resolve_db_path(),
-        ensure=(_ensure_all_tables, _apply_column_migrations),
+        ensure=(backup_before_install, _ensure_all_tables, _apply_column_migrations),
         steps=PROFILE_STEPS,
         backfills=(_attach_store_then_backfill,),
     )
@@ -335,6 +347,9 @@ def _attach_store_then_backfill() -> None:
     from zylch.memory.join_recover import recover
 
     recover()
+    from zylch.qonto.guard import recover as recover_qonto
+
+    recover_qonto()
     _apply_data_backfills()
 
 

@@ -13,6 +13,9 @@ from typing import Any, Awaitable, Callable, Dict, List, Optional, Tuple
 
 from ..llm import LLMClient, make_llm_client
 from ..llm.exceptions import LLMPromptTooLargeError
+from zylch.qonto import history as finance_history
+from zylch.qonto.logging import install as install_finance_logging, tool_event
+
 from .budget import (
     PROMPT_TOKEN_BUDGET,
     TOOL_RESULT_MAX_CHARS,
@@ -37,6 +40,7 @@ ApprovalCallback = Callable[
     [str, str, Dict[str, Any]], Awaitable[Tuple[bool, Optional[Dict[str, Any]]]]
 ]
 
+install_finance_logging()
 logger = logging.getLogger(__name__)
 
 
@@ -187,7 +191,12 @@ class ZylchAIAgent(BaseConversationalAgent):
         Returns:
             List of tool schemas
         """
-        schemas = [tool.get_schema() for tool in self.tools]
+        schemas = [
+            tool.get_schema()
+            for tool in self.tools
+            if not tool.name.startswith("qonto_")
+            or (self.customer_service_instructions is None and finance_history.is_managed())
+        ]
         tool_names = [s["name"] for s in schemas]
         logger.info(f"Tools available to Claude: {tool_names}")
         return schemas
@@ -264,6 +273,7 @@ class ZylchAIAgent(BaseConversationalAgent):
             f"[chat turn={turn_id}] process_message start" f" user_message_len={len(user_message)}"
         )
 
+        finance_history.check_before_disclosure()
         self.last_truncations = []
 
         # Add user message to history
@@ -404,6 +414,7 @@ class ZylchAIAgent(BaseConversationalAgent):
                 )
                 # Add the direct response as assistant message
                 self.conversation_history.append({"role": "assistant", "content": direct_response})
+                finance_history.check_before_disclosure()
                 return direct_response
 
             # Add assistant's tool use to history
@@ -438,6 +449,7 @@ class ZylchAIAgent(BaseConversationalAgent):
             if hasattr(block, "text"):
                 assistant_message += block.text
 
+        finance_history.check_before_disclosure()
         # Add final response to history
         self.conversation_history.append({"role": "assistant", "content": assistant_message})
 
@@ -460,6 +472,7 @@ class ZylchAIAgent(BaseConversationalAgent):
         results is the one that grows. A refused prompt raises
         `LLMPromptTooLargeError` with the numbers; nothing is sent.
         """
+        finance_history.check_before_disclosure()
         messages = self._messages_with_history_cache(
             self.conversation_history,
             volatile_suffix=volatile_suffix,
@@ -471,7 +484,9 @@ class ZylchAIAgent(BaseConversationalAgent):
 
                 estimated = estimate_tokens(system_blocks, tools, messages)
             else:
-                estimated = check_prompt_budget(system=system_blocks, tools=tools, messages=messages)
+                estimated = check_prompt_budget(
+                    system=system_blocks, tools=tools, messages=messages
+                )
         except LLMPromptTooLargeError as e:
             logger.error(f"[chat turn={turn_id} step={step}] prompt refused before dispatch: {e}")
             raise
@@ -525,7 +540,7 @@ class ZylchAIAgent(BaseConversationalAgent):
                     f"[chat turn={tid} step={step}] tool={tool_name}"
                     f" input_keys={input_keys} status=executing"
                 )
-                if self.customer_service_instructions is None:
+                if self.customer_service_instructions is None and not finance_history.is_managed():
                     logger.debug(
                         f"[chat turn={tid} step={step}] tool={tool_name}"
                         f" full_input={tool_input}"
@@ -629,14 +644,25 @@ class ZylchAIAgent(BaseConversationalAgent):
                         tool_input = edited_input
 
                 # Execute tool
+                finance_history.check_before_disclosure()
                 tool_result = await self._call_tool(tool_name, tool_input)
+                finance_history.check_before_disclosure()
+                if finance_history.is_managed():
+                    tool_event(
+                        logger,
+                        name=tool_name,
+                        status=tool_result.status.value,
+                        step=step,
+                        count=1,
+                        registered=tool_name in self.tool_map,
+                    )
 
                 # Log tool result details for debugging
                 logger.info(
                     f"[chat turn={tid} step={step}] tool={tool_name}"
                     f" input_keys={input_keys} status={tool_result.status.value}"
                 )
-                if tool_result.message:
+                if tool_result.message and not finance_history.is_managed():
                     logger.info(
                         f"[chat turn={tid} step={step}] tool={tool_name}"
                         f" message={tool_result.message}"
@@ -672,7 +698,7 @@ class ZylchAIAgent(BaseConversationalAgent):
                         f" (budget {TOOL_RESULT_MAX_CHARS})"
                     )
                     self.last_truncations.append(cut)
-                if self.customer_service_instructions is None:
+                if self.customer_service_instructions is None and not finance_history.is_managed():
                     logger.debug(f"Formatted tool result sent to agent:\n{formatted_result}")
 
                 results.append(
@@ -699,6 +725,9 @@ class ZylchAIAgent(BaseConversationalAgent):
             logger.warning(f"[tools] tool={name} status=refused reason=read_only_origin")
             return ToolResult(status=ToolStatus.ERROR, data=None, error=str(exc))
 
+        finance_history.check_before_disclosure()
+        if name.startswith("qonto_"):
+            finance_history.require_managed()
         if name not in self.tool_map:
             return ToolResult(status=ToolStatus.ERROR, data=None, error=f"Unknown tool: {name}")
 
@@ -711,7 +740,13 @@ class ZylchAIAgent(BaseConversationalAgent):
                 # Stays on the loop, where a cancellation reaches it.
                 result = await tool.execute(**input_data)
             return result
+        except finance_history.HistoryAuthorizationError:
+            raise
         except Exception as e:
+            finance_history.check_before_disclosure()
+            if finance_history.is_managed():
+                logger.error("Finance tool failed")
+                return ToolResult(status=ToolStatus.ERROR, data=None, error="Tool execution failed")
             logger.error(f"Tool execution failed: {name} - {e}")
             return ToolResult(status=ToolStatus.ERROR, data=None, error=str(e))
 

@@ -61,6 +61,10 @@ export const KNOWN_KEYS: ReadonlySet<string> = new Set([
   'USER_VAT_NUMBER'
 ])
 
+export function excludedFinanceSetting(key: string): boolean {
+  return key.trim().toUpperCase().startsWith('QONTO_')
+}
+
 const NEEDS_QUOTE = new Set([' ', '\t', '\n', '\r', '"', "'", '\\', '#', '=', '$', '`'])
 
 /**
@@ -153,6 +157,7 @@ function stripDotenvQuoting(raw: string): string {
  * UID-keyed directory names.
  */
 export function readProfileEnvValue(id: string, key: string): string | null {
+  if (excludedFinanceSetting(key)) return null
   const envPath = join(profileDir(id), '.env')
   let text: string
   try {
@@ -262,7 +267,7 @@ export function createProfileForFirebaseUser(
   const cleaned: Record<string, string> = {}
   const unknown: string[] = []
   for (const [k, rawV] of Object.entries(values)) {
-    if (!KNOWN_KEYS.has(k)) {
+    if (excludedFinanceSetting(k) || !KNOWN_KEYS.has(k)) {
       unknown.push(k)
       continue
     }
@@ -346,7 +351,7 @@ export function createProfileFS(
   const cleaned: Record<string, string> = {}
   const unknown: string[] = []
   for (const [k, rawV] of Object.entries(values)) {
-    if (!KNOWN_KEYS.has(k)) {
+    if (excludedFinanceSetting(k) || !KNOWN_KEYS.has(k)) {
       unknown.push(k)
       continue
     }
@@ -428,6 +433,7 @@ export function writeProfileEnvValue(
   key: string,
   value: string | null
 ): { ok: boolean; written?: boolean } {
+  if (excludedFinanceSetting(key)) return { ok: false }
   const dir = profileDir(id)
   const envPath = join(dir, '.env')
   if (!existsSync(envPath)) {

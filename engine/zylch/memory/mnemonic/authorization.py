@@ -171,6 +171,31 @@ def _registered(grant: Any) -> bool:
 # ─── 1. Request authorization ─────────────────────────────────────────
 
 
+def refuse_finance_publication(event: MemoryEvent) -> None:
+    from zylch.qonto.publication_guard import authorizes
+
+    if authorizes(event):
+        return
+    if event.source_kind == "qonto":
+        raise MnemonicRefusal("Qonto publication requires its exact engine-issued consent guard.")
+    from zylch.qonto.history import (
+        HistoryAuthorizationError,
+        is_managed_finance,
+        reject_known_evidence,
+    )
+
+    if is_managed_finance():
+        raise MnemonicRefusal(
+            "Private finance evidence cannot be published by generic memory tools."
+        )
+    try:
+        reject_known_evidence([event.observation, event.suggestion])
+    except HistoryAuthorizationError:
+        raise MnemonicRefusal(
+            "Retained finance evidence cannot be published by generic memory tools."
+        ) from None
+
+
 def authorize_request(event: MemoryEvent) -> None:
     """Refuse a semantic memory request this origin may not make.
 
@@ -180,6 +205,7 @@ def authorize_request(event: MemoryEvent) -> None:
     """
     from zylch.services.request_policy import is_read_only, refusal_text
 
+    refuse_finance_publication(event)
     if is_read_only():
         raise MnemonicRefusal(refusal_text("memory_write"))
     owners = _current_owners()

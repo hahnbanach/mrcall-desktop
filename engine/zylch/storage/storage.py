@@ -1077,6 +1077,9 @@ class Storage:
         Returns task dicts in newest-first order of ``analyzed_at`` (or
         ``created_at`` if missing). Empty when ``blob_ids`` is empty.
         """
+        from zylch.qonto.task_access import ordinary_tasks
+        from zylch.qonto.task_records import public_task
+
         if not blob_ids:
             return []
         wanted = {str(b) for b in blob_ids if b}
@@ -1094,7 +1097,7 @@ class Storage:
             rows = (
                 session.query(TaskItem)
                 .filter(
-                    TaskItem.owner_id == owner_id,
+                    ordinary_tasks(owner_id),
                     TaskItem.completed_at.is_(None),
                     TaskItem.action_required.is_(True),
                 )
@@ -1108,7 +1111,7 @@ class Storage:
             if not task_blobs:
                 continue
             if wanted.intersection({str(b) for b in task_blobs}):
-                out.append(r.to_dict())
+                out.append(public_task(r))
 
         def _key(t: Dict[str, Any]) -> str:
             return str(t.get("analyzed_at") or t.get("created_at") or "")
@@ -3654,6 +3657,9 @@ class Storage:
           so the dedup sweep does not immediately re-close the task it
           had just merged away.
         """
+        from zylch.qonto.task_records import reject_finance_creation
+
+        reject_finance_creation(item)
         try:
             # Ensure analyzed_at is a proper datetime
             analyzed_at = item.get("analyzed_at")
@@ -3775,18 +3781,21 @@ class Storage:
         contact_email: str,
     ) -> Optional[Dict[str, Any]]:
         """Get existing open task for a contact (returns first one)."""
+        from zylch.qonto.task_access import ordinary_tasks
+        from zylch.qonto.task_records import public_task
+
         try:
             with get_session() as session:
                 row = (
                     session.query(TaskItem)
                     .filter(
-                        TaskItem.owner_id == owner_id,
+                        ordinary_tasks(owner_id),
                         TaskItem.contact_email == contact_email.lower(),
                         TaskItem.completed_at.is_(None),
                     )
                     .first()
                 )
-                return row.to_dict() if row else None
+                return public_task(row) if row else None
         except Exception as e:
             logger.error(f"Failed to get task by contact {contact_email}: {e}")
             return None
@@ -3800,18 +3809,21 @@ class Storage:
         """Get a task by its upsert key (owner_id, event_type, event_id),
         regardless of completed state. Used to return the id after an
         external tasks.create upsert."""
+        from zylch.qonto.task_access import ordinary_tasks
+        from zylch.qonto.task_records import public_task
+
         try:
             with get_session() as session:
                 row = (
                     session.query(TaskItem)
                     .filter(
-                        TaskItem.owner_id == owner_id,
+                        ordinary_tasks(owner_id),
                         TaskItem.event_type == event_type,
                         TaskItem.event_id == event_id,
                     )
                     .first()
                 )
-                return row.to_dict() if row else None
+                return public_task(row) if row else None
         except Exception as e:
             logger.error(f"Failed to get task by event {event_type}/{event_id}: {e}")
             return None
@@ -3822,19 +3834,22 @@ class Storage:
         contact_email: str,
     ) -> List[Dict[str, Any]]:
         """Get ALL open tasks for a contact."""
+        from zylch.qonto.task_access import ordinary_tasks
+        from zylch.qonto.task_records import public_task
+
         try:
             with get_session() as session:
                 rows = (
                     session.query(TaskItem)
                     .filter(
-                        TaskItem.owner_id == owner_id,
+                        ordinary_tasks(owner_id),
                         func.lower(TaskItem.contact_email) == contact_email.lower(),
                         TaskItem.completed_at.is_(None),
                     )
                     .order_by(TaskItem.created_at.desc())
                     .all()
                 )
-                return [r.to_dict() for r in rows]
+                return [public_task(r) for r in rows]
         except Exception as e:
             logger.error(f"Failed to get tasks by contact {contact_email}: {e}")
             return []
@@ -3852,6 +3867,9 @@ class Storage:
         been through ``_normalise_phone`` in the memory worker, so
         nothing else is needed here. Empty/whitespace input returns ``[]``.
         """
+        from zylch.qonto.task_access import ordinary_tasks
+        from zylch.qonto.task_records import public_task
+
         if not (contact_phone or "").strip():
             return []
         try:
@@ -3859,14 +3877,14 @@ class Storage:
                 rows = (
                     session.query(TaskItem)
                     .filter(
-                        TaskItem.owner_id == owner_id,
+                        ordinary_tasks(owner_id),
                         TaskItem.contact_phone == contact_phone.strip(),
                         TaskItem.completed_at.is_(None),
                     )
                     .order_by(TaskItem.created_at.desc())
                     .all()
                 )
-                return [r.to_dict() for r in rows]
+                return [public_task(r) for r in rows]
         except Exception as e:
             logger.error(f"Failed to get tasks by contact_phone {contact_phone}: {e}")
             return []
@@ -3900,6 +3918,9 @@ class Storage:
         thread even when the sender changes) and the WA task path
         (cross-channel close when the user replies on WhatsApp).
         """
+        from zylch.qonto.task_access import ordinary_tasks
+        from zylch.qonto.task_records import public_task
+
         if not thread_id:
             return []
         try:
@@ -3915,7 +3936,7 @@ class Storage:
                     .all()
                 }
 
-                q = session.query(TaskItem).filter(TaskItem.owner_id == owner_id)
+                q = session.query(TaskItem).filter(ordinary_tasks(owner_id))
                 if open_only:
                     q = q.filter(TaskItem.completed_at.is_(None))
                 rows = q.all()
@@ -3937,7 +3958,7 @@ class Storage:
                         if any(eid in thread_email_ids for eid in src_emails):
                             matched = True
                     if matched:
-                        matches.append(r.to_dict())
+                        matches.append(public_task(r))
                         seen_ids.add(r.id)
                 self._enrich_tasks_with_last_signal(session, matches)
                 return matches
@@ -3955,9 +3976,15 @@ class Storage:
         new_reason: str,
     ) -> bool:
         """Merge new sources into existing task, update if more urgent."""
+        from zylch.qonto.task_access import ordinary_tasks
+
         try:
             with get_session() as session:
-                task = session.query(TaskItem).filter(TaskItem.id == task_id).one_or_none()
+                task = (
+                    session.query(TaskItem)
+                    .filter(TaskItem.id == task_id, ordinary_tasks(owner_id))
+                    .one_or_none()
+                )
 
                 if not task:
                     return False
@@ -4038,6 +4065,9 @@ class Storage:
 
         Returns True when a row was updated.
         """
+        from zylch.qonto.task_access import visible_tasks, task_session
+        from zylch.qonto.task_records import user_edit
+
         if not isinstance(actor, str):
             raise ValueError("complete_task_item requires actor to be a string")
         if not isinstance(why, str):
@@ -4049,10 +4079,10 @@ class Storage:
         display_note = (note.strip() or None) if note is not None else (why or None)
         audit_why = why or display_note or "task closed without a supplied reason"
         try:
-            with get_session() as session:
+            with task_session() as session:
                 task = (
                     session.query(TaskItem)
-                    .filter(TaskItem.id == task_id, TaskItem.owner_id == owner_id)
+                    .filter(TaskItem.id == task_id, visible_tasks(owner_id))
                     .one_or_none()
                 )
                 if task is None:
@@ -4073,10 +4103,10 @@ class Storage:
                 task.close_actor = actor
                 task.close_note = display_note
                 task.sources = sources
+                user_edit(task, "completed_at")
                 session.flush()
                 logger.debug(
-                    f"[complete_task_item] task_id={task_id} actor={actor} "
-                    f"why={audit_why!r} rows=1"
+                    f"[complete_task_item] task_id={task_id} actor={actor} " f"why={audit_why!r} rows=1"
                 )
                 return True
         except Exception as e:
@@ -4102,6 +4132,8 @@ class Storage:
 
         Returns the number of tasks closed.
         """
+        from zylch.qonto.task_access import ordinary_tasks
+
         if max_age_days <= 0:
             return 0
         cutoff = datetime.now(timezone.utc) - timedelta(days=max_age_days)
@@ -4112,7 +4144,7 @@ class Storage:
                 rows = (
                     session.query(TaskItem)
                     .filter(
-                        TaskItem.owner_id == owner_id,
+                        ordinary_tasks(owner_id),
                         TaskItem.completed_at.is_(None),
                         TaskItem.action_required.is_(True),
                         TaskItem.channel == "phone",
@@ -4134,8 +4166,7 @@ class Storage:
                     r.close_actor = "age_sweep.phone"
                 session.flush()
                 logger.info(
-                    f"[age-sweep] auto-closed {len(rows)} phone task(s) "
-                    f"older than {max_age_days}d"
+                    f"[age-sweep] auto-closed {len(rows)} phone task(s) " f"older than {max_age_days}d"
                 )
                 return len(rows)
         except Exception as e:
@@ -4173,6 +4204,9 @@ class Storage:
         Returns the stored ``due_at`` on success, ``None`` when no open
         task with that id belongs to the owner.
         """
+        from zylch.qonto.task_access import visible_tasks, task_session
+        from zylch.qonto.task_records import user_edit
+
         actor = (actor or "").strip()
         if not actor:
             raise ValueError("snooze_task_item requires a non-empty actor")
@@ -4183,10 +4217,10 @@ class Storage:
         else:
             resolved = float(due_at)
         try:
-            with get_session() as session:
+            with task_session() as session:
                 task = (
                     session.query(TaskItem)
-                    .filter(TaskItem.id == task_id, TaskItem.owner_id == owner_id)
+                    .filter(TaskItem.id == task_id, visible_tasks(owner_id))
                     .one_or_none()
                 )
                 if task is None:
@@ -4213,6 +4247,7 @@ class Storage:
                 )
                 sources["snoozes"] = history
                 task.sources = sources
+                user_edit(task, "due_at")
                 session.flush()
                 logger.info(
                     f"[snooze] task {task_id} due_at {previous} → {resolved} "
@@ -4233,6 +4268,9 @@ class Storage:
         that would otherwise be inevitable when the user disagrees with
         the arbiter's keeper choice.
         """
+        from zylch.qonto.task_access import visible_tasks, task_session
+        from zylch.qonto.task_records import user_edit
+
         try:
             import time as _time
 
@@ -4243,20 +4281,18 @@ class Storage:
             # If a stamp ever shows up again without a matching line here,
             # the writer is OUTSIDE the engine (direct SQLite access).
             logger.info(f"[reopen] task {task_id} reopened; dedup_skip_until={skip_until}")
-            with get_session() as session:
-                count = (
+            with task_session() as session:
+                task = (
                     session.query(TaskItem)
-                    .filter(TaskItem.id == task_id, TaskItem.owner_id == owner_id)
-                    .update(
-                        {
-                            "completed_at": None,
-                            "close_note": None,
-                            "close_actor": None,
-                            "dedup_skip_until": skip_until,
-                        }
-                    )
+                    .filter(TaskItem.id == task_id, visible_tasks(owner_id))
+                    .one_or_none()
                 )
-                return count > 0
+                if task is None:
+                    return False
+                task.completed_at = task.close_note = task.close_actor = None
+                task.dedup_skip_until = skip_until
+                user_edit(task, "completed_at")
+                return True
         except Exception as e:
             logger.error(f"Failed to reopen task {task_id}: {e}")
             return False
@@ -4294,17 +4330,29 @@ class Storage:
         updates do not overwrite it (the FIRST WA touchpoint on a task
         defines its chat).
         """
+        from zylch.qonto.task_access import visible_tasks, task_session
+        from zylch.qonto.task_records import user_edit
+
         try:
-            with get_session() as session:
+            with task_session() as session:
                 task = (
                     session.query(TaskItem)
-                    .filter(TaskItem.id == task_id, TaskItem.owner_id == owner_id)
+                    .filter(TaskItem.id == task_id, visible_tasks(owner_id))
                     .one_or_none()
                 )
 
                 if not task:
                     return False
 
+                if (task.sources or {}).get("_qonto") and any(
+                    (
+                        add_source_email,
+                        add_source_calendar_event,
+                        add_source_whatsapp_message,
+                        whatsapp_chat_jid,
+                    )
+                ):
+                    return False
                 sources = dict(task.sources or {})
 
                 if add_source_email:
@@ -4345,6 +4393,19 @@ class Storage:
                     task.title = title
                 task.analyzed_at = datetime.now(timezone.utc)
 
+                user_edit(
+                    task,
+                    *[
+                        name
+                        for name, value in (
+                            ("urgency", urgency),
+                            ("suggested_action", suggested_action),
+                            ("reason", reason),
+                            ("title", title),
+                        )
+                        if value
+                    ],
+                )
                 session.flush()
                 return True
 
@@ -4472,12 +4533,15 @@ class Storage:
         to "all": a filter that silently does not filter is the exact
         failure the RPC param check exists to prevent.
         """
+        from zylch.qonto.task_access import visible_tasks, task_session
+        from zylch.qonto.task_records import public_task
+
         if due_filter not in ("all", "due_now"):
             raise ValueError(f"due_filter must be 'all' or 'due_now', got {due_filter!r}")
         try:
-            with get_session() as session:
+            with task_session() as session:
                 query = session.query(TaskItem).filter(
-                    TaskItem.owner_id == owner_id,
+                    visible_tasks(owner_id),
                 )
                 if not include_completed:
                     query = query.filter(TaskItem.completed_at.is_(None))
@@ -4499,7 +4563,7 @@ class Storage:
                     .all()
                 )
 
-                tasks = [r.to_dict() for r in rows]
+                tasks = [public_task(r) for r in rows]
                 self._enrich_tasks_with_last_signal(session, tasks)
 
                 # Sort by pinned DESC, then urgency: critical -> high -> medium -> low.
@@ -4533,19 +4597,22 @@ class Storage:
         ``close_note`` and ``close_actor``) enriched with
         ``last_signal_at``, or ``None``.
         """
+        from zylch.qonto.task_access import visible_tasks, task_session
+        from zylch.qonto.task_records import public_task
+
         if not task_id:
             return None
         try:
-            with get_session() as session:
+            with task_session() as session:
                 row = (
                     session.query(TaskItem)
-                    .filter(TaskItem.owner_id == owner_id, TaskItem.id == task_id)
+                    .filter(visible_tasks(owner_id), TaskItem.id == task_id)
                     .one_or_none()
                 )
                 if row is None:
                     logger.debug(f"[get_task_by_id] task_id={task_id} -> None")
                     return None
-                task = row.to_dict()
+                task = public_task(row)
                 self._enrich_tasks_with_last_signal(session, [task])
                 logger.debug(
                     f"[get_task_by_id] task_id={task_id} -> "
@@ -4564,15 +4631,17 @@ class Storage:
         prefix are escaped so a user-typed wildcard cannot turn a
         prefix match into a full-table match.
         """
+        from zylch.qonto.task_access import visible_tasks, task_session
+
         if not prefix:
             return []
         escaped = prefix.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
         try:
-            with get_session() as session:
+            with task_session() as session:
                 rows = (
                     session.query(TaskItem.id)
                     .filter(
-                        TaskItem.owner_id == owner_id,
+                        visible_tasks(owner_id),
                         TaskItem.id.like(f"{escaped}%", escape="\\"),
                     )
                     .all()
@@ -4586,30 +4655,35 @@ class Storage:
 
     def set_task_pinned(self, owner_id: str, task_id: str, pinned: bool) -> bool:
         """Set the pinned flag on a task. Returns True if a row was updated."""
+        from zylch.qonto.task_access import visible_tasks, task_session
+        from zylch.qonto.task_records import user_edit
+
         try:
-            with get_session() as session:
-                count = (
+            with task_session() as session:
+                task = (
                     session.query(TaskItem)
-                    .filter(TaskItem.owner_id == owner_id, TaskItem.id == task_id)
-                    .update({"pinned": bool(pinned)})
+                    .filter(TaskItem.id == task_id, visible_tasks(owner_id))
+                    .one_or_none()
                 )
-                logger.debug(
-                    f"set_task_pinned(owner_id={owner_id}, task_id={task_id}, "
-                    f"pinned={pinned}) -> updated={count}"
-                )
-                return count > 0
+                if task is None:
+                    return False
+                task.pinned = bool(pinned)
+                user_edit(task, "pinned")
+                return True
         except Exception as e:
             logger.error(f"Failed to set pinned on task {task_id}: {e}")
             return False
 
     def task_item_exists(self, owner_id: str, event_type: str, event_id: str) -> bool:
         """Check if a task item already exists."""
+        from zylch.qonto.task_access import ordinary_tasks
+
         try:
             with get_session() as session:
                 row = (
                     session.query(TaskItem.id)
                     .filter(
-                        TaskItem.owner_id == owner_id,
+                        ordinary_tasks(owner_id),
                         TaskItem.event_type == event_type,
                         TaskItem.event_id == event_id,
                     )
@@ -4637,15 +4711,17 @@ class Storage:
 
     def get_task_items_stats(self, owner_id: str) -> Optional[Dict[str, Any]]:
         """Get task items statistics for a user."""
+        from zylch.qonto.task_access import visible_tasks, task_session
+
         try:
-            with get_session() as session:
+            with task_session() as session:
                 rows = (
                     session.query(
                         TaskItem.action_required,
                         TaskItem.completed_at,
                         TaskItem.analyzed_at,
                     )
-                    .filter(TaskItem.owner_id == owner_id)
+                    .filter(visible_tasks(owner_id))
                     .all()
                 )
 
@@ -4672,9 +4748,11 @@ class Storage:
 
     def clear_task_items(self, owner_id: str) -> int:
         """Clear all task items for a user (for refresh)."""
+        from zylch.qonto.task_access import ordinary_tasks
+
         try:
             with get_session() as session:
-                count = session.query(TaskItem).filter(TaskItem.owner_id == owner_id).delete()
+                count = session.query(TaskItem).filter(ordinary_tasks(owner_id)).delete()
                 logger.info(f"Cleared {count} task items for {owner_id}")
                 return count
         except Exception as e:

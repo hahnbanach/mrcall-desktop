@@ -181,6 +181,8 @@ split indexes.**
 | docs/ipc-contract.md | 1218 | keep whole — it is the method index, retrieved by traversal; splitting it buys more reads, not fewer | 2026-08-26 |
 | docs/execution-plans/proactive-task-open.md | 575 | keep whole — one workstream's argument, read end to end | 2026-08-26 |
 | docs/execution-plans/cross-machine-transport.md | 428 | keep whole — one workstream's argument, read end to end | 2026-08-26 |
+| docs/execution-plans/2026-09-29-toward-sandbox.md | 3947 | split — prune obsolete rollout narrative and separate distinct operational subjects deliberately | 2026-10-04 |
+| docs/remote-backend.md | 511 | keep whole — host operations index, read by section | 2026-10-04 |
 
 | docs/briefs/2026-09-08-shared-company-memory-implementation.md | 598 | keep whole — one company-memory design argument, read by section | 2026-09-10 |
 | docs/execution-plans/2026-09-23-gpt-live-engine-integration.md | 449 | keep whole — one bounded four-milestone plan and its acceptance evidence, read by section | 2026-09-24 |
@@ -191,6 +193,10 @@ split indexes.**
 - **OPEN (2026-10-01):** The oversized session record above needs deliberate
   pruning by its owning workflow; this documentation close records the gate's
   size advisory and does not edit or inspect that session's content.
+
+- **OPEN (2026-10-04):** The sandbox plan above needs deliberate narrative
+  pruning and subject-level separation; recording its size verdict does not
+  begin that separate workstream.
 
 ## Resolved
 

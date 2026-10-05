@@ -47,6 +47,7 @@ ENV/
 .env
 .env.*
 !.env.example
+!docs/examples/.env.qonto.example
 env
 credentials/
 **/credentials/

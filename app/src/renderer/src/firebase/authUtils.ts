@@ -29,6 +29,17 @@ type TokenPusher = (info: {
 let tokenPusher: TokenPusher | null = null
 let authGeneration = 0
 let revokedUser: User | null = null
+const invalidationListeners = new Set<() => void>()
+
+export function onAuthSessionInvalidated(listener: () => void): () => void {
+  invalidationListeners.add(listener)
+  return () => { invalidationListeners.delete(listener) }
+}
+
+export function isAuthSessionActive(): boolean {
+  const user = auth.currentUser
+  return !!user && !user.isAnonymous && revokedUser !== user
+}
 
 export function setTokenPusher(fn: TokenPusher | null): void {
   tokenPusher = fn
@@ -39,6 +50,11 @@ export function invalidateAuthSession(): void {
   revokedUser = auth.currentUser
   tokenPusher = null
   stopProactiveRefresh()
+  // Notify before either logout RPC: Firebase may fail without emitting a
+  // user change, and the retired transport deliberately suppresses events.
+  for (const listener of invalidationListeners) {
+    try { listener() } catch { console.warn('[firebase/authUtils] session invalidation listener failed') }
+  }
 }
 
 function sessionIsCurrent(user: User, generation: number): boolean {
@@ -96,6 +112,9 @@ function stopProactiveRefresh(): void {
 
 export function setupAuthListener(onUserChange?: (user: User | null) => void): () => void {
   let active = true
+  // The auth gate must unmount its whole private shell even when Firebase
+  // signOut fails and emits no user change (including pending task lists).
+  const offInvalidation = onAuthSessionInvalidated(() => onUserChange?.(null))
   const offRefresh = window.zylch.account.onTokenRefreshRequest(async (uid) => {
     const user = auth.currentUser
     if (!active || !user || user.isAnonymous || user.uid !== uid) return false
@@ -127,6 +146,7 @@ export function setupAuthListener(onUserChange?: (user: User | null) => void): (
     active = false
     authGeneration++
     stopProactiveRefresh()
+    offInvalidation()
     offRefresh()
     unsub()
   }

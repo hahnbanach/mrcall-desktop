@@ -100,6 +100,8 @@ BUILT_SQL = Counter(
         ("zylch/email/sync_cursor.py", "set_cursor", "exec_driver_sql"): 1,
         ("zylch/memory/join_import.py", "_put", "exec_driver_sql"): 1,
         ("zylch/memory/join_import.py", "_rows", "exec_driver_sql"): 1,
+        # Fixed table/column/type constants add columns to private profile tables.
+        ("zylch/qonto/migration.py", "sync_columns", "exec_driver_sql"): 1,
         ("zylch/rpc/preparation.py", "preparation_status", "exec_driver_sql"): 2,
         ("zylch/services/command_handlers.py", "handle_email", "text"): 2,
         ("zylch/services/preparation.py", "_finish", "exec_driver_sql"): 1,

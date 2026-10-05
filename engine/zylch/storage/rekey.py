@@ -33,6 +33,9 @@ from cryptography.fernet import Fernet, InvalidToken
 
 from zylch.storage.database import get_session
 from zylch.storage.models import OAuthToken
+from zylch.qonto.models import QontoConnection
+from zylch.qonto.secrets import decode_envelope
+from zylch.qonto.errors import QontoError
 from zylch.utils.encryption import is_encrypted as _looks_encrypted
 
 logger = logging.getLogger(__name__)
@@ -124,6 +127,21 @@ def rekey(old_key: str, new_key: str) -> RekeyReport:
             walked = _rekey_inner(_load(outer_plain), old, new, report, row.provider)
             row.credentials = new.encrypt(_dump(walked, outer_plain).encode()).decode()
             report.rewritten += 1
+        for row in _qonto_rows(session):
+            token = row.encrypted_credentials
+            if not token:
+                continue
+            try:
+                decode_envelope(token, new)
+                report.already += 1
+            except QontoError:
+                try:
+                    decode_envelope(token, old)
+                    plain = old.decrypt(token.encode())
+                    row.encrypted_credentials = new.encrypt(plain).decode()
+                    report.rewritten += 1
+                except QontoError:
+                    report.failed.append("qonto: credential envelope does not decrypt")
     logger.info(
         f"[rekey] rewritten={report.rewritten} already={report.already} "
         f"plaintext={report.plaintext} failed={len(report.failed)}"
@@ -149,6 +167,13 @@ def verify(new_key: str) -> RekeyReport:
                 continue
             _verify_inner(_load(outer_plain), new, report, row.provider)
             report.rewritten += 1
+        for row in _qonto_rows(session):
+            if row.encrypted_credentials:
+                try:
+                    decode_envelope(row.encrypted_credentials, new)
+                    report.rewritten += 1
+                except QontoError:
+                    report.failed.append("qonto: credential envelope does not decrypt")
     return report
 
 
@@ -179,3 +204,11 @@ def _dump(walked, raw: str) -> str:
     if isinstance(walked, str) and walked == raw:
         return raw
     return json.dumps(walked)
+
+
+def _qonto_rows(session):
+    from sqlalchemy import inspect
+
+    if not inspect(session.get_bind()).has_table(QontoConnection.__tablename__):
+        return []
+    return session.query(QontoConnection).all()

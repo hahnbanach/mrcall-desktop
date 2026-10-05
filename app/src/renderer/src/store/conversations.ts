@@ -11,6 +11,7 @@ import {
   type Dispatch
 } from 'react'
 import type { ZylchTask } from '../types'
+import type { FinanceHistoryBinding } from '../finance'
 
 // Where we stash conversations between renderer reloads (Cmd+R,
 // Electron restart, crash). Key is per-profile so two windows bound
@@ -97,6 +98,7 @@ export type Conversation = {
    */
   waChatJid?: string
   sourceEmailId?: string
+  finance?: FinanceHistoryBinding
   history: Msg[]
   draftInput: string
   pendingApproval: Approval | null
@@ -195,6 +197,7 @@ function reducer(state: State, action: Action): State {
 
 type Ctx = {
   state: State
+  openFinanceChat: (uid: string, transport: string) => void
   openTaskChat: (task: ZylchTask) => void
   openThreadChat: (threadId: string, subject: string, sourceEmailId?: string) => void
   closeConversation: (id: string) => void
@@ -349,6 +352,14 @@ export function ConversationsProvider({ children }: { children: ReactNode }) {
       cancelled = true
     }
   }, [profileKey])
+
+  const openFinanceChat = useCallback((uid: string, transport: string) => {
+    dispatch({ type: 'OPEN_TASK_CHAT', conv: {
+      id: 'finance-' + crypto.randomUUID(), title: 'Qonto finance',
+      finance: { mode: 'managed_finance', uid, transport, started: false },
+      history: [], draftInput: '', pendingApproval: null, busy: false
+    } })
+  }, [])
 
   const openTaskChat = useCallback((task: ZylchTask) => {
     const id = 'task-' + task.id
@@ -505,6 +516,7 @@ export function ConversationsProvider({ children }: { children: ReactNode }) {
 
   const value: Ctx = {
     state,
+    openFinanceChat,
     openTaskChat,
     openThreadChat,
     closeConversation,

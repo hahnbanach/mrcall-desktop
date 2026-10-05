@@ -14,6 +14,8 @@ from __future__ import annotations
 
 from typing import Any, Dict, List, TypedDict
 
+from zylch.services.credential_policy import excluded_finance_setting
+
 
 class ModelChoice(TypedDict, total=False):
     value: str  # canonical Anthropic model id written to the .env
@@ -475,12 +477,12 @@ SETTINGS_SCHEMA: List[SettingsField] = [
 
 
 # Set of keys whose value is a secret (used by settings_get to mask).
-SECRET_KEYS = {f["key"] for f in SETTINGS_SCHEMA if f.get("secret")}
+SECRET_KEYS = {f["key"] for f in SETTINGS_SCHEMA if f.get("secret") and not excluded_finance_setting(f["key"])}
 
 # Set of all known keys (used by settings_update to validate).
-KNOWN_KEYS = {f["key"] for f in SETTINGS_SCHEMA}
+KNOWN_KEYS = {f["key"] for f in SETTINGS_SCHEMA if not excluded_finance_setting(f["key"])}
 
 
 def get_schema() -> List[Dict[str, Any]]:
     """Return the schema as a plain list of dicts (JSON-serialisable)."""
-    return [dict(f) for f in SETTINGS_SCHEMA]
+    return [dict(f) for f in SETTINGS_SCHEMA if not excluded_finance_setting(f["key"])]

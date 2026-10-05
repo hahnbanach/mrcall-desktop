@@ -300,6 +300,10 @@ class ToolFactory:
         tools.append(ComposeEmailTool(session_state=session_state))
         logger.info("Compose Email tool initialized")
 
+        from .qonto_tools import create_qonto_tools
+
+        tools.extend(create_qonto_tools())
+
         # Store service client references
         ToolFactory._starchat_client = starchat
         ToolFactory._email_archive = email_archive
