@@ -879,6 +879,12 @@ not started.
      choice is changed. Source and delivery evidence is tracked in the
      [picker repair plan](2026-10-05-business-picker-recovery.md); R5 remains
      active for its real signed-app journey and scratch lifecycle criteria.
+     Source passes integration and two fresh independent final reviews; actual
+     picker/Settings browser checks, 14 renderer-auth checks, typecheck and build
+     pass. Signed/notarized Apple Silicon 0.1.54 is published from `0ab1bd7`
+     (CI 37289911832, source/tag match). Both independent post-CI reviewers
+     return APPROVED; the picker repair plan is completed. The CTO's installed
+     lookup remains pending; publishing the patch does not close R5.
 
    - **Open after this plan, not part of it:**
      - one handset whose speech the voice provider does not transcribe

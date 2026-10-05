@@ -1,5 +1,5 @@
 ---
-status: active
+status: completed
 ---
 
 # Billing-business picker recovery
@@ -82,5 +82,27 @@ No real business data, token, voice value, mail content or paid call is used.
 The next unused patch version is 0.1.54; package and lockfile metadata are aligned.
 Fresh independent final source reviewers `business_picker_final_a` and
 `business_picker_final_b` both return APPROVED for `b3023a3`. Signed CI and
-post-CI delivery reviews are pending.
+post-CI delivery reviews are recorded below.
 The installed application has not changed; R5 remains active.
+
+### Published delivery evidence
+
+Source/tag `0ab1bd7233ed982ad79ebcfbc6bf92519180ec67` (`v0.1.54`) is
+published on main. CI [37289911832](https://github.com/hahnbanach/mrcall-desktop/actions/runs/37289911832)
+completed successfully: sidecar, installer and release attachment all succeed.
+Notary credential validation succeeds and the un-notarized fallback step is
+skipped. Filtered build evidence shows Darwin distribution signing, custom
+`[notarize] submitting`, and no custom notarization skip. The awaited pinned
+notarization library requires Apple's Accepted status and stapling before the
+successful installer step completes. No credential or raw log is recorded.
+
+[Release 0.1.54](https://github.com/hahnbanach/mrcall-desktop/releases/tag/v0.1.54)
+is published (not a draft or prerelease), with Apple Silicon asset
+`MrCall.Desktop-0.1.54-arm64.dmg`, 240719271 bytes, GitHub digest
+`sha256:fbd9281004b8201815b11272cb53c2f576cb33373d0f013078dc0a84d1227380`.
+Filtered metadata: `/tmp/mrcall-picker-release-metadata-20261005.json` (0600).
+Native macOS signature inspection and the installed-patch business lookup are
+not performed on this Linux VPS. Both post-CI delivery reviewers,
+`business_picker_final_a` and `business_picker_final_b`, return APPROVED. This
+repair delivery is completed; the CTO must install the patch, choose the intended business, save and retry a new chat.
+The separate sandbox R5 acceptance remains active.

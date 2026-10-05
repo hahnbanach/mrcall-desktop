@@ -8,7 +8,7 @@ state lives in ../../docs/active-context.md. Historical snapshots are archived.
 
 ## State now
 
-Desktop v0.1.53 is the current published Apple Silicon release. The CTO confirms
+Desktop v0.1.54 is the current published signed/notarized Apple Silicon release. The CTO confirms
 Remote Mario Gmail reconnects after full app quit/reopen. Fresh-device sign-in
 and personal-key GUI entry remain unverified; engine/API checks do not establish
 those packaged-app journeys.
@@ -21,11 +21,12 @@ provisioning share bounded fresh-token retrieval. Focused synthetic tests execut
 actual App/preload/main IPC paths and a local WebSocket handshake; typecheck/build
 pass. Signed/notarized Apple Silicon 0.1.53 is published (CI 37278638471;
 source/tag match, signing observed, notarization required and not skipped).
-The CTO must install that patch; installed-patch GUI acceptance remains pending.
+Current 0.1.54 includes that repair; installed-patch GUI acceptance remains pending.
 Work trace: [auth recovery](../../docs/execution-plans/2026-10-05-desktop-auth-session-recovery.md).
 
-The billing-business picker repair is undergoing source verification and release
-review. Discovery covers company and personal labels, distinguishes failure from
+The billing-business picker repair is published in 0.1.54 after two independent
+source approvals; signed CI 37289911832 passes and both delivery reviewers
+return APPROVED. Discovery covers company and personal labels, distinguishes failure from
 empty results, and requires explicit selection even for a sole result. Bounded
 lookups ignore superseded account/transport results. The precise CTO incident
 remains uncorrelated; an installed-patch search is still needed. Work trace:
