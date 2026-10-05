@@ -1,5 +1,5 @@
 ---
-status: active
+status: completed
 date: 2026-10-05
 brief: ../briefs/2026-10-05-mailboxes-qonto-release-integration.md
 ---
@@ -78,7 +78,7 @@ resetting shared history or replacing live profile databases.
 Brief and plan gates: APPROVED (`pec_qonto_brief_review`,
 `pec_qonto_plan_review`). M1 integration gate: APPROVED
 (`pec_qonto_integration_review`). Separate final gate: APPROVED
-(`pec_qonto_final_review`). Shared-main delivery is the remaining action.
+(`pec_qonto_final_review`). Shared-main delivery completed.
 
 Integrated local Qonto commit `a68ea7b` with shared main `7b4e7d2` and only
 PEC delta `65659b3..83a6700`. Package metadata remains 0.1.55. Auth immediate
@@ -120,3 +120,15 @@ the operator's existing local rewrap already satisfies that limit and is left
 uncommitted. The Qonto brief's link to an ignored local transcript is replaced
 with the durable PEC brief. No release tag, workflow, live profile or service
 has been changed. Installed Desktop and live PEC/provider acceptance remain open.
+
+
+## Delivery
+
+Reviewed integration commit: `a89e261`. A concurrent documentation-only shared
+commit, `fddf760`, was retained in merge `63f1916`; `app/` and `engine/` are
+byte-identical to the reviewed integration. Local main was fast-forwarded with
+all unrelated operator files preserved, and a normal push delivered `63f1916`
+to origin/main. The source now carries both Settings cards and their native
+engine methods for the next release. No tag, installer, workflow dispatch or
+hosted update was performed. This completion record is a documentation-only
+follow-up; installed/live acceptance remains in the original feature plans.
