@@ -909,6 +909,55 @@ not started.
      `opaque_id_delivery_b` both return APPROVED; the repair plan is completed.
      The CTO's installed-patch acceptance remains pending. R5 remains active.
 
+   - **Billing request path verified after Save — 2026-10-05, VPS.**
+     The CTO reports the same visible `business_id_required` before and after
+     Save. Metadata now distinguishes historical chat text from fresh billing
+     events. Before Save, the actual `[billing]` events are `POST /quote` 400
+     `business_id_required` at 14:51:15.739 and 14:51:24.821 UTC. The active
+     Mario Gmail profile receives `settings.update` at 14:53:01.082 UTC and its
+     file now contains a nonempty numeric billing ID. Host and daemon namespace
+     views see the same file inode. Neither the value nor message content is
+     recorded. An earlier read during this diagnosis preceded that save and
+     correctly found the field absent; it is not the post-save state.
+
+     After Save, the two actual billing refusals are `POST /execute` 402
+     `insufficient_credits` at 14:53:22.633 and 14:53:22.886 UTC. Occurrences of
+     the old 400 at 14:53:22.117/121 belong to chat.send history containing an
+     assistant response, not new billing logger events. Substring-only log
+     counts were misleading; the corrected diagnosis filters the billing
+     logger/method/path/status. The post-save requests reach the execute endpoint
+     after quote/local budget reservation; no continuing missing-ID refusal is
+     evidenced there. In the inspected billing source, 402 precedes server
+     admission and provider inference. Deployed billing-source equivalence is
+     not independently established by this check.
+
+     An offline intercepted probe runs the installed interpreter and factory
+     as the daemon user inside its mount/network namespaces. Installed checkout
+     is `776e3f4`. With a synthetic in-memory authentication object and HTTP
+     MockTransport, it reads the saved profile, constructs the actual LLM
+     factory and bounded client, and serializes a synthetic quote. Results:
+     saved ID present, client ID matches saved ID, serialized body contains
+     `business_id` and `request`, serialized ID matches saved ID, no network
+     used. This does not impersonate the user's authentication or run paid AI.
+     The real post-save 402 events independently establish the current server
+     refusal. The sibling billing route's quote/execute schema accepts this
+     top-level field and forwards it to its authorized-business resolver.
+
+     Read-only SQLite queries run as the daemon user: the two post-save proxy
+     reservations use `claude-opus-5`, maximum USD 0.154 and USD 2.937, both
+     unsettled; zero post-save llm_usage rows. These are local holds, not proof
+     of charges. No hold is manually released, no provider/budget/business is
+     changed, no daemon is restarted and the service checkout is unchanged.
+     The 402 establishes insufficient available credits for the requested
+     maximum, not a measured zero balance. Actual credit balance and the
+     installed UI's display of the latest response remain unverified. R5 stays
+     active; the next paid retry needs funded credits for the chosen business
+     or an explicit operator choice of a separately funded provider.
+     Independent verifier `billing_saved_path_verify`: PASS for the strict
+     billing events, daemon-user SQLite counts/amounts and route ordering.
+     Each actual billing event is duplicated at the same timestamp in the
+     journal; these are two post-save attempts, not four.
+
    - **Open after this plan, not part of it:**
      - one handset whose speech the voice provider does not transcribe
        (voice path, not the host; 2026-10-03 diagnosis above);
