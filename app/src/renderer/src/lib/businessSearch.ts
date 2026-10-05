@@ -59,14 +59,16 @@ export function businessSearchMessage(error: unknown): string {
     default: return 'Business search failed. Check the connection and retry.'
   }
 }
+/** Selected IDs are opaque; only discovery text uses format-based routing. */
+type BusinessLookupQuery = string | { businessId: string }
 export function createBusinessLookup(api: BusinessApi) {
   // Raw RPCs already have a 30-second deadline. A timed-out UI must not start
   // another batch while they are still running; obsolete queued work is skipped.
   let tail: Promise<unknown> = Promise.resolve()
-  return (query: string, signal: AbortSignal): Promise<BusinessResults> => {
+  return (query: BusinessLookupQuery, signal: AbortSignal): Promise<BusinessResults> => {
     const task = tail.catch(() => {}).then(async () => {
       if (signal.aborted) throw new BusinessSearchError('cancelled')
-      const filters = businessQueries(query)
+      const filters = typeof query === 'string' ? businessQueries(query) : [{ businessId: query.businessId }]
       const calls = filters.length
         ? filters.map(filter => () => api.searchBusinesses({ ...filter, limit: LIMIT }))
         : [() => api.listMyBusinesses({ limit: LIMIT })]
@@ -91,7 +93,7 @@ export function createBusinessLookup(api: BusinessApi) {
   }
 }
 export function boundedBusinessLookup(
-  lookup: ReturnType<typeof createBusinessLookup>, query: string, controller: AbortController, timeoutMs: number
+  lookup: ReturnType<typeof createBusinessLookup>, query: BusinessLookupQuery, controller: AbortController, timeoutMs: number
 ): Promise<BusinessResults> {
   return new Promise((resolve, reject) => {
     const cleanup = (): void => { clearTimeout(timer); controller.signal.removeEventListener('abort', abort) }

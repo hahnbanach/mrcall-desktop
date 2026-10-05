@@ -886,6 +886,23 @@ not started.
      return APPROVED; the picker repair plan is completed. The CTO's installed
      lookup remains pending; publishing the patch does not close R5.
 
+   - **Selected opaque business ID regression — 2026-10-05.**
+     After installing 0.1.54, the CTO selects a listed business and receives a
+     false billing-eligibility warning. Source identifies the regression: the
+     selected non-UUID ID goes through name-discovery routing instead of an exact
+     businessId lookup. The duplicate ID in the trigger is label fallback plus
+     its metadata display, not a concatenated saved value. Settings Save already
+     validates by exact businessId; no successful save or chat is claimed here.
+     The previous browser fixture covered only UUID IDs and missed this case.
+
+     The [opaque-ID repair](2026-10-05-business-id-resolution.md) uses an explicit
+     exact-ID request for selected/saved values. Discovery and server scoping,
+     selection authority, serialization and cancellation remain unchanged.
+     Actual-picker regressions now include numeric and other opaque synthetic
+     IDs, selection, remount/reopen, exact Save validation, missing IDs and
+     failures. Browser checks, typecheck and build pass. No real business ID,
+     live configuration change or paid request is included; R5 stays active.
+
    - **Open after this plan, not part of it:**
      - one handset whose speech the voice provider does not transcribe
        (voice path, not the host; 2026-10-03 diagnosis above);

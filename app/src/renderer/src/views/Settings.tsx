@@ -1400,7 +1400,7 @@ export function ModelSelect({
 
 // ─── Business picker (SMS_BUSINESS_ID) ───────────────────────────────
 //
-// SMS_BUSINESS_ID must be a real StarChat businessId (a UUID). Typing it
+// SMS_BUSINESS_ID must be a real StarChat businessId (an opaque string). Typing it
 // blind is a footgun: a wrong value gets a cryptic 400/403 only later,
 // when something bills it. This picker resolves it from the businesses
 // the signed-in account can actually see, via the engine RPCs that hit
@@ -1507,7 +1507,7 @@ export function BusinessPicker({
     let cancelled = false
     const controller = new AbortController()
     pending.current = controller
-    void boundedBusinessLookup(lookup, value, controller, lookupTimeoutMs).then(result => {
+    void boundedBusinessLookup(lookup, { businessId: value }, controller, lookupTimeoutMs).then(result => {
       if (cancelled || controller.signal.aborted) return
       const business = result.businesses.find(item => item.businessId === value)
       setCurrentLabel(business ? bizLabel(business) : null)

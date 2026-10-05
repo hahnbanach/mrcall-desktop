@@ -1,6 +1,6 @@
 import React, {useState} from 'react'
 import {createRoot} from 'react-dom/client'
-import {BusinessPicker} from '../src/renderer/src/views/Settings'
+import {BusinessPicker, validateBusinessId} from '../src/renderer/src/views/Settings'
 import {auth} from '../src/renderer/src/firebase/config'
 import {invalidateAuthSession} from '../src/renderer/src/firebase/authUtils'
 
@@ -9,7 +9,7 @@ type Row = Record<string, string | number>
 const params = new URLSearchParams(location.search)
 let mode = params.get('mode') || 'normal'
 const rows: Row[] = [
-  {businessId:'11111111-1111-1111-1111-111111111111',companyName:'Company Match'},
+  {businessId:params.get('rowId') || '11111111-1111-1111-1111-111111111111',companyName:'Company Match'},
   {businessId:'22222222-2222-2222-2222-222222222222',nickname:'Nickname Match'},
   {businessId:'33333333-3333-3333-3333-333333333333',name:'Personal Match'},
   {businessId:'44444444-4444-4444-4444-444444444444',surname:'Surname Match'}
@@ -38,14 +38,15 @@ async function rpc(method:string, query:Params) {
     if ('emailAddress' in query) return {businesses:[rows[0]]}
     const field = ['companyName','nickname','name','surname'].find(key=>key in query)!
     if (String(query[field]).includes('missing')) return {businesses:[]}
-    const found = rows.filter(row=>field in row)
+    const term = String(query[field]).replace(/^%+|%+$/g, '').toLowerCase()
+    const found = rows.filter(row=>field in row && String(row[field]).toLowerCase().includes(term))
     return {businesses: startedMode === 'duplicates' ? [...found,rows[0]] : found}
   } finally {active--}
 }
 const root = createRoot(document.getElementById('root')!)
 Object.assign(window, {
   fixture: {
-    calls:()=>calls, changes:()=>changes, peak:()=>peak, active:()=>active,
+    validate:validateBusinessId, calls:()=>calls, changes:()=>changes, peak:()=>peak, active:()=>active,
     mode:(next:string)=>{mode=next}, release:()=>{pending.splice(0).forEach(resolve=>resolve())},
     transport:()=>{for(const fn of listeners) fn({alive:false,ready:false})},
     reconnect:()=>{for(const fn of listeners) fn({alive:true,ready:true})},

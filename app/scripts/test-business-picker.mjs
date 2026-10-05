@@ -34,6 +34,37 @@ try {
   const unchanged=async()=>assert.equal(await page.evaluate(()=>window.fixture.changes().length),0)
   const open=async(query='')=>{await page.goto(base+query,{waitUntil:'domcontentloaded',timeout:30000});await page.locator('#fixture-picker').click()}
   const search=async(value)=>{const before=await page.evaluate(()=>window.fixture.calls().length);await input.fill(value);await page.waitForFunction(before=>window.fixture.calls().length>before,before);await page.waitForFunction(()=>window.fixture.active()===0 && !document.body.textContent.includes('Searching…'))}
+  // Returned IDs need not be UUIDs: selecting and remounting must resolve the
+  // exact opaque ID, never send it through discovery's name filters.
+  for (const id of ['7300012345', 'fixture-business-alpha']) {
+    const query = '?rowId=' + encodeURIComponent(id)
+    await open(query)
+    await choices.waitFor()
+    await choices.click()
+    await page.waitForFunction(() => !document.querySelector('[role="listbox"]') && window.fixture.calls().some(call => call.method === 'search'))
+    await page.waitForFunction(() => document.querySelector('#fixture-picker').textContent.includes('Company Match'))
+    assert.equal(await page.getByText(/This business ID isn’t one/).count(), 0)
+    assert.deepEqual(await page.evaluate(() => window.fixture.changes()), [id])
+    assert.deepEqual(await page.evaluate(() => window.fixture.calls().filter(call => call.method === 'search').map(call => call.params)), [{businessId:id,limit:25}])
+    assert.equal(await page.evaluate(id => window.fixture.validate(id), id), true)
+    assert.deepEqual(await page.evaluate(() => window.fixture.calls().at(-1).params), {businessId:id,limit:1})
+    await page.locator('#fixture-picker').click()
+    await choices.waitFor()
+    assert.equal(await choices.getAttribute('aria-selected'), 'true')
+    await page.goto(base + query + '&value=' + encodeURIComponent(id), {waitUntil:'domcontentloaded'})
+    await page.waitForFunction(() => document.querySelector('#fixture-picker')?.textContent.includes('Company Match'))
+    assert.deepEqual(await page.evaluate(() => window.fixture.calls()), [{method:'search',params:{businessId:id,limit:25}}])
+    await unchanged()
+    assert.equal(await page.evaluate(() => window.fixture.validate('missing-opaque-id')), false)
+    await page.evaluate(() => window.fixture.mode('reject'))
+    assert.equal(await page.evaluate(id => window.fixture.validate(id), id), null)
+  }
+  await page.goto(base + '?value=missing-opaque-id', {waitUntil:'domcontentloaded'})
+  await page.getByText(/This business ID isn’t one/).waitFor()
+  assert.deepEqual(await page.evaluate(() => window.fixture.calls()), [{method:'search',params:{businessId:'missing-opaque-id',limit:25}}])
+  await page.goto(base + '?value=7300012345&rowId=7300012345&mode=reject', {waitUntil:'domcontentloaded'})
+  await page.getByRole('alert').waitFor()
+  assert.equal(await page.getByText(/This business ID isn’t one/).count(), 0)
   await open()
   await choices.waitFor()
   await unchanged()

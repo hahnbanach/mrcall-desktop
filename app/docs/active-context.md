@@ -32,6 +32,12 @@ lookups ignore superseded account/transport results. The precise CTO incident
 remains uncorrelated; an installed-patch search is still needed. Work trace:
 [picker recovery](../../docs/execution-plans/2026-10-05-business-picker-recovery.md).
 
+A 0.1.54 follow-up fixes selected non-UUID businesses being re-resolved as
+names and falsely marked invalid. Save already validates exact IDs. The repair
+uses explicit opaque-ID resolution and adds actual-picker numeric/non-UUID
+regressions; signed delivery is pending. Work trace:
+[opaque IDs](../../docs/execution-plans/2026-10-05-business-id-resolution.md).
+
 Settings separates MrCall/Anthropic/OpenRouter billing from model selection.
 The free catalog follows the provider; custom defaults and advanced role
 settings are explicit. Keys save on the active engine, including remote profiles.
