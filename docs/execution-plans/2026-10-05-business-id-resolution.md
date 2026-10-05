@@ -44,4 +44,8 @@ Final typecheck/build and `git diff --check` pass (lead tool sessions 23024,
 79411). No live account search or paid call is part of these checks.
 
 Version 0.1.55 was unoccupied at preparation and package metadata is aligned.
-Two final source reviews and signed delivery remain pending.
+Fresh independent source reviewers `opaque_id_final_a` and `opaque_id_final_b`
+both return APPROVED for `1c04412`. Both independently execute the browser
+suite successfully. Reviewer A's first run timed out on an existing click case
+while another browser run was active; its retry passed. Signed delivery and
+post-CI rereviews remain pending.
