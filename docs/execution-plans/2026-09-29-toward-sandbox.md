@@ -1112,8 +1112,16 @@ not started.
      its bytes match the IMAP MIME payload by checksum. No LLM or credits were
      involved. An earlier probe omitted hosted mode and was not accepted as a
      confinement proof; the corrected hosted-mode run passed.
-     Source pin delivery and installed-helper verification follow. The signed
-     app attachment retry remains pending; R5 is still active.
+     Delivery: only Mario Gmail was restarted with a read-only source release
+     `/home/mrcalld/releases/r5-attachments-ed0c8c9/engine`, selected by its
+     `90-attachment-source.conf` PYTHONPATH override. The running checkout was
+     not modified. The daemon is active as its own Unix user, `NRestarts=0`.
+     The installed-source verification (no in-memory lookup replacement) repeated
+     the actual hosted download: success, one 58,449-byte file, checksum matching
+     the IMAP payload, saved within the profile downloads directory. Two
+     independent delivery reviewers APPROVED. Evidence:
+     `attachment-installed.json` in the local metadata-only review artifacts.
+     The signed-app attachment retry remains pending; R5 is still active.
 
    - **Open after this plan, not part of it:**
      - one handset whose speech the voice provider does not transcribe
