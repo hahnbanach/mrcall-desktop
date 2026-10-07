@@ -1123,6 +1123,34 @@ not started.
      `attachment-installed.json` in the local metadata-only review artifacts.
      The signed-app attachment retry remains pending; R5 is still active.
 
+   - **Attachment retry without execution — 2026-10-07, R5 follow-up.**
+     The signed-app retry still claimed no attachments. Metadata from Mario
+     Gmail's daemon shows the 16:12:51 UTC request restored 12 history messages,
+     completed at 16:12:58 UTC, and executed no tools. The process still uses
+     the reviewed attachment release and has `NRestarts=0`. The assistant's
+     claim that it had retried was false: it repeated the earlier failed lookup
+     from history. No mail body or call recording was read for this diagnosis.
+     The ordinary chat system prompt and attachment-tool description now require
+     a fresh download execution for each download/retry request. Earlier prose
+     or empty results cannot establish the current outcome; lookup errors cannot
+     establish absence. Tool selection remains automatic, and combined requests
+     can continue after downloading. Regression checks: 42 passed, 45 warnings
+     in 7.47 seconds; targeted fatal-error lint and diff checks passed.
+     The real deployed provider was tested with automatic tool selection and
+     10 stale history messages, including a previous empty tool result and false
+     assistant claims. It selected `download_attachment` for the correct stored
+     message. The installed LLMResponse projection and hosted attachment tool
+     ran as the daemon user: one 58,449-byte file inside profile downloads. The
+     actual second model response ended normally, contained the saved filename,
+     and did not repeat the absence claim. No mail body or audio was read.
+     Evidence: local metadata-only `attachment-chat-live.json`; this bypasses
+     the signed app and billing admission and is not signed-app acceptance.
+     Two earlier diagnostic continuations failed before dispatch because the
+     harness replayed raw provider blocks. Both failure artifacts are retained;
+     replay through the installed decoder corrected the harness without changing
+     billing or product code. Delivery and signed-app retry remain pending;
+     R5 remains active.
+
    - **Open after this plan, not part of it:**
      - one handset whose speech the voice provider does not transcribe
        (voice path, not the host; 2026-10-03 diagnosis above);

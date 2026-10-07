@@ -34,7 +34,10 @@ class DownloadAttachmentTool(Tool):
                 " the local SQLite store, fetches the attachments over IMAP, and saves"
                 " them to disk. Works for any email provider (Gmail, Outlook, Exchange,"
                 " generic IMAP). Files are saved to the downloads folder, or to"
-                " `target_dir` inside it."
+                " `target_dir` inside it. Call this tool afresh for every download or"
+                " retry request, even if earlier conversation claims no attachments."
+                " Only the current result verifies whether anything was downloaded;"
+                " lookup errors do not establish absence of attachments."
             ),
         )
         self.storage = storage
