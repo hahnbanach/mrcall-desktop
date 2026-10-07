@@ -1084,6 +1084,37 @@ not started.
      The operator explicitly suspended ai-kit for this correction while
      repairing its installation. No running engine checkout was modified.
 
+   - **Attachment folder lookup repair — 2026-10-07, R5 follow-up.**
+     The CTO confirmed the same requested mail has an attachment. The local
+     row reports one attachment. A read-only IMAP probe as Mario Gmail's own
+     daemon user, inside its mount namespace, confirmed the matching Message-ID
+     and one `audio/mpeg` attachment, 58,449 decoded bytes. INBOX, All Mail and
+     Sent returned no match; searching the server's selectable folders found
+     it in the 32nd candidate (99 candidates listed). Folder names, mail text,
+     audio contents and credentials were not printed.
+     Root cause: attachment retrieval searched only those three usual folders
+     and returned `[]` when the message was not found. The tool called that a
+     successful empty download, allowing the assistant to falsely conclude
+     there were no attachments. The lead also wrongly accepted that conclusion
+     before checking; the user's attachment was real.
+     The fix keeps the fast usual-folder path, then searches the remaining
+     selectable folders. UID SEARCH/FETCH and exact fetched Message-ID checking
+     preserve identity; PEEK and read-only selection preserve read state.
+     Missing/incomplete lookup now fails explicitly instead of claiming an
+     empty message. Only an actually fetched message can report no attachments.
+     File-write errors propagate without being reinterpreted as lookup failure.
+     Two independent source reviewers APPROVED after a REVISE finding about
+     fetched identity was corrected. Regression checks: 42 passed, 45 warnings
+     in 7.54 seconds, including PEC, multi-mailbox and filename confinement.
+     A live diagnostic used the actual DownloadAttachmentTool and corrected
+     lookup as the daemon user, in hosted mode and the daemon's mount namespace.
+     It saved one 58,449-byte file under the profile's downloads test subfolder;
+     its bytes match the IMAP MIME payload by checksum. No LLM or credits were
+     involved. An earlier probe omitted hosted mode and was not accepted as a
+     confinement proof; the corrected hosted-mode run passed.
+     Source pin delivery and installed-helper verification follow. The signed
+     app attachment retry remains pending; R5 is still active.
+
    - **Open after this plan, not part of it:**
      - one handset whose speech the voice provider does not transcribe
        (voice path, not the host; 2026-10-03 diagnosis above);

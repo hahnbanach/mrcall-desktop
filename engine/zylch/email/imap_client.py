@@ -1564,34 +1564,71 @@ class IMAPClient:
         if sent and sent not in folders:
             folders.append(sent)
 
-        msg_data = None
-        for folder in folders:
+        def candidates():
+            # Prefer the usual folders; discover all selectable folders only
+            # when those do not hold this exact message.
+            yield from folders
+            status, listed = conn.list()
+            if status != "OK":
+                raise IMAPError("Attachment lookup failed: cannot list IMAP folders")
+            seen = {f.strip('"') for f in folders}
+            for entry in listed or []:
+                if not isinstance(entry, bytes):
+                    raise IMAPError("Attachment lookup failed: unsupported IMAP folder listing")
+                match = re.match(rb'\(([^)]*)\) (?:"(?:[^"\\]|\\.)*"|NIL) (.+)$', entry)
+                if not match:
+                    raise IMAPError("Attachment lookup failed: malformed IMAP folder listing")
+                if b"\\noselect" in match.group(1).lower():
+                    continue
+                folder = match.group(2).decode("utf-8")
+                key = folder.strip('"')
+                if key not in seen:
+                    seen.add(key)
+                    yield folder
+
+        lookup_failed = False
+        msg = None
+        for folder in candidates():
             try:
                 status, _ = conn.select(folder, readonly=True)
                 if status != "OK":
+                    lookup_failed = True
                     continue
-                status, data = conn.search(
-                    None,
+                status, data = conn.uid(
+                    "SEARCH", None,
                     f'(HEADER Message-ID "{message_id}")',
                 )
-                if status != "OK" or not data or not data[0]:
+                if status != "OK":
+                    lookup_failed = True
                     continue
-                msg_num = data[0].split()[-1]
-                status, fetched = conn.fetch(msg_num, "(RFC822)")
-                if status == "OK" and fetched and fetched[0]:
-                    msg_data = fetched
-                    logger.debug(f"[IMAP] fetch_attachments: found {message_id} in {folder}")
-                    break
-            except Exception as e:
-                logger.warning(f"[IMAP] fetch_attachments: folder {folder}: {e}")
+                if not data or not data[0]:
+                    continue
+                # PEEK preserves the unread state, including on providers
+                # that do not enforce EXAMINE's read-only semantics.
+                status, fetched = conn.uid("FETCH", data[0].split()[-1], "(BODY.PEEK[])")
+                bodies = [
+                    item[1] for item in (fetched or [])
+                    if isinstance(item, tuple) and len(item) > 1 and isinstance(item[1], bytes)
+                ]
+                if status != "OK" or not bodies:
+                    raise IMAPError("Attachment lookup failed: message body unavailable")
+                msg = email_lib.message_from_bytes(bodies[0])
+                if str(msg.get("Message-ID", "")).strip() != message_id.strip():
+                    raise IMAPError("Attachment lookup failed: fetched message identity mismatch")
+                break
+            except IMAPError:
+                raise
+            except Exception:
+                lookup_failed = True
                 continue
 
-        if msg_data is None:
-            logger.debug(f"[IMAP] fetch_attachments: message {message_id} not found in {folders}")
-            return []
-
-        msg = email_lib.message_from_bytes(msg_data[0][1])
-        return save_attachments(msg, save_dir)
+        if msg is not None:
+            # File errors must reach the caller; do not reinterpret a failed
+            # write as another folder-search failure.
+            return save_attachments(msg, save_dir)
+        if lookup_failed:
+            raise IMAPError("Attachment lookup incomplete; attachment presence not verified")
+        raise IMAPError("Message not found in selectable IMAP folders; attachments not checked")
 
     @_imap_serialized
     def get_batch(
