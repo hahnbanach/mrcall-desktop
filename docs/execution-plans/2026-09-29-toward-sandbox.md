@@ -1148,8 +1148,16 @@ not started.
      Two earlier diagnostic continuations failed before dispatch because the
      harness replayed raw provider blocks. Both failure artifacts are retained;
      replay through the installed decoder corrected the harness without changing
-     billing or product code. Delivery and signed-app retry remain pending;
-     R5 remains active.
+     billing or product code. Two independent reviewers APPROVED the source
+     and successful real-provider evidence. Delivery: Mario Gmail alone was
+     restarted onto read-only release `r5-attachments-86bf2f1`, retaining the
+     earlier IMAP fix. Its daemon is active under its own user, `NRestarts=0`.
+     The live process pin and all three relevant source hashes match the reviewed
+     code; importing in its mount namespace confirms the fresh-execution prompt
+     and tool description. A further installed-source download again saved one
+     58,449-byte file inside downloads with checksum matching the IMAP payload.
+     Evidence: `attachment-chat-delivery.json` and `attachment-installed.json`.
+     The signed-app retry remains pending; R5 remains active.
 
    - **Open after this plan, not part of it:**
      - one handset whose speech the voice provider does not transcribe
