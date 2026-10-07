@@ -1027,6 +1027,63 @@ not started.
      Existing local holds remain untouched. The real signed-app journey and
      parent R5 remain active.
 
+   - **Context admission diagnosis and repair — 2026-10-07, R5 follow-up.**
+     The CTO's real signed-app attempt reached Mario Gmail. Production billing
+     admissions at 08:18:21.433 and 08:18:30.110 UTC settled FREE with zero
+     credits; the subsequent quote at 08:18:38.716 returned HTTP400
+     `bounded_context_limit_exceeded`. Journal prompt estimates grew from
+     17,929 to 22,361 tokens, with seven then nine messages and 30 tools.
+     The daemon remained active as its own user with zero restarts.
+     Root cause: the billing gateway compared its conservative monetary input
+     allowance with the context window. Thirty tools add 122,880 units to that
+     allowance before counting any serialized input. This is not a provider
+     token count. Earlier billing/decoder fixtures did not establish that the
+     full real chat/tool-result continuation succeeded.
+     The production hotfix retains the monetary bound and obtains free Anthropic
+     token counting only for direct requests that would otherwise hit that
+     guard. Counted input plus 8,192 margin plus output must fit 200,000 tokens.
+     Counter failures refuse before admission; FREE, business authorization,
+     usage verification and replay remain enforced. OpenRouter/K3 is unchanged.
+     Two fresh independent source reviewers APPROVED. Installed engine
+     collection confirmed all 30 real tool schemas (20,671 serialized bytes)
+     and the 27,578-character base system prompt. Diagnostic and delivery
+     evidence below do not by themselves close R5.
+     **Verification:** 214 focused HTTP/provider-fixture/PostgreSQL checks
+     passed, including the seven-to-nine-message continuation. Ruff and Black
+     passed. The broad suite was interrupted under high host load after 1,061
+     passing tests (18 warnings, exit 2); it is not a completed suite pass.
+     The successful live diagnostic used installed engine response projection,
+     actual daemon-user ReadEmailTool and the provider's exact tool ID. Its
+     continuation was 123,701 UTF-8 bytes and 45,779 provider input tokens;
+     old admission refused, corrected admission allowed text/end_turn with
+     four output tokens. The 70,738-character tool result was not truncated.
+     Earlier history was invented and the final turn disabled further tools:
+     this validates the specific continuation, not a complete user journey.
+     Two unsuccessful probes remain recorded: a forced-tool response/refusal
+     plus raw block metadata, and an overly strict tool-only assertion on valid
+     text plus tool_use. A separate lookup timed out without inference. Four
+     inference requests total, USD12.419 aggregate nominal ceilings, no customer
+     credit consumption. No private mail content was written to artifacts.
+     Both independent reviewers APPROVED the source and evidence with these
+     limits. Isolated backend production commit `37f330d` extends `45812bd`;
+     [pipeline 2921422750](https://gitlab.com/hahnbanach/mrcall-agent/-/pipelines/2921422750)
+     succeeded in all four jobs. CI passed 940 tests with 157 PostgreSQL-dependent
+     skips (covered locally), 101 warnings, 111.48 seconds. At 10:31 UTC,
+     actual image `prod-37f330d0` had one ready/updated/available replica,
+     zero restarts and public health HTTP200. Installed pricing/context source
+     hashes match the checkout; image digest is
+     `sha256:e003f252bff70ba636e40b4caf132c56bf921e70f52643113f59d83de34a2079`.
+     Main integration `12cbc2c` preserves catalog/V1/V2 forwarding and snapshot
+     binding: 295 focused checks passed, repository Ruff/Black passed, two fresh
+     independent integration reviewers APPROVED. Main's unreleased catalog/v2
+     code is not part of this production rollout.
+     **CTO signed-app feedback:** the requested mail was found. The next steps
+     are downloading its attachment, opening it and searching its contents.
+     Those results are pending; R5 stays active. Existing local holds remain
+     untouched. The gateway experiment above is not substituted for app acceptance.
+     The operator explicitly suspended ai-kit for this correction while
+     repairing its installation. No running engine checkout was modified.
+
    - **Open after this plan, not part of it:**
      - one handset whose speech the voice provider does not transcribe
        (voice path, not the host; 2026-10-03 diagnosis above);
