@@ -52,6 +52,7 @@ jobs:
           ENGINE_PYTHON: python
           CS_KERNEL_ROOT: ${{ github.workspace }}/cs-kernel
         run: |
+          cp src/main/oauthSecrets.example.ts src/main/oauthSecrets.ts
           npm run typecheck
           npm run test:rpc-contracts
       - name: Check registry and task lifecycle over both transports
