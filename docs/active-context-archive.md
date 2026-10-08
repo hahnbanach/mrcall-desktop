@@ -16,6 +16,13 @@ cannot assign across that boundary. The [assignment
 plan](execution-plans/2026-10-08-explicit-task-assignment.md) owns released local lifecycle
 acceptance; release verification creates no real assignment.
 
+## 2026-10-08 — Superseded sandbox final-gate state
+
+Mario Gmail has CTO-reported installed-app acceptance for mail, attachment
+transfer and document lookup/read by basename. Its attachment source pin is
+separate from the service checkout. R5 still requires representative scratch
+lifecycle and consistent A/B isolation evidence, followed by final reviews.
+
 ## 2026-10-08 — Superseded release state
 
 Desktop `v0.1.55` carries the auth and billing-business fixes; its tag and
