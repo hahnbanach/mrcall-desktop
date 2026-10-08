@@ -111,15 +111,21 @@ The model:
   `tenant.conf`, and the order among the others is kept. A pin carries
   only `Environment=PYTHONPATH=`; a different command line goes in the
   `tenant-exec` declaration below. A reconcile in which any `create` is
-  refused exits 3, naming the profiles, so `zylch-reconcile.service`
-  shows `Result=failed`; the units keep their previous `tenant.conf`.
-- **Leaving a shared company store hands the leaver's files to root.**
-  When `mrcall-tenant delete` removes a holder that is not the last, the
-  company files it created (the store, `-wal`, `-shm`, `backups/`) go to
-  `root:<company group>`, with their modes unchanged. That happens before
-  its user is removed, so no later user given the same numeric uid owns
-  them; the remaining members keep their group access. If any file is
-  left, `delete` stops before removing anything else.
+  refused exits 3, naming the profiles, so `zylch-reconcile.service` ends
+  `ActiveState=failed`, `Result=exit-code`, `ExecMainStatus=3`; the units
+  keep their previous `tenant.conf`.
+- **Leaving hands the leaver's company files to root and removes its
+  egress.** Before `mrcall-tenant delete` removes a user, it gives every
+  file that user owns in any company directory, plus any file of no
+  existing user, to `root:<that directory's group>`:
+  - this covers the store, `-wal`, `-shm`, `backups/` and lock files;
+  - modes are unchanged;
+  - remaining members keep their group access;
+  - if anything is left, `delete` stops before removing anything else.
+
+  It also removes the tenant's egress units, nftables table and
+  `/etc/mrcalld/egress/<user>`. Both are keyed on the numeric uid, which
+  a later user may be given.
 - A unit that needs **its own interpreter or the production voice
   listener** is declared by the operator in `/etc/mrcalld/tenant-exec/<uid>`
   (`0600 root`): `INTERPRETER=<release>/venv/bin/zylch` and/or

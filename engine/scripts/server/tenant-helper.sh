@@ -251,6 +251,50 @@ check_dropins() {
   done
 }
 
+# The company files a leaving holder created (the store, -wal, -shm,
+# backups, locks) outlive it when others still hold the key, and keep its
+# numeric uid: the next user given that uid would own them. Every company
+# directory is swept, not only the current key's (a holder that changed
+# company or stopped mid-join), and so are files of no existing user (an
+# earlier delete, a manual userdel). They go to root and the directory's
+# group, modes untouched (no chmod: it follows links). -execdir and chown -h:
+# a member who swaps an entry for a link moves only the link. A member's
+# SQLite may remove its -wal/-shm while find runs: the chown pass may then
+# fail on a vanished name, so only the re-check decides, after a retry.
+hand_company_files() {
+  local d gid left attempt
+  local -a who=(-nouser)
+  id "$user" >/dev/null 2>&1 && who=(\( -user "$user" -o -nouser \))
+  for d in "$MEMORY"/mc-c-*; do
+    [ -d "$d" ] && [ ! -L "$d" ] || continue
+    gid=$(stat -c %g -- "$d")
+    for attempt in 1 2 3; do
+      find "$d" -xdev -ignore_readdir_race "${who[@]}" -execdir chown -h "0:$gid" -- {} + 2>/dev/null || true
+      left=$(find "$d" -xdev -ignore_readdir_race "${who[@]}" -print -quit)
+      [ -z "$left" ] && break
+      sleep 1
+    done
+    [ -z "$left" ] || die "files of $user or of no user remain under $d; nothing deleted (unit disabled) — fix and re-run delete"
+  done
+  log "company files of $user handed to root"
+}
+
+# The tenant's egress firewall and resolver (plan M3, egress_policy.py) are
+# keyed on its numeric uid: left in place they would bind the next user
+# given that uid. Observe-mode units are removed too.
+remove_egress() {
+  local tag=${user#mc-} unit_name
+  for unit_name in "mrcall-dns-$tag.service" "mrcall-egress-$tag.service" \
+                   "mrcall-observe-$tag.service" "mrcall-observe-refresh-$tag.timer" \
+                   "mrcall-observe-refresh-$tag.service"; do
+    systemctl disable --now "$unit_name" >/dev/null 2>&1 || true
+    rm -f "/etc/systemd/system/$unit_name"
+  done
+  nft delete table inet "mc_egress_$tag" >/dev/null 2>&1 || true
+  ! nft list table inet "mc_egress_$tag" >/dev/null 2>&1 || die "egress table mc_egress_$tag remains"
+  rm -rf "/etc/mrcalld/egress/$user"
+}
+
 # Legacy migrated profiles have no reliable original mode. Re-apply remains
 # supported, but rollback requires the operator to import the recorded mode
 # (0600 root file here) from the migration backup, never infer it from 0700.
@@ -748,22 +792,12 @@ delete)
     # is disabled); fix and re-run `delete`
     as_tenant "$user" "$profile_dir" -p "$uid" memory-offboard --yes $last || die "offboard failed; nothing deleted (unit disabled, .deleting keeps reconcile off it) — fix and re-run delete"
   fi
-  # The company files this user created (the store, -wal, -shm, backups)
-  # outlive it when others still hold the key. Left as they are they keep its
-  # numeric uid, and the next user given that uid would own them: hand them
-  # to root, keeping the group access every remaining member uses. -execdir
-  # and chown -h: a member who swaps an entry for a link moves only the link.
-  if [ -z "$last" ] && [ -n "$group" ] && id "$user" >/dev/null 2>&1 && [ -d "$MEMORY/$group" ] && [ ! -L "$MEMORY/$group" ]; then
-    find "$MEMORY/$group" -xdev -user "$user" -execdir chown -h "root:$group" -- {} + \
-      || die "cannot hand $user's company files to root; nothing deleted (unit disabled) — fix and re-run delete"
-    [ -z "$(find "$MEMORY/$group" -xdev -user "$user" -print -quit)" ] \
-      || die "files of $user remain under $MEMORY/$group; nothing deleted (unit disabled) — fix and re-run delete"
-    log "company files of $user handed to root:$group"
-  fi
+  hand_company_files
   rm -rf "$profile_dir"
   rm -f "$keyfile" "$fragment" "$voice_copy" "$exec_decl" "$modefile"
   rm -rf "$dropin_d" "$RUN_ROOT/$uid"
   [ -L "$RUN_ROOT/$uid.sock" ] && rm -f "$RUN_ROOT/$uid.sock"
+  remove_egress
   if id "$user" >/dev/null 2>&1; then userdel "$user"; log "removed user $user"; fi
   if [ -n "$last" ] && [ -n "$group" ]; then
     rm -rf "$MEMORY/$group"; groupdel "$group" >/dev/null 2>&1 || true

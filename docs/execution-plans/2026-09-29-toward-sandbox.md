@@ -1345,21 +1345,35 @@ not started.
      reviews. No live profile or refused unit was modified to force a pass.
 
    - **Repair of both blockers — 2026-10-08, cloud session.**
-     - *Surviving company files.* Before removing the user of a holder
-       that is not the last, `mrcall-tenant delete` hands every file under
-       `$MEMORY/<group>` that the user owns to `root:<group>`:
-       - `find -xdev -user … -execdir chown -h`, so a member who swaps an
-         entry for a link moves only the link;
-       - modes are left as they are. There is deliberately no `chmod`,
-         because it follows links;
-       - `delete` then checks that nothing is left and stops otherwise,
-         before removing anything.
+     - *Surviving company files.* Before removing the user,
+       `mrcall-tenant delete` hands to `root:<that directory's group>`
+       every file the user owns in any company directory. Two reasons:
+       - a holder that changed company or stopped mid-join leaves files
+         outside its current key's directory;
+       - files of no existing user (an earlier delete, a manual `userdel`)
+         are orphans already.
+
+       How it does it:
+       - `find -xdev -ignore_readdir_race … -execdir chown -h`. A member who
+         swaps an entry for a link moves only the link.
+       - Modes are left as they are. There is deliberately no `chmod`,
+         because it follows links.
+       - A member's SQLite may remove its `-wal`/`-shm` mid-pass. So the
+         chown pass may fail on a vanished name, and only the re-check
+         decides, after up to three tries. If anything is left, `delete`
+         stops before removing anything.
+
+       `delete` also removes the tenant's egress units, nftables table and
+       `/etc/mrcalld/egress/<user>`. They are keyed on the numeric uid and
+       would bind a later user given it.
 
        Checked here with real users and groups:
        - the leaver's store, `-wal`, `-shm`, `backups/` and a link become
-         `root:<group>` with their modes kept (`0660`, `2770` with setgid);
+         root-owned with their modes kept (`0660`, `2770` with setgid);
        - another member's file is untouched, and the link's target is not
          followed;
+       - a second company directory and an orphan of a deleted user are
+         handed too;
        - after the leaver's user is deleted, the remaining member writes to
          the `0660` WAL store twice. It also recovers the leaver's committed
          row from the WAL left behind.
@@ -1371,8 +1385,15 @@ not started.
        refusal now names the file and the fix: `t0-<name>.conf` sorts after
        every other operator drop-in and before `tenant.conf`. The
        reconcile no longer hides a refusal: it exits 3 naming the refused
-       profiles, so the unit shows `Result=failed` and `reconcile-notify`
-       mails `exit=3`. Documented in `docs/remote-backend.md`.
+       profiles, so `zylch-reconcile.service` ends `ActiveState=failed`,
+       `Result=exit-code`, `ExecMainStatus=3`, and `reconcile-notify` mails
+       `exit=3`. Documented in `docs/remote-backend.md`. Plans that require
+       `Result=success` of a reconcile, such as
+       `2026-10-04-r5-mail-owner-cleanup.md`, therefore need the six pins
+       renamed first.
+     - *Review.* The first review returned REVISE on wording, the
+       vanished-WAL race, single-directory scope and egress leftovers. All
+       four are fixed above.
 
      *VPS, to close R5:*
      1. For each of the six units, record:
@@ -1388,8 +1409,10 @@ not started.
         not set it).
      3. Pull `main` and reconcile: exit 0, seven `ready`.
      4. Repeat the scratch lifecycle:
-        - after the first deletion, no file under the company directory
-          belongs to the deleted uid;
+        - after the first deletion, no file under any company directory
+          belongs to the deleted uid or to no user, and no egress unit,
+          table or directory of its tag is left (give one scratch holder
+          an egress policy first, so this is exercised);
         - the remaining scratch holder then commits a write to the store,
           as its own user;
         - the last deletion removes everything.

@@ -143,7 +143,8 @@ done
 
 echo "done. (${#UIDS[@]} profiles; code_changed=$CODE_CHANGED dry_run=$DRY prune=$PRUNE)"
 # a refused re-apply leaves that unit on its previous tenant.conf: the
-# reconcile as a whole is not a success (the service shows Result=failed)
+# reconcile as a whole is not a success (the oneshot service ends
+# ActiveState=failed, Result=exit-code, ExecMainStatus=3)
 if [ "${#REFUSED[@]}" -gt 0 ]; then
   echo "FAILED: tenant create refused for ${#REFUSED[@]} profile(s): ${REFUSED[*]}" >&2
   exit 3
