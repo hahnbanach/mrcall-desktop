@@ -8,8 +8,10 @@ local acceptance under the [delivery plan](../../../docs/execution-plans/2026-10
 Six hosted company engines have compatible source, verified root-owned trust,
 tenant-inaccessible independent signing material and complete assignment reads.
 Both maintained clones install kernel `v0.51.0`. Café 124's four profiles share
-one space; MrCall support and Mario remain separate, so assignment between those
-spaces is unavailable. Release checks create no real assignment or customer send.
+one space. MrCall support and Mario share support's company space after the
+separately authorized [fenced join](../../../docs/execution-plans/2026-10-08-mrcall-company-memory-sharing.md),
+with complete authenticated assignment reads for both members and private mailbox/task
+isolation. No real assignment or customer send is part of that acceptance.
 
 Private [ordinary tasks](task-management.md), including Qonto financial rows,
 retain their own storage and visibility. Assignment records share only company

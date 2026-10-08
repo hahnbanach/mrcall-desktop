@@ -1,5 +1,5 @@
 ---
-doc_baseline_commit: 5d9c4a786393125ae5971c7a62698171848ce4e4
+doc_baseline_commit: 06cc4895c759976aec5432e63772b8f5c3d82cdf
 doc_baseline_date: 2026-10-08
 ---
 
@@ -21,8 +21,9 @@ what is *current*, targeting ≤ ~120 lines.
 
 Desktop `v0.1.56` and kernel `v0.51.0` are published. Six hosted company engines have verified
 assignment reads and root-owned trust; both maintained clones install the release. Ordinary/Qonto
-tasks remain private. Café 124 shares one space; MrCall support/Mario retain separate spaces and
-cannot assign across that boundary. The [assignment
+tasks remain private. Café 124 shares one space; MrCall support/Mario share support's company
+space after the authorized [fenced join](execution-plans/2026-10-08-mrcall-company-memory-sharing.md).
+Both members have authenticated project and complete assignment reads; no real assignment is created. The [assignment
 plan](execution-plans/2026-10-08-explicit-task-assignment.md) owns released local lifecycle
 acceptance; release verification creates no real assignment.
 
@@ -30,8 +31,8 @@ The local [contextual-email
 candidate](execution-plans/2026-10-08-contextual-email-assignment-guard.md) extends holds to
 generic chat, known email-task context and final transport with durable enrollment and exact
 source binding. It is unreleased and inactive in the hosted fleet and installed clones. Its
-separate MrCall launcher patch is an uninstalled handoff. Company sharing and future rollout
-require separate authority.
+separate MrCall launcher patch is committed on a separate branch and remains uninstalled.
+Future candidate rollout requires separate authority.
 
 Local Desktop/kernel reliability gates and task/RPC contract checks pass.
 The August umbrella is retired; exact source-only evidence, withdrawn work and

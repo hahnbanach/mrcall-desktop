@@ -1,3 +1,21 @@
+## 2026-10-08 — Before authorized MrCall company sharing
+
+The local [contextual-email
+candidate](execution-plans/2026-10-08-contextual-email-assignment-guard.md) extends holds to
+generic chat, known email-task context and final transport with durable enrollment and exact
+source binding. It is unreleased and inactive in the hosted fleet and installed clones. Its
+separate MrCall launcher patch is an uninstalled handoff. Company sharing and future rollout
+require separate authority.
+
+## 2026-10-08 — Before authorized MrCall company sharing
+
+Desktop `v0.1.56` and kernel `v0.51.0` are published. Six hosted company engines have verified
+assignment reads and root-owned trust; both maintained clones install the release. Ordinary/Qonto
+tasks remain private. Café 124 shares one space; MrCall support/Mario retain separate spaces and
+cannot assign across that boundary. The [assignment
+plan](execution-plans/2026-10-08-explicit-task-assignment.md) owns released local lifecycle
+acceptance; release verification creates no real assignment.
+
 ## 2026-10-08 — Superseded release state
 
 Desktop `v0.1.55` carries the auth and billing-business fixes; its tag and

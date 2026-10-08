@@ -11,8 +11,11 @@ are preserved in [active-context-archive.md](active-context-archive.md).
 [Company assignments](features/task-assignment.md) ship in Desktop `v0.1.56`. Six hosted company
 engines have verified assignment reads, root-owned public trust and tenant-inaccessible signing
 keys. Scoped draft and three-host workflows retain local acceptance. Ordinary/Qonto tasks remain
-private. Café 124 shares one space; MrCall support/Mario cannot assign across their separate
-spaces. Release verification creates no real assignment or paid work.
+private. Café 124 shares one space; MrCall support/Mario share company memory and projects
+in support's space after an authorized fenced join. Both identities have complete assignment
+reads and shared project acceptance; private task/email cross-owner probes refuse.
+[Operational record](../../docs/execution-plans/2026-10-08-mrcall-company-memory-sharing.md).
+No real assignment or paid work is part of this acceptance.
 
 The unreleased [contextual-email
 candidate](../../docs/execution-plans/2026-10-08-contextual-email-assignment-guard.md) guards

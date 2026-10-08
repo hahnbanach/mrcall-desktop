@@ -1,3 +1,11 @@
+## 2026-10-08 — Before authorized MrCall company sharing
+
+[Company assignments](features/task-assignment.md) ship in Desktop `v0.1.56`. Six hosted company
+engines have verified assignment reads, root-owned public trust and tenant-inaccessible signing
+keys. Scoped draft and three-host workflows retain local acceptance. Ordinary/Qonto tasks remain
+private. Café 124 shares one space; MrCall support/Mario cannot assign across their separate
+spaces. Release verification creates no real assignment or paid work.
+
 ## 2026-10-08 — Superseded release state
 
 Mnemonic M5–M9 source is retained in five nonproduction checkout daemons and
