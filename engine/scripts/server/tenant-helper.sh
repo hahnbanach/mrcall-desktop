@@ -260,7 +260,8 @@ check_dropins() {
 # group, modes untouched (no chmod: it follows links). -execdir and chown -h:
 # a member who swaps an entry for a link moves only the link. A member's
 # SQLite may remove its -wal/-shm while find runs: the chown pass may then
-# fail on a vanished name, so only the re-check decides, after a retry.
+# fail on a vanished name (its message stays visible), so only the re-check
+# decides, after a retry.
 hand_company_files() {
   local d gid left attempt
   local -a who=(-nouser)
@@ -269,7 +270,7 @@ hand_company_files() {
     [ -d "$d" ] && [ ! -L "$d" ] || continue
     gid=$(stat -c %g -- "$d")
     for attempt in 1 2 3; do
-      find "$d" -xdev -ignore_readdir_race "${who[@]}" -execdir chown -h "0:$gid" -- {} + 2>/dev/null || true
+      find "$d" -xdev -ignore_readdir_race "${who[@]}" -execdir chown -h "0:$gid" -- {} + || true
       left=$(find "$d" -xdev -ignore_readdir_race "${who[@]}" -print -quit)
       [ -z "$left" ] && break
       sleep 1
@@ -797,8 +798,11 @@ delete)
   rm -f "$keyfile" "$fragment" "$voice_copy" "$exec_decl" "$modefile"
   rm -rf "$dropin_d" "$RUN_ROOT/$uid"
   [ -L "$RUN_ROOT/$uid.sock" ] && rm -f "$RUN_ROOT/$uid.sock"
-  remove_egress
   if id "$user" >/dev/null 2>&1; then userdel "$user"; log "removed user $user"; fi
+  # only once no process of that user can run: removing the table first
+  # would leave a straggler (a hung as_tenant) with unrestricted egress when
+  # userdel then refuses; a re-run still finds the table by the uid's tag
+  remove_egress
   if [ -n "$last" ] && [ -n "$group" ]; then
     rm -rf "$MEMORY/$group"; groupdel "$group" >/dev/null 2>&1 || true
     log "removed empty company group $group and its store directory"
