@@ -71,8 +71,9 @@ N active IMAP mailboxes are supported; PEC envelopes retain provider identity
 and original-message content, with per-mailbox sync, cursors and encrypted secrets.
 
 Production K3 uses personal OpenRouter with USD20/day; the other three Café124
-profiles retain prior billing choices and USD5/day. Those four have automatic
-processing off and preparation paused. Personal-key synthetic K3 acceptance
+profiles retain prior billing choices and USD5/day. Their saved host configuration
+enables automatic work and leaves preparation unpaused; the release preflight
+finds no active preparation run. Preserve actual controls during rollout. Personal-key synthetic K3 acceptance
 passes; funded credits remain unverified and an isolated uncertain hold remains.
 Model configuration does not authorize backlog work. Engine API budgets and pauses
 are independent from clone headless Claude Code and kernel classifiers. See
@@ -110,8 +111,8 @@ acceptance is implied.
 ## Next
 
 1. Continue Qonto/PEC GUI and provider acceptance under their existing plans.
-2. Resolve billing choices without replaying uncertain requests; keep paused
-   preparation until an explicit bounded run is requested.
+2. Resolve billing choices without replaying uncertain requests; preserve actual
+   saved controls and initiate no paid preparation for release verification.
 3. Re-measure mnemonic AC 5 and review rollout plus migration rehearsal before
    product acceptance. Preserve the rejected corpus evidence.
 4. Continue telephone knowledge detail/adverse/latency acceptance from its plan.

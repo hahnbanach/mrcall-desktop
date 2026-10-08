@@ -1,5 +1,5 @@
 ---
-doc_baseline_commit: b238350c38da967f4fff81e8b18d3b3274104820
+doc_baseline_commit: c638922afa202b143c9534ca10e6ace26206570e
 doc_baseline_date: 2026-10-08
 ---
 
@@ -63,8 +63,9 @@ and prior acceptance belong to the
 and [knowledge plan](execution-plans/2026-09-28-voice-company-knowledge.md).
 
 Production K3 uses its personal OpenRouter key with USD20/day; the other three
-Café124 profiles preserve prior billing choices and USD5/day. Those four retain
-automatic work off and paused preparation. Personal-key synthetic K3 acceptance
+Café124 profiles preserve prior billing choices and USD5/day. Their saved host
+configuration enables automatic work and has preparation unpaused; no run is
+active in the release preflight. Preserve actual controls during rollout. Personal-key synthetic K3 acceptance
 passes; funded credit acceptance remains open. See
 [K3 adoption](execution-plans/2026-09-16-k3-production.md).
 
@@ -116,8 +117,8 @@ external reader. The app Refresh action only lists threads.
    a signed-in GUI is available; preserve billing and pause controls.
 2. Continue the knowledge plan's detail/repetition/latency gates without
    repeating completed archive acceptance.
-3. Resolve remaining billing choices; keep the four Café124 preparations paused
-   until an explicit bounded run is requested.
+3. Resolve remaining billing choices and preserve actual saved controls;
+   release verification initiates no paid preparation run.
 4. Exercise installed Mac/Windows GUI and add an external WhatsApp status reader.
 5. Resume deferred work from its existing briefs when requested. Electron stays
    primary; the [thin-client brief](execution-plans/cross-machine-thin-clients.md)

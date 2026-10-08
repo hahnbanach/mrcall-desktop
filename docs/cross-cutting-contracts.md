@@ -114,4 +114,3 @@ Engine contracts: [`engine/docs/features/daily-llm-budget.md`](../engine/docs/fe
 and [`engine/docs/features/bounded-preparation.md`](../engine/docs/features/bounded-preparation.md).
 `MRCALL_PROXY_URL` selects the billing server (default `https://zylch.mrcall.ai`).
 App behavior: [`app/docs/bounded-preparation.md`](../app/docs/bounded-preparation.md).
-

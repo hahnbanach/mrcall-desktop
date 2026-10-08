@@ -1,5 +1,14 @@
 # Engine context archive
 
+## 2026-10-08 — Saved preparation controls reconciled before release
+
+profiles retain prior billing choices and USD5/day. Those four have automatic
+processing off and preparation paused.
+
+2. Resolve billing choices without replaying uncertain requests; keep paused
+   preparation until an explicit bounded run is requested.
+
+
 Historical snapshots preserved verbatim when the living context is consolidated.
 Dated deployment claims and incident counts below are historical observations,
 not current operational state; use [active-context.md](active-context.md).

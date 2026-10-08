@@ -1,5 +1,14 @@
 # Active Context — Archive (cross-cutting)
 
+## 2026-10-08 — Saved preparation controls reconciled before release
+
+Café124 profiles preserve prior billing choices and USD5/day. Those four retain
+automatic work off and paused preparation.
+
+3. Resolve remaining billing choices; keep the four Café124 preparations paused
+   until an explicit bounded run is requested.
+
+
 Historical narrative pruned out of [`active-context.md`](active-context.md).
 That file is a living snapshot and carries only `State now` / `Unresolved` /
 `Next`; anything chronological lands here instead. Newest section first.
