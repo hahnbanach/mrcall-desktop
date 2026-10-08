@@ -74,3 +74,46 @@ def test_not_last_holder_keeps_company_rows_even_when_alone_in_rows(company_db):
     assert _contents(engine) == ["fact by a"]
     assert offboard.delete_owned_rules("a@x", last_holder=True) == 1
     assert _contents(engine) == []
+
+
+def test_rules_of_both_account_identities_go(company_db):
+    """A profile names its account by email and by Firebase uid; rules written
+    under either are this account's, another account's rules stay."""
+    from sqlalchemy.orm import sessionmaker
+
+    key = current_company_key()
+    engine = dbm.current_memory_engine()
+    with sessionmaker(bind=engine)() as s:
+        s.add_all(
+            [
+                Blob(owner_id="a@x", company_key=key, namespace="prefs:a@x", content="pref by email"),
+                Blob(owner_id="uidA", company_key=key, namespace="template:uidA", content="rule by uid"),
+                Blob(owner_id="uidA", company_key=key, namespace="user:" + key, content="fact by uid"),
+                Blob(owner_id="b@x", company_key=key, namespace="prefs:b@x", content="pref of b"),
+            ]
+        )
+        s.commit()
+    assert offboard.delete_account_rules({"a@x", "uidA"}) == 2
+    assert _contents(engine) == ["fact by uid", "pref of b"]
+
+
+def test_offboard_cli_uses_both_identities_and_refuses_with_none(company_db, monkeypatch):
+    from click.testing import CliRunner
+
+    from zylch.cli import main as cli_main
+    from zylch.cli.tenant_commands import memory_offboard
+
+    seen = []
+    monkeypatch.setattr(cli_main, "_configure_logging", lambda: None)
+    monkeypatch.setattr(cli_main, "_setup_profile", lambda name, lock=True: "p")
+    monkeypatch.setattr(offboard, "delete_account_rules",
+                        lambda owners, last_holder=False: seen.append(sorted(owners)) or 0)
+    monkeypatch.setenv("OWNER_ID", "uidA")
+    monkeypatch.setenv("EMAIL_ADDRESS", "a@x")
+    result = CliRunner().invoke(memory_offboard, ["--yes"], obj={"profile": "p"})
+    assert result.exit_code == 0, result.output
+    assert seen == [["a@x", "uidA"]]
+    monkeypatch.delenv("OWNER_ID")
+    monkeypatch.delenv("EMAIL_ADDRESS")
+    result = CliRunner().invoke(memory_offboard, ["--yes"], obj={"profile": "p"})
+    assert result.exit_code == 2 and "refused" in result.output

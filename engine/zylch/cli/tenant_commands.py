@@ -141,9 +141,9 @@ def memory_offboard(ctx, yes, last_holder):
     profile_name = ctx.obj.get("profile") if ctx.obj else None
     profile = _main._setup_profile(profile_name, lock=True)
     logger.info(f"[CLI] memory-offboard profile={profile} last_holder={last_holder}")
-    from zylch.cli.utils import get_owner_id
     from zylch.memory.company_key import current_company_key
-    from zylch.memory.offboard import delete_owned_rules, delete_store
+    from zylch.memory.mnemonic.authorization import _current_owners
+    from zylch.memory.offboard import delete_account_rules, delete_store
     from zylch.storage.storage import Storage
 
     key = current_company_key()
@@ -151,16 +151,20 @@ def memory_offboard(ctx, yes, last_holder):
         click.echo("nothing to do: this profile has no MEMORY_KEY")
         return
     Storage.get_instance()
-    owner = get_owner_id()
+    owners = sorted(_current_owners())
+    if not owners:
+        # its rules cannot be told from another account's: remove nothing
+        click.echo("refused: this profile names no account (EMAIL_ADDRESS or OWNER_ID)")
+        raise SystemExit(2)
     if not yes and not click.confirm(
-        f"Delete {owner}'s own rule rows from the company memory"
+        f"Delete the rule rows of {', '.join(owners)} from the company memory"
         + (" AND the whole store file" if last_holder else "")
         + "?",
         default=False,
     ):
         click.echo("aborted")
         raise SystemExit(1)
-    removed = delete_owned_rules(owner, last_holder=last_holder)
+    removed = delete_account_rules(owners, last_holder=last_holder)
     click.echo(f"removed {removed} owned rule row(s)")
     if last_holder:
         path = delete_store(key)

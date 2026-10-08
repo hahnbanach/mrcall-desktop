@@ -41,6 +41,17 @@ def delete_owned_rules(owner_id: str, *, last_holder: bool = False) -> int:
     return count
 
 
+def delete_account_rules(owners, *, last_holder: bool = False) -> int:
+    """Delete the rule rows of every identity the profile names its account by.
+
+    A profile names its account twice (``mnemonic.authorization._current_owners``):
+    ``EMAIL_ADDRESS``, which chat and the RPC handlers put on the rules they
+    write, and ``OWNER_ID``, the Firebase uid a path without a session falls
+    back to (``ToolConfig.from_settings``). Offboarding by one of them leaves
+    the other's rules behind with no profile left to remove them."""
+    return sum(delete_owned_rules(owner, last_holder=last_holder) for owner in sorted(owners))
+
+
 def delete_store(company_key: str) -> str | None:
     """Delete the company store file and its sidecars. The caller has
     established that no other profile holds this key. Returns the path
