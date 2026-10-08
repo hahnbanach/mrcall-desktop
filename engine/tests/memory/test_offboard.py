@@ -97,6 +97,29 @@ def test_rules_of_both_account_identities_go(company_db):
     assert _contents(engine) == ["fact by uid", "pref of b"]
 
 
+@pytest.mark.parametrize("owners", ["a@x", set(), {" "}, {"a@x", "local-user"}, {"owner_default"}])
+def test_identities_are_a_collection_of_real_accounts(company_db, owners):
+    with pytest.raises((TypeError, ValueError)):
+        offboard.delete_account_rules(owners)
+
+
+def test_last_holder_with_two_identities_removes_their_rows(company_db):
+    from sqlalchemy.orm import sessionmaker
+
+    key = current_company_key()
+    engine = dbm.current_memory_engine()
+    with sessionmaker(bind=engine)() as s:
+        s.add_all(
+            [
+                Blob(owner_id="a@x", company_key=key, namespace="prefs:a@x", content="pref by email"),
+                Blob(owner_id="uidA", company_key=key, namespace="user:" + key, content="fact by uid"),
+            ]
+        )
+        s.commit()
+    assert offboard.delete_account_rules({"a@x", "uidA"}, last_holder=True) == 2
+    assert _contents(engine) == []
+
+
 def test_offboard_cli_uses_both_identities_and_refuses_with_none(company_db, monkeypatch):
     from click.testing import CliRunner
 
@@ -113,7 +136,11 @@ def test_offboard_cli_uses_both_identities_and_refuses_with_none(company_db, mon
     result = CliRunner().invoke(memory_offboard, ["--yes"], obj={"profile": "p"})
     assert result.exit_code == 0, result.output
     assert seen == [["a@x", "uidA"]]
-    monkeypatch.delenv("OWNER_ID")
     monkeypatch.delenv("EMAIL_ADDRESS")
     result = CliRunner().invoke(memory_offboard, ["--yes"], obj={"profile": "p"})
+    assert result.exit_code == 0, result.output
+    assert seen[-1] == ["uidA"]  # a profile without an email still leaves by its uid
+    monkeypatch.delenv("OWNER_ID")
+    result = CliRunner().invoke(memory_offboard, ["--yes"], obj={"profile": "p"})
     assert result.exit_code == 2 and "refused" in result.output
+    assert len(seen) == 2  # the refusal deleted nothing

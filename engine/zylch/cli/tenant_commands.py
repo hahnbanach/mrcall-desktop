@@ -164,7 +164,11 @@ def memory_offboard(ctx, yes, last_holder):
     ):
         click.echo("aborted")
         raise SystemExit(1)
-    removed = delete_account_rules(owners, last_holder=last_holder)
+    try:
+        removed = delete_account_rules(owners, last_holder=last_holder)
+    except ValueError as exc:
+        click.echo(f"refused: {exc}")
+        raise SystemExit(2) from None
     click.echo(f"removed {removed} owned rule row(s)")
     if last_holder:
         path = delete_store(key)
