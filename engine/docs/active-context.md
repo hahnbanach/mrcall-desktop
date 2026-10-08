@@ -70,10 +70,11 @@ Mnemonic product rollout remains pending. AC 5 failed on the rejected Haiku arm
 and awaits M10 re-measurement using the resolver-selected model. The paid corpus
 retains one critical failure; incomplete automatic extraction can remain pending
 without a reason and be repaid. The corpus also lacks per-round proposal/latency
-evidence and recorded Italian preservation misses. A reviewed rollout plan and
-migration rehearsal on a store copy remain required; the formerly referenced hb
-September 30 rollout plan is absent from this workspace. Deployment of source
-and sandbox acceptance do not establish mnemonic product quality.
+evidence and recorded Italian preservation misses. The hb plan at
+`docs/execution-plans/2026-09-30-mnemonic-rollout.md` is present as historical
+planned work. Refresh its host/source pins and prerequisites, review the current
+product-rollout plan and rehearse migration on a store copy before use. Accepted
+source activation and sandbox acceptance do not establish mnemonic product quality.
 
 The engine owns revisioned company [written projects](features/project-memory.md).
 Company membership is the capability changed only by `memory.join`; account

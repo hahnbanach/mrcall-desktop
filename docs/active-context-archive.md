@@ -1,3 +1,12 @@
+## 2026-10-08 — Launcher integration into clone main
+
+The local [contextual-email
+candidate](execution-plans/2026-10-08-contextual-email-assignment-guard.md) extends holds to
+generic chat, known email-task context and final transport with durable enrollment and exact
+source binding. It is unreleased and inactive in the hosted fleet and installed clones. Its
+separate MrCall launcher patch is committed on a separate branch and remains uninstalled.
+Future candidate rollout requires separate authority.
+
 ## 2026-10-08 — Before authorized MrCall company sharing
 
 The local [contextual-email

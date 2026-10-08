@@ -1,5 +1,5 @@
 ---
-doc_baseline_commit: 06cc4895c759976aec5432e63772b8f5c3d82cdf
+doc_baseline_commit: a53376621a37656b78545b5a90d2d6798568a44a
 doc_baseline_date: 2026-10-08
 ---
 
@@ -31,7 +31,7 @@ The local [contextual-email
 candidate](execution-plans/2026-10-08-contextual-email-assignment-guard.md) extends holds to
 generic chat, known email-task context and final transport with durable enrollment and exact
 source binding. It is unreleased and inactive in the hosted fleet and installed clones. Its
-separate MrCall launcher patch is committed on a separate branch and remains uninstalled.
+MrCall launcher patch is committed in the clone main branch and remains uninstalled.
 Future candidate rollout requires separate authority.
 
 Local Desktop/kernel reliability gates and task/RPC contract checks pass.

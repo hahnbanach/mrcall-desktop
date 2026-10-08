@@ -509,9 +509,11 @@ acceptance are tracked in the cross-repository harness plan
 `2026-09-20-mnemonic-harness.md`, which is not included in this repository.
 Current engine contracts are in [mnemonic decisions](../engine/docs/features/mnemonic-decisions.md);
 the [engine snapshot](../engine/docs/active-context.md) owns current state.
-The previously referenced `2026-09-30-mnemonic-rollout.md` is absent from this
-workspace. Its detailed rollout gates and rollback stages cannot be verified;
-a reviewed rollout plan is required before any live upgrade. Host prerequisites:
+The hb plan at `docs/execution-plans/2026-09-30-mnemonic-rollout.md` is present
+as historical planned work. Refresh its host/source pins and prerequisites and
+review the current plan before any future live upgrade; its historical commands
+are not current deployment instructions. Accepted source activation does not
+establish mnemonic product/corpus acceptance. Host prerequisites to refresh:
 
 - *The per-unit pin.* This guide documents one checkout that
   `update-daemons.sh` pulls and one `ExecStart` for every instance, so before

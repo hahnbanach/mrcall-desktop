@@ -1,3 +1,14 @@
+## 2026-10-08 — Before restored mnemonic rollout-plan reference
+
+Mnemonic product rollout remains pending. AC 5 failed on the rejected Haiku arm
+and awaits M10 re-measurement using the resolver-selected model. The paid corpus
+retains one critical failure; incomplete automatic extraction can remain pending
+without a reason and be repaid. The corpus also lacks per-round proposal/latency
+evidence and recorded Italian preservation misses. A reviewed rollout plan and
+migration rehearsal on a store copy remain required; the formerly referenced hb
+September 30 rollout plan is absent from this workspace. Deployment of source
+and sandbox acceptance do not establish mnemonic product quality.
+
 ## 2026-10-08 — Before authorized MrCall company sharing
 
 [Company assignments](features/task-assignment.md) ship in Desktop `v0.1.56`. Six hosted company
