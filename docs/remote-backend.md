@@ -104,6 +104,22 @@ The model:
   unit reads only its key file and, when declared, its voice copy), a first
   migration of a unit that is not stopped, and a result whose user,
   `ProtectHome` or environment files are not `tenant.conf`'s.
+- **Operator drop-ins sort before `tenant.conf`.** `create` refuses a unit
+  with an applied drop-in whose name sorts after it, so a pin named
+  `zz-<name>.conf` is refused. Name a pin meant to apply after every other
+  operator drop-in `t0-<name>.conf`: that still sorts before
+  `tenant.conf`, and the order among the others is kept. A pin carries
+  only `Environment=PYTHONPATH=`; a different command line goes in the
+  `tenant-exec` declaration below. A reconcile in which any `create` is
+  refused exits 3, naming the profiles, so `zylch-reconcile.service`
+  shows `Result=failed`; the units keep their previous `tenant.conf`.
+- **Leaving a shared company store hands the leaver's files to root.**
+  When `mrcall-tenant delete` removes a holder that is not the last, the
+  company files it created (the store, `-wal`, `-shm`, `backups/`) go to
+  `root:<company group>`, with their modes unchanged. That happens before
+  its user is removed, so no later user given the same numeric uid owns
+  them; the remaining members keep their group access. If any file is
+  left, `delete` stops before removing anything else.
 - A unit that needs **its own interpreter or the production voice
   listener** is declared by the operator in `/etc/mrcalld/tenant-exec/<uid>`
   (`0600 root`): `INTERPRETER=<release>/venv/bin/zylch` and/or

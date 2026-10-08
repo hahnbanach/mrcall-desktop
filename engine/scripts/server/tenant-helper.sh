@@ -247,7 +247,7 @@ check_dropins() {
     [ "$(dirname -- "$f")" = "$dropin_d" ] &&
       [ "$(realpath -e -- "$f")" = "$f" ] || die "applied drop-in is outside the instance /etc directory"
     name=${f##*/}
-    [[ "$name" = tenant.conf || "$name" < tenant.conf ]] || die "applied drop-in sorts after tenant.conf"
+    [[ "$name" = tenant.conf || "$name" < tenant.conf ]] || die "applied drop-in $name sorts after tenant.conf: rename it to sort before it, keeping its order among the others (a pin applied last: t0-<name>.conf); a different command line goes in /etc/mrcalld/tenant-exec/<uid>"
   done
 }
 
@@ -747,6 +747,18 @@ delete)
     # profile left to remove them: stop here, nothing deleted yet (the unit
     # is disabled); fix and re-run `delete`
     as_tenant "$user" "$profile_dir" -p "$uid" memory-offboard --yes $last || die "offboard failed; nothing deleted (unit disabled, .deleting keeps reconcile off it) — fix and re-run delete"
+  fi
+  # The company files this user created (the store, -wal, -shm, backups)
+  # outlive it when others still hold the key. Left as they are they keep its
+  # numeric uid, and the next user given that uid would own them: hand them
+  # to root, keeping the group access every remaining member uses. -execdir
+  # and chown -h: a member who swaps an entry for a link moves only the link.
+  if [ -z "$last" ] && [ -n "$group" ] && id "$user" >/dev/null 2>&1 && [ -d "$MEMORY/$group" ] && [ ! -L "$MEMORY/$group" ]; then
+    find "$MEMORY/$group" -xdev -user "$user" -execdir chown -h "root:$group" -- {} + \
+      || die "cannot hand $user's company files to root; nothing deleted (unit disabled) — fix and re-run delete"
+    [ -z "$(find "$MEMORY/$group" -xdev -user "$user" -print -quit)" ] \
+      || die "files of $user remain under $MEMORY/$group; nothing deleted (unit disabled) — fix and re-run delete"
+    log "company files of $user handed to root:$group"
   fi
   rm -rf "$profile_dir"
   rm -f "$keyfile" "$fragment" "$voice_copy" "$exec_decl" "$modefile"

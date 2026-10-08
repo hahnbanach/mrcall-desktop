@@ -1344,6 +1344,59 @@ not started.
      incompatibility, then repeat the representative lifecycle and final
      reviews. No live profile or refused unit was modified to force a pass.
 
+   - **Repair of both blockers — 2026-10-08, cloud session.**
+     - *Surviving company files.* Before removing the user of a holder
+       that is not the last, `mrcall-tenant delete` hands every file under
+       `$MEMORY/<group>` that the user owns to `root:<group>`:
+       - `find -xdev -user … -execdir chown -h`, so a member who swaps an
+         entry for a link moves only the link;
+       - modes are left as they are. There is deliberately no `chmod`,
+         because it follows links;
+       - `delete` then checks that nothing is left and stops otherwise,
+         before removing anything.
+
+       Checked here with real users and groups:
+       - the leaver's store, `-wal`, `-shm`, `backups/` and a link become
+         `root:<group>` with their modes kept (`0660`, `2770` with setgid);
+       - another member's file is untouched, and the link's target is not
+         followed;
+       - after the leaver's user is deleted, the remaining member writes to
+         the `0660` WAL store twice. It also recovers the leaver's committed
+         row from the WAL left behind.
+
+       With a `0640` store the remaining member gets `readonly database`
+       whatever the owner. That is the existing group-write precondition
+       (`0660`, recorded for the live stores), not this change.
+     - *Release pins after `tenant.conf`.* The helper keeps its rule. Its
+       refusal now names the file and the fix: `t0-<name>.conf` sorts after
+       every other operator drop-in and before `tenant.conf`. The
+       reconcile no longer hides a refusal: it exits 3 naming the refused
+       profiles, so the unit shows `Result=failed` and `reconcile-notify`
+       mails `exit=3`. Documented in `docs/remote-backend.md`.
+
+     *VPS, to close R5:*
+     1. For each of the six units, record:
+        - the keys of `zz-assignment-release.conf` (expected: `[Service]`
+          and `Environment=PYTHONPATH=…` only; anything else, stop and
+          report);
+        - the sorted effective `Environment`, `ExecStart`, `User`,
+          `ProtectHome`, `EnvironmentFiles` and `BindReadOnlyPaths`, as
+          hashes.
+     2. Rename each file to `t0-assignment-release.conf` in the same
+        directory and run `daemon-reload`. The same hashes must be
+        identical (PYTHONPATH keeps its value because `tenant.conf` does
+        not set it).
+     3. Pull `main` and reconcile: exit 0, seven `ready`.
+     4. Repeat the scratch lifecycle:
+        - after the first deletion, no file under the company directory
+          belongs to the deleted uid;
+        - the remaining scratch holder then commits a write to the store,
+          as its own user;
+        - the last deletion removes everything.
+     5. Two fresh final reviews, then `status: completed`.
+
+     The assignment workstream names future pins `t0-…`, not `zz-…`.
+
    - **Open after this plan, not part of it:**
      - one handset whose speech the voice provider does not transcribe
        (voice path, not the host; 2026-10-03 diagnosis above);
