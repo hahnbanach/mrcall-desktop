@@ -106,11 +106,10 @@ structure). Read those for details:
 ## Cross-cutting runtime contracts
 
 [Identity, company memory, hosted isolation and LLM billing](docs/cross-cutting-contracts.md)
-carry the detailed contracts and historical migration notes. Read the relevant
-section before changing these boundaries. Firebase tokens stay in memory;
-profile identity is the immutable UID; company memory access requires its
-capability key. Provider selection never falls back, and paid requests reserve
-their maximum cost against the saved daily budget before dispatch.
+carry the detailed contracts. Firebase ID tokens stay in memory; profile identity
+is the immutable UID; company memory requires its capability key. Hosted tools
+stay within their tenant folders and refuse `run_python`. Provider selection
+never falls back, and paid requests reserve maximum cost before dispatch.
 
 ## Naming and identifiers — the rename in flight
 

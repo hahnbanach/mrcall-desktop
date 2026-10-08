@@ -22,7 +22,7 @@ The repo has three parallel doc trees, mirroring the three index files. Each tre
 
 ## Index
 
-- [Cross-cutting runtime contracts](cross-cutting-contracts.md) — Firebase identity, company memory, hosted tenant isolation and LLM billing; operating rules remain in the repository index.
+- [Cross-cutting runtime contracts](cross-cutting-contracts.md) — identity, company memory, hosted isolation and LLM billing; operating rules remain in AGENTS.md.
 
 - [Qonto connection](briefs/2026-10-04-qonto-connection.md) — native Desktop setup and engine-owned financial source; [development plan](execution-plans/2026-10-04-qonto-connection.md), including the authorized support-only rollout.
 - [Qonto IPC](qonto-ipc.md) — native bank methods, managed chat history and verification boundaries.

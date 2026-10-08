@@ -475,10 +475,10 @@ backlog is analysed in daily instalments at the cap — raise it for a day
 with a line in `.env` and a restart.
 
 **Upgrading to the mnemonic harness (milestones 5–9).** Design and milestone
-acceptance are tracked in the cross-repository harness plan, outside this
-repository at `../../docs/execution-plans/2026-09-20-mnemonic-harness.md`
-(relative to this document). The [engine snapshot](../engine/docs/active-context.md)
-owns the in-repository mnemonic state.
+acceptance are tracked in the cross-repository harness plan
+`2026-09-20-mnemonic-harness.md`, which is not included in this repository.
+Current engine contracts are in [mnemonic decisions](../engine/docs/features/mnemonic-decisions.md);
+the [engine snapshot](../engine/docs/active-context.md) owns current state.
 The previously referenced `2026-09-30-mnemonic-rollout.md` is absent from this
 workspace. Its detailed rollout gates and rollback stages cannot be verified;
 a reviewed rollout plan is required before any live upgrade. Host prerequisites:

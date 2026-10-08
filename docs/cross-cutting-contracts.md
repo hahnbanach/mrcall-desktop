@@ -1,10 +1,9 @@
 # Cross-cutting runtime contracts
 
 <!-- doc-scope:start -->
-Scope: identity, company-memory access, hosted tenant isolation and engine
-LLM billing contracts shared by the engine and Desktop. The repository index
-owns operating rules and routing; rollout state belongs to the living contexts
-and linked execution plans.
+Scope: identity, company-memory access, hosted tenant isolation and LLM billing
+contracts shared by the engine and Desktop. Operating rules belong to AGENTS.md;
+rollout state belongs to the living contexts and owning execution plans.
 <!-- doc-scope:end -->
 
 ## Identity (Firebase) — added 2026-05-02
@@ -43,7 +42,8 @@ is available.
 The legacy CLI MrCall PKCE flow on `:19274` (`zylch init`) was **removed
 2026-05** — MrCall connection today happens exclusively via the Firebase
 sign-in in the desktop UI (`tools/mrcall/starchat_firebase.py`); `zylch init`
-no longer runs any OAuth/PKCE code for MrCall.
+no longer runs any OAuth/PKCE code for MrCall (corrected 2026-07-14,
+doc-critic pass).
 
 ## Shared company memory (since 2026-09)
 
@@ -114,3 +114,4 @@ Engine contracts: [`engine/docs/features/daily-llm-budget.md`](../engine/docs/fe
 and [`engine/docs/features/bounded-preparation.md`](../engine/docs/features/bounded-preparation.md).
 `MRCALL_PROXY_URL` selects the billing server (default `https://zylch.mrcall.ai`).
 App behavior: [`app/docs/bounded-preparation.md`](../app/docs/bounded-preparation.md).
+

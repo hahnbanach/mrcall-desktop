@@ -1,5 +1,5 @@
 ---
-doc_baseline_commit: a67fb27b2e8d0d48629b8850e9275ea84e377f97
+doc_baseline_commit: b238350c38da967f4fff81e8b18d3b3274104820
 doc_baseline_date: 2026-10-08
 ---
 
@@ -47,6 +47,10 @@ Qonto source pin. Company stores use hashed hosted paths. Self-serve provisionin
 remains closed; template/provisiond still use the shared key. Sandbox final
 acceptance and its operational floor remain open in the
 [rollout plan](execution-plans/2026-09-29-toward-sandbox.md).
+Mario Gmail has CTO-reported installed-app acceptance for mail, attachment
+transfer and document lookup/read by basename. Its attachment source pin is
+separate from the service checkout. R5 still requires representative scratch
+lifecycle and consistent A/B isolation evidence, followed by final reviews.
 
 Production uses GPT-Live for telephone service and the scoped company-knowledge
 trial. Its pinned release reads revisioned `operator-instructions/phone.md`;
