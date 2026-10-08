@@ -862,7 +862,8 @@ async def tasks_solve_cancel(
 async def chat_send(params: Dict[str, Any], notify: NotifyFn) -> Any:
     """chat.send(message, conversation_history=[], conversation_id="general",
     context={}, mutation_policy?, policy_version?, history_mode?,
-    history_handle?, history_revision?) -> ChatService result with managed binding fields.
+    history_handle?, history_revision?, assignment_thread_key?,
+    assignment_policy_version?) -> ChatService result with managed binding fields.
 
     Destructive tools trigger `chat.pending_approval` notifications; the
     client must respond via `chat.approve` to resume.
@@ -873,6 +874,17 @@ async def chat_send(params: Dict[str, Any], notify: NotifyFn) -> Any:
         READ_ONLY_POLICY_VERSION,
         policy_scope,
     )
+
+    from zylch.services.task_assignment_draft_policy import VERSION, scope as assignment_scope
+    from zylch.services.task_assignment_types import AssignmentError, thread
+
+    assignment_root = params.get("assignment_thread_key")
+    if assignment_root is not None:
+        thread(assignment_root)
+        if params.get("assignment_policy_version") != VERSION:
+            raise AssignmentError("Assignment draft policy version required", -32602)
+    elif params.get("assignment_policy_version") is not None:
+        raise AssignmentError("Assignment draft thread required", -32602)
 
     message = params.get("message")
     if not message:
@@ -1044,6 +1056,7 @@ async def chat_send(params: Dict[str, Any], notify: NotifyFn) -> Any:
             finance_history.turn_scope(history_guard),
             progress,
             policy_scope(mutation_policy),
+            assignment_scope(assignment_root),
             revocable_turn(turn),
         ):
             service = ChatService()
@@ -1089,7 +1102,7 @@ async def system_capabilities(params: Dict[str, Any], notify: NotifyFn) -> Any:
     """system.capabilities() -> protocol capabilities supported by this engine."""
     from zylch.services.request_policy import READ_ONLY_POLICY_VERSION
 
-    return {"chat_read_only_policy": READ_ONLY_POLICY_VERSION, "chat_history_binding": 1}
+    return {"chat_read_only_policy": READ_ONLY_POLICY_VERSION, "chat_history_binding": 1, "assignment_draft_policy": 1}
 
 
 async def chat_approve(params: Dict[str, Any], notify: NotifyFn) -> Any:
@@ -2617,4 +2630,11 @@ for _name, _fn in _VOICE_METHODS.items():
 for _name, _fn in _QONTO_METHODS.items():
     if _name in METHODS:
         raise RuntimeError(f"duplicate RPC method registration: {_name}")
+    METHODS[_name] = _fn
+
+from zylch.rpc.task_assignments import METHODS as _ASSIGNMENT_METHODS
+
+for _name, _fn in _ASSIGNMENT_METHODS.items():
+    if _name in METHODS:
+        raise RuntimeError(f"Duplicate RPC method name: {_name}")
     METHODS[_name] = _fn

@@ -6,6 +6,15 @@ That file is a living snapshot and carries only `State now` / `Unresolved` /
 Nothing is discarded — only relocated, verbatim.
 
 
+## 2026-10-08 — Assignment verification before final native acceptance
+
+Company assignment APIs are implemented locally with signed approvals, retained
+audit and exact inbound coverage. Scoped draft writes hold assigned or unknown
+threads; ordinary and Qonto tasks remain private. Engine transport/regression
+fixtures pass; kernel workflow/native acceptance is still in progress under the
+[assignment plan](execution-plans/2026-10-08-explicit-task-assignment.md).
+
+
 ## 2026-10-05 — Qonto rollout and correction evidence before reconciliation
 
 Historical execution record. Current authority and remaining acceptance are in

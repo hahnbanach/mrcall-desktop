@@ -1834,6 +1834,9 @@ class Storage:
     # DRAFTS
     # ─────────────────────────────────────────────────────────────────────────
 
+    from zylch.services.task_assignment_draft_policy import guard as _assignment_draft_guard
+
+    @_assignment_draft_guard
     def create_draft(
         self,
         owner_id: str,

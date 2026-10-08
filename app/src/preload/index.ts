@@ -1,4 +1,9 @@
 import { contextBridge, ipcRenderer } from 'electron'
+import type {
+  QontoConnectResult, QontoPublicationResult, QontoRemovalResult, QontoSyncResult,
+  QontoTestResult, QontoTransactionResult
+} from '../renderer/src/finance'
+import type { MailboxMutationResult, MailboxTestResult } from '../renderer/src/types'
 
 type NotifyCb = (params: unknown) => void
 const listeners = new Map<string, Set<NotifyCb>>()
@@ -33,6 +38,7 @@ interface WhatsAppMessage {
   sender_name: string | null
   text: string | null
   media_type: string | null
+  transcription: string | null
   is_from_me: boolean
   is_group: boolean
   timestamp: string | null
@@ -162,16 +168,16 @@ const api = {
       credential_stored: boolean; error?: string; bootstrap: { available: boolean; reason?: string }
     }>('qonto.status', {}, 30_000),
     test: (credentials: { credential_source: 'input' | 'bootstrap'; login?: string; api_key?: string }) =>
-      call<{ ok: boolean; organization: { id: string; name: string; legal_name: string; accounts: { id: string; name: string; currency: string }[] }; challenge_id: string; expires_at: number; account_ids: string[]; engine_location: string; consent_version: number }>('qonto.test', credentials, 35_000),
+      call<QontoTestResult>('qonto.test', credentials, 35_000),
     connect: (params: { credential_source: 'input' | 'bootstrap'; login?: string; api_key?: string; challenge_id: string; account_ids: string[]; authority_confirmed: boolean; consent_version: number }) =>
-      call<{ ok: boolean; status: string; generation: number; account_count?: number; initial_sync: unknown }>('qonto.connect', params, 180_000),
-    sync: () => call<{ ok: boolean; status: string; generation: number; error?: string; completed_windows?: number; remaining_windows?: number }>('qonto.sync', {}, 180_000),
-    disconnect: () => call<{ ok: boolean; status: string; generation: number; bootstrap_retained: boolean }>('qonto.disconnect', {}, 30_000),
-    deleteImportedData: (confirmed: boolean) => call<{ ok: boolean; deleted: boolean; published_facts_retained: boolean }>('qonto.delete_imported_data', { confirmed }, 30_000),
+      call<QontoConnectResult>('qonto.connect', params, 180_000),
+    sync: () => call<QontoSyncResult>('qonto.sync', {}, 180_000),
+    disconnect: () => call<QontoRemovalResult>('qonto.disconnect', {}, 30_000),
+    deleteImportedData: (confirmed: boolean) => call<QontoRemovalResult>('qonto.delete_imported_data', { confirmed }, 30_000),
     prepare: (resume = false) => call<{ success?: boolean; summary?: string; attempted?: number; completed?: number; failed?: number; errors?: { detail: string }[] }>('qonto.prepare', { resume }, 600_000),
     publicationPreview: () => call<{ preview_id: string; fact_text: string; disclosure: string }>('qonto.publication_preview', {}, 30_000),
-    publish: (previewId: string, confirmed: boolean, resume = false) => call<{ status: string; reason?: string }>('qonto.publish', { preview_id: previewId, confirmed, resume }, 600_000),
-    transaction: (sourceId: string) => call<{ transaction: { source_id: string; source_revision: string; account_id: string; currency: string; status: string; side: string; amount: { minor: number | string; scale: number; decimal: string }; retrieved_at: number }; coverage: unknown; stale: boolean }>('qonto.transaction', { source_id: sourceId }, 35_000)
+    publish: (previewId: string, confirmed: boolean, resume = false) => call<QontoPublicationResult>('qonto.publish', { preview_id: previewId, confirmed, resume }, 600_000),
+    transaction: (sourceId: string) => call<QontoTransactionResult>('qonto.transaction', { source_id: sourceId }, 35_000)
   },
   llm: { models: (provider?: string) => call<{ provider: string; models: { id: string; label: string; provider: string }[]; available: boolean; reason: string }>('llm.models', provider ? { provider } : {}, 15_000) },
   usage: {
@@ -547,7 +553,7 @@ const api = {
       imap_port?: number
       smtp_host?: string
       smtp_port?: number
-    }) => call<{ ok: boolean; status: string; message: string }>('mailboxes.test', params, 60000),
+    }) => call<MailboxTestResult>('mailboxes.test', params, 60000),
     add: (params: {
       address: string
       password: string
@@ -557,7 +563,7 @@ const api = {
       smtp_port?: number
       preset?: string
     }) =>
-      call<{ ok: boolean; status: string; message?: string; mailbox?: any }>(
+      call<MailboxMutationResult>(
         'mailboxes.add',
         params,
         60000
@@ -571,13 +577,13 @@ const api = {
       password?: string
       preset?: string
     }) =>
-      call<{ ok: boolean; status: string; message?: string; mailbox?: any }>(
+      call<MailboxMutationResult>(
         'mailboxes.update',
         params,
         60000
       ),
     remove: (mailboxId: string) =>
-      call<{ ok: boolean; status: string; message?: string; mailbox?: any }>(
+      call<MailboxMutationResult>(
         'mailboxes.remove',
         { mailbox_id: mailboxId },
         15000

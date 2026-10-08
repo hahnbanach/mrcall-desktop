@@ -26,6 +26,33 @@ Schema, errors, selected sentence permissions and operator examples:
 [voice configuration contract](../engine/docs/features/voice-agent-configuration.md).
 The isolated telephone runtime is described in the configuration contract.
 
+## Company task assignments (local integration)
+
+The new company subtype uses `tasks.assignment.*`, separately from private
+ordinary/Qonto `tasks.*` rows. Local transport and kernel verification are
+recorded in the [delivery plan](execution-plans/2026-10-08-explicit-task-assignment.md).
+
+| Method | Parameters | Result |
+|---|---|---|
+| `tasks.assignment.list` | none | Versioned authenticated company rows with completeness. |
+| `tasks.assignment.get` | `thread_key` | Current task or authoritative absence, with retained events. |
+| `tasks.assignment.project` | `thread_key` | Exact-thread state, completeness, held action and source/closed audit. |
+| `tasks.assignment.reply_evidence` | `source_id, thread_key` | Owner-scoped live Sent candidate/automatic/unknown metadata; no body or credentials. |
+| `tasks.assignment.preview` | `operation, thread_key, expected_revision, assignee_uid?, task_id?, reason?, handled_ref?, source_id?` | Exact unsigned short-lived intent derived from verified actor/company. |
+| `tasks.assignment.commit` | `intent, grant` | Exact acknowledged receipt after independent signature, membership and revision checks. |
+
+Assignment refusals use safe typed JSON-RPC errors, including revision conflict;
+lookup failure never becomes a successful empty ownership ledger. Generic chat
+approval and ordinary caller audit text cannot authorize these writes. The
+[assignment contract](../engine/docs/features/task-assignment.md) specifies fixed
+privileged trust/signing paths, source-owner close coverage and rollback.
+
+Scoped kernel composition negotiates `assignment_draft_policy: 1` before
+`chat.send(..., assignment_thread_key, assignment_policy_version=1)`. The engine
+must enforce the exact thread and fresh nonheld authority at the actual draft
+write. Scoped turns refuse other mutation effects, including sends; ordinary
+unscoped Desktop and finance paths retain their own policies. Local fixture acceptance does not establish deployed-client support.
+
 ## Transports
 
 Transport: JSON-RPC 2.0, transport-agnostic on the engine side
@@ -56,7 +83,7 @@ The method surface, payload shapes, and notification streams below are
 
 - **Server**: `engine/zylch/rpc/methods.py` assembles the `METHODS` dispatch table from its local and per-domain registrations. A duplicate method name raises at import.
 - **Client**: `app/src/preload/index.ts` exposes `window.zylch.*` to the renderer; `app/src/main/` brokers stdio or WebSocket.
-- **Owner identity**: every call resolves `owner_id` server-side from the active profile — the client never sends it.
+- **Owner identity**: calls resolve profile ownership server-side. Legacy ordinary task owner IDs are mailbox emails; company assignments derive stable actor UIDs from verified Firebase identity. Neither is a caller-selected assignee field.
 
 **Coverage.** The assembled `METHODS` registry is authoritative. The index below
 is a dated reference, with later additions described in their owning sections;
@@ -103,10 +130,9 @@ registered method. A bare name is **required**; a name with `?` or a
 `=default` is optional. If a signature cannot be parsed (a placeholder
 like `…fields` rather than identifiers) the method is marked *open* and
 no unknown-key check runs for it — a visible gap rather than a guess.
-The current registry has one open method, `llm.models`: its handler docstring
-lacks the signature declaration used by `param_spec`. Its handler still validates
-the provider; undeclared-parameter rejection is not enforced for that method.
-This gap is tracked in [the harness backlog](harness-backlog.md).
+Every current registered method has a checkable declaration, including
+`llm.models(provider?)`; unknown catalog parameters are refused with `-32602`.
+An open method still fails the registry-wide regression gate.
 
 **The required mark carries an obligation.** A parameter may be declared
 required only where the handler genuinely cannot proceed — where it
@@ -120,11 +146,22 @@ consumer relying on the default.
 gate: every method must declare a checkable signature; required must be a
 subset of accepted; every method must answer its documented minimal
 payload through the real `dispatch_raw` (an internal `-32603` does not
-count as an answer); required-ness is proven leave-one-out over the whole
-registry; and every `window.zylch.*` binding in
+count as an answer), except `whatsapp.connect` whose interactive/native
+connection is explicitly exempt; required-ness is proven leave-one-out over
+non-exempt methods; and every `window.zylch.*` binding in
 `app/src/preload/index.ts` must resolve to a registered engine method.
-The suite is not wired into CI — `.github/workflows/` holds only
-`release.yml` — so it runs when someone runs it.
+`.github/workflows/rpc-contracts.yml` runs this suite, task lifecycle/transport
+checks, app typecheck and `npm run test:rpc-contracts` on relevant pushes/PRs.
+The latter uses the TypeScript checker to compare preload payload keys with
+engine accepted/required names and renderer arguments/declared returns with
+preload declarations. `npm run inventory:rpc` regenerates
+[rpc-contract-inventory.json](rpc-contract-inventory.json); both commands accept
+`ENGINE_PYTHON` and `CS_KERNEL_ROOT`. The inventory records dynamic kernel call
+sites and extraction limits. This is not shared runtime value/return validation:
+`any`/`unknown` and Python aliases/dataflow remain explicit coverage limits.
+Local task transport checks exercise subprocess stdin/stdout and the production
+WebSocket handler with fixture claims; they do not verify Firebase handshake,
+CLI initialization, packaged sidecars or deployed profiles.
 
 **Secret redaction.** The dispatcher's DEBUG `params=` line is recursively
 redacted before it is written: exact names (`token`, `password`, `secret`,
@@ -441,21 +478,21 @@ preload bridge.
 |-------|------|----------|-------|
 | `task_id` | string | yes | TaskItem UUID |
 | `note` | string \| null | no | Optional free-text closing reason. Stored on `task_items.close_note`. **Display-only — never injected into the task-detection prompt or any other LLM context.** Whitespace-only notes are stored as NULL. |
-| `actor` | string \| null | no | WHO closed it, as a stable machine token: `human` for a user action in the desktop (the default), otherwise the calling code path or external operator — `mrcall-cs` sends `operator`. Lands in `task_items.close_actor`. A non-string raises. |
+| `actor` | string \| null | no | Caller-supplied audit label, default `human`; external operator paths use `operator`. Stored in `task_items.close_actor`. It does not authenticate human presence or authorize company assignments. A non-string raises. |
 | `why` | string \| null | no | The audit reason, distinct from the display `note`; falls back to `note` when omitted. A non-string raises. |
 
 Returns `{ ok: boolean }`.
 
-A close is the one irreversible thing this ledger does, so it records WHO
-and WHY — the same audit convention `tasks.snooze` follows. Both
-parameters default to the desktop-human close, so a client written before
-they existed is unaffected. Each successful close appends note, actor and
-reason as a separate entry to `sources.closes[]`; both reopen paths, and
-every conflicting `tasks.create` upsert, carry that history over rather
-than replacing `sources` wholesale.
+A close records caller-supplied actor and reason using the same audit convention
+as `tasks.snooze`; the default actor is `human`. It can be reversed through
+`tasks.reopen`. Each successful close appends note, actor and reason as a separate
+entry to `sources.closes[]`; both reopen paths and conflicting `tasks.create`
+upserts retain that history. These labels are audit text, not verified human
+provenance.
 
-Auto-close paths (worker, reanalyze sweep, task_interactive) call this
-with `note=None` so closing reasons are never fabricated by the LLM.
+When `note` is `None`, storage falls back to a supplied `why` for the display
+close note. An automated caller's reason can therefore become display text;
+`note=None` does not establish human authorship of the reason.
 
 ### `tasks.reopen(task_id)`
 
@@ -483,8 +520,8 @@ already-closed task — reviving a closed task is `tasks.reopen`'s job.
 
 One task by primary key, **open or closed**. The row is the full record:
 `completed_at`, `close_note` and the `close_actor` audit column are
-included, so a caller can tell an open task from a closed one, and a
-human close from a machine one. `due_at` (epoch seconds, NULL when the
+included, so a caller can tell an open task from a closed one and inspect the
+caller-supplied close label. `due_at` (epoch seconds, NULL when the
 task is actionable now) comes back too, so a parked task is
 distinguishable from a pending one.
 
@@ -780,13 +817,17 @@ at `app/src/preload/index.ts` has a 15 s timeout.
 
 ### `account.set_firebase_token(uid, id_token, expires_at_ms, email?, refresh_token?)` / `account.who_am_i()` / `account.sign_out()`
 
-The in-band session trio. `set_firebase_token` **trusts the caller** — it
-installs the token as-is, which is safe only because the local sidecar's
-parent process is the app itself; the cross-machine path uses
-`auth.refresh` instead, which verifies. `expires_at_ms` is the absolute
-Unix-ms instant at which Firebase will reject the token; the renderer
-reads it from `user.getIdTokenResult().expirationTime`. The engine holds
-the token **in memory only** and never persists it.
+The in-band session trio. Both `set_firebase_token` and `auth.refresh` verify
+the signed Firebase token and bind it to the selected `OWNER_ID`; a requested
+UID mismatch, invalid/expired token or hosted profile without an owner is
+refused. Local onboarding may establish verified identity before a profile
+owner exists. Email and effective expiry come from signed claims.
+`expires_at_ms` remains a required compatibility parameter on
+`set_firebase_token`, validated for shape rather than trusted as authority.
+The ID token stays **in memory only**. An optional `refresh_token` is persisted
+through `utils/encryption.py` for headless renewal: Fernet with a configured key,
+local plaintext passthrough without one. Hosted startup requires an environment
+key. Neither token is echoed.
 
 `who_am_i` answers `{signed_in, uid?, email?, expires_at_ms?}` and
 deliberately **never echoes the token back** — the renderer is the source
@@ -1199,8 +1240,8 @@ owner is ignored). Backs the MrCall tab's search bar + status dropdown.
 ### `auth.refresh(id_token, refresh_token?)`
 
 Cross-machine transport (WebSocket backend). Verifies a fresh Firebase ID
-token server-side (RS256 against Google's certs — unlike
-`account.set_firebase_token`, which trusts the caller) and replaces the
+token server-side (RS256 against Google's certs), applies the same signed
+identity/profile-owner admission as `account.set_firebase_token`, and replaces the
 engine's in-memory session. The WebSocket client
 (`app/src/main/wsRpcClient.ts`) calls this on a ~30-min timer to keep the
 remote session alive well inside the token's ~1h lifetime; the engine
@@ -1417,6 +1458,10 @@ counter. The summary always carries its whole shape:
 immediately and returns counts the renderer can phrase as "Closed N tasks
 across M cluster(s)"; it tolerates a profile with no LLM configured,
 answering `no_llm=True` instead of failing.
+Both task dedup entrypoints retain bounded-preparation admission. A paused or
+busy run refuses with JSON-RPC `-32020` and a fixed safe message directing the
+caller to preparation status; it does not become an internal task error or run
+maintenance despite the pause. Exception details stay private.
 
 ### `memory.restore_version(blob_id?, version_id?)`
 

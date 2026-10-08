@@ -41,6 +41,11 @@ longer expires old pending task checkpoints merely because of their age.
   item's retry history. Stage examples are `memory:email` and `task:calendar`.
 - `sync.run()` remains the free synchronization operation.
 
+`tasks.dedup_now()` and `tasks.topic_dedup_now()` retain this admission even when
+called directly. Paused/busy preparation refusal crosses task dispatch as
+`-32020` with a fixed privacy-safe message; inspect `preparation.status()` for
+state. Unknown task exceptions remain internal/private.
+
 Normal `update.run` and CLI update use the same bounded run. Standalone memory
 batches, task refresh, trainers and maintenance RPCs also use run admission.
 Legacy private paid preparation paths without an admitted scope are refused

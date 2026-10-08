@@ -1,6 +1,6 @@
 # Zylch — Documentation Index
 
-Complete documentation for Zylch standalone (local CLI sales intelligence tool).
+Documentation for the MrCall Desktop engine: local sidecar and per-profile hosted daemon.
 
 ## Architecture and Rules (Static)
 
@@ -57,7 +57,8 @@ Complete documentation for Zylch standalone (local CLI sales intelligence tool).
 | [features/company-memory-join.md](features/company-memory-join.md) | Fenced company-memory join, parked-work resolution, maintenance routes |
 | [features/read-only-chat-policy.md](features/read-only-chat-policy.md) | Negotiated server-enforced read-only chat origin policy |
 | [features/outbound-calls.md](features/outbound-calls.md) | MrCall outbound calls: Firebase, approval, submission semantics |
-| [features/task-management.md](features/task-management.md) | Task system (4-level urgency) |
+| [features/task-management.md](features/task-management.md) | Private ordinary tasks, lifecycle and company subtype boundary |
+| [features/task-assignment.md](features/task-assignment.md) | Company assignments, privileged approval, source coverage and rollback |
 | [features/relationship-intelligence.md](features/relationship-intelligence.md) | Relationship intelligence and gap detection |
 | [features/calendar-integration.md](features/calendar-integration.md) | Calendar integration (planned: CalDAV) |
 | [features/MICROSOFT_CALENDAR_TODO.md](features/MICROSOFT_CALENDAR_TODO.md) | Outlook Calendar via CalDAV (TODO) |

@@ -1,7 +1,7 @@
 ---
 description: |
-  Development conventions for Zylch standalone: local CLI tool with SQLite,
-  IMAP/SMTP, Click, no server. Code style, patterns, logging, security.
+  Development conventions for the MrCall Desktop engine: local/hosted profiles,
+  SQLite, IMAP/SMTP and authenticated RPC. Code style, patterns and security.
 ---
 
 # Zylch Code Conventions
@@ -123,7 +123,9 @@ def sync(days: int):
 ## Configuration
 
 ### Environment Variables
-All config via `zylch/config.py` using Pydantic Settings, loaded from `~/.zylch/.env`:
+Profile settings use `zylch/config.py` and Pydantic Settings, loaded from the
+selected UID-keyed profile. Privileged assignment trust and signing configuration
+use their separate [filesystem contract](features/task-assignment.md):
 ```python
 class Settings(BaseSettings):
     email_address: str = ""
@@ -211,10 +213,10 @@ def test_search_emails():
 
 ### Credentials
 - Never commit credentials to git
-- Use `~/.zylch/.env` for secrets (Pydantic Settings)
+- Use the selected profile configuration and encrypted secret store; assignment signing keys belong only to the independent privileged operator.
 - Encrypt stored credentials with Fernet (`zylch/utils/encryption.py`)
 - App passwords for IMAP (no OAuth token storage needed)
-- **Firebase ID token** (held in-memory by `zylch.auth.session` and used as the `auth:` header by `MrCallProxyClient` and StarChat-Firebase callers): never log the token itself. `len(id_token)` and at most the first 8 characters are acceptable for diagnostic logs, matching the rest of the secret-logging policy.
+- **Firebase ID token**: kept in memory by `zylch.auth.session`; never persist or log it, including prefixes. Log only presence/absence. Refresh-token persistence follows the separate [identity contract](../../docs/cross-cutting-contracts.md).
 
 ### Input Validation
 - Validate user input at CLI boundaries

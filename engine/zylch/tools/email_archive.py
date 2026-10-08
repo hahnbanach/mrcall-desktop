@@ -573,49 +573,12 @@ class EmailArchiveManager:
             else:
                 from_email = from_str.strip()
 
-        # Detect auto-reply
-        from zylch.utils.auto_reply_detector import (
-            detect_auto_reply,
-        )
+        from zylch.utils.auto_reply_detector import message_is_auto_reply
 
-        auto_reply_headers = {
-            "Auto-Submitted": msg.get("auto_submitted"),
-            "X-Autoreply": msg.get("x_autoreply"),
-            "Precedence": msg.get("precedence"),
-            "X-Auto-Response-Suppress": msg.get("x_auto_response_suppress"),
-        }
-        is_auto_reply = detect_auto_reply(auto_reply_headers, from_email)
-
-        # Use message_id as ID (IMAP) or id (Gmail)
+        is_auto_reply = message_is_auto_reply(msg, from_email)
         msg_id = msg.get("message_id", msg.get("id", ""))
-
-        # Body: IMAP provides body_plain/body_html,
-        # Gmail provides body
         body_plain = msg.get("body_plain", msg.get("body", ""))
         body_html = msg.get("body_html")
-
-        # Stopgap (2026-06): MrCall's product auto-replies (from support@, the
-        # "MrCall. 📩 …" template) carry NO RFC-3834 auto headers, so the
-        # header-only detector above misses them and they read as "the user
-        # replied" → silently closing customer tasks. A literal sentinel was
-        # added to the FIRST LINE of that template; match it case-insensitively,
-        # tolerating both the "auto-reply" and "auto-replay" spelling and a
-        # hyphen/space/no separator. The proper fix is the product emitting
-        # Auto-Submitted on those mails; tracked separately.
-        if not is_auto_reply and body_plain:
-            import re as _re
-
-            _first_line = next((ln.strip() for ln in body_plain.splitlines() if ln.strip()), "")
-            if _re.search(r"\bauto[\s\-]?repl(?:ay|y)\b", _first_line, _re.I):
-                is_auto_reply = True
-            # The legacy Italian product auto-reply opens with the literal
-            # greeting "Ciao MrCaller!" (no RFC-3834 headers, no English
-            # sentinel). Real human replies from the mailbox open with
-            # "Buongiorno" or "Ciao <customer name>" — never "Ciao MrCaller"
-            # — so this opener is a safe, distinctive marker. (Operator
-            # request 2026-06-15; backfilled the historical rows separately.)
-            elif _first_line.lower().startswith("ciao mrcaller"):
-                is_auto_reply = True
 
         return {
             "id": msg_id,

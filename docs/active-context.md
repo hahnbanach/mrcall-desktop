@@ -1,6 +1,6 @@
 ---
-doc_baseline_commit: 33e157ecc04673859972f5beaeabc0e77c4843eb
-doc_baseline_date: 2026-10-01
+doc_baseline_commit: a67fb27b2e8d0d48629b8850e9275ea84e377f97
+doc_baseline_date: 2026-10-08
 ---
 
 # Active Context — Cross-cutting
@@ -18,6 +18,17 @@ what is *current*, targeting ≤ ~120 lines.
 <!-- doc-scope:end -->
 
 ## State now
+
+Company assignment APIs have local engine, CLI and native workflow acceptance
+with signed approvals, retained audit and exact inbound coverage. Scoped draft
+writes hold assigned or unknown threads; ordinary and Qonto tasks remain private.
+Production enablement and live acceptance remain separate under the
+[assignment plan](execution-plans/2026-10-08-explicit-task-assignment.md).
+
+Local Desktop/kernel reliability gates and task/RPC contract checks pass.
+The August umbrella is retired; exact source-only evidence, withdrawn work and
+remaining owners are in the [closure record](execution-plans/2026-10-07-desktop-kernel-hardening-closure.md).
+No new release, clone upgrade, installer/fleet acceptance or live cleanup is implied.
 
 Native Qonto code has reviewed engine and Desktop browser-fixture acceptance,
 including private tasks, managed history and consented minimal company facts.

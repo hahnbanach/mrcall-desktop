@@ -185,7 +185,11 @@ class ChatService:
             }
         """
         from zylch.qonto import history as finance_history
+        from zylch.services.task_assignment_draft_policy import current, process_chat
 
+        if current() is not None:
+            return await process_chat(self, user_message, user_id, conversation_history,
+                                      session_id, approval_callback)
         if finance_history.is_managed():
             from zylch.qonto.chat import process
 

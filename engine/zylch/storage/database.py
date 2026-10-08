@@ -215,6 +215,9 @@ def get_session() -> Generator[Session, None, None]:
 # MetaData would otherwise create every table in every file, and the
 # mis-binding would be silent instead of an error.
 MEMORY_TABLE_NAMES = (
+    "assigned_tasks",
+    "assigned_task_events",
+    "assigned_task_receipts",
     "project_space",
     "project_documents",
     "project_revisions",
@@ -245,8 +248,9 @@ MEMORY_TABLE_NAMES = (
 def _tables(names: tuple[str, ...] | None, *, exclude: bool = False):
     from zylch.storage.models import Base as _Base
     from zylch.qonto import models as _qonto_models
+    from zylch.storage import assigned_task_models as _assigned_task_models
 
-    _ = _qonto_models
+    _ = _qonto_models, _assigned_task_models
     if names is None:
         return list(_Base.metadata.sorted_tables)
     wanted = set(names)

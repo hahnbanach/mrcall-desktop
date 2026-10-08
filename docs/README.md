@@ -22,6 +22,8 @@ The repo has three parallel doc trees, mirroring the three index files. Each tre
 
 ## Index
 
+- [Cross-cutting runtime contracts](cross-cutting-contracts.md) — Firebase identity, company memory, hosted tenant isolation and LLM billing; operating rules remain in the repository index.
+
 - [Qonto connection](briefs/2026-10-04-qonto-connection.md) — native Desktop setup and engine-owned financial source; [development plan](execution-plans/2026-10-04-qonto-connection.md), including the authorized support-only rollout.
 - [Qonto IPC](qonto-ipc.md) — native bank methods, managed chat history and verification boundaries.
 - [Additional mailboxes and PEC](../engine/docs/features/mailboxes.md) — multiple IMAP sources, PEC envelope extraction and Desktop Settings; [original plan](execution-plans/2026-09-30-pec-net-mailbox-integration.md).
@@ -53,7 +55,7 @@ The repo has three parallel doc trees, mirroring the three index files. Each tre
 - [`claude-agent-sdk-analysis.md`](claude-agent-sdk-analysis.md) — evaluation of the Claude Agent SDK against the engine's own agent loop
 - [`briefs/`](briefs/) — the what/why half of a work trace, paired with the execution plan of the same `YYYY-MM-DD-<slug>`
 - [`execution-plans/`](execution-plans/) — workstreams that span both subsystems, one file each, `status:` in the frontmatter
-- `.doc-profile` — doc-harness configuration (leaf mode, `AGENTS.md` as the project index, `CLAUDE.md` as the managed harness entry point)
+- `.doc-profile` — doc-harness configuration (leaf mode, `AGENTS.md` as the project index and managed v9 harness entry point)
 
 The release pipeline (tag-driven matrix, signing, notarization,
 electron-builder quirks) is documented inside
@@ -74,3 +76,9 @@ anywhere in the repo):
 - [Daily LLM budget and spend incident](briefs/2026-09-11-daily-llm-budget.md) — [implementation plan](execution-plans/2026-09-11-daily-llm-budget.md) and [engine spending contract](../engine/docs/features/daily-llm-budget.md).
 
 - [Operator versus engine AI: models, costs and pauses](operator-setup.md#ai-execution-and-controls).
+
+- [Desktop/kernel hardening closure](execution-plans/2026-10-07-desktop-kernel-hardening-closure.md) — local contract/gate evidence, historical dispositions and explicit remaining owners; [brief](briefs/2026-10-07-desktop-kernel-hardening-closure.md).
+- [RPC call inventory](rpc-contract-inventory.json) — generated names, payload keys and declared types; limits and verification in [IPC contract](ipc-contract.md#parameter-contract--what-the-dispatcher-refuses).
+
+- [Company task assignments](../engine/docs/features/task-assignment.md) — local implementation and approval/source boundaries; [brief](briefs/2026-10-08-explicit-task-assignment.md) and [delivery plan](execution-plans/2026-10-08-explicit-task-assignment.md).
+- [Human thread-assignment gaps](../engine/docs/features/human-thread-ownership-gaps.md) — original requirements and selected mechanism; current verification status belongs to the delivery plan.

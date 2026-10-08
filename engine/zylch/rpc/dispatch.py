@@ -244,9 +244,22 @@ async def dispatch_raw(raw: str, notify: NotifyFn) -> Optional[Dict[str, Any]]:
         else:
             result = await handler(params, notify)
     except Exception as e:
+        if method.startswith("tasks.assignment."):
+            from zylch.services.task_assignment_types import AssignmentError
+
+            code = e.code if isinstance(e, AssignmentError) else INTERNAL_ERROR
+            message = str(e) if isinstance(e, AssignmentError) else "Assignment operation unavailable"
+            logger.warning("[rpc] assignment operation refused code=%s", code)
+            return None if is_notification else _error(req_id, code, message)
         if method.startswith("tasks."):
             from zylch.qonto.errors import QontoError
+            from zylch.services.preparation import PreparationStopped
 
+            if isinstance(e, PreparationStopped):
+                logger.warning("[rpc] task preparation refused code=%s", e.code)
+                return None if is_notification else _error(
+                    req_id, e.code, "Preparation is unavailable; review preparation status."
+                )
             code = e.code if isinstance(e, QontoError) else INTERNAL_ERROR
             safe_validation = {"actor must be a string when provided", "why must be a string when provided", "note must be a string when provided", "task_id is required", "task_id must be a string", "pinned is required", "contact_email, title and event_id are required", "pass exactly one of due_at (epoch seconds) or days"}
             message = str(e) if isinstance(e, QontoError) or (isinstance(e, ValueError) and str(e) in safe_validation) else "Task operation failed"

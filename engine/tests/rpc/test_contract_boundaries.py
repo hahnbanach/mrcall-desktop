@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
+import asyncio
+import contextvars
 import json
 import logging
 import re
+import socket
 from pathlib import Path
 
 import pytest
@@ -133,14 +136,15 @@ def offline_engine(tmp_path, monkeypatch):
 
     - ``HOME`` points at a temp dir, so nothing can read or write the
       real ``~/.zylch`` (``profiles.create`` writes a profile directory).
-    - the active profile's ``.env`` carries NO credentials, so no handler
-      can authenticate to anything even if it tried.
+    - the active profile's ``.env`` carries only synthetic credentials, so no handler
+      can authenticate to a real account.
     - the httpx TRANSPORTS refuse to send, so an HTTP call is an error
       rather than a packet. Patched at ``handle_request`` and not by
       swapping ``httpx.Client`` itself: third-party modules evaluate
       annotations like ``httpx.Client | None`` at import time, and a
       class replaced by a function makes that a TypeError which then
       sticks in ``sys.modules`` for the rest of the session.
+    - sockets and DNS are blocked, including IMAP; sync uses an offline result.
     - the LLM factories are neutered, so nothing bills a token.
     """
     home = tmp_path / "home"
@@ -169,6 +173,10 @@ def offline_engine(tmp_path, monkeypatch):
     def _no_network(*_args, **_kwargs):
         raise RuntimeError("network is blocked in the contract-boundary test")
 
+    monkeypatch.setattr(socket, "create_connection", _no_network)
+    monkeypatch.setattr(socket.socket, "connect", _no_network)
+    monkeypatch.setattr(socket.socket, "connect_ex", _no_network)
+    monkeypatch.setattr(socket, "getaddrinfo", _no_network)
     monkeypatch.setattr(httpx.HTTPTransport, "handle_request", _no_network)
     monkeypatch.setattr(httpx.AsyncHTTPTransport, "handle_async_request", _no_network)
     # Modules that bind these factories by name at import time are imported
@@ -212,7 +220,11 @@ def offline_engine(tmp_path, monkeypatch):
     async def _no_process(*_args, **_kwargs):
         return None
 
+    async def _offline_sync(*_args, **_kwargs):
+        return {"sync_new": 0, "wa_messages": 0, "wa_contacts": 0}
+
     monkeypatch.setattr(process_pipeline, "handle_process", _no_process)
+    monkeypatch.setattr(process_pipeline, "run_sync_only", _offline_sync)
 
     db_mod.dispose_engine()
     db_mod.init_db()
@@ -521,3 +533,53 @@ async def test_exception_log_does_not_echo_top_level_secret(caplog, monkeypatch)
 
     assert response is not None
     assert secret not in caplog.text
+
+
+@pytest.mark.parametrize("method", ["tasks.dedup_now", "tasks.topic_dedup_now"])
+@pytest.mark.parametrize("state", ["paused", "running"])
+@pytest.mark.asyncio
+async def test_dedup_preserves_preparation_admission_refusal(offline_engine, method, state):
+    from contextlib import nullcontext
+    from zylch.cli.utils import get_owner_id
+    from zylch.services.preparation import PreparationStopped, pause, preparation_run
+
+    owner = get_owner_id()
+    if state == "paused":
+        pause(owner)
+    context = preparation_run(owner) if state == "running" else nullcontext()
+    with context:
+        if state == "running":
+            async def probe():
+                return await dispatch_raw(_request(method, {}), _notify)
+            response = await asyncio.create_task(probe(), context=contextvars.Context())
+        else:
+            with pytest.raises(PreparationStopped, match="paused"):
+                await METHODS[method]({}, _notify)
+            response = await dispatch_raw(_request(method, {}), _notify)
+    assert response["error"] == {
+        "code": PreparationStopped.code,
+        "message": "Preparation is unavailable; review preparation status.",
+    }
+
+
+@pytest.mark.parametrize("coded", [False, True])
+@pytest.mark.asyncio
+async def test_task_errors_do_not_disclose_private_exception_text(monkeypatch, caplog, coded):
+    from zylch.services.preparation import PreparationStopped
+
+    secret = "private-mail-and-credential-material"
+    async def explode(_params, _notify):
+        raise PreparationStopped(secret) if coded else RuntimeError(secret)
+
+    monkeypatch.setitem(METHODS, "tasks.dedup_now", explode)
+    response = await dispatch_raw(_request("tasks.dedup_now", {}), _notify)
+    assert response["error"]["code"] == (PreparationStopped.code if coded else INTERNAL_ERROR)
+    assert secret not in repr(response) + caplog.text
+
+
+def test_offline_profile_blocks_direct_socket_connections(offline_engine):
+    with pytest.raises(RuntimeError, match="network is blocked"):
+        socket.create_connection(("imap.example.test", 993))
+    with socket.socket() as client:
+        with pytest.raises(RuntimeError, match="network is blocked"):
+            client.connect(("127.0.0.1", 993))

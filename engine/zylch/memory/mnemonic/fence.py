@@ -209,6 +209,11 @@ def place(company_key: str, owner_ids: Iterable[str], destination_key: str) -> s
     fence_id = secrets.token_hex(24)
     try:
         with company_transaction(write=True) as session:
+            from zylch.services.task_assignment_join import refusal_connection
+
+            blocked = refusal_connection(session.connection(bind_arguments={"mapper": MemoryJoinFence}))
+            if blocked:
+                raise CompanyFenced(blocked)
             session.add(
                 MemoryJoinFence(
                     id=fence_id,

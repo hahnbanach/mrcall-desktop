@@ -1,0 +1,63 @@
+name: RPC parameter and task contracts
+
+on:
+  push:
+    paths:
+      - 'engine/**'
+      - 'app/src/**'
+      - 'app/scripts/rpc-contract-inventory.cjs'
+      - 'app/package*.json'
+      - 'app/tsconfig*.json'
+      - '.github/workflows/rpc-contracts.yml'
+  pull_request:
+    paths:
+      - 'engine/**'
+      - 'app/src/**'
+      - 'app/scripts/rpc-contract-inventory.cjs'
+      - 'app/package*.json'
+      - 'app/tsconfig*.json'
+      - '.github/workflows/rpc-contracts.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  contracts:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: malemi/cs-kernel
+          ref: ba79cc13f55b5f19b43a98ebdeb7fe1ca6a4704a
+          path: cs-kernel
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install engine test dependencies
+        working-directory: engine
+        run: python -m pip install -e . pytest pytest-asyncio
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: app/package-lock.json
+      - name: Install app without packaging or secret setup
+        working-directory: app
+        run: npm ci --ignore-scripts
+      - name: Check app declarations and RPC parameter boundaries
+        working-directory: app
+        env:
+          ENGINE_PYTHON: python
+          CS_KERNEL_ROOT: ${{ github.workspace }}/cs-kernel
+        run: |
+          npm run typecheck
+          npm run test:rpc-contracts
+      - name: Check registry and task lifecycle over both transports
+        working-directory: engine
+        run: |
+          python -m pytest -q -p no:cacheprovider \
+            tests/rpc/test_contract_boundaries.py \
+            tests/rpc/test_task_transport_contract.py \
+            tests/storage/test_tasks_create_close.py
