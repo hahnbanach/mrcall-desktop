@@ -1182,6 +1182,39 @@ not started.
      lifecycle, consistent A/B isolation evidence for the accepted app profile,
      and both independent final reviews. No live profile is deleted.
 
+   - **Criterion 7 code fix — 2026-10-08, cloud session.** Commit
+     `598cbd55`. A profile names its account twice
+     (`memory.mnemonic.authorization._current_owners`):
+     - chat, `tasks.solve` and correction learning write rules under
+       `EMAIL_ADDRESS` (`get_owner_id`);
+     - a memory tool whose session carries no owner falls back to
+       `settings.owner_id` = `OWNER_ID`, the Firebase uid
+       (`ToolConfig.from_settings`).
+
+     So the code can produce the uid-owned rules the 2026-10-04 fixture
+     seeded; whether any exist on the live stores is for the VPS to count,
+     by number only. `memory-offboard` removed only the email's rules, so
+     uid-owned rules outlived the profile. It now removes the rules of both identities
+     (`offboard.delete_account_rules`). A profile that names neither is
+     refused with exit 2, and the helper's `delete` stops with nothing
+     deleted. The tests cover both identities, another account's rules
+     kept, the company fact kept, and the refusal.
+
+     *To close R5 (VPS):*
+     1. Pull `main` and reconcile, so the checkout the helper calls carries
+        the fix.
+     2. Re-run the scratch lifecycle of 2026-10-04, seeding each scratch
+        holder with one rule under its email, one under its uid, and one
+        company fact.
+        - Deleting the first holder must remove exactly its two rules and
+          keep the fact and the other holder's rules.
+        - Deleting the last holder must remove the store and the group.
+        - No file, user or key of either uid may remain.
+     3. Re-check criteria 1, 2, 5 and 6 with A = Mario Gmail (the accepted
+        signed-app profile) and B = a profile of another company
+        (support@), so that one A carries the whole evidence set.
+     4. Two independent final reviews, then `status: completed`.
+
    - **Open after this plan, not part of it:**
      - one handset whose speech the voice provider does not transcribe
        (voice path, not the host; 2026-10-03 diagnosis above);
