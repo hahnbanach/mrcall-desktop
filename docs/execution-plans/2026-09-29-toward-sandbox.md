@@ -1159,6 +1159,29 @@ not started.
      Evidence: `attachment-chat-delivery.json` and `attachment-installed.json`.
      The signed-app retry remains pending; R5 remains active.
 
+   - **CTO signed-app acceptance — reported 2026-10-08, Mario Gmail.**
+     The CTO reports successful mail lookup/read, actual attachment download,
+     and a fresh document lookup by basename through `read_document` on the
+     same Remote profile. The audio download is 58,449 bytes; a separate PDF
+     download is 85,574 bytes and reads as two pages. The PDF is found by its
+     basename without supplying an absolute path. No mail text, call content,
+     invoice values, business identifiers or credentials are reproduced here.
+     The app version was not reconfirmed in this feedback. A metadata-only
+     daemon-log check records actual `download_attachment` success at
+     2026-10-08 08:16:40 UTC and `read_document` success at 08:16:50, 09:05:41
+     and 09:20:51 UTC. These are actual tool events; exact mapping of each
+     feedback message to a turn was not reconstructed. Metadata evidence:
+     `app-tool-metadata.json` under the local R5 harness-migration review folder.
+     Operator-reported installed-app evidence is distinct from the auxiliary
+     provider/tool diagnostics above.
+     The lead's intervening full-text-search request was outside the existing
+     document tool contract. `read_document` searches by filename; a folder-wide
+     content index is not exposed, and hosted `run_python` remains refused.
+     The signed-app mail/attachment/document sequence is accepted for Mario
+     Gmail. R5 remains active pending the representative scratch offboarding
+     lifecycle, consistent A/B isolation evidence for the accepted app profile,
+     and both independent final reviews. No live profile is deleted.
+
    - **Open after this plan, not part of it:**
      - one handset whose speech the voice provider does not transcribe
        (voice path, not the host; 2026-10-03 diagnosis above);

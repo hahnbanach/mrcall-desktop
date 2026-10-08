@@ -1,3 +1,65 @@
+<!-- mrcall-ai-kit:delivery:start -->
+## Documentation lifecycle (harness v9)
+This repository's managed protocol lives here in AGENTS.md; no CLAUDE.md read is
+required. Use this v9 entry instead of any older kit instruction to load CLAUDE.md.
+When repository `.agents/skills/` provides doc-start/doc-end/doc-critic, load those
+copies; do not select same-named older global workflows.
+
+The lead, before source reads, searches, diagnosis, edits, or delegation for ANY repository
+request (including questions, fast-path fixes, briefs, and reviews), invoke
+`doc-start`: load its current workflow and execute it. The lead personally reads
+AGENTS.md, docs/README.md, docs/active-context.md, and relevant durable docs in full.
+Reuse exact documents already present in context. Bounded installation/profile
+checks may precede orientation; source exploration may not. Reload affected
+orientation after repository/worktree/instruction changes or context loss, not
+ordinary source edits. Never substitute a worker summary for these lead reads.
+Workers use the lead's scoped handoff; reload only required context they lack.
+
+Act as the senior engineer and project manager reporting to the human CTO.
+Resolve routine reversible decisions from evidence; deliver verified outcomes.
+Ask only for unresolved intent, authority, material risk, or irreversible/external
+action. Match effort to risk; fix in-scope problems. Delegate bounded substantive
+work only when its parallelism, expertise, or isolation exceeds coordination cost.
+
+Classify the request and preserve its scope:
+- Explanation/read-only diagnosis: orient, investigate, answer with uncertainty;
+  no required edits, trace, consolidation, baseline advancement, or release.
+- Brief-only/review-only: orient and deliver only the requested artifact/verdict;
+  no automatic plan, implementation, migration, baseline advancement, or release.
+- Fast path requires ALL: local, obvious, reversible; no public contract, behavior
+  boundary, persistent data, security, dependency graph, or migration change;
+  no decomposition/delegation; one focused real check proves it. Implement and
+  check; state documentation impact. If none, justify it. If docs are affected,
+  invoke `doc-end` for proportionate reconciliation and verification.
+- Documentation-only: invoke `doc-end` before completion, including lead-owned
+  reconciliation, mechanical gate, `doc-critic`, and living-context shape check.
+- Substantial development: follow the ordered reviews below, then `doc-end`
+  before final approval. Generic code review never substitutes for `doc-critic`.
+
+Substantial work starts with docs/briefs/YYYY-MM-DD-<slug>.md (intent, scope,
+constraints, acceptance, assumptions) and then docs/execution-plans/YYYY-MM-DD-<slug>.md
+(status frontmatter, dependencies, ownership, verification, relevant rollback).
+Order: brief → fresh reviewer APPROVED → plan → fresh reviewer APPROVED →
+implementation → milestone integration review before dependent work → separate
+final review through the final-user path. Review the brief's framing first.
+Repair REVISE with the same reviewer; use a fresh reviewer for each new gate.
+Verdicts: APPROVED, REVISE, FAST_PATH (prove every criterion), BLOCKED (unresolved
+intent/risk/authority). Reviews are internal gates, not human approval prompts.
+Relay each verdict and its evidence in your own words; never paste the report.
+Without fresh-review capability, perform a separate pass and report the limitation.
+
+Closure: the lead identifies affected docs, including unchanged docs and missing
+coverage; reconciles current knowledge; preserves historical narrative verbatim
+in docs/active-context-archive.md; runs the mechanical gate and explicitly invokes
+`doc-critic` over affected docs plus active-context shape even when untouched.
+Repair STALE, preserve UNVERIFIABLE, and recheck affected changes. Final review
+must REVISE missing/stale required evidence. For applicable closure, use
+`doc-check.py --completion check`, then `--completion finalize` for baseline.
+Fast-path no-impact closure stays proportionate; release needs authorization.
+Keep actual result references and pending obligations across delegation/resumption;
+attestations and mechanical success alone do not prove semantic or runtime enforcement.
+<!-- mrcall-ai-kit:delivery:end -->
+
 # AGENTS.md
 
 **Stack**: Electron + React (app), Python 3.11+ (engine), SQLite
@@ -41,106 +103,13 @@ structure). Read those for details:
 - [`app/CLAUDE.md`](app/CLAUDE.md) + [`app/docs/`](app/docs/) — Electron layout, dev workflow, packaging.
 - [`docs/`](docs/) — cross-cutting docs: IPC contract, release pipeline, brand/rename rollout.
 
-## Identity (Firebase) — added 2026-05-02
+## Cross-cutting runtime contracts
 
-The Electron renderer now gates the entire UI behind a Firebase Auth
-sign-in (same `talkmeapp-e696c` project the dashboard uses, so the
-account is shared). The renderer pushes the resulting ID token to the
-Python sidecar over JSON-RPC (`account.set_firebase_token`); the
-sidecar holds it in memory and uses it as the `auth:` header for
-outgoing StarChat calls. The token is never persisted to disk.
-
-Profiles created post-Firebase are keyed by the immutable Firebase
-UID (`~/.zylch/profiles/<firebase_uid>/`), not the email — emails can
-change. The user's email is stored as `EMAIL_ADDRESS` in the
-profile's `.env` for display, alongside `OWNER_ID = <firebase_uid>`
-which the engine's owner-scoped storage (OAuthToken etc.) uses as the
-foreign key.
-
-Google Calendar is a *separate* OAuth — PKCE flow on
-`127.0.0.1:19275`, scope `calendar.readonly`, tokens stored encrypted
-in the existing `OAuthToken` table with `provider='google_calendar'`.
-The Calendar OAuth is incremental: Firebase signin doesn't ask for it,
-the user clicks "Connect Google Calendar" in Settings to grant it
-later. Configure `GOOGLE_CALENDAR_CLIENT_ID` (Desktop-app or Web
-loopback OAuth client) in profile settings before the first
-connect — no client secret is used.
-
-The legacy CLI MrCall PKCE flow on `:19274` (`zylch init`) was **removed
-2026-05** — MrCall connection today happens exclusively via the Firebase
-sign-in in the desktop UI (`tools/mrcall/starchat_firebase.py`); `zylch init`
-no longer runs any OAuth/PKCE code for MrCall (corrected 2026-07-14,
-doc-critic pass).
-
-## Shared company memory (since 2026-09)
-
-Memory is per company, not per account. A profile carries `MEMORY_KEY`
-(`secrets.token_urlsafe(16)`, 22 chars) in its `.env`, and every profile on
-the same engine host holding that key reads and writes one SQLite store
-under `~/.zylch/memory/` (`MEMORY_DB_DIR` overrides the directory; `ZYLCH_HOME`
-overrides `~/.zylch` everywhere): on a local engine `<MEMORY_KEY>.db`, on a
-hosted one `mc-c-<sha256(key)[:12]>/<sha256(key)[:32]>.db` so the file name
-never carries the key (legacy-named stores are still opened, never shadowed);
-the profile's `zylch.db` keeps mail, tasks, tokens and sync cursors.
-Company families (`user:<key>`, `facts:<key>`) are visible to every key
-holder; rule families (`template:<owner>`, `prefs:<owner>`) only to their
-owner; `owner_id` on a company row is provenance, not a wall — the one
-predicate is `engine/zylch/memory/scope.py:blob_visible`. The key is a
-capability: `memory.join` is its only write path (`settings.update` refuses
-it), a key the host does not know is refused rather than turned into an
-empty store, and duplicates left by a join are united by the sweep that
-runs after each update. Design:
-[`docs/briefs/2026-09-08-shared-company-memory-implementation.md`](docs/briefs/2026-09-08-shared-company-memory-implementation.md);
-engine detail in [`engine/docs/features/entity-memory-system.md`](engine/docs/features/entity-memory-system.md)
-("Scope"); host operations in [`docs/remote-backend.md`](docs/remote-backend.md)
-("Shared company memory on the host"); app surface in [`app/CLAUDE.md`](app/CLAUDE.md).
-
-## Hosted engines: one Unix user per profile (since 2026-10)
-
-A hosted engine (`zylch serve`) is multi-tenant on one host, and the
-boundary between tenants is the operating system, not the model. All seven
-hosted profiles, production voice included, run as their own users, and each
-has an enforced outbound allow-list (state in the plan).
-Each migrated profile's daemon runs as its own Unix user `mc-<sha256(uid)[:12]>`
-inside a systemd sandbox, with the engine checkout read-only and its own
-root-only `ENCRYPTION_KEY`; its tools read and write only the profile's
-`downloads/` and `scratch/` folders, `run_python` is refused, and
-`DOCUMENT_PATHS`/`DOWNLOADS_DIR` are ignored (`settings.get` reports them
-under `ignored`). Its outbound connections are limited to the hosts in its
-egress policy: a per-tenant nftables table keyed on its Unix user, filled
-by a dedicated resolver that refuses every other name
-(`engine/scripts/server/egress_policy.py`; refusals are listed by
-`egress_refused.py`). On a local engine only the profile root is refused as a
-write target and attachment filenames are reduced to a basename. Threat model and criteria:
-[`docs/briefs/2026-09-29-toward-sandbox.md`](docs/briefs/2026-09-29-toward-sandbox.md);
-rollout state and runbook:
-[`docs/execution-plans/2026-09-29-toward-sandbox.md`](docs/execution-plans/2026-09-29-toward-sandbox.md);
-host operations: [`docs/remote-backend.md`](docs/remote-backend.md).
-
-## LLM billing and spending controls
-
-Saved `LLM_PROVIDER` explicitly selects `anthropic`, `mrcall`, or `openrouter`.
-Anthropic and OpenRouter use the corresponding personal API key. MrCall credits
-use Firebase authentication and the shared StarChat `CALLCREDIT` pool; top-up
-opens `https://dashboard.mrcall.ai/plan`. Switching providers preserves keys
-and never falls back to another provider. Legacy profiles without a provider
-use their saved Anthropic key when present, otherwise MrCall credits.
-
-The engine reserves each request's maximum cost against the saved daily USD
-budget before dispatch. Uncertain requests retain their holds across restarts
-and UTC midnight. MrCall calls use the versioned bounded quote/execute/status
-contract; an older server without that contract refuses paid work. OpenRouter
-supports an explicitly priced Claude/GLM/K3 catalog with provider price caps,
-through either personal keys or MrCall credits. Payment and model selection
-are separate; `llm.models` discovers available models. Economy, balanced and
-custom presets expose effective role models; a small synthetic comparison
-does not certify production quality. Automatic preparation is off by default and explicit runs have
-a saved batch limit (default 25 steps).
-
-Engine contracts: [`engine/docs/features/daily-llm-budget.md`](engine/docs/features/daily-llm-budget.md)
-and [`engine/docs/features/bounded-preparation.md`](engine/docs/features/bounded-preparation.md).
-`MRCALL_PROXY_URL` selects the billing server (default `https://zylch.mrcall.ai`).
-App behavior: [`app/docs/bounded-preparation.md`](app/docs/bounded-preparation.md).
+[Identity, company memory, hosted isolation and LLM billing](docs/cross-cutting-contracts.md)
+carry the detailed contracts. Firebase ID tokens stay in memory; profile identity
+is the immutable UID; company memory requires its capability key. Hosted tools
+stay within their tenant folders and refuse `run_python`. Provider selection
+never falls back, and paid requests reserve maximum cost before dispatch.
 
 ## Naming and identifiers — the rename in flight
 

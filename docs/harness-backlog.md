@@ -181,6 +181,7 @@ split indexes.**
 | docs/ipc-contract.md | 1218 | keep whole — it is the method index, retrieved by traversal; splitting it buys more reads, not fewer | 2026-08-26 |
 | docs/execution-plans/proactive-task-open.md | 575 | keep whole — one workstream's argument, read end to end | 2026-08-26 |
 | docs/execution-plans/cross-machine-transport.md | 428 | keep whole — one workstream's argument, read end to end | 2026-08-26 |
+| docs/execution-plans/2026-09-30-pec-net-mailbox-integration.md | 410 | keep whole — one bounded mailbox rollout and its acceptance, read by section | 2026-10-08 |
 | docs/execution-plans/2026-09-29-toward-sandbox.md | 3947 | split — prune obsolete rollout narrative and separate distinct operational subjects deliberately | 2026-10-04 |
 | docs/remote-backend.md | 511 | keep whole — host operations index, read by section | 2026-10-04 |
 
