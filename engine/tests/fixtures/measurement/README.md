@@ -172,3 +172,26 @@ It writes `measured.json` in the shape `resolver.validate_measured`
 reads, with the hashes it measured; `tests/measurement/test_derive_thresholds.py`
 refuses a committed `measured.json` whose hashes are not today's or whose
 thresholds its own results do not give.
+
+## The audit of the paid run (2026-10-03)
+
+Every failing cell of the paid run was read by hand. Fixed since:
+
+- **Scorer.** A text in which neither function-word list has a single hit has
+  an unreadable language. It now skips the language bar and the rule's
+  language label instead of failing them (B1, correction_learning-01).
+- **Corpus verdict.** "A child inherited the sender's identity" reads the
+  identifier header's email, not the whole text (B2).
+- **Corpus labels.** `must_preserve` entries accept the substance in either
+  language (C1). REVIEW is allowed where the M9 prompt prescribes it (C2).
+- **Case labels.** sync_analysis-11's `critical_on` is `["invalid"]` (C3).
+- **Judge.** An address the answer itself calls wrong is a counter-example,
+  not a `matches_none` hit (C4, web_search-03). `run_python` is no
+  `unmatched_write` (C5, task_solve-04).
+- **Corpus rows.** A failed extraction keeps its raw text in
+  `extraction_failures`.
+
+A label edit changes `case_set_sha256`. The recorded answers are therefore
+scored again with `derive_thresholds.py --rescore-from OLD_HASH`, which accepts
+only cases whose request is still today's, byte for byte, and records
+`rescored_from`.

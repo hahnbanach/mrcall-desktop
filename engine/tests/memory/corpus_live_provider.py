@@ -214,3 +214,24 @@ def bound(arm: Arm, request: dict) -> int:
 def unpriced_client(arm: Arm, model: str):
     """A scripted client of the arm's transport for a model that transport cannot price."""
     return scripted_client(arm, text_response(arm, "{}"), model=model)
+
+
+def record_failed_extractions(worker) -> list:
+    """The raw text of every extraction the worker could not parse, for the corpus row.
+
+    ``MemoryWorker._parse_entities`` raising leaves a case with no operation and
+    nothing to judge it by; the list it returns (filled as the worker runs) holds
+    ``{"raw", "error"}`` of each such answer, the worker's behaviour unchanged.
+    """
+    failures: list = []
+    parse = worker._parse_entities
+
+    def recording(raw_output):
+        try:
+            return parse(raw_output)
+        except Exception as exc:
+            failures.append({"raw": raw_output, "error": f"{type(exc).__name__}: {exc}"})
+            raise
+
+    worker._parse_entities = recording
+    return failures

@@ -136,6 +136,20 @@ def test_the_language_bar_skips_a_short_answer_and_fails_a_long_one_in_the_other
     assert scoring.language_bar(long_en, None)["ok"] is None
 
 
+def test_a_text_no_function_word_reads_skips_the_language_bar_and_the_label():
+    # Audit B1: correction_learning-01's rule by DeepSeek, eleven words, no hit in
+    # either list. Unreadable is not wrong: the bar and the rule's language skip it.
+    rule = "Per assistenza, indirizza i clienti all'email anziché offrire richiamate telefoniche."
+    assert scoring.no_hits(rule) and scoring.language_bar(rule, "it")["ok"] is None
+    tie = "Per assistenza, indirizza i clienti all'email and the richiamate di telefono"
+    assert scoring.language_bar(tie, "it")["ok"] is False  # a tie with hits still fails
+    document, every = cases("CORRECTION_LEARNING")
+    case, request = next((c, r) for c, r in every if c["id"] == "correction_learning-01")
+    answer = call("record_rule", is_durable_rule=True, rule=rule)
+    result = scored("CORRECTION_LEARNING", document, case, request, answer)
+    assert result["label_match"] and result["bars"]["language"] is None, result
+
+
 def test_the_smoke_form_bars_read_the_label():
     document, every = cases("NARRATION")
     case, request = next((c, r) for c, r in every if c["label"].get("starts_with_any"))
