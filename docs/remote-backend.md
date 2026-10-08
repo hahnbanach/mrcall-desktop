@@ -428,6 +428,9 @@ while the profile's own memory work in its current company is unsettled;
 the refusal lists each operation and the command that settles it
 (`zylch -p <uid> memory-join --drain <key>`, which first runs one memory pass
 and may pay, or `zylch -p <uid> memory-reviews --retry|--dismiss <id>`).
+A join also refuses a source store containing assignment state or retained
+assignment history, and refuses unsupported assignment schema, until a lossless
+history migration is available. See the [assignment contract](../engine/docs/features/task-assignment.md).
 While a join runs, the source company's memory writes are refused for every
 profile on it; a join that stopped is finished or undone by its profile's
 next boot, or `memory-join --release-fence` releases it
@@ -520,8 +523,9 @@ the SQLite backup API, then rebuilds `emails` with a `mailbox_id` on every
 row. Contract and data-loss window:
 [additional mailboxes](../engine/docs/features/mailboxes.md).
 
-This source integration does not deploy a hosted engine. Stage any later
-rollout per tenant using the current sandbox and release-pin runbook above;
+The six company tenants now have verified primary-mailbox migration on the
+released source; personal Gmail retains its separate attachment pin. For future
+tenants, stage rollout using the current sandbox and release-pin runbook above;
 retain the tenant Unix user, encryption key, filesystem restrictions and
 egress policy. Rehearse the migration and a second boot on a disposable
 SQLite backup before changing a live unit. Do not repoint a sandboxed unit

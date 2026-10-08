@@ -53,8 +53,11 @@ until a lossless history migration is available.
 
 The [assignment brief](../../../docs/briefs/2026-10-08-explicit-task-assignment.md)
 and [delivery plan](../../../docs/execution-plans/2026-10-08-explicit-task-assignment.md)
-own implementation and verification status. This is local source work; installed
-clients and production enablement are separate.
+own implementation and verification status. The APIs ship in Desktop `v0.1.56`;
+six hosted company engines and both kernel `v0.51.0` clones have verified
+assignment reads. [Assignment availability](task-assignment.md) records the
+company-space limits and signed-write boundary. Installed GUI acceptance remains
+separate from these API and CLI checks.
 
 ## Implementation references
 

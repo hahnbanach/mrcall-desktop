@@ -8,11 +8,13 @@ are preserved in [active-context-archive.md](active-context-archive.md).
 
 ## State now
 
-Local [company assignments](features/task-assignment.md) have verified signed
-operations, live-source fixtures, guarded scoped drafts and three-host workflow
-acceptance. Exact new inbound identities reopen closed operator work without
-restoring the previous assignee. Ordinary/Qonto tasks remain private; production
-trust installation and live rollout remain separate.
+[Company assignments](features/task-assignment.md) ship in Desktop `v0.1.56`.
+Six hosted company engines have verified complete assignment reads, public
+root-owned trust and tenant-inaccessible signing keys. Signed operations,
+guarded scoped drafts and three-host workflows retain local acceptance. Ordinary
+and Qonto tasks remain private. Café 124 shares one space; MrCall support/Mario
+remain separate and cannot assign across that boundary. Real assignment
+mutations and paid work are outside release verification.
 
 The statements about hosted services below are the latest recorded acceptance,
 not live rechecks by the local hardening closure. Detailed historical trial
@@ -20,9 +22,10 @@ receipts and diagnostic sequences are in the archive and owning plans.
 
 Native [Qonto](features/qonto.md) has authenticated support-only banking,
 restart/reconnect, source-comparison and managed-answer acceptance. Packaged
-Desktop and provider-UI comparison remain unverified. Next-release source combines
-Qonto and [additional mailboxes/PEC](features/mailboxes.md) with migration/restart
-fixtures; hosted units have not received the mailbox migration. The
+GUI and provider-UI comparison remain unverified. Released source combines
+Qonto and [additional mailboxes/PEC](features/mailboxes.md). Six company units
+have verified mailbox migration, primary registration, encryption startup and
+row preservation; personal Gmail keeps its separate attachment source pin. The
 [Qonto plan](../../docs/execution-plans/2026-10-04-qonto-connection.md) and
 [integration plan](../../docs/execution-plans/2026-10-05-mailboxes-qonto-release-integration.md)
 own remaining acceptance and rollout.
@@ -45,8 +48,8 @@ boundaries. Kernel `cs ask` requires that capability. Local persisted-state and
 installed-kernel journeys verify refusal without a paid reservation; no renewed
 live product acceptance is asserted.
 
-Mnemonic M5–M9 source is retained in five nonproduction checkout daemons and
-support's isolated Qonto release. Its role, symbolic validator, origin-bound
+Mnemonic source is included in the six company engines' reviewed release pin.
+Its product-quality acceptance remains separate from source activation. Its role, symbolic validator, origin-bound
 admission, atomic commit/receipt/CAS, fenced join and maintenance boundaries are
 wired. Replaced text is retained; the owner can restore a version. Customer-shaped
 FACT eligibility applies before ordinary fact retrieval and search ranking;
@@ -94,7 +97,7 @@ acceptance is implied.
 
 ## Unresolved
 
-- Live PEC.net acceptance and provider marker comparison, hosted mailbox migration,
+- Live PEC.net acceptance and provider marker comparison,
   Qonto installed Electron and provider UI remain open in their owning plans.
 - Remaining Café124 billing choices and funded credit acceptance remain open;
   do not replay uncertain requests or resume preparation implicitly.

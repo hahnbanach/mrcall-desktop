@@ -2,13 +2,14 @@
 
 ## Availability and authority
 
-The explicit company task subtype is local source work. Signed operations,
-RPC, mail-provider protocol fixtures and scoped draft enforcement have executable
-local acceptance. The delivery plan owns current milestone and native-workflow
-verification. No production trust files, keys, membership,
-clone pins or installed clients are changed by this work. The
-[delivery plan](../../../docs/execution-plans/2026-10-08-explicit-task-assignment.md)
-owns verification status and remaining release acceptance.
+The explicit company task subtype ships in Desktop `v0.1.56`. Signed operations,
+RPC, provider protocol fixtures and scoped draft enforcement have executable
+local acceptance under the [delivery plan](../../../docs/execution-plans/2026-10-08-explicit-task-assignment.md).
+Six hosted company engines have compatible source, verified root-owned trust,
+tenant-inaccessible independent signing material and complete assignment reads.
+Both maintained clones install kernel `v0.51.0`. Café 124's four profiles share
+one space; MrCall support and Mario remain separate, so assignment between those
+spaces is unavailable. Release checks create no real assignment or customer send.
 
 Private [ordinary tasks](task-management.md), including Qonto financial rows,
 retain their own storage and visibility. Assignment records share only company

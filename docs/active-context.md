@@ -1,5 +1,5 @@
 ---
-doc_baseline_commit: c638922afa202b143c9534ca10e6ace26206570e
+doc_baseline_commit: 5e89233a14fb32268db4871cf5930798c426b386
 doc_baseline_date: 2026-10-08
 ---
 
@@ -19,11 +19,14 @@ what is *current*, targeting ≤ ~120 lines.
 
 ## State now
 
-Company assignment APIs have local engine, CLI and native workflow acceptance
-with signed approvals, retained audit and exact inbound coverage. Scoped draft
-writes hold assigned or unknown threads; ordinary and Qonto tasks remain private.
-Production enablement and live acceptance remain separate under the
-[assignment plan](execution-plans/2026-10-08-explicit-task-assignment.md).
+Desktop `v0.1.56` is published with its Mac Apple Silicon installer. Company
+assignment APIs have local signed-lifecycle and three-host workflow acceptance;
+six hosted engines now expose complete assignment reads with root-owned trust.
+Both maintained clones install kernel `v0.51.0`. Ordinary/Qonto tasks remain
+private. Café 124 shares one company space; MrCall support/Mario remain separate,
+so cross-space assignment is unavailable. No real assignment mutation is part of
+release verification. The [assignment plan](execution-plans/2026-10-08-explicit-task-assignment.md)
+owns local delivery evidence.
 
 Local Desktop/kernel reliability gates and task/RPC contract checks pass.
 The August umbrella is retired; exact source-only evidence, withdrawn work and
@@ -37,13 +40,15 @@ single account is connected, 30-day source sync completes across restart,
 and independent provider balances/movements/flows agree with source reads.
 A real managed assistant uses the bank tool and cites its source. Its
 engine-formatted UTC retrieval strings match the accepted managed answer.
-Six other daemons and saved controls remain unchanged. Packaged Desktop and provider UI acceptance
-remain unverified. Exact release, usage, rollback and remaining criteria belong
+The six company daemons run the combined release source with their saved
+controls restored; support Qonto connection and encryption checks pass. Packaged
+GUI and provider UI acceptance remain unverified. Exact release, usage, rollback and remaining criteria belong
 to the active [Qonto plan](execution-plans/2026-10-04-qonto-connection.md).
 
 All seven hosted profiles run as separate Unix users with enforced outbound
-allow-lists. Production voice preserves its pinned release; support has its
-Qonto source pin. Company stores use hashed hosted paths. Self-serve provisioning
+allow-lists. Production voice preserves its interpreter/configuration and available
+listener; support preserves its Qonto host binding. Six company profiles use the
+reviewed assignment release source pin. Company stores use hashed hosted paths. Self-serve provisioning
 remains closed; template/provisiond still use the shared key. Sandbox final
 acceptance and its operational floor remain open in the
 [rollout plan](execution-plans/2026-09-29-toward-sandbox.md).
@@ -69,10 +74,11 @@ active in the release preflight. Preserve actual controls during rollout. Person
 passes; funded credit acceptance remains open. See
 [K3 adoption](execution-plans/2026-09-16-k3-production.md).
 
-Mnemonic M9 source is retained in nonproduction engines. The failed Haiku
-corpus criterion is deferred to M10 on the resolver-selected model; sandbox
-acceptance does not close mnemonic product/corpus gates. The
-[engine snapshot](../engine/docs/active-context.md) owns the detailed state.
+Mnemonic M9 source is active in all six company engines, including production.
+The failed Haiku corpus criterion is deferred to M10 on the resolver-selected
+model; source activation and sandbox acceptance do not close mnemonic
+product/corpus gates. The [engine snapshot](../engine/docs/active-context.md)
+owns the detailed state.
 
 Settings separates provider/model selection, daily budgets and bounded
 preparation. Setup verifies an engine and hands off a descriptor-based kernel
@@ -81,16 +87,13 @@ written projects are revisioned company records. See
 [operator setup](operator-setup.md#ai-execution-and-controls) and
 [project memory](../engine/docs/features/project-memory.md).
 
-Desktop `v0.1.55` carries the auth and billing-business fixes; its tag and
-`v0.1.54` contain neither Qonto nor PEC Settings. Both are now combined in
-the next-release source with those fixes. No installer or hosted rollout is
-part of this [integration](execution-plans/2026-10-05-mailboxes-qonto-release-integration.md);
-installed Qonto and live PEC acceptance remain open. Windows neonize imports and
-loose-file loading remain unverified. Runtime contracts belong to
-[IPC](ipc-contract.md), [host operations](remote-backend.md) and per-tree docs.
-WhatsApp's protocol can become stale; the checkout has a refresh loop,
-production voice retains a release without it, and `whatsapp.status` has no
-external reader. The app Refresh action only lists threads.
+Desktop `v0.1.56` combines Qonto, additional mailboxes/PEC and the auth/billing
+fixes. Its Mac Apple Silicon DMG is published; installed Qonto GUI and live PEC
+provider acceptance remain open. Six company profiles have mailbox migration,
+primary registration and encryption startup checks; personal Gmail retains its
+separate attachment pin. Windows imports and loose-file loading remain
+unverified. Runtime contracts belong to [IPC](ipc-contract.md),
+[host operations](remote-backend.md) and per-tree docs.
 
 ## Unresolved
 

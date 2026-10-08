@@ -1,3 +1,22 @@
+## 2026-10-08 — Superseded release state
+
+Mnemonic M5–M9 source is retained in five nonproduction checkout daemons and
+support's isolated Qonto release.
+
+## 2026-10-08 — Superseded release state
+
+Desktop and provider-UI comparison remain unverified. Next-release source combines
+Qonto and [additional mailboxes/PEC](features/mailboxes.md) with migration/restart
+fixtures; hosted units have not received the mailbox migration.
+
+## 2026-10-08 — Superseded release state
+
+Local [company assignments](features/task-assignment.md) have verified signed
+operations, live-source fixtures, guarded scoped drafts and three-host workflow
+acceptance. Exact new inbound identities reopen closed operator work without
+restoring the previous assignee. Ordinary/Qonto tasks remain private; production
+trust installation and live rollout remain separate.
+
 # Engine context archive
 
 ## 2026-10-08 — Saved preparation controls reconciled before release
