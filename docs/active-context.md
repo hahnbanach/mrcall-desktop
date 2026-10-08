@@ -54,8 +54,11 @@ acceptance and its operational floor remain open in the
 [rollout plan](execution-plans/2026-09-29-toward-sandbox.md).
 Mario Gmail has CTO-reported installed-app acceptance for mail, attachment
 transfer and document lookup/read by basename. Its attachment source pin is
-separate from the service checkout. R5 still requires representative scratch
-lifecycle and consistent A/B isolation evidence, followed by final reviews.
+separate from the service checkout. R5 is blocked by scratch offboarding that
+leaves company database/WAL/SHM ownership with the deleted user; dual-identity
+rule removal and Mario Gmail/support isolation checks pass. Six assignment
+release pins also cause helper reapplication refusals despite reconcile wrapper
+success; their units remain untouched. The rollout plan owns both blockers.
 
 Production uses GPT-Live for telephone service and the scoped company-knowledge
 trial. Its pinned release reads revisioned `operator-instructions/phone.md`;

@@ -1235,6 +1235,115 @@ not started.
        the last holder removes the store directory. Criterion 7's
        ownership-absence check must say so, not claim them gone.
 
+   - **Criterion 7 VPS recheck — 2026-10-08: FAIL; R5 remains active.**
+     Main `2a42cda` includes the dual-identity fix. The authorized reconcile
+     ran at 15:55 UTC; its wrapper reports `Result=success` and
+     `ExecMainStatus=0`, and the service checkout is `2a42cda`. Installed helper
+     comparison is identical (`cmp -s` exit 0; SHA-256
+     `b5e95bf5f361723dc0429436c1b0be47983d763e37bd8d06ff5d3fbe09b90f10`).
+     Wrapper success does **not** establish successful reapplication: Ivan,
+     Riccardo, support, Mario MrCall, Café124 and production each returned
+     helper exit 2, `applied drop-in sorts after tenant.conf`, because their
+     `zz-assignment-release.conf` sorts after the generated drop-in.
+     Those six units and their release pins were left untouched. A later
+     timer invocation's success does not erase these refusals.
+
+     The actual helper/CLI lifecycle at 16:00:16–16:01:27 UTC used two new
+     scratch profiles, their own Unix users and an independent company store;
+     both scratch daemons had private networking and zero restarts. Each
+     fixture contained exactly one email-owned rule, one UID-owned rule and
+     one company fact. Live database reads ran as a tenant, never root.
+
+     | Stage | First holder rules / facts | Other holder rules / facts | Total rows |
+     |---|---|---|---|
+     | Before deletion | 2 / 1 | 2 / 1 | 6 |
+     | After first deletion | 0 / 1 | 2 / 1 | 4 |
+
+     The dual-identity deletion is effective, but criterion 7 still fails:
+     after the first deletion the live company database, WAL and SHM belong
+     to the deleted numeric UID. The helper removes the Unix user without
+     transferring ownership of the surviving company files. Group access is
+     not proof of ownership absence. This is outside the accepted backup
+     exception. One migration backup remained after first deletion; its
+     historical rows were not scrubbed or claimed absent. Cleanup deleted
+     the last scratch holder and removed the entire company directory,
+     including that backup. Both scratch profiles, users, keys and generated
+     artifacts are absent in the checked helper roots; their company group
+     is checked separately below. All seven real daemon PIDs, profile/key/store
+     metadata and the tenant table remained unchanged throughout this cycle.
+     Missing-key actual scratch `serve` refused startup with exit 3.
+
+     Fresh criteria 1, 2, 5 and 6 at 16:00:07–16:00:43 UTC use the accepted
+     app profile A = Mario Gmail and B = support, with distinct company
+     stores, actual daemon namespaces and owning Unix identities:
+     - Absolute cross-profile reads, environment globs and OS reads fail;
+       B cannot find A's synthetic document or open/list A's company store.
+       `DOCUMENT_PATHS` and `DOWNLOADS_DIR` overrides are ignored in auxiliary
+       process memory, and `settings.get` reports both ignored. No live
+       settings update was performed; the earlier RPC-update acceptance is
+       retained separately.
+     - Six locally constructed MIME attachments are confined by basename,
+       including `.env`; four external download targets are refused. A's
+       profile environment is unchanged; checkout and sibling writes fail.
+       Synthetic fixtures were removed. Both hosted `run_python` paths refuse.
+     - Seven distinct root-owned `0400` keyfiles; seven OAuth rows and 21
+       encrypted values checked as their own tenants, zero decrypt failures.
+       Ivan and Riccardo have zero OAuth rows. A cannot read B's key.
+     - The controlled local DNS negative returns NXDOMAIN with one journal
+       record; the TEST-NET TCP negative is refused with one scoped kernel
+       record. Thirty installed firewall sets are readable; resolver binding
+       matches. All seven real daemons are active as their own users with
+       `NRestarts=0`, unchanged probe-window PIDs and environment files.
+       No paid calls, mail sends or new installed-GUI acceptance are claimed.
+
+     Read-only live rule counts (UID owner / email owner; no contents read or
+     rows deleted):
+
+     | Profile | UID-owned rules | Email-owned rules |
+     |---|---|---|
+     | Ivan | 0 | 0 |
+     | Riccardo | 0 | 0 |
+     | support | 0 | 10 |
+     | Mario MrCall | 0 | 0 |
+     | Café124 | 0 | 0 |
+     | Mario Gmail | 0 | 4 |
+     | production | 0 | 0 |
+
+     Root-only evidence: `/root/r5-final-20261008/` contains
+     `scratch-offboard.json`, both scratch scripts and private helper logs,
+     `host-probes.json`, `host-report.txt`, `host-reconcile-diagnosis.json`
+     and cleanup ownership audits. The preliminary safety review APPROVED
+     only execution of the guarded scratch harness, not R5 acceptance.
+     The final namespace audit confirms zero remaining scratch users, keys,
+     profile directories, unit drop-in directories, company groups or company
+     directories. Separate `/run` and `/dev` ownership scans exit 0 with zero
+     files. The first broader audit incorrectly assumed numeric GID = UID;
+     its 12-file result is invalid evidence, not a scratch-residual finding.
+     Actual daemon journal `_UID`/`_GID` pairs differ and are retained privately.
+     Corrected scans of the physical root filesystem and separate `/run`
+     and `/dev` mounts each exit 0 with zero owned files and zero traversal
+     errors (`scratch-corrected-owner-audit.json`). Mount inventory reports
+     no other physical filesystem mounts. The entire scratch company
+     directory, including its migration backup, is absent after final cleanup.
+     No unrelated files were deleted. This audit correction does not affect
+     the first-delete assertion, which used actual passwd identities and
+     checked file UID ownership directly.
+
+     **Independent final reviews: REVISE / REVISE.** Fresh reviewers
+     `r5_final_20261008_a` and `r5_final_20261008_b` independently confirmed
+     the live-store ownership failure, correct dual-identity row removal and
+     final fixture cleanup. Review B also confirms the six helper refusals.
+     Their reports are retained in the local review folder
+     `/home/mal/.cache/mrcall-review/r5-final-20261008/` as `final-a.txt` and
+     `final-b.txt`. At those reviews the completion checker also reported
+     `critic: missing`; a documentation review cannot override the runtime
+     acceptance failures.
+     Neither review approves R5. `status: active` is preserved, and the
+     baseline is not advanced over the failed acceptance. Required follow-up:
+     repair surviving-company file ownership and the release-pin/helper
+     incompatibility, then repeat the representative lifecycle and final
+     reviews. No live profile or refused unit was modified to force a pass.
+
    - **Open after this plan, not part of it:**
      - one handset whose speech the voice provider does not transcribe
        (voice path, not the host; 2026-10-03 diagnosis above);
