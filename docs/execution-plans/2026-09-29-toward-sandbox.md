@@ -1215,6 +1215,26 @@ not started.
         (support@), so that one A carries the whole evidence set.
      4. Two independent final reviews, then `status: completed`.
 
+     The review of `598cbd55` came back **APPROVED**, with an end-to-end CLI
+     run on a scratch home. The cheap findings are fixed in `fe569a85`:
+     - identities must be a collection, not one string;
+     - a blank identity or a stand-in (`local-user`, `owner_default`) is
+       refused with exit 2;
+     - tests now cover a uid-only profile, a refusal that deletes nothing,
+       and last-holder with two identities.
+
+     Two findings were already true before this change. They are open and
+     do not block R5:
+     - **Shared or spoofed email.** `EMAIL_ADDRESS` is user-settable
+       (`settings.update`, the provisiond body). If two holders of one
+       store name the same email, offboarding either removes the rules
+       under that email. Follow-up: the helper (root, which can read every
+       holder's `.env`) skips an identity another holder names.
+     - **Store backups.** Migration backups under `<storedir>/backups/*.bak`
+       (`storage/migrations.py`) keep a non-last holder's rule rows until
+       the last holder removes the store directory. Criterion 7's
+       ownership-absence check must say so, not claim them gone.
+
    - **Open after this plan, not part of it:**
      - one handset whose speech the voice provider does not transcribe
        (voice path, not the host; 2026-10-03 diagnosis above);
