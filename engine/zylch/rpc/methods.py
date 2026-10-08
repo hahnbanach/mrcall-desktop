@@ -703,6 +703,7 @@ async def tasks_solve(params: Dict[str, Any], notify: NotifyFn) -> Any:
                 store,
                 owner_id,
                 SOLVE_TOOLS,
+                email_task=task,
             )
             _active_executor = executor
             # What this solve is working on, kept apart: the instruction the
@@ -713,7 +714,9 @@ async def tasks_solve(params: Dict[str, Any], notify: NotifyFn) -> Any:
             try:
                 final: Dict[str, Any] = {}
                 done_event: Dict[str, Any] = {}
-                with revocable_turn(), solve_scope(solve_context):
+                from zylch.services.contextual_email_policy import from_task, scope as email_scope
+
+                with revocable_turn(), solve_scope(solve_context), email_scope(from_task(owner_id, task)):
                     async for event in executor.run():
                         if event["type"] == "done":
                             # Hold the done event back — we may decorate it
@@ -863,7 +866,7 @@ async def chat_send(params: Dict[str, Any], notify: NotifyFn) -> Any:
     """chat.send(message, conversation_history=[], conversation_id="general",
     context={}, mutation_policy?, policy_version?, history_mode?,
     history_handle?, history_revision?, assignment_thread_key?,
-    assignment_policy_version?) -> ChatService result with managed binding fields.
+    assignment_policy_version?, email_context?, contextual_email_policy_version?) -> ChatService result with managed binding fields.
 
     Destructive tools trigger `chat.pending_approval` notifications; the
     client must respond via `chat.approve` to resume.
@@ -886,6 +889,13 @@ async def chat_send(params: Dict[str, Any], notify: NotifyFn) -> Any:
     elif params.get("assignment_policy_version") is not None:
         raise AssignmentError("Assignment draft thread required", -32602)
 
+    from zylch.services.contextual_email_policy import VERSION as EMAIL_POLICY_VERSION
+    email_context = params.get("email_context")
+    if email_context is not None and params.get("contextual_email_policy_version") != EMAIL_POLICY_VERSION:
+        raise AssignmentError("Contextual email policy version required", -32602)
+    if email_context is None and params.get("contextual_email_policy_version") is not None:
+        raise AssignmentError("Contextual email source required", -32602)
+
     message = params.get("message")
     if not message:
         raise ValueError("message is required")
@@ -894,6 +904,10 @@ async def chat_send(params: Dict[str, Any], notify: NotifyFn) -> Any:
     req_context = params.get("context") or {}
     if not isinstance(req_context, dict):
         req_context = {}
+    if email_context is not None:
+        if "email_context" in req_context and req_context["email_context"] != email_context:
+            raise AssignmentError("Contextual email sources disagree", -32602)
+        req_context = {**req_context, "email_context": email_context}
     mutation_policy = params.get("mutation_policy")
     policy_version = params.get("policy_version")
     if mutation_policy is not None and mutation_policy != READ_ONLY_POLICY:
@@ -1102,7 +1116,7 @@ async def system_capabilities(params: Dict[str, Any], notify: NotifyFn) -> Any:
     """system.capabilities() -> protocol capabilities supported by this engine."""
     from zylch.services.request_policy import READ_ONLY_POLICY_VERSION
 
-    return {"chat_read_only_policy": READ_ONLY_POLICY_VERSION, "chat_history_binding": 1, "assignment_draft_policy": 1}
+    return {"chat_read_only_policy": READ_ONLY_POLICY_VERSION, "chat_history_binding": 1, "assignment_draft_policy": 1, "contextual_email_policy": 1}
 
 
 async def chat_approve(params: Dict[str, Any], notify: NotifyFn) -> Any:

@@ -25,6 +25,9 @@ class Evidence(Protocol):
 
 
 def _admit(actor: identity.Actor, space: str, conn: Any) -> dict:
+    from .task_assignment_enrollment import require_managed
+
+    require_managed(conn, space)
     current = identity.recheck(actor, space)
     from zylch.storage.join_fence_model import MemoryJoinFence
 

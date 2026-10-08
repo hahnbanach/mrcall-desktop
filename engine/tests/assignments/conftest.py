@@ -61,7 +61,11 @@ def env(tmp_path, monkeypatch):
     )
     monkeypatch.setattr(trust, "TRUST_DIRECTORY", trust_dir)
     monkeypatch.setattr(trust, "SIGNING_DIRECTORY", signing_dir)
-    monkeypatch.setattr(trust, "protected_read", lambda path, **kwargs: path.read_bytes())
+    monkeypatch.setattr(trust, "protected_read", lambda path, **kwargs: None if kwargs.get("missing_ok") and not path.exists() else path.read_bytes())
+
+    from zylch.services.task_assignment_enrollment import finish_install
+
+    finish_install(memory)
 
     def verify(token):
         if not token.startswith("fixture:"):

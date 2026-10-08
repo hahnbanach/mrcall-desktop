@@ -68,6 +68,12 @@ engine detail in [`engine/docs/features/entity-memory-system.md`](../engine/docs
 ("Scope"); host operations in [`docs/remote-backend.md`](remote-backend.md)
 ("Shared company memory on the host"); app surface in [`app/CLAUDE.md`](../app/CLAUDE.md).
 
+The local unreleased contextual-email candidate adds durable assignment
+[enrollment](../engine/docs/features/assignment-enrollment.md). History-free joins
+preserve the stricter company classification and its provenance; knowing a memory
+key does not grant trusted assignment membership. Ordinary mail/tasks remain in
+the private profile store.
+
 ## Hosted engines: one Unix user per profile (since 2026-10)
 
 A hosted engine (`zylch serve`) is multi-tenant on one host, and the

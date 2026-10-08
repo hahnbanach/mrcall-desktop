@@ -1836,7 +1836,11 @@ class Storage:
 
     from zylch.services.task_assignment_draft_policy import guard as _assignment_draft_guard
 
+    from zylch.services.task_assignment_email_effect import create_guard as _email_create_guard
+    from zylch.services.task_assignment_email_effect import update_guard as _email_update_guard
+
     @_assignment_draft_guard
+    @_email_create_guard
     def create_draft(
         self,
         owner_id: str,
@@ -1902,8 +1906,12 @@ class Storage:
             in_reply_to=in_reply_to,
             references=references,
         )
+        from zylch.services.task_assignment_email_effect import current_binding
+
         cutoff = _naive_utcnow() - timedelta(hours=DRAFT_DEDUP_WINDOW_HOURS)
-        with get_session() as session:
+        from zylch.services.task_assignment_draft_transaction import session as draft_session
+
+        with draft_session() as session:
             # Body equality narrows the scan in SQL; the rest of the identity
             # needs normalization the DB cannot do (the same recipients are
             # stored as "a@x, b@y" by one call site and ["a@x","b@y"] by
@@ -1940,6 +1948,9 @@ class Storage:
                     # `drafts.list` around a turn sees no new id and would
                     # otherwise conclude that nothing was composed. See
                     # `rpc/draft_queries.py`.
+                    if row.reply_binding is not None and row.reply_binding != current_binding():
+                        continue
+                    row.reply_binding = current_binding()
                     row.updated_at = _naive_utcnow()
                     session.flush()
                     logger.info(
@@ -1949,6 +1960,7 @@ class Storage:
                     return {**row.to_dict(), "created": False}
 
             draft = Draft(
+                reply_binding=current_binding(),
                 owner_id=owner_id,
                 to_addresses=to_list,
                 cc_addresses=cc_list,
@@ -2024,11 +2036,14 @@ class Storage:
             )
             return row.to_dict() if row else None
 
+    @_email_update_guard
     def update_draft(
         self, owner_id: str, draft_id: str, updates: Dict[str, Any]
     ) -> Dict[str, Any] | None:
         """Update a draft."""
-        with get_session() as session:
+        from zylch.services.task_assignment_draft_transaction import session as draft_session
+
+        with draft_session() as session:
             row = (
                 session.query(Draft)
                 .filter(Draft.owner_id == owner_id, Draft.id == draft_id)
@@ -2103,7 +2118,7 @@ class Storage:
             # read decides only the window — the UPDATE below is still what
             # picks the single winner, so two callers cannot both claim.
             row = (
-                session.query(Draft.to_addresses, Draft.cc_addresses, Draft.bcc_addresses)
+                session.query(Draft.to_addresses, Draft.cc_addresses, Draft.bcc_addresses, Draft.status, Draft.updated_at)
                 .filter(Draft.owner_id == owner_id, Draft.id == draft_id)
                 .one_or_none()
             )
@@ -2115,6 +2130,10 @@ class Storage:
                 send_claim_recipient_count(row[0], row[1], row[2]) if row is not None else 0
             )
             stale_before = now - timedelta(minutes=send_claim_window_minutes(recipients))
+            # Fresh claims need no writer attempt: a live transport retains the
+            # private reservation, so waiting here would stall a losing caller.
+            if row is not None and (row[3] == "sent" or (row[3] == "sending" and row[4] is not None and row[4] >= stale_before)):
+                return False
             claimed = (
                 session.query(Draft)
                 .filter(

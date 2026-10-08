@@ -18,6 +18,49 @@ inbound identities and audit. They contain no message body or company capability
 `assigned_tasks` holds the current row; `assigned_task_events` retains operations;
 `assigned_task_receipts` retains exact retry acknowledgements.
 
+## Contextual email enforcement — unreleased development
+
+The local [contextual-email workstream](../../../docs/execution-plans/2026-10-08-contextual-email-assignment-guard.md)
+extends assignment holds to engine draft creation, content updates and the final
+engine email transport, including generic chat and drafts composed before assignment.
+This is separate from the published scoped policy above and is not activated in
+the six hosted engines or installed clones.
+
+[Durable enrollment](assignment-enrollment.md) distinguishes never-enabled
+companies from managed or ambiguous legacy stores. An empty ledger or missing
+trust cannot disable a managed company's reply guard. Fresh never-enabled local
+profiles keep contextual email without privileged host configuration.
+
+A reply binds the exact owner-scoped archived original, RFC root and target.
+All supplied threading identities must agree; private draft source metadata is
+retained. Assigned, pending, conflicting, unknown and acknowledged closed targets
+hold the write or send. Only a verified later inbound outside closed coverage can
+return operator work. Unrelated threads from the same sender remain independent.
+Generic tool approval never overrides company ownership.
+
+Provider/source evidence is gathered before the company writer lock. Final
+admission rechecks enrollment, identity, membership, company binding, join fence
+and assignment revision under that lock. Private draft mutation checks the
+current persisted row under its writer reservation. Persisted send admission
+checks the current claim and exact content/binding, retaining the reservation
+through provider handoff. A stale standalone snapshot cannot overwrite or send a
+draft that has become a bound reply. Existing sent/uncertain claim semantics
+remain applicable.
+
+Source-free standalone composition retains ordinary approval behavior. Arbitrary
+prose is not semantically classified as reply intent; known source/task context
+and already-bound drafts cannot use header removal as an exemption. Fixed-template
+kernel first-contact bulk delivery remains outside this engine reply policy.
+Legacy task-orchestrator Gmail/Outlook modules remain unavailable; guarded call
+sites do not establish working OAuth provider integration.
+
+This policy certifies engine effects, not external mailbox actions. The existing
+kernel `draft-reply` Gmail review copy checks current projection immediately
+before append, but that append occurs outside the engine company lock. It is
+not an atomic assignment-guarded external draft write. Manual edits/sends from
+Gmail and other external clients remain outside engine enforcement. The new
+contextual campaign queue path refuses an additional Gmail copy.
+
 ## Operator configuration
 
 The engine reads public trust at the fixed path
@@ -46,6 +89,9 @@ The independent signer reads
 Ed25519 private key, be root-owned and exclude all group/other permissions.
 The engine needs public verification material only. Creating/installing these
 files and enabling real users require separately authorized host operations.
+For the unreleased contextual-email candidate, use the ordered
+[enrollment procedure](assignment-enrollment.md#privileged-enrollment) instead of
+installing public trust directly; managed enrollment must commit first.
 
 `engine/scripts/server/assignment_approve.py` accepts one exported intent JSON.
 Run it with the engine Python environment under the independent host operator's
@@ -103,8 +149,11 @@ Company joins refuse source stores containing assignment state or history, and
 incomplete assignment schemas, before profile/env/store changes. A separately
 reviewed lossless history migration is required to lift this restriction.
 Disabling trust denies access/mutations without deleting assignment history or
-receipts. Older builds without this join guard must not perform joins involving
-assignment-bearing stores. Rollback retains all assignment tables and audit.
+receipts. The unreleased enrollment candidate also preserves the stricter
+classification and provenance on history-free joins, without granting destination
+membership. Older builds without this join guard must not perform joins involving
+assignment-bearing stores. Rollback retains all assignment tables and audit,
+and the candidate enrollment latch.
 
 Offline source/SQLite/RPC fixtures establish their observed cases. They do not
 prove production key permissions, real mailbox parity/latency, installed Desktop

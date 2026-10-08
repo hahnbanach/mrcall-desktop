@@ -1,5 +1,5 @@
 ---
-doc_baseline_commit: 5e89233a14fb32268db4871cf5930798c426b386
+doc_baseline_commit: 5d9c4a786393125ae5971c7a62698171848ce4e4
 doc_baseline_date: 2026-10-08
 ---
 
@@ -19,14 +19,19 @@ what is *current*, targeting ≤ ~120 lines.
 
 ## State now
 
-Desktop `v0.1.56` is published with its Mac Apple Silicon installer. Company
-assignment APIs have local signed-lifecycle and three-host workflow acceptance;
-six hosted engines now expose complete assignment reads with root-owned trust.
-Both maintained clones install kernel `v0.51.0`. Ordinary/Qonto tasks remain
-private. Café 124 shares one company space; MrCall support/Mario remain separate,
-so cross-space assignment is unavailable. No real assignment mutation is part of
-release verification. The [assignment plan](execution-plans/2026-10-08-explicit-task-assignment.md)
-owns local delivery evidence.
+Desktop `v0.1.56` and kernel `v0.51.0` are published. Six hosted company engines have verified
+assignment reads and root-owned trust; both maintained clones install the release. Ordinary/Qonto
+tasks remain private. Café 124 shares one space; MrCall support/Mario retain separate spaces and
+cannot assign across that boundary. The [assignment
+plan](execution-plans/2026-10-08-explicit-task-assignment.md) owns released local lifecycle
+acceptance; release verification creates no real assignment.
+
+The local [contextual-email
+candidate](execution-plans/2026-10-08-contextual-email-assignment-guard.md) extends holds to
+generic chat, known email-task context and final transport with durable enrollment and exact
+source binding. It is unreleased and inactive in the hosted fleet and installed clones. Its
+separate MrCall launcher patch is an uninstalled handoff. Company sharing and future rollout
+require separate authority.
 
 Local Desktop/kernel reliability gates and task/RPC contract checks pass.
 The August umbrella is retired; exact source-only evidence, withdrawn work and

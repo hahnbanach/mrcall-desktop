@@ -59,6 +59,19 @@ assignment reads. [Assignment availability](task-assignment.md) records the
 company-space limits and signed-write boundary. Installed GUI acceptance remains
 separate from these API and CLI checks.
 
+## Contextual email effects — unreleased candidate
+
+Ordinary tasks remain private. Known email source context must retain its exact
+original-message binding through contextual composition and sending; neither an
+ordinary task's audit actor nor tool approval overrides a company assignment.
+Multiple original sources in the same exact thread form a restrictive source
+set; selecting one original can narrow it. Unavailable sources or conflicting
+threads hold effects, including when a model drops reply headers.
+The candidate [assignment contract](task-assignment.md#contextual-email-enforcement--unreleased-development)
+covers the central draft and transport guard, enrollment, stale draft refusal and
+source-free composition limit. The published releases retain their previous
+scoped policy until a separately authorized rollout.
+
 ## Implementation references
 
 - `zylch/storage/models.py`: private `TaskItem` schema.

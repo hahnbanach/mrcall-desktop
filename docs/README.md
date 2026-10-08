@@ -82,3 +82,5 @@ anywhere in the repo):
 
 - [Company task assignments](../engine/docs/features/task-assignment.md) — local implementation and approval/source boundaries; [brief](briefs/2026-10-08-explicit-task-assignment.md) and [delivery plan](execution-plans/2026-10-08-explicit-task-assignment.md).
 - [Human thread-assignment gaps](../engine/docs/features/human-thread-ownership-gaps.md) — original requirements and selected mechanism; current verification status belongs to the delivery plan.
+
+- [Contextual email assignment enforcement](execution-plans/2026-10-08-contextual-email-assignment-guard.md) — local unreleased guard, exact caller binding and verification; [brief](briefs/2026-10-08-contextual-email-assignment-guard.md).

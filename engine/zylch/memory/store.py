@@ -206,6 +206,9 @@ def _memory_tables():
 def _ensure_memory_tables(engine: Engine) -> None:
     from zylch.storage.models import Base
 
+    from zylch.services.task_assignment_enrollment import before_install
+
+    before_install(engine)
     Base.metadata.create_all(engine, tables=_memory_tables())
 
 
@@ -230,6 +233,9 @@ def prepare_store(engine: Engine, company_key: str, *, created_by: Optional[str]
         from zylch.services.project_store import ensure_space
 
         ensure_space(_engine)
+        from zylch.services.task_assignment_enrollment import finish_install
+
+        finish_install(_engine)
 
     from zylch.storage.step_identifiers_company_unique import STEP as identifiers_step
     from zylch.storage.step_memory_operations_drop_approval import STEP as drop_approval_step

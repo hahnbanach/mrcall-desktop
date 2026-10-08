@@ -55,8 +55,9 @@ def test_write_boundary_exact_thread_and_assignment(env, mail):
     with policy.scope(ROOT), pytest.raises(AssignmentError):
         storage.create_draft(**{**payload(), "body": "Another draft"})
     assert count() == 1
-    assert storage.create_draft(**{**payload(), "body": "Ordinary desktop draft"})["created"]
-    assert count() == 2
+    with pytest.raises(AssignmentError):
+        storage.create_draft(**{**payload(), "body": "Ordinary desktop draft"})
+    assert count() == 1
 
 
 def test_scoped_tools_refuse_send_and_run_python_before_execution(env, mail):

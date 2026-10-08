@@ -50,8 +50,47 @@ privileged trust/signing paths, source-owner close coverage and rollback.
 Scoped kernel composition negotiates `assignment_draft_policy: 1` before
 `chat.send(..., assignment_thread_key, assignment_policy_version=1)`. The engine
 must enforce the exact thread and fresh nonheld authority at the actual draft
-write. Scoped turns refuse other mutation effects, including sends; ordinary
-unscoped Desktop and finance paths retain their own policies. Local fixture acceptance does not establish deployed-client support.
+write. Scoped turns refuse other mutation effects, including sends. The local
+contextual-email candidate below additionally guards unscoped replies; finance
+and genuinely source-free composition retain their domain policies. Local
+fixture acceptance does not establish deployed-client support.
+
+## Contextual email policy — unreleased candidate
+
+`system.capabilities` additionally returns `contextual_email_policy: 1` in the
+local candidate. This capability covers source-bound draft creation/update and
+final engine transport admission; `assignment_draft_policy: 1` alone does not.
+It does not certify external/manual mailbox writes. The retained kernel
+`draft-reply` Gmail review append is preceded by a projection check but is
+outside the engine/company lock; contextual campaign queue copying refuses.
+Published Desktop `v0.1.56` and the current hosted release retain the old scoped
+contract until a separately authorized rollout.
+
+`chat.send` accepts optional `email_context` plus
+`contextual_email_policy_version=1`. The context is a nonempty object with one or
+more of the following nonempty identifiers; unknown keys refuse:
+
+| Field | Meaning |
+|---|---|
+| `thread_key` | Exact RFC conversation root; the actual effect still requires an exact original source target. |
+| `source_email_id` | Original email ID resolved in the authenticated owner's private store. |
+| `target_message_id` | Exact original RFC Message-ID, resolved in that same store. |
+| `draft_id` | Full persisted engine draft identity; reply binding is re-resolved from the actual row. |
+
+All supplied source identities must agree. A version without context, or context
+without the supported version, refuses. Explicit context cannot contradict
+known `context.email_id`, task sources or another active binding. A genuinely
+source-free draft remains standalone; a known reply cannot drop headers to
+become standalone. This context restricts effects and grants no assignment or
+send authority. Existing approval and request-read-only policies still apply.
+
+Chat, email-backed ordinary tasks and executor hops retain known source context.
+Final write and transport admission rechecks current company authority and the
+persisted draft under their writer reservations; old drafts and stale copies
+receive the same checks. Enrollment and source-free semantic limits are in the
+[assignment contract](../engine/docs/features/task-assignment.md#contextual-email-enforcement--unreleased-development).
+The source-level [RPC inventory](rpc-contract-inventory.json) is generated from
+actual registration and signatures.
 
 ## Transports
 
@@ -237,7 +276,7 @@ registry on 2026-08-15 (65 methods), plus `emails.needs_reply` added
 | Method | Declared parameters | Returns |
 |---|---|---|
 | `chat.approve` | `tool_use_id, mode?, approved?, edited_input?` | {ok: true} |
-| `chat.send` | `message, conversation_history=[], conversation_id="general", context={}` | ChatService result dict |
+| `chat.send` | `message, conversation_history=[], conversation_id="general", context={}, email_context?, contextual_email_policy_version?` | ChatService result dict; candidate contextual fields described above |
 
 **`drafts.*`**
 

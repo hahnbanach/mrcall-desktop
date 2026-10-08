@@ -8,13 +8,18 @@ are preserved in [active-context-archive.md](active-context-archive.md).
 
 ## State now
 
-[Company assignments](features/task-assignment.md) ship in Desktop `v0.1.56`.
-Six hosted company engines have verified complete assignment reads, public
-root-owned trust and tenant-inaccessible signing keys. Signed operations,
-guarded scoped drafts and three-host workflows retain local acceptance. Ordinary
-and Qonto tasks remain private. Café 124 shares one space; MrCall support/Mario
-remain separate and cannot assign across that boundary. Real assignment
-mutations and paid work are outside release verification.
+[Company assignments](features/task-assignment.md) ship in Desktop `v0.1.56`. Six hosted company
+engines have verified assignment reads, root-owned public trust and tenant-inaccessible signing
+keys. Scoped draft and three-host workflows retain local acceptance. Ordinary/Qonto tasks remain
+private. Café 124 shares one space; MrCall support/Mario cannot assign across their separate
+spaces. Release verification creates no real assignment or paid work.
+
+The unreleased [contextual-email
+candidate](../../docs/execution-plans/2026-10-08-contextual-email-assignment-guard.md) guards
+actual reply create/update/send and preserves known email/task context across chat and worker
+hops. [Enrollment](features/assignment-enrollment.md) distinguishes never-enabled, managed and
+ambiguous legacy stores; managed authority cannot be removed by deleting trust. No candidate
+source, enrollment or caller patch is activated in hosted services or installed clones.
 
 The statements about hosted services below are the latest recorded acceptance,
 not live rechecks by the local hardening closure. Detailed historical trial

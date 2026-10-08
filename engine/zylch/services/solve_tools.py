@@ -325,7 +325,9 @@ def _send_email(args: Dict, store, owner_id: str) -> str:
             imap_host=os.environ.get("IMAP_HOST") or None,
             smtp_host=os.environ.get("SMTP_HOST") or None,
         )
-        result = client.send_message(
+        from zylch.services.task_assignment_email_effect import send as guarded_send
+
+        result = guarded_send(client.send_message, owner_id=owner_id,
             to=to,
             subject=subject,
             body=body,

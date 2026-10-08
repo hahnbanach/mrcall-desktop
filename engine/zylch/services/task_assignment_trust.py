@@ -16,7 +16,7 @@ TRUST_DIRECTORY = Path("/etc/mrcalld/assignment-trust")
 SIGNING_DIRECTORY = Path("/etc/mrcalld/assignment-signing")
 
 
-def protected_read(path: Path, *, private: bool = False) -> bytes:
+def protected_read(path: Path, *, private: bool = False, missing_ok: bool = False) -> bytes | None:
     if not path.is_absolute() or any(part in {".", ".."} for part in path.parts):
         raise AssignmentError("Assignment trust path refused")
     fd = None
@@ -40,6 +40,10 @@ def protected_read(path: Path, *, private: bool = False) -> bytes:
         if len(raw) > 65536:
             raise AssignmentError("Assignment trust file is too large")
         return raw
+    except FileNotFoundError:
+        if missing_ok:
+            return None
+        raise AssignmentError("Assignment trust is unavailable") from None
     except OSError:
         raise AssignmentError("Assignment trust is unavailable") from None
     finally:
@@ -60,8 +64,13 @@ def _check(info: os.stat_result, *, directory: bool, private: bool = False) -> N
 
 def load(space_id: str) -> dict[str, Any]:
     identifier(space_id)
+    return parse(protected_read(TRUST_DIRECTORY / f"{space_id}.json"), space_id)
+
+
+def parse(raw: bytes, space_id: str) -> dict[str, Any]:
+    identifier(space_id)
     try:
-        trust = json.loads(protected_read(TRUST_DIRECTORY / f"{space_id}.json"))
+        trust = json.loads(raw)
         if (
             not isinstance(trust, dict)
             or set(trust) != {"version", "issuer", "space_id", "public_key", "members"}
@@ -107,3 +116,10 @@ def member(trust: dict[str, Any], uid: str, mailbox: str | None = None) -> None:
     aliases = trust["members"].get(uid)
     if not aliases or (mailbox is not None and mailbox not in aliases):
         raise AssignmentError("Current company membership refused")
+
+
+def probe(space_id: str) -> dict | None:
+    """Only safely inspected ENOENT is absence; malformed/unreadable refuses."""
+    identifier(space_id)
+    raw = protected_read(TRUST_DIRECTORY / f"{space_id}.json", missing_ok=True)
+    return None if raw is None else load(space_id)

@@ -431,6 +431,11 @@ and may pay, or `zylch -p <uid> memory-reviews --retry|--dismiss <id>`).
 A join also refuses a source store containing assignment state or retained
 assignment history, and refuses unsupported assignment schema, until a lossless
 history migration is available. See the [assignment contract](../engine/docs/features/task-assignment.md).
+The local unreleased contextual-email candidate also retains stricter enrollment
+on history-free joins. For future activation, follow its ordered
+[enrollment procedure](../engine/docs/features/assignment-enrollment.md) before
+publishing trust; direct file installation does not serialize with email effects.
+This candidate is not installed by the current hosted release.
 While a join runs, the source company's memory writes are refused for every
 profile on it; a join that stopped is finished or undone by its profile's
 next boot, or `memory-join --release-fence` releases it

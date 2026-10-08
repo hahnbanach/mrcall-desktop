@@ -133,7 +133,12 @@ class TaskExecutor:
         owner_id: str,
         tools: List[Dict],
         max_turns: int = 10,
+        *,
+        email_task=None,
     ):
+        from zylch.services.contextual_email_policy import current, from_task
+
+        self._email_binding = from_task(owner_id, email_task) if email_task is not None else current()
         self._client = client
         self._system = system
         self._messages = messages
@@ -191,6 +196,26 @@ class TaskExecutor:
             self._pending.pop(tool_use_id, None)
 
     async def run(self) -> AsyncIterator[Dict[str, Any]]:
+        """Retain authoritative task source across the complete asynchronous run."""
+        from zylch.services.contextual_email_policy import scope
+
+        iterator = self._run()
+        try:
+            while True:
+                # Apply context while the executor advances, not while an
+                # event is yielded to its caller. Early break/asyncgen cleanup
+                # must not leave a binding installed in an unrelated task.
+                with scope(self._email_binding):
+                    try:
+                        event = await anext(iterator)
+                    except StopAsyncIteration:
+                        break
+                yield event
+        finally:
+            with scope(self._email_binding):
+                await iterator.aclose()
+
+    async def _run(self) -> AsyncIterator[Dict[str, Any]]:
         """Drive the loop, yielding events."""
         from zylch.services.solve_tools import execute_tool
 
@@ -199,9 +224,11 @@ class TaskExecutor:
         try:
             for _turn in range(self._max_turns):
                 # LLM call runs in a thread (sync SDK call).
+                model_context = contextvars.copy_context()
                 response = await loop.run_in_executor(
                     None,
-                    lambda: self._client.create_message_sync(
+                    lambda: model_context.run(
+                        self._client.create_message_sync,
                         system=self._system,
                         messages=self._messages,
                         tools=self._tools,

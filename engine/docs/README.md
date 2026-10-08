@@ -59,6 +59,7 @@ Documentation for the MrCall Desktop engine: local sidecar and per-profile hoste
 | [features/outbound-calls.md](features/outbound-calls.md) | MrCall outbound calls: Firebase, approval, submission semantics |
 | [features/task-management.md](features/task-management.md) | Private ordinary tasks, lifecycle and company subtype boundary |
 | [features/task-assignment.md](features/task-assignment.md) | Company assignments, privileged approval, source coverage and rollback |
+| [features/assignment-enrollment.md](features/assignment-enrollment.md) | Local contextual-email applicability, privileged enrollment and offline legacy recovery |
 | [features/relationship-intelligence.md](features/relationship-intelligence.md) | Relationship intelligence and gap detection |
 | [features/calendar-integration.md](features/calendar-integration.md) | Calendar integration (planned: CalDAV) |
 | [features/MICROSOFT_CALENDAR_TODO.md](features/MICROSOFT_CALENDAR_TODO.md) | Outlook Calendar via CalDAV (TODO) |

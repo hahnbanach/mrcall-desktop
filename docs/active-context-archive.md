@@ -11,6 +11,17 @@ WhatsApp's protocol can become stale; the checkout has a refresh loop,
 production voice retains a release without it, and `whatsapp.status` has no
 external reader. The app Refresh action only lists threads.
 
+## 2026-10-08 — Before contextual email candidate reconciliation
+
+Desktop `v0.1.56` is published with its Mac Apple Silicon installer. Company
+assignment APIs have local signed-lifecycle and three-host workflow acceptance;
+six hosted engines now expose complete assignment reads with root-owned trust.
+Both maintained clones install kernel `v0.51.0`. Ordinary/Qonto tasks remain
+private. Café 124 shares one company space; MrCall support/Mario remain separate,
+so cross-space assignment is unavailable. No real assignment mutation is part of
+release verification. The [assignment plan](execution-plans/2026-10-08-explicit-task-assignment.md)
+owns local delivery evidence.
+
 ## 2026-10-08 — Superseded mnemonic source deployment scope
 
 Mnemonic M9 source is retained in nonproduction engines. The failed Haiku

@@ -46,3 +46,13 @@ class AssignedTaskReceipt(Base):
     nonce = Column(String(64), nullable=False, unique=True)
     payload_digest = Column(String(64), nullable=False)
     receipt = Column(JSON, nullable=False)
+
+
+class AssignmentEnrollment(Base):
+    __tablename__ = "assignment_enrollment"
+
+    id = Column(Integer, primary_key=True)
+    space_id = Column(String(36), nullable=True)
+    version = Column(Integer, nullable=False)
+    state = Column(String(24), nullable=False)
+    provenance = Column(JSON, nullable=False)

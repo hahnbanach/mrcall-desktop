@@ -154,6 +154,9 @@ class ChatService:
             logger.error(f"[SemanticMatch] Error matching command: {e}", exc_info=True)
             return None
 
+    from zylch.services.contextual_email_policy import chat_scope as _email_chat_scope
+
+    @_email_chat_scope
     async def process_message(
         self,
         user_message: str,

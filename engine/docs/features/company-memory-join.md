@@ -6,8 +6,8 @@ mechanical maintenance routes (`zylch memory-reindex-identifiers`,
 `scripts/compact_learned_prefs.py`, the boot link rebuild). Milestone 8 of the
 mnemonic harness; the semantic write path itself is
 [mnemonic-commit.md](mnemonic-commit.md), the sealed writer boundary
-[mnemonic-writer-inventory.md](mnemonic-writer-inventory.md). On `main` since
-`71bbc21`; **not deployed**.
+[mnemonic-writer-inventory.md](mnemonic-writer-inventory.md). Source availability
+does not establish acceptance of a live company join.
 
 ## A join is a fenced, crash-safe cutover
 
@@ -131,6 +131,21 @@ own profile's recovery. "This profile's" fence is one whose recorded
 identities meet the profile's: a second profile of the same account booting on
 the same company can release a live join's `fenced` fence, and that join then
 refuses at its compare-and-set, writing nothing.
+
+## Assignment enrollment on history-free joins
+
+The unreleased contextual-email candidate retains the existing refusal for
+assignment-bearing source stores and incomplete assignment schemas. For a
+history-free join, the destination keeps the stricter source/destination
+classification: managed, legacy-unknown, never-enabled. Source enrollment is
+included in the snapshot digest; destination enrollment and classification
+provenance commit with the import and its receipt. A failed import does not
+switch the profile key. Managed or unknown companies cannot become never-enabled
+by joining. Memory membership does not provision assignment membership.
+
+See [assignment enrollment](assignment-enrollment.md) for candidate migration,
+privileged trust publication and legacy recovery. This candidate change is
+local; no live company join or fleet enrollment migration is part of its checks.
 
 ## Resolving parked work: `zylch memory-reviews`
 

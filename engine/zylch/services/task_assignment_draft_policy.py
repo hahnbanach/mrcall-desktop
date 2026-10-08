@@ -61,33 +61,9 @@ def guard(method):
         refs = mail.references(refs if isinstance(refs, str) else " ".join(refs))
         if (refs and refs[0] != root) or (not refs and target != root):
             raise AssignmentError("Scoped draft must retain the exact RFC thread root")
-        source = projection.project(root)
-        if (
-            not source["complete"]
-            or source["hold_auto_reply"]
-            or target not in source["current_message_ids"]
-        ):
-            raise AssignmentError("Assignment scope holds this draft before writing")
-        prior = source["task"]
-        with project_store.connection(space, write=True) as (conn, _):
-            from .task_assignment_store import _admit
-
-            _admit(actor, space, conn)
-            row = (
-                conn.execute(
-                    select(AssignedTask.__table__).where(
-                        AssignedTask.space_id == space, AssignedTask.thread_key == root
-                    )
-                )
-                .mappings()
-                .one_or_none()
-            )
-            now = dict(row) if row else None
-            if now != prior or (now and now["state"] == "assigned"):
-                raise AssignmentError("Assignment changed before draft write", -32061)
-            identity.recheck(actor, space)
-            logger.debug("[tasks.assignment] scoped draft admitted before write")
-            return method(*args, **kwargs)
+        # The shared effect guard covers scoped and ordinary contextual writes.
+        # It owns the sole company transaction; do not nest another write lock.
+        return method(*args, **kwargs)
 
     return wrapped
 

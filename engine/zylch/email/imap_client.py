@@ -1720,6 +1720,9 @@ class IMAPClient:
         """
         return self.search(query=query, limit=max_results)
 
+    from zylch.services.task_assignment_email_effect import transport_guard as _email_effect_guard
+
+    @_email_effect_guard
     def send(
         self,
         to: str,
@@ -1847,6 +1850,7 @@ class IMAPClient:
             logger.error(f"[SMTP] Failed to send: {e}")
             raise
 
+    @_email_effect_guard
     def send_message(
         self,
         to: str,

@@ -234,6 +234,11 @@ def _snapshot(source: Session, fence: Dict[str, Any], source_key: str):
     digest.update(b"--restrictions--\n")
     for entry in restrictions:
         digest.update(entry.encode("utf-8") + b"\n")
+    from zylch.services.task_assignment_enrollment import read as read_enrollment
+    from zylch.storage.models import ProjectSpace
+
+    space = source.execute(select(ProjectSpace.space_id)).scalar_one()
+    digest.update(json.dumps(read_enrollment(source.connection(), space), sort_keys=True).encode())
     return blobs, [json.loads(e) for e in restrictions], digest.hexdigest(), excluded_count
 
 
@@ -338,6 +343,7 @@ def _write_receipt(
     digest: str,
     counts: Dict[str, int],
     restrictions: List[Dict[str, Any]],
+    enrollment: Dict[str, Any],
 ) -> None:
     """The import's own receipt row: written directly, not through the checked journal writers."""
     from zylch.memory.mnemonic.contracts import COMMITTED, INTERACTIVE, OPERATOR_DELEGATED
@@ -361,6 +367,7 @@ def _write_receipt(
                 "reason": "company memory join import",
                 "committed_ids": [],
                 "counts": dict(counts),
+                "assignment_enrollment": enrollment,
             },
             pending_effects=[],
             restrictions=restrictions,
@@ -428,9 +435,12 @@ def import_into(
             counts["qonto_excluded"] = excluded_count
             counts["restrictions"] = len(restrictions)
             counts.update(project_join.merge_projects(source.connection(), destination.connection()))
+            from zylch.services.task_assignment_enrollment import merge as merge_enrollment
+
+            enrollment = merge_enrollment(source.connection(), destination.connection())
             _write_receipt(
                 destination, event_id, owner=owner, destination_key=destination_key,
-                digest=digest, counts=counts, restrictions=restrictions,
+                digest=digest, counts=counts, restrictions=restrictions, enrollment=enrollment,
             )
             bump_mutation_seq(destination)
         destination.commit()

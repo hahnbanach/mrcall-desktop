@@ -3,6 +3,16 @@
 Mnemonic M5–M9 source is retained in five nonproduction checkout daemons and
 support's isolated Qonto release.
 
+## 2026-10-08 — Before contextual email candidate reconciliation
+
+[Company assignments](features/task-assignment.md) ship in Desktop `v0.1.56`.
+Six hosted company engines have verified complete assignment reads, public
+root-owned trust and tenant-inaccessible signing keys. Signed operations,
+guarded scoped drafts and three-host workflows retain local acceptance. Ordinary
+and Qonto tasks remain private. Café 124 shares one space; MrCall support/Mario
+remain separate and cannot assign across that boundary. Real assignment
+mutations and paid work are outside release verification.
+
 ## 2026-10-08 — Superseded release state
 
 Desktop and provider-UI comparison remain unverified. Next-release source combines
