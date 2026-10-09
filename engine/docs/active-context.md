@@ -30,7 +30,9 @@ receipts and diagnostic sequences are in the archive and owning plans.
 
 Native [Qonto](features/qonto.md) has authenticated support-only banking,
 restart/reconnect, source-comparison and managed-answer acceptance. Packaged
-GUI and provider-UI comparison remain unverified. Released source combines
+GUI and provider-UI comparison remain unverified. Current source accepts Qonto
+credentials only as typed request arguments; no published Desktop or hosted
+engine has that change. Released source combines
 Qonto and [additional mailboxes/PEC](features/mailboxes.md). Six company units
 have verified mailbox migration, primary registration, encryption startup and
 row preservation; personal Gmail keeps its separate attachment source pin. The

@@ -74,12 +74,13 @@ Support now has real authenticated banking/source/managed-assistant acceptance;
 its corrected UTC source timestamps match the managed answer. Packaged
 Desktop and provider-UI acceptance remain pending in the delivery plan.
 Qonto and PEC/additional mailboxes are combined with the 0.1.55 source fixes
-for the next release. Tags 0.1.54 and 0.1.55 contain neither Settings card.
+and ship in Desktop `v0.1.56`. Tags 0.1.54 and 0.1.55 contain neither Settings card.
 The [integration plan](../../docs/execution-plans/2026-10-05-mailboxes-qonto-release-integration.md)
-records source delivery and verification; no new installer is published here.
+records source delivery and verification; [cross-cutting state](../../docs/active-context.md) tracks the published release.
 Explicit logout clears finance state and rejects late responses even if
 Firebase signout fails; same-UID relogin is covered by the combined App/Qonto
-lifecycle regression. The published installer does not yet contain Qonto.
+lifecycle regression. The `v0.1.56` Qonto card still offers the engine bootstrap
+option; current source has typed login and key as its only credential source.
 
 ## Unresolved
 

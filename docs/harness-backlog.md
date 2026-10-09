@@ -6,6 +6,61 @@ materialises) `app/docs/harness-backlog.md`.
 
 ## Open
 
+- [ ] **A failing UI fixture assertion can exhaust host memory.**
+  Discovered: 2026-10-09. On Node 22 a failing
+  `assert.equal(<react-test-renderer instance>, undefined)` formats the instance
+  for its failure message and allocates without bound; one such run exhausted
+  the memory of the VPS that also serves the hosted engines. No assertion of
+  that form remains under `app/scripts`: absence is asserted with
+  `assert.ok(!instance)`, which reports in under a second. Nothing prevents the
+  form from returning, and the documented commands set no heap limit.
+  Recommendation: a check over `app/scripts` that rejects equality assertions
+  on test instances, and `--max-old-space-size` in the documented commands.
+
+- [ ] **No workflow runs the Qonto engine suite or a Qonto UI script.**
+  Discovered: 2026-10-09. `rpc-contracts.yml`, `memory-boundary.yml` and
+  `mnemonic-journey.yml` run their own named test files and `release.yml` runs
+  no test. `engine/tests/qonto` and the six `app/scripts/test-qonto*.mjs`
+  scripts run only on a developer machine; of Qonto, the workflows check the
+  RPC parameter declarations only.
+  Recommendation: a workflow for the engine Qonto suite and the Qonto scripts
+  that need no browser.
+
+- [ ] **The RPC contract check ignores result shapes and inventory currency.**
+  Discovered: 2026-10-09. `npm run test:rpc-contracts` passed while the client
+  types still declared two removed Qonto result fields as required. Nothing
+  fails when `docs/rpc-contract-inventory.json` is stale. `rpc-contracts.yml`
+  pins cs-kernel `ba79cc13`, which yields 54 kernel calls; the committed
+  inventory lists 64 and reproduces only from kernel `eb6dc1a`, a revision the
+  file does not record.
+  Recommendation: compare declared client result fields with engine results
+  for the methods that have fixtures, regenerate the inventory in the workflow
+  and fail on a diff, and record one kernel revision for both.
+
+- [ ] **Qonto client result types differ from the engine.**
+  Discovered: 2026-10-09. The preload type of `qonto.status` omits `sync`,
+  which the engine returns when connected and the card reads.
+  `app/src/renderer/src/finance.ts` declares `last_sync_at`, which no engine
+  returns, so its card line never renders.
+  Recommendation: type the preload call with the renderer's status type and
+  drop the field, or return it from the engine.
+
+- [ ] **`qonto.test` returns account balances before authority is confirmed.**
+  Discovered: 2026-10-09, by reading; the fixture provider leaves the values
+  empty. The Test result is `Organization.public()`, which carries `balance`
+  and `authorized_balance` for every organization account. The client types
+  declare, and the card renders, only id, name and currency; account selection
+  and authority confirmation come after Test.
+  Recommendation: return from Test only what the confirmation step shows.
+
+- [ ] **`engine/tests/server/test_qonto_egress_policy.py` errors at setup under pytest.**
+  Discovered: 2026-10-09; the same error occurs at `434f325`. The autouse
+  `cleanup_test_data` fixture of `engine/tests/conftest.py` requests `storage`,
+  whose setup reads `settings.supabase_url`: `AttributeError: 'Settings' object
+  has no attribute 'supabase_url'`. Both tests pass under `python -m unittest`.
+  Recommendation: remove the `storage` and `cleanup_test_data` fixtures from
+  the root conftest, or override them for `tests/server`.
+
 - [ ] **Deployed server gzip/SSE contract lacks automated acceptance.**
   Offline Desktop parser/transport regression exists in
   `engine/tests/llm/test_proxy_boundaries.py` and passes locally. This remaining

@@ -257,3 +257,68 @@ logs with leftover lines present).
 - Pre-existing and untouched: whole-package `make lint` fails identically on
   the base; `tests/server/test_qonto_egress_policy.py` errors at setup under
   pytest on the base and passes under `unittest`.
+
+**M2 (2026-10-09).** Integration review and IPC contract review: both
+APPROVED on the first pass. Notes applied before the commit: the fixture
+comment names what it mirrors, the late-reply helper asserts that Test is
+disabled while a Test is pending, and two document sentences are tightened.
+
+- Card: no bootstrap state, line, checkbox or wording; the diff against the
+  published card is six hunks, all bootstrap code. In a real browser, through
+  the actual preload and real Python dispatch, the changed card and the
+  published card post identical Test and Save bodies.
+- Changed app against the base engine (D6): the native journey passes on a
+  real copy of the changed `app/` beside the base engine, whose status still
+  carries `bootstrap`; the card shows no bootstrap UI and "Qonto
+  disconnected.".
+- Fixture journeys: 29 guarded mutants of the card, the fixture and the
+  script each fail on the intended assertion, among them a stale Test reply
+  accepted after a host switch, a UID switch and a sign-out.
+- Inventory: six changed lines, namely the two source hashes, the preload
+  record of `qonto.status` and the three renderer-linkage signatures;
+  `engine` and `kernel_calls` unchanged, no line number moved, regeneration
+  byte-identical.
+- App commands: typecheck, build, the six Qonto scripts,
+  `test:rpc-contracts`, `test:auth` and `test:onboarding` pass.
+
+**Host incident during M2.** An unguarded mutation run of
+`app/scripts/test-qonto.mjs` exhausted host memory around 12:35-12:52 UTC:
+a failing `assert.equal(<react-test-renderer instance>, undefined)` never
+reports on Node 22 and allocates without bound. No hosted unit restarted.
+The eighteen assertions of that form in three scripts are converted in a
+separate commit, and a guarded failing run now reports its message at
+140 MB. The remaining gap is logged in `docs/harness-backlog.md`.
+
+**Findings outside this plan**, logged in `docs/harness-backlog.md`: no
+workflow runs the Qonto suites; the RPC contract check ignores result
+shapes and inventory currency; two Qonto client result types differ from
+the engine; `qonto.test` returns account balances before authority is
+confirmed.
+
+**M3 (2026-10-09).** One rerun of the whole surface on `28166c2`, one
+process at a time under a heap cap. The commits after `28166c2` change
+Markdown only.
+
+- Engine: `tests/qonto` 435 passed, which is the 425 of M1 plus the ten
+  cases of the four added tests; the three contract files 39 passed; the
+  two memory-boundary files 27 passed.
+- App: typecheck, build, `test-qonto.mjs`, `test-qonto-credentials.mjs`,
+  `test-qonto-history.mjs`, `test-qonto-auth-lifecycle.mjs`,
+  `test-mailboxes-ui.mjs`, `test-qonto-browser.mjs`,
+  `test-qonto-native-browser.mjs`, `test:rpc-contracts`, `test:auth` and
+  `test:onboarding` exit 0.
+- Inventory: a regeneration with kernel `eb6dc1a` leaves the committed
+  file unchanged.
+- The three names: `git grep -l` returns exactly the seven files of step
+  2, before and after the reconciliation edits.
+- Reconciliation: the two notes of D4, the index entry, the update order
+  under "Unresolved", the credential source in the three living snapshots,
+  and six entries in `docs/harness-backlog.md`. The app snapshot also
+  stops saying that the published installer lacks Qonto.
+- No engine file changed after the M1 gate, so D5 and the published-app
+  journey of M1 stand without a rerun.
+- Not verified by any journey: a packaged Electron build and the Electron
+  main transport, the WebSocket transport, a real Qonto connection through
+  the changed card, and live hosted state.
+- The final-review verdicts and the closure result are in the commit that
+  completes this plan and in the pull request.
