@@ -8,7 +8,8 @@ state lives in ../../docs/active-context.md. Historical snapshots are archived.
 
 ## State now
 
-Desktop v0.1.55 is the current published signed/notarized Apple Silicon release. The CTO confirms
+Desktop v0.1.56 is the current published Apple Silicon release (CI 37787264959; notarization
+credentials validated, un-notarized path skipped). The CTO confirms
 Remote Mario Gmail reconnects after full app quit/reopen. Fresh-device sign-in
 and personal-key GUI entry remain unverified; engine/API checks do not establish
 those packaged-app journeys.
@@ -21,7 +22,7 @@ provisioning share bounded fresh-token retrieval. Focused synthetic tests execut
 actual App/preload/main IPC paths and a local WebSocket handshake; typecheck/build
 pass. Signed/notarized Apple Silicon 0.1.53 is published (CI 37278638471;
 source/tag match, signing observed, notarization required and not skipped).
-Current 0.1.55 includes that repair; installed-patch GUI acceptance remains pending.
+0.1.55 and 0.1.56 include that repair; installed-patch GUI acceptance remains pending.
 Work trace: [auth recovery](../../docs/execution-plans/2026-10-05-desktop-auth-session-recovery.md).
 
 The billing-business picker repair is published in 0.1.54 after two independent
@@ -58,7 +59,7 @@ mailbox; archive reads the engine's `ok` and rolls back on a per-mailbox
 failure. Typecheck, build, onboarding and `scripts/test-mailboxes-ui.mjs`
 pass. Cancel, account changes and engine changes clear credentials and invalidate
 late tests or mutations. Older engines receive an upgrade instruction.
-Not released; hosted units not migrated.
+Released in Desktop `v0.1.56`; [cross-cutting state](../../docs/active-context.md) tracks the hosted migration.
 
 React component journeys use fake RPCs; their successful results, typecheck and
 build are source checks, not live GUI acceptance. Current hosted deployment and

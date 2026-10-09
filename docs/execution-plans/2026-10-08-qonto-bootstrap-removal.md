@@ -272,8 +272,9 @@ disabled while a Test is pending, and two document sentences are tightened.
   carries `bootstrap`; the card shows no bootstrap UI and "Qonto
   disconnected.".
 - Fixture journeys: 29 guarded mutants of the card, the fixture and the
-  script each fail on the intended assertion, among them a stale Test reply
-  accepted after a host switch, a UID switch and a sign-out.
+  script each make the script exit 1 at the check that covers them, among
+  them a stale Test reply accepted after a host switch, a UID switch and a
+  sign-out.
 - Inventory: six changed lines, namely the two source hashes, the preload
   record of `qonto.status` and the three renderer-linkage signatures;
   `engine` and `kernel_calls` unchanged, no line number moved, regeneration
@@ -285,19 +286,22 @@ disabled while a Test is pending, and two document sentences are tightened.
 `app/scripts/test-qonto.mjs` exhausted host memory around 12:35-12:52 UTC:
 a failing `assert.equal(<react-test-renderer instance>, undefined)` never
 reports on Node 22 and allocates without bound. No hosted unit restarted.
-The eighteen assertions of that form in three scripts are converted in a
-separate commit, and a guarded failing run now reports its message at
-140 MB. The remaining gap is logged in `docs/harness-backlog.md`.
+The eighteen assertions of that form in three scripts are converted: the
+twelve in `test-qonto.mjs` in the M2 commit, and the six in
+`test-qonto-auth-lifecycle.mjs` and `test-mailboxes-ui.mjs` in a separate
+commit. A guarded failing run now reports its message instead of
+allocating without bound. The remaining gap is logged in
+`docs/harness-backlog.md`.
 
 **Findings outside this plan**, logged in `docs/harness-backlog.md`: no
 workflow runs the Qonto suites; the RPC contract check ignores result
-shapes and inventory currency; two Qonto client result types differ from
-the engine; `qonto.test` returns account balances before authority is
-confirmed.
+shapes and inventory currency; Qonto results differ from the client types,
+and `qonto.test` returns account balances before authority is confirmed.
+One more is logged in `engine/docs/harness-backlog.md`: the egress policy
+test of `tests/server` errors at setup under pytest.
 
 **M3 (2026-10-09).** One rerun of the whole surface on `28166c2`, one
-process at a time under a heap cap. The commits after `28166c2` change
-Markdown only.
+process at a time. The commits after `28166c2` change Markdown only.
 
 - Engine: `tests/qonto` 435 passed, which is the 425 of M1 plus the ten
   cases of the four added tests; the three contract files 39 passed; the
@@ -313,10 +317,11 @@ Markdown only.
   2, before and after the reconciliation edits.
 - Reconciliation: the two notes of D4, the index entry, the update order
   under "Unresolved", the credential source in the three living snapshots,
-  and six entries in `docs/harness-backlog.md`. The app snapshot also
-  stops saying that the published installer lacks Qonto.
-- No engine file changed after the M1 gate, so D5 and the published-app
-  journey of M1 stand without a rerun.
+  four entries in `docs/harness-backlog.md` and one in
+  `engine/docs/harness-backlog.md`. The app snapshot also names `v0.1.56`
+  as the published release that carries both Settings cards.
+- No file under `engine/zylch` changed after the M1 gate, so D5 and the
+  published-app journey of M1 stand without a rerun.
 - Not verified by any journey: a packaged Electron build and the Electron
   main transport, the WebSocket transport, a real Qonto connection through
   the changed card, and live hosted state.

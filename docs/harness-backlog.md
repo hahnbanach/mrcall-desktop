@@ -37,29 +37,20 @@ materialises) `app/docs/harness-backlog.md`.
   for the methods that have fixtures, regenerate the inventory in the workflow
   and fail on a diff, and record one kernel revision for both.
 
-- [ ] **Qonto client result types differ from the engine.**
+- [ ] **Qonto results differ from the client types, and Test returns balances before authority is confirmed.**
   Discovered: 2026-10-09. The preload type of `qonto.status` omits `sync`,
   which the engine returns when connected and the card reads.
   `app/src/renderer/src/finance.ts` declares `last_sync_at`, which no engine
-  returns, so its card line never renders.
-  Recommendation: type the preload call with the renderer's status type and
-  drop the field, or return it from the engine.
-
-- [ ] **`qonto.test` returns account balances before authority is confirmed.**
-  Discovered: 2026-10-09, by reading; the fixture provider leaves the values
-  empty. The Test result is `Organization.public()`, which carries `balance`
-  and `authorized_balance` for every organization account. The client types
-  declare, and the card renders, only id, name and currency; account selection
-  and authority confirmation come after Test.
-  Recommendation: return from Test only what the confirmation step shows.
-
-- [ ] **`engine/tests/server/test_qonto_egress_policy.py` errors at setup under pytest.**
-  Discovered: 2026-10-09; the same error occurs at `434f325`. The autouse
-  `cleanup_test_data` fixture of `engine/tests/conftest.py` requests `storage`,
-  whose setup reads `settings.supabase_url`: `AttributeError: 'Settings' object
-  has no attribute 'supabase_url'`. Both tests pass under `python -m unittest`.
-  Recommendation: remove the `storage` and `cleanup_test_data` fixtures from
-  the root conftest, or override them for `tests/server`.
+  returns, so its card line never renders. The `qonto.test` result is
+  `Organization.public()`: each account carries `balance` and
+  `authorized_balance`, which the client types do not declare and the card
+  does not render. The HTTP fixture that the native journey runs through
+  returns the values at Test; the in-process `FixtureProvider` leaves them
+  empty. They reach the renderer before account selection and authority
+  confirmation.
+  Recommendation: type the preload status call with the renderer's status
+  type; drop `last_sync_at` or return it from the engine; return from Test
+  only what the confirmation step shows.
 
 - [ ] **Deployed server gzip/SSE contract lacks automated acceptance.**
   Offline Desktop parser/transport regression exists in
