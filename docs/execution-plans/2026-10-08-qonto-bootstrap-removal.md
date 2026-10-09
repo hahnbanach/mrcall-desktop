@@ -227,4 +227,33 @@ the checks.
 
 ## Evidence
 
-Filled as each gate closes.
+Brief gate: APPROVED on the third pass. Plan gate: APPROVED on the second
+pass; its five closing notes were written into this plan after the verdict
+(static scan over `*.py`, three-dot guard diff, grep after the trace is
+committed, reruns after a late engine change, update order in the Qonto
+plan).
+
+**M1 (2026-10-09).** Integration review and IPC contract review: both
+APPROVED on the first pass, with notes applied before the commit: two
+document precisions and four regression cases (identity checks before the
+refusal on both methods, a serving engine, a reopened disconnected profile,
+logs with leftover lines present).
+
+- Engine `tests/qonto`: 425 passed before the added cases; the changed file
+  `test_secrets.py` then 31 passed. Contract files 39 passed; memory-boundary
+  files 27 passed. Ruff and Black clean on the touched files.
+- Saved connection (D5): 22 of 22 checks; the base engine's status carries
+  `bootstrap`, the changed engine's does not, same root, same generation;
+  sync, accounts and transactions answer.
+- Published app against the changed engine (D6): the unchanged app's native
+  journey passes. With the retired box ticked the published card shows
+  "Enter your Qonto organization API login and key, then Test." and offers
+  no Save.
+- Inventory: two `declared_return` lines changed; a regeneration with
+  cs-kernel `eb6dc1a` reproduces the file byte for byte.
+- Mutation probes by the reviewer: 25 of 28 in-memory mutants killed by the
+  first five regressions; the order mutant is now covered by the identity
+  cases, and the two discarded-lookup mutants by the static scan.
+- Pre-existing and untouched: whole-package `make lint` fails identically on
+  the base; `tests/server/test_qonto_egress_policy.py` errors at setup under
+  pytest on the base and passes under `unittest`.

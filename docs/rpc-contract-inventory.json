@@ -674,7 +674,7 @@
     "qonto.disconnect": {
       "accepted": [],
       "required": [],
-      "declared_return": "application credential removal and retained bootstrap availability.",
+      "declared_return": "application credential removal, disconnected status and generation.",
       "open": false
     },
     "qonto.prepare": {
@@ -704,7 +704,7 @@
     "qonto.status": {
       "accepted": [],
       "required": [],
-      "declared_return": "safe connection and bootstrap availability.",
+      "declared_return": "safe connection state, generation, stored-credential flag and persisted coverage.",
       "open": false
     },
     "qonto.summary": {

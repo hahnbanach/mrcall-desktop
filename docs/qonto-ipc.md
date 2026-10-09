@@ -13,9 +13,9 @@ See [engine behavior](../engine/docs/features/qonto.md) and
 
 | Method | Parameters | Result |
 |---|---|---|
-| `qonto.status` | none | connection state, generation, bootstrap availability, stored-copy flag and persisted coverage |
-| `qonto.test` | `credential_source`, input `login`/`api_key` when applicable; optional `account_ids` | organization/accounts, challenge, expiry, consent version and `company_name: string|null` |
-| `qonto.connect` | same credential source, `challenge_id`, `account_ids`, `authority_confirmed=true`, `consent_version` | saved state and bounded initial sync |
+| `qonto.status` | none | `status`, `generation`, `credential_stored`, `account_count`, `source_access`; `sync` (persisted coverage) when connected, `error` (safe outcome) when unavailable |
+| `qonto.test` | typed `login` and `api_key`; optional `account_ids`; optional `credential_source`, accepted only as `input` | organization/accounts, challenge, expiry, consent version and `company_name: string|null` |
+| `qonto.connect` | the tested `login` and `api_key`, `challenge_id`, `account_ids`, `authority_confirmed=true`, `consent_version`; optional `credential_source`, accepted only as `input` | saved state and bounded initial sync |
 | `qonto.sync` | none | bounded source-only sync outcome and coverage |
 | `qonto.accounts` | optional `account_ids` | authorized provider balances with source metadata |
 | `qonto.transactions` | date basis/from/to, statuses; optional accounts/currency/side/page/page size | bounded source rows, pagination and coverage |
@@ -24,14 +24,22 @@ See [engine behavior](../engine/docs/features/qonto.md) and
 | `qonto.prepare` | optional `resume=false` | bounded private task preparation status, counters and safe errors |
 | `qonto.publication_preview` | none | `preview_id`, exact `fact_text`, audience disclosure, generation and expiry |
 | `qonto.publish` | engine-issued `preview_id`, `confirmed=true`; optional `resume=false` | committed/skipped/review_needed/refused status and safe reason |
-| `qonto.disconnect` | none | application-copy removal and independent bootstrap availability |
-| `qonto.delete_imported_data` | `confirmed=true` | private-source deletion; bootstrap and historical facts retained |
+| `qonto.disconnect` | none | application-copy removal, disconnected status and generation |
+| `qonto.delete_imported_data` | `confirmed=true` | private-source deletion and removed-row count; historical published facts retained |
 
-`credential_source` is `input` or `bootstrap`. Input credentials are secret
-arguments. Test does not save them: Desktop retains a short-lived request-only
-copy until Save, edit, expiry, error or context change. Save consumes the exact
-tested context and account selection. A key without an organization API login
-returns the safe `login_required` outcome.
+Credentials have one source: the `login` and `api_key` arguments of Test and
+Save. Both are secret arguments. `credential_source` is optional and `input` is
+its only accepted value. The retired `bootstrap` value is refused with
+`credentials_required` and any other value with `invalid_credentials`. Both
+refusals follow the identity checks and, on Save, the `authority_required`
+check; both precede the challenge and any provider request. Test does not save
+the credentials: Desktop retains a short-lived request-only copy until Save,
+edit, expiry, error or context change. Save consumes the exact tested context
+and account selection. `login` and `api_key` are declared optional, so the
+engine and not the dispatcher answers their absence: a missing or empty key
+returns `credentials_required`; a key without an organization API login
+returns `login_required`, unless `api_key` carries the combined `login:key`
+form.
 
 `company_name` describes the MrCall company bound to the issued challenge;
 `null` means unnamed. Desktop requires this field and uses it for confirmation.

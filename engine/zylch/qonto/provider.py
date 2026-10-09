@@ -16,7 +16,7 @@ from typing import Protocol
 import httpx
 
 from zylch.qonto.amounts import Money, currency, money, timestamp
-from zylch.qonto.bootstrap import Credentials
+from zylch.qonto.credentials import Credentials
 from zylch.qonto.errors import QontoError
 from zylch.qonto.source import STATUSES, text, transaction
 
