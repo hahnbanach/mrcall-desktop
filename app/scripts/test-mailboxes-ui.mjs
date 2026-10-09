@@ -148,7 +148,7 @@ assert.equal(changed, 1, 'Settings announces the change to the Email view')
 assert.match(text(), /Added new@pec\.net/)
 assert.match(text(), /new@pec\.net/)
 assert.equal(buttons('Remove').length, 2)
-assert.equal(input('mailbox-add-password'), undefined, 'the form closes after Save')
+assert.ok(!input('mailbox-add-password'), 'the form closes after Save')
 
 // Edit: the refusal from update is shown inline.
 const pecRow = () => view.root.findAll((node) => node.type === 'li' && node.props['data-mailbox-id'] === 'mb-pec')[0]
