@@ -1,9 +1,9 @@
 {
   "version": 1,
   "source_sha256": {
-    "preload": "93c0c5e682b6288bdfdc648352536706b840d31d03096bdc761e08c65d4e444c",
+    "preload": "f55a049e15a2e0a16751b6346458a2c51a88825fe1295dac2820a5111f55184f",
     "renderer": "853a661aac6641ad4399aa73cc67f327a0add1d5d741ebe771a0a7913951822b",
-    "finance": "ac3bf205e665e5e6a526022f7450bb29dfff6240c3cd5360bc9827814128573e"
+    "finance": "85643cf1d0e4848ca801c5d177ef50451ad043ea86e25c8c16039e2bf246db6e"
   },
   "command": "ENGINE_PYTHON=../engine/venv/bin/python CS_KERNEL_ROOT=../../cs-kernel npm run test:rpc-contracts",
   "limits": [
@@ -1211,7 +1211,7 @@
       "payload_keys": [],
       "guaranteed_keys": [],
       "dynamic_payload": false,
-      "declared_return": "Promise<{ status: string; generation: number; account_count: number; source_access: boolean; credential_stored: boolean; error?: string | undefined; bootstrap: { available: boolean; reason?: string | undefined; }; }>"
+      "declared_return": "Promise<{ status: string; generation: number; account_count: number; source_access: boolean; credential_stored: boolean; error?: string | undefined; }>"
     },
     {
       "line": 171,
@@ -2171,21 +2171,21 @@
     {
       "api": "qonto.test",
       "renderer": "(credentials: QontoCredentials) => Promise<QontoTestResult>",
-      "preload": "(credentials: { credential_source: \"input\" | \"bootstrap\"; login?: string | undefined; api_key?: string | undefined; }) => Promise<QontoTestResult>",
+      "preload": "(credentials: { credential_source: \"input\"; login?: string | undefined; api_key?: string | undefined; }) => Promise<QontoTestResult>",
       "renderer_arguments_accepted": true,
       "declared_return_assignable": true
     },
     {
       "api": "qonto.connect",
       "renderer": "(params: QontoConnectParams) => Promise<QontoConnectResult>",
-      "preload": "(params: { credential_source: \"input\" | \"bootstrap\"; login?: string | undefined; api_key?: string | undefined; challenge_id: string; account_ids: string[]; authority_confirmed: boolean; consent_version: number; }) => Promise<QontoConnectResult>",
+      "preload": "(params: { credential_source: \"input\"; login?: string | undefined; api_key?: string | undefined; challenge_id: string; account_ids: string[]; authority_confirmed: boolean; consent_version: number; }) => Promise<QontoConnectResult>",
       "renderer_arguments_accepted": true,
       "declared_return_assignable": true
     },
     {
       "api": "qonto.status",
       "renderer": "() => Promise<QontoStatus>",
-      "preload": "() => Promise<{ status: string; generation: number; account_count: number; source_access: boolean; credential_stored: boolean; error?: string | undefined; bootstrap: { available: boolean; reason?: string | undefined; }; }>",
+      "preload": "() => Promise<{ status: string; generation: number; account_count: number; source_access: boolean; credential_stored: boolean; error?: string | undefined; }>",
       "renderer_arguments_accepted": true,
       "declared_return_assignable": true
     },

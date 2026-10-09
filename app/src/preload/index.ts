@@ -165,11 +165,11 @@ const api = {
   qonto: {
     status: () => call<{
       status: string; generation: number; account_count: number; source_access: boolean
-      credential_stored: boolean; error?: string; bootstrap: { available: boolean; reason?: string }
+      credential_stored: boolean; error?: string
     }>('qonto.status', {}, 30_000),
-    test: (credentials: { credential_source: 'input' | 'bootstrap'; login?: string; api_key?: string }) =>
+    test: (credentials: { credential_source: 'input'; login?: string; api_key?: string }) =>
       call<QontoTestResult>('qonto.test', credentials, 35_000),
-    connect: (params: { credential_source: 'input' | 'bootstrap'; login?: string; api_key?: string; challenge_id: string; account_ids: string[]; authority_confirmed: boolean; consent_version: number }) =>
+    connect: (params: { credential_source: 'input'; login?: string; api_key?: string; challenge_id: string; account_ids: string[]; authority_confirmed: boolean; consent_version: number }) =>
       call<QontoConnectResult>('qonto.connect', params, 180_000),
     sync: () => call<QontoSyncResult>('qonto.sync', {}, 180_000),
     disconnect: () => call<QontoRemovalResult>('qonto.disconnect', {}, 30_000),

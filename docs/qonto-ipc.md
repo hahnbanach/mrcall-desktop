@@ -29,7 +29,9 @@ See [engine behavior](../engine/docs/features/qonto.md) and
 
 Credentials have one source: the `login` and `api_key` arguments of Test and
 Save. Both are secret arguments. `credential_source` is optional and `input` is
-its only accepted value. The retired `bootstrap` value is refused with
+its only accepted value. Desktop sends `credential_source: "input"` with both
+fields on every Test and repeats the same three values on Save. The retired
+`bootstrap` value is refused with
 `credentials_required` and any other value with `invalid_credentials`. Both
 refusals follow the identity checks and, on Save, the `authority_required`
 check; both precede the challenge and any provider request. Test does not save
