@@ -125,6 +125,9 @@ def validate_requirements(req: object, name: str = "requirements.json") -> dict:
     policy = req.get("provider_policy") if isinstance(req.get("provider_policy"), dict) else {}
     if not _names(policy.get("quantizations")) or not policy["quantizations"]:
         raise ConfigError(f"{name}: provider_policy.quantizations must list quantizations")
+    pins = policy.get("pinned_endpoints", {})
+    if not isinstance(pins, dict) or not _names([*pins.keys(), *pins.values()]):
+        raise ConfigError(f"{name}: provider_policy.pinned_endpoints must map ids to endpoint tags")
     if not _names(req.get("excluded_endpoint_variants")):
         raise ConfigError(f"{name}: excluded_endpoint_variants must be a list of tiers")
     if not isinstance(req.get("reference"), str) or not req["reference"]:
