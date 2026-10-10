@@ -1420,6 +1420,43 @@ not started.
 
      The assignment workstream names future pins `t0-…`, not `zz-…`.
 
+   - **Repair VPS preflight — 2026-10-10, 11:39 UTC: STOP.**
+     Clone `main` is `3876c093`, containing required `08ea112c`.
+     All six `zz-assignment-release.conf` files contain the same keys:
+     `[Service]`, `Environment=PYTHONPATH`, and the additional
+     `Environment=PYTHONDONTWRITEBYTECODE`. No values are recorded.
+     The CTO's explicit condition is to stop and report any additional key;
+     this preflight therefore stops before every host-changing step.
+     No pin was renamed, no `daemon-reload` or reconcile was executed,
+     and zero scratch profiles were created. The scratch harness worker was
+     stopped before execution. R5 stays `active`; no new runtime acceptance,
+     final approval or baseline advancement is claimed.
+
+     Effective property hashes before any rename are recorded below.
+     Method: SHA-256 of newline-joined, lexically sorted `shlex` tokens from
+     each `systemctl show --value -p <property>` result. Only hashes are
+     retained; raw effective environment and command values are not logged.
+     Since no rename occurred, there is no after-rename comparison.
+
+     | Profile | Environment | ExecStart | User | ProtectHome | EnvironmentFiles | BindReadOnlyPaths |
+     |---|---|---|---|---|---|---|
+     | support | `b48d2776af6c4d24c069b30d56a366b8949d7c665d4593624d7bb77f2f019178` | `08f869128cdc3e4422b380e58633e1d182f4f32a4f26327537fa1938a947d9b5` | `3c6a6627c53f919ed365ae22f98dcd1c585d4d0bcc0952027c2ebf4957f81b2a` | `02dae179e16841345a4e5cb7996e022ea6f45aeb4cbfa4811a76934328c2d24e` | `6124dfbefef4a7fdbb7b44f3ce36d9664ed7c951e111542f2383a8c89935466e` | `ad138c3145c65ba02478e6d9b72082d55945ccaedb83beebb03d300ea825a4a7` |
+     | Café124 | `31e720f1cb338a731e0bbcf6800519ae6e8c161131a32239950f054f1058c078` | `5020354555416dda5198ad850a3f58a9c4e4f98396f1913d833fd648525115c5` | `a9312059c94c9eda40efd3af3b0764f8ac4ae9463eaf7f849d39e7cd3303d1cf` | `02dae179e16841345a4e5cb7996e022ea6f45aeb4cbfa4811a76934328c2d24e` | `3e200e1b36fd927453d8c2732fcde4a3ccca82dd9a077608d852d5fb5d806144` | `d084519f66d553d67f3a9ee8ddadc4274d4f33204d3d46003971746eb4de35e9` |
+     | Mario MrCall | `fec57ebbcf9978deebff51e796190263b820cdbd258c6ff867d865c145927589` | `f0a4dc4f5b8096eb44327c6b6281c00f7bd686b50379b35f6eef88040a8d2c37` | `3612e92ce72bf5643ab1a777b216d772d9939f1543614f376754559334781046` | `02dae179e16841345a4e5cb7996e022ea6f45aeb4cbfa4811a76934328c2d24e` | `5bfe7e565c9b7c957d533348ce92f622555bee2069ddffa3d1cdee7a663f7e5d` | `9a5d1bd25606cdda6d14ec61bd83c98c9a944f2859fddc820245f9e8e8577ad8` |
+     | production | `dc59ed6430a3cbe568c6a873bd4a88b4cd9b496be31c29fbdaecb81e0c02d0a5` | `a9e8757f32f5f9ca2fa96365ca553355d3e477e445dddf5a2a1b5aeaf4aa6d57` | `f9dacf54fb642ecf30bb4f880146532d0fc4e69551788ec7d8acbbef0364e6fa` | `02dae179e16841345a4e5cb7996e022ea6f45aeb4cbfa4811a76934328c2d24e` | `43e2ecc3b8e083f8f76c0a9883bcf953b47abc260000f9392bf54aa211c3f932` | `d7effd8380f430c1bfd24c9c0560d4487f9e2d42377fb242dce614cb1d2713d9` |
+     | Ivan | `2bcc9c8c942a0e518ace26f8ead2316bb75a7767a0ac00df164d7c8a28a65e9e` | `ef9fa834035d8b25e9639bbd67e6ebf0ea2ba460f414c358c1e01e14692bbc4a` | `88a402313a2868bd2ff212ece1adf496f5b5d3a8c94050e58217d1afbb664b36` | `02dae179e16841345a4e5cb7996e022ea6f45aeb4cbfa4811a76934328c2d24e` | `fd0aead599e04779152a7943a91ae9af1f305a75165a2b134932e638047d402d` | `b839cbb97f4ec86f8665b9a7c833a09379ff780c50de7bf5c11182cdb27e690c` |
+     | Riccardo | `e456c1636ed17334239f187f347323688bfdad460ebf8beb0e0dec67a8b9d98c` | `a05230837e3ed6de70d4695c2086d4abd79ecc74cda7714edf1edd0949751894` | `754036e1e6512d7c586a7a16baaa815bb517cd9374759aaea06bbee86f99183d` | `02dae179e16841345a4e5cb7996e022ea6f45aeb4cbfa4811a76934328c2d24e` | `f6f550c91c80affcdd16495460e66fddcc6e87c6220937045073b4fbd61fad14` | `1806abf0fbac3a68ce6d200a1e74e3c33ee4ee4aa10c453f1ef01c15d52964f8` |
+
+     Root-only receipt: `/root/r5-final-20261010/pins-preflight.json`
+     (`0600`, parent `0700`), including the file hashes and all 36 effective
+     property hashes. No service checkout was directly modified.
+
+     **Notice to the assignment workstream (Git coordination channel):**
+     future operator pins must be named `t0-…`, not `zz-…`, as documented in
+     [the host runbook](../remote-backend.md#b--production-many-profiles-behind-one-url-mrcalld--caddy).
+     The current six pins additionally set `PYTHONDONTWRITEBYTECODE`; the
+     requested PYTHONPATH-only preflight has not been accepted or applied.
+
    - **Open after this plan, not part of it:**
      - one handset whose speech the voice provider does not transcribe
        (voice path, not the host; 2026-10-03 diagnosis above);
