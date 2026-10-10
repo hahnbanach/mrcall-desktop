@@ -137,7 +137,9 @@ def endpoint_tags(model_id: object) -> list[str] | None:
     row = _find(model_id, "models")
     if row is None or row.get("endpoints") is None:
         return None
-    return sorted(endpoint["tag"] for endpoint in row["endpoints"])
+    # A provider can list one tag twice (two endpoints at different prices, as
+    # OpenRouter's 2026-10-10 read does for `alibaba/fp8`); `only` names each once.
+    return sorted({endpoint["tag"] for endpoint in row["endpoints"]})
 
 
 def policy() -> dict:
