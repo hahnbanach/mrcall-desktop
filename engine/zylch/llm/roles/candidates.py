@@ -24,20 +24,24 @@ excluded service tier (`flex`: discounted, slower tiers that price sorting
 would always pick and whose latency can exceed the client's timeout); and
 it has a fixed input and output price. The model's *reference price*, which
 the snapshot publishes as its `pricing` and the preset ceilings compare, is
-its model-level price, cache prices included, when at least one eligible
-endpoint's input and output prices are at or under it × the margin (`fits`).
-The model-level price stays the anchor whenever it admits an endpoint
-because it is the list price OpenRouter shows, and a median of the
-endpoints flips with the count of regional premiums (Opus 5.5 on
-2026-10-02: five endpoints at Anthropic's list price, five regional ones
-10% above it). Otherwise — OpenRouter computes the model-level price over
-every endpoint, those the policy excludes included, so an fp4 endpoint can
-set it below every eligible one (the live read of 2026-10-02 17:24Z left
-GLM 5.3 Flash none under it) — the reference price is the *reference
-endpoint*'s (`reference`): the lower median, index (n - 1) // 2, of the
-eligible endpoints ordered by Artificial Analysis's blended price, (3 ×
-input + output) / 4, a tie going by output, then input, then tag; its cache
-prices where it publishes them, else the model-level ones. The fallback is
+its model-level price, cache prices included, when at least half its
+eligible endpoints (⌈n / 2⌉ of n) have input and output prices at or under
+it × the margin (`fits`, `keeps_level`). The model-level price stays the
+anchor whenever it does because it is the list price OpenRouter shows, and
+a median of the endpoints flips with the count of regional premiums (Opus
+5.5 on 2026-10-02: five endpoints at Anthropic's list price, five regional
+ones 10% above it). A list price that admits only a minority of the
+endpoints the policy accepts is not the price the model is mainly offered
+at: OpenRouter computes the model-level price over every endpoint, those
+the policy excludes included, so an fp4 endpoint can set it below every
+eligible one (the live read of 2026-10-02 17:24Z left GLM 5.3 Flash none
+under it) or below all but a few oddly priced ones (on 2026-10-10 12:01Z
+K3's, 0.64/13.5 from an fp4 endpoint, admitted 2 of its 12). Then the
+reference price is the *reference endpoint*'s (`reference`): the lower
+median, index (n - 1) // 2, of the eligible endpoints ordered by Artificial
+Analysis's blended price, (3 × input + output) / 4, a tie going by output,
+then input, then tag; its cache prices where it publishes them, else the
+model-level ones. The fallback is
 for a model with a fixed model-level input and output price only: one whose
 model-level price is absent or variable (`-1`) keeps it — null, no cap —
 and admits no endpoint, because OpenRouter itself cannot price it
@@ -48,7 +52,13 @@ An eligible endpoint is *admitted* when its input and output prices are at
 or under the reference price × the margin, the cap OpenRouter's
 `max_price` enforces, so a premium endpoint priced above it is never one a
 request can reach; a model with a fixed model-level price and an eligible
-endpoint therefore always admits one. A model with no eligible endpoint,
+endpoint therefore always admits one. A model's pinned endpoint
+(`requirements.json` `provider_policy.pinned_endpoints`: K3's
+`digitalocean`) is admitted whenever it is eligible, whatever its price:
+K3's cap is that endpoint's price × the margin (`k3_reasoning.rates`, and
+the billing server's adapter), read from the admitted endpoints, so an
+outlier reference must never price the pin out and drop the cap to a price
+below the pin's. A model with no eligible endpoint,
 or whose endpoints were not read, keeps its model-level price and admits
 no endpoint.
 
@@ -218,10 +228,13 @@ def endpoints_by_model(raw: bytes | None, wanted: list[str]) -> dict[str, list[d
 def policy(req: dict) -> dict:
     """The provider policy of `requirements.json`: the margin as a Decimal, the
     admitted quantizations and the excluded service tiers; with the excluded
-    families, which the snapshot publishes beside them."""
+    families, which the snapshot publishes beside them, and the pinned
+    endpoints (`{catalogue id: tag}`), which it does not: they decide
+    admission only."""
     return {
         "margin": Decimal(str(req["margin"])),
         "quantizations": list(req["provider_policy"]["quantizations"]),
+        "pinned_endpoints": dict(req["provider_policy"].get("pinned_endpoints", {})),
         "excluded_endpoint_variants": list(req["excluded_endpoint_variants"]),
         "excluded_families": [
             {"vendor": family["vendor"], "token": family["token"]}
@@ -292,8 +305,8 @@ def blended(prices: dict) -> Decimal:
 
 def reference(rows: list[tuple[dict, dict]]) -> tuple[dict, dict] | None:
     """The reference endpoint of eligible `rows` (`eligible`), whose price
-    `anchored` takes when no eligible endpoint fits under the model-level
-    price × the margin: the lower median by blended price, a tie by output,
+    `anchored` takes when fewer than half the eligible endpoints fit under the
+    model-level price × the margin: the lower median by blended price, a tie by output,
     then input, then tag; None when no endpoint is eligible."""
     if not rows:
         return None
@@ -313,12 +326,23 @@ def fits(prices: dict, price: dict, margin: Decimal) -> bool:
     )
 
 
+def keeps_level(rows: list[tuple[dict, dict]], level: dict, margin: Decimal) -> bool:
+    """Whether the model-level price `level` is the reference price for the
+    eligible `rows`: at least half of them (⌈n / 2⌉ of n) fit under it ×
+    the margin (see the module docstring)."""
+    fitting = sum(1 for _, prices in rows if fits(prices, level, margin))
+    return bool(rows) and 2 * fitting >= len(rows)
+
+
 def anchored(entry: dict, endpoints: list[dict] | None, rules: dict) -> tuple[dict, list | None]:
     """The model's reference price (the four prices per million, None where
     absent) and its admitted endpoints, in the payload's order (see the
-    module docstring): the model-level price when an eligible endpoint fits
-    under it × the margin, else the reference endpoint's (`reference`, its
-    cache prices where it publishes them, else the model-level ones). With
+    module docstring): the model-level price when at least half the eligible
+    endpoints fit under it × the margin (`keeps_level`), else the reference
+    endpoint's (`reference`, its cache prices where it publishes them, else
+    the model-level ones). The admitted endpoints are the eligible ones under
+    the reference price × the margin, and the model's pinned endpoint
+    (`pinned_endpoints`) whenever it is eligible. With
     no eligible endpoint, or a model-level input or output price that is not
     fixed (absent, or variable: no fallback then), the price is the
     model-level one and no endpoint is admitted; with its endpoints not read
@@ -331,7 +355,8 @@ def anchored(entry: dict, endpoints: list[dict] | None, rules: dict) -> tuple[di
         return level, []
     rows = eligible(endpoints, rules)
     margin = rules["margin"]
-    if any(fits(prices, level, margin) for _, prices in rows):
+    pin = rules.get("pinned_endpoints", {}).get(entry.get("id"))
+    if keeps_level(rows, level, margin):
         price = dict(level)
     else:
         anchor = reference(rows)
@@ -341,7 +366,11 @@ def anchored(entry: dict, endpoints: list[dict] | None, rules: dict) -> tuple[di
         for side in ("cache_read", "cache_write"):
             if price[side] is None:
                 price[side] = level[side]
-    return price, [endpoint for endpoint, prices in rows if fits(prices, price, margin)]
+    return price, [
+        endpoint
+        for endpoint, prices in rows
+        if fits(prices, price, margin) or endpoint.get("tag") == pin
+    ]
 
 
 def admitted(entry: dict, endpoints: list[dict], rules: dict) -> list[dict]:

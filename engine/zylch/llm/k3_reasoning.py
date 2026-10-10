@@ -26,11 +26,15 @@ POLICY_KEYS = ("allow_fallbacks", "require_parameters", "sort", "max_price")
 def rates():
     """K3's ``(input, output)`` per million tokens before the margin, or None.
 
-    Its pinned endpoint's price among the snapshot's admitted endpoints. On a
+    Its pinned endpoint's price among the snapshot's admitted endpoints,
+    which carry the pin whenever it is eligible (up, an allowed quantization,
+    tools, no excluded tier), whatever its price against K3's reference
+    price (`requirements.json` `provider_policy.pinned_endpoints`, which
+    must name `ENDPOINT`). On a
     day the snapshot does not admit that endpoint (degraded when the catalogue
     was read, so absent from its `endpoints`), K3's snapshot price instead —
-    its reference price: its model-level price whenever an eligible endpoint
-    is priced within it × the margin, else the lower-median eligible
+    its reference price: its model-level price whenever at least half its
+    eligible endpoints are priced within it × the margin, else the lower-median eligible
     endpoint's (contract README, "Prices in use"): K3 stays priced, and a
     request its pin
     cannot route fails at the provider as it would today. It is K3's

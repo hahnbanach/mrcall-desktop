@@ -213,8 +213,9 @@ billed price winning where an id was in both.
 Since milestone 10 (slice S3, brief D5) it reads the model snapshot
 (`roles/catalogue.py`: the snapshot layers in force, the build copy
 `roles/snapshot.json` last) at every call: a catalogue id at its snapshot
-price on OpenRouter (its reference price: its model-level price whenever an
-eligible endpoint is priced within it × the margin, else the lower median of
+price on OpenRouter (its reference price: its model-level price whenever at
+least half its eligible endpoints are priced within it × the margin, else
+the lower median of
 its eligible endpoints by Artificial Analysis's blended price; the
 model-level price too when its endpoints were not read, none is eligible
 or that price is not fixed, a variable one staying unpriced), a direct id at its

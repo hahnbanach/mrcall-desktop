@@ -1,5 +1,5 @@
 {
-  "_doc": "The billing server's OpenRouter `provider` object for each id, captured by running mrcall-agent model-table-m10 2d81bb5eba7ba352531f5107749f2165d140eae2 (tree equal to mrcall-agent main 31e83e8) (mrcall_agent/services/bounded_openrouter.py: provider_policy(model_table.priced(id)), non-K3, not the K3 adapter) over tests/fixtures/llm/snapshot-2026-10-02.json (version 2e2f9ebd803d0167dc4bbc1817eefcd562631e35af018619599c62b4ed7384e0). tests/llm/test_snapshot_prices.py holds the engine's openrouter_pricing.provider_policy equal to it for the same ids and snapshot.",
+  "_doc": "The billing server's OpenRouter `provider` object for each id, captured by running mrcall-agent model-table-m10 2d81bb5eba7ba352531f5107749f2165d140eae2 (tree equal to mrcall-agent main 31e83e8) (mrcall_agent/services/bounded_openrouter.py: provider_policy(model_table.priced(id)), non-K3, not the K3 adapter) over tests/fixtures/llm/snapshot-2026-10-02.json (version 7b2249c10c92bbeae2a5bbaa3a9fa2ec0dbe87e40c1f1ffe21944c93583223a9). tests/llm/test_snapshot_prices.py holds the engine's openrouter_pricing.provider_policy equal to it for the same ids and snapshot.",
   "providers": {
     "anthropic/claude-sonnet-5.5": {
       "allow_fallbacks": false,
@@ -124,15 +124,29 @@
     "z-ai/glm-5.2": {
       "allow_fallbacks": false,
       "max_price": {
-        "completion": "4.9875",
-        "prompt": "0.5125",
+        "completion": "5.5",
+        "prompt": "1.475",
         "request": "0"
       },
       "only": [
+        "alibaba/fp8",
+        "atlas-cloud/fp8",
         "baidu/fp8",
+        "baseten/fp8",
+        "cloudflare",
+        "digitalocean",
+        "friendli",
+        "gmicloud/fp8",
         "morph/fp8",
+        "novita/fp8",
+        "phala/fp8",
         "relace",
-        "wafer"
+        "siliconflow/fp8",
+        "streamlake/fp8",
+        "together",
+        "venice/fp8",
+        "wafer",
+        "z-ai/fp8"
       ],
       "quantizations": [
         "int8",
@@ -148,5 +162,5 @@
     }
   },
   "server_commit": "2d81bb5eba7ba352531f5107749f2165d140eae2",
-  "snapshot_version": "2e2f9ebd803d0167dc4bbc1817eefcd562631e35af018619599c62b4ed7384e0"
+  "snapshot_version": "7b2249c10c92bbeae2a5bbaa3a9fa2ec0dbe87e40c1f1ffe21944c93583223a9"
 }
