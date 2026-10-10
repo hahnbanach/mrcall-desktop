@@ -26,6 +26,7 @@ The repo has three parallel doc trees, mirroring the three index files. Each tre
 
 - [Qonto connection](briefs/2026-10-04-qonto-connection.md) — native Desktop setup and engine-owned financial source; [development plan](execution-plans/2026-10-04-qonto-connection.md), including the authorized support-only rollout.
 - [Qonto IPC](qonto-ipc.md) — native bank methods, managed chat history and verification boundaries.
+- [Qonto bootstrap removal](briefs/2026-10-08-qonto-bootstrap-removal.md) — typed login and key as the only Qonto credential source, and what Desktop `v0.1.56` does against it; [plan and evidence](execution-plans/2026-10-08-qonto-bootstrap-removal.md).
 - [Additional mailboxes and PEC](../engine/docs/features/mailboxes.md) — multiple IMAP sources, PEC envelope extraction and Desktop Settings; [original plan](execution-plans/2026-09-30-pec-net-mailbox-integration.md).
 - [PEC and Qonto next-release integration](execution-plans/2026-10-05-mailboxes-qonto-release-integration.md) — combined source, migration/auth verification and shared-main delivery; no installer or hosted rollout.
 - [GPT-Live customer-service channel](brief/2026-09-23-gpt-live-engine-integration.md) — incoming calls with asynchronous company memory first; agent configured by cs-operator. [Four-milestone plan](execution-plans/2026-09-23-gpt-live-engine-integration.md); repeatable integrations and outbound support follow.

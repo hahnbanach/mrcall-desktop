@@ -20,6 +20,7 @@ Scope: implementation milestones for the native MrCall Desktop Qonto company con
 - Verification: original focused engine suite 518 passed; timestamp correction suite 96 passed plus one stricter RPC regression. Focused Ruff/Black and the documentation mechanical gate pass. Native browser and company-change/history journeys pass.
 - Scope of approval: installed/packaged Desktop and Qonto-provider UI comparison remain unverified. Finance preparation, publication and deletion have fixture acceptance; they were not executed against the live bank.
 - Plan status stays `active` for the remaining installed Desktop/provider-UI checks. Historical gate revisions and diagnostic evidence are in the [archive](../active-context-archive.md#2026-10-05--qonto-rollout-and-correction-evidence-before-reconciliation).
+- Credential source on `main`: Qonto credentials arrive only as the typed `login` and `api_key` arguments of Test and Save, and the retired `bootstrap` value is refused ([removal plan](2026-10-08-qonto-bootstrap-removal.md)). Desktop `v0.1.56` and the release source the hosted company engines run still carry the bootstrap source. A hosted engine that holds a Qonto connection, today the support profile only, takes a source revision without the bootstrap source only after one typed connection from an installed Desktop has passed.
 
 ## Classification and authority
 
@@ -39,6 +40,8 @@ The lead owns integration and rollout. Engine and app work belong to this reposi
 - Disconnect erases encrypted credentials, increments generation, cancels work and hides raw reads/tasks. A detected 401/403 likewise fences access and erases unusable credentials. Retain hidden source rows for reconnection to the exact original company and organization; a different binding starts fresh and does not relabel retained rows. Delete imported data removes rows, accounts/cursors/preparation checkpoints and generated source-only task evidence; preserve user-authored task edits as a private source-unavailable shell. Published facts remain historical shared knowledge with unavailable source and an ordinary memory-removal link.
 
 ## Credential bootstrap contract
+
+On `main` credentials arrive only as typed request arguments: `credential_source` accepts only `input`, and the retired `bootstrap` value is refused with `credentials_required` ([removal plan](2026-10-08-qonto-bootstrap-removal.md), [engine behavior](../../engine/docs/features/qonto.md)). The bootstrap bullets below describe Desktop `v0.1.56` and the release source the hosted company engines run, which still carry that source. Where a profile `.env` keeps its `QONTO_API_LOGIN` and `QONTO_API_KEY` lines, profile activation loads them into the engine process environment until an operator deletes them; nothing on `main` uses them.
 
 Qonto requires organization login and secret in `Authorization: <login>:<key>`; this is not Base64 Basic authentication. [Official authentication](https://docs.qonto.com/get-started/business-api/authentication/api-key).
 - Preferred bootstrap variables: `QONTO_API_LOGIN` and `QONTO_API_KEY`. Read only on an explicit `qonto.test(credential_source="bootstrap")` or matching connect. No automatic connection/ingestion at boot. A key alone produces `login_required`; do not guess the login from company/email names.

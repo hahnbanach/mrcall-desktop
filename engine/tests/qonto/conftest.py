@@ -113,7 +113,6 @@ def env(tmp_path, monkeypatch):
     monkeypatch.setenv("EMAIL_ADDRESS", "display@example.test")
     monkeypatch.setenv("MEMORY_KEY", "")
     monkeypatch.setenv("MEMORY_DB_DIR", str(home / "memory"))
-    monkeypatch.delenv("QONTO_BOOTSTRAP_ENV_FILE", raising=False)
     monkeypatch.delenv("QONTO_HOST_ID_FILE", raising=False)
     monkeypatch.setattr(runtime, "_serving", False)
     monkeypatch.setattr(profiles, "_active_profile", UID)

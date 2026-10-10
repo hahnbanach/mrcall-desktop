@@ -15,12 +15,12 @@ async def qonto_connect(params, notify):
 
 
 async def qonto_status(params, notify):
-    """qonto.status() -> safe connection and bootstrap availability."""
+    """qonto.status() -> safe connection state, generation, stored-credential flag and persisted coverage."""
     return connection.status()
 
 
 async def qonto_disconnect(params, notify):
-    """qonto.disconnect() -> application credential removal and retained bootstrap availability."""
+    """qonto.disconnect() -> application credential removal, disconnected status and generation."""
     return connection.disconnect()
 
 

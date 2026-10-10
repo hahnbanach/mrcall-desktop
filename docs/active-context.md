@@ -1,6 +1,6 @@
 ---
-doc_baseline_commit: a53376621a37656b78545b5a90d2d6798568a44a
-doc_baseline_date: 2026-10-08
+doc_baseline_commit: ae72034a9ee7b0dbd72b35124e930b839abac71c
+doc_baseline_date: 2026-10-10
 ---
 
 # Active Context — Cross-cutting
@@ -48,7 +48,8 @@ A real managed assistant uses the bank tool and cites its source. Its
 engine-formatted UTC retrieval strings match the accepted managed answer.
 The six company daemons run the combined release source with their saved
 controls restored; support Qonto connection and encryption checks pass. Packaged
-GUI and provider UI acceptance remain unverified. Exact release, usage, rollback and remaining criteria belong
+GUI and provider UI acceptance remain unverified. `main` takes Qonto credentials only as typed login and key;
+no published Desktop or hosted engine has that change ([removal](execution-plans/2026-10-08-qonto-bootstrap-removal.md)). Exact release, usage, rollback and remaining criteria belong
 to the active [Qonto plan](execution-plans/2026-10-04-qonto-connection.md).
 
 All seven hosted profiles run as separate Unix users with enforced outbound
@@ -109,6 +110,9 @@ unverified. Runtime contracts belong to [IPC](ipc-contract.md),
 - Qonto installed/packaged Electron and provider-UI comparison remain unverified.
   Hosted authentication, banking, restart/reconnect and source-grounded assistant
   acceptance have passed; the corrected UTC timestamp matches its source.
+  Until one typed connection from an installed Desktop passes, no hosted engine
+  holding a Qonto connection takes source without the bootstrap credential source.
+  `main` never uses Qonto credential lines left in a profile `.env`; deleting them is operator work.
 - Remaining Café124 billing choices and funded K3 credits are open. The reviewed
   comparison's 60 cases/240 outputs do not establish production equivalence.
 - Sandbox final review, shared-key provisioning and operational floor remain

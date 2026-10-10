@@ -11,7 +11,7 @@ export function createQontoFixture(saved: { connected?: boolean; generation?: nu
   let capability: number | undefined = 1
   let generation = saved.generation ?? 0
   let sourceRevision = 'fixture-revision-1'
-  let bootstrapStatus = 'available'
+  let legacyFields = false
   let challenge: { id: string; credentials: string; generation: number } | null = null
   let previewId = ''
   let prepared = saved.prepared ?? false
@@ -29,7 +29,16 @@ export function createQontoFixture(saved: { connected?: boolean; generation?: nu
     history_planned: true, error: syncError, unresolved_pending_windows: 0, retry_at: null,
     coverage_kind: 'traversed_windows', accounts: [{ account_id: 'fixture-eur', emitted_watermark: '2026-10-04T00:00:00Z', updated_watermark: '2026-10-04T00:00:00Z', initial_from: '2026-09-04T00:00:00Z', initial_to: '2026-10-04T00:00:00Z' }]
   })
-  const status = () => ({ status: connected ? 'connected' : 'disconnected', generation, account_count: connected ? 1 : 0, source_access: false, credential_stored: connected, bootstrap: { available: bootstrapStatus === 'available', status: bootstrapStatus }, ...(connected ? { sync: coverage() } : {}) })
+  // Older engines return `bootstrap` in status and removal results; the card ignores it.
+  const legacyStatus = () => legacyFields ? { bootstrap: { available: true, status: 'available' } } : {}
+  // Mirrors only the engine's credential-source refusal: `input` is the one accepted source and
+  // `bootstrap` gets the engine's message. Other outcomes of this bridge are simplified stand-ins.
+  const requireInputSource = (params: Record<string, unknown>) => {
+    const source = params.credential_source === undefined ? 'input' : params.credential_source
+    if (source === 'bootstrap') throw new Error('credentials_required: Enter the organization login and API key.')
+    if (source !== 'input') throw new Error('invalid_credentials')
+  }
+  const status = () => ({ status: connected ? 'connected' : 'disconnected', generation, account_count: connected ? 1 : 0, source_access: false, credential_stored: connected, ...legacyStatus(), ...(connected ? { sync: coverage() } : {}) })
   const tasks = () => connected && prepared ? [{ id: 'fixture-qonto-task', owner_id: uid, channel: 'qonto', event_type: 'qonto', event_id: 'fixture-event', contact_email: '', title: 'Review this declined outgoing transaction', action_required: true, urgency: 'medium', reason: 'A selected account has a declined debit.', suggested_action: 'Review the Qonto source. No payment will be initiated.', created_at: '2026-10-04T00:00:00Z', completed_at: closed ? '2026-10-04T01:00:00Z' : null, pinned, sources: { emails: [], blobs: [], calendar_events: [], qonto: { source_id: 'fixture-source', source_revision: sourceRevision } } }] : []
   const emit = (name: string, value: unknown) => { for (const callback of channels.get(name) || []) callback({}, value) }
   const evaluate = (method: string, params: Record<string, unknown>) => {
@@ -52,16 +61,17 @@ export function createQontoFixture(saved: { connected?: boolean; generation?: nu
     if (nextError) { const error = nextError; nextError = ''; throw new Error(error) }
     if (method === 'qonto.status') return status()
     if (method === 'qonto.test') {
-      if (params.credential_source === 'bootstrap' && bootstrapStatus !== 'available') throw new Error(bootstrapStatus)
-      if (params.credential_source !== 'bootstrap' && (!params.login || !params.api_key)) throw new Error('credentials_required')
+      requireInputSource(params)
+      if (!params.login || !params.api_key) throw new Error('credentials_required')
       challenge = { id: 'fixture-challenge-' + calls.length, credentials: JSON.stringify(params), generation }
       return { ok: true, ...(companyDescriptorAvailable ? { company_name: companyName } : {}), organization: { id: 'fixture-organization', name: 'Fixture Qonto', legal_name: 'Fixture Qonto legal company', accounts: [{ id: 'fixture-eur', name: 'Fixture EUR account', currency: 'EUR' }, { id: 'fixture-usd', name: 'Fixture USD account', currency: 'USD' }] }, challenge_id: challenge.id, expires_at: (Date.now() + testTtl) / 1000, account_ids: ['fixture-eur', 'fixture-usd'], engine_location: backend.location === 'local' ? 'local' : 'hosted', consent_version: 1 }
     }
     if (method === 'qonto.connect') {
-      if (!challenge || params.challenge_id !== challenge.id || challenge.generation !== generation) throw new Error('challenge_invalid')
-      const credentials = { credential_source: params.credential_source, ...(params.credential_source === 'input' ? { login: params.login, api_key: params.api_key } : {}) }
-      if (JSON.stringify(credentials) !== challenge.credentials) throw new Error('invalid_credentials')
       if (params.authority_confirmed !== true || params.consent_version !== 1) throw new Error('authority_required')
+      requireInputSource(params)
+      if (!challenge || params.challenge_id !== challenge.id || challenge.generation !== generation) throw new Error('challenge_invalid')
+      const credentials = { credential_source: params.credential_source, login: params.login, api_key: params.api_key }
+      if (JSON.stringify(credentials) !== challenge.credentials) throw new Error('invalid_credentials')
       const accounts = params.account_ids as string[]
       if (!Array.isArray(accounts) || !accounts.length || accounts.some(id => !['fixture-eur', 'fixture-usd'].includes(id))) throw new Error('accounts_invalid')
       connected = true; generation++; challenge = null
@@ -71,7 +81,7 @@ export function createQontoFixture(saved: { connected?: boolean; generation?: nu
       if (method === 'qonto.delete_imported_data' && params.confirmed !== true) throw new Error('confirmation_required')
       connected = false; generation++; previewId = ''
       if (method === 'qonto.delete_imported_data') prepared = false
-      return { ok: true, status: 'disconnected', generation, bootstrap: status().bootstrap, bootstrap_retained: true, ...(method === 'qonto.delete_imported_data' ? { deleted: true, removed_rows: 1, published_facts_retained: true } : {}) }
+      return { ok: true, status: 'disconnected', generation, ...legacyStatus(), ...(legacyFields ? { bootstrap_retained: true } : {}), ...(method === 'qonto.delete_imported_data' ? { deleted: true, removed_rows: 1, published_facts_retained: true } : {}) }
     }
     if (!connected) throw new Error('source_unavailable')
     if (method === 'qonto.sync') return { ok: true, generation, requests: 30, ...coverage() }
@@ -115,7 +125,7 @@ export function createQontoFixture(saved: { connected?: boolean; generation?: nu
     fail: (outcome: string) => { nextError = outcome },
     testTtl: (milliseconds: number) => { testTtl = milliseconds },
     oldEngine: () => { capability = undefined },
-    bootstrap: (value: string) => { bootstrapStatus = value },
+    legacyBootstrapFields: (enabled: boolean) => { legacyFields = enabled },
     partialSync: () => { syncError = 'network' },
     goodSync: () => { syncError = null },
     connectFixture: () => { connected = true; generation++; prepared = true },

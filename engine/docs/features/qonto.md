@@ -28,12 +28,26 @@ tested account subset, authority confirmation and the consent version. The
 engine probes again before saving a direct-Fernet encrypted credential copy.
 Login and key never appear in Settings readback, provisioning, logs or model tools.
 
-Bootstrap requires `QONTO_API_LOGIN` and `QONTO_API_KEY`, or a strictly validated
-combined `login:key` value in the latter. A bare key returns `login_required`.
-Hosted engines read only their active profile `.env`. A local developer can
-explicitly select an ignored worktree `.env.qonto` using
-`QONTO_BOOTSTRAP_ENV_FILE`; [credential-free example](../examples/.env.qonto.example).
-Neither startup nor an ordinary mail update imports bootstrap credentials.
+Credentials have one source: the `login` and `api_key` arguments of
+`qonto.test` and `qonto.connect`, which the Desktop card fills from its typed
+fields. The key argument also accepts a strictly validated combined `login:key`
+value; a bare key without a login returns `login_required`. `credential_source`
+is optional and `input` is its only accepted value. The retired `bootstrap`
+value is refused with `credentials_required`, after the authority checks and
+before any provider request; any other value is refused with
+`invalid_credentials`.
+
+A Qonto request carries only credentials that arrived in those request
+arguments or come from the engine's own encrypted stored copy. That copy is
+decrypted with the profile's private `qonto.key` file on a local engine and
+with the tenant's injected `ENCRYPTION_KEY` on a hosted one. No engine code
+looks up a Qonto credential anywhere else: not in a profile `.env`, not in
+another file, not in the process environment. Credential lines left in a
+profile `.env` are never used as Qonto
+credentials, and every `QONTO_`-prefixed profile key is refused by Settings,
+`settings.get_secret` and provisioning. Profile activation loads such lines
+into the engine process environment like every other profile line; deleting
+them is operator work.
 
 Every bank operation binds the signed, unexpired Firebase UID to its immutable
 profile, engine installation, current company, organization, selected accounts
@@ -128,9 +142,9 @@ remove the shared memory.
 ## Disconnect and deletion
 
 Disconnect removes the encrypted application credential copy and hides bank
-reads; bootstrap configuration remains user-managed and is never re-imported
-automatically. Delete imported data separately removes private source rows and
-sync/preparation records. It retains tombstones and historical published facts.
-Neither action revokes or regenerates the provider-side key.
+reads; reconnecting takes typed credentials and a new Test. Delete imported
+data separately removes private source rows and sync/preparation records. It
+retains tombstones and historical published facts. Neither action revokes or
+regenerates the provider-side key.
 
 RPC details: [Qonto IPC](../../../docs/qonto-ipc.md).

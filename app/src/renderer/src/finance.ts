@@ -35,7 +35,6 @@ export interface QontoStatus {
   error?: string
   sync?: QontoCoverage
   last_sync_at?: number | null
-  bootstrap: { available: boolean; status?: string; reason?: string }
 }
 
 export function financeTransport(location: { location: 'local' | 'remote'; url?: string }): string {
@@ -43,7 +42,7 @@ export function financeTransport(location: { location: 'local' | 'remote'; url?:
 }
 
 export interface QontoCredentials {
-  credential_source: 'input' | 'bootstrap'
+  credential_source: 'input'
   login?: string
   api_key?: string
 }
@@ -109,8 +108,6 @@ export interface QontoRemovalResult {
   ok: boolean
   status: string
   generation: number
-  bootstrap_retained: boolean
-  bootstrap: QontoStatus['bootstrap']
   deleted?: boolean
   removed_rows?: number
   published_facts_retained?: boolean

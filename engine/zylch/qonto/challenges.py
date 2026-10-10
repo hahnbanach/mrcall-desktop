@@ -10,7 +10,7 @@ import threading
 import time
 from dataclasses import dataclass
 
-from zylch.qonto.bootstrap import Credentials
+from zylch.qonto.credentials import Credentials
 from zylch.qonto.errors import QontoError
 from zylch.qonto.identity import Authority
 from zylch.qonto.provider import Organization

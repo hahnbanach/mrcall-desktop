@@ -43,7 +43,6 @@ Thumbs.db
 .env.local
 .env.*
 !.env.example
-!engine/docs/examples/.env.qonto.example
 
 # ---------------------------------------------------------------------------
 # Per-session doc-harness scratch memory: one file per Claude Code session,
