@@ -1397,9 +1397,14 @@ not started.
 
      *VPS, to close R5:*
      1. For each of the six units, record:
-        - the keys of `zz-assignment-release.conf` (expected: `[Service]`
-          and `Environment=PYTHONPATH=…` only; anything else, stop and
-          report);
+        - the keys of `zz-assignment-release.conf` (expected: `[Service]`,
+          `Environment=PYTHONPATH=…` and, as the 2026-10-10 preflight
+          found, `Environment=PYTHONDONTWRITEBYTECODE=1`; anything else,
+          stop and report). `tenant.conf` sets `PYTHONDONTWRITEBYTECODE=1`
+          itself, so after the rename that line is the same variable with
+          the same value and changes nothing. Check the value is `1` as a
+          true/false only. Any other value would change behaviour, and the
+          hash check below stops on it;
         - the sorted effective `Environment`, `ExecStart`, `User`,
           `ProtectHome`, `EnvironmentFiles` and `BindReadOnlyPaths`, as
           hashes.
