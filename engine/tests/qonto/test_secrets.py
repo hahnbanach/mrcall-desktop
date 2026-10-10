@@ -224,6 +224,36 @@ def test_refused_bootstrap_request_leaves_an_existing_connection_connected(env, 
     assert {path: path.read_bytes() for path in leftover} == leftover
 
 
+@pytest.mark.parametrize("method", ["qonto.test", "qonto.connect"])
+@pytest.mark.parametrize(
+    "source",
+    [
+        "",
+        " input",
+        "INPUT",
+        "Input",
+        "file",
+        None,
+        0,
+        1.5,
+        True,
+        [],
+        ["input"],
+        {},
+        {"credential_source": "input"},
+    ],
+    ids=repr,
+)
+def test_every_source_other_than_input_and_bootstrap_is_invalid(env, leftover, method, source):
+    required = save_parameters("never-issued") if method == "qonto.connect" else {}
+    for carried in ({}, env.credentials):
+        response = env.rpc(method, credential_source=source, **carried, **required)
+        assert refusal(response) == "invalid_credentials"
+    assert env.provider.calls == []
+    assert env.rpc("qonto.status")["result"]["status"] == "disconnected"
+    assert {path: path.read_bytes() for path in leftover} == leftover
+
+
 @pytest.mark.parametrize("source", [{}, {"credential_source": "input"}], ids=["omitted", "input"])
 def test_typed_test_and_save_pass_and_removal_results_name_no_bootstrap(env, leftover, source):
     tested = env.rpc("qonto.test", **source, **env.credentials)["result"]
