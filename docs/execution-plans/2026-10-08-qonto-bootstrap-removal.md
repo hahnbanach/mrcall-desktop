@@ -1,5 +1,5 @@
 ---
-status: active
+status: completed
 date: 2026-10-08
 brief: ../briefs/2026-10-08-qonto-bootstrap-removal.md
 ---

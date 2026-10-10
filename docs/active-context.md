@@ -1,6 +1,6 @@
 ---
-doc_baseline_commit: a53376621a37656b78545b5a90d2d6798568a44a
-doc_baseline_date: 2026-10-08
+doc_baseline_commit: ae72034a9ee7b0dbd72b35124e930b839abac71c
+doc_baseline_date: 2026-10-10
 ---
 
 # Active Context — Cross-cutting
