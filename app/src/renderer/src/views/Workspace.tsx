@@ -1,4 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
+import { onAuthStateChanged } from 'firebase/auth'
+import { auth } from '../firebase/config'
+import { isAuthSessionActive, onAuthSessionInvalidated } from '../firebase/authUtils'
+import { financeTransport } from '../finance'
 import ReactMarkdown from 'react-markdown'
 import { useConversations, type Approval } from '../store/conversations'
 import { useTasks } from '../store/tasks'
@@ -32,6 +36,7 @@ interface Props {
 export default function Workspace({ onGoToTasks }: Props = {}) {
   const {
     state,
+    openFinanceChat,
     setActive,
     closeConversation,
     appendUser,
@@ -51,6 +56,77 @@ export default function Workspace({ onGoToTasks }: Props = {}) {
   const [completing, setCompleting] = useState(false)
   const [narrationSeed, setNarrationSeed] = useState<string>('')
   const [lastUserText, setLastUserText] = useState<string>('')
+  const [financeNotice, setFinanceNotice] = useState('')
+  const [authActive, setAuthActive] = useState(isAuthSessionActive)
+  const [startingFinance, setStartingFinance] = useState(false)
+  const contextEpoch = useRef(0)
+  const companyEpoch = useRef(0)
+  const companyChangingRef = useRef(false)
+  const [companyChanging, setCompanyChanging] = useState(false)
+  const financeStartRequest = useRef(0)
+  const activeIdRef = useRef(active.id)
+  activeIdRef.current = active.id
+
+  useEffect(() => {
+    const invalidate = () => { contextEpoch.current += 1 }
+    const beginCompanyChange = () => {
+      companyEpoch.current++; companyChangingRef.current = true; setCompanyChanging(true)
+      financeStartRequest.current++; setStartingFinance(false)
+      setFinanceNotice('Company memory is changing. Wait before starting or sending finance chat.')
+    }
+    const finishCompanyChange = () => {
+      companyEpoch.current++; companyChangingRef.current = false; setCompanyChanging(false)
+      financeStartRequest.current++; setStartingFinance(false)
+      setFinanceNotice('Company memory changed. Start a new Qonto chat on the authorized connection.')
+    }
+    window.addEventListener('mrcall:company-changing', beginCompanyChange)
+    window.addEventListener('mrcall:company-changed', finishCompanyChange)
+    const offStatus = window.zylch.onSidecarStatus(invalidate)
+    const offInvalidation = onAuthSessionInvalidated(() => {
+      invalidate(); financeStartRequest.current++; setStartingFinance(false); setAuthActive(false)
+    })
+    const offAuth = onAuthStateChanged(auth, () => { invalidate(); setAuthActive(isAuthSessionActive()) })
+    return () => { invalidate(); offStatus(); offAuth(); offInvalidation(); window.removeEventListener('mrcall:company-changing', beginCompanyChange); window.removeEventListener('mrcall:company-changed', finishCompanyChange) }
+  }, [])
+
+  useEffect(() => {
+    contextEpoch.current += 1
+  }, [active.id])
+
+  const newFinanceChat = async () => {
+    if (!isAuthSessionActive()) return
+    if (companyChangingRef.current) { setFinanceNotice('Company memory is changing. Wait before starting finance chat.'); return }
+    const request = ++financeStartRequest.current
+    const financeEpoch = companyEpoch.current
+    const epoch = contextEpoch.current
+    const conversationId = active.id
+    const uid = auth.currentUser?.uid
+    const current = () => isAuthSessionActive() && contextEpoch.current === epoch && companyEpoch.current === financeEpoch && !companyChangingRef.current && activeIdRef.current === conversationId && auth.currentUser?.uid === uid
+    setStartingFinance(true)
+    setFinanceNotice('')
+    try {
+      const capabilities = await window.zylch.system.capabilities().catch(() => null)
+      if (!current()) return
+      if (capabilities?.chat_history_binding !== 1) {
+        throw new Error('Your engine needs an update before Qonto finance chat is available.')
+      }
+      const [profile, location, status] = await Promise.all([
+        window.zylch.profile.current(), window.zylch.settings.getBackendLocation(),
+        window.zylch.qonto.status()
+      ])
+      if (!current()) return
+      if (!uid || profile.id !== uid) throw new Error('Sign in to the selected engine profile before starting finance chat.')
+      if (status.status !== 'connected' || status.account_count < 1) {
+        throw new Error('Connect Qonto in Settings before starting a finance chat.')
+      }
+      openFinanceChat(uid, financeTransport(location))
+    } catch (e) {
+      if (current()) setFinanceNotice(errorMessage(e))
+    } finally {
+      if (financeStartRequest.current === request) setStartingFinance(false)
+    }
+  }
+
 
   // Per-conversation Source panel expansion state. Key: conversation.id.
   // If a conversation isn't in the map, fall back to the default rule
@@ -144,7 +220,7 @@ export default function Workspace({ onGoToTasks }: Props = {}) {
     }
     return ''
   })()
-  const narration = useNarration(!!active.busy, narrationContext, narrationSeed)
+  const narration = useNarration(!!active.busy && !active.finance, active.finance ? '' : narrationContext, active.finance ? '' : narrationSeed)
 
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight })
@@ -336,47 +412,79 @@ export default function Workspace({ onGoToTasks }: Props = {}) {
     attachmentPaths: string[],
     _ctx?: ChatComposerTaskContext
   ): Promise<void> => {
-    if (!text || active.busy) return
-    // Clear the per-conversation seed/template; subsequent re-mounts of
-    // the composer (e.g. after switching tabs) should start empty.
-    setDraftInput(active.id, '')
-    appendUser(active.id, text)
-    setLastUserText(text)
-    setNarrationSeed('Sto pensando alla tua richiesta.')
-    setBusy(active.id, true)
-    const historySnapshot = active.history.map((m) => ({ role: m.role, content: m.content }))
-    window.zylch.narration
-      .predict(text, '')
-      .then((r) => {
-        const t = (r && typeof r.text === 'string' ? r.text.trim() : '') || ''
-        if (t) setNarrationSeed(t)
-      })
-      .catch(() => {
-        /* fallback seed already set */
-      })
+    if (!text || active.busy || !isAuthSessionActive()) return
+    if (active.finance && companyChangingRef.current) { setFinanceNotice('Company memory is changing. Wait before sending finance chat.'); return }
+    const epoch = contextEpoch.current
+    const financeEpoch = companyEpoch.current
+    const uid = auth.currentUser?.uid
+    const convId = active.id
+    const binding = active.finance
+    const current = () => isAuthSessionActive() && contextEpoch.current === epoch && activeIdRef.current === convId && auth.currentUser?.uid === uid && (!binding || (companyEpoch.current === financeEpoch && !companyChangingRef.current))
+    setBusy(convId, true)
     try {
+      if (binding) {
+        if (binding.unavailable) throw new Error(binding.unavailable)
+        const capabilities = await window.zylch.system.capabilities().catch(() => null)
+        if (!current()) return
+        if (capabilities?.chat_history_binding !== 1) throw new Error('Your engine needs an update before Qonto finance chat is available.')
+        const [profile, location] = await Promise.all([
+          window.zylch.profile.current(), window.zylch.settings.getBackendLocation()
+        ])
+        if (!current()) return
+        if (!uid || binding.uid !== uid || profile.id !== uid || binding.transport !== financeTransport(location)) {
+          throw new Error('This finance conversation belongs to another account or engine. Start a new Qonto chat on the connected engine.')
+        }
+        if (binding.started && (!binding.handle || !Number.isInteger(binding.revision))) {
+          throw new Error('Finance history binding is unavailable. Start a new Qonto chat; this transcript remains display-only.')
+        }
+        if (!binding.started && active.history.length > 0) throw new Error('A new finance chat must start empty.')
+        patchConversation(convId, { finance: { ...binding, started: true } })
+      }
+      setDraftInput(convId, '')
+      appendUser(convId, text)
+      setLastUserText(binding ? '' : text)
+      setNarrationSeed(binding ? '' : 'Sto pensando alla tua richiesta.')
+      const historySnapshot = binding ? [] : active.history.map((m) => ({ role: m.role, content: m.content }))
+      if (!binding) {
+        window.zylch.narration.predict(text, '').then((r) => {
+          const t = (r && typeof r.text === 'string' ? r.text.trim() : '') || ''
+          if (current() && t) setNarrationSeed(t)
+        }).catch(() => {})
+      }
       const chatContext: Record<string, unknown> = {}
       if (active.taskId) chatContext.task_id = active.taskId
       if (active.sourceEmailId) chatContext.email_id = active.sourceEmailId
       if (attachmentPaths.length > 0) chatContext.attachment_paths = attachmentPaths
       const res = await window.zylch.chat.send(text, historySnapshot, {
-        conversationId: active.id,
-        context: chatContext
+        conversationId: convId,
+        context: chatContext,
+        ...(binding ? {
+          historyMode: binding.mode,
+          historyHandle: binding.handle,
+          historyRevision: binding.revision
+        } : {})
       })
-      const content =
-        (res && (res.response || res.message || res.content)) || JSON.stringify(res, null, 2)
-      appendAssistant(active.id, content)
-    } catch (e: unknown) {
-      // Profile-locked: the SidecarStatusBanner is already shouting
-      // about it; appending an "Error: …" assistant bubble would be
-      // duplicate noise.
-      if (!isProfileLockedError(e)) {
-        appendAssistant(active.id, '**Error:** ' + errorMessage(e))
+      if (!current()) return
+      if (binding) {
+        if (res.history_mode !== 'managed_finance' || typeof res.history_handle !== 'string' || !res.history_handle ||
+            !Number.isInteger(res.history_revision) || (res.history_revision as number) <= (binding.revision ?? 0) ||
+            (binding.handle && binding.handle !== res.history_handle)) {
+          throw new Error('The engine returned an invalid finance history binding. Update the engine and start a new Qonto chat.')
+        }
+        patchConversation(convId, { finance: {
+          ...binding, started: true, handle: res.history_handle, revision: res.history_revision
+        } })
       }
+      const content = (res && (res.response || res.message || res.content)) || JSON.stringify(res, null, 2)
+      appendAssistant(convId, content)
+    } catch (e: unknown) {
+      if (!current()) return
+      if (binding) patchConversation(convId, { finance: { ...binding, started: true, unavailable: errorMessage(e) } })
+      if (!isProfileLockedError(e)) appendAssistant(convId, '**Error:** ' + errorMessage(e))
       throw e
     } finally {
-      setBusy(active.id, false)
-      setNarrationSeed('')
+      setBusy(convId, false)
+      if (current()) setNarrationSeed('')
     }
   }
 
@@ -477,12 +585,19 @@ export default function Workspace({ onGoToTasks }: Props = {}) {
     ? panelExpanded[active.id]
     : defaultExpanded
 
+  if (!authActive) return <p role="status" className="p-4">Sign in again to use this workspace.</p>
+
   return (
     <div className="flex h-full">
       <aside className="w-[220px] border-r bg-brand-light-grey flex flex-col">
         <div className="p-3 text-xs font-semibold uppercase tracking-wide text-brand-grey-80">
           Conversazioni
         </div>
+        <button onClick={newFinanceChat} disabled={startingFinance || companyChanging || !!active.busy}
+          className="mx-3 mb-2 px-2 py-1 text-sm border rounded disabled:opacity-50">
+          {startingFinance ? 'Checking Qonto…' : 'New Qonto chat'}
+        </button>
+        {financeNotice && <div role="status" className="px-3 pb-2 text-xs text-brand-danger">{financeNotice}</div>}
         <div className="flex-1 overflow-y-auto">
           {state.conversations.map((c) => {
             const isActive = c.id === state.activeId
@@ -567,6 +682,10 @@ export default function Workspace({ onGoToTasks }: Props = {}) {
           </div>
         </header>
 
+        {active.finance && <div role="status" className="px-4 py-2 text-xs border-b">
+          {active.finance.unavailable || 'Private Qonto chat. History is held by this engine; the transcript below is display-only.'}
+        </div>}
+
         {/* Source panel: email thread preview for task OR thread-only
             conversations. Key by conversation id so React remounts and
             resets internal state when the user switches conversations. */}
@@ -613,7 +732,7 @@ export default function Workspace({ onGoToTasks }: Props = {}) {
           ))}
           {active.busy && !active.pendingApproval && (
             <div className="text-brand-grey-80 italic text-sm whitespace-pre-wrap">
-              {narration || 'Sto pensando alla tua richiesta.'}
+              {active.finance ? 'Checking the authorized source…' : narration || 'Sto pensando alla tua richiesta.'}
             </div>
           )}
 
@@ -631,7 +750,7 @@ export default function Workspace({ onGoToTasks }: Props = {}) {
           key={active.id}
           onSubmit={send}
           onSolve={active.taskId ? solve : undefined}
-          disabled={!!active.busy || !!active.taskCompleted}
+          disabled={!!active.busy || !!active.taskCompleted || !!active.finance?.unavailable || (!!active.finance && companyChanging)}
           placeholder={
             active.taskCompleted
               ? 'Task chiusa — riaprila per scrivere.'
@@ -685,6 +804,29 @@ function ApprovalCard({
     setEdited((prev) => ({ ...prev, [k]: v }))
   }
 
+  // Sending always goes through the primary mailbox (the sign-up
+  // address), whatever mailbox the thread arrived in. An outgoing email
+  // card shows that address as a read-only From line so the user knows
+  // which identity the message leaves with. Read once per card from
+  // `settings.get` (EMAIL_ADDRESS is not a secret, so it comes in clear).
+  const showFrom = approval.name === 'send_email' || approval.name === 'send_draft'
+  const [fromAddress, setFromAddress] = useState<string | null>(null)
+  useEffect(() => {
+    if (!showFrom) return
+    let cancelled = false
+    window.zylch.settings
+      .get()
+      .then((r) => {
+        if (!cancelled) setFromAddress(r.values?.EMAIL_ADDRESS || null)
+      })
+      .catch(() => {
+        /* the card still works without the line */
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [showFrom, approval.toolUseId])
+
   return (
     <div className="border border-brand-orange bg-brand-orange/10 rounded-lg p-4 mr-12">
       <div className="flex items-center gap-2 mb-2">
@@ -701,6 +843,17 @@ function ApprovalCard({
         </div>
       )}
       <div className="bg-white border border-brand-orange/30 rounded p-3 mb-3 space-y-2">
+        {showFrom && fromAddress && (
+          <div>
+            <div className="text-xs font-semibold uppercase tracking-wide text-brand-grey-80 mb-0.5">
+              From
+            </div>
+            <div className="text-sm text-brand-black break-words">
+              {fromAddress}{' '}
+              <span className="text-xs text-brand-grey-80">(primary mailbox)</span>
+            </div>
+          </div>
+        )}
         {Object.entries(edited).map(([k, v]) => {
           const label = (
             <div className="text-xs font-semibold uppercase tracking-wide text-brand-grey-80 mb-0.5">

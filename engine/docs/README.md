@@ -1,6 +1,6 @@
 # Zylch — Documentation Index
 
-Complete documentation for Zylch standalone (local CLI sales intelligence tool).
+Documentation for the MrCall Desktop engine: local sidecar and per-profile hosted daemon.
 
 ## Architecture and Rules (Static)
 
@@ -48,15 +48,19 @@ Complete documentation for Zylch standalone (local CLI sales intelligence tool).
 |------|---------|
 | [features/entity-memory-system.md](features/entity-memory-system.md) | Entity-centric memory with hybrid search |
 | [features/email-archive.md](features/email-archive.md) | Email archive with IMAP sync |
+| [features/mailboxes.md](features/mailboxes.md) | Additional IMAP mailboxes: table, secrets, per-mailbox sync, PEC unwrap, migration |
 | [features/email-triage.md](features/email-triage.md) | Email triage and auto-reply detection |
 | [features/model-selection.md](features/model-selection.md) | Roles, requirements, the resolver and the resolved table as the model and price source |
+| [features/qonto.md](features/qonto.md) | Native private Qonto source, authority and managed finance history |
 | [features/mnemonic-writer-inventory.md](features/mnemonic-writer-inventory.md) | The sealed memory write boundary: frozen writer graph and exempt primitives |
 | [features/mnemonic-decisions.md](features/mnemonic-decisions.md) | Mnemonic memory events, validator and origin-bound paid admission |
 | [features/mnemonic-commit.md](features/mnemonic-commit.md) | Atomic semantic commit, commit permit and the operation journal |
 | [features/company-memory-join.md](features/company-memory-join.md) | Fenced company-memory join, parked-work resolution, maintenance routes |
 | [features/read-only-chat-policy.md](features/read-only-chat-policy.md) | Negotiated server-enforced read-only chat origin policy |
 | [features/outbound-calls.md](features/outbound-calls.md) | MrCall outbound calls: Firebase, approval, submission semantics |
-| [features/task-management.md](features/task-management.md) | Task system (4-level urgency) |
+| [features/task-management.md](features/task-management.md) | Private ordinary tasks, lifecycle and company subtype boundary |
+| [features/task-assignment.md](features/task-assignment.md) | Company assignments, privileged approval, source coverage and rollback |
+| [features/assignment-enrollment.md](features/assignment-enrollment.md) | Local contextual-email applicability, privileged enrollment and offline legacy recovery |
 | [features/relationship-intelligence.md](features/relationship-intelligence.md) | Relationship intelligence and gap detection |
 | [features/calendar-integration.md](features/calendar-integration.md) | Calendar integration (planned: CalDAV) |
 | [features/MICROSOFT_CALENDAR_TODO.md](features/MICROSOFT_CALENDAR_TODO.md) | Outlook Calendar via CalDAV (TODO) |

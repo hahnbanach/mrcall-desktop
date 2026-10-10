@@ -1,12 +1,16 @@
 """Single-attempt MrCall debit contract; never replay inference to recover billing."""
 import hashlib
 import json
+import logging
+import re
 from types import SimpleNamespace
 
 import httpx
 
 from .budget_pricing import BudgetError
 from .response import REASONING
+
+logger = logging.getLogger(__name__)
 
 PROTOCOL = 'mrcall-bounded-v1'
 PREFIX = '/api/desktop/llm/bounded'
@@ -64,6 +68,26 @@ def validate_receipt(reservation, quote, receipt):
         raise BudgetError('AI paused: MrCall charge is unconfirmed; reservation retained.') from None
 
 
+REASON = re.compile(r"[A-Za-z0-9 _.:/,'()-]{1,160}")
+
+
+def server_reason(response):
+    """The billing server's own short reason for a refusal, when it gives one
+    as a plain identifier or sentence (``error``/``code``/``detail``/``message``).
+    Anything else, a body echoing input included, is not repeated."""
+    try:
+        body = response.json()
+    except ValueError:
+        return None
+    if not isinstance(body, dict):
+        return None
+    for key in ('code', 'error', 'detail', 'message'):
+        value = body.get(key)
+        if isinstance(value, str) and REASON.fullmatch(value.strip()):
+            return value.strip()
+    return None
+
+
 class BoundedProxyClient:
     def __init__(self, proxy_base_url, firebase_session, *, http_client=None, business_id=None):
         self.base = proxy_base_url.rstrip('/')
@@ -83,8 +107,15 @@ class BoundedProxyClient:
                 hints = {401: 'Sign in again.', 402: 'Top up at dashboard.mrcall.ai/plan.',
                          404: 'Update the billing server to support bounded credits.',
                          409: 'Pricing or request state changed; check reservations before retrying.'}
-                raise BudgetError(f'MrCall billing HTTP {response.status_code}. ' +
-                                  hints.get(response.status_code, 'Request unconfirmed; check reservations.'))
+                # A refused quote reserved nothing; only execute/status can leave a hold.
+                default = ('Refused before any reservation.' if path in ('/quote', '/capabilities')
+                           else 'Request unconfirmed; check reservations.')
+                reason = server_reason(response)
+                logger.warning(f'[billing] {method} {path} -> HTTP {response.status_code} '
+                               f'reason={reason or "absent"}')
+                raise BudgetError(f'MrCall billing HTTP {response.status_code}'
+                                  + (f' ({reason})' if reason else '') + '. '
+                                  + hints.get(response.status_code, default))
             return response.json()
         try:
             if self.http is not None:

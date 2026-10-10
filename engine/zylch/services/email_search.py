@@ -206,6 +206,7 @@ def _match_one(
     p: Predicate,
     *,
     user_email: str,
+    user_addresses: Optional[frozenset] = None,
     now: datetime,
 ) -> bool:
     op = p.op
@@ -248,6 +249,8 @@ def _match_one(
         if v == "unread":
             sender = (getattr(row, "from_email", "") or "").lower()
             from_user = bool(user_email) and sender == user_email
+            if not from_user and user_addresses:
+                from_user = sender in user_addresses
             return (
                 not from_user
                 and getattr(row, "read_at", None) is None
@@ -285,6 +288,7 @@ def email_matches(
     *,
     user_email: str = "",
     now: Optional[datetime] = None,
+    user_addresses: Optional[frozenset] = None,
 ) -> bool:
     """Return True if a single email row satisfies *query*.
 
@@ -306,9 +310,9 @@ def email_matches(
             positive.setdefault(p.op, []).append(p)
 
     for _op, preds in positive.items():
-        if not any(_match_one(row, p, user_email=me, now=now_dt) for p in preds):
+        if not any(_match_one(row, p, user_email=me, now=now_dt, user_addresses=user_addresses) for p in preds):
             return False
     for p in negative:
-        if _match_one(row, p, user_email=me, now=now_dt):
+        if _match_one(row, p, user_email=me, now=now_dt, user_addresses=user_addresses):
             return False
     return True

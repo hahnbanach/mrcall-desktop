@@ -1087,7 +1087,10 @@ class SendDraftTool(Tool):
             )
             if edits:
                 logger.debug(f"[send_draft] applying card edits keys={list(edits.keys())}")
-                self.storage.update_draft(self.owner_id, draft_id, edits)
+                from zylch.services.task_assignment_draft_transaction import claim_edits
+
+                with claim_edits(self.owner_id, draft_id):
+                    self.storage.update_draft(self.owner_id, draft_id, edits)
                 draft = self.storage.get_draft(self.owner_id, draft_id) or draft
 
             to_addresses = draft.get("to_addresses", [])
@@ -1121,7 +1124,9 @@ class SendDraftTool(Tool):
             )
 
         try:
-            sent_message = self.imap.send_message(
+            from zylch.services.task_assignment_email_effect import send as guarded_send
+
+            sent_message = guarded_send(self.imap.send_message, owner_id=self.owner_id, draft=draft,
                 to=to_str,
                 subject=subject,
                 body=body,

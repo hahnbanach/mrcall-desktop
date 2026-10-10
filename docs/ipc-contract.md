@@ -26,6 +26,72 @@ Schema, errors, selected sentence permissions and operator examples:
 [voice configuration contract](../engine/docs/features/voice-agent-configuration.md).
 The isolated telephone runtime is described in the configuration contract.
 
+## Company task assignments (local integration)
+
+The new company subtype uses `tasks.assignment.*`, separately from private
+ordinary/Qonto `tasks.*` rows. Local transport and kernel verification are
+recorded in the [delivery plan](execution-plans/2026-10-08-explicit-task-assignment.md).
+
+| Method | Parameters | Result |
+|---|---|---|
+| `tasks.assignment.list` | none | Versioned authenticated company rows with completeness. |
+| `tasks.assignment.get` | `thread_key` | Current task or authoritative absence, with retained events. |
+| `tasks.assignment.project` | `thread_key` | Exact-thread state, completeness, held action and source/closed audit. |
+| `tasks.assignment.reply_evidence` | `source_id, thread_key` | Owner-scoped live Sent candidate/automatic/unknown metadata; no body or credentials. |
+| `tasks.assignment.preview` | `operation, thread_key, expected_revision, assignee_uid?, task_id?, reason?, handled_ref?, source_id?` | Exact unsigned short-lived intent derived from verified actor/company. |
+| `tasks.assignment.commit` | `intent, grant` | Exact acknowledged receipt after independent signature, membership and revision checks. |
+
+Assignment refusals use safe typed JSON-RPC errors, including revision conflict;
+lookup failure never becomes a successful empty ownership ledger. Generic chat
+approval and ordinary caller audit text cannot authorize these writes. The
+[assignment contract](../engine/docs/features/task-assignment.md) specifies fixed
+privileged trust/signing paths, source-owner close coverage and rollback.
+
+Scoped kernel composition negotiates `assignment_draft_policy: 1` before
+`chat.send(..., assignment_thread_key, assignment_policy_version=1)`. The engine
+must enforce the exact thread and fresh nonheld authority at the actual draft
+write. Scoped turns refuse other mutation effects, including sends. The local
+contextual-email candidate below additionally guards unscoped replies; finance
+and genuinely source-free composition retain their domain policies. Local
+fixture acceptance does not establish deployed-client support.
+
+## Contextual email policy — unreleased candidate
+
+`system.capabilities` additionally returns `contextual_email_policy: 1` in the
+local candidate. This capability covers source-bound draft creation/update and
+final engine transport admission; `assignment_draft_policy: 1` alone does not.
+It does not certify external/manual mailbox writes. The retained kernel
+`draft-reply` Gmail review append is preceded by a projection check but is
+outside the engine/company lock; contextual campaign queue copying refuses.
+Published Desktop `v0.1.56` and the current hosted release retain the old scoped
+contract until a separately authorized rollout.
+
+`chat.send` accepts optional `email_context` plus
+`contextual_email_policy_version=1`. The context is a nonempty object with one or
+more of the following nonempty identifiers; unknown keys refuse:
+
+| Field | Meaning |
+|---|---|
+| `thread_key` | Exact RFC conversation root; the actual effect still requires an exact original source target. |
+| `source_email_id` | Original email ID resolved in the authenticated owner's private store. |
+| `target_message_id` | Exact original RFC Message-ID, resolved in that same store. |
+| `draft_id` | Full persisted engine draft identity; reply binding is re-resolved from the actual row. |
+
+All supplied source identities must agree. A version without context, or context
+without the supported version, refuses. Explicit context cannot contradict
+known `context.email_id`, task sources or another active binding. A genuinely
+source-free draft remains standalone; a known reply cannot drop headers to
+become standalone. This context restricts effects and grants no assignment or
+send authority. Existing approval and request-read-only policies still apply.
+
+Chat, email-backed ordinary tasks and executor hops retain known source context.
+Final write and transport admission rechecks current company authority and the
+persisted draft under their writer reservations; old drafts and stale copies
+receive the same checks. Enrollment and source-free semantic limits are in the
+[assignment contract](../engine/docs/features/task-assignment.md#contextual-email-enforcement--unreleased-development).
+The source-level [RPC inventory](rpc-contract-inventory.json) is generated from
+actual registration and signatures.
+
 ## Transports
 
 Transport: JSON-RPC 2.0, transport-agnostic on the engine side
@@ -56,7 +122,7 @@ The method surface, payload shapes, and notification streams below are
 
 - **Server**: `engine/zylch/rpc/methods.py` assembles the `METHODS` dispatch table from its local and per-domain registrations. A duplicate method name raises at import.
 - **Client**: `app/src/preload/index.ts` exposes `window.zylch.*` to the renderer; `app/src/main/` brokers stdio or WebSocket.
-- **Owner identity**: every call resolves `owner_id` server-side from the active profile — the client never sends it.
+- **Owner identity**: calls resolve profile ownership server-side. Legacy ordinary task owner IDs are mailbox emails; company assignments derive stable actor UIDs from verified Firebase identity. Neither is a caller-selected assignee field.
 
 **Coverage.** The assembled `METHODS` registry is authoritative. The index below
 is a dated reference, with later additions described in their owning sections;
@@ -103,10 +169,9 @@ registered method. A bare name is **required**; a name with `?` or a
 `=default` is optional. If a signature cannot be parsed (a placeholder
 like `…fields` rather than identifiers) the method is marked *open* and
 no unknown-key check runs for it — a visible gap rather than a guess.
-The current registry has one open method, `llm.models`: its handler docstring
-lacks the signature declaration used by `param_spec`. Its handler still validates
-the provider; undeclared-parameter rejection is not enforced for that method.
-This gap is tracked in [the harness backlog](harness-backlog.md).
+Every current registered method has a checkable declaration, including
+`llm.models(provider?)`; unknown catalog parameters are refused with `-32602`.
+An open method still fails the registry-wide regression gate.
 
 **The required mark carries an obligation.** A parameter may be declared
 required only where the handler genuinely cannot proceed — where it
@@ -120,11 +185,22 @@ consumer relying on the default.
 gate: every method must declare a checkable signature; required must be a
 subset of accepted; every method must answer its documented minimal
 payload through the real `dispatch_raw` (an internal `-32603` does not
-count as an answer); required-ness is proven leave-one-out over the whole
-registry; and every `window.zylch.*` binding in
+count as an answer), except `whatsapp.connect` whose interactive/native
+connection is explicitly exempt; required-ness is proven leave-one-out over
+non-exempt methods; and every `window.zylch.*` binding in
 `app/src/preload/index.ts` must resolve to a registered engine method.
-The suite is not wired into CI — `.github/workflows/` holds only
-`release.yml` — so it runs when someone runs it.
+`.github/workflows/rpc-contracts.yml` runs this suite, task lifecycle/transport
+checks, app typecheck and `npm run test:rpc-contracts` on relevant pushes/PRs.
+The latter uses the TypeScript checker to compare preload payload keys with
+engine accepted/required names and renderer arguments/declared returns with
+preload declarations. `npm run inventory:rpc` regenerates
+[rpc-contract-inventory.json](rpc-contract-inventory.json); both commands accept
+`ENGINE_PYTHON` and `CS_KERNEL_ROOT`. The inventory records dynamic kernel call
+sites and extraction limits. This is not shared runtime value/return validation:
+`any`/`unknown` and Python aliases/dataflow remain explicit coverage limits.
+Local task transport checks exercise subprocess stdin/stdout and the production
+WebSocket handler with fixture claims; they do not verify Firebase handshake,
+CLI initialization, packaged sidecars or deployed profiles.
 
 **Secret redaction.** The dispatcher's DEBUG `params=` line is recursively
 redacted before it is written: exact names (`token`, `password`, `secret`,
@@ -161,7 +237,7 @@ Methods recorded in this index, with the parameters it declares and the shape it
 returns. `?` and `=default` mark optional parameters; everything else is
 required and its absence is a `-32602`. Transcribed from the engine
 registry on 2026-08-15 (65 methods), plus `emails.needs_reply` added
-2026-08-26.
+2026-08-26 and the six `mailboxes.*` methods added 2026-09-30 (72 methods).
 
 **`account.*`**
 
@@ -200,7 +276,7 @@ registry on 2026-08-15 (65 methods), plus `emails.needs_reply` added
 | Method | Declared parameters | Returns |
 |---|---|---|
 | `chat.approve` | `tool_use_id, mode?, approved?, edited_input?` | {ok: true} |
-| `chat.send` | `message, conversation_history=[], conversation_id="general", context={}` | ChatService result dict |
+| `chat.send` | `message, conversation_history=[], conversation_id="general", context={}, email_context?, contextual_email_policy_version?` | ChatService result dict; candidate contextual fields described above |
 
 **`drafts.*`**
 
@@ -211,17 +287,90 @@ registry on 2026-08-15 (65 methods), plus `emails.needs_reply` added
 
 **`emails.*`**
 
+A message is the user's (user-sent, ours) when its `from_email` equals,
+case-insensitively, the primary `EMAIL_ADDRESS`, an address in
+`EMAIL_ALIASES`, or the address of an active mailbox
+(`engine/zylch/email/identity.py:user_addresses`); `emails.needs_reply`
+and `is_user_sent` use only the primary and active mailbox addresses,
+because a declared alias is not verified by a connection. A colleague on
+the same domain is never the user.
+
+Every row belongs to one mailbox (`mailbox_id`, see `mailboxes.*`); rows
+of a removed mailbox are absent from every list, search and count. A
+message delivered to two mailboxes is two rows (one per mailbox) in one
+thread.
+
 | Method | Declared parameters | Returns |
 |---|---|---|
-| `emails.archive` | `thread_id` | {ok, archived, imap} |
+| `emails.archive` | `thread_id` | {ok, archived, mailboxes: [{mailbox_id, attempted, moved, error}]} |
 | `emails.delete` | `thread_id` | {ok, deleted} |
-| `emails.list_by_thread` | `thread_id` | {"emails": [...]} |
-| `emails.list_inbox` | `limit=50, offset=0` | {"threads": [...]} |
-| `emails.list_sent` | `limit=50, offset=0` | {"threads": [...]} |
+| `emails.list_by_thread` | `thread_id` | {"emails": [...]} — rows carry `mailbox_id`, `mailbox_address`, `original_message_id`, `pec_markers` |
+| `emails.list_inbox` | `limit=50, offset=0, mailbox_id?` | {"threads": [...]} — summaries carry `mailbox_ids` |
+| `emails.list_sent` | `limit=50, offset=0, mailbox_id?` | {"threads": [...]} — summaries carry `mailbox_ids` |
 | `emails.mark_read` | `thread_id` | {ok, affected} |
 | `emails.needs_reply` | `thread_ids` | {"threads": {tid: {...}}, asked, note} |
 | `emails.pin` | `thread_id, pinned: bool` | {ok, affected} |
-| `emails.search` | `query?, folder='inbox', limit=50, offset=0` | {"threads": [...]} |
+| `emails.search` | `query?, folder='inbox', limit=50, offset=0, mailbox_id?` | {"threads": [...]} — summaries carry `mailbox_ids` |
+
+`mailbox_id` on the three listers restricts the rows to that mailbox (the
+threads as that mailbox sees them); without it every active mailbox
+contributes. `mailbox_ids` lists the mailboxes holding rows of the
+thread. On `emails.list_by_thread` rows, `original_message_id` and
+`pec_markers` (`{kind: transport|receipt|anomaly, receipt_type,
+reference_message_id, headers}`) are non-null only on PEC rows. For a
+transport envelope and for an anomaly wrapper (the "busta di anomalia"
+that delivers an ordinary, non-certified message to a PEC mailbox) the
+row's identity (`id`, Message-ID) is the provider's envelope, the content
+(sender, subject, body, attachments, threading) is the wrapped original's,
+and a reply threads on `original_message_id`; `kind: anomaly` says the
+message was not certified. A receipt, and an envelope without a wrapped
+original, keep the provider as sender.
+
+**`mailboxes.*`**
+
+The profile's IMAP mailboxes. The primary is the sign-up address configured
+in Settings (`EMAIL_ADDRESS`, `EMAIL_PASSWORD`, hosts in `.env`) and is
+read-only here; additional mailboxes are added, tested, changed and removed
+through these methods, their passwords encrypted under the profile's
+`MAILBOX_SECRET_KEY` (never a Settings key, never returned, never echoed).
+Refusals are answers (`{ok: false, status, message}`), not errors.
+
+| Method | Declared parameters | Returns |
+|---|---|---|
+| `mailboxes.add` | `address, password, imap_host?, imap_port?, smtp_host?, smtp_port?, preset?` | {ok, status, message?, mailbox?} |
+| `mailboxes.list` | — | {mailboxes: [{id, address, imap_host, imap_port, smtp_host, smtp_port, preset, is_primary, configured, state, last_sync_at, last_error, created_at}]} |
+| `mailboxes.presets` | — | {presets: [{id, label, domains, imap_host, imap_port, imap_security, smtp_host, smtp_port, smtp_security, username, password_label}]} |
+| `mailboxes.remove` | `mailbox_id` | {ok, status, message?, mailbox?} |
+| `mailboxes.test` | `address, password, imap_host?, imap_port?, smtp_host?, smtp_port?` | {ok, status, message} |
+| `mailboxes.update` | `mailbox_id, imap_host?, imap_port?, smtp_host?, smtp_port?, password?, preset?` | {ok, status, message?, mailbox?} |
+
+`mailboxes.list` returns every active mailbox, the primary first, without
+secrets; `configured` is false for a primary whose address or
+`EMAIL_PASSWORD` is empty and for an additional mailbox without a stored
+password; `state` is `ok` (last sync succeeded), `error` (`last_error`
+set, the message names the failure) or `never`. `mailboxes.presets` is the
+engine's provider table plus `PEC.net (Register.it)` (`imap.pec-email.com:993`
+SSL, `smtp.pec-email.com:465` SSL, username = full address, password label
+"PEC mailbox password"). `mailboxes.test` logs in, LISTs, opens INBOX
+read-only and the Sent and archive folders discovery finds (absent ones
+count as absent) and answers `status` `ok`, `auth`, `unreachable`, `tls`,
+`folder` (a found folder cannot be selected) or `invalid` (an address
+without `@`, an unusable port); nothing is stored, and no message ever
+carries the password. `mailboxes.add` runs that test first and refuses on
+its failure with the same `status`, refuses an active duplicate address —
+compared case-insensitively, the primary's included — with `duplicate`,
+answers `secret` when the profile's key cannot be written or the password
+cannot be stored, and revives a removed row with its id, rows and cursors.
+`mailboxes.update` re-tests when a host, port or password changes (same
+statuses as the test, plus `secret`), answers `unknown` for an id without
+an active row and `primary` for the primary. `mailboxes.remove` sets
+`removed_at` (rows, cursors and extracted memory are kept; the sync stops
+covering it) and answers `unknown` or `primary` the same way.
+
+Complete `status` set per method: `test` → `ok | auth | unreachable | tls |
+folder | invalid`; `add` → those plus `duplicate | secret`; `update` → `ok |
+auth | unreachable | tls | folder | invalid | secret | unknown | primary`;
+`remove` → `ok | unknown | primary`.
 
 **`google.*`**
 
@@ -257,6 +406,11 @@ registry on 2026-08-15 (65 methods), plus `emails.needs_reply` added
 |---|---|---|
 | `narration.predict` | `message?, context=""` | {"text": str} |
 | `narration.summarize` | `lines?, context=""` | {"text": str} |
+
+**`qonto.*`**
+
+Native bank methods and the additive managed finance-history contract are in
+[Qonto IPC](qonto-ipc.md), with verification and rollout limits in its linked plan.
 
 **`profiles.*`**
 
@@ -363,21 +517,21 @@ preload bridge.
 |-------|------|----------|-------|
 | `task_id` | string | yes | TaskItem UUID |
 | `note` | string \| null | no | Optional free-text closing reason. Stored on `task_items.close_note`. **Display-only — never injected into the task-detection prompt or any other LLM context.** Whitespace-only notes are stored as NULL. |
-| `actor` | string \| null | no | WHO closed it, as a stable machine token: `human` for a user action in the desktop (the default), otherwise the calling code path or external operator — `mrcall-cs` sends `operator`. Lands in `task_items.close_actor`. A non-string raises. |
+| `actor` | string \| null | no | Caller-supplied audit label, default `human`; external operator paths use `operator`. Stored in `task_items.close_actor`. It does not authenticate human presence or authorize company assignments. A non-string raises. |
 | `why` | string \| null | no | The audit reason, distinct from the display `note`; falls back to `note` when omitted. A non-string raises. |
 
 Returns `{ ok: boolean }`.
 
-A close is the one irreversible thing this ledger does, so it records WHO
-and WHY — the same audit convention `tasks.snooze` follows. Both
-parameters default to the desktop-human close, so a client written before
-they existed is unaffected. Each successful close appends note, actor and
-reason as a separate entry to `sources.closes[]`; both reopen paths, and
-every conflicting `tasks.create` upsert, carry that history over rather
-than replacing `sources` wholesale.
+A close records caller-supplied actor and reason using the same audit convention
+as `tasks.snooze`; the default actor is `human`. It can be reversed through
+`tasks.reopen`. Each successful close appends note, actor and reason as a separate
+entry to `sources.closes[]`; both reopen paths and conflicting `tasks.create`
+upserts retain that history. These labels are audit text, not verified human
+provenance.
 
-Auto-close paths (worker, reanalyze sweep, task_interactive) call this
-with `note=None` so closing reasons are never fabricated by the LLM.
+When `note` is `None`, storage falls back to a supplied `why` for the display
+close note. An automated caller's reason can therefore become display text;
+`note=None` does not establish human authorship of the reason.
 
 ### `tasks.reopen(task_id)`
 
@@ -405,8 +559,8 @@ already-closed task — reviving a closed task is `tasks.reopen`'s job.
 
 One task by primary key, **open or closed**. The row is the full record:
 `completed_at`, `close_note` and the `close_actor` audit column are
-included, so a caller can tell an open task from a closed one, and a
-human close from a machine one. `due_at` (epoch seconds, NULL when the
+included, so a caller can tell an open task from a closed one and inspect the
+caller-supplied close label. `due_at` (epoch seconds, NULL when the
 task is actionable now) comes back too, so a parked task is
 distinguishable from a pending one.
 
@@ -537,7 +691,7 @@ onto the same row. This is a direct user action (typed + sent), so it is
 **not** approval-gated — unlike the LLM-initiated `send_whatsapp` inside
 `tasks.solve`. Preload binding has a 30 s timeout.
 
-### `emails.search(query?, folder?, limit?, offset?)`
+### `emails.search(query?, folder?, limit?, offset?, mailbox_id?)`
 
 | Param | Type | Required | Notes |
 |-------|------|----------|-------|
@@ -545,6 +699,7 @@ onto the same row. This is a direct user action (typed + sent), so it is
 | `folder` | `"inbox" \| "sent" \| "all"` | no | Default `"inbox"`. Same coarse filter the listing endpoints use; `all` searches both directions. |
 | `limit` | int | no | Default 50. |
 | `offset` | int | no | Default 0. Pagination is over the matching thread list, not over messages. |
+| `mailbox_id` | string | no | Restricts the rows to one mailbox (the threads as that mailbox sees them); absent, every active mailbox contributes. Summaries carry `mailbox_ids`. |
 
 Returns `{ threads: InboxThread[] }` — same dict shape as
 `emails.list_inbox` / `emails.list_sent`, so the renderer reuses the
@@ -587,7 +742,7 @@ far they reach:
 
 | Method | Reach | Returns |
 |---|---|---|
-| `emails.archive` | IMAP MOVE of every row of the thread to the archive folder, **then** the local flag. If IMAP fails the local flag is NOT set and the error surfaces to the caller, so the UI can show it. | `{ok, archived, imap}` |
+| `emails.archive` | Per mailbox of the thread's rows: IMAP MOVE of that mailbox's Message-IDs from INBOX to its archive folder over its own client, **then** `archived_at` on the rows whose copy moved. A Message-ID not in INBOX but held by the archive or Sent folder (the user's own reply, a message archived from another client) is already where it belongs and counts as moved; a Message-ID absent from all of them is a named failure (its row stays visible), a non-OK SEARCH a protocol failure; a connection or login failure is the mailbox's `error` with nothing moved. `ok` is true only when every mailbox moved everything; `archived` counts the rows stamped. The primary's connection is never used for another mailbox's messages. | `{ok, archived, mailboxes: [{mailbox_id, attempted, moved, error}]}` |
 | `emails.delete` | **Local-only soft delete** — `deleted_at = now()` on every row so the thread drops out of inbox/sent views. Deliberately does NOT touch IMAP: the server copy is preserved so any `TaskItem` pointing at these emails stays resolvable. | `{ok, deleted}` |
 | `emails.mark_read` | `read_at = now()` on every row that lacks one. Idempotent; fire-and-forget from the renderer when the user opens a thread. | `{ok, affected}` |
 | `emails.pin` | Thread-level flag written as `pinned_at` on every row. `affected` counts rows whose value actually changed — re-pinning an already-pinned thread returns `0`. | `{ok, affected}` |
@@ -701,13 +856,17 @@ at `app/src/preload/index.ts` has a 15 s timeout.
 
 ### `account.set_firebase_token(uid, id_token, expires_at_ms, email?, refresh_token?)` / `account.who_am_i()` / `account.sign_out()`
 
-The in-band session trio. `set_firebase_token` **trusts the caller** — it
-installs the token as-is, which is safe only because the local sidecar's
-parent process is the app itself; the cross-machine path uses
-`auth.refresh` instead, which verifies. `expires_at_ms` is the absolute
-Unix-ms instant at which Firebase will reject the token; the renderer
-reads it from `user.getIdTokenResult().expirationTime`. The engine holds
-the token **in memory only** and never persists it.
+The in-band session trio. Both `set_firebase_token` and `auth.refresh` verify
+the signed Firebase token and bind it to the selected `OWNER_ID`; a requested
+UID mismatch, invalid/expired token or hosted profile without an owner is
+refused. Local onboarding may establish verified identity before a profile
+owner exists. Email and effective expiry come from signed claims.
+`expires_at_ms` remains a required compatibility parameter on
+`set_firebase_token`, validated for shape rather than trusted as authority.
+The ID token stays **in memory only**. An optional `refresh_token` is persisted
+through `utils/encryption.py` for headless renewal: Fernet with a configured key,
+local plaintext passthrough without one. Hosted startup requires an environment
+key. Neither token is echoed.
 
 `who_am_i` answers `{signed_in, uid?, email?, expires_at_ms?}` and
 deliberately **never echoes the token back** — the renderer is the source
@@ -1053,9 +1212,17 @@ Returns:
   "agents_trained": ["memory_message", "task_email", "emailer"],
   "emails_analyzed_count": 1200,         // this owner's rows with memory_processed_at
   "emails_pending_analysis": 34,         // this owner's rows without that marker
-  "last_email_analyzed_at": "2026-09-10T08:00:00"
+  "last_email_analyzed_at": "2026-09-10T08:00:00",
+  "mailboxes": [                         // per active mailbox (additive)
+    {"mailbox_id": "…", "address": "support@example.test",
+     "emails_count": 1200, "emails_pending_analysis": 34}
+  ]
 }
 ```
+
+Every email count covers the active mailboxes only: the rows of a removed
+mailbox are not counted. `mailboxes` is empty when the breakdown cannot be
+queried.
 
 Per-profile (driven by the active SQLite DB), so a brand-new profile
 starts gated even if a sibling profile on the same machine is fully
@@ -1112,8 +1279,8 @@ owner is ignored). Backs the MrCall tab's search bar + status dropdown.
 ### `auth.refresh(id_token, refresh_token?)`
 
 Cross-machine transport (WebSocket backend). Verifies a fresh Firebase ID
-token server-side (RS256 against Google's certs — unlike
-`account.set_firebase_token`, which trusts the caller) and replaces the
+token server-side (RS256 against Google's certs), applies the same signed
+identity/profile-owner admission as `account.set_firebase_token`, and replaces the
 engine's in-memory session. The WebSocket client
 (`app/src/main/wsRpcClient.ts`) calls this on a ~30-min timer to keep the
 remote session alive well inside the token's ~1h lifetime; the engine
@@ -1330,6 +1497,10 @@ counter. The summary always carries its whole shape:
 immediately and returns counts the renderer can phrase as "Closed N tasks
 across M cluster(s)"; it tolerates a profile with no LLM configured,
 answering `no_llm=True` instead of failing.
+Both task dedup entrypoints retain bounded-preparation admission. A paused or
+busy run refuses with JSON-RPC `-32020` and a fixed safe message directing the
+caller to preparation status; it does not become an internal task error or run
+maintenance despite the pause. Exception details stay private.
 
 ### `memory.restore_version(blob_id?, version_id?)`
 

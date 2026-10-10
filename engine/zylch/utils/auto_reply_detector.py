@@ -235,3 +235,23 @@ def detect_vacation_responder(subject: str, body: str) -> bool:
             return True
 
     return False
+
+
+def message_is_auto_reply(message: dict, from_email: Optional[str] = None) -> bool:
+    """Apply archive header and first-nonempty-line product sentinel checks."""
+    import re
+
+    sender = from_email if from_email is not None else message.get("from_email")
+    headers = {
+        "Auto-Submitted": message.get("auto_submitted"),
+        "X-Autoreply": message.get("x_autoreply"),
+        "Precedence": message.get("precedence"),
+        "X-Auto-Response-Suppress": message.get("x_auto_response_suppress"),
+    }
+    if detect_auto_reply(headers, sender):
+        return True
+    body = message.get("body_plain", message.get("body", ""))
+    first_line = next((line.strip() for line in (body or "").splitlines() if line.strip()), "")
+    return bool(
+        re.search(r"\bauto[\s\-]?repl(?:ay|y)\b", first_line, re.I)
+    ) or first_line.lower().startswith("ciao mrcaller")

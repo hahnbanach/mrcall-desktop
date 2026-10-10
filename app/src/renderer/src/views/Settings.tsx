@@ -3,12 +3,17 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { errorMessage, isProfileLockedError } from '../lib/errors'
 import Icon from '../components/Icon'
 import DailyBudget from '../components/DailyBudget'
+import QontoCard from '../components/QontoCard'
 import ModelPolicy, { MODEL_FIELDS } from '../components/ModelPolicy'
 import ConnectGoogleCalendar from './ConnectGoogleCalendar'
 import ConnectWhatsApp from './ConnectWhatsApp'
 import { performSignOut } from '../App'
 import { auth } from '../firebase/config'
-import { ensureEngineSession } from '../firebase/authUtils'
+import { ensureEngineSession, onAuthSessionInvalidated, isAuthSessionActive } from '../firebase/authUtils'
+import { onAuthStateChanged } from 'firebase/auth'
+import { businessQueries, checkedBusinesses, createBusinessLookup, boundedBusinessLookup, businessSearchError, businessSearchMessage, type Business } from '../lib/businessSearch'
+import type { Mailbox, MailboxPreset, MailboxStatus } from '../types'
+import { MAILBOXES_CHANGED_EVENT } from '../lib/mailboxes'
 
 type FieldType = 'text' | 'password' | 'number' | 'select' | 'textarea' | 'model'
 
@@ -271,6 +276,7 @@ export default function Settings(): JSX.Element {
         <div className="space-y-3">
           <ConnectGoogleCalendar />
           <ConnectWhatsApp />
+          <QontoCard />
         </div>
       </section>
 
@@ -314,6 +320,7 @@ export default function Settings(): JSX.Element {
                 isDirty={f.key in edits && edits[f.key] !== (loaded[f.key] ?? '')}
               />
             ))}
+            {group === 'Email' && <MailboxesCard />}
           </div>
         </section>
       ))}
@@ -1133,6 +1140,7 @@ function MemoryCard(): JSX.Element {
 
   const handleJoin = async (): Promise<void> => {
     setJoining(true)
+    window.dispatchEvent(new Event('mrcall:company-changing'))
     setJoinMsg({ kind: 'idle', text: '' })
     try {
       const r = await window.zylch.memory.join(joinKey.trim())
@@ -1155,6 +1163,8 @@ function MemoryCard(): JSX.Element {
     } catch (e) {
       setJoinMsg({ kind: 'err', text: errorMessage(e) })
     } finally {
+      window.dispatchEvent(new Event('mrcall:company-changed'))
+      window.dispatchEvent(new Event('mrcall:qonto-changed'))
       setJoining(false)
     }
   }
@@ -1237,6 +1247,710 @@ function MemoryCard(): JSX.Element {
           <p className={`text-xs mt-2 ${joinMsg.kind === 'err' ? 'text-brand-danger' : 'text-brand-success'}`}>
             {joinMsg.text}
           </p>
+        )}
+      </div>
+    </div>
+  )
+}
+
+// ─── Mailboxes ─────────────────────────────────────────────────────
+// Additional IMAP mailboxes next to the primary (the sign-up address,
+// whose EMAIL_* fields stay in the schema form above). Own state, own
+// RPCs, no shared Save bar: every gesture is one `mailboxes.*` call and
+// every refusal is an answer with a `status`, shown inline. The
+// password is typed into a masked field, sent once to test/add/update,
+// and never stored, echoed or logged on this side.
+
+const MAILBOX_STATUS_LABEL: Record<MailboxStatus, string> = {
+  ok: 'Connection OK',
+  auth: 'Login refused',
+  unreachable: 'Server unreachable',
+  tls: 'TLS error',
+  folder: 'Folder cannot be opened',
+  invalid: 'Not a valid mailbox',
+  duplicate: 'Already configured',
+  secret: 'Password could not be stored',
+  unknown: 'Mailbox not found',
+  primary: 'Primary mailbox'
+}
+
+function mailboxStatusText(status: string, message?: string): string {
+  const label = MAILBOX_STATUS_LABEL[status as MailboxStatus] ?? status
+  return message ? `${label}: ${message}` : label
+}
+
+/** Sends a port only when the field holds a number; an empty field
+ *  leaves the engine's default in place. */
+function portValue(raw: string): number | undefined {
+  const trimmed = raw.trim()
+  if (!trimmed) return undefined
+  const n = Number(trimmed)
+  return Number.isInteger(n) && n > 0 ? n : undefined
+}
+
+function formatSyncTime(iso: string | null): string {
+  if (!iso) return 'never'
+  const d = new Date(iso)
+  return isNaN(d.getTime()) ? iso : d.toLocaleString()
+}
+
+const CUSTOM_PRESET = 'custom'
+
+interface MailboxForm {
+  preset: string
+  address: string
+  password: string
+  imap_host: string
+  imap_port: string
+  smtp_host: string
+  smtp_port: string
+}
+
+const EMPTY_MAILBOX_FORM: MailboxForm = {
+  preset: CUSTOM_PRESET,
+  address: '',
+  password: '',
+  imap_host: '',
+  imap_port: '',
+  smtp_host: '',
+  smtp_port: ''
+}
+
+function MailboxesCard(): JSX.Element {
+  const [mailboxes, setMailboxes] = useState<Mailbox[] | null>(null)
+  const [presets, setPresets] = useState<MailboxPreset[]>([])
+  const [loadError, setLoadError] = useState<string | null>(null)
+
+  // Add form. `tested` is true only after `mailboxes.test` answered ok
+  // for the values currently in the form; any edit clears it, and Save
+  // stays disabled until the next successful test.
+  const [addOpen, setAddOpen] = useState(false)
+  const [form, setForm] = useState<MailboxForm>(EMPTY_MAILBOX_FORM)
+  const [test, setTest] = useState<{ kind: 'idle' | 'busy' | 'ok' | 'err'; text: string }>({
+    kind: 'idle',
+    text: ''
+  })
+  const [tested, setTested] = useState(false)
+  // Bumped on every edit and every test: a test answer older than the
+  // latest edit is ignored, so an edited form never inherits an ok.
+  const testRequest = useRef(0)
+  const [saving, setSaving] = useState(false)
+  const [saveMsg, setSaveMsg] = useState<{ kind: 'idle' | 'ok' | 'err'; text: string }>({
+    kind: 'idle',
+    text: ''
+  })
+
+  // Edit / remove of one row at a time.
+  const [editingId, setEditingId] = useState<string | null>(null)
+  const [edit, setEdit] = useState<Omit<MailboxForm, 'preset' | 'address'>>({
+    password: '',
+    imap_host: '',
+    imap_port: '',
+    smtp_host: '',
+    smtp_port: ''
+  })
+  const [editBusy, setEditBusy] = useState(false)
+  const [editMsg, setEditMsg] = useState<{ kind: 'idle' | 'ok' | 'err'; text: string }>({
+    kind: 'idle',
+    text: ''
+  })
+  const [confirmRemoveId, setConfirmRemoveId] = useState<string | null>(null)
+  const [removeBusy, setRemoveBusy] = useState(false)
+  const [rowMsg, setRowMsg] = useState<{ id: string; kind: 'ok' | 'err'; text: string } | null>(
+    null
+  )
+
+  // Answers from a previous engine (restart, backend switch) are dropped:
+  // every refresh bumps the generation and only the latest one lands.
+  const generation = useRef(0)
+  const contextEpoch = useRef(0)
+  const refresh = async (): Promise<void> => {
+    const request = ++generation.current
+    try {
+      const r = await window.zylch.mailboxes.list()
+      if (request !== generation.current) return
+      setMailboxes(Array.isArray(r.mailboxes) ? r.mailboxes : [])
+      setLoadError(null)
+    } catch (e) {
+      if (request !== generation.current) return
+      const message = errorMessage(e)
+      setLoadError(/method.*not found|-32601|unknown method/i.test(message)
+        ? 'This engine does not support additional mailboxes. Update the connected engine, then reconnect.'
+        : message)
+      setMailboxes([])
+    }
+  }
+  const loadPresets = (): void => {
+    const request = generation.current
+    window.zylch.mailboxes
+      .presets()
+      .then((r) => {
+        if (request === generation.current) setPresets(Array.isArray(r.presets) ? r.presets : [])
+      })
+      .catch(() => {
+        if (request === generation.current) setPresets([])
+      })
+  }
+  // Tells the Email view (always mounted) to re-read the list.
+  const announceChange = (): void => {
+    window.dispatchEvent(new Event(MAILBOXES_CHANGED_EVENT))
+  }
+
+  useEffect(() => {
+    void refresh()
+    loadPresets()
+    const invalidate = (): void => {
+      contextEpoch.current++
+      generation.current++
+      testRequest.current++
+      setMailboxes(null)
+      setPresets([])
+      setLoadError(null)
+      setForm(EMPTY_MAILBOX_FORM)
+      setEdit({ password: '', imap_host: '', imap_port: '', smtp_host: '', smtp_port: '' })
+      setAddOpen(false)
+      setEditingId(null)
+      setConfirmRemoveId(null)
+      setTested(false)
+      setTest({ kind: 'idle', text: '' })
+      setSaveMsg({ kind: 'idle', text: '' })
+      setEditMsg({ kind: 'idle', text: '' })
+      setRowMsg(null)
+      setSaving(false)
+      setEditBusy(false)
+      setRemoveBusy(false)
+    }
+    const offInvalidated = onAuthSessionInvalidated(invalidate)
+    let uid = auth.currentUser?.uid
+    const offAuth = onAuthStateChanged(auth, user => {
+      if (uid !== user?.uid) {
+        uid = user?.uid
+        invalidate()
+      }
+    })
+    const off = window.zylch.onSidecarStatus((status) => {
+      invalidate()
+      if (!status.alive || !status.ready) {
+        setMailboxes(null)
+        return
+      }
+      setEditingId(null)
+      setConfirmRemoveId(null)
+      setRowMsg(null)
+      void refresh()
+      loadPresets()
+    })
+    return () => {
+      contextEpoch.current++
+      generation.current++
+      testRequest.current++
+      offInvalidated()
+      offAuth()
+      off()
+    }
+  }, [])
+
+  const selectedPreset = presets.find((p) => p.id === form.preset) ?? null
+  const passwordLabel = selectedPreset?.password_label || 'Password'
+
+  const setFormField = (key: keyof MailboxForm, value: string): void => {
+    testRequest.current++
+    setForm((prev) => ({ ...prev, [key]: value }))
+    setTested(false)
+    setTest({ kind: 'idle', text: '' })
+    setSaveMsg({ kind: 'idle', text: '' })
+  }
+
+  const applyPreset = (id: string): void => {
+    const preset = presets.find((p) => p.id === id)
+    setForm((prev) => ({
+      ...prev,
+      preset: id,
+      imap_host: preset?.imap_host ?? prev.imap_host,
+      imap_port: preset?.imap_port != null ? String(preset.imap_port) : prev.imap_port,
+      smtp_host: preset?.smtp_host ?? prev.smtp_host,
+      smtp_port: preset?.smtp_port != null ? String(preset.smtp_port) : prev.smtp_port
+    }))
+    testRequest.current++
+    setTested(false)
+    setTest({ kind: 'idle', text: '' })
+    setSaveMsg({ kind: 'idle', text: '' })
+  }
+
+  // Typing an address whose domain a preset covers selects that preset
+  // while the user has not picked one; the hosts stay editable.
+  const onAddressChange = (value: string): void => {
+    setFormField('address', value)
+    if (form.preset !== CUSTOM_PRESET) return
+    const domain = value.split('@')[1]?.trim().toLowerCase()
+    if (!domain) return
+    const match = presets.find((p) => p.domains.includes(domain))
+    if (match) applyPreset(match.id)
+  }
+
+  const formParams = (): {
+    address: string
+    password: string
+    imap_host?: string
+    imap_port?: number
+    smtp_host?: string
+    smtp_port?: number
+  } => ({
+    address: form.address.trim(),
+    password: form.password,
+    imap_host: form.imap_host.trim() || undefined,
+    imap_port: portValue(form.imap_port),
+    smtp_host: form.smtp_host.trim() || undefined,
+    smtp_port: portValue(form.smtp_port)
+  })
+
+  const canTest =
+    form.address.includes('@') && form.password.length > 0 && test.kind !== 'busy' && !saving
+
+  const handleTest = async (): Promise<void> => {
+    const request = ++testRequest.current
+    setTest({ kind: 'busy', text: 'Connecting…' })
+    setTested(false)
+    try {
+      const r = await window.zylch.mailboxes.test(formParams())
+      if (request !== testRequest.current) return
+      setTest({ kind: r.ok ? 'ok' : 'err', text: mailboxStatusText(r.status, r.message) })
+      setTested(r.ok)
+    } catch (e) {
+      if (request !== testRequest.current) return
+      setTest({ kind: 'err', text: errorMessage(e) })
+    }
+  }
+
+  const handleAdd = async (): Promise<void> => {
+    const epoch = contextEpoch.current
+    setSaving(true)
+    setSaveMsg({ kind: 'idle', text: '' })
+    try {
+      const r = await window.zylch.mailboxes.add({
+        ...formParams(),
+        preset: form.preset !== CUSTOM_PRESET ? form.preset : undefined
+      })
+      if (epoch !== contextEpoch.current) return
+      if (!r.ok) {
+        setSaveMsg({ kind: 'err', text: mailboxStatusText(r.status, r.message) })
+        setTested(false)
+        return
+      }
+      setForm(EMPTY_MAILBOX_FORM)
+      setTest({ kind: 'idle', text: '' })
+      setTested(false)
+      setAddOpen(false)
+      setSaveMsg({ kind: 'ok', text: `Added ${r.mailbox?.address ?? 'mailbox'}.` })
+      await refresh()
+      if (epoch === contextEpoch.current) announceChange()
+    } catch (e) {
+      if (epoch !== contextEpoch.current) return
+      setSaveMsg({ kind: 'err', text: errorMessage(e) })
+    } finally {
+      if (epoch === contextEpoch.current) setSaving(false)
+    }
+  }
+
+  const startEdit = (m: Mailbox): void => {
+    setEditingId(m.id)
+    setConfirmRemoveId(null)
+    setRowMsg(null)
+    setEditMsg({ kind: 'idle', text: '' })
+    setEdit({
+      password: '',
+      imap_host: m.imap_host ?? '',
+      imap_port: m.imap_port != null ? String(m.imap_port) : '',
+      smtp_host: m.smtp_host ?? '',
+      smtp_port: m.smtp_port != null ? String(m.smtp_port) : ''
+    })
+  }
+
+  const handleUpdate = async (m: Mailbox): Promise<void> => {
+    const epoch = contextEpoch.current
+    setEditBusy(true)
+    setEditMsg({ kind: 'idle', text: '' })
+    try {
+      const params: Parameters<typeof window.zylch.mailboxes.update>[0] = { mailbox_id: m.id }
+      const imapHost = edit.imap_host.trim()
+      const smtpHost = edit.smtp_host.trim()
+      if (imapHost !== (m.imap_host ?? '')) params.imap_host = imapHost
+      if (smtpHost !== (m.smtp_host ?? '')) params.smtp_host = smtpHost
+      const imapPort = portValue(edit.imap_port)
+      const smtpPort = portValue(edit.smtp_port)
+      if (imapPort !== undefined && imapPort !== m.imap_port) params.imap_port = imapPort
+      if (smtpPort !== undefined && smtpPort !== m.smtp_port) params.smtp_port = smtpPort
+      if (edit.password) params.password = edit.password
+      if (Object.keys(params).length === 1) {
+        setEditMsg({ kind: 'err', text: 'Nothing changed.' })
+        return
+      }
+      const r = await window.zylch.mailboxes.update(params)
+      if (epoch !== contextEpoch.current) return
+      if (!r.ok) {
+        setEditMsg({ kind: 'err', text: mailboxStatusText(r.status, r.message) })
+        return
+      }
+      setEditingId(null)
+      setEdit((prev) => ({ ...prev, password: '' }))
+      setRowMsg({ id: m.id, kind: 'ok', text: 'Saved and tested.' })
+      await refresh()
+      if (epoch === contextEpoch.current) announceChange()
+    } catch (e) {
+      if (epoch !== contextEpoch.current) return
+      setEditMsg({ kind: 'err', text: errorMessage(e) })
+    } finally {
+      if (epoch === contextEpoch.current) setEditBusy(false)
+    }
+  }
+
+  const handleRemove = async (m: Mailbox): Promise<void> => {
+    const epoch = contextEpoch.current
+    setRemoveBusy(true)
+    setRowMsg(null)
+    try {
+      const r = await window.zylch.mailboxes.remove(m.id)
+      if (epoch !== contextEpoch.current) return
+      if (!r.ok) {
+        setRowMsg({ id: m.id, kind: 'err', text: mailboxStatusText(r.status, r.message) })
+        return
+      }
+      setConfirmRemoveId(null)
+      await refresh()
+      if (epoch === contextEpoch.current) announceChange()
+    } catch (e) {
+      if (epoch !== contextEpoch.current) return
+      setRowMsg({ id: m.id, kind: 'err', text: errorMessage(e) })
+    } finally {
+      if (epoch === contextEpoch.current) setRemoveBusy(false)
+    }
+  }
+
+  const hostFields = (
+    values: Pick<MailboxForm, 'imap_host' | 'imap_port' | 'smtp_host' | 'smtp_port'>,
+    onChange: (key: 'imap_host' | 'imap_port' | 'smtp_host' | 'smtp_port', value: string) => void,
+    idPrefix: string
+  ): JSX.Element => (
+    <div className="grid grid-cols-[1fr_88px] gap-2">
+      <label className="text-xs text-brand-grey-80">
+        IMAP host
+        <input
+          id={`${idPrefix}-imap-host`}
+          type="text"
+          value={values.imap_host}
+          onChange={(e) => onChange('imap_host', e.target.value)}
+          spellCheck={false}
+          className="mt-0.5 w-full text-xs font-mono border border-brand-mid-grey rounded px-2 py-1"
+        />
+      </label>
+      <label className="text-xs text-brand-grey-80">
+        Port
+        <input
+          id={`${idPrefix}-imap-port`}
+          type="number"
+          min={1}
+          max={65535}
+          value={values.imap_port}
+          onChange={(e) => onChange('imap_port', e.target.value)}
+          className="mt-0.5 w-full text-xs font-mono border border-brand-mid-grey rounded px-2 py-1"
+        />
+      </label>
+      <label className="text-xs text-brand-grey-80">
+        SMTP host
+        <input
+          id={`${idPrefix}-smtp-host`}
+          type="text"
+          value={values.smtp_host}
+          onChange={(e) => onChange('smtp_host', e.target.value)}
+          spellCheck={false}
+          className="mt-0.5 w-full text-xs font-mono border border-brand-mid-grey rounded px-2 py-1"
+        />
+      </label>
+      <label className="text-xs text-brand-grey-80">
+        Port
+        <input
+          id={`${idPrefix}-smtp-port`}
+          type="number"
+          min={1}
+          max={65535}
+          value={values.smtp_port}
+          onChange={(e) => onChange('smtp_port', e.target.value)}
+          className="mt-0.5 w-full text-xs font-mono border border-brand-mid-grey rounded px-2 py-1"
+        />
+      </label>
+    </div>
+  )
+
+  return (
+    <div className="bg-white border border-brand-mid-grey rounded-lg shadow-sm p-4 space-y-4">
+      <div>
+        <div className="text-sm font-semibold text-brand-black">Mailboxes</div>
+        <p className="text-xs text-brand-grey-80 mt-1">
+          Every mailbox listed here is synced, and its messages feed memory and tasks like the
+          primary&apos;s. Outgoing mail always leaves from the primary mailbox, the address above.
+        </p>
+      </div>
+
+      {loadError && <p className="text-xs text-brand-danger">Mailboxes unavailable: {loadError}</p>}
+      {mailboxes === null && !loadError && (
+        <p className="text-xs text-brand-grey-80">Loading mailboxes…</p>
+      )}
+
+      {mailboxes && mailboxes.length > 0 && (
+        <ul className="divide-y divide-brand-mid-grey border border-brand-mid-grey rounded">
+          {mailboxes.map((m) => {
+            const isEditing = editingId === m.id
+            const isConfirming = confirmRemoveId === m.id
+            return (
+              <li key={m.id} className="px-3 py-2 text-xs" data-mailbox-id={m.id}>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="font-mono text-brand-black break-all">{m.address}</span>
+                  {m.is_primary && (
+                    <span className="px-1.5 py-0.5 rounded bg-brand-blue/10 text-brand-grey-80 border border-brand-blue/30">
+                      Primary
+                    </span>
+                  )}
+                  <span
+                    className={
+                      'px-1.5 py-0.5 rounded border ' +
+                      (m.state === 'ok'
+                        ? 'bg-brand-light-grey text-brand-grey-80 border-brand-mid-grey'
+                        : m.state === 'error'
+                          ? 'bg-brand-danger/10 text-brand-danger border-brand-danger/30'
+                          : 'bg-brand-orange/10 text-brand-orange border-brand-orange/40')
+                    }
+                  >
+                    {m.state === 'ok' ? 'ok' : m.state === 'error' ? 'error' : 'never synced'}
+                  </span>
+                  {!m.configured && (
+                    <span className="text-brand-danger">no password stored</span>
+                  )}
+                  {!m.is_primary && (
+                    <span className="ml-auto flex items-center gap-1">
+                      <button
+                        type="button"
+                        onClick={() => (isEditing ? setEditingId(null) : startEdit(m))}
+                        disabled={editBusy || removeBusy}
+                        className="px-2 py-0.5 border rounded text-brand-grey-80 hover:text-brand-black disabled:opacity-50"
+                      >
+                        {isEditing ? 'Close' : 'Edit'}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setConfirmRemoveId(isConfirming ? null : m.id)
+                          setEditingId(null)
+                          setRowMsg(null)
+                        }}
+                        disabled={editBusy || removeBusy}
+                        className="px-2 py-0.5 border rounded text-brand-danger border-brand-danger/30 hover:bg-brand-danger/10 disabled:opacity-50"
+                      >
+                        Remove
+                      </button>
+                    </span>
+                  )}
+                </div>
+                <div className="text-brand-grey-80 mt-0.5">
+                  Last sync: {formatSyncTime(m.last_sync_at)}
+                  {m.imap_host && (
+                    <span>
+                      {' '}
+                      · {m.imap_host}
+                      {m.imap_port ? `:${m.imap_port}` : ''}
+                    </span>
+                  )}
+                </div>
+                {m.last_error && (
+                  <div className="text-brand-danger mt-0.5 break-words">{m.last_error}</div>
+                )}
+                {rowMsg && rowMsg.id === m.id && (
+                  <div
+                    className={
+                      'mt-1 ' + (rowMsg.kind === 'err' ? 'text-brand-danger' : 'text-brand-grey-80')
+                    }
+                  >
+                    {rowMsg.text}
+                  </div>
+                )}
+                {isConfirming && (
+                  <div
+                    role="dialog"
+                    aria-label={`Remove ${m.address}`}
+                    className="mt-2 p-2 rounded border border-brand-danger/30 bg-brand-danger/10 text-brand-black"
+                  >
+                    <div>
+                      Remove {m.address}? Its messages leave the inbox, search and tasks; what
+                      memory already learned from them is kept. Adding the address again brings
+                      them back.
+                    </div>
+                    <div className="mt-2 flex gap-2">
+                      <button
+                        type="button"
+                        onClick={() => void handleRemove(m)}
+                        disabled={removeBusy}
+                        className="px-2 py-0.5 rounded bg-brand-danger text-white disabled:opacity-50"
+                      >
+                        {removeBusy ? 'Removing…' : 'Remove mailbox'}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setConfirmRemoveId(null)}
+                        disabled={removeBusy}
+                        className="px-2 py-0.5 border rounded text-brand-grey-80"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  </div>
+                )}
+                {isEditing && (
+                  <div className="mt-2 space-y-2">
+                    {hostFields(edit, (key, value) => setEdit((prev) => ({ ...prev, [key]: value })), `edit-${m.id}`)}
+                    <label className="block text-xs text-brand-grey-80">
+                      New password (leave empty to keep the stored one)
+                      <input
+                        id={`edit-${m.id}-password`}
+                        type="password"
+                        autoComplete="new-password"
+                        value={edit.password}
+                        onChange={(e) => setEdit((prev) => ({ ...prev, password: e.target.value }))}
+                        className="mt-0.5 w-full text-xs border border-brand-mid-grey rounded px-2 py-1"
+                      />
+                    </label>
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => void handleUpdate(m)}
+                        disabled={editBusy}
+                        className="px-3 py-1 text-xs bg-brand-black text-white rounded disabled:bg-brand-mid-grey"
+                      >
+                        {editBusy ? 'Testing and saving…' : 'Save changes'}
+                      </button>
+                      <span className="text-brand-grey-80">
+                        The connection is tested before the change is stored.
+                      </span>
+                    </div>
+                    {editMsg.text && (
+                      <p className={editMsg.kind === 'err' ? 'text-brand-danger' : 'text-brand-grey-80'}>
+                        {editMsg.text}
+                      </p>
+                    )}
+                  </div>
+                )}
+              </li>
+            )
+          })}
+        </ul>
+      )}
+
+      <div className="border-t pt-3">
+        {!addOpen ? (
+          <div className="flex items-center gap-3">
+            <button
+              type="button"
+              disabled={!!loadError || mailboxes === null}
+              onClick={() => {
+                setAddOpen(true)
+                setSaveMsg({ kind: 'idle', text: '' })
+              }}
+              className="px-3 py-1 text-xs bg-brand-black text-white rounded"
+            >
+              Add mailbox
+            </button>
+            {saveMsg.text && (
+              <span className={`text-xs ${saveMsg.kind === 'err' ? 'text-brand-danger' : 'text-brand-grey-80'}`}>
+                {saveMsg.text}
+              </span>
+            )}
+          </div>
+        ) : (
+          <div className="space-y-2">
+            <div className="text-xs font-semibold text-brand-black">Add mailbox</div>
+            <label className="block text-xs text-brand-grey-80">
+              Provider
+              <select
+                id="mailbox-add-preset"
+                value={form.preset}
+                onChange={(e) => applyPreset(e.target.value)}
+                className="mt-0.5 w-full text-xs border border-brand-mid-grey rounded px-2 py-1 bg-white"
+              >
+                <option value={CUSTOM_PRESET}>Custom (enter the servers below)</option>
+                {presets.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="block text-xs text-brand-grey-80">
+              Email address
+              <input
+                id="mailbox-add-address"
+                type="email"
+                value={form.address}
+                onChange={(e) => onAddressChange(e.target.value)}
+                spellCheck={false}
+                autoComplete="off"
+                className="mt-0.5 w-full text-xs font-mono border border-brand-mid-grey rounded px-2 py-1"
+              />
+            </label>
+            <label className="block text-xs text-brand-grey-80">
+              {passwordLabel}
+              <input
+                id="mailbox-add-password"
+                type="password"
+                autoComplete="new-password"
+                value={form.password}
+                onChange={(e) => setFormField('password', e.target.value)}
+                className="mt-0.5 w-full text-xs border border-brand-mid-grey rounded px-2 py-1"
+              />
+            </label>
+            {hostFields(form, (key, value) => setFormField(key, value), 'mailbox-add')}
+            <div className="flex items-center gap-2 flex-wrap">
+              <button
+                type="button"
+                onClick={() => void handleTest()}
+                disabled={!canTest}
+                className="px-2 py-1 text-xs border rounded text-brand-grey-80 hover:text-brand-black disabled:opacity-50"
+              >
+                {test.kind === 'busy' ? 'Testing…' : 'Test connection'}
+              </button>
+              <button
+                type="button"
+                onClick={() => void handleAdd()}
+                disabled={!tested || saving}
+                title={tested ? undefined : 'Test the connection first'}
+                className="px-3 py-1 text-xs bg-brand-black text-white rounded disabled:bg-brand-mid-grey"
+              >
+                {saving ? 'Saving…' : 'Save'}
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  testRequest.current++
+                  setAddOpen(false)
+                  setForm(EMPTY_MAILBOX_FORM)
+                  setTest({ kind: 'idle', text: '' })
+                  setTested(false)
+                  setSaveMsg({ kind: 'idle', text: '' })
+                }}
+                disabled={saving}
+                className="px-2 py-1 text-xs border rounded text-brand-grey-80"
+              >
+                Cancel
+              </button>
+            </div>
+            {test.text && (
+              <p className={`text-xs ${test.kind === 'err' ? 'text-brand-danger' : 'text-brand-grey-80'}`}>
+                {test.text}
+              </p>
+            )}
+            {saveMsg.text && (
+              <p className={`text-xs ${saveMsg.kind === 'err' ? 'text-brand-danger' : 'text-brand-grey-80'}`}>
+                {saveMsg.text}
+              </p>
+            )}
+          </div>
         )}
       </div>
     </div>
@@ -1398,7 +2112,7 @@ export function ModelSelect({
 
 // ─── Business picker (SMS_BUSINESS_ID) ───────────────────────────────
 //
-// SMS_BUSINESS_ID must be a real StarChat businessId (a UUID). Typing it
+// SMS_BUSINESS_ID must be a real StarChat businessId (an opaque string). Typing it
 // blind is a footgun: a wrong value gets a cryptic 400/403 only later,
 // when something bills it. This picker resolves it from the businesses
 // the signed-in account can actually see, via the engine RPCs that hit
@@ -1408,45 +2122,16 @@ export function ModelSelect({
 // (mirrors mrcall-dashboard's /businesses search) — a bare term is an
 // exact match. That makes it scale to a reseller/admin with ~1000
 // businesses: we never page them all client-side, we `%q%` search.
-interface Business {
-  businessId: string
-  companyName?: string
-  nickname?: string
-  name?: string
-  surname?: string
-  emailAddress?: string
-  businessPhoneNumber?: string
-  totalHits?: number
-}
-
-const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
-
 function bizLabel(b: Business): string {
   const person = [b.name, b.surname].filter(Boolean).join(' ').trim()
   return b.companyName || b.nickname || person || b.businessId
 }
 
-// Wrap a search term for the StarChat LIKE filter: strip stray % then
-// bracket with %...% so "contrast" matches "CONTRAST ARQUITECTURA".
-function likeWrap(q: string): string {
-  return '%' + q.replace(/^%+/, '').replace(/%+$/, '') + '%'
-}
-
-// Route a typed term to the right search filter. Empty → null (caller
-// lists the account's own businesses). A UUID → exact businessId (no
-// wildcards). An '@' → email %substring%. Otherwise company-name
-// %substring%. Exported so the routing is unit-testable without the DOM.
+// Kept for callers of the original routing helper; discovery uses all filters.
 export function businessQuery(query: string): Record<string, string> | null {
-  const q = query.trim()
-  if (!q) return null
-  if (UUID_RE.test(q)) return { businessId: q }
-  if (q.includes('@')) return { emailAddress: likeWrap(q) }
-  return { companyName: likeWrap(q) }
+  return businessQueries(query)[0] ?? null
 }
-
-function asBusinesses(arr: unknown[]): Business[] {
-  return (arr as Business[]).filter((b) => b && typeof b.businessId === 'string')
-}
+const asBusinesses = checkedBusinesses
 
 // Validate a businessId against the caller's visible set (role-scoped by
 // StarChat). Returns true when it resolves, false when it doesn't, and
@@ -1465,89 +2150,110 @@ export function BusinessPicker({
   id,
   value,
   isDirty,
-  onChange
+  onChange,
+  lookupTimeoutMs = 12000
 }: {
   id: string
   value: string
   isDirty: boolean
   onChange: (v: string) => void
+  lookupTimeoutMs?: number
 }): JSX.Element {
   const [open, setOpen] = useState(false)
   const [query, setQuery] = useState('')
   const [results, setResults] = useState<Business[]>([])
-  const [totalHits, setTotalHits] = useState<number | null>(null)
   const [loading, setLoading] = useState(false)
   const [currentLabel, setCurrentLabel] = useState<string | null>(null)
   const [invalid, setInvalid] = useState(false)
-  const [notSignedIn, setNotSignedIn] = useState(false)
+  const [error, setError] = useState<string | null>(() => isAuthSessionActive() ? null : 'Sign in to MrCall again to search for a business.')
+  const [partial, setPartial] = useState(false)
+  const [truncated, setTruncated] = useState(false)
+  const [retry, setRetry] = useState(0)
+  const [context, setContext] = useState(0)
+  const [ready, setReady] = useState(isAuthSessionActive)
   const wrap = useRef<HTMLDivElement>(null)
+  const pending = useRef<AbortController | null>(null)
+  const lookup = useMemo(() => createBusinessLookup(window.zylch.mrcall), [])
 
-  // Resolve the current value's friendly name; "never empty" — if the
-  // account has exactly one business and nothing is set, adopt it.
   useEffect(() => {
-    let cancelled = false
-    void (async () => {
-      try {
-        if (value) {
-          const r = await window.zylch.mrcall.searchBusinesses({ businessId: value, limit: 1 })
-          if (cancelled) return
-          const b = asBusinesses(r.businesses).find((x) => x.businessId === value)
-          setCurrentLabel(b ? bizLabel(b) : null)
-          setInvalid(!b)
-          setNotSignedIn(false)
-        } else {
-          const r = await window.zylch.mrcall.listMyBusinesses({ limit: 2 })
-          if (cancelled) return
-          const b = asBusinesses(r.businesses)
-          const total = b[0]?.totalHits
-          setNotSignedIn(false)
-          if (b.length === 1 && (total == null || total === 1)) {
-            onChange(b[0].businessId) // sole business — populate it, never empty
-          }
-        }
-      } catch (e) {
-        if (cancelled) return
-        if ((e as { code?: number })?.code === -32010) setNotSignedIn(true)
-      }
-    })()
-    return () => {
-      cancelled = true
+    let previousUser = auth.currentUser
+    let authAvailable = isAuthSessionActive()
+    let transportAvailable = true
+    const invalidate = (available: boolean, message: string): void => {
+      pending.current?.abort()
+      setResults([])
+      setCurrentLabel(null)
+      setInvalid(false)
+      setLoading(false)
+      setPartial(false)
+      setTruncated(false)
+      setError(message)
+      setReady(available)
+      setContext(n => n + 1)
     }
-  }, [value]) // eslint-disable-line react-hooks/exhaustive-deps
+    const offAuth = onAuthStateChanged(auth, user => {
+      if (user === previousUser) return
+      previousUser = user
+      authAvailable = isAuthSessionActive()
+      invalidate(authAvailable && transportAvailable, 'The signed-in account changed. Search again.')
+    })
+    const offSession = onAuthSessionInvalidated(() => {
+      authAvailable = false
+      invalidate(false, 'Sign in to MrCall again to search for a business.')
+    })
+    const offStatus = window.zylch.onSidecarStatus(status => {
+      transportAvailable = status.alive
+      invalidate(authAvailable && transportAvailable, authAvailable
+        ? 'The backend connection changed. Search again.'
+        : 'Sign in to MrCall again to search for a business.')
+    })
+    return () => { pending.current?.abort(); offAuth(); offSession(); offStatus() }
+  }, [])
 
-  // Load options when open / query changes. Empty query → the account's
-  // own list; a term → a %substring% search (by businessId if a UUID, by
-  // email if it has an '@', else by company name).
+  // Resolve an existing selection, but never adopt a business without a click.
   useEffect(() => {
-    if (!open) return
+    if (open || !ready) return
+    setCurrentLabel(null)
+    setInvalid(false)
+    if (!value) return
     let cancelled = false
-    const run = async (): Promise<void> => {
-      setLoading(true)
-      try {
-        const bq = businessQuery(query)
-        const r = bq
-          ? await window.zylch.mrcall.searchBusinesses({ ...bq, limit: 25 })
-          : await window.zylch.mrcall.listMyBusinesses({ limit: 25 })
-        if (cancelled) return
-        const b = asBusinesses(r.businesses)
-        setResults(b)
-        setTotalHits(b[0]?.totalHits ?? b.length)
-        setNotSignedIn(false)
-      } catch (e) {
-        if (cancelled) return
-        setResults([])
-        setTotalHits(null)
-        if ((e as { code?: number })?.code === -32010) setNotSignedIn(true)
-      } finally {
-        if (!cancelled) setLoading(false)
-      }
-    }
-    const t = setTimeout(run, query.trim() ? 250 : 0)
-    return () => {
-      cancelled = true
-      clearTimeout(t)
-    }
-  }, [open, query])
+    const controller = new AbortController()
+    pending.current = controller
+    void boundedBusinessLookup(lookup, { businessId: value }, controller, lookupTimeoutMs).then(result => {
+      if (cancelled || controller.signal.aborted) return
+      const business = result.businesses.find(item => item.businessId === value)
+      setCurrentLabel(business ? bizLabel(business) : null)
+      setInvalid(!business && !result.partial)
+      setError(result.partial ? 'Business search is incomplete. Retry the search.' : null)
+    }).catch(reason => {
+      if (!cancelled && businessSearchError(reason).code !== 'cancelled') setError(businessSearchMessage(reason))
+    })
+    return () => { cancelled = true; controller.abort() }
+  }, [value, open, ready, context, lookup, lookupTimeoutMs])
+
+  useEffect(() => {
+    if (!open || !ready) return
+    let cancelled = false
+    const controller = new AbortController()
+    pending.current = controller
+    setLoading(true)
+    setResults([])
+    setError(null)
+    setPartial(false)
+    setTruncated(false)
+    const timer = setTimeout(() => {
+      void boundedBusinessLookup(lookup, query, controller, lookupTimeoutMs).then(result => {
+        if (cancelled || controller.signal.aborted) return
+        setResults(result.businesses)
+        setPartial(result.partial)
+        setTruncated(result.truncated)
+        setError(result.partial ? 'Business search is incomplete. Some searches failed; retry.' : null)
+      }).catch(reason => {
+        if (!cancelled && businessSearchError(reason).code !== 'cancelled') setError(businessSearchMessage(reason))
+      }).finally(() => { if (!cancelled) setLoading(false) })
+    }, query.trim() ? 250 : 0)
+    return () => { cancelled = true; clearTimeout(timer); controller.abort() }
+  }, [open, query, retry, ready, context, lookup, lookupTimeoutMs])
 
   useEffect(() => {
     if (!open) return
@@ -1567,6 +2273,7 @@ export function BusinessPicker({
 
   const pick = (b: Business): void => {
     onChange(b.businessId)
+    setError(null)
     setCurrentLabel(bizLabel(b))
     setInvalid(false)
     setOpen(false)
@@ -1610,6 +2317,7 @@ export function BusinessPicker({
           This business ID isn’t one your account can bill — pick the right one below.
         </div>
       )}
+      {!open && error && <p role="alert" className="text-xs text-brand-danger mt-1">{error}</p>}
       {open && (
         <div className="absolute z-20 mt-1 w-full rounded border border-brand-mid-grey bg-white shadow-lg">
           <div className="p-2 border-b border-brand-light-grey">
@@ -1622,14 +2330,14 @@ export function BusinessPicker({
               className="w-full px-2 py-1.5 border border-brand-mid-grey rounded text-sm focus:outline-none focus:ring-2 focus:ring-brand-mid-grey"
             />
           </div>
+          {error && <div role="alert" className="px-3 py-2 text-sm text-brand-danger">
+            {error}
+            <button type="button" className="ml-2 underline" disabled={!ready || loading} onClick={() => setRetry(n => n + 1)}>Retry search</button>
+          </div>}
           <ul role="listbox" className="max-h-64 overflow-auto py-1">
-            {notSignedIn ? (
-              <li className="px-3 py-2 text-sm text-brand-grey-80">
-                Sign in to MrCall to pick a business.
-              </li>
-            ) : loading ? (
+            {loading ? (
               <li className="px-3 py-2 text-sm text-brand-grey-80">Searching…</li>
-            ) : results.length === 0 ? (
+            ) : !error && results.length === 0 ? (
               <li className="px-3 py-2 text-sm text-brand-grey-80">
                 {query.trim() ? 'No matching business.' : 'No businesses found.'}
               </li>
@@ -1658,9 +2366,9 @@ export function BusinessPicker({
               ))
             )}
           </ul>
-          {totalHits != null && totalHits > results.length && (
+          {(truncated || partial) && (
             <div className="px-3 py-1.5 text-xs text-brand-grey-80 border-t border-brand-light-grey">
-              Showing {results.length} of {totalHits} — refine your search.
+              {truncated ? 'More businesses may match — refine your search.' : 'Results are incomplete.'}
             </div>
           )}
         </div>

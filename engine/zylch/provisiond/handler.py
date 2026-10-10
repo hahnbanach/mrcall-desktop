@@ -22,6 +22,7 @@ from typing import Any
 from zylch.rpc.firebase_auth import FirebaseAuthError, verify_firebase_id_token
 from zylch.services.settings_io import _quote
 from zylch.services.settings_schema import KNOWN_KEYS
+from zylch.services.credential_policy import excluded_finance_setting
 
 logger = logging.getLogger(__name__)
 
@@ -268,6 +269,8 @@ def handle_provision(claims: dict[str, Any], body: Any) -> tuple[int, dict[str, 
 
     # Python is the authority on which keys are valid Settings fields —
     # 400 naming every offender in one response rather than the first.
+    if any(excluded_finance_setting(key) for key in body):
+        raise ProvisionError(400, "Finance configuration is not transferable")
     unknown = sorted(str(k) for k in body if str(k) not in KNOWN_KEYS)
     if unknown:
         raise ProvisionError(400, f"unknown key(s): {', '.join(unknown)}")

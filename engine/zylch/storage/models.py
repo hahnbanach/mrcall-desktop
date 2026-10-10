@@ -1,6 +1,6 @@
 """SQLAlchemy ORM models for Zylch standalone (SQLite).
 
-13 models. SQLite-compatible column types only.
+SQLite-compatible column types only.
 """
 
 import uuid as _uuid
@@ -72,6 +72,62 @@ def _utcnow() -> datetime:
 
 
 # -------------------------------------------------------------------
+# MAILBOXES
+# -------------------------------------------------------------------
+
+
+class Mailbox(DictMixin, Base):
+    """One IMAP mailbox of a profile; every ``emails`` row belongs to one.
+
+    The primary row is the sign-up mailbox: its address is the profile's
+    ``owner_id`` and its password stays in the ``.env`` ``EMAIL_PASSWORD``,
+    so ``secret`` is NULL there. Additional mailboxes keep their password
+    in ``secret``, Fernet-encrypted under the profile's
+    ``MAILBOX_SECRET_KEY`` (see ``zylch.email.mailbox_secrets``); the
+    column never holds plaintext. ``removed_at`` hides a mailbox and its
+    rows without deleting them.
+    """
+
+    __tablename__ = "mailboxes"
+    _EXCLUDE_FROM_DICT: Set[str] = {"secret"}
+
+    id = Column(String(36), primary_key=True, default=_new_uuid)
+    owner_id = Column(Text, nullable=False, index=True)
+    address = Column(Text, nullable=False)
+    imap_host = Column(Text)
+    imap_port = Column(Integer)
+    smtp_host = Column(Text)
+    smtp_port = Column(Integer)
+    preset = Column(Text)
+    is_primary = Column(Boolean, nullable=False, default=False)
+    secret = Column(Text)
+    created_at = Column(DateTime, default=_utcnow)
+    last_sync_at = Column(DateTime)
+    last_error = Column(Text)
+    removed_at = Column(DateTime)
+
+    __table_args__ = (
+        UniqueConstraint("owner_id", "address", name="mailboxes_owner_address_unique"),
+    )
+
+
+def _default_mailbox_id(context) -> str:
+    """Column default for ``Email.mailbox_id`` when a writer passes none.
+
+    Resolves the owner's mailbox on the connection running the INSERT
+    (same transaction, no second writer on the SQLite file): the primary
+    row, materialised from the profile ``.env`` when the owner is its
+    address, otherwise the owner-keyed row. The sync always names its
+    mailbox; the send mirrors rely on this default (sent mail is the
+    primary's).
+    """
+    from zylch.email.mailboxes import resolve_default_mailbox_id
+
+    params = context.get_current_parameters()
+    return resolve_default_mailbox_id(context.connection, params["owner_id"])
+
+
+# -------------------------------------------------------------------
 # EMAILS
 # -------------------------------------------------------------------
 
@@ -85,6 +141,10 @@ class Email(DictMixin, Base):
         default=_new_uuid,
     )
     owner_id = Column(Text, nullable=False, index=True)
+    # The mailbox this copy was fetched from (``mailboxes.id``). NOT NULL:
+    # a NULL would be distinct in the unique constraint below and let two
+    # copies of one Message-ID collide or not by accident.
+    mailbox_id = Column(String(36), nullable=False, index=True, default=_default_mailbox_id)
     gmail_id = Column(Text, nullable=False)
     thread_id = Column(Text, nullable=False)
     from_email = Column(Text)
@@ -131,13 +191,23 @@ class Email(DictMixin, Base):
     # thread grouping.
     archived_at = Column(DateTime, nullable=True, index=True)
     deleted_at = Column(DateTime, nullable=True, index=True)
+    # PEC envelope (D4): ``gmail_id`` / ``message_id_header`` stay the
+    # envelope's Message-ID (the server finds the message by it); the
+    # wrapped original's Message-ID and the transport markers land here.
+    # NULL on every non-PEC row.
+    original_message_id = Column(Text, nullable=True)
+    pec_markers = Column(JSON(none_as_null=True), nullable=True)  # SQL NULL on ordinary mail
 
     __table_args__ = (
         UniqueConstraint(
             "owner_id",
+            "mailbox_id",
             "gmail_id",
-            name="emails_owner_gmail_unique",
+            name="emails_owner_mailbox_gmail_unique",
         ),
+        # The first-copy rule (D2) correlates rows on the Message-ID header;
+        # without this index the pickers and the ETA are quadratic.
+        Index("ix_emails_owner_message_id_header", "owner_id", "message_id_header"),
     )
 
 
@@ -610,6 +680,7 @@ class Draft(DictMixin, Base):
     body_format = Column(Text, default="html")
     in_reply_to = Column(Text)
     references = Column("references", JSON)
+    reply_binding = Column(JSON, nullable=True)
     thread_id = Column(Text)
     original_message_id = Column(Text)
     status = Column(Text, default="draft")

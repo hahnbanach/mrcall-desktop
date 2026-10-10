@@ -245,6 +245,8 @@ def join(key: str, *, drain: bool = False) -> Dict[str, Any]:
     if not store_exists(key):
         return {"ok": False, "reason": "no company memory exists for this key on this host"}
     current = current_company_key()
+    if current and store_exists(current) and dbm.current_memory_engine() is None and current != key:
+        return {"ok": False, "reason": "Company join refused: source assignment history is unavailable"}
     if current == key:
         # Same key — but the store may not have existed when this profile
         # booted (a typed key, refused then; the colleague minted since).
@@ -264,9 +266,17 @@ def join(key: str, *, drain: bool = False) -> Dict[str, Any]:
         return {"ok": True, "already": True, "merged": {}}
 
     with join_lock():
+        from zylch.services.task_assignment_join import refusal
+
+        blocked = refusal(dbm.current_memory_engine())
+        if blocked:
+            return {"ok": False, "reason": blocked}
         recover_locked()
         if current_company_key() == key:
             return {"ok": True, "already": True, "merged": {}}
+        blocked = refusal(dbm.current_memory_engine())
+        if blocked:
+            return {"ok": False, "reason": blocked}
         if drain:
             from zylch.cli.utils import get_owner_id
 
@@ -286,6 +296,14 @@ def _cut_over(key: str) -> Dict[str, Any]:
     from zylch.services.settings_io import update_env
     from zylch.storage import database as dbm
 
+    from zylch.qonto.guard import suspend_for_join
+    from zylch.services.task_assignment_join import refusal
+
+    blocked = refusal(dbm.current_memory_engine())
+    if blocked:
+        return {"ok": False, "reason": blocked}
+
+    suspend_for_join()
     current = current_company_key()
     source = dbm.current_memory_engine()
     if source is None or not current or not store_exists(current):

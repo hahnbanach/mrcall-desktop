@@ -1,0 +1,201 @@
+"""Policy injection/ownership tests. Live enforcement belongs to the R_4 probe."""
+from __future__ import annotations
+
+import importlib.util
+import json
+from pathlib import Path
+import subprocess
+import sys
+import tempfile
+import unittest
+
+SOURCE = Path(__file__).resolve().parents[2] / "scripts/server/egress_policy.py"
+spec = importlib.util.spec_from_file_location("egress_policy", SOURCE)
+policy = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(policy)
+
+
+def fixture():
+    return {"mode": "enforce", "profile_uid": "scratchR4A", "unix_uid": 2001,
+            "resolver": "127.0.0.54", "upstream": "1.1.1.1",
+            "endpoints": [{"suffix": "example.com", "tcp": [443], "udp": []}]}
+
+
+class PolicyTests(unittest.TestCase):
+    def test_rejects_injection_and_non_tenant_uids(self):
+        for key, values in {
+            "profile_uid": ["x\n[Service]", "../x", "a.sock", "a-b", ""],
+            "unix_uid": [0, -1, True, "2001", 2**31],
+            "resolver": ["127.0.0.1", "127.0.0.0", "127.0.0.255", "1.1.1.1", "::1", "127.0.0.54\nserver=8.8.8.8"],
+            "upstream": ["127.0.0.1", "169.254.169.254", "10.0.0.1", "224.0.0.1", "fd00::1", "resolver.example", "2606:4700:4700::1111%lo", "2606:4700:4700::1111%lo\nserver=8.8.8.8", 16843009],
+        }.items():
+            for value in values:
+                with self.subTest(key=key, value=value):
+                    raw = fixture()
+                    raw[key] = value
+                    with self.assertRaises(policy.PolicyError):
+                        policy.compile_policy(raw)
+
+    def test_system_uid_is_supported(self):
+        raw = fixture()
+        raw["unix_uid"] = 998
+        self.assertIn("meta skuid 998 jump tenant", policy.compile_policy(raw)["firewall.nft"])
+
+    def test_endpoint_policy_is_not_a_dns_or_nft_program(self):
+        for suffix in ["com", "co.uk", "*.example.com", "Example.com", "example.com.",
+                       "example.com/1.1.1.1", "example.com\nserver=8.8.8.8", "1.2.3.4"]:
+            raw = fixture()
+            raw["endpoints"][0]["suffix"] = suffix
+            with self.subTest(suffix=suffix), self.assertRaises(policy.PolicyError):
+                policy.compile_policy(raw)
+        for ports in [[53], [853], [443, 443], [False], [0], [65536], ["443; accept"]]:
+            raw = fixture()
+            raw["endpoints"][0]["tcp"] = ports
+            with self.subTest(ports=ports), self.assertRaises(policy.PolicyError):
+                policy.compile_policy(raw)
+
+    def test_no_silent_shadowing_or_extra_fields(self):
+        for suffix in ["example.com", "www.example.com", "com"]:
+            raw = fixture()
+            raw["endpoints"].append({"suffix": suffix, "tcp": [993], "udp": []})
+            with self.subTest(suffix=suffix), self.assertRaises(policy.PolicyError):
+                policy.compile_policy(raw)
+        raw = fixture()
+        raw["environment"] = "not-an-approved-input"
+        with self.assertRaises(policy.PolicyError):
+            policy.compile_policy(raw)
+        with self.assertRaises(policy.PolicyError):
+            json.loads('{"unix_uid": 2001, "unix_uid": 0}', object_pairs_hook=policy.unique_fields)
+
+    def test_ports_do_not_leak_between_endpoint_sets(self):
+        raw = fixture()
+        raw["endpoints"].append({"suffix": "mail.example.net", "tcp": [993, 587], "udp": []})
+        output = policy.compile_policy(raw)
+        rules = output["firewall.nft"]
+        self.assertIn("ip daddr @e0_4 tcp dport { 443 }", rules)
+        self.assertIn("ip daddr @e1_4 tcp dport { 587, 993 }", rules)
+        self.assertNotIn("ip daddr @e0_4 tcp dport { 587", rules)
+        self.assertIn("ip6 daddr @e1_6 tcp dport { 587, 993 }", rules)
+        self.assertIn("local=/#/", output["dnsmasq.conf"])
+
+    def test_independent_tenant_artifacts_and_no_global_mutation(self):
+        a = policy.compile_policy(fixture())
+        raw = fixture()
+        raw.update(profile_uid="scratchR4B", unix_uid=2002, resolver="127.0.0.55")
+        b = policy.compile_policy(raw)
+        ma, mb = (json.loads(x["manifest.json"]) for x in (a, b))
+        self.assertNotEqual(ma["table"], mb["table"])
+        self.assertNotEqual(ma["install_directory"], mb["install_directory"])
+        self.assertNotIn(mb["table"], a["firewall.nft"])
+        self.assertNotIn("flush ruleset", a["firewall.nft"])
+        self.assertNotIn("ct state established accept", a["firewall.nft"])
+        self.assertIn("ct direction reply ct state established", a["firewall.nft"])
+        self.assertIn("meta skuid 2001 jump tenant", a["firewall.nft"])
+        self.assertEqual(ma["status"], "scratch-experiment-not-production-approved")
+
+    def test_service_pidfile_is_not_disabled_by_dns_config(self):
+        artifacts = policy.compile_policy(fixture())
+        service = next(v for k, v in artifacts.items() if k.startswith("mrcall-dns-"))
+        self.assertIn("Type=forking", service)
+        self.assertIn("PIDFile=/run/mrcall-dns-", service)
+        self.assertIn("--pid-file=/run/mrcall-dns-", service)
+        self.assertNotIn("pid-file=", artifacts["dnsmasq.conf"])
+
+    def test_every_reject_is_logged_first_and_logging_never_accepts(self):
+        rules = policy.compile_policy(fixture())["firewall.nft"].splitlines()
+        tag = json.loads(policy.compile_policy(fixture())["manifest.json"])["tenant"][3:]
+        rejects = [i for i, r in enumerate(rules) if r.strip().endswith("reject")
+                   or "reject with icmpx" in r]
+        self.assertEqual(len(rejects), 3)
+        for i in rejects:
+            log = rules[i - 1]
+            self.assertIn(f'log prefix "mc-deny-{tag} "', log)
+            self.assertIn("limit rate", log)
+            self.assertNotIn("accept", log)
+            # the log rule and its reject select the same packets
+            self.assertEqual(log.split(" limit rate")[0].strip(),
+                             rules[i].replace("counter reject with icmpx type admin-prohibited", "")
+                             .replace("counter reject", "").strip())
+
+    def test_dns_refusals_are_logged_and_allowed_lookups_are_dropped(self):
+        import re
+        artifacts = policy.compile_policy(fixture())
+        self.assertIn("log-queries", artifacts["dnsmasq.conf"].splitlines())
+        unit = next(v for k, v in artifacts.items() if k.startswith("mrcall-dns-"))
+        line = next(x for x in unit.splitlines() if x.startswith("LogFilterPatterns="))
+        self.assertTrue(line.startswith("LogFilterPatterns=~"))
+        self.assertNotIn("%", line)  # no systemd specifier expansion
+        drop = re.compile(line.split("=~", 1)[1])
+        for allowed in ["dnsmasq[811]: query[A] api.mrcall.ai from 127.0.0.54",
+                        "dnsmasq[811]: query[AAAA] api.mrcall.ai from 127.0.0.54",
+                        "dnsmasq[811]: query[type=999] api.allowed.example from 127.0.0.54",
+                        "dnsmasq[811]: forwarded api.mrcall.ai to 51.159.69.156",
+                        "dnsmasq[811]: reply api.mrcall.ai is 203.0.113.7",
+                        "dnsmasq[811]: reply x y.allowed.example is 9.9.9.11",
+                        "dnsmasq[811]: reply error x.allowed.example is 9.9.9.11",
+                        "Oct  3 09:04:01 dnsmasq[811]: reply api.mrcall.ai is 203.0.113.7",
+                        "dnsmasq[811]: cached api.mrcall.ai is 203.0.113.7",
+                        "dnsmasq[811]: nftset add inet t e0_4 203.0.113.7 api.mrcall.ai"]:
+            with self.subTest(dropped=allowed):
+                self.assertIsNotNone(drop.search(allowed))
+        # the first word after dnsmasq's own prefix decides; a name (which may
+        # hold spaces and colons) never does
+        for kept in ["dnsmasq[811]: config evil.example is NXDOMAIN",
+                     "dnsmasq[811]: config x: reply a is b.evil.example is NXDOMAIN",
+                     "dnsmasq[811]: config dnsmasq[1]: query[A] x from y is NXDOMAIN",
+                     "dnsmasq[811]: config evil.reply is NXDOMAIN",
+                     "Oct  3 09:04:01 dnsmasq[811]: config evil.reply is NXDOMAIN",
+                     "dnsmasq[811]: config <name unprintable> is NXDOMAIN",
+                     "dnsmasq[811]: reply error is SERVFAIL",
+                     "dnsmasq[811]: reply error is REFUSED",
+                     "dnsmasq[811]: possible DNS-rebind attack detected: internal.example",
+                     "dnsmasq[811]: started, version 2.91 cachesize 0"]:
+            with self.subTest(kept=kept):
+                self.assertIsNone(drop.search(kept))
+
+    def test_upstream_list_fails_over_and_legacy_string_keeps_its_digest(self):
+        raw = fixture()
+        raw["upstream"] = ["51.159.69.156", "51.159.69.162"]
+        dns = policy.compile_policy(raw)["dnsmasq.conf"]
+        self.assertIn("server=/example.com/51.159.69.156", dns)
+        self.assertIn("server=/example.com/51.159.69.162", dns)
+        self.assertEqual(policy.validate(fixture())["upstream"], "1.1.1.1")
+        # the legacy single-string form keeps the digest it had before lists
+        legacy = fixture()
+        legacy["mode"] = "observe"
+        self.assertEqual(json.loads(policy.compile_policy(legacy)["manifest.json"])["observe_marker"],
+                         "mrcall mode=observe policy=2187a35462157ed4067de8996ce449769febbefb4448330bfd77363e6feb4c77")
+        for bad in [[], ["1.1.1.1", "1.1.1.1"], ["1.1.1.1"] * 5, ["1.1.1.1", "10.0.0.1"],
+                    ["1.1.1.1", "8.8.8.8\nserver=9.9.9.9"], ["1.1.1.1", 16843009], "1.1.1.1 8.8.8.8",
+                    ["1.1.1.1", True], ["1.1.1.1", ["8.8.8.8"]], ["1.1.1.1", "::ffff:1.1.1.1"],
+                    "::ffff:1.1.1.1", "64:ff9b::a9fe:a9fe", "::a00:1", "64:ff9b:1::808:808",
+                    "2606:4700:4700::1111%eth0"]:
+            raw = fixture()
+            raw["upstream"] = bad
+            with self.subTest(upstream=bad), self.assertRaises(policy.PolicyError):
+                policy.compile_policy(raw)
+
+    def test_cli_refuses_overwrite_and_does_not_echo_bad_input(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            source = root / "policy.json"
+            source.write_text(json.dumps(fixture()))
+            out = root / "out"
+            first = subprocess.run([sys.executable, str(SOURCE), str(source), str(out)], capture_output=True)
+            self.assertEqual(first.returncode, 0)
+            before = {x.name: x.read_bytes() for x in out.iterdir()}
+            second = subprocess.run([sys.executable, str(SOURCE), str(source), str(out)], capture_output=True)
+            self.assertEqual(second.returncode, 2)
+            self.assertEqual(before, {x.name: x.read_bytes() for x in out.iterdir()})
+            marker = "PRIVATE_INPUT_MUST_NOT_BE_ECHOED"
+            raw = fixture()
+            raw["upstream"] = marker
+            source.write_text(json.dumps(raw))
+            bad = subprocess.run([sys.executable, str(SOURCE), str(source), str(root / "bad")], capture_output=True)
+            self.assertEqual(bad.returncode, 2)
+            self.assertNotIn(marker.encode(), bad.stdout + bad.stderr)
+            self.assertFalse((root / "bad").exists())
+
+
+if __name__ == "__main__":
+    unittest.main()

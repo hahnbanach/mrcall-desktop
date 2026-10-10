@@ -1,0 +1,3674 @@
+{
+  "version": 1,
+  "source_sha256": {
+    "preload": "f55a049e15a2e0a16751b6346458a2c51a88825fe1295dac2820a5111f55184f",
+    "renderer": "853a661aac6641ad4399aa73cc67f327a0add1d5d741ebe771a0a7913951822b",
+    "finance": "85643cf1d0e4848ca801c5d177ef50451ad043ea86e25c8c16039e2bf246db6e"
+  },
+  "command": "ENGINE_PYTHON=../engine/venv/bin/python CS_KERNEL_ROOT=../../cs-kernel npm run test:rpc-contracts",
+  "limits": [
+    "Engine accepted/required parameter names are runtime-enforced docstring declarations; parameter value types and returns have no shared runtime schema.",
+    "Preload payload keys use the TypeScript checker plus local named-property assignment extraction; dynamic indexed payloads remain explicit.",
+    "Renderer argument assignability checks the first callable signature against preload declarations, including defaults. Declared return assignability is checked; any/unknown may hide drift and no declaration proves runtime results.",
+    "Kernel candidates are Python AST calls named call_sync, call_rpc or call; aliases with other names and dynamically generated calls are outside this inventory.",
+    "Kernel variable payloads and computed method names are reported without dataflow resolution; Any returns are not validated.",
+    "WebSocket transport tests use fixture claims; Firebase verification, deployed clones and packaged installers are outside these checks."
+  ],
+  "engine": {
+    "account.balance": {
+      "accepted": [],
+      "required": [],
+      "declared_return": "{balance_credits, balance_micro_usd, ...}",
+      "open": false
+    },
+    "account.set_firebase_token": {
+      "accepted": [
+        "email",
+        "expires_at_ms",
+        "id_token",
+        "refresh_token",
+        "uid"
+      ],
+      "required": [
+        "expires_at_ms",
+        "id_token",
+        "uid"
+      ],
+      "declared_return": "{ok}",
+      "open": false
+    },
+    "account.sign_out": {
+      "accepted": [],
+      "required": [],
+      "declared_return": "{ok}",
+      "open": false
+    },
+    "account.who_am_i": {
+      "accepted": [],
+      "required": [],
+      "declared_return": "{signed_in, uid?, email?, expires_at_ms?}",
+      "open": false
+    },
+    "agents.get_prompt": {
+      "accepted": [
+        "key"
+      ],
+      "required": [],
+      "declared_return": "{ok, key, prompt}.",
+      "open": false
+    },
+    "agents.train_all": {
+      "accepted": [],
+      "required": [],
+      "declared_return": "{ok, results}.",
+      "open": false
+    },
+    "auth.refresh": {
+      "accepted": [
+        "id_token",
+        "refresh_token"
+      ],
+      "required": [
+        "id_token"
+      ],
+      "declared_return": "{ok, uid, expires_at_ms}.",
+      "open": false
+    },
+    "campaign.add_contact": {
+      "accepted": [
+        "campaign_id",
+        "dossier",
+        "draft_body",
+        "draft_subject",
+        "email",
+        "language",
+        "message_id",
+        "state",
+        "stratum",
+        "uid",
+        "verdict"
+      ],
+      "required": [
+        "campaign_id",
+        "email"
+      ],
+      "declared_return": "contact dict.",
+      "open": false
+    },
+    "campaign.contacts": {
+      "accepted": [
+        "campaign_id",
+        "state"
+      ],
+      "required": [
+        "campaign_id"
+      ],
+      "declared_return": "list of contact dicts.",
+      "open": false
+    },
+    "campaign.create": {
+      "accepted": [
+        "brief",
+        "name"
+      ],
+      "required": [
+        "name"
+      ],
+      "declared_return": "campaign dict.",
+      "open": false
+    },
+    "campaign.list": {
+      "accepted": [],
+      "required": [],
+      "declared_return": "list of campaigns with contact/state counts.",
+      "open": false
+    },
+    "campaign.update_contact": {
+      "accepted": [
+        "contact_id",
+        "dossier",
+        "draft_body",
+        "draft_subject",
+        "language",
+        "message_id",
+        "state",
+        "stratum",
+        "uid",
+        "verdict"
+      ],
+      "required": [
+        "contact_id"
+      ],
+      "declared_return": "{ok, contact}.",
+      "open": false
+    },
+    "chat.approve": {
+      "accepted": [
+        "approved",
+        "edited_input",
+        "mode",
+        "tool_use_id"
+      ],
+      "required": [
+        "tool_use_id"
+      ],
+      "declared_return": "{ok: true}.",
+      "open": false
+    },
+    "chat.send": {
+      "accepted": [
+        "assignment_policy_version",
+        "assignment_thread_key",
+        "context",
+        "contextual_email_policy_version",
+        "conversation_history",
+        "conversation_id",
+        "email_context",
+        "history_handle",
+        "history_mode",
+        "history_revision",
+        "message",
+        "mutation_policy",
+        "policy_version"
+      ],
+      "required": [
+        "message"
+      ],
+      "declared_return": "ChatService result with managed binding fields.",
+      "open": false
+    },
+    "drafts.discard": {
+      "accepted": [
+        "draft_id"
+      ],
+      "required": [
+        "draft_id"
+      ],
+      "declared_return": "{ok, discarded, draft_id, reason?}.",
+      "open": false
+    },
+    "drafts.list": {
+      "accepted": [
+        "status"
+      ],
+      "required": [],
+      "declared_return": "list of draft dicts.",
+      "open": false
+    },
+    "emails.archive": {
+      "accepted": [
+        "thread_id"
+      ],
+      "required": [
+        "thread_id"
+      ],
+      "declared_return": "{ok, archived, mailboxes: [{mailbox_id, attempted, moved, error}]}.",
+      "open": false
+    },
+    "emails.delete": {
+      "accepted": [
+        "thread_id"
+      ],
+      "required": [
+        "thread_id"
+      ],
+      "declared_return": "{ok, deleted}.",
+      "open": false
+    },
+    "emails.list_by_thread": {
+      "accepted": [
+        "thread_id"
+      ],
+      "required": [
+        "thread_id"
+      ],
+      "declared_return": "{\"emails\": [...]}.",
+      "open": false
+    },
+    "emails.list_inbox": {
+      "accepted": [
+        "limit",
+        "mailbox_id",
+        "offset"
+      ],
+      "required": [],
+      "declared_return": "{\"threads\": [...]}.",
+      "open": false
+    },
+    "emails.list_sent": {
+      "accepted": [
+        "limit",
+        "mailbox_id",
+        "offset"
+      ],
+      "required": [],
+      "declared_return": "{\"threads\": [...]}.",
+      "open": false
+    },
+    "emails.mark_read": {
+      "accepted": [
+        "thread_id"
+      ],
+      "required": [
+        "thread_id"
+      ],
+      "declared_return": "{ok, affected}.",
+      "open": false
+    },
+    "emails.needs_reply": {
+      "accepted": [
+        "thread_ids"
+      ],
+      "required": [
+        "thread_ids"
+      ],
+      "declared_return": "per-thread verdict on the newest inbound.",
+      "open": false
+    },
+    "emails.pin": {
+      "accepted": [
+        "pinned",
+        "thread_id"
+      ],
+      "required": [
+        "pinned",
+        "thread_id"
+      ],
+      "declared_return": "{ok, affected}.",
+      "open": false
+    },
+    "emails.search": {
+      "accepted": [
+        "folder",
+        "limit",
+        "mailbox_id",
+        "offset",
+        "query"
+      ],
+      "required": [],
+      "declared_return": "{\"threads\": [...]}.",
+      "open": false
+    },
+    "google.calendar.cancel": {
+      "accepted": [],
+      "required": [],
+      "declared_return": "{cancelled}",
+      "open": false
+    },
+    "google.calendar.connect": {
+      "accepted": [],
+      "required": [],
+      "declared_return": "{ok, email, scope}",
+      "open": false
+    },
+    "google.calendar.disconnect": {
+      "accepted": [],
+      "required": [],
+      "declared_return": "{ok}",
+      "open": false
+    },
+    "google.calendar.status": {
+      "accepted": [],
+      "required": [],
+      "declared_return": "{connected, signed_in, email?}",
+      "open": false
+    },
+    "instructions.preview": {
+      "accepted": [],
+      "required": [],
+      "declared_return": "{space_id, documents: [{path, revision, sha256, content_base64}], block}.",
+      "open": false
+    },
+    "instructions.store": {
+      "accepted": [
+        "content_base64",
+        "expected_revision",
+        "path",
+        "space_id"
+      ],
+      "required": [
+        "content_base64",
+        "expected_revision",
+        "path",
+        "space_id"
+      ],
+      "declared_return": "document metadata.",
+      "open": false
+    },
+    "llm.models": {
+      "accepted": [
+        "provider"
+      ],
+      "required": [],
+      "declared_return": "free catalog without changing saved policy.",
+      "open": false
+    },
+    "mailboxes.add": {
+      "accepted": [
+        "address",
+        "imap_host",
+        "imap_port",
+        "password",
+        "preset",
+        "smtp_host",
+        "smtp_port"
+      ],
+      "required": [
+        "address",
+        "password"
+      ],
+      "declared_return": "{ok, status, message?, mailbox?}.",
+      "open": false
+    },
+    "mailboxes.list": {
+      "accepted": [],
+      "required": [],
+      "declared_return": "{mailboxes: [{id, address, imap_host, imap_port, smtp_host, smtp_port, preset, is_primary, configured, state, last_sync_at, last_error, created_at}]}.",
+      "open": false
+    },
+    "mailboxes.presets": {
+      "accepted": [],
+      "required": [],
+      "declared_return": "{presets: [{id, label, domains, imap_host, imap_port, imap_security, smtp_host, smtp_port, smtp_security, username, password_label}]}.",
+      "open": false
+    },
+    "mailboxes.remove": {
+      "accepted": [
+        "mailbox_id"
+      ],
+      "required": [
+        "mailbox_id"
+      ],
+      "declared_return": "{ok, status, message?, mailbox?}.",
+      "open": false
+    },
+    "mailboxes.test": {
+      "accepted": [
+        "address",
+        "imap_host",
+        "imap_port",
+        "password",
+        "smtp_host",
+        "smtp_port"
+      ],
+      "required": [
+        "address",
+        "password"
+      ],
+      "declared_return": "{ok, status, message}.",
+      "open": false
+    },
+    "mailboxes.update": {
+      "accepted": [
+        "imap_host",
+        "imap_port",
+        "mailbox_id",
+        "password",
+        "preset",
+        "smtp_host",
+        "smtp_port"
+      ],
+      "required": [
+        "mailbox_id"
+      ],
+      "declared_return": "{ok, status, message?, mailbox?}.",
+      "open": false
+    },
+    "memory.join": {
+      "accepted": [
+        "key"
+      ],
+      "required": [],
+      "declared_return": "{ok, reason?, blocking?, already?, merged?, self_notion?, blob_count?, contributors?}.",
+      "open": false
+    },
+    "memory.join_preview": {
+      "accepted": [
+        "key"
+      ],
+      "required": [],
+      "declared_return": "{well_formed, exists, reason, self_notion?, blob_count?, fact_count?, contributors?}.",
+      "open": false
+    },
+    "memory.key_mint": {
+      "accepted": [],
+      "required": [],
+      "declared_return": "{key, minted}.",
+      "open": false
+    },
+    "memory.key_validate": {
+      "accepted": [
+        "key"
+      ],
+      "required": [],
+      "declared_return": "{well_formed, reason}.",
+      "open": false
+    },
+    "memory.reconsolidate_now": {
+      "accepted": [],
+      "required": [],
+      "declared_return": "summary dict.",
+      "open": false
+    },
+    "memory.restore_version": {
+      "accepted": [
+        "blob_id",
+        "version_id"
+      ],
+      "required": [],
+      "declared_return": "{ok, blob?, version_id?, reason?}.",
+      "open": false
+    },
+    "memory.status": {
+      "accepted": [],
+      "required": [],
+      "declared_return": "{has_key, available, reason, joining?, joining_reason?, self_notion?, blob_count?, contributors?}.",
+      "open": false
+    },
+    "mrcall.list_my_businesses": {
+      "accepted": [
+        "limit",
+        "offset"
+      ],
+      "required": [],
+      "declared_return": "{businesses, role}",
+      "open": false
+    },
+    "mrcall.search_businesses": {
+      "accepted": [
+        "address",
+        "businessId",
+        "businessPhoneNumber",
+        "companyName",
+        "countryAlpha2",
+        "emailAddress",
+        "limit",
+        "name",
+        "nickname",
+        "offset",
+        "subscriptionStatus",
+        "surname",
+        "vatId"
+      ],
+      "required": [],
+      "declared_return": "{businesses, role}",
+      "open": false
+    },
+    "narration.predict": {
+      "accepted": [
+        "context",
+        "message"
+      ],
+      "required": [],
+      "declared_return": "{\"text\": str}.",
+      "open": false
+    },
+    "narration.summarize": {
+      "accepted": [
+        "context",
+        "lines"
+      ],
+      "required": [],
+      "declared_return": "{\"text\": str}.",
+      "open": false
+    },
+    "preparation.pause": {
+      "accepted": [],
+      "required": [],
+      "declared_return": "preparation state or result.",
+      "open": false
+    },
+    "preparation.reset_failures": {
+      "accepted": [
+        "source",
+        "stage"
+      ],
+      "required": [
+        "source",
+        "stage"
+      ],
+      "declared_return": "preparation state or result.",
+      "open": false
+    },
+    "preparation.resume": {
+      "accepted": [],
+      "required": [],
+      "declared_return": "preparation state or result.",
+      "open": false
+    },
+    "preparation.status": {
+      "accepted": [],
+      "required": [],
+      "declared_return": "preparation state or result.",
+      "open": false
+    },
+    "profiles.create": {
+      "accepted": [
+        "email",
+        "values"
+      ],
+      "required": [
+        "email",
+        "values"
+      ],
+      "declared_return": "{ok, profile} | error.",
+      "open": false
+    },
+    "projects.create": {
+      "accepted": [
+        "files",
+        "project",
+        "space_id"
+      ],
+      "required": [
+        "files",
+        "project",
+        "space_id"
+      ],
+      "declared_return": "project metadata and initial files.",
+      "open": false
+    },
+    "projects.files": {
+      "accepted": [
+        "limit",
+        "offset",
+        "project"
+      ],
+      "required": [
+        "project"
+      ],
+      "declared_return": "paginated document metadata.",
+      "open": false
+    },
+    "projects.history": {
+      "accepted": [
+        "limit",
+        "offset",
+        "path",
+        "project"
+      ],
+      "required": [
+        "path",
+        "project"
+      ],
+      "declared_return": "paginated revision metadata.",
+      "open": false
+    },
+    "projects.list": {
+      "accepted": [
+        "limit",
+        "offset"
+      ],
+      "required": [],
+      "declared_return": "paginated project metadata.",
+      "open": false
+    },
+    "projects.read": {
+      "accepted": [
+        "path",
+        "project",
+        "revision"
+      ],
+      "required": [
+        "path",
+        "project"
+      ],
+      "declared_return": "document metadata and base64 bytes.",
+      "open": false
+    },
+    "projects.write": {
+      "accepted": [
+        "content_base64",
+        "expected_revision",
+        "path",
+        "project",
+        "space_id"
+      ],
+      "required": [
+        "content_base64",
+        "expected_revision",
+        "path",
+        "project",
+        "space_id"
+      ],
+      "declared_return": "document metadata.",
+      "open": false
+    },
+    "qonto.accounts": {
+      "accepted": [
+        "account_ids"
+      ],
+      "required": [],
+      "declared_return": "authorized selected accounts and provider balances.",
+      "open": false
+    },
+    "qonto.connect": {
+      "accepted": [
+        "account_ids",
+        "api_key",
+        "authority_confirmed",
+        "challenge_id",
+        "consent_version",
+        "credential_source",
+        "login"
+      ],
+      "required": [
+        "account_ids",
+        "authority_confirmed",
+        "challenge_id",
+        "consent_version"
+      ],
+      "declared_return": "connection status.",
+      "open": false
+    },
+    "qonto.delete_imported_data": {
+      "accepted": [
+        "confirmed"
+      ],
+      "required": [
+        "confirmed"
+      ],
+      "declared_return": "deletion of private imported source data.",
+      "open": false
+    },
+    "qonto.disconnect": {
+      "accepted": [],
+      "required": [],
+      "declared_return": "application credential removal, disconnected status and generation.",
+      "open": false
+    },
+    "qonto.prepare": {
+      "accepted": [
+        "resume"
+      ],
+      "required": [],
+      "declared_return": "one bounded private finance preparation batch.",
+      "open": false
+    },
+    "qonto.publication_preview": {
+      "accepted": [],
+      "required": [],
+      "declared_return": "minimal fact, audience disclosure and bound confirmation preview.",
+      "open": false
+    },
+    "qonto.publish": {
+      "accepted": [
+        "confirmed",
+        "preview_id",
+        "resume"
+      ],
+      "required": [],
+      "declared_return": "consented minimal company fact publication outcome or safe refusal.",
+      "open": false
+    },
+    "qonto.status": {
+      "accepted": [],
+      "required": [],
+      "declared_return": "safe connection state, generation, stored-credential flag and persisted coverage.",
+      "open": false
+    },
+    "qonto.summary": {
+      "accepted": [
+        "account_ids",
+        "currency",
+        "date_basis",
+        "date_from",
+        "date_to",
+        "side",
+        "statuses"
+      ],
+      "required": [
+        "date_basis",
+        "date_from",
+        "date_to",
+        "statuses"
+      ],
+      "declared_return": "exact grouped period flow, never account balance.",
+      "open": false
+    },
+    "qonto.sync": {
+      "accepted": [],
+      "required": [],
+      "declared_return": "bounded source-only refresh and durable partial coverage.",
+      "open": false
+    },
+    "qonto.test": {
+      "accepted": [
+        "account_ids",
+        "api_key",
+        "credential_source",
+        "login"
+      ],
+      "required": [],
+      "declared_return": "tested organization and confirmation challenge.",
+      "open": false
+    },
+    "qonto.transaction": {
+      "accepted": [
+        "source_id"
+      ],
+      "required": [
+        "source_id"
+      ],
+      "declared_return": "authorized bounded source evidence.",
+      "open": false
+    },
+    "qonto.transactions": {
+      "accepted": [
+        "account_ids",
+        "currency",
+        "date_basis",
+        "date_from",
+        "date_to",
+        "page",
+        "page_size",
+        "side",
+        "statuses"
+      ],
+      "required": [
+        "date_basis",
+        "date_from",
+        "date_to",
+        "statuses"
+      ],
+      "declared_return": "bounded transactions and coverage.",
+      "open": false
+    },
+    "settings.get": {
+      "accepted": [],
+      "required": [],
+      "declared_return": "{key: value} for the active profile's .env.",
+      "open": false
+    },
+    "settings.get_secret": {
+      "accepted": [
+        "key"
+      ],
+      "required": [
+        "key"
+      ],
+      "declared_return": "{key, value} for ONE secret field.",
+      "open": false
+    },
+    "settings.schema": {
+      "accepted": [],
+      "required": [],
+      "declared_return": "list of field descriptors (no values).",
+      "open": false
+    },
+    "settings.update": {
+      "accepted": [
+        "updates"
+      ],
+      "required": [
+        "updates"
+      ],
+      "declared_return": "{ok, applied: [keys]}.",
+      "open": false
+    },
+    "setup.state": {
+      "accepted": [],
+      "required": [],
+      "declared_return": "current onboarding state.",
+      "open": false
+    },
+    "sms.get_sender": {
+      "accepted": [],
+      "required": [],
+      "declared_return": "{sender, business_id} | {error: 'auth_expired'}.",
+      "open": false
+    },
+    "sms.set_sender": {
+      "accepted": [
+        "sender"
+      ],
+      "required": [
+        "sender"
+      ],
+      "declared_return": "{sender, business_id} | {error: 'auth_expired'}.",
+      "open": false
+    },
+    "sync.run": {
+      "accepted": [
+        "days_back"
+      ],
+      "required": [],
+      "declared_return": "result dict.",
+      "open": false
+    },
+    "system.capabilities": {
+      "accepted": [],
+      "required": [],
+      "declared_return": "protocol capabilities supported by this engine.",
+      "open": false
+    },
+    "tasks.assignment.commit": {
+      "accepted": [
+        "grant",
+        "intent"
+      ],
+      "required": [
+        "grant",
+        "intent"
+      ],
+      "declared_return": "exact acknowledged assignment receipt.",
+      "open": false
+    },
+    "tasks.assignment.get": {
+      "accepted": [
+        "thread_key"
+      ],
+      "required": [
+        "thread_key"
+      ],
+      "declared_return": "authenticated task and retained audit.",
+      "open": false
+    },
+    "tasks.assignment.list": {
+      "accepted": [],
+      "required": [],
+      "declared_return": "authenticated complete company task rows.",
+      "open": false
+    },
+    "tasks.assignment.preview": {
+      "accepted": [
+        "assignee_uid",
+        "expected_revision",
+        "handled_ref",
+        "operation",
+        "reason",
+        "source_id",
+        "task_id",
+        "thread_key"
+      ],
+      "required": [
+        "expected_revision",
+        "operation",
+        "thread_key"
+      ],
+      "declared_return": "exact unsigned versioned intent.",
+      "open": false
+    },
+    "tasks.assignment.project": {
+      "accepted": [
+        "thread_key"
+      ],
+      "required": [
+        "thread_key"
+      ],
+      "declared_return": "held/assigned/closed exact-identity projection.",
+      "open": false
+    },
+    "tasks.assignment.reply_evidence": {
+      "accepted": [
+        "source_id",
+        "thread_key"
+      ],
+      "required": [
+        "source_id",
+        "thread_key"
+      ],
+      "declared_return": "owner-scoped live Sent evidence without mail content.",
+      "open": false
+    },
+    "tasks.complete": {
+      "accepted": [
+        "actor",
+        "note",
+        "task_id",
+        "why"
+      ],
+      "required": [
+        "task_id"
+      ],
+      "declared_return": "{ok: bool}.",
+      "open": false
+    },
+    "tasks.create": {
+      "accepted": [
+        "action_required",
+        "channel",
+        "contact_email",
+        "contact_name",
+        "contact_phone",
+        "event_id",
+        "event_type",
+        "reason",
+        "reopen_if_closed",
+        "sources",
+        "suggested_action",
+        "title",
+        "urgency"
+      ],
+      "required": [
+        "contact_email",
+        "event_id",
+        "title"
+      ],
+      "declared_return": "{ok, task_id, created, reopened} | {ok: false, closed: true, …}.",
+      "open": false
+    },
+    "tasks.dedup_now": {
+      "accepted": [],
+      "required": [],
+      "declared_return": "summary dict.",
+      "open": false
+    },
+    "tasks.get": {
+      "accepted": [
+        "task_id"
+      ],
+      "required": [
+        "task_id"
+      ],
+      "declared_return": "task dict | null.",
+      "open": false
+    },
+    "tasks.list": {
+      "accepted": [
+        "due_filter",
+        "include_completed",
+        "include_skipped",
+        "limit"
+      ],
+      "required": [],
+      "declared_return": "list of task dicts.",
+      "open": false
+    },
+    "tasks.list_by_thread": {
+      "accepted": [
+        "thread_id"
+      ],
+      "required": [
+        "thread_id"
+      ],
+      "declared_return": "list of task dicts.",
+      "open": false
+    },
+    "tasks.pin": {
+      "accepted": [
+        "pinned",
+        "task_id"
+      ],
+      "required": [
+        "pinned",
+        "task_id"
+      ],
+      "declared_return": "{ok: bool}.",
+      "open": false
+    },
+    "tasks.reanalyze": {
+      "accepted": [
+        "task_id"
+      ],
+      "required": [
+        "task_id"
+      ],
+      "declared_return": "{ok, action, reason, task_id}.",
+      "open": false
+    },
+    "tasks.reopen": {
+      "accepted": [
+        "task_id"
+      ],
+      "required": [
+        "task_id"
+      ],
+      "declared_return": "{ok: bool}.",
+      "open": false
+    },
+    "tasks.skip": {
+      "accepted": [
+        "task_id"
+      ],
+      "required": [
+        "task_id"
+      ],
+      "declared_return": "{ok: bool}.",
+      "open": false
+    },
+    "tasks.snooze": {
+      "accepted": [
+        "actor",
+        "days",
+        "due_at",
+        "task_id",
+        "why"
+      ],
+      "required": [
+        "task_id"
+      ],
+      "declared_return": "{ok, due_at, …}.",
+      "open": false
+    },
+    "tasks.solve": {
+      "accepted": [
+        "instructions",
+        "task_id"
+      ],
+      "required": [
+        "task_id"
+      ],
+      "declared_return": null,
+      "open": false
+    },
+    "tasks.solve.approve": {
+      "accepted": [
+        "approved",
+        "edited_input",
+        "tool_use_id"
+      ],
+      "required": [
+        "tool_use_id"
+      ],
+      "declared_return": null,
+      "open": false
+    },
+    "tasks.solve.cancel": {
+      "accepted": [
+        "task_id"
+      ],
+      "required": [],
+      "declared_return": null,
+      "open": false
+    },
+    "tasks.topic_dedup_now": {
+      "accepted": [],
+      "required": [],
+      "declared_return": "summary dict.",
+      "open": false
+    },
+    "update.run": {
+      "accepted": [],
+      "required": [],
+      "declared_return": "pipeline result with a DIFF summary.",
+      "open": false
+    },
+    "usage.reconcile": {
+      "accepted": [
+        "cursor"
+      ],
+      "required": [],
+      "declared_return": "recovered and unresolved credit reservations.",
+      "open": false
+    },
+    "usage.today": {
+      "accepted": [],
+      "required": [],
+      "declared_return": "today's spend snapshot + per-call-site breakdown.",
+      "open": false
+    },
+    "voice.config.get": {
+      "accepted": [],
+      "required": [],
+      "declared_return": "bound settings; credentials are never returned.",
+      "open": false
+    },
+    "voice.config.update": {
+      "accepted": [
+        "config",
+        "expected_revision",
+        "owner_uid",
+        "space_id"
+      ],
+      "required": [
+        "config",
+        "expected_revision",
+        "owner_uid",
+        "space_id"
+      ],
+      "declared_return": "settings.",
+      "open": false
+    },
+    "voice.status": {
+      "accepted": [],
+      "required": [],
+      "declared_return": "configuration state and opt-in runtime availability.",
+      "open": false
+    },
+    "whatsapp.cancel": {
+      "accepted": [],
+      "required": [],
+      "declared_return": "{cancelled}",
+      "open": false
+    },
+    "whatsapp.connect": {
+      "accepted": [],
+      "required": [],
+      "declared_return": "{ok: bool, jid?: str, reason?: str}",
+      "open": false
+    },
+    "whatsapp.disconnect": {
+      "accepted": [
+        "forget_session"
+      ],
+      "required": [],
+      "declared_return": "{ok}",
+      "open": false
+    },
+    "whatsapp.list_messages": {
+      "accepted": [
+        "chat_jid",
+        "limit",
+        "offset"
+      ],
+      "required": [],
+      "declared_return": "{messages}.",
+      "open": false
+    },
+    "whatsapp.list_threads": {
+      "accepted": [
+        "limit",
+        "offset"
+      ],
+      "required": [],
+      "declared_return": "{threads: [...]}.",
+      "open": false
+    },
+    "whatsapp.search_messages": {
+      "accepted": [
+        "limit",
+        "query"
+      ],
+      "required": [],
+      "declared_return": "{threads, query}.",
+      "open": false
+    },
+    "whatsapp.send_message": {
+      "accepted": [
+        "chat_jid",
+        "text"
+      ],
+      "required": [],
+      "declared_return": "{ok, message?, error?}.",
+      "open": false
+    },
+    "whatsapp.status": {
+      "accepted": [],
+      "required": [],
+      "declared_return": "{connected, has_session, jid?}",
+      "open": false
+    },
+    "whatsapp.sync": {
+      "accepted": [],
+      "required": [],
+      "declared_return": "{ok, contacts?, groups?, lid?, error?}.",
+      "open": false
+    }
+  },
+  "preload_calls": [
+    {
+      "line": 163,
+      "method": "system.capabilities",
+      "payload_keys": [],
+      "guaranteed_keys": [],
+      "dynamic_payload": false,
+      "declared_return": "Promise<{ chat_history_binding?: number | undefined; }>"
+    },
+    {
+      "line": 166,
+      "method": "qonto.status",
+      "payload_keys": [],
+      "guaranteed_keys": [],
+      "dynamic_payload": false,
+      "declared_return": "Promise<{ status: string; generation: number; account_count: number; source_access: boolean; credential_stored: boolean; error?: string | undefined; }>"
+    },
+    {
+      "line": 171,
+      "method": "qonto.test",
+      "payload_keys": [
+        "api_key",
+        "credential_source",
+        "login"
+      ],
+      "guaranteed_keys": [
+        "credential_source"
+      ],
+      "dynamic_payload": false,
+      "declared_return": "Promise<QontoTestResult>"
+    },
+    {
+      "line": 173,
+      "method": "qonto.connect",
+      "payload_keys": [
+        "account_ids",
+        "api_key",
+        "authority_confirmed",
+        "challenge_id",
+        "consent_version",
+        "credential_source",
+        "login"
+      ],
+      "guaranteed_keys": [
+        "account_ids",
+        "authority_confirmed",
+        "challenge_id",
+        "consent_version",
+        "credential_source"
+      ],
+      "dynamic_payload": false,
+      "declared_return": "Promise<QontoConnectResult>"
+    },
+    {
+      "line": 174,
+      "method": "qonto.sync",
+      "payload_keys": [],
+      "guaranteed_keys": [],
+      "dynamic_payload": false,
+      "declared_return": "Promise<QontoSyncResult>"
+    },
+    {
+      "line": 175,
+      "method": "qonto.disconnect",
+      "payload_keys": [],
+      "guaranteed_keys": [],
+      "dynamic_payload": false,
+      "declared_return": "Promise<QontoRemovalResult>"
+    },
+    {
+      "line": 176,
+      "method": "qonto.delete_imported_data",
+      "payload_keys": [
+        "confirmed"
+      ],
+      "guaranteed_keys": [
+        "confirmed"
+      ],
+      "dynamic_payload": false,
+      "declared_return": "Promise<QontoRemovalResult>"
+    },
+    {
+      "line": 177,
+      "method": "qonto.prepare",
+      "payload_keys": [
+        "resume"
+      ],
+      "guaranteed_keys": [
+        "resume"
+      ],
+      "dynamic_payload": false,
+      "declared_return": "Promise<{ success?: boolean | undefined; summary?: string | undefined; attempted?: number | undefined; completed?: number | undefined; failed?: number | undefined; errors?: { detail: string; }[] | undefined; }>"
+    },
+    {
+      "line": 178,
+      "method": "qonto.publication_preview",
+      "payload_keys": [],
+      "guaranteed_keys": [],
+      "dynamic_payload": false,
+      "declared_return": "Promise<{ preview_id: string; fact_text: string; disclosure: string; }>"
+    },
+    {
+      "line": 179,
+      "method": "qonto.publish",
+      "payload_keys": [
+        "confirmed",
+        "preview_id",
+        "resume"
+      ],
+      "guaranteed_keys": [
+        "confirmed",
+        "preview_id",
+        "resume"
+      ],
+      "dynamic_payload": false,
+      "declared_return": "Promise<QontoPublicationResult>"
+    },
+    {
+      "line": 180,
+      "method": "qonto.transaction",
+      "payload_keys": [
+        "source_id"
+      ],
+      "guaranteed_keys": [
+        "source_id"
+      ],
+      "dynamic_payload": false,
+      "declared_return": "Promise<QontoTransactionResult>"
+    },
+    {
+      "line": 182,
+      "method": "llm.models",
+      "payload_keys": [
+        "provider"
+      ],
+      "guaranteed_keys": [],
+      "dynamic_payload": false,
+      "declared_return": "Promise<{ provider: string; models: { id: string; label: string; provider: string; }[]; available: boolean; reason: string; }>"
+    },
+    {
+      "line": 184,
+      "method": "usage.reconcile",
+      "payload_keys": [
+        "cursor"
+      ],
+      "guaranteed_keys": [],
+      "dynamic_payload": false,
+      "declared_return": "Promise<{ recovered: number; unresolved: number; message: string; next_cursor: string | null; }>"
+    },
+    {
+      "line": 185,
+      "method": "usage.today",
+      "payload_keys": [],
+      "guaranteed_keys": [],
+      "dynamic_payload": false,
+      "declared_return": "Promise<{ spent_usd: number; budget_usd: number; reserved_usd: number; pricing_fault: boolean; billing_supported: boolean; billing_reason?: string | undefined; model_policy?: { provider: string; preset: string; model: string; roles: Record<string, string>; quality_status: string; credential_configured: boolean; } | undefined; remaining_usd: number; exceeded: boolean; paused: boolean; resets_at: string; calls_today: number; by_site: Record<string, { calls: number; est_usd: number; }>; }>"
+    },
+    {
+      "line": 203,
+      "method": "tasks.list",
+      "payload_keys": [
+        "include_completed",
+        "include_skipped"
+      ],
+      "guaranteed_keys": [],
+      "dynamic_payload": false,
+      "declared_return": "Promise<any[]>"
+    },
+    {
+      "line": 205,
+      "method": "tasks.complete",
+      "payload_keys": [
+        "note",
+        "task_id"
+      ],
+      "guaranteed_keys": [
+        "note",
+        "task_id"
+      ],
+      "dynamic_payload": false,
+      "declared_return": "Promise<{ ok: boolean; }>"
+    },
+    {
+      "line": 206,
+      "method": "tasks.reopen",
+      "payload_keys": [
+        "task_id"
+      ],
+      "guaranteed_keys": [
+        "task_id"
+      ],
+      "dynamic_payload": false,
+      "declared_return": "Promise<{ ok: boolean; }>"
+    },
+    {
+      "line": 207,
+      "method": "tasks.skip",
+      "payload_keys": [
+        "task_id"
+      ],
+      "guaranteed_keys": [
+        "task_id"
+      ],
+      "dynamic_payload": false,
+      "declared_return": "Promise<{ ok: boolean; }>"
+    },
+    {
+      "line": 209,
+      "method": "tasks.pin",
+      "payload_keys": [
+        "pinned",
+        "task_id"
+      ],
+      "guaranteed_keys": [
+        "pinned",
+        "task_id"
+      ],
+      "dynamic_payload": false,
+      "declared_return": "Promise<{ ok: boolean; }>"
+    },
+    {
+      "line": 211,
+      "method": "tasks.reanalyze",
+      "payload_keys": [
+        "task_id"
+      ],
+      "guaranteed_keys": [
+        "task_id"
+      ],
+      "dynamic_payload": false,
+      "declared_return": "Promise<{ ok: boolean; action: \"kept\" | \"closed\" | \"updated\"; reason: string; task_id: string; usage?: Record<string, unknown> | undefined; }>"
+    },
+    {
+      "line": 223,
+      "method": "tasks.list_by_thread",
+      "payload_keys": [
+        "thread_id"
+      ],
+      "guaranteed_keys": [
+        "thread_id"
+      ],
+      "dynamic_payload": false,
+      "declared_return": "Promise<any[]>"
+    },
+    {
+      "line": 230,
+      "method": "tasks.dedup_now",
+      "payload_keys": [],
+      "guaranteed_keys": [],
+      "dynamic_payload": false,
+      "declared_return": "Promise<{ clusters_examined: number; clusters_with_dups: number; tasks_closed: number; skipped_recently_reopened: number; skipped_oversize: number; no_llm: boolean; }>"
+    },
+    {
+      "line": 246,
+      "method": "tasks.solve",
+      "payload_keys": [
+        "instructions",
+        "task_id"
+      ],
+      "guaranteed_keys": [
+        "instructions",
+        "task_id"
+      ],
+      "dynamic_payload": false,
+      "declared_return": "Promise<{ ok: boolean; result?: unknown; error?: string | undefined; }>"
+    },
+    {
+      "line": 255,
+      "method": "tasks.solve.approve",
+      "payload_keys": [
+        "approved",
+        "edited_input",
+        "tool_use_id"
+      ],
+      "guaranteed_keys": [
+        "approved",
+        "edited_input",
+        "tool_use_id"
+      ],
+      "dynamic_payload": false,
+      "declared_return": "Promise<{ ok: boolean; }>"
+    },
+    {
+      "line": 265,
+      "method": "tasks.solve.cancel",
+      "payload_keys": [
+        "task_id"
+      ],
+      "guaranteed_keys": [],
+      "dynamic_payload": false,
+      "declared_return": "Promise<{ ok: boolean; task_id?: string | undefined; cancelled_pending?: number | undefined; error?: string | undefined; }>"
+    },
+    {
+      "line": 273,
+      "method": "memory.reconsolidate_now",
+      "payload_keys": [],
+      "guaranteed_keys": [],
+      "dynamic_payload": false,
+      "declared_return": "Promise<{ ok: boolean; error?: string | undefined; groups_examined?: number | undefined; blobs_examined?: number | undefined; blobs_merged?: number | undefined; blobs_kept_distinct?: number | undefined; pair_cap_hit?: boolean | undefined; no_llm?: boolean | undefined; skipped?: boolean | undefined; reason?: string | undefined; }>"
+    },
+    {
+      "line": 291,
+      "method": "memory.key_mint",
+      "payload_keys": [],
+      "guaranteed_keys": [],
+      "dynamic_payload": false,
+      "declared_return": "Promise<{ key: string; minted: boolean; }>"
+    },
+    {
+      "line": 293,
+      "method": "memory.key_validate",
+      "payload_keys": [
+        "key"
+      ],
+      "guaranteed_keys": [
+        "key"
+      ],
+      "dynamic_payload": false,
+      "declared_return": "Promise<{ well_formed: boolean; reason: string; }>"
+    },
+    {
+      "line": 295,
+      "method": "memory.status",
+      "payload_keys": [],
+      "guaranteed_keys": [],
+      "dynamic_payload": false,
+      "declared_return": "Promise<{ has_key: boolean; available: boolean; reason: string; self_notion?: string | null | undefined; blob_count?: number | undefined; fact_count?: number | undefined; contributors?: string[] | undefined; }>"
+    },
+    {
+      "line": 305,
+      "method": "memory.join_preview",
+      "payload_keys": [
+        "key"
+      ],
+      "guaranteed_keys": [
+        "key"
+      ],
+      "dynamic_payload": false,
+      "declared_return": "Promise<{ well_formed: boolean; exists: boolean; reason: string; self_notion?: string | null | undefined; blob_count?: number | undefined; fact_count?: number | undefined; contributors?: string[] | undefined; }>"
+    },
+    {
+      "line": 315,
+      "method": "memory.join",
+      "payload_keys": [
+        "key"
+      ],
+      "guaranteed_keys": [
+        "key"
+      ],
+      "dynamic_payload": false,
+      "declared_return": "Promise<{ ok: boolean; reason?: string | undefined; already?: boolean | undefined; merged?: Record<string, number> | undefined; self_notion?: string | null | undefined; blob_count?: number | undefined; contributors?: string[] | undefined; }>"
+    },
+    {
+      "line": 334,
+      "method": "chat.send",
+      "payload_keys": [
+        "context",
+        "conversation_history",
+        "conversation_id",
+        "history_handle",
+        "history_mode",
+        "history_revision",
+        "message"
+      ],
+      "guaranteed_keys": [
+        "context",
+        "conversation_history",
+        "conversation_id",
+        "message"
+      ],
+      "dynamic_payload": false,
+      "declared_return": "Promise<any>"
+    },
+    {
+      "line": 366,
+      "method": "chat.approve",
+      "payload_keys": [
+        "approved",
+        "edited_input",
+        "mode",
+        "tool_use_id"
+      ],
+      "guaranteed_keys": [
+        "tool_use_id"
+      ],
+      "dynamic_payload": false,
+      "declared_return": "Promise<{ ok: boolean; }>"
+    },
+    {
+      "line": 370,
+      "method": "preparation.status",
+      "payload_keys": [],
+      "guaranteed_keys": [],
+      "dynamic_payload": false,
+      "declared_return": "Promise<any>"
+    },
+    {
+      "line": 371,
+      "method": "preparation.pause",
+      "payload_keys": [],
+      "guaranteed_keys": [],
+      "dynamic_payload": false,
+      "declared_return": "Promise<any>"
+    },
+    {
+      "line": 373,
+      "method": "preparation.resume",
+      "payload_keys": [],
+      "guaranteed_keys": [],
+      "dynamic_payload": false,
+      "declared_return": "Promise<any>"
+    },
+    {
+      "line": 375,
+      "method": "preparation.reset_failures",
+      "payload_keys": [
+        "source",
+        "stage"
+      ],
+      "guaranteed_keys": [
+        "source",
+        "stage"
+      ],
+      "dynamic_payload": false,
+      "declared_return": "Promise<{ reset: boolean; }>"
+    },
+    {
+      "line": 382,
+      "method": "update.run",
+      "payload_keys": [],
+      "guaranteed_keys": [],
+      "dynamic_payload": false,
+      "declared_return": "Promise<any>"
+    },
+    {
+      "line": 389,
+      "method": "sync.run",
+      "payload_keys": [
+        "days_back"
+      ],
+      "guaranteed_keys": [],
+      "dynamic_payload": false,
+      "declared_return": "Promise<{ success: boolean; summary: string; result: { sync_new: number; wa_messages: number; wa_contacts: number; wa_skipped_reason?: string | null | undefined; }; errors: { severity?: string | undefined; title?: string | undefined; detail?: string | undefined; action?: string | undefined; mailbox?: string | undefined; }[]; }>"
+    },
+    {
+      "line": 413,
+      "method": "setup.state",
+      "payload_keys": [],
+      "guaranteed_keys": [],
+      "dynamic_payload": false,
+      "declared_return": "Promise<{ has_synced: boolean; has_trained: boolean; emails_count: number; whatsapp_messages_count: number; agents_trained: string[]; emails_analyzed_count?: number | null | undefined; emails_pending_analysis?: number | null | undefined; last_email_analyzed_at?: string | null | undefined; mailboxes?: { mailbox_id: string; address: string; emails_count: number; emails_pending_analysis: number; }[] | undefined; }>"
+    },
+    {
+      "line": 444,
+      "method": "agents.train_all",
+      "payload_keys": [],
+      "guaranteed_keys": [],
+      "dynamic_payload": false,
+      "declared_return": "Promise<{ ok: boolean; error?: string | undefined; results: Record<string, { ok: boolean; error?: string | undefined; threads_analyzed?: number | undefined; whatsapp_chats_analyzed?: number | undefined; }>; }>"
+    },
+    {
+      "line": 460,
+      "method": "emails.list_by_thread",
+      "payload_keys": [
+        "thread_id"
+      ],
+      "guaranteed_keys": [
+        "thread_id"
+      ],
+      "dynamic_payload": false,
+      "declared_return": "Promise<any>"
+    },
+    {
+      "line": 464,
+      "method": "emails.list_inbox",
+      "payload_keys": [
+        "limit",
+        "mailbox_id",
+        "offset"
+      ],
+      "guaranteed_keys": [
+        "limit",
+        "offset"
+      ],
+      "dynamic_payload": false,
+      "declared_return": "Promise<{ threads: any[]; }>"
+    },
+    {
+      "line": 474,
+      "method": "emails.list_sent",
+      "payload_keys": [
+        "limit",
+        "mailbox_id",
+        "offset"
+      ],
+      "guaranteed_keys": [
+        "limit",
+        "offset"
+      ],
+      "dynamic_payload": false,
+      "declared_return": "Promise<{ threads: any[]; }>"
+    },
+    {
+      "line": 493,
+      "method": "emails.search",
+      "payload_keys": [
+        "folder",
+        "limit",
+        "mailbox_id",
+        "offset",
+        "query"
+      ],
+      "guaranteed_keys": [
+        "folder",
+        "limit",
+        "offset",
+        "query"
+      ],
+      "dynamic_payload": false,
+      "declared_return": "Promise<{ threads: any[]; }>"
+    },
+    {
+      "line": 505,
+      "method": "emails.pin",
+      "payload_keys": [
+        "pinned",
+        "thread_id"
+      ],
+      "guaranteed_keys": [
+        "pinned",
+        "thread_id"
+      ],
+      "dynamic_payload": false,
+      "declared_return": "Promise<{ ok: boolean; affected: number; }>"
+    },
+    {
+      "line": 511,
+      "method": "emails.mark_read",
+      "payload_keys": [
+        "thread_id"
+      ],
+      "guaranteed_keys": [
+        "thread_id"
+      ],
+      "dynamic_payload": false,
+      "declared_return": "Promise<{ ok: boolean; affected: number; }>"
+    },
+    {
+      "line": 522,
+      "method": "emails.archive",
+      "payload_keys": [
+        "thread_id"
+      ],
+      "guaranteed_keys": [
+        "thread_id"
+      ],
+      "dynamic_payload": false,
+      "declared_return": "Promise<{ ok: boolean; archived: number; mailboxes: { mailbox_id: string; attempted: number; moved: number; error: string | null; }[]; }>"
+    },
+    {
+      "line": 536,
+      "method": "emails.delete",
+      "payload_keys": [
+        "thread_id"
+      ],
+      "guaranteed_keys": [
+        "thread_id"
+      ],
+      "dynamic_payload": false,
+      "declared_return": "Promise<{ ok: boolean; deleted: number; }>"
+    },
+    {
+      "line": 547,
+      "method": "mailboxes.list",
+      "payload_keys": [],
+      "guaranteed_keys": [],
+      "dynamic_payload": false,
+      "declared_return": "Promise<{ mailboxes: any[]; }>"
+    },
+    {
+      "line": 548,
+      "method": "mailboxes.presets",
+      "payload_keys": [],
+      "guaranteed_keys": [],
+      "dynamic_payload": false,
+      "declared_return": "Promise<{ presets: any[]; }>"
+    },
+    {
+      "line": 556,
+      "method": "mailboxes.test",
+      "payload_keys": [
+        "address",
+        "imap_host",
+        "imap_port",
+        "password",
+        "smtp_host",
+        "smtp_port"
+      ],
+      "guaranteed_keys": [
+        "address",
+        "password"
+      ],
+      "dynamic_payload": false,
+      "declared_return": "Promise<MailboxTestResult>"
+    },
+    {
+      "line": 566,
+      "method": "mailboxes.add",
+      "payload_keys": [
+        "address",
+        "imap_host",
+        "imap_port",
+        "password",
+        "preset",
+        "smtp_host",
+        "smtp_port"
+      ],
+      "guaranteed_keys": [
+        "address",
+        "password"
+      ],
+      "dynamic_payload": false,
+      "declared_return": "Promise<MailboxMutationResult>"
+    },
+    {
+      "line": 580,
+      "method": "mailboxes.update",
+      "payload_keys": [
+        "imap_host",
+        "imap_port",
+        "mailbox_id",
+        "password",
+        "preset",
+        "smtp_host",
+        "smtp_port"
+      ],
+      "guaranteed_keys": [
+        "mailbox_id"
+      ],
+      "dynamic_payload": false,
+      "declared_return": "Promise<MailboxMutationResult>"
+    },
+    {
+      "line": 586,
+      "method": "mailboxes.remove",
+      "payload_keys": [
+        "mailbox_id"
+      ],
+      "guaranteed_keys": [
+        "mailbox_id"
+      ],
+      "dynamic_payload": false,
+      "declared_return": "Promise<MailboxMutationResult>"
+    },
+    {
+      "line": 617,
+      "method": "profiles.create",
+      "payload_keys": [
+        "email",
+        "values"
+      ],
+      "guaranteed_keys": [
+        "email",
+        "values"
+      ],
+      "dynamic_payload": false,
+      "declared_return": "Promise<{ ok: boolean; profile: string; }>"
+    },
+    {
+      "line": 629,
+      "method": "narration.summarize",
+      "payload_keys": [
+        "context",
+        "lines"
+      ],
+      "guaranteed_keys": [
+        "context",
+        "lines"
+      ],
+      "dynamic_payload": false,
+      "declared_return": "Promise<{ text: string; }>"
+    },
+    {
+      "line": 631,
+      "method": "narration.predict",
+      "payload_keys": [
+        "context",
+        "message"
+      ],
+      "guaranteed_keys": [
+        "context",
+        "message"
+      ],
+      "dynamic_payload": false,
+      "declared_return": "Promise<{ text: string; }>"
+    },
+    {
+      "line": 635,
+      "method": "settings.schema",
+      "payload_keys": [],
+      "guaranteed_keys": [],
+      "dynamic_payload": false,
+      "declared_return": "Promise<{ fields: { key: string; label: string; type: \"number\" | \"text\" | \"password\" | \"select\" | \"textarea\"; group: string; optional?: boolean | undefined; options?: string[] | undefined; help?: string | undefined; secret?: boolean | undefined; }[]; }>"
+    },
+    {
+      "line": 647,
+      "method": "settings.get",
+      "payload_keys": [],
+      "guaranteed_keys": [],
+      "dynamic_payload": false,
+      "declared_return": "Promise<{ values: Record<string, string>; }>"
+    },
+    {
+      "line": 653,
+      "method": "settings.get_secret",
+      "payload_keys": [
+        "key"
+      ],
+      "guaranteed_keys": [
+        "key"
+      ],
+      "dynamic_payload": false,
+      "declared_return": "Promise<{ key: string; value: string; }>"
+    },
+    {
+      "line": 655,
+      "method": "settings.update",
+      "payload_keys": [
+        "updates"
+      ],
+      "guaranteed_keys": [
+        "updates"
+      ],
+      "dynamic_payload": false,
+      "declared_return": "Promise<{ ok: boolean; applied: string[]; skipped_unchanged: string[]; }>"
+    },
+    {
+      "line": 764,
+      "method": "account.set_firebase_token",
+      "payload_keys": [
+        "email",
+        "expires_at_ms",
+        "id_token",
+        "uid"
+      ],
+      "guaranteed_keys": [
+        "email",
+        "expires_at_ms",
+        "id_token",
+        "uid"
+      ],
+      "dynamic_payload": false,
+      "declared_return": "Promise<{ ok: boolean; }>"
+    },
+    {
+      "line": 772,
+      "method": "account.sign_out",
+      "payload_keys": [],
+      "guaranteed_keys": [],
+      "dynamic_payload": false,
+      "declared_return": "Promise<{ ok: boolean; }>"
+    },
+    {
+      "line": 780,
+      "method": "account.who_am_i",
+      "payload_keys": [],
+      "guaranteed_keys": [],
+      "dynamic_payload": false,
+      "declared_return": "Promise<{ signed_in: boolean; uid?: string | undefined; email?: string | null | undefined; expires_at_ms?: number | undefined; }>"
+    },
+    {
+      "line": 795,
+      "method": "account.balance",
+      "payload_keys": [],
+      "guaranteed_keys": [],
+      "dynamic_payload": false,
+      "declared_return": "Promise<{ balance_credits: number; balance_micro_usd: number; balance_usd: number; granularity_micro_usd?: number | undefined; estimate_messages_remaining?: number | undefined; } | { error: \"auth_expired\"; }>"
+    },
+    {
+      "line": 802,
+      "method": "sms.get_sender",
+      "payload_keys": [],
+      "guaranteed_keys": [],
+      "dynamic_payload": false,
+      "declared_return": "Promise<{ sender: string; business_id?: string | undefined; } | { error: \"auth_expired\"; }>"
+    },
+    {
+      "line": 806,
+      "method": "sms.set_sender",
+      "payload_keys": [
+        "sender"
+      ],
+      "guaranteed_keys": [
+        "sender"
+      ],
+      "dynamic_payload": false,
+      "declared_return": "Promise<{ sender: string; business_id?: string | undefined; } | { error: \"auth_expired\"; }>"
+    },
+    {
+      "line": 815,
+      "method": "mrcall.list_my_businesses",
+      "payload_keys": [
+        "limit",
+        "offset"
+      ],
+      "guaranteed_keys": [
+        "limit",
+        "offset"
+      ],
+      "dynamic_payload": false,
+      "declared_return": "Promise<{ businesses: unknown[]; role: string; }>"
+    },
+    {
+      "line": 841,
+      "method": "mrcall.search_businesses",
+      "payload_keys": [
+        "address",
+        "businessId",
+        "businessPhoneNumber",
+        "companyName",
+        "countryAlpha2",
+        "emailAddress",
+        "limit",
+        "name",
+        "nickname",
+        "offset",
+        "subscriptionStatus",
+        "surname",
+        "vatId"
+      ],
+      "guaranteed_keys": [
+        "limit",
+        "offset"
+      ],
+      "dynamic_payload": false,
+      "declared_return": "Promise<{ businesses: unknown[]; role: string; }>"
+    },
+    {
+      "line": 856,
+      "method": "google.calendar.connect",
+      "payload_keys": [],
+      "guaranteed_keys": [],
+      "dynamic_payload": false,
+      "declared_return": "Promise<{ ok: boolean; email: string; scope: string; }>"
+    },
+    {
+      "line": 862,
+      "method": "google.calendar.disconnect",
+      "payload_keys": [],
+      "guaranteed_keys": [],
+      "dynamic_payload": false,
+      "declared_return": "Promise<{ ok: boolean; }>"
+    },
+    {
+      "line": 869,
+      "method": "google.calendar.status",
+      "payload_keys": [],
+      "guaranteed_keys": [],
+      "dynamic_payload": false,
+      "declared_return": "Promise<{ connected: boolean; signed_in?: boolean | undefined; email?: string | null | undefined; }>"
+    },
+    {
+      "line": 874,
+      "method": "google.calendar.cancel",
+      "payload_keys": [],
+      "guaranteed_keys": [],
+      "dynamic_payload": false,
+      "declared_return": "Promise<{ cancelled: boolean; }>"
+    },
+    {
+      "line": 885,
+      "method": "whatsapp.connect",
+      "payload_keys": [],
+      "guaranteed_keys": [],
+      "dynamic_payload": false,
+      "declared_return": "Promise<{ ok: boolean; phone?: string | null | undefined; display_name?: string | null | undefined; reason?: string | undefined; }>"
+    },
+    {
+      "line": 894,
+      "method": "whatsapp.disconnect",
+      "payload_keys": [
+        "forget_session"
+      ],
+      "guaranteed_keys": [
+        "forget_session"
+      ],
+      "dynamic_payload": false,
+      "declared_return": "Promise<{ ok: boolean; forgot: boolean; error?: string | undefined; }>"
+    },
+    {
+      "line": 901,
+      "method": "whatsapp.status",
+      "payload_keys": [],
+      "guaranteed_keys": [],
+      "dynamic_payload": false,
+      "declared_return": "Promise<{ connected: boolean; has_session: boolean; phone?: string | null | undefined; display_name?: string | null | undefined; }>"
+    },
+    {
+      "line": 907,
+      "method": "whatsapp.cancel",
+      "payload_keys": [],
+      "guaranteed_keys": [],
+      "dynamic_payload": false,
+      "declared_return": "Promise<{ cancelled: boolean; }>"
+    },
+    {
+      "line": 909,
+      "method": "whatsapp.list_threads",
+      "payload_keys": [
+        "limit",
+        "offset"
+      ],
+      "guaranteed_keys": [
+        "limit",
+        "offset"
+      ],
+      "dynamic_payload": false,
+      "declared_return": "Promise<{ threads: WhatsAppThread[]; total_messages?: number | undefined; owner_id?: string | undefined; breakdown_by_server?: Record<string, number> | undefined; error?: string | undefined; }>"
+    },
+    {
+      "line": 920,
+      "method": "whatsapp.list_messages",
+      "payload_keys": [
+        "chat_jid",
+        "limit",
+        "offset"
+      ],
+      "guaranteed_keys": [
+        "chat_jid",
+        "limit",
+        "offset"
+      ],
+      "dynamic_payload": false,
+      "declared_return": "Promise<{ messages: WhatsAppMessage[]; error?: string | undefined; }>"
+    },
+    {
+      "line": 932,
+      "method": "whatsapp.search_messages",
+      "payload_keys": [
+        "limit",
+        "query"
+      ],
+      "guaranteed_keys": [
+        "limit",
+        "query"
+      ],
+      "dynamic_payload": false,
+      "declared_return": "Promise<{ threads: WhatsAppThread[]; query?: string | undefined; error?: string | undefined; }>"
+    },
+    {
+      "line": 942,
+      "method": "whatsapp.send_message",
+      "payload_keys": [
+        "chat_jid",
+        "text"
+      ],
+      "guaranteed_keys": [
+        "chat_jid",
+        "text"
+      ],
+      "dynamic_payload": false,
+      "declared_return": "Promise<{ ok: boolean; message?: WhatsAppMessage | undefined; error?: string | undefined; }>"
+    }
+  ],
+  "renderer_linkage": [
+    {
+      "api": "system.capabilities",
+      "renderer": "() => Promise<{ chat_history_binding?: number | undefined; }>",
+      "preload": "() => Promise<{ chat_history_binding?: number | undefined; }>",
+      "renderer_arguments_accepted": true,
+      "declared_return_assignable": true
+    },
+    {
+      "api": "qonto.test",
+      "renderer": "(credentials: QontoCredentials) => Promise<QontoTestResult>",
+      "preload": "(credentials: { credential_source: \"input\"; login?: string | undefined; api_key?: string | undefined; }) => Promise<QontoTestResult>",
+      "renderer_arguments_accepted": true,
+      "declared_return_assignable": true
+    },
+    {
+      "api": "qonto.connect",
+      "renderer": "(params: QontoConnectParams) => Promise<QontoConnectResult>",
+      "preload": "(params: { credential_source: \"input\"; login?: string | undefined; api_key?: string | undefined; challenge_id: string; account_ids: string[]; authority_confirmed: boolean; consent_version: number; }) => Promise<QontoConnectResult>",
+      "renderer_arguments_accepted": true,
+      "declared_return_assignable": true
+    },
+    {
+      "api": "qonto.status",
+      "renderer": "() => Promise<QontoStatus>",
+      "preload": "() => Promise<{ status: string; generation: number; account_count: number; source_access: boolean; credential_stored: boolean; error?: string | undefined; }>",
+      "renderer_arguments_accepted": true,
+      "declared_return_assignable": true
+    },
+    {
+      "api": "qonto.sync",
+      "renderer": "() => Promise<QontoSyncResult>",
+      "preload": "() => Promise<QontoSyncResult>",
+      "renderer_arguments_accepted": true,
+      "declared_return_assignable": true
+    },
+    {
+      "api": "qonto.disconnect",
+      "renderer": "() => Promise<QontoRemovalResult>",
+      "preload": "() => Promise<QontoRemovalResult>",
+      "renderer_arguments_accepted": true,
+      "declared_return_assignable": true
+    },
+    {
+      "api": "qonto.deleteImportedData",
+      "renderer": "(confirmed: boolean) => Promise<QontoRemovalResult>",
+      "preload": "(confirmed: boolean) => Promise<QontoRemovalResult>",
+      "renderer_arguments_accepted": true,
+      "declared_return_assignable": true
+    },
+    {
+      "api": "qonto.prepare",
+      "renderer": "(resume?: boolean | undefined) => Promise<QontoPreparationResult>",
+      "preload": "(resume?: boolean) => Promise<{ success?: boolean | undefined; summary?: string | undefined; attempted?: number | undefined; completed?: number | undefined; failed?: number | undefined; errors?: { detail: string; }[] | undefined; }>",
+      "renderer_arguments_accepted": true,
+      "declared_return_assignable": true
+    },
+    {
+      "api": "qonto.publicationPreview",
+      "renderer": "() => Promise<QontoPublicationPreview>",
+      "preload": "() => Promise<{ preview_id: string; fact_text: string; disclosure: string; }>",
+      "renderer_arguments_accepted": true,
+      "declared_return_assignable": true
+    },
+    {
+      "api": "qonto.publish",
+      "renderer": "(previewId: string, confirmed: boolean, resume?: boolean | undefined) => Promise<QontoPublicationResult>",
+      "preload": "(previewId: string, confirmed: boolean, resume?: boolean) => Promise<QontoPublicationResult>",
+      "renderer_arguments_accepted": true,
+      "declared_return_assignable": true
+    },
+    {
+      "api": "qonto.transaction",
+      "renderer": "(sourceId: string) => Promise<QontoTransactionResult>",
+      "preload": "(sourceId: string) => Promise<QontoTransactionResult>",
+      "renderer_arguments_accepted": true,
+      "declared_return_assignable": true
+    },
+    {
+      "api": "preparation.status",
+      "renderer": "() => Promise<PreparationStatus>",
+      "preload": "() => Promise<any>",
+      "renderer_arguments_accepted": true,
+      "declared_return_assignable": true
+    },
+    {
+      "api": "preparation.pause",
+      "renderer": "() => Promise<PreparationStatus>",
+      "preload": "() => Promise<any>",
+      "renderer_arguments_accepted": true,
+      "declared_return_assignable": true
+    },
+    {
+      "api": "preparation.resume",
+      "renderer": "() => Promise<PreparationResult>",
+      "preload": "() => Promise<any>",
+      "renderer_arguments_accepted": true,
+      "declared_return_assignable": true
+    },
+    {
+      "api": "preparation.resetFailures",
+      "renderer": "(stage: string, source: string) => Promise<{ reset: boolean; }>",
+      "preload": "(stage: string, source: string) => Promise<{ reset: boolean; }>",
+      "renderer_arguments_accepted": true,
+      "declared_return_assignable": true
+    },
+    {
+      "api": "llm.models",
+      "renderer": "(provider?: string | undefined) => Promise<{ provider: string; models: { id: string; label: string; provider: string; }[]; available: boolean; reason: string; }>",
+      "preload": "(provider?: string | undefined) => Promise<{ provider: string; models: { id: string; label: string; provider: string; }[]; available: boolean; reason: string; }>",
+      "renderer_arguments_accepted": true,
+      "declared_return_assignable": true
+    },
+    {
+      "api": "usage.reconcile",
+      "renderer": "(cursor?: string | undefined) => Promise<{ recovered: number; unresolved: number; message: string; next_cursor: string | null; }>",
+      "preload": "(cursor?: string | undefined) => Promise<{ recovered: number; unresolved: number; message: string; next_cursor: string | null; }>",
+      "renderer_arguments_accepted": true,
+      "declared_return_assignable": true
+    },
+    {
+      "api": "usage.today",
+      "renderer": "() => Promise<{ spent_usd: number; budget_usd: number; reserved_usd: number; pricing_fault: boolean; billing_supported: boolean; billing_reason?: string | undefined; model_policy?: { provider: string; preset: string; model: string; roles: Record<string, string>; quality_status: string; credential_configured: boolean; } | undefined; remaining_usd: number; exceeded: boolean; paused: boolean; resets_at: string; calls_today: number; by_site: Record<string, { calls: number; est_usd: number; }>; }>",
+      "preload": "() => Promise<{ spent_usd: number; budget_usd: number; reserved_usd: number; pricing_fault: boolean; billing_supported: boolean; billing_reason?: string | undefined; model_policy?: { provider: string; preset: string; model: string; roles: Record<string, string>; quality_status: string; credential_configured: boolean; } | undefined; remaining_usd: number; exceeded: boolean; paused: boolean; resets_at: string; calls_today: number; by_site: Record<string, { calls: number; est_usd: number; }>; }>",
+      "renderer_arguments_accepted": true,
+      "declared_return_assignable": true
+    },
+    {
+      "api": "tasks.list",
+      "renderer": "(p?: { include_completed?: boolean | undefined; include_skipped?: boolean | undefined; } | undefined) => Promise<ZylchTask[]>",
+      "preload": "(params?: { include_completed?: boolean | undefined; include_skipped?: boolean | undefined; }) => Promise<any[]>",
+      "renderer_arguments_accepted": true,
+      "declared_return_assignable": true
+    },
+    {
+      "api": "tasks.complete",
+      "renderer": "(task_id: string, note?: string | null | undefined) => Promise<{ ok: boolean; }>",
+      "preload": "(task_id: string, note?: string | null | undefined) => Promise<{ ok: boolean; }>",
+      "renderer_arguments_accepted": true,
+      "declared_return_assignable": true
+    },
+    {
+      "api": "tasks.reopen",
+      "renderer": "(task_id: string) => Promise<{ ok: boolean; }>",
+      "preload": "(task_id: string) => Promise<{ ok: boolean; }>",
+      "renderer_arguments_accepted": true,
+      "declared_return_assignable": true
+    },
+    {
+      "api": "tasks.skip",
+      "renderer": "(task_id: string) => Promise<{ ok: boolean; }>",
+      "preload": "(task_id: string) => Promise<{ ok: boolean; }>",
+      "renderer_arguments_accepted": true,
+      "declared_return_assignable": true
+    },
+    {
+      "api": "tasks.pin",
+      "renderer": "(task_id: string, pinned: boolean) => Promise<{ ok: boolean; }>",
+      "preload": "(task_id: string, pinned: boolean) => Promise<{ ok: boolean; }>",
+      "renderer_arguments_accepted": true,
+      "declared_return_assignable": true
+    },
+    {
+      "api": "tasks.reanalyze",
+      "renderer": "(task_id: string) => Promise<{ ok: boolean; action: \"kept\" | \"closed\" | \"updated\"; reason: string; task_id: string; usage?: Record<string, unknown> | undefined; }>",
+      "preload": "(task_id: string) => Promise<{ ok: boolean; action: \"kept\" | \"closed\" | \"updated\"; reason: string; task_id: string; usage?: Record<string, unknown> | undefined; }>",
+      "renderer_arguments_accepted": true,
+      "declared_return_assignable": true
+    },
+    {
+      "api": "tasks.listByThread",
+      "renderer": "(thread_id: string) => Promise<ZylchTask[]>",
+      "preload": "(thread_id: string) => Promise<any[]>",
+      "renderer_arguments_accepted": true,
+      "declared_return_assignable": true
+    },
+    {
+      "api": "tasks.dedupNow",
+      "renderer": "() => Promise<{ clusters_examined: number; clusters_with_dups: number; tasks_closed: number; skipped_recently_reopened: number; skipped_oversize: number; no_llm: boolean; }>",
+      "preload": "() => Promise<{ clusters_examined: number; clusters_with_dups: number; tasks_closed: number; skipped_recently_reopened: number; skipped_oversize: number; no_llm: boolean; }>",
+      "renderer_arguments_accepted": true,
+      "declared_return_assignable": true
+    },
+    {
+      "api": "tasks.solve",
+      "renderer": "(task_id: string, instructions?: string | undefined) => Promise<{ ok: boolean; result?: unknown; error?: string | undefined; }>",
+      "preload": "(task_id: string, instructions?: string | undefined) => Promise<{ ok: boolean; result?: unknown; error?: string | undefined; }>",
+      "renderer_arguments_accepted": true,
+      "declared_return_assignable": true
+    },
+    {
+      "api": "tasks.solveApprove",
+      "renderer": "(tool_use_id: string, payload: { approved: boolean; edited_input?: Record<string, unknown> | null | undefined; }) => Promise<{ ok: boolean; }>",
+      "preload": "(tool_use_id: string, payload: { approved: boolean; edited_input?: Record<string, unknown> | null | undefined; }) => Promise<{ ok: boolean; }>",
+      "renderer_arguments_accepted": true,
+      "declared_return_assignable": true
+    },
+    {
+      "api": "tasks.solveCancel",
+      "renderer": "(task_id?: string | undefined) => Promise<{ ok: boolean; task_id?: string | undefined; cancelled_pending?: number | undefined; error?: string | undefined; }>",
+      "preload": "(task_id?: string | undefined) => Promise<{ ok: boolean; task_id?: string | undefined; cancelled_pending?: number | undefined; error?: string | undefined; }>",
+      "renderer_arguments_accepted": true,
+      "declared_return_assignable": true
+    },
+    {
+      "api": "memory.reconsolidateNow",
+      "renderer": "() => Promise<{ ok: boolean; error?: string | undefined; groups_examined?: number | undefined; blobs_examined?: number | undefined; blobs_merged?: number | undefined; blobs_kept_distinct?: number | undefined; pair_cap_hit?: boolean | undefined; no_llm?: boolean | undefined; skipped?: boolean | undefined; reason?: string | undefined; }>",
+      "preload": "() => Promise<{ ok: boolean; error?: string | undefined; groups_examined?: number | undefined; blobs_examined?: number | undefined; blobs_merged?: number | undefined; blobs_kept_distinct?: number | undefined; pair_cap_hit?: boolean | undefined; no_llm?: boolean | undefined; skipped?: boolean | undefined; reason?: string | undefined; }>",
+      "renderer_arguments_accepted": true,
+      "declared_return_assignable": true
+    },
+    {
+      "api": "memory.keyMint",
+      "renderer": "() => Promise<{ key: string; minted: boolean; }>",
+      "preload": "() => Promise<{ key: string; minted: boolean; }>",
+      "renderer_arguments_accepted": true,
+      "declared_return_assignable": true
+    },
+    {
+      "api": "memory.keyValidate",
+      "renderer": "(key: string) => Promise<{ well_formed: boolean; reason: string; }>",
+      "preload": "(key: string) => Promise<{ well_formed: boolean; reason: string; }>",
+      "renderer_arguments_accepted": true,
+      "declared_return_assignable": true
+    },
+    {
+      "api": "memory.status",
+      "renderer": "() => Promise<{ has_key: boolean; available: boolean; reason: string; self_notion?: string | null | undefined; blob_count?: number | undefined; fact_count?: number | undefined; contributors?: string[] | undefined; }>",
+      "preload": "() => Promise<{ has_key: boolean; available: boolean; reason: string; self_notion?: string | null | undefined; blob_count?: number | undefined; fact_count?: number | undefined; contributors?: string[] | undefined; }>",
+      "renderer_arguments_accepted": true,
+      "declared_return_assignable": true
+    },
+    {
+      "api": "memory.joinPreview",
+      "renderer": "(key: string) => Promise<{ well_formed: boolean; exists: boolean; reason: string; self_notion?: string | null | undefined; blob_count?: number | undefined; fact_count?: number | undefined; contributors?: string[] | undefined; }>",
+      "preload": "(key: string) => Promise<{ well_formed: boolean; exists: boolean; reason: string; self_notion?: string | null | undefined; blob_count?: number | undefined; fact_count?: number | undefined; contributors?: string[] | undefined; }>",
+      "renderer_arguments_accepted": true,
+      "declared_return_assignable": true
+    },
+    {
+      "api": "memory.join",
+      "renderer": "(key: string) => Promise<{ ok: boolean; reason?: string | undefined; already?: boolean | undefined; merged?: Record<string, number> | undefined; self_notion?: string | null | undefined; blob_count?: number | undefined; contributors?: string[] | undefined; }>",
+      "preload": "(key: string) => Promise<{ ok: boolean; reason?: string | undefined; already?: boolean | undefined; merged?: Record<string, number> | undefined; self_notion?: string | null | undefined; blob_count?: number | undefined; contributors?: string[] | undefined; }>",
+      "renderer_arguments_accepted": true,
+      "declared_return_assignable": true
+    },
+    {
+      "api": "chat.send",
+      "renderer": "(message: string, conversation_history?: unknown[] | undefined, opts?: ChatSendOptions | undefined) => Promise<ChatSendResult>",
+      "preload": "(message: string, conversation_history?: unknown[], opts?: { conversationId?: string | undefined; context?: Record<string, unknown> | undefined; historyMode?: \"managed_finance\" | undefined; historyHandle?: string | undefined; historyRevision?: number | undefined; }) => Promise<any>",
+      "renderer_arguments_accepted": true,
+      "declared_return_assignable": true
+    },
+    {
+      "api": "chat.approve",
+      "renderer": "(tool_use_id: string, approvedOrOpts?: boolean | { mode: \"once\" | \"session\" | \"deny\"; edited_input?: Record<string, unknown> | undefined; } | undefined) => Promise<{ ok: boolean; }>",
+      "preload": "(tool_use_id: string, approvedOrOpts?: boolean | { mode: \"once\" | \"session\" | \"deny\"; edited_input?: Record<string, unknown> | undefined; }) => Promise<{ ok: boolean; }>",
+      "renderer_arguments_accepted": true,
+      "declared_return_assignable": true
+    },
+    {
+      "api": "update.run",
+      "renderer": "() => Promise<any>",
+      "preload": "() => Promise<any>",
+      "renderer_arguments_accepted": true,
+      "declared_return_assignable": true
+    },
+    {
+      "api": "sync.run",
+      "renderer": "(params?: { days_back?: number | undefined; } | undefined) => Promise<{ success: boolean; summary: string; result: { sync_new: number; wa_messages: number; wa_contacts: number; wa_skipped_reason?: string | null | undefined; }; errors: { severity?: string | undefined; title?: string | undefined; detail?: string | undefined; action?: string | undefined; mailbox?: string | undefined; }[]; }>",
+      "preload": "(params?: { days_back?: number | undefined; }) => Promise<{ success: boolean; summary: string; result: { sync_new: number; wa_messages: number; wa_contacts: number; wa_skipped_reason?: string | null | undefined; }; errors: { severity?: string | undefined; title?: string | undefined; detail?: string | undefined; action?: string | undefined; mailbox?: string | undefined; }[]; }>",
+      "renderer_arguments_accepted": true,
+      "declared_return_assignable": true
+    },
+    {
+      "api": "setup.state",
+      "renderer": "() => Promise<{ has_synced: boolean; has_trained: boolean; emails_count: number; whatsapp_messages_count: number; agents_trained: string[]; emails_analyzed_count?: number | null | undefined; emails_pending_analysis?: number | null | undefined; last_email_analyzed_at?: string | null | undefined; mailboxes?: { mailbox_id: string; address: string; emails_count: number; emails_pending_analysis: number; }[] | undefined; }>",
+      "preload": "() => Promise<{ has_synced: boolean; has_trained: boolean; emails_count: number; whatsapp_messages_count: number; agents_trained: string[]; emails_analyzed_count?: number | null | undefined; emails_pending_analysis?: number | null | undefined; last_email_analyzed_at?: string | null | undefined; mailboxes?: { mailbox_id: string; address: string; emails_count: number; emails_pending_analysis: number; }[] | undefined; }>",
+      "renderer_arguments_accepted": true,
+      "declared_return_assignable": true
+    },
+    {
+      "api": "workspace.status",
+      "renderer": "() => Promise<{ available: true; uid: string; email: string; engineWsUrl: string; descriptorPath: string; command: string; } | { available: false; reason: string; }>",
+      "preload": "() => Promise<{ available: true; uid: string; email: string; engineWsUrl: string; descriptorPath: string; command: string; } | { available: false; reason: string; }>",
+      "renderer_arguments_accepted": true,
+      "declared_return_assignable": true
+    },
+    {
+      "api": "agents.trainAll",
+      "renderer": "() => Promise<{ ok: boolean; error?: string | undefined; results: Record<string, { ok: boolean; error?: string | undefined; threads_analyzed?: number | undefined; whatsapp_chats_analyzed?: number | undefined; }>; }>",
+      "preload": "() => Promise<{ ok: boolean; error?: string | undefined; results: Record<string, { ok: boolean; error?: string | undefined; threads_analyzed?: number | undefined; whatsapp_chats_analyzed?: number | undefined; }>; }>",
+      "renderer_arguments_accepted": true,
+      "declared_return_assignable": true
+    },
+    {
+      "api": "emails.listByThread",
+      "renderer": "(threadId: string) => Promise<EmailThreadResult>",
+      "preload": "(threadId: string) => Promise<any>",
+      "renderer_arguments_accepted": true,
+      "declared_return_assignable": true
+    },
+    {
+      "api": "emails.listInbox",
+      "renderer": "(params?: { limit?: number | undefined; offset?: number | undefined; mailbox_id?: string | undefined; } | undefined) => Promise<{ threads: InboxThread[]; }>",
+      "preload": "(params?: { limit?: number | undefined; offset?: number | undefined; mailbox_id?: string | undefined; }) => Promise<{ threads: any[]; }>",
+      "renderer_arguments_accepted": true,
+      "declared_return_assignable": true
+    },
+    {
+      "api": "emails.listSent",
+      "renderer": "(params?: { limit?: number | undefined; offset?: number | undefined; mailbox_id?: string | undefined; } | undefined) => Promise<{ threads: InboxThread[]; }>",
+      "preload": "(params?: { limit?: number | undefined; offset?: number | undefined; mailbox_id?: string | undefined; }) => Promise<{ threads: any[]; }>",
+      "renderer_arguments_accepted": true,
+      "declared_return_assignable": true
+    },
+    {
+      "api": "emails.search",
+      "renderer": "(params: { query: string; folder?: \"inbox\" | \"sent\" | \"all\" | undefined; limit?: number | undefined; offset?: number | undefined; mailbox_id?: string | undefined; }) => Promise<{ threads: InboxThread[]; }>",
+      "preload": "(params: { query: string; folder?: \"inbox\" | \"sent\" | \"all\" | undefined; limit?: number | undefined; offset?: number | undefined; mailbox_id?: string | undefined; }) => Promise<{ threads: any[]; }>",
+      "renderer_arguments_accepted": true,
+      "declared_return_assignable": true
+    },
+    {
+      "api": "emails.pin",
+      "renderer": "(threadId: string, pinned: boolean) => Promise<{ ok: boolean; affected: number; }>",
+      "preload": "(threadId: string, pinned: boolean) => Promise<{ ok: boolean; affected: number; }>",
+      "renderer_arguments_accepted": true,
+      "declared_return_assignable": true
+    },
+    {
+      "api": "emails.markRead",
+      "renderer": "(threadId: string) => Promise<{ ok: boolean; affected: number; }>",
+      "preload": "(threadId: string) => Promise<{ ok: boolean; affected: number; }>",
+      "renderer_arguments_accepted": true,
+      "declared_return_assignable": true
+    },
+    {
+      "api": "emails.archive",
+      "renderer": "(threadId: string) => Promise<ArchiveResult>",
+      "preload": "(threadId: string) => Promise<{ ok: boolean; archived: number; mailboxes: { mailbox_id: string; attempted: number; moved: number; error: string | null; }[]; }>",
+      "renderer_arguments_accepted": true,
+      "declared_return_assignable": true
+    },
+    {
+      "api": "emails.deleteLocal",
+      "renderer": "(threadId: string) => Promise<{ ok: boolean; deleted: number; }>",
+      "preload": "(threadId: string) => Promise<{ ok: boolean; deleted: number; }>",
+      "renderer_arguments_accepted": true,
+      "declared_return_assignable": true
+    },
+    {
+      "api": "mailboxes.list",
+      "renderer": "() => Promise<{ mailboxes: Mailbox[]; }>",
+      "preload": "() => Promise<{ mailboxes: any[]; }>",
+      "renderer_arguments_accepted": true,
+      "declared_return_assignable": true
+    },
+    {
+      "api": "mailboxes.presets",
+      "renderer": "() => Promise<{ presets: MailboxPreset[]; }>",
+      "preload": "() => Promise<{ presets: any[]; }>",
+      "renderer_arguments_accepted": true,
+      "declared_return_assignable": true
+    },
+    {
+      "api": "mailboxes.test",
+      "renderer": "(params: { address: string; password: string; imap_host?: string | undefined; imap_port?: number | undefined; smtp_host?: string | undefined; smtp_port?: number | undefined; }) => Promise<MailboxTestResult>",
+      "preload": "(params: { address: string; password: string; imap_host?: string | undefined; imap_port?: number | undefined; smtp_host?: string | undefined; smtp_port?: number | undefined; }) => Promise<MailboxTestResult>",
+      "renderer_arguments_accepted": true,
+      "declared_return_assignable": true
+    },
+    {
+      "api": "mailboxes.add",
+      "renderer": "(params: { address: string; password: string; imap_host?: string | undefined; imap_port?: number | undefined; smtp_host?: string | undefined; smtp_port?: number | undefined; preset?: string | undefined; }) => Promise<MailboxMutationResult>",
+      "preload": "(params: { address: string; password: string; imap_host?: string | undefined; imap_port?: number | undefined; smtp_host?: string | undefined; smtp_port?: number | undefined; preset?: string | undefined; }) => Promise<MailboxMutationResult>",
+      "renderer_arguments_accepted": true,
+      "declared_return_assignable": true
+    },
+    {
+      "api": "mailboxes.update",
+      "renderer": "(params: { mailbox_id: string; imap_host?: string | undefined; imap_port?: number | undefined; smtp_host?: string | undefined; smtp_port?: number | undefined; password?: string | undefined; preset?: string | undefined; }) => Promise<MailboxMutationResult>",
+      "preload": "(params: { mailbox_id: string; imap_host?: string | undefined; imap_port?: number | undefined; smtp_host?: string | undefined; smtp_port?: number | undefined; password?: string | undefined; preset?: string | undefined; }) => Promise<MailboxMutationResult>",
+      "renderer_arguments_accepted": true,
+      "declared_return_assignable": true
+    },
+    {
+      "api": "mailboxes.remove",
+      "renderer": "(mailboxId: string) => Promise<MailboxMutationResult>",
+      "preload": "(mailboxId: string) => Promise<MailboxMutationResult>",
+      "renderer_arguments_accepted": true,
+      "declared_return_assignable": true
+    },
+    {
+      "api": "files.select",
+      "renderer": "() => Promise<string[]>",
+      "preload": "() => Promise<string[]>",
+      "renderer_arguments_accepted": true,
+      "declared_return_assignable": true
+    },
+    {
+      "api": "files.selectDirectories",
+      "renderer": "() => Promise<string[]>",
+      "preload": "() => Promise<string[]>",
+      "renderer_arguments_accepted": true,
+      "declared_return_assignable": true
+    },
+    {
+      "api": "profile.current",
+      "renderer": "() => Promise<{ id: string; email: string | null; }>",
+      "preload": "() => Promise<{ id: string; email: string | null; }>",
+      "renderer_arguments_accepted": true,
+      "declared_return_assignable": true
+    },
+    {
+      "api": "profiles.list",
+      "renderer": "() => Promise<{ id: string; email: string | null; }[]>",
+      "preload": "() => Promise<{ id: string; email: string | null; }[]>",
+      "renderer_arguments_accepted": true,
+      "declared_return_assignable": true
+    },
+    {
+      "api": "profiles.create",
+      "renderer": "(email: string, values: Record<string, string>) => Promise<{ ok: boolean; profile: string; }>",
+      "preload": "(email: string, values: Record<string, string>) => Promise<{ ok: boolean; profile: string; }>",
+      "renderer_arguments_accepted": true,
+      "declared_return_assignable": true
+    },
+    {
+      "api": "window.openForProfile",
+      "renderer": "(id: string) => Promise<{ ok: boolean; }>",
+      "preload": "(id: string) => Promise<{ ok: boolean; }>",
+      "renderer_arguments_accepted": true,
+      "declared_return_assignable": true
+    },
+    {
+      "api": "narration.summarize",
+      "renderer": "(lines: string[], context?: string | undefined) => Promise<{ text: string; }>",
+      "preload": "(lines: string[], context?: string) => Promise<{ text: string; }>",
+      "renderer_arguments_accepted": true,
+      "declared_return_assignable": true
+    },
+    {
+      "api": "narration.predict",
+      "renderer": "(message: string, context?: string | undefined) => Promise<{ text: string; }>",
+      "preload": "(message: string, context?: string) => Promise<{ text: string; }>",
+      "renderer_arguments_accepted": true,
+      "declared_return_assignable": true
+    },
+    {
+      "api": "settings.schema",
+      "renderer": "() => Promise<{ fields: { key: string; label: string; type: \"number\" | \"text\" | \"password\" | \"select\" | \"textarea\"; group: string; optional?: boolean | undefined; options?: string[] | undefined; help?: string | undefined; secret?: boolean | undefined; }[]; }>",
+      "preload": "() => Promise<{ fields: { key: string; label: string; type: \"number\" | \"text\" | \"password\" | \"select\" | \"textarea\"; group: string; optional?: boolean | undefined; options?: string[] | undefined; help?: string | undefined; secret?: boolean | undefined; }[]; }>",
+      "renderer_arguments_accepted": true,
+      "declared_return_assignable": true
+    },
+    {
+      "api": "settings.get",
+      "renderer": "() => Promise<{ values: Record<string, string>; }>",
+      "preload": "() => Promise<{ values: Record<string, string>; }>",
+      "renderer_arguments_accepted": true,
+      "declared_return_assignable": true
+    },
+    {
+      "api": "settings.getSecret",
+      "renderer": "(key: string) => Promise<{ key: string; value: string; }>",
+      "preload": "(key: string) => Promise<{ key: string; value: string; }>",
+      "renderer_arguments_accepted": true,
+      "declared_return_assignable": true
+    },
+    {
+      "api": "settings.update",
+      "renderer": "(updates: Record<string, string>) => Promise<{ ok: boolean; applied: string[]; skipped_unchanged: string[]; }>",
+      "preload": "(updates: Record<string, string>) => Promise<{ ok: boolean; applied: string[]; skipped_unchanged: string[]; }>",
+      "renderer_arguments_accepted": true,
+      "declared_return_assignable": true
+    },
+    {
+      "api": "settings.getBackendLocation",
+      "renderer": "() => Promise<{ location: \"local\" | \"remote\"; url?: string | undefined; }>",
+      "preload": "() => Promise<{ location: \"local\" | \"remote\"; url?: string | undefined; }>",
+      "renderer_arguments_accepted": true,
+      "declared_return_assignable": true
+    },
+    {
+      "api": "settings.setBackendLocation",
+      "renderer": "(location: \"local\" | \"remote\", url?: string | undefined) => Promise<{ ok: boolean; }>",
+      "preload": "(location: \"local\" | \"remote\", url?: string | undefined) => Promise<{ ok: boolean; }>",
+      "renderer_arguments_accepted": true,
+      "declared_return_assignable": true
+    },
+    {
+      "api": "settings.testBackendConnection",
+      "renderer": "(url: string) => Promise<{ ok: true; signedIn: boolean; uid?: string | undefined; email?: string | null | undefined; } | { ok: false; code: string; message: string; }>",
+      "preload": "(url: string) => Promise<{ ok: true; signedIn: boolean; uid?: string | undefined; email?: string | null | undefined; } | { ok: false; code: string; message: string; }>",
+      "renderer_arguments_accepted": true,
+      "declared_return_assignable": true
+    },
+    {
+      "api": "sidecar.restart",
+      "renderer": "() => Promise<{ ok: boolean; }>",
+      "preload": "() => Promise<{ ok: boolean; }>",
+      "renderer_arguments_accepted": true,
+      "declared_return_assignable": true
+    },
+    {
+      "api": "provision.start",
+      "renderer": "() => Promise<{ ok: true; uid: string; state: \"preparing\"; } | { ok: false; code: string; message: string; }>",
+      "preload": "() => Promise<{ ok: true; uid: string; state: \"preparing\"; } | { ok: false; code: string; message: string; }>",
+      "renderer_arguments_accepted": true,
+      "declared_return_assignable": true
+    },
+    {
+      "api": "provision.status",
+      "renderer": "() => Promise<{ ok: true; state: \"preparing\" | \"active\" | \"problem\" | \"not_provisioned\"; } | { ok: false; code: string; message: string; }>",
+      "preload": "() => Promise<{ ok: true; state: \"preparing\" | \"active\" | \"problem\" | \"not_provisioned\"; } | { ok: false; code: string; message: string; }>",
+      "renderer_arguments_accepted": true,
+      "declared_return_assignable": true
+    },
+    {
+      "api": "account.onTokenRefreshRequest",
+      "renderer": "(handler: (uid: string) => Promise<boolean>) => () => void",
+      "preload": "(handler: TokenRefreshHandler) => () => void",
+      "renderer_arguments_accepted": true,
+      "declared_return_assignable": true
+    },
+    {
+      "api": "account.pushToken",
+      "renderer": "(args: { uid: string; email: string | null; idToken: string; expiresAtMs: number; refreshToken: string; }) => Promise<{ ok: boolean; }>",
+      "preload": "(args: { uid: string; email: string | null; idToken: string; expiresAtMs: number; refreshToken: string; }) => Promise<{ ok: boolean; }>",
+      "renderer_arguments_accepted": true,
+      "declared_return_assignable": true
+    },
+    {
+      "api": "account.setFirebaseToken",
+      "renderer": "(args: { uid: string; email: string | null; idToken: string; expiresAtMs: number; }) => Promise<{ ok: boolean; }>",
+      "preload": "(args: { uid: string; email: string | null; idToken: string; expiresAtMs: number; }) => Promise<{ ok: boolean; }>",
+      "renderer_arguments_accepted": true,
+      "declared_return_assignable": true
+    },
+    {
+      "api": "account.signOut",
+      "renderer": "() => Promise<{ ok: boolean; }>",
+      "preload": "() => Promise<{ ok: boolean; }>",
+      "renderer_arguments_accepted": true,
+      "declared_return_assignable": true
+    },
+    {
+      "api": "account.whoAmI",
+      "renderer": "() => Promise<{ signed_in: boolean; uid?: string | undefined; email?: string | null | undefined; expires_at_ms?: number | undefined; }>",
+      "preload": "() => Promise<{ signed_in: boolean; uid?: string | undefined; email?: string | null | undefined; expires_at_ms?: number | undefined; }>",
+      "renderer_arguments_accepted": true,
+      "declared_return_assignable": true
+    },
+    {
+      "api": "account.balance",
+      "renderer": "() => Promise<{ balance_credits: number; balance_micro_usd: number; balance_usd: number; granularity_micro_usd?: number | undefined; estimate_messages_remaining?: number | undefined; } | { error: \"auth_expired\"; }>",
+      "preload": "() => Promise<{ balance_credits: number; balance_micro_usd: number; balance_usd: number; granularity_micro_usd?: number | undefined; estimate_messages_remaining?: number | undefined; } | { error: \"auth_expired\"; }>",
+      "renderer_arguments_accepted": true,
+      "declared_return_assignable": true
+    },
+    {
+      "api": "sms.getSender",
+      "renderer": "() => Promise<{ sender: string; business_id?: string | undefined; } | { error: \"auth_expired\"; }>",
+      "preload": "() => Promise<{ sender: string; business_id?: string | undefined; } | { error: \"auth_expired\"; }>",
+      "renderer_arguments_accepted": true,
+      "declared_return_assignable": true
+    },
+    {
+      "api": "sms.setSender",
+      "renderer": "(sender: string) => Promise<{ sender: string; business_id?: string | undefined; } | { error: \"auth_expired\"; }>",
+      "preload": "(sender: string) => Promise<{ sender: string; business_id?: string | undefined; } | { error: \"auth_expired\"; }>",
+      "renderer_arguments_accepted": true,
+      "declared_return_assignable": true
+    },
+    {
+      "api": "mrcall.listMyBusinesses",
+      "renderer": "(params?: { offset?: number | undefined; limit?: number | undefined; } | undefined) => Promise<{ businesses: unknown[]; role: string; }>",
+      "preload": "(params?: { offset?: number | undefined; limit?: number | undefined; }) => Promise<{ businesses: unknown[]; role: string; }>",
+      "renderer_arguments_accepted": true,
+      "declared_return_assignable": true
+    },
+    {
+      "api": "mrcall.searchBusinesses",
+      "renderer": "(params?: { emailAddress?: string | undefined; name?: string | undefined; surname?: string | undefined; companyName?: string | undefined; nickname?: string | undefined; businessPhoneNumber?: string | undefined; vatId?: string | undefined; businessId?: string | undefined; address?: string | undefined; countryAlpha2?: string | undefined; subscriptionStatus?: string | undefined; offset?: number | undefined; limit?: number | undefined; } | undefined) => Promise<{ businesses: unknown[]; role: string; }>",
+      "preload": "(params?: { emailAddress?: string | undefined; name?: string | undefined; surname?: string | undefined; companyName?: string | undefined; nickname?: string | undefined; businessPhoneNumber?: string | undefined; vatId?: string | undefined; businessId?: string | undefined; address?: string | undefined; countryAlpha2?: string | undefined; subscriptionStatus?: string | undefined; offset?: number | undefined; limit?: number | undefined; }) => Promise<{ businesses: unknown[]; role: string; }>",
+      "renderer_arguments_accepted": true,
+      "declared_return_assignable": true
+    },
+    {
+      "api": "google.calendar.connect",
+      "renderer": "() => Promise<{ ok: boolean; email: string; scope: string; }>",
+      "preload": "() => Promise<{ ok: boolean; email: string; scope: string; }>",
+      "renderer_arguments_accepted": true,
+      "declared_return_assignable": true
+    },
+    {
+      "api": "google.calendar.disconnect",
+      "renderer": "() => Promise<{ ok: boolean; }>",
+      "preload": "() => Promise<{ ok: boolean; }>",
+      "renderer_arguments_accepted": true,
+      "declared_return_assignable": true
+    },
+    {
+      "api": "google.calendar.status",
+      "renderer": "() => Promise<{ connected: boolean; signed_in?: boolean | undefined; email?: string | null | undefined; }>",
+      "preload": "() => Promise<{ connected: boolean; signed_in?: boolean | undefined; email?: string | null | undefined; }>",
+      "renderer_arguments_accepted": true,
+      "declared_return_assignable": true
+    },
+    {
+      "api": "google.calendar.cancel",
+      "renderer": "() => Promise<{ cancelled: boolean; }>",
+      "preload": "() => Promise<{ cancelled: boolean; }>",
+      "renderer_arguments_accepted": true,
+      "declared_return_assignable": true
+    },
+    {
+      "api": "whatsapp.connect",
+      "renderer": "() => Promise<{ ok: boolean; phone?: string | null | undefined; display_name?: string | null | undefined; reason?: string | undefined; }>",
+      "preload": "() => Promise<{ ok: boolean; phone?: string | null | undefined; display_name?: string | null | undefined; reason?: string | undefined; }>",
+      "renderer_arguments_accepted": true,
+      "declared_return_assignable": true
+    },
+    {
+      "api": "whatsapp.disconnect",
+      "renderer": "(forgetSession?: boolean | undefined) => Promise<{ ok: boolean; forgot: boolean; error?: string | undefined; }>",
+      "preload": "(forgetSession?: boolean) => Promise<{ ok: boolean; forgot: boolean; error?: string | undefined; }>",
+      "renderer_arguments_accepted": true,
+      "declared_return_assignable": true
+    },
+    {
+      "api": "whatsapp.status",
+      "renderer": "() => Promise<{ connected: boolean; has_session: boolean; phone?: string | null | undefined; display_name?: string | null | undefined; }>",
+      "preload": "() => Promise<{ connected: boolean; has_session: boolean; phone?: string | null | undefined; display_name?: string | null | undefined; }>",
+      "renderer_arguments_accepted": true,
+      "declared_return_assignable": true
+    },
+    {
+      "api": "whatsapp.cancel",
+      "renderer": "() => Promise<{ cancelled: boolean; }>",
+      "preload": "() => Promise<{ cancelled: boolean; }>",
+      "renderer_arguments_accepted": true,
+      "declared_return_assignable": true
+    },
+    {
+      "api": "whatsapp.listThreads",
+      "renderer": "(params?: { limit?: number | undefined; offset?: number | undefined; } | undefined) => Promise<{ threads: WhatsAppThread[]; total_messages?: number | undefined; owner_id?: string | undefined; breakdown_by_server?: Record<string, number> | undefined; error?: string | undefined; }>",
+      "preload": "(params?: { limit?: number | undefined; offset?: number | undefined; } | undefined) => Promise<{ threads: WhatsAppThread[]; total_messages?: number | undefined; owner_id?: string | undefined; breakdown_by_server?: Record<string, number> | undefined; error?: string | undefined; }>",
+      "renderer_arguments_accepted": true,
+      "declared_return_assignable": true
+    },
+    {
+      "api": "whatsapp.listMessages",
+      "renderer": "(params: { chat_jid: string; limit?: number | undefined; offset?: number | undefined; }) => Promise<{ messages: WhatsAppMessage[]; error?: string | undefined; }>",
+      "preload": "(params: { chat_jid: string; limit?: number | undefined; offset?: number | undefined; }) => Promise<{ messages: WhatsAppMessage[]; error?: string | undefined; }>",
+      "renderer_arguments_accepted": true,
+      "declared_return_assignable": true
+    },
+    {
+      "api": "whatsapp.searchMessages",
+      "renderer": "(params: { query: string; limit?: number | undefined; }) => Promise<{ threads: WhatsAppThread[]; query?: string | undefined; error?: string | undefined; }>",
+      "preload": "(params: { query: string; limit?: number | undefined; }) => Promise<{ threads: WhatsAppThread[]; query?: string | undefined; error?: string | undefined; }>",
+      "renderer_arguments_accepted": true,
+      "declared_return_assignable": true
+    },
+    {
+      "api": "whatsapp.sendMessage",
+      "renderer": "(params: { chat_jid: string; text: string; }) => Promise<{ ok: boolean; message?: WhatsAppMessage | undefined; error?: string | undefined; }>",
+      "preload": "(params: { chat_jid: string; text: string; }) => Promise<{ ok: boolean; message?: WhatsAppMessage | undefined; error?: string | undefined; }>",
+      "renderer_arguments_accepted": true,
+      "declared_return_assignable": true
+    },
+    {
+      "api": "shell.openExternal",
+      "renderer": "(url: string) => Promise<{ ok: boolean; }>",
+      "preload": "(url: string) => Promise<{ ok: boolean; }>",
+      "renderer_arguments_accepted": true,
+      "declared_return_assignable": true
+    },
+    {
+      "api": "signin.googleStart",
+      "renderer": "() => Promise<{ ok: boolean; idToken?: string | undefined; email?: string | null | undefined; error?: string | undefined; }>",
+      "preload": "() => Promise<{ ok: boolean; idToken?: string | undefined; email?: string | null | undefined; error?: string | undefined; }>",
+      "renderer_arguments_accepted": true,
+      "declared_return_assignable": true
+    },
+    {
+      "api": "signin.googleCancel",
+      "renderer": "() => Promise<{ cancelled: boolean; }>",
+      "preload": "() => Promise<{ cancelled: boolean; }>",
+      "renderer_arguments_accepted": true,
+      "declared_return_assignable": true
+    },
+    {
+      "api": "auth.bindProfile",
+      "renderer": "(uid: string) => Promise<{ ok: boolean; found: boolean; reason?: string | undefined; }>",
+      "preload": "(uid: string) => Promise<{ ok: boolean; found: boolean; reason?: string | undefined; }>",
+      "renderer_arguments_accepted": true,
+      "declared_return_assignable": true
+    },
+    {
+      "api": "onboarding.createProfile",
+      "renderer": "(email: string, values: Record<string, string>) => Promise<{ ok: true; profile: string; } | { ok: false; error: string; }>",
+      "preload": "(email: string, values: Record<string, string>) => Promise<{ ok: true; profile: string; } | { ok: false; error: string; }>",
+      "renderer_arguments_accepted": true,
+      "declared_return_assignable": true
+    },
+    {
+      "api": "onboarding.createProfileForFirebaseUser",
+      "renderer": "(uid: string, email: string, values: Record<string, string>) => Promise<{ ok: true; profile: string; } | { ok: false; error: string; }>",
+      "preload": "(uid: string, email: string, values: Record<string, string>) => Promise<{ ok: true; profile: string; } | { ok: false; error: string; }>",
+      "renderer_arguments_accepted": true,
+      "declared_return_assignable": true
+    },
+    {
+      "api": "onboarding.finalize",
+      "renderer": "(profile: string) => Promise<{ ok: boolean; }>",
+      "preload": "(profile: string) => Promise<{ ok: boolean; }>",
+      "renderer_arguments_accepted": true,
+      "declared_return_assignable": true
+    },
+    {
+      "api": "onNotification",
+      "renderer": "(method: string, cb: (params: any) => void) => () => void",
+      "preload": "(method: string, cb: NotifyCb) => () => void",
+      "renderer_arguments_accepted": true,
+      "declared_return_assignable": true
+    },
+    {
+      "api": "onStderr",
+      "renderer": "(cb: (chunk: string) => void) => () => void",
+      "preload": "(cb: StderrCb) => () => void",
+      "renderer_arguments_accepted": true,
+      "declared_return_assignable": true
+    },
+    {
+      "api": "onSidecarStatus",
+      "renderer": "(cb: (status: SidecarStatusEvent) => void) => () => void",
+      "preload": "(cb: StatusCb) => () => void",
+      "renderer_arguments_accepted": true,
+      "declared_return_assignable": true
+    },
+    {
+      "api": "onOpenProfilePicker",
+      "renderer": "(cb: () => void) => () => void",
+      "preload": "(cb: MenuCb) => () => void",
+      "renderer_arguments_accepted": true,
+      "declared_return_assignable": true
+    },
+    {
+      "api": "logs.tail",
+      "renderer": "() => Promise<string[]>",
+      "preload": "() => Promise<string[]>",
+      "renderer_arguments_accepted": true,
+      "declared_return_assignable": true
+    },
+    {
+      "api": "logs.clear",
+      "renderer": "() => Promise<{ ok: boolean; }>",
+      "preload": "() => Promise<{ ok: boolean; }>",
+      "renderer_arguments_accepted": true,
+      "declared_return_assignable": true
+    },
+    {
+      "api": "onLogLine",
+      "renderer": "(cb: (chunk: string) => void) => () => void",
+      "preload": "(cb: LogLineCb) => () => void",
+      "renderer_arguments_accepted": true,
+      "declared_return_assignable": true
+    }
+  ],
+  "kernel_calls": [
+    {
+      "file": "cs/assignment_cli.py",
+      "line": 59,
+      "callee": "rpc.call_sync",
+      "method": "tasks.assignment.preview",
+      "method_expression": "'tasks.assignment.preview'",
+      "keys": [],
+      "dynamic_payload": true,
+      "return": "Any at EngineClient.call; no runtime return schema"
+    },
+    {
+      "file": "cs/campaign.py",
+      "line": 99,
+      "callee": "rpc.call_sync",
+      "method": "campaign.list",
+      "method_expression": "'campaign.list'",
+      "keys": [],
+      "dynamic_payload": false,
+      "return": "Any at EngineClient.call; no runtime return schema"
+    },
+    {
+      "file": "cs/campaign.py",
+      "line": 201,
+      "callee": "rpc.call_sync",
+      "method": "campaign.contacts",
+      "method_expression": "'campaign.contacts'",
+      "keys": [
+        "campaign_id"
+      ],
+      "dynamic_payload": false,
+      "return": "Any at EngineClient.call; no runtime return schema"
+    },
+    {
+      "file": "cs/campaign.py",
+      "line": 407,
+      "callee": "rpc.call_sync",
+      "method": "campaign.contacts",
+      "method_expression": "'campaign.contacts'",
+      "keys": [
+        "campaign_id"
+      ],
+      "dynamic_payload": false,
+      "return": "Any at EngineClient.call; no runtime return schema"
+    },
+    {
+      "file": "cs/campaign.py",
+      "line": 462,
+      "callee": "rpc.call_sync",
+      "method": "campaign.update_contact",
+      "method_expression": "'campaign.update_contact'",
+      "keys": [],
+      "dynamic_payload": true,
+      "return": "Any at EngineClient.call; no runtime return schema"
+    },
+    {
+      "file": "cs/campaign.py",
+      "line": 481,
+      "callee": "rpc.call_sync",
+      "method": "campaign.update_contact",
+      "method_expression": "'campaign.update_contact'",
+      "keys": [],
+      "dynamic_payload": true,
+      "return": "Any at EngineClient.call; no runtime return schema"
+    },
+    {
+      "file": "cs/campaign.py",
+      "line": 591,
+      "callee": "rpc.call_sync",
+      "method": "campaign.update_contact",
+      "method_expression": "'campaign.update_contact'",
+      "keys": [
+        "contact_id",
+        "message_id",
+        "state"
+      ],
+      "dynamic_payload": false,
+      "return": "Any at EngineClient.call; no runtime return schema"
+    },
+    {
+      "file": "cs/campaign.py",
+      "line": 613,
+      "callee": "rpc.call_sync",
+      "method": "campaign.update_contact",
+      "method_expression": "'campaign.update_contact'",
+      "keys": [
+        "contact_id",
+        "dossier"
+      ],
+      "dynamic_payload": false,
+      "return": "Any at EngineClient.call; no runtime return schema"
+    },
+    {
+      "file": "cs/campaign.py",
+      "line": 640,
+      "callee": "rpc.call_sync",
+      "method": "campaign.update_contact",
+      "method_expression": "'campaign.update_contact'",
+      "keys": [
+        "contact_id",
+        "message_id",
+        "state"
+      ],
+      "dynamic_payload": false,
+      "return": "Any at EngineClient.call; no runtime return schema"
+    },
+    {
+      "file": "cs/campaign.py",
+      "line": 712,
+      "callee": "rpc.call_sync",
+      "method": "campaign.update_contact",
+      "method_expression": "'campaign.update_contact'",
+      "keys": [
+        "contact_id",
+        "dossier"
+      ],
+      "dynamic_payload": false,
+      "return": "Any at EngineClient.call; no runtime return schema"
+    },
+    {
+      "file": "cs/campaign.py",
+      "line": 811,
+      "callee": "rpc.call_sync",
+      "method": "campaign.update_contact",
+      "method_expression": "'campaign.update_contact'",
+      "keys": [
+        "contact_id",
+        "dossier"
+      ],
+      "dynamic_payload": false,
+      "return": "Any at EngineClient.call; no runtime return schema"
+    },
+    {
+      "file": "cs/campaign.py",
+      "line": 817,
+      "callee": "rpc.call_sync",
+      "method": "campaign.update_contact",
+      "method_expression": "'campaign.update_contact'",
+      "keys": [
+        "contact_id",
+        "dossier"
+      ],
+      "dynamic_payload": false,
+      "return": "Any at EngineClient.call; no runtime return schema"
+    },
+    {
+      "file": "cs/campaign.py",
+      "line": 909,
+      "callee": "rpc.call_sync",
+      "method": "campaign.update_contact",
+      "method_expression": "'campaign.update_contact'",
+      "keys": [
+        "contact_id",
+        "dossier"
+      ],
+      "dynamic_payload": false,
+      "return": "Any at EngineClient.call; no runtime return schema"
+    },
+    {
+      "file": "cs/campaign.py",
+      "line": 920,
+      "callee": "rpc.call_sync",
+      "method": "campaign.update_contact",
+      "method_expression": "'campaign.update_contact'",
+      "keys": [
+        "contact_id",
+        "message_id",
+        "state"
+      ],
+      "dynamic_payload": false,
+      "return": "Any at EngineClient.call; no runtime return schema"
+    },
+    {
+      "file": "cs/campaign.py",
+      "line": 978,
+      "callee": "rpc.call_sync",
+      "method": "campaign.update_contact",
+      "method_expression": "'campaign.update_contact'",
+      "keys": [
+        "contact_id",
+        "dossier"
+      ],
+      "dynamic_payload": false,
+      "return": "Any at EngineClient.call; no runtime return schema"
+    },
+    {
+      "file": "cs/cli.py",
+      "line": 137,
+      "callee": "rpc.call_sync",
+      "method": "account.who_am_i",
+      "method_expression": "'account.who_am_i'",
+      "keys": [],
+      "dynamic_payload": false,
+      "return": "Any at EngineClient.call; no runtime return schema"
+    },
+    {
+      "file": "cs/cli.py",
+      "line": 164,
+      "callee": "rpc.call_sync",
+      "method": null,
+      "method_expression": "args.method",
+      "keys": [],
+      "dynamic_payload": true,
+      "return": "Any at EngineClient.call; no runtime return schema"
+    },
+    {
+      "file": "cs/cli.py",
+      "line": 169,
+      "callee": "rpc.call_sync",
+      "method": "emails.search",
+      "method_expression": "'emails.search'",
+      "keys": [
+        "folder",
+        "limit",
+        "query"
+      ],
+      "dynamic_payload": false,
+      "return": "Any at EngineClient.call; no runtime return schema"
+    },
+    {
+      "file": "cs/cli.py",
+      "line": 203,
+      "callee": "rpc.call_sync",
+      "method": "emails.list_by_thread",
+      "method_expression": "'emails.list_by_thread'",
+      "keys": [
+        "thread_id"
+      ],
+      "dynamic_payload": false,
+      "return": "Any at EngineClient.call; no runtime return schema"
+    },
+    {
+      "file": "cs/cli.py",
+      "line": 569,
+      "callee": "rpc.call_sync",
+      "method": "tasks.list",
+      "method_expression": "'tasks.list'",
+      "keys": [
+        "include_completed",
+        "limit"
+      ],
+      "dynamic_payload": false,
+      "return": "Any at EngineClient.call; no runtime return schema"
+    },
+    {
+      "file": "cs/cli.py",
+      "line": 615,
+      "callee": "rpc.call_sync",
+      "method": "tasks.create",
+      "method_expression": "'tasks.create'",
+      "keys": [],
+      "dynamic_payload": true,
+      "return": "Any at EngineClient.call; no runtime return schema"
+    },
+    {
+      "file": "cs/cli.py",
+      "line": 637,
+      "callee": "rpc.call_sync",
+      "method": "tasks.complete",
+      "method_expression": "'tasks.complete'",
+      "keys": [],
+      "dynamic_payload": true,
+      "return": "Any at EngineClient.call; no runtime return schema"
+    },
+    {
+      "file": "cs/cli.py",
+      "line": 800,
+      "callee": "rpc.call_sync",
+      "method": "tasks.list",
+      "method_expression": "'tasks.list'",
+      "keys": [
+        "include_completed",
+        "limit"
+      ],
+      "dynamic_payload": false,
+      "return": "Any at EngineClient.call; no runtime return schema"
+    },
+    {
+      "file": "cs/cli.py",
+      "line": 813,
+      "callee": "rpc.call_sync",
+      "method": "tasks.complete",
+      "method_expression": "'tasks.complete'",
+      "keys": [
+        "actor",
+        "note",
+        "task_id",
+        "why"
+      ],
+      "dynamic_payload": false,
+      "return": "Any at EngineClient.call; no runtime return schema"
+    },
+    {
+      "file": "cs/cli.py",
+      "line": 1140,
+      "callee": "rpc.call_sync",
+      "method": "tasks.list",
+      "method_expression": "'tasks.list'",
+      "keys": [
+        "limit"
+      ],
+      "dynamic_payload": false,
+      "return": "Any at EngineClient.call; no runtime return schema"
+    },
+    {
+      "file": "cs/cli.py",
+      "line": 1307,
+      "callee": "rpc.call_sync",
+      "method": "drafts.list",
+      "method_expression": "'drafts.list'",
+      "keys": [
+        "status"
+      ],
+      "dynamic_payload": false,
+      "return": "Any at EngineClient.call; no runtime return schema"
+    },
+    {
+      "file": "cs/cli.py",
+      "line": 1604,
+      "callee": "rpc.call_sync",
+      "method": "drafts.list",
+      "method_expression": "'drafts.list'",
+      "keys": [],
+      "dynamic_payload": false,
+      "return": "Any at EngineClient.call; no runtime return schema"
+    },
+    {
+      "file": "cs/cli.py",
+      "line": 1626,
+      "callee": "rpc.call_sync",
+      "method": "drafts.list",
+      "method_expression": "'drafts.list'",
+      "keys": [],
+      "dynamic_payload": false,
+      "return": "Any at EngineClient.call; no runtime return schema"
+    },
+    {
+      "file": "cs/cli.py",
+      "line": 1712,
+      "callee": "rpc.call_sync",
+      "method": "drafts.list",
+      "method_expression": "'drafts.list'",
+      "keys": [
+        "status"
+      ],
+      "dynamic_payload": false,
+      "return": "Any at EngineClient.call; no runtime return schema"
+    },
+    {
+      "file": "cs/cli.py",
+      "line": 1811,
+      "callee": "rpc.call_sync",
+      "method": "sync.run",
+      "method_expression": "'sync.run'",
+      "keys": [],
+      "dynamic_payload": false,
+      "return": "Any at EngineClient.call; no runtime return schema"
+    },
+    {
+      "file": "cs/cli.py",
+      "line": 1816,
+      "callee": "rpc.call_sync",
+      "method": "update.run",
+      "method_expression": "'update.run'",
+      "keys": [],
+      "dynamic_payload": false,
+      "return": "Any at EngineClient.call; no runtime return schema"
+    },
+    {
+      "file": "cs/contextual_email.py",
+      "line": 20,
+      "callee": "rpc.call_sync",
+      "method": "system.capabilities",
+      "method_expression": "'system.capabilities'",
+      "keys": [],
+      "dynamic_payload": false,
+      "return": "Any at EngineClient.call; no runtime return schema"
+    },
+    {
+      "file": "cs/contextual_email.py",
+      "line": 25,
+      "callee": "rpc.call_sync",
+      "method": "drafts.list",
+      "method_expression": "'drafts.list'",
+      "keys": [
+        "status"
+      ],
+      "dynamic_payload": false,
+      "return": "Any at EngineClient.call; no runtime return schema"
+    },
+    {
+      "file": "cs/contextual_email.py",
+      "line": 66,
+      "callee": "rpc.call_sync",
+      "method": "drafts.list",
+      "method_expression": "'drafts.list'",
+      "keys": [
+        "status"
+      ],
+      "dynamic_payload": false,
+      "return": "Any at EngineClient.call; no runtime return schema"
+    },
+    {
+      "file": "cs/crm/__init__.py",
+      "line": 89,
+      "callee": "rpc_mod.call_sync",
+      "method": null,
+      "method_expression": "method",
+      "keys": [],
+      "dynamic_payload": true,
+      "return": "Any at EngineClient.call; no runtime return schema"
+    },
+    {
+      "file": "cs/crm/starchat.py",
+      "line": 23,
+      "callee": "ctx.call_rpc",
+      "method": "mrcall.search_businesses",
+      "method_expression": "'mrcall.search_businesses'",
+      "keys": [
+        "emailAddress"
+      ],
+      "dynamic_payload": false,
+      "return": "Any at EngineClient.call; no runtime return schema"
+    },
+    {
+      "file": "cs/engine_view.py",
+      "line": 102,
+      "callee": "rpc.call_sync",
+      "method": "emails.list_by_thread",
+      "method_expression": "'emails.list_by_thread'",
+      "keys": [
+        "thread_id"
+      ],
+      "dynamic_payload": false,
+      "return": "Any at EngineClient.call; no runtime return schema"
+    },
+    {
+      "file": "cs/engine_view.py",
+      "line": 180,
+      "callee": "rpc.call_sync",
+      "method": "emails.needs_reply",
+      "method_expression": "'emails.needs_reply'",
+      "keys": [
+        "thread_ids"
+      ],
+      "dynamic_payload": false,
+      "return": "Any at EngineClient.call; no runtime return schema"
+    },
+    {
+      "file": "cs/instructions.py",
+      "line": 210,
+      "callee": "client.call",
+      "method": "instructions.store",
+      "method_expression": "'instructions.store'",
+      "keys": [
+        "content_base64",
+        "expected_revision",
+        "path",
+        "space_id"
+      ],
+      "dynamic_payload": false,
+      "return": "Any at EngineClient.call; no runtime return schema"
+    },
+    {
+      "file": "cs/login.py",
+      "line": 421,
+      "callee": "rpc.call_sync",
+      "method": "account.who_am_i",
+      "method_expression": "'account.who_am_i'",
+      "keys": [],
+      "dynamic_payload": false,
+      "return": "Any at EngineClient.call; no runtime return schema"
+    },
+    {
+      "file": "cs/mailboxes.py",
+      "line": 337,
+      "callee": "rpc.call_sync",
+      "method": "settings.get",
+      "method_expression": "'settings.get'",
+      "keys": [],
+      "dynamic_payload": false,
+      "return": "Any at EngineClient.call; no runtime return schema"
+    },
+    {
+      "file": "cs/mailboxes.py",
+      "line": 352,
+      "callee": "rpc.call_sync",
+      "method": "settings.get_secret",
+      "method_expression": "'settings.get_secret'",
+      "keys": [
+        "key"
+      ],
+      "dynamic_payload": false,
+      "return": "Any at EngineClient.call; no runtime return schema"
+    },
+    {
+      "file": "cs/operator_recovery.py",
+      "line": 232,
+      "callee": "client.call",
+      "method": "settings.get_secret",
+      "method_expression": "'settings.get_secret'",
+      "keys": [
+        "key"
+      ],
+      "dynamic_payload": false,
+      "return": "Any at EngineClient.call; no runtime return schema"
+    },
+    {
+      "file": "cs/project_documents.py",
+      "line": 108,
+      "callee": "self.call",
+      "method": null,
+      "method_expression": "'projects.' + method",
+      "keys": [],
+      "dynamic_payload": true,
+      "return": "Any at EngineClient.call; no runtime return schema"
+    },
+    {
+      "file": "cs/project_init.py",
+      "line": 185,
+      "callee": "rpc.call_sync",
+      "method": "settings.get_secret",
+      "method_expression": "'settings.get_secret'",
+      "keys": [
+        "key"
+      ],
+      "dynamic_payload": false,
+      "return": "Any at EngineClient.call; no runtime return schema"
+    },
+    {
+      "file": "cs/project_init.py",
+      "line": 208,
+      "callee": "rpc.call_sync",
+      "method": "settings.get",
+      "method_expression": "'settings.get'",
+      "keys": [],
+      "dynamic_payload": false,
+      "return": "Any at EngineClient.call; no runtime return schema"
+    },
+    {
+      "file": "cs/review.py",
+      "line": 118,
+      "callee": "rpc.call_sync",
+      "method": "campaign.contacts",
+      "method_expression": "'campaign.contacts'",
+      "keys": [
+        "campaign_id"
+      ],
+      "dynamic_payload": false,
+      "return": "Any at EngineClient.call; no runtime return schema"
+    },
+    {
+      "file": "cs/review.py",
+      "line": 202,
+      "callee": "rpc.call_sync",
+      "method": "emails.list_by_thread",
+      "method_expression": "'emails.list_by_thread'",
+      "keys": [
+        "thread_id"
+      ],
+      "dynamic_payload": false,
+      "return": "Any at EngineClient.call; no runtime return schema"
+    },
+    {
+      "file": "cs/review.py",
+      "line": 243,
+      "callee": "rpc.call_sync",
+      "method": "drafts.list",
+      "method_expression": "'drafts.list'",
+      "keys": [],
+      "dynamic_payload": false,
+      "return": "Any at EngineClient.call; no runtime return schema"
+    },
+    {
+      "file": "cs/review.py",
+      "line": 271,
+      "callee": "rpc.call_sync",
+      "method": "tasks.list",
+      "method_expression": "'tasks.list'",
+      "keys": [
+        "limit"
+      ],
+      "dynamic_payload": false,
+      "return": "Any at EngineClient.call; no runtime return schema"
+    },
+    {
+      "file": "cs/rpc.py",
+      "line": 228,
+      "callee": "c.call",
+      "method": null,
+      "method_expression": "method",
+      "keys": [],
+      "dynamic_payload": true,
+      "return": "Any at EngineClient.call; no runtime return schema"
+    },
+    {
+      "file": "cs/rpc.py",
+      "line": 345,
+      "callee": "client.call",
+      "method": "chat.approve",
+      "method_expression": "'chat.approve'",
+      "keys": [
+        "mode",
+        "tool_use_id"
+      ],
+      "dynamic_payload": false,
+      "return": "Any at EngineClient.call; no runtime return schema"
+    },
+    {
+      "file": "cs/rpc.py",
+      "line": 351,
+      "callee": "c.call",
+      "method": "system.capabilities",
+      "method_expression": "'system.capabilities'",
+      "keys": [],
+      "dynamic_payload": false,
+      "return": "Any at EngineClient.call; no runtime return schema"
+    },
+    {
+      "file": "cs/rpc.py",
+      "line": 360,
+      "callee": "c.call",
+      "method": "chat.send",
+      "method_expression": "'chat.send'",
+      "keys": [],
+      "dynamic_payload": true,
+      "return": "Any at EngineClient.call; no runtime return schema"
+    },
+    {
+      "file": "cs/rpc.py",
+      "line": 377,
+      "callee": "client.call",
+      "method": "system.capabilities",
+      "method_expression": "'system.capabilities'",
+      "keys": [],
+      "dynamic_payload": false,
+      "return": "Any at EngineClient.call; no runtime return schema"
+    },
+    {
+      "file": "cs/rpc.py",
+      "line": 383,
+      "callee": "client.call",
+      "method": "chat.send",
+      "method_expression": "'chat.send'",
+      "keys": [
+        "conversation_id",
+        "message",
+        "mutation_policy",
+        "policy_version"
+      ],
+      "dynamic_payload": false,
+      "return": "Any at EngineClient.call; no runtime return schema"
+    },
+    {
+      "file": "cs/setup.py",
+      "line": 51,
+      "callee": "call",
+      "method": "account.who_am_i",
+      "method_expression": "'account.who_am_i'",
+      "keys": [],
+      "dynamic_payload": false,
+      "return": "Any at EngineClient.call; no runtime return schema"
+    },
+    {
+      "file": "cs/setup.py",
+      "line": 65,
+      "callee": "call",
+      "method": "setup.state",
+      "method_expression": "'setup.state'",
+      "keys": [],
+      "dynamic_payload": false,
+      "return": "Any at EngineClient.call; no runtime return schema"
+    },
+    {
+      "file": "cs/setup.py",
+      "line": 90,
+      "callee": "call",
+      "method": "memory.status",
+      "method_expression": "'memory.status'",
+      "keys": [],
+      "dynamic_payload": false,
+      "return": "Any at EngineClient.call; no runtime return schema"
+    },
+    {
+      "file": "cs/task_assignment.py",
+      "line": 44,
+      "callee": "rpc.call_sync",
+      "method": "tasks.assignment.list",
+      "method_expression": "'tasks.assignment.list'",
+      "keys": [],
+      "dynamic_payload": false,
+      "return": "Any at EngineClient.call; no runtime return schema"
+    },
+    {
+      "file": "cs/task_assignment.py",
+      "line": 59,
+      "callee": "rpc.call_sync",
+      "method": "tasks.assignment.project",
+      "method_expression": "'tasks.assignment.project'",
+      "keys": [
+        "thread_key"
+      ],
+      "dynamic_payload": false,
+      "return": "Any at EngineClient.call; no runtime return schema"
+    },
+    {
+      "file": "cs/task_assignment.py",
+      "line": 180,
+      "callee": "rpc.call_sync",
+      "method": "tasks.assignment.commit",
+      "method_expression": "'tasks.assignment.commit'",
+      "keys": [
+        "grant",
+        "intent"
+      ],
+      "dynamic_payload": false,
+      "return": "Any at EngineClient.call; no runtime return schema"
+    },
+    {
+      "file": "cs/worker_llm.py",
+      "line": 146,
+      "callee": "call",
+      "method": null,
+      "method_expression": "prompt",
+      "keys": [],
+      "dynamic_payload": false,
+      "return": "Any at EngineClient.call; no runtime return schema"
+    },
+    {
+      "file": "cs/worker_llm.py",
+      "line": 203,
+      "callee": "call",
+      "method": null,
+      "method_expression": "prompt",
+      "keys": [],
+      "dynamic_payload": false,
+      "return": "Any at EngineClient.call; no runtime return schema"
+    }
+  ]
+}

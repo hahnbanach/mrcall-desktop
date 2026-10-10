@@ -20,6 +20,7 @@ import logging
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Tuple
 
+from zylch.email.identity import is_user_sender
 from zylch.llm import make_llm_client, routed_model
 from zylch.storage import Storage
 
@@ -412,8 +413,7 @@ Extract facts only from the provided message. Illustrative examples in these ins
         # Find emails sent BY the user
         user_sent_emails = []
         for email in emails:
-            from_email = email.get("from_email", "")
-            if user_domain and user_domain in from_email.lower():
+            if is_user_sender(self.owner_id, email.get("from_email", ""), self.user_email):
                 user_sent_emails.append(email)
 
         if not user_sent_emails:

@@ -20,6 +20,7 @@ All knowledge lives in `./docs/`. This file is the index.
 | [features/gpt-live-smoke.md](docs/features/gpt-live-smoke.md) | Isolated GPT-Live M1 runner; live smoke and integration review passed |
 | [features/voice-agent-configuration.md](docs/features/voice-agent-configuration.md) | Operator RPC settings, selected caller facts and the opt-in M3 engine listener |
 | [features/project-memory.md](docs/features/project-memory.md) | Shared authored project documents, revisions and RPC contract |
+| [features/mailboxes.md](docs/features/mailboxes.md) | Additional IMAP mailboxes: `mailboxes` table, per-mailbox sync, secrets, PEC unwrap, migration `0003` |
 | [agents/README.md](docs/agents/README.md) | Agent system (memory, tasks, emailer) |
 | [qa/testing-live.md](docs/qa/testing-live.md) | Live testing: use Zylch, compare against Gmail |
 
@@ -125,3 +126,8 @@ is off by default; enabling it permits bounded paid runs. Top-up remains on
 - **NO HARDCODED SECRETS**: Pydantic Settings from profile `.env`
 - **NO ROOT FILES**: Use `/zylch`, `/tests`, `/docs`, `/scripts`
 - **PROFILE MATCH**: Exact match only, no substring/fuzzy
+- **MAILBOXES — do not break**: `MAILBOX_SECRET_KEY` is never logged, never
+  in git, written only by the engine (`mailbox_secrets.ensure_secret_key`,
+  outside the settings schema); the primary mailbox's `.env` keys
+  (`EMAIL_ADDRESS`, `EMAIL_PASSWORD`, `IMAP_*`, `SMTP_*`) keep their
+  meaning. See [features/mailboxes.md](docs/features/mailboxes.md)

@@ -28,4 +28,5 @@ For now, [`../CLAUDE.md`](../CLAUDE.md) is the authoritative app-side
 index.
 
 - [Bounded preparation](bounded-preparation.md): sync, batches and pause UI.
+- [Qonto](qonto.md): native connection, private source review and managed chat.
 - [Context archive](active-context-archive.md): historical app snapshots.

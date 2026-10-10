@@ -54,7 +54,9 @@ class BlobReads:
                 .filter(Blob.id == blob_id, blob_visible(owner_id, key))
                 .one_or_none()
             )
-            return blob.to_dict() if blob else None
+            from zylch.qonto.provenance import annotate
+
+            return annotate(session, key, blob.to_dict()) if blob else None
 
     def list_blobs(
         self,
@@ -71,7 +73,10 @@ class BlobReads:
                 .limit(limit)
                 .all()
             )
-            return [r.to_dict() for r in rows]
+            from zylch.qonto.provenance import annotate, excluded_blob_ids
+
+            excluded = excluded_blob_ids(session, key)
+            return [annotate(session, key, r.to_dict(), excluded=excluded) for r in rows]
 
     def other_owners_present(self, owner_id: str) -> bool:
         """Has any OTHER account contributed to this company's memory?

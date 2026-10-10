@@ -134,6 +134,42 @@ types in `renderer/src/types.ts`). `scripts/test-onboarding.mjs` covers the
 step. Engine side in [`../engine/CLAUDE.md`](../engine/CLAUDE.md); design in
 [`../docs/briefs/2026-09-08-shared-company-memory-implementation.md`](../docs/briefs/2026-09-08-shared-company-memory-implementation.md).
 
+## Additional mailboxes — Settings card and Email view (since 2026-09)
+
+`views/Settings.tsx` carries a `MailboxesCard` (the `MemoryCard` pattern:
+own state, own RPCs, no shared Save bar) inside the `Email` settings group,
+under the primary's `EMAIL_*` fields. It lists every active mailbox with a
+Primary badge, an ok/error/never chip, last sync and last error; Add takes
+a preset from `mailboxes.presets` (or Custom), address, hosts/ports and a
+password whose label comes from the preset, and Save stays disabled until
+`mailboxes.test` answers `ok` (any edit clears the result, a late answer
+is dropped). Cancel, logout and engine changes invalidate pending results and
+clear mailbox credentials; older engines show an upgrade instruction.
+Edit sends only the changed fields to `mailboxes.update`;
+Remove confirms inline before `mailboxes.remove`. The primary row has
+neither Edit nor Remove. The password lives only in component state and
+the RPC payload. After a successful mutation the card dispatches
+`MAILBOXES_CHANGED_EVENT` (`lib/mailboxes.ts`) on `window`.
+
+`views/Email.tsx` re-reads `mailboxes.list` on mount, when the view becomes
+active, on that event and when the sidecar reports ready. With more than
+one active mailbox it shows a `Mailbox` filter in the toolbar (its value
+goes to `list_inbox`/`list_sent`/`search` as `mailbox_id`; a filter whose
+mailbox is gone resets to all) and a per-message `mailbox_address` chip in
+the reading pane. `emails.archive` answers `{ok, archived, mailboxes[]}`
+without throwing on a per-mailbox failure: the handler reads `ok`, and on
+`false` restores the optimistic removal and shows the joined
+`mailboxes[].error`. `views/Update.tsx` names the mailbox in a sync stage
+error; `ApprovalCard` shows the primary address as the From line of a
+`send_email`/`send_draft` approval.
+
+Preload bindings: `mailboxes.{list,presets,test,add,update,remove}`,
+`mailbox_id?` on the three listers; types in `renderer/src/types.ts`.
+`scripts/test-mailboxes-ui.mjs` (react-test-renderer, `MRCALL_UI_TEST_DEPS`)
+covers the card, the filter, the chip, the change event and the archive
+rollback. Engine contract:
+[`../engine/docs/features/mailboxes.md`](../engine/docs/features/mailboxes.md).
+
 ## Naming and branding
 
 - **User-visible**: "MrCall Desktop" everywhere — window title, sidebar, onboarding, README, asset names. `appId` is `ai.mrcall.desktop`.

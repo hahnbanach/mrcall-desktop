@@ -24,11 +24,12 @@ def fresh_db(tmp_path, monkeypatch):
 
 
 OWNER = "owner-uid-1"
+MAILBOX = "mailbox-1"
 
 
 def test_table_is_created_on_first_use(fresh_db):
     """The module owns its schema — no migration-list entry needed."""
-    assert sync_cursor.get_cursor(OWNER, "INBOX") is None
+    assert sync_cursor.get_cursor(OWNER, "INBOX", MAILBOX) is None
 
     from zylch.storage.database import get_engine
 
@@ -41,24 +42,27 @@ def test_table_is_created_on_first_use(fresh_db):
 
 
 def test_round_trip_and_update(fresh_db):
-    assert sync_cursor.set_cursor(OWNER, "INBOX", uidvalidity=12, last_uid=100) is True
+    assert (
+        sync_cursor.set_cursor(OWNER, "INBOX", uidvalidity=12, last_uid=100, mailbox_id=MAILBOX)
+        is True
+    )
 
-    cursor = sync_cursor.get_cursor(OWNER, "INBOX")
+    cursor = sync_cursor.get_cursor(OWNER, "INBOX", MAILBOX)
     assert cursor is not None
     assert (cursor.uidvalidity, cursor.last_uid) == (12, 100)
 
-    sync_cursor.set_cursor(OWNER, "INBOX", uidvalidity=12, last_uid=140)
-    assert sync_cursor.get_cursor(OWNER, "INBOX").last_uid == 140
+    sync_cursor.set_cursor(OWNER, "INBOX", uidvalidity=12, last_uid=140, mailbox_id=MAILBOX)
+    assert sync_cursor.get_cursor(OWNER, "INBOX", MAILBOX).last_uid == 140
 
 
 def test_cursors_are_scoped_per_owner_and_folder(fresh_db):
-    sync_cursor.set_cursor(OWNER, "INBOX", 12, 100)
-    sync_cursor.set_cursor(OWNER, '"[Gmail]/All Mail"', 77, 900)
-    sync_cursor.set_cursor("other-owner", "INBOX", 12, 5)
+    sync_cursor.set_cursor(OWNER, "INBOX", 12, 100, mailbox_id=MAILBOX)
+    sync_cursor.set_cursor(OWNER, '"[Gmail]/All Mail"', 77, 900, mailbox_id=MAILBOX)
+    sync_cursor.set_cursor("other-owner", "INBOX", 12, 5, mailbox_id=MAILBOX)
 
-    assert sync_cursor.get_cursor(OWNER, "INBOX").last_uid == 100
-    assert sync_cursor.get_cursor(OWNER, '"[Gmail]/All Mail"').last_uid == 900
-    assert sync_cursor.get_cursor("other-owner", "INBOX").last_uid == 5
+    assert sync_cursor.get_cursor(OWNER, "INBOX", MAILBOX).last_uid == 100
+    assert sync_cursor.get_cursor(OWNER, '"[Gmail]/All Mail"', MAILBOX).last_uid == 900
+    assert sync_cursor.get_cursor("other-owner", "INBOX", MAILBOX).last_uid == 5
     assert len(sync_cursor.list_cursors(OWNER)) == 2
 
 
@@ -68,16 +72,16 @@ def test_folder_key_ignores_imap_quoting(fresh_db):
     IMAP needs the quotes for SELECT; the cursor must not end up with
     two rows (and two positions) for the same mailbox.
     """
-    sync_cursor.set_cursor(OWNER, '"[Gmail]/All Mail"', 77, 900)
+    sync_cursor.set_cursor(OWNER, '"[Gmail]/All Mail"', 77, 900, mailbox_id=MAILBOX)
 
-    assert sync_cursor.get_cursor(OWNER, "[Gmail]/All Mail").last_uid == 900
+    assert sync_cursor.get_cursor(OWNER, "[Gmail]/All Mail", MAILBOX).last_uid == 900
     assert len(sync_cursor.list_cursors(OWNER)) == 1
 
 
 def test_drop_cursor_removes_the_row(fresh_db):
-    sync_cursor.set_cursor(OWNER, "INBOX", 12, 100)
-    assert sync_cursor.drop_cursor(OWNER, "INBOX") is True
-    assert sync_cursor.get_cursor(OWNER, "INBOX") is None
+    sync_cursor.set_cursor(OWNER, "INBOX", 12, 100, mailbox_id=MAILBOX)
+    assert sync_cursor.drop_cursor(OWNER, "INBOX", MAILBOX) is True
+    assert sync_cursor.get_cursor(OWNER, "INBOX", MAILBOX) is None
 
 
 def test_read_failure_degrades_to_no_cursor_and_logs_error(fresh_db, monkeypatch, caplog):
@@ -89,7 +93,7 @@ def test_read_failure_degrades_to_no_cursor_and_logs_error(fresh_db, monkeypatch
 
     monkeypatch.setattr(db_mod, "get_engine", boom)
     with caplog.at_level("ERROR"):
-        assert sync_cursor.get_cursor(OWNER, "INBOX") is None
+        assert sync_cursor.get_cursor(OWNER, "INBOX", MAILBOX) is None
     assert any("get_cursor" in r.message for r in caplog.records)
 
 
@@ -107,7 +111,7 @@ def test_write_failure_is_loud_but_does_not_raise(fresh_db, monkeypatch, caplog)
 
     monkeypatch.setattr(db_mod, "get_engine", boom)
     with caplog.at_level("ERROR"):
-        assert sync_cursor.set_cursor(OWNER, "INBOX", 12, 100) is False
+        assert sync_cursor.set_cursor(OWNER, "INBOX", 12, 100, mailbox_id=MAILBOX) is False
     assert any("set_cursor" in r.message and "FAILED" in r.message for r in caplog.records)
 
 

@@ -11,6 +11,7 @@ is shown, and the read-only callables that produce it.
 from __future__ import annotations
 
 import logging
+from contextlib import nullcontext
 from dataclasses import dataclass
 from typing import Any, Callable, Optional, Sequence, Tuple
 
@@ -36,6 +37,9 @@ class CommitContext:
     # A consolidation pair: each blob id with the version it was paired at.
     # When set, the role is shown exactly these blobs and nothing retrieved.
     pinned: Tuple[Tuple[str, str], ...] = ()
+    commit_guard: Callable = nullcontext
+    commit_check: Callable = lambda: None
+    proposal_validator: Callable = lambda _event, _proposal: ""
 
 
 def default_context(owner_id: str, *, retrieval: bool = True) -> CommitContext:

@@ -1,625 +1,82 @@
----
-description: |
-  A task exists when the user needs to take action - period. Not about urgency or type
-  classification, only "Does Mario need to do something?" Categories (answer, deliver, follow-up,
-  fix, schedule) exist for context but all are TASKs equally. Detection logic: expected_action
-  != None. Never filter by type - any expected action means a task.
----
-
-# Task Management System - Person-Centric Email Intelligence
-
-## What is a Task?
-
-A task exists when Mario needs to take action. Period.
-
-NOT about whether it's:
-- An answer vs a reminder
-- Urgent vs non-urgent
-- Email vs meeting follow-up
-
-ONLY about: **Does Mario need to do something?**
-
-### Task Detection Logic
-```python
-# The core logic is simple:
-requires_action = (expected_action is not None)
-
-# NOT:
-requires_action = (expected_action == 'answer')  # ❌ Too narrow!
-
-# Because:
-# - "answer a question" → TASK
-# - "send promised document" → TASK
-# - "fix something" → TASK
-# - "follow up on meeting" → TASK
-# - "remind customer who didn't respond" → TASK
-# - ALL of these need expected_action != None
-```
-
-### Task Categories (for context only)
-While we don't classify for filtering, these are common task patterns:
-1. **Answer**: Contact asked, Mario must respond
-2. **Deliver**: Mario promised something (document, fix, information)
-3. **Follow-up**: Contact expected to respond but didn't → Mario reminds
-4. **Fix**: Technical issue Mario said he'd resolve
-5. **Schedule**: Need to arrange meeting/call
-
-ALL of these are TASKs. None should be filtered out.
-
-### Task Aggregation
-Tasks are grouped by PERSON:
-- One person = maximum one task
-- LLM analyzes ALL threads with that person
-- Provides single consolidated action needed
-
----
-
-## The Problem
-
-Traditional email clients (Gmail, Outlook, Superhuman) organize emails by **threads**. This creates problems for B2B sales professionals:
-
-### Example: Carol White's 5 Threads
-```
-Thread 1: "Re: Urgente" (Feb 2024)
-Thread 2: "Passaggio al nuovo assistente MrCall" (Nov 5)
-Thread 3: "settaggio wa" (Nov 19)
-Thread 4: "settaggio orari segreteria" (Nov 19)
-Thread 5: "Richiesta per passaggio" (Nov 13-19)
-```
-
-**Problem**: You have to mentally aggregate:
-- What's the overall situation with Carol?
-- Is she happy or at risk?
-- What action do I need to take?
-- How urgent is it?
-
----
-
-## Zylch AI's Solution: Person-Centric Tasks
-
-**One person = One task (maximum)**
-
-Zylch AI aggregates ALL threads from the same contact into a unified task view.
-
-### Example Output
-```
-📋 Task: Carol White
-
-Email: contact@example.com
-Status: open
-Priority: 10/10 (URGENT)
-Threads: 5
-
-View:
-Il contatto ha avuto problemi con l'assistente precedente ("Re: Urgente")
-ed è stata migrata a un nuovo assistente ("Passaggio al nuovo assistente
-MrCall"). Ha problemi di configurazione (WhatsApp, orari, messaggi) ed è
-molto ansiosa per la migrazione - ha detto di non dormire la notte.
-Rischiamo di perdere questa cliente.
-
-Action:
-Contattare SUBITO - rischio di perdere la cliente. Chiamare o scrivere
-oggi per rassicurarla e risolvere i problemi di configurazione.
-```
-
-**Benefits:**
-- ✅ See the **full picture** instantly
-- ✅ Understand **emotional context** (anxious, frustrated, happy)
-- ✅ Know **priority** (1-10 score)
-- ✅ Get **actionable next step**
-
----
-
-## Architecture
-
-### Two-Tier System
-
-```
-┌─────────────────────────────────────────────────────────────┐
-│ Gmail API                                                   │
-│ (Fetches emails via OAuth)                                 │
-└──────────────────────┬──────────────────────────────────────┘
-                       ↓
-┌─────────────────────────────────────────────────────────────┐
-│ TIER 1: Thread Cache (threads.json)                        │
-│                                                             │
-│ - LLM analysis                                             │
-│ - Fast sync (Gmail API → JSON)                             │
-│ - Thread-by-thread view                                    │
-│ - Preserves all details                                    │
-│ - Enables search (subject, participants, body)             │
-│                                                             │
-│ Example:                                                    │
-│ {                                                           │
-│   "thread_123": {                                           │
-│     "subject": "settaggio wa",                              │
-│     "participants": ["contact@example.com"],           │
-│     "summary": "Chiede come resettare messaggio WA",        │
-│     "open": true,                                           │
-│     "expected_action": "answer"                             │
-│   }                                                         │
-│ }                                                           │
-└──────────────────────┬──────────────────────────────────────┘
-                       ↓
-         TaskManager.build_tasks_from_threads()
-         (Groups by contact, analyzes with LLM)
-                       ↓
-┌─────────────────────────────────────────────────────────────┐
-│ TIER 2: Task Cache (tasks.json)                            │
-│                                                             │
-│ - LLM analysis                                             │
-│ - Person-centric aggregation                               │
-│ - One task per contact                                     │
-│ - Intelligent view with context                            │
-│ - Priority scoring (1-10)                                  │
-│                                                             │
-│ Example:                                                    │
-│ {                                                           │
-│   "contact_carol_white": {                                   │
-│     "contact_name": "Carol White",                           │
-│     "contact_email": "contact@example.com",            │
-│     "status": "open",                                       │
-│     "score": 10,                                            │
-│     "view": "Cliente ansiosa...",                           │
-│     "action": "Contattare SUBITO",                          │
-│     "threads": ["thread_123", "thread_456", ...]            │
-│   }                                                         │
-│ }                                                           │
-└─────────────────────────────────────────────────────────────┘
-```
-
-### Why Two Tiers?
-
-**Thread Cache (Tier 1):**
-- Fast to sync (LLM analysis)
-- Preserves all email details
-- Enables granular search
-- Source of truth for raw email data
-
-**Task Cache (Tier 2):**
-- Expensive to build (LLM analysis)
-- But only built once or on-demand
-- Provides **actionable intelligence**
-- Saves time: you see what matters
-
----
-
-## Contact Identification
-
-### The Challenge
-Zylch AI needs to identify **who is the contact** (vs. you) in each thread.
-
-**Example thread participants:**
-```
-From: Carol White <contact@example.com>
-To: Alex Doe <you@example.com>
-Cc: Support <support@example.com>
-```
-
-**Question:** Who is the "contact" here?
-- Not you@example.com (that's you!)
-- Not support@example.com (that's you too!)
-- **Answer:** contact@example.com
-
-### Solution: MY_EMAILS Configuration
-
-In `.env`:
-```bash
-MY_EMAILS=you.personal@example.com,you@example.com,support@example.com,*@pipedrivemail.com
-```
-
-**Features:**
-- Comma-separated list
-- Supports wildcards: `*@pipedrivemail.com` matches all Pipedrive automated emails
-- Used to filter out "you" and find "them"
-
-**Algorithm:**
-```python
-def _extract_contact_email(thread):
-    participants = thread.get('participants')  # [email1, email2, ...]
-
-    for participant in participants:
-        if not _is_my_email(participant):
-            return participant  # This is the contact!
-
-    return None
-```
-
----
-
-## Task Analysis with LLM
-
-### Input Context
-When analyzing a contact, TaskManager provides the LLM with:
-
-```json
-{
-  "contact_email": "contact@example.com",
-  "contact_name": "Carol White",
-  "threads_count": 5,
-  "threads": [
-    {
-      "subject": "Re: Urgente",
-      "date": "2024-02-06",
-      "summary": "Problema critico con assistente",
-      "body_preview": "Grazie! Mi potete informare quando risolto?...",
-      "open": true,
-      "expected_action": "answer"
-    },
-    {
-      "subject": "Passaggio al nuovo assistente",
-      "date": "2025-11-05",
-      "summary": "Migrazione a nuovo assistente confermata",
-      "body_preview": "Buongiorno. Va bene grazie...",
-      "open": false,
-      "expected_action": null
-    },
-    // ... 3 more threads
-  ]
-}
-```
-
-### LLM Prompt
-```
-Analyze these 5 email threads for Carol White and create a TASK summary.
-
-IMPORTANT: This is B2B context. One person = one task maximum.
-Aggregate ALL threads into a single unified view.
-
-Respond with JSON:
-{
-  "contact_name": "First Last",
-  "view": "Narrative summary of entire relationship and current situation.
-           Include: what happened chronologically, current problems,
-           emotional state (anxious, frustrated, happy), context.",
-  "status": "open|closed|waiting",
-  "score": 1-10,
-  "action": "Specific next step"
-}
-
-Rules:
-- status: "open" = needs our action, "waiting" = waiting for them, "closed" = done
-- score: 1 (low) to 10 (URGENT - risk losing customer)
-- view: Italian, natural narrative, 2-4 sentences
-- action: Specific next step in Italian
-```
-
-### Output
-```json
-{
-  "contact_name": "Carol White",
-  "contact_emails": ["contact@example.com", "contact2@example.com"],
-  "view": "Il contatto ha avuto problemi con l'assistente precedente...",
-  "status": "open",
-  "score": 10,
-  "action": "Contattare SUBITO - rischio di perdere la cliente..."
-}
-```
-
----
-
-## Usage Patterns
-
-### Initial Setup (First Time)
-
-```bash
-# 1. Sync emails (30 days, LLM analysis)
-You: sync emails
-# Takes: ~5-10 minutes for 1000 emails
-
-# 2. Build tasks (LLM aggregation)
-You: build tasks
-# Takes: ~2-3 minutes for 200 contacts
-```
-
-### Daily Workflow
-
-```bash
-# Morning: Check urgent tasks
-You: show urgent tasks
-# Returns: All tasks with score >= 8
-
-# Work on specific contact
-You: status di Carol White
-# Returns: Full aggregated view + action
-
-# Update after contact
-You: rebuild tasks  # Optional, only if many new emails
-```
-
-### Incremental Updates
-
-```bash
-# New emails arrived? Sync threads
-You: sync emails
-# Fast: only fetches new emails since last sync
-
-# Update specific contact's task
-You: get contact task contact@example.com
-# On-demand: re-analyzes only that contact
-# Cost: <$0.01
-```
-
----
-
-## API / Tool Reference
-
-### build_tasks
-**Description:** Build tasks.json from threads.json (batch operation)
-
-**Parameters:**
-- `force_rebuild` (bool, default: false) - Rebuild even if cache exists
-
-**Usage:**
-```
-You: build tasks
-You: build tasks force_rebuild=true
-```
-
-**Cost:** Depends on configured model
-
----
-
-### get_contact_task
-**Description:** Get/rebuild task for specific contact (on-demand)
-
-**Parameters:**
-- `contact_email` (string, required) - Contact email address
-
-**Usage:**
-```
-You: status di Carol White
-You: get contact task contact@example.com
-```
-
-**Cost:** ~$0.007 per contact (< 1 cent)
-
----
-
-### search_tasks
-**Description:** Search tasks with filters
-
-**Parameters:**
-- `status` (string, optional) - Filter by: "open", "closed", "waiting"
-- `min_score` (int, optional) - Minimum priority score (1-10)
-- `query` (string, optional) - Search in name/email/view
-
-**Usage:**
-```
-You: show urgent tasks          # min_score=8
-You: show open tasks            # status=open
-You: search tasks carol         # query="carol"
-You: tasks score 7 status open  # combined
-```
-
----
-
-### task_stats
-**Description:** Get task statistics
-
-**Usage:**
-```
-You: task stats
-You: overview tasks
-You: situazione generale
-```
-
-**Returns:**
-- Total tasks
-- Open tasks
-- Urgent tasks (score >= 8)
-- Average priority score
-- Last build timestamp
-
----
-
-## Performance & Costs
-
-### Initial Sync (First Time)
-| Operation | Volume | Model | Time |
-|-----------|--------|-------|------|
-| Sync emails | 1000 emails | LLM | 5-10 min |
-| Build tasks | 200 contacts | LLM | 2-3 min |
-| **Total** | | | **~12 min** |
-
-### Daily Usage
-| Operation | Frequency | Model |
-|-----------|-----------|-------|
-| Sync new emails | 1x/day (50 new) | LLM |
-| Update 5 contacts | As needed | LLM |
-
-### Monthly Cost Estimate
-Cost depends on the configured model. See your provider's pricing page.
-
----
-
-## Future Enhancements
-
-### Reasoning History (Planned)
-Track decisions and actions over time:
-
-```json
-{
-  "task_id": "contact_carol",
-  "reasoning_history": [
-    {
-      "date": "2025-11-19T10:00:00Z",
-      "reasoning": "Cliente ansiosa, rischio perdita. Decision: chiamare.",
-      "action_taken": "Chiamata rassicurante effettuata",
-      "user": "mario"
-    },
-    {
-      "date": "2025-11-19T15:30:00Z",
-      "reasoning": "Ancora confusa su WA. Decision: inviare guida.",
-      "action_taken": "Email con screenshot inviata",
-      "user": "mario"
-    }
-  ]
-}
-```
-
-**Benefits:**
-- Continuity: Don't repeat same actions
-- Context: LLM knows what was already tried
-- Learning: Patterns emerge over time
-- Audit trail: Full history of decisions
-
----
-
-## Best Practices
-
-### 1. Sync Strategy
-- **Initial:** 30 days (fixed)
-- **Daily:** Incremental (only new emails)
-- **After absence:** `sync emails force_full=true`
-
-### 2. Task Rebuild Frequency
-- **Daily:** Not needed (expensive!)
-- **Weekly:** `build tasks force_rebuild=true`
-- **On-demand:** `get contact task [email]` for specific contacts
-
-### 3. Contact Identification
-- Add ALL your email addresses to `MY_EMAILS`
-- Use wildcards for automated services: `*@pipedrivemail.com`, `*@noreply.github.com`
-- Test: search for a known contact and verify they appear correctly
-
-### 4. Search vs Tasks
-- **Use search_emails when:** Looking for specific thread/subject
-- **Use tasks when:** Want to understand overall situation with a person
-
----
-
-## Troubleshooting
-
-### "No tasks found for [email]"
-**Cause:** Email might not be in threads cache
-
-**Solution:**
-1. Check: `search emails [email]`
-2. If found: `get contact task [email]` (rebuilds on-demand)
-3. If not found: `sync emails` first
-
-### "Task shows wrong contact"
-**Cause:** Your email not in `MY_EMAILS`
-
-**Solution:**
-1. Add your email to `MY_EMAILS` in `.env`
-2. Restart Zylch AI
-3. `build tasks force_rebuild=true`
-
-### "Task is outdated"
-**Cause:** New emails arrived but task not rebuilt
-
-**Solution:**
-1. `sync emails` (updates threads)
-2. `get contact task [email]` (updates that task)
-3. Or: `build tasks force_rebuild=true` (updates all)
-
----
-
-## Technical Details
-
-### Thread Grouping Algorithm
-```python
-def _group_threads_by_contact(threads):
-    contact_threads = {}
-
-    for thread in threads:
-        # Find the contact (not me)
-        contact_email = _extract_contact_email(thread)
-
-        if contact_email:
-            if contact_email not in contact_threads:
-                contact_threads[contact_email] = []
-
-            contact_threads[contact_email].append(thread)
-
-    return contact_threads
-```
-
-### Cc Handling
-Threads can have contacts in Cc field:
-```
-From: You
-To: Person A
-Cc: Person B, Person C
-```
-
-**Question:** Who is the "contact"?
-
-**Answer:** First non-you email in participants list.
-
-In this example: Person A (from To field)
-
-Person B and C are also tracked in `participants` for search, but task is created for Person A.
-
-### StarChat Integration
-When analyzing, TaskManager tries to enrich from StarChat:
-```python
-contact = starchat.get_contact_by_email(contact_email)
-
-# If found, includes:
-# - contact.name
-# - contact.phone
-# - contact.id
-# - Any other StarChat variables
-```
-
-This enriches the task with phone numbers, CRM data, etc.
-
----
-
-## Comparison: Threads vs Tasks
-
-### Thread View (Traditional)
-```
-Inbox:
-1. "settaggio wa" - Carol White
-2. "Re: Urgente" - Carol White
-3. "Passaggio al nuovo assistente" - Carol White
-4. "Order confirmation" - Acme Retail
-5. "settaggio orari" - Carol White
-```
-
-**You must mentally:**
-- Realize #1, #2, #3, #5 are same person
-- Remember context from each thread
-- Decide priority
-- Figure out next action
-
-### Task View (Zylch AI)
-```
-Tasks:
-1. Carol White (10/10 URGENT) - 5 threads
-   Status: open
-   Action: Contattare SUBITO - rischio perdita cliente
-
-2. Acme Retail (1/10) - 1 thread
-   Status: closed
-   Action: None
-```
-
-**Zylch AI does:**
-- ✅ Aggregates 5 threads → 1 task
-- ✅ Analyzes context from all threads
-- ✅ Assigns priority (10/10)
-- ✅ Suggests action
-
-**You just:**
-- See what matters
-- Take action
-
----
-
-## Summary
-
-**Zylch AI's Task Management System transforms email from "inbox chaos" to "actionable intelligence".**
-
-- **Problem:** Email clients show threads, you think in people
-- **Solution:** Zylch AI aggregates threads by person
-- **Result:** One person = one task = one clear action
-
-**Cost:** ~$5/month for typical usage
-**Time saved:** Hours per week in mental aggregation
-
-**Philosophy:** Email is about relationships, not threads.
+# Task management
+
+## Private ordinary tasks
+
+Ordinary tasks are `TaskItem` rows in the selected profile's `zylch.db`.
+Their legacy `owner_id` is the mailbox email returned by `cli/utils.py`,
+not a human assignee or Firebase UID. Sharing company memory does not share
+these rows. Qonto task visibility has its own authenticated finance predicates;
+ordinary task access must not expose financial tasks through company memory.
+
+A task records an event, contact, title, required action, urgency, reason,
+suggested action and source references. The unique key is
+`(owner_id, event_type, event_id)`. Multiple tasks can refer to the same contact;
+there is no database guarantee of one task per person. `sources.emails` links
+email-backed tasks to archived messages and their threads. Task detection and
+reanalysis are engine work; their paid calls use the saved engine billing and
+preparation controls.
+
+## RPC lifecycle
+
+| Method | Behavior |
+|---|---|
+| `tasks.list` | Open visible tasks by default; `include_completed` and `include_skipped` opt in to those rows. Default limit is 200. |
+| `tasks.list_by_thread(thread_id)` | Open ordinary tasks whose referenced emails belong to the exact thread. |
+| `tasks.get(task_id)` | One visible open or closed row, including close audit; null for unavailable/missing results in the legacy storage path. |
+| `tasks.create(contact_email, title, event_id, ...)` | Upserts the event key; refuses a closed target unless `reopen_if_closed=true`. |
+| `tasks.complete(task_id, note?, actor?, why?)` | Closes a visible task and records close audit. |
+| `tasks.reopen(task_id)` | Reopens a closed task and protects it temporarily from deduplication. |
+| `tasks.snooze(task_id, due_at? , days?, actor?, why?)` | Requires exactly one absolute UTC epoch or relative day interval; parks an open task. |
+| `tasks.pin(task_id, pinned)` | Changes the pin used in list ordering. |
+| `tasks.skip(task_id)` | Records `sources.skipped_at`; ordinary listing omits it unless explicitly requested. |
+
+`tasks.list(due_filter="all")` includes snoozed tasks. `due_filter="due_now"`
+returns only tasks with no future `due_at`. Urgency uses critical, high, medium
+and low; pinning takes precedence in list ordering. `due_at` means when to act;
+`dedup_skip_until` protects a task against deduplication and is a separate field.
+
+`completed_at`, `close_note` and `close_actor` retain the current close state.
+Close and snooze history are retained in source metadata across ordinary upserts.
+The legacy `actor` argument is caller-supplied audit text, including its default
+`human`; it does not prove human presence or authorize company assignments.
+Legacy storage getters can turn read failures into empty/null results. Such
+results cannot establish authoritative absence of an assigned human.
+
+## Company-assigned task subtype
+
+The explicit assignment implementation has a separate company-bound subtype,
+with `assigned_tasks`, `assigned_task_events` and `assigned_task_receipts`.
+It retains stable Firebase identities, exact RFC thread identity, revisions,
+operator-approved operations and closed audit without moving private TaskItem
+rows into shared storage. Company joins refuse assignment-bearing source stores
+until a lossless history migration is available.
+
+The [assignment brief](../../../docs/briefs/2026-10-08-explicit-task-assignment.md)
+and [delivery plan](../../../docs/execution-plans/2026-10-08-explicit-task-assignment.md)
+own implementation and verification status. The APIs ship in Desktop `v0.1.56`;
+six hosted company engines and both kernel `v0.51.0` clones have verified
+assignment reads. [Assignment availability](task-assignment.md) records the
+company-space limits and signed-write boundary. Installed GUI acceptance remains
+separate from these API and CLI checks.
+
+## Contextual email effects — unreleased candidate
+
+Ordinary tasks remain private. Known email source context must retain its exact
+original-message binding through contextual composition and sending; neither an
+ordinary task's audit actor nor tool approval overrides a company assignment.
+Multiple original sources in the same exact thread form a restrictive source
+set; selecting one original can narrow it. Unavailable sources or conflicting
+threads hold effects, including when a model drops reply headers.
+The candidate [assignment contract](task-assignment.md#contextual-email-enforcement--unreleased-development)
+covers the central draft and transport guard, enrollment, stale draft refusal and
+source-free composition limit. The published releases retain their previous
+scoped policy until a separately authorized rollout.
+
+## Implementation references
+
+- `zylch/storage/models.py`: private `TaskItem` schema.
+- `zylch/storage/storage.py`: task CRUD, due filtering and retained audit.
+- `zylch/rpc/methods.py` and `rpc/task_queries.py`: ordinary task handlers.
+- `zylch/qonto/task_access.py`: ordinary versus finance visibility.
+- `zylch/storage/assigned_task_models.py`: company assignment schema.
+- [IPC contract](../../../docs/ipc-contract.md): transport and parameter rules.

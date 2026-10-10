@@ -527,7 +527,10 @@ The sub-agents can handle multi-step workflows. Give them the full picture.
             updates = draft_updates_from_card(edited)
             if updates:
                 try:
-                    self.storage.update_draft(self.owner_id, draft_id, updates)
+                    from zylch.services.task_assignment_draft_transaction import claim_edits
+
+                    with claim_edits(self.owner_id, draft_id):
+                        self.storage.update_draft(self.owner_id, draft_id, updates)
                     draft = self.storage.get_draft(self.owner_id, draft_id) or draft
                 except Exception as e:
                     logger.warning(f"[TaskOrchestrator] Failed to apply approval-card edits: {e}")
@@ -564,7 +567,9 @@ The sub-agents can handle multi-step workflows. Give them the full picture.
                 if references:
                     refs_str = " ".join(references) if isinstance(references, list) else references
 
-                sent_message = gmail.send_message(
+                from zylch.services.task_assignment_email_effect import send as guarded_send
+
+                sent_message = guarded_send(gmail.send_message, owner_id=self.owner_id, draft=draft,
                     to=to_str,
                     subject=subject,
                     body=body,
@@ -580,7 +585,9 @@ The sub-agents can handle multi-step workflows. Give them the full picture.
 
                 outlook = OutlookClient(graph_token=graph_token["access_token"], account=user_email)
 
-                sent_message = outlook.send_message(
+                from zylch.services.task_assignment_email_effect import send as guarded_send
+
+                sent_message = guarded_send(outlook.send_message, owner_id=self.owner_id, draft=draft,
                     to=to_str,
                     subject=subject,
                     body=body,

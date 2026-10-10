@@ -93,28 +93,20 @@ def parse_user_aliases(raw: Optional[str]) -> "frozenset[str]":
 
 
 def load_user_aliases_for_owner(owner_id: str) -> "frozenset[str]":
-    """Best-effort fetch of the user's ``EMAIL_ALIASES`` setting.
+    """Every address the user writes from, besides being the profile's primary.
 
-    Reads from the same Settings layer the renderer writes through.
-    Never raises — a missing setting / unbootable Settings object just
-    means no aliases (degrades to the pre-2026-05-28 strict-match
-    behaviour). Caller passes the result to ``build_thread_history`` /
-    ``_is_user_email`` so all turns Jane sent from a secondary identity
-    are marked ``USER REPLY ✓``.
+    Delegates to :func:`zylch.email.identity.user_addresses`: declared
+    ``EMAIL_ALIASES`` plus the addresses of the profile's active
+    mailboxes (and the primary itself). Never raises. Callers pass the
+    result to ``build_thread_history`` / ``_is_user_email`` so every turn
+    the user sent from a secondary identity is marked ``USER REPLY ✓``.
     """
     try:
-        import os
+        from zylch.email.identity import user_addresses
 
-        from zylch.config import settings as _settings
-
-        raw = (
-            os.environ.get("EMAIL_ALIASES")
-            or getattr(_settings, "email_aliases", "")
-            or ""
-        )
-        return parse_user_aliases(raw)
+        return user_addresses(owner_id)
     except Exception:
-        logger.debug("[thread_presenter] could not load EMAIL_ALIASES — degrading to strict match")
+        logger.debug("[thread_presenter] could not load user addresses — degrading to strict match")
         return frozenset()
 
 
@@ -143,6 +135,7 @@ def build_thread_history(
         A rendered THREAD HISTORY section, or "" if no emails.
     """
     from zylch.storage.models import Email
+    from zylch.storage.storage import Storage
 
     if not thread_id:
         return ""
@@ -151,13 +144,25 @@ def build_thread_history(
         session.query(Email)
         .filter(
             Email.owner_id == owner_id,
+            Storage.active_mailbox_filter(owner_id),
             Email.thread_id == thread_id,
         )
-        .order_by(Email.date_timestamp.asc())
+        .order_by(Email.date_timestamp.asc(), Email.created_at.asc(), Email.id.asc())
     )
     thread_emails = q.all()
     if exclude_email_id:
         thread_emails = [e for e in thread_emails if str(e.id) != str(exclude_email_id)]
+    # One copy per message: a message delivered to two mailboxes is two
+    # rows, and the LLM must read it once.
+    seen_headers: set = set()
+    unique: List = []
+    for te in thread_emails:
+        header = te.message_id_header or ""
+        if header and header in seen_headers:
+            continue
+        seen_headers.add(header)
+        unique.append(te)
+    thread_emails = unique
 
     blocks: List[str] = []
     user_email_lc = (user_email or "").lower()

@@ -22,6 +22,13 @@ The repo has three parallel doc trees, mirroring the three index files. Each tre
 
 ## Index
 
+- [Cross-cutting runtime contracts](cross-cutting-contracts.md) — identity, company memory, hosted isolation and LLM billing; operating rules remain in AGENTS.md.
+
+- [Qonto connection](briefs/2026-10-04-qonto-connection.md) — native Desktop setup and engine-owned financial source; [development plan](execution-plans/2026-10-04-qonto-connection.md), including the authorized support-only rollout.
+- [Qonto IPC](qonto-ipc.md) — native bank methods, managed chat history and verification boundaries.
+- [Qonto bootstrap removal](briefs/2026-10-08-qonto-bootstrap-removal.md) — typed login and key as the only Qonto credential source, and what Desktop `v0.1.56` does against it; [plan and evidence](execution-plans/2026-10-08-qonto-bootstrap-removal.md).
+- [Additional mailboxes and PEC](../engine/docs/features/mailboxes.md) — multiple IMAP sources, PEC envelope extraction and Desktop Settings; [original plan](execution-plans/2026-09-30-pec-net-mailbox-integration.md).
+- [PEC and Qonto next-release integration](execution-plans/2026-10-05-mailboxes-qonto-release-integration.md) — combined source, migration/auth verification and shared-main delivery; no installer or hosted rollout.
 - [GPT-Live customer-service channel](brief/2026-09-23-gpt-live-engine-integration.md) — incoming calls with asynchronous company memory first; agent configured by cs-operator. [Four-milestone plan](execution-plans/2026-09-23-gpt-live-engine-integration.md); repeatable integrations and outbound support follow.
 - [Desktop voice alpha UX](briefs/2026-09-25-desktop-voice-assistant-alpha-ux.md) — customer setup and preview journey; the [original Café 124 pilot plan](execution-plans/2026-09-25-desktop-voice-assistant-alpha-ux.md) is superseded by the existing-business test input.
 - [Café 124 production voice brief](briefs/2026-09-27-cafe124-voice-daemon.md) — one-number GPT-Live alpha in the existing `production@` daemon; [execution plan](execution-plans/2026-09-27-cafe124-voice-daemon.md) completed for the scoped manual/identity/archive and source-grounded service-answer gates.
@@ -49,7 +56,7 @@ The repo has three parallel doc trees, mirroring the three index files. Each tre
 - [`claude-agent-sdk-analysis.md`](claude-agent-sdk-analysis.md) — evaluation of the Claude Agent SDK against the engine's own agent loop
 - [`briefs/`](briefs/) — the what/why half of a work trace, paired with the execution plan of the same `YYYY-MM-DD-<slug>`
 - [`execution-plans/`](execution-plans/) — workstreams that span both subsystems, one file each, `status:` in the frontmatter
-- `.doc-profile` — doc-harness configuration (leaf mode, `AGENTS.md` as the project index, `CLAUDE.md` as the managed harness entry point)
+- `.doc-profile` — doc-harness configuration (leaf mode, `AGENTS.md` as the project index and managed v9 harness entry point)
 
 The release pipeline (tag-driven matrix, signing, notarization,
 electron-builder quirks) is documented inside
@@ -70,3 +77,13 @@ anywhere in the repo):
 - [Daily LLM budget and spend incident](briefs/2026-09-11-daily-llm-budget.md) — [implementation plan](execution-plans/2026-09-11-daily-llm-budget.md) and [engine spending contract](../engine/docs/features/daily-llm-budget.md).
 
 - [Operator versus engine AI: models, costs and pauses](operator-setup.md#ai-execution-and-controls).
+
+- [Desktop/kernel hardening closure](execution-plans/2026-10-07-desktop-kernel-hardening-closure.md) — local contract/gate evidence, historical dispositions and explicit remaining owners; [brief](briefs/2026-10-07-desktop-kernel-hardening-closure.md).
+- [RPC call inventory](rpc-contract-inventory.json) — generated names, payload keys and declared types; limits and verification in [IPC contract](ipc-contract.md#parameter-contract--what-the-dispatcher-refuses).
+
+- [Company task assignments](../engine/docs/features/task-assignment.md) — local implementation and approval/source boundaries; [brief](briefs/2026-10-08-explicit-task-assignment.md) and [delivery plan](execution-plans/2026-10-08-explicit-task-assignment.md).
+- [Human thread-assignment gaps](../engine/docs/features/human-thread-ownership-gaps.md) — original requirements and selected mechanism; current verification status belongs to the delivery plan.
+
+- [Contextual email assignment enforcement](execution-plans/2026-10-08-contextual-email-assignment-guard.md) — local unreleased guard, exact caller binding and verification; [brief](briefs/2026-10-08-contextual-email-assignment-guard.md).
+
+- [MrCall company sharing](execution-plans/2026-10-08-mrcall-company-memory-sharing.md) — authorized fenced join, authenticated shared reads and private-data preservation; [brief](briefs/2026-10-08-mrcall-company-memory-sharing.md).

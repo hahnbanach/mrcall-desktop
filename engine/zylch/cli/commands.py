@@ -53,7 +53,6 @@ async def _sync_emails_direct(owner_id: str, console):
     """Run email sync directly (no background job)."""
     import os
 
-    from zylch.email.imap_client import IMAPClient
     from zylch.services.sync_service import SyncService
     from zylch.storage.storage import Storage
 
@@ -64,21 +63,8 @@ async def _sync_emails_direct(owner_id: str, console):
             "Email not configured. Run 'zylch init'.",
         )
 
-    email_client = IMAPClient(
-        email_addr=email_addr,
-        password=email_pass,
-        imap_host=os.environ.get("IMAP_HOST") or None,
-        imap_port=(int(os.environ.get("IMAP_PORT", "0")) or None),
-        smtp_host=os.environ.get("SMTP_HOST") or None,
-        smtp_port=(int(os.environ.get("SMTP_PORT", "0")) or None),
-    )
-
     store = Storage.get_instance()
-    sync_svc = SyncService(
-        email_client=email_client,
-        owner_id=owner_id,
-        supabase_storage=store,
-    )
+    sync_svc = SyncService(owner_id=owner_id, supabase_storage=store)
 
     def _on_progress(pct: int, message: str):
         if pct % 25 == 0:
@@ -87,6 +73,8 @@ async def _sync_emails_direct(owner_id: str, console):
     result = await sync_svc.sync_emails(
         on_progress=_on_progress,
     )
+    for failed in result.get("errors", []):
+        console.print(f"  [red]{failed['address']}: {failed['error']}[/red]")
     if not result.get("success"):
         raise RuntimeError(
             result.get("error", "Sync failed"),

@@ -116,6 +116,19 @@ EMAIL_AGENT_TOOLS = [
 WRITE_EMAIL_TOOL = EMAIL_AGENT_TOOLS[0]
 
 
+def reply_threading(latest_email: Dict[str, Any]) -> tuple:
+    """``(in_reply_to, references)`` for a reply to ``latest_email``.
+
+    The id the correspondent threads on: a PEC row's identity is the
+    provider's envelope, while the person replied to threads on the
+    wrapped original (``original_message_id``, D4); every other row
+    threads on its own ``message_id_header``.
+    """
+    msg_id = latest_email.get("original_message_id") or latest_email.get("message_id_header")
+    existing_refs = list(latest_email.get("references") or [])
+    return msg_id, (existing_refs + [msg_id]) if msg_id else existing_refs
+
+
 @dataclass
 class EmailContext:
     """Context gathered for email composition.
@@ -466,16 +479,7 @@ Use the write_email tool to output your composed email."""
             # Get the most recent email to reply to (ordered by date_timestamp ASC)
             latest_email = context.source_emails[-1]
 
-            # For reply: in_reply_to = message_id of the email we're replying to
-            result["in_reply_to"] = latest_email.get("message_id_header")
-
-            # Build references: existing references + message_id we're replying to
-            existing_refs = latest_email.get("references") or []
-            msg_id = latest_email.get("message_id_header")
-            if msg_id:
-                result["references"] = existing_refs + [msg_id]
-            else:
-                result["references"] = existing_refs
+            result["in_reply_to"], result["references"] = reply_threading(latest_email)
 
             # Gmail thread ID
             result["thread_id"] = latest_email.get("thread_id")
@@ -839,14 +843,7 @@ use that information to write the email or provide the answer. Don't just report
         if context.source_emails:
             latest_email = context.source_emails[-1]
 
-            in_reply_to = latest_email.get("message_id_header")
-
-            existing_refs = latest_email.get("references") or []
-            msg_id = latest_email.get("message_id_header")
-            if msg_id:
-                references = existing_refs + [msg_id]
-            else:
-                references = existing_refs
+            in_reply_to, references = reply_threading(latest_email)
 
             thread_id = latest_email.get("thread_id")
 

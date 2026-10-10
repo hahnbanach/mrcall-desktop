@@ -213,6 +213,7 @@ def _solve_task(
         store,
         owner_id,
         SOLVE_TOOLS,
+        email_task=task,
     )
     messages = _cli_run_executor(executor, solve_context_from_task(task))
 
@@ -272,6 +273,7 @@ def _instruct_task(
         store,
         owner_id,
         SOLVE_TOOLS,
+        email_task=task,
     )
     messages = _cli_run_executor(executor, solve_context_from_task(task, instructions))
 
@@ -331,5 +333,6 @@ def _post_solve_menu(
                 store,
                 owner_id,
                 SOLVE_TOOLS,
+                email_task=task,
             )
             messages = _cli_run_executor(executor, solve_context_from_task(task, choice))

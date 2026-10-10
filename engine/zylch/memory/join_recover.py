@@ -110,6 +110,10 @@ def recover_locked() -> Dict[str, Any]:
         return {"state": "none"}
     joined_from = (env.get(JOIN_FROM) or "").strip()
     joining_to = (env.get(JOIN_TO) or "").strip()
+    if joined_from or joining_to:
+        from zylch.qonto.guard import suspend_for_join
+
+        suspend_for_join()
     if joined_from:
         return _after_key(joined_from, (env.get("MEMORY_KEY") or "").strip())
     if joining_to:
@@ -181,6 +185,9 @@ def finish(
     from zylch.memory.company_key import persist_company_key
     from zylch.storage import database as dbm
 
+    from zylch.qonto.guard import suspend_for_join
+
+    suspend_for_join()
     engine = destination if destination is not None else open_store(destination_key)
     persist_company_key(
         destination_key, source="join", also={JOIN_FROM: source_key, JOIN_TO: ""}

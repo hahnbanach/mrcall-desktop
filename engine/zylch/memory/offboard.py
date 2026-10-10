@@ -20,6 +20,10 @@ from zylch.storage import database as dbm
 
 logger = logging.getLogger(__name__)
 
+# Defaults every profile without the identity shares (cli.utils.get_owner_id,
+# config.Settings.owner_id): they name no account.
+STAND_INS = ("local-user", "owner_default")
+
 
 def delete_owned_rules(owner_id: str, *, last_holder: bool = False) -> int:
     """Delete ``owner_id``'s personal rows from the bound company store.
@@ -39,6 +43,26 @@ def delete_owned_rules(owner_id: str, *, last_holder: bool = False) -> int:
     count = BlobStorage(get_session, None).delete_all_blobs(owner_id, sole_holder=last_holder)
     logger.info(f"[offboard] rows removed={count}")
     return count
+
+
+def delete_account_rules(owners, *, last_holder: bool = False) -> int:
+    """Delete the rule rows of every identity the profile names its account by.
+
+    A profile names its account twice (``mnemonic.authorization._current_owners``):
+    ``EMAIL_ADDRESS``, which chat and the RPC handlers put on the rules they
+    write, and ``OWNER_ID``, the Firebase uid a path without a session falls
+    back to (``ToolConfig.from_settings``). Offboarding by one of them leaves
+    the other's rules behind with no profile left to remove them.
+
+    ``owners`` is a collection of identities, never one string (iterating a
+    string would offboard its characters). Blank values and the shared
+    stand-ins, which name no account, are refused."""
+    if isinstance(owners, str):
+        raise TypeError("owners must be a collection of identities, not one string")
+    cleaned = sorted({str(owner).strip() for owner in owners})
+    if not cleaned or any(owner in ("", *STAND_INS) for owner in cleaned):
+        raise ValueError("refusing to offboard a blank or stand-in identity")
+    return sum(delete_owned_rules(owner, last_holder=last_holder) for owner in cleaned)
 
 
 def delete_store(company_key: str) -> str | None:

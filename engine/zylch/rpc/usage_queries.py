@@ -124,7 +124,7 @@ async def usage_reconcile(params, notify):
 
 
 async def llm_models(params, notify):
-    """Free catalog for a proposed billing selection; never changes saved policy."""
+    """llm.models(provider?) -> free catalog without changing saved policy."""
     from zylch.llm.model_policy import resolve_provider
     from zylch.llm.roles.table import listed
 

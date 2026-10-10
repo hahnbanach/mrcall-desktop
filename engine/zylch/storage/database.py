@@ -215,6 +215,10 @@ def get_session() -> Generator[Session, None, None]:
 # MetaData would otherwise create every table in every file, and the
 # mis-binding would be silent instead of an error.
 MEMORY_TABLE_NAMES = (
+    "assignment_enrollment",
+    "assigned_tasks",
+    "assigned_task_events",
+    "assigned_task_receipts",
     "project_space",
     "project_documents",
     "project_revisions",
@@ -244,7 +248,10 @@ MEMORY_TABLE_NAMES = (
 
 def _tables(names: tuple[str, ...] | None, *, exclude: bool = False):
     from zylch.storage.models import Base as _Base
+    from zylch.qonto import models as _qonto_models
+    from zylch.storage import assigned_task_models as _assigned_task_models
 
+    _ = _qonto_models, _assigned_task_models
     if names is None:
         return list(_Base.metadata.sorted_tables)
     wanted = set(names)
@@ -269,11 +276,38 @@ PROFILE_STEPS: list = []
 
 def _register_profile_steps() -> None:
     from zylch.storage.step_company_key import STEP as company_key_step
+    from zylch.storage.step_emails_mailbox import STEP as emails_mailbox_step
     from zylch.storage.step_memory_split import STEP as memory_split_step
 
-    for step in (company_key_step, memory_split_step):
+    from zylch.qonto.migration import (
+        STEP as qonto_step,
+        SYNC_STEP as qonto_sync_step,
+        HISTORY_STEP as qonto_history_step,
+    )
+
+    for step in (
+        company_key_step,
+        memory_split_step,
+        emails_mailbox_step,
+        qonto_step,
+        qonto_sync_step,
+        qonto_history_step,
+    ):
         if step not in PROFILE_STEPS:
             PROFILE_STEPS.append(step)
+
+
+def _ensure_primary_mailbox(engine: Engine) -> None:
+    """Ensure pass: the primary ``mailboxes`` row exists when ``EMAIL_ADDRESS`` is set.
+
+    Runs on every boot, before the versioned steps, so step
+    ``0003_emails_mailbox`` finds the primary row and every later boot
+    mirrors the environment's hosts onto it. A profile without an address
+    gets no row (see ``zylch.email.mailboxes.ensure_primary_mailbox``).
+    """
+    from zylch.email.mailboxes import ensure_primary_mailbox
+
+    ensure_primary_mailbox(engine)
 
 
 def _ensure_all_tables(engine: Engine) -> None:
@@ -300,12 +334,19 @@ def init_db():
     """
     from zylch.storage.migrations import run_migrations
 
+    from zylch.qonto.migration import backup_before_install
+
     _register_profile_steps()
     engine = get_engine()
     applied = run_migrations(
         engine,
         _resolve_db_path(),
-        ensure=(_ensure_all_tables, _apply_column_migrations),
+        ensure=(
+            backup_before_install,
+            _ensure_all_tables,
+            _apply_column_migrations,
+            _ensure_primary_mailbox,
+        ),
         steps=PROFILE_STEPS,
         backfills=(_attach_store_then_backfill,),
     )
@@ -335,6 +376,9 @@ def _attach_store_then_backfill() -> None:
     from zylch.memory.join_recover import recover
 
     recover()
+    from zylch.qonto.guard import recover as recover_qonto
+
+    recover_qonto()
     _apply_data_backfills()
 
 
@@ -345,6 +389,7 @@ def _apply_column_migrations(engine: Engine) -> None:
     existing column set via PRAGMA table_info and ALTER-ADD if missing.
     """
     migrations = [
+        ("drafts", "reply_binding", "JSON"),
         # 2026-04-17: chat attachments — absolute local paths attached to a
         # draft and transported to MIME at send time.
         ("drafts", "attachment_paths", "JSON DEFAULT '[]'"),
@@ -481,6 +526,18 @@ def _apply_column_migrations(engine: Engine) -> None:
             idx_name = f"ix_{table}_{column}"
             try:
                 conn.exec_driver_sql(f"CREATE INDEX IF NOT EXISTS {idx_name} ON {table}({column})")
+            except Exception as e:
+                logger.warning(f"[migrate] Failed to ensure index {idx_name}: {e}")
+        # Composite indexes: (table, name, columns). A file migrated before an
+        # index was declared gets it here; the step creates it on a rebuild.
+        composite_indexes = [
+            ("emails", "ix_emails_owner_message_id_header", "owner_id, message_id_header"),
+        ]
+        for table, idx_name, cols in composite_indexes:
+            if table not in present:
+                continue
+            try:
+                conn.exec_driver_sql(f"CREATE INDEX IF NOT EXISTS {idx_name} ON {table}({cols})")
             except Exception as e:
                 logger.warning(f"[migrate] Failed to ensure index {idx_name}: {e}")
 
