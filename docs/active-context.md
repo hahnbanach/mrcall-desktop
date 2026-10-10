@@ -1,5 +1,5 @@
 ---
-doc_baseline_commit: ae72034a9ee7b0dbd72b35124e930b839abac71c
+doc_baseline_commit: d158c8655f4397a1770bf4b207fea094aa099fac
 doc_baseline_date: 2026-10-10
 ---
 
@@ -96,6 +96,10 @@ workspace. Engine and operator billing/pause controls are separate. Shared
 written projects are revisioned company records. See
 [operator setup](operator-setup.md#ai-execution-and-controls) and
 [project memory](../engine/docs/features/project-memory.md).
+
+External-client MCP is an unreleased local candidate in isolated worktrees;
+the remote MCP/OAuth service and hosted operator workspace are proposed.
+[Data flows](operator-data-flows.md) separate these states and their authority boundaries.
 
 Desktop `v0.1.56` combines Qonto, additional mailboxes/PEC and the auth/billing
 fixes. Its Mac Apple Silicon DMG is published; installed Qonto GUI and live PEC

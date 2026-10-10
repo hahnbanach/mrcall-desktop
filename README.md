@@ -84,6 +84,13 @@ laptops each running the app locally keep two separate memories.
 
 ## Everything technical
 
+### Desktop, MCP and daemon data flows
+
+See the [sequence diagrams](docs/operator-data-flows.md) for sign-in,
+Claude/ChatGPT authorization, all nine candidate MCP tools, local-file access
+and revocation. The diagrams distinguish existing Desktop behavior, the
+unreleased local connector candidate and the proposed remote service.
+
 ### Repository layout
 
 - **[`engine/`](engine/)** — Python 3.11+ sidecar (the brain). IMAP /
