@@ -37,6 +37,7 @@ import pytest
 
 from tests.measurement.task_roles_env import (
     FIXTURES,
+    OWNER_ID,
     CaptureError,
     fixture_module,
     load_authored,
@@ -221,6 +222,14 @@ def test_each_case_captures_one_request_from_its_call_site(role):
         if role == "TASK_DETECTION":  # score.py resolves targets among the tasks shown
             for task_id in _task_ids(case):
                 assert task_id in request["messages"][0]["content"], case["id"]
+
+
+@pytest.mark.parametrize("role", ROLES)
+def test_the_harness_owner_never_appears_in_a_request(role):
+    """Production keys mail by the user's address; the harness owner id is not one."""
+    _, requests = captured(role)
+    for item in requests:
+        assert OWNER_ID not in json.dumps(item["request"], ensure_ascii=False), item["case_id"]
 
 
 @pytest.mark.parametrize("role", ROLES)
