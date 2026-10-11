@@ -37,9 +37,9 @@ refused once is still sent its second time. In CHAT and TASK_SOLVE only a
 refusal at a turn's first dispatch is sent again: one later in the turn
 follows dispatches already paid for, which a second attempt would repeat, so
 the cell stays failed (``error``, the refusal named) and its arm incomplete.
-A 401 or 403 means the key itself was refused: the run stops with that
-message (exit 1), and the denied cell is settled at zero and never sent
-again. Two transport failures in a row (refusals aside) skip the rest of
+A 401 or 403 means the key itself was refused, a 402 that the OpenRouter
+account is out of credit: the run stops with that message (exit 1), and the
+denied cell is settled at zero and never sent again. Two transport failures in a row (refusals aside) skip the rest of
 that arm in that role.
 
 **Results** (``<out>/results.jsonl``, one row per cell and repetition): the
@@ -56,8 +56,8 @@ or fail (``derive_thresholds.py`` judges the first repetition).
     python scripts/measure_roles.py --arms ARMS.json --out DIR --cap 20   # paid
 
 Exit codes: 0 done; 1 refused (stale requests, no key, corrupt ledger, or a
-key the provider denies — a 401 or 403 stops the run, and the denied cell is
-never sent again); 3 the cap stopped the run (what was measured is recorded).
+key the provider denies or an account out of credit — a 401, 402 or 403 stops
+the run, and the denied cell is never sent again); 3 the cap stopped the run (what was measured is recorded).
 """
 
 from __future__ import annotations
@@ -102,7 +102,12 @@ EXIT_DENIED = 1
 
 
 class AccessDenied(RuntimeError):
-    """The provider refused the key itself (HTTP 401 or 403): the run stops."""
+    """The provider refused the key itself (HTTP 401 or 403), or the account has no
+    credit left (HTTP 402): the run stops. ``status_code`` says which."""
+
+    def __init__(self, error: str, status_code: int | None = None):
+        super().__init__(error)
+        self.status_code = status_code
 
 
 def run_cell(
@@ -236,7 +241,8 @@ def finished(ctx: Context, row: dict) -> dict:
     if row["status"] == "cap":
         raise CapExceeded(row["error"])
     if row["status"] == "denied":
-        raise AccessDenied(row["error"])
+        denied = [d for d in row.get("dispatches") or [] if d.get("denied")]
+        raise AccessDenied(row["error"], denied[-1].get("status_code") if denied else None)
     return row
 
 
@@ -287,6 +293,14 @@ def run_all(ctx: Context, runs: list[RoleRun], repeat: bool) -> int:
         print(f"stopped by the cap: {stop}", file=sys.stderr)
         return EXIT_CAP
     except AccessDenied as stop:
+        if stop.status_code == 402:
+            print(
+                f"refused: the OpenRouter account is out of credit ({stop}). Nothing more is"
+                " sent, and the refused cell never will be; add credit at"
+                " https://openrouter.ai/settings/credits, then resume with the same --out.",
+                file=sys.stderr,
+            )
+            return EXIT_DENIED
         print(
             f"refused: the provider denied the key ({stop}). Nothing more is sent, and the"
             f" denied cell never will be; check {KEY_ENV}, then resume with the same --out.",

@@ -18,6 +18,8 @@ carries its HTTP status (as the transport's does), these tests hold:
   refused mid-turn is not, since its first dispatch is paid: the cell stays
   failed;
 - a 401 or 403 stops the run (exit 1) and the denied cell is never sent again.
+- a 402 (the OpenRouter account out of credit, answered before inference)
+  stops the run the same way, saying so, and its cell is never sent again.
 """
 
 from __future__ import annotations
@@ -235,6 +237,23 @@ def test_a_denied_key_stops_the_run_and_its_cell_is_never_sent_again(run_dir, st
     denial = ctx.ledger.denial(key("td-1"))
     assert denial["outcome"] == "denied" and denial["cost_micro_usd"] == 0
     assert by_cell(ctx)[(SONNET, "td-1", 1)]["status"] == "denied"
+    again = Wire(run_dir / "ledger.jsonl", script=scripted({}))
+    code, ctx, _slept = measured(run_dir, again)
+    assert code == 0 and key("td-1") not in sent(again) and len(sent(again)) == 5
+
+
+def test_an_account_out_of_credit_stops_the_run_and_its_cell_is_never_sent_again(run_dir, capsys):
+    """2026-10-11: OpenRouter answered 402 before any inference when the account ran out
+    of credit. The run stops (exit 1) saying so; the cell is settled at zero, not re-sent."""
+    wire = Wire(run_dir / "ledger.jsonl", script=scripted({(SONNET, "td-1"): [402]}))
+    code, ctx, slept = measured(run_dir, wire)
+    assert code == measure_roles.EXIT_DENIED and slept == []
+    assert sent(wire)[-1] == key("td-1") and len(sent(wire)) == 3 + 1  # nothing after it
+    assert "the OpenRouter account is out of credit" in capsys.readouterr().err
+    denial = ctx.ledger.denial(key("td-1"))
+    assert denial["status_code"] == 402 and denial["cost_micro_usd"] == 0
+    assert by_cell(ctx)[(SONNET, "td-1", 1)]["status"] == "denied"
+    assert ctx.ledger.totals()["open_intents"] == 0  # no hold left as possibly charged
     again = Wire(run_dir / "ledger.jsonl", script=scripted({}))
     code, ctx, _slept = measured(run_dir, again)
     assert code == 0 and key("td-1") not in sent(again) and len(sent(again)) == 5

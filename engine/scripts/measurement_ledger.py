@@ -22,7 +22,8 @@ each line flushed and fsync'd before the next step:
   saturated): nothing was spent, so it is settled at zero.
 - the same with ``"outcome": "denied"`` — a 401 or 403 (``DENIED_STATUSES``):
   the key itself was refused, so it is settled at zero, never sent again, and
-  ``measure_roles.py`` stops the whole run.
+  ``measure_roles.py`` stops the whole run; a 402 likewise: the account is out
+  of credit (OpenRouter answers it before any inference).
 - ``{"event": "fail", "id", "error", "at"}`` — any other failure (a 5xx, a
   timeout, a lost connection, an answer that cannot be read): whether it cost
   anything is unknown, so the intent stays open at its bound.
@@ -58,7 +59,8 @@ from typing import Any
 MAX_ATTEMPTS = 2
 RETRY_WAIT_S = 5.0
 REFUSED, DENIED = "refused", "denied"
-DENIED_STATUSES = frozenset({401, 403})
+# The account itself refused: its key (401, 403) or its credit (402).
+DENIED_STATUSES = frozenset({401, 402, 403})
 
 
 class CapExceeded(RuntimeError):
@@ -176,7 +178,7 @@ class Ledger:
         return f"refused twice before inference: {error}"
 
     def denial(self, cell: str) -> dict | None:
-        """The settlement of the cell's dispatch the provider denied (401, 403), if any."""
+        """The settlement of the cell's dispatch the provider denied (401, 402, 403), if any."""
         with self._lock:
             ids = {r["id"] for r in self._rows if r["event"] == "intent" and r["cell"] == cell}
             return next(
@@ -238,7 +240,8 @@ class Ledger:
         self, intent: str, error: str, status_code: int | None, retry_after: float | None
     ) -> None:
         """Settle a dispatch the provider refused before inference: at zero, outcome refused,
-        or ``denied`` for a 401 or 403 (the key refused: never sent again)."""
+        or ``denied`` for a 401 or 403 (the key refused) or a 402 (the account out of
+        credit): never sent again."""
         outcome = DENIED if status_code in DENIED_STATUSES else REFUSED
         row = {"event": "settle", "id": intent, "cost_micro_usd": 0, "source": outcome}
         row.update(outcome=outcome, status_code=status_code, retry_after=retry_after)
