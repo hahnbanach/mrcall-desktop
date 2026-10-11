@@ -204,6 +204,19 @@ again, and `--answered-at COMMIT ...` names the commits the runs were made on.
 A case is refused when its request differs from the one committed at those
 commits under the rows' hashes, or, when none of them carries those hashes,
 from any committed version under them. `rescored_from` names each verdict that
-changed. The published `roles/measured.json` and its record
+changed.
+
+Since S4b7 each result set is a named run, `--run ID@COMMIT=PATH`
+(`--corpus RUN=MANIFEST` for a corpus record). The run's commit pins its
+requests. Every arm is judged against K3 from its own run, never against
+another run's K3 chosen afterwards (`scripts/measurement_runs.py`).
+
+`--shape-check` (`scripts/measurement_shape.py`) also compares the
+*shaped* request: as the run's commit and snapshot shaped it, against today's
+code and build snapshot. A row that differs is `stale_request`, an
+unmeasured cell rather than a failed one. The headroom fix made every older
+MiMo v2.6 row stale this way.
+
+The published `roles/measured.json` and its record
 (`docs/evaluations/2026-10-11-role-measurement.md` at the monorepo root) were
 written this way.

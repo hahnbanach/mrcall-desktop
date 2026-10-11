@@ -69,7 +69,7 @@ correctly classified. Current contracts: [decisions](features/mnemonic-decisions
 [writer inventory](features/mnemonic-writer-inventory.md).
 
 Mnemonic product rollout remains pending. AC 5 failed on the rejected Haiku arm.
-On M10's measured picks (branch `m10-s4b6`, not merged) it passes on today's
+On M10's measured picks (branch `m10-s4b7`, not merged) it passes on today's
 labels, Opus 5.5 only after the B2 scorer fix; that awaits merge and the
 published table. Haiku's paid corpus retains one critical failure; incomplete automatic extraction can remain pending
 without a reason and be repaid. The corpus also lacks per-round proposal/latency
@@ -111,14 +111,21 @@ published metadata, reasoning blocks kept and replayed within a tool loop and
 stripped where history is rewritten.
 
 The paid role measurement is written to `roles/measured.json` on branch
-`m10-s4b6`. It ran 2026-10-04, with CHAT re-measured 2026-10-11 on main's
-new prompt: USD 10.99 settled, 11.86 counted, of 20. Every answer is
-re-scored on today's labels and scorer, and only where its request bytes are
-today's. On today's labels every critical corpus case passes on both MNEMONIC
-picks: Opus 5.5 (balanced) and GPT-6.1 Sol (economy). `table.json` is not
-written yet: economy's ceiling would rise to 14 (NARRATION), and DEDUP ranks
-a zero-priced model the gates refuse. Both are CTO decisions. See the
-[record](../../docs/evaluations/2026-10-11-role-measurement.md).
+`m10-s4b7`. It ran 2026-10-04; CHAT was re-measured 2026-10-11 on main's new
+prompt, and NARRATION and MiMo after the headroom fix. Spend: USD 11.58
+settled, 12.45 counted, of 20.
+
+- Each arm is judged against K3 from its own run.
+- Answers are re-scored on today's labels and scorer, only where the captured
+  and the shaped request are today's. MiMo's older rows are not, so MiMo is
+  unmeasured on the roles not re-measured.
+- On today's labels every critical corpus case passes on both MNEMONIC picks:
+  Opus 5.5 (balanced) and GPT-6.1 Sol (economy).
+- `resolve_models.py --apply` writes a `table.json` that passes the gates. It
+  is committed with S6.
+- Four roles pick an unmeasured model through their 24.4 threshold.
+
+See the [record](../../docs/evaluations/2026-10-11-role-measurement.md).
 
 The local hardening closure repairs the model-catalog parameter declaration and
 preserves typed preparation refusal through task dispatch. Synthetic contract,
@@ -134,8 +141,8 @@ acceptance is implied.
 - Remaining Café124 billing choices and funded credit acceptance remain open;
   do not replay uncertain requests or resume preparation implicitly.
 - Several M10 and mnemonic items remain open:
-  - M10's table: the economy ceiling and DEDUP's zero-priced candidate, both
-    CTO decisions;
+  - M10's table: whether a 24.4 threshold may pick an unmeasured model
+    (REANALYZE, DEDUP, INTENT, TRAIN), a decision before S6;
   - the OpenRouter truncation check, which did not bind on seven of nine
     arms;
   - the extraction parser's refusal of "SKIP + reason";
@@ -157,7 +164,7 @@ acceptance is implied.
 2. Resolve billing choices without replaying uncertain requests; preserve actual
    saved controls and initiate no paid preparation for release verification.
 3. Finish milestone 10 (branch `model-selection-m10a`, not merged):
-   - take the CTO's two table decisions;
+   - decide on the unmeasured threshold picks;
    - publish `table.json` at S6's switch-over;
    - review the mnemonic rollout and the migration rehearsal before product
      acceptance.
