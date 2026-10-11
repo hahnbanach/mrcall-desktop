@@ -5,6 +5,8 @@
   second, and each result names the run that judged it (``judged_by``);
 - the reference, measured in both runs, is judged in each; its result keeps
   both (``runs``), and the role's ``reference`` lists both yardsticks;
+- a reference case that misses a bar and the label is credited to the
+  yardstick, never counted against it; the reference itself still fails;
 - an arm of a run without a complete reference cannot be judged: it goes
   under ``incomplete``;
 - ``check_measured`` refuses a result judged by another run's yardstick and a
@@ -75,6 +77,29 @@ def test_the_reference_is_judged_in_every_run_and_lists_each_yardstick():
     yardsticks = role["reference"]["runs"]
     assert yardsticks["A"] == {"n": 22, "passes": 22, "score": 1.0, "se": 0.0}
     assert yardsticks["B"]["score"] == pytest.approx(0.909091) and "score" not in role["reference"]
+
+
+@pytest.mark.usefixtures("synthetic_role")
+def test_a_reference_missing_a_bar_never_lowers_its_runs_yardstick():
+    """K3 answers two cases with no tool (bar and label missed), as in rerun 7's REANALYZE."""
+    k3 = rows(K3, 43.6, 22)
+    for row in k3[-2:]:
+        row["scoring"] = {"label_match": False, "bars_ok": False, "critical": False}
+    # A bar missed on a label it matched (TASK_SOLVE's language bar) is no miss to credit.
+    k3[0]["scoring"] = {"label_match": True, "bars_ok": False, "critical": False}
+    every = in_run("R", k3 + rows("entrant", 24.6, 20))
+    document, _ = derive.derive(every, roles={ROLE: {"rule": "satisfice", "index": "x"}})
+    role = document["roles"][ROLE]
+    # Counted as misses, K3's 20/22 would let the entrant's 20/22 pass (p - se = 0.848).
+    yardstick = role["reference"]["runs"]["R"]
+    assert (yardstick["passes"], yardstick["score"], yardstick["se"]) == (22, 1.0, 0.0)
+    assert yardstick["bar_misses_credited"] == [row["case_id"] for row in k3[-2:]]
+    entrant = role["results"]["entrant"]
+    assert (
+        not entrant["pass"] and "below the reference less its standard error" in entrant["reasons"]
+    )
+    assert not role["results"][K3]["pass"] and role["results"][K3]["passes"] == 20
+    assert derive.check_measured(document) == []
 
 
 @pytest.mark.usefixtures("synthetic_role")

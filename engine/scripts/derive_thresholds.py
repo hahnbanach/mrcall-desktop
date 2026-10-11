@@ -240,12 +240,18 @@ def role_entry(role: str, rows: list[dict], cases: list[str], rule: dict, refere
             if again:
                 second.setdefault(arm, {}).update(again)
             result, why = arm_result(mine, cases)
+            if arm == reference and runs.bar_misses(mine):
+                result["bar_misses"] = runs.bar_misses(mine)  # credited to its yardstick
             if why is None:
                 named = {"judged_by": run} if run else {}  # the unnamed run: the daily job's shape
                 per_run.setdefault(run, {})[arm] = {**result, **named}
             else:  # cut short: no measurement of this model (module docstring)
                 incomplete[arm] = f"run {run}: {why}" if run else why
-    yardsticks = {run: arms[reference] for run, arms in per_run.items() if reference in arms}
+    yardsticks = {
+        run: runs.yardstick_of(arms[reference])
+        for run, arms in per_run.items()
+        if reference in arms
+    }
     if not yardsticks:
         why = incomplete.get(reference, "no results")
         raise Refused(f"{role}: the reference {reference} is not completely measured: {why}")
@@ -314,7 +320,8 @@ def check_measured(document: dict) -> list[str]:
             problems.append(f"{role}: no reference result")
             continue
         own = results[reference]  # each run's yardstick is the reference's own result there
-        yardsticks = own.get("runs") or {own.get("judged_by", ""): own}
+        own_runs = own.get("runs") or {own.get("judged_by", ""): own}
+        yardsticks = {run: runs.yardstick_of(result) for run, result in own_runs.items()}
         if body["reference"] != reference_entry(reference, yardsticks):
             problems.append(f"{role}: the reference's yardsticks are not its own results")
         for arm, result in results.items():

@@ -24,7 +24,13 @@ names a corpus record's run). Per role:
   own result;
 - the role's ``reference`` lists each run's yardstick (``runs``: ``n``,
   ``passes``, ``score``, ``se``), and keeps ``score`` and ``se`` at top level
-  when there is one run.
+  when there is one run;
+- a reference case that misses a bar and the label (no tool called, an empty
+  answer) is credited to the yardstick, not counted against it
+  (``bar_misses``, ``yardstick_of``): a reference's mechanical failure never
+  lowers the bar its run's arms must clear. The credited cases are named
+  (``bar_misses_credited``), and the reference's own result keeps the
+  failure, so it does not pass that role in that run.
 """
 
 from __future__ import annotations
@@ -157,6 +163,36 @@ def judge_runs(per_run: dict, yardsticks: dict, incomplete: dict) -> dict:
     return out
 
 
+def bar_misses(mine: list[dict]) -> list[str]:
+    """The reference's first-repetition cases that missed a bar *and* the label.
+
+    A reference that answers nothing (no tool called, an empty reply) also
+    misses the label. Counted as a miss, that mechanical failure would lower
+    the yardstick every arm of its run is judged against: in rerun 7, K3's two
+    REANALYZE answers without a tool call would have let an arm pass with
+    12 of 15. ``yardstick_of`` therefore credits these cases to the yardstick,
+    and ``reference_entry`` names them.
+    """
+    return sorted(
+        r["case_id"]
+        for r in mine
+        if r.get("repetition", 1) == 1
+        and r["status"] == "scored"
+        and not r["scoring"]["bars_ok"]
+        and not r["scoring"]["label_match"]
+    )
+
+
+def yardstick_of(result: dict) -> dict:
+    """The reference's result as a yardstick: its bar misses credited, never counted against it.
+
+    A bar failure can therefore only keep the yardstick where it would be or
+    raise it, never lower it. The reference's own result is unchanged: it
+    still misses that bar, so it does not pass in that run.
+    """
+    return {**result, "passes": result["passes"] + len(result.get("bar_misses") or ())}
+
+
 def reference_entry(reference: str, yardsticks: dict) -> dict:
     """The role's ``reference``: each run's yardstick; ``score`` and ``se`` when one run."""
     runs = {}
@@ -168,6 +204,8 @@ def reference_entry(reference: str, yardsticks: dict) -> dict:
             "score": round(float(p), 6),
             "se": round(se, 6),
         }
+        if result.get("bar_misses"):
+            runs[run]["bar_misses_credited"] = result["bar_misses"]
     entry: dict = {"id": reference, "runs": runs}
     if len(runs) == 1:
         only = next(iter(runs.values()))
