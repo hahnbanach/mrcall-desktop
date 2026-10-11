@@ -63,7 +63,10 @@ rules derive from its own results.
 rows recorded under an older case set, after a label edit, are scored again
 on today's labels only where every request is still today's, byte for byte;
 a case whose request changed is refused, and the document's ``rescored_from``
-records the old and new hashes. ``--out`` writes the document elsewhere than
+records the old and new hashes. ``--rescore`` scores every recorded answer
+again, those of today's case set too, so a scorer fix reaches rows recorded
+before it; ``--answered-at COMMIT ...`` names the commits the runs were made
+on. ``--out`` writes the document elsewhere than
 ``roles/measured.json`` (a candidate for review).
 
     python scripts/derive_thresholds.py --arms ARMS.json --results OUT/results.jsonl \\
@@ -387,6 +390,18 @@ def main(argv: list[str] | None = None) -> int:
         metavar="OLD_CASE_HASH",
         help="re-score rows of these case-set hashes on today's labels (measurement_rescore)",
     )
+    parser.add_argument(
+        "--rescore",
+        action="store_true",
+        help="score every recorded answer again with today's scorer and labels",
+    )
+    parser.add_argument(
+        "--answered-at",
+        nargs="*",
+        default=[],
+        metavar="COMMIT",
+        help="the commits the results were answered on (measurement_rescore)",
+    )
     args = parser.parse_args(argv)
     rows = []
     for path in args.results:
@@ -397,9 +412,10 @@ def main(argv: list[str] | None = None) -> int:
 
     record: dict = {}
     try:
-        rows = rescore.rescore_rows(rows, set(args.rescore_from), record)
+        old, every = set(args.rescore_from), args.rescore
+        rows = rescore.rescore_rows(rows, old, record, every=every, answered_at=args.answered_at)
         for manifest in args.corpus:
-            rows += rescore.corpus(manifest, set(args.rescore_from), scores, rules, record)
+            rows += rescore.corpus(manifest, old, scores, rules, record, every=every)
     except (Refused, rescore.RescoreRefused) as refused:
         print(f"refused: {refused}", file=sys.stderr)
         return 1

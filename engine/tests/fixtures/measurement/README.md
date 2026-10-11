@@ -195,3 +195,15 @@ A label edit changes `case_set_sha256`. The recorded answers are therefore
 scored again with `derive_thresholds.py --rescore-from OLD_HASH`, which accepts
 only cases whose request is still today's, byte for byte, and records
 `rescored_from`.
+
+A scorer or judge fix changes no hash, so `--rescore-from` alone leaves the
+rows of an unchanged case set with the verdict the old scorer gave. That is
+how the S4b5 candidate kept B1 out of CORRECTION_LEARNING, C4 out of
+WEB_SEARCH and C5 out of TASK_SOLVE. `--rescore` scores every recorded answer
+again, and `--answered-at COMMIT ...` names the commits the runs were made on.
+A case is refused when its request differs from the one committed at those
+commits under the rows' hashes, or, when none of them carries those hashes,
+from any committed version under them. `rescored_from` names each verdict that
+changed. The published `roles/measured.json` and its record
+(`docs/evaluations/2026-10-11-role-measurement.md` at the monorepo root) were
+written this way.
