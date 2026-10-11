@@ -1462,6 +1462,71 @@ not started.
      The current six pins additionally set `PYTHONDONTWRITEBYTECODE`; the
      requested PYTHONPATH-only preflight has not been accepted or applied.
 
+   - **Repair VPS continuation — 2026-10-11, 14:31 UTC: STOP at reconcile.**
+     Clone `main` is `6516163b`, containing required `d158c865` and
+     `08ea112c`. All six pin preflights pass: allowed keys only = `true`,
+     `PYTHONDONTWRITEBYTECODE` equals `1` = `true` for every pin. No values
+     are recorded. The files were renamed in place from
+     `zz-assignment-release.conf` to `t0-assignment-release.conf` under the
+     reconcile lock, followed by `daemon-reload`.
+
+     All 36 effective property hashes **after that reload** match the
+     2026-10-10 recorded baseline above. The immediate pre-rename snapshot
+     had one discrepancy from that baseline (tenant `mc-fd58d04802f1`,
+     UID `x59G6SnymAN2lkFny0JDGJgdFz33`, `ExecStart`); its
+     post-reload hash matches the recorded baseline. Consequently the
+     immediate-before/after comparison is 35/36, while the CTO-requested
+     recorded-baseline comparison is 36/36. The initial discrepancy is not
+     explained by these hash-only receipts. The rename was initially retained on the historical-baseline comparison;
+     the strict immediate-before/after condition was not met. After the
+     independent final review, all six names were restored to `zz-…`,
+     followed by a successful `daemon-reload` (exit `0`). Every restored
+     pin has its original file hash. This rollback changes only the six
+     filenames; the additional production pin remains untouched. The
+     unexplained hash change still blocks acceptance.
+
+     `systemctl start zylch-reconcile.service` ran from 14:31:19 to
+     14:31:41 UTC: command exit `1`, `Result=exit-code`,
+     `ExecMainStatus=3`. Six tenant reapplications are `ready`; production
+     (`mc-18f855d535e9`) is refused. Exact helper error, containing no
+     configuration values:
+
+     ```text
+     applied drop-in zz-qonto-identity.conf sorts after tenant.conf: rename it to sort before it, keeping its order among the others (a pin applied last: t0-<name>.conf); a different command line goes in /etc/mrcalld/tenant-exec/<uid>
+     ```
+
+     The additional file belongs to production's instance directory, not
+     support's. Its contents were not inspected or changed. All seven
+     daemons remain active. The installed helper silently matches this
+     clone's `engine/scripts/server/tenant-helper.sh` (`cmp` exit `0`).
+     The service checkout was updated only by the authorized reconcile.
+     Future assignment pins must use `t0-…`; the six existing pins are
+     back under `zz-…` after the required rollback. The independent late
+     production pin remains unresolved. No reconcile was repeated after
+     restoring the names.
+
+     Initial invocation-ID and unit-journal selections did not establish
+     this reconcile's tenant results. The corrected receipt selects the
+     14:31:19–14:31:45 UTC host journal and
+     `SYSLOG_IDENTIFIER=zylch-reconcile`: six ready, one refused. Old
+     six-refusal records are not evidence for this attempt.
+
+     Zero scratch profiles were created; the offboarding harness was held
+     before execution. Criterion 7 runtime repair, the required successful
+     reconcile, and final acceptance remain pending. R5 stays `active`;
+     no new offboarding acceptance, final approval or baseline advancement
+     is claimed. Both fresh final reviews returned **REVISE**: the
+     successful reconcile and scratch lifecycle are missing; review B also
+     required resolution of the immediate-before/after hash change and
+     application of the rollback condition. The rollback is now applied;
+     its cause and the remaining acceptance gates are unresolved. Actual
+     reports: `/home/mal/.cache/mrcall-review/r5-vps-20261011/final-a.txt`
+     and `final-b.txt` in that directory. Root-only receipts (`0600`, parent `0700`):
+     `/root/r5-final-20261011/pins.json`,
+     `/root/r5-final-20261011/reconcile-corrected.json`,
+     `/root/r5-final-20261011/rollback.json`, and the retained
+     private journal at `reconcile-current.private.jsonl` in that directory.
+
    - **Open after this plan, not part of it:**
      - one handset whose speech the voice provider does not transcribe
        (voice path, not the host; 2026-10-03 diagnosis above);

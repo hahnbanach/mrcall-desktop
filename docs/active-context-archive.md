@@ -7,6 +7,14 @@ source binding. It is unreleased and inactive in the hosted fleet and installed 
 separate MrCall launcher patch is committed on a separate branch and remains uninstalled.
 Future candidate rollout requires separate authority.
 
+## 2026-10-11 — R5 state before pin rename and reconcile
+
+separate from the service checkout. R5 is blocked by scratch offboarding that
+leaves company database/WAL/SHM ownership with the deleted user; dual-identity
+rule removal and Mario Gmail/support isolation checks pass. Six assignment
+release pins also cause helper reapplication refusals despite reconcile wrapper
+success; their units remain untouched. The rollout plan owns both blockers.
+
 ## 2026-10-08 — Before authorized MrCall company sharing
 
 The local [contextual-email

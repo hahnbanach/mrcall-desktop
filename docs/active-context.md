@@ -61,11 +61,15 @@ acceptance and its operational floor remain open in the
 [rollout plan](execution-plans/2026-09-29-toward-sandbox.md).
 Mario Gmail has CTO-reported installed-app acceptance for mail, attachment
 transfer and document lookup/read by basename. Its attachment source pin is
-separate from the service checkout. R5 is blocked by scratch offboarding that
-leaves company database/WAL/SHM ownership with the deleted user; dual-identity
-rule removal and Mario Gmail/support isolation checks pass. Six assignment
-release pins also cause helper reapplication refusals despite reconcile wrapper
-success; their units remain untouched. The rollout plan owns both blockers.
+separate from the service checkout. R5 still needs runtime acceptance of the
+company-file handoff and egress cleanup repair; dual-identity rule removal and
+Mario Gmail/support isolation checks pass. The six assignment pins retain
+`zz-…` after rollback: the attempted rename matched the 36 recorded hashes,
+but one immediate-before/after `ExecStart` comparison changed.
+Reconcile exits `3`: six ready, production refused because its independent
+`zz-qonto-identity.conf` sorts after `tenant.conf`. All seven daemons remain
+active. Both fresh final reviews are REVISE. No new scratch lifecycle has run. The rollout plan owns the remaining
+gates and the unexplained pre-reload `mc-fd58d04802f1` `ExecStart` hash discrepancy.
 
 Production uses GPT-Live for telephone service and the scoped company-knowledge
 trial. Its pinned release reads revisioned `operator-instructions/phone.md`;
