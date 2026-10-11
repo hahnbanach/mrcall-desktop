@@ -6,13 +6,13 @@ Scope: English sequence descriptions for local connector candidate; existing beh
 
 [Back to the data-flow index](../operator-data-flows.md).
 
-**Implementation boundary:** Desktop Firebase authentication and its WSS engine connection exist on `main`. The nine-tool local MCP exists only as an **uncommitted, unreleased candidate in isolated `feat/desktop-operator-mcp-20261008` worktrees** and is **absent from main**. Remote MCP, OAuth, the authorized engine/workspace bridge and company-project file upload in this design are **unimplemented proposals**.
+Implementation status and transport boundaries: [data-flow index](../operator-data-flows.md#implementation-status-and-navigation). Each case labels existing, candidate or proposed behavior.
 
 ## 2 · Workspace preparation and procedure saving
 
 **Status: LOCAL CANDIDATE ONLY — uncommitted and unreleased, absent from main.**
 
-Here canonical files live on the user’s computer. The proposed remote architecture would host them on the server; transfer and provisioning remain unimplemented. Mailbox settings remain engine-owned.
+Here canonical files live on the user’s computer. The remote product instead uses canonical revisioned engine project records and server-side compilation; local files become working copies for that mode. That authority change is unimplemented and does not migrate existing clones. Mailbox settings remain engine-owned.
 
 ```mermaid
 sequenceDiagram
@@ -71,8 +71,8 @@ participant H as Local cs-operator
 participant W as Local descriptor and workspace
 participant F as Firebase Auth
 participant E as Linux engine through WSS
-U->>D: Export Claude / ChatGPT connector
-D-->>U: MCPB / ZIP with executable and workspace path, no included token
+U->>D: Export Claude Desktop preview connector
+D-->>U: MCPB with executable and workspace path, no included token
 U->>C: Install in supported client (acceptance remains unverified)
 C->>H: Start mcp --workspace process through STDIO
 C->>H: initialize and tools/list
@@ -107,3 +107,12 @@ Note over C,E: Local grant retained, powered-on computer and reachable engine re
 end
 ```
 
+
+This STDIO path targets a Claude Desktop preview. The candidate's generic ZIP
+export has no verified ChatGPT consumer; it is not a ChatGPT connection method.
+ChatGPT requires its supported remote connection or separately configured Secure
+MCP Tunnel, not this local process launch. See [OpenAI remote setup](https://developers.openai.com/plugins/build/app-quickstart)
+and [Secure MCP Tunnel](https://developers.openai.com/api/docs/guides/secure-mcp-tunnels).
+A local preview requires an awake computer; the Linux-hosted product is the mobile path.
+Token caching and persistent WSS are not part of this verified candidate flow,
+and local generation checks cannot replace remote identity/company validation.

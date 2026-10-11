@@ -1,18 +1,18 @@
 # Tools and engine RPC mapping
 
 <!-- doc-scope:start -->
-Scope: English sequence descriptions for tools and engine rpc mapping; existing behavior, isolated candidate behavior and unimplemented proposals are explicitly distinguished.
+Scope: sequence descriptions for candidate tools and engine RPC mapping, plus proposed remote governance, budgets, audit, procedure authority and native draft identity. Existing, candidate and proposed behavior remain separate.
 <!-- doc-scope:end -->
 
 [Back to the data-flow index](../operator-data-flows.md).
 
-**Implementation boundary:** Desktop Firebase authentication and its WSS engine connection exist on `main`. The nine-tool local MCP exists only as an **uncommitted, unreleased candidate in isolated `feat/desktop-operator-mcp-20261008` worktrees** and is **absent from main**. Remote MCP, OAuth, the authorized engine/workspace bridge and company-project file upload in this design are **unimplemented proposals**.
+Implementation status and transport boundaries: [data-flow index](../operator-data-flows.md#implementation-status-and-navigation). Each case labels existing, candidate or proposed behavior.
 
 ## 5 · All reads: six tools and their RPCs
 
 **Status: LOCAL CANDIDATE MAPPING — remote port unimplemented.**
 
-These are alternative calls, not a mandatory sequence on every request. The checks in case 4 apply to the remote proposal. Mail, tasks and drafts belong to the profile; projects follow company-memory permissions. The AI client does not read Gmail/IMAP directly.
+M is the adapter and E the engine method layer; in the remote design they share one profile process. These are alternative calls, not a mandatory sequence on every request. The checks in case 4 apply to the remote proposal. Mail, tasks and drafts belong to the profile; projects follow company-memory permissions. The remote design adds source-class filtering, with Qonto/finance and PEC excluded by default, including derived content. The AI client does not read Gmail/IMAP directly.
 
 ```mermaid
 sequenceDiagram
@@ -60,7 +60,7 @@ end
 
 **Status: LOCAL CANDIDATE MAPPING — local files; server workspace unimplemented.**
 
-W is the workspace on the computer in the candidate; in the remote proposal W would be the server workspace. Canonical files are the procedure source; the engine holds derived, revisioned copies. This tool accepts no arbitrary computer path.
+W is the canonical workspace on the computer in this candidate only; the engine holds derived, revisioned copies. The proposed remote product instead makes revisioned engine records canonical, as shown in case 14. This tool accepts no arbitrary computer path.
 
 ```mermaid
 sequenceDiagram
@@ -212,3 +212,189 @@ This table describes the isolated local candidate, not a released or main-branch
 | `read_project` | `projects.read(project, path); metadata/SHA256 and UTF-8 verification` | Text document up to 64 KiB |
 | `ask_operator` | `system.capabilities + chat.send with read_only and policy 1` | Response; engine cost possible |
 | `prepare_reply` | `capabilities + context + source + drafts.list before/after + chat.send; chat.approve only deny` | Persistent draft, sent=false |
+
+## Remote access, cost and errors
+
+**Status: UNIMPLEMENTED REMOTE REQUIREMENTS.** Cases 5–8 describe the local
+candidate; the requirements below must be built before remote beta.
+
+| Scope | Tools | Independent limits |
+|---|---|---|
+| `operator.read` | context and six read tools | current company policy and source classes |
+| `operator.ask` | `ask_operator` | source classes, paid MCP pool and grant quota |
+| `operator.draft` | `prepare_reply` | source classes, paid MCP pool, native draft identity |
+
+All tools carry accurate effect annotations. `readOnlyHint` and `destructiveHint`
+are descriptions, not permission checks or guaranteed confirmation prompts.
+Email and document text never grants additional authority. Preparing without
+sending reduces action damage; read results already disclose data to the AI provider.
+
+| Outcome | Response boundary |
+|---|---|
+| Invalid/expired token or revoked grant | HTTP authentication refusal, no admitted operation |
+| Insufficient OAuth scope | HTTP 403 with insufficient_scope challenge, no admitted operation |
+| AS unavailable | Service unavailable, no admitted operation or business result |
+| `data_class_denied`, `company_disabled` | current data-policy refusal, no permitted data or model dispatch |
+| `policy_missing` | unsupported exact engine policy contract, no generation |
+| `budget_exhausted`, `rate_limited` | no model dispatch, no daemon-budget fallback |
+| `operation_conflict` | native key reused for a different payload |
+| `outcome_unknown`, `draft_unverified` | inspect operation/draft, no blind regeneration |
+| Grant revoked during admitted work | result withheld, recorded work/cost may remain |
+
+Admitted tool failures use `isError=true` with a structured code, retry guidance
+and a nonsecret correlation reference. Authentication/admission failures retain
+HTTP semantics. Never expose token, raw provider error or private payload in errors.
+
+## 12 · Company policy and connected-client management
+
+**Status: UNIMPLEMENTED REMOTE REQUIREMENT.**
+
+```mermaid
+sequenceDiagram
+autonumber
+actor U as Company admin or profile user
+participant D as Desktop
+participant A as Central MrCall authorization
+participant C as Provider MCP client
+participant M as Profile MCP endpoint
+U->>D: Open connected clients and authorized activity
+D->>A: Authenticated request with actor/company rights
+A-->>D: Permitted grant metadata, last use and scopes
+D-->>U: Client, company, data classes and revoke controls
+U->>D: Revoke own grant or change authorized company policy
+D->>A: Actor-authorized revocation or policy update
+A->>A: Atomically persist grant/policy change
+A-->>D: Change acknowledged
+C->>M: Next request with previous token
+M->>A: Introspection for this resource and current company policy
+A-->>M: Inactive grant or reduced authority
+M-->>C: Refusal or only currently permitted operation
+Note over D,A: Admin grant metadata never grants access to private mail content
+```
+
+## 13 · Engine-enforced quota, source filtering and audit
+
+**Status: UNIMPLEMENTED REMOTE REQUIREMENT.**
+
+Case 4 token checks apply before and after this sequence. Every tool is rate-limited;
+only admitted paid work reserves model cost. Audit is required before execution and
+business-result release; unsettled quota reservations remain held for recovery.
+
+```mermaid
+sequenceDiagram
+autonumber
+participant M as Profile MCP endpoint
+participant E as Profile engine
+participant S as Authorized source data
+participant L as Engine LLM provider
+participant R as Profile operation and audit store
+participant A as Central authorization and MCP quota ledger
+M->>E: Tool with trusted grant context and permitted data classes
+E->>R: Record admitted request metadata, no tokens or content
+E->>E: Enforce tool scope, data provenance and rate limit
+alt Scope, source class or rate check refuses
+E->>R: Record refusal
+E-->>M: Structured refusal, no model dispatch
+else Checks pass
+opt Paid ask or draft generation
+E->>A: Profile-authenticated atomic grant/profile/company reservation
+A-->>E: Reservation, quota refusal or service unavailable
+end
+alt Paid reservation refused or quota service unavailable
+E->>R: Record budget_exhausted
+E-->>M: Budget or service refusal, no daemon allocation used
+else Read or reserved paid operation
+E->>S: Read only allowed source classes and derived content
+S-->>E: Permitted bounded context
+opt Paid generation
+E->>L: Selected permitted context with cost reservation
+L-->>E: Result or policy-checked tool requests
+end
+opt Paid reservation exists
+E->>A: Settle actual cost or release unused reservation
+A-->>E: Durable quota settlement
+end
+E->>R: Record outcome, references and actual cost, settle reservation
+E-->>M: Bounded result for case 4 authority recheck
+end
+end
+```
+
+## 14 · Remote procedures: one canonical revision
+
+**Proposed authority change; existing clone files are not migrated by this design.**
+A Save uses the revision from the editor's original read, not an automatically
+refetched revision that could silently overwrite another colleague's changes.
+
+```mermaid
+sequenceDiagram
+autonumber
+actor U as User
+participant D as Desktop editor
+participant E as Profile engine
+participant P as Revisioned company procedure project
+participant K as Server-side operator compiler
+D->>E: Read canonical procedures with ordinary Desktop authority
+E->>P: Read authorized canonical revision
+P-->>E: Text and revision
+E-->>D: Editor text and base revision
+U->>D: Edit and Save
+D->>E: Store canonical text with original expected_revision
+E->>P: Compare revision and authorize writer
+alt Revision conflict
+P-->>E: Conflict with current revision
+E-->>D: Conflict, no overwrite
+D-->>U: Review differences and explicitly merge or reload
+else Expected revision matches
+E->>K: Compile canonical text for this company/profile
+K-->>E: Derived procedures, phone and mailbox documents
+E->>P: CAS-publish canonical and derived set using original expected_revision
+P-->>E: Committed revision or commit-time conflict
+alt Commit-time revision conflict
+E-->>D: Conflict, no overwrite
+D-->>U: Explicit merge or reload required
+else Publication committed
+E-->>D: Verified saved revision
+D-->>U: Procedures available
+end
+end
+Note over E,P: Remote operator_context reads this authority, local files are working copies
+```
+
+## 15 · Remote draft result and native retry identity
+
+**Required contract, not an existing RPC schema:** fields and lookup names describe requirements. Grant-scoped keys prevent retry duplication, not other writers to the same draft; draft revisions preserve that distinction.
+
+```mermaid
+sequenceDiagram
+autonumber
+participant C as Provider MCP client
+participant M as Profile MCP endpoint
+participant E as Profile engine
+participant R as Durable operation and draft store
+C->>M: prepare_reply with operation_id and exact source
+M->>E: Policy-checked preparation with native caller-bound idempotency key
+E->>R: Atomically claim key and compare payload hash
+alt Key belongs to a different payload
+R-->>E: Conflict
+E-->>M: operation_conflict
+else Existing same-payload operation
+R-->>E: Completed result or pending operation
+E-->>M: Exact stored draft ID/revision or outcome_unknown
+else Newly claimed operation
+E->>E: Generate under source/assignment policy and reserved quota
+E->>R: Persist exact draft ID/revision and recoverable operation outcome
+R-->>E: Durable result for this turn
+E-->>M: draft_id, draft_revision, operation reference and sent=false
+end
+M-->>C: Result only after case 4 return-time authority check
+opt Response lost or transport outcome uncertain
+C->>M: Retry the same operation_id and payload
+M->>E: Look up or resume the same native operation under current authority
+E->>R: Resolve durable outcome without a second generation
+R-->>E: Exact result or still pending
+E-->>M: Result or outcome_unknown
+M-->>C: Authorized result or explicit uncertainty
+end
+Note over E,R: Another writer may create a later revision, never relabel it as this turn's result
+```

@@ -5,10 +5,7 @@ status: completed
 # Desktop-to-operator UX delivery
 
 <!-- doc-scope:start -->
-Scope: reviewed milestone execution and evidence for the two-worktree delivery;
-product intent is in the paired brief, and shipped behavior belongs in the
-setup guide and IPC contract. The final section records the separately authorized
-Desktop production rollout; kernel release and clone upgrades are excluded.
+Scope: historical execution and evidence for the completed coding-agent delivery and Desktop rollout, plus proposed sequencing for the remote extension in the same brief. Remote gates are planning input, not an approved execution plan or implementation/release authorization.
 <!-- doc-scope:end -->
 
 ## Brief gate and baselines
@@ -213,3 +210,33 @@ The documented `uvx --from` bootstrap resolves the public tag and exposes
 check. Earlier source-acceptance and Desktop-release observations above remain
 historical evidence. The kernel delivery plan records detailed verification
 limits and existing external-harness drift.
+
+## Remote extension — proposed sequence, not executed
+
+The frontmatter `completed` describes the original delivery above. This section
+is planning input for the [remote extension in the same brief](../briefs/2026-09-10-desktop-to-operator-onboarding.md#remote-mcp-design-decisions--unimplemented-extension),
+not approved implementation work. Every remote gate below is pending. No source,
+service, installation or profile migration is authorized by this documentation edit.
+
+| Gate | Owner | Required evidence before dependent work |
+|---|---|---|
+| R1 — authorization and company controls | Desktop authorization service + UI | Verified provider registration/redirects, selected profile/company consent, durable grants, introspection refusal, security-event revocation, company disable and fail-closed outage |
+| R2 — profile read endpoint | Desktop engine | Streamable HTTP under the profile Unix user, resource binding, scoped tools/resources, rate limits, provenance filtering, read/audit boundaries, wrong-profile and excluded-source refusal |
+| R3 — canonical procedures | Desktop engine + server-side cs-kernel compiler | Single canonical revision, atomic derived publication, conflict during compilation/commit, explicit merge, no silent existing-clone migration |
+| R4 — paid read questions | Desktop engine + authorization/quota service | Native trusted grant attribution, reserved MCP pool, shared atomic grant/profile/company quotas across profiles, cost settlement and outage refusal, no daemon-budget fallback |
+| R5 — native draft result and retry | Desktop engine, then MCP adapter | Exact draft ID/revision, durable caller-bound idempotency, payload conflict, concurrent equal calls, restart/lost-response recovery, other-writer revision, no send/approve-to-send path |
+| R6 — one-company beta | Desktop + provider clients | Real Claude/ChatGPT authorization and permitted tools, mobile/closed-Desktop path, user-readable grant/audit controls, excluded data, revoked in-flight return, quota refusal and operational rollback |
+
+Company controls, approved data classes and minimal audit are prerequisites for
+read access, not a late security milestone. Before beta, fix quota defaults,
+audit retention/access and deployment/backups for the central service. Review
+applicable data disclosures and contractual terms separately; this plan asserts
+no legal compliance. Registration/support differences between real provider
+clients must be settled using current official documentation and acceptance.
+
+Verification uses synthetic profiles first; real mailbox, paid-provider, service
+activation and release actions require their applicable authorization. Engine
+policy compatibility is explicit, not inferred from a version number alone.
+Rollback disables the remote endpoint and grants while retaining the independent
+Desktop/daemon path. Durable draft outcomes remain inspectable and are not deleted
+by revocation or rollback. Existing completed delivery evidence is not remote acceptance.

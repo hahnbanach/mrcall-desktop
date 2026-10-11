@@ -1,13 +1,162 @@
 # From desktop setup to a working company operator
 
 <!-- doc-scope:start -->
-Scope: proposed product journey across desktop configuration, the remote engine,
-and a cs-kernel clone; separates today's entry path from future personal-account
-delegation and an embedded agent interface. This is a brief, not shipped behavior
-or an approved implementation plan.
+Scope: product journey across Desktop configuration, a cs-kernel operator workspace and external AI clients; owns the proposed remote MCP architecture, authority, data, cost and lifecycle requirements. The original coding-agent delivery remains distinct from the unimplemented remote extension. This brief describes intent, not shipped remote behavior or an approved remote implementation plan.
 <!-- doc-scope:end -->
 
 ## Intent
+
+The remote product target is: configure the company through Desktop, then connect
+ChatGPT or Claude using an independently authenticated AI account to the selected
+MrCall profile and company. Read authorized company data and prepare a draft from
+an exact source message, including from a phone while Desktop is closed. The
+daemon is released only for Linux. Desktop remains the configuration and draft
+review interface. The coding-agent journey below is the original delivered slice,
+not a prerequisite requiring every remote user to install a coding agent.
+
+## Remote MCP design decisions — unimplemented extension
+
+The [data flows](../operator-data-flows.md) explain this design. None of the
+following requirements is an assertion that the remote service exists.
+
+### Service and identity boundary
+
+- Each profile's Linux engine process hosts its own Streamable HTTP MCP endpoint
+  behind Caddy, under the same Unix user and sandbox as that engine. Its MCP
+  adapter dispatches through the engine's policy-enforced methods internally.
+  There is no central adapter impersonating users, minting Firebase tokens or
+  crossing profile Unix sockets. Desktop's Firebase WSS boundary stays separate.
+- A centrally hosted MrCall authorization service owns the private grant store,
+  client registrations, consent and the shared MCP quota ledger. Firebase proves the person's identity; the
+  service separately checks profile access, company membership and company policy.
+  Signing into ChatGPT or Claude establishes none of these rights.
+- A grant binds subject UID, selected profile, one space_id, verified client,
+  permitted data classes and scopes to that profile's canonical MCP resource URL.
+  Authorization and token requests carry that resource. The profile engine
+  rejects wrong issuer/resource/profile/company even when a token is otherwise valid.
+- First-party-supported Claude/ChatGPT clients and exact registered redirect URIs
+  are allowlisted. No unrestricted DCR. Provider registration details must be
+  verified before implementation; consent names come from trusted registration.
+  Invalid clients or redirects are rejected before any redirect or code issuance.
+- The authorization service is deployed separately from tenant engines, with
+  protected persistent grant storage. Engines may reach only its required HTTPS
+  introspection and quota endpoints through their outbound allowlist. Introspection reads
+  committed current grants/policy, never a stale replica. Registration, backups,
+  service credentials and operational deployment belong to implementation gates.
+
+### Consent, revocation and permissions
+
+- Use opaque access tokens, authenticated introspection at each request admission
+  and immediately before releasing business results. No positive grant cache in
+  the initial implementation. An unavailable service fails closed for MCP only;
+  Desktop and scheduled engine work retain their independent authentication.
+- Revocation acknowledgement means subsequent admissions are refused. Work
+  already admitted may have produced a draft or cost; revocation does not roll it
+  back or retract content already delivered. A failed return-time check withholds
+  the result and leaves an uncertain operation inspectable in Desktop.
+- Refresh rotates refresh tokens and rechecks membership, client, grant and
+  company policy. Access tokens expire after five minutes as a secondary bound;
+  expiration is not the mechanism providing acknowledged grant revocation.
+- Desktop logout and closing a conversation do not revoke remote grants. Explicit
+  grant revocation, removal of company membership, company connector disable,
+  password reset and sign-out-everywhere invalidate affected grants. Firebase
+  session revocation alone is insufficient: security events must invalidate the
+  central grant store before the product can claim this behavior.
+- Grants expire after 90 days without admitted use. Desktop Settings shows the
+  verified client, profile/company, scopes, data classes, last use and individual
+  revoke action. The company admin can disable connectors and revoke company grants.
+- Scope `operator.read` covers context and the six read tools; `operator.ask`
+  permits paid read-only engine questions; `operator.draft` permits reply preparation.
+  Budget is a separate bound. A paid read is not a draft permission. Consent names
+  the company and data classes; the same user needs a separate grant for another company.
+
+### Data, budget and audit
+
+- Effective access is the intersection of profile rights, current company policy,
+  grant scopes and approved source classes. Ordinary business mail/tasks and
+  explicitly permitted project/procedure documents may be selected. Finance/Qonto
+  and PEC content and their derived tasks are excluded by default. Unknown origin
+  is denied; text redaction is not source classification. Mixed-source answers and
+  derived memory must preserve provenance or remain unavailable to the connector.
+- Company admins decide whether these classes may be exposed to the third-party
+  AI provider; individuals can narrow that choice, never widen it. Disabling a
+  class affects existing grants and results. Publication requires an explicit data
+  disclosure and review of the applicable contractual/privacy terms; this brief
+  makes no legal-compliance claim and prescribes no unsupported DPA wording.
+- Paid calls reserve cost in the engine before dispatch. The MCP pool is bounded
+  separately from the daemon's reserved share of the total profile budget, with
+  per-grant cost and request limits and a company aggregate ceiling. Concurrency,
+  retries, read-only calls and draft calls cannot bypass reservation. A company
+  counter local to one profile is insufficient: the central quota ledger
+  atomically reserves the grant, MCP-profile and company limits across profiles.
+  Its authenticated service caller is restricted to the engine's own profile.
+  A quota-service failure refuses paid MCP work. There is no automatic
+  fallback to the daemon allocation. Quota sizes are visible configuration and
+  must be fixed before beta. Exhaustion reports `budget_exhausted`; rate refusal
+  reports `rate_limited`. Admission or quota refusal incurs no model request.
+  Unsettled reservations remain held until idempotent recovery settles actual cost.
+- Minimal audit records capture time, grant/client, profile/company, tool, outcome,
+  source references, request correlation and charged cost. Do not log tokens, full
+  mail, prompts or returned documents. A profile user sees their own activity;
+  company admins see grant/governance metadata without inheriting private mail
+  contents. Retention and access limits must be fixed before beta.
+
+### Procedures and draft authority
+
+- The remote operator's canonical procedures are revisioned engine-owned
+  `operator-instructions` project records. Local files are working copies for this
+  mode, never a competing authority. Existing clone/local-candidate canonical-file
+  behavior is not silently migrated. A server-side operator compiler produces
+  derived procedure/phone/mailbox documents from an atomic canonical revision.
+  Shared procedures and private profile mailbox identity retain distinct write
+  permissions; company membership alone cannot rewrite another profile's identity.
+- Save uses the revision originally loaded by the editor, reports conflicts and
+  presents changes for explicit merge/reload. It never fetches the latest revision
+  merely to overwrite somebody else's changes. Remote `operator_context` reads the
+  authorized canonical revision and its derived-publication state.
+- Before remote draft preparation, the engine contract must accept a native,
+  profile/grant-bound idempotency key and return the exact draft ID and revision
+  caused by that turn. Same-key/different-payload conflicts are refused; concurrent
+  equal requests have one outcome. A lost response can be resolved by engine
+  operation lookup without generating another draft. Draft persistence and the
+  operation outcome must be recoverable across crashes. No before/after list diff
+  is accepted as causal attribution. The current candidate's limitation remains
+  until this contract is implemented and verified.
+- Read exact versions supported by `system.capabilities` and refuse unsupported
+  policy contracts; do not guess compatibility. Engine enforcement applies to
+  connector dispatch as well as other entry points. Error codes are structured
+  MCP tool errors; admission/authentication errors retain their HTTP semantics.
+- This MCP surface exposes no send, approval-to-send, arbitrary filesystem or
+  shell tool. Draft sending stays in the separately authorized Desktop workflow.
+  Tool annotations describe effects but cannot enforce confirmation or permission.
+
+### Threat model and delivery boundary
+
+| Threat | Required boundary and remaining limit |
+|---|---|
+| Attacker-controlled email or document | Treat content as untrusted data, never a permission grant. Enforce source/data scopes in the engine. A draft still requires human review. |
+| AI client follows injected instructions | Restrict every read and mutation independently. No-send limits action damage but does not prevent disclosure through read results. |
+| Stolen MCP token | Profile resource binding, active-grant checks, rotation and revocation bound exposure; allowed data can still be read before revocation. |
+| Compromised user computer | Local descriptors/session access may be stolen; local generation checks cannot defend against the same user's compromise. Remote grant revocation is a separate control. |
+| Compromised central authorization service | It can issue profile authority; tenant isolation does not eliminate this trust root. Protect and audit its administration and credentials. |
+
+The local STDIO candidate is a Claude Desktop preview, with real installation
+acceptance still unverified. It is not the mobile product, and a ChatGPT ZIP has
+no verified consumer. ChatGPT's supported remote or Secure MCP Tunnel connection
+is a distinct transport requiring its own configuration and acceptance. Token
+caching and persistent WSS are possible local optimizations, not a measured
+latency fix or an equivalent substitute for per-call identity/company checks.
+
+Remote beta depends on read access, company policy and audit first; then isolated
+paid asks and native draft identity/idempotency. Broader self-service provisioning,
+filesystem extensions, embedded product chat and sending through MCP are excluded.
+The existing completed delivery plan remains historical; its remote sequence is
+planning input, not authorization to implement, deploy or migrate profiles.
+
+## Original coding-agent delivery
+
+The following sections retain the original delivery contract; they do not override
+the remote extension above or claim its requirements are implemented.
 
 A colleague should be able to configure an engine through MrCall Desktop, create
 a company operator workspace from cs-kernel, and work in that workspace through
