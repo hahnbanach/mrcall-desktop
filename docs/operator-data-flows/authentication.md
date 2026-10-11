@@ -80,6 +80,7 @@ F-->>B: Firebase login proof
 B->>A: Present login proof
 A->>A: Verify identity, UID and company membership
 A-->>B: Show account, company and requested permissions
+alt User grants consent
 U->>B: Confirm authorization for the AI client
 B->>A: Explicit consent
 A-->>B: Redirect to provider callback with code, state and issuer
@@ -93,6 +94,15 @@ M->>M: Verify issuer, MCP audience, expiry, grant and scopes
 M-->>C: Access allowed to the MrCall profile tools
 C-->>UI: Authorized connector
 UI-->>U: MrCall available in enabled conversations
+else User declines consent
+U->>B: Decline authorization
+B->>A: Consent denied
+A-->>B: Redirect to provider callback with access_denied and state
+B->>C: OAuth error callback
+C->>C: Validate state, create no connection
+C-->>UI: Authorization declined, no MCP grant
+UI-->>U: MrCall remains disconnected
+end
 ```
 
 ## 4 · MCP session and per-call checks

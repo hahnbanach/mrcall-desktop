@@ -41,6 +41,8 @@ UI->>F: Read selected file
 F-->>UI: Bytes
 UI->>E: Authenticated, limited upload remains unimplemented
 E-->>UI: Document ID/path, revision and permissions
+UI-->>U: Show project and document path
+U->>C: Share project/path in the AI conversation and request a read
 C->>M: read_project(project, path) if stored as a text project
 M->>E: projects.read(project, path)
 E-->>M: Stored content and metadata
@@ -72,9 +74,18 @@ participant M as Remote MCP
 alt Access token expired and refresh allowed
 C->>A: Connection MCP refresh token
 A->>A: Verify grant remains active
-A-->>C: New access token or login required
+alt Refresh accepted
+A-->>C: New access token
 C->>M: New request with valid token
 M-->>C: Authorized result
+else Refresh rejected or login required
+A-->>C: Refresh refused, authorization required
+C-->>UI: Stop tool requests and offer reconnection
+UI-->>U: Sign in and authorize again through case 3
+end
+else Access token expired and refresh unavailable
+C-->>UI: Stop tool requests and offer reconnection
+UI-->>U: Sign in and authorize again through case 3
 else Close conversation or client
 U->>UI: Close
 UI->>C: Stop using the MCP session

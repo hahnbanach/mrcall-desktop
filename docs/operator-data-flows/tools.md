@@ -126,6 +126,8 @@ Note over E,L: May consume engine budget in addition to the ChatGPT/Claude subsc
 
 Capabilities, procedures and source checks also precede returning a completed result. operation_id is an adapter idempotency key; it is not forwarded as native chat.send idempotency. An uncertain outcome requires draft inspection.
 
+**Attribution limit:** matching source/thread/reply_binding and a before/after difference identifies a matching draft, not necessarily the draft caused by this call. A concurrent Desktop or connector operation may change the same source-bound draft. The flow does not establish a request-specific correlation or exclusion of competing writers; that design requirement remains unresolved. A completed adapter receipt prevents repeat submission but does not prove causal ownership of the draft.
+
 ```mermaid
 sequenceDiagram
 autonumber
@@ -176,10 +178,10 @@ E-->>M: chat.send result
 M->>E: drafts.list(status=draft) after
 E-->>M: Final draft state
 M->>M: Require exactly one changed draft with exact source/thread/reply_binding
-alt Unique draft verified
+alt Unique matching draft found
 M->>W: Store completed receipt and result
 M-->>C: draft + operation_id + sent=false
-C-->>U: Draft ready for review
+C-->>U: Matching draft available for review, causal attribution unproven
 else No unique verified draft
 M-->>C: draft_unverified, receipt remains pending
 end
@@ -192,6 +194,7 @@ M-->>C: Unverified outcome, no blind retry
 end
 end
 Note over M,E: chat.approve is only an internal denial RPC, not an exposed send tool
+Note over M,E: Source binding is not request attribution, concurrent writers remain an unresolved boundary
 ```
 
 ## Nine-tool mapping
