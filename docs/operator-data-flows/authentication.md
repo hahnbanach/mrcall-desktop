@@ -6,7 +6,7 @@ Scope: English sequence descriptions for authentication and sessions; existing b
 
 [Back to the data-flow index](../operator-data-flows.md).
 
-**Implementation boundary:** Desktop Firebase authentication and its WSS engine connection exist on `main`. The nine-tool local MCP exists only as an **uncommitted, unreleased candidate in isolated `feat/desktop-operator-mcp-20261008` worktrees** and is **absent from main**. Remote MCP, OAuth, the authorized engine/workspace bridge and company-project file upload in this design are **unimplemented proposals**.
+Implementation status and transport boundaries: [data-flow index](../operator-data-flows.md#implementation-status-and-navigation). Each case labels existing, candidate or proposed behavior.
 
 ## 1 · First MrCall Desktop login
 
@@ -69,7 +69,7 @@ C->>M: Read protected resource metadata
 M-->>C: Authorization server and available scopes
 C->>A: Read OAuth metadata, identify the client
 A-->>C: OAuth endpoints and configuration
-Note over C,A: Client identity through CIMD, DCR or supported registration
+Note over C,A: Allowlisted client identity and exact verified redirect URI, no unrestricted DCR
 C-->>UI: Start authorization URL with state, PKCE challenge, resource and scope
 UI->>B: Open MrCall page
 B->>A: OAuth authorization request
@@ -78,8 +78,8 @@ U->>B: Sign in with the selected MrCall account
 B->>F: Login through the same identity system as Desktop
 F-->>B: Firebase login proof
 B->>A: Present login proof
-A->>A: Verify identity, UID and company membership
-A-->>B: Show account, company and requested permissions
+A->>A: Verify identity, selected profile/company membership and connector policy
+A-->>B: Show verified client name, profile/company, scopes and data classes
 alt User grants consent
 U->>B: Confirm authorization for the AI client
 B->>A: Explicit consent
@@ -87,10 +87,12 @@ A-->>B: Redirect to provider callback with code, state and issuer
 B->>C: OAuth callback with single-use code
 C->>C: Verify state and issuer
 C->>A: Exchange code + PKCE verifier + resource
-A-->>C: MCP access token, refresh token if supported and authorized
+A-->>C: Opaque five-minute MCP token and rotating refresh token
 Note over C: MCP token belongs to this connection, not Desktop Firebase token
 C->>M: MCP request + Authorization: Bearer MCP token
-M->>M: Verify issuer, MCP audience, expiry, grant and scopes
+M->>A: Authenticated introspection for this profile resource
+A-->>M: Active grant and current profile/company/data authority
+M->>M: Validate resource, profile, company and required scopes
 M-->>C: Access allowed to the MrCall profile tools
 C-->>UI: Authorized connector
 UI-->>U: MrCall available in enabled conversations
@@ -109,7 +111,11 @@ end
 
 **Status: UNIMPLEMENTED REMOTE PROPOSAL — tool design based on the local candidate.**
 
-The authorized engine bridge remains unimplemented. It cannot forward an MCP token to the existing WebSocket, which requires Firebase. M and E are logical components and could share a daemon using authorized internal calls. Later M→E arrows describe methods and payloads, not an implemented remote transport. The handshake is the SDK 1.x candidate pattern with negotiated 2025 compatibility, not a universal claim about current remote clients.
+The profile's MCP endpoint and engine methods share one Linux process and Unix user.
+They dispatch internally through engine policies, without passing MCP tokens to
+Firebase WSS. The central authorization service owns the grant store. Streamable
+HTTP session IDs identify protocol sessions, never authorization. Every request
+requires a valid resource-bound token; version negotiation is independent of identity.
 
 ```mermaid
 sequenceDiagram
@@ -117,35 +123,49 @@ autonumber
 actor U as User
 participant UI as AI UI
 participant C as Provider MCP client
-participant M as Remote MCP in Linux service
+participant A as Central MrCall authorization
+participant M as Profile MCP endpoint
 participant E as Profile engine
 U->>UI: Open conversation and enable MrCall
-UI->>C: Use selected MrCall connection
-C->>M: initialize(version and capabilities) + MCP token
-M-->>C: Compatible version, capabilities and guidance
-C->>M: notifications/initialized
-C->>M: tools/list
-M-->>C: Nine tools with names and argument schemas
-opt Client uses MCP resources
-C->>M: resources/list
-M-->>C: operator://guidance
-C->>M: resources/read(operator://guidance)
-M->>M: Run operator_context with the same checks
-M-->>C: Context and instructions
-end
-loop Every tools/call
-C->>M: Tool name + arguments + MCP token
-M->>M: Verify token, active grant and argument schema
-M->>M: Resolve UID and company from server-side grant
-M->>E: Internal dispatch with authorized profile identity
-E->>E: Check data and operation access
-E-->>M: Result or refusal
-M->>M: Recheck company scope and grant, limit and filter response
-M-->>C: MCP result or error
-C-->>UI: Tool result in the conversation
+UI->>C: Use selected profile connection
+C->>M: initialize(version, capabilities) with opaque MCP token
+M->>A: Authenticated introspection for this resource
+A-->>M: Grant status and current policy
+alt Initialization admission refused
+M-->>C: Authentication or resource error, session not initialized
+else Initialization authorized
+M->>M: Validate resource/profile/company binding and negotiated version
+M-->>C: Compatible initialize result
+C->>M: notifications/initialized with token
+C->>M: tools/list with token
+Note over A,M: Initialization and discovery also require admission checks
+M-->>C: Scope-permitted tools and argument schemas
+loop Every tools/call or authorized guidance resource read
+C->>M: Name, arguments and opaque MCP token
+M->>A: Introspect token, membership and current company/data policy
+alt Inactive grant, wrong resource or authorization unavailable
+A-->>M: Inactive or invalid authority, or unavailable
+M-->>C: Admission refused, no engine operation
+else Active authorization
+A-->>M: Trusted profile/company, scopes and permitted data classes
+M->>M: Validate scope and arguments, attach trusted caller context
+M->>E: In-process dispatch through engine policy methods
+E->>E: Enforce data classes, operation access, quotas and minimal audit
+E-->>M: Result or structured tool error
+M->>A: Recheck authority immediately before business result release
+alt Authority remains valid
+A-->>M: Current grant and data policy
+M->>M: Bound and filter content under the current policy
+M-->>C: Permitted result
+C-->>UI: Tool result
 UI-->>U: Assistant response
+else Revoked, policy changed or authorization unavailable
+A-->>M: Refusal or unavailable
+M-->>C: Result withheld, admitted work may already have occurred
 end
-Note over M,E: Authenticated remote bridge remains unimplemented, MCP token does not reach Firebase WSS
-Note over C,M: Handshake represents the candidate SDK 1.x protocol, real clients must negotiate a version
+end
+end
+end
+Note over M,E: Same process and Unix user, both components are proposed
+Note over C,M: Mcp-Session-Id never replaces per-request authorization
 ```
-

@@ -1,5 +1,5 @@
 ---
-doc_baseline_commit: 6516163b423fe802997b7987849cea1ec5967d43
+doc_baseline_commit: 5e693d5fd1b840ddca8265560a6b6e6012c06d1c
 doc_baseline_date: 2026-10-11
 ---
 
@@ -102,7 +102,8 @@ written projects are revisioned company records. See
 [project memory](../engine/docs/features/project-memory.md).
 
 External-client MCP is an unreleased local candidate in isolated worktrees;
-the remote MCP/OAuth service and hosted operator workspace are proposed.
+the remote design selects profile-local Linux MCP endpoints, central grant
+introspection and revisioned engine procedures; all are unimplemented.
 [Data flows](operator-data-flows.md) separate these states and their authority boundaries.
 
 Desktop `v0.1.56` combines Qonto, additional mailboxes/PEC and the auth/billing

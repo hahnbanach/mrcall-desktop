@@ -6,7 +6,7 @@ Scope: English sequence descriptions for files and connection lifecycle; existin
 
 [Back to the data-flow index](../operator-data-flows.md).
 
-**Implementation boundary:** Desktop Firebase authentication and its WSS engine connection exist on `main`. The nine-tool local MCP exists only as an **uncommitted, unreleased candidate in isolated `feat/desktop-operator-mcp-20261008` worktrees** and is **absent from main**. Remote MCP, OAuth, the authorized engine/workspace bridge and company-project file upload in this design are **unimplemented proposals**.
+Implementation status and transport boundaries: [data-flow index](../operator-data-flows.md#implementation-status-and-navigation). Each case labels existing, candidate or proposed behavior.
 
 ## 9 · Files on the computer: three separate cases
 
@@ -61,7 +61,7 @@ Note over F,M: A local path or MCP root is a reference, it does not transfer byt
 
 **Status: UNIMPLEMENTED PROPOSAL — revocation policy.**
 
-Revoking an AI-client grant and signing out of Desktop are distinct events. Remote behavior on Desktop logout remains to be decided and implemented; the local candidate revokes on logout. Revocation stops subsequent requests but does not retract data already shown or work already submitted.
+Revoking an AI-client grant and signing out of Desktop are distinct events. Desktop logout does not revoke remote grants in the proposed product; the local candidate revokes on logout. Acknowledged revocation stops new admissions through uncached introspection; return-time checks withhold results when authority has changed. It does not retract data already shown or roll back admitted work.
 
 ```mermaid
 sequenceDiagram
@@ -73,11 +73,13 @@ participant A as MrCall authorization
 participant M as Remote MCP
 alt Access token expired and refresh allowed
 C->>A: Connection MCP refresh token
-A->>A: Verify grant remains active
+A->>A: Verify active grant, membership, client and company policy
 alt Refresh accepted
-A-->>C: New access token
-C->>M: New request with valid token
-M-->>C: Authorized result
+A-->>C: New opaque access token and rotated refresh token
+C->>M: New request with token
+M->>A: Authenticated introspection for this profile resource
+A-->>M: Current authority or refusal
+M-->>C: Result after return-time recheck, or refusal
 else Refresh rejected or login required
 A-->>C: Refresh refused, authorization required
 C-->>UI: Stop tool requests and offer reconnection
@@ -89,15 +91,29 @@ UI-->>U: Sign in and authorize again through case 3
 else Close conversation or client
 U->>UI: Close
 UI->>C: Stop using the MCP session
-Note over A,M: Session closure does not revoke the grant
+Note over A,M: Conversation closure leaves the grant active
+else Sign out of Desktop only
+U->>UI: Sign out of Desktop
+UI->>UI: End the Desktop Firebase session
+Note over C,M: Remote AI connection and grant remain active
 else Revoke the client's MrCall authorization
 U->>UI: Revoke Claude or ChatGPT
 UI->>A: Revoke selected grant with authenticated identity
 A->>A: Invalidate grant and renewals
 C->>M: Next request with previous token
-M->>M: Check revoked grant
+M->>A: Authenticated introspection of previous token
+A-->>M: Inactive grant
 M-->>C: Request rejected, new authorization required
 end
-Note over A,M: Service must check revocation rather than rely only on JWT expiry
+Note over A,M: No positive grant cache, AS outage refuses MCP access
+Note over A,M: Password reset, sign-out-everywhere and membership removal must invalidate central grants
 ```
 
+
+Tokens expire after five minutes; grants expire after 90 days without admitted use.
+Explicit revocation, company disable and removal of company membership also refuse
+refresh. Security-event integration must invalidate the central store; Firebase
+session invalidation alone does not invalidate an independently issued MCP grant.
+Already-admitted model calls or draft writes may finish after revocation; their
+results are withheld if the return-time check fails. Audit and Desktop operation
+inspection remain available to the authorized profile user.

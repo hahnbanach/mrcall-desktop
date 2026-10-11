@@ -45,8 +45,8 @@ The repo has three parallel doc trees, mirroring the three index files. Each tre
 - [Model comparison](evaluations/2026-09-13-openrouter-models.md) — blinded synthetic evidence and limitations.
 - [Actual-prompt comparison](evaluations/2026-09-15-real-engine-prompts.md) — K3/GLM source-grounded checks, availability and prompt corrections.
 
-- [Desktop setup to operator workspace](briefs/2026-09-10-desktop-to-operator-onboarding.md) — proposed end-to-end setup journey, current evidence, and future delegation boundary.
-- [Desktop, MCP and daemon data flows](operator-data-flows.md) — English sequence diagrams for authentication, all nine candidate tools, local files and revocation; existing behavior, unreleased local candidate and remote proposal are labeled separately.
+- [Desktop setup to operator workspace](briefs/2026-09-10-desktop-to-operator-onboarding.md) — original coding-agent delivery and proposed remote MCP architecture, consent, data/cost controls, procedures and native draft requirements.
+- [Desktop, MCP and daemon data flows](operator-data-flows.md) — English sequences for authentication, nine candidate tools, local files and revocation, plus proposed remote governance, budgets, audit, procedure authority and native drafts; implementation states remain separate.
 - [Chat approval isolation](briefs/2026-09-10-chat-approval-isolation.md) — scoped existing cross-client approval defect and acceptance criteria.
 - [`active-context.md`](active-context.md) — cross-cutting living snapshot: `State now` / `Unresolved` / `Next`, nothing else
 - [`active-context-archive.md`](active-context-archive.md) — dated narrative pruned out of the living snapshot
