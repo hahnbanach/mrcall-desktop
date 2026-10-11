@@ -112,7 +112,7 @@ set: since milestone 10 (slice S3c) a request whose `only` lists the
 endpoints the snapshot admitted may fall back among them, and no further; a
 request without `only` never falls back, and K3's pin to its one endpoint
 never does (the billing server mirrors this rule in an S7 follow-up). A
-refused call (429, or another status proving no work was done) releases its
+refused call (429, 402 from an account out of credit, or another status proving no work was done) releases its
 hold. Missing or invalid receipts keep holds.
 Explicit model/feature allowlists apply; this is not unlimited model routing.
 

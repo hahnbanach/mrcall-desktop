@@ -212,14 +212,16 @@ PATHS = {MODEL: "/api/v1/messages", K3: "/api/v1/chat/completions"}
 
 
 @pytest.mark.parametrize("model", [MODEL, K3])
-@pytest.mark.parametrize("status, released", [(429, True), (503, False)])
+@pytest.mark.parametrize("status, released", [(429, True), (402, True), (503, False)])
 def test_a_refused_call_releases_its_hold_and_a_server_error_keeps_it(
     ledger, model, status, released
 ):
     """S3c: OpenRouter's refusal carries its HTTP status (`status_code`), so a
     status that proves no work was done, a 429 from a rate-limited endpoint's
     shared pool, releases the hold, as an SDK refusal does on the direct
-    transport; a 5xx, after which the provider may have worked, keeps it. On
+    transport; a 402 (the account out of credit, refused before any inference,
+    2026-10-11) releases it too; a 5xx, after which the provider may have
+    worked, keeps it. On
     the Messages path and on K3's Chat path alike."""
     calls = []
 
