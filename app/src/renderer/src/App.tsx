@@ -16,6 +16,7 @@ import Onboarding from './views/Onboarding'
 import SignIn from './views/SignIn'
 import { auth } from './firebase/config'
 import {
+  invalidateAuthSession,
   refreshAuthToken,
   repushTokenForCurrentUser,
   setupAuthListener,
@@ -60,14 +61,15 @@ export async function installEngineTokenPusher(): Promise<boolean> {
   // (preserving the pre-Phase-2 effect). This replaces the direct in-band
   // `account.setFirebaseToken` RPC, which could not reach the WS handshake.
   setTokenPusher(async ({ uid, email, idToken, expiresAtMs, refreshToken }) => {
-    await window.zylch.account.pushToken({ uid, email, idToken, expiresAtMs, refreshToken })
+    const result = await window.zylch.account.pushToken({ uid, email, idToken, expiresAtMs, refreshToken })
+    if (!result.ok) throw new Error('Token push refused')
   })
   for (let attempt = 0; attempt < 3; attempt++) {
     try {
       await repushTokenForCurrentUser()
       return true
-    } catch (e) {
-      console.warn(`[App] engine token push attempt ${attempt + 1}/3 failed:`, e)
+    } catch {
+      console.warn(`[App] engine token push attempt ${attempt + 1}/3 failed`)
       await new Promise((resolve) => setTimeout(resolve, 300 * (attempt + 1)))
     }
   }
@@ -529,8 +531,6 @@ function AppInner(): JSX.Element {
   // reports an expired/absent Firebase session, force a fresh ID token in
   // the renderer (getIdToken(true)) and push it, so the main process's
   // next reconnect uses a valid token instead of replaying the stale one.
-  // We DON'T decode the JWT in main; the engine's 4401 close (surfaced as
-  // status code 'auth_expired') is the trigger. Guarded so a tight
   // reconnect loop can't hammer Firebase: at most one refresh in flight,
   // and a short cooldown between refreshes.
   useEffect(() => {
@@ -725,7 +725,7 @@ function AppInner(): JSX.Element {
                   `taskThreadFilter` on the thread store). The target
                   view is the same whether the thread has 0, 1, or many
                   tasks — no direct-open shortcut. */}
-              <Email onOpenTasks={() => setView('tasks')} />
+              <Email onOpenTasks={() => setView('tasks')} active={view === 'email'} />
             </div>
           )}
           <div
@@ -987,15 +987,16 @@ function FirebaseAuthGate({ children }: { children: React.ReactNode }): JSX.Elem
               // Out-of-band push to main (canonical Phase-2 path). Main
               // caches it for the remote-WS handshake and forwards it into
               // a local engine via set_firebase_token.
-              await window.zylch.account.pushToken({
+              const result = await window.zylch.account.pushToken({
                 uid,
                 email,
                 idToken,
                 expiresAtMs,
                 refreshToken
               })
+              if (!result.ok) throw new Error('Token push refused')
             } catch (e) {
-              console.warn('[App] account.pushToken push failed:', e)
+              console.warn('[App] account.pushToken push failed')
               throw e
             }
           })
@@ -1009,11 +1010,8 @@ function FirebaseAuthGate({ children }: { children: React.ReactNode }): JSX.Elem
               await repushTokenForCurrentUser()
               pushed = true
               break
-            } catch (e) {
-              console.warn(
-                `[App] initial token push attempt ${attempt + 1}/3 failed:`,
-                e
-              )
+            } catch {
+              console.warn(`[App] initial token push attempt ${attempt + 1}/3 failed`)
               await new Promise((resolve) => setTimeout(resolve, 300 * (attempt + 1)))
             }
           }
@@ -1174,18 +1172,19 @@ function AuthGateError({ user, reason }: { user: User; reason: string }): JSX.El
 // surfaced from Settings via a top-bar action; kept here so it lives
 // next to the gate that consumes it.
 export async function performSignOut(): Promise<void> {
+  invalidateAuthSession()
   // Tell the engine first so its cached session is cleared even if
   // Firebase's signOut throws (offline, etc). On a no-sidecar window
   // this is a no-op.
   try {
     await window.zylch.account.signOut()
-  } catch (e) {
-    console.debug('[App] engine signOut push skipped:', e)
+  } catch {
+    console.debug('[App] engine signOut push skipped')
   }
   try {
     await signOut(auth)
-  } catch (e) {
-    console.error('[App] firebase signOut failed', e)
+  } catch {
+    console.error('[App] firebase signOut failed')
   }
 }
 

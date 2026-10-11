@@ -1,4 +1,9 @@
 import { contextBridge, ipcRenderer } from 'electron'
+import type {
+  QontoConnectResult, QontoPublicationResult, QontoRemovalResult, QontoSyncResult,
+  QontoTestResult, QontoTransactionResult
+} from '../renderer/src/finance'
+import type { MailboxMutationResult, MailboxTestResult } from '../renderer/src/types'
 
 type NotifyCb = (params: unknown) => void
 const listeners = new Map<string, Set<NotifyCb>>()
@@ -33,6 +38,7 @@ interface WhatsAppMessage {
   sender_name: string | null
   text: string | null
   media_type: string | null
+  transcription: string | null
   is_from_me: boolean
   is_group: boolean
   timestamp: string | null
@@ -130,10 +136,49 @@ ipcRenderer.on('rpc:notification', (_e, msg: { method: string; params: unknown }
   }
 })
 
+type TokenRefreshHandler = (uid: string) => Promise<boolean>
+let tokenRefreshSubscription: { handler: TokenRefreshHandler } | null = null
+
+ipcRenderer.on('account:requestTokenRefresh', async (_event, payload: unknown) => {
+  if (!payload || typeof payload !== 'object') return
+  const { requestId, uid } = payload as { requestId?: unknown; uid?: unknown }
+  if (typeof requestId !== 'number' || !Number.isSafeInteger(requestId) || requestId < 1) return
+  const subscription = tokenRefreshSubscription
+  let ok = false
+  if (subscription && typeof uid === 'string' && uid.length > 0 && uid.trim() === uid) {
+    try {
+      ok = await subscription.handler(uid) === true && tokenRefreshSubscription === subscription
+    } catch {
+      ok = false
+    }
+  }
+  ipcRenderer.send('account:tokenRefreshResult', { requestId, ok })
+})
+
 const call = <T = unknown>(method: string, params: unknown = {}, timeout?: number): Promise<T> =>
   ipcRenderer.invoke('rpc:call', method, params, timeout) as Promise<T>
 
 const api = {
+  system: {
+    capabilities: () => call<{ chat_history_binding?: number }>('system.capabilities', {}, 15_000)
+  },
+  qonto: {
+    status: () => call<{
+      status: string; generation: number; account_count: number; source_access: boolean
+      credential_stored: boolean; error?: string
+    }>('qonto.status', {}, 30_000),
+    test: (credentials: { credential_source: 'input'; login?: string; api_key?: string }) =>
+      call<QontoTestResult>('qonto.test', credentials, 35_000),
+    connect: (params: { credential_source: 'input'; login?: string; api_key?: string; challenge_id: string; account_ids: string[]; authority_confirmed: boolean; consent_version: number }) =>
+      call<QontoConnectResult>('qonto.connect', params, 180_000),
+    sync: () => call<QontoSyncResult>('qonto.sync', {}, 180_000),
+    disconnect: () => call<QontoRemovalResult>('qonto.disconnect', {}, 30_000),
+    deleteImportedData: (confirmed: boolean) => call<QontoRemovalResult>('qonto.delete_imported_data', { confirmed }, 30_000),
+    prepare: (resume = false) => call<{ success?: boolean; summary?: string; attempted?: number; completed?: number; failed?: number; errors?: { detail: string }[] }>('qonto.prepare', { resume }, 600_000),
+    publicationPreview: () => call<{ preview_id: string; fact_text: string; disclosure: string }>('qonto.publication_preview', {}, 30_000),
+    publish: (previewId: string, confirmed: boolean, resume = false) => call<QontoPublicationResult>('qonto.publish', { preview_id: previewId, confirmed, resume }, 600_000),
+    transaction: (sourceId: string) => call<QontoTransactionResult>('qonto.transaction', { source_id: sourceId }, 35_000)
+  },
   llm: { models: (provider?: string) => call<{ provider: string; models: { id: string; label: string; provider: string }[]; available: boolean; reason: string }>('llm.models', provider ? { provider } : {}, 15_000) },
   usage: {
     reconcile: (cursor?: string) => call<{ recovered: number; unresolved: number; message: string; next_cursor: string | null }>('usage.reconcile', cursor ? { cursor } : {}, 65_000),
@@ -281,7 +326,10 @@ const api = {
     send: (
       message: string,
       conversation_history: unknown[] = [],
-      opts: { conversationId?: string; context?: Record<string, unknown> } = {}
+      opts: {
+        conversationId?: string; context?: Record<string, unknown>
+        historyMode?: 'managed_finance'; historyHandle?: string; historyRevision?: number
+      } = {}
     ) =>
       call<any>(
         'chat.send',
@@ -289,7 +337,10 @@ const api = {
           message,
           conversation_history,
           conversation_id: opts.conversationId ?? 'general',
-          context: opts.context ?? {}
+          context: opts.context ?? {},
+          ...(opts.historyMode ? { history_mode: opts.historyMode } : {}),
+          ...(opts.historyHandle !== undefined ? { history_handle: opts.historyHandle } : {}),
+          ...(opts.historyRevision !== undefined ? { history_revision: opts.historyRevision } : {})
         },
         600000
       ),
@@ -349,6 +400,8 @@ const api = {
           title?: string
           detail?: string
           action?: string
+          /** The mailbox address a per-mailbox sync failure belongs to. */
+          mailbox?: string
         }>
       }>('sync.run', params, 12 * 3600 * 1000)
   },
@@ -366,6 +419,12 @@ const api = {
         emails_analyzed_count?: number | null
         emails_pending_analysis?: number | null
         last_email_analyzed_at?: string | null
+        mailboxes?: Array<{
+          mailbox_id: string
+          address: string
+          emails_count: number
+          emails_pending_analysis: number
+        }>
       }>('setup.state', {})
   },
   workspace: {
@@ -399,16 +458,26 @@ const api = {
   emails: {
     listByThread: (threadId: string) =>
       call<any>('emails.list_by_thread', { thread_id: threadId }, 60000),
-    listInbox: (params: { limit?: number; offset?: number } = {}) =>
+    // `mailbox_id` restricts the rows to one mailbox; absent, every
+    // active mailbox contributes (docs/ipc-contract.md, `emails.*`).
+    listInbox: (params: { limit?: number; offset?: number; mailbox_id?: string } = {}) =>
       call<{ threads: any[] }>(
         'emails.list_inbox',
-        { limit: params.limit ?? 50, offset: params.offset ?? 0 },
+        {
+          limit: params.limit ?? 50,
+          offset: params.offset ?? 0,
+          ...(params.mailbox_id ? { mailbox_id: params.mailbox_id } : {})
+        },
         30000
       ),
-    listSent: (params: { limit?: number; offset?: number } = {}) =>
+    listSent: (params: { limit?: number; offset?: number; mailbox_id?: string } = {}) =>
       call<{ threads: any[] }>(
         'emails.list_sent',
-        { limit: params.limit ?? 50, offset: params.offset ?? 0 },
+        {
+          limit: params.limit ?? 50,
+          offset: params.offset ?? 0,
+          ...(params.mailbox_id ? { mailbox_id: params.mailbox_id } : {})
+        },
         30000
       ),
     search: (params: {
@@ -416,6 +485,7 @@ const api = {
       folder?: 'inbox' | 'sent' | 'all'
       limit?: number
       offset?: number
+      mailbox_id?: string
     }) =>
       // Search scans the entire owner mailbox in-memory on the engine
       // side, so a long mailbox + body matching can take a beat. 30s
@@ -426,7 +496,8 @@ const api = {
           query: params.query,
           folder: params.folder ?? 'inbox',
           limit: params.limit ?? 50,
-          offset: params.offset ?? 0
+          offset: params.offset ?? 0,
+          ...(params.mailbox_id ? { mailbox_id: params.mailbox_id } : {})
         },
         30000
       ),
@@ -443,13 +514,20 @@ const api = {
         15000
       ),
     archive: (threadId: string) =>
-      // IMAP MOVE can take a few seconds (network + folder lookup) so
-      // we give this a comfortable 60s ceiling — the renderer shows a
-      // spinner in the archive button until it resolves.
+      // IMAP MOVE can take a few seconds per mailbox (network + folder
+      // lookup) so we give this a comfortable 60s ceiling — the renderer
+      // shows a spinner in the archive button until it resolves. A
+      // login, connection or missing-message failure is an answer
+      // (`ok: false` with the mailbox's `error`), not a rejection.
       call<{
         ok: boolean
         archived: number
-        imap: { folder: string; moved: number; attempted: number }
+        mailboxes: Array<{
+          mailbox_id: string
+          attempted: number
+          moved: number
+          error: string | null
+        }>
       }>('emails.archive', { thread_id: threadId }, 60000),
     deleteLocal: (threadId: string) =>
       // Local-only soft delete: instant, no network. Method name
@@ -458,6 +536,56 @@ const api = {
       call<{ ok: boolean; deleted: number }>(
         'emails.delete',
         { thread_id: threadId },
+        15000
+      )
+  },
+  // ── Mailboxes (additional IMAP accounts; the primary is read-only here) ──
+  // Refusals are answers ({ok: false, status, message}), never rejections;
+  // no result carries a password. test/add/update log in to the server,
+  // hence the 60s ceiling.
+  mailboxes: {
+    list: () => call<{ mailboxes: any[] }>('mailboxes.list', {}, 30000),
+    presets: () => call<{ presets: any[] }>('mailboxes.presets', {}, 30000),
+    test: (params: {
+      address: string
+      password: string
+      imap_host?: string
+      imap_port?: number
+      smtp_host?: string
+      smtp_port?: number
+    }) => call<MailboxTestResult>('mailboxes.test', params, 60000),
+    add: (params: {
+      address: string
+      password: string
+      imap_host?: string
+      imap_port?: number
+      smtp_host?: string
+      smtp_port?: number
+      preset?: string
+    }) =>
+      call<MailboxMutationResult>(
+        'mailboxes.add',
+        params,
+        60000
+      ),
+    update: (params: {
+      mailbox_id: string
+      imap_host?: string
+      imap_port?: number
+      smtp_host?: string
+      smtp_port?: number
+      password?: string
+      preset?: string
+    }) =>
+      call<MailboxMutationResult>(
+        'mailboxes.update',
+        params,
+        60000
+      ),
+    remove: (mailboxId: string) =>
+      call<MailboxMutationResult>(
+        'mailboxes.remove',
+        { mailbox_id: mailboxId },
         15000
       )
   },
@@ -593,6 +721,13 @@ const api = {
       >
   },
   account: {
+    onTokenRefreshRequest: (handler: TokenRefreshHandler): (() => void) => {
+      const subscription = { handler }
+      tokenRefreshSubscription = subscription
+      return () => {
+        if (tokenRefreshSubscription === subscription) tokenRefreshSubscription = null
+      }
+    },
     // Out-of-band Firebase token push to the MAIN process (Phase 2,
     // cross-machine transport). This is the CANONICAL token path: main
     // needs a token to open the remote WebSocket handshake BEFORE any RPC

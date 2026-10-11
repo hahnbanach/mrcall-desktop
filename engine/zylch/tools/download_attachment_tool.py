@@ -6,7 +6,6 @@ through TaskExecutor.
 """
 
 import logging
-import os
 from typing import Any, Dict, Optional
 
 from zylch.utils.safe_paths import PathRefused
@@ -35,7 +34,10 @@ class DownloadAttachmentTool(Tool):
                 " the local SQLite store, fetches the attachments over IMAP, and saves"
                 " them to disk. Works for any email provider (Gmail, Outlook, Exchange,"
                 " generic IMAP). Files are saved to the downloads folder, or to"
-                " `target_dir` inside it."
+                " `target_dir` inside it. Call this tool afresh for every download or"
+                " retry request, even if earlier conversation claims no attachments."
+                " Only the current result verifies whether anything was downloaded;"
+                " lookup errors do not establish absence of attachments."
             ),
         )
         self.storage = storage
@@ -76,27 +78,6 @@ class DownloadAttachmentTool(Tool):
             logger.debug(f"[download_attachment turn={turn_id}] -> status={result.status}")
             return result
 
-        # Fail-loud IMAP credential check BEFORE touching anything else.
-        # Without this, an empty IMAPClient would fail in an opaque way and the LLM
-        # would hallucinate explanations ("different account / server Outlook").
-        email_addr = os.environ.get("EMAIL_ADDRESS", "").strip()
-        email_pass = os.environ.get("EMAIL_PASSWORD", "").strip()
-        if not email_addr or not email_pass:
-            result = ToolResult(
-                status=ToolStatus.ERROR,
-                data=None,
-                error=(
-                    "IMAP credentials missing: set EMAIL_ADDRESS and EMAIL_PASSWORD"
-                    " in the profile .env file. The attachment cannot be downloaded"
-                    " until IMAP is configured."
-                ),
-            )
-            logger.debug(
-                f"[download_attachment turn={turn_id}] -> status={result.status}"
-                " reason=imap_credentials_missing"
-            )
-            return result
-
         # Try internal UUID first, then fall back to gmail_id
         email = self.storage.get_email_by_supabase_id(owner_id, email_id)
         if not email:
@@ -124,13 +105,11 @@ class DownloadAttachmentTool(Tool):
         )
 
         try:
-            from zylch.email.imap_client import IMAPClient
+            from zylch.email.mailboxes import client_for_row
 
-            client = IMAPClient(
-                email_addr=email_addr,
-                password=email_pass,
-                imap_host=os.environ.get("IMAP_HOST") or None,
-            )
+            # The row's own mailbox holds the message: its client, never
+            # the primary's for another mailbox's mail.
+            client = client_for_row(owner_id, email)
             attachments = client.fetch_attachments(message_id, save_dir=save_dir)
             if not attachments:
                 result = ToolResult(

@@ -249,3 +249,12 @@ def test_two_processes_booting_init_db_on_a_fresh_file_both_succeed(tmp_path):
     # the profile file holds exactly its own tables plus schema_version;
     # the memory tables live in the company store since M2
     assert results[0]["tables"] == results[1]["tables"] == len(dbm.profile_tables()) + 1
+
+
+def test_backup_is_readable_by_the_owner_only(db_path):
+    """The backup holds the store's secrets: 0600, whatever the directory's mode."""
+    import stat
+
+    dbm.init_db()
+    path = backup_sqlite(db_path, label="mode-probe")
+    assert stat.S_IMODE(os.stat(path).st_mode) == 0o600

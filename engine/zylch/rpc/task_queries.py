@@ -21,6 +21,8 @@ Kept separate from `rpc/methods.py` (1500+ lines) to stay under the
 
 from __future__ import annotations
 
+from zylch.qonto.task_access import desktop_task_rpc
+
 import logging
 from typing import Any, Awaitable, Callable, Dict
 
@@ -59,6 +61,7 @@ async def tasks_list_by_thread(params: Dict[str, Any], notify: NotifyFn) -> Any:
     return tasks
 
 
+@desktop_task_rpc
 async def tasks_get(params: Dict[str, Any], notify: NotifyFn) -> Any:
     """tasks.get(task_id) -> task dict | null.
 

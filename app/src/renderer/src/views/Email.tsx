@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import type { InboxThread, ThreadEmail } from '../types'
+import type { InboxThread, Mailbox, ThreadEmail } from '../types'
 import { errorMessage, isProfileLockedError } from '../lib/errors'
+import { MAILBOXES_CHANGED_EVENT } from '../lib/mailboxes'
 import { useThread } from '../store/thread'
 import HtmlEmailBody from '../components/HtmlEmailBody'
 import Icon from '../components/Icon'
@@ -47,6 +48,12 @@ interface EmailProps {
    * thread. ALWAYS goes to Tasks, even when the thread has 0 or 1 task.
    */
   onOpenTasks?: () => void
+  /**
+   * Whether this view is the visible one. App keeps every view mounted,
+   * so the mailbox list is refreshed each time the view becomes active
+   * (a mailbox added or removed in Settings shows up without a restart).
+   */
+  active?: boolean
 }
 
 /**
@@ -66,7 +73,7 @@ interface EmailProps {
  *   Enter          — scroll selected into view
  *   C              — Open the selected thread in Workspace
  */
-export default function Email({ onOpenTasks }: EmailProps = {}): JSX.Element {
+export default function Email({ onOpenTasks, active = true }: EmailProps = {}): JSX.Element {
   const [folder, setFolder] = useState<Folder>('inbox')
   const [threads, setThreads] = useState<InboxThread[]>([])
   const [loading, setLoading] = useState(false)
@@ -84,6 +91,14 @@ export default function Email({ onOpenTasks }: EmailProps = {}): JSX.Element {
   const [searchInput, setSearchInput] = useState('')
   const [searchQuery, setSearchQuery] = useState('')
   const [searchHelpOpen, setSearchHelpOpen] = useState(false)
+  // The profile's active mailboxes (primary first). With more than one,
+  // the toolbar offers a mailbox filter and the reading pane tags each
+  // message with the mailbox it arrived in. A failed lookup leaves the
+  // view single-mailbox: nothing else depends on it.
+  const [mailboxes, setMailboxes] = useState<Mailbox[]>([])
+  // Committed mailbox filter: null = every active mailbox.
+  const [mailboxFilter, setMailboxFilter] = useState<string | null>(null)
+  const multiMailbox = mailboxes.length > 1
 
   const { setTaskThreadFilter } = useThread()
 
@@ -98,6 +113,7 @@ export default function Email({ onOpenTasks }: EmailProps = {}): JSX.Element {
       setError(null)
       try {
         const trimmed = searchQuery.trim()
+        const mailboxId = mailboxFilter ?? undefined
         if (target === 'drafts') {
           // Drafts use the existing chat-side endpoint — no dedicated RPC
           // is exposed for the desktop today. We just surface the count,
@@ -116,7 +132,8 @@ export default function Email({ onOpenTasks }: EmailProps = {}): JSX.Element {
             query: trimmed,
             folder: target === 'sent' ? 'sent' : 'inbox',
             limit: PAGE_SIZE,
-            offset: append ? threads.length : 0
+            offset: append ? threads.length : 0,
+            mailbox_id: mailboxId
           })
           setThreads((prev) => (append ? [...prev, ...r.threads] : r.threads))
           setHasMore(r.threads.length === PAGE_SIZE)
@@ -125,14 +142,16 @@ export default function Email({ onOpenTasks }: EmailProps = {}): JSX.Element {
         if (target === 'inbox') {
           const r = await window.zylch.emails.listInbox({
             limit: PAGE_SIZE,
-            offset: append ? threads.length : 0
+            offset: append ? threads.length : 0,
+            mailbox_id: mailboxId
           })
           setThreads((prev) => (append ? [...prev, ...r.threads] : r.threads))
           setHasMore(r.threads.length === PAGE_SIZE)
         } else if (target === 'sent') {
           const r = await window.zylch.emails.listSent({
             limit: PAGE_SIZE,
-            offset: append ? threads.length : 0
+            offset: append ? threads.length : 0,
+            mailbox_id: mailboxId
           })
           setThreads((prev) => (append ? [...prev, ...r.threads] : r.threads))
           setHasMore(r.threads.length === PAGE_SIZE)
@@ -143,17 +162,61 @@ export default function Email({ onOpenTasks }: EmailProps = {}): JSX.Element {
         setLoading(false)
       }
     },
-    [threads.length, searchQuery]
+    [threads.length, searchQuery, mailboxFilter]
   )
 
-  // Initial load + folder/search change. Reloading on `searchQuery`
-  // means submit-on-Enter triggers the new fetch automatically.
+  // Initial load + folder/search/mailbox change. Reloading on
+  // `searchQuery` means submit-on-Enter triggers the new fetch
+  // automatically.
   useEffect(() => {
     setSelectedId(null)
     setThreads([])
     void loadFolder(folder, false)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [folder, searchQuery])
+  }, [folder, searchQuery, mailboxFilter])
+
+  // Active mailboxes: on mount, whenever the view becomes active, when
+  // Settings announces a change (`MAILBOXES_CHANGED_EVENT`) and when the
+  // sidecar comes back ready (restart, backend switch). A filter whose
+  // mailbox is no longer listed falls back to every mailbox. A
+  // single-mailbox profile (or an engine without `mailboxes.list`)
+  // shows no filter and no chips. Answers older than the latest request
+  // are dropped.
+  const mailboxRequest = useRef(0)
+  const refreshMailboxes = useCallback(async () => {
+    const request = ++mailboxRequest.current
+    let next: Mailbox[] = []
+    try {
+      const r = await window.zylch.mailboxes.list()
+      next = Array.isArray(r.mailboxes) ? r.mailboxes : []
+    } catch {
+      next = []
+    }
+    if (request !== mailboxRequest.current) return
+    setMailboxes(next)
+    setMailboxFilter((current) =>
+      current && !next.some((m) => m.id === current) ? null : current
+    )
+  }, [])
+
+  useEffect(() => {
+    if (active) void refreshMailboxes()
+  }, [active, refreshMailboxes])
+
+  useEffect(() => {
+    const onChanged = (): void => {
+      void refreshMailboxes()
+    }
+    window.addEventListener(MAILBOXES_CHANGED_EVENT, onChanged)
+    const off = window.zylch.onSidecarStatus((status) => {
+      if (status.alive && status.ready) void refreshMailboxes()
+    })
+    return () => {
+      mailboxRequest.current++
+      window.removeEventListener(MAILBOXES_CHANGED_EVENT, onChanged)
+      off()
+    }
+  }, [refreshMailboxes])
 
   // Reset the search box when the user switches folder (Inbox ↔ Sent ↔
   // Drafts) so the input never shows a stale query against a folder
@@ -254,12 +317,15 @@ export default function Email({ onOpenTasks }: EmailProps = {}): JSX.Element {
     [folder, loadFolder]
   )
 
-  // ─── archive (IMAP MOVE + local flag) ─────────────────────────────
+  // ─── archive (IMAP MOVE per mailbox + local flag) ─────────────────
   // Mirrors the Gmail "Archive" button: moves every message of the
-  // thread to the provider's archive folder AND hides the thread from
-  // the local inbox/sent lists. If IMAP fails (auth, network, folder
-  // lookup) the local flag is NOT set — the backend surfaces the error
-  // and we leave the thread in place so the user can retry.
+  // thread to its mailbox's archive folder AND hides the thread from
+  // the local inbox/sent lists. The engine answers `ok: false` with a
+  // per-mailbox `error` (login, connection, a message no folder holds)
+  // instead of rejecting, and stamps only the rows whose copy moved; on
+  // `ok: false` the optimistic removal is rolled back and the named
+  // errors are shown so the user can retry. A rejection (transport,
+  // profile lock) is handled the same way.
   const onArchive = useCallback(
     async (thread: InboxThread, evt?: React.MouseEvent) => {
       evt?.stopPropagation()
@@ -271,7 +337,18 @@ export default function Email({ onOpenTasks }: EmailProps = {}): JSX.Element {
       setThreads((prev) => prev.filter((t) => t.thread_id !== thread.thread_id))
       if (selectedId === thread.thread_id) setSelectedId(null)
       try {
-        await window.zylch.emails.archive(thread.thread_id)
+        const result = await window.zylch.emails.archive(thread.thread_id)
+        if (!result.ok) {
+          setThreads(prevThreads)
+          const failures = (result.mailboxes || [])
+            .map((m) => m.error)
+            .filter((msg): msg is string => !!msg)
+          setError(
+            failures.length > 0
+              ? `Archive failed: ${failures.join('; ')}`
+              : 'Archive failed: not every message could be moved.'
+          )
+        }
       } catch (e: unknown) {
         setThreads(prevThreads)
         if (!isProfileLockedError(e)) setError(errorMessage(e))
@@ -402,6 +479,22 @@ export default function Email({ onOpenTasks }: EmailProps = {}): JSX.Element {
           <div className="text-sm font-bold text-brand-black">
             {currentFolderLabel}
           </div>
+          {multiMailbox && !selected && (
+            <select
+              value={mailboxFilter ?? ''}
+              onChange={(e) => setMailboxFilter(e.target.value || null)}
+              title="Show one mailbox or all of them"
+              aria-label="Mailbox"
+              className="ml-auto max-w-[220px] text-xs border border-brand-mid-grey rounded px-2 py-1 text-brand-grey-80 bg-white"
+            >
+              <option value="">All mailboxes</option>
+              {mailboxes.map((m) => (
+                <option key={m.id} value={m.id}>
+                  {m.address}
+                </option>
+              ))}
+            </select>
+          )}
           {folderMenuOpen && !selected && (
             <>
               {/* Click-outside backdrop. */}
@@ -667,6 +760,7 @@ export default function Email({ onOpenTasks }: EmailProps = {}): JSX.Element {
         <section className="flex-1 min-w-0 flex flex-col bg-white h-full">
           <ThreadReadingPane
             thread={selected}
+            showMailbox={multiMailbox}
             onOpen={openSelected}
             onPin={() => onPin(selected)}
             onArchive={() => onArchive(selected)}
@@ -688,6 +782,7 @@ export default function Email({ onOpenTasks }: EmailProps = {}): JSX.Element {
  */
 function ThreadReadingPane({
   thread,
+  showMailbox,
   onOpen,
   onPin,
   onArchive,
@@ -698,6 +793,8 @@ function ThreadReadingPane({
   deleting
 }: {
   thread: InboxThread
+  /** Tag each message with its mailbox address (profiles with more than one). */
+  showMailbox: boolean
   onOpen: () => void
   onPin: () => void
   onArchive: () => void
@@ -833,6 +930,14 @@ function ThreadReadingPane({
                 {e.is_auto_reply && (
                   <span className="inline-block text-xs px-2 py-0.5 mr-2 rounded bg-brand-light-grey text-brand-grey-80 border border-brand-mid-grey">
                     auto
+                  </span>
+                )}
+                {showMailbox && e.mailbox_address && (
+                  <span
+                    title="Mailbox this message arrived in"
+                    className="inline-block text-xs px-2 py-0.5 mr-2 rounded bg-brand-light-grey text-brand-grey-80 border border-brand-mid-grey font-mono"
+                  >
+                    {e.mailbox_address}
                   </span>
                 )}
                 <span className="font-medium">

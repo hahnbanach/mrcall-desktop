@@ -7,7 +7,8 @@ run-time distribution puts in front, newest first, then the build copy
 
 - on `openrouter` a catalogue id is priced at its snapshot price
   (`models[id].pricing`), its reference price: its model-level catalogue
-  price whenever an eligible endpoint is priced within it × the margin,
+  price whenever at least half its eligible endpoints are priced within it
+  × the margin,
   else its reference endpoint's — the lower median of its eligible
   endpoints by Artificial Analysis's blended price — and the model-level
   price too when its endpoints were not read, none is eligible or that

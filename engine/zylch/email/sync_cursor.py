@@ -11,8 +11,8 @@ three days while the daemon "successfully" synced every five minutes.
 
 A cursor fixes the direction of trust. The floor is no longer "what we
 happen to hold" but "what we have *confirmed* we ingested", stored
-per (owner, folder) with the folder's UIDVALIDITY so a server-side
-renumbering is detected instead of silently mis-read.
+per (owner, mailbox, folder) with the folder's UIDVALIDITY so a
+server-side renumbering is detected instead of silently mis-read.
 
 Contract
 --------
@@ -34,6 +34,12 @@ for a folder therefore falls back ONCE to the date-derived floor (newest
 stored email minus the overlap window), and the cursor takes over from
 the next run onwards.
 
+Mailbox
+-------
+A profile has N mailboxes (``zylch.email.mailboxes``); each has its own
+cursors, so an added mailbox's first sync covers its own window whatever
+the others hold. Every read and write names its mailbox.
+
 Failure policy
 --------------
 Both directions degrade *conservatively* — towards re-scanning, never
@@ -51,8 +57,9 @@ Schema ownership
 ----------------
 This module owns its table end to end via idempotent
 ``CREATE TABLE IF NOT EXISTS`` against the same SQLite file the rest of
-the engine uses. It deliberately does not register an ORM model or an
-entry in ``zylch.storage.database``'s migration list.
+the engine uses; the profile step ``0003_emails_mailbox`` reuses the same
+DDL when it carries the pre-mailbox rows over. It deliberately does not
+register an ORM model.
 
 No LLM anywhere near this module.
 """
@@ -67,17 +74,19 @@ from typing import Optional
 
 logger = logging.getLogger(__name__)
 
-TABLE_NAME = "email_sync_cursor"
+LEGACY_TABLE_NAME = "email_sync_cursor"
+TABLE_NAME = "email_sync_cursor_v2"
 
-_CREATE_TABLE_SQL = f"""
+CREATE_TABLE_SQL = f"""
 CREATE TABLE IF NOT EXISTS {TABLE_NAME} (
     owner_id       TEXT    NOT NULL,
+    mailbox_id     TEXT    NOT NULL,
     folder         TEXT    NOT NULL,
     uidvalidity    INTEGER NOT NULL,
     last_uid       INTEGER NOT NULL DEFAULT 0,
     last_synced_at TEXT    NOT NULL,
     updated_at     TEXT    NOT NULL,
-    PRIMARY KEY (owner_id, folder)
+    PRIMARY KEY (owner_id, mailbox_id, folder)
 )
 """
 
@@ -93,12 +102,18 @@ CREATE TABLE IF NOT EXISTS {TABLE_NAME} (
 DEFAULT_OVERLAP_DAYS = 7
 OVERLAP_DAYS_ENV = "EMAIL_SYNC_OVERLAP_DAYS"
 
+_SELECT = (
+    "SELECT owner_id, mailbox_id, folder, uidvalidity, last_uid, last_synced_at, updated_at "
+    f"FROM {TABLE_NAME}"
+)
+
 
 @dataclass(frozen=True)
 class FolderCursor:
-    """A single (owner, folder) sync position."""
+    """A single (owner, mailbox, folder) sync position."""
 
     owner_id: str
+    mailbox_id: str
     folder: str
     uidvalidity: int
     last_uid: int
@@ -152,11 +167,23 @@ def _now_iso() -> str:
 
 def _ensure_schema(conn) -> None:
     """Create the cursor table if missing. Idempotent, cheap."""
-    conn.exec_driver_sql(_CREATE_TABLE_SQL)
+    conn.exec_driver_sql(CREATE_TABLE_SQL)
 
 
-def get_cursor(owner_id: str, folder: str) -> Optional[FolderCursor]:
-    """Return the stored cursor for ``(owner_id, folder)``, or ``None``.
+def _row(r) -> FolderCursor:
+    return FolderCursor(
+        owner_id=r[0],
+        mailbox_id=r[1],
+        folder=r[2],
+        uidvalidity=int(r[3]),
+        last_uid=int(r[4]),
+        last_synced_at=r[5],
+        updated_at=r[6],
+    )
+
+
+def get_cursor(owner_id: str, folder: str, mailbox_id: str) -> Optional[FolderCursor]:
+    """Return the stored cursor for ``(owner_id, mailbox_id, folder)``, or ``None``.
 
     ``None`` means "no confirmed position" and the caller must fall back
     to the date-derived floor. A read failure returns ``None`` too — the
@@ -169,39 +196,37 @@ def get_cursor(owner_id: str, folder: str) -> Optional[FolderCursor]:
         with get_engine().begin() as conn:
             _ensure_schema(conn)
             row = conn.exec_driver_sql(
-                f"SELECT owner_id, folder, uidvalidity, last_uid, last_synced_at, updated_at "
-                f"FROM {TABLE_NAME} WHERE owner_id = ? AND folder = ?",
-                (owner_id, key),
+                f"{_SELECT} WHERE owner_id = ? AND mailbox_id = ? AND folder = ?",
+                (owner_id, mailbox_id, key),
             ).fetchone()
     except Exception as e:
         logger.error(
-            f"[sync-cursor] get_cursor(owner_id={owner_id}, folder={key}) failed: {e} "
-            f"-> treating as NO CURSOR (folder will re-seed from the date floor)",
+            f"[sync-cursor] get_cursor(owner_id={owner_id}, mailbox_id={mailbox_id}, "
+            f"folder={key}) failed: {e} -> treating as NO CURSOR "
+            f"(folder will re-seed from the date floor)",
             exc_info=True,
         )
         return None
 
     if row is None:
-        logger.debug(f"[sync-cursor] get_cursor(owner_id={owner_id}, folder={key}) -> None")
+        logger.debug(
+            f"[sync-cursor] get_cursor(owner_id={owner_id}, mailbox_id={mailbox_id}, "
+            f"folder={key}) -> None"
+        )
         return None
 
-    cursor = FolderCursor(
-        owner_id=row[0],
-        folder=row[1],
-        uidvalidity=int(row[2]),
-        last_uid=int(row[3]),
-        last_synced_at=row[4],
-        updated_at=row[5],
-    )
+    cursor = _row(row)
     logger.debug(
-        f"[sync-cursor] get_cursor(owner_id={owner_id}, folder={key}) -> "
+        f"[sync-cursor] get_cursor(owner_id={owner_id}, mailbox_id={mailbox_id}, folder={key}) -> "
         f"uidvalidity={cursor.uidvalidity} last_uid={cursor.last_uid}"
     )
     return cursor
 
 
-def set_cursor(owner_id: str, folder: str, uidvalidity: int, last_uid: int) -> bool:
-    """Upsert the confirmed position for ``(owner_id, folder)``.
+def set_cursor(
+    owner_id: str, folder: str, uidvalidity: int, last_uid: int, mailbox_id: str
+) -> bool:
+    """Upsert the confirmed position for ``(owner_id, mailbox_id, folder)``.
 
     Returns True when the row was written. A failure logs ERROR and
     returns False without raising: callers reach this point *after*
@@ -218,33 +243,33 @@ def set_cursor(owner_id: str, folder: str, uidvalidity: int, last_uid: int) -> b
             _ensure_schema(conn)
             conn.exec_driver_sql(
                 f"INSERT INTO {TABLE_NAME} "
-                f"(owner_id, folder, uidvalidity, last_uid, last_synced_at, updated_at) "
-                f"VALUES (?, ?, ?, ?, ?, ?) "
-                f"ON CONFLICT(owner_id, folder) DO UPDATE SET "
+                f"(owner_id, mailbox_id, folder, uidvalidity, last_uid, last_synced_at, updated_at) "
+                f"VALUES (?, ?, ?, ?, ?, ?, ?) "
+                f"ON CONFLICT(owner_id, mailbox_id, folder) DO UPDATE SET "
                 f"uidvalidity = excluded.uidvalidity, "
                 f"last_uid = excluded.last_uid, "
                 f"last_synced_at = excluded.last_synced_at, "
                 f"updated_at = excluded.updated_at",
-                (owner_id, key, int(uidvalidity), int(last_uid), now, now),
+                (owner_id, mailbox_id, key, int(uidvalidity), int(last_uid), now, now),
             )
     except Exception as e:
         logger.error(
-            f"[sync-cursor] set_cursor(owner_id={owner_id}, folder={key}, "
-            f"uidvalidity={uidvalidity}, last_uid={last_uid}) FAILED: {e} "
+            f"[sync-cursor] set_cursor(owner_id={owner_id}, mailbox_id={mailbox_id}, "
+            f"folder={key}, uidvalidity={uidvalidity}, last_uid={last_uid}) FAILED: {e} "
             f"-> cursor stays behind; next run re-examines the same UIDs",
             exc_info=True,
         )
         return False
 
     logger.debug(
-        f"[sync-cursor] set_cursor(owner_id={owner_id}, folder={key}) -> "
+        f"[sync-cursor] set_cursor(owner_id={owner_id}, mailbox_id={mailbox_id}, folder={key}) -> "
         f"uidvalidity={uidvalidity} last_uid={last_uid}"
     )
     return True
 
 
-def drop_cursor(owner_id: str, folder: str) -> bool:
-    """Delete the cursor for ``(owner_id, folder)``.
+def drop_cursor(owner_id: str, folder: str, mailbox_id: str) -> bool:
+    """Delete the cursor for ``(owner_id, mailbox_id, folder)``.
 
     Used when UIDVALIDITY changes: every stored UID for that folder is
     meaningless and keeping it would silently skip mail. Returns True on
@@ -257,44 +282,45 @@ def drop_cursor(owner_id: str, folder: str) -> bool:
         with get_engine().begin() as conn:
             _ensure_schema(conn)
             conn.exec_driver_sql(
-                f"DELETE FROM {TABLE_NAME} WHERE owner_id = ? AND folder = ?",
-                (owner_id, key),
+                f"DELETE FROM {TABLE_NAME} WHERE owner_id = ? AND mailbox_id = ? AND folder = ?",
+                (owner_id, mailbox_id, key),
             )
     except Exception as e:
         logger.error(
-            f"[sync-cursor] drop_cursor(owner_id={owner_id}, folder={key}) FAILED: {e}",
+            f"[sync-cursor] drop_cursor(owner_id={owner_id}, mailbox_id={mailbox_id}, "
+            f"folder={key}) FAILED: {e}",
             exc_info=True,
         )
         return False
 
-    logger.info(f"[sync-cursor] drop_cursor(owner_id={owner_id}, folder={key}) -> deleted")
+    logger.info(
+        f"[sync-cursor] drop_cursor(owner_id={owner_id}, mailbox_id={mailbox_id}, folder={key}) "
+        f"-> deleted"
+    )
     return True
 
 
-def list_cursors(owner_id: str) -> list:
-    """All cursors for an owner, newest-written first. Diagnostics only."""
+def list_cursors(owner_id: str, mailbox_id: Optional[str] = None) -> list:
+    """Cursors of an owner (one mailbox, or all of them), newest-written first.
+
+    Diagnostics only.
+    """
     try:
         from zylch.storage.database import get_engine
 
         with get_engine().begin() as conn:
             _ensure_schema(conn)
-            rows = conn.exec_driver_sql(
-                f"SELECT owner_id, folder, uidvalidity, last_uid, last_synced_at, updated_at "
-                f"FROM {TABLE_NAME} WHERE owner_id = ? ORDER BY updated_at DESC",
-                (owner_id,),
-            ).fetchall()
+            if mailbox_id:
+                rows = conn.exec_driver_sql(
+                    f"{_SELECT} WHERE owner_id = ? AND mailbox_id = ? ORDER BY updated_at DESC",
+                    (owner_id, mailbox_id),
+                ).fetchall()
+            else:
+                rows = conn.exec_driver_sql(
+                    f"{_SELECT} WHERE owner_id = ? ORDER BY updated_at DESC", (owner_id,)
+                ).fetchall()
     except Exception as e:
         logger.error(f"[sync-cursor] list_cursors(owner_id={owner_id}) failed: {e}")
         return []
 
-    return [
-        FolderCursor(
-            owner_id=r[0],
-            folder=r[1],
-            uidvalidity=int(r[2]),
-            last_uid=int(r[3]),
-            last_synced_at=r[4],
-            updated_at=r[5],
-        )
-        for r in rows
-    ]
+    return [_row(r) for r in rows]

@@ -106,6 +106,10 @@ def natural_mutation_effect(message: str) -> str | None:
 
 
 def assert_tool_allowed(tool_name: str) -> None:
+    from zylch.services.task_assignment_draft_policy import current
+
+    if current() is not None and tool_name in MUTATING_TOOLS and tool_name != "create_draft":
+        raise ReadOnlyViolation("Scoped assignment requests may only create a guarded draft")
     if is_read_only() and tool_name in MUTATING_TOOLS:
         raise ReadOnlyViolation(f"read-only request cannot run {tool_name}")
 

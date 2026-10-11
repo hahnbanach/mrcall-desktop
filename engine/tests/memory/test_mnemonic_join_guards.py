@@ -125,3 +125,47 @@ def test_the_import_bumps_the_destinations_mutation_sequence_once(world):
     imported(fence.place(COMPANY_A, [OWNER_A], COMPANY_B))
 
     assert sequence() == before + 1
+
+
+@pytest.mark.parametrize("source_state,destination_state,expected", [
+    ("managed", "managed", "managed"),
+    ("managed", "never-enabled", "managed"),
+    ("legacy-unknown", "never-enabled", "legacy-unknown"),
+    ("never-enabled", "never-enabled", "never-enabled"),
+])
+def test_real_history_free_join_retains_assignment_enrollment(world, source_state, destination_state, expected):
+    import json
+    from sqlalchemy import update
+    from zylch.storage.assigned_task_models import AssignmentEnrollment
+
+    with dbm.current_memory_engine().begin() as conn:
+        conn.execute(update(AssignmentEnrollment).values(state=source_state))
+    dst = join_recover.open_store(COMPANY_B)
+    try:
+        with dst.begin() as conn:
+            conn.execute(update(AssignmentEnrollment).values(state=destination_state))
+    finally:
+        dst.dispose()
+    result = join(COMPANY_B)
+    assert result["ok"], result
+    state, space = rows(COMPANY_B, "SELECT state, space_id FROM assignment_enrollment")[0]
+    assert state == expected
+    assert space == rows(COMPANY_B, "SELECT space_id FROM project_space")[0][0]
+    receipt = json.loads(rows(COMPANY_B, "SELECT result FROM memory_operations WHERE event_id LIKE 'join-%'")[0][0])
+    assert receipt["assignment_enrollment"]["source_state"] == source_state
+    assert receipt["assignment_enrollment"]["destination_state"] == destination_state
+
+
+def test_real_join_failure_after_enrollment_merge_retains_destination_state(world, monkeypatch):
+    from sqlalchemy import update
+    from zylch.storage.assigned_task_models import AssignmentEnrollment
+
+    with dbm.current_memory_engine().begin() as conn:
+        conn.execute(update(AssignmentEnrollment).values(state="managed"))
+    def fail(*args, **kwargs):
+        raise RuntimeError("injected receipt failure after enrollment merge")
+    monkeypatch.setattr(join_import, "_write_receipt", fail)
+    with pytest.raises(RuntimeError, match="after enrollment merge"):
+        join(COMPANY_B)
+    assert rows(COMPANY_B, "SELECT state FROM assignment_enrollment") == [("never-enabled",)]
+    assert receipts() == [] and current_company_key() == COMPANY_A

@@ -94,11 +94,15 @@ echo "== 3a. re-apply the per-tenant identity of ALREADY MIGRATED profiles (plan
 # re-applies it for uids the helper already recorded, so a pull never
 # migrates a running customer by itself. Idempotent; never chowns a profile
 # back to mrcalld.
+REFUSED=()
 if [ -x "$HELPER_DST" ]; then
   for u in $("$HELPER_DST" list 2>/dev/null); do
     [ -e "$PROFILES/$u/.deleting" ] && continue
     # never abort the whole reconcile on one profile: 3b must still run
-    run "$HELPER_DST" create "$u" || echo "  $u: tenant create FAILED (exit $?) — fix by hand" >&2
+    run "$HELPER_DST" create "$u" || {
+      echo "  $u: tenant create FAILED (exit $?) — fix by hand" >&2
+      REFUSED+=("$u")
+    }
   done
 fi
 
@@ -138,3 +142,10 @@ for name in "${INSTANCES[@]:-}"; do
 done
 
 echo "done. (${#UIDS[@]} profiles; code_changed=$CODE_CHANGED dry_run=$DRY prune=$PRUNE)"
+# a refused re-apply leaves that unit on its previous tenant.conf: the
+# reconcile as a whole is not a success (the oneshot service ends
+# ActiveState=failed, Result=exit-code, ExecMainStatus=3)
+if [ "${#REFUSED[@]}" -gt 0 ]; then
+  echo "FAILED: tenant create refused for ${#REFUSED[@]} profile(s): ${REFUSED[*]}" >&2
+  exit 3
+fi

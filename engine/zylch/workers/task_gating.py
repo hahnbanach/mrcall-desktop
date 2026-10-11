@@ -134,10 +134,11 @@ def _email_activity_max(session, owner_id: str, *filters) -> Optional[datetime]:
     from sqlalchemy import func
 
     from zylch.storage.models import Email
+    from zylch.storage.storage import Storage
 
     ts_max, date_max = (
         session.query(func.max(Email.date_timestamp), func.max(Email.date))
-        .filter(Email.owner_id == owner_id, *filters)
+        .filter(Email.owner_id == owner_id, Storage.active_mailbox_filter(owner_id), *filters)
         .one()
     )
     best: Optional[datetime] = None

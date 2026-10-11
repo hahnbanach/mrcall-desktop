@@ -29,7 +29,8 @@ class GetTasksTool(Tool):
         )
         self.session_state = session_state
 
-    async def execute(self, days_back: int = 7):
+    async def execute(self, days_back: int = 7, include_qonto: bool = False):
+        from zylch.qonto.task_access import ordinary_tasks
         from zylch.storage.database import get_session
         from zylch.storage.models import TaskItem
 
@@ -41,12 +42,17 @@ class GetTasksTool(Tool):
                 message=("No owner_id available. Please log in first."),
             )
 
+        if include_qonto is True:
+            from zylch.qonto.task_tools import managed_tasks
+
+            return await managed_tasks(owner_id)
+
         try:
             with get_session() as session:
                 rows = (
                     session.query(TaskItem)
                     .filter(
-                        TaskItem.owner_id == owner_id,
+                        ordinary_tasks(owner_id),
                         TaskItem.action_required == True,  # noqa: E712
                     )
                     .order_by(TaskItem.analyzed_at.desc())
@@ -112,6 +118,11 @@ class GetTasksTool(Tool):
             "input_schema": {
                 "type": "object",
                 "properties": {
+                    "include_qonto": {
+                        "type": "boolean",
+                        "description": "Include private finance tasks only in a managed finance conversation.",
+                        "default": False,
+                    },
                     "days_back": {
                         "type": "integer",
                         "description": ("Days to look back (default 7)"),
@@ -251,6 +262,17 @@ class SearchLocalMemoryTool(Tool):
                     " data.results:"
                 ]
                 formatted_results = []
+                from zylch.memory.company_key import require_company_key
+                from zylch.memory.mnemonic.session import company_transaction
+                from zylch.qonto.provenance import annotation, excluded_blob_ids
+
+                from zylch.storage.database import current_memory_engine
+
+                bank_roots = set()
+                company_engine = current_memory_engine()
+                if company_engine is not None:
+                    with company_transaction(engine=company_engine) as session:
+                        bank_roots = excluded_blob_ids(session, require_company_key())
 
                 for r in results:
                     person_data = {
@@ -264,10 +286,13 @@ class SearchLocalMemoryTool(Tool):
                         ),
                     }
 
+                    person_data.update(annotation(r.blob_id, bank_roots))
                     formatted_results.append(person_data)
                     output.append(
                         f"- **{r.namespace}** (blob_id={r.blob_id}, score: {r.hybrid_score:.2f})"
                     )
+                    if person_data.get("source_guidance"):
+                        output.append(person_data["source_guidance"])
 
                 return ToolResult(
                     status=ToolStatus.SUCCESS,

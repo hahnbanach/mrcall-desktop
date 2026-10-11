@@ -15,6 +15,9 @@ Rules, each with a test:
   inner fields are re-encrypted too, then the outer.
 - **Plaintext rows.** Hosts that ran without a key stored JSON in clear;
   those are encrypted with the new key and counted separately.
+- **Legacy tagged plaintext.** The no-key credential writer also prefixed
+  plaintext fields with ``encrypted:``. Encrypt those fields; a payload
+  starting with the Fernet marker must still decrypt, even when truncated.
 - **Verify.** ``verify(new)`` decrypts every row (outer and inner) and
   fails loudly on any miss; the runbook runs it before the unit starts.
 - **Reverse.** ``rekey(old=new_key, new=old_key)`` is the rollback.
@@ -30,6 +33,9 @@ from cryptography.fernet import Fernet, InvalidToken
 
 from zylch.storage.database import get_session
 from zylch.storage.models import OAuthToken
+from zylch.qonto.models import QontoConnection
+from zylch.qonto.secrets import decode_envelope
+from zylch.qonto.errors import QontoError
 from zylch.utils.encryption import is_encrypted as _looks_encrypted
 
 logger = logging.getLogger(__name__)
@@ -68,9 +74,16 @@ def _rekey_inner(obj, old: Fernet, new: Fernet, report: RekeyReport, provider: s
                     continue
                 plain = _try(old, token)
                 if plain is None:
-                    report.failed.append(f"{provider}: inner field {k}")
-                    out[k] = v
-                    continue
+                    if token.startswith("gAAA"):
+                        report.failed.append(f"{provider}: inner field {k}")
+                        out[k] = v
+                        continue
+                    # save_provider_credentials adds the tag even when a
+                    # local no-key encrypt() returns the original text.
+                    # Do not use is_encrypted's length threshold here:
+                    # truncated Fernet must fail rather than be encrypted
+                    # again as if it were a plaintext credential.
+                    plain = token
                 out[k] = INNER_PREFIX + new.encrypt(plain.encode()).decode()
             else:
                 out[k] = _rekey_inner(v, old, new, report, provider)
@@ -114,6 +127,21 @@ def rekey(old_key: str, new_key: str) -> RekeyReport:
             walked = _rekey_inner(_load(outer_plain), old, new, report, row.provider)
             row.credentials = new.encrypt(_dump(walked, outer_plain).encode()).decode()
             report.rewritten += 1
+        for row in _qonto_rows(session):
+            token = row.encrypted_credentials
+            if not token:
+                continue
+            try:
+                decode_envelope(token, new)
+                report.already += 1
+            except QontoError:
+                try:
+                    decode_envelope(token, old)
+                    plain = old.decrypt(token.encode())
+                    row.encrypted_credentials = new.encrypt(plain).decode()
+                    report.rewritten += 1
+                except QontoError:
+                    report.failed.append("qonto: credential envelope does not decrypt")
     logger.info(
         f"[rekey] rewritten={report.rewritten} already={report.already} "
         f"plaintext={report.plaintext} failed={len(report.failed)}"
@@ -139,6 +167,13 @@ def verify(new_key: str) -> RekeyReport:
                 continue
             _verify_inner(_load(outer_plain), new, report, row.provider)
             report.rewritten += 1
+        for row in _qonto_rows(session):
+            if row.encrypted_credentials:
+                try:
+                    decode_envelope(row.encrypted_credentials, new)
+                    report.rewritten += 1
+                except QontoError:
+                    report.failed.append("qonto: credential envelope does not decrypt")
     return report
 
 
@@ -169,3 +204,11 @@ def _dump(walked, raw: str) -> str:
     if isinstance(walked, str) and walked == raw:
         return raw
     return json.dumps(walked)
+
+
+def _qonto_rows(session):
+    from sqlalchemy import inspect
+
+    if not inspect(session.get_bind()).has_table(QontoConnection.__tablename__):
+        return []
+    return session.query(QontoConnection).all()

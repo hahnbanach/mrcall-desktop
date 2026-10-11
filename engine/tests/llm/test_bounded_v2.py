@@ -177,3 +177,23 @@ def test_a_reservation_quoted_in_v1_before_an_upgrade_still_settles():
         "debit_micro_usd": 11000,
     }
     assert validate_receipt(reservation, quote, receipt) == 11000
+
+
+def test_a_refused_v2_capabilities_read_says_nothing_was_reserved():
+    # The marked read's path carries ``?protocol=``; a refusal there reserved nothing.
+    seen = []
+
+    def handler(request):
+        seen.append(str(request.url))
+        return httpx.Response(403, json={"code": "account_disabled"})
+
+    client = BoundedProxyClient(
+        "https://billing.example",
+        SimpleNamespace(id_token="t"),
+        http_client=httpx.Client(transport=httpx.MockTransport(handler)),
+    )
+    with pytest.raises(BudgetError) as refused:
+        client.capabilities()
+    assert seen and seen[0].endswith("/capabilities?protocol=" + PROTOCOL)
+    assert "HTTP 403 (account_disabled)" in str(refused.value)
+    assert "Refused before any reservation" in str(refused.value)

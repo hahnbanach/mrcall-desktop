@@ -61,6 +61,7 @@ TMPFILES_DIR=/etc/tmpfiles.d
 RUN_ROOT=/run/mrcalld
 PROXY_GROUP=caddy
 UNIT_PREFIX="zylch-server@"
+MODES_DIR=/etc/mrcalld/profile-modes     # original directory modes, root-only
 EXEC_DIR=/etc/mrcalld/tenant-exec        # operator-declared interpreter/voice per uid
 
 [ "$(id -u)" = 0 ] || { echo "run as root" >&2; exit 1; }
@@ -68,16 +69,12 @@ EXEC_DIR=/etc/mrcalld/tenant-exec        # operator-declared interpreter/voice p
 log() { echo "[tenant] $*"; }
 die() { echo "[tenant] ERROR: $*" >&2; exit 2; }
 
-# The same guard provisiond applies to a uid before it becomes a path
-# component (zylch/provisiond/handler.py _UID_RE), plus an explicit refusal
-# of `.` and `..`. A uid only ever appears inside absolute paths, after
-# `-p`, or through printf '%s'; useradd/chown/gpasswd get derived names.
+# Hosted Firebase identities use a bounded path-safe subset, including
+# hyphenated test/custom identities. Dots are deliberately excluded: the
+# runtime namespace also contains <uid>.sock and reconcile.lock.
 check_uid() {
-  local u="$1"
-  [[ "$u" =~ ^[A-Za-z0-9_.-]+$ ]] || die "uid has characters outside [A-Za-z0-9_.-]"
-  [ "$u" != "." ] && [ "$u" != ".." ] || die "uid may not be . or .."
-  # its flat link would replace provisiond's socket in /run/mrcalld
-  [ "$u" != "provisiond" ] || die "uid may not be provisiond"
+  [[ "$1" =~ ^[A-Za-z0-9_-]{1,128}$ ]] || die "uid must be 1-128 letters, digits, underscores or hyphens"
+  [ "$1" != provisiond ] || die "uid may not be provisiond"
 }
 check_group() { [[ "$1" =~ ^mc-c-[0-9a-f]{12}$ ]] || die "not a derived company group name: $1"; }
 
@@ -200,6 +197,7 @@ dropin_d="$DROPIN_DIR/$unit.d"
 dropin="$dropin_d/tenant.conf"
 fragment="$TMPFILES_DIR/mrcalld-$user.conf"
 keyfile="$KEYS_DIR/$uid"
+modefile="$MODES_DIR/$uid"
 
 exec_decl="$EXEC_DIR/$uid"
 voice_copy="$EXEC_DIR/$uid.voice.env"
@@ -209,35 +207,176 @@ EXEC_BIN="$VENV/bin/zylch"; VOICE_ARG=""
 # command line (production@: a release venv and --voice-config). Every
 # value is checked here: a path the sandbox cannot see, a link, a writable
 # file or an environment line outside the voice allowlist is refused
-# rather than run. Sets declared=1 when a declaration exists; without one
-# a stale voice copy is removed. Called plainly (never in `&&`/`||`), so
-# `set -e` holds inside.
-declared=0
-VOICE_ALLOWED='^[[:space:]]*((#.*)?|(export[[:space:]]+)?(VOICE_[A-Z0-9_]*|OPENAI_[A-Z0-9_]*|VONAGE_[A-Z0-9_]*|FIREBASE_WEB_API_KEY)[[:space:]]*=.*)$'
+# rather than run. Sets declared=1 when a declaration exists. A voice copy
+# no declaration names any more is NOT removed here: a migrated unit's
+# tenant.conf still loads it until `create` has rewritten that file, and a
+# refusal further down would leave the unit unable to restart (scratch VM
+# probe 2026-10-02); `create` removes it once nothing is left to refuse.
+# Called plainly (never in `&&`/`||`), so `set -e` holds inside.
+declared=0; VOICE_SRC=""
+# Deliberately narrow line/name grammar for dotenv and systemd EnvironmentFile:
+# one assignment per physical line; quotes may only wrap the whole value.
+# Backslash escapes and controls (apart from horizontal tab) are refused.
+# Comments are recognised only after spaces/tabs, never FF or VT.
+voice_lines_ok() { # voice_lines_ok <file>; never emit file contents
+  LC_ALL=C awk -v sq="'" '
+    { l=$0; gsub(/\t/, "", l); if (l ~ /[[:cntrl:]]/ || index($0, "\\")) { bad=1; exit } }
+    /^[ \t]*(#.*)?$/ { next }
+    !/^(VOICE_[A-Z0-9_]+|OPENAI_[A-Z0-9_]+|VONAGE_[A-Z0-9_]+|FIREBASE_WEB_API_KEY)=/ { bad=1; exit }
+    {
+      count++; v=substr($0, index($0, "=")+1)
+      sub(/^[ \t]+/, "", v); sub(/[ \t]+$/, "", v)
+      q=substr(v,1,1)
+      if (q == "\"" || q == sq) {
+        if (length(v)<2 || substr(v,length(v),1)!=q) { bad=1; exit }
+        v=substr(v,2,length(v)-2)
+        if (index(v,q)) { bad=1; exit }
+      } else if (index(v,"\"") || index(v,sq)) { bad=1; exit }
+    }
+    END { exit (bad || !count) }
+  ' "$1"
+}
+
+# Only earlier instance-local /etc drop-ins may contribute configuration.
+# Check real paths too, so an /etc symlink cannot disguise a /run file.
+check_dropins() {
+  local paths f name
+  local LC_ALL=C
+  paths=$(systemctl show -p DropInPaths --value "$unit") || die "cannot inspect applied drop-ins"
+  for f in $paths; do
+    [ "$(dirname -- "$f")" = "$dropin_d" ] &&
+      [ "$(realpath -e -- "$f")" = "$f" ] || die "applied drop-in is outside the instance /etc directory"
+    name=${f##*/}
+    [[ "$name" = tenant.conf || "$name" < tenant.conf ]] || die "applied drop-in $name sorts after tenant.conf: rename it to sort before it, keeping its order among the others (a pin applied last: t0-<name>.conf); a different command line goes in /etc/mrcalld/tenant-exec/<uid>"
+  done
+}
+
+# The company files a leaving holder created (the store, -wal, -shm,
+# backups, locks) outlive it when others still hold the key, and keep its
+# numeric uid: the next user given that uid would own them. Every company
+# directory is swept, not only the current key's (a holder that changed
+# company or stopped mid-join), and so are files of no existing user (an
+# earlier delete, a manual userdel). They go to root and the directory's
+# group, modes untouched (no chmod: it follows links). -execdir and chown -h:
+# a member who swaps an entry for a link moves only the link. A member's
+# SQLite may remove its -wal/-shm while find runs: the chown pass may then
+# fail on a vanished name (its message stays visible), so only the re-check
+# decides, after a retry.
+hand_company_files() {
+  local d gid left attempt
+  local -a who=(-nouser)
+  id "$user" >/dev/null 2>&1 && who=(\( -user "$user" -o -nouser \))
+  for d in "$MEMORY"/mc-c-*; do
+    [ -d "$d" ] && [ ! -L "$d" ] || continue
+    gid=$(stat -c %g -- "$d")
+    for attempt in 1 2 3; do
+      find "$d" -xdev -ignore_readdir_race "${who[@]}" -execdir chown -h "0:$gid" -- {} + || true
+      left=$(find "$d" -xdev -ignore_readdir_race "${who[@]}" -print -quit)
+      [ -z "$left" ] && break
+      sleep 1
+    done
+    [ -z "$left" ] || die "files of $user or of no user remain under $d; nothing deleted (unit disabled) — fix and re-run delete"
+  done
+  log "company files of $user handed to root"
+}
+
+# The tenant's egress firewall and resolver (plan M3, egress_policy.py) are
+# keyed on its numeric uid: left in place they would bind the next user
+# given that uid. Observe-mode units are removed too.
+remove_egress() {
+  local tag=${user#mc-} unit_name
+  for unit_name in "mrcall-dns-$tag.service" "mrcall-egress-$tag.service" \
+                   "mrcall-observe-$tag.service" "mrcall-observe-refresh-$tag.timer" \
+                   "mrcall-observe-refresh-$tag.service"; do
+    systemctl disable --now "$unit_name" >/dev/null 2>&1 || true
+    rm -f "/etc/systemd/system/$unit_name"
+  done
+  nft delete table inet "mc_egress_$tag" >/dev/null 2>&1 || true
+  ! nft list table inet "mc_egress_$tag" >/dev/null 2>&1 || die "egress table mc_egress_$tag remains"
+  rm -rf "/etc/mrcalld/egress/$user"
+}
+
+# Legacy migrated profiles have no reliable original mode. Re-apply remains
+# supported, but rollback requires the operator to import the recorded mode
+# (0600 root file here) from the migration backup, never infer it from 0700.
+read_profile_mode() {
+  [ -f "$modefile" ] && [ ! -L "$modefile" ] || die "original profile mode missing: import the recorded mode into $modefile (0600 root) before unmigrate"
+  [ "$(stat -c %u:%a "$modefile")" = 0:600 ] || die "original profile mode must be a 0600 root file"
+  original_mode=$(cat "$modefile")
+  [[ "$original_mode" =~ ^[0-7]{1,4}$ ]] || die "invalid original profile mode record"
+}
+record_profile_mode() {
+  if [ -e "$modefile" ] || [ -L "$modefile" ]; then read_profile_mode; return; fi
+  table_has "$uid" && return 0
+  install -d -m 0700 -o root -g root "$MODES_DIR"
+  (umask 077; stat -c %a "$profile_dir" > "$modefile")
+  mode_created=1
+}
 plain_path() { # plain_path <what> <path>: absolute, no whitespace, no systemd specifier or expansion
   [[ "$2" = /* ]] || die "$1 $2 is not absolute"
   case "$2" in *[[:space:]%\$]*) die "$1 $2 contains whitespace, % or \$ (systemd would expand it); refusing" ;; esac
 }
+# Every name the kernel follows to reach a shebang's interpreter must be in
+# a tree the sandbox has: a venv's `python` is a link, and one that lives
+# (or passes) under a /home path the sandbox hides resolves fine out here
+# and is ENOENT in there — the unit then dies with 203/EXEC (scratch VM
+# probe 2026-10-02). Walks the chain; under the release trees no directory
+# on the way may be a link either.
+sandbox_sees() { # sandbox_sees <absolute path of an executable>
+  local p="$1" n=0 d t
+  while :; do
+    case "$p" in *[[:space:]]*|*/../*|*/./*|*/..|*/.) return 1 ;; esac
+    case "$p" in
+      /usr/*|/bin/*|/sbin/*|/lib/*|/lib64/*|/etc/alternatives/*) ;;
+      "$RELEASES"/*|"$REPO"/*) d=$(dirname -- "$p"); [ "$(realpath -e -- "$d" 2>/dev/null)" = "$d" ] || return 1 ;;
+      *) return 1 ;;
+    esac
+    [ -L "$p" ] || break
+    t=$(readlink -- "$p"); [[ "$t" = /* ]] || t="$(dirname -- "$p")/$t"
+    p=$t; n=$((n + 1)); [ "$n" -lt 16 ] || return 1
+  done
+  [ -f "$p" ] && [ -x "$p" ]
+}
 read_tenant_exec() {
   declared=0
-  if [ ! -e "$exec_decl" ] && [ ! -L "$exec_decl" ]; then rm -f "$voice_copy"; return 0; fi
+  if [ ! -e "$exec_decl" ] && [ ! -L "$exec_decl" ]; then return 0; fi
   [ -L "$exec_decl" ] && die "$exec_decl is a symlink; refusing"
+  [ -f "$exec_decl" ] || die "$exec_decl is not a regular file"
   [ "$(stat -c '%U' "$exec_decl")" = root ] || die "$exec_decl must be owned by root"
   case "$(stat -c '%a' "$exec_decl")" in 600|400|640|644) ;; *) die "$exec_decl must not be group/other-writable (0600)";; esac
-  local interp vconf rp shebang sp
+  # A declaration says something or is refused: with a misspelt key the
+  # unit would migrate onto the standard command line, voice silently gone
+  # (scratch VM probe 2026-10-02). Only the two keys, each at most once.
+  if grep -qvE '^([[:space:]]*(#.*)?|(INTERPRETER|VOICE_CONFIG)=.+)$' "$exec_decl"; then
+    die "$exec_decl has a line that is not INTERPRETER=<path>, VOICE_CONFIG=<path> or a comment"
+  fi
+  # a quoted value is unquoted by this reader: `VOICE_CONFIG=""` would be
+  # a valid line that declares nothing
+  if grep -q "[\"']" "$exec_decl"; then die "$exec_decl has a quote; write the two paths bare"; fi
+  local interp vconf rp shebang sp k
+  for k in INTERPRETER VOICE_CONFIG; do
+    [ "$(grep -cE "^$k=" "$exec_decl" || true)" -le 1 ] || die "$exec_decl sets $k more than once"
+  done
   interp=$(env_value "$exec_decl" INTERPRETER); vconf=$(env_value "$exec_decl" VOICE_CONFIG)
+  [ -n "$interp" ] || [ -n "$vconf" ] || die "$exec_decl declares neither INTERPRETER nor VOICE_CONFIG; remove it or fill it in"
   if [ -n "$interp" ]; then
     plain_path INTERPRETER "$interp"
     rp=$(realpath -e -- "$interp" 2>/dev/null) || die "INTERPRETER $interp does not exist"
     [ "$rp" = "$interp" ] || die "INTERPRETER $interp is not the real path (it is $rp)"
     case "$rp" in "$RELEASES"/*|"$REPO"/*) ;; *) die "INTERPRETER $interp is outside $RELEASES and $REPO: the sandbox cannot see it";; esac
-    # a console script runs its shebang's python: that must be visible too
+    [ -f "$interp" ] || die "INTERPRETER $interp is not a regular file"
+    # It is a venv's `zylch` console script, whose shebang is that venv's
+    # python: anything else this check cannot follow (`env`, a `/bin/sh`
+    # trampoline, a file with no shebang, `pip`) is refused rather than
+    # found out at start.
+    [ "$(basename -- "$interp")" = zylch ] || die "INTERPRETER $interp is not a venv's zylch script"
     shebang=$(head -c 512 -- "$interp" | head -n 1)
-    if [[ "$shebang" == '#!'* ]]; then
-      sp=${shebang#\#!}; sp=${sp%%[[:space:]]*}
-      sp=$(realpath -e -- "$sp" 2>/dev/null) || die "INTERPRETER $interp: its shebang interpreter does not exist"
-      case "$sp" in /usr/*|"$RELEASES"/*|"$REPO"/*) ;; *) die "INTERPRETER $interp runs $sp, outside /usr, $RELEASES and $REPO: the sandbox cannot see it";; esac
-    fi
+    [[ "$shebang" == '#!'* ]] || die "INTERPRETER $interp has no shebang: it is not a venv's zylch script"
+    sp=${shebang#\#!}
+    [[ "${sp##*/}" =~ ^python([0-9]+(\.[0-9]+)*)?$ ]] &&
+      [ "$(dirname -- "$sp")" = "${interp%/*}" ] &&
+      [ -f "${interp%/bin/zylch}/pyvenv.cfg" ] || die "INTERPRETER must use its own venv python without shebang arguments"
+    sandbox_sees "$sp" || die "INTERPRETER $interp runs $sp, which is missing, or reached through a link or a path outside /usr, $RELEASES and $REPO: the sandbox cannot see it"
     runuser -u "$user" -- test -x "$interp" || die "$user cannot execute $interp: chmod -R go=rX $RELEASES"
     EXEC_BIN="$interp"
   fi
@@ -246,18 +385,22 @@ read_tenant_exec() {
     [ -L "$vconf" ] && die "VOICE_CONFIG $vconf is a symlink; refusing"
     [ -f "$vconf" ] || die "VOICE_CONFIG $vconf is not a regular file"
     [ "$(stat -c '%U' "$vconf")" = root ] || die "VOICE_CONFIG $vconf must be owned by root"
-    # it is also loaded as an EnvironmentFile: only voice variables, one
-    # per line (no tenant identity, data root, key or import path)
-    if grep -qvE "$VOICE_ALLOWED" "$vconf"; then
-      die "VOICE_CONFIG $vconf has a line outside VOICE_*, OPENAI_*, VONAGE_*, FIREBASE_WEB_API_KEY (or a multi-line value); remove it"
-    fi
     # 0711: the tenant reaches its own copy by name, never lists the others
     install -d -m 0711 -o root -g root "$EXEC_DIR"; chmod 0711 "$EXEC_DIR"
-    install -m 0640 -o root -g "$user" "$vconf" "$voice_copy"
-    runuser -u "$user" -- test -r "$voice_copy" || die "$user cannot read $voice_copy (is /etc/mrcalld o+x?)"
-    VOICE_ARG=" --voice-config $voice_copy"
-  else
-    rm -f "$voice_copy"
+    # it is also loaded as an EnvironmentFile: only voice variables, one
+    # per line (no tenant identity, data root, key or import path). The
+    # COPY is what is checked, then renamed into place: what was read is
+    # what the unit loads.
+    install -m 0640 -o root -g "$user" "$vconf" "$voice_copy.new"
+    if ! voice_lines_ok "$voice_copy.new"; then
+      rm -f "$voice_copy.new"
+      die "VOICE_CONFIG $vconf has a line outside VOICE_*, OPENAI_*, VONAGE_*, FIREBASE_WEB_API_KEY, or one systemd reads differently (carriage return, trailing backslash, open quote, export, indented key); remove it"
+    fi
+    if ! runuser -u "$user" -- test -r "$voice_copy.new"; then
+      rm -f "$voice_copy.new"; die "$user cannot read $voice_copy (is /etc/mrcalld o+x?)"
+    fi
+    mv -f "$voice_copy.new" "$voice_copy"
+    VOICE_ARG=" --voice-config $voice_copy"; VOICE_SRC="$vconf"
   fi
   declared=1
 }
@@ -289,16 +432,34 @@ ensure_company_store() { # ensure_company_store <group>
 # A refused first migration falls back to the template: tenant.conf is
 # removed again (nothing has been chown'ed yet), whatever made `create`
 # stop — a refusal below, or a failing systemctl/tmpfiles under `set -e`.
-# An already migrated profile keeps its drop-in (its tree is tenant-owned)
-# and only the error stands.
+# An already migrated profile keeps its drop-in (its tree is tenant-owned):
+# tenant.conf and the voice copy are put back as they were before this
+# run — a refusal that came after they were rewritten would otherwise
+# leave a unit that restarts onto a command nobody accepted (review
+# 2026-10-02) — and only the error stands.
+prev=""; snapshot_complete=0; mode_created=0
+save_prev() { # a migrated profile's tenant.conf and voice copy, before create touches them
+  table_has "$uid" || return 0
+  prev=$(mktemp -d /etc/mrcalld/.create-prev.XXXXXX)
+  if [ -f "$dropin" ]; then cp -p "$dropin" "$prev/tenant.conf"; fi
+  if [ -f "$voice_copy" ]; then cp -p "$voice_copy" "$prev/voice.env"; fi
+  snapshot_complete=1
+}
+drop_prev() { rm -f "$voice_copy.new"; if [ -n "$prev" ]; then rm -rf "$prev"; prev=""; fi; }
 undo_first_dropin() {
   local rc=$?
   if [ "$rc" != 0 ] && ! table_has "$uid"; then
+    [ "$mode_created" = 0 ] || rm -f "$modefile"
     rm -f "$dropin" "$fragment" "$voice_copy"; rmdir "$dropin_d" 2>/dev/null || true
     # step 7's run dir and flat-name link: the template's daemon binds that name
     rm -rf "${RUN_ROOT:?}/$uid"; [ -L "$RUN_ROOT/$uid.sock" ] && rm -f "$RUN_ROOT/$uid.sock"
     systemctl daemon-reload || true
+  elif [ "$rc" != 0 ] && [ "$snapshot_complete" = 1 ]; then
+    if [ -f "$prev/tenant.conf" ]; then cp -p "$prev/tenant.conf" "$dropin.tmp" && mv -f "$dropin.tmp" "$dropin"; fi
+    if [ -f "$prev/voice.env" ]; then cp -p "$prev/voice.env" "$voice_copy.new" && mv -f "$voice_copy.new" "$voice_copy"; else rm -f "$voice_copy"; fi
+    systemctl daemon-reload || true
   fi
+  drop_prev
   exit "$rc"
 }
 
@@ -410,6 +571,7 @@ names)
   exit 0 ;;
 
 create)
+  [ ! -L "$profile_dir" ] || die "profile directory is a symlink; refusing"
   [ -f "$profile_dir/.env" ] || die "no profile .env at $profile_dir"
   [ -L "$profile_dir/.env" ] && die "$profile_dir/.env is a symlink; refusing"
   key=$(profile_key); require_relocated "$key"
@@ -459,7 +621,9 @@ create)
   systemctl daemon-reload
   # A declared unit (tenant-exec) keeps its operator command drop-ins:
   # tenant.conf resets ExecStart and 6b verifies what systemd will run.
+  check_dropins
   trap undo_first_dropin EXIT
+  save_prev
   read_tenant_exec
   while IFS= read -r f; do
     [ -n "$f" ] && [ "$f" != "$dropin" ] && [ -f "$f" ] || continue
@@ -469,14 +633,32 @@ create)
       # a specifier (%i) names a file this loop cannot find: refuse it
       case "$ef" in *%*) die "$f: EnvironmentFile $ef uses a specifier and cannot be checked for PYTHONPATH; pin with Environment=PYTHONPATH=… in a drop-in instead" ;; esac
       if grep -qsE '^[[:space:]]*PYTHONPATH[[:space:]]*=' "$ef"; then die "$f: EnvironmentFile $ef sets PYTHONPATH; pin with Environment=PYTHONPATH=… in a drop-in instead"; fi
+      # tenant.conf resets the list: an operator's own file would stop
+      # being loaded without a word. Only the declared voice file is
+      # carried over (as its copy).
+      case "$f" in *.d/*) if [ -n "$ef" ] && [ "$ef" != "$VOICE_SRC" ]; then die "$f loads EnvironmentFile $ef, which a migrated unit no longer reads (tenant.conf resets the list): move its variables to Environment= lines in that drop-in first"; fi ;; esac
     done < <(sed -nE 's/^[[:space:]]*EnvironmentFile[[:space:]]*=[[:space:]]*//p' "$f")
   done < <(systemctl show -p FragmentPath -p DropInPaths --value "$unit" | tr ' ' '\n')
+  # A first migration replaces the flat socket by a link and re-owns the
+  # tree: never under a running daemon (runbook: stop first).
+  if ! table_has "$uid"; then
+    case "$(systemctl show -p ActiveState --value "$unit")" in inactive|failed) ;; *) die "$unit is running unmigrated: stop it first (runbook 2b step 2), then create";; esac
+  fi
+  record_profile_mode
   write_dropin "$group"
-  # 6b. what systemd will actually run
+  # 6b. what systemd will actually run: the command, the identity, the
+  #    sandbox and the environment files are tenant.conf's — a drop-in
+  #    that sorts after it (or one in /run) would win without a word
   systemctl daemon-reload
+  check_dropins
   es=$(systemctl show -p ExecStart --value "$unit")
   [ "$(grep -o 'argv\[\]=' <<< "$es" | wc -l)" = 1 ] && [[ "$es" == *"argv[]=$EXEC_BIN -p $uid serve --unix $RUN_ROOT/$uid/ws.sock$VOICE_ARG ;"* ]] \
     || die "the unit's effective ExecStart is not tenant.conf's: something else overrides it (systemctl cat $unit)"
+  [ "$(systemctl show -p User --value "$unit")" = "$user" ] && [ "$(systemctl show -p ProtectHome --value "$unit")" = tmpfs ] \
+    || die "the unit's effective User/ProtectHome are not tenant.conf's: another drop-in overrides them (systemctl cat $unit)"
+  efs=$(systemctl show -p EnvironmentFiles --value "$unit" | sed -E 's/ \(ignore_errors=[a-z]+\)$//' | tr '\n' ' ')
+  [ "$efs" = "${VOICE_ARG:+$voice_copy }$keyfile " ] \
+    || die "the unit's effective EnvironmentFile list is not tenant.conf's (the voice copy, then the key file): another drop-in adds to it (systemctl cat $unit)"
   # 6c. a pinned PYTHONPATH must be a real path inside the bound trees,
   #    readable by the tenant, or the daemon would silently import the
   #    checkout: the sandbox hides every other path under /home, and
@@ -499,6 +681,8 @@ create)
     done
     runuser -u "$user" -- test -r "$p/zylch/__init__.py" || die "$user cannot read $p/zylch/__init__.py: chmod -R go=rX $RELEASES (runbook step 0), then create again"
   done
+  # tenant.conf no longer names a voice copy: only now is a stale one removed
+  [ -n "$VOICE_ARG" ] || rm -f "$voice_copy"
   # 7. runtime socket dir: per-uid 2750 <user>:caddy so the socket inherits
   #    the proxy's group and server_ws.py's chmod(0o660) lets Caddy connect.
   #    The parent comes from tmpfiles.d/mrcalld.conf (2751 mrcalld:caddy).
@@ -517,7 +701,7 @@ create)
     [ -L "$profile_dir/$d" ] && die "$profile_dir/$d is a symlink; refusing"
     [ -d "$profile_dir/$d" ] || mkdir -m 0750 "$profile_dir/$d"
   done
-  trap - EXIT
+  trap - EXIT; drop_prev
   chown -R --no-dereference "$user:$user" "$profile_dir"
   chmod 0700 "$profile_dir"; chmod 0600 "$profile_dir/.env"
   # 9. record
@@ -550,6 +734,10 @@ unjoin)
   ;;
 
 unmigrate)
+  if ! table_has "$uid" && [ ! -e "$dropin" ]; then
+    log "already unmigrated $uid"; exit 0
+  fi
+  read_profile_mode
   # Rollback of `create` (runbook M2.7): the unit returns to the
   # transitional template. Keeps the user and the key file so the forward
   # path is repeatable; the caller has already run `rekey` back to the
@@ -561,12 +749,14 @@ unmigrate)
   rm -rf "$RUN_ROOT/$uid"; rm -f "$fragment" "$voice_copy"
   [ -L "$RUN_ROOT/$uid.sock" ] && rm -f "$RUN_ROOT/$uid.sock"
   [ -d "$profile_dir" ] && chown -R --no-dereference "$SVC_USER:$SVC_USER" "$profile_dir"
+  [ ! -d "$profile_dir" ] || chmod "$original_mode" "$profile_dir"
   # a -wal/-shm the tenant left on the relocated store is 0660 <tenant>:<group>;
   # give the returning mrcalld daemon the group so it can write it
   g=$(company_group_for_profile); [ -n "$g" ] && getent group "$g" >/dev/null && usermod -a -G "$g" "$SVC_USER"
   ensure_table; table_drop "$uid"
   systemctl daemon-reload
   write_logrotate
+  rm -f "$modefile"
   log "unmigrated $uid (user and key file kept)"
   ;;
 
@@ -603,11 +793,16 @@ delete)
     # is disabled); fix and re-run `delete`
     as_tenant "$user" "$profile_dir" -p "$uid" memory-offboard --yes $last || die "offboard failed; nothing deleted (unit disabled, .deleting keeps reconcile off it) — fix and re-run delete"
   fi
+  hand_company_files
   rm -rf "$profile_dir"
-  rm -f "$keyfile" "$fragment" "$voice_copy" "$exec_decl"
+  rm -f "$keyfile" "$fragment" "$voice_copy" "$exec_decl" "$modefile"
   rm -rf "$dropin_d" "$RUN_ROOT/$uid"
   [ -L "$RUN_ROOT/$uid.sock" ] && rm -f "$RUN_ROOT/$uid.sock"
   if id "$user" >/dev/null 2>&1; then userdel "$user"; log "removed user $user"; fi
+  # only once no process of that user can run: removing the table first
+  # would leave a straggler (a hung as_tenant) with unrestricted egress when
+  # userdel then refuses; a re-run still finds the table by the uid's tag
+  remove_egress
   if [ -n "$last" ] && [ -n "$group" ]; then
     rm -rf "$MEMORY/$group"; groupdel "$group" >/dev/null 2>&1 || true
     log "removed empty company group $group and its store directory"

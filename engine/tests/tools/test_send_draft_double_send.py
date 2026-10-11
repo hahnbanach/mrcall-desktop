@@ -272,57 +272,20 @@ def test_cc_and_bcc_count_towards_the_window(fresh_storage):
 
 
 def test_a_late_rollback_never_resurrects_a_delivered_draft(fresh_storage):
-    """The worst failure this design can have, and it is reachable.
+    """A delayed failure cleanup must not resurrect a subsequently delivered row.
 
-    Caller A's send outlives the stale window; caller B re-claims the row and
-    delivers the mail; A then fails and rolls back. An UNGUARDED rollback
-    writes `draft` over the delivered row, and the same mail can go out a
-    third time — a rare race turned into a repeatable double-send. The
-    rollback must therefore be conditional on still holding the claim.
+    The private writer now prevents ageing a claim while its transport is
+    active. Exercise the retained cleanup CAS directly after delivery instead.
     """
-    from zylch.storage.storage import send_claim_window_minutes
     from zylch.tools.base import ToolStatus
 
     draft = _draft(fresh_storage)
-    a_in_smtp = threading.Event()
-    a_may_fail = threading.Event()
-
-    def a_send(**kwargs):
-        a_in_smtp.set()
-        assert a_may_fail.wait(10), "A was never released"
-        raise smtplib.SMTPDataError(451, b"try again later")
-
-    imap_a = MagicMock()
-    imap_a.send_message.side_effect = a_send
-    outcome = {}
-
-    def run_a():
-        outcome["a"] = _run(_tool(fresh_storage, imap_a).execute(draft_id=draft["id"]))
-
-    worker = threading.Thread(target=run_a)
-    worker.start()
-    assert a_in_smtp.wait(10), "A never reached the transport"
-
-    # A's claim ages out while A is still inside SMTP.
-    fresh_storage.update_draft(
-        OWNER,
-        draft["id"],
-        {"updated_at": _naive_utcnow() - timedelta(minutes=send_claim_window_minutes(1) + 1)},
-    )
-
-    imap_b = MagicMock()
-    imap_b.send_message.return_value = {"id": "sent-by-b"}
-    b = _run(_tool(fresh_storage, imap_b).execute(draft_id=draft["id"]))
-    assert b.status == ToolStatus.SUCCESS
-
-    a_may_fail.set()
-    worker.join(10)
-
-    stored = fresh_storage.get_draft(OWNER, draft["id"])
-    assert (
-        stored["status"] == "sent"
-    ), "a delivered draft was resurrected to 'draft' and is sendable again"
-
+    imap = MagicMock()
+    imap.send_message.return_value = {"id": "delivered"}
+    result = _run(_tool(fresh_storage, imap).execute(draft_id=draft["id"]))
+    assert result.status == ToolStatus.SUCCESS
+    assert fresh_storage.release_draft_claim(OWNER, draft["id"], "draft", "late failure") is False
+    assert fresh_storage.get_draft(OWNER, draft["id"])["status"] == "sent"
     third = _run(_tool(fresh_storage, MagicMock()).execute(draft_id=draft["id"]))
     assert third.status == ToolStatus.ERROR
 

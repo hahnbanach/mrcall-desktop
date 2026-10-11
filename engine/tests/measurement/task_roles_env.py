@@ -180,6 +180,7 @@ def disposable_profile(personal: dict[str, str] | None = None) -> Iterator[Path]
         settings.email_aliases = ""
         database.dispose_engine()
         database.init_db()
+        _primary_mailbox(os.environ.get("EMAIL_ADDRESS", ""))
         yield root
     finally:
         database.dispose_engine()
@@ -187,6 +188,24 @@ def disposable_profile(personal: dict[str, str] | None = None) -> Iterator[Path]
         os.environ.update(saved_env)
         settings.email_address, settings.email_aliases = saved_settings
         shutil.rmtree(root, ignore_errors=True)
+
+
+def _primary_mailbox(address: str) -> None:
+    """Give ``OWNER_ID`` the primary mailbox a production profile has.
+
+    The engine keys mail by ``EMAIL_ADDRESS``, so a production profile's
+    primary mailbox row carries the user's address. The harness keys rows by
+    ``OWNER_ID`` instead; without this row the mailbox fallback would
+    register ``OWNER_ID`` itself as an address the user "also writes from"
+    (``zylch.email.identity.describe_user``) and put it in the prompt.
+    """
+    if not address:
+        return
+    from zylch.storage.database import get_session
+    from zylch.storage.models import Mailbox
+
+    with get_session() as session:
+        session.add(Mailbox(owner_id=OWNER_ID, address=address, is_primary=True))
 
 
 class _FrozenMeta(type):

@@ -14,6 +14,1422 @@ approved 2026-09-29 by two independent reviews. This plan was revised once on
 two independent plan reviews (conformance; adversarial mechanisms), whose
 findings are folded in below.
 
+## Remaining work (index, as of 2026-10-02 after `35f8840`)
+
+This is the entry point for any session picking this up. Each item names:
+- **where it runs:** *cloud* is a session on this repository with no host
+  access; *scratch* is the Remote Control session on the scratch VM; *VPS*
+  is the Remote Control session on desktop.mrcall.ai;
+- **when it may start;**
+- **when it is done.**
+
+Git is the only channel between sessions. Every session records its
+result in this plan and pushes to `main`. Rules that hold for every item:
+- never print `MEMORY_KEY`, `ENCRYPTION_KEY`, tokens or voice-file values;
+- stop and roll back on a host, daemon, store or app anomaly;
+- a defect in your own check script is fixed and the check re-run (the
+  stop rule in the "VPS rollout" record).
+
+State: five profiles, production@ included, run as their own users. Ivan
+(`ZwpLepFDghWhQEBO4WJRIFcEr7p1`) and Riccardo
+(`YZNI2ZLDjFOxcvF0zmptW3vRZxV2`) are still `mrcalld` on the shared key,
+excluded by the CTO. All four company stores have derived names. M3 has
+not started.
+
+1. **R1 — 2b for Ivan and Riccardo.** *VPS.*
+   - *Starts:* when the CTO says.
+   - *Procedure:* exactly the repaired sequence in "M2 record — VPS
+     rollout", "Published repair and resumed 2b":
+     1. a read-only rekey dry run as the daemon identity;
+     2. backup;
+     3. `create` → rekey with verify → verify-only → `create` → start;
+     4. acceptance.
+
+     Their app acceptance has no Firebase row to use (recorded there): the
+     daemon-identity `memory-status` plus a clean start are the evidence
+     unless the CTO provides a sign-in.
+   - *Afterwards:* `gpasswd -d mrcalld mc-c-7aaa48b3ef85`. Café124 then
+     has no `mrcalld` holder.
+   - *Done:* the helper table lists all seven uids.
+
+   **R1 execution record — 2026-10-02.** Ivan and Riccardo were
+   authorized by the CTO and processed sequentially. Each read-only
+   credential dry run executed as the current daemon identity through the
+   repaired walker: zero OAuth rows, zero failures. Under inherited root
+   fd 9 on `reconcile.lock`: stop, ownership/mode record and root-only
+   backup, `create` → rekey `--verify` → `--verify-only` → `create` → start
+   → acceptance. Both rekey checks reported zero rows and zero failures;
+   boolean comparisons confirmed the daemon adopted its distinct tenant
+   key rather than the shared key.
+
+   | Profile | Accepted UTC | Daemon identity | Memory at acceptance |
+   |---|---|---|---|
+   | Ivan, `ZwpLepFDghWhQEBO4WJRIFcEr7p1` | 17:36:54 | `mc-3a94d888f0a7` | available; 1,415 blobs, 199 facts |
+   | Riccardo, `YZNI2ZLDjFOxcvF0zmptW3vRZxV2` | 17:43:08 | `mc-e00a4971b76c` | available; 1,416 blobs, 199 facts |
+
+   **Check correction and retained rollback.** Ivan's first attempt at
+   17:32 was restored because the immediate process-UID check raced
+   systemd's `Type=simple` identity setup/exec (Started → our Stopping:
+   33.084 ms). Reverse rekey and `unmigrate` succeeded, recorded directory
+   mode was restored, and the original daemon returned active with memory
+   available and zero startup errors. Independent reviews confirmed a
+   check defect, with no daemon failure. The corrected bounded readiness
+   predicate waits for actual UID and command; the approved retry passed.
+   Original `/root/backup-2b-ZwpLepFDghWhQEBO4WJRIFcEr7p1-20261002-r1/`,
+   accepted Ivan
+   `/root/backup-2b-ZwpLepFDghWhQEBO4WJRIFcEr7p1-20261002-r1-retry1/`,
+   Riccardo
+   `/root/backup-2b-YZNI2ZLDjFOxcvF0zmptW3vRZxV2-20261002-r1/`, their
+   old keys, and all preceding rollback material remain root-only.
+
+   **Acceptance.** Each profile was active with `NRestarts=0`, memory
+   available as its daemon identity, correct profile ownership and company
+   store/sidecar group and `0660` mode, unchanged operator drop-ins, denied
+   sibling environment/key reads, Caddy route reachable (unsigned handshake
+   401), and zero new startup-error matches. Other daemon PIDs stayed
+   unchanged during each migration; production voice health stayed 200 with
+   `calls_available=true` locally and publicly. Subsequent budget refusals
+   and worker batch stops match pre-migration behavior. No authenticated app/GUI observation is
+   claimed: the daemon-identity memory check and clean start are R1's
+   explicitly authorized evidence for these two profiles.
+
+   **Closure.** After both fresh Riccardo milestone reviews returned
+   APPROVED, `gpasswd -d mrcalld mc-c-7aaa48b3ef85` succeeded under the
+   reconciliation lock. The helper table contains exactly all seven live
+   UIDs; all seven daemons are active as their derived tenant users, with
+   zero restarts and available memory before and after group removal.
+   Café124 has no remaining `mrcalld` daemon holder or group membership.
+   All four stores remain derived with correct group-writable sidecars;
+   sibling environment/key reads are denied, provisiond is active, both
+   logrotate debug checks pass, and local/public production voice health
+   remains 200 with `calls_available=true`. R1's runtime done condition is
+   met; R3's seven-day rollback window starts from the last 2b acceptance,
+   Riccardo's 2026-10-02 17:43:08 UTC. No backup or shared key was removed.
+
+   **Reviews and publication.** Fresh independent brief and plan pairs
+   returned APPROVED (plan defects were repaired and re-reviewed), as did
+   both fresh milestone reviewers for each profile. Separate final R1
+   reviewers `r1_final_a` and `r1_final_b` both returned APPROVED on the
+   runtime evidence and this R1-only record before publication. Operational
+   evidence and the
+   approved scratch brief/plan are under `/root/r1-20261002/` and
+   `/tmp/mrcall-ai-kit/r1-20261002/`. The service checkout was never edited,
+   pulled or deployed. Automatic reconcile triggers skipped under the held
+   lock; no reconcile work ran. Only this R1 record is changed
+   in the repository; R2/R4 and global reconciliation remain their owners'.
+
+2. **R2 — Helper hardening.** *cloud* for the code, then *scratch* for the
+   probe with two independent reviews.
+   - *Starts:* any time.
+   - *Must finish:* before self-serve provisioning opens (Parked).
+   - *Scope:* the "Open, not changed here" list of "M2 record —
+     tenant-exec probe":
+     - refuse any applied drop-in that sorts after `tenant.conf`, or lives
+       outside the instance's `/etc` directory;
+     - `delete` refuses a uid that is not a Firebase UID (`<uid>.sock`,
+       `reconcile.lock`);
+     - the two voice-file forms the check and systemd read differently;
+     - `save_prev` runs after the trap is armed;
+     - refuse a `zylch` whose shebang is not its own venv's python, and
+       an empty or comment-only voice file;
+     - `unmigrate` restores the recorded profile-directory mode.
+   - *Done:* both reviews APPROVED on the scratch record; merged; the VPS
+     installs it through the next reconcile, and every migrated unit
+     re-applies as `ready`.
+   - *R_2 record (2026-10-02):* existing approved brief and R2 scope/plan
+     re-reviewed independently: A (mechanisms) APPROVED; B (conformance)
+     APPROVED. Implementation by this worktree's primary agent; both will
+     separately review the resulting code and scratch evidence.
+     Sequence: implement the six guards; exercise hostile and accepted
+     controls on scratch, including partial-backup failure and mode
+     round-trip; review/fix/re-review; merge; record VPS reconcile evidence.
+     Refusals must preserve existing unit/voice state. Legacy migrations
+     without a recorded original mode must not invent one. Restore the
+     installed helper and test fixtures on an anomaly; do not change R4's
+     firewall/resolver state. No secret or voice value in evidence.
+   - *Machine coordination:* scratch VM presa da R_2 dalle
+     2026-10-02T17:30:52Z. Reservation is effective only after push and a
+     refreshed check that R_4 is not using the machine.
+     R_2: rilasciata alle 2026-10-02T17:33:04Z; competing R_4 lease observed
+     after refresh. No system mutation or probe performed (only systemd
+     version/helper-presence inspection). R_4 may use the VM; R_2 continues
+     code work and will acquire a new lease after R_4 releases.
+   - *New lease:* scratch VM presa da R_2 dalle 2026-10-02T17:34:59Z.
+     R_4 release observed at origin/main; acquisition pending push/refresh.
+   - *Implementation:* `engine/scripts/server/tenant-helper.sh` now checks
+     applied `DropInPaths` before changing unit/voice files and after reload:
+     C-order at/before `tenant.conf`, real files in the instance `/etc`
+     directory only. Hosted UID subset is 1–128 letters/digits/underscore/
+     hyphen (dots refused, including socket/lock names); this is not a claim
+     about every Firebase custom UID. Voice admission uses single physical
+     assignments, whole-value quotes, no escapes or controls except tab,
+     and at least one assignment. Declared scripts require their own venv's
+     `bin/python[version]` without arguments and `pyvenv.cfg`. EXIT is armed
+     before snapshot; only a complete snapshot may restore live files.
+     Original directory modes live in root-only
+     `/etc/mrcalld/profile-modes/<uid>` (0600), survive reapply, are restored
+     by `unmigrate`, and are removed by successful rollback/delete. Repeated
+     rollback is a no-op. A legacy migrated profile without metadata may
+     reapply, but rollback refuses **before stop**: import its actual recorded
+     pre-migration mode from the operator's backup into that root-owned file;
+     do not infer it from today's 0700. No legacy modes were fabricated.
+   - *Scratch evidence (2026-10-02, systemd 249):* installed baseline
+     SHA256 `a90d1bc081978c4716d20d3ecd1f6cd7f5caa78d78283843ae21647e6c2a9eae`
+     matched main before tests. Candidate installed byte-for-byte, then all
+     four table tenants (A1, A2, B1, P1) returned `ready`. P1's PID, active
+     state, tenant.conf and voice copy stayed identical across reapply and
+     every refusal. No daemon restart was requested for these tests.
+     `/tmp/r2-probe.py` and `/tmp/r2-probe-results.txt` record:
+     late `zz-r2.conf`, `/run` instance and `/etc` template drop-ins refused;
+     `<uid>.sock`, `reconcile.lock`, `provisiond`, traversal refused without
+     changing the lock inode; empty/comment-only voice, reopened quote,
+     FF-comment and VT-comment refused; system python and another venv's
+     python refused. An injected failing `cp` after writing the voice backup
+     left both live files intact and no `.create-prev.*` residue. Legacy
+     missing-mode rollback refused with P1 still running unchanged.
+     `/tmp/r2-mode-probe.py`: fresh disposable profile 0770 → create 0700 →
+     reapply retaining recorded 0770 → unmigrate 0770; rollback retry passed;
+     corrupt mode refused, mode 0070 round-trip passed, second forward/delete
+     removed the metadata and disposable profile. No company store used.
+     `/tmp/r2-env-probe.py`: transient actual systemd EnvironmentFile and
+     engine-venv dotenv agreed on all names and values of the accepted
+     synthetic sample (only PASS emitted). Helper and operator files were
+     restored after each probe; transient unit collected, fixtures removed.
+     Four isolated unittest cases cover grammar, UID collisions, drop-in
+     order/location/symlinks and partial-snapshot failure. `bash -n` passes.
+   - *Review status:* A and B independently **APPROVED** the final code
+     and scratch record on helper SHA256
+     `b5e95bf5f361723dc0429436c1b0be47983d763e37bd8d06ff5d3fbe09b90f10`.
+     Both inspected the three probe scripts and PASS log and independently
+     reran the four isolated tests; A also ran syntax/diff checks. B's earlier
+     REVISE (short octal modes and repeat rollback) was repaired and verified.
+     Their approval closes the scratch gate, not the unobserved VPS gate.
+   - *Published:* implementation merged to main as `72719a15` via
+     `git pull --rebase origin main && git push origin HEAD:main`.
+     Afterwards the approved helper was installed on scratch (exact full
+     SHA256 above); all four table tenants re-applied `ready` again. P1
+     remained active, PID 128040 unchanged. No firewall/resolver changes.
+   - *Machine coordination, final:* scratch VM **rilasciata** da R_2 alle
+     2026-10-02T17:43:24Z. R_4 may take it after this record is pushed.
+     Scratch now keeps the approved main helper, not the pre-R2 baseline.
+   - *Earlier VPS access attempt:* the scratch session had no verified VPS
+     SSH host key/access: BatchMode + StrictHostKeyChecking connection to
+     root@desktop.mrcall.ai refused with host-key verification failure before
+     any remote command. It performed no VPS mutation and handed the gate
+     to the VPS session; the authorized local checks below close that gap.
+   - **VPS gate (2026-10-02, accepted 18:14:28 UTC):** the operator clone's
+     `git pull origin main` included `72719a15`. The authorized
+     `sudo systemctl start zylch-reconcile.service` updated the service
+     checkout from `926ef84` to `ca478a0`; no manual checkout or unit edit
+     was made. Reconcile invocation `23b3f1663b1a40b68de782537e12738e`
+     returned `Result=success`, `ExecMainStatus=0`; unit/tagged journals
+     showed updater exit 0 and seven profiles with `code_changed=1`.
+     Exactly seven `ready` entries matched the helper's seven-UID table;
+     no helper refusal or reconcile error occurred.
+     Installed `sha256sum /usr/local/sbin/mrcall-tenant` was
+     `b5e95bf5f361723dc0429436c1b0be47983d763e37bd8d06ff5d3fbe09b90f10`;
+     `cmp` was silent against both service and operator checkout copies.
+
+     | Tenant | Unix user | Main PID | Daemon/memory |
+     |---|---|---|---|
+     | support@ | `mc-16d5836d57be` | 3751348 | active; available |
+     | Mario Cafe124 | `mc-b75843f3770f` | 3751426 | active; available |
+     | Mario Gmail | `mc-0c008879b605` | 3751598 | active; available |
+     | Mario MrCall | `mc-fd58d04802f1` | 3751862 | active; available |
+     | production@ | `mc-18f855d535e9` | 3751503 | active; available |
+     | Ivan | `mc-3a94d888f0a7` | 3751754 | active; available |
+     | Riccardo | `mc-e00a4971b76c` | 3751676 | active; available |
+
+     All seven restarted through reconcile, then remained active as their
+     own users with `NRestarts=0`; every daemon-identity `memory-status`
+     returned available. Production's local/public `/healthz` returned
+     200 with `calls_available=true`; unsigned `/vonage/answer`,
+     `/vonage/event`, `/openai/live` returned 401/401/400 on both paths.
+     Port 8787 belonged to production's MainPID 3751503. No live call or
+     authenticated GUI acceptance was requested or claimed.
+     Independent VPS milestone reviews `r2_vps_milestone_a` and
+     `r1_final_b` returned APPROVED. The second context was reused from
+     R1 because the session's reviewer-thread limit prevented another fresh
+     context; its R1 verdict was not reused as R2 evidence. This follows
+     CLAUDE.md's explicit separate-review fallback. Separate final passes
+     `r1_final_a` and `r2_vps_milestone_a` also returned APPROVED using
+     available reviewer contexts. Private evidence is under
+     `/root/r2-vps-20261002/`; task and review artifacts are under
+     `/tmp/mrcall-ai-kit/r2-vps-20261002/`. No keys, tokens or voice-file
+     values are in this record. R1/R3/R4/R5 sections are unchanged.
+   - *Done status:* **done** — both scratch reviews APPROVED, implementation
+     merged as `72719a15`, VPS installed the approved helper through
+     reconcile, and all seven migrated tenants re-applied `ready`.
+3. **R3 — Close the rollback window.** *VPS.*
+   - *Starts:* seven days after the last 2b with no rollback, and not
+     before R1.
+   - *Removes:*
+     - the root-only `/root/backup-2a-*`, `/root/backup-2b-*`,
+       `/root/prod-2b/migration/` and `/root/k3-pins-backup/`;
+     - the old-key copies (with `shred -u`).
+
+     The record of what existed stays here.
+   - *The shared key:* `ENCRYPTION_KEY` in `/etc/mrcalld/env` stays as
+     long as any unit runs as `mrcalld`, or provisiond creates new
+     profiles under the template before `create`. Establish which from
+     the code before removing it, and record the answer.
+   - *Done:* recorded here.
+   - **Conditional VPS gate — 2026-10-04, after R4 completion.** The
+     shared-key dependency is still present. Active provisiond runs as
+     `mrcalld` with `/etc/mrcalld/env`; its handler creates the preparing
+     marker and profile environment without invoking tenant `create`.
+     Reconcile re-applies `create` only to already migrated profiles, then
+     starts discovered profiles. The installed daemon template therefore
+     still starts a new profile as `mrcalld` with the shared environment
+     until explicit tenant migration. All seven existing migrated daemons
+     use their per-UID key files; that does not remove the provisioning
+     dependency. Sources: `engine/zylch/provisiond/handler.py`,
+     `engine/scripts/server/update-daemons.sh`,
+     `engine/scripts/systemd/zylch-server@.service`, and
+     `engine/scripts/server/tenant-helper.sh`. The relevant installed/live
+     definitions agree with the checked source.
+   - *Retention under the CTO rule below:* the condition for removing
+     backups, old keys and the shared key is false. All remain in place;
+     no deletion or `shred` was executed. The rollback window is not
+     represented as closed. The shared environment remains root-owned,
+     mode 0600; no key value was read into the record.
+   - *Retained inventory:* five `/root/backup-2a-*` directories, eight
+     `/root/backup-2b-*` directories, `/root/prod-2b/migration/`, and
+     `/root/k3-pins-backup/`: 15 root-owned mode-0700 directories,
+     88 regular files, 1,405,209,333 logical bytes. Nine standalone
+     old-key copies remain root-owned, mode 0400, with one hard link each.
+     There are no symlinks or multiply linked regular files in those
+     roots, and no hard links to active keys or live profile/company
+     stores. Individual backup filenames and all file contents are omitted.
+     Active units and provisioning sources contain no backup-path
+     references. No active key, voice file, service checkout, or R4
+     evidence was changed.
+   - *Review:* **APPROVED** — the fresh independent R3 reviewer verified
+     the live provisioning dependency, installed/source agreement, retained
+     inventory and absence of links or references to active files. The
+     conditional gate is completed and recorded; destructive cleanup is
+     not executed because its prerequisite is false.
+   **CTO decision, 2026-10-03 07:20 UTC — finish by 09:00 UTC.** This
+   supersedes the observation window for R4 and the seven-day wait for R3.
+   Accepted risk: a destination that has not been seen is blocked until it
+   is added.
+
+   *R4.* Every profile is enforced now, one at a time, in this order:
+   Ivan, Riccardo, support, Mario MrCall, Mario Café124, Mario Gmail,
+   production. Each profile's set is built from three sources:
+   - the VPS inventory;
+   - whatever the observe logs have already recorded;
+   - these explicit additions:
+     - WhatsApp: the `whatsapp.net` and `whatsapp.com` suffixes, Mario Gmail
+       only;
+     - Hugging Face downloads: the `huggingface.co` and `hf.co` suffixes,
+       plus `storage.googleapis.com`;
+     - Calendar: `www.googleapis.com` and `oauth2.googleapis.com`;
+     - production only:
+       - `api.openai.com`;
+       - Vonage `api.nexmo.com`, `rest.nexmo.com`, `api.vonage.com`;
+       - OpenRouter.
+
+   Pipedrive is not used, so it is closed as "not used".
+
+   **Every profile gets all three LLM providers:** `api.anthropic.com`,
+   `openrouter.ai` and `zylch.mrcall.ai`, plus `api.mrcall.ai`. The reason
+   is that `LLM_PROVIDER` can be switched in Settings at any time, and
+   M10 model selection (branch `model-selection-m10a`) uses OpenRouter.
+   With only the provider configured today, a switch would be blocked.
+   Web search is a server-side Anthropic tool and needs no further host.
+   Every profile also gets `raw.githubusercontent.com:443`, for the M10
+   daily model table (the M10 answer, `1f0b9f26`). It is harmless before
+   M10 merges.
+
+   Before enforcing, each profile's denied connections must be logged, so a
+   missing destination shows up instead of failing silently. Acceptance per
+   profile:
+   - a manual mail sync completes;
+   - the app reconnects;
+   - memory is available;
+   - no unexplained denied connection appears in the first minutes.
+
+   For production, acceptance also requires `calls_available=true` and the
+   CTO's test call, closed in the ledger. Any anomaly rolls back that one
+   tenant's rules and moves on. One reviewer per step replaces two.
+
+   *R3.* Runs after R4. The backups, the old keys and the shared key are
+   removed only if the template or provisiond does not need the shared key;
+   otherwise it stays and is recorded.
+
+   *R5.* The cloud session updates the documents in parallel.
+
+   **R4 compiler fixes, 2026-10-03, cloud session; one independent review,
+   APPROVED after two REVISE rounds.** Code `9f5f069f` + `cc29f30f`
+   (`engine/scripts/server/egress_policy.py`, new `egress_refused.py`,
+   tests). What it fixes:
+   - **A missing host was invisible.** A name outside a tenant's policy is
+     refused by its resolver (`local=/#/`, NXDOMAIN) before any packet
+     exists, so "zero denied connections" proved nothing about missing
+     hosts. dnsmasq now runs `log-queries`. The DNS unit's
+     `LogFilterPatterns` (systemd ≥ 253, asserted by the host probe) drops
+     every allowed lookup. The journal keeps refusals (`config <name> is
+     NXDOMAIN`), rebind refusals, upstream failures, startup and errors.
+     `egress_refused.py dns` lists the refused names. A refused name is
+     whatever the tenant asked for, data it tried to send out included; the
+     journal is root-only, like the keys.
+   - **The host had drifted from git.** The rate-limited log rule before
+     each reject is now generated, prefix `mc-deny-<tag> `, with its own
+     counter (rejected minus logged = rate-limited).
+     `egress_refused.py deny <tag>` lists one tenant's denied destinations.
+   - **One upstream.** `upstream` accepts a list of up to four public
+     resolvers, and dnsmasq fails over between them. The single-string form
+     and its policy digests are unchanged.
+
+   *VPS, to apply:*
+   1. Recompile every enforced tenant from its manifest policy, with
+      `upstream` = both host resolvers.
+   2. Install the result in place of the hand-edited files.
+   3. Restart the tenant's DNS unit with `--job-mode=ignore-dependencies`;
+      reload the firewall unit.
+   4. Check `nft -s list table` against the compiled `firewall.nft`.
+   5. Check that `systemctl show -p LogFilterPatterns` of the DNS unit is
+      not empty.
+
+   **Production call diagnosis so far:** the metadata above does not
+   implicate R4. The engine side of the 09:04 calls matches the working
+   07:09 call, with no binding failure and no denied packet. The call audio
+   runs Vonage → OpenAI SIP directly, not through this host. What differs
+   is the caller transcription: 13 caller deltas at 07:09, 0 and 2 at
+   09:04. The DNS capture of the next call decides whether any name was
+   refused.
+
+4. **R4 — M3, egress bound per daemon** (section below). *scratch* first,
+   then *VPS* one profile at a time, each watched over a full mail sync
+   cycle.
+   - *Starts:* any time on scratch. On the VPS only after a mechanism
+     record on scratch, with two independent reviews, covering every
+     line of the M3 verification.
+   - *Done:* all migrated tenants have their per-user set; criterion 6 is
+     recorded.
+   - *Done status, 2026-10-04:* **done** — all seven VPS tenants are in
+     enforcement with the approved compiler fixes. Each tenant received
+     APPROVED and its record was published; the separate final integration
+     review returned APPROVED. The current CTO acceptance decisions and
+     explained refusals are recorded in the October 4 completion section.
+   - *M10 (model selection, 2026-10-03):*
+     - Nothing of M10 runs on the VPS, and M10 has installed nothing there:
+       no units, crons or drop-ins.
+     - The paid measurement runs from a cloud session, not from the daemons,
+       and makes no network call from them.
+     - `model-selection-m10a` will not be merged into `main` before 09:00 UTC
+       2026-10-03.
+     - After the merge, every engine downloads the model table once a day from
+       `raw.githubusercontent.com` (`/hahnbanach/mrcall-desktop/model-table/v1/`;
+       GET, ETag). Add that host to each tenant's allow-list. Without it a
+       tenant runs on the build copy and logs one warning a day; nothing
+       breaks.
+5. **R5 — M4 and the final review** (sections below). *cloud*.
+   - *Starts:* after R1–R4.
+   - *Done:* the final end-to-end review is recorded for all eight
+     criteria, and this plan's `status` is `completed`.
+   - **M4 record (2026-10-04, cloud session).** The following now describe
+     M1–M3 as deployed: `AGENTS.md`, `docs/remote-backend.md` (the
+     multi-tenant caveat, plus a new egress caveat on how to find a missing
+     host and add one), `docs/active-context.md` and
+     `engine/docs/active-context.md`. Criterion 8 is met on the docs side.
+   - **Final review: pending, VPS session.** It runs once through the user
+     path, on two hosted profiles A and B of different companies. A
+     signed-in app on A:
+     - reads mail;
+     - downloads an attachment;
+     - searches a document.
+
+     Then the eight criteria are re-checked on the live host:
+     1. A's tools refuse B's `.env`; `DOCUMENT_PATHS` is ignored.
+     2. A crafted attachment name stays a basename under A's downloads.
+     3. `run_python` is refused.
+     4. Two holders of one company store write concurrently; a third user
+        cannot list it.
+     5. A's user cannot read B's key file.
+     6. From A's daemon, a host outside its policy is refused (DNS and
+        packet), and `nft list table` shows the set.
+     7. Offboarding is checked on a scratch profile only: never delete a
+        live one.
+     8. The docs above.
+
+     Evidence is recorded here. Two reviewers, then `status: completed`.
+   - **Final review execution — 2026-10-04, VPS.** Base checkout
+     `0bf8289e` was pulled and verified as an ancestor of HEAD. The host
+     probes use A = Café124, B = support; a private key comparison confirms
+     different companies. Riccardo is a second holder of A's company store.
+     The CTO's signed-app attempt below instead uses Mario Gmail. These
+     are distinct evidence sets, not one completed end-to-end A journey.
+     Production is not a test target.
+
+     Host evidence is root-private in `/root/r5-final-20261004/`:
+     `host-probes.json`, `key-metadata.json` and the executable probe
+     sources with recorded SHA256 provenance. The corrected pass ended
+     at 13:45:39 UTC. These are auxiliary processes using each running
+     daemon's installed interpreter, mount/network namespaces, actual
+     UID, supplementary groups and no-new-privs; they are not authenticated
+     requests to that daemon and are not signed-app evidence. Bytecode
+     writes were disabled on the final pass.
+
+     | Criterion | Fresh VPS evidence | Result |
+     |---|---|---|
+     | 1 | A's actual read tool refuses B's existing environment file; environment glob returns no result. Actual settings update saves the legacy document-path field, but settings get reports it ignored and search roots remain exactly A's downloads/scratch. B cannot find A's synthetic document; OS access to B's environment is denied. | passed |
+     | 2 | Real IMAP attachment parser/save code confines six hostile synthetic MIME names to basenames in A's nonce download directory. Four external download targets and an outgoing cross-profile attachment are refused. OS writes to the checkout and B's profile are denied; profile environments remain unchanged. | passed |
+     | 3 | Both hosted Python entry points return the hosted refusal. A separate local-mode check retains Documents and configured document-path resolution. | passed |
+     | 4 | Café124 and Riccardo, UIDs 994/986, perform concurrent committed no-op updates on the same existing store inode. Both affect one metadata row; the second writer waits 1.031 seconds for the first. No facts, schema or values change. B cannot open or list the store; join preview finds the derived store. | passed |
+     | 5 | Seven distinct root-owned mode-0400 key files; A cannot read B's key. All seven private profile databases are checked as their own daemon users: seven OAuth rows and 21 outer/inner encrypted values, zero decryption failures. Ivan/Riccardo have zero OAuth rows. Both auxiliary no-key initialization and an actual scratch serve startup without a key are refused; the latter exits 3. | passed |
+     | 6 | A's local negative DNS query returns NXDOMAIN and its unapproved TCP attempt is refused. One scoped DNS journal line and one kernel refusal are recorded; the installed table's 28 sets are readable. | passed |
+     | 7 | Installed-helper deletion of the first of two fresh scratch holders removes **zero owned rule rows, expected two**. `memory_offboard` calls `get_owner_id()`, which selects the legacy email identifier or `local-user`, ignoring the immutable `OWNER_ID` used for the fixture's rules. No real profile is deleted. | FAIL |
+     | 8 | The runbook's obsolete five-tenant rollout statement is corrected to all seven. Its unavailable firewall-unit reload instruction is replaced by the exact lock-protected nft loader. Other M4 documents remain reconciled. | review pending |
+
+     The synthetic attachment check supplies only the message transport
+     input locally; it executes the installed confinement/parser code.
+     It does not prove a real mailbox attachment download through the app.
+     A's environment is restored byte-for-byte, test downloads are removed,
+     and all seven live daemon PIDs remain unchanged. Initial harness
+     errors in synthetic address shape, kernel-prefix selection and legacy
+     OAuth-row filtering were repaired before the accepted final pass.
+
+     **Scratch lifecycle details:** the final fixture runs at
+     13:56:56–13:57:17 UTC with two newly created profiles and a wholly new
+     synthetic company. Both scratch daemons run as their own users with
+     private networking. Each seeds two UID-owned rules and one company
+     fact. The first installed-helper deletion reports zero rules removed;
+     the following row-count assertion fails. Exact post-delete counts
+     were not persisted before that assertion, so later lifecycle
+     invariants are not claimed as passed. Fixture SQLite files initially
+     lack group write permission; the owning scratch users grant it to
+     their own fixture DB/WAL/SHM before the test, without ownership or
+     inode transfer. This setup is recorded, not a real-company migration.
+     All six fresh identities from preparation and final attempts are
+     removed, including their units, profiles, keys, principals and private
+     company. Zero residual fixture artifact sets remain. Ownership
+     absence checks cover protected backups, the service home, runtime
+     and helper configuration; a whole-host walk timed out, so global
+     absence is not asserted. All seven real PIDs, key metadata, store
+     inodes and firewall state remain unchanged. The service checkout has
+     zero modified files since the first attempt. Private evidence:
+     `scratch-offboard.json`.
+
+     **Signed-app gate: failed/incomplete.** The CTO reports signed app
+     0.1.52, Remote, Mario Gmail (`mc-0c008879b605`): two chat attempts
+     return `MrCall billing HTTP 400. Request unconfirmed; check
+     reservations`; mail appears only through 2026-09-23. Attachment
+     download and document search are not evidenced. This observation is
+     not replaced by synthetic transport or prior rollout results.
+     The plan remains `status: active`; criterion 7 and the required
+     single-profile signed-app journey prevent completion.
+
+   - **R5 Mario Gmail diagnosis — 2026-10-04, VPS; metadata only.**
+     The CTO's “15:55 CET” is treated as Italian local summer time
+     (CEST, 13:55 UTC): the matching daemon errors are at 13:51:12 and
+     13:55:34–35 UTC. Literal CET would mean 14:55 UTC, later than this
+     investigation. The inspected interval is 13:45–14:02 UTC.
+
+     1. **Request/billing/ledger:** both requests reach the running Mario
+        Gmail daemon. The journal and private `zylch.log` show the billing
+        HTTP 400 and `BudgetError`; balance requests to `zylch.mrcall.ai`
+        also return HTTP 400 (`HTTPStatusError`). Installed client code
+        requests a bounded quote before `reserve()`; its non-200 handler
+        discards the response body and supplies the generic “unconfirmed”
+        text. There are zero reservation rows created in this interval,
+        zero unsettled reservations in this profile, and zero usage rows
+        in the interval. These failed quotes have no new uncertain hold
+        to release. Repeated log/trace representations are not counted as
+        distinct requests.
+     2. **Egress:** the actual `egress_refused.py dns` and `deny
+        0c008879b605` commands both exit 0 and produce zero refused entries
+        for this interval. The billing server is reachable and returns an
+        application-level response.
+     3. **Mail cause:** the app mail RPCs use `cli.utils.get_owner_id()`,
+        which resolves the legacy email owner. The inbox SQL filters that
+        exact owner; there is no September cutoff. Read-only queries as
+        the daemon user find 3,675 legacy-owner messages, newest
+        2026-09-23 22:03:32 UTC, versus 719 immutable-UID messages, newest
+        2026-10-03 07:12:03 UTC. R4's manual sync deliberately uses the
+        immutable UID; those newer rows are hidden from this app query.
+        Before this new manual sync, the UID's last folder checkpoint is
+        2026-10-03 08:16:26 UTC, versus 2026-09-23 22:12:09 UTC for the
+        legacy owner. Checkpoints are per-folder evidence, not whole-run
+        completion. The installed daemon resolves automatic update to
+        **disabled**, with a five-minute interval that is consequently
+        unused. Opening Mail reads cached rows; it does not trigger IMAP.
+        The chat fallback only supports connected Google/Microsoft OAuth,
+        not IMAP credentials alone.
+     4. **Isolation versus billing contract:** 131 matching log mentions
+        of the same billing error start on 2026-09-23 11:17:56 UTC; 126
+        precede 2026-10-02, before this profile's isolation. The same
+        generic error therefore predates isolation; today's requests
+        reach billing and return HTTP 400 without scoped egress refusals.
+        The precise rejection cause and its equivalence to the historical
+        failures remain unverified. Billing uses the
+        verified Firebase WebSocket token in memory, distinct from the
+        encryption key. Business selection is unset, but ambiguous
+        business selection is only a possible server rejection, not a
+        confirmed cause. The exact HTTP 400 validation reason remains
+        unknown because no server rejection-body metadata is available;
+        a fresh outside-sandbox paid request was not performed.
+
+     The lead reported these causes and the remaining billing uncertainty
+     to the CTO before starting the explicitly requested R4-style manual
+     mail-only sync. No provider, identity, key, unit, firewall, reservation
+     or automatic-sync setting is changed. The manual mail-only sync
+     runs at 14:14:15–14:14:29 UTC and completes successfully: **15 new
+     messages**, zero deleted messages, memory available. Immutable-UID
+     rows increase from 719 to 734, newest
+     message 2026-10-04 12:43:35 UTC; the three folder checkpoints advance
+     to 14:14:25–29 UTC. Legacy-owner rows and checkpoints remain unchanged,
+     so this refresh alone does not repair the app's owner filter. The
+     daemon stays active as `mc-0c008879b605`, PID 340803, `NRestarts=0`.
+     The actual DNS/deny parser commands also report zero refused entries
+     throughout the manual-sync interval, with exit status 0.
+     No analysis or paid chat request is made by this sync.
+     Private evidence is under `/root/r5-final-20261004/`:
+     `mario-gmail-diagnosis.json`, `gmail-chat-egress.json`,
+     `gmail-mail-checkpoints-before.json`, `gmail-manual-sync.json` and
+     `gmail-sync-egress.json`.
+   - **Independent final reviews — 2026-10-04, VPS: REVISE / REVISE.**
+     Reviewers `r5_live_checks_reviewer` and `r5_final_independent_b`
+     independently inspect the approved brief, this plan, installed
+     source and private metadata. The second receives no first-review
+     verdict. Both identify the same closure blockers: criterion 7 fails
+     to remove the scratch holder's two UID-owned rules, and the required
+     complete signed-app journey on one designated A is absent. The
+     successful manual sync does not repair the app's legacy-owner filter.
+     The first review's concern about overstating the billing cause is
+     corrected and explicitly rechecked: the exact server reason and
+     historical equivalence remain unknown.
+
+     Both reviews accept the recorded limitations and retain
+     `status: active`. Closing R5 requires acceptance-harness owner
+     correction and a representative complete scratch lifecycle (including
+     retained company facts,
+     last-holder deletion and ownership absence), followed by the signed
+     app's mail/attachment/document journey on the designated A and
+     consistent sibling-B denial evidence. Those repairs and acceptance
+     checks are not claimed by this diagnostic record. No deployment or
+     production rollback is performed.
+   - **CTO owner correction and authorized repair — 2026-10-04, VPS.**
+     The CTO correction supersedes the earlier interpretation above:
+     native mail ownership is `cli.utils.get_owner_id()` → `EMAIL_ADDRESS`.
+     Firebase UID selects the profile; the acceptance script incorrectly
+     supplied it as the mail owner. No engine/app owner-contract change is
+     required to populate the existing app mailbox. The earlier criterion-7
+     fixture also seeded UID-owned rules; its failure remains unaccepted
+     evidence requiring a representative owner fixture, rather than proof
+     that native owner selection must be changed. R5 remains active until
+     scratch lifecycle and the complete signed-app journey are accepted.
+
+     Repair brief/plan: [brief](../briefs/2026-10-04-r5-mail-owner-cleanup.md),
+     [execution](2026-10-04-r5-mail-owner-cleanup.md). Clone pulled main
+     through `d30e5680`; no direct writes to the service checkout.
+     Native Mario Gmail `-p <uid> sync` executes through the installed CLI
+     as its actual daemon user and groups, preserving the per-unit key.
+     The auxiliary operator uses a fresh private mount namespace and the
+     tenant resolver, host network and unchanged per-UID firewall; this is
+     not a claim of the identical daemon mount sandbox. Only Mario Gmail
+     is stopped for its CLI profile lock, then restarted in `finally`.
+     Incidental update prompts are suppressed; native email code is used.
+
+     The accepted mail stage adds **220 messages**, with zero fetch,
+     folder or storage failures: email-owner count 3,678 → 3,898;
+     UID count 734 unchanged. Full preexisting email/UID row comparisons,
+     memory availability and unit-key preservation pass. Three messages
+     had already committed in an earlier interrupted attempt, so total
+     native additions from the initial 3,675 are **223**. That first attempt
+     lacks full preexisting-row equality proof. Subsequent failed attempts
+     are recorded as SQLite `SQLITE_CANTOPEN` failures, not successes.
+     The accepted auxiliary CLI is bounded after email completion; overall
+     WhatsApp/CLI completion is not asserted. The existing daemon returns
+     active under its own user with `NRestarts=0`. Native milestone review:
+     `r5_owner_native_sync_review`, **APPROVED**.
+
+     Both operational acceptance sync scripts now resolve `get_owner_id()`
+     after profile activation, guard equality with the configured email
+     owner without printing it, and preserve the unit key. Their progress
+     counter also runs as the daemon user and uses a separate email-owner
+     baseline, preserving historical UID counters. All three sources and
+     the embedded counter pass syntax validation; original sources and
+     before/after digests are root-private.
+
+     Backup/provenance: all seven pre-script backups contain zero UID-mail
+     rows; every one of the 3,207 frozen candidate IDs is absent under every
+     prior owner and matches script intervals/counts. Consistent backups
+     are created through SQLite's backup API as each daemon user, copied
+     and verified completely, protected as root-owned 0600 files in a 0700
+     directory, and tenant staging copies removed as their owners. Only
+     proven UID rows are removed following predelete review
+     `r5_owner_predelete_review`, **APPROVED**. The actual guarded
+     transactions delete exactly 3,207 rows. Counts below refer to the
+     immediately pre/post-cleanup state, after native Gmail sync.
+
+     | Profile | UID before → after | Email-owner before → after | Deleted |
+     |---|---:|---:|---:|
+     | Ivan | 499 → 0 | 1,310 → 1,310 | 499 |
+     | Riccardo | 727 → 0 | 3,719 → 3,719 | 727 |
+     | support | 284 → 0 | 2,500 → 2,500 | 284 |
+     | Mario MrCall | 273 → 0 | 1,731 → 1,731 | 273 |
+     | Café124 | 410 → 0 | 1,964 → 1,964 | 410 |
+     | Mario Gmail | 734 → 0 | 3,898 → 3,898 | 734 |
+     | production | 280 → 0 | 520 → 520 | 280 |
+
+     Every deletion runs as the actual daemon user in `BEGIN IMMEDIATE`,
+     matching frozen IDs/timestamps/UID and full candidate-row digests
+     against the verified backup. All full protected email rows, every
+     other profile table, schema and foreign-key checks remain unchanged.
+     No cursor, task, company memory or reference is deleted. Fourteen
+     synthetic transaction tests and eight root-copy guard tests pass.
+     Private evidence: `/root/r5-mail-owner-repair-20261004/`, including
+     `native-sync.json`, `script-fix-summary.json`, `backup-summary.json`,
+     `cleanup-summary.json` and the protected SQLite backup copies.
+     Post-cleanup integration review `r5_owner_postcleanup_review`:
+     **APPROVED**.
+
+     Deployment runs at 15:59:56–16:00:33 UTC through the installed
+     reconcile service: `Result=success`, `ExecMainStatus=0`, seven unique
+     ready tenants, zero helper failures, `code_changed=1`, no skipped
+     lock. Service checkout becomes `d30e5680`; the installed tenant helper
+     matches the clone. All seven main PIDs change and run as their actual
+     own users, active with `NRestarts=0`; memory, DNS, firewall services
+     and DNS log filters pass. Egress configuration digests are unchanged;
+     compiled static firewall rules match the installed tables. Dynamic
+     DNS set elements make five exact stateless dumps differ; these are
+     not configuration drift. Six unpinned runtimes, including Mario Gmail,
+     load the checkout's new billing module. Production remains on its
+     declared voice release: current argv/script interpreter and PYTHONPATH
+     agree with its root-only declaration; declaration and release module
+     predate deployment. A complete before/after pin digest was not taken.
+     No voice file is opened or changed. An initial combined journal
+     unit/tag selector misses updater records; the corrected tag-only
+     query is bounded to this same run and confirms the seven ready rows.
+     No second reconcile is needed.
+
+     Mario Gmail is **ready for the CTO's chat retry** with the new billing
+     rejection reason. No paid retry or successful chat is claimed here.
+     Evidence: `deploy-summary.json` and private bounded journal extracts
+     under the repair evidence directory. Deployment integration review
+     `r5_owner_deploy_review`: **APPROVED**. Fresh final reviewer
+     `r5_owner_repair_final_a`: **APPROVED**, including fresh owner counts
+     as each actual daemon user. The platform rejects a second fresh
+     reviewer with `agent thread limit reached`; an existing reviewer
+     performs the CLAUDE fallback separate independent final pass:
+     `r5_owner_provenance_review`, **APPROVED**. Its reuse is disclosed
+     and is not claimed as a second fresh session.
+     The repair review closure and parent plan remain active.
+
+   - **Mario Gmail connection timeout — 2026-10-05, VPS; read-only.**
+     The CTO confirms Mario Gmail and reports `Connection timed out (10s).
+     (timeout)`. At 06:28–06:36 UTC all seven daemons and sockets are active,
+     with `NRestarts=0`; Caddy and provisiond are active. Mario Gmail's
+     unsigned Unix-socket and local Caddy probes return HTTP 401 promptly.
+     On this VPS the hostname resolves through the hosts file to loopback,
+     so a hostname curl alone is not an external reachability check. Public
+     DNS gives the host's actual IPv4; forcing that IP with correct TLS
+     hostname, including an unsigned WebSocket upgrade, also returns 401
+     in about 0.10 seconds. No public AAAA is returned. TCP 443 is listening
+     and the host INPUT policy is ACCEPT. These VPS-originated probes do
+     not prove reachability from the CTO's desktop network.
+
+     Google's public signing-certificate fetch succeeds as Mario Gmail's
+     actual daemon user inside its namespaces: four certificates, 0.89s.
+     Scoped DNS/kernel metadata shows no refusals in the inspected hour.
+     The private daemon log records one rejected handshake because the
+     token expired, at **06:24:18 UTC**; its token value is never read out
+     or persisted. This confirms an expired-token rejection, not that it
+     caused the reported 10-second timeout. The app's Test connection has
+     an independent 10-second deadline. The CTO is advised to sign out and
+     back in to obtain a fresh token, then retry. Current base URL/version,
+     retry time, fresh authenticated success and the desktop network path
+     remain unverified. No daemon/DNS restart or configuration change is
+     made. Metadata-only evidence:
+     `/root/r5-mail-owner-repair-20261004/ws-diagnosis-20261005.json`.
+     R5 remains active; this diagnostic does not close the signed-app gate.
+
+   - **Mario Gmail relogin returns 403 — 2026-10-05, VPS.**
+     After relogin, the CTO reports the app showing Mario Gmail's identity
+     while refusing the connection as a different remote owner. Mario
+     Gmail's own log records `token uid does not own this profile`, last
+     at **06:38:48 UTC** (two occurrences). No other tenant log records a
+     corresponding forbidden handshake. The flat socket link, active
+     Caddy matcher and UID-derived upstream all select Mario Gmail.
+
+     Its profile has one literal correct `OWNER_ID`, identical inside the
+     daemon namespace. The current PID 827152 started at 00:00:29 UTC;
+     startup logs confirm the correct profile and owner. Replaying its
+     installed startup env-loading code as the actual daemon user also
+     resolves that owner correctly, but this auxiliary check alone is not
+     live-process proof. A separate read-only live check at **06:51:25 UTC**
+     confirms the process's actual `OWNER_ID` and profile directory match
+     Mario Gmail. It reads only those two selected libc environment
+     values, without pausing/injecting into the process or reading token,
+     key, email or voice values. Initial ELF-address attempts fail safely;
+     the executable's absolute EXEC symbol resolves the successful check.
+     Metadata flags only are saved in
+     `/root/r5-mail-owner-repair-20261004/ws-owner-metadata-20261005.json`;
+     reproducible source: `/tmp/r5-runtime-owner-metadata.py`.
+
+     The verified token UID therefore disagrees with this correctly bound
+     backend; which client account supplied it, and why it differs from
+     the app's displayed identity, are not yet known. The app caches
+     handshake tokens per window in its main process; full app exit clears
+     that cache. The CTO is advised to quit with Cmd-Q and reopen Mario
+     Gmail, then repeat Test connection. Result/current app version are
+     pending. No owner, auth check, profile, unit or daemon is changed;
+     no token is extracted. R5 remains active.
+
+   - **Desktop auth session recovery — 2026-10-05, R5 follow-up.**
+     The CTO confirms Mario Gmail Test connection succeeds after full Cmd-Q
+     and reopen. This closes the immediate connection incident, not the
+     remaining signed-app mail/attachment/document journey. Source inspection
+     finds the main token cache survived signout, Remote/Test connection used
+     it without checking UID/expiry, and asynchronous renderer refreshes lacked
+     session-generation/current-user guards. These defects explain how a stale
+     client identity can survive relogin; the exact original sequence and the
+     incorrectly supplied token subject were not captured. The server's
+     verified-token owner check and correct tenant binding remain unchanged.
+
+     Repair: main signout clears credentials and cancels refresh requests even
+     offline, detaches the old transport, bounds its best-effort logout and
+     stops only that captured transport. Token subject, claimed UID, profile
+     and expiry must agree before use. Live Remote, Test connection and
+     provisioning share bounded/coalesced renderer refresh, with originating
+     window and current-binding checks. Renderer invalidates generation before
+     logout and discards late results, including same-account relogin; both
+     actual App token pushers propagate explicit refusal. New IPC replies carry
+     request ID/success only; no credentials are logged or newly persisted.
+
+     Verification: `node app/scripts/test-auth-renderer.mjs` passes 13 behavior
+     checks; `node app/scripts/test-auth-main.mjs` passes twelve. Tests execute
+     actual App/preload/auth modules and main IPC handlers with synthetic
+     credentials; actual WebSocket transport receives a local 401 followed by
+     a refreshed successful Test connection. They cover offline logout,
+     late refresh, subject/profile mismatch, near expiry, independent windows,
+     sender correlation, bounded cancellation, local-engine forwarding, and
+     logout/rebind/window-close during a delayed transport restart, retiring old
+     log polling/scrollback and suppressing old transport notifications.
+     App typecheck/build pass. Real Firebase and the installed patch's GUI
+     journey are not inferred from these fixtures. No live profile, daemon,
+     DNS, firewall, voice file or service checkout is modified. Repair work
+     trace: [reviewed brief](../briefs/2026-10-05-desktop-auth-session-recovery.md)
+     and [delivery plan](2026-10-05-desktop-auth-session-recovery.md).
+     Integration reviewer first returned REVISE for a delayed restart restoring
+     a logged-out profile; captured-entry/window guards and regression close
+     it, and rereview is APPROVED. One final reviewer returned REVISE because
+     detached log polling remained active; logout now clears it and scrollback,
+     replacement stops old polling, and retired transports cannot send events.
+     Actual IPC/tailer/window-close regressions pass; rereview is APPROVED.
+     Two fresh independent final source/readiness reviews (`desktop_auth_final_a`,
+     `desktop_auth_final_b`) are APPROVED. Source `6c827e6` and exact tag
+     `v0.1.53` are published after pull with rebase. Apple Silicon
+     [release 0.1.53](https://github.com/hahnbanach/mrcall-desktop/releases/tag/v0.1.53)
+     is published at **07:43:57 UTC**. CI 37278638471 succeeds: signing metadata
+     confirms Darwin distribution signing, credential validation succeeds,
+     un-notarized fallback is skipped, custom notarization submission occurs
+     and installer build/upload/release complete. The lock-pinned hook requires
+     Apple Accepted and app stapling before returning. Selected metadata only:
+     `/tmp/desktop-auth-release-metadata-20261005.json` (0600). Asset
+     `MrCall.Desktop-0.1.53-arm64.dmg`, 240724629 bytes, GitHub digest
+     `sha256:603f936dc4171f391adc77f15d3c72387d284ca20e161d6cb1abd18f5838edbe`.
+     Post-CI independent delivery reviews `desktop_auth_final_a` and
+     `desktop_auth_final_b` both return APPROVED; the auth repair delivery plan
+     is completed. Native macOS signature
+     inspection and the installed patch's GUI journey remain unverified on
+     this Linux VPS; the CTO must install 0.1.53, because existing 0.1.52 is
+     unpatched. R5 stays active for its separate acceptance criteria.
+
+   - **Signed-app retry: billing business missing — 2026-10-05.**
+     The CTO's Mario Gmail chat retry reports `MrCall billing HTTP 400
+     (business_id_required). Refused before any reservation.` A bounded
+     metadata-only journal check finds four matching `POST /quote` refusals
+     in the preceding two hours. The profile has no nonempty
+     `SMS_BUSINESS_ID`; installed checkout `776e3f4` already wires that
+     setting into the bounded client's `business_id` quote field. No request
+     content, credential, business identifier or mail content is recorded.
+
+     The refusal is before the client calls `reserve()`, so this attempt
+     creates no local reservation or paid execute request. This establishes
+     the missing billing-business selection for the current retry, not the
+     precise reason for every historical HTTP 400. The app's signed 0.1.53
+     Settings/LLM field is misleadingly labelled `SMS billing business`,
+     although the engine also uses it for MrCall LLM credits. The CTO must
+     choose the intended chargeable business from that authenticated picker,
+     save, and open a new chat to pick up the changed policy. No business is
+     guessed or assigned by the operator and no paid retry is made here.
+     R5's signed-app journey remains blocked at chat; no further attachment
+     or document-search success is claimed. This read-only diagnosis does
+     not modify a live profile, unit, key, firewall or service checkout.
+
+   - **Billing-business discovery repair — 2026-10-05, R5 follow-up.**
+     The CTO reports Searching followed by No business found. Source inspection
+     confirms that text discovery only filters companyName, although displayed
+     labels also use nickname and personal names; non-authentication errors are
+     incorrectly rendered as empty results. Initial list lookups appear in
+     daemon metadata, including a slow lookup, but no typed-filter request has
+     been correlated. These source defects do not prove the precise cause of
+     the CTO's particular attempt; app version/connection confirmation is pending.
+
+     The reviewed repair searches companyName, nickname, name and surname with
+     bounded role-scoped calls, preserves UUID/email routing, unions IDs, and
+     distinguishes timeout, authentication, transport and partial failures from
+     successful empty results. Only an explicit result click selects a billing
+     business; sole-result automatic selection is removed. A UI deadline and
+     one active raw batch prevent indefinite loading and overlapping retries.
+     Late account/transport responses are discarded. No live profile or billing
+     choice is changed. Source and delivery evidence is tracked in the
+     [picker repair plan](2026-10-05-business-picker-recovery.md); R5 remains
+     active for its real signed-app journey and scratch lifecycle criteria.
+     Source passes integration and two fresh independent final reviews; actual
+     picker/Settings browser checks, 14 renderer-auth checks, typecheck and build
+     pass. Signed/notarized Apple Silicon 0.1.54 is published from `0ab1bd7`
+     (CI 37289911832, source/tag match). Both independent post-CI reviewers
+     return APPROVED; the picker repair plan is completed. The CTO's installed
+     lookup remains pending; publishing the patch does not close R5.
+
+   - **Selected opaque business ID regression — 2026-10-05.**
+     Following 0.1.54 publication, the CTO reports selecting a listed business
+     and receiving a billing-eligibility warning. The app version is not
+     independently confirmed. Source identifies a matching 0.1.54 regression: the
+     selected non-UUID ID goes through name-discovery routing instead of an exact
+     businessId lookup. The duplicate ID in the trigger is label fallback plus
+     its metadata display, not a concatenated saved value. Settings Save already
+     validates by exact businessId; no successful save or chat is claimed here.
+     The previous browser fixture covered only UUID IDs and missed this case.
+
+     The [opaque-ID repair](2026-10-05-business-id-resolution.md) uses an explicit
+     exact-ID request for selected/saved values. Discovery and server scoping,
+     selection authority, serialization and cancellation remain unchanged.
+     Actual-picker regressions now include numeric and other opaque synthetic
+     IDs, selection, remount/reopen, exact Save validation, missing IDs and
+     failures. Browser checks, typecheck and build pass. No real business ID,
+     live configuration change or paid request is included; R5 stays active.
+     Source passes integration and two independent final reviews. Signed and
+     notarized Apple Silicon 0.1.55 is published from `cf642ef` (CI 37298416013,
+     source/tag aligned). Fresh delivery reviewers `opaque_id_delivery_a` and
+     `opaque_id_delivery_b` both return APPROVED; the repair plan is completed.
+     The CTO's installed-patch acceptance remains pending. R5 remains active.
+
+   - **Billing request path verified after Save — 2026-10-05, VPS.**
+     The CTO reports the same visible `business_id_required` before and after
+     Save. Metadata now distinguishes historical chat text from fresh billing
+     events. Before Save, the actual `[billing]` events are `POST /quote` 400
+     `business_id_required` at 14:51:15.739 and 14:51:24.821 UTC. The active
+     Mario Gmail profile receives `settings.update` at 14:53:01.082 UTC and its
+     file now contains a nonempty numeric billing ID. Host and daemon namespace
+     views see the same file inode. Neither the value nor message content is
+     recorded. An earlier read during this diagnosis preceded that save and
+     correctly found the field absent; it is not the post-save state.
+
+     After Save, the two actual billing refusals are `POST /execute` 402
+     `insufficient_credits` at 14:53:22.633 and 14:53:22.886 UTC. Occurrences of
+     the old 400 at 14:53:22.117/121 belong to chat.send history containing an
+     assistant response, not new billing logger events. Substring-only log
+     counts were misleading; the corrected diagnosis filters the billing
+     logger/method/path/status. The post-save requests reach the execute endpoint
+     after quote/local budget reservation; no continuing missing-ID refusal is
+     evidenced there. In the inspected billing source, 402 precedes server
+     admission and provider inference. Deployed billing-source equivalence is
+     not independently established by this check.
+
+     An offline intercepted probe runs the installed interpreter and factory
+     as the daemon user inside its mount/network namespaces. Installed checkout
+     is `776e3f4`. With a synthetic in-memory authentication object and HTTP
+     MockTransport, it reads the saved profile, constructs the actual LLM
+     factory and bounded client, and serializes a synthetic quote. Results:
+     saved ID present, client ID matches saved ID, serialized body contains
+     `business_id` and `request`, serialized ID matches saved ID, no network
+     used. This does not impersonate the user's authentication or run paid AI.
+     The real post-save 402 events independently establish the current server
+     refusal. The sibling billing route's quote/execute schema accepts this
+     top-level field and forwards it to its authorized-business resolver.
+
+     Read-only SQLite queries run as the daemon user: the two post-save proxy
+     reservations use `claude-opus-5`, maximum USD 0.154 and USD 2.937, both
+     unsettled; zero post-save llm_usage rows. These are local holds, not proof
+     of charges. No hold is manually released, no provider/budget/business is
+     changed, no daemon is restarted and the service checkout is unchanged.
+     The 402 establishes insufficient available credits for the requested
+     maximum, not a measured zero balance. Actual credit balance and the
+     installed UI's display of the latest response remain unverified. R5 stays
+     active. The CTO subsequently confirmed the selected business is FREE;
+     the inference that it needs funding was incorrect. The server must honor
+     its authoritative FREE status, as recorded below.
+     Independent verifier `billing_saved_path_verify`: PASS for the strict
+     billing events, daemon-user SQLite counts/amounts and route ordering.
+     Each actual billing event is duplicated at the same timestamp in the
+     journal; these are two post-save attempts, not four.
+
+   - **FREE business billing correction — 2026-10-05, R5 follow-up.**
+     The CTO confirms the selected business is FREE. The bounded billing server
+     previously discarded subscription status, always checked CALLCREDIT and
+     consumed credits. Thus the post-save 402 was a server defect for FREE,
+     not evidence that the operator should buy credits or change the business.
+     Backend hotfix `546cfb5`, based on deployed `a6d1dd58`, binds exact
+     server-authorized FREE status into the quote, rechecks it at execution,
+     skips balance/consumption, and settles zero credits/debit. Paid checks,
+     provider usage bounds and replay protection remain. Released Desktop v1
+     keeps a positive nominal ceiling and accepts the zero receipt.
+     Verification: 150 focused PostgreSQL/HTTP tests, full suite 1033 passed,
+     Ruff/Black passed. Actual synthetic endpoint output passes the installed
+     engine's quote/receipt validators as its Unix user. Integration and two
+     fresh independent final source reviewers all APPROVED. No tenant setting or
+     business plan changed; no real mail contents or voice values were read.
+     Live operator authentication cannot mint an accepted token with the
+     billing pod's configured signing key: Google does not publish that key
+     and returns INVALID_CUSTOM_TOKEN. No credentials changed. The planned
+     nominal USD0.01 smoke cap is also below the unchanged USD0.011 minimum.
+     No operator inference ran in that FREE check; synthetic tests do not close R5's real
+     signed-app mail/attachment/document journey.
+     **Delivered at 15:37 UTC:** backend main `45b20e4`; isolated production
+     hotfix `546cfb5` through successful
+     [pipeline 2914216277](https://gitlab.com/hahnbanach/mrcall-agent/-/pipelines/2914216277).
+     Actual image `prod-546cfb5f`, one updated/available ready replica,
+     zero restarts; public billing `/health` HTTP200. CI: 921 passed,
+     112 PostgreSQL-dependent skips (covered by the local full suite).
+     Main's unrelated model-table release was excluded.
+     **CTO live retry:** production ledger rows at 15:37:47.681 and
+     15:37:47.976 are both settled, model `claude-opus-5`, FREE, zero credits
+     and zero debit. The app then reports `MrCall response incomplete;
+     reservation retained`: its v1 decoder rejects incompatible response blocks
+     (unsupported type or malformed structure; exact kind not yet observed).
+     Response compatibility is a separate open defect; the FREE settlement
+     now has actual user-originated evidence. Both independent final delivery
+     reviewers APPROVED the FREE billing delivery; R5 remains active.
+
+   - **Released response compatibility — 2026-10-05, R5 follow-up.**
+     The CTO's `MrCall response incomplete; reservation retained` originates
+     in the installed v1 decoder, which rejects reasoning blocks. One synthetic
+     provider diagnostic confirmed Opus 5 returns `thinking` plus `text` by
+     default. Isolated backend hotfix `45812bd` disables that optional reasoning
+     for the observed model and validates direct Anthropic answer blocks before
+     debit. Reasoning plus tool_use refuses instead of losing signatures needed
+     by continuation; OpenRouter/K3 remains unchanged.
+     Verification: 182 focused HTTP/PostgreSQL tests, 1065 full-suite tests;
+     actual installed `BoundedProxyClient.execute`, `LLMResponse` projection,
+     quote and receipt checks accept real endpoint text/tool/continuation
+     fixtures at zero FREE debit. Provider metadata is projected exactly into
+     the paired-ID continuation. Two further synthetic provider diagnostics
+     confirmed a tool response without reasoning and a text continuation with
+     canonical synthetic history; that live continuation used an invented paired
+     ID, not the original live response ID. Three diagnostics total, USD0.627
+     nominal maximum, no customer credit consumption or real mail contents.
+     Main integration `895918a` preserves v2/catalog behavior; 299 focused
+     checks pass. Integration and two fresh independent final source reviews
+     APPROVED. Production
+     [pipeline 2914343565](https://gitlab.com/hahnbanach/mrcall-agent/-/pipelines/2914343565)
+     succeeded, deploying only `45812bd` atop the FREE fix. At 16:13 UTC,
+     actual image `prod-45812bd1` has one ready/updated/available replica,
+     zero restarts, public billing `/health` HTTP200. CI: 921 passed,
+     144 PostgreSQL-dependent skips covered by the local full run. The CTO
+     was asked for one signed-app retry after verified rollout; its result is
+     pending. Both independent final delivery reviewers APPROVED; one also
+     rechecked the live deployment and health endpoint.
+     Existing local holds remain untouched. The real signed-app journey and
+     parent R5 remain active.
+
+   - **Context admission diagnosis and repair — 2026-10-07, R5 follow-up.**
+     The CTO's real signed-app attempt reached Mario Gmail. Production billing
+     admissions at 08:18:21.433 and 08:18:30.110 UTC settled FREE with zero
+     credits; the subsequent quote at 08:18:38.716 returned HTTP400
+     `bounded_context_limit_exceeded`. Journal prompt estimates grew from
+     17,929 to 22,361 tokens, with seven then nine messages and 30 tools.
+     The daemon remained active as its own user with zero restarts.
+     Root cause: the billing gateway compared its conservative monetary input
+     allowance with the context window. Thirty tools add 122,880 units to that
+     allowance before counting any serialized input. This is not a provider
+     token count. Earlier billing/decoder fixtures did not establish that the
+     full real chat/tool-result continuation succeeded.
+     The production hotfix retains the monetary bound and obtains free Anthropic
+     token counting only for direct requests that would otherwise hit that
+     guard. Counted input plus 8,192 margin plus output must fit 200,000 tokens.
+     Counter failures refuse before admission; FREE, business authorization,
+     usage verification and replay remain enforced. OpenRouter/K3 is unchanged.
+     Two fresh independent source reviewers APPROVED. Installed engine
+     collection confirmed all 30 real tool schemas (20,671 serialized bytes)
+     and the 27,578-character base system prompt. Diagnostic and delivery
+     evidence below do not by themselves close R5.
+     **Verification:** 214 focused HTTP/provider-fixture/PostgreSQL checks
+     passed, including the seven-to-nine-message continuation. Ruff and Black
+     passed. The broad suite was interrupted under high host load after 1,061
+     passing tests (18 warnings, exit 2); it is not a completed suite pass.
+     The successful live diagnostic used installed engine response projection,
+     actual daemon-user ReadEmailTool and the provider's exact tool ID. Its
+     continuation was 123,701 UTF-8 bytes and 45,779 provider input tokens;
+     old admission refused, corrected admission allowed text/end_turn with
+     four output tokens. The 70,738-character tool result was not truncated.
+     Earlier history was invented and the final turn disabled further tools:
+     this validates the specific continuation, not a complete user journey.
+     Two unsuccessful probes remain recorded: a forced-tool response/refusal
+     plus raw block metadata, and an overly strict tool-only assertion on valid
+     text plus tool_use. A separate lookup timed out without inference. Four
+     inference requests total, USD12.419 aggregate nominal ceilings, no customer
+     credit consumption. No private mail content was written to artifacts.
+     Both independent reviewers APPROVED the source and evidence with these
+     limits. Isolated backend production commit `37f330d` extends `45812bd`;
+     [pipeline 2921422750](https://gitlab.com/hahnbanach/mrcall-agent/-/pipelines/2921422750)
+     succeeded in all four jobs. CI passed 940 tests with 157 PostgreSQL-dependent
+     skips (covered locally), 101 warnings, 111.48 seconds. At 10:31 UTC,
+     actual image `prod-37f330d0` had one ready/updated/available replica,
+     zero restarts and public health HTTP200. Installed pricing/context source
+     hashes match the checkout; image digest is
+     `sha256:e003f252bff70ba636e40b4caf132c56bf921e70f52643113f59d83de34a2079`.
+     Main integration `12cbc2c` preserves catalog/V1/V2 forwarding and snapshot
+     binding: 295 focused checks passed, repository Ruff/Black passed, two fresh
+     independent integration reviewers APPROVED. Main's unreleased catalog/v2
+     code is not part of this production rollout.
+     **CTO signed-app feedback:** the requested mail was found. The next steps
+     are downloading its attachment, opening it and searching its contents.
+     Those results are pending; R5 stays active. Existing local holds remain
+     untouched. The gateway experiment above is not substituted for app acceptance.
+     The operator explicitly suspended ai-kit for this correction while
+     repairing its installation. No running engine checkout was modified.
+
+   - **Attachment folder lookup repair — 2026-10-07, R5 follow-up.**
+     The CTO confirmed the same requested mail has an attachment. The local
+     row reports one attachment. A read-only IMAP probe as Mario Gmail's own
+     daemon user, inside its mount namespace, confirmed the matching Message-ID
+     and one `audio/mpeg` attachment, 58,449 decoded bytes. INBOX, All Mail and
+     Sent returned no match; searching the server's selectable folders found
+     it in the 32nd candidate (99 candidates listed). Folder names, mail text,
+     audio contents and credentials were not printed.
+     Root cause: attachment retrieval searched only those three usual folders
+     and returned `[]` when the message was not found. The tool called that a
+     successful empty download, allowing the assistant to falsely conclude
+     there were no attachments. The lead also wrongly accepted that conclusion
+     before checking; the user's attachment was real.
+     The fix keeps the fast usual-folder path, then searches the remaining
+     selectable folders. UID SEARCH/FETCH and exact fetched Message-ID checking
+     preserve identity; PEEK and read-only selection preserve read state.
+     Missing/incomplete lookup now fails explicitly instead of claiming an
+     empty message. Only an actually fetched message can report no attachments.
+     File-write errors propagate without being reinterpreted as lookup failure.
+     Two independent source reviewers APPROVED after a REVISE finding about
+     fetched identity was corrected. Regression checks: 42 passed, 45 warnings
+     in 7.54 seconds, including PEC, multi-mailbox and filename confinement.
+     A live diagnostic used the actual DownloadAttachmentTool and corrected
+     lookup as the daemon user, in hosted mode and the daemon's mount namespace.
+     It saved one 58,449-byte file under the profile's downloads test subfolder;
+     its bytes match the IMAP MIME payload by checksum. No LLM or credits were
+     involved. An earlier probe omitted hosted mode and was not accepted as a
+     confinement proof; the corrected hosted-mode run passed.
+     Delivery: only Mario Gmail was restarted with a read-only source release
+     `/home/mrcalld/releases/r5-attachments-ed0c8c9/engine`, selected by its
+     `90-attachment-source.conf` PYTHONPATH override. The running checkout was
+     not modified. The daemon is active as its own Unix user, `NRestarts=0`.
+     The installed-source verification (no in-memory lookup replacement) repeated
+     the actual hosted download: success, one 58,449-byte file, checksum matching
+     the IMAP payload, saved within the profile downloads directory. Two
+     independent delivery reviewers APPROVED. Evidence:
+     `attachment-installed.json` in the local metadata-only review artifacts.
+     The signed-app attachment retry remains pending; R5 is still active.
+
+   - **Attachment retry without execution — 2026-10-07, R5 follow-up.**
+     The signed-app retry still claimed no attachments. Metadata from Mario
+     Gmail's daemon shows the 16:12:51 UTC request restored 12 history messages,
+     completed at 16:12:58 UTC, and executed no tools. The process still uses
+     the reviewed attachment release and has `NRestarts=0`. The assistant's
+     claim that it had retried was false: it repeated the earlier failed lookup
+     from history. No mail body or call recording was read for this diagnosis.
+     The ordinary chat system prompt and attachment-tool description now require
+     a fresh download execution for each download/retry request. Earlier prose
+     or empty results cannot establish the current outcome; lookup errors cannot
+     establish absence. Tool selection remains automatic, and combined requests
+     can continue after downloading. Regression checks: 42 passed, 45 warnings
+     in 7.47 seconds; targeted fatal-error lint and diff checks passed.
+     The real deployed provider was tested with automatic tool selection and
+     10 stale history messages, including a previous empty tool result and false
+     assistant claims. It selected `download_attachment` for the correct stored
+     message. The installed LLMResponse projection and hosted attachment tool
+     ran as the daemon user: one 58,449-byte file inside profile downloads. The
+     actual second model response ended normally, contained the saved filename,
+     and did not repeat the absence claim. No mail body or audio was read.
+     Evidence: local metadata-only `attachment-chat-live.json`; this bypasses
+     the signed app and billing admission and is not signed-app acceptance.
+     Two earlier diagnostic continuations failed before dispatch because the
+     harness replayed raw provider blocks. Both failure artifacts are retained;
+     replay through the installed decoder corrected the harness without changing
+     billing or product code. Two independent reviewers APPROVED the source
+     and successful real-provider evidence. Delivery: Mario Gmail alone was
+     restarted onto read-only release `r5-attachments-86bf2f1`, retaining the
+     earlier IMAP fix. Its daemon is active under its own user, `NRestarts=0`.
+     The live process pin and all three relevant source hashes match the reviewed
+     code; importing in its mount namespace confirms the fresh-execution prompt
+     and tool description. A further installed-source download again saved one
+     58,449-byte file inside downloads with checksum matching the IMAP payload.
+     Evidence: `attachment-chat-delivery.json` and `attachment-installed.json`.
+     The signed-app retry remains pending; R5 remains active.
+
+   - **CTO signed-app acceptance — reported 2026-10-08, Mario Gmail.**
+     The CTO reports successful mail lookup/read, actual attachment download,
+     and a fresh document lookup by basename through `read_document` on the
+     same Remote profile. The audio download is 58,449 bytes; a separate PDF
+     download is 85,574 bytes and reads as two pages. The PDF is found by its
+     basename without supplying an absolute path. No mail text, call content,
+     invoice values, business identifiers or credentials are reproduced here.
+     The app version was not reconfirmed in this feedback. A metadata-only
+     daemon-log check records actual `download_attachment` success at
+     2026-10-08 08:16:40 UTC and `read_document` success at 08:16:50, 09:05:41
+     and 09:20:51 UTC. These are actual tool events; exact mapping of each
+     feedback message to a turn was not reconstructed. Metadata evidence:
+     `app-tool-metadata.json` under the local R5 harness-migration review folder.
+     Operator-reported installed-app evidence is distinct from the auxiliary
+     provider/tool diagnostics above.
+     The lead's intervening full-text-search request was outside the existing
+     document tool contract. `read_document` searches by filename; a folder-wide
+     content index is not exposed, and hosted `run_python` remains refused.
+     The signed-app mail/attachment/document sequence is accepted for Mario
+     Gmail. R5 remains active pending the representative scratch offboarding
+     lifecycle, consistent A/B isolation evidence for the accepted app profile,
+     and both independent final reviews. No live profile is deleted.
+
+   - **Criterion 7 code fix — 2026-10-08, cloud session.** Commit
+     `598cbd55`. A profile names its account twice
+     (`memory.mnemonic.authorization._current_owners`):
+     - chat, `tasks.solve` and correction learning write rules under
+       `EMAIL_ADDRESS` (`get_owner_id`);
+     - a memory tool whose session carries no owner falls back to
+       `settings.owner_id` = `OWNER_ID`, the Firebase uid
+       (`ToolConfig.from_settings`).
+
+     So the code can produce the uid-owned rules the 2026-10-04 fixture
+     seeded; whether any exist on the live stores is for the VPS to count,
+     by number only. `memory-offboard` removed only the email's rules, so
+     uid-owned rules outlived the profile. It now removes the rules of both identities
+     (`offboard.delete_account_rules`). A profile that names neither is
+     refused with exit 2, and the helper's `delete` stops with nothing
+     deleted. The tests cover both identities, another account's rules
+     kept, the company fact kept, and the refusal.
+
+     *To close R5 (VPS):*
+     1. Pull `main` and reconcile, so the checkout the helper calls carries
+        the fix.
+     2. Re-run the scratch lifecycle of 2026-10-04, seeding each scratch
+        holder with one rule under its email, one under its uid, and one
+        company fact.
+        - Deleting the first holder must remove exactly its two rules and
+          keep the fact and the other holder's rules.
+        - Deleting the last holder must remove the store and the group.
+        - No file, user or key of either uid may remain.
+     3. Re-check criteria 1, 2, 5 and 6 with A = Mario Gmail (the accepted
+        signed-app profile) and B = a profile of another company
+        (support@), so that one A carries the whole evidence set.
+     4. Two independent final reviews, then `status: completed`.
+
+     The review of `598cbd55` came back **APPROVED**, with an end-to-end CLI
+     run on a scratch home. The cheap findings are fixed in `fe569a85`:
+     - identities must be a collection, not one string;
+     - a blank identity or a stand-in (`local-user`, `owner_default`) is
+       refused with exit 2;
+     - tests now cover a uid-only profile, a refusal that deletes nothing,
+       and last-holder with two identities.
+
+     Two findings were already true before this change. They are open and
+     do not block R5:
+     - **Shared or spoofed email.** `EMAIL_ADDRESS` is user-settable
+       (`settings.update`, the provisiond body). If two holders of one
+       store name the same email, offboarding either removes the rules
+       under that email. Follow-up: the helper (root, which can read every
+       holder's `.env`) skips an identity another holder names.
+     - **Store backups.** Migration backups under `<storedir>/backups/*.bak`
+       (`storage/migrations.py`) keep a non-last holder's rule rows until
+       the last holder removes the store directory. Criterion 7's
+       ownership-absence check must say so, not claim them gone.
+
+   - **Criterion 7 VPS recheck — 2026-10-08: FAIL; R5 remains active.**
+     Main `2a42cda` includes the dual-identity fix. The authorized reconcile
+     ran at 15:55 UTC; its wrapper reports `Result=success` and
+     `ExecMainStatus=0`, and the service checkout is `2a42cda`. Installed helper
+     comparison is identical (`cmp -s` exit 0; SHA-256
+     `b5e95bf5f361723dc0429436c1b0be47983d763e37bd8d06ff5d3fbe09b90f10`).
+     Wrapper success does **not** establish successful reapplication: Ivan,
+     Riccardo, support, Mario MrCall, Café124 and production each returned
+     helper exit 2, `applied drop-in sorts after tenant.conf`, because their
+     `zz-assignment-release.conf` sorts after the generated drop-in.
+     Those six units and their release pins were left untouched. A later
+     timer invocation's success does not erase these refusals.
+
+     The actual helper/CLI lifecycle at 16:00:16–16:01:27 UTC used two new
+     scratch profiles, their own Unix users and an independent company store;
+     both scratch daemons had private networking and zero restarts. Each
+     fixture contained exactly one email-owned rule, one UID-owned rule and
+     one company fact. Live database reads ran as a tenant, never root.
+
+     | Stage | First holder rules / facts | Other holder rules / facts | Total rows |
+     |---|---|---|---|
+     | Before deletion | 2 / 1 | 2 / 1 | 6 |
+     | After first deletion | 0 / 1 | 2 / 1 | 4 |
+
+     The dual-identity deletion is effective, but criterion 7 still fails:
+     after the first deletion the live company database, WAL and SHM belong
+     to the deleted numeric UID. The helper removes the Unix user without
+     transferring ownership of the surviving company files. Group access is
+     not proof of ownership absence. This is outside the accepted backup
+     exception. One migration backup remained after first deletion; its
+     historical rows were not scrubbed or claimed absent. Cleanup deleted
+     the last scratch holder and removed the entire company directory,
+     including that backup. Both scratch profiles, users, keys and generated
+     artifacts are absent in the checked helper roots; their company group
+     is checked separately below. All seven real daemon PIDs, profile/key/store
+     metadata and the tenant table remained unchanged throughout this cycle.
+     Missing-key actual scratch `serve` refused startup with exit 3.
+
+     Fresh criteria 1, 2, 5 and 6 at 16:00:07–16:00:43 UTC use the accepted
+     app profile A = Mario Gmail and B = support, with distinct company
+     stores, actual daemon namespaces and owning Unix identities:
+     - Absolute cross-profile reads, environment globs and OS reads fail;
+       B cannot find A's synthetic document or open/list A's company store.
+       `DOCUMENT_PATHS` and `DOWNLOADS_DIR` overrides are ignored in auxiliary
+       process memory, and `settings.get` reports both ignored. No live
+       settings update was performed; the earlier RPC-update acceptance is
+       retained separately.
+     - Six locally constructed MIME attachments are confined by basename,
+       including `.env`; four external download targets are refused. A's
+       profile environment is unchanged; checkout and sibling writes fail.
+       Synthetic fixtures were removed. Both hosted `run_python` paths refuse.
+     - Seven distinct root-owned `0400` keyfiles; seven OAuth rows and 21
+       encrypted values checked as their own tenants, zero decrypt failures.
+       Ivan and Riccardo have zero OAuth rows. A cannot read B's key.
+     - The controlled local DNS negative returns NXDOMAIN with one journal
+       record; the TEST-NET TCP negative is refused with one scoped kernel
+       record. Thirty installed firewall sets are readable; resolver binding
+       matches. All seven real daemons are active as their own users with
+       `NRestarts=0`, unchanged probe-window PIDs and environment files.
+       No paid calls, mail sends or new installed-GUI acceptance are claimed.
+
+     Read-only live rule counts (UID owner / email owner; no contents read or
+     rows deleted):
+
+     | Profile | UID-owned rules | Email-owned rules |
+     |---|---|---|
+     | Ivan | 0 | 0 |
+     | Riccardo | 0 | 0 |
+     | support | 0 | 10 |
+     | Mario MrCall | 0 | 0 |
+     | Café124 | 0 | 0 |
+     | Mario Gmail | 0 | 4 |
+     | production | 0 | 0 |
+
+     Root-only evidence: `/root/r5-final-20261008/` contains
+     `scratch-offboard.json`, both scratch scripts and private helper logs,
+     `host-probes.json`, `host-report.txt`, `host-reconcile-diagnosis.json`
+     and cleanup ownership audits. The preliminary safety review APPROVED
+     only execution of the guarded scratch harness, not R5 acceptance.
+     The final namespace audit confirms zero remaining scratch users, keys,
+     profile directories, unit drop-in directories, company groups or company
+     directories. Separate `/run` and `/dev` ownership scans exit 0 with zero
+     files. The first broader audit incorrectly assumed numeric GID = UID;
+     its 12-file result is invalid evidence, not a scratch-residual finding.
+     Actual daemon journal `_UID`/`_GID` pairs differ and are retained privately.
+     Corrected scans of the physical root filesystem and separate `/run`
+     and `/dev` mounts each exit 0 with zero owned files and zero traversal
+     errors (`scratch-corrected-owner-audit.json`). Mount inventory reports
+     no other physical filesystem mounts. The entire scratch company
+     directory, including its migration backup, is absent after final cleanup.
+     No unrelated files were deleted. This audit correction does not affect
+     the first-delete assertion, which used actual passwd identities and
+     checked file UID ownership directly.
+
+     **Independent final reviews: REVISE / REVISE.** Fresh reviewers
+     `r5_final_20261008_a` and `r5_final_20261008_b` independently confirmed
+     the live-store ownership failure, correct dual-identity row removal and
+     final fixture cleanup. Review B also confirms the six helper refusals.
+     Their reports are retained in the local review folder
+     `/home/mal/.cache/mrcall-review/r5-final-20261008/` as `final-a.txt` and
+     `final-b.txt`. At those reviews the completion checker also reported
+     `critic: missing`; a documentation review cannot override the runtime
+     acceptance failures.
+     Neither review approves R5. `status: active` is preserved, and the
+     baseline is not advanced over the failed acceptance. Required follow-up:
+     repair surviving-company file ownership and the release-pin/helper
+     incompatibility, then repeat the representative lifecycle and final
+     reviews. No live profile or refused unit was modified to force a pass.
+
+   - **Repair of both blockers — 2026-10-08, cloud session.**
+     - *Surviving company files.* Before removing the user,
+       `mrcall-tenant delete` hands to `root:<that directory's group>`
+       every file the user owns in any company directory. Two reasons:
+       - a holder that changed company or stopped mid-join leaves files
+         outside its current key's directory;
+       - files of no existing user (an earlier delete, a manual `userdel`)
+         are orphans already.
+
+       How it does it:
+       - `find -xdev -ignore_readdir_race … -execdir chown -h`. A member who
+         swaps an entry for a link moves only the link.
+       - Modes are left as they are. There is deliberately no `chmod`,
+         because it follows links.
+       - A member's SQLite may remove its `-wal`/`-shm` mid-pass. So the
+         chown pass may fail on a vanished name, and only the re-check
+         decides, after up to three tries. If anything is left, `delete`
+         stops before removing anything.
+
+       `delete` also removes the tenant's egress units, nftables table and
+       `/etc/mrcalld/egress/<user>`. They are keyed on the numeric uid and
+       would bind a later user given it.
+
+       Checked here with real users and groups:
+       - the leaver's store, `-wal`, `-shm`, `backups/` and a link become
+         root-owned with their modes kept (`0660`, `2770` with setgid);
+       - another member's file is untouched, and the link's target is not
+         followed;
+       - a second company directory and an orphan of a deleted user are
+         handed too;
+       - after the leaver's user is deleted, the remaining member writes to
+         the `0660` WAL store twice. It also recovers the leaver's committed
+         row from the WAL left behind.
+
+       With a `0640` store the remaining member gets `readonly database`
+       whatever the owner. That is the existing group-write precondition
+       (`0660`, recorded for the live stores), not this change.
+     - *Release pins after `tenant.conf`.* The helper keeps its rule. Its
+       refusal now names the file and the fix: `t0-<name>.conf` sorts after
+       every other operator drop-in and before `tenant.conf`. The
+       reconcile no longer hides a refusal: it exits 3 naming the refused
+       profiles, so `zylch-reconcile.service` ends `ActiveState=failed`,
+       `Result=exit-code`, `ExecMainStatus=3`, and `reconcile-notify` mails
+       `exit=3`. Documented in `docs/remote-backend.md`. Plans that require
+       `Result=success` of a reconcile, such as
+       `2026-10-04-r5-mail-owner-cleanup.md`, therefore need the six pins
+       renamed first.
+     - *Review.* The first review returned REVISE on wording, the
+       vanished-WAL race, single-directory scope and egress leftovers. All
+       four are fixed above.
+
+     *VPS, to close R5:*
+     1. For each of the six units, record:
+        - the keys of `zz-assignment-release.conf` (expected: `[Service]`
+          and `Environment=PYTHONPATH=…` only; anything else, stop and
+          report);
+        - the sorted effective `Environment`, `ExecStart`, `User`,
+          `ProtectHome`, `EnvironmentFiles` and `BindReadOnlyPaths`, as
+          hashes.
+     2. Rename each file to `t0-assignment-release.conf` in the same
+        directory and run `daemon-reload`. The same hashes must be
+        identical (PYTHONPATH keeps its value because `tenant.conf` does
+        not set it).
+     3. Pull `main` and reconcile: exit 0, seven `ready`.
+     4. Repeat the scratch lifecycle:
+        - after the first deletion, no file under any company directory
+          belongs to the deleted uid or to no user, and no egress unit,
+          table or directory of its tag is left (give one scratch holder
+          an egress policy first, so this is exercised);
+        - the remaining scratch holder then commits a write to the store,
+          as its own user;
+        - the last deletion removes everything.
+     5. Two fresh final reviews, then `status: completed`.
+
+     The assignment workstream names future pins `t0-…`, not `zz-…`.
+
+   - **Open after this plan, not part of it:**
+     - one handset whose speech the voice provider does not transcribe
+       (voice path, not the host; 2026-10-03 diagnosis above);
+     - the shared key still loaded by the template and provisiond
+       (R3: kept);
+     - the brief's parked items.
+
+R1, R2 and R4 are independent of each other. R3 waits for R1, and R5
+waits for all of them.
+
 ## Facts the brief does not state
 
 - There is no serve flag: `zylch serve` (`engine/zylch/cli/main.py:434`)
@@ -630,10 +2046,12 @@ Café124 trees; `create` refuses a PYTHONPATH its tenant cannot read —
 second pass PIN-1/2), and every pin names the real path of its tree: no
 symbolic link, no `..`, set with `Environment=PYTHONPATH=` in a drop-in,
 no trailing slash, never through an `EnvironmentFile` (`create` refuses
-each — post-gate record). **production@ requires a helper extension before
-its 2b:** its own `ExecStart` also starts voice with `--voice-config`,
-which the helper's command omits. The live command and configuration
-requirements are recorded in [the VPS preflight](#m2-record--vps-preflight-and-proposed-café124-window-2026-10-02).
+each — post-gate record). **production@ is migrated through an operator
+declaration**, not by editing its drop-ins: its own `ExecStart` also
+starts voice with `--voice-config`, which the standard command omits.
+The live command is in [the VPS preflight](#m2-record--vps-preflight-and-proposed-café124-window-2026-10-02);
+the declaration, what the scratch VM proved of it and the steps added to
+its 2b are in the [tenant-exec probe](#m2-record--tenant-exec-probe-2026-10-02).
 Re-read `systemctl cat zylch-server@<uid>` before its 2b.
 
 *2a, per company, one window (Café124: its four daemons):*
@@ -661,7 +2079,12 @@ unstore <uid>` (it does not take the lock itself); start all; release the
 lock; `memory-names` shows `legacy`. Afterwards `mrcall-tenant orphans` (listing
 only) and, once the backup window has passed, `--archive`.
 
-*2b, per profile U, one per day, after its company's 2a:* steps 1–6 of the
+*2b, per profile U, after its company's 2a (one per day as planned;
+the [CTO decision](#m2-decision--compressed-rollout-2026-10-02-cto) puts
+them in one window, each accepted before the next; what the helper of
+`0dc122d` additionally refuses for any unit, and the drop-in check before
+each 2b, are under "For every 2b" in the
+[tenant-exec probe](#m2-record--tenant-exec-probe-2026-10-02)):* steps 1–6 of the
 list above, unchanged (the step 0 check as above). Step 7, exactly:
 - `systemctl start zylch-server@U`; release the lock;
 - `systemctl is-active zylch-server@U` and `journalctl -u
@@ -912,7 +2335,9 @@ keeps its pid (REV-1, DEP-5, FINAL-6).
 
 - *Before 2b of a pinned profile:* `systemctl cat zylch-server@U`. The pin
   is one `Environment=PYTHONPATH=<real path of the tree>/engine` line in a
-  drop-in; anything else `create` refuses and says why.
+  drop-in; anything else `create` refuses and says why — except for a
+  unit with a declaration in `/etc/mrcalld/tenant-exec/<uid>`
+  ([tenant-exec probe](#m2-record--tenant-exec-probe-2026-10-02)).
 - *2b step 7, for a pinned profile:* the process's `PYTHONPATH` (`tr '\0'
   '\n' < /proc/<pid>/environ`) is the release **and** `nsenter -t <pid>
   -m -- test -e <PYTHONPATH>/zylch/__init__.py` succeeds — the tree
@@ -925,7 +2350,9 @@ keeps its pid (REV-1, DEP-5, FINAL-6).
 
 **Open.**
 
-- **production@ cannot be migrated with this helper.** Its drop-in sets
+- **production@ cannot be migrated with this helper** (`267e365`;
+  superseded by the declaration of the [tenant-exec probe](#m2-record--tenant-exec-probe-2026-10-02)).
+  Its drop-in sets
   `ExecStart` to a path under `releases`, and `create` refuses any
   `ExecStart` outside `tenant.conf`. On the scratch VM a unit whose own
   `ExecStart` was the standard command line migrated once those lines
@@ -957,13 +2384,16 @@ keeps its pid (REV-1, DEP-5, FINAL-6).
 - Not exercised on the committed final helper: the effective-`ExecStart`
   backstop (by no probe at all); a `zylch/__init__.py` that is itself a
   link; the production@-like forward path and rollback (PROD-1..4 ran on
-  the REV-0 build; on `267e365` only its refusal, FINAL-5); a start of
+  the REV-0 build; on `267e365` only its refusal, FINAL-5 — since
+  exercised through the declaration, tenant-exec probe TE-F1, TE-RB,
+  TE-F4); a start of
   the template unit after a stopped first migration (FINAL-5 shows the
   leftovers gone and `User=mrcalld`, not a bind).
 - `docs/remote-backend.md` on main (mnemonic upgrade, "the per-unit pin")
   proposes a second checkout with its own venv selected by a drop-in that
   resets `ExecStart=`. A unit pinned that way is refused by `create`, like
-  production@: pin by `PYTHONPATH`, or extend the helper first.
+  production@: pin by `PYTHONPATH`, or declare its interpreter
+  (tenant-exec probe).
 - The scratch VM's root disk is at 97 % (the 4 GB swap file): clear space
   before the next session there.
 
@@ -995,7 +2425,8 @@ brief and plan are the work trace for this follow-up. Secret-free probe
 output is in `/tmp/mrcall-ai-kit/sandbox-preflight/` on the VPS; tokens,
 credentials and the memory capability key are excluded.
 
-**production@ command classification — helper extension required.**
+**production@ command classification — helper extension required**
+(since written and probed: [tenant-exec probe](#m2-record--tenant-exec-probe-2026-10-02)).
 `systemctl cat zylch-server@Gn9IcuWzYyY7DBMHkVUGB7bIiTp2` and
 `systemctl show … -p ExecStart -p EnvironmentFiles -p DropInPaths`
 show three operator drop-ins: `90-daily-budget.conf`,
@@ -1172,7 +2603,10 @@ before start, and rollback by `unstore` / `unmigrate`.
 
 1. **Bootstrap now, not at midnight.** Once `main` carries the bootstrap
    stub (`engine/scripts/logrotate.d/mrcalld`, commit `b6d098f`) and the
-   tenant-exec fixes (`5ee01d4`), the VPS operator runs
+   tenant-exec fixes (`5ee01d4`: the bootstrap ran from `499ca09` with
+   that helper — VPS rollout record below; `0dc122d` reaches the host
+   with the first reconcile after the tenant-exec record is on main),
+   the VPS operator runs
    `systemctl start zylch-reconcile.service` twice. That is the timer's
    own path, and it takes the reconcile lock. The first run is the old
    on-disk updater, which the stub lets succeed; the second is the new
@@ -1281,7 +2715,1981 @@ the corrected scratch runner and re-establish bootstrap acceptance
 before proceeding in the same authorized order. This record does not
 claim completion of M2 or waive the first-anomaly stop rule.
 
+#### Resume from `aa57697`, clarified stop rule (2026-10-02)
+
+The CTO authorized resuming the same compressed window, now including
+production's final 2b. The stop rule distinguishes a broken operator check
+(import, arguments, parsing) from a real host/daemon/store/app anomaly:
+repair and repeat the same check for the former; stop with the prescribed
+company/profile rollback for the latter. The earlier attempt remains
+historical above. No production test call is authorized; voice acceptance
+uses `calls_available`.
+
+**Bootstrap, 13:53 UTC.** The corrected guarded runner was installed
+under `/root/m2-rollout-20261002/`; its original failed copy was retained.
+Exactly one further reconcile pulled the service checkout to `aa57697`
+and restarted the seven unmigrated daemons. `Result=success`,
+`ExecMainStatus=0`; both the unit and tagged `zylch-reconcile` journal
+show updater exit 0 and seven profiles, `code_changed=1`. Installed helper
+SHA256 is `a90d1bc081978c4716d20d3ecd1f6cd7f5caa78d78283843ae21647e6c2a9eae`,
+matching the checkout, with silent `cmp`. Generated explicit log paths,
+both logrotate debug checks, seven active `mrcalld` units and empty tenant
+list passed. Authenticated provisiond status GET passed on the Unix socket
+and public HTTPS (200, `active`); unauthenticated GETs returned 401.
+Tokens stayed in memory. Production's ledger had ten closed and zero
+unresolved calls; local/public health returned 200 with
+`calls_available=true`, unsigned callbacks 401/401/400.
+
+The first immediate post-restart health request raced listener startup.
+The check gained a bounded readiness wait; the same health/ledger/callback
+check passed without another reconcile. This was not recorded as a daemon
+failure or used to waive a persistently unavailable listener.
+
+**K3, 13:57–13:58 UTC.** The `90-daily-budget.conf` PYTHONPATH drop-ins of
+`C06xHKoRcfdz94FaLPKuJuo0xVo1`, `YZNI2ZLDjFOxcvF0zmptW3vRZxV2` and
+`ZwpLepFDghWhQEBO4WJRIFcEr7p1` were moved intact into root-only
+`/root/k3-pins-backup/<uid>/`, never deleted. After daemon reload and each
+restart: active `mrcalld`, `NRestarts=0`, live `/proc` command from the
+checkout, no release PYTHONPATH, same-environment `zylch.__file__` from
+`/home/mrcalld/mrcall-desktop/engine/zylch/__init__.py`, no startup errors.
+Backup hashes match the original files. Production retained its three
+drop-ins and `mrcall-voice-cafe124-phone-md-5ebe3fa` pin. Its exact-source,
+AST-extracted path functions were probed with synthetic files under its
+actual interpreter: derived present resolves to derived in serving mode;
+legacy is used only when derived is absent. Its `home.py` exists.
+
+**Authenticated-client prerequisite.** The actual app
+`WebSocketRpcClient`, transpiled from repository source, made two real
+Firebase-authenticated opens with a forced reconnect and successful mail
+and `memory.status` reads for support, Mario, production, Hxi… and x59….
+This is headless app transport evidence, not a renderer/GUI observation.
+YZNI… and Zwp… have no local/server descriptor or stored Firebase row:
+read-only queries as their daemon identity found zero OAuth rows. Their
+daemons and memory are healthy; no authenticated request was attempted or
+rejected. The initial checker label `HOST/APP ANOMALY` overstated this
+missing-evidence condition and was corrected. The CTO subsequently
+excluded Riccardo (`YZNI…`) and Ivan (`Zwp…`) from 2b for now. All-company
+2a was still accepted with memory checks as the daemon identity; their
+identity remains `mrcalld`. Production stays last among the selected profiles.
+
+**2a, 14:07–14:08 UTC.** All four companies were relocated under the root
+process's inherited fd 9 on `reconcile.lock`. Each company's full holder
+set was stopped before the root-only backup, ownership record and
+no-open-store-descriptor check. The maintenance CLI ran as `mrcalld`
+with umask 007, then the installed helper's `store`, then all holders
+restarted. The resulting company groups are:
+
+| Company group | Holders | Accepted UTC |
+|---|---|---|
+| `mc-c-556508c0bf3f` | `9nXeYF8OXPetUFsSP4zDC3F2i673` | 14:07:20 |
+| `mc-c-6bf6c0996296` | `x59G6SnymAN2lkFny0JDGJgdFz33` | 14:07:32 |
+| `mc-c-ca1cdaf60f12` | `HxiZhWEBoRUarPzqX8eRWP21FuJ3` | 14:07:50 |
+| `mc-c-7aaa48b3ef85` (Café124) | C06…, Gn9… (production), YZNI…, Zwp… | 14:08:17 |
+
+Café124's four holders were stopped together at 14:07:51 UTC, including
+production; its acceptance finished within the ten-minute decision limit.
+All seven resolved the derived name and reported memory available; legacy
+stores were absent. Database/WAL/SHM files have their company group and
+0660 mode. Actual app-client mail/memory checks passed for the five
+credentialed profiles. Production's original drop-in hashes, pinned
+release, ten-closed/zero-unresolved ledger and local/public health/auth
+baseline remain unchanged.
+
+The first support-store attempt at 14:04 UTC was unnecessarily rolled
+back because the check searched for `available: True` instead of parsing
+CLI whitespace (`available:    True`). Its actual memory and app checks
+were healthy. The parser was corrected, the same status check passed,
+and 2a was repeated from the verified legacy state with a separate backup;
+all four company acceptances above then passed. Original and retry backups
+are retained. No key or legacy capability-bearing filename was printed.
+
+Root-only resumed evidence is in
+`/root/m2-rollout-20261002/resume-rollout.log`; runners and per-company
+`/root/backup-2a-<group>-20261002-resume-retry1/` backups are retained.
+The narrow reviewed resume brief/plan are under
+`/tmp/mrcall-ai-kit/sandbox-resume/`. Independent 2a review also compared
+SQLite integrity and backup counts: all four copies/live stores are valid;
+Café124's stopped backup already held 1,468 blobs, matching immediate
+acceptance. Subsequent automatic consolidation removed 19 live rows with
+19 committed operations, aliases to live keepers and preserved original
+content in `blob_versions`; that change was not relocation loss.
+
+**First 2b attempt: support, 14:14 UTC.** The embedding cache was warmed
+as `mrcalld` (dimension 384) and checkout readability passed. Under fd 9,
+`9nXeYF8OXPetUFsSP4zDC3F2i673` was stopped and backed up root-only;
+first `create` made its tenant/key/drop-in. Root `rekey --verify` exited
+2 after rewriting two rows, reporting seven Google Calendar inner-field
+failures (`access_token`, `refresh_token`, `scope`, `expires_in`,
+`token_type`, `email`, `id_token`). The inverse rekey also exited 2 on
+those fields. With that UID still stopped, the original database and
+its recorded WAL/SHM were restored from the pre-create archive, failed
+versions retained root-only, and `unmigrate` was run for that UID only.
+Its original profile-directory mode was restored. It returned active as
+`mrcalld`, with successful authenticated app mail/memory reconnect and
+zero new startup error lines. No other profile entered 2b; all four
+company stores remain derived and the helper table returned empty.
+Production retained its pin and healthy voice baseline. The new tenant
+user/key remain, as the helper's rollback contract permits.
+
+**Repair decision after recovery.** The CTO asked to fix the blocker and
+continue, rather than end the work at rollback. Read-only independent
+verification proved recovery credentials byte-identical to the original
+backup. Both the original Google Calendar outer JSON and its seven
+`encrypted:`-tagged payloads were plaintext; none was Fernet-shaped.
+The old source key matched the shared host key (boolean comparison only).
+The legacy credential writer prefixes `encrypt()` even when local
+no-key encryption returns plaintext; the current reader supports that
+encoding, but the rekey walker incorrectly assumes every tagged payload
+is Fernet. Wrong-key/corrupt ciphertext must continue to fail.
+
+The reviewed repair brief/plan under the same scratch directory add a
+minimal rekey compatibility fix, regression and backup-copy forward/
+verify/idempotence/reverse proof before deployment. Support is retried
+first, then the remaining selected ordinary profiles, production last
+through the exact tenant-exec runbook. Ivan and Riccardo remain excluded.
+Results of that repair and continuation follow here.
+
+**Published repair and resumed 2b.** Commit `926ef84` adds the narrow
+legacy tagged-plaintext compatibility path. Fernet-shaped payloads that
+cannot decrypt still fail, including truncated ciphertext; verification
+is unchanged. The focused suite passed 15 tests and the complete storage
+suite passed 131 tests. A disposable copy of support's original backup
+passed forward rekey (two rows, zero failures), verify, idempotence,
+reverse rekey and verify, with decoded credentials preserved. Fresh
+milestone and separate final repair reviews approved it before push and
+deployment. The service checkout was pulled to `926ef84` under fd 9;
+the helper still matches silently. That CLI-only deployment did not run
+another reconcile or restart daemons.
+
+The revised runner now tests all credential rows, read-only as the
+current daemon identity, through the corrected pure rekey walker before
+stopping a profile. Each selected ordinary 2b retains its own root-only
+`/root/backup-2b-<uid>-20261002-repaired/` archive and old key. The sequence
+is first `create`, root forward rekey with verification, verify-only,
+second `create`, start and acceptance, all under root fd 9. Accepted
+profiles stay migrated while the next is processed. The rollback window
+and backups remain open.
+
+| Ordinary profile | Accepted UTC | Daemon identity | Rekey verification |
+|---|---|---|---|
+| support@, `9nXeYF8OXPetUFsSP4zDC3F2i673` | 14:29:35 | `mc-16d5836d57be` | 2 rows, zero failures, twice |
+| Mario Café124, `C06xHKoRcfdz94FaLPKuJuo0xVo1` | 14:34:06 | `mc-b75843f3770f` | 1 row, zero failures, twice |
+| Mario Gmail, `HxiZhWEBoRUarPzqX8eRWP21FuJ3` | 14:42:34 | `mc-0c008879b605` | 2 rows, zero failures, twice |
+| Mario MrCall, `x59G6SnymAN2lkFny0JDGJgdFz33` | 14:45:31 | `mc-fd58d04802f1` | 1 row, zero failures, twice |
+
+For these acceptances the actual authenticated app transport opened twice
+with a forced reconnect; both mail and memory RPCs succeeded. Each tenant
+also passed `memory-status`, refusal of another profile's environment/key,
+profile ownership, company-store sidecar permissions, unchanged operator
+drop-ins and zero new startup error lines. Each of the three singleton
+companies has no remaining `mrcalld` holder, so that user's membership in
+its company group was removed after acceptance review. Café124 retains `mrcalld` membership
+for the excluded Ivan/Riccardo daemons. The GUI was not exercised.
+
+**Production, exact tenant-exec runbook.** Fresh preparation review caught
+and repaired errors in the acceptance runner before deployment: operational
+voice/filesystem failures now enter recovery; stop and backup preparation
+are protected; all post-start subprocess and HTTP operations share a
+270-second deadline, leaving 30 seconds before the five-minute decision
+boundary. Read-only company inventory happens before the stop. These
+were check-script defects, not host failures.
+
+The required release credential scan covered 8.7 GB of preserved releases.
+An initial 180-second probe budget was too short; the same ASCII patterns
+were rerun with the C locale and a longer pre-stop budget. The complete
+`grep -rIlE` returned 0 with 68 filenames, comprising 12 distinct file
+contents. Every hit was opened privately: synthetic test fixtures, PEM
+format markers/comments, public case/license identifiers, a documentation
+placeholder and a package checksum; none was a credential. The five
+`find ... -name '.env*' ! -name '.env.example'` hits were identical public
+`.env.example.j2` templates with empty or unexpanded secret fields. Exact
+full-content hashes and classifications are root-only under `/root/prod-2b/`.
+The initial classifier's refusal of public test fixtures was corrected;
+classification resumed from the fresh, complete root-only scan evidence,
+checking every hit again against its approved content hash. Unknown or
+changed matching content is refused. A separate preparation review approved
+the classification before `chmod -R go=rX /home/mrcalld/releases`.
+
+Pre-checks 1–6 passed, recorded from **15:02:05 UTC**, before the declaration:
+
+- Helper SHA and silent checkout comparison passed; systemd 255 prints
+  the expected one-environment-file-per-line format.
+- Root-only `/root/prod-2b/` holds the original unit/show, all three
+  operator drop-ins and hashes, profile mode `0770`, and environment
+  **names**. Effective original files are exactly the shared file and
+  `/etc/mrcalld/voice-cafe124.env`; all drop-in paths/order passed.
+- Absolute voice executable:
+  `/home/mrcalld/releases/mrcall-voice-cafe124-phone-md-5ebe3fa/venv/bin/zylch`.
+  Its shebang and complete interpreter chain passed. The real release has
+  `home.py` and its exact extracted path functions choose the derived store
+  when present, with legacy fallback. No real SQLite store was opened by
+  that root path probe.
+- Voice file root-owned, regular and not a link; CR, trailing-backslash,
+  off-allowlist and odd-quote counts zero. `grep -vE` used the helper's
+  actual `VOICE_ALLOWED` pattern; no nonmatching variable name existed.
+  `/etc/mrcalld` is `0755`, so `o+x` was already present.
+- Read-only ledger as `mrcalld`: ten closed calls, zero unresolved.
+  Local/public health 200, `calls_available=true`; unsigned answer/event/live
+  401/401/400 on both paths. Last company-notes preparation status:
+  `supported`, with company knowledge enabled.
+
+The exact two bare declaration lines were then written `0600 root:root`
+to `/etc/mrcalld/tenant-exec/Gn9IcuWzYyY7DBMHkVUGB7bIiTp2`:
+the absolute `INTERPRETER` above and
+`VOICE_CONFIG=/etc/mrcalld/voice-cafe124.env`. Operator drop-ins were not
+edited. Immediately before stopping, the voice baseline was repeated with
+no call in flight. Under root fd 9, the stopped profile was backed up in
+`/root/prod-2b/migration/`, then `create` → root rekey (one row, zero failures)
+→ verify-only (one row, zero failures) → `create` → start ran successfully.
+Before start, the effective command used the same voice executable, tenant
+`<uid>/ws.sock` and `<uid>.voice.env`; `User=mc-18f855d535e9`,
+`ProtectHome=tmpfs`, with only the voice copy then the tenant key file.
+
+**Production accepted at 15:02:37 UTC, 12.77 seconds after start.**
+The daemon was active with `NRestarts=0`; port 8787 belonged to its main
+PID 3642907. Local/public health and unsigned callbacks matched baseline;
+the ledger was read as the tenant in `mode=ro`, still ten closed and zero
+unresolved. No baseline environment name was lost; only `MEMORY_DB_DIR`,
+`PYTHONDONTWRITEBYTECODE`, `ZYLCH_HOME` were added. The unchanged release pin
+was visible inside the mount namespace. New journal/profile-log error
+matches were zero, and company-notes status remained `supported`. The
+actual authenticated app client connected and reconnected, read mail and
+available company memory (1,397 blobs at acceptance); tenant CLI confirmed
+1,397 blobs and 197 facts. Derived store and sidecars retained `0660` with
+the company group; no legacy store was recreated. All three original
+drop-in hashes matched. No rollback trigger fired and no test call was
+made: voice acceptance is explicitly on `calls_available`.
+
+**Final runtime acceptance, 15:04 UTC.** All seven daemons are active with
+zero restarts: five `mc-…` identities and the two excluded `mrcalld`
+identities. Every profile's daemon-identity `memory-status` is available;
+all four company stores remain derived with group-writable sidecars and
+no recreated legacy. All six nonproduction profiles have no `PYTHONPATH`
+pin. The helper table contains exactly the five selected UIDs; helper
+comparison remains silent. Generated logrotate has one shared stanza for
+the two excluded profiles and one stanza per migrated user. Both per-file
+and global `logrotate -d` exit 0 without errors or duplicate entries;
+no actual rotation was run. Cross-profile environment/key reads are denied
+for all five tenants, production included. Provisiond remains active and
+the voice baseline passes again as the tenant. Authenticated provisiond
+socket/public GET acceptance is recorded in the completed bootstrap above.
+
+The explicitly requested main pull and K3 unpinning also put M5–M9
+mnemonic source in the checkout imported by six nonproduction daemons:
+`19639d2` is an ancestor of deployed `926ef84`. Production voice retains
+its older release. This is verified source presence, not a new mnemonic
+product/corpus acceptance; AC 5 and the separate rollout gates remain open.
+
+The selected rollout is complete; **M2 remains partial** because Ivan
+(`ZwpLepFDghWhQEBO4WJRIFcEr7p1`) and Riccardo
+(`YZNI2ZLDjFOxcvF0zmptW3vRZxV2`) were explicitly excluded from 2b.
+Self-serve provisioning stays closed. Their pins were removed and their
+company's all-holder 2a completed before that exclusion; neither entered
+identity migration. Shared-key/profile/store backups and the production
+declaration remain in place for the rollback window. M3 is unexecuted.
+No secret values or key-bearing legacy filenames are in this record.
+
+Fresh individual acceptance reviews approved all five selected identities;
+a separate final end-to-end review approved the runtime evidence and the
+narrow publication diff. Mechanical documentation checks are clean,
+`git diff --check` passes, and both rekey files pass Black. The remaining
+test diff only formats three assertions; its AST is unchanged. Real
+secret-value and JWT comparisons against the intended diff found zero
+matches. The global documentation baseline and unrelated work are untouched.
+
+### M2 record — tenant-exec probe (2026-10-02)
+
+Same scratch VM (root disk 63 % before, 71 % after the fake release; swap
+1 GB, as found — it had already been shrunk). Subject: the operator
+declaration `/etc/mrcalld/tenant-exec/<uid>` (`read_tenant_exec`, commits
+`b6d098f`, `5ee01d4` on main), with which `create` migrates a unit that
+runs its own interpreter and the production voice listener. Log:
+`/root/m2-probe.log` on the VM from `## TE-0`, scripts
+`/root/m2-probes/a0…a13-te-*.sh`. The helper changed three times during
+the probe and the battery was repeated on each build: the log's notes say
+which blocks are superseded, and only the sections named below are
+cited.
+
+**The stand-in for production@.** Profile `scrP1…1`, built as production@
+is today: created and seeded by `mrcalld` under the shared key, a holder
+of company A's already relocated store (A1 migrated and running beside
+it), and three operator drop-ins with the preflight's names. The
+preflight records only the names of `90-…` and `95-…` and the command of
+`99-…`; their contents here are the probe's assumption, taken from the
+voice plan's description: `90-…` and `95-…` pin the older release, `95-…`
+and `99-…` each reset `ExecStart`, `99-…` pins `PYTHONPATH` to the voice
+release, loads the voice file as an `EnvironmentFile` and runs `<release>/venv/bin/zylch -p
+<uid> serve --unix /run/mrcalld/<uid>.sock --voice-config
+/etc/mrcalld/voice-fake.env`. The release
+`/home/mrcalld/releases/mrcall-voice-fake-499ca09` is main `499ca09b`'s
+engine tree with its own venv (`pip install -e`, plus `aiohttp`, whose
+install is the one command of this probe that was not logged); its
+`zylch` is pip's console script, shebang `<release>/venv/bin/python3.11`,
+a link to `/usr/bin/python3.11`. The voice file is `0640 root:mrcalld`
+and holds fifteen fake variables, all inside the allowlist: the fourteen
+`load_production_config` reads and the probe's stub switch.
+
+*What is fake, and what that leaves uncovered.* The engine is main's, not
+the voice-line release `5ebe3fa` production@ runs (that commit is not on
+origin). The listener is the real one — real configuration loader, real
+ledger `voice-production.db` in the profile, real aiohttp application on
+`127.0.0.1:8787` — except for **one probe-only change in the fake
+release**: `prepare_carrier` returns at once when
+`VOICE_PROBE_STUB_ADMISSION=1`. The stub skips the **whole** of
+preparation, the local half included: reading the profile's voice
+binding and agent configuration from `zylch.db` (`snapshot_for_call`),
+the ledger limits, and the remote verification of the business. Without
+it the unit does not start: the log shows "admission unavailable during
+preparation" and a `failed` unit (TE-2b), not which step failed — the
+scratch profile has no voice binding, so it may well be the local one.
+With the stub `/healthz` answers `calls_available: false`, for the same
+unrecorded reason.
+
+**Not covered here**; the runbook below has a check on production@ for
+each, except that the release's own tables rest on the start-time
+self-check, `calls_available` and the journal:
+
+- preparation as the tenant inside the sandbox — the voice binding and
+  agent configuration read under `HOME=<profile>`, then StarChat,
+  Firebase, Vonage and OpenAI reachability: `calls_available: true`;
+- a call;
+- `VOICE_COMPANY_KNOWLEDGE_ENABLED=1` (its privacy check on the profile
+  was run by hand as the tenant in the daemon's mount namespace and
+  passes — TE-K; the rest needs the remote business);
+- the public tunnel, and a signed carrier or OpenAI callback (unsigned,
+  `/vonage/answer`, `/vonage/event` and `/openai/live` answer 401/401/400
+  on the migrated unit — TE-VON; main's listener serves all three);
+- the release `5ebe3fa` itself: any path it writes outside the profile
+  and the company store (the sandbox is `ProtectSystem=strict`,
+  `ProtectHome=tmpfs`, `PrivateTmp`), and tables only it knows — here
+  `rekey` and the release are the same code, on the VPS the checkout's
+  `rekey` rewrites a database the release wrote;
+- what the real unit loses from its environment: `tenant.conf` resets
+  `EnvironmentFile=` and moves `HOME` to the profile, and here the shared
+  env file and the drop-ins were the probe's own;
+- the mode of `/etc/mrcalld` on the VPS (`0755` here; the tenant must
+  traverse it);
+- an authenticated app session (Caddy 401 only, as in every scratch
+  pass).
+
+**Defects found in main's helper (`5ee01d4`, sha256 `594b7375…`) and
+fixed.** 15–18 by the probe, 19–24 by review A on `5ab4576`
+(`/root/te-reviewA.log`), each reproduced on the VM before the fix
+(numbering continues):
+
+15. **The shebang check followed the link and judged only its target**
+    (TE-D15). A console script whose python is a link from a `/home` path
+    the sandbox hides (`#!/home/mrcalld/venv-elsewhere/bin/python →
+    /usr/bin/python3.11`) was accepted; the migrated unit died with
+    `203/EXEC … No such file or directory`. Now every name on the way
+    must be in `/usr` (or `/bin`, `/sbin`, `/lib*`, `/etc/alternatives`),
+    the releases or the checkout, with no link among the directories
+    under the release trees and no `..` (`sandbox_sees`, `ba669ed`).
+16. **A declaration with a misspelt key was a valid empty declaration**
+    (TE-D16). It switched off the refusal of operator `ExecStart`
+    drop-ins and the unit migrated onto the standard command line (not
+    started here): no `--voice-config`, nothing in the output. A
+    declaration now holds only `INTERPRETER=` and `VOICE_CONFIG=` lines
+    and comments, each key at most once, at least one of them
+    (`ba669ed`), and no quote — `VOICE_CONFIG=""` was the same hole
+    (review A; `0dc122d`).
+17. **`INTERPRETER` naming a directory** was refused by a failing
+    `head(1)`, exit 1 and no `[tenant]` error; now a named refusal
+    (`ba669ed`).
+18. **A refused `create` deleted the voice copy a migrated unit still
+    loads** (TE-D18 on `ba636e8a…`). With the declaration moved away —
+    by hand, or found so by the nightly reconcile's `create` — the copy
+    was removed first and the `ExecStart` refusal came after;
+    `tenant.conf` still named the copy and the next restart failed with
+    "Failed to load environment files". The stale copy is now removed
+    only after `tenant.conf` has been rewritten and verified (`5ab4576`).
+19. **A carriage return went through the voice allowlist** (A-T1).
+    `VOICE_X=1\rHOME=/tmp/evil\rPYTHONPATH=…\rLD_PRELOAD=…` is one
+    allowed line to `grep` and four assignments to systemd: `create`
+    exited 0 and the migrated unit's environment had `HOME`,
+    `ZYLCH_HOME`, `PYTHONPATH` and `LD_PRELOAD` from the file
+    (`ENCRYPTION_KEY` did not win: the key file is read last). A
+    trailing backslash, an open quote, `export KEY=` and an indented or
+    form-fed key were also read differently by the two (A-T2). The file
+    is root's, so this was a broken guard, not a tenant's way in. Now
+    each of those is refused, and the **copy** is what is checked, then
+    renamed into place (`0dc122d`).
+20. **A drop-in sorting after `tenant.conf`, or one under `/run`,
+    overrode identity and sandbox while `create` said "ready"** (A-T3):
+    `User=mrcalld`, `ProtectHome=no`, the shared key file after the
+    per-profile one. Only a late `ExecStart` was caught. Step 6b now
+    also requires the effective `User`, `ProtectHome=tmpfs` and exactly
+    the voice copy then the key file as `EnvironmentFiles` (`0dc122d`).
+    `User` and `ProtectHome` are probed (TE-N7, TE-M); the
+    `EnvironmentFiles` comparison is a backstop no probe reaches, because
+    a drop-in that loads another file is refused earlier by defect 21's
+    check.
+    Older than tenant-exec; production@'s `90-/95-/99-` sort before
+    `tenant.conf`.
+21. **An operator `EnvironmentFile` other than the voice file was
+    dropped without a word** (A-T10): `tenant.conf` resets the list.
+    `create` now refuses a drop-in that loads one and says to move the
+    variables to `Environment=` lines (`0dc122d`). This also holds for a
+    declaration without `VOICE_CONFIG` while `99-…` still loads the
+    voice file (TE-V).
+22. **A refusal on a migrated profile came after `tenant.conf` and the
+    copy had been rewritten** (A-T6): the unit would restart onto files
+    nobody accepted. `create` now keeps the previous two and puts them
+    back on any refusal (`0dc122d`). TE-M7 is the case that shows it: the
+    declaration cut to `VOICE_CONFIG` only and the voice file edited, so
+    both files change, then a pin step 6c refuses — the helper prints
+    "wrote …/tenant.conf", then the error, and afterwards `tenant.conf`,
+    the copy, their owners and modes, the effective command and the pid
+    are those of before, with no temporary file left. Of TE-M's six
+    refusals on the running migrated unit (all identical before and
+    after), M2 restores a replaced copy; M1, M3 and M5 are refused before
+    `tenant.conf` is written (M3 and M5 after the copy was installed
+    again with the same content), and in M3b and M4 the new `tenant.conf`
+    equals the old one, so the helper leaves the file: it replaces it,
+    and prints "wrote", only when the content differs. Review A's second
+    pass repeated it at six points of
+    `create` and with thirty runs killed by a signal (B-R3, B-R3b in its
+    log).
+23. **Accepted interpreters that cannot run** (A-T4): an `env` shebang,
+    a `/bin/sh` trampoline, a file with no shebang, the venv's `pip`.
+    `INTERPRETER` must now be a file named `zylch` whose shebang is a
+    `python*` the sandbox sees (`0dc122d`).
+24. **`<uid>.voice.env` was a valid uid** (A-T5): `delete` of it removed
+    `<uid>`'s voice copy. Refused in `check_uid`. And **a first `create`
+    ran under a running unmigrated daemon** (A-T7), replacing its live
+    socket by the link and re-owning its tree: it now refuses a unit
+    that is not stopped (`0dc122d`; the runbook always stopped it).
+
+Final code: **`0dc122d`** on `claude/m2-scratch-probe` (= main `499ca09b`
++ `ba669ed`, `5ab4576`, `0dc122d`: the helper only), helper sha256
+**`a90d1bc0…`**, installed on the VM by `update-daemons.sh` from origin
+(TE-FINAL2-0, with the migrated declared unit running: `create`
+re-applied, hash equal to the checkout's). **Every result below is from
+that helper**: TE-FINAL2-0, TE-M, the TE-D18, TE-V and TE-DEL after it,
+the last "FINAL RUN" block (TE-2a … TE-N9, TE-F1 … TE-F4), the last
+TE-K, TE-M7, TE-O0 … TE-O4 and TE-VON; the log's notes say which earlier
+blocks are superseded.
+It is **not on main** until this record's gate passes; main's helper
+until then is `594b7375…`, and that is the one the VPS installed at its
+bootstrap from `499ca09` (VPS rollout record above): the build with
+defects 15–24.
+
+**Before migration** (TE-2a): the unit runs as `mrcalld` on the flat
+socket from the release venv; `:8787` is bound by its main pid, `/healthz`
+200, an unsigned `POST /openai/live` 400, Caddy 401, the release's
+marker in the journal.
+
+**Refusals** (TE-N0…N7, 83 cases). Each `create` exits 2 with a named
+error, and after each: no `tenant.conf`, no tmpfiles fragment, no voice
+copy, no run dir, no table row, every file of the profile still
+`mrcalld`'s, the effective `ExecStart` the baseline one. In the 79 that
+are refused before `tenant.conf` is written the unmigrated unit was
+running, and **the running process is untouched** (same pid, `:8787`
+still bound); the last four are refused after it is written, so the unit
+was stopped for them as the runbook has it, and the undo removes what
+was written. Two of the after-lines differ by the probe's own doing (the
+log's closing note): one shows the `EnvironmentFile` line the probe had
+added to the operator's `90-…`, the other the probe's late `ExecStart`
+drop-in still in place when the line was printed.
+The user, its membership of the company group and the key file a refused
+first `create` made stay (as in defect 13). The cases:
+
+- *no declaration* (1) — the operator `ExecStart` drop-ins are refused
+  as before;
+- *voice file* (20) — outside the allowlist: `HOME=`, `ENCRYPTION_KEY=`,
+  `PYTHONPATH=`, `LD_PRELOAD=`, an indented `ZYLCH_HOME=`, `export
+  MEMORY_DB_DIR=`, lower case, `VOICEX=`, `XVOICE_A=`, a bad line in the
+  middle; read differently by systemd: carriage returns inside a line,
+  CRLF throughout, a quoted two-line value, an open quote running on to
+  an allowed line, a backslash continuation before a bad line and
+  before an allowed one, a comment ending in a backslash, `export
+  VOICE_E=`, a form feed before the key, a space before `=`;
+- *`INTERPRETER` or `VOICE_CONFIG` systemd would split or expand* (10) —
+  a space, a tab, `%i`, `%%`, `${X}` inside the path, a relative path
+  (`$HOME/…` is refused as not absolute);
+- *links* (8) — a link to the script, a linked directory on the way, the
+  venv's `python3.11`, `..`, `/./`, `//`, a linked voice file, a linked
+  declaration;
+- *outside the bound trees or not a runnable `zylch`* (18) — `/opt/…`,
+  `/usr/bin/python3.11`, the venv's `pip`, a real script in
+  `/home/mrcalld/releases-b`, an absent path, a directory; a `zylch`
+  whose shebang is in `/opt`, hidden under `/home`, through a linked
+  directory, through two hops, through a relative `../` link, missing,
+  relative, with `..`, `env`, `/bin/sh`, absent altogether; a `0700`
+  script;
+- *ownership and kind* (9) — declaration owned by `mrcalld`, modes
+  `0660 0666 0602 0620 0755`; voice file owned by `mrcalld`, missing, a
+  directory;
+- *a declaration that does not say what it means* (11) — misspelt keys,
+  empty, comment only, a third key, a key twice, an empty value, an
+  indented key, CRLF line ends, a directory, `VOICE_CONFIG=""`, a quoted
+  `INTERPRETER`;
+- *a valid declaration, something else in the way* (6) — the unit still
+  running; an operator `EnvironmentFile` other than the voice file; and,
+  unit stopped: a later drop-in with `User=mrcalld`, one under `/run`
+  with `ProtectHome=no`, a later `ExecStart`, a later pin outside the
+  trees.
+
+A uid ending in `.voice.env` is refused by `create` and `delete`. After
+the last case the unit is started and comes up as before (TE-N9).
+
+**Forward** (TE-F1; runbook 2b unchanged, the declaration written first;
+`/etc/mrcalld/tenant-exec` deliberately created `0700`):
+
+- `systemctl show -p ExecStart` is exactly one command, `<release>/venv/bin/zylch
+  -p <uid> serve --unix /run/mrcalld/<uid>/ws.sock --voice-config
+  /etc/mrcalld/tenant-exec/<uid>.voice.env`; `EnvironmentFiles` are the
+  voice copy, then the per-profile key; the shared `/etc/mrcalld/env` and
+  the operator's voice file are no longer loaded. The three operator
+  drop-ins are byte-identical and still applied before `tenant.conf`.
+- The copy is `0640 root:<tenant>`, identical to the operator's file;
+  the directory is `0711 root`; the declaration `0600 root`. The tenant
+  reads its copy and cannot list the directory, read the declaration or
+  read the operator's file; another tenant (A1's user), `mrcalld` and
+  `caddy` cannot read the copy.
+- `rekey --verify` 2/2; started: active as `mc-cae1364247ca`, 0 restarts,
+  0 "self-check failed"; socket `<uid>/ws.sock` `0660 <tenant>:caddy`
+  behind the flat-name link, Caddy 401.
+- **`:8787` is bound by the unit's main pid inside the sandbox**,
+  `/healthz` 200, unsigned `POST /openai/live` 400, unsigned `POST
+  /vonage/answer` and `/vonage/event` 401 (TE-VON, on TE-F4's process;
+  not probed before migration or after rollback); the journal has the
+  release's marker and "production runtime module=<release>/…"; the
+  process environment carries the release `PYTHONPATH`, the 15 voice
+  variables, the operator's `LLM_DAILY_BUDGET_PROBE` from `90-…`, and an
+  `ENCRYPTION_KEY` whose hash is the per-profile key's, not the shared
+  one's. `voice-production.db` (made by the unmigrated listener) is the
+  tenant's after `create`.
+- In the daemon's mount namespace the release script, its python and the
+  voice copy exist; A1's profile does not; as the tenant there, the copy
+  is readable, the operator's voice file and the key file are not, and a
+  write into the release is `Read-only file system`.
+- Outside the unit, as the runbook's step 7 does it (`sudo -u <tenant>`,
+  the checkout's `zylch`): `memory-status` `available: True`. A1 stays
+  active; the logrotate stanza is the tenant's and `logrotate -d` reports
+  0 errors.
+
+**Re-apply and change** (TE-F2, TE-F3, TE-M, TE-V, TE-D18): `create` on
+the running unit and a full `update-daemons.sh` with no new commit leave
+pid and `tenant.conf` unchanged. A reconcile that pulls new code restarts
+the unit like every other daemon (TE-FINAL2-0), **and with it the voice
+listener**: a deploy to main is a short voice outage for production@, as
+it is today for its app socket. An edit of the operator's voice file
+reaches the unit by `create` then restart; a bad edit is refused, the old
+copy and the running process stay. With the declaration moved away,
+`create` refuses, the copy and `tenant.conf` stay and the unit restarts
+(TE-D18). Applied by `create` and not started: a declaration with only
+`VOICE_CONFIG` gives the checkout's `zylch` with `--voice-config`; one
+with only `INTERPRETER` is refused while `99-…` loads the voice file
+(defect 21); both back gives a byte-identical `tenant.conf`.
+
+**Rollback** (TE-RB): stop, `rekey` back (2/2), `unmigrate`, start.
+`tenant.conf`, the fragment, the run dir, the link, the voice copy and
+the table row go, and the logrotate stanza returns to `mrcalld`; the three
+drop-ins are byte-identical to the copies taken before,
+the effective `ExecStart` is the baseline line, `EnvironmentFiles` are
+again the shared key and the operator's voice file (untouched,
+`0640 root:mrcalld`). The unit runs as `mrcalld` on the flat socket with
+`:8787`, `/healthz` 200, unsigned `POST /openai/live` 400, Caddy 401, the
+shared key in its environment; every file is `mrcalld`'s,
+`voice-production.db` included. The declaration, the user and the key
+file stay, and the second forward (TE-F4) repeats TE-F1's results with
+them. One difference from the record taken before: the profile directory
+is `0700`, not `0770` (`create` sets it, `unmigrate` does not put it
+back; `getent group mrcalld` has no member besides the user itself —
+checked on the VM, not in the log — and the unit runs). The rollback is
+therefore not mode-for-mode until the operator restores it.
+
+**Delete** (TE-DEL): the declaration, the voice copy, the drop-in
+directory, profile, key, fragment, run dir, link, user and table row are
+gone; no unowned file is left; company A's store stays (A1 and A2 hold
+the key) and A1 keeps running. The operator's own voice file is not the
+helper's and stays.
+
+**For every 2b, not only production@'s.** With this helper `create`
+also refuses, for any unit: a first migration while the unit is not
+stopped (the runbook's step 2 comes before step 4, so nothing changes in
+the order); a drop-in that loads an `EnvironmentFile` other than a
+declared unit's voice file (move its variables to `Environment=` lines
+first); a result whose `User`, `ProtectHome` or environment files are
+not `tenant.conf`'s. Before each 2b, `systemctl show -p DropInPaths
+zylch-server@U` lists only files of
+`/etc/systemd/system/zylch-server@U.service.d/` that sort before
+`tenant.conf`: a later drop-in can change what `create` does not verify
+(review A, under "Open"). On an ordinary scratch profile with no
+declaration and no pin (TE-O0 … TE-O4): `create` under the running
+unmigrated unit is refused and the unit, its socket and its files are
+untouched (the user and key file it makes stay, as for any refused first
+`create`); the runbook's forward, a re-apply on the running unit, the
+rollback, a second forward and `delete` go as before. The three already
+migrated scratch tenants were re-applied by the reconcile with no
+`FAILED` line (TE-FINAL2-0, TE-F2 — their own `ready` lines are filtered
+out of that output) and by `create` directly in review A's B-R4 (`ready`
+for each). The helper check of production@'s pre-check 1 below holds
+for every 2b: until a reconcile after this record is on main, the VPS
+runs `594b7375…`, which refuses neither a dropped `EnvironmentFile` nor
+a `create` under a running unit (defects 21, 24).
+
+**Runbook, added for production@'s 2b** (it is the last one). `U` is its
+uid, `R` its release directory, `VF=/etc/mrcalld/voice-cafe124.env`.
+
+*On the VPS, before the window — any failed line means no declaration is
+written:*
+
+1. **The helper.** `sha256sum /usr/local/sbin/mrcall-tenant` starts
+   `a90d1bc0` and `cmp` with the checkout's
+   `engine/scripts/server/tenant-helper.sh` is silent. A helper installed
+   by hand is replaced by the next reconcile: it must come from main,
+   with the first reconcile after this record is there (the nightly one,
+   or an explicit `systemctl start zylch-reconcile.service`) — which
+   restarts every daemon, production@'s voice listener included.
+   `systemctl --version` (249 on the VM), and `systemctl show -p
+   EnvironmentFiles --value zylch-server@U` prints one `<path>
+   (ignore_errors=…)` per line: step 6b reads that form, and on a systemd
+   that prints another every `create` on the host is refused (nothing is
+   changed by a refusal) until the helper is adapted.
+2. **The unit as it is**, kept under `/root/prod-2b/`: `systemctl cat
+   zylch-server@U`; `systemctl show zylch-server@U -p ExecStart -p
+   EnvironmentFiles -p DropInPaths`; copies and `sha256sum` of every
+   drop-in; `stat -c '%U:%G %a %n'` of the profile directory;
+   `tr '\0' '\n' < /proc/<pid>/environ | cut -d= -f1 | sort` (names
+   only). `EnvironmentFiles` must be exactly `/etc/mrcalld/env` and
+   `VF`: any other file is refused by `create` — move its variables to
+   `Environment=` lines in that drop-in first (a change to the running
+   unit: its own restart, before the window). `DropInPaths` lists only
+   files in `/etc/systemd/system/zylch-server@U.service.d/`, each with a
+   name that sorts before `tenant.conf` (digits do): `create` verifies
+   only the command, `User`, `ProtectHome` and the environment files of
+   the result, and a later drop-in, one under `/run` or one of the
+   template's could change anything else (review A).
+3. **The interpreter.** `head -1 R/venv/bin/zylch` is `#!R/venv/bin/python…`;
+   `namei -l` of that path shows every hop under `/usr`, `/bin`, `/sbin`,
+   `/lib*`, `/etc/alternatives`, the releases or the checkout, and no
+   linked directory under `R`. `readlink -f` is not enough: it shows only
+   the last target, which is defect 15.
+4. **The release.** `R/engine/zylch/home.py` exists and
+   `R/engine/zylch/memory/store.py` has the dual-name lookup (the
+   preflight found it). If either is missing: no 2b for production@.
+   `chmod -R go=rX /home/mrcalld/releases` makes every release readable
+   by every tenant, so first: `grep -rIlE -e 'sk-[A-Za-z0-9_-]{20,}' -e
+   'BEGIN [A-Z ]*PRIVATE KEY' /home/mrcalld/releases` and `find
+   /home/mrcalld/releases -name '.env*' ! -name '.env.example'` — every
+   hit is opened and is not a credential (a bare `sk-` matches ordinary
+   words in a venv).
+5. **The voice file.** Root-owned, not a link; `grep -c $'\r' VF` → 0;
+   `grep -cE '\\$' VF` → 0; `grep -cvE
+   '^([[:space:]]*(#.*)?|(VOICE_[A-Z0-9_]*|OPENAI_[A-Z0-9_]*|VONAGE_[A-Z0-9_]*|FIREBASE_WEB_API_KEY)=.*)$'
+   VF` → 0; no line other than a comment with an odd number of `"` or
+   of `'`. `stat -c %a
+   /etc/mrcalld` has the `o+x` bit.
+6. **The voice baseline**, as the VPS rollout record above took it on
+   2026-10-02 around the bootstrap: production's ledger read as `mrcalld`
+   with SQLite `mode=ro` — no unresolved call; `/healthz` locally and
+   through the public endpoint, 200 with `calls_available=true`; unsigned
+   `POST` to `/vonage/answer`, `/vonage/event` and `/openai/live` → 401,
+   401, 400 on both paths (the same three answers the migrated scratch
+   unit gives locally, TE-VON); the last "company notes preparation
+   status=" line of the journal or the profile's `zylch.log` if
+   `VOICE_COMPANY_KNOWLEDGE_ENABLED=1`.
+
+*The declaration:* `/etc/mrcalld/tenant-exec/U`, `0600 root`, two bare
+lines and nothing else — `INTERPRETER=R/venv/bin/zylch` and
+`VOICE_CONFIG=/etc/mrcalld/voice-cafe124.env`. The operator's drop-ins
+are not edited.
+
+*2b steps 1–6 unchanged* (the unit is stopped before the first
+`create`, which now refuses otherwise; no call in flight at the stop). A
+refused first `create` changes nothing: start the unit as it is, fix,
+try again. After the second `create`, before the start: `systemctl show
+zylch-server@U -p ExecStart -p User -p ProtectHome -p EnvironmentFiles`
+shows one command with `R/venv/bin/zylch`, `U/ws.sock` and
+`--voice-config /etc/mrcalld/tenant-exec/U.voice.env`; the `mc-…` user;
+`tmpfs`; the voice copy then the key file and nothing else.
+
+*Step 7, added — each is a rollback trigger, decided within **five
+minutes** of the start:*
+
+- the unit is `active` with `NRestarts=0` and no "self-check failed" (a
+  failed admission at start takes the whole unit down, app socket
+  included);
+- `ss -ltnp 'sport = :8787'` names the unit's main pid;
+- `/healthz` says **`calls_available: true`** locally and through the
+  tunnel — the first time preparation runs as the tenant inside the
+  sandbox, and the one result the VM could not give;
+- the unsigned callbacks answer as in the baseline;
+- the names in `/proc/<pid>/environ` are the baseline's, minus nothing
+  but what `tenant.conf` replaces (`HOME` changes value) and plus
+  `ZYLCH_HOME`, `MEMORY_DB_DIR`, `PYTHONDONTWRITEBYTECODE`: a lost name
+  is explained or it is a rollback;
+- the pinned-profile check of the post-gate record (`nsenter -t <pid>
+  -m -- test -e <PYTHONPATH>/zylch/__init__.py`);
+- no `Read-only file system`, `Permission denied`, decrypt or
+  `InvalidToken` line in the journal and the profile's `zylch.log` since
+  the start (a path the release writes outside the profile; a row the
+  checkout's `rekey` did not know);
+- the "company notes preparation status=" line as in the baseline, when
+  enabled;
+- the customer's app reconnects — the authenticated check of every 2b.
+
+A call is checked by a call: a test call to the production number with
+its ledger row closed. The operators decide whether to make it before
+they leave the window; without it, voice is accepted on
+`calls_available` alone.
+
+*Afterwards:* a change to the voice file is `mrcall-tenant create U`
+then a restart, never an edit of the copy. **The declaration is not
+removed while the unit is migrated** — `create` then refuses (the unit
+keeps running on what it has) and the reconcile reports it every night.
+
+*Rollback:* as for any profile (stop, `rekey` back, `unmigrate`, start),
+then `chmod` the profile directory back to the recorded mode, compare the
+drop-ins with `/root/prod-2b/`, and repeat the baseline of point 6. The
+declaration stays for the next attempt.
+
+**Open, not changed here.**
+
+- `unmigrate` leaves the profile directory `0700` (above).
+- A declared unit depends on the operator's voice file staying where the
+  declaration says: if it is removed, `create` fails in the reconcile
+  (stderr only, as recorded for any refused `create`) and the unit keeps
+  running on its last copy.
+- Nothing ties the declared `INTERPRETER`'s release to the `PYTHONPATH`
+  pin in `99-…` (review A, from the code): the runbook's point 2 and the
+  pinned-profile check are what show they agree.
+- The operator's own voice file stays `0640 root:mrcalld`, readable by
+  the deploy identity as before; tightening it would break the rollback.
+- Voice-file lines the helper now refuses although both readers agree on
+  them (a quoted value holding an apostrophe, a key with a space before
+  `=`; in the declaration, a comment with an apostrophe): the operator
+  rewrites the line.
+- Review A's second pass on `0dc122d`, reproduced on the VM, not changed
+  (the gate closed on that commit; the first three are covered for
+  production@ by a runbook line above, the last two are reached by no
+  command of the runbook):
+  - the voice check and systemd still disagree on two forms — a quote
+    reopened right after a closing one (`VOICE_T1="'"'`), and a
+    form-feed "comment" holding a quote (a vertical tab is the same case
+    from the code; its log shows the form feed). Either makes
+    systemd swallow the following lines into one value: allowed variables
+    are lost from the unit's environment, none outside the allowlist can
+    arrive (a key starts only after a line end, and a carriage return is
+    refused). The engine reads the file itself, and step 7 compares the
+    environment names. The commit message of `0dc122d` says more than
+    this ("reads the same to the check and to systemd");
+  - step 6b checks the command, `User`, `ProtectHome` and the
+    environment files; a drop-in that sorts after `tenant.conf` can still
+    set `Group`, `SupplementaryGroups`, `Environment=`, `ProtectSystem`,
+    `BindPaths`, `NoNewPrivileges`, `CapabilityBoundingSet`,
+    `ExecStartPre` or `UnsetEnvironment`, and `create` says "ready".
+    Root-written and older than tenant-exec. The fix is one rule: refuse
+    any applied drop-in that sorts after `tenant.conf` or lives outside
+    the instance's `/etc` directory;
+  - accepted by `create` (B-R6, B-R1; not started there — that the unit
+    then cannot start is from the code): a `zylch` whose shebang is the
+    system python rather than its own venv's; an empty or comment-only
+    voice file (the engine refuses "voice is disabled");
+  - `save_prev` runs before the trap is armed: a failing `cp` there
+    leaves a root-only `/etc/mrcalld/.create-prev.*` holding a voice copy
+    (from the code);
+  - `delete <uid>.sock` and `delete reconcile.lock` are valid uids and
+    remove another unit's socket or the lock file (from the code; older
+    than tenant-exec, same class as defect 24).
+- The fake release, the scratch profile `scrP1…1` (migrated, running)
+  and `/etc/mrcalld/voice-fake.env` are still on the VM.
+
+**Gate.** Two independent reviews of the probe, the helper and this
+record, each continued over the fixes. A (adversarial, host scripts; its
+own probes on the VM, `/root/te-reviewA.log`) REVISE on `5ab4576` —
+defects 19–24, no check of the installed helper, the dropped
+`EnvironmentFile` — → **APPROVED at `0dc122d`** (the helper; the runbook
+as of `2df77fa`, which has only gained pre-checks since), with the
+follow-ups listed under "Open", none of which it judges a blocker for
+production@. Its log holds its probes, not its verdicts: those are as
+relayed by the lead.
+B (evidence conformance, runbook) REVISE on the first draft — claims
+wider than the log, an incomplete "not covered" list, a runbook with no
+helper check and no executable rollback trigger — and on two revisions
+(`2df77fa`, `ba08649`) — a credential scan that could not pass, the
+restore shown by no case (hence TE-M7), the carrier routes (an error of
+B's own first pass, corrected by TE-VON), sections of the log the record
+did not name — → **APPROVED at `997aa65`**, this record included; the
+wording of this paragraph about B, and of the next one, is B's.
+
+Both verdicts are on helper `0dc122d` and on what the scratch VM can
+show. **production@ can be migrated with this helper, by the runbook
+above.** What the VM could not show — the list under "Not covered here",
+first of all preparation as the tenant inside the sandbox on the release
+it really runs — is decided on the VPS by step 7: `calls_available:
+true` within five minutes of the start and its other triggers, or the
+rollback. A real call is shown only by the test call the operators may
+make; without it, voice is accepted on `calls_available` alone.
+
+**After the gate.** Merged to main as `2e22bea`, a fast-forward over the
+VPS rollout record (`b29242d`). The VM's checkout was put back on main
+and `update-daemons.sh` pulled it (TE-MAIN): the helper it installed from
+main is `a90d1bc0…`, the four scratch tenants were re-applied `ready` and
+restarted with the code change, and the declared unit is active as its
+tenant with `:8787` up. Nothing was done on the VPS from this session: it
+keeps `594b7375…` until its next reconcile pulls main.
+
 ## M3 — Egress bound per daemon
+
+### R_4 execution record — 2026-10-02
+
+scratch VM presa da R_4 dalle 17:30:55 UTC (2026-10-02).
+**rilasciata** on resumption: refreshed main contains R_2's earlier
+17:30:52 UTC reservation. R_4 has made no host mutation or network probe;
+only read PID 1's command, executable availability and systemd's running
+state. R_4 defers all further host checks until R_2 releases the machine.
+Lease publication precedes any host probe. After push, fetch main again and
+check R2's record for a competing lease; if occupied, do no host work until
+its release. This record is the only plan section edited by R_4.
+
+Scope and acceptance remain the approved sandbox brief, criterion 6, and
+the M3 verification below. R_4 is not done until the scratch evidence has
+two independent APPROVED reviews and every migrated VPS tenant has its set
+and a full accepted mail sync cycle. Unavailable service credentials or host
+access are recorded as missing evidence, never replaced by synthetic success.
+
+**New lease:** scratch VM presa da R_4 dalle 17:46:00 UTC (2026-10-02).
+R_2's final release at 17:43:24 UTC observed on origin/main. Publish and
+refresh before the first probe. The installed helper is R2's approved main
+version; leave it unchanged.
+
+#### R_4 compiler-fix deployment and completion — 2026-10-04
+
+Current CTO authorization accepts production's functional call under
+enforcement; the original telephone's missing OpenAI transcription is a
+separate voice issue, outside R4. Ivan is accepted on daemon evidence.
+The lead applies the already reviewed compiler fixes to Ivan, support,
+Mario MrCall, Mario Gmail and production, then enforces Riccardo and Café124.
+Every tenant is independently reviewed and published before its step closes.
+
+Each policy is recompiled from its retained manifest, changing upstream to
+the two verified host resolvers. Generated files replace local edits exactly.
+DNS restart uses ignore-dependencies; firewall reload executes the existing
+unit's lock-protected nft loader because the unit has no ExecReload.
+Stateless live table configuration is compared with the same compiled file
+loaded in a disconnected network namespace; dynamic DNS set elements are
+reported separately from static rules. LogFilterPatterns must be populated.
+The reviewed refused-log CLI checks DNS and packet metadata; a controlled
+local .invalid lookup/negative packet probe is explicitly explained.
+
+The five existing daemon PIDs remain unchanged. Only a newly enforced
+tenant's daemon is restarted to bind its dedicated resolver. For Riccardo
+and Café124, acceptance is completed sync or observed UID-scoped database
+progress, memory availability, and no unexplained DNS/packet refusal.
+Duration alone is not an anomaly and does not trigger rollback.
+After seven accepted enforced tenants R4 is marked done, then R3 runs under
+the CTO's conditional shared-key rule. No service-checkout or voice-file edit
+is permitted; private evidence stays root-only.
+
+Riccardo's initial two DNS refusals were `api.github.com`, the HTTPS
+release check in `engine/zylch/cli/main.py`. The policy was regenerated
+with that exact host on TCP 443; a controlled request from the daemon's
+UID and namespaces resolved it and returned HTTPS 200. Only DNS restarted,
+with ignore-dependencies, and the firewall loader ran; every daemon PID
+remained unchanged. The original refusal interval remains in private
+evidence and is explained here; the post-fix interval has zero unexplained
+refusals. Café124 receives the same source-backed dependency at initial
+enforcement. This adds no wildcard or port allowance.
+
+The final watch also identified production DNS requests for
+`mobile.events.data.microsoft.com`. Its installed, loaded ONNX Runtime
+binary contains that telemetry endpoint; telemetry remains denied, without
+widening the policy. The refused-log CLI reports this explained name and
+the controlled negative probe, with no other refused name.
+
+Mario MrCall had six TCP 443 refusals on one tuple to `160.79.104.10`:
+five ACK-only packets about 61 seconds apart, then ACK/RST, with no SYN.
+A controlled lookup and CA-verified HTTPS request from its daemon identity
+confirmed `api.anthropic.com` at that address and returned HTTP 404; that
+exact endpoint was already allowed. These packets are explained traffic
+to an approved endpoint. The previous connection's creation, conntrack
+mark and precise rejection cause are unknown; stale-connection behavior
+is an inference. No allowance or daemon restart was added for these packets.
+
+<!-- r4-vps-compiler-fixes-20261004:start -->
+| Tenant | Deployment | Static nft match | DNS filter / unexplained refusals | Mail / memory | Review |
+|---|---|---|---|---|---|
+| Ivan | 09:00:12 UTC; updated; daemon PID retained | passed | enabled; DNS 0 / packets 0 | CTO daemon acceptance; available | APPROVED |
+| support | 09:05:14 UTC; updated; daemon PID retained | passed | enabled; DNS 0 / packets 0 | prior accepted sync; available | APPROVED |
+| Mario MrCall | 09:08:17 UTC; updated; daemon PID retained | passed | enabled; DNS 0 / packets 0 | prior accepted sync; available | APPROVED |
+| Mario Gmail | 09:12:11 UTC; updated; daemon PID retained | passed | enabled; DNS 0 / packets 0 | prior accepted sync; available | APPROVED |
+| production | 09:13:44 UTC; updated; daemon PID retained | passed | enabled; DNS 0 / packets 0 | CTO functional acceptance; available | APPROVED |
+| Riccardo | 09:14:42 UTC; new enforcement; dependency update 09:17:34 UTC | passed | enabled; DNS 0 / packets 0 | sync completed; available | APPROVED |
+| Café124 | 09:18:45 UTC; new enforcement | passed | enabled; DNS 0 / packets 0 | sync completed; available | APPROVED |
+<!-- r4-vps-compiler-fixes-20261004:end -->
+
+**R4 done — 2026-10-04.** All seven tenants are enforced and all seven
+milestone verdicts are APPROVED. The separate final reviewer independently
+checked their live UID, active state, zero restarts, installed compiler
+output, both upstreams, dedicated resolvers, DNS filters, static nft rules,
+and current refusal classifications; result: APPROVED. Reject/log counters
+had no sampling gap. Riccardo and Café124 completed their manual syncs;
+memory is available for all seven. Production health remains HTTP 200 with
+`calls_available=true`; the CTO's accepted call and Ivan's daemon acceptance
+close their functional gates. R3 can now evaluate its conditional cleanup.
+
+#### R_4 immediate VPS rollout — 2026-10-03 (stop at 08:45 UTC)
+
+Latest CTO instruction authorizes immediate per-profile enforcement, in order
+Ivan, Riccardo, support, Mario MrCall, Mario Cafe124, Mario Gmail, production.
+Target is at most ten minutes each; a tenant anomaly rolls back only that
+tenant and rollout proceeds. One reviewer per step runs in parallel with the
+next tenant. Production pauses at **ready for the test call** until the CTO
+provides the test call; unfinished work stops at 08:45 UTC.
+
+Pulled `b8cd987d`. Every policy includes all three LLM providers, MrCall API
+and `raw.githubusercontent.com`, TCP 443, plus the inventory and CTO's
+explicit additions. Each tenant has its own reviewed-compiler table, marked
+established-flow exception and dedicated DNS resolver; the host resolver and
+existing firewall remain in place. Before activation, each reject receives a
+separate rate-limited metadata-only log rule followed by its unconditional
+reject, so logging throttling never permits rejected traffic. Root retains
+policy, baseline and acceptance evidence under `/root/r4-vps-20261003/`.
+Controlled refused-connection probes verify metadata logging; their explained
+refusals are recorded separately from unexplained denials.
+The reviewed dnsmasq 2.91 source hash matched; the nftset-enabled binary is
+root-owned, SHA256 `42ea9e4a426b424bb75489fa54ff686ac006941f69cd219d59989003eda5e539`.
+
+Acceptance uses a manual mail-only sync under the daemon UID, supplementary
+groups, mount/network namespaces and pinned interpreter, followed by company
+memory availability. No paid analysis or new WhatsApp session is initiated.
+The existing actual app transport checks authenticated reconnect where a
+non-voice Firebase credential is available. Missing credentials are recorded
+explicitly; no voice file is read and no app acceptance is fabricated.
+
+**Check correction:** the first manual-sync helper used the legacy CLI owner
+instead of the daemon's immutable UID. Its mail counters are retained only as
+legacy-check evidence; corrected UID checks replace them before final acceptance.
+Café124's legacy check exceeded its 180-second check limit and its selected
+policy was rolled back; daemon recovery succeeded. Corrected checks use a bounded
+360-second limit. The existing authenticated app evidence remains separate.
+No customer data was deleted to hide or repair the check trace.
+
+<!-- r4-vps-immediate:start -->
+| Profile | Enforced UTC | Policy SHA256 | Mail / memory | Watch / unexplained denied | App reconnect | Review | Runtime state |
+|---|---|---|---|---|---|---|---|
+| Ivan | 07:42:27 | `06bc4a81d8da53b7e0e295e4a597a70e2f947ad960a55bb5ae93c93529b57149` | passed / available | 3659s / 0 | unavailable: no non-voice credential | APPROVED | enforced; runtime checks passed |
+| Riccardo | 07:46:26 | `552186a177478acd73ca971d9cc29f7e54fc7a3991f552b7e671c986f05e9a55` | failed | 1599s / 0 | unavailable: no non-voice credential | APPROVED (rollback) | rolled-back |
+| support | 07:49:39 | `b8c6ece4d00dac7a2fbfcc84e8f67643d0cc890a004b1d28873319ceb2b34d36` | passed / available | 3227s / 0 | passed | APPROVED | enforced; runtime checks passed |
+| Mario MrCall | 07:53:56 | `a2cf2c5f5b7bb8138abad634bdaf423086ac33c01047cc4f6500d7756a427acd` | passed / available | 2970s / 0 | passed | APPROVED | enforced; runtime checks passed |
+| Mario Cafe124 | 07:58:44 | `ed7a019e47eeb4ba8a87ea838117231db4b3da37cc5762721dbe300b69517112` | passed at baseline / available | 201s / 0 | passed | APPROVED (rollback) | rolled-back |
+| Mario Gmail | 08:12:03 | `de669d4b1d211644b92818c468192c52da43046aee0829d09deab40d75b77454` | passed / available | 1883s / 0 | passed | APPROVED | enforced; runtime checks passed |
+| production | 08:20:46 | `513d32e7767dcf0d83d10b80da00e882a68a1a3df7823b940f71a7d9f76bc8a8` | passed / available | 1360s / 0 | passed | APPROVED (ready; call pending) | enforced; ready for CTO test call |
+<!-- r4-vps-immediate:end -->
+
+**Production readiness, 08:34:37 UTC:** ready for the test call. Correct UID
+mail sync completed at 08:28:00 UTC (280 new messages), memory is available,
+both authenticated app reconnect checks passed, and local/public health checks
+returned 200 with `calls_available=true`. Production is active with
+`NRestarts=0`; 830 seconds of observation showed no unexplained denied
+connections. The read-only funded-call baseline contains 11 closed calls and
+zero unresolved calls. The CTO test call is pending; readiness does not close
+the funded-call gate. Five profiles remain enforced; Riccardo and Café124
+remain rolled back. Ivan's authenticated app reconnect remains unverified
+because no non-voice credential was available. R4 is not done.
+
+**Review transport deviation:** the Gmail reviewer made two failed SSH
+authentication attempts despite the local-only review instruction. No account
+authenticated and no remote command ran. The reviewer was redirected to local
+read-only checks; the APPROVED verdict is based on those local checks.
+
+**08:45 UTC stop — rollout stopped; R4 remains open.** No further profile
+enforcement or retry was started. Ivan, support, Mario MrCall, Mario Gmail
+and production remain enforced. Riccardo's corrected UID mail check exceeded
+its 360-second limit; only Riccardo was rolled back at 08:12:53 UTC.
+Café124's earlier legacy-owner check exceeded its 180-second limit; only
+Café124 was rolled back at 08:02:33 UTC. Its later corrected UID mail/memory
+check passed at baseline, which does not certify enforcement. The corrective
+checks exceeded the intended ten-minute per-profile target; their actual
+timestamps and rollback dispositions are retained above.
+
+The final process snapshot at 08:42:27 UTC found all seven daemons active as
+their own expected Unix users with `NRestarts=0`. The five enforced tenants'
+kernel-log checks at 08:43:26–27 UTC found zero unexplained denials. Changes
+to sibling PIDs relative to earlier rollout baselines correspond to the
+authorized subsequent enforcement and rollback steps. Production's latest
+local/public health checks at 08:44:32 UTC returned 200 with
+`calls_available=true`. The stop-time read-only ledger snapshot at
+08:45:13 UTC still contains 11 closed funded calls, zero unresolved calls
+and zero new funded calls: the CTO test call was not observed.
+
+Every attempted profile step has an APPROVED review for its recorded
+disposition; production's APPROVED verdict covers readiness only. Production
+remains ready, with its funded-call acceptance pending. Ivan's authenticated
+app reconnect is also unverified. The two rolled-back profiles and these open
+checks prevent marking R4 done. Healthy daemons and their current policies
+remain running; no further host rollout work continues after the deadline.
+
+#### R_4 production diagnosis — CTO request, 2026-10-03
+
+Production remains enforced: the CTO explicitly forbids its rollback for
+this diagnosis. Scope is metadata only, with no call content, credentials,
+voice-file values or service-checkout edits. The lead owns the following
+operational extension of the approved R4 plan:
+
+1. Read the ledger and trace of the two 09:04 UTC calls and the 07:09 UTC
+   pre-enforcement call using explicit metadata whitelists. Record states,
+   durations, evidence keys and typed binding/exposure/sideband/delegation
+   metadata; assess normal conversation only as far as those facts support.
+2. Filter production and kernel journals for 09:00–09:10 UTC. Publish
+   timestamps, fixed event labels, exception class names and denied network
+   destination/protocol/port metadata; never raw diagnostic messages.
+3. Compare each retained installed egress artifact against the current main
+   compiler using its manifest policy as input. Distinguish retained
+   rolled-back artifacts from live enforcement, and list semantic differences.
+4. Enable query logging only in production's DNS configuration, validate it,
+   assert its firewall is active, and restart only its DNS unit with
+   `systemctl --job-mode=ignore-dependencies restart mrcall-dns-18f855d535e9.service`.
+   The same job mode applies to DNS-only recovery; an ordinary restart is
+   prohibited because the daemon's Requires dependency would propagate it.
+   Capture all daemon PIDs before/after and verify they remain unchanged.
+   Neither policy allowlists nor daemon units are changed. Keep root-only
+   query evidence and report resolved names versus local=/#/ refusals.
+5. Publish the pre-call diagnosis and reviewed readiness; tell the CTO it is
+   ready for the point-4 call. After the CTO call, append the sanitized DNS
+   observations. Pending test evidence remains explicitly pending.
+
+Verification is targeted live metadata inspection plus independent review;
+logger recovery, if needed, restores only that DNS configuration/service.
+Production enforcement and its daemon are not rolled back or restarted.
+
+**Plan review:** APPROVED after correcting the DNS restart job mode to avoid
+Requires propagation. The five diagnostic voice source files inspected in the
+running pinned release match current main byte-for-byte (`9b081f1`):
+engine_runtime, business_binding, listener, diagnostics and smoke_runtime.
+
+**Historical call metadata (2026-10-03 UTC):** queried SQLite in read-only
+mode; no trace event payload, transcript delta or session content was selected.
+Carrier reservation timestamps label the calls; observed runtime duration is
+not reservation-to-end duration. Trace call_finished supplies the end time.
+
+| Start UTC | Ledger / meter | Observed runtime | Provider voice seconds | Trace finished UTC | Sideband attached | Audio events caller / voice | Transcript deltas caller / voice | Delegation events / unique client delegations | Capture |
+|---|---|---|---|---|---|---|---|---|---|
+| 07:09:45 | closed / closed | 35.135s | 30 | 07:10:21.524556 | 1 | 156 / 151 | 13 / 53 | 0 / 0 | deltas_observed |
+| 09:04:00 | closed / closed | 35.704s | 31 | 09:04:36.850428 | 1 | 157 / 151 | 0 / 14 | 0 / 0 | possible_gap |
+| 09:04:44 | closed / closed | 27.028s | 23 | 09:05:11.928744 | 1 | 117 / 113 | 2 / 14 | 0 / 0 | deltas_observed |
+
+All three calls are funded, have `finalization=confirmed`,
+`closure_trigger=sideband_eof`, `diagnostics=complete`, `results_sent=0` and
+meter reconciliation `provisionally_covered`. The keys `binding_invalidated`
+and `exposure` are absent in all three ledger evidence objects: **not
+recorded**, rather than an explicit false/healthy value. `sideband_attached`
+is a trace event, not an evidence key. No engine_failure or engine_failure_type
+is recorded. All three traces contain one call_attached, caller_context_ready,
+memory_started, memory_result, session.started, session.instructions.appended,
+session.thinking.appended (event count only), session.closed,
+conversation_closed, call_finished and trace_closed, plus two append_attempt
+and two append_sent events. None contains session.delegation.created.
+
+The common complete evidence key list is: `events`, `results_sent`,
+`finalization`, `voice_seconds`, `carrier_cost`, `engine_cost_microusd`,
+`config_revision`, `conversational_model`, `delegated_engine_model`,
+`engine_accounting`, `company_note_status`, `company_note_source_hash`,
+`company_note_included_spans`, `company_note_omissions`, `diagnostics`,
+`transcript_capture`, `diagnostic_file`, `caller_recognition`,
+`caller_fact_count`, `caller_lookup_ms`, `first_audio_ms`,
+`first_voice_transcript_ms`, `first_voice_provider_start_ms`,
+`voice_cost_estimate_microusd`, `closure_trigger`, `hangup_confirmed`,
+`observed_elapsed_ms`. This lists names only; configuration/model/company
+note/identity values are not published.
+
+**07:09 assessment:** the pre-enforcement call shows a normal bidirectional
+conversation at the metadata level: caller and voice audio and transcript
+deltas, attached sideband, memory context and confirmed closure. Metadata
+cannot certify conversation quality or handset playback. The first 09:04
+call differs by having no caller transcript and possible_gap capture; the
+second has only two caller deltas. Zero delegation means these three calls
+do not test a delegated engine request.
+
+**Production journal, 09:00–09:10 UTC:** 164 journal entries inspected;
+zero matches for `[voice] active call binding invalidated`,
+`Voice business binding unavailable`, `[auth] ... failed` or websocket/httpx
+error lines. Accordingly there are no exception types to report for that
+window. **Kernel:** zero denied entries from production's scoped rule or
+explicit Unix UID 988 in the same interval. These are logging observations,
+not proof that every dependency succeeded: the running listener suppresses
+httpx/httpcore/aiohttp/auth-refresh logging, business-binding failures are
+collapsed to a generic error, and packet-denial logging is rate-limited.
+DNS names refused by local=/#/ do not require a kernel-denied packet.
+
+**Installed artifacts versus main compiler:** compiled each of the seven
+retained manifest policies with `engine/scripts/server/egress_policy.py` on
+`9b081f1`, without installing regenerated output. For all seven directories:
+
+- `firewall.nft` has exactly three added metadata-only logging rules: before
+  the private IPv4 reject, private IPv6 reject and final unconditional reject.
+  They use the same reject predicate, `limit rate 10/second burst 20 packets`,
+  `log prefix "mc-deny-<tenant-tag> " level info`. No generated line was removed;
+  every unconditional reject remains after its log rule.
+- `manifest.json` differs only in top-level `status`
+  (`cto-authorized-vps-rollout` versus `scratch-experiment-not-production-approved`)
+  and the added `denied_log_prefix`.
+- `resolv.conf`, both generated service files and `50-egress.conf` match
+  byte-for-byte. DNS configs matched before the point-4 change; production's
+  `dnsmasq.conf` now additionally contains exactly `log-queries`.
+- `observe.lock` is an extra operational lock file, outside compiler output.
+
+The compared tags are Ivan `3a94d888f0a7`, Riccardo `e00a4971b76c`, support
+`16d5836d57be`, Mario MrCall `fd58d04802f1`, Café124 `b75843f3770f`, Mario Gmail
+`0c008879b605` and production `18f855d535e9`. Riccardo/Café124 files are retained
+rollback evidence, not live enforcement. No allowlist difference was found.
+
+**Point-4 capture armed at 09:23:04 UTC:** production-only DNS config syntax
+validated, firewall stayed active, and only mrcall-dns-18f855d535e9.service
+was restarted with ignore-dependencies. DNS PID changed 4126830 → 4155073;
+production PID stayed 4126831 and all seven daemon PIDs were unchanged.
+The production daemon and its enforced firewall were not restarted.
+The first metadata snapshot, through 09:24:14 UTC, contains four queries for
+`api.mrcall.ai`, forwarded and resolved; no local-policy refusals or upstream
+negative answers. This is background traffic, not attributed to a CTO test call.
+The new CTO test call and its query/refusal report remain pending.
+
+Root-only sanitized evidence is retained as production-diagnosis-calls,
+production-diagnosis-journal, production-diagnosis-artifacts-before,
+production-diagnosis-source, production-dns-query-capture-start and
+production-dns-query-observations JSON files under `/root/r4-vps-20261003/`.
+The DNS config backup is also root-only. Raw call contents and voice-file
+values are not read or copied for this diagnosis.
+
+**Pre-call final reviews:** two fresh independent reviewers returned
+APPROVED. Their local read-only checks reproduced historical call counts,
+the 164-entry production journal scan, zero kernel denials, exact compiler
+differences and live daemon/DNS/firewall status. Only production enables
+query logging. Copies retained in the egress directories match the compiler
+as described above; active systemd service/drop-in copies match for the five
+enforced tenants, while Riccardo/Café124's active installations remain removed
+after rollback. Approval covers the diagnosis and armed DNS capture, with the
+new CTO call and its DNS observations explicitly pending. **Ready for the
+point-4 test call.**
+
+**Point-4 CTO call — 09:36:30 UTC, welcome followed by no response.** The
+CTO reported the symptom after calling. One funded call appeared after query
+logging was armed, correlated by reservation and trace timestamps. It closed
+at trace call_finished 09:36:58.623125 UTC with observed runtime 27.275s,
+provider voice duration 23s, ledger/meter both closed, finalization confirmed,
+sideband_eof and provisionally_covered reconciliation. This confirms closure,
+not successful conversation; the CTO reports that functional acceptance failed.
+
+Sideband attached once at 09:36:33.235346 UTC. The trace contains 116
+input_audio.append events (09:36:33.361052–09:36:56.308035), 114 output_audio
+events, **zero caller transcript deltas**, 15 voice transcript deltas,
+zero delegation events and zero unique client delegations. Voice transcript
+provider timing spans 0.6–5.2 seconds; capture is possible_gap. Memory context
+completed; results_sent is zero. binding_invalidated and exposure are absent
+(not recorded), as are engine_failure and engine_failure_type.
+
+The trace's audio event counts do not measure non-silent input or handset
+playback. Source analysis confirms that audio bytes, amplitude, VAD and speech
+markers are not retained; the event filter would discard other event kinds.
+The greeting is triggered by session.started independently of caller words.
+The observed failure occurs before any caller transcript/delegation is seen;
+whether caller media is silent, lost, or not recognized remains unresolved.
+
+For the correlated **09:36:29–09:37:00 UTC** network window, DNS records 22
+queries: 18 for api.mrcall.ai and four for api.openai.com. Both names were
+forwarded and resolved. No name was refused by local=/#/ and no upstream
+negative answer was observed. The production journal has 48 entries and no
+requested binding/auth/exception-type errors. Packet logging shows two
+production-scoped rejects to **172.66.0.243:443 TCP**:
+
+- 09:36:31.762982 UTC: FIN/ACK, 52 bytes;
+- 09:36:31.763152 UTC: RST/ACK, 52 bytes.
+
+Both use the same source port. The DNS response associates that destination
+with api.openai.com at 09:36:31.768787 UTC; later lookup and the sideband
+attachment succeed. The flags are consistent with connection teardown;
+their cause is not established and they do not demonstrate a failed new
+connection. No further production rejects were observed through call closure.
+They do not explain the lack of caller text after the sideband attaches.
+At diagnosis time production remains active, PID 4126831, NRestarts=0.
+No daemon restart, rollback, allowlist or voice-configuration change was made.
+
+The DNS capture requested in point 4 has now observed the CTO call. Healthy
+closure and resolved DNS do not override the reported conversational failure;
+production's functional call acceptance and R4 completion remain open.
+Sanitized point-4 call, network, DNS-address and rejected-packet metadata are
+retained in root-only production-point4-*.json evidence. A bounded next
+controlled test can compare the caller's speaking interval and microphone/
+handset observations with metadata counts, preferably using another telephone
+path; no spoken words need to be recorded or published.
+
+**Point-4 amendment reviews:** both independent reviewers returned APPROVED
+after reproducing the call counts, 22-query DNS window, two teardown-flagged
+rejects and unchanged production PID. Their approval is for the diagnosis;
+the underlying caller-transcription failure remains unresolved, and neither
+functional call acceptance nor R4 completion is approved. The CTO was asked
+for speaking-interval and alternate-telephone metadata to bound a subsequent
+controlled test without reading or publishing spoken content.
+
+**Controlled alternate-telephone result — 09:48 UTC CTO report:** the CTO
+retried speaking after five seconds and confirmed that another originating
+telephone works. Its number is not copied into this record; no caller
+identity or spoken content was queried from runtime storage. Two additional
+funded calls appear in the metadata:
+
+| Reservation UTC | Runtime | Ledger / meter | Caller / voice transcript deltas | Sideband | Delegations | Capture |
+|---|---|---|---|---|---|---|
+| 09:46:45 | 15.961s | closed / closed | 3 / 20 | 1 | 0 | deltas_observed |
+| 09:47:10 | 19.054s | closed / closed | 0 / 13 | 1 | 0 | possible_gap |
+
+Both finalize confirmed with sideband_eof and provisionally_covered
+reconciliation; neither records binding_invalidated, exposure or engine
+failure. The first contains 58 input-audio/55 output-audio events and caller
+transcript provider timestamps 6.6–7.4 seconds. Voice transcript timing
+extends to 9.0 seconds. The second contains 78 input-audio/76 output-audio
+events and voice transcript timing ending at 5.2 seconds. Without querying
+caller identities, these timestamps are not assigned to a specific telephone;
+the CTO's report supplies the successful alternate-path observation.
+
+For 09:46:44–09:47:31 UTC there are 40 DNS queries; api.openai.com and
+api.mrcall.ai resolve and no names are refused by local=/#/. The 88-entry
+production journal scan has no requested binding/auth/exception-type errors.
+Two scoped kernel rejects occur at 09:46:47.093994/.094155 UTC to
+162.159.140.245:443 TCP, FIN/ACK and RST/ACK, before the first call's sideband
+attachment. Thus the same teardown-rejection pattern also occurs in the call
+with bidirectional transcript observations; it is not sufficient to explain
+the greeting-only symptom.
+
+The 09:36:30, 09:46:45 and 09:47:10 calls have identical recorded
+config_revision values (compared privately, values not published). Production
+remains PID 4126831, active, NRestarts=0. Installed firewall SHA256 remains
+`7236784127ab3e8b676cb6165a9d8d277c20642f68e380cd07f59d81af435479`.
+No host or voice-configuration change was made for the comparison. This
+supports an originating-telephone/media-path-dependent problem under the same
+enforcement; it does not distinguish handset input, carrier/codec transport
+or provider recognition. The CTO-confirmed successful conversation is retained
+as a controlled positive result, with the failing originating path unresolved.
+The metadata contains no delegated-engine request, so that path remains
+untested. R4 remains open for the outstanding rolled-back profiles and checks.
+Root-only evidence: production-alternate-path-call-metadata.json and
+production-alternate-path-network-metadata.json.
+
+**Alternate-path amendment reviews:** both independent reviewers returned
+APPROVED after verifying the two calls, unchanged production runtime/firewall,
+DNS observations and teardown packet flags. The controlled positive result
+is recorded without identifying a telephone or attributing a specific carrier/
+codec cause. The failing originating path and delegated-engine test remain open.
+
+**Repeated functional confirmation — 09:55 UTC CTO report:** the CTO repeated
+the test and reported that it works again. This is a further CTO-confirmed
+positive result; it is not assigned to a caller identity or a ledger row.
+This session made no host changes for the retry. The remaining R4 rollout
+gates are unchanged.
+
+#### R_4 VPS check — all LLM providers (2026-10-03)
+
+`git pull --rebase origin main` included `81c830bd` and reached `1f0b9f2`.
+Every profile's policy must include `api.anthropic.com`, `openrouter.ai`,
+`zylch.mrcall.ai` and `api.mrcall.ai`, each TCP 443 / HTTPS, regardless of its
+currently selected provider. This applies to initial enforcement and updates
+of already-enforced profiles.
+
+Read-only VPS checks at 07:25–07:27 UTC found **zero already-enforced
+profiles**. All seven daemons are active as their own tenant users with
+`NRestarts=0`, in the host network namespace. None has an egress/DNS unit
+dependency, a dedicated resolver bind or a systemd IP-address filter. There
+are no tenant egress tables, owner/cgroup firewall rules, installed egress
+units, policy directory or reviewed DNS binary. An independent verifier
+confirmed the effective daemon/slice and nft/iptables state. Focused final
+review: **APPROVED**. Consequently, there was no existing enforced policy to
+extend; no host rule or daemon was changed. R4 enforcement and its acceptance
+remain pending.
+
+#### R_4 observe-first amendment — 2026-10-02 (two brief reviews APPROVED)
+
+CTO instruction after inventory `e33c653`: every VPS profile must first run
+observe-only, logging connections outside its candidate sets and blocking
+nothing. R_4 must prove observe → enforce → rollback on scratch before any VPS
+proposal. R_4 still must not access the services VPS; inventory and handoff
+use git only.
+
+**CTO decision — observation duration and unknown closure (2026-10-02):**
+the observation window is **24 continuous hours per profile**, replacing the
+previous 72-hour interpretation. It must contain at least one accepted full
+mail-sync cycle. **Unknown destinations are closed through controlled tests
+of the applicable channels, not by waiting.** Record each test's outcome and
+destination attribution; for an inapplicable channel record evidence that it
+is disabled/unconfigured.
+
+The security brief remains the right artifact and final criterion 6 remains
+unchanged. This is an explicitly unconfined discovery stage, never evidence
+that egress is already bounded. Missing controlled-test evidence for Calendar,
+cold embeddings, WhatsApp media, CRM or production voice keeps its corresponding
+unknown open; elapsed time alone does not authorize enforcement. A collector
+outage, unaccounted sample loss or material policy change invalidates the
+observation window and requires
+fresh complete evidence. One tenant's acceptance never authorizes another.
+
+Acceptance for this amendment: observe adds no packet rejection, DNS refusal,
+connection marks, daemon restart dependency or resolver replacement. A known
+candidate destination and an unknown destination both remain usable; the latter
+produces metadata-only evidence. Enforcement denies that unknown destination;
+rollback restores the original behavior and leaves a sibling unaffected.
+No payload, credentials, HTTP headers, raw DNS queries or voice-file values
+are collected. IP/port evidence alone does not prove hostname ownership:
+ambiguous CDN/shared-IP samples remain unknown until explained by trustworthy
+code/configuration or a controlled channel operation. No automatic allowlisting.
+
+Inventory interpretation: all seven use Gmail IMAPS 993 and SMTP STARTTLS 587;
+shared StarChat/billing are api.mrcall.ai / zylch.mrcall.ai:443, providers vary
+as recorded in the preserved inventory block. Only Mario Gmail has WhatsApp
+session metadata; only production has a voice listener. Calendar API,
+embedding redirects, WhatsApp media, Pipedrive/other credential-backed enabled
+states, and voice Vonage/selected routes remain open. Browser-only endpoints
+must not widen daemon policies. Do not infer a wildcard from an unknown.
+
+#### R_4 observe-first implementation plan (two fresh reviews APPROVED)
+
+The two fresh brief reviewers returned APPROVED. This amendment supersedes
+any earlier direct-to-enforcement rollout wording; the preserved inventory
+block is input, not closure of its unknowns. Implementation remains here.
+
+1. Require explicit `mode: observe|enforce` in policy input, reflected in the
+   manifest. Enforcement keeps its existing restrictive resolver and guard.
+   Observe generates only its own all-accept nft table, manifest, independent
+   observation service and candidate-refresh timer. **No daemon drop-in,
+   resolver file/config, DNS service, ct-mark assignment or reject/drop rule
+   in observe mode.** No daemon restart is needed to attach observation.
+2. Observe classifies original-direction IPv4/IPv6 TCP/UDP against the same
+   per-endpoint IP/port sets; reply-direction traffic is excluded. Everything
+   outside is accepted and counted. Kernel `log` uses a fixed tenant prefix,
+   default header-only fields, no payload/option logging or NFLOG packet copy.
+   Logs are rate-limited to 10/second (burst 20); separate total-outside and
+   emitted-log counters expose skipped samples. It samples packets, not a
+   lossless connection ledger. Root journal collection retains only timestamp,
+   tenant prefix, destination IP/port/protocol; never raw packet payload,
+   DNS query names, HTTP headers or voice configuration. Root controls access
+   and retention (at least the active 24-hour window plus its review).
+3. Keep the daemon's existing DNS path unchanged. A separate root timer every
+   60 seconds resolves **only operator-approved candidate hostnames** through
+   the host resolver and atomically refreshes the observe sets. No traffic
+   interception. This is a conservative DNS snapshot: different CDN answers
+   or subdomain lookups may appear outside and require explanation, never
+   automatic allowlisting. A failed/incomplete refresh is visible and prevents
+   acceptance of that window; it cannot block any daemon traffic. The updater
+   reads only a root-owned generated manifest, invokes fixed nft commands,
+   requires observe mode and a matching loaded observe table, and takes a
+   per-policy lock. Promotion stops its timer/service and holds that lock
+   before replacing the table, so a stale updater cannot change enforce sets.
+4. A small root report command exposes candidate-update outcome and nft
+   total/logged/suppressed counts without echoing supplied policy values.
+   Zero nft sample suppression alone is not proof of complete logs: collector
+   continuity, journal retention/rate-loss and valid refresh coverage must
+   also be recorded. IP/port observations need curated hostname attribution
+   backed by code/configuration or controlled channel evidence. Reverse DNS
+   or a quiet interval is insufficient to close an unknown.
+5. Scratch proof: start with a running synthetic daemon and sibling baseline.
+   Attach observe without changing its PID or resolver. An unknown TCP/UDP
+   destination (also loopback/private), external DNS and IPv6 remain usable;
+   verify the unknown event is actually in kernel logs, while a synthetic
+   payload marker is absent. Prove known-set classification and visible
+   suppression under a burst. Prove observer/refresh failure does not stop
+   daemon or block its traffic. Stop timer/observer, stop selected daemon,
+   clear only its conntrack mark, load enforce and its resolver dependency,
+   restart selected daemon: unknown is now refused while known is usable.
+   Roll back only this tenant to its baseline; sibling PID/rules untouched.
+   Retain existing namespace and compiler tests; add mode/refresh/race tests.
+6. Reviews: two independent code/evidence reviews, repair REVISE findings;
+   only then publish the scratch mechanism record as suitable for a proposed
+   **observe-only** VPS phase. No VPS access or deployment from R_4.
+
+VPS handoff gates, separately for each of the seven profiles:
+- An authorized VPS operator records profile identity, policy hash, observation
+  start UTC, journal cursor/retention and candidate-refresh health. Start only
+  observation; keep existing daemon and resolver. Existing host firewall
+  behavior is preserved, not overridden. Record one full accepted mail sync
+  and 24 continuous hours with complete usable evidence.
+- Maintain a closure row for Calendar API, embedding redirects, WhatsApp media,
+  Pipedrive/other connectors and production voice/Vonage. For an inapplicable
+  channel require evidence that it is disabled/unconfigured; silence is not
+  proof. For an applicable channel perform a controlled relevant test
+  (e.g. media receipt/cold model download/voice integration), map destinations
+  to curated hostnames/ports and rerun the window after material policy changes.
+- Log loss/suppression, refresh or collection gaps, unexplained destinations,
+  missing representative channel activity or app/mail anomalies keep the
+  profile in observe; fix and restart a complete window. No "24 hours passed"
+  automatic promotion and no inferred broad suffix to silence an unknown.
+- Only after all closure rows and authentic M3 channel checks have evidence
+  and two reviewers APPROVE the profile's promotion: snapshot/stop selected
+  daemon, stop observer timer/updater under policy lock, clear selected marks,
+  switch to enforce, start, accept a full mail cycle before the next profile.
+  Preserve observation evidence. Any enforcement anomaly rolls that tenant
+  back to its original resolver and unrestricted egress (or reviewed observe
+  configuration); never edit another tenant's table or flush the host ruleset.
+- R_4 done still means every migrated tenant is enforced with criterion 6
+  recorded. Completion of the observe-only window is not that condition.
+
+**Scratch coordination:** scratch VM presa da R_4 dalle 2026-10-02 19:58:02 UTC.
+R2's recorded release and this worktree's prior release checked; publish
+and refresh main before any host test. Only scratch is authorized.
+
+#### R_4 observe-first scratch result — 2026-10-02 (two integration reviews APPROVED)
+
+Implementation is in `engine/scripts/server/egress_policy.py` and
+`egress_observe.py`; the repeatable explicit host proof is
+`engine/tests/server/probe_egress_observe_host.py`. Both input modes are now
+mandatory: a policy without `mode` is refused. Observe emits no daemon drop-in
+or DNS configuration. Its candidate timer and service are independent of the
+running daemon. Enforcement retains the restrictive resolver and startup guard.
+Both firewall loaders and the updater serialize on the same root-owned
+`observe.lock`; the updater verifies the live observe policy under that lock.
+On scratch nftables 1.0.2, JSON omits table comments, so the live discriminator
+is the `observe_<policy SHA256>` chain name (present in JSON), not a comment.
+No helper or application code was changed.
+
+Host proof at **20:19:19–20:19:24 UTC**, fixture `scrA2…2` / Unix UID 993:
+- Observe attached to an already running daemon: PID and mounted resolver
+  unchanged. Unknown TCP and UDP echo worked over loopback, private IPv4 and
+  IPv6; direct external UDP/TCP DNS worked. Known HTTPS certificate retrieval
+  worked and matched its candidate set without adding outside counters.
+- Actual kernel journal events identified the unknown UDP destination. The
+  synthetic payload canary was absent from every matching raw kernel record;
+  the export contained only timestamp, tenant, destination IP, port, protocol.
+  A 200-packet burst made sample suppression visible. This intentional burst
+  invalidates any observation-window claim for this short functional test.
+- Failing updater and observer starts left the daemon PID and unknown traffic
+  working. A real updater queued behind the promotion lock refused after the
+  table changed to enforce; a second stale refresh also refused. Neither
+  changed enforcement rules.
+- With enforce and its resolver active, known HTTPS worked; unknown TCP/UDP
+  loopback/private/IPv6 and direct external TCP DNS were refused. Rollback
+  restored unknown reachability and the original resolver. A separate canary
+  table was unchanged; actual A1/P1 sibling PIDs, states and restart counters
+  were unchanged. Cleanup restored A2 inactive, empty host nft tables,
+  original host resolver and the identical installed R2 helper.
+
+Regression evidence: 14 focused unit tests PASS; the prior disconnected
+namespace probe PASS (A/AAAA, CNAME, TTL expiry/admitted connection continuity,
+external DNS denial, per-tenant rollback); the prior real systemd lifecycle
+probe PASS including helper reapply, cold firewall failure and resolver
+failure refusing daemon startup. That regression ran at 20:14:10–20:14:17 UTC
+and cleaned up its host changes. The earlier five-minute timeout proof remains
+in the preceding R4 record; this rerun used the short expiry variant.
+
+Local evidence (ignored build workspace, synthetic metadata only):
+- `observe-host-final.jsonl` SHA256 `71a5be6a37343528b2ad999e751a1846853339dc02e54b4ebe9600c105a05d75`
+- `observe-enforce-regression.txt` SHA256 `828e6d1eb41754cfb5113e098da2107fe1937f13b9b12617413e9d9a9ab8519a`
+- `observe-kernel-regression.jsonl` SHA256 `ef731e9ea4e15d958c0d1ba893c2746e132c2f9b95853111e7e83d23024ebf96`
+- `observe-unit-final.txt` SHA256 `ebf27328d5c60c4bcb12b8847f660f24b6c3b414884da06a1ea6132d0338bb45`
+
+Initial probe repairs, not hidden acceptance: a malformed one-line canary
+nft table was corrected; missing JSON table comments caused safe refresh
+refusal until the chain discriminator replaced it. Periodic DNS refresh can
+legitimately change CDN snapshots; the deterministic known-set assertion now
+stops that timer and pins one independently resolved candidate address.
+Actual automatic refresh success is checked before this controlled assertion.
+All failed attempts also completed cleanup. This reinforces the documented
+conservative-snapshot limitation; it does not close any real CDN unknown.
+
+**Not claimed:** authentic IMAP/WhatsApp/LLM/Firebase acceptance, a complete
+observation window, complete service host attribution, any VPS deployment,
+or R4 done.
+No services VPS access and no paid LLM calls occurred. Two fresh independent
+integration reviewers returned **APPROVED** for this scratch mechanism after
+reading code and the transition/race/regression evidence. Both explicitly kept
+the authentic channel, then-proposed 72-hour observation and VPS enforcement
+gates open; the CTO decision above now sets the observation window to 24 hours.
+Separate final end-to-end reviewers also returned **APPROVED** for publication
+of the scratch mechanism and handoff. A final bounded-memory improvement
+streams multi-day journal export rather than buffering it: 14 tests and the
+whole host transition were rerun successfully. Both final reviewers again
+returned **APPROVED**, including the streaming delta, updated evidence hashes
+and explicit incomplete-export handling.
+
+#### R_4 observe-first operator handoff (proposal only; no VPS action here)
+
+For each profile independently, the authorized VPS session must complete the
+following. Inventory `r4-vps-destinations` below remains unchanged input.
+
+1. Map the immutable profile UID to its existing Unix user; verify identity,
+   daemon baseline, existing rules and root ownership. Compile a reviewed
+   candidate policy with `mode: observe` into a new staging directory. Use
+   the inventory's exact service names and port groups, not browser-only
+   domains, guessed wildcards or an unreviewed shared-IP expansion. Resolver
+   fields are still validated policy fields, but observe never applies them.
+   Record the policy hash and open closure rows before installing anything.
+2. Review the generated manifest and all-accept rules. Install the two
+   reviewed Python files under `/usr/local/libexec/mrcall-egress/`, root-owned,
+   not writable by tenants. Install generated artifacts at the manifest's
+   `/etc/mrcalld/egress/mc-<tag>/` (root-owned, no group/world write), with its
+   observer service and refresh service/timer under `/etc/systemd/system/`.
+   Do not install any enforce artifact, daemon drop-in or resolver file.
+   Start only `mrcall-observe-<tag>.service` and
+   `mrcall-observe-refresh-<tag>.timer`; confirm refresh success, unchanged
+   daemon PID/resolver, and no existing host rule was changed. Observe does
+   not override an existing firewall's restrictions. A reboot/restart needs
+   operator reattachment and a new complete observation window; there is no
+   implicit persistence/promotion or automatic acceptance.
+3. Before starting the 24-hour clock, establish root-controlled journal
+   retention for the complete window plus review; record boot ID and journal
+   cursor/start UTC. The kernel journal holds default packet-header metadata
+   only; its root export deliberately retains only the five fields above.
+   Export with `egress_observe.py events <canonical manifest> <UTC-start>`
+   (`YYYY-MM-DDTHH:MM:SSZ`), redirecting to a root-only evidence file. Use
+   `egress_observe.py report <canonical manifest>` to record refresh health
+   and outside/logged/suppressed packet counts. The logged counter counts
+   nft log attempts, **not guaranteed journal delivery**. Reconcile it with
+   retained records, monitor journal/kernel loss and the timer's success
+   history; a currently healthy report cannot certify a gap-free past.
+   `events` streams existing retained records, not a persistent collector;
+   require exit status zero, otherwise its partial export is incomplete.
+   Record periodic cursors/exports and counters throughout the window;
+   archive them before journal rotation. Any unexplained loss, restart,
+   refresh gap or material candidate change restarts the full window.
+4. Keep each profile in observe for **24 continuous hours containing
+   one full accepted mail sync**. Close applicable unknowns through controlled
+   tests, recording destination attribution/disabled-channel evidence from the
+   amendment's closure rows. Initial policy snapshots may report false
+   outside candidates for subdomains/CDNs; investigate them, never silently
+   allow everything. No packet sample or DNS answer proves hostname ownership.
+5. After two independent reviewers approve that profile's complete window,
+   closure rows and authentic M3 channel evidence, stage `mode: enforce` in
+   a separate directory. Snapshot the original files/state; stop only the
+   selected daemon and its observe timer/updater. Keep the policy directory
+   and its lock inode in place; **do not replace or delete `observe.lock`**.
+   Install the reviewed enforce artifacts, DNS binary/service and daemon
+   drop-in; its firewall loader uses the same lock. Clear only the selected
+   tenant's conntrack mark, reload systemd and start that daemon. Preserve
+   observation evidence. A full accepted mail cycle is required before the
+   next tenant's enforcement. No blanket restart or ruleset flush.
+6. On an enforcement anomaly, stop selected daemon, remove only its egress
+   drop-in, stop its DNS/firewall units, clear its selected conntrack mark,
+   and under the same policy lock delete only its nft table. Restore original
+   resolver/configuration and restart selected daemon; verify its functional
+   baseline and sibling invariants. Resume reviewed observe only after its
+   artifacts and independent services are restored; begin a new window.
+
+VPS observation status: **NOT STARTED by this session** for support, Mario
+Cafe124, Mario Gmail, Mario MrCall, production, Ivan and Riccardo. Each requires
+its own timestamps, policy hash, full-sync evidence, 24h continuity, closure
+rows and review verdicts. Inventory alone and another profile's success do not
+satisfy those gates. No request to access or enforce the VPS is made here.
+
+**Observe-first scratch lease:** scratch VM **rilasciata** da R_4 alle
+2026-10-02T20:20:56Z. Final checks: no host nft table, A2 inactive, A1/P1 active,
+all temporary observer/enforce services and binaries removed; R2 helper hash
+unchanged. No further machine tests under this lease. Publication follows
+`git pull --rebase origin main && git push origin HEAD:main`.
+
+#### R_4 mechanism revision (two plan reviews APPROVED)
+
+First isolated kernel experiment: dnsmasq 2.91 with nftset, nftables 1.0.2,
+A/AAAA population, unrelated DNS refusal, IPv4/IPv6/private/metadata refusal,
+pre-opened forbidden flow rejection and cold-table repopulation pass.
+An accelerated three-second set expiry kills an already admitted TCP flow:
+**REVISE**, no live daemon rules installed. The initial test fixture used
+RFC5737 addresses, correctly refused by DNS rebinding protection; repaired
+by using public-form addresses bound only inside the disconnected namespace.
+
+Revision: reserve connection-tracking marks for this mechanism on this host.
+Operator preflight must find no foreign ct-mark writer/consumer or unexpected
+use of the selected numeric uid mark. Independently validated rules owned by
+this mechanism for other tenants are permitted; before first apply there
+must be no connections carrying the selected mark; otherwise refuse and
+redesign, never overwrite another firewall's marks. On new admitted outbound
+flows set ct mark to the numeric tenant uid. Only that tenant's established
+flows bearing its mark bypass later set expiry; pre-existing unmarked flows
+still go through the destination check. Private destination denial still
+precedes the established outbound exception. Incoming reply-direction traffic
+retains the separate allowance. This is connection admission: no new flow to
+an expired/unapproved address is allowed. Per-tenant changes stop the daemon
+and clear that tenant's marks before reapply; rollback clears those marks and
+removes only its table, with a sibling retained. No blanket established permit.
+The scratch probe must demonstrate admitted flow survival beyond expiry,
+new-flow denial until DNS refresh, rejection of a pre-opened forbidden flow,
+and two-tenant installation/reapply preserving the sibling rules and its
+already-admitted connection.
+
+Ubuntu's `dnsmasq-base` 2.90 has **no-nftset**. The experiment builds upstream
+2.91 with `COPTS=-DHAVE_NFTSET`; production prerequisites require a reviewed,
+root-owned nftset-enabled binary at `/usr/local/libexec/mrcall-dnsmasq`.
+No distribution daemon or host resolver is enabled. The dependency installs
+and source build on scratch do not establish a production packaging decision.
+
+The revised isolated probe passes expiry survival/new-flow denial and
+sibling preservation. First actual A2 service probe stopped at resolver
+startup: `pid-file=` in the shared dnsmasq config disabled the systemd
+forking service's requested PID file. The probe was cancelled and rolled
+back immediately; A2 is inactive again, host nft tables empty, A1/P1 PIDs,
+host resolver and installed R2 helper unchanged. Fix: PID-file selection
+belongs to the invocation (dedicated runtime file for systemd, disabled
+only in the isolated foreground probe), never shared dnsmasq config.
+Code re-review precedes another host attempt. No VPS action.
+
+#### R_4 detailed plan (APPROVED for compiler and scratch experiment)
+
+Two fresh independent reviewers approved the existing brief and returned
+REVISE on the outline as an executable plan: resolver bypass, IPv6, lifecycle,
+rollback isolation and authentic application evidence need explicit checks.
+The index's scratch-now / VPS-after-reviewed-evidence ordering supersedes
+"after M2 is stable on all six" below. Rollout targets all migrated tenants.
+
+Fresh plan reviewers A (mechanism) and B (conformance) both returned
+APPROVED. A requires the expiry probe to include an already-open IMAP or
+WhatsApp connection crossing the five-minute lifetime, not just reconnect.
+
+Implementation belongs to R_4 in this worktree; do not edit R2's helper.
+Build a dependency-free policy compiler plus focused tests, followed by the
+scratch mechanism experiment. No automatic production enablement or change
+to `update-daemons.sh` is part of the experiment. The experiment is a gate,
+not a claim of completed deployment.
+
+- Root supplies an explicit policy: numeric tenant uid, derived tenant name,
+  dedicated 127.0.0.x DNS address, literal upstream resolver, approved DNS
+  suffixes and TCP/UDP ports per suffix. Reject malformed/duplicate fields,
+  unsafe addresses, and non-derived tenant names. Before installation compare
+  the numeric uid with `id -u` of the derived username and the daemon
+  effective User; a mismatch is a refusal. System uids below 1000 are valid. Customer Settings never
+  updates this policy automatically. An endpoint change needs operator review.
+- Compile one `inet` table per tenant, separate A/AAAA sets per port group,
+  one output base chain matching only that numeric skuid, counters and final
+  reject. Permit that tenant's dedicated DNS address on TCP/UDP 53; deny
+  external DNS, loopback/private/link-local/metadata targets before the
+  destination-set permits. Both IP families are covered. Do not permit
+  arbitrary established outbound flows. Established reply-direction traffic
+  preserves inbound voice callbacks; the reviewed revision above adds only
+  the tenant-marked, previously admitted outbound exception.
+- Run one dnsmasq instance per tenant, listening only on its dedicated loopback
+  address; `no-resolv`, `no-hosts`, `local=/#/`, approved suffix forwarding
+  only, rebinding protection, A/AAAA nftset entries. Bind a root-owned resolver
+  file into that daemon's `/etc/resolv.conf` through an instance drop-in
+  sorting before `tenant.conf`. Do not change the host resolver. Other tenants
+  cannot reach this resolver: their loopback egress is denied. Exact suffix
+  and all its subdomains are authorized; no public-TLD wildcard is allowed.
+- This is address/port enforcement, not HTTPS hostname or payload filtering:
+  another service on an admitted shared IP and port remains reachable. DNS
+  queries under approved suffixes remain possible. Document these limits.
+  DNS cache disabled and answer TTL capped at zero; nft elements expire after
+  five minutes. Test repeated answers, expiry, CNAME and reconnect explicitly:
+  dnsmasq's `add element` does not promise refresh of an existing timeout.
+  A failed reconnect is a failed gate, not permission to add unrestricted
+  established traffic or remove expiration. Long-lived clients which cache
+  beyond the TTL require a revised mechanism before deployment.
+- The scratch operator stops only the selected daemon, atomically loads its
+  table (`nft -c` first), starts its resolver, installs the resolver bind and
+  systemd dependency, then starts the daemon. A oneshot firewall unit loads
+  the same rules before the resolver/daemon on boot, stays active and never
+  removes rules on stop. Guard failure prevents daemon start. No global
+  `flush ruleset`, host resolver change, or service reconcile is permitted.
+  Reload/reapply is tested with tenant stopped, empty sets and a cold resolver.
+- Rollback: stop selected daemon, remove its resolver bind/dependency, stop
+  its resolver, remove only its named table, daemon-reload, start daemon and
+  repeat baseline. Keep another tenant's table/rules and resolver unchanged.
+  Offboarding removes these same owned artifacts before uid reuse. A global
+  firewall flush is outside operator procedure; daemon/service restart and
+  reboot protection must be proved before the VPS gate.
+
+Inventory from repository (host configuration still pending):
+
+| Use | Source / approved endpoint candidate | Transport |
+| --- | --- | --- |
+| Mail | `config.py` IMAP_HOST/SMTP_HOST and actual saved overrides, extracted by name only | configured IMAP/SMTP TCP ports |
+| WhatsApp | neonize/whatsmeow service and media names; enumerate installed dependency and observe scratch receipt before approving suffixes | TCP 443, additional ports only with evidence |
+| StarChat / billing | `config.py`, `api.mrcall.ai`, `zylch.mrcall.ai`, saved MRCALL_PROXY_URL host | TCP 443 or explicitly reviewed override |
+| LLM | `llm/client.py`, `openrouter_client.py`: api.anthropic.com, openrouter.ai | TCP 443 |
+| Firebase | `rpc/firebase_auth.py`: www.googleapis.com certificate URL; securetoken.googleapis.com / identitytoolkit.googleapis.com only where refresh/sign-in actually runs | TCP 443 |
+| Google | `tools/google/calendar_oauth.py`: accounts.google.com, oauth2.googleapis.com, www.googleapis.com; Calendar transport inventory pending | TCP 443 |
+| Embeddings | fastembed installed model manifest: huggingface.co and actual redirect hosts, inventory pending; current hosted cache is read-only | TCP 443 |
+| CRM | `tools/pipedrive.py`: api.pipedrive.com or configured base host when enabled | TCP 443 |
+| Voice | `llm/openai_voice.py`, `services/voice/smoke_transport.py`: api.openai.com | TCP 443 |
+
+The two voice transports explicitly use `trust_env=False`; leave them so.
+Packet filtering also covers their direct sockets. Other clients retain their
+existing proxy behavior; inspect only proxy host/port, never credentials, and
+refuse rollout if a proxy would turn the allowlist into unrestricted forwarding.
+No voice-file values enter output, policy artifacts or git.
+
+Scratch evidence matrix (each row must name identity, result and timestamp):
+
+1. Baseline selected daemon and sibling, unit identities, mail status and
+   restart counters; check dnsmasq >=2.87 with nftset and current firewall.
+2. Real sockets as daemon uid: permitted address/port; denied unrelated
+   IPv4/IPv6, UDP, external DNS, loopback, metadata and a pre-opened disallowed
+   connection. Dedicated DNS refuses unrelated names; approved A/AAAA and
+   CNAME populate only intended sets. Observe counters and `nft list set`.
+3. DNS answer changes/expiry/repeated lookup, resolver restart, cold firewall
+   reload, daemon restart and boot ordering; verify no unfiltered interval.
+4. Full engine IMAP sync with completed result; WhatsApp message receipt;
+   real LLM response through normal budget controls with no paid inference
+   unless CTO explicitly overrides the brief's no-paid-verification rule;
+   valid Firebase ID token verification with cold Google certificate cache.
+   Never persist the ID token. Credentials/session availability is a hard
+   prerequisite. TCP/TLS/401 or mock responses are not these checks.
+5. Rollback restores baseline; sibling table and service state are unchanged.
+   Any daemon/store/app anomaly triggers rollback and halts rollout. A bug in
+   the test itself is fixed and rerun, with both outcomes retained.
+6. Two fresh independent code/evidence reviews must both say APPROVED over
+   every row before VPS. Missing live credentials or inference evidence leave
+   the gate open. No production rule is installed while it is open.
+7. VPS: selective inventory, baseline, one migrated tenant at a time; accept
+   one complete engine mail sync cycle and applicable channel/auth checks
+   before the next. On failure roll back only that tenant, verify recovery,
+   stop. Record each readable set and criterion 6, then R_4 is done.
+
+Sources for mechanism semantics: [dnsmasq manual](https://dnsmasq.org/docs/dnsmasq-man.html)
+(`nftset`, domain-scoped upstreams, rebinding) and
+[nftset implementation](https://github.com/imp/dnsmasq/blob/master/src/nftset.c).
+
+#### R_4 request to the VPS session — destination inventory only
+
+**CTO correction:** R_4 must not access desktop.mrcall.ai as any user.
+Mario's profile is on that VPS, not scratch. The previous suggestion to use
+that profile from this session is withdrawn. No further SSH attempts or VPS
+operations by R_4. Continue synthetic/scratch tests here. The prior failed
+SSH attempt authenticated no user and executed no remote command.
+
+The VPS session is authorized to read configuration only and fill the response
+block below, then push. R_4 will consume it through git. **Return only network
+hostnames (or configured address literals), ports and protocol, associated
+with the existing profile UID/alias. Never return complete URLs, URL paths,
+query strings, usernames, passwords, keys, tokens, voice-file values or dumps
+of any environment/process environment.** For a disabled/unconfigured channel,
+write `not configured`; an unavailable field is `unknown`, never guessed.
+No DNS queries, traffic tests, paid calls, service restarts or mutations are
+requested on the VPS for this inventory.
+
+For each of the seven migrated profiles, return these exact destination fields:
+
+1. **Mail:** effective `IMAP_HOST`, `IMAP_PORT`, `SMTP_HOST`, `SMTP_PORT`
+   after the engine's explicit override / email-domain preset / fallback
+   resolution in `email/imap_client.py::_resolve_host`. Do not return the
+   email address or password. Record TLS/STARTTLS protocol if it changes the
+   destination port; no mailbox names.
+2. **LLM and billing:** host + port only extracted from effective
+   `MRCALL_PROXY_URL`, `MRCALL_BASE_URL`, and the selected provider's actual
+   API base (`api.anthropic.com`, `openrouter.ai`, or an override). Include
+   host+port of any `ANTHROPIC_BASE_URL` / `OPENAI_BASE_URL` override actually
+   consumed by the running code. Provider label is optional; no model names,
+   API keys, account identifiers, balances or budgets are needed.
+3. **HTTP proxy:** host + port only for effective `HTTP_PROXY`, `HTTPS_PROXY`,
+   `ALL_PROXY` and lowercase equivalents, if present. Strip userinfo and all
+   paths/queries in memory before output. Do not dump `NO_PROXY`; instead
+   indicate which requested destinations use a proxy, if determinable from
+   configuration/code without traffic. An unrestricted forward proxy cannot
+   be automatically admitted as an egress endpoint.
+4. **WhatsApp:** configured/in-use WebSocket and media destination hostnames
+   and ports from the installed neonize/whatsmeow version or existing
+   non-secret connection metadata. No message content, JIDs, phone numbers,
+   session database or pairing material. If media hosts are runtime-only,
+   record `unknown until receipt`; do not guess a broad wildcard suffix.
+5. **Google/Firebase/Calendar:** configured certificate-fetch, OAuth token,
+   userinfo, Calendar API/discovery and Firebase refresh destination hostnames
+   + ports. Mark renderer-only sign-in endpoints as such so they do not
+   widen daemon egress. No Firebase token or OAuth row values.
+6. **Embedding model downloads:** actual configured model source hostnames
+   and ports from the installed fastembed model manifest and any already
+   known redirect/cache backend hosts. Do not initiate downloads. A warm
+   cache is not evidence that cold-download redirect destinations are known.
+7. **CRM and other enabled connectors:** effective Pipedrive base host+port;
+   any other enabled outbound connector (including Telegram/call initiation)
+   host+port. No CRM data or API tokens.
+8. **Voice:** outbound provider hostnames and ports derived from code and
+   enabled integration names only. **Do not read out or record any value from
+   the voice file**, including its endpoint/configuration values. If deciding
+   the route would require disclosing such a value, record `unknown`.
+9. **DNS:** currently configured upstream resolver address/host and port,
+   plus whether any above destination is a literal IP or private/internal
+   hostname. No host key, firewall dump or account credentials are requested.
+
+VPS response (reserved for that session; R_4 will not overwrite it):
+
+<!-- r4-vps-destinations:start -->
+Read-only inventory, 2026-10-02 UTC. Profile aliases below are the existing
+seven migrated profiles. Shared entries apply to all seven. Effective profile
+configuration was compared with initial daemon configuration and the running
+source, including production's pinned release; configuration predates daemon
+startup. No connection tests or DNS queries were made; no voice file was read.
+
+1. **Mail:**
+
+   | Profile alias | IMAP host | Port / protocol | SMTP host | Port / protocol |
+   |---|---|---|---|---|
+   | support | imap.gmail.com | 993 IMAPS/TCP/TLS | smtp.gmail.com | 587 SMTP/TCP/STARTTLS |
+   | Mario Cafe124 | imap.gmail.com | 993 IMAPS/TCP/TLS | smtp.gmail.com | 587 SMTP/TCP/STARTTLS |
+   | Mario Gmail | imap.gmail.com | 993 IMAPS/TCP/TLS | smtp.gmail.com | 587 SMTP/TCP/STARTTLS |
+   | Mario MrCall | imap.gmail.com | 993 IMAPS/TCP/TLS | smtp.gmail.com | 587 SMTP/TCP/STARTTLS |
+   | production | imap.gmail.com | 993 IMAPS/TCP/TLS | smtp.gmail.com | 587 SMTP/TCP/STARTTLS |
+   | Ivan | imap.gmail.com | 993 IMAPS/TCP/TLS | smtp.gmail.com | 587 SMTP/TCP/STARTTLS |
+   | Riccardo | imap.gmail.com | 993 IMAPS/TCP/TLS | smtp.gmail.com | 587 SMTP/TCP/STARTTLS |
+
+2. **LLM and billing:** all seven have billing proxy `zylch.mrcall.ai`,
+   443 HTTPS/TCP, and MrCall API `api.mrcall.ai`, 443 HTTPS/TCP.
+
+   | Profile alias | Selected provider | Daemon API host | Port / protocol |
+   |---|---|---|---|
+   | support | anthropic | api.anthropic.com | 443 HTTPS/TCP |
+   | Mario Cafe124 | anthropic | api.anthropic.com | 443 HTTPS/TCP |
+   | Mario Gmail | mrcall | zylch.mrcall.ai | 443 HTTPS/TCP |
+   | Mario MrCall | anthropic | api.anthropic.com | 443 HTTPS/TCP |
+   | production | openrouter | openrouter.ai | 443 HTTPS/TCP |
+   | Ivan | anthropic | api.anthropic.com | 443 HTTPS/TCP |
+   | Riccardo | anthropic | api.anthropic.com | 443 HTTPS/TCP |
+
+   Consumed Anthropic/OpenAI base overrides: `not configured` for all seven.
+   Upstream providers behind MrCall billing are server-side destinations,
+   not additional daemon destinations.
+
+3. **HTTP proxy:** HTTP_PROXY, HTTPS_PROXY, ALL_PROXY and their lowercase
+   equivalents: `not configured` for all seven. No requested destination is
+   routed through an environment-configured HTTP proxy. No proxy endpoint is
+   proposed for admission.
+
+4. **WhatsApp:** support, Mario Cafe124, Mario MrCall, production, Ivan and
+   Riccardo: `not configured` (no session-file metadata). Mario Gmail has
+   session-file metadata; the installed neonize/whatsmeow WebSocket
+   destination is `web.whatsapp.com`, 443 WSS/TCP. Current connected state:
+   `unknown`. Media destinations: `unknown until receipt`. Session contents
+   were not read; the disabled environment flag alone does not prevent the
+   session-based sync path. No wildcard destination is inferred.
+
+5. **Google/Firebase/Calendar:** all seven: Firebase certificate fetch
+   `www.googleapis.com`, 443 HTTPS/TCP; daemon Firebase refresh
+   `securetoken.googleapis.com`, 443 HTTPS/TCP (conditional on a refresh
+   credential; current credential availability `unknown`). Calendar OAuth
+   client: `not configured` in all seven effective profile environments;
+   existing Calendar credential state: `unknown`. Conditional OAuth token
+   destination `oauth2.googleapis.com`, 443 HTTPS/TCP, and userinfo
+   `www.googleapis.com`, 443 HTTPS/TCP, are fixed by code. Calendar
+   API/discovery destination: `unknown` from the running code/installed
+   client inventory. Browser-only Calendar consent: `accounts.google.com`,
+   443 HTTPS/TCP. Renderer-only Firebase sign-in:
+   `identitytoolkit.googleapis.com`, 443 HTTPS/TCP; renderer refresh:
+   `securetoken.googleapis.com`, 443 HTTPS/TCP. Browser/renderer endpoints
+   do not by themselves widen daemon egress.
+
+6. **Embedding downloads:** all seven use the configured default model's
+   installed fastembed manifest, with sources `huggingface.co`, 443 HTTPS/TCP,
+   and fallback `storage.googleapis.com`, 443 HTTPS/TCP. No configured model
+   or source override was found. Cold-download redirect/cache backend
+   destinations: `unknown`; no already-known per-model redirect endpoint
+   was established. Installed constants for other services and a warm cache
+   are not evidence of the required redirect destinations.
+
+7. **CRM and other connectors:** all seven: Pipedrive enabled state `unknown`
+   (credential-backed configuration was not read); its factory-selected
+   base is `api.pipedrive.com`, 443 HTTPS/TCP, conditional on configuration.
+   Telegram: `not configured` in all seven effective daemon environments.
+   MrCall call initiation uses `api.mrcall.ai`, 443 HTTPS/TCP; SMS uses
+   `zylch.mrcall.ai`, 443 HTTPS/TCP. Availability of the authenticated
+   call/SMS session: `unknown`. Other credential-backed connector enabled
+   states/destinations: `unknown`; no credential or OAuth row values were
+   inspected.
+
+8. **Voice:** support, Mario Cafe124, Mario Gmail, Mario MrCall, Ivan and
+   Riccardo: `not configured` as daemon voice listeners. Production has a
+   voice listener enabled; code supplies OpenAI destinations `api.openai.com`,
+   443 HTTPS/TCP and 443 WSS/TCP. Active integration selection and any route
+   requiring voice-file configuration: `unknown`. These code destinations
+   are conditional, not confirmation of a route chosen in the voice file.
+
+9. **DNS and address scope:** all seven use local stub `127.0.0.53`,
+   53 DNS/UDP and DNS/TCP. Configured upstream resolvers: `51.159.69.156`
+   and `51.159.69.162`, each 53 DNS/UDP and DNS/TCP; DNS-over-TLS is disabled.
+   The stub is a loopback literal; both upstream literals are public
+   addresses. Above application destinations are public-domain hostnames,
+   with no configured literal IP or explicitly private/internal hostname
+   identified. Their resolved address scope is `unknown` without DNS queries.
+<!-- r4-vps-destinations:end -->
+
+#### R_4 scratch results — 2026-10-02, final gate open
+
+Implemented in this worktree:
+`engine/scripts/server/egress_policy.py` (pure compiler, never installs),
+`engine/scripts/server/egress_probe.py` (disconnected network namespace),
+`engine/tests/server/test_egress_policy.py` (8 passing unittest cases),
+`engine/tests/server/probe_egress_host.py` (explicit root scratch-only fixture
+probe; refuses without `--execute-scratch`). Generated artifacts declare
+`scratch-experiment-not-production-approved`. Nothing is wired into reconcile.
+
+Compiler review A/B: initially REVISE for scoped IPv6 directive injection and
+excluding system UIDs below 1000; both fixed, re-reviewed APPROVED. Revised
+mark admission and PID-file repair also received both code APPROVED verdicts
+before the host retry. These are code approvals, not the M3/VPS evidence gate.
+
+Environment: systemd 249, nftables 1.0.2; distro dnsmasq-base 2.90 reports
+`no-nftset`. Installed compilation dependencies (gcc, make, pkg-config,
+libnftables-dev) and conntrack; built upstream dnsmasq 2.91 using
+`make -j2 COPTS=-DHAVE_NFTSET`. Source archive from
+`https://thekelleys.org.uk/dnsmasq/dnsmasq-2.91.tar.gz`, SHA256
+`2d26a048df452b3cfa7ba05efbbcdb19b12fe7a0388761eb5d00938624bd76c8`.
+Only dnsmasq-base was installed, not the distribution DNS service. The test's
+root-owned dedicated binary was removed by rollback. Packages remain for the
+next scratch pass; no global resolver service was enabled.
+
+| Evidence | Result and limits |
+| --- | --- |
+| Compiler tests | 8 PASS: injection, types/system UIDs, overlapping suffixes, endpoint port isolation, tenant isolation, output refusal/redaction and PID-file regression. |
+| Real kernel + DNS, isolated network namespace | PASS: atomic table load, A/AAAA and CNAME set population, changed DNS answer admission, allowed UDP endpoint, unrelated DNS refusal, allowed IPv4/IPv6, denied unrelated IPv4/IPv6, metadata and loopback, pre-opened forbidden connection refused, admitted TCP flow survives both accelerated 3-second and actual 300-second expiry, new flow denied until DNS refresh, cold table reload/repopulation, external and sibling DNS refused, selected rollback leaves sibling table and admitted connection intact. Synthetic servers never leave the namespace; this is not IMAP/WhatsApp evidence. |
+| Actual scratch daemon | A2 (`scrA2aaaaaaaaaaaaaaaaaaaaaaa2`, Unix uid 993) starts with firewall/resolver dependencies. Its mount namespace sees the dedicated resolver. A process in that namespace under the daemon identity resolves www.googleapis.com and fetches the public Firebase certificate endpoint with HTTP 200; unrelated DNS and direct 1.1.1.1:443 fail. Its nft set is populated/readable. Daemon restart succeeds. |
+| Reconcile compatibility | Installed R2 helper `create A2` says ready and keeps the running PID, with the R4 drop-in applied. The helper itself is byte-identical before/after. No full reconcile/pull was run. |
+| Rollback | PASS after every attempt: A2 back to its initial inactive state, generated drop-in/services/binary/config/table removed, selected conntrack mark deleted, host resolver byte-identical. A1 PID 127936 and P1 PID 128040 remain active with NRestarts=0. Host nft table list is empty as before. |
+| Full IMAP sync | NOT RUN: the four scratch profiles have no configured mail password/host; no real mailbox supplied. |
+| WhatsApp receipt | NOT RUN: none has a WhatsApp session store. |
+| Successful LLM call | NOT RUN: no configured provider key on scratch. CTO now authorizes Mario’s account and real calls with a USD 10 ceiling (target cents), overriding the brief’s no-paid-verification rule. No paid request made yet. |
+| Valid Firebase token verification | NOT RUN: no signed-in scratch client/token supplied. Certificate-fetch 200 is only network reachability, not authentication acceptance. |
+| Other lifecycle/transport requirements | Cold firewall-load failure and resolver-start failure prevent daemon exec; stop of guard retains rules and stops dependent daemon; both recovery paths PASS (18:16:41–18:16:44 UTC). Actual 300-second synthetic TCP run PASS (18:16:14–18:21:16 UTC). NOT YET PROVED: full five-minute authentic live-channel survival, actual host reboot and foreign-mark coexistence refusal. Two-tenant isolation was proved in the namespace, not with two live daemon services. |
+| VPS / criterion 6 for all migrated tenants | NOT STARTED: scratch live-evidence gate is open. Read-only SSH attempt to the documented mal@desktop.mrcall.ai failed public-key authentication before any remote command; no VPS mutation. |
+
+The final CNAME probe uses a distinct alias address: absent from the set and
+refused before lookup, then present only in its intended endpoint set and
+reachable afterwards (18:19:35–18:19:42 UTC; alias admission at 18:19:36 UTC). An earlier version checked only
+answer text for an already-admitted address; reviewer A correctly returned
+REVISE on that evidence, repaired and re-reviewed APPROVED. The separate
+300-second run used the prior alias check; its expiry/connection logic is
+unchanged. Neither run is presented as real IMAP or WhatsApp acceptance. After these
+additions, independent reviewers A and B again returned APPROVED for the
+partial scratch record/tests; the full R_4/VPS verdict remains REVISE.
+
+The real-service attempts retain two failures in the record: (1) PID-file
+configuration defect, fixed after rollback and two code reviews; (2) the
+probe inspected the mount namespace immediately after Type=simple reported
+active, before namespace setup completed. The second is a probe readiness
+bug: a bounded five-second wait repaired it, and the rerun passed. Final
+resolver service grants CAP_CHOWN for its PID-file ownership change as well
+as the DNS/nftset capabilities; final actual-service rerun passed with it.
+
+Reproduce only after obtaining the shared-machine lease: unittest discovery
+under `engine/tests/server` with `-p test_egress_policy.py`; the namespace
+probe takes the nftset-enabled binary path (append `--full-timeout` for
+the actual 300-second lifetime); the actual-daemon probe takes
+`--execute-scratch <binary>`. The latter intentionally requires this scratch
+fixture and an empty host nft table list, not an arbitrary production host.
+
+**Latest CTO instruction:** use `mario.alemi@gmail.com`; real calls authorized,
+maximum USD 10 for this verification, aiming for cents. This supersedes the
+no-paid-verification condition above and in the brief. Profile discovery found
+no matching Mario profile among the four hosted scratch fixtures or the one
+root-local profile. The documented `mal@desktop.mrcall.ai` SSH route refuses
+public-key authentication from this VM. The CTO subsequently prohibited VPS access from R_4 and requested the
+read-only inventory exchange above instead. No paid call has occurred.
+
+Final reviewers A and B independently returned **APPROVED** for shipping
+this experimental compiler and the accurate partial record, and **REVISE**
+for the full R_4/VPS gate. B inspected the timestamped final evidence
+(2026-10-02 18:11:55–18:11:57 UTC actual-daemon run); both independently ran
+all eight pure tests. Neither approved missing live application evidence.
+
+**R_4 is NOT DONE.** Live credentials/session prerequisites must be provided
+through the normal scratch setup, the missing matrix rows completed, and
+two independent full-evidence reviews must both return APPROVED before a
+VPS rollout. The compiler and synthetic probes do not waive those conditions.
+
+**Scratch lease released:** scratch VM **rilasciata** da R_4 alle
+2026-10-02 18:23:13 UTC. Final readback: host nft tables empty; A2 inactive;
+A1/P1 still PID 127936/128040 active; approved R2 helper SHA256 unchanged.
+All generated unit files, resolver binding, policy directory and dedicated
+binary are removed, including empty test parent directories. Root package
+installs noted above remain. Build and non-secret probe logs stay locally
+under `engine/scripts/server/.r4-work/` (ignored by git); the reviewed scripts
+and result record are committed. Another host test requires a new published
+lease and conflict check. Destination response block remains pending; next
+step is consume the VPS session's inventory through git, with no VPS access
+from R_4.
+
+### Approved M3 outline
 
 Owner: release-engineer. After M2 is stable on all six; own rollback.
 
@@ -1325,7 +4733,9 @@ any of it — with recorded evidence for all eight criteria.
 
 - **Live customers.** Scratch first; Café124 store rename in one all-stopped
   window; identity one per day, operator present, `stat` record and backup
-  before each.
+  before each (the cadence is superseded by the
+  [CTO decision](#m2-decision--compressed-rollout-2026-10-02-cto): one
+  window, each profile accepted before the next).
 - **Store fork.** Dual-name code ships before any rename; a restart of an
   unmigrated daemon opens the legacy store, never an empty one.
 - **Token lockout.** `rekey --verify` before the unit starts; the reverse

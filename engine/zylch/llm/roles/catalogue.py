@@ -12,8 +12,9 @@ are. This module answers from it at call time:
   snapshot holds. The request shape reads it.
 - `rates(model_id, transport)` — `(input, output)` in USD per million tokens
   as Decimals: on `openrouter` the catalogue entry's snapshot price (its
-  reference price: the model-level price whenever an eligible endpoint is
-  priced within it × the margin, else the lower-median eligible endpoint's;
+  reference price: the model-level price whenever at least half its eligible
+  endpoints are priced within it × the margin, else the lower-median
+  eligible endpoint's;
   the model-level price too when its endpoints were not read, none is
   eligible or that price is not fixed, a variable one staying unpriced), on
   `direct` the direct id's (a dated id as its alias); None when the id is
@@ -136,7 +137,9 @@ def endpoint_tags(model_id: object) -> list[str] | None:
     row = _find(model_id, "models")
     if row is None or row.get("endpoints") is None:
         return None
-    return sorted(endpoint["tag"] for endpoint in row["endpoints"])
+    # A provider can list one tag twice (two endpoints at different prices, as
+    # OpenRouter's 2026-10-10 read does for `alibaba/fp8`); `only` names each once.
+    return sorted({endpoint["tag"] for endpoint in row["endpoints"]})
 
 
 def policy() -> dict:

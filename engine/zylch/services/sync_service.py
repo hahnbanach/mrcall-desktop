@@ -1,9 +1,12 @@
 """Email and calendar sync service - business logic layer.
 
-Uses IMAPClient for email sync (replaces Gmail/Outlook OAuth).
+Uses IMAPClient for email sync (replaces Gmail/Outlook OAuth). Without an
+explicit client, :meth:`SyncService.sync_emails` syncs every non-removed
+mailbox of the owner in turn — one client and one archive manager per
+mailbox, one mailbox's failure never stopping the others.
 """
 
-from typing import Dict, Any, Optional, TYPE_CHECKING
+from typing import Any, Callable, Dict, List, Optional, TYPE_CHECKING
 import logging
 
 from zylch.email.imap_client import IMAPClient
@@ -14,6 +17,24 @@ if TYPE_CHECKING:
     from zylch.storage import Storage
 
 logger = logging.getLogger(__name__)
+
+
+class MailboxSyncFailed(RuntimeError):
+    """No mailbox synced. Carries the per-mailbox ``result`` of ``sync_emails``.
+
+    Chained ``from`` the first mailbox's exception, so an error classifier
+    walking ``__cause__`` still sees the IMAP, DNS, TLS or timeout error
+    a single-mailbox profile hit; ``result["errors"]`` has every mailbox.
+    """
+
+    def __init__(self, result: Dict[str, Any]):
+        super().__init__(result.get("error") or "Sync failed")
+        self.result = result
+        first = next(
+            (e.get("exception") for e in result.get("errors", []) if e.get("exception")), None
+        )
+        if first is not None:
+            self.__cause__ = first
 
 
 class SyncService:
@@ -90,52 +111,179 @@ class SyncService:
         force_full: bool = False,
         on_progress=None,
     ) -> Dict[str, Any]:
-        """Sync emails via IMAP into archive.
+        """Sync emails via IMAP into the archive, one mailbox at a time.
 
-        This method ONLY fetches emails into archive.
-        AI analysis is done separately via /tasks.
+        This method ONLY fetches emails into archive. AI analysis is done
+        separately via /tasks.
+
+        With an explicit ``email_client`` / ``email_archive`` the service
+        syncs that one archive (its mailbox, or the primary). Otherwise it
+        iterates the owner's non-removed mailboxes, builds one client and
+        one ``EmailArchiveManager`` per mailbox, and aggregates. A mailbox
+        that fails is reported in ``errors`` with its address and never
+        stops the others; ``success`` is False only when no mailbox
+        synced. ``last_sync_at`` / ``last_error`` are written per mailbox.
 
         Args:
             days_back: Days to sync (default: 30)
             force_full: Force full sync
+            on_progress: ``(pct, message)`` callback; messages carry the
+                mailbox address.
 
         Returns:
-            Sync results with stats
+            ``success``, ``new_messages``, ``deleted_messages``,
+            ``mailboxes`` (one entry per mailbox), ``errors`` (one entry
+            per failed mailbox: ``mailbox_id``, ``address``, ``error``,
+            and the ``exception`` for classification — strip it before
+            serialising), ``error`` when nothing synced.
         """
         logger.info(
             f"[email_sync] Starting archive sync"
             f" (days_back={days_back},"
             f" force_full={force_full})"
         )
+        if self.email_archive is not None or self.email_client is not None:
+            archive = await self._ensure_email_archive()
+            address = getattr(getattr(archive, "mailbox", None), "address", None) or getattr(
+                self.email_client, "email_addr", "primary"
+            )
+            entry = self._sync_archive(archive, address, days_back, force_full, on_progress)
+            return self._aggregate([entry])
 
-        archive = await self._ensure_email_archive()
-        archive_result = archive.incremental_sync(
-            days_back=days_back,
-            force_full=force_full,
-            on_progress=on_progress,
-        )
+        from zylch.email import mailboxes as mailbox_rows
 
-        if not archive_result["success"]:
-            logger.error(f"Archive sync failed:" f" {archive_result.get('error')}")
-            return {
-                "success": False,
-                "error": (f"Archive sync failed:" f" {archive_result.get('error')}"),
-            }
+        boxes = mailbox_rows.for_owner(self.owner_id)
+        if not boxes:
+            return {"success": False, "error": "No mailbox configured.", "new_messages": 0}
+        entries: List[Dict[str, Any]] = []
+        span = 100.0 / len(boxes)
+        for index, box in enumerate(boxes):
+            base = span * index
 
-        logger.info(
-            f"[email_sync] Complete:"
-            f" +{archive_result['messages_added']}"
-            f" -{archive_result['messages_deleted']}"
-            f" messages"
-        )
+            def scaled(pct: int, message: str, _base=base, _address=box.address) -> None:
+                # A raising callback is the caller's bug, never a reason to
+                # leave the remaining mailboxes unsynced.
+                if on_progress is None:
+                    return
+                try:
+                    on_progress(int(_base + pct * span / 100), f"{_address}: {message}")
+                except Exception as e:
+                    logger.warning(f"[email_sync] {_address}: progress callback failed: {e}")
 
+            client = None
+            entry: Optional[Dict[str, Any]] = None
+            try:
+                client = mailbox_rows.build_imap_client(box)
+                archive = EmailArchiveManager(
+                    gmail_client=client,
+                    owner_id=self.owner_id,
+                    supabase_storage=self.supabase,
+                    mailbox=box,
+                )
+                entry = self._sync_archive(archive, box.address, days_back, force_full, scaled)
+            except Exception as e:
+                logger.error(f"[email_sync] {box.address}: cannot open mailbox: {e}")
+                entry = self._failed(box.id, box.address, e)
+                scaled(100, f"failed: {e}")
+            finally:
+                if entry is None:  # only when the body was interrupted before it produced one
+                    entry = self._failed(box.id, box.address, RuntimeError("sync interrupted"))
+                entry["mailbox_id"] = box.id
+                entries.append(entry)
+                mailbox_rows.record_sync_result(self.owner_id, box.id, entry.get("error"))
+                if client is not None and hasattr(client, "disconnect"):
+                    try:
+                        client.disconnect()
+                    except Exception as e:
+                        logger.debug(f"[email_sync] {box.address}: disconnect failed: {e}")
+        return self._aggregate(entries)
+
+    @staticmethod
+    def _failed(mailbox_id: Optional[str], address: str, exc: BaseException) -> Dict[str, Any]:
         return {
-            "success": True,
-            "new_messages": archive_result["messages_added"],
-            "deleted_messages": archive_result["messages_deleted"],
-            "incremental": archive_result.get("incremental", False),
-            "first_sync_date": archive_result.get("first_sync_date"),
+            "mailbox_id": mailbox_id,
+            "address": address,
+            "success": False,
+            "new_messages": 0,
+            "error": str(exc),
+            "exception": exc,
         }
+
+    def _sync_archive(
+        self,
+        archive: EmailArchiveManager,
+        address: str,
+        days_back: Optional[int],
+        force_full: bool,
+        on_progress: Optional[Callable[[int, str], None]],
+    ) -> Dict[str, Any]:
+        """One mailbox's sync as an entry; never raises."""
+        mailbox_id = getattr(getattr(archive, "mailbox", None), "id", None)
+        try:
+            result = archive.incremental_sync(
+                days_back=days_back, force_full=force_full, on_progress=on_progress
+            )
+        except Exception as e:
+            logger.error(f"[email_sync] {address}: sync failed: {e}", exc_info=True)
+            if on_progress:
+                on_progress(100, f"failed: {e}")
+            return self._failed(mailbox_id, address, e)
+        if not result.get("success"):
+            detail = result.get("error") or "; ".join(
+                f"{f['folder']}: {f['error']}" for f in result.get("folder_errors", [])
+            )
+            logger.error(f"[email_sync] {address}: archive sync failed: {detail}")
+            entry = self._failed(
+                mailbox_id, address, RuntimeError(f"Archive sync failed: {detail}")
+            )
+            entry["new_messages"] = int(result.get("messages_added", 0) or 0)
+            return entry
+        logger.info(f"[email_sync] {address}: +{result['messages_added']} messages")
+        return {
+            "mailbox_id": mailbox_id,
+            "address": address,
+            "success": True,
+            "new_messages": int(result.get("messages_added", 0) or 0),
+            "deleted_messages": int(result.get("messages_deleted", 0) or 0),
+            "error": None,
+        }
+
+    @staticmethod
+    def _aggregate(entries: List[Dict[str, Any]]) -> Dict[str, Any]:
+        errors = [
+            {
+                "mailbox_id": e.get("mailbox_id"),
+                "address": e["address"],
+                "error": e["error"],
+                "exception": e.get("exception"),
+            }
+            for e in entries
+            if not e["success"]
+        ]
+        ok = [e for e in entries if e["success"]]
+        out: Dict[str, Any] = {
+            "success": bool(ok),
+            "new_messages": sum(e["new_messages"] for e in entries),
+            "deleted_messages": sum(e.get("deleted_messages", 0) for e in entries),
+            "incremental": False,
+            "first_sync_date": None,
+            "mailboxes": [{k: v for k, v in e.items() if k != "exception"} for e in entries],
+            "errors": errors,
+        }
+        if not ok:
+            out["error"] = "; ".join(f"{e['address']}: {e['error']}" for e in errors) or (
+                "Sync failed"
+            )
+        return out
+
+    @staticmethod
+    def serialisable(result: Dict[str, Any]) -> Dict[str, Any]:
+        """``sync_emails``'s result without the exception objects."""
+        out = dict(result)
+        out["errors"] = [
+            {k: v for k, v in e.items() if k != "exception"} for e in result.get("errors", [])
+        ]
+        return out
 
     async def sync_mrcall(
         self,
@@ -223,14 +371,14 @@ class SyncService:
 
         # Sync emails via IMAP
         try:
-            email_result = await self.sync_emails(
-                days_back=days_back,
-                on_progress=on_progress,
+            email_result = self.serialisable(
+                await self.sync_emails(days_back=days_back, on_progress=on_progress)
             )
-            results["email_sync"] = {
-                "success": True,
-                **email_result,
-            }
+            results["email_sync"] = {**email_result, "success": bool(email_result["success"])}
+            for entry in email_result.get("errors", []):
+                results["errors"].append(f"Email sync ({entry['address']}): {entry['error']}")
+            if not email_result["success"]:
+                results["success"] = False
         except Exception as e:
             logger.error(f"Email sync failed: {e}")
             results["email_sync"] = {

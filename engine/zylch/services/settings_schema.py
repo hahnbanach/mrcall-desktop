@@ -15,6 +15,7 @@ from __future__ import annotations
 from typing import Any, Dict, List, TypedDict
 
 from zylch.llm import roles
+from zylch.services.credential_policy import excluded_finance_setting
 
 
 class ModelChoice(TypedDict, total=False):
@@ -458,10 +459,10 @@ SETTINGS_SCHEMA: List[SettingsField] = [
 
 
 # Set of keys whose value is a secret (used by settings_get to mask).
-SECRET_KEYS = {f["key"] for f in SETTINGS_SCHEMA if f.get("secret")}
+SECRET_KEYS = {f["key"] for f in SETTINGS_SCHEMA if f.get("secret") and not excluded_finance_setting(f["key"])}
 
 # Set of all known keys (used by settings_update to validate).
-KNOWN_KEYS = {f["key"] for f in SETTINGS_SCHEMA}
+KNOWN_KEYS = {f["key"] for f in SETTINGS_SCHEMA if not excluded_finance_setting(f["key"])}
 
 
 def get_schema() -> List[Dict[str, Any]]:
@@ -471,10 +472,13 @@ def get_schema() -> List[Dict[str, Any]]:
     ``type: "model"`` field offers `roles.model_choices()` (the rankings, no
     excluded family) and greys its role's suggestion when the table has one;
     the preset help states the ceilings and the OpenRouter field's placeholder
-    is the economy CHAT pick when the table has one."""
+    is the economy CHAT pick when the table has one. An excluded finance
+    setting (`credential_policy.excluded_finance_setting`) is not listed."""
     choices: List[ModelChoice] = roles.model_choices()
     fields = []
     for template in SETTINGS_SCHEMA:
+        if excluded_finance_setting(template["key"]):
+            continue
         field = dict(template)
         if field["type"] == "model":
             field["model_choices"] = choices

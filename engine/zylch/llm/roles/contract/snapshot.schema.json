@@ -59,7 +59,7 @@
           }
         },
         "margin": {
-          "description": "The factor on the reference price (`pricing`) that caps an OpenRouter request (max_price) and its reservation and bounds the endpoints admitted (at or under the reference price × margin). The model-level price is the reference price when an eligible endpoint is priced within it × margin.",
+          "description": "The factor on the reference price (`pricing`) that caps an OpenRouter request (max_price) and its reservation and bounds the endpoints admitted (at or under the reference price × margin). The model-level price is the reference price when at least half the eligible endpoints are priced within it × margin.",
           "$ref": "#/$defs/price"
         },
         "quantizations": {
@@ -271,14 +271,14 @@
       "additionalProperties": false,
       "properties": {
         "pricing": {
-          "description": "The reference price: the model-level catalogue price, except for a model with a fixed model-level price whose endpoints were read with one eligible and none priced within it × margin, which takes its reference endpoint's (the lower median of the eligible endpoints by Artificial Analysis's blended price; its cache prices where it publishes them, else the model-level ones). What ceilings compare and the margin multiplies.",
+          "description": "The reference price: the model-level catalogue price, except for a model with a fixed model-level price whose endpoints were read with one eligible and fewer than half of them priced within it × margin, which takes its reference endpoint's (the lower median of the eligible endpoints by Artificial Analysis's blended price; its cache prices where it publishes them, else the model-level ones). What ceilings compare and the margin multiplies.",
           "$ref": "#/$defs/pricing"
         },
         "metadata": {
           "$ref": "#/$defs/metadata"
         },
         "endpoints": {
-          "description": "The admitted endpoints (eligible, and priced at or under the reference price × the margin), sorted by tag; null when the endpoints were not read.",
+          "description": "The admitted endpoints (eligible, and priced at or under the reference price × the margin; a model's pinned endpoint, K3's, whenever it is eligible, whatever its price), sorted by tag; null when the endpoints were not read.",
           "type": [
             "array",
             "null"

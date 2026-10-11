@@ -4,6 +4,16 @@ Enforcement gaps, missing tooling, and documentation debt.
 
 ## Open
 
+- [ ] **`tests/server/test_qonto_egress_policy.py` errors at setup under pytest (discovered 2026-10-09).**
+  - The root `tests/conftest.py` has an autouse `cleanup_test_data` fixture
+    that requests `storage`, whose setup reads `settings.supabase_url`:
+    `AttributeError: 'Settings' object has no attribute 'supabase_url'`.
+    Every other directory with test files overrides that fixture in its own
+    conftest; `tests/server` has none. Both tests of the file pass under
+    `python -m unittest`. The same error occurs at `434f325`.
+  - Action: give `tests/server` the same overriding conftest, or remove the
+    `storage` and `cleanup_test_data` fixtures from the root conftest.
+
 - [ ] **No cold-import smoke for the daemon's load chain (discovered 2026-06-16).**
   - `tools/factory.py` carried `from .sms_tools import SendSMSTool` while
     `sms_tools.py` was untracked/deleted — a broken import on `main` that only

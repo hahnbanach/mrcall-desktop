@@ -59,6 +59,13 @@ on the committed file: S2's reader accepts it, its hashes are today's, no
 result in it is incomplete, and its passes and thresholds are the ones these
 rules derive from its own results.
 
+**Re-scoring** (``--rescore-from OLD_CASE_HASH ...``, ``measurement_rescore``):
+rows recorded under an older case set, after a label edit, are scored again
+on today's labels only where every request is still today's, byte for byte;
+a case whose request changed is refused, and the document's ``rescored_from``
+records the old and new hashes. ``--out`` writes the document elsewhere than
+``roles/measured.json`` (a candidate for review).
+
     python scripts/derive_thresholds.py --arms ARMS.json --results OUT/results.jsonl \\
         --corpus REC/2026-10-03-mnemonic-corpus-k3-manifest.json ... [--write]
 """
@@ -117,14 +124,23 @@ def index_scores(arms_document: dict) -> dict:
     return out
 
 
-def corpus_rows(manifest_path: Path, scores: dict, rules: dict) -> list[dict]:
-    """A corpus record as measure_roles-like rows of the three memory roles."""
+def corpus_rows(
+    manifest_path: Path, scores: dict, rules: dict, records: list | None = None
+) -> list[dict]:
+    """A corpus record as measure_roles-like rows of the three memory roles.
+
+    ``records`` replaces the record's own results: ``measurement_rescore``'s, the
+    same answers judged again on today's labels, under today's case-set hash.
+    """
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
     if manifest.get("mode") != "live":
         raise Refused(f"{manifest_path.name}: a {manifest.get('mode')} record measures no model")
     prefix = manifest_path.name.removesuffix("-manifest.json")
-    lines = (manifest_path.parent / f"{prefix}-results.jsonl").read_text(encoding="utf-8")
-    records = [json.loads(line) for line in lines.splitlines() if line.strip()]
+    if records is None:
+        lines = (manifest_path.parent / f"{prefix}-results.jsonl").read_text(encoding="utf-8")
+        records = [json.loads(line) for line in lines.splitlines() if line.strip()]
+    else:
+        manifest["case_set_sha256"] = corpus_hashes()["MNEMONIC"][0]
     arm = manifest.get("arm_id") or manifest["model"]
     out = []
     for role, scope in CORPUS_MAP.items():
@@ -363,25 +379,40 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--results", type=Path, nargs="*", default=[])
     parser.add_argument("--corpus", type=Path, nargs="*", default=[])
     parser.add_argument("--write", action="store_true", help=f"write {common.MEASURED.name}")
+    parser.add_argument("--out", type=Path, help="write the document here instead")
+    parser.add_argument(
+        "--rescore-from",
+        nargs="*",
+        default=[],
+        metavar="OLD_CASE_HASH",
+        help="re-score rows of these case-set hashes on today's labels (measurement_rescore)",
+    )
     args = parser.parse_args(argv)
     rows = []
     for path in args.results:
         rows += [json.loads(line) for line in path.read_text().splitlines() if line.strip()]
     rules = common.requirements()["roles"]
     scores = index_scores(json.loads(args.arms.read_text(encoding="utf-8")))
+    import measurement_rescore as rescore
+
+    record: dict = {}
     try:
+        rows = rescore.rescore_rows(rows, set(args.rescore_from), record)
         for manifest in args.corpus:
-            rows += corpus_rows(manifest, scores, rules)
-    except Refused as refused:
+            rows += rescore.corpus(manifest, set(args.rescore_from), scores, rules, record)
+    except (Refused, rescore.RescoreRefused) as refused:
         print(f"refused: {refused}", file=sys.stderr)
         return 1
     document, unmeasured = derive(rows)
+    if record:
+        document["rescored_from"] = record
     for role, why in unmeasured.items():
         print(f"unmeasured, blocks the table: {role}: {why}")
     text = json.dumps(document, indent=1, sort_keys=True) + "\n"
-    if args.write:
-        common.MEASURED.write_text(text, encoding="utf-8")
-        print(f"wrote {common.MEASURED}")
+    if args.write or args.out:
+        target = args.out or common.MEASURED
+        target.write_text(text, encoding="utf-8")
+        print(f"wrote {target}")
     else:
         print(text)
     return 0

@@ -38,6 +38,8 @@ error, not "none".
 
 from __future__ import annotations
 
+from zylch.qonto.task_access import ordinary_tasks
+
 import dataclasses
 import logging
 from typing import Any, Dict, List, Optional, Tuple
@@ -239,7 +241,7 @@ def _rewrite_ledger(owner_id: str, donor: str, keeper: str) -> int:
         return 0
     rewritten = 0
     with get_session() as session:
-        for task in session.query(TaskItem).filter(TaskItem.owner_id == owner_id).all():
+        for task in session.query(TaskItem).filter(ordinary_tasks(owner_id)).all():
             sources = task.sources
             if not isinstance(sources, dict):
                 continue

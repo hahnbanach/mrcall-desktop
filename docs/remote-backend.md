@@ -25,14 +25,14 @@ Two ways to run it remotely:
 Your `<uid>` is the Firebase UID shown next to your email in the app's
 IdentityBanner — it is also the profile directory name.
 
-**Automated provisioning (in progress, branch `phase-b-provisiond`).** A
-vendor-side service, `zylch-provisiond`, is replacing the by-hand rsync
+**Automated provisioning (implemented; self-serve rollout remains closed).** A
+vendor-side service, `zylch-provisiond`, provides the alternative to by-hand rsync
 step in B.2 below with a POST from the desktop app itself, authenticated
 with the same Firebase ID token the app already carries — see
 [`../engine/scripts/server/README-provisiond.md`](../engine/scripts/server/README-provisiond.md)
 for what it does, the install steps, and curl examples for both routes.
-Service-first: not yet wired into the app, so B.2's rsync flow remains
-how profiles actually land on the server today.
+Desktop wires provisioning and its status view. B.2 remains an operator-run
+manual path; client wiring does not open hosted self-serve enrollment.
 
 ---
 
@@ -99,22 +99,66 @@ The model:
   for — outside the checkout and the releases tree, through a symbolic
   link or `..`, unreadable by the tenant, or set by an `EnvironmentFile` —
   and any other drop-in that sets `ExecStart`: a migrated unit runs
-  `tenant.conf`'s command line only.
+  `tenant.conf`'s command line only. It also refuses a drop-in that loads
+  an `EnvironmentFile` other than a declared unit's voice file (a migrated
+  unit reads only its key file and, when declared, its voice copy), a first
+  migration of a unit that is not stopped, and a result whose user,
+  `ProtectHome` or environment files are not `tenant.conf`'s.
+- **Operator drop-ins sort before `tenant.conf`.** `create` refuses a unit
+  with an applied drop-in whose name sorts after it, so a pin named
+  `zz-<name>.conf` is refused. Name a pin meant to apply after every other
+  operator drop-in `t0-<name>.conf`: that still sorts before
+  `tenant.conf`, and the order among the others is kept. A pin carries
+  only `Environment=PYTHONPATH=`; a different command line goes in the
+  `tenant-exec` declaration below. A reconcile in which any `create` is
+  refused exits 3, naming the profiles, so `zylch-reconcile.service` ends
+  `ActiveState=failed`, `Result=exit-code`, `ExecMainStatus=3`; the units
+  keep their previous `tenant.conf`.
+- **Leaving hands the leaver's company files to root and removes its
+  egress.** Before `mrcall-tenant delete` removes a user, it gives every
+  file that user owns in any company directory, plus any file of no
+  existing user, to `root:<that directory's group>`:
+  - this covers the store, `-wal`, `-shm`, `backups/` and lock files;
+  - modes are unchanged;
+  - remaining members keep their group access;
+  - if anything is left, `delete` stops before removing anything else.
+
+  It also removes the tenant's egress units, nftables table and
+  `/etc/mrcalld/egress/<user>`. Both are keyed on the numeric uid, which
+  a later user may be given.
+- A unit that needs **its own interpreter or the production voice
+  listener** is declared by the operator in `/etc/mrcalld/tenant-exec/<uid>`
+  (`0600 root`): `INTERPRETER=<release>/venv/bin/zylch` and/or
+  `VOICE_CONFIG=<root-owned voice env file>`, nothing else. `create` then
+  writes that command itself (the operator's command drop-ins stay and
+  are what `unmigrate` returns the unit to), copies the voice file to
+  `<uid>.voice.env` beside the declaration (`0640 root:<tenant>`) and
+  passes the copy as `--voice-config` and `EnvironmentFile`; the voice
+  file may hold only `VOICE_*`, `OPENAI_*`, `VONAGE_*` and
+  `FIREBASE_WEB_API_KEY` lines. A change to the voice file is `create`
+  again, then a restart. What the scratch VM proved of it, what it could
+  not, and the steps for the one unit that uses it:
+  [tenant-exec probe](execution-plans/2026-09-29-toward-sandbox.md#m2-record--tenant-exec-probe-2026-10-02).
 - Security over the network is the per-daemon Firebase-JWT gate
   (`token.uid == OWNER_ID`); a mis-route just fails `403`, so the routing is
   a hint, not the boundary. Security **on the host**, once a profile is
   migrated, is its Unix user: another company's daemon cannot read or write
   this profile's files; and the engine's own tools are confined to the
   profile's `downloads/` and `scratch/` folders on a hosted engine (M1, on
-  `main` since `c2b3ca5`). Rollout state (2026-10-01): M1 is deployed to
-  all seven daemons (the four pinned Café124 ones as backports); **no
-  profile is migrated yet**, so every daemon still runs as `mrcalld`. The
-  plan's records are the authority.
+  `main` since `c2b3ca5`). Rollout state (2026-10-04): all four company
+  stores are derived; all seven profiles run as `mc-…` and have their own
+  egress enforcement, including production voice on its pinned release
+  through a tenant-exec declaration. Newly provisioned profiles still use
+  the transitional shared-key template until explicit tenant migration.
+  Self-serve provisioning stays closed.
+  The plan's VPS rollout record is the authority.
 - One idempotent **`sudo update-daemons.sh`** is the operational entry-point:
   pull code, discover profiles, re-apply the identity of already-migrated
   profiles, ensure one daemon each, prune orphans. It never migrates a
   profile by itself: migration is the operator's explicit `mrcall-tenant
-  create <uid>`, one profile per day, per the plan's runbook.
+  create <uid>`, per the plan's runbook (one profile per day as planned;
+  the plan's decision of 2026-10-02 puts this rollout's profiles in one
+  window, each accepted before the next).
 
 ### B.1 · One-time server setup
 
@@ -162,16 +206,15 @@ Day-to-day you don't even need that — admin runs as root: `sudo update-daemons
 
 ### B.2 · Per profile: bring the data, then run the updater
 
-> Being replaced by `zylch-provisiond` (branch `phase-b-provisiond`) —
-> see the note above. This rsync-by-hand flow stays the documented path
-> until that service is wired into the app; nothing below is deleted or
-> deprecated yet.
+> Desktop also wires `zylch-provisiond`; see the note above. This manual
+> operator flow remains documented while self-serve enrollment is closed.
 
 The engine **discovers** profiles; it does not create them. Copy **only the
 profiles you want to run remotely** (not necessarily all of them), one dir per
-uid, under the service user — it's private data, not in git. Note: a profile
-runs **either** locally **or** remotely, never both at once (the fcntl lock
-enforces it), and there is **no two-way sync** — once a profile is served from
+uid, under the service user — it's private data, not in git. Keep one
+authoritative local or remote copy. The fcntl lock serializes processes using
+the same filesystem; it cannot coordinate copies on different hosts.
+There is **no two-way sync** — once a profile is served from
 the server, the server copy is the source of truth; don't keep running that same
 profile locally against the old Mac copy, the two SQLite DBs would diverge.
 Then run the updater:
@@ -238,9 +281,10 @@ sudo /home/mrcalld/mrcall-desktop/engine/scripts/server/update-daemons.sh --prun
 ## Caveats
 
 - **This host is multi-tenant, and the boundary between tenants is the
-  per-profile Unix user.** Until a profile is migrated (`mrcall-tenant
-  create`), its daemon still runs as `mrcalld` next to every other
-  unmigrated one, with only the M1 tool confinement between them. The
+  per-profile Unix user.** Every hosted profile is migrated (2026-10). A
+  newly provisioned profile starts as `mrcalld`, under the shared key the
+  template still loads, until `mrcall-tenant create` migrates it; until
+  then only the M1 tool confinement separates it from the others. The
   threat model, the evidence and the acceptance criteria are in
   [the toward-sandbox brief](briefs/2026-09-29-toward-sandbox.md); the
   migration runbook (M2.7) and its rollback (`mrcall-tenant unmigrate`)
@@ -252,6 +296,26 @@ sudo /home/mrcalld/mrcall-desktop/engine/scripts/server/update-daemons.sh --prun
   (`mrcall-tenant logrotate`, re-run by `create`, `unmigrate`, `delete` and
   every `update-daemons.sh`): unmigrated logs rotate as `mrcalld`, each
   migrated profile's log as its own user. Do not edit it by hand.
+- **Outbound traffic is per-tenant allow-listed (M3).** Each migrated
+  daemon reaches only the hosts in its policy: an nftables table keyed on
+  its Unix user, and a dedicated dnsmasq that refuses every other name
+  (compiler `engine/scripts/server/egress_policy.py`; installed files under
+  `/etc/mrcalld/egress/mc-<tag>/`). A host the code needs but the policy
+  lacks fails as a DNS refusal, not as a denied packet. List both with
+  `egress_refused.py dns` (the DNS unit's journal) and
+  `egress_refused.py deny <tag>` (kernel log). To add a host: edit the
+  manifest policy, recompile, install, restart only the tenant's DNS unit
+  with `--job-mode=ignore-dependencies`. The generated firewall unit has
+  no `ExecReload`; reload its table with the same lock-protected loader
+  used by the unit (replace `<tag>` with the tenant tag):
+
+  ```bash
+  sudo flock -x "/etc/mrcalld/egress/mc-<tag>/observe.lock" \
+    nft -f "/etc/mrcalld/egress/mc-<tag>/firewall.nft"
+  ```
+
+  A provider switch in Settings needs no change: every policy carries all
+  three LLM providers.
 - **WhatsApp is per profile.** The neonize session lives at
   `<profile>/whatsapp.db`; the global `~/.zylch/whatsapp.db` is a legacy
   fallback the daemons never use (`ZYLCH_PROFILE_DIR` is always set).
@@ -386,6 +450,14 @@ while the profile's own memory work in its current company is unsettled;
 the refusal lists each operation and the command that settles it
 (`zylch -p <uid> memory-join --drain <key>`, which first runs one memory pass
 and may pay, or `zylch -p <uid> memory-reviews --retry|--dismiss <id>`).
+A join also refuses a source store containing assignment state or retained
+assignment history, and refuses unsupported assignment schema, until a lossless
+history migration is available. See the [assignment contract](../engine/docs/features/task-assignment.md).
+The local unreleased contextual-email candidate also retains stricter enrollment
+on history-free joins. For future activation, follow its ordered
+[enrollment procedure](../engine/docs/features/assignment-enrollment.md) before
+publishing trust; direct file installation does not serialize with email effects.
+This candidate is not installed by the current hosted release.
 While a join runs, the source company's memory writes are refused for every
 profile on it; a join that stopped is finished or undone by its profile's
 next boot, or `memory-join --release-fence` releases it
@@ -426,18 +498,22 @@ session there: mail syncs, but the memory and task stages skip until the
 profile `.env` carries a BYOK key (`LLM_PROVIDER=anthropic` +
 `ANTHROPIC_API_KEY=…`), and the daemon reads `.env` only at start
 (`systemctl restart zylch-server@<uid>`). Spend is capped per profile and
-per UTC day by `LLM_DAILY_BUDGET_USD` (default 10, `0` = no cap; the
+per UTC day by `LLM_DAILY_BUDGET_USD` (default 10; `0` refuses paid work; the
 `[llm-budget]` line of the tick names the numbers); consolidation spends
 from the budget of the profile whose tick runs it. A large
 backlog is analysed in daily instalments at the cap — raise it for a day
 with a line in `.env` and a restart.
 
 **Upgrading to the mnemonic harness (milestones 5–9).** Design and milestone
-acceptance are tracked in the
-[cross-repository harness plan](../../docs/execution-plans/2026-09-20-mnemonic-harness.md).
-The previously referenced `2026-09-30-mnemonic-rollout.md` is absent from this
-workspace. Its detailed rollout gates and rollback stages cannot be verified;
-a reviewed rollout plan is required before any live upgrade. Host prerequisites:
+acceptance are tracked in the cross-repository harness plan
+`2026-09-20-mnemonic-harness.md`, which is not included in this repository.
+Current engine contracts are in [mnemonic decisions](../engine/docs/features/mnemonic-decisions.md);
+the [engine snapshot](../engine/docs/active-context.md) owns current state.
+The hb plan at `docs/execution-plans/2026-09-30-mnemonic-rollout.md` is present
+as historical planned work. Refresh its host/source pins and prerequisites and
+review the current plan before any future live upgrade; its historical commands
+are not current deployment instructions. Accepted source activation does not
+establish mnemonic product/corpus acceptance. Host prerequisites to refresh:
 
 - *The per-unit pin.* This guide documents one checkout that
   `update-daemons.sh` pulls and one `ExecStart` for every instance, so before
@@ -466,3 +542,33 @@ disposable profile under a scratch root, the provider key enters only as
 `ANTHROPIC_API_KEY` in the process environment — never on argv, in a log or
 in the record — is copied once into that profile's `.env` (mode 600), and the
 profile directory is deleted once the record is extracted.
+
+## Additional mailboxes on the host (migration `0003_emails_mailbox`)
+
+A release carrying the `mailboxes` table runs the destructive profile step
+`0003_emails_mailbox` on each daemon's first boot: it backs up `zylch.db`
+to `<profile>/backups/zylch.db.<pending-destructive-step-ids>.<stamp>.bak` through
+the SQLite backup API, then rebuilds `emails` with a `mailbox_id` on every
+row. Contract and data-loss window:
+[additional mailboxes](../engine/docs/features/mailboxes.md).
+
+The six company tenants now have verified primary-mailbox migration on the
+released source; personal Gmail retains its separate attachment pin. For future
+tenants, stage rollout using the current sandbox and release-pin runbook above;
+retain the tenant Unix user, encryption key, filesystem restrictions and
+egress policy. Rehearse the migration and a second boot on a disposable
+SQLite backup before changing a live unit. Do not repoint a sandboxed unit
+to a shared-user invocation or restart all tenants together.
+
+After an authorized rollout, verify `mailboxes.list` returns the primary
+mailbox and run one bounded sync. Additional passwords use the profile's
+private `MAILBOX_SECRET_KEY`; it is never provisioned or shared with company
+memory. Permit the configured IMAP hostname through that tenant's egress
+policy before testing the provider.
+
+Rollback requires stopping the affected unit, restoring the pre-migration
+profile backup through `restore_sqlite`, and restoring its previous release
+pin while retaining the sandbox. Post-backup local tasks and mail flags are
+lost; server mail can sync again. Company memory is a separate store and is
+not rolled back with the profile. See the mailbox contract for this data-loss
+window.

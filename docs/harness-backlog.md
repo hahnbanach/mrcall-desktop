@@ -6,7 +6,56 @@ materialises) `app/docs/harness-backlog.md`.
 
 ## Open
 
-- [ ] **No contract test for the desktop ↔ mrcall-agent transport (gzip / SSE / streaming shape).**
+- [ ] **A failing UI fixture assertion can exhaust host memory.**
+  Discovered: 2026-10-09. On Node 22 a failing
+  `assert.equal(<react-test-renderer instance>, undefined)` formats the instance
+  for its failure message and allocates without bound; one such run exhausted
+  the memory of the VPS that also serves the hosted engines. No assertion of
+  that form remains under `app/scripts`: absence is asserted with
+  `assert.ok(!instance)`, which reports in under a second. Nothing prevents the
+  form from returning, and the documented commands set no heap limit.
+  Recommendation: a check over `app/scripts` that rejects equality assertions
+  on test instances, and `--max-old-space-size` in the documented commands.
+
+- [ ] **No workflow runs the Qonto engine suite or a Qonto UI script.**
+  Discovered: 2026-10-09. `rpc-contracts.yml`, `memory-boundary.yml` and
+  `mnemonic-journey.yml` run their own named test files and `release.yml` runs
+  no test. `engine/tests/qonto` and the six `app/scripts/test-qonto*.mjs`
+  scripts run only on a developer machine; of Qonto, the workflows check the
+  RPC parameter declarations only.
+  Recommendation: a workflow for the engine Qonto suite and the Qonto scripts
+  that need no browser.
+
+- [ ] **The RPC contract check ignores result shapes and inventory currency.**
+  Discovered: 2026-10-09. `npm run test:rpc-contracts` passed while the client
+  types still declared two removed Qonto result fields as required. Nothing
+  fails when `docs/rpc-contract-inventory.json` is stale. `rpc-contracts.yml`
+  pins cs-kernel `ba79cc13`, which yields 54 kernel calls; the committed
+  inventory lists 64 and reproduces only from kernel `eb6dc1a`, a revision the
+  file does not record.
+  Recommendation: compare declared client result fields with engine results
+  for the methods that have fixtures, regenerate the inventory in the workflow
+  and fail on a diff, and record one kernel revision for both.
+
+- [ ] **Qonto results differ from the client types, and Test returns balances before authority is confirmed.**
+  Discovered: 2026-10-09. The preload type of `qonto.status` omits `sync`,
+  which the engine returns when connected and the card reads.
+  `app/src/renderer/src/finance.ts` declares `last_sync_at`, which no engine
+  returns, so its card line never renders. The `qonto.test` result is
+  `Organization.public()`: each account carries `balance` and
+  `authorized_balance`, which the client types do not declare and the card
+  does not render. The HTTP fixture that the native journey runs through
+  returns the values at Test; the in-process `FixtureProvider` leaves them
+  empty. They reach the renderer before account selection and authority
+  confirmation.
+  Recommendation: type the preload status call with the renderer's status
+  type; drop `last_sync_at` or return it from the engine; return from Test
+  only what the confirmation step shows.
+
+- [ ] **Deployed server gzip/SSE contract lacks automated acceptance.**
+  Offline Desktop parser/transport regression exists in
+  `engine/tests/llm/test_proxy_boundaries.py` and passes locally. This remaining
+  item concerns the deployed server boundary, owned by mrcall-agent.
   Discovered: 2026-05-31 (the "credits never decrease" investigation).
   Impact: the production proxy was forwarding `httpx.aiter_raw()` bytes
   with `Content-Encoding` stripped, so a gzipped SSE body landed at the
@@ -21,21 +70,6 @@ materialises) `app/docs/harness-backlog.md`.
   raw first chunk starts with `event:` (text), not `\x1f\x8b` (gzip).
   Can live in `mrcall-agent` since it's a server invariant; the
   desktop's `_wrap_gzip_iter` keeps a defensive fallback either way.
-
-- [ ] **No CI check that the dispatcher's DEBUG `params=` log redacts new secret-bearing RPC params.**
-  Discovered: 2026-05-31 (Firebase JWT leak via narration pipeline).
-  Impact: stderr is captured by the renderer's narration feature and
-  forwarded to the LLM proxy for summarisation. `rpc/server._redact_params`
-  masks `id_token` / `access_token` / `api_key` / `password` /
-  `client_secret` / `secret`, plus a per-method table. A new RPC that
-  accepts (say) `otp_code` or `session_cookie` without updating the
-  tables would leak silently. No test enforces "all RPCs that accept a
-  bearer-like param are in the table".
-  Recommendation: a pytest that walks the JSON-RPC dispatch table,
-  introspects each handler's expected params via the schema / docstring,
-  and asserts any field name that matches a "looks secret" heuristic
-  (regex on field name only, the value is structured) is in the redact
-  table.
 
 - [ ] **No CI check that mrcall-agent's pricing YAML stays aligned with Anthropic's published prices.**
   Discovered: 2026-05-31 (Opus 4.7 priced at $15/$75, the Opus 4.1
@@ -132,37 +166,32 @@ materialises) `app/docs/harness-backlog.md`.
   a `gitleaks`-style action in CI on PRs, configured to fail on any
   match against the Google client_secret regex.
 
-- [ ] **No contract test for IPC method/payload changes.**
-  Discovered: 2026-05-02
-  Impact: a server-side method rename or payload shape change must be
-  manually mirrored in `app/src/preload/index.ts` + `app/src/renderer/src/types.ts`.
-  TypeScript catches signature mismatches inside the renderer (which is
-  why `tasks.complete(task_id, note?)` was caught at typecheck this
-  session) — but it does NOT catch cases where the engine and the
-  preload disagree, because the preload is the only declaration of the
-  surface seen by the typechecker. There is no end-to-end check that
-  the JSON the renderer sends matches what the server accepts.
-  Recommendation: a small Python+TS shared schema (e.g. JSON Schema
-  generated from one side and consumed by the other), or at minimum a
-  pytest that spins up the sidecar in-process and round-trips a
-  representative payload per method.
+- [ ] **Runtime RPC value/response schemas and dynamic kernel calls remain unproved.**
+  Owner: Desktop/kernel contract tooling. The 2026-10-07 inventory and CI check
+  parameter names and TypeScript argument/declared-return assignability. Engine
+  value/return validation has no shared schema; `any`/`unknown` may mask drift.
+  Twelve current kernel call sites have computed method names or variable payloads,
+  and aliases outside the AST candidate names are not resolved. Extending this
+  requires reviewed schema/dataflow coverage; the bounded hardening umbrella
+  does not assert it complete. Inventory: `docs/rpc-contract-inventory.json`.
 
-- [ ] **No CI for `engine/make lint` and `app/npm run typecheck`.**
+- [ ] **No CI for `engine/make lint`.**
   Discovered: 2026-05-02
   Impact: lint/typecheck violations slip through until the next
   session's manual run. Tonight a Black-reformat issue and a TS
   arity error were both caught only because /doc-startsession ran
   the smoke check.
-  Recommendation: GitHub Actions workflow that runs both on PRs.
+  App typecheck is wired in `rpc-contracts.yml`; engine lint remains open.
 
-- [ ] **No CI for `pytest` on engine.**
+- [ ] **No CI for the full engine pytest suite.**
   Discovered: 2026-05-02
   Impact: a partial / `-k`-filtered local run hides reds. On 2026-06-04
   a filtered run reported 2 red groups while the FULL suite had 6 (3
   failed + 16 errors across 4 files); caught only by manually re-running
   the whole suite. Without CI on the full suite, a "green" claim in
   active-context.md can age into a lie.
-  Recommendation: GitHub Actions step `cd engine && venv/bin/python
+  Focused RPC/task checks and mnemonic journeys have source CI. Full-suite
+  coverage remains separate. Recommendation: `cd engine && venv/bin/python
   -m pytest tests/workers tests/services -q`. The `tests/` directory
   as a whole is stale (separate engine harness gap), but the two
   curated dirs above are the live test set.
@@ -181,6 +210,10 @@ split indexes.**
 | docs/ipc-contract.md | 1218 | keep whole — it is the method index, retrieved by traversal; splitting it buys more reads, not fewer | 2026-08-26 |
 | docs/execution-plans/proactive-task-open.md | 575 | keep whole — one workstream's argument, read end to end | 2026-08-26 |
 | docs/execution-plans/cross-machine-transport.md | 428 | keep whole — one workstream's argument, read end to end | 2026-08-26 |
+| docs/execution-plans/2026-09-30-pec-net-mailbox-integration.md | 410 | keep whole — one bounded mailbox rollout and its acceptance, read by section | 2026-10-08 |
+| docs/execution-plans/2026-09-29-toward-sandbox.md | 3947 | split — prune obsolete rollout narrative and separate distinct operational subjects deliberately | 2026-10-04 |
+| docs/remote-backend.md | 511 | keep whole — host operations index, read by section | 2026-10-04 |
+| docs/execution-plans/2026-09-30-pec-net-mailbox-integration.md | 410 | keep whole — one mailbox-integration workstream and its acceptance record, read by section | 2026-10-07 |
 
 | docs/briefs/2026-09-08-shared-company-memory-implementation.md | 598 | keep whole — one company-memory design argument, read by section | 2026-09-10 |
 | docs/execution-plans/2026-09-23-gpt-live-engine-integration.md | 449 | keep whole — one bounded four-milestone plan and its acceptance evidence, read by section | 2026-09-24 |
@@ -192,9 +225,16 @@ split indexes.**
   pruning by its owning workflow; this documentation close records the gate's
   size advisory and does not edit or inspect that session's content.
 
+- **OPEN (2026-10-04):** The sandbox plan above needs deliberate narrative
+  pruning and subject-level separation; recording its size verdict does not
+  begin that separate workstream.
+
 ## Resolved
 
-(none yet)
+- RPC signature enforcement includes `llm.models(provider?)` (2026-10-07).
+- RPC secret-redaction/registry checks, task transport contracts, app typecheck
+  and bounded payload/type inventory are wired in `rpc-contracts.yml`
+  (2026-10-07). Local commands pass; remote CI execution is not certified here.
 
 ## OpenRouter catalog recovery
 
@@ -206,8 +246,6 @@ split indexes.**
 
 ## RPC catalog parameter declaration
 
-- **OPEN (2026-09-16):** `llm.models` has no parseable signature declaration in
-  `usage_queries.py`; `param_spec` therefore leaves that handler open to unknown
-  parameter names. Add its provider signature and run the registry contract
-  regression before asserting complete undeclared-parameter enforcement. Other
-  registered handlers have declarations.
+- **RESOLVED (2026-10-07):** `llm.models(provider?)` is declared in
+  `usage_queries.py`. The registry-wide boundary gate passes with zero open
+  methods; unknown catalog keys receive `-32602`.

@@ -868,10 +868,10 @@ class JobExecutor:
                 return {"stopped": True}
 
             import os as _os
-            from zylch.email.imap_client import IMAPClient
             from zylch.services.sync_service import SyncService
 
-            # Read IMAP creds from os.environ (set by activate_profile)
+            # The primary's IMAP creds gate the stage (set by activate_profile);
+            # the service opens one client per mailbox row.
             email_addr = _os.environ.get("EMAIL_ADDRESS", "")
             email_pass = _os.environ.get("EMAIL_PASSWORD", "")
 
@@ -880,25 +880,9 @@ class JobExecutor:
                     "Email not configured. Run 'zylch init' to set up IMAP credentials."
                 )
 
-            email_client = IMAPClient(
-                email_addr=email_addr,
-                password=email_pass,
-                imap_host=_os.environ.get("IMAP_HOST") or None,
-                imap_port=int(_os.environ.get("IMAP_PORT", "0")) or None,
-                smtp_host=_os.environ.get("SMTP_HOST") or None,
-                smtp_port=int(_os.environ.get("SMTP_PORT", "0")) or None,
-            )
+            logger.info(f"[SYNC] Using IMAP for {email_addr} and every other mailbox")
 
-            logger.info(f"[SYNC] Using IMAP for {email_addr}")
-
-            # Create sync service. The service constructs its own
-            # LLMClient via `make_llm_client()` if it needs one for
-            # event analysis.
-            sync_service = SyncService(
-                email_client=email_client,
-                owner_id=owner_id,
-                supabase_storage=storage,
-            )
+            sync_service = SyncService(owner_id=owner_id, supabase_storage=storage)
 
             # Progress callback: updates the background job status
             def _on_progress(pct: int, message: str):
@@ -958,6 +942,8 @@ class JobExecutor:
         msg_parts = []
         if email_data.get("success"):
             msg_parts.append(f"+{email_data.get('new_messages', 0)} emails")
+        for failed in email_data.get("errors", []) or []:
+            msg_parts.append(f"{failed.get('address')}: {failed.get('error')}")
         if cal_data.get("success"):
             msg_parts.append(f"{cal_data.get('new_events', 0)} calendar events")
         if pipedrive_data.get("success") and not pipedrive_data.get("skipped"):

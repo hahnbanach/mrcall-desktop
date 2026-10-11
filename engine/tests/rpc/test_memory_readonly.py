@@ -144,7 +144,7 @@ def test_rpc_requires_the_negotiated_policy_version(engine_db, monkeypatch):
             )
         )
     caps = _run(methods.system_capabilities({}, lambda *_: None))
-    assert caps == {"chat_read_only_policy": 1}
+    assert caps["chat_read_only_policy"] == 1
 
 
 def test_rpc_to_dispatcher_refusal_creates_no_rows(engine_db, monkeypatch):

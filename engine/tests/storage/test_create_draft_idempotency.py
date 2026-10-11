@@ -32,14 +32,41 @@ TO = "customer@example.com"
 
 @pytest.fixture
 def storage(tmp_path, monkeypatch):
-    db_path = tmp_path / "create_draft_idempotency.db"
+    import time
+    from zylch.cli import profiles
+    from zylch.auth import set_session, clear_session
+    from zylch.rpc import firebase_auth
+
+    profile = tmp_path / "draft-idempotency-owner"
+    profile.mkdir()
+    (profile / ".env").write_text(f"OWNER_ID=draft-idempotency-owner\nEMAIL_ADDRESS={OWNER}\n")
+    monkeypatch.setattr(profiles, "_active_profile", "draft-idempotency-owner")
+    monkeypatch.setattr(profiles, "_active_profile_dir", str(profile))
+    monkeypatch.setenv("ZYLCH_PROFILE_DIR", str(profile))
+    monkeypatch.setenv("OWNER_ID", "draft-idempotency-owner")
+    monkeypatch.setenv("EMAIL_ADDRESS", OWNER)
+    monkeypatch.setattr(firebase_auth, "verify_firebase_id_token", lambda token: {
+        "sub": "draft-idempotency-owner", "exp": time.time() + 3600,
+    })
+    set_session("draft-idempotency-owner", OWNER, "fixture-idempotency", int(time.time() * 1000) + 3600000)
+    db_path = profile / "zylch.db"
     monkeypatch.setenv("ZYLCH_DB_PATH", str(db_path))
     from zylch.storage import database as db_mod
     from zylch.storage.storage import Storage
 
     db_mod.dispose_engine()
     db_mod.init_db()
+    from zylch.storage.models import Email
+
+    with db_mod.get_session() as session:
+        for mid, root in (("<msg-1@example.com>", "<msg-1@example.com>"),
+                          ("<msg-2@example.com>", "<msg-1@example.com>"),
+                          ("<other-message@example.com>", "<other-message@example.com>")):
+            session.add(Email(owner_id=OWNER, gmail_id=mid, thread_id=root,
+                              message_id_header=mid, references=root if mid != root else None,
+                              from_email=TO, to_email=OWNER, date=datetime.now(timezone.utc).replace(tzinfo=None)))
     yield Storage()
+    clear_session()
     db_mod.dispose_engine()
 
 
@@ -106,11 +133,9 @@ def test_the_caller_is_told_which_of_the_two_happened(storage):
         ("subject", "A different subject"),
         ("body", "A different body"),
         ("to", "someone.else@example.com"),
-        ("thread_id", "thread-xyz"),
         ("cc", ["boss@example.com"]),
         ("bcc", ["archive@example.com"]),
         ("in_reply_to", "<other-message@example.com>"),
-        ("references", ["<root@example.com>", "<other@example.com>"]),
     ],
 )
 def test_a_difference_in_any_identity_field_makes_a_new_draft(storage, field, value):
@@ -148,14 +173,14 @@ def test_two_replies_to_different_messages_of_one_thread_stay_apart(storage):
     first = _create(
         storage,
         body="Ricevuto, grazie.",
-        thread_id="thread-1",
+        thread_id="<msg-1@example.com>",
         in_reply_to="<msg-1@example.com>",
         references=["<msg-1@example.com>"],
     )
     second = _create(
         storage,
         body="Ricevuto, grazie.",
-        thread_id="thread-1",
+        thread_id="<msg-1@example.com>",
         in_reply_to="<msg-2@example.com>",
         references=["<msg-1@example.com>", "<msg-2@example.com>"],
     )
@@ -170,13 +195,13 @@ def test_the_same_reply_recomposed_still_collapses(storage):
     mechanism exists to catch still collapses."""
     first = _create(
         storage,
-        thread_id="thread-1",
+        thread_id="<msg-1@example.com>",
         in_reply_to="<msg-1@example.com>",
         references=["<msg-1@example.com>"],
     )
     second = _create(
         storage,
-        thread_id="thread-1",
+        thread_id="<msg-1@example.com>",
         in_reply_to="<msg-1@example.com>",
         references=["<msg-1@example.com>"],
     )
@@ -286,3 +311,17 @@ def test_just_inside_the_window_still_deduplicates(storage):
 
     assert second["id"] == first["id"]
     assert len(_rows(storage)) == 1
+
+
+@pytest.mark.parametrize("invalid", [
+    {"thread_id": "thread-xyz"},
+    {"references": ["<root@example.com>", "<other@example.com>"]},
+])
+def test_incomplete_reply_identity_refuses_before_deduplication(storage, invalid):
+    from zylch.services.task_assignment_types import AssignmentError
+
+    first = _create(storage)
+    with pytest.raises(AssignmentError):
+        _create(storage, **invalid)
+    assert len(_rows(storage)) == 1
+    assert _rows(storage)[0]["id"] == first["id"]

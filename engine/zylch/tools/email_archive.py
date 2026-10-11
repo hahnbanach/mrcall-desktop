@@ -39,20 +39,42 @@ class EmailArchiveManager:
         gmail_client,
         owner_id: str,
         supabase_storage: Optional[Storage] = None,
+        mailbox=None,
     ):
         """Initialize archive manager.
 
         Args:
-            gmail_client: IMAPClient instance for email
+            gmail_client: IMAPClient instance for the mailbox being synced
             owner_id: User ID (required)
             supabase_storage: Optional Storage instance
+            mailbox: The ``MailboxInfo`` this manager syncs. Every row it
+                stores, its date floor, its dedup set and its cursors
+                belong to that mailbox. ``None`` means the owner's
+                primary mailbox (the owner-keyed row for a profile
+                without an address), resolved on first use; read-only
+                users of the archive (thread and search helpers) never
+                need it.
         """
         self.gmail = gmail_client
         self.owner_id = owner_id
         self.supabase = supabase_storage or Storage.get_instance()
+        self.mailbox = mailbox
+        self._mailbox_id: Optional[str] = mailbox.id if mailbox is not None else None
         self._connected = False
 
-        logger.info(f"EmailArchiveManager initialized" f" for owner {owner_id}")
+        logger.info(
+            f"EmailArchiveManager initialized for owner {owner_id} "
+            f"(mailbox={mailbox.address if mailbox is not None else 'primary'})"
+        )
+
+    @property
+    def mailbox_id(self) -> str:
+        """The mailbox this manager writes to; the owner's primary when unset."""
+        if self._mailbox_id is None:
+            from zylch.email.mailboxes import default_mailbox_id
+
+            self._mailbox_id = default_mailbox_id(self.owner_id)
+        return self._mailbox_id
 
     def _ensure_connected(self) -> None:
         """Ensure IMAP client is connected (lazy).
@@ -96,10 +118,12 @@ class EmailArchiveManager:
         sync_days = days_back if days_back is not None else 30
         target_date = now - timedelta(days=sync_days)
 
-        newest = self.supabase.get_newest_email_date(self.owner_id)
+        # Per mailbox: an added mailbox's first sync covers the whole
+        # days_back window whatever the other mailboxes already hold.
+        newest = self.supabase.get_newest_email_date(self.owner_id, self.mailbox_id)
         if newest and newest.tzinfo is None:
             newest = newest.replace(tzinfo=timezone.utc)
-        oldest = self.supabase.get_oldest_email_date(self.owner_id)
+        oldest = self.supabase.get_oldest_email_date(self.owner_id, self.mailbox_id)
         if oldest and oldest.tzinfo is None:
             oldest = oldest.replace(tzinfo=timezone.utc)
 
@@ -189,8 +213,12 @@ class EmailArchiveManager:
             logger.error(f"[sync] folder discovery failed: {e}", exc_info=True)
             return {"success": False, "error": f"folder discovery failed: {e}"}
 
-        existing_ids = self.supabase.get_existing_email_ids(self.owner_id)
-        logger.info(f"[sync] archive holds {len(existing_ids)} known message identifiers")
+        # Per mailbox: a message another mailbox already holds is still
+        # fetched for this one (stored as its own row, processed once — D2).
+        existing_ids = self.supabase.get_existing_email_ids(self.owner_id, self.mailbox_id)
+        logger.info(
+            f"[sync] mailbox {self.mailbox_id} holds {len(existing_ids)} known message identifiers"
+        )
 
         result: Dict[str, Any] = {
             "success": True,
@@ -262,7 +290,7 @@ class EmailArchiveManager:
         from zylch.email import sync_cursor
         from zylch.email.imap_client import FolderState, format_imap_date
 
-        cursor = sync_cursor.get_cursor(self.owner_id, folder)
+        cursor = sync_cursor.get_cursor(self.owner_id, folder, self.mailbox_id)
         since = format_imap_date(floor)
         # Filled in by the criteria builder below, which runs inside
         # scan_folder once EXAMINE has reported UIDVALIDITY.
@@ -277,7 +305,7 @@ class EmailArchiveManager:
                     f"folder is void; dropping the cursor and re-seeding from the date floor "
                     f"{floor.strftime('%Y-%m-%d')}"
                 )
-                sync_cursor.drop_cursor(self.owner_id, folder)
+                sync_cursor.drop_cursor(self.owner_id, folder, self.mailbox_id)
                 active = None
                 decision["cursor"] = None
             if active is None:
@@ -398,6 +426,7 @@ class EmailArchiveManager:
                 rows_written += self.supabase.store_emails_batch(
                     self.owner_id,
                     archive_messages,
+                    mailbox_id=self.mailbox_id,
                 )
                 stored.extend(chunk)
                 for archived in archive_messages:
@@ -459,7 +488,7 @@ class EmailArchiveManager:
             )
 
         new_last = max(new_last, 0)
-        sync_cursor.set_cursor(self.owner_id, folder, state.uidvalidity, new_last)
+        sync_cursor.set_cursor(self.owner_id, folder, state.uidvalidity, new_last, self.mailbox_id)
         logger.info(f"[sync] {folder}: cursor -> uid={new_last} (uidvalidity={state.uidvalidity})")
         return new_last
 
@@ -544,52 +573,16 @@ class EmailArchiveManager:
             else:
                 from_email = from_str.strip()
 
-        # Detect auto-reply
-        from zylch.utils.auto_reply_detector import (
-            detect_auto_reply,
-        )
+        from zylch.utils.auto_reply_detector import message_is_auto_reply
 
-        auto_reply_headers = {
-            "Auto-Submitted": msg.get("auto_submitted"),
-            "X-Autoreply": msg.get("x_autoreply"),
-            "Precedence": msg.get("precedence"),
-            "X-Auto-Response-Suppress": msg.get("x_auto_response_suppress"),
-        }
-        is_auto_reply = detect_auto_reply(auto_reply_headers, from_email)
-
-        # Use message_id as ID (IMAP) or id (Gmail)
+        is_auto_reply = message_is_auto_reply(msg, from_email)
         msg_id = msg.get("message_id", msg.get("id", ""))
-
-        # Body: IMAP provides body_plain/body_html,
-        # Gmail provides body
         body_plain = msg.get("body_plain", msg.get("body", ""))
         body_html = msg.get("body_html")
 
-        # Stopgap (2026-06): MrCall's product auto-replies (from support@, the
-        # "MrCall. 📩 …" template) carry NO RFC-3834 auto headers, so the
-        # header-only detector above misses them and they read as "the user
-        # replied" → silently closing customer tasks. A literal sentinel was
-        # added to the FIRST LINE of that template; match it case-insensitively,
-        # tolerating both the "auto-reply" and "auto-replay" spelling and a
-        # hyphen/space/no separator. The proper fix is the product emitting
-        # Auto-Submitted on those mails; tracked separately.
-        if not is_auto_reply and body_plain:
-            import re as _re
-
-            _first_line = next((ln.strip() for ln in body_plain.splitlines() if ln.strip()), "")
-            if _re.search(r"\bauto[\s\-]?repl(?:ay|y)\b", _first_line, _re.I):
-                is_auto_reply = True
-            # The legacy Italian product auto-reply opens with the literal
-            # greeting "Ciao MrCaller!" (no RFC-3834 headers, no English
-            # sentinel). Real human replies from the mailbox open with
-            # "Buongiorno" or "Ciao <customer name>" — never "Ciao MrCaller"
-            # — so this opener is a safe, distinctive marker. (Operator
-            # request 2026-06-15; backfilled the historical rows separately.)
-            elif _first_line.lower().startswith("ciao mrcaller"):
-                is_auto_reply = True
-
         return {
             "id": msg_id,
+            "mailbox_id": self.mailbox_id,
             "thread_id": msg.get("thread_id", ""),
             "from_email": from_email,
             "from_name": from_name,
@@ -610,6 +603,10 @@ class EmailArchiveManager:
             # threaded through here so store_emails_batch can persist it.
             "has_attachments": bool(msg.get("has_attachments")),
             "attachment_filenames": list(msg.get("attachment_filenames") or []),
+            # PEC (D4): the wrapped original's id and the envelope markers,
+            # both filled by the parser; None on ordinary mail.
+            "original_message_id": msg.get("original_message_id"),
+            "pec_markers": msg.get("pec_markers"),
         }
 
     def get_thread_messages(

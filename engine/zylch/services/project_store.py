@@ -89,6 +89,11 @@ def page(limit: int = 50, offset: int = 0) -> tuple[int, int]:
 def ensure_space(engine: Engine) -> None:
     with engine.begin() as conn:
         conn.execute(insert(S).prefix_with("OR IGNORE").values(id=1, space_id=str(uuid.uuid4())))
+        from zylch.storage.assigned_task_models import AssignmentEnrollment
+
+        enrollment = AssignmentEnrollment.__table__
+        space = conn.execute(select(S.c.space_id).where(S.c.id == 1)).scalar_one()
+        conn.execute(update(enrollment).where(enrollment.c.id == 1, enrollment.c.space_id.is_(None)).values(space_id=space))
 
 
 @contextmanager

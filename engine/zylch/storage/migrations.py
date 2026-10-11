@@ -168,6 +168,9 @@ def backup_sqlite(db_path: str, label: str) -> str:
     finally:
         dst.close()
         src.close()
+    # The backup holds everything the store holds (mail, tokens, encrypted
+    # mailbox secrets): the owner's to read, nobody else's.
+    os.chmod(dst_path, 0o600)
     logger.info(f"[migrate] backup written: {dst_path}")
     return dst_path
 

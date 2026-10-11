@@ -19,12 +19,12 @@ other OAuth credential; the VPS disk is the trust boundary.
 from __future__ import annotations
 
 import logging
-import os
 import time
 
 import httpx
 
 from .session import get_session, set_session
+from .verified_session import SessionAdmissionError, verified_claims
 
 logger = logging.getLogger(__name__)
 
@@ -71,46 +71,67 @@ def ensure_fresh_session(owner_id: str) -> bool:
     """
     sess = get_session()
     now = int(time.time() * 1000)
-    if sess is not None and now < sess.expires_at_ms - _SKEW_MS:
-        return True  # still fresh, nothing to do
+    verified_expiry = 0
+    if sess is not None and sess.uid == owner_id:
+        try:
+            claims = verified_claims(sess.id_token, requested_uid=owner_id)
+            verified_expiry = int(claims["exp"]) * 1000
+        except SessionAdmissionError:
+            pass
+        if now < verified_expiry - _SKEW_MS:
+            email = claims.get("email")
+            set_session(
+                uid=claims["sub"],
+                email=email if isinstance(email, str) else None,
+                id_token=sess.id_token,
+                expires_at_ms=verified_expiry,
+            )
+            return True
+
+    def existing_is_usable() -> bool:
+        return int(time.time() * 1000) < verified_expiry
 
     from zylch.config import settings
     from zylch.storage.storage import Storage
 
     try:
         refresh_token = Storage.get_instance().get_firebase_refresh_token(owner_id)
-    except Exception as e:
-        logger.warning(f"[auth] could not read stored refresh token for {owner_id}: {e}")
+    except Exception:
+        logger.warning("[auth] could not read stored refresh token")
         refresh_token = None
 
     if not refresh_token:
         # No way to refresh — report whether the existing session is still usable.
-        return sess is not None and not sess.is_expired(now)
+        return existing_is_usable()
 
     api_key = settings.firebase_web_api_key
     if not api_key:
         logger.warning("[auth] no FIREBASE_WEB_API_KEY configured — cannot refresh headless")
-        return sess is not None and not sess.is_expired(now)
+        return existing_is_usable()
 
     try:
         fresh = exchange_refresh_token(refresh_token, api_key)
-    except Exception as e:
-        logger.warning(f"[auth] refresh-token exchange failed for {owner_id}: {e}")
-        return sess is not None and not sess.is_expired(now)
+    except Exception:
+        logger.warning("[auth] refresh-token exchange failed")
+        return existing_is_usable()
 
-    # The profile is keyed by the Firebase uid (OWNER_ID); email is display-only.
-    uid = os.environ.get("OWNER_ID") or owner_id
-    email = os.environ.get("EMAIL_ADDRESS") or None
+    try:
+        claims = verified_claims(fresh["id_token"], requested_uid=owner_id)
+    except SessionAdmissionError:
+        logger.warning("[auth] refreshed Firebase identity refused")
+        return existing_is_usable()
+    uid = claims["sub"]
+    email = claims.get("email")
     set_session(
         uid=uid,
-        email=email,
+        email=email if isinstance(email, str) else None,
         id_token=fresh["id_token"],
-        expires_at_ms=fresh["expires_at_ms"],
+        expires_at_ms=int(claims["exp"]) * 1000,
     )
     if fresh["refresh_token"] != refresh_token:
         try:
             Storage.get_instance().store_firebase_refresh_token(owner_id, fresh["refresh_token"])
-        except Exception as e:
-            logger.warning(f"[auth] could not persist rotated refresh token for {owner_id}: {e}")
+        except Exception:
+            logger.warning("[auth] could not persist rotated refresh token")
     logger.info(f"[auth] refreshed Firebase session for {owner_id} via stored refresh token")
     return True

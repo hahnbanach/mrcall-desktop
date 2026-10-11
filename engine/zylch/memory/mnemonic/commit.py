@@ -53,7 +53,7 @@ from zylch.memory.company_key import family_of, scoped_namespace
 from . import journal, references, writes
 from .agent import decide
 from .approval import RequestedWrite, departure_for
-from .authorization import MnemonicRefusal, authorize_request
+from .authorization import MnemonicRefusal, authorize_request, refuse_finance_publication
 from .contracts import CREATE, FACT, MAX_DECISION_ATTEMPTS, MERGE, UPDATE, MemoryEvent
 from .fence import CompanyFenced
 from .pairs import PAIR_CHANGED, admits_merge, intact
@@ -119,6 +119,10 @@ def _submit(
     requested: Optional[RequestedWrite],
 ) -> MnemonicResult:
     try:
+        refuse_finance_publication(event)
+    except MnemonicRefusal as exc:
+        return MnemonicResult.review_needed(event.event_id, str(exc))
+    try:
         opened = journal.open_operation(event, parent_event_id=parent_event_id)
     except journal.EventIdReused as exc:
         return MnemonicResult.review_needed(event.event_id, str(exc))
@@ -177,6 +181,9 @@ def _decide_and_commit(
             # The durable allowance is spent at the client boundary, so a
             # journal that stops answering surfaces here, mid-dispatch.
             return _journal_refused(event, exc)
+        refusal = context.proposal_validator(event, decision.proposal)
+        if refusal:
+            return _settle(event, MnemonicResult.review_needed(event.event_id, refusal), None)
         try:
             journal.record_attempt(event.event_id, event, decision.proposal)
         except journal.JournalError as exc:
@@ -306,6 +313,9 @@ def _settle(
     round's candidates travel here: a restriction is recorded only against a
     row the role was actually shown, at the version it was shown.
     """
+    from zylch.qonto.publication_guard import sanitize_outcome
+
+    result, proposal = sanitize_outcome(event, result, proposal)
     state = {
         "skipped": journal.SKIPPED,
         "review_needed": journal.REVIEW,
@@ -388,7 +398,7 @@ def _commit(
 
     committed_ids: Tuple[Tuple[str, str], ...]
     try:
-        with journal.company_transaction(write=True) as session:
+        with context.commit_guard(), journal.company_transaction(write=True) as session:
             row = journal.owns(session, event.event_id, lease)
             # Authorization is re-checked under the lock, not trusted from the
             # door: a turn cancelled or a policy flipped while the model was
@@ -429,6 +439,7 @@ def _commit(
                 state=journal.COMMITTED,
                 proposal=proposal,
             )
+            context.commit_check()
     except Exception:
         abandon_permit(permit)
         raise

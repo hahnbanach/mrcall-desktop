@@ -105,7 +105,8 @@ those are the snapshot's, so a refresh of prices moves no record.
   - `pricing`: the model's reference price, `input`, `output`,
     `cache_read`, `cache_write` (below): the model-level catalogue price,
     except for a model with a fixed model-level price whose endpoints were
-    read with one eligible and none priced within it × `policy.margin` — then its
+    read with one eligible and fewer than half of them priced within it ×
+    `policy.margin` — then its
     reference endpoint's price (its cache prices where it publishes them,
     else the model-level ones).
   - `metadata`: `reasoning` (`mandatory`; `efforts`, the published
@@ -118,7 +119,9 @@ those are the snapshot's, so a refresh of prices moves no record.
     one of the parameters), `context_length`, `expiration_date`.
   - `endpoints`: for the models whose endpoints were read (tools, the
     minimum context, no variant, no alias), the admitted ones as `{tag,
-    quantization, pricing}` sorted by tag; `null` for the others.
+    quantization, pricing}` sorted by tag (a model's pinned endpoint among
+    them whenever it is eligible, whatever its price: below); `null` for the
+    others.
 - `direct` — keyed by Anthropic's direct id: `{catalogue_id, pricing,
   metadata}` from the endpoint tagged `anthropic` (Anthropic's list price,
   that endpoint's parameters, forced tool choice and context; reasoning and
@@ -130,15 +133,19 @@ quantization is in `policy.quantizations` (an endpoint that declares none is
 in `policy.excluded_endpoint_variants` (`<provider>/flex`,
 `<provider>/<region>/flex`), and it has a fixed input and output price. A
 model's **reference price** is its model-level catalogue price, cache prices
-included, when at least one eligible endpoint's input and output prices are
-at or under it × `policy.margin`. The model-level price stays the anchor
-whenever it admits an endpoint because it is the list price OpenRouter
-shows, and a median of the endpoints flips with the count of regional
-premiums (Opus 5.5 on 2026-10-02: five endpoints at Anthropic's list price,
-five regional ones 10% above it; one more region would move the median to
-the premium). Otherwise — OpenRouter computes the model-level price over
-every endpoint, those the policy excludes included, so an fp4 endpoint can
-set it below every eligible one — the reference price is the **reference
+included, when at least half its eligible endpoints (⌈n / 2⌉ of n) have
+input and output prices at or under it × `policy.margin`. The model-level
+price stays the anchor whenever it does because it is the list price
+OpenRouter shows, and a median of the endpoints flips with the count of
+regional premiums (Opus 5.5 on 2026-10-02: five endpoints at Anthropic's
+list price, five regional ones 10% above it; one more region would move the
+median to the premium). A list price that admits only a minority of the
+endpoints the policy accepts is not the price the model is mainly offered
+at: OpenRouter computes the model-level price over every endpoint, those the
+policy excludes included, so an fp4 endpoint can set it below every
+eligible one, or below all but a few oddly priced ones (K3 on 2026-10-10:
+0.64/13.5, which two of its twelve eligible endpoints fit). Then the
+reference price is the **reference
 endpoint**'s: the lower median, index (n − 1) // 2, of the eligible
 endpoints ordered by Artificial Analysis's blended price, (3 × input +
 output) / 4, a tie by output, then input, then tag; its cache prices where
@@ -149,7 +156,11 @@ has no cap and admits no endpoint, since OpenRouter itself cannot price it
 (OpenRouter's auto router and the like route to a model of their choosing). An
 eligible endpoint is **admitted** when its input and output prices are at
 or under the reference price × `policy.margin`, so a model with a fixed
-model-level price and an eligible endpoint always admits one. A model with no eligible
+model-level price and an eligible endpoint always admits one. A model's
+**pinned endpoint** (K3's `digitalocean`; `requirements.json`
+`provider_policy.pinned_endpoints`, not published in `policy`) is admitted
+whenever it is eligible, whatever its price, so a pinned model's cap
+(below) never falls back while its pin is up. A model with no eligible
 endpoint (every one fp4, say) or whose endpoints were not read keeps the
 model-level price and admits no endpoint. The screen still requires a fixed
 model-level price of any model it ranks.
@@ -158,8 +169,10 @@ model-level price of any model it ranks.
 reference price. On OpenRouter, `max_price` and the reservation (engine) and
 the pre-authorisation (billing server) use the reference price × the margin;
 K3's cap is its pinned `digitalocean` endpoint's price × the margin, read
-from its `endpoints` (admitted endpoints only); on a day that endpoint is
-not admitted (degraded, so absent from `endpoints`), K3's cap falls back
+from its `endpoints`, which carry the pin whenever it is eligible (status 0,
+an allowed quantization, tools, no excluded tier), however its price
+compares with the reference price; on a day that endpoint is
+not eligible (degraded, so absent from `endpoints`), K3's cap falls back
 to its reference price × the margin — K3 stays priced, and a request
 that cannot be routed to its pin fails at the provider as it would today. A direct id is priced from `direct`. A dated direct
 id `<alias>-YYYYMMDD` is priced and shaped as its alias, and a response

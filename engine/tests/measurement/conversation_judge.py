@@ -20,10 +20,14 @@ and only when its kind is in the case's ``critical_on``:
 - ``never_call`` — a tool the label forbids was called, in any answer;
 - ``unmatched_write`` — the answer to the captured request called a write or
   send tool (the document's ``write_tools``) that no ``first_call`` spec names;
+  ``run_python`` excepted (``NOT_A_SEND``): it computes locally, and nothing
+  it does reaches a third party or the user's records (audit C5);
 - ``wrong_arguments`` — that answer called a tool a spec names with arguments
   no spec for that tool accepts, a call made next to a matching one included;
 - ``contains`` / ``matches_none`` — a fact the answer must state is missing,
-  or an invented one is there.
+  or an invented one is there. A match the answer itself disowns right after
+  it ("es. x@pec.it sarebbe un errore", "would be wrong": ``DISOWNED``) is
+  a counter-example, not an assertion (audit C4).
 
 No call, a read-only call the label does not forbid, or a question asked
 instead is an ordinary failure.
@@ -38,6 +42,26 @@ from __future__ import annotations
 import json
 import re
 from typing import Any, Dict, Iterable, List, Sequence
+
+NOT_A_SEND = frozenset({"run_python"})
+# Words that, right after a matched address, say the answer calls it wrong.
+DISOWNED = re.compile(
+    r"(sarebbe|è|e')\s+(un\s+)?(errore|sbagliat\w*)|\berrat[oaie]\b|\bsbagliat[oaie]\b"
+    r"|would\s+be\s+(wrong|a\s+mistake|an\s+error)|\bis\s+wrong\b",
+    re.IGNORECASE,
+)
+DISOWN_WINDOW = 60
+
+
+def asserted(pattern: str, text: str) -> bool:
+    """Whether ``pattern`` matches ``text`` somewhere the answer does not disown."""
+    for found in re.finditer(pattern, text, re.IGNORECASE):
+        # The rest of the same clause: a later sentence disowns nothing said here.
+        tail = re.split(r"[.;!?\n]", text[found.end() : found.end() + DISOWN_WINDOW])[0]
+        if not DISOWNED.search(tail):
+            return True
+    return False
+
 
 FAILURE_KINDS = (
     "first_call",
@@ -93,7 +117,7 @@ def text_failures(checks: Dict[str, Any], text: str) -> List[str]:
         found.append("contains_none")
     if any(not re.search(rx, text, re.IGNORECASE) for rx in checks.get("matches", [])):
         found.append("matches")
-    if any(re.search(rx, text, re.IGNORECASE) for rx in checks.get("matches_none", [])):
+    if any(asserted(rx, text) for rx in checks.get("matches_none", [])):
         found.append("matches_none")
     return found
 
@@ -125,7 +149,7 @@ def failures(
         if call["name"] in named:
             if not any(matches_spec(spec, call) for spec in specs if spec["name"] == call["name"]):
                 found.add("wrong_arguments")
-        elif call["name"] in writes:
+        elif call["name"] in writes - NOT_A_SEND:
             found.add("unmatched_write")
     if label.get("answer") is not None and "text" in turn:
         found.update(text_failures(label["answer"], turn["text"]))

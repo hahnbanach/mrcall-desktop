@@ -176,17 +176,25 @@ class TaskWorker:
         self.owner_id = owner_id
         # MODEL_TASK_DETECTION per-worker knob (empty → engine default).
         self.client = make_llm_client(model=routed_model("MODEL_TASK_DETECTION"))
+        if not user_email:
+            # A caller that passes no identity (chat and command sync jobs)
+            # gets the profile's primary, never an empty user.
+            from zylch.email.identity import primary_address
+
+            user_email = primary_address(owner_id)
         self.user_email = user_email.lower() if user_email else ""
         self.user_domain = (
             user_email.split("@")[1].lower() if user_email and "@" in user_email else ""
         )
-        # Extra identities the user owns (e.g. carol@example.com
-        # alongside production@example.com). Loaded from the
-        # EMAIL_ALIASES setting; used by _is_user_email so replies from a
-        # secondary address are still recognised as "the user's".
+        # Every other address the user writes from (declared EMAIL_ALIASES
+        # and the profile's active mailboxes); used by _is_user_email so a
+        # reply from a secondary address is still recognised as "the user's".
+        from zylch.email.identity import describe_user
         from zylch.workers.thread_presenter import load_user_aliases_for_owner
 
         self.user_aliases = load_user_aliases_for_owner(owner_id)
+        # What prompts see as {{user_email}}: the primary plus the others.
+        self._user_identity_text = describe_user(owner_id) or self.user_email
 
         # Initialize hybrid search for blob retrieval
         config = MemoryConfig()
@@ -198,6 +206,22 @@ class TaskWorker:
         # Cache for task prompt
         self._task_prompt: Optional[str] = None
         self._task_prompt_loaded: bool = False
+
+    @property
+    def user_identity_text(self) -> str:
+        """The user as prompts name them: the primary plus the other addresses.
+
+        Derived from the owner on first use when the constructor did not
+        run (test doubles built with ``__new__``), so a prompt is never
+        formatted without an identity.
+        """
+        text = getattr(self, "_user_identity_text", None)
+        if not text:
+            from zylch.email.identity import describe_user
+
+            text = describe_user(self.owner_id) or self.user_email
+            self._user_identity_text = text
+        return text
 
     def _is_user_email(self, email: str) -> bool:
         """Check if email belongs to the user (primary OR alias).
@@ -404,7 +428,7 @@ class TaskWorker:
                 existing_task_context=existing_task_context,
                 calendar_context=calendar_context,
                 thread_history_section=thread_history_section,
-                user_email=self.user_email,
+                user_email=self.user_identity_text,
                 personal_section=personal_section,
                 notifier_hint=notifier_hint,
             )

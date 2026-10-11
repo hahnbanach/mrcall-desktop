@@ -161,8 +161,8 @@ async def _handle_connection(connection) -> None:
     uid = claims.get("sub", "")
     email = claims.get("email")
     expires_at_ms = int(claims["exp"]) * 1000
-    # Reconstruct the in-memory session from the VERIFIED token — better
-    # than stdio, where the renderer's pushed values are trusted as-is.
+    # Reconstruct the in-memory session from the verified token. The stdio
+    # session-update RPCs enforce the same signed identity/expiry admission.
     set_session(uid=uid, email=email, id_token=token, expires_at_ms=expires_at_ms)
     logger.info(f"[ws] client connected uid={uid} email={email!r}")
 

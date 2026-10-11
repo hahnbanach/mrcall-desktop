@@ -1,13 +1,28 @@
 ---
 description: |
-  Zylch standalone architecture: local CLI sales intelligence tool.
+  MrCall Desktop engine architecture: local sidecar or per-profile hosted daemon.
   SQLite storage, IMAP email, WhatsApp (neonize), Telegram bot,
-  fastembed vectors, BYOK LLM, no server.
+  fastembed vectors, authenticated RPC and saved LLM billing controls.
 ---
 
 # Architecture
 
-> Local CLI tool. Mono-user. No server, no multi-tenant, no Docker.
+The engine runs as the Desktop stdio sidecar or a per-profile hosted daemon.
+Firebase identity selects an immutable UID-keyed profile. Private mail, ordinary
+tasks and sync cursors stay in its SQLite database; company memory binds selected
+tables to a separate company store. Hosted profiles also have separate Unix users.
+See [runtime contracts](../../docs/cross-cutting-contracts.md) for identity,
+company capabilities and hosted isolation.
+
+Company task assignments are an additive company-bound task subtype, separate
+from private ordinary and Qonto tasks. Their signed operations, exact inbound coverage,
+closed audit and assignment-bearing join refusal are described by the
+[assignment contract](features/task-assignment.md); verification belongs to the
+[delivery plan](../../docs/execution-plans/2026-10-08-explicit-task-assignment.md).
+
+The component map below retains legacy CLI names. Current paid admission,
+semantic memory writes and authenticated transports are specified by the linked
+feature contracts rather than the historical inline tool descriptions.
 
 ## System Map
 
@@ -70,7 +85,6 @@ zylch/
 │   ├── starchat.py       # StarChat/MrCall HTTP client (channel)
 │   ├── call_tools.py     # Phone call tools (via StarChat)
 │   ├── sms_tools.py      # SMS tools (via StarChat)
-│   ├── mrcall/oauth.py   # MrCall OAuth2 flow
 │   ├── calendar_sync.py  # Calendar sync (pending CalDAV)
 │   ├── pipedrive.py      # Pipedrive CRM tools
 │   ├── web_search.py     # Web search for enrichment
@@ -180,7 +194,7 @@ User
 |---------|----------|---------------|
 | Email | IMAP/SMTP | `zylch/email/imap_client.py` |
 | WhatsApp | neonize (whatsmeow) | `zylch/whatsapp/client.py` — QR login, sync on demand |
-| MrCall | StarChat HTTP + OAuth2 | `zylch/tools/starchat.py` + `mrcall/oauth.py` |
+| MrCall | StarChat HTTP with Firebase identity | `zylch/tools/mrcall/starchat_firebase.py` |
 | Telegram | python-telegram-bot | `zylch/telegram/bot.py` — bot interface (long-polling) |
 | Calendar | CalDAV | Planned |
 
@@ -206,7 +220,7 @@ User
 ## Storage
 
 - **Engine**: SQLite with WAL mode, foreign keys enabled
-- **Location**: `~/.zylch/profiles/<name>/zylch.db` (mail, tasks, tokens, sync cursors) + `~/.zylch/memory/<MEMORY_KEY>.db` (the memory tables: blobs, sentences, email/calendar/whatsapp links, identifiers, meta, fact history, aliases), one store per company shared by every profile with the key; a store is created only by mint, migration or provisioning — a typed key opens an existing store or is refused
+- **Location**: `~/.zylch/profiles/<firebase_uid>/zylch.db` (mail, tasks, tokens, sync cursors) + `~/.zylch/memory/<MEMORY_KEY>.db` (the memory tables: blobs, sentences, email/calendar/whatsapp links, identifiers, meta, fact history, aliases), one store per company shared by every profile with the key; a store is created only by mint, migration or provisioning — a typed key opens an existing store or is refused
 - **Models**: 20+ (Email, Blob, BlobSentence, TaskItem, OAuthToken, WhatsAppMessage, WhatsAppContact, MrcallConversation, EmailBlob/CalendarBlob/WhatsAppBlob join tables, PersonIdentifier index for cross-channel identity, etc.)
 - **Embeddings**: stored as LargeBinary (BLOB), loaded into numpy for search
 - **No pgvector**: cosine similarity computed in-memory via numpy

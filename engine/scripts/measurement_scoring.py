@@ -35,7 +35,9 @@ surrounding whitespace (NARRATION also of surrounding quotes).
 case sets were written against: lower-case, split into words on anything
 that is not a letter, count the words in a fixed Italian and a fixed English
 function-word list, the strictly larger count wins; a tie is undecided and
-fails. An answer of fewer than ``MIN_LANGUAGE_WORDS`` (eight) words is too
+fails, except a text in which neither list has a single hit: nothing
+reads its language, so it is skipped and fails neither the bar nor the
+label (audit B1). An answer of fewer than ``MIN_LANGUAGE_WORDS`` (eight) words is too
 short to detect reliably and the bar is skipped (G3). The text is the free
 text the README names: the ``title``, ``suggested_action`` and ``reason`` of
 TASK_DETECTION and REANALYZE, CORRECTION_LEARNING's rule, otherwise the
@@ -123,7 +125,17 @@ def language_bar(text: str, expect: str | None) -> dict:
     if words < MIN_LANGUAGE_WORDS:
         return {"ok": None, "detected": None, "words": words}
     detected = detector()(normalize(text))
+    if detected is None and no_hits(text):  # unreadable, not wrong (audit B1)
+        return {"ok": None, "detected": None, "words": words}
     return {"ok": detected == expect, "detected": detected, "words": words}
+
+
+def no_hits(text: str) -> bool:
+    """Whether neither function-word list has a hit in ``text`` (its language unreadable)."""
+    from tests.measurement.capture_support import _FUNCTION_WORDS
+
+    words = re.findall(r"[^\W\d_]+", normalize(text or "").lower())
+    return not any(word in vocab for word in words for vocab in _FUNCTION_WORDS.values())
 
 
 # ─── tool inputs ──────────────────────────────────────────────────────
@@ -267,8 +279,9 @@ def _correction(case: dict, answer: dict, request: dict) -> dict:
             return _result(outcome == "no_record", outcome, case["critical_on"])
         if not records:
             return _result(False, "no_record", case["critical_on"])
+        language = detector()(rule)
         match = _groups_met(label.get("rule_must_contain", []), rule, fold=True) and (
-            detector()(rule) == case["expect_lang"]
+            language == case["expect_lang"] or (language is None and no_hits(rule))
         )
         return _result(match, "record", case["critical_on"])
     fields = {

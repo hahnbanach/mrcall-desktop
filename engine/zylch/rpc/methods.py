@@ -17,6 +17,9 @@ from collections import OrderedDict
 from datetime import datetime, timezone
 from typing import Any, Awaitable, Callable, Dict, Optional
 
+from zylch.qonto.task_access import desktop_task_rpc, ordinary_tasks
+from zylch.rpc.qonto import METHODS as _QONTO_METHODS
+
 logger = logging.getLogger(__name__)
 
 NotifyFn = Callable[[str, Dict[str, Any]], None]
@@ -157,6 +160,9 @@ def _owner_id() -> str:
 # ─── Tasks ───────────────────────────────────────────────────
 
 
+
+
+@desktop_task_rpc
 async def tasks_list(params: Dict[str, Any], notify: NotifyFn) -> Any:
     """tasks.list(include_completed=False, include_skipped=False,
     limit=200, due_filter="all") -> list of task dicts.
@@ -303,6 +309,7 @@ async def tasks_create(params: Dict[str, Any], notify: NotifyFn) -> Any:
     }
 
 
+@desktop_task_rpc
 async def tasks_complete(params: Dict[str, Any], notify: NotifyFn) -> Any:
     """tasks.complete(task_id, note?, actor?, why?) -> {ok: bool}.
 
@@ -365,6 +372,7 @@ async def tasks_complete(params: Dict[str, Any], notify: NotifyFn) -> Any:
     return {"ok": bool(ok)}
 
 
+@desktop_task_rpc
 async def tasks_snooze(params: Dict[str, Any], notify: NotifyFn) -> Any:
     """tasks.snooze(task_id, due_at?, days?, actor?, why?) -> {ok, due_at, …}.
 
@@ -429,6 +437,7 @@ async def tasks_snooze(params: Dict[str, Any], notify: NotifyFn) -> Any:
     return {"ok": True, "task_id": task_id, "due_at": resolved}
 
 
+@desktop_task_rpc
 async def tasks_reopen(params: Dict[str, Any], notify: NotifyFn) -> Any:
     """tasks.reopen(task_id) -> {ok: bool}.
 
@@ -449,6 +458,7 @@ async def tasks_reopen(params: Dict[str, Any], notify: NotifyFn) -> Any:
     return {"ok": bool(ok)}
 
 
+@desktop_task_rpc
 async def tasks_pin(params: Dict[str, Any], notify: NotifyFn) -> Any:
     """tasks.pin(task_id, pinned: bool) -> {ok: bool}.
 
@@ -472,6 +482,7 @@ async def tasks_pin(params: Dict[str, Any], notify: NotifyFn) -> Any:
     return {"ok": bool(ok)}
 
 
+@desktop_task_rpc
 async def tasks_skip(params: Dict[str, Any], notify: NotifyFn) -> Any:
     """tasks.skip(task_id) -> {ok: bool}.
 
@@ -479,7 +490,8 @@ async def tasks_skip(params: Dict[str, Any], notify: NotifyFn) -> Any:
     existing `sources` JSON field. Skipped tasks are filtered out
     of `tasks.list` unless `include_skipped=True`.
     """
-    from zylch.storage.database import get_session
+    from zylch.qonto.task_access import task_session, visible_tasks
+    from zylch.qonto.task_records import user_edit
     from zylch.storage.models import TaskItem
 
     task_id = params.get("task_id")
@@ -489,12 +501,12 @@ async def tasks_skip(params: Dict[str, Any], notify: NotifyFn) -> Any:
     logger.debug(f"[rpc] tasks.skip owner_id={owner_id} task_id={task_id}")
 
     try:
-        with get_session() as session:
+        with task_session() as session:
             task = (
                 session.query(TaskItem)
                 .filter(
                     TaskItem.id == task_id,
-                    TaskItem.owner_id == owner_id,
+                    visible_tasks(owner_id),
                 )
                 .one_or_none()
             )
@@ -503,10 +515,11 @@ async def tasks_skip(params: Dict[str, Any], notify: NotifyFn) -> Any:
             sources = dict(task.sources or {})
             sources["skipped_at"] = datetime.now(timezone.utc).isoformat()
             task.sources = sources
+            user_edit(task, "skipped_at")
             session.flush()
-    except Exception as e:
+    except Exception:
         logger.exception(f"[rpc] tasks.skip failed for {task_id}")
-        return {"ok": False, "error": str(e)}
+        return {"ok": False, "error": "Task operation failed"}
     return {"ok": True}
 
 
@@ -690,6 +703,7 @@ async def tasks_solve(params: Dict[str, Any], notify: NotifyFn) -> Any:
                 store,
                 owner_id,
                 SOLVE_TOOLS,
+                email_task=task,
             )
             _active_executor = executor
             # What this solve is working on, kept apart: the instruction the
@@ -700,7 +714,9 @@ async def tasks_solve(params: Dict[str, Any], notify: NotifyFn) -> Any:
             try:
                 final: Dict[str, Any] = {}
                 done_event: Dict[str, Any] = {}
-                with revocable_turn(), solve_scope(solve_context):
+                from zylch.services.contextual_email_policy import from_task, scope as email_scope
+
+                with revocable_turn(), solve_scope(solve_context), email_scope(from_task(owner_id, task)):
                     async for event in executor.run():
                         if event["type"] == "done":
                             # Hold the done event back — we may decorate it
@@ -848,7 +864,9 @@ async def tasks_solve_cancel(
 
 async def chat_send(params: Dict[str, Any], notify: NotifyFn) -> Any:
     """chat.send(message, conversation_history=[], conversation_id="general",
-    context={}, mutation_policy?, policy_version?) -> ChatService result dict.
+    context={}, mutation_policy?, policy_version?, history_mode?,
+    history_handle?, history_revision?, assignment_thread_key?,
+    assignment_policy_version?, email_context?, contextual_email_policy_version?) -> ChatService result with managed binding fields.
 
     Destructive tools trigger `chat.pending_approval` notifications; the
     client must respond via `chat.approve` to resume.
@@ -860,6 +878,24 @@ async def chat_send(params: Dict[str, Any], notify: NotifyFn) -> Any:
         policy_scope,
     )
 
+    from zylch.services.task_assignment_draft_policy import VERSION, scope as assignment_scope
+    from zylch.services.task_assignment_types import AssignmentError, thread
+
+    assignment_root = params.get("assignment_thread_key")
+    if assignment_root is not None:
+        thread(assignment_root)
+        if params.get("assignment_policy_version") != VERSION:
+            raise AssignmentError("Assignment draft policy version required", -32602)
+    elif params.get("assignment_policy_version") is not None:
+        raise AssignmentError("Assignment draft thread required", -32602)
+
+    from zylch.services.contextual_email_policy import VERSION as EMAIL_POLICY_VERSION
+    email_context = params.get("email_context")
+    if email_context is not None and params.get("contextual_email_policy_version") != EMAIL_POLICY_VERSION:
+        raise AssignmentError("Contextual email policy version required", -32602)
+    if email_context is None and params.get("contextual_email_policy_version") is not None:
+        raise AssignmentError("Contextual email source required", -32602)
+
     message = params.get("message")
     if not message:
         raise ValueError("message is required")
@@ -868,6 +904,10 @@ async def chat_send(params: Dict[str, Any], notify: NotifyFn) -> Any:
     req_context = params.get("context") or {}
     if not isinstance(req_context, dict):
         req_context = {}
+    if email_context is not None:
+        if "email_context" in req_context and req_context["email_context"] != email_context:
+            raise AssignmentError("Contextual email sources disagree", -32602)
+        req_context = {**req_context, "email_context": email_context}
     mutation_policy = params.get("mutation_policy")
     policy_version = params.get("policy_version")
     if mutation_policy is not None and mutation_policy != READ_ONLY_POLICY:
@@ -887,6 +927,19 @@ async def chat_send(params: Dict[str, Any], notify: NotifyFn) -> Any:
     if existing is not None and not existing.done():
         raise ChatBusyError("chat busy, approve or decline pending action first")
 
+    from zylch.qonto import history as finance_history
+
+    admission_task = asyncio.current_task()
+    _active_chats[conversation_id] = admission_task
+    try:
+        history_guard = await finance_history.admit(params)
+    except BaseException:
+        if _active_chats.get(conversation_id) is admission_task:
+            _active_chats.pop(conversation_id, None)
+        raise
+    if history_guard is not None:
+        conversation_history = history_guard.canonical_history
+
     owner_id = _owner_id()
     logger.debug(
         f"[rpc] chat.send owner_id={owner_id} "
@@ -898,7 +951,7 @@ async def chat_send(params: Dict[str, Any], notify: NotifyFn) -> Any:
 
     # Optional context notification (confirms task scoping to the UI)
     task_id = req_context.get("task_id") if isinstance(req_context, dict) else None
-    if task_id:
+    if task_id and history_guard is None:
         try:
             notify(
                 "chat.context",
@@ -990,8 +1043,6 @@ async def chat_send(params: Dict[str, Any], notify: NotifyFn) -> Any:
         )
         return (bool(approved), edited_input)
 
-    service = ChatService()
-
     # The turn scope, installed by the driver that owns the turn — the same
     # arrangement `tasks.solve` uses.
     #
@@ -1003,14 +1054,42 @@ async def chat_send(params: Dict[str, Any], notify: NotifyFn) -> Any:
     turn = Cancellation()
 
     async def _run():
-        with policy_scope(mutation_policy), revocable_turn(turn):
-            return await service.process_message(
+        from contextlib import nullcontext
+        from zylch.qonto.logging import progress_scope
+
+        progress = (
+            progress_scope(
+                lambda payload: notify(
+                    "chat.progress", {"conversation_id": conversation_id, **payload}
+                )
+            )
+            if history_guard is not None
+            else nullcontext()
+        )
+        with (
+            finance_history.turn_scope(history_guard),
+            progress,
+            policy_scope(mutation_policy),
+            assignment_scope(assignment_root),
+            revocable_turn(turn),
+        ):
+            service = ChatService()
+            result = await service.process_message(
                 user_message=message,
                 user_id=owner_id,
                 conversation_history=conversation_history,
                 context=req_context,
                 approval_callback=approval_callback,
             )
+            if history_guard is not None:
+                finance_history.check_before_disclosure()
+                canonical = (
+                    service.agent.get_history()
+                    if service.agent is not None
+                    else history_guard.canonical_history
+                )
+                result = finance_history.finish(history_guard, canonical, result)
+            return result
 
     task = asyncio.create_task(_run())
     _active_chats[conversation_id] = task
@@ -1024,9 +1103,11 @@ async def chat_send(params: Dict[str, Any], notify: NotifyFn) -> Any:
         turn.cancel("the chat turn was cancelled")
         raise
     finally:
+        finance_history.abort(history_guard)
         if _active_chats.get(conversation_id) is task:
             _active_chats.pop(conversation_id, None)
 
+    finance_history.check_delivery(history_guard)
     logger.debug("[rpc] chat.send -> result keys=%s", list(result.keys()))
     return result
 
@@ -1035,7 +1116,7 @@ async def system_capabilities(params: Dict[str, Any], notify: NotifyFn) -> Any:
     """system.capabilities() -> protocol capabilities supported by this engine."""
     from zylch.services.request_policy import READ_ONLY_POLICY_VERSION
 
-    return {"chat_read_only_policy": READ_ONLY_POLICY_VERSION}
+    return {"chat_read_only_policy": READ_ONLY_POLICY_VERSION, "chat_history_binding": 1, "assignment_draft_policy": 1, "contextual_email_policy": 1}
 
 
 async def chat_approve(params: Dict[str, Any], notify: NotifyFn) -> Any:
@@ -1125,6 +1206,33 @@ def _task_change_key(task: Dict[str, Any]) -> str:
     return str(task.get("analyzed_at") or "")
 
 
+def _pending_email_counts(owner_id: str) -> Dict[str, int]:
+    """The email counts the ETA is built from, over the owner's active mailboxes.
+
+    ``pending_*`` count only the first stored copy of a message held by
+    several mailboxes (the copy the pickers will process); ``total`` is
+    every row in an active mailbox, for first-sync detection.
+    """
+    from sqlalchemy import or_
+
+    from zylch.storage.database import get_session
+    from zylch.storage.models import Email
+    from zylch.storage.storage import Storage
+
+    active = Storage.active_mailbox_filter(owner_id)
+    first_copy = Storage.first_copy_filter(owner_id)
+    with get_session() as session:
+        pending = session.query(Email).filter(Email.owner_id == owner_id, active, first_copy)
+        return {
+            "pending_memory": pending.filter(Email.memory_processed_at.is_(None)).count(),
+            "pending_tasks": pending.filter(Email.task_processed_at.is_(None)).count(),
+            "pending_any": pending.filter(
+                or_(Email.memory_processed_at.is_(None), Email.task_processed_at.is_(None))
+            ).count(),
+            "total": session.query(Email).filter(Email.owner_id == owner_id, active).count(),
+        }
+
+
 def _estimate_update_eta(store, owner_id: str) -> str:
     """Rough human-readable ETA for update.run.
 
@@ -1143,47 +1251,15 @@ def _estimate_update_eta(store, owner_id: str) -> str:
     have to grind through. Now we sum all three centres and add a
     first-sync bump when the email table is empty.
     """
-    from sqlalchemy import or_
-
-    from zylch.storage.database import get_session
-    from zylch.storage.models import Email
-
     try:
-        with get_session() as session:
-            # Pending memory = not yet memory-extracted
-            pending_mem = (
-                session.query(Email)
-                .filter(Email.owner_id == owner_id)
-                .filter(Email.memory_processed_at.is_(None))
-                .count()
-            )
-            # Pending tasks = not yet task-analyzed
-            pending_tasks = (
-                session.query(Email)
-                .filter(Email.owner_id == owner_id)
-                .filter(Email.task_processed_at.is_(None))
-                .count()
-            )
-            # Pending memory OR task (used as the legacy "any pending"
-            # bucket for first-sync detection).
-            pending_any = (
-                session.query(Email)
-                .filter(Email.owner_id == owner_id)
-                .filter(
-                    or_(
-                        Email.memory_processed_at.is_(None),
-                        Email.task_processed_at.is_(None),
-                    )
-                )
-                .count()
-            )
-            # If the local store is empty this is a first-time sync: IMAP
-            # will pull the whole window (default 60 days) before the
-            # pipeline even starts counting, so nudge the estimate up.
-            total = session.query(Email).filter(Email.owner_id == owner_id).count()
+        counts = _pending_email_counts(owner_id)
     except Exception as e:
         logger.warning(f"[rpc] update ETA calc failed: {e}")
         return "unknown"
+    pending_mem = counts["pending_memory"]
+    pending_tasks = counts["pending_tasks"]
+    pending_any = counts["pending_any"]
+    total = counts["total"]
 
     # Open task count drives F4 + F8 + F9 sweep cost. The sweeps run
     # even when no new emails arrived — this is exactly the case where
@@ -1456,7 +1532,7 @@ async def update_run(params: Dict[str, Any], notify: NotifyFn) -> Any:
                 rows = (
                     session.query(TaskItem)
                     .filter(
-                        TaskItem.owner_id == owner_id,
+                        ordinary_tasks(owner_id),
                         TaskItem.id.in_(missing_from_after),
                         TaskItem.completed_at.isnot(None),
                     )
@@ -1473,9 +1549,9 @@ async def update_run(params: Dict[str, Any], notify: NotifyFn) -> Any:
     diff = build_update_diff_summary(before_open, after_open_by_id, closed_after)
 
     # Turn any collected stage failures into clear, structured messages.
-    from zylch.services.error_messages import humanize_error
+    from zylch.services.error_messages import humanize_entry
 
-    humanized = [humanize_error(item.get("error"), item.get("stage")) for item in pipeline_errors]
+    humanized = [humanize_entry(item) for item in pipeline_errors]
     fatal = [h for h in humanized if h.get("severity") == "error"]
 
     logger.debug(
@@ -1527,6 +1603,9 @@ async def narration_summarize(
     """
     import re
 
+    from zylch.qonto.history import reject_known_evidence
+
+    reject_known_evidence(params)
     lines = params.get("lines") or []
     context = params.get("context") or ""
     if not isinstance(lines, list) or not lines:
@@ -1622,7 +1701,9 @@ async def emails_list_by_thread(
     """emails.list_by_thread(thread_id) -> {"emails": [...]}.
 
     Returns the full thread in chronological order (date ASC) with a
-    provider-uniform shape. Dispatch:
+    provider-uniform shape; each row carries `mailbox_id`,
+    `mailbox_address`, `original_message_id` and `pec_markers` (the last
+    two non-null only on PEC rows). Dispatch:
       - provider == 'imap'      -> local DB (Email table)
       - provider == 'google'    -> GmailClient.threads.get (not available
                                     in standalone repo; returns error)
@@ -1639,14 +1720,25 @@ async def emails_list_by_thread(
     owner_id = _owner_id()
     provider = get_provider(owner_id)
     user_email = (get_email(owner_id) or "").lower()
+    # Ours = the primary plus the active mailboxes' addresses (verified by
+    # their connections); declared aliases are not, exactly as
+    # `emails.needs_reply` reads it (D2), so the two never disagree.
+    from zylch.email.identity import verified_user_addresses
+
+    user_set = set(verified_user_addresses(owner_id))
+    if user_email:
+        user_set.add(user_email)
     logger.debug(
         f"[rpc] emails.list_by_thread owner_id={owner_id} "
         f"provider={provider} thread_id={thread_id}"
     )
 
     if provider == "imap":
+        from zylch.email.mailboxes import for_owner
+
         store = Storage.get_instance()
         rows = store.get_thread_emails(owner_id=owner_id, thread_id=thread_id)
+        addresses = {m.id: m.address for m in for_owner(owner_id, include_removed=True)}
         out = []
         for r in rows:
             from_email = (r.get("from_email") or "").strip()
@@ -1691,9 +1783,15 @@ async def emails_list_by_thread(
                     "body_plain": body_clean,
                     "body_html": body_html_raw,
                     "is_auto_reply": bool(r.get("is_auto_reply")),
-                    "is_user_sent": bool(user_email and from_email.lower() == user_email),
+                    "is_user_sent": from_email.lower() in user_set,
                     "has_attachments": bool(r.get("has_attachments")) or bool(attach_names),
                     "attachment_filenames": attach_names,
+                    # The mailbox this copy came from, and the PEC original
+                    # behind an envelope (both None-safe, additive).
+                    "mailbox_id": r.get("mailbox_id"),
+                    "mailbox_address": addresses.get(r.get("mailbox_id")),
+                    "original_message_id": r.get("original_message_id"),
+                    "pec_markers": r.get("pec_markers"),
                 }
             )
         logger.debug(
@@ -1722,12 +1820,14 @@ async def emails_list_inbox(
     params: Dict[str, Any],
     notify: NotifyFn,
 ) -> Any:
-    """emails.list_inbox(limit=50, offset=0) -> {"threads": [...]}.
+    """emails.list_inbox(limit=50, offset=0, mailbox_id?) -> {"threads": [...]}.
 
     Returns thread summaries for the desktop Email tab's Inbox. See
     `Storage.list_inbox_threads` for the precise grouping/filtering
     rules. Each thread dict carries the latest message's metadata plus
-    `pinned`, `unread`, `message_count`.
+    `pinned`, `unread`, `message_count` and `mailbox_ids` (the mailboxes
+    holding rows of the thread). `mailbox_id` restricts the rows to one
+    mailbox: the threads as that mailbox sees them.
     """
     from zylch.api.token_storage import get_email
     from zylch.storage.storage import Storage
@@ -1746,6 +1846,7 @@ async def emails_list_inbox(
         user_email=user_email,
         limit=limit,
         offset=offset,
+        mailbox_id=str(params.get("mailbox_id") or "") or None,
     )
     logger.debug(f"[rpc] emails.list_inbox -> {len(threads)} threads")
     return {"threads": threads}
@@ -1755,11 +1856,12 @@ async def emails_list_sent(
     params: Dict[str, Any],
     notify: NotifyFn,
 ) -> Any:
-    """emails.list_sent(limit=50, offset=0) -> {"threads": [...]}.
+    """emails.list_sent(limit=50, offset=0, mailbox_id?) -> {"threads": [...]}.
 
     Symmetric to `emails.list_inbox` but filters for threads whose
-    latest email was sent by the profile owner (from_email ==
-    owner_email).
+    latest email was sent from any address the user writes from (the
+    primary, declared aliases, active mailboxes). `mailbox_id` restricts
+    the rows to one mailbox; summaries carry `mailbox_ids`.
     """
     from zylch.api.token_storage import get_email
     from zylch.storage.storage import Storage
@@ -1778,6 +1880,7 @@ async def emails_list_sent(
         user_email=user_email,
         limit=limit,
         offset=offset,
+        mailbox_id=str(params.get("mailbox_id") or "") or None,
     )
     logger.debug(f"[rpc] emails.list_sent -> {len(threads)} threads")
     return {"threads": threads}
@@ -1787,7 +1890,7 @@ async def emails_search(
     params: Dict[str, Any],
     notify: NotifyFn,
 ) -> Any:
-    """emails.search(query?, folder='inbox', limit=50, offset=0) -> {"threads": [...]}.
+    """emails.search(query?, folder='inbox', limit=50, offset=0, mailbox_id?) -> {"threads": [...]}.
 
     Gmail-style query language. Supported operators:
     ``from:`` / ``to:`` / ``cc:`` / ``subject:`` / ``body:``,
@@ -1799,7 +1902,8 @@ async def emails_search(
 
     ``query`` is optional: an absent or empty query is an unfiltered
     browse of ``folder``, which is what the renderer's "clear search"
-    already sends.
+    already sends. ``mailbox_id`` restricts the rows to one mailbox;
+    summaries carry ``mailbox_ids``.
     """
     from zylch.api.token_storage import get_email
     from zylch.storage.storage import Storage
@@ -1825,6 +1929,7 @@ async def emails_search(
         folder=folder,
         limit=limit,
         offset=offset,
+        mailbox_id=str(params.get("mailbox_id") or "") or None,
     )
     logger.debug(f"[rpc] emails.search -> {len(threads)} threads")
     return {"threads": threads}
@@ -1893,6 +1998,9 @@ async def narration_predict(
     Never raises; returns {"text": ""} on any failure — including the
     no-`message` call, which is why `message` is optional.
     """
+    from zylch.qonto.history import reject_known_evidence
+
+    reject_known_evidence(params)
     message = params.get("message") or ""
     context = params.get("context") or ""
     if not isinstance(message, str):
@@ -2004,7 +2112,11 @@ async def settings_get(params: Dict[str, Any], notify: NotifyFn) -> Any:
 
     raw = read_env()
     out: Dict[str, str] = {}
+    from zylch.services.credential_policy import excluded_finance_setting
+
     for key in KNOWN_KEYS:
+        if excluded_finance_setting(key):
+            continue
         value = raw.get(key, "")
         if key in SECRET_KEYS:
             out[key] = "<set>" if value else ""
@@ -2054,6 +2166,10 @@ async def settings_get_secret(params: Dict[str, Any], notify: NotifyFn) -> Any:
     key = str(params.get("key") or "").strip()
     if not key:
         raise ValueError("settings.get_secret requires 'key'")
+    from zylch.services.credential_policy import excluded_finance_setting
+
+    if excluded_finance_setting(key):
+        raise ValueError("Finance credentials are not available through Settings")
     if key not in SECRET_KEYS:
         raise ValueError(
             f"{key!r} is not a secret field — read it with settings.get"
@@ -2130,8 +2246,10 @@ async def profiles_create(params: Dict[str, Any], notify: NotifyFn) -> Any:
     # Validate keys against the known schema.
     cleaned: Dict[str, str] = {}
     unknown: list[str] = []
+    from zylch.services.credential_policy import excluded_finance_setting
+
     for key, value in values.items():
-        if key not in KNOWN_KEYS:
+        if excluded_finance_setting(key) or key not in KNOWN_KEYS:
             unknown.append(key)
             continue
         if not isinstance(value, str):
@@ -2232,8 +2350,10 @@ async def settings_update(params: Dict[str, Any], notify: NotifyFn) -> Any:
     cleaned: Dict[str, str] = {}
     skipped: list[str] = []
     unknown: list[str] = []
+    from zylch.services.credential_policy import excluded_finance_setting
+
     for key, value in updates.items():
-        if key not in KNOWN_KEYS:
+        if excluded_finance_setting(key) or key not in KNOWN_KEYS:
             unknown.append(key)
             continue
         if key == "MEMORY_KEY":
@@ -2368,6 +2488,15 @@ from zylch.rpc.mrcall_actions import METHODS as _MRCALL_METHODS  # noqa: E402
 for _name, _fn in _MRCALL_METHODS.items():
     if _name in METHODS:
         raise RuntimeError(f"Duplicate RPC method name: {_name}")
+    METHODS[_name] = _fn
+
+# The profile's mailboxes (list, presets, test, add, update, remove): the
+# additional-mailbox surface, passwords encrypted under MAILBOX_SECRET_KEY.
+from zylch.rpc.mailboxes import METHODS as _MAILBOX_METHODS  # noqa: E402
+
+for _name, _fn in _MAILBOX_METHODS.items():
+    if _name in METHODS:
+        raise RuntimeError(f"RPC method name collision: {_name}")
     METHODS[_name] = _fn
 
 # Outreach campaigns — durable state for operator-driven outreach
@@ -2510,4 +2639,16 @@ from zylch.rpc.voice_actions import METHODS as _VOICE_METHODS  # noqa: E402
 for _name, _fn in _VOICE_METHODS.items():
     if _name in METHODS:
         raise RuntimeError(f"duplicate RPC method registration: {_name}")
+    METHODS[_name] = _fn
+
+for _name, _fn in _QONTO_METHODS.items():
+    if _name in METHODS:
+        raise RuntimeError(f"duplicate RPC method registration: {_name}")
+    METHODS[_name] = _fn
+
+from zylch.rpc.task_assignments import METHODS as _ASSIGNMENT_METHODS
+
+for _name, _fn in _ASSIGNMENT_METHODS.items():
+    if _name in METHODS:
+        raise RuntimeError(f"Duplicate RPC method name: {_name}")
     METHODS[_name] = _fn

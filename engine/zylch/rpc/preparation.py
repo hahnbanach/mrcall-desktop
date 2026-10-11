@@ -30,6 +30,20 @@ async def preparation_status(params, notify):
                     (owner,),
                 ).one()
                 counts[f"{table}:{column}"] = {"pending": pending, "completed": complete}
+    if {"qonto_connections", "qonto_transactions", "qonto_checkpoints"} <= tables:
+        from zylch.qonto.errors import QontoError
+        from zylch.qonto.guard import active_binding
+        from zylch.qonto.logging import private_scope
+        from zylch.qonto.preparation import pending_counts
+
+        # Private status metadata: no source rows, identifiers or model access.
+        # The helper owns the generation guard; never nest its process lock.
+        with private_scope():
+            try:
+                authority, binding = active_binding()
+                counts.update(pending_counts(authority, binding))
+            except QontoError:
+                pass
     result["pending"] = sum(c["pending"] for c in counts.values())
     result["checkpoints_completed"] = sum(c["completed"] for c in counts.values())
     result["channels"] = counts

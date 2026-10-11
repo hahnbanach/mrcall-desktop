@@ -94,8 +94,20 @@ def _all_fact_blobs(owner_id: str) -> List[Dict[str, str]]:
             .all()
         )
         excluded = ineligible_fact_ids(session, key)
+        from zylch.qonto.provenance import annotate, excluded_blob_ids
+
+        bank_roots = excluded_blob_ids(session, key)
         return [
-            {"blob_id": str(r.id), "content": r.content or "", "updated_at": _iso(r.updated_at)}
+            annotate(
+                session,
+                key,
+                {
+                    "blob_id": str(r.id),
+                    "content": r.content or "",
+                    "updated_at": _iso(r.updated_at),
+                },
+                excluded=bank_roots,
+            )
             for r in rows
             if str(r.id) not in excluded
         ]
@@ -151,7 +163,7 @@ def get_facts_by_category(owner_id: str, category: str) -> List[Dict[str, str]]:
         if parse_category(blob["content"]).lower() == want:
             out.append(
                 {
-                    "blob_id": blob["blob_id"],
+                    **{k: v for k, v in blob.items() if k not in ("content", "updated_at")},
                     "key": parse_key(blob["content"]),
                     "content": blob["content"],
                 }
@@ -225,7 +237,9 @@ def upsert_fact(
             source_id=entry.source_id,
             source_revision=entry.source_revision,
             observation=entry.observation,
-            subject_hint=SubjectHint(entity_type=FACT, target_blob_id=row["blob_id"] if row else None),
+            subject_hint=SubjectHint(
+                entity_type=FACT, target_blob_id=row["blob_id"] if row else None
+            ),
             explicit_request=False,
             stage=entry.stage,
             cancellation=entry.cancellation,

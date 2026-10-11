@@ -86,7 +86,9 @@ def test_boot_mints_the_key_then_stamps_and_rewrites_every_row(legacy):
     assert pending_step_ids(dbm.get_engine(), [STEP, SPLIT_STEP]) == []
     # both steps are destructive: one backup of the profile file covers both
     backups = os.listdir(os.path.join(os.path.dirname(legacy), "backups"))
-    assert len(backups) == 1 and STEP_ID in backups[0] and SPLIT_STEP.id in backups[0]
+    step_backups = [name for name in backups if STEP_ID in name]
+    assert len(step_backups) == 1 and SPLIT_STEP.id in step_backups[0]
+    assert len([name for name in backups if "qonto-private-v1" in name]) == 1
 
 
 def test_migrated_rows_are_retrievable_through_the_key(legacy, monkeypatch):
@@ -139,7 +141,8 @@ def test_second_boot_is_a_no_op(legacy):
     dbm.init_db()
     store = _store(legacy)
     before = _rows(store, "SELECT id, namespace, company_key FROM blobs ORDER BY id")
+    backups_before = os.listdir(os.path.join(os.path.dirname(legacy), "backups"))
     dbm.dispose_engine()
     dbm.init_db()
     assert _rows(store, "SELECT id, namespace, company_key FROM blobs ORDER BY id") == before
-    assert len(os.listdir(os.path.join(os.path.dirname(legacy), "backups"))) == 1
+    assert os.listdir(os.path.join(os.path.dirname(legacy), "backups")) == backups_before

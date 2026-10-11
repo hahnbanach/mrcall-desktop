@@ -124,7 +124,7 @@ async def usage_reconcile(params, notify):
 
 
 async def llm_models(params, notify):
-    """Free catalog for a proposed billing selection; never changes saved policy.
+    """llm.models(provider?) -> free catalog without changing saved policy.
 
     The models proposed are the rankings of the table in force (`roles/table.py`,
     downloaded daily by `roles/distribution.py`): on a personal Anthropic key

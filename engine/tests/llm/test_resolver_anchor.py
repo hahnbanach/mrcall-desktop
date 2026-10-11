@@ -1,9 +1,10 @@
 """The price anchor: the reference price and the fallback (`candidates.anchored`).
 
 A model's reference price is its model-level price — the list price
-OpenRouter shows — whenever at least one eligible endpoint (up, an allowed
-quantization, tools, no excluded tier, a fixed price) is priced within it ×
-the margin. A median of the endpoints is not the first anchor because it
+OpenRouter shows — whenever at least half the eligible endpoints (up, an
+allowed quantization, tools, no excluded tier, a fixed price; ⌈n / 2⌉ of n)
+are priced within it × the margin (the half rule and K3's pin:
+`test_resolver_anchor_k3.py`). A median of the endpoints is not the first anchor because it
 flips with the count of regional premiums: Anthropic sells Opus 5.5 at its
 list price on five endpoints and 10% above it on five regional ones, and one
 more region would move the median to the premium. OpenRouter computes the
@@ -93,14 +94,15 @@ def test_a_model_level_price_set_by_an_fp4_outlier_takes_the_fallback():
     assert (price["input"], price["output"]) == (D("0.15"), D("0.5")) and admitted == rest
 
 
-def test_a_model_level_price_that_admits_an_endpoint_stays_the_reference():
+def test_a_model_level_price_that_admits_half_the_endpoints_stays_the_reference():
     cheap, mid, dear = (
         priced("cheap", "0.5", "1"),
         priced("mid", "0.6", "1.2"),
         priced("dear", "3", "6"),
     )
     price, admitted = candidates.anchored(listed_at("1", "2"), [dear, mid, cheap], rules())
-    # Neither the cheapest (0.5/1) nor the median (0.6/1.2): the list price.
+    # Two of three fit under it, at least half. Neither the cheapest (0.5/1)
+    # nor the median (0.6/1.2): the list price.
     assert (price["input"], price["output"]) == (D(1), D(2))
     assert admitted == [mid, cheap]
     # K3 on the capture: morph/fp8 (2/11.357) is its cheapest eligible endpoint,
@@ -182,9 +184,10 @@ def test_the_reference_endpoint_is_always_admitted():
     price, admitted = candidates.anchored(listed_at(*OUTLIER), rows, rules("1"))
     assert (price["input"], price["output"]) == (D(1), D(3))
     assert admitted == rows[:2]
-    # At the model-level price, an endpoint priced exactly at the cap is admitted.
-    price, admitted = candidates.anchored(listed_at("1", "2"), rows, rules("1"))
-    assert (price["input"], price["output"]) == (D(1), D(2)) and admitted == rows[:1]
+    # At the model-level price (a and b of three fit, at least half), an
+    # endpoint priced exactly at the cap is admitted: b at 1/3.
+    price, admitted = candidates.anchored(listed_at("1", "3"), rows, rules("1"))
+    assert (price["input"], price["output"]) == (D(1), D(3)) and admitted == rows[:2]
 
 
 def test_cache_prices_follow_the_reference():
@@ -267,16 +270,22 @@ def test_an_all_fp4_model_has_no_admitted_endpoint():
     )
 
 
-def test_six_models_of_the_capture_take_the_fallback():
+def test_twenty_six_models_of_the_capture_take_the_fallback():
     src = sources()
     catalogue = by_id(src["catalogue"])
 
     def anchored(model: str) -> tuple[dict, list | None]:
         return candidates.anchored(catalogue[model], src["endpoints"][model], rules())
 
+    def fitting(model: str) -> int:
+        rows = candidates.eligible(src["endpoints"][model], rules())
+        return sum(candidates.fits(p, level[model], D("1.25")) for _, p in rows)
+
     level = {m: candidates.prices_of(catalogue[m]["pricing"]) for m in src["endpoints"]}
     taken = sorted(m for m in src["endpoints"] if anchored(m)[0] != level[m])
-    assert taken == [
+    # Six whose model-level price admits no eligible endpoint...
+    none = [m for m in taken if fitting(m) == 0]
+    assert none == [
         "meta-llama/llama-4-scout",
         "moonshotai/kimi-k2.5",
         KIMI_K2_6,
@@ -284,7 +293,12 @@ def test_six_models_of_the_capture_take_the_fallback():
         "qwen/qwen3.5-122b-a10b",
         "z-ai/glm-4.6",
     ]
-    # None of them admitted an endpoint at its model-level price; each now does.
+    # ...and twenty whose model-level price admits fewer than half of them.
+    minority = [m for m in taken if m not in none]
+    assert len(minority) == 20 and "z-ai/glm-5.2" in minority
+    for model in minority:
+        eligible = len(candidates.eligible(src["endpoints"][model], rules()))
+        assert 0 < 2 * fitting(model) < eligible, model
     assert all(anchored(m)[1] for m in taken)
     price, admitted = anchored(KIMI_K2_6)
     assert (price["input"], price["output"]) == (D("0.77"), D("3.4")) and len(admitted) == 7

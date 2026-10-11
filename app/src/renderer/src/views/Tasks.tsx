@@ -6,10 +6,11 @@ import { useThread } from '../store/thread'
 import { showError } from '../lib/errors'
 import { formatAbsolute, formatRelative } from '../lib/dates'
 import Icon from '../components/Icon'
+import QontoSource from '../components/QontoSource'
 
 type StatusFilter = 'open' | 'closed'
 type SortMode = 'urgency' | 'date'
-type ChannelFilter = 'all' | 'email' | 'phone' | 'calendar' | 'whatsapp'
+type ChannelFilter = 'all' | 'email' | 'phone' | 'calendar' | 'whatsapp' | 'qonto'
 
 // Persistence key for the channel filter — kept in localStorage so a
 // user who only cares about phone tasks doesn't have to flip the
@@ -55,7 +56,7 @@ export default function Tasks({ onOpenWorkspace }: Props = {}) {
   const [channelFilter, setChannelFilter] = useState<ChannelFilter>(() => {
     try {
       const v = localStorage.getItem(CHANNEL_FILTER_KEY)
-      if (v === 'email' || v === 'phone' || v === 'calendar' || v === 'whatsapp') return v
+      if (v === 'email' || v === 'phone' || v === 'calendar' || v === 'whatsapp' || v === 'qonto') return v
     } catch {
       /* localStorage unavailable */
     }
@@ -69,6 +70,17 @@ export default function Tasks({ onOpenWorkspace }: Props = {}) {
     }
   }, [channelFilter])
   const [search, setSearch] = useState('')
+  const [qontoReview, setQontoReview] = useState<string | null>(null)
+  useEffect(() => {
+    const invalidate = () => {
+      setQontoReview(null)
+      setTasks(previous => previous.filter(task => task.channel !== 'qonto' && task.event_type !== 'qonto'))
+      void refresh()
+    }
+    window.addEventListener('mrcall:qonto-changed', invalidate)
+    const off = window.zylch.onSidecarStatus(invalidate)
+    return () => { window.removeEventListener('mrcall:qonto-changed', invalidate); off() }
+  }, [refresh, setTasks])
 
   const loadThreadTasks = useCallback(async (threadId: string) => {
     setThreadLoading(true)
@@ -265,10 +277,10 @@ export default function Tasks({ onOpenWorkspace }: Props = {}) {
   // Channel counts feed badges in the dropdown so the user can see
   // how many phone vs email tasks exist without scrubbing through.
   const channelCounts = useMemo(() => {
-    const out = { all: statusFiltered.length, email: 0, phone: 0, calendar: 0, whatsapp: 0 }
+    const out = { all: statusFiltered.length, email: 0, phone: 0, calendar: 0, whatsapp: 0, qonto: 0 }
     for (const t of statusFiltered) {
       const c = t.channel || 'email'
-      if (c === 'email' || c === 'phone' || c === 'calendar' || c === 'whatsapp') {
+      if (c === 'email' || c === 'phone' || c === 'calendar' || c === 'whatsapp' || c === 'qonto') {
         out[c] += 1
       } else {
         out.email += 1
@@ -344,7 +356,8 @@ export default function Tasks({ onOpenWorkspace }: Props = {}) {
 
   const renderTask = (t: ZylchTask) => {
     const u = (t.urgency || 'low').toLowerCase()
-    const threadId = t.sources?.thread_id || null
+    const finance = t.channel === 'qonto' || t.event_type === 'qonto'
+    const threadId = finance ? null : t.sources?.thread_id || null
     return (
       <article
         key={t.id}
@@ -418,6 +431,10 @@ export default function Tasks({ onOpenWorkspace }: Props = {}) {
             <div className="text-brand-black whitespace-pre-wrap">{t.close_note}</div>
           </div>
         )}
+        {finance && qontoReview === t.id && <QontoSource
+          key={t.id} sourceId={t.sources.qonto?.source_id} expectedRevision={t.sources.qonto?.source_revision}
+          onClose={() => setQontoReview(null)}
+        />}
         {closingId === t.id ? (
           <div className="space-y-2">
             <textarea
@@ -500,14 +517,14 @@ export default function Tasks({ onOpenWorkspace }: Props = {}) {
               Close
             </button>
           )}
-          <button
+          {!finance && <button
             onClick={() => onUpdate(t.id)}
             disabled={updating.has(t.id)}
             className="px-3 py-1.5 text-sm border border-brand-mid-grey rounded hover:bg-brand-light-grey transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {updating.has(t.id) ? 'Analyzing…' : 'Update'}
-          </button>
-          <button
+          </button>}
+          {finance ? <button onClick={() => setQontoReview(t.id)} className="px-3 py-1.5 text-sm bg-brand-blue text-white rounded">Review Qonto source</button> : <button
             onClick={() => {
               // Task conversation is `task-<id>` — openTaskChat creates
               // it if missing AND fires tasks.solve to populate the
@@ -528,7 +545,7 @@ export default function Tasks({ onOpenWorkspace }: Props = {}) {
             title={threadId ? 'Open in workspace' : 'Open in workspace (no thread)'}
           >
             Open
-          </button>
+          </button>}
         </div>
         )}
         {keptNotice[t.id] && (
@@ -644,6 +661,7 @@ export default function Tasks({ onOpenWorkspace }: Props = {}) {
               <option value="phone">Phone ({channelCounts.phone})</option>
               <option value="calendar">Calendar ({channelCounts.calendar})</option>
               <option value="whatsapp">WhatsApp ({channelCounts.whatsapp})</option>
+              <option value="qonto">Qonto ({channelCounts.qonto})</option>
             </select>
           </div>
         )}

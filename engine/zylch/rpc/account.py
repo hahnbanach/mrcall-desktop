@@ -26,6 +26,7 @@ The renderer already holds the token; never echo it back over the wire.
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from typing import Any, Awaitable, Callable, Dict
 
@@ -42,9 +43,8 @@ NotifyFn = Callable[[str, Dict[str, Any]], None]
 async def account_set_firebase_token(params: Dict[str, Any], notify: NotifyFn) -> Any:
     """account.set_firebase_token(uid, id_token, expires_at_ms, email?, refresh_token?) -> {ok}
 
-    `expires_at_ms` is the absolute Unix-ms timestamp at which Firebase
-    will reject the token (the renderer reads this from
-    user.getIdTokenResult().expirationTime).
+    The client expiry remains a compatibility parameter. Identity, email
+    and effective expiry come from the verified Firebase token claims.
     """
     uid = params.get("uid")
     email = params.get("email")
@@ -65,7 +65,18 @@ async def account_set_firebase_token(params: Dict[str, Any], notify: NotifyFn) -
     if email is not None and not isinstance(email, str):
         raise ValueError("email, when provided, must be a string")
 
-    set_session(uid=uid, email=email, id_token=id_token, expires_at_ms=expires_at_ms)
+    from zylch.auth.verified_session import verified_claims
+
+    claims = await asyncio.to_thread(verified_claims, id_token, requested_uid=uid)
+    uid = claims["sub"]
+    email = claims.get("email")
+    expires_at_ms = int(claims["exp"]) * 1000
+    set_session(
+        uid=uid,
+        email=email if isinstance(email, str) else None,
+        id_token=id_token,
+        expires_at_ms=expires_at_ms,
+    )
 
     # Persist the refresh token (encrypted) so a headless daemon can mint
     # fresh ID tokens past the ~1h ID-token lifetime. Optional — older
@@ -77,8 +88,8 @@ async def account_set_firebase_token(params: Dict[str, Any], notify: NotifyFn) -
             from zylch.storage.storage import Storage
 
             Storage.get_instance().store_firebase_refresh_token(uid, refresh_token)
-        except Exception as e:
-            logger.warning(f"[rpc:account.set_firebase_token] refresh-token store failed: {e}")
+        except Exception:
+            logger.warning("[rpc:account.set_firebase_token] refresh-token store failed")
 
     logger.debug(
         f"[rpc:account.set_firebase_token] uid={uid} "
@@ -91,6 +102,9 @@ async def account_set_firebase_token(params: Dict[str, Any], notify: NotifyFn) -
 async def account_sign_out(params: Dict[str, Any], notify: NotifyFn) -> Any:
     """account.sign_out() -> {ok}"""
     clear_session()
+    from zylch.qonto.guard import suspend_on_signout
+
+    suspend_on_signout()
     logger.debug("[rpc:account.sign_out] cleared")
     return {"ok": True}
 
@@ -166,24 +180,17 @@ async def auth_refresh(params: Dict[str, Any], notify: NotifyFn) -> Any:
     (the WS server enforces expiry and closes 4401 otherwise). Harmless
     over stdio.
 
-    Unlike `account.set_firebase_token`, this VERIFIES the token (RS256
-    against Google's certs) rather than trusting the caller — the
-    cross-machine WS backend has no trusted parent process to vouch for
-    it. `expires_at_ms` is derived from the token's own `exp`, not from a
-    client-supplied value.
+    Both session-update routes verify the token against Google's signing
+    certificates and bind it to the selected profile. `expires_at_ms` is
+    derived from the token's own `exp`, never from a client-supplied value.
     """
-    from zylch.rpc.firebase_auth import FirebaseAuthError, verify_firebase_id_token
+    from zylch.auth.verified_session import verified_claims
 
     id_token = params.get("id_token")
     if not isinstance(id_token, str) or not id_token:
         raise ValueError("id_token is required")
 
-    try:
-        claims = verify_firebase_id_token(id_token)
-    except FirebaseAuthError as e:
-        err = ValueError(f"token verification failed: {e}")
-        err.code = getattr(e, "code", -32011)  # type: ignore[attr-defined]
-        raise err
+    claims = await asyncio.to_thread(verified_claims, id_token)
 
     uid = claims["sub"]
     email = claims.get("email")
@@ -205,8 +212,8 @@ async def auth_refresh(params: Dict[str, Any], notify: NotifyFn) -> Any:
             from zylch.storage.storage import Storage
 
             Storage.get_instance().store_firebase_refresh_token(uid, refresh_token)
-        except Exception as e:
-            logger.warning(f"[rpc:auth.refresh] refresh-token store failed: {e}")
+        except Exception:
+            logger.warning("[rpc:auth.refresh] refresh-token store failed")
 
     logger.debug(
         f"[rpc:auth.refresh] uid={uid} expires_at_ms={expires_at_ms} "

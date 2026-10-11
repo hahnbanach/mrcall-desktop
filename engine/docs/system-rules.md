@@ -14,7 +14,7 @@ description: |
 | CLI Framework | Click | 8.1+ |
 | ORM | SQLAlchemy | 2.0+ |
 | Database | SQLite (WAL mode): the profile `zylch.db` + one memory store per company key | built-in |
-| Auth | None (mono-user, local) | - |
+| Auth | Verified Firebase identity; UID-keyed local or hosted profile | - |
 | AI/LLM | Direct SDK (Anthropic, OpenAI) | anthropic 0.39+, openai 1.0+ |
 | Vector Search | numpy cosine similarity (in-memory) | numpy 1.24+ |
 | Embeddings | fastembed (ONNX backend, no PyTorch) | 0.4+ |
@@ -23,7 +23,7 @@ description: |
 | Email | IMAP/SMTP (auto-detect presets) | - |
 | WhatsApp | neonize (whatsmeow Go wrapper) | 0.3.15+ |
 | Telegram | python-telegram-bot | 22.0+ |
-| Telephony | StarChat/MrCall HTTP + OAuth2 | - |
+| Telephony | StarChat/MrCall HTTP with Firebase identity | - |
 | Terminal UI | Rich | 13.0+ |
 | Scheduling | APScheduler | 3.10+ |
 | Encryption | cryptography (Fernet) | 41.0+ |
@@ -89,7 +89,7 @@ Config (config.py)
 
 ### Import Rules
 - `config.py` imports nothing from `zylch/`
-- `storage/` imports only from `config`
+- `storage/` owns persistence and model helpers. The scoped assignment draft guard is an explicit service-policy hook at the actual write boundary; it must preserve unscoped storage behavior.
 - `tools/` imports from `config`, `storage`
 - `agents/` imports from `config`, `storage`, `tools`, `llm`, `memory`
 - `services/` imports from anything except `cli/`
@@ -100,18 +100,19 @@ Config (config.py)
 
 ### Data Storage
 - ALL data in SQLite via SQLAlchemy ORM
-- Models defined in `zylch/storage/models.py` (19 models)
-- Tables created via `Base.metadata.create_all()` (no Alembic)
-- Credentials encrypted at rest (Fernet encryption)
-- Mono-user — no `owner_id` multi-tenant isolation needed
+- Core models live in `zylch/storage/models.py`; additional domains register their own model modules.
+- New tables use `Base.metadata.create_all()`; existing schemas use the idempotent migration runner in `storage/migrations.py` (no Alembic).
+- Credential persistence follows [cross-cutting identity contracts](../../docs/cross-cutting-contracts.md); Firebase ID tokens stay in memory.
+- Private profile tables retain their owner predicates; company tables bind to the selected company store. Ordinary task owner IDs are legacy mailbox emails, not human assignees. Hosted isolation also uses a separate Unix user per profile.
+- Company assignment writes require verified identity, current trusted membership and an independently signed exact operation; caller audit text and generic chat approval cannot authorize them.
 
 ## Imperatives
 
-1. NEVER store data on filesystem — SQLite only (except `~/.zylch/.env` for config)
+1. Store application records in SQLite. Profile configuration, encrypted mailbox secrets and privileged assignment trust/signing files follow their documented filesystem contracts.
 2. NEVER hardcode secrets — use environment variables via Pydantic Settings
 3. NEVER truncate output in code (no `[:8]`, `[:50]`, `[:100]` slicing for display)
 4. NEVER commit credentials to git
-5. ALWAYS use `Base.metadata.create_all()` for schema creation (no Alembic)
+5. Use registered models for additive tables and the existing migration runner for changes to existing schemas; no Alembic.
 6. ALWAYS include debug logging in every new feature
 7. ALWAYS use parameterized queries (SQLAlchemy handles this)
 8. Files MUST stay under 500 lines

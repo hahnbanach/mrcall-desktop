@@ -8,7 +8,10 @@ actual receipt cost, not the reserved ceiling, is settled after completion.
 Its price cap (`max_price`) and reservation follow the DigitalOcean endpoint's
 price in the model snapshot × the margin 1.25 (`k3_reasoning.rates`), or K3's
 reference price (the snapshot's price for K3) × 1.25 on a day the snapshot
-does not admit that endpoint.
+does not admit that endpoint. The snapshot admits it whenever it is eligible
+(up, an allowed quantization, tools), whatever its price against K3's
+reference price (`requirements.json` `provider_policy.pinned_endpoints`), so
+an outlier reference never prices the pin out of its own cap.
 Other configured models retain their existing transport. There is no automatic
 model/provider fallback or inference retry.
 

@@ -140,8 +140,10 @@ class Settings(BaseSettings):
     # in the desktop renderer's firebase config). Used only to exchange a
     # stored refresh token for a fresh ID token via the Secure Token API, so
     # a headless serve daemon survives past the ~1h ID-token lifetime.
+    # Keep this default aligned with app/src/renderer/src/firebase/config.ts.
+    # Server requests have no browser referrer; use the Desktop-compatible key.
     firebase_web_api_key: str = Field(
-        default="AIzaSyDTaGASuYL5ZEW5YUaJvOa3DN-7LSaXn8g",
+        default="AIzaSyA_LnUBg1dfafu9RMMRNvAm4_ZTfjoHEEI",
         env="FIREBASE_WEB_API_KEY",
         description="Firebase Web API key for the securetoken refresh exchange",
     )

@@ -518,14 +518,20 @@ def serve(ctx, ws_addr, unix_path, voice_config):
     # every stored credential must decrypt under it, or the unit fails
     # now rather than surfacing later as "no refresh token".
     from zylch.utils.encryption import DecryptionError, EncryptionUnavailable, assert_encryption_ready
+    from zylch.qonto.errors import QontoError
+    from zylch.qonto.secrets import assert_hosted_credentials_ready
 
     try:
         from zylch.storage.storage import Storage
 
         samples = [row.get("credentials") for row in Storage.get_instance().list_oauth_token_rows()]
         checked = assert_encryption_ready(samples)
-        logger.info(f"[CLI] serve: encryption self-check passed ({checked} credential(s))")
-    except (EncryptionUnavailable, DecryptionError) as e:
+        qonto_checked = assert_hosted_credentials_ready()
+        logger.info(
+            f"[CLI] serve: encryption self-check passed ({checked} OAuth credential(s), "
+            f"{qonto_checked} Qonto credential(s))"
+        )
+    except (EncryptionUnavailable, DecryptionError, QontoError) as e:
         sys.stderr.write(f"encryption self-check failed: {e}\n")
         raise SystemExit(3) from None
 

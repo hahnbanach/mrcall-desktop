@@ -118,7 +118,9 @@ def judge(spec: dict, row: dict, seeded: env.Seeded) -> dict:
         kids = [o for o in row["operations"] if o["parent_event_id"]]
         if len(kids) < len(expected["children"]) or any(o["state"] == "pending" for o in kids):
             critical.append("children truncated or left pending")
-        if any(f"sender-{spec['id']}@corpus.invalid" in t for t in texts):
+        # The identifier header only: a body may quote the sender's address (audit B2).
+        sender = f"sender-{spec['id']}@corpus.invalid"
+        if any(sender in (parse_header(t).get("email") or "") for t in texts):
             critical.append("a child inherited the sender's identity")
     if not committed:
         outcomes = {OUTCOME_ACTION.get(o["outcome"], o["outcome"]) for o in row["operations"]}
@@ -127,7 +129,9 @@ def judge(spec: dict, row: dict, seeded: env.Seeded) -> dict:
             noncritical.append(f"no commit and no allowed outcome: {reasons}")
     joined = "\n".join(texts).lower()
     for token in expected.get("must_preserve", []):
-        if committed and token.lower() not in joined:
+        # An entry may list alternatives, the same substance in either language (audit C1).
+        alternatives = [token] if isinstance(token, str) else token
+        if committed and not any(a.lower() in joined for a in alternatives):
             noncritical.append(f"must_preserve missing: {token}")
     for token in expected.get("must_not_assert", []):
         if token.lower() in joined:
