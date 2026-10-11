@@ -282,16 +282,17 @@ action; until it exists, `test_resolved_table.py` is the guard.
 - Whether OpenRouter passes `between_tools` through for
   `anthropic/claude-sonnet-5.5` is unverified until 10b's paid run.
 - The paid measurement is in `zylch/llm/roles/measured.json` (branch
-  `m10-s4b7`, written by `scripts/derive_thresholds.py`). Each arm is judged
-  against the reference from its own run, and rows whose shaped request is
-  not today's are unmeasured. Its record, with spend, per-role results, picks
-  and limits, is
+  `m10-s4b8`, written by `scripts/derive_thresholds.py`).
+  - Each arm is judged against the reference from its own run.
+  - A reference case that misses a bar and the label is credited to the
+    yardstick, never counted against it.
+  - Rows whose shaped request is not today's are unmeasured.
+
+  Its record, with spend, per-role results, picks and limits, is
   [`docs/evaluations/2026-10-11-role-measurement.md`](../../../docs/evaluations/2026-10-11-role-measurement.md).
-  `resolve_models.py --apply` writes a `table.json` that passes the gates; it
-  is committed at S6's switch-over.
-- In REANALYZE, DEDUP, INTENT and TRAIN the measured threshold (24.4) admits
-  unmeasured models. Their pick is `inclusionai/ling-3.0-flash-vl`, which was
-  never measured.
+  `resolve_models.py --apply` writes a table that passes the gates, but it is
+  not published: DEDUP, INTENT and TRAIN still rank unmeasured models below
+  their measured heads (D8).
 - The measurement ran through OpenRouter only. The direct-Anthropic transport
   and the `mrcall` column are unmeasured. The memory corpus's 16-token
   truncation check did not bind on OpenRouter for seven of nine arms.

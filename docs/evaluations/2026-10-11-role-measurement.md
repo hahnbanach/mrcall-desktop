@@ -1,8 +1,8 @@
 # Role measurement: milestone 10's paid run and `measured.json`, 2026-10-11
 
 Scope: the record of the one-off paid measurement behind
-`engine/zylch/llm/roles/measured.json` (branch `m10-s4b7`, commit `61ff02e0`;
-the code that derives it is `fcd5a0a1`). It covers:
+`engine/zylch/llm/roles/measured.json` (branch `m10-s4b8`, commit `9bb8cb5d`;
+the code that derives it is `fcd5a0a1` and `12ef7b08`). It covers:
 
 - what was run, on which prompts, snapshots and commits, and what it cost;
 - the per-run reference rule and the shaped-request check;
@@ -25,6 +25,7 @@ The role, rule and table contract is in
 | `rerun3`, CHAT on today's prompt, 2026-10-11 | Sonnet 5.5, Qwen 3.8 Max, GLM 5.3, K3 | `1785352c` | `8df61cff` (read 2026-10-10T12:01Z, before S2's forced_tool change) |
 | `rerun4`, CHAT, 2026-10-11 | Opus 5.5, K3 | `f827ae19` | `b3196ae2` |
 | `rerun6`, the headroom re-measure, 2026-10-11 | NARRATION: every arm and K3. INTENT, WEB_SEARCH, TRAIN: MiMo flash, MiMo pro and K3. | `1221b0a4`, inferred (below) | `b3196ae2` |
+| `rerun7`, the threshold entrants, 2026-10-11 | REANALYZE, DEDUP, INTENT, TRAIN: ling-3.0-flash-vl, deepseek-v4-flash-0731 and upstage/solar-pro4. REANALYZE and DEDUP also: mimo-v2.6-flash. K3 in every role. s4c's MiMo-flash rows on REANALYZE and DEDUP are not used. | `1221b0a4` (`head.txt`) | `b3196ae2` |
 | `corpus`, memory corpus (MNEMONIC, MEMORY_EXTRACT, MEMORY_MERGE) | The 2026-10-02 records of seven arms, mimo-pro's re-run (10-04, `e9bd6d02`) and Sonnet's (10-11c, `f827ae19`) | `8b18ea69` | `81998270` |
 
 `measure_roles` records no commit. Rerun 6 started at 18:17Z, three minutes
@@ -36,12 +37,13 @@ The **build snapshot in force** is `b3196ae2…` (read 2026-10-10T12:01:52Z).
 `measured.json` records each role's snapshot version(s).
 
 `measured.json` was written by `scripts/derive_thresholds.py` alone, from the
-row sets in `scratchpad/s4b7/runs/`:
+row sets in `scratchpad/s4b8/runs/`:
 
 ```
 derive_thresholds.py --arms arms-final.json
   --run s4c@8b18ea69=s4c.jsonl  --run rerun3@1785352c=rerun3.jsonl
   --run rerun4@f827ae19=rerun4.jsonl  --run rerun6@1221b0a4=rerun6.jsonl
+  --run rerun7@1221b0a4=rerun7.jsonl
   --corpus corpus=<nine manifests>
   --rescore --rescore-from fa1518f0… acb2e224… --shape-check
 ```
@@ -71,9 +73,39 @@ The rule applied to this data:
   pass.
 - INTENT, WEB_SEARCH and TRAIN: MiMo is judged against rerun 6's K3, the
   other arms against s4c's K3.
+- REANALYZE, DEDUP, INTENT and TRAIN: rerun 7's entrants are judged against
+  rerun 7's K3.
 - The corpus has one K3 record, 2026-10-02's, and each arm's record is its
   own pytest run. All nine records are therefore judged against that one K3
   record. There was no choice among K3 records.
+
+### A reference that misses a bar
+
+In rerun 7, K3 answered reanalyze-08 and reanalyze-18 without calling the
+tool. Each answer was empty, so it missed both the `tool_called` and
+`non_empty` bars and the label. Before S4b8, `derive_thresholds` built the
+yardstick from the reference's label passes alone. Those two mechanical
+failures would have counted as misses: p = 13/15, se 0.088. The run's arms
+would then have been judged against 0.779, so 12 of 15 would have passed,
+and nothing in the document said why.
+
+What derive now does (`12ef7b08`, `measurement_runs.bar_misses` and
+`yardstick_of`):
+
+- **The yardstick credits the miss.** A reference case that misses a bar
+  *and* the label counts as a pass for the yardstick. A bar failure can
+  therefore never lower the bar the run's arms must clear. Rerun 7's
+  REANALYZE yardstick is 15/15, 1.0 ± 0.
+- **A bar missed on a matched label is not credited.** TASK_SOLVE's
+  task_solve-09 language bar is one; its label pass is already counted.
+- **The credited cases are named:** `reference.runs.rerun7.bar_misses_credited`.
+- **The reference itself still fails the bar.** K3's own REANALYZE result in
+  rerun 7 is 13/15 with a failed bar, so it does not pass there. Measured in
+  two runs, it passes a role only when it passes in both, so **K3 fails
+  REANALYZE**. Lower-scored arms pass where K3 does not, so the role becomes
+  `measured_only`.
+
+No other run's reference missed a bar on a missed label.
 
 ## The shaped request
 
@@ -126,7 +158,8 @@ profile's `llm_usage` and `llm_reservations` tables.
 | Sonnet corpus, rerun 4 (stopped by its 0.60 cap) | 0.095 | cases 0.077, checks 0.017 |
 | Sonnet corpus, rerun 5 (the record used) | 0.157 | |
 | Headroom re-measure, rerun 6 | 0.591 | 102 intents, all settled |
-| **Total** | **11.58 settled; 12.45 counted** | Counted takes the aborted attempt at its 0.97 bound. Of the USD 20 the CTO approved. |
+| Threshold entrants, rerun 7 | 0.745 | 221 intents, all settled |
+| **Total** | **12.32 settled; 13.20 counted** | Counted takes the aborted attempt at its 0.97 bound. Of the USD 20 the CTO approved. |
 
 The 2026-10-03 rehearsal ledger's 4.57 is a dry run's scripted receipts, not
 spend.
@@ -147,13 +180,13 @@ critical failure and scores at least p − se of its own run's K3.
 | MEMORY_EXTRACT | satisfice | corpus 6/6 | measured_only | Opus, deepseek, K3, GPT-6 Sol, GPT-6.1 Sol | Sonnet (bar), glm-flash | mimo flash, pro | Opus 5.5 |
 | MEMORY_MERGE | maximise | corpus 7/7 | – | Opus, deepseek, K3, GPT-6 Sol, GPT-6.1 Sol | Sonnet (bar), glm-flash | mimo flash, pro | Opus 5.5 |
 | TASK_DETECTION | satisfice | s4c 16/16 | measured_only | Sonnet, deepseek, K3 | glm-flash (bar) | mimo flash, pro | Sonnet 5.5 |
-| REANALYZE | satisfice | s4c 15/15 | **24.4** | Sonnet, deepseek, K3, glm-flash | – | mimo flash, pro | Sonnet 5.5 |
-| DEDUP | satisfice | s4c 14/14 | **24.4** | Sonnet, deepseek, K3, glm-flash | – | mimo flash, pro | Sonnet 5.5 |
+| REANALYZE | satisfice | s4c 15/15; rerun7 15/15 (2 bar misses credited) | measured_only | Sonnet, deepseek, glm-flash (s4c); ling-3.0-flash-vl, v4-flash-0731, solar-pro4, mimo-flash (rerun7) | **K3** (bar in rerun7) | mimo-pro | Sonnet 5.5 |
+| DEDUP | satisfice | s4c 14/14; rerun7 14/14 | **24.4** | Sonnet, deepseek, glm-flash (s4c); ling-3.0-flash-vl, v4-flash-0731 (rerun7); K3 | solar-pro4 13/14, mimo-flash (critical, bars) | mimo-pro | Sonnet 5.5 |
 | REPLY_NEED | satisfice | s4c 13/14 | measured_only | Sonnet, glm-flash | deepseek, K3 (critical) | mimo flash, pro | Sonnet 5.5 |
-| INTENT | satisfice | s4c 14/14; rerun6 14/14 | **24.4** | Sonnet, deepseek, glm-flash (s4c); mimo flash, pro (rerun6); K3 (both) | – | – | Sonnet 5.5 |
+| INTENT | satisfice | s4c, rerun6, rerun7 14/14 | **24.4** | Sonnet, deepseek, glm-flash (s4c); mimo flash, pro (rerun6); ling-3.0-flash-vl, v4-flash-0731 (rerun7); K3 | solar-pro4 (bar, 13/14) | – | Sonnet 5.5 |
 | CHAT | maximise | rerun3 10/11 (0.909 ± 0.087); rerun4 11/11 | – | Sonnet 10/11, Qwen 11/11, GLM 5.3 11/11 (rerun3); K3 (both) | **Opus 5.5 10/11 (rerun4)** | – | Sonnet 5.5 |
 | TASK_SOLVE | maximise | s4c 10/11 | – | Opus, Sonnet, GLM 5.3 | K3, Qwen (bar) | – | Opus, Sonnet |
-| TRAIN | satisfice | s4c 5/5; rerun6 5/5 | **24.4** | Sonnet, deepseek, glm-flash (s4c); mimo flash, pro (rerun6); K3 | – | – | Sonnet 5.5 |
+| TRAIN | satisfice | s4c, rerun6, rerun7 5/5 | **24.4** | Sonnet, deepseek, glm-flash (s4c); mimo flash, pro (rerun6); ling-3.0-flash-vl (rerun7); K3 | v4-flash-0731, solar-pro4 (bars) | – | Sonnet 5.5 |
 | COMPACTION | satisfice | s4c 5/5 | measured_only | Sonnet, deepseek, K3 | glm-flash (bar) | mimo flash, pro | Sonnet 5.5 |
 | SYNC_ANALYSIS | satisfice | s4c 13/14 | measured_only | Sonnet, deepseek, K3 | glm-flash | mimo flash, pro | Sonnet 5.5 |
 | WEB_SEARCH | satisfice | s4c 5/5; rerun6 5/5 | measured_only | Sonnet, glm-flash (s4c); mimo-flash (rerun6); K3 | deepseek (critical), mimo-pro (bar) | – | Sonnet 5.5 |
@@ -164,9 +197,9 @@ critical failure and scores at least p − se of its own run's K3.
 called, or an operation left pending. The reference fails two roles itself:
 REPLY_NEED (critical) and TASK_SOLVE (a bar).
 
-**REANALYZE, INTENT and TRAIN gain a threshold of 24.4.** In REANALYZE every
-remaining measured arm passes once MiMo is unmeasured. In INTENT and TRAIN,
-MiMo passes with the headroom.
+**Thresholds.** DEDUP, INTENT and TRAIN have a threshold of 24.4: every
+measured arm at or above it passes. REANALYZE is `measured_only`, because
+K3 (43.6) fails it on its rerun 7 bar while lower-scored arms pass.
 
 ## The audit and its fixes
 
@@ -232,17 +265,31 @@ rule.
 
 ## The table (`resolve_models.py --apply`)
 
-The resolver ran on the 2026-10-10T12:01Z payloads (`--fixture`):
+The resolver ran on the 2026-10-10T12:01Z payloads (`--fixture`).
+`snapshot.json` was rewritten byte-identical (`b3196ae2`). The resolver wrote
+a table (version `153def31…`) and `gates.check_table` passes. **The table is
+not published**, because it fails D8.
 
-- `snapshot.json` was rewritten byte-identical (`b3196ae2`);
-- **`table.json` was written** (version `c6d9e9f2…`), and
-  `gates.check_table` passes;
-- `table.json` is not committed: it lands with S6 at the switch-over. A
-  copy is in `scratchpad/s4b7/table.json`.
+**D8** is the rule the daily job applies: no unmeasured model enters a
+published satisfice ranking for the first table. Rerun 7 measured every
+entrant the S4b7 rankings held. Solar-pro4 failed DEDUP, INTENT and TRAIN,
+and v4-flash-0731 failed TRAIN. That let the next unmeasured models move up
+into the five-place rankings:
 
-Both S4b6 blockers are gone. Economy's ceiling stays at 10, because
-NARRATION now has deepseek-v4-flash and mimo-v2.6-pro. The zero-priced model
-is screened out (`558ff4ad`).
+| Unmeasured entry | Where |
+|---|---|
+| `openai/gpt-6-luna` | ranking, 5th: DEDUP and TRAIN, both presets |
+| `anthropic/claude-sonnet-5` | Anthropic ranking: DEDUP, INTENT, TRAIN, both presets |
+| `anthropic/claude-sonnet-4.6` | Anthropic ranking: DEDUP, INTENT, TRAIN, balanced |
+| `anthropic/claude-opus-5.5` | Anthropic ranking: DEDUP, INTENT, TRAIN, balanced (measured on other roles, not these) |
+
+The candidate is kept as `scratchpad/s4b8/table.candidate-fails-D8.json`; it
+is neither committed nor offered as the table. Every pick and every
+Anthropic head below is measured and passing. Only lower places of the
+rankings are unmeasured.
+
+The economy ceiling stays at 10: NARRATION now has deepseek-v4-flash and
+mimo-v2.6-pro. The zero-priced model is screened out (`558ff4ad`).
 
 | Role | Economy pick (10) | Economy Anthropic head | Balanced pick (20) | Balanced Anthropic head |
 |---|---|---|---|---|
@@ -250,13 +297,13 @@ is screened out (`558ff4ad`).
 | MEMORY_EXTRACT | deepseek-v4-flash | **none** | deepseek-v4-flash | Opus 5.5 |
 | MEMORY_MERGE | GPT-6.1 Sol | **none** | Opus 5.5 | Opus 5.5 |
 | TASK_DETECTION | deepseek-v4-flash | Sonnet 5.5 | deepseek-v4-flash | Sonnet 5.5 |
-| REANALYZE | ling-3.0-flash-vl (unmeasured) | Sonnet 5.5 | ling-3.0-flash-vl | Sonnet 5.5 |
-| DEDUP | ling-3.0-flash-vl (unmeasured) | Sonnet 5.5 | ling-3.0-flash-vl | Sonnet 5.5 |
+| REANALYZE | ling-3.0-flash-vl | Sonnet 5.5 | ling-3.0-flash-vl | Sonnet 5.5 |
+| DEDUP | ling-3.0-flash-vl | Sonnet 5.5 | ling-3.0-flash-vl | Sonnet 5.5 |
 | REPLY_NEED | glm-5.3-flash | Sonnet 5.5 | glm-5.3-flash | Sonnet 5.5 |
-| INTENT | ling-3.0-flash-vl (unmeasured) | Sonnet 5.5 | ling-3.0-flash-vl | Sonnet 5.5 |
+| INTENT | ling-3.0-flash-vl | Sonnet 5.5 | ling-3.0-flash-vl | Sonnet 5.5 |
 | CHAT | Sonnet 5.5 | Sonnet 5.5 | Sonnet 5.5 | Sonnet 5.5 |
 | TASK_SOLVE | Sonnet 5.5 | Sonnet 5.5 | Opus 5.5 | Opus 5.5 |
-| TRAIN | ling-3.0-flash-vl (unmeasured) | Sonnet 5.5 | ling-3.0-flash-vl | Sonnet 5.5 |
+| TRAIN | ling-3.0-flash-vl | Sonnet 5.5 | ling-3.0-flash-vl | Sonnet 5.5 |
 | COMPACTION | deepseek-v4-flash | Sonnet 5.5 | deepseek-v4-flash | Sonnet 5.5 |
 | SYNC_ANALYSIS | deepseek-v4-flash | Sonnet 5.5 | deepseek-v4-flash | Sonnet 5.5 |
 | WEB_SEARCH | mimo-v2.6-flash | Sonnet 5.5 | mimo-v2.6-flash | Sonnet 5.5 |
@@ -269,11 +316,9 @@ is screened out (`558ff4ad`).
 - MNEMONIC, MEMORY_EXTRACT and MEMORY_MERGE under economy: Opus 5.5 is above
   10, and Sonnet 5.5 failed them.
 
-**Four roles pick an unmeasured model.** In REANALYZE, DEDUP, INTENT and TRAIN
-the threshold of 24.4 admits every model with an intelligence score at or
-above it. The cheapest such model is `inclusionai/ling-3.0-flash-vl` (24.6,
-USD 0.06 output), a vision variant this measurement never ran. This is the
-satisfice threshold working as specified, and a product decision before S6.
+**ling-3.0-flash-vl is now measured.** In S4b7, REANALYZE, DEDUP, INTENT and
+TRAIN picked it unmeasured through the 24.4 threshold. Rerun 7 measured it
+against K3 in the same run, and it passes all four at full marks.
 
 ## Mnemonic AC 5 on the measured picks
 
@@ -310,8 +355,10 @@ the corpus K3:
   answered once. Where K3 scores 1.0, se is 0 and one miss fails an arm. In
   CHAT, Opus's pass turns on rerun 4's K3 answering chat-09, which rerun 3's
   K3 missed.
-- **Unmeasured models above a threshold.** See the four ling-3.0-flash-vl
-  picks above.
+- **Unmeasured models above a threshold.** DEDUP, INTENT and TRAIN still
+  admit unmeasured models at or above 24.4. The rankings carry four such
+  entries below their measured heads (D8, above), so the table is not
+  published until they are measured or the rankings exclude them.
 - **Imputed agentic scores.** Opus's and Sonnet's agentic scores (60.4,
   58.3) are imputed from intelligence.
 - **The truncation check.** M9's D6 check patches the decision call's

@@ -69,7 +69,7 @@ correctly classified. Current contracts: [decisions](features/mnemonic-decisions
 [writer inventory](features/mnemonic-writer-inventory.md).
 
 Mnemonic product rollout remains pending. AC 5 failed on the rejected Haiku arm.
-On M10's measured picks (branch `m10-s4b7`, not merged) it passes on today's
+On M10's measured picks (branch `m10-s4b8`, not merged) it passes on today's
 labels, Opus 5.5 only after the B2 scorer fix; that awaits merge and the
 published table. Haiku's paid corpus retains one critical failure; incomplete automatic extraction can remain pending
 without a reason and be repaid. The corpus also lacks per-round proposal/latency
@@ -111,19 +111,21 @@ published metadata, reasoning blocks kept and replayed within a tool loop and
 stripped where history is rewritten.
 
 The paid role measurement is written to `roles/measured.json` on branch
-`m10-s4b7`. It ran 2026-10-04; CHAT was re-measured 2026-10-11 on main's new
-prompt, and NARRATION and MiMo after the headroom fix. Spend: USD 11.58
-settled, 12.45 counted, of 20.
+`m10-s4b8`. It ran 2026-10-04. On 2026-10-11 three things were re-measured:
+CHAT on main's new prompt; NARRATION and MiMo after the headroom fix; and
+the threshold entrants. Spend: USD 12.32 settled, 13.20 counted, of 20.
 
-- Each arm is judged against K3 from its own run.
+- Each arm is judged against K3 from its own run. A K3 case that misses a
+  bar and the label is credited to the yardstick, never counted against it.
 - Answers are re-scored on today's labels and scorer, only where the captured
   and the shaped request are today's. MiMo's older rows are not, so MiMo is
   unmeasured on the roles not re-measured.
 - On today's labels every critical corpus case passes on both MNEMONIC picks:
   Opus 5.5 (balanced) and GPT-6.1 Sol (economy).
-- `resolve_models.py --apply` writes a `table.json` that passes the gates. It
-  is committed with S6.
-- Four roles pick an unmeasured model through their 24.4 threshold.
+- `resolve_models.py --apply` writes a table that passes the gates. It is not
+  published, because it fails D8: DEDUP, INTENT and TRAIN still rank four
+  unmeasured models below their measured heads (gpt-6-luna, Sonnet 5,
+  Sonnet 4.6, and Opus 5.5 on these roles).
 
 See the [record](../../docs/evaluations/2026-10-11-role-measurement.md).
 
@@ -141,8 +143,9 @@ acceptance is implied.
 - Remaining Café124 billing choices and funded credit acceptance remain open;
   do not replay uncertain requests or resume preparation implicitly.
 - Several M10 and mnemonic items remain open:
-  - M10's table: whether a 24.4 threshold may pick an unmeasured model
-    (REANALYZE, DEDUP, INTENT, TRAIN), a decision before S6;
+  - M10's table (D8): four unmeasured entries remain in the DEDUP, INTENT
+    and TRAIN rankings. They must be measured, or the rankings must exclude
+    them;
   - the OpenRouter truncation check, which did not bind on seven of nine
     arms;
   - the extraction parser's refusal of "SKIP + reason";
@@ -164,7 +167,7 @@ acceptance is implied.
 2. Resolve billing choices without replaying uncertain requests; preserve actual
    saved controls and initiate no paid preparation for release verification.
 3. Finish milestone 10 (branch `model-selection-m10a`, not merged):
-   - decide on the unmeasured threshold picks;
+   - clear D8's four unmeasured ranking entries;
    - publish `table.json` at S6's switch-over;
    - review the mnemonic rollout and the migration rehearsal before product
      acceptance.
