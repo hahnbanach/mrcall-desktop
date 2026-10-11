@@ -25,7 +25,10 @@ explicit choice keeps running whatever the picks are). Per entry:
   intersection of the admitted endpoints' `supported_parameters` when the
   endpoints were read and one is admitted, else the model-level list;
   `forced_tool`, true only when an admitted endpoint accepts a forced named
-  tool choice (`supports_tool_choice.function`); `structured_outputs`;
+  tool choice (`supports_tool_choice.function`) and lists `tool_choice` in
+  its `supported_parameters` — with `require_parameters` OpenRouter routes
+  a forced choice only to such an endpoint, and the billing server keeps a
+  forced `tool_choice` whenever the flag is true; `structured_outputs`;
   `context_length`; `expiration_date`.
 - `endpoints`: for the endpoint pool, the endpoints the provider policy
   admits (`candidates.anchored`: eligible, and priced at or under the
@@ -88,9 +91,12 @@ def metadata(entry: dict, endpoints: list[dict] | None, context: object) -> dict
     if endpoints:
         lists = [set(candidates.strings(e.get("supported_parameters"))) for e in endpoints]
         parameters = sorted(set.intersection(*lists))
+        # A forced choice needs an endpoint that honours it and that OpenRouter
+        # routes it to: with `require_parameters` only one listing `tool_choice`.
         forced = any(
             isinstance(e.get("supports_tool_choice"), dict)
             and e["supports_tool_choice"].get("function") is True
+            and "tool_choice" in candidates.strings(e.get("supported_parameters"))
             for e in endpoints
         )
     else:

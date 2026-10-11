@@ -115,7 +115,9 @@ those are the snapshot's, so a refresh of prices moves no record.
     intersection of the admitted endpoints' `supported_parameters` when the
     endpoints were read and one is admitted, the model-level list
     otherwise), `forced_tool` (true only when an admitted endpoint accepts a
-    forced named tool choice), `structured_outputs` (`structured_outputs` is
+    forced named tool choice and lists `tool_choice` in its
+    `supported_parameters`, the endpoint `require_parameters` lets OpenRouter
+    route a forced choice to), `structured_outputs` (`structured_outputs` is
     one of the parameters), `context_length`, `expiration_date`.
   - `endpoints`: for the models whose endpoints were read (tools, the
     minimum context, no variant, no alias), the admitted ones as `{tag,
