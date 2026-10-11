@@ -19,7 +19,7 @@ import json
 from decimal import Decimal
 
 import pytest
-from zylch.llm.roles import candidates, impute
+from zylch.llm.roles import candidates, impute, resolver
 
 from .resolver_fixture import (
     HAIKU,
@@ -32,6 +32,7 @@ from .resolver_fixture import (
     by_id,
     endpoint,
     entry,
+    measured_all,
     raw,
     requirements,
     sources,
@@ -258,6 +259,54 @@ def test_ambiguous_slugs_score_nothing():
     }
     scores, ambiguous = impute.scores_by_slug([record, other])
     assert scores == {} and ambiguous == {"acme/model-1-20260101"}
+
+
+def test_a_model_priced_at_zero_is_never_a_candidate_even_above_a_threshold():
+    """A $0 model scored above a satisfice threshold would rank first and the
+    table's gates (positive prices) would refuse the table: the screen drops
+    it (2026-10-10: `inclusionai/ling-3.1-flash`, DEDUP's threshold 24.4)."""
+    req, src, flash = requirements(), sources(), "z-ai/glm-5.3-flash"
+    rules = candidates.policy(req)
+    measured = measured_all(req)
+    satisfice = [role for role, rule in req["roles"].items() if rule["rule"] == "satisfice"]
+
+    def ranked_anywhere(ranked: dict) -> bool:
+        rows = [row for body in ranked["presets"].values() for row in body["roles"].values()]
+        return any(flash in [c["id"] for c in row["ranking"]] for row in rows)
+
+    ranked = resolver.rankings(req, resolver.pool(req, src)["pool"], measured)
+    economy = ranked["presets"]["economy"]["roles"]
+    assert any(flash in [c["id"] for c in economy[role]["ranking"]] for role in satisfice)
+    for side in ("prompt", "completion"):  # either price at 0 is enough
+        free = sources()
+        by_id(free["catalogue"])[flash]["pricing"][side] = "0"
+        for each in free["endpoints"][flash]:
+            each["pricing"][side] = "0"
+        result = resolver.pool(req, free)
+        assert result["dropped"][flash] == candidates.NOT_POSITIVE == "not a positive price"
+        assert not ranked_anywhere(resolver.rankings(req, result["pool"], measured)), side
+        # Free at the list price only: the fallback would price it from its
+        # endpoints, yet a model-level price at 0 is refused on its own.
+        listed_free = sources()
+        by_id(listed_free["catalogue"])[flash]["pricing"][side] = "0"
+        assert (
+            candidates.anchored(
+                by_id(listed_free["catalogue"])[flash], listed_free["endpoints"][flash], rules
+            )[0]["output"]
+            > 0
+        )
+        result = resolver.pool(req, listed_free)
+        assert result["dropped"][flash] == candidates.NOT_POSITIVE, side
+    # A positive list price whose fallback reference endpoint is free on input.
+    rules = candidates.policy(requirements())
+    model = entry(pricing={"prompt": "0.000001", "completion": "0.000001"})
+    listed = [
+        endpoint("free-in/a", pricing={"prompt": "0", "completion": "0.000005"}),
+        endpoint("free-in/b", pricing={"prompt": "0", "completion": "0.000005"}),
+        endpoint("dear", pricing={"prompt": "0.000003", "completion": "0.000006"}),
+    ]
+    assert candidates.anchored(model, listed, rules)[0]["input"] == 0
+    assert candidates.exclusion(model, listed, requirements(), rules) == candidates.NOT_POSITIVE
 
 
 # ------------------------------------------------------------ the payloads
