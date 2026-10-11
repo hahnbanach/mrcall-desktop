@@ -310,14 +310,16 @@ def reserved_request(client: Any, **kwargs: Any) -> dict:
 
 
 def latest_rows(rows: list[dict]) -> list[dict]:
-    """One row per (role, arm, case, repetition): the last one written.
+    """One row per (run, role, arm, case, repetition): the last one written.
 
     A cell that never reached a provider (unpriced, skipped, stopped at the
     cap) runs again when a run is resumed; its newer row supersedes the old.
+    Rows of different runs (``measurement_runs``) never supersede each other.
     """
     latest: dict[tuple, dict] = {}
     for row in rows:
-        key = (row["role"], row["arm"], row["case_id"], row.get("repetition", 1))
+        key = (row.get("run", ""), row["role"], row["arm"], row["case_id"])
+        key += (row.get("repetition", 1),)
         latest.pop(key, None)
         latest[key] = row
     return list(latest.values())
