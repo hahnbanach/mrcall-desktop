@@ -4,7 +4,9 @@ Every request leaves the client without sampling, without a forced tool
 choice, with reasoning set from the model's published metadata — on at the
 lowest published effort (never ``disabled``), off where it is optional and on
 by default, the provider's default where it is mandatory without efforts —
-and with ``REASONING_HEADROOM`` more output tokens whenever reasoning is on.
+and with ``REASONING_HEADROOM`` more output tokens whenever reasoning is on,
+or the model may reason with no field to set (MiMo v2.6), unless the shape
+sent ``thinking: disabled``; an unknown model keeps the caller's size.
 A published effort counts only when it is in the request vocabulary, ``low``
 to ``max`` (IR1 B1): ``minimal`` and ``none`` are never sent.
 
@@ -101,6 +103,13 @@ OUTSIDE_OPTIONAL = meta(
     {"mandatory": False, "default_enabled": True, "supported_efforts": ["minimal", "none"]}
 )
 OUTSIDE_MANDATORY = meta({"mandatory": True, "supported_efforts": ["minimal"]})
+# Optional, no efforts, no default published, reasoning among its parameters.
+MIMO_V2_6_PRO = meta(
+    {"mandatory": False},
+    ("include_reasoning", "max_tokens", "reasoning", "temperature", "tool_choice", "tools"),
+)
+# Optional and off by default, with no reasoning parameter: may not reason.
+OFF_BY_DEFAULT = meta({"mandatory": False, "default_enabled": False})
 
 
 def request(model="any/model", **extra):
@@ -169,11 +178,43 @@ def test_a_model_publishing_only_values_outside_the_vocabulary_publishes_no_effo
     assert default["max_tokens"] == 400 + REASONING_HEADROOM
 
 
-def test_an_optional_model_off_by_default_gets_nothing():
+def test_an_optional_model_with_no_field_to_set_gets_headroom_only():
+    # Haiku 4.5's capture: optional, no efforts, `default_enabled: null`, which
+    # is not false, so it may reason: headroom, and still no reasoning field.
     out = shape(request(model="claude-haiku-4-5"), HAIKU_4_5)
     assert_one_shape(out)
     assert "thinking" not in out and "output_config" not in out
+    assert out["max_tokens"] == 400 + REASONING_HEADROOM
+
+
+def test_mimo_reasoning_by_default_gets_headroom_on_a_60_token_request():
+    """The paid measurement's defect: MiMo v2.6 publishes no effort and no
+    default, yet reasons by default, and spent 59 of NARRATION's 60 tokens
+    thinking. It may reason (``reasoning`` among its parameters, default not
+    false), so it gets the headroom; no reasoning field is sent."""
+    out = shape(request(model="xiaomi/mimo-v2.6-pro", max_tokens=60), MIMO_V2_6_PRO)
+    assert_one_shape(out)
+    assert "thinking" not in out and "output_config" not in out
+    assert out["max_tokens"] == 60 + REASONING_HEADROOM
+    assert request_shape.may_reason(MIMO_V2_6_PRO)
+
+
+def test_an_optional_model_off_by_default_gets_nothing():
+    out = shape(request(), OFF_BY_DEFAULT)
+    assert_one_shape(out)
+    assert "thinking" not in out and "output_config" not in out
     assert out["max_tokens"] == 400
+    assert not request_shape.may_reason(OFF_BY_DEFAULT) and not request_shape.may_reason(None)
+    # Off by default, but a reasoning switch among its parameters: it may reason.
+    switch = meta({"mandatory": False, "default_enabled": False}, ("include_reasoning",))
+    assert shape(request(), switch)["max_tokens"] == 400 + REASONING_HEADROOM
+
+
+def test_reasoning_the_shape_turned_off_gets_no_headroom():
+    for disabled in (LING_3_FLASH, OUTSIDE_OPTIONAL):
+        assert request_shape.may_reason(disabled)
+        out = shape(request(max_tokens=60), disabled)
+        assert out["thinking"] == {"type": "disabled"} and out["max_tokens"] == 60
 
 
 def test_an_unseen_id_gets_no_sampling_no_forced_choice_and_no_reasoning():
@@ -288,7 +329,11 @@ def test_every_model_of_the_snapshot_and_an_unseen_id_get_the_one_shape(snapshot
     rows = {**snapshot_in_force["direct"], **snapshot_in_force["models"]}
     assert len(snapshot_in_force["models"]) >= 400, "the capture lost its entries"
     assert "claude-opus-6" not in rows
-    seen = {"effort": 0, "mandatory_default": 0, "off": 0, "nothing": 0, "unseen": 0}
+    # Every snapshot model that publishes no effort and no reasoning switch may
+    # still reason (2026-10 build: none has `default_enabled: false` without a
+    # reasoning parameter), so "nothing" is counted but not required.
+    seen = {"effort": 0, "mandatory_default": 0, "off": 0, "headroom_only": 0, "unseen": 0}
+    seen["nothing"] = 0
     for model in sorted(rows) + ["claude-opus-6"]:
         metadata = rows[model]["metadata"] if model in rows else None
         sent = request(model=model, tools=[CLOSED])
@@ -322,12 +367,19 @@ def test_every_model_of_the_snapshot_and_an_unseen_id_get_the_one_shape(snapshot
             assert "output_config" not in out, model
             seen["off"] += 1
         else:
+            # No field to set, yet the model may reason (MiMo v2.6): headroom
+            # all the same. The rule is written out here, not read from the shape.
             assert "thinking" not in out and "output_config" not in out, model
-            assert out["max_tokens"] == 400, model
-            seen["nothing"] += 1
+            may = (
+                published.get("efforts")
+                or published.get("default_enabled") is not False
+                or {"reasoning", "include_reasoning"} & set(metadata.get("parameters") or ())
+            )
+            assert out["max_tokens"] == 400 + (REASONING_HEADROOM if may else 0), model
+            seen["headroom_only" if may else "nothing"] += 1
         structured = bool(metadata and metadata["structured_outputs"])
         assert out["tools"][0].get("strict") is (True if structured else None), model
-    assert all(seen.values()), seen
+    assert all(count for case, count in seen.items() if case != "nothing"), seen
 
 
 # ─── The seam is strict (IR1 integration) ─────────────────────────────
