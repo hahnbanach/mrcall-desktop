@@ -24,8 +24,8 @@ OpenRouter, MrCall credits), set from the model's published metadata
 - ``REASONING_HEADROOM`` tokens added to ``max_tokens`` whenever reasoning is
   on, so a short-output role still has room for its answer — and whenever
   the model may reason without the shape turning it on (:func:`may_reason`:
-  mandatory, any published effort, ``default_enabled`` not false, or
-  ``reasoning`` / ``include_reasoning`` among its parameters), unless the
+  mandatory, any published effort, ``default_enabled`` true (``null`` is
+  not), or ``reasoning`` / ``include_reasoning`` among its parameters), unless the
   shape sent ``thinking: disabled``. A model that reasons by default with no
   field to set (MiMo v2.6 on a 60-token NARRATION request) otherwise spends
   the whole output on thinking. A model the snapshot does not know gets no
@@ -148,9 +148,12 @@ def may_reason(meta: Optional[dict]) -> bool:
     """True when the model described by ``meta`` may spend output on reasoning.
 
     Any of: reasoning is mandatory; it publishes an effort (any value, in the
-    vocabulary or not); ``default_enabled`` is not false (``null`` included:
-    MiMo v2.6 publishes nothing, yet reasons by default); ``reasoning`` or
-    ``include_reasoning`` is among its parameters. ``None`` (a model no
+    vocabulary or not); ``default_enabled`` is true; ``reasoning`` or
+    ``include_reasoning`` is among its parameters (MiMo v2.6 publishes no
+    effort and ``default_enabled: null``, yet reasons by default: its
+    parameters say it may). ``default_enabled: null`` alone does not count:
+    on the 2026-10 snapshot it marks 128 plain chat models (GPT-4o, Llama,
+    Mistral) that publish no reasoning switch. ``None`` (a model no
     snapshot holds) is False: today's behaviour, no headroom.
     """
     if meta is None:
@@ -159,7 +162,7 @@ def may_reason(meta: Optional[dict]) -> bool:
     return bool(
         published.get("mandatory")
         or published.get("efforts")
-        or published.get("default_enabled") is not False
+        or published.get("default_enabled") is True
         or set(meta.get("parameters") or ()) & set(REASONING_PARAMETERS)
     )
 

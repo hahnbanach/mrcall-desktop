@@ -178,20 +178,25 @@ def test_a_model_publishing_only_values_outside_the_vocabulary_publishes_no_effo
     assert default["max_tokens"] == 400 + REASONING_HEADROOM
 
 
-def test_an_optional_model_with_no_field_to_set_gets_headroom_only():
-    # Haiku 4.5's capture: optional, no efforts, `default_enabled: null`, which
-    # is not false, so it may reason: headroom, and still no reasoning field.
-    out = shape(request(model="claude-haiku-4-5"), HAIKU_4_5)
+def test_default_enabled_null_without_a_reasoning_parameter_keeps_the_callers_size():
+    # Optional, no efforts, `default_enabled: null` and no reasoning parameter
+    # (as GPT-4o or Llama publish): `null` is not "on", so no headroom.
+    out = shape(request(model="claude-haiku-4-5", max_tokens=60), HAIKU_4_5)
     assert_one_shape(out)
     assert "thinking" not in out and "output_config" not in out
-    assert out["max_tokens"] == 400 + REASONING_HEADROOM
+    assert out["max_tokens"] == 60
+    assert not request_shape.may_reason(HAIKU_4_5)
+    # The same entry with Haiku 4.5's real `reasoning` parameter may reason.
+    switch = meta({"mandatory": False}, ("reasoning", "tools", "tool_choice"))
+    assert shape(request(max_tokens=60), switch)["max_tokens"] == 60 + REASONING_HEADROOM
 
 
 def test_mimo_reasoning_by_default_gets_headroom_on_a_60_token_request():
     """The paid measurement's defect: MiMo v2.6 publishes no effort and no
     default, yet reasons by default, and spent 59 of NARRATION's 60 tokens
-    thinking. It may reason (``reasoning`` among its parameters, default not
-    false), so it gets the headroom; no reasoning field is sent."""
+    thinking. It may reason (``reasoning`` and ``include_reasoning`` among its
+    parameters, though its default is ``null``), so it gets the headroom; no
+    reasoning field is sent."""
     out = shape(request(model="xiaomi/mimo-v2.6-pro", max_tokens=60), MIMO_V2_6_PRO)
     assert_one_shape(out)
     assert "thinking" not in out and "output_config" not in out
@@ -329,9 +334,6 @@ def test_every_model_of_the_snapshot_and_an_unseen_id_get_the_one_shape(snapshot
     rows = {**snapshot_in_force["direct"], **snapshot_in_force["models"]}
     assert len(snapshot_in_force["models"]) >= 400, "the capture lost its entries"
     assert "claude-opus-6" not in rows
-    # Every snapshot model that publishes no effort and no reasoning switch may
-    # still reason (2026-10 build: none has `default_enabled: false` without a
-    # reasoning parameter), so "nothing" is counted but not required.
     seen = {"effort": 0, "mandatory_default": 0, "off": 0, "headroom_only": 0, "unseen": 0}
     seen["nothing"] = 0
     for model in sorted(rows) + ["claude-opus-6"]:
@@ -372,14 +374,14 @@ def test_every_model_of_the_snapshot_and_an_unseen_id_get_the_one_shape(snapshot
             assert "thinking" not in out and "output_config" not in out, model
             may = (
                 published.get("efforts")
-                or published.get("default_enabled") is not False
+                or published.get("default_enabled") is True
                 or {"reasoning", "include_reasoning"} & set(metadata.get("parameters") or ())
             )
             assert out["max_tokens"] == 400 + (REASONING_HEADROOM if may else 0), model
             seen["headroom_only" if may else "nothing"] += 1
         structured = bool(metadata and metadata["structured_outputs"])
         assert out["tools"][0].get("strict") is (True if structured else None), model
-    assert all(count for case, count in seen.items() if case != "nothing"), seen
+    assert all(seen.values()), seen
 
 
 # ─── The seam is strict (IR1 integration) ─────────────────────────────
