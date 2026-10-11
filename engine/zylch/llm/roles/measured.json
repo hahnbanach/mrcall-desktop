@@ -1,0 +1,1958 @@
+{
+ "rescored_from": {
+  "CHAT": {
+   "case_set_sha256": {
+    "from": "3cd501697fb98ba55af6990690c60086f7b31acd44aff096d8f23f7efa04646a",
+    "to": "3cd501697fb98ba55af6990690c60086f7b31acd44aff096d8f23f7efa04646a"
+   },
+   "cases_refused": [],
+   "verdicts_changed": []
+  },
+  "COMPACTION": {
+   "case_set_sha256": {
+    "from": "5aca578fb06e00d2a8526510ea1dc6da3de65f5e660bc4658ae9cb803bcaa69b",
+    "to": "5aca578fb06e00d2a8526510ea1dc6da3de65f5e660bc4658ae9cb803bcaa69b"
+   },
+   "cases_refused": [],
+   "verdicts_changed": []
+  },
+  "CORRECTION_LEARNING": {
+   "case_set_sha256": {
+    "from": "801ace2db488587b6d5ad21b6789ff80d018c3e15be2fc0cdbeb7a49c5a4f184",
+    "to": "801ace2db488587b6d5ad21b6789ff80d018c3e15be2fc0cdbeb7a49c5a4f184"
+   },
+   "cases_refused": [],
+   "verdicts_changed": [
+    "deepseek/deepseek-v4-flash correction_learning-01 r1"
+   ]
+  },
+  "DEDUP": {
+   "case_set_sha256": {
+    "from": "4eef61b9d1ee1a0e2748186662dabab836de5e0e9943b16c2f2d6d7fca94e375",
+    "to": "4eef61b9d1ee1a0e2748186662dabab836de5e0e9943b16c2f2d6d7fca94e375"
+   },
+   "cases_refused": [],
+   "verdicts_changed": []
+  },
+  "INTENT": {
+   "case_set_sha256": {
+    "from": "f5e69d7c6def194444e13614357539d60c4e2a9582d6a30a44679a4a59e7a7e0",
+    "to": "f5e69d7c6def194444e13614357539d60c4e2a9582d6a30a44679a4a59e7a7e0"
+   },
+   "cases_refused": [],
+   "verdicts_changed": []
+  },
+  "MEMORY_EXTRACT": {
+   "anthropic/claude-opus-5.5": {
+    "case_set_sha256": {
+     "from": "acb2e22448a6569da3707a2a8df7d7919d2cecc920237f088ea704af3970a01d",
+     "to": "36354885b64b012cca7ea365a9f88f31ecdd838df8ec0de0594fa4387ab8d42e"
+    },
+    "cases_refused": [],
+    "verdicts_changed": [
+     "customer_forwarding_number_correction: noncritical -> pass",
+     "customer_price_correction: noncritical -> pass",
+     "multi_entity_source: critical_failure -> pass",
+     "planned_not_completed: noncritical -> pass"
+    ]
+   },
+   "anthropic/claude-sonnet-5.5": {
+    "case_set_sha256": {
+     "from": "36354885b64b012cca7ea365a9f88f31ecdd838df8ec0de0594fa4387ab8d42e",
+     "to": "36354885b64b012cca7ea365a9f88f31ecdd838df8ec0de0594fa4387ab8d42e"
+    },
+    "cases_refused": [],
+    "verdicts_changed": []
+   },
+   "deepseek/deepseek-v4-flash": {
+    "case_set_sha256": {
+     "from": "acb2e22448a6569da3707a2a8df7d7919d2cecc920237f088ea704af3970a01d",
+     "to": "36354885b64b012cca7ea365a9f88f31ecdd838df8ec0de0594fa4387ab8d42e"
+    },
+    "cases_refused": [],
+    "verdicts_changed": [
+     "account_feedback: noncritical -> pass",
+     "customer_forwarding_number_correction: noncritical -> pass",
+     "global_opening_hours: noncritical -> pass"
+    ]
+   },
+   "moonshotai/kimi-k3": {
+    "case_set_sha256": {
+     "from": "acb2e22448a6569da3707a2a8df7d7919d2cecc920237f088ea704af3970a01d",
+     "to": "36354885b64b012cca7ea365a9f88f31ecdd838df8ec0de0594fa4387ab8d42e"
+    },
+    "cases_refused": [],
+    "verdicts_changed": [
+     "customer_price_correction: noncritical -> pass"
+    ]
+   },
+   "openai/gpt-6-sol": {
+    "case_set_sha256": {
+     "from": "acb2e22448a6569da3707a2a8df7d7919d2cecc920237f088ea704af3970a01d",
+     "to": "36354885b64b012cca7ea365a9f88f31ecdd838df8ec0de0594fa4387ab8d42e"
+    },
+    "cases_refused": [],
+    "verdicts_changed": [
+     "customer_forwarding_number_correction: noncritical -> pass",
+     "customer_price_correction: noncritical -> pass",
+     "planned_not_completed: noncritical -> pass",
+     "unrelated_same_name_people: noncritical -> pass"
+    ]
+   },
+   "openai/gpt-6.1-sol": {
+    "case_set_sha256": {
+     "from": "acb2e22448a6569da3707a2a8df7d7919d2cecc920237f088ea704af3970a01d",
+     "to": "36354885b64b012cca7ea365a9f88f31ecdd838df8ec0de0594fa4387ab8d42e"
+    },
+    "cases_refused": [],
+    "verdicts_changed": [
+     "customer_forwarding_number_correction: noncritical -> pass",
+     "customer_price_correction: noncritical -> pass",
+     "planned_not_completed: noncritical -> pass",
+     "unrelated_same_name_people: noncritical -> pass"
+    ]
+   },
+   "xiaomi/mimo-v2.6-flash": {
+    "case_set_sha256": {
+     "from": "acb2e22448a6569da3707a2a8df7d7919d2cecc920237f088ea704af3970a01d",
+     "to": "36354885b64b012cca7ea365a9f88f31ecdd838df8ec0de0594fa4387ab8d42e"
+    },
+    "cases_refused": [],
+    "verdicts_changed": [
+     "customer_price_correction: noncritical -> pass",
+     "multi_entity_source: critical_failure -> pass",
+     "unrelated_same_name_people: noncritical -> pass"
+    ]
+   },
+   "xiaomi/mimo-v2.6-pro": {
+    "case_set_sha256": {
+     "from": "36354885b64b012cca7ea365a9f88f31ecdd838df8ec0de0594fa4387ab8d42e",
+     "to": "36354885b64b012cca7ea365a9f88f31ecdd838df8ec0de0594fa4387ab8d42e"
+    },
+    "cases_refused": [],
+    "verdicts_changed": []
+   },
+   "z-ai/glm-5.3-flash": {
+    "case_set_sha256": {
+     "from": "acb2e22448a6569da3707a2a8df7d7919d2cecc920237f088ea704af3970a01d",
+     "to": "36354885b64b012cca7ea365a9f88f31ecdd838df8ec0de0594fa4387ab8d42e"
+    },
+    "cases_refused": [],
+    "verdicts_changed": [
+     "customer_forwarding_number_correction: noncritical -> pass"
+    ]
+   }
+  },
+  "MEMORY_MERGE": {
+   "anthropic/claude-opus-5.5": {
+    "case_set_sha256": {
+     "from": "acb2e22448a6569da3707a2a8df7d7919d2cecc920237f088ea704af3970a01d",
+     "to": "36354885b64b012cca7ea365a9f88f31ecdd838df8ec0de0594fa4387ab8d42e"
+    },
+    "cases_refused": [],
+    "verdicts_changed": [
+     "customer_forwarding_number_correction: noncritical -> pass",
+     "customer_price_correction: noncritical -> pass",
+     "multi_entity_source: critical_failure -> pass",
+     "planned_not_completed: noncritical -> pass"
+    ]
+   },
+   "anthropic/claude-sonnet-5.5": {
+    "case_set_sha256": {
+     "from": "36354885b64b012cca7ea365a9f88f31ecdd838df8ec0de0594fa4387ab8d42e",
+     "to": "36354885b64b012cca7ea365a9f88f31ecdd838df8ec0de0594fa4387ab8d42e"
+    },
+    "cases_refused": [],
+    "verdicts_changed": []
+   },
+   "deepseek/deepseek-v4-flash": {
+    "case_set_sha256": {
+     "from": "acb2e22448a6569da3707a2a8df7d7919d2cecc920237f088ea704af3970a01d",
+     "to": "36354885b64b012cca7ea365a9f88f31ecdd838df8ec0de0594fa4387ab8d42e"
+    },
+    "cases_refused": [],
+    "verdicts_changed": [
+     "account_feedback: noncritical -> pass",
+     "customer_forwarding_number_correction: noncritical -> pass",
+     "global_opening_hours: noncritical -> pass"
+    ]
+   },
+   "moonshotai/kimi-k3": {
+    "case_set_sha256": {
+     "from": "acb2e22448a6569da3707a2a8df7d7919d2cecc920237f088ea704af3970a01d",
+     "to": "36354885b64b012cca7ea365a9f88f31ecdd838df8ec0de0594fa4387ab8d42e"
+    },
+    "cases_refused": [],
+    "verdicts_changed": [
+     "customer_price_correction: noncritical -> pass"
+    ]
+   },
+   "openai/gpt-6-sol": {
+    "case_set_sha256": {
+     "from": "acb2e22448a6569da3707a2a8df7d7919d2cecc920237f088ea704af3970a01d",
+     "to": "36354885b64b012cca7ea365a9f88f31ecdd838df8ec0de0594fa4387ab8d42e"
+    },
+    "cases_refused": [],
+    "verdicts_changed": [
+     "customer_forwarding_number_correction: noncritical -> pass",
+     "customer_price_correction: noncritical -> pass",
+     "planned_not_completed: noncritical -> pass",
+     "unrelated_same_name_people: noncritical -> pass"
+    ]
+   },
+   "openai/gpt-6.1-sol": {
+    "case_set_sha256": {
+     "from": "acb2e22448a6569da3707a2a8df7d7919d2cecc920237f088ea704af3970a01d",
+     "to": "36354885b64b012cca7ea365a9f88f31ecdd838df8ec0de0594fa4387ab8d42e"
+    },
+    "cases_refused": [],
+    "verdicts_changed": [
+     "customer_forwarding_number_correction: noncritical -> pass",
+     "customer_price_correction: noncritical -> pass",
+     "planned_not_completed: noncritical -> pass",
+     "unrelated_same_name_people: noncritical -> pass"
+    ]
+   },
+   "xiaomi/mimo-v2.6-flash": {
+    "case_set_sha256": {
+     "from": "acb2e22448a6569da3707a2a8df7d7919d2cecc920237f088ea704af3970a01d",
+     "to": "36354885b64b012cca7ea365a9f88f31ecdd838df8ec0de0594fa4387ab8d42e"
+    },
+    "cases_refused": [],
+    "verdicts_changed": [
+     "customer_price_correction: noncritical -> pass",
+     "multi_entity_source: critical_failure -> pass",
+     "unrelated_same_name_people: noncritical -> pass"
+    ]
+   },
+   "xiaomi/mimo-v2.6-pro": {
+    "case_set_sha256": {
+     "from": "36354885b64b012cca7ea365a9f88f31ecdd838df8ec0de0594fa4387ab8d42e",
+     "to": "36354885b64b012cca7ea365a9f88f31ecdd838df8ec0de0594fa4387ab8d42e"
+    },
+    "cases_refused": [],
+    "verdicts_changed": []
+   },
+   "z-ai/glm-5.3-flash": {
+    "case_set_sha256": {
+     "from": "acb2e22448a6569da3707a2a8df7d7919d2cecc920237f088ea704af3970a01d",
+     "to": "36354885b64b012cca7ea365a9f88f31ecdd838df8ec0de0594fa4387ab8d42e"
+    },
+    "cases_refused": [],
+    "verdicts_changed": [
+     "customer_forwarding_number_correction: noncritical -> pass"
+    ]
+   }
+  },
+  "MNEMONIC": {
+   "anthropic/claude-opus-5.5": {
+    "case_set_sha256": {
+     "from": "acb2e22448a6569da3707a2a8df7d7919d2cecc920237f088ea704af3970a01d",
+     "to": "36354885b64b012cca7ea365a9f88f31ecdd838df8ec0de0594fa4387ab8d42e"
+    },
+    "cases_refused": [],
+    "verdicts_changed": [
+     "customer_forwarding_number_correction: noncritical -> pass",
+     "customer_price_correction: noncritical -> pass",
+     "multi_entity_source: critical_failure -> pass",
+     "planned_not_completed: noncritical -> pass"
+    ]
+   },
+   "anthropic/claude-sonnet-5.5": {
+    "case_set_sha256": {
+     "from": "36354885b64b012cca7ea365a9f88f31ecdd838df8ec0de0594fa4387ab8d42e",
+     "to": "36354885b64b012cca7ea365a9f88f31ecdd838df8ec0de0594fa4387ab8d42e"
+    },
+    "cases_refused": [],
+    "verdicts_changed": []
+   },
+   "deepseek/deepseek-v4-flash": {
+    "case_set_sha256": {
+     "from": "acb2e22448a6569da3707a2a8df7d7919d2cecc920237f088ea704af3970a01d",
+     "to": "36354885b64b012cca7ea365a9f88f31ecdd838df8ec0de0594fa4387ab8d42e"
+    },
+    "cases_refused": [],
+    "verdicts_changed": [
+     "account_feedback: noncritical -> pass",
+     "customer_forwarding_number_correction: noncritical -> pass",
+     "global_opening_hours: noncritical -> pass"
+    ]
+   },
+   "moonshotai/kimi-k3": {
+    "case_set_sha256": {
+     "from": "acb2e22448a6569da3707a2a8df7d7919d2cecc920237f088ea704af3970a01d",
+     "to": "36354885b64b012cca7ea365a9f88f31ecdd838df8ec0de0594fa4387ab8d42e"
+    },
+    "cases_refused": [],
+    "verdicts_changed": [
+     "customer_price_correction: noncritical -> pass"
+    ]
+   },
+   "openai/gpt-6-sol": {
+    "case_set_sha256": {
+     "from": "acb2e22448a6569da3707a2a8df7d7919d2cecc920237f088ea704af3970a01d",
+     "to": "36354885b64b012cca7ea365a9f88f31ecdd838df8ec0de0594fa4387ab8d42e"
+    },
+    "cases_refused": [],
+    "verdicts_changed": [
+     "customer_forwarding_number_correction: noncritical -> pass",
+     "customer_price_correction: noncritical -> pass",
+     "planned_not_completed: noncritical -> pass",
+     "unrelated_same_name_people: noncritical -> pass"
+    ]
+   },
+   "openai/gpt-6.1-sol": {
+    "case_set_sha256": {
+     "from": "acb2e22448a6569da3707a2a8df7d7919d2cecc920237f088ea704af3970a01d",
+     "to": "36354885b64b012cca7ea365a9f88f31ecdd838df8ec0de0594fa4387ab8d42e"
+    },
+    "cases_refused": [],
+    "verdicts_changed": [
+     "customer_forwarding_number_correction: noncritical -> pass",
+     "customer_price_correction: noncritical -> pass",
+     "planned_not_completed: noncritical -> pass",
+     "unrelated_same_name_people: noncritical -> pass"
+    ]
+   },
+   "xiaomi/mimo-v2.6-flash": {
+    "case_set_sha256": {
+     "from": "acb2e22448a6569da3707a2a8df7d7919d2cecc920237f088ea704af3970a01d",
+     "to": "36354885b64b012cca7ea365a9f88f31ecdd838df8ec0de0594fa4387ab8d42e"
+    },
+    "cases_refused": [],
+    "verdicts_changed": [
+     "customer_price_correction: noncritical -> pass",
+     "multi_entity_source: critical_failure -> pass",
+     "unrelated_same_name_people: noncritical -> pass"
+    ]
+   },
+   "xiaomi/mimo-v2.6-pro": {
+    "case_set_sha256": {
+     "from": "36354885b64b012cca7ea365a9f88f31ecdd838df8ec0de0594fa4387ab8d42e",
+     "to": "36354885b64b012cca7ea365a9f88f31ecdd838df8ec0de0594fa4387ab8d42e"
+    },
+    "cases_refused": [],
+    "verdicts_changed": []
+   },
+   "z-ai/glm-5.3-flash": {
+    "case_set_sha256": {
+     "from": "acb2e22448a6569da3707a2a8df7d7919d2cecc920237f088ea704af3970a01d",
+     "to": "36354885b64b012cca7ea365a9f88f31ecdd838df8ec0de0594fa4387ab8d42e"
+    },
+    "cases_refused": [],
+    "verdicts_changed": [
+     "customer_forwarding_number_correction: noncritical -> pass"
+    ]
+   }
+  },
+  "NARRATION": {
+   "case_set_sha256": {
+    "from": "6ff98e4da9d148b3d534d977a8f6723b6ba644904e11e77acefe21d63fd9ab43",
+    "to": "6ff98e4da9d148b3d534d977a8f6723b6ba644904e11e77acefe21d63fd9ab43"
+   },
+   "cases_refused": [],
+   "verdicts_changed": []
+  },
+  "REANALYZE": {
+   "case_set_sha256": {
+    "from": "d20d4defa5d259ace3a1c31f9ab6270d2ac50a9f2ddcee4256b08428bd3a9d43",
+    "to": "d20d4defa5d259ace3a1c31f9ab6270d2ac50a9f2ddcee4256b08428bd3a9d43"
+   },
+   "cases_refused": [],
+   "verdicts_changed": []
+  },
+  "REPLY_NEED": {
+   "case_set_sha256": {
+    "from": "2f927825d4cd22052a5e72efe4945dc037b665f6f0340940f954352f8798c977",
+    "to": "2f927825d4cd22052a5e72efe4945dc037b665f6f0340940f954352f8798c977"
+   },
+   "cases_refused": [],
+   "verdicts_changed": []
+  },
+  "SYNC_ANALYSIS": {
+   "case_set_sha256": {
+    "from": "fa1518f070e5af386d7f4a2a6e99457a9610f2492f8f2a1c5f48ea24be9a83e2",
+    "to": "c350923ac7d44a1e89a69caf74a993133c975c48c0bf971366d7b228b84a4e06"
+   },
+   "cases_refused": [],
+   "verdicts_changed": [
+    "anthropic/claude-sonnet-5.5 sync_analysis-11 r1",
+    "deepseek/deepseek-v4-flash sync_analysis-11 r1",
+    "xiaomi/mimo-v2.6-flash sync_analysis-11 r1"
+   ]
+  },
+  "TASK_DETECTION": {
+   "case_set_sha256": {
+    "from": "7b78399bca018c37807b5ff051f1cfacf7b5d87be37b477d8435ea816d224d92",
+    "to": "7b78399bca018c37807b5ff051f1cfacf7b5d87be37b477d8435ea816d224d92"
+   },
+   "cases_refused": [],
+   "verdicts_changed": []
+  },
+  "TASK_SOLVE": {
+   "case_set_sha256": {
+    "from": "1e2fa219695e598ce16a9f64221c685b95348be78738b43d6376e632aaf02f4c",
+    "to": "1e2fa219695e598ce16a9f64221c685b95348be78738b43d6376e632aaf02f4c"
+   },
+   "cases_refused": [],
+   "verdicts_changed": [
+    "qwen/qwen3.8-max-0902 task_solve-04 r1"
+   ]
+  },
+  "TRAIN": {
+   "case_set_sha256": {
+    "from": "d0e55fbbe9945264e0819d449a2c4003428b690fc49fb4edcfd35d63c09f4f55",
+    "to": "d0e55fbbe9945264e0819d449a2c4003428b690fc49fb4edcfd35d63c09f4f55"
+   },
+   "cases_refused": [],
+   "verdicts_changed": []
+  },
+  "WEB_SEARCH": {
+   "case_set_sha256": {
+    "from": "4767cdb13895a5a64098342593c76099fa363898be9b79bef0d2c1553c50ae3c",
+    "to": "4767cdb13895a5a64098342593c76099fa363898be9b79bef0d2c1553c50ae3c"
+   },
+   "cases_refused": [],
+   "verdicts_changed": [
+    "xiaomi/mimo-v2.6-pro web_search-03 r1"
+   ]
+  }
+ },
+ "roles": {
+  "CHAT": {
+   "case_set_sha256": "3cd501697fb98ba55af6990690c60086f7b31acd44aff096d8f23f7efa04646a",
+   "incomplete": {},
+   "index": "agentic",
+   "measured_only": false,
+   "prompt_sha256": "c55f551c8cbac8f38a2486af0b5e525d031f0cc003050220e2519706656e69b3",
+   "reference": {
+    "id": "moonshotai/kimi-k3",
+    "score": 0.909091,
+    "se": 0.086678
+   },
+   "results": {
+    "anthropic/claude-opus-5.5": {
+     "bars_ok": true,
+     "complete": true,
+     "critical": false,
+     "index_score": 59.84,
+     "n": 11,
+     "pass": true,
+     "passes": 10,
+     "reasons": [],
+     "score": 0.909091
+    },
+    "anthropic/claude-sonnet-5.5": {
+     "bars_ok": true,
+     "complete": true,
+     "critical": false,
+     "index_score": 57.73,
+     "n": 11,
+     "pass": true,
+     "passes": 10,
+     "reasons": [],
+     "score": 0.909091
+    },
+    "moonshotai/kimi-k3": {
+     "bars_ok": true,
+     "complete": true,
+     "critical": false,
+     "index_score": 50,
+     "n": 11,
+     "pass": true,
+     "passes": 10,
+     "reasons": [],
+     "score": 0.909091
+    },
+    "qwen/qwen3.8-max-0902": {
+     "bars_ok": true,
+     "complete": true,
+     "critical": false,
+     "index_score": 56,
+     "n": 11,
+     "pass": true,
+     "passes": 11,
+     "reasons": [],
+     "score": 1.0
+    },
+    "z-ai/glm-5.3": {
+     "bars_ok": true,
+     "complete": true,
+     "critical": false,
+     "index_score": 53.1,
+     "n": 11,
+     "pass": true,
+     "passes": 11,
+     "reasons": [],
+     "score": 1.0
+    }
+   },
+   "rule": "maximise",
+   "second_repetition": {},
+   "snapshot_version": [
+    "8df61cff4d65d7059ea40e70b18861878ff4447bde08c87902c12ef5172e00fe",
+    "b3196ae202a7cc190cbf6cc0e3ca230fa26e7b57d127ddb15fd981e763070a8b"
+   ],
+   "threshold": null
+  },
+  "COMPACTION": {
+   "case_set_sha256": "5aca578fb06e00d2a8526510ea1dc6da3de65f5e660bc4658ae9cb803bcaa69b",
+   "incomplete": {},
+   "index": "intelligence",
+   "measured_only": true,
+   "prompt_sha256": "f99a21dda12f11c4d22961fe8bfdec5a4fdadc63fa6bc3cffcc94dea0ebdb860",
+   "reference": {
+    "id": "moonshotai/kimi-k3",
+    "score": 1.0,
+    "se": 0.0
+   },
+   "results": {
+    "anthropic/claude-sonnet-5.5": {
+     "bars_ok": true,
+     "complete": true,
+     "critical": false,
+     "index_score": 56,
+     "n": 5,
+     "pass": true,
+     "passes": 5,
+     "reasons": [],
+     "score": 1.0
+    },
+    "deepseek/deepseek-v4-flash": {
+     "bars_ok": true,
+     "complete": true,
+     "critical": false,
+     "index_score": 24.4,
+     "n": 5,
+     "pass": true,
+     "passes": 5,
+     "reasons": [],
+     "score": 1.0
+    },
+    "moonshotai/kimi-k3": {
+     "bars_ok": true,
+     "complete": true,
+     "critical": false,
+     "index_score": 43.6,
+     "n": 5,
+     "pass": true,
+     "passes": 5,
+     "reasons": [],
+     "score": 1.0
+    },
+    "xiaomi/mimo-v2.6-flash": {
+     "bars_ok": true,
+     "complete": true,
+     "critical": false,
+     "index_score": 37.9,
+     "n": 5,
+     "pass": true,
+     "passes": 5,
+     "reasons": [],
+     "score": 1.0
+    },
+    "xiaomi/mimo-v2.6-pro": {
+     "bars_ok": true,
+     "complete": true,
+     "critical": false,
+     "index_score": 46.3,
+     "n": 5,
+     "pass": true,
+     "passes": 5,
+     "reasons": [],
+     "score": 1.0
+    },
+    "z-ai/glm-5.3-flash": {
+     "bars_ok": false,
+     "complete": true,
+     "critical": false,
+     "index_score": 41.8,
+     "n": 5,
+     "pass": false,
+     "passes": 5,
+     "reasons": [
+      "mechanical bar"
+     ],
+     "score": 1.0
+    }
+   },
+   "rule": "satisfice",
+   "second_repetition": {},
+   "snapshot_version": "81998270380cb1927ada4bddf4d8869802edb73a9b042fb8560e2db95c610e05",
+   "threshold": null
+  },
+  "CORRECTION_LEARNING": {
+   "case_set_sha256": "801ace2db488587b6d5ad21b6789ff80d018c3e15be2fc0cdbeb7a49c5a4f184",
+   "incomplete": {},
+   "index": "intelligence",
+   "measured_only": true,
+   "prompt_sha256": "3e6e88fecfeb96673b98b1d65243229c0f873778e53bb3e26e7fcb246160717d",
+   "reference": {
+    "id": "moonshotai/kimi-k3",
+    "score": 1.0,
+    "se": 0.0
+   },
+   "results": {
+    "anthropic/claude-sonnet-5.5": {
+     "bars_ok": true,
+     "complete": true,
+     "critical": false,
+     "index_score": 56,
+     "n": 14,
+     "pass": true,
+     "passes": 14,
+     "reasons": [],
+     "score": 1.0
+    },
+    "deepseek/deepseek-v4-flash": {
+     "bars_ok": true,
+     "complete": true,
+     "critical": false,
+     "index_score": 24.4,
+     "n": 14,
+     "pass": true,
+     "passes": 14,
+     "reasons": [],
+     "score": 1.0
+    },
+    "moonshotai/kimi-k3": {
+     "bars_ok": true,
+     "complete": true,
+     "critical": false,
+     "index_score": 43.6,
+     "n": 14,
+     "pass": true,
+     "passes": 14,
+     "reasons": [],
+     "score": 1.0
+    },
+    "xiaomi/mimo-v2.6-flash": {
+     "bars_ok": true,
+     "complete": true,
+     "critical": false,
+     "index_score": 37.9,
+     "n": 14,
+     "pass": true,
+     "passes": 14,
+     "reasons": [],
+     "score": 1.0
+    },
+    "xiaomi/mimo-v2.6-pro": {
+     "bars_ok": false,
+     "complete": true,
+     "critical": false,
+     "index_score": 46.3,
+     "n": 14,
+     "pass": false,
+     "passes": 14,
+     "reasons": [
+      "mechanical bar"
+     ],
+     "score": 1.0
+    },
+    "z-ai/glm-5.3-flash": {
+     "bars_ok": false,
+     "complete": true,
+     "critical": false,
+     "index_score": 41.8,
+     "n": 14,
+     "pass": false,
+     "passes": 11,
+     "reasons": [
+      "mechanical bar",
+      "below the reference less its standard error"
+     ],
+     "score": 0.785714
+    }
+   },
+   "rule": "satisfice",
+   "second_repetition": {},
+   "snapshot_version": "81998270380cb1927ada4bddf4d8869802edb73a9b042fb8560e2db95c610e05",
+   "threshold": null
+  },
+  "DEDUP": {
+   "case_set_sha256": "4eef61b9d1ee1a0e2748186662dabab836de5e0e9943b16c2f2d6d7fca94e375",
+   "incomplete": {},
+   "index": "intelligence",
+   "measured_only": false,
+   "prompt_sha256": "23e00d3e08fc90c9fd4851c2816c0f3046405261bb67b73011eba3bc149166d3",
+   "reference": {
+    "id": "moonshotai/kimi-k3",
+    "score": 1.0,
+    "se": 0.0
+   },
+   "results": {
+    "anthropic/claude-sonnet-5.5": {
+     "bars_ok": true,
+     "complete": true,
+     "critical": false,
+     "index_score": 56,
+     "n": 14,
+     "pass": true,
+     "passes": 14,
+     "reasons": [],
+     "score": 1.0
+    },
+    "deepseek/deepseek-v4-flash": {
+     "bars_ok": true,
+     "complete": true,
+     "critical": false,
+     "index_score": 24.4,
+     "n": 14,
+     "pass": true,
+     "passes": 14,
+     "reasons": [],
+     "score": 1.0
+    },
+    "moonshotai/kimi-k3": {
+     "bars_ok": true,
+     "complete": true,
+     "critical": false,
+     "index_score": 43.6,
+     "n": 14,
+     "pass": true,
+     "passes": 14,
+     "reasons": [],
+     "score": 1.0
+    },
+    "xiaomi/mimo-v2.6-flash": {
+     "bars_ok": true,
+     "complete": true,
+     "critical": false,
+     "index_score": 37.9,
+     "n": 14,
+     "pass": true,
+     "passes": 14,
+     "reasons": [],
+     "score": 1.0
+    },
+    "xiaomi/mimo-v2.6-pro": {
+     "bars_ok": true,
+     "complete": true,
+     "critical": false,
+     "index_score": 46.3,
+     "n": 14,
+     "pass": true,
+     "passes": 14,
+     "reasons": [],
+     "score": 1.0
+    },
+    "z-ai/glm-5.3-flash": {
+     "bars_ok": true,
+     "complete": true,
+     "critical": false,
+     "index_score": 41.8,
+     "n": 14,
+     "pass": true,
+     "passes": 14,
+     "reasons": [],
+     "score": 1.0
+    }
+   },
+   "rule": "satisfice",
+   "second_repetition": {},
+   "snapshot_version": "81998270380cb1927ada4bddf4d8869802edb73a9b042fb8560e2db95c610e05",
+   "threshold": 24.4
+  },
+  "INTENT": {
+   "case_set_sha256": "f5e69d7c6def194444e13614357539d60c4e2a9582d6a30a44679a4a59e7a7e0",
+   "incomplete": {},
+   "index": "intelligence",
+   "measured_only": true,
+   "prompt_sha256": "8700cebf859ebd6c91ece0a16079a865d18a108a0d03ca2831b36c144af6c438",
+   "reference": {
+    "id": "moonshotai/kimi-k3",
+    "score": 1.0,
+    "se": 0.0
+   },
+   "results": {
+    "anthropic/claude-sonnet-5.5": {
+     "bars_ok": true,
+     "complete": true,
+     "critical": false,
+     "index_score": 56,
+     "n": 14,
+     "pass": true,
+     "passes": 14,
+     "reasons": [],
+     "score": 1.0
+    },
+    "deepseek/deepseek-v4-flash": {
+     "bars_ok": true,
+     "complete": true,
+     "critical": false,
+     "index_score": 24.4,
+     "n": 14,
+     "pass": true,
+     "passes": 14,
+     "reasons": [],
+     "score": 1.0
+    },
+    "moonshotai/kimi-k3": {
+     "bars_ok": true,
+     "complete": true,
+     "critical": false,
+     "index_score": 43.6,
+     "n": 14,
+     "pass": true,
+     "passes": 14,
+     "reasons": [],
+     "score": 1.0
+    },
+    "xiaomi/mimo-v2.6-flash": {
+     "bars_ok": true,
+     "complete": true,
+     "critical": false,
+     "index_score": 37.9,
+     "n": 14,
+     "pass": true,
+     "passes": 14,
+     "reasons": [],
+     "score": 1.0
+    },
+    "xiaomi/mimo-v2.6-pro": {
+     "bars_ok": true,
+     "complete": true,
+     "critical": false,
+     "index_score": 46.3,
+     "n": 14,
+     "pass": false,
+     "passes": 13,
+     "reasons": [
+      "below the reference less its standard error"
+     ],
+     "score": 0.928571
+    },
+    "z-ai/glm-5.3-flash": {
+     "bars_ok": true,
+     "complete": true,
+     "critical": false,
+     "index_score": 41.8,
+     "n": 14,
+     "pass": true,
+     "passes": 14,
+     "reasons": [],
+     "score": 1.0
+    }
+   },
+   "rule": "satisfice",
+   "second_repetition": {},
+   "snapshot_version": "81998270380cb1927ada4bddf4d8869802edb73a9b042fb8560e2db95c610e05",
+   "threshold": null
+  },
+  "MEMORY_EXTRACT": {
+   "case_set_sha256": "36354885b64b012cca7ea365a9f88f31ecdd838df8ec0de0594fa4387ab8d42e",
+   "incomplete": {},
+   "index": "intelligence",
+   "measured_only": true,
+   "prompt_sha256": "352eaba92e38fd718125eb3572a6b429b6a4b35be57ba4498ebcb6b6f3f84cc1",
+   "reference": {
+    "id": "moonshotai/kimi-k3",
+    "score": 1.0,
+    "se": 0.0
+   },
+   "results": {
+    "anthropic/claude-opus-5.5": {
+     "bars_ok": true,
+     "complete": true,
+     "critical": false,
+     "index_score": 57.6,
+     "n": 6,
+     "pass": true,
+     "passes": 6,
+     "reasons": [],
+     "score": 1.0
+    },
+    "anthropic/claude-sonnet-5.5": {
+     "bars_ok": false,
+     "complete": true,
+     "critical": false,
+     "index_score": 56,
+     "n": 6,
+     "pass": false,
+     "passes": 5,
+     "reasons": [
+      "mechanical bar",
+      "below the reference less its standard error"
+     ],
+     "score": 0.833333
+    },
+    "deepseek/deepseek-v4-flash": {
+     "bars_ok": true,
+     "complete": true,
+     "critical": false,
+     "index_score": 24.4,
+     "n": 6,
+     "pass": true,
+     "passes": 6,
+     "reasons": [],
+     "score": 1.0
+    },
+    "moonshotai/kimi-k3": {
+     "bars_ok": true,
+     "complete": true,
+     "critical": false,
+     "index_score": 43.6,
+     "n": 6,
+     "pass": true,
+     "passes": 6,
+     "reasons": [],
+     "score": 1.0
+    },
+    "openai/gpt-6-sol": {
+     "bars_ok": true,
+     "complete": true,
+     "critical": false,
+     "index_score": 47.6,
+     "n": 6,
+     "pass": true,
+     "passes": 6,
+     "reasons": [],
+     "score": 1.0
+    },
+    "openai/gpt-6.1-sol": {
+     "bars_ok": true,
+     "complete": true,
+     "critical": false,
+     "index_score": 51.8,
+     "n": 6,
+     "pass": true,
+     "passes": 6,
+     "reasons": [],
+     "score": 1.0
+    },
+    "xiaomi/mimo-v2.6-flash": {
+     "bars_ok": true,
+     "complete": true,
+     "critical": true,
+     "index_score": 37.9,
+     "n": 6,
+     "pass": false,
+     "passes": 5,
+     "reasons": [
+      "critical failure",
+      "below the reference less its standard error"
+     ],
+     "score": 0.833333
+    },
+    "xiaomi/mimo-v2.6-pro": {
+     "bars_ok": false,
+     "complete": true,
+     "critical": false,
+     "index_score": 46.3,
+     "n": 6,
+     "pass": false,
+     "passes": 4,
+     "reasons": [
+      "mechanical bar",
+      "below the reference less its standard error"
+     ],
+     "score": 0.666667
+    },
+    "z-ai/glm-5.3-flash": {
+     "bars_ok": false,
+     "complete": true,
+     "critical": true,
+     "index_score": 41.8,
+     "n": 6,
+     "pass": false,
+     "passes": 4,
+     "reasons": [
+      "mechanical bar",
+      "critical failure",
+      "below the reference less its standard error"
+     ],
+     "score": 0.666667
+    }
+   },
+   "rule": "satisfice",
+   "second_repetition": {},
+   "snapshot_version": [
+    "81998270380cb1927ada4bddf4d8869802edb73a9b042fb8560e2db95c610e05",
+    "b3196ae202a7cc190cbf6cc0e3ca230fa26e7b57d127ddb15fd981e763070a8b"
+   ],
+   "threshold": null
+  },
+  "MEMORY_MERGE": {
+   "case_set_sha256": "36354885b64b012cca7ea365a9f88f31ecdd838df8ec0de0594fa4387ab8d42e",
+   "incomplete": {},
+   "index": "intelligence",
+   "measured_only": false,
+   "prompt_sha256": "9d4a1fdfe1f5fbb8e4f3876e602c24e3c729e05f7786f4d59a71a64164715d1b",
+   "reference": {
+    "id": "moonshotai/kimi-k3",
+    "score": 1.0,
+    "se": 0.0
+   },
+   "results": {
+    "anthropic/claude-opus-5.5": {
+     "bars_ok": true,
+     "complete": true,
+     "critical": false,
+     "index_score": 57.6,
+     "n": 7,
+     "pass": true,
+     "passes": 7,
+     "reasons": [],
+     "score": 1.0
+    },
+    "anthropic/claude-sonnet-5.5": {
+     "bars_ok": false,
+     "complete": true,
+     "critical": false,
+     "index_score": 56,
+     "n": 7,
+     "pass": false,
+     "passes": 6,
+     "reasons": [
+      "mechanical bar",
+      "below the reference less its standard error"
+     ],
+     "score": 0.857143
+    },
+    "deepseek/deepseek-v4-flash": {
+     "bars_ok": true,
+     "complete": true,
+     "critical": false,
+     "index_score": 24.4,
+     "n": 7,
+     "pass": true,
+     "passes": 7,
+     "reasons": [],
+     "score": 1.0
+    },
+    "moonshotai/kimi-k3": {
+     "bars_ok": true,
+     "complete": true,
+     "critical": false,
+     "index_score": 43.6,
+     "n": 7,
+     "pass": true,
+     "passes": 7,
+     "reasons": [],
+     "score": 1.0
+    },
+    "openai/gpt-6-sol": {
+     "bars_ok": true,
+     "complete": true,
+     "critical": false,
+     "index_score": 47.6,
+     "n": 7,
+     "pass": true,
+     "passes": 7,
+     "reasons": [],
+     "score": 1.0
+    },
+    "openai/gpt-6.1-sol": {
+     "bars_ok": true,
+     "complete": true,
+     "critical": false,
+     "index_score": 51.8,
+     "n": 7,
+     "pass": true,
+     "passes": 7,
+     "reasons": [],
+     "score": 1.0
+    },
+    "xiaomi/mimo-v2.6-flash": {
+     "bars_ok": true,
+     "complete": true,
+     "critical": true,
+     "index_score": 37.9,
+     "n": 7,
+     "pass": false,
+     "passes": 6,
+     "reasons": [
+      "critical failure",
+      "below the reference less its standard error"
+     ],
+     "score": 0.857143
+    },
+    "xiaomi/mimo-v2.6-pro": {
+     "bars_ok": false,
+     "complete": true,
+     "critical": false,
+     "index_score": 46.3,
+     "n": 7,
+     "pass": false,
+     "passes": 5,
+     "reasons": [
+      "mechanical bar",
+      "below the reference less its standard error"
+     ],
+     "score": 0.714286
+    },
+    "z-ai/glm-5.3-flash": {
+     "bars_ok": false,
+     "complete": true,
+     "critical": true,
+     "index_score": 41.8,
+     "n": 7,
+     "pass": false,
+     "passes": 5,
+     "reasons": [
+      "mechanical bar",
+      "critical failure",
+      "below the reference less its standard error"
+     ],
+     "score": 0.714286
+    }
+   },
+   "rule": "maximise",
+   "second_repetition": {},
+   "snapshot_version": [
+    "81998270380cb1927ada4bddf4d8869802edb73a9b042fb8560e2db95c610e05",
+    "b3196ae202a7cc190cbf6cc0e3ca230fa26e7b57d127ddb15fd981e763070a8b"
+   ],
+   "threshold": null
+  },
+  "MNEMONIC": {
+   "case_set_sha256": "36354885b64b012cca7ea365a9f88f31ecdd838df8ec0de0594fa4387ab8d42e",
+   "incomplete": {},
+   "index": "intelligence",
+   "measured_only": false,
+   "prompt_sha256": "9d4a1fdfe1f5fbb8e4f3876e602c24e3c729e05f7786f4d59a71a64164715d1b",
+   "reference": {
+    "id": "moonshotai/kimi-k3",
+    "score": 1.0,
+    "se": 0.0
+   },
+   "results": {
+    "anthropic/claude-opus-5.5": {
+     "bars_ok": true,
+     "complete": true,
+     "critical": false,
+     "index_score": 57.6,
+     "n": 10,
+     "pass": true,
+     "passes": 10,
+     "reasons": [],
+     "score": 1.0
+    },
+    "anthropic/claude-sonnet-5.5": {
+     "bars_ok": false,
+     "complete": true,
+     "critical": false,
+     "index_score": 56,
+     "n": 10,
+     "pass": false,
+     "passes": 9,
+     "reasons": [
+      "mechanical bar",
+      "below the reference less its standard error"
+     ],
+     "score": 0.9
+    },
+    "deepseek/deepseek-v4-flash": {
+     "bars_ok": true,
+     "complete": true,
+     "critical": true,
+     "index_score": 24.4,
+     "n": 10,
+     "pass": false,
+     "passes": 9,
+     "reasons": [
+      "critical failure",
+      "below the reference less its standard error"
+     ],
+     "score": 0.9
+    },
+    "moonshotai/kimi-k3": {
+     "bars_ok": true,
+     "complete": true,
+     "critical": false,
+     "index_score": 43.6,
+     "n": 10,
+     "pass": true,
+     "passes": 10,
+     "reasons": [],
+     "score": 1.0
+    },
+    "openai/gpt-6-sol": {
+     "bars_ok": true,
+     "complete": true,
+     "critical": false,
+     "index_score": 47.6,
+     "n": 10,
+     "pass": true,
+     "passes": 10,
+     "reasons": [],
+     "score": 1.0
+    },
+    "openai/gpt-6.1-sol": {
+     "bars_ok": true,
+     "complete": true,
+     "critical": false,
+     "index_score": 51.8,
+     "n": 10,
+     "pass": true,
+     "passes": 10,
+     "reasons": [],
+     "score": 1.0
+    },
+    "xiaomi/mimo-v2.6-flash": {
+     "bars_ok": true,
+     "complete": true,
+     "critical": true,
+     "index_score": 37.9,
+     "n": 10,
+     "pass": false,
+     "passes": 9,
+     "reasons": [
+      "critical failure",
+      "below the reference less its standard error"
+     ],
+     "score": 0.9
+    },
+    "xiaomi/mimo-v2.6-pro": {
+     "bars_ok": false,
+     "complete": true,
+     "critical": false,
+     "index_score": 46.3,
+     "n": 10,
+     "pass": false,
+     "passes": 7,
+     "reasons": [
+      "mechanical bar",
+      "below the reference less its standard error"
+     ],
+     "score": 0.7
+    },
+    "z-ai/glm-5.3-flash": {
+     "bars_ok": false,
+     "complete": true,
+     "critical": true,
+     "index_score": 41.8,
+     "n": 10,
+     "pass": false,
+     "passes": 8,
+     "reasons": [
+      "mechanical bar",
+      "critical failure",
+      "below the reference less its standard error"
+     ],
+     "score": 0.8
+    }
+   },
+   "rule": "maximise",
+   "second_repetition": {},
+   "snapshot_version": [
+    "81998270380cb1927ada4bddf4d8869802edb73a9b042fb8560e2db95c610e05",
+    "b3196ae202a7cc190cbf6cc0e3ca230fa26e7b57d127ddb15fd981e763070a8b"
+   ],
+   "threshold": null
+  },
+  "NARRATION": {
+   "case_set_sha256": "6ff98e4da9d148b3d534d977a8f6723b6ba644904e11e77acefe21d63fd9ab43",
+   "incomplete": {},
+   "index": "intelligence",
+   "measured_only": true,
+   "prompt_sha256": "e073f77edfa189bbf21f8069ad691b6754043d105c45204724a30fb1103249ca",
+   "reference": {
+    "id": "moonshotai/kimi-k3",
+    "score": 1.0,
+    "se": 0.0
+   },
+   "results": {
+    "anthropic/claude-sonnet-5.5": {
+     "bars_ok": false,
+     "complete": true,
+     "critical": false,
+     "index_score": 56,
+     "n": 5,
+     "pass": false,
+     "passes": 5,
+     "reasons": [
+      "mechanical bar"
+     ],
+     "score": 1.0
+    },
+    "deepseek/deepseek-v4-flash": {
+     "bars_ok": false,
+     "complete": true,
+     "critical": false,
+     "index_score": 24.4,
+     "n": 5,
+     "pass": false,
+     "passes": 4,
+     "reasons": [
+      "mechanical bar",
+      "below the reference less its standard error"
+     ],
+     "score": 0.8
+    },
+    "moonshotai/kimi-k3": {
+     "bars_ok": true,
+     "complete": true,
+     "critical": false,
+     "index_score": 43.6,
+     "n": 5,
+     "pass": true,
+     "passes": 5,
+     "reasons": [],
+     "score": 1.0
+    },
+    "xiaomi/mimo-v2.6-flash": {
+     "bars_ok": false,
+     "complete": true,
+     "critical": false,
+     "index_score": 37.9,
+     "n": 5,
+     "pass": false,
+     "passes": 1,
+     "reasons": [
+      "mechanical bar",
+      "below the reference less its standard error"
+     ],
+     "score": 0.2
+    },
+    "xiaomi/mimo-v2.6-pro": {
+     "bars_ok": false,
+     "complete": true,
+     "critical": false,
+     "index_score": 46.3,
+     "n": 5,
+     "pass": false,
+     "passes": 0,
+     "reasons": [
+      "mechanical bar",
+      "below the reference less its standard error"
+     ],
+     "score": 0.0
+    },
+    "z-ai/glm-5.3-flash": {
+     "bars_ok": false,
+     "complete": true,
+     "critical": false,
+     "index_score": 41.8,
+     "n": 5,
+     "pass": false,
+     "passes": 5,
+     "reasons": [
+      "mechanical bar"
+     ],
+     "score": 1.0
+    }
+   },
+   "rule": "satisfice",
+   "second_repetition": {},
+   "snapshot_version": "81998270380cb1927ada4bddf4d8869802edb73a9b042fb8560e2db95c610e05",
+   "threshold": null
+  },
+  "REANALYZE": {
+   "case_set_sha256": "d20d4defa5d259ace3a1c31f9ab6270d2ac50a9f2ddcee4256b08428bd3a9d43",
+   "incomplete": {},
+   "index": "intelligence",
+   "measured_only": true,
+   "prompt_sha256": "67387d06d4a0a2759c85f01038885a93bc31e9c640017ad835beb95654ff1769",
+   "reference": {
+    "id": "moonshotai/kimi-k3",
+    "score": 1.0,
+    "se": 0.0
+   },
+   "results": {
+    "anthropic/claude-sonnet-5.5": {
+     "bars_ok": true,
+     "complete": true,
+     "critical": false,
+     "index_score": 56,
+     "n": 15,
+     "pass": true,
+     "passes": 15,
+     "reasons": [],
+     "score": 1.0
+    },
+    "deepseek/deepseek-v4-flash": {
+     "bars_ok": true,
+     "complete": true,
+     "critical": false,
+     "index_score": 24.4,
+     "n": 15,
+     "pass": true,
+     "passes": 15,
+     "reasons": [],
+     "score": 1.0
+    },
+    "moonshotai/kimi-k3": {
+     "bars_ok": true,
+     "complete": true,
+     "critical": false,
+     "index_score": 43.6,
+     "n": 15,
+     "pass": true,
+     "passes": 15,
+     "reasons": [],
+     "score": 1.0
+    },
+    "xiaomi/mimo-v2.6-flash": {
+     "bars_ok": false,
+     "complete": true,
+     "critical": false,
+     "index_score": 37.9,
+     "n": 15,
+     "pass": false,
+     "passes": 14,
+     "reasons": [
+      "mechanical bar",
+      "below the reference less its standard error"
+     ],
+     "score": 0.933333
+    },
+    "xiaomi/mimo-v2.6-pro": {
+     "bars_ok": true,
+     "complete": true,
+     "critical": false,
+     "index_score": 46.3,
+     "n": 15,
+     "pass": true,
+     "passes": 15,
+     "reasons": [],
+     "score": 1.0
+    },
+    "z-ai/glm-5.3-flash": {
+     "bars_ok": true,
+     "complete": true,
+     "critical": false,
+     "index_score": 41.8,
+     "n": 15,
+     "pass": true,
+     "passes": 15,
+     "reasons": [],
+     "score": 1.0
+    }
+   },
+   "rule": "satisfice",
+   "second_repetition": {},
+   "snapshot_version": "81998270380cb1927ada4bddf4d8869802edb73a9b042fb8560e2db95c610e05",
+   "threshold": null
+  },
+  "REPLY_NEED": {
+   "case_set_sha256": "2f927825d4cd22052a5e72efe4945dc037b665f6f0340940f954352f8798c977",
+   "incomplete": {},
+   "index": "intelligence",
+   "measured_only": true,
+   "prompt_sha256": "40a0042bd314c25258bbcb9110d0912e9c86f8f32f2b37f5f9ee6d9b77370f0d",
+   "reference": {
+    "id": "moonshotai/kimi-k3",
+    "score": 0.928571,
+    "se": 0.06883
+   },
+   "results": {
+    "anthropic/claude-sonnet-5.5": {
+     "bars_ok": true,
+     "complete": true,
+     "critical": false,
+     "index_score": 56,
+     "n": 14,
+     "pass": true,
+     "passes": 14,
+     "reasons": [],
+     "score": 1.0
+    },
+    "deepseek/deepseek-v4-flash": {
+     "bars_ok": true,
+     "complete": true,
+     "critical": true,
+     "index_score": 24.4,
+     "n": 14,
+     "pass": false,
+     "passes": 13,
+     "reasons": [
+      "critical failure"
+     ],
+     "score": 0.928571
+    },
+    "moonshotai/kimi-k3": {
+     "bars_ok": true,
+     "complete": true,
+     "critical": true,
+     "index_score": 43.6,
+     "n": 14,
+     "pass": false,
+     "passes": 13,
+     "reasons": [
+      "critical failure"
+     ],
+     "score": 0.928571
+    },
+    "xiaomi/mimo-v2.6-flash": {
+     "bars_ok": true,
+     "complete": true,
+     "critical": false,
+     "index_score": 37.9,
+     "n": 14,
+     "pass": true,
+     "passes": 14,
+     "reasons": [],
+     "score": 1.0
+    },
+    "xiaomi/mimo-v2.6-pro": {
+     "bars_ok": true,
+     "complete": true,
+     "critical": false,
+     "index_score": 46.3,
+     "n": 14,
+     "pass": true,
+     "passes": 14,
+     "reasons": [],
+     "score": 1.0
+    },
+    "z-ai/glm-5.3-flash": {
+     "bars_ok": true,
+     "complete": true,
+     "critical": false,
+     "index_score": 41.8,
+     "n": 14,
+     "pass": true,
+     "passes": 14,
+     "reasons": [],
+     "score": 1.0
+    }
+   },
+   "rule": "satisfice",
+   "second_repetition": {},
+   "snapshot_version": "81998270380cb1927ada4bddf4d8869802edb73a9b042fb8560e2db95c610e05",
+   "threshold": null
+  },
+  "SYNC_ANALYSIS": {
+   "case_set_sha256": "c350923ac7d44a1e89a69caf74a993133c975c48c0bf971366d7b228b84a4e06",
+   "incomplete": {},
+   "index": "intelligence",
+   "measured_only": true,
+   "prompt_sha256": "baa23965f58f7353b4d676e4e4d00e104a22350e69a2674ba77278e4ac704bdb",
+   "reference": {
+    "id": "moonshotai/kimi-k3",
+    "score": 0.928571,
+    "se": 0.06883
+   },
+   "results": {
+    "anthropic/claude-sonnet-5.5": {
+     "bars_ok": true,
+     "complete": true,
+     "critical": false,
+     "index_score": 56,
+     "n": 14,
+     "pass": true,
+     "passes": 13,
+     "reasons": [],
+     "score": 0.928571
+    },
+    "deepseek/deepseek-v4-flash": {
+     "bars_ok": true,
+     "complete": true,
+     "critical": false,
+     "index_score": 24.4,
+     "n": 14,
+     "pass": true,
+     "passes": 13,
+     "reasons": [],
+     "score": 0.928571
+    },
+    "moonshotai/kimi-k3": {
+     "bars_ok": true,
+     "complete": true,
+     "critical": false,
+     "index_score": 43.6,
+     "n": 14,
+     "pass": true,
+     "passes": 13,
+     "reasons": [],
+     "score": 0.928571
+    },
+    "xiaomi/mimo-v2.6-flash": {
+     "bars_ok": false,
+     "complete": true,
+     "critical": true,
+     "index_score": 37.9,
+     "n": 14,
+     "pass": false,
+     "passes": 11,
+     "reasons": [
+      "mechanical bar",
+      "critical failure",
+      "below the reference less its standard error"
+     ],
+     "score": 0.785714
+    },
+    "xiaomi/mimo-v2.6-pro": {
+     "bars_ok": false,
+     "complete": true,
+     "critical": true,
+     "index_score": 46.3,
+     "n": 14,
+     "pass": false,
+     "passes": 13,
+     "reasons": [
+      "mechanical bar",
+      "critical failure"
+     ],
+     "score": 0.928571
+    },
+    "z-ai/glm-5.3-flash": {
+     "bars_ok": false,
+     "complete": true,
+     "critical": false,
+     "index_score": 41.8,
+     "n": 14,
+     "pass": false,
+     "passes": 11,
+     "reasons": [
+      "mechanical bar",
+      "below the reference less its standard error"
+     ],
+     "score": 0.785714
+    }
+   },
+   "rule": "satisfice",
+   "second_repetition": {},
+   "snapshot_version": "81998270380cb1927ada4bddf4d8869802edb73a9b042fb8560e2db95c610e05",
+   "threshold": null
+  },
+  "TASK_DETECTION": {
+   "case_set_sha256": "7b78399bca018c37807b5ff051f1cfacf7b5d87be37b477d8435ea816d224d92",
+   "incomplete": {},
+   "index": "intelligence",
+   "measured_only": true,
+   "prompt_sha256": "589521323a76cdc38ea3597caf9804945ddb92ca9ae7577f5bca649759891737",
+   "reference": {
+    "id": "moonshotai/kimi-k3",
+    "score": 1.0,
+    "se": 0.0
+   },
+   "results": {
+    "anthropic/claude-sonnet-5.5": {
+     "bars_ok": true,
+     "complete": true,
+     "critical": false,
+     "index_score": 56,
+     "n": 16,
+     "pass": true,
+     "passes": 16,
+     "reasons": [],
+     "score": 1.0
+    },
+    "deepseek/deepseek-v4-flash": {
+     "bars_ok": true,
+     "complete": true,
+     "critical": false,
+     "index_score": 24.4,
+     "n": 16,
+     "pass": true,
+     "passes": 16,
+     "reasons": [],
+     "score": 1.0
+    },
+    "moonshotai/kimi-k3": {
+     "bars_ok": true,
+     "complete": true,
+     "critical": false,
+     "index_score": 43.6,
+     "n": 16,
+     "pass": true,
+     "passes": 16,
+     "reasons": [],
+     "score": 1.0
+    },
+    "xiaomi/mimo-v2.6-flash": {
+     "bars_ok": false,
+     "complete": true,
+     "critical": false,
+     "index_score": 37.9,
+     "n": 16,
+     "pass": false,
+     "passes": 15,
+     "reasons": [
+      "mechanical bar",
+      "below the reference less its standard error"
+     ],
+     "score": 0.9375
+    },
+    "xiaomi/mimo-v2.6-pro": {
+     "bars_ok": true,
+     "complete": true,
+     "critical": false,
+     "index_score": 46.3,
+     "n": 16,
+     "pass": true,
+     "passes": 16,
+     "reasons": [],
+     "score": 1.0
+    },
+    "z-ai/glm-5.3-flash": {
+     "bars_ok": false,
+     "complete": true,
+     "critical": false,
+     "index_score": 41.8,
+     "n": 16,
+     "pass": false,
+     "passes": 15,
+     "reasons": [
+      "mechanical bar",
+      "below the reference less its standard error"
+     ],
+     "score": 0.9375
+    }
+   },
+   "rule": "satisfice",
+   "second_repetition": {},
+   "snapshot_version": "81998270380cb1927ada4bddf4d8869802edb73a9b042fb8560e2db95c610e05",
+   "threshold": null
+  },
+  "TASK_SOLVE": {
+   "case_set_sha256": "1e2fa219695e598ce16a9f64221c685b95348be78738b43d6376e632aaf02f4c",
+   "incomplete": {},
+   "index": "agentic",
+   "measured_only": false,
+   "prompt_sha256": "19792f4c0b59fab19d7e8403e0a32638b1d7657bb1ea8beaa537abca6b73b171",
+   "reference": {
+    "id": "moonshotai/kimi-k3",
+    "score": 0.909091,
+    "se": 0.086678
+   },
+   "results": {
+    "anthropic/claude-opus-5.5": {
+     "bars_ok": true,
+     "complete": true,
+     "critical": false,
+     "index_score": 59.84,
+     "n": 11,
+     "pass": true,
+     "passes": 11,
+     "reasons": [],
+     "score": 1.0
+    },
+    "anthropic/claude-sonnet-5.5": {
+     "bars_ok": true,
+     "complete": true,
+     "critical": false,
+     "index_score": 57.73,
+     "n": 11,
+     "pass": true,
+     "passes": 11,
+     "reasons": [],
+     "score": 1.0
+    },
+    "moonshotai/kimi-k3": {
+     "bars_ok": false,
+     "complete": true,
+     "critical": false,
+     "index_score": 50,
+     "n": 11,
+     "pass": false,
+     "passes": 10,
+     "reasons": [
+      "mechanical bar"
+     ],
+     "score": 0.909091
+    },
+    "qwen/qwen3.8-max-0902": {
+     "bars_ok": false,
+     "complete": true,
+     "critical": false,
+     "index_score": 56,
+     "n": 11,
+     "pass": false,
+     "passes": 10,
+     "reasons": [
+      "mechanical bar"
+     ],
+     "score": 0.909091
+    },
+    "z-ai/glm-5.3": {
+     "bars_ok": true,
+     "complete": true,
+     "critical": false,
+     "index_score": 53.1,
+     "n": 11,
+     "pass": true,
+     "passes": 10,
+     "reasons": [],
+     "score": 0.909091
+    }
+   },
+   "rule": "maximise",
+   "second_repetition": {},
+   "snapshot_version": "81998270380cb1927ada4bddf4d8869802edb73a9b042fb8560e2db95c610e05",
+   "threshold": null
+  },
+  "TRAIN": {
+   "case_set_sha256": "d0e55fbbe9945264e0819d449a2c4003428b690fc49fb4edcfd35d63c09f4f55",
+   "incomplete": {},
+   "index": "intelligence",
+   "measured_only": true,
+   "prompt_sha256": "6d3996452d7e3d138fa237322655e89b04527fdb1252b60e2140ac95f16cf627",
+   "reference": {
+    "id": "moonshotai/kimi-k3",
+    "score": 1.0,
+    "se": 0.0
+   },
+   "results": {
+    "anthropic/claude-sonnet-5.5": {
+     "bars_ok": true,
+     "complete": true,
+     "critical": false,
+     "index_score": 56,
+     "n": 5,
+     "pass": true,
+     "passes": 5,
+     "reasons": [],
+     "score": 1.0
+    },
+    "deepseek/deepseek-v4-flash": {
+     "bars_ok": true,
+     "complete": true,
+     "critical": false,
+     "index_score": 24.4,
+     "n": 5,
+     "pass": true,
+     "passes": 5,
+     "reasons": [],
+     "score": 1.0
+    },
+    "moonshotai/kimi-k3": {
+     "bars_ok": true,
+     "complete": true,
+     "critical": false,
+     "index_score": 43.6,
+     "n": 5,
+     "pass": true,
+     "passes": 5,
+     "reasons": [],
+     "score": 1.0
+    },
+    "xiaomi/mimo-v2.6-flash": {
+     "bars_ok": true,
+     "complete": true,
+     "critical": false,
+     "index_score": 37.9,
+     "n": 5,
+     "pass": true,
+     "passes": 5,
+     "reasons": [],
+     "score": 1.0
+    },
+    "xiaomi/mimo-v2.6-pro": {
+     "bars_ok": false,
+     "complete": true,
+     "critical": false,
+     "index_score": 46.3,
+     "n": 5,
+     "pass": false,
+     "passes": 5,
+     "reasons": [
+      "mechanical bar"
+     ],
+     "score": 1.0
+    },
+    "z-ai/glm-5.3-flash": {
+     "bars_ok": true,
+     "complete": true,
+     "critical": false,
+     "index_score": 41.8,
+     "n": 5,
+     "pass": true,
+     "passes": 5,
+     "reasons": [],
+     "score": 1.0
+    }
+   },
+   "rule": "satisfice",
+   "second_repetition": {},
+   "snapshot_version": "81998270380cb1927ada4bddf4d8869802edb73a9b042fb8560e2db95c610e05",
+   "threshold": null
+  },
+  "WEB_SEARCH": {
+   "case_set_sha256": "4767cdb13895a5a64098342593c76099fa363898be9b79bef0d2c1553c50ae3c",
+   "incomplete": {},
+   "index": "intelligence",
+   "measured_only": true,
+   "prompt_sha256": "df56242761939a6ce8e2d0c24fa5a406ac9dc37745f788ed0cb4cde5d1597219",
+   "reference": {
+    "id": "moonshotai/kimi-k3",
+    "score": 1.0,
+    "se": 0.0
+   },
+   "results": {
+    "anthropic/claude-sonnet-5.5": {
+     "bars_ok": true,
+     "complete": true,
+     "critical": false,
+     "index_score": 56,
+     "n": 5,
+     "pass": true,
+     "passes": 5,
+     "reasons": [],
+     "score": 1.0
+    },
+    "deepseek/deepseek-v4-flash": {
+     "bars_ok": true,
+     "complete": true,
+     "critical": true,
+     "index_score": 24.4,
+     "n": 5,
+     "pass": false,
+     "passes": 4,
+     "reasons": [
+      "critical failure",
+      "below the reference less its standard error"
+     ],
+     "score": 0.8
+    },
+    "moonshotai/kimi-k3": {
+     "bars_ok": true,
+     "complete": true,
+     "critical": false,
+     "index_score": 43.6,
+     "n": 5,
+     "pass": true,
+     "passes": 5,
+     "reasons": [],
+     "score": 1.0
+    },
+    "xiaomi/mimo-v2.6-flash": {
+     "bars_ok": false,
+     "complete": true,
+     "critical": false,
+     "index_score": 37.9,
+     "n": 5,
+     "pass": false,
+     "passes": 5,
+     "reasons": [
+      "mechanical bar"
+     ],
+     "score": 1.0
+    },
+    "xiaomi/mimo-v2.6-pro": {
+     "bars_ok": false,
+     "complete": true,
+     "critical": false,
+     "index_score": 46.3,
+     "n": 5,
+     "pass": false,
+     "passes": 5,
+     "reasons": [
+      "mechanical bar"
+     ],
+     "score": 1.0
+    },
+    "z-ai/glm-5.3-flash": {
+     "bars_ok": true,
+     "complete": true,
+     "critical": false,
+     "index_score": 41.8,
+     "n": 5,
+     "pass": true,
+     "passes": 5,
+     "reasons": [],
+     "score": 1.0
+    }
+   },
+   "rule": "satisfice",
+   "second_repetition": {},
+   "snapshot_version": "81998270380cb1927ada4bddf4d8869802edb73a9b042fb8560e2db95c610e05",
+   "threshold": null
+  }
+ },
+ "schema": 1,
+ "written_by": "engine/scripts/derive_thresholds.py"
+}
