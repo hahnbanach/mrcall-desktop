@@ -1121,6 +1121,14 @@
       "model": "qwen/qwen3.8-2.4t-a95b",
       "outcome": "passed",
       "run": "2026-10-12T17:43:39Z"
+    },
+    {
+      "at": "2026-10-12T18:59:48Z",
+      "detail": "",
+      "metadata_sha256": "3496f9da850aaf4832fe4a0d4ad16ef4fe574b0075c5c6953a457dd3747f0074",
+      "model": "google/gemini-3.7-flash",
+      "outcome": "passed",
+      "run": "2026-10-12T17:43:39Z"
     }
   ],
   "stops": [
