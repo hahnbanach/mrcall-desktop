@@ -203,6 +203,14 @@
       "model": "inclusionai/ling-3.0-flash-vl",
       "outcome": "passed",
       "run": "2026-10-12T17:43:39Z"
+    },
+    {
+      "at": "2026-10-12T17:50:01Z",
+      "detail": "",
+      "metadata_sha256": "815d85eb2822dbee48a3e945696c764ad062cd420eda22557cf5adcc73c36363",
+      "model": "inclusionai/ling-3.0-flash",
+      "outcome": "passed",
+      "run": "2026-10-12T17:43:39Z"
     }
   ],
   "stops": []
