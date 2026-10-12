@@ -1417,6 +1417,14 @@
       "model": "minimax/minimax-m2.1",
       "outcome": "passed",
       "run": "2026-10-12T17:43:39Z"
+    },
+    {
+      "at": "2026-10-12T19:04:43Z",
+      "detail": "",
+      "metadata_sha256": "80e316696c2bea2e45a224de0c9709a867c257a641baa07f99f34b22ed0d325a",
+      "model": "meituan/longcat-2.0",
+      "outcome": "passed",
+      "run": "2026-10-12T17:43:39Z"
     }
   ],
   "stops": [
