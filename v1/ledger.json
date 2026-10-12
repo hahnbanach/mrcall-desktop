@@ -177,10 +177,21 @@
             "role": "TASK_DETECTION",
             "spent_usd": "0.000882",
             "why": "pick of economy / TASK_DETECTION / ranking"
+          },
+          {
+            "at": "2026-10-12T17:52:51Z",
+            "bound_usd": "0.2",
+            "check": "smoke inclusionai/ling-3.0-flash-fin",
+            "kind": "smoke",
+            "model": "inclusionai/ling-3.0-flash-fin",
+            "outcome": "passed",
+            "role": null,
+            "spent_usd": "0.000023",
+            "why": "pick of economy / TASK_DETECTION / ranking"
           }
         ],
         "opened_at": "2026-10-12T17:44:44Z",
-        "reserved_usd": "0.458883",
+        "reserved_usd": "0.258906",
         "run": "2026-10-12T17:43:39Z",
         "settled_at": null,
         "spent_usd": null
