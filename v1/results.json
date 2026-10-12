@@ -1361,6 +1361,14 @@
       "model": "minimax/minimax-m2.5",
       "outcome": "passed",
       "run": "2026-10-12T17:43:39Z"
+    },
+    {
+      "at": "2026-10-12T19:03:45Z",
+      "detail": "",
+      "metadata_sha256": "b5d03b668fc18d14375acad33c70f51a97d11118dd492257fc18961315c7a2cf",
+      "model": "qwen/qwen3-next-80b-a3b-instruct",
+      "outcome": "passed",
+      "run": "2026-10-12T17:43:39Z"
     }
   ],
   "stops": [
