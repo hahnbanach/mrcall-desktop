@@ -346,6 +346,14 @@
       "model": "inception/mercury-2.5",
       "outcome": "passed",
       "run": "2026-10-12T17:43:39Z"
+    },
+    {
+      "at": "2026-10-12T17:54:47Z",
+      "detail": "",
+      "metadata_sha256": "75341e0d841ea9409994ba833b490515ef51c902337e0c9782ea0b179f989201",
+      "model": "mistralai/ministral-8b-2512",
+      "outcome": "passed",
+      "run": "2026-10-12T17:43:39Z"
     }
   ],
   "stops": []
