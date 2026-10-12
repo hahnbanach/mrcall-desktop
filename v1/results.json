@@ -492,6 +492,23 @@
       },
       "role": "SYNC_ANALYSIS",
       "run": "2026-10-12T17:43:39Z"
+    },
+    {
+      "case_set_sha256": "4767cdb13895a5a64098342593c76099fa363898be9b79bef0d2c1553c50ae3c",
+      "measured_at": "2026-10-12T18:07:21Z",
+      "model": "inclusionai/ling-3.0-flash",
+      "prompt_sha256": "df56242761939a6ce8e2d0c24fa5a406ac9dc37745f788ed0cb4cde5d1597219",
+      "result": {
+        "bars_ok": true,
+        "complete": true,
+        "critical": false,
+        "index_score": 20.1,
+        "n": 5,
+        "passes": 5,
+        "score": 1.0
+      },
+      "role": "WEB_SEARCH",
+      "run": "2026-10-12T17:43:39Z"
     }
   ],
   "schema": 1,
