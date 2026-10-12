@@ -12,9 +12,21 @@
         "spent_usd": "4.146243"
       },
       {
-        "calls": [],
+        "calls": [
+          {
+            "at": "2026-10-12T17:44:46Z",
+            "bound_usd": "0.2",
+            "check": "smoke xiaomi/mimo-v2.6-flash",
+            "kind": "smoke",
+            "model": "xiaomi/mimo-v2.6-flash",
+            "outcome": "passed",
+            "role": null,
+            "spent_usd": "0.00006",
+            "why": "metadata changed (models parameters)"
+          }
+        ],
         "opened_at": "2026-10-12T17:44:44Z",
-        "reserved_usd": "0.2",
+        "reserved_usd": "0.00006",
         "run": "2026-10-12T17:43:39Z",
         "settled_at": null,
         "spent_usd": null

@@ -1,0 +1,15 @@
+{
+  "results": [],
+  "schema": 1,
+  "smokes": [
+    {
+      "at": "2026-10-12T17:44:46Z",
+      "detail": "",
+      "metadata_sha256": "ffa33aeb3f7ed6f9413ce3051bb37f9785ecc5658e30b76ca2b35329cab937c2",
+      "model": "xiaomi/mimo-v2.6-flash",
+      "outcome": "passed",
+      "run": "2026-10-12T17:43:39Z"
+    }
+  ],
+  "stops": []
+}
