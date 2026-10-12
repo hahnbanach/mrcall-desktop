@@ -364,10 +364,21 @@
             "role": "SYNC_ANALYSIS",
             "spent_usd": "0.001115",
             "why": "pick of economy / SYNC_ANALYSIS / ranking"
+          },
+          {
+            "at": "2026-10-12T18:03:31Z",
+            "bound_usd": "0.2",
+            "check": "smoke mistralai/ministral-14b-2512",
+            "kind": "smoke",
+            "model": "mistralai/ministral-14b-2512",
+            "outcome": "passed",
+            "role": null,
+            "spent_usd": "0.000053",
+            "why": "pick of economy / SYNC_ANALYSIS / ranking"
           }
         ],
         "opened_at": "2026-10-12T17:44:44Z",
-        "reserved_usd": "0.475586",
+        "reserved_usd": "0.275639",
         "run": "2026-10-12T17:43:39Z",
         "settled_at": null,
         "spent_usd": null
