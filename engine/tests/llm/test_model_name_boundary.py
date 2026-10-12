@@ -11,13 +11,14 @@ company memory:
   ``claude-``, the OpenRouter vendor prefixes, ``gpt-``, dated snapshot ids)
   on a non-comment line must be covered by a row of
   ``tests/fixtures/llm/model_name_inventory.json`` with the same file and
-  literal — or lie in one of the two files allowed whole by exact path, the
-  role files the resolver reads and writes (``requirements.json``,
-  ``resolved.json``), or, since milestone 10's published contract, in the
-  snapshot it writes (``snapshot.json``), the measurement it reads
-  (``measured.json``, S4b6) or the contract's two examples and
-  protocol document (``contract/``): data and documentation no code takes a
-  model from; the resolver's code beside them is held to rows like any
+  literal — or lie in one of the files allowed whole by exact path: the role
+  file the resolver reads (``requirements.json``; 10a's ``resolved.json`` was
+  the second until the switch-over deleted it, slice S6), or, since milestone
+  10's published contract, in the snapshot it writes (``snapshot.json``), the
+  measurement it reads (``measured.json``, S4b6), the build copy of the decision
+  record it writes and the engine reads at run time (``table.json``, slice
+  S6) or the contract's two examples and protocol document (``contract/``):
+  data and documentation no code takes a model from; the resolver's code beside them is held to rows like any
   other file, docstrings included. Rows match by ``(file, literal)`` with multiplicity; their line is
   informational, so an edit elsewhere in a file does not break the test, but
   a second copy of an allowed name in the same file does;
@@ -72,15 +73,16 @@ MANIFEST = ENGINE_ROOT / "tests" / "fixtures" / "llm" / "model_name_inventory.js
 PURPOSES = frozenset(
     {"default", "adapter", "price", "snapshot", "placeholder", "label", "doc", "voice"}
 )
-# The two files the brief allows whole: the requirements and the resolved table;
-# and the contract's data: the snapshot, the two examples, the protocol document;
-# and the measurement the resolver reads (milestone 10, S4b6): written by
-# scripts/derive_thresholds.py only, checked whole by test_derive_thresholds.
+# The file the brief allows whole: the requirements (10a's resolved table, the
+# second, is deleted since the switch-over); and the contract's data: the
+# snapshot, the decision record's build copy, the two examples, the protocol
+# document; and the measurement the resolver reads (milestone 10, S4b6):
+# written by scripts/derive_thresholds.py only, checked whole by test_derive_thresholds.
 ROLE_FILES = (
     "zylch/llm/roles/requirements.json",
-    "zylch/llm/roles/resolved.json",
     "zylch/llm/roles/snapshot.json",
     "zylch/llm/roles/measured.json",
+    "zylch/llm/roles/table.json",
     "zylch/llm/roles/contract/table.example.json",
     "zylch/llm/roles/contract/snapshot.example.json",
     "zylch/llm/roles/contract/protocol-v2.md",

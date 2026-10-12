@@ -355,7 +355,7 @@ export interface ZylchAPI {
       pricing_fault: boolean
       billing_supported: boolean
       billing_reason?: string
-      model_policy?: { provider: string; preset: string; model: string; roles: Record<string, string>; quality_status: string; credential_configured: boolean }
+      model_policy?: { provider: string; preset: string; model: string | null; roles: Record<string, string | null>; paused?: Record<string, string>; quality_status: string; credential_configured: boolean }
       remaining_usd: number
       exceeded: boolean
       paused: boolean
@@ -661,8 +661,8 @@ export interface ZylchAPI {
     openForProfile: (id: string) => Promise<{ ok: boolean }>
   }
   narration: {
-    summarize: (lines: string[], context?: string) => Promise<{ text: string }>
-    predict: (message: string, context?: string) => Promise<{ text: string }>
+    summarize: (lines: string[], context?: string) => Promise<{ text: string; paused?: string }>
+    predict: (message: string, context?: string) => Promise<{ text: string; paused?: string }>
   }
   settings: {
     schema: () => Promise<{

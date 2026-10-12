@@ -6,7 +6,9 @@ literals below are the rates every model billed today was billed at before
 the table existed: the contract that the upgrade changes no profile's price.
 
 Since milestone 10 slice S3 the source is the model snapshot (brief D5), and
-10a's allowlist answers only for an id no snapshot prices. Every price here is
+since the switch-over (slice S6) the only one: 10a's allowlist and resolved
+table are gone, and the models the table ranks are those of the table in
+force (the fixture table the root conftest puts in force). Every price here is
 read from the committed fixture snapshot as 10a billed it (`billed_snapshot`:
 the 2026-10-02 capture, whose rates are 10a's for every id below but two
 OpenRouter rates, put back), never from the build copy. The direct rates and
@@ -23,7 +25,7 @@ import pytest
 
 from zylch.llm import budget_pricing, openrouter_pricing, usage
 from zylch.llm.budget_pricing import BudgetError, request_bound
-from zylch.llm.roles import catalogue, prices
+from zylch.llm.roles import catalogue, prices, table
 
 ROLES = Path(prices.__file__).resolve().parent
 D = Decimal
@@ -66,14 +68,20 @@ def _json(name):
     return json.loads((ROLES / name).read_text(encoding="utf-8"))
 
 
-def _resolved_rows():
-    """``(preset, role, kind, row)`` for every main, fallback and mrcall row."""
-    for preset, body in _json("resolved.json")["presets"].items():
+def _ranked_rows():
+    """``(preset, role, column, entry)`` for every entry of both rankings of
+    the table in force (the fixture table: `model_table_fixture`)."""
+    for preset, body in table.document()["presets"].items():
         for role, record in body["roles"].items():
-            yield preset, role, "main", record
-            for kind in ("anthropic_fallback", "mrcall"):
-                if record.get(kind):
-                    yield preset, role, kind, record[kind]
+            for column in ("ranking", "anthropic_ranking"):
+                for entry in record[column]:
+                    yield preset, role, column, entry
+
+
+def _snapshot_rate(snapshot, model, transport):
+    """`model`'s pair as the snapshot document itself states it (not through the source)."""
+    row = snapshot["direct" if transport == "direct" else "models"][model]
+    return D(row["pricing"]["input"]), D(row["pricing"]["output"])
 
 
 def _expected_hold(model, transport, max_tokens=1000):
@@ -98,12 +106,9 @@ def _bound(model, transport):
 
 @pytest.mark.parametrize("transport", ["direct", "openrouter"])
 def test_every_model_billed_today_is_priced_at_today_s_rate(transport):
-    allowlisted = {
-        m
-        for m, row in _json("requirements.json")["allowlist"].items()
-        if row["transport"] == transport
-    }
-    assert allowlisted == set(TODAY[transport])
+    # 10a's allowlist, which listed exactly these ids, is gone (slice S6, brief
+    # D1); the snapshot still prices every one of them at today's rate.
+    assert "allowlist" not in _json("requirements.json")
     for model, rate in TODAY[transport].items():
         assert prices.price(model, transport) == rate, model
         assert _bound(model, transport) == _expected_hold(model, transport), model
@@ -111,21 +116,21 @@ def test_every_model_billed_today_is_priced_at_today_s_rate(transport):
     assert {m: module[m] for m in TODAY[transport]} == TODAY[transport]
 
 
-def test_every_resolved_row_prices_a_request_on_its_transport():
+def test_every_ranked_model_prices_a_request_on_its_transport(snapshot_as_billed):
     seen = 0
-    for preset, role, kind, row in _resolved_rows():
-        where = (preset, role, kind)
-        pairs = [("openrouter", row["catalogue_id"])]
-        if row.get("direct_id"):
-            pairs.append(("direct", row["direct_id"]))
+    for preset, role, column, entry in _ranked_rows():
+        where = (preset, role, column)
+        pairs = [("openrouter", entry["id"])]
+        if entry.get("direct_id"):
+            pairs.append(("direct", entry["direct_id"]))
         for transport, model in pairs:
-            billed = TODAY[transport].get(model)
-            table = (D(str(row["price"]["input"])), D(str(row["price"]["output"])))
-            assert prices.price(model, transport) == (billed or table), where
+            stated = _snapshot_rate(snapshot_as_billed, model, transport)
+            assert prices.price(model, transport) == stated, where
+            assert TODAY[transport].get(model, stated) == stated, where  # 10a's rate where billed
             hold = _bound(model, transport)
             assert hold == _expected_hold(model, transport) and hold > 0, where
             seen += 1
-    assert seen >= 2 * 16 * 3  # both presets, sixteen roles, three rows each
+    assert seen >= 2 * 16 * 2  # both presets, sixteen roles, both rankings at least once each
 
 
 def test_table_picks_are_priced_at_the_table_s_price():
@@ -169,9 +174,7 @@ def _catalogue_form(direct_id):
 def test_direct_rates_equal_the_openrouter_anthropic_rates():
     """The brief's assumption 4: a direct id and its `anthropic/*` route cost the same."""
     pairs = {(d, _catalogue_form(d)) for d in prices.priced("direct")}
-    pairs |= {
-        (r["direct_id"], r["catalogue_id"]) for *_, r in _resolved_rows() if r.get("direct_id")
-    }
+    pairs |= {(e["direct_id"], e["id"]) for *_, e in _ranked_rows() if e.get("direct_id")}
     compared = 0
     for direct_id, catalogue_id in sorted(pairs):
         routed = prices.price(catalogue_id, "openrouter")
@@ -185,13 +188,13 @@ def _priced_row(i, o):
     return {"pricing": {"input": i, "output": o, "cache_read": None, "cache_write": None}}
 
 
-def test_the_snapshot_wins_and_the_allowlist_answers_only_for_what_no_snapshot_prices(
-    monkeypatch,
-):
+def test_only_a_snapshot_prices_an_id_whatever_10a_billed(monkeypatch):
     """Slice S3 replaced 10a's rule (the allowlist's billed price won over the
     table): an id a snapshot prices is priced by the snapshot, whatever the
-    allowlist billed; the allowlist answers, on its own transport, only for an
-    id no snapshot layer prices; the resolved table prices nothing."""
+    allowlist billed. Since the switch-over (slice S6, brief D1: the allowlist
+    and its frozen prices removed) nothing else prices an id: a requirements
+    file that still carried an allowlist, or a resolved table beside it, prices
+    nothing, so an id no snapshot layer lists is unpriced on every transport."""
     requirements = {
         "allowlist": {
             "vendor/both": {"transport": "openrouter", "price": {"input": "3", "output": "9"}},
@@ -218,22 +221,18 @@ def test_the_snapshot_wins_and_the_allowlist_answers_only_for_what_no_snapshot_p
     }
     files = {"requirements.json": requirements, "resolved.json": resolved}
     monkeypatch.setattr(prices, "_load", lambda name: files[name])
-    prices._allowlist.cache_clear()
     catalogue.set_layers(layer, build=False)
-    try:
-        assert prices.price("vendor/both", "openrouter") == (D("7"), D("70"))
-        assert prices.price("claude-both", "direct") == (D("4"), D("8"))
-        assert prices.price("vendor/only", "openrouter") == (D("0.5"), D("1"))
-        assert prices.price("vendor/only", "direct") is None
-        assert prices.price("anthropic/x", "openrouter") == (D("4"), D("8"))
-        assert prices.price("vendor/table-row-only", "openrouter") is None
-        assert dict(prices.priced("openrouter")) == {
-            "vendor/both": (D("7"), D("70")),
-            "anthropic/x": (D("4"), D("8")),
-            "vendor/only": (D("0.5"), D("1")),
-        }
-    finally:
-        prices._allowlist.cache_clear()
+    assert prices.price("vendor/both", "openrouter") == (D("7"), D("70"))
+    assert prices.price("claude-both", "direct") == (D("4"), D("8"))
+    # 10a billed it at 0.5/1; no snapshot lists it: unpriced (it was priced before S6).
+    assert prices.price("vendor/only", "openrouter") is None
+    assert prices.price("vendor/only", "direct") is None
+    assert prices.price("anthropic/x", "openrouter") == (D("4"), D("8"))
+    assert prices.price("vendor/table-row-only", "openrouter") is None
+    assert dict(prices.priced("openrouter")) == {
+        "vendor/both": (D("7"), D("70")),
+        "anthropic/x": (D("4"), D("8")),
+    }
 
 
 def test_usage_estimates_a_table_pick_at_its_table_price():
@@ -243,8 +242,8 @@ def test_usage_estimates_a_table_pick_at_its_table_price():
     assert usage.estimate_cost_usd("z-ai/glm-5.2", million) == pytest.approx(2.6)
     # Sonnet 5 at its own 2/10, not the sonnet family's 3/15.
     assert usage.estimate_cost_usd("claude-sonnet-5", million) == pytest.approx(12.0)
-    for _, _, _, row in _resolved_rows():
-        for transport, model in (("openrouter", row["catalogue_id"]), ("direct", row["direct_id"])):
+    for _, _, _, entry in _ranked_rows():
+        for transport, model in (("openrouter", entry["id"]), ("direct", entry["direct_id"])):
             if model:
                 i, o = prices.price(model, transport)
                 assert usage.estimate_cost_usd(model, million) == pytest.approx(float(i + o))

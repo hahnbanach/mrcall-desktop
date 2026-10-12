@@ -459,8 +459,8 @@ def _settle_from_raw(reservation, raw, receipt, settle) -> None:
 
 def make_llm_client(model: Optional[str] = None) -> LLMClient:
     """Resolve saved billing and model policy without credential-driven fallback."""
-    from zylch.auth import get_session
-    from .model_policy import profile_values, resolve_model, resolve_provider, policy_fingerprint
+    from .model_policy import client_fingerprint, credits_client, profile_values, resolve_model
+    from .model_policy import resolve_provider
 
     values = profile_values()
     provider = resolve_provider(values)
@@ -475,16 +475,9 @@ def make_llm_client(model: Optional[str] = None) -> LLMClient:
             api_key=key,
             model=selected_model,
         )
-        client._saved_policy_fingerprint = policy_fingerprint(values)
+        client._saved_policy_fingerprint = client_fingerprint(values)
         return client
-    session = get_session()
-    if session is None:
-        raise RuntimeError("Sign in to use the selected MrCall credits billing mode.")
-    client = LLMClient(transport="proxy", firebase_session=session, model=selected_model,
-                       proxy_base_url=str(values.get("MRCALL_PROXY_URL") or "https://zylch.mrcall.ai").strip(),
-                       billing_business_id=str(values.get("SMS_BUSINESS_ID") or "").strip())
-    client._saved_policy_fingerprint = policy_fingerprint(values)
-    return client
+    return credits_client(values, selected_model)
 
 
 def try_make_llm_client(model: Optional[str] = None) -> Optional[LLMClient]:

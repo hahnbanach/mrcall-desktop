@@ -9,6 +9,7 @@ from zylch.llm.openrouter_client import OpenRouterClient
 from zylch.llm.openrouter_pricing import request_bound, usage_cost
 MODEL = "z-ai/glm-5.2"  # an allowlisted OpenRouter model, billed at 0.6/2
 
+from .model_table_fixture import everything, serve
 from .test_model_policy_roles import expected
 
 
@@ -34,6 +35,8 @@ def test_saved_profile_wins_ambient_key(tmp_path, monkeypatch):
 
 
 def test_preserve_explicit_models_and_legacy_routing():
+    # Credits resolve from the served set (milestone 10 S6): a server serving all.
+    serve(everything())
     values = {"ANTHROPIC_API_KEY": "key", "ANTHROPIC_MODEL": "claude-opus-5"}
     assert resolve_provider(values) == "anthropic"
     assert resolve_model(values=values) == "claude-opus-5"
@@ -198,7 +201,8 @@ def test_real_factory_saved_explicit_provider_and_live_model(tmp_path, monkeypat
     path.write_text(base + "LLM_PROVIDER=anthropic\nLLM_MODEL_PRESET=balanced\n")
     second = make_llm_client()
     assert second.transport == "direct"
-    assert second.model == "claude-sonnet-5"
+    # The fixture table's pick (milestone 10 S6), no longer 10a's resolved.json.
+    assert second.model == expected("balanced", "CHAT", "anthropic")
     assert second._client.api_key == "fake-anthropic"
     second._client.close()
     path.write_text(base + "LLM_PROVIDER=mrcall\n")

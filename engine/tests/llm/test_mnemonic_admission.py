@@ -635,25 +635,14 @@ def _metered_client():
     The reservation, the quote validation and the billing-authorization row are
     the real ones; what is stubbed is the HTTP the proxy would do.
     """
-    from zylch.llm.bounded_proxy import PROTOCOL, digest, wire_request
+    from .proxy_fixtures import v2_quote
 
     llm = LLMClient(transport="direct", api_key="fake", model="claude-haiku-4-5")
     llm.transport = "proxy"
 
     def quote_for(request):
-        body = {
-            "protocol": PROTOCOL,
-            "currency": "USD",
-            "account_id": OWNER,
-            "model": request["model"],
-            "payload_hash": digest(wire_request(request)),
-            "business_id": "biz-test",
-            "tariff_version": "v1",
-            "credit_value_micro_usd": 100,
-            "max_credits": 10,
-            "max_debit_micro_usd": 1000,
-        }
-        return {**body, "quote_hash": digest(body)}
+        # The credits protocol v2 (milestone 10 S6): the quote names its snapshot.
+        return v2_quote(request, OWNER, "biz-test", credit=100, credits=10)
 
     llm._client.quote = quote_for
     llm._client.execute = Mock(side_effect=AssertionError("the proxy must not be reached"))

@@ -1,4 +1,17 @@
-"""Single-attempt MrCall debit contract; never replay inference to recover billing."""
+"""Single-attempt MrCall debit contract; never replay inference to recover billing.
+
+This engine speaks the credits protocol `mrcall-bounded-v2`
+(`roles/contract/protocol-v2.md`): ``"protocol": "mrcall-bounded-v2"`` beside
+``request`` in the quote and execute bodies (outside ``request``, so
+``payload_hash`` is computed as in v1; the server binds an execute replay to
+it) and ``?protocol=mrcall-bounded-v2`` on ``GET /capabilities``. The server
+answers v2 in the capabilities, the quote and the receipt, and the quote names
+the snapshot it priced with (``snapshot_version``), which the receipt repeats.
+A server that answers a marked call in another protocol (a v1 server) makes
+the engine pause with `UPDATE_SERVER`: it never falls back to v1. Released
+engines send no marker and keep v1 on the server.
+"""
+
 import hashlib
 import json
 import logging
@@ -12,60 +25,101 @@ from .response import REASONING
 
 logger = logging.getLogger(__name__)
 
-PROTOCOL = 'mrcall-bounded-v1'
-PREFIX = '/api/desktop/llm/bounded'
+PROTOCOL = "mrcall-bounded-v2"
+# What every released engine speaks; a reservation quoted under it before an
+# upgrade still settles from its stored v1 quote (`validate_receipt`).
+V1 = "mrcall-bounded-v1"
+PREFIX = "/api/desktop/llm/bounded"
+# The snapshot `version` a v2 quote names: a SHA-256, lowercase hex.
+SNAPSHOT_VERSION = re.compile(r"[0-9a-f]{64}")
+UPDATE_SERVER = (
+    "AI paused: update the billing server; it does not answer in the credits protocol "
+    "mrcall-bounded-v2 this engine speaks."
+)
+# A v2 capabilities answer that is not an object, or not in USD: a server fault,
+# not an old server (`roles/served.py` uses it for a bad model list too).
+MALFORMED = "AI paused: the MrCall billing server returned a malformed model catalogue."
 
 
 def digest(value):
-    return hashlib.sha256(json.dumps(value, sort_keys=True, separators=(',', ':'),
-                                    ensure_ascii=False, allow_nan=False).encode()).hexdigest()
+    return hashlib.sha256(
+        json.dumps(
+            value, sort_keys=True, separators=(",", ":"), ensure_ascii=False, allow_nan=False
+        ).encode()
+    ).hexdigest()
 
 
 def wire_request(request):
-    if request.get('service_tier', 'standard_only') != 'standard_only':
-        raise BudgetError('MrCall credits support standard pricing only.')
+    if request.get("service_tier", "standard_only") != "standard_only":
+        raise BudgetError("MrCall credits support standard pricing only.")
     # The server injects standard_only. All other features are validated there;
     # never silently drop caller options from the quoted/authorized payload.
-    return {key: value for key, value in request.items() if key != 'service_tier' and value is not None}
+    return {
+        key: value for key, value in request.items() if key != "service_tier" and value is not None
+    }
 
 
 def validate_quote(request, quote, owner):
     try:
         if not isinstance(quote, dict):
             raise ValueError()
-        if (quote['protocol'] != PROTOCOL or quote['currency'] != 'USD'
-                or quote['account_id'] != owner or quote['model'] != request['model']
-                or quote['payload_hash'] != digest(wire_request(request))
-                or not isinstance(quote['business_id'], str) or not quote['business_id']
-                or not isinstance(quote['tariff_version'], str) or not quote['tariff_version']):
+        if (
+            quote["protocol"] != PROTOCOL
+            or quote["currency"] != "USD"
+            or quote["account_id"] != owner
+            or quote["model"] != request["model"]
+            or quote["payload_hash"] != digest(wire_request(request))
+            or not isinstance(quote["business_id"], str)
+            or not quote["business_id"]
+            or not isinstance(quote["tariff_version"], str)
+            or not quote["tariff_version"]
+        ):
             raise ValueError()
-        for key in ('credit_value_micro_usd', 'max_credits', 'max_debit_micro_usd'):
+        for key in ("credit_value_micro_usd", "max_credits", "max_debit_micro_usd"):
             if type(quote[key]) is not int or quote[key] <= 0:
                 raise ValueError()
-        if quote['max_debit_micro_usd'] != quote['max_credits'] * quote['credit_value_micro_usd']:
+        if quote["max_debit_micro_usd"] != quote["max_credits"] * quote["credit_value_micro_usd"]:
             raise ValueError()
-        if quote['quote_hash'] != digest({k: v for k, v in quote.items() if k != 'quote_hash'}):
+        # v2: the quote names the snapshot it priced with; the receipt repeats it.
+        version = quote["snapshot_version"]
+        if not isinstance(version, str) or not SNAPSHOT_VERSION.fullmatch(version):
             raise ValueError()
-        return quote['max_debit_micro_usd']
+        if quote["quote_hash"] != digest({k: v for k, v in quote.items() if k != "quote_hash"}):
+            raise ValueError()
+        return quote["max_debit_micro_usd"]
     except (KeyError, ValueError, TypeError):
-        raise BudgetError('AI paused: MrCall returned an invalid debit quote.') from None
+        raise BudgetError("AI paused: MrCall returned an invalid debit quote.") from None
 
 
 def validate_receipt(reservation, quote, receipt):
+    """The settled debit, when `receipt` repeats every field of the stored
+    `quote` (a v2 receipt its ``protocol`` and ``snapshot_version`` too; a
+    reservation quoted in v1 before an upgrade settles against its v1 quote)
+    and its amounts stay within the reservation."""
     try:
         if not isinstance(receipt, dict) or any(receipt.get(k) != v for k, v in quote.items()):
             raise ValueError()
-        if (receipt['request_id'] != reservation.id
-                or receipt['authorized_max_debit_micro_usd'] != reservation.reserved_micro_usd):
+        if (
+            receipt["request_id"] != reservation.id
+            or receipt["authorized_max_debit_micro_usd"] != reservation.reserved_micro_usd
+        ):
             raise ValueError()
-        units, amount = receipt['credits'], receipt['debit_micro_usd']
-        if (type(units) is not int or type(amount) is not int or units < 0 or amount < 0
-                or units > quote['max_credits'] or amount > reservation.reserved_micro_usd
-                or amount != units * quote['credit_value_micro_usd']):
+        units, amount = receipt["credits"], receipt["debit_micro_usd"]
+        if (
+            type(units) is not int
+            or type(amount) is not int
+            or units < 0
+            or amount < 0
+            or units > quote["max_credits"]
+            or amount > reservation.reserved_micro_usd
+            or amount != units * quote["credit_value_micro_usd"]
+        ):
             raise ValueError()
         return amount
     except (KeyError, ValueError, TypeError):
-        raise BudgetError('AI paused: MrCall charge is unconfirmed; reservation retained.') from None
+        raise BudgetError(
+            "AI paused: MrCall charge is unconfirmed; reservation retained."
+        ) from None
 
 
 REASON = re.compile(r"[A-Za-z0-9 _.:/,'()-]{1,160}")
@@ -81,7 +135,7 @@ def server_reason(response):
         return None
     if not isinstance(body, dict):
         return None
-    for key in ('code', 'error', 'detail', 'message'):
+    for key in ("code", "error", "detail", "message"):
         value = body.get(key)
         if isinstance(value, str) and REASON.fullmatch(value.strip()):
             return value.strip()
@@ -90,49 +144,76 @@ def server_reason(response):
 
 class BoundedProxyClient:
     def __init__(self, proxy_base_url, firebase_session, *, http_client=None, business_id=None):
-        self.base = proxy_base_url.rstrip('/')
+        self.base = proxy_base_url.rstrip("/")
         self.session = firebase_session
         self.http = http_client
         self.business_id = business_id or None
 
     def _call(self, method, path, body=None, prefix=PREFIX):
-        token = getattr(self.session, 'id_token', None)
+        token = getattr(self.session, "id_token", None)
         if not isinstance(token, str) or not token:
-            raise BudgetError('Sign in again to check MrCall billing.')
+            raise BudgetError("Sign in again to check MrCall billing.")
+
         def send(client):
             response = client.request(
                 method, self.base + prefix + path, json=body, headers={"auth": token}
             )
             if response.status_code != 200:
-                hints = {401: 'Sign in again.', 402: 'Top up at dashboard.mrcall.ai/plan.',
-                         404: 'Update the billing server to support bounded credits.',
-                         409: 'Pricing or request state changed; check reservations before retrying.'}
+                hints = {
+                    401: "Sign in again.",
+                    402: "Top up at dashboard.mrcall.ai/plan.",
+                    404: "Update the billing server to support bounded credits.",
+                    409: "Pricing or request state changed; check reservations before retrying.",
+                }
                 # A refused quote reserved nothing; only execute/status can leave a hold.
-                default = ('Refused before any reservation.' if path in ('/quote', '/capabilities')
-                           else 'Request unconfirmed; check reservations.')
+                endpoint = path.split("?", 1)[0]
+                default = (
+                    "Refused before any reservation."
+                    if endpoint in ("/quote", "/capabilities")
+                    else "Request unconfirmed; check reservations."
+                )
                 reason = server_reason(response)
-                logger.warning(f'[billing] {method} {path} -> HTTP {response.status_code} '
-                               f'reason={reason or "absent"}')
-                raise BudgetError(f'MrCall billing HTTP {response.status_code}'
-                                  + (f' ({reason})' if reason else '') + '. '
-                                  + hints.get(response.status_code, default))
+                logger.warning(
+                    f"[billing] {method} {endpoint} -> HTTP {response.status_code} "
+                    f'reason={reason or "absent"}'
+                )
+                raise BudgetError(
+                    f"MrCall billing HTTP {response.status_code}"
+                    + (f" ({reason})" if reason else "")
+                    + ". "
+                    + hints.get(response.status_code, default)
+                )
             return response.json()
+
         try:
             if self.http is not None:
                 return send(self.http)
-            timeout = 5 if method == 'GET' else 180
-            request = (body or {}).get('request', {})
-            if path == '/execute' and request.get('model') == 'moonshotai/kimi-k3' and request.get('thinking') == {'type': 'adaptive'}:
+            timeout = 5 if method == "GET" else 180
+            request = (body or {}).get("request", {})
+            if (
+                path == "/execute"
+                and request.get("model") == "moonshotai/kimi-k3"
+                and request.get("thinking") == {"type": "adaptive"}
+            ):
                 timeout = 660
             with httpx.Client(timeout=timeout, follow_redirects=False) as client:
                 return send(client)
         except (httpx.HTTPError, ValueError):
-            raise BudgetError('MrCall request unconfirmed; any existing reservation remains.') from None
+            raise BudgetError(
+                "MrCall request unconfirmed; any existing reservation remains."
+            ) from None
 
     def capabilities(self):
-        result = self._call('GET', '/capabilities')
-        if not isinstance(result, dict) or result.get('protocol') != PROTOCOL or result.get('currency') != 'USD':
-            raise BudgetError('Update the billing server to support bounded credits.')
+        """The server's v2 capabilities; an answer in another protocol pauses
+        with `UPDATE_SERVER`, one that is not an object or not in USD with
+        `MALFORMED`. The model list is read by `roles/served.py`."""
+        result = self._call("GET", "/capabilities?protocol=" + PROTOCOL)
+        if not isinstance(result, dict):
+            raise BudgetError(MALFORMED)
+        if result.get("protocol") != PROTOCOL:
+            raise BudgetError(UPDATE_SERVER)
+        if result.get("currency") != "USD":
+            raise BudgetError(MALFORMED)
         return result
 
     def check_account(self):
@@ -145,39 +226,51 @@ class BoundedProxyClient:
             raise BudgetError("MrCall credits are exhausted. Top up at dashboard.mrcall.ai/plan.")
 
     def quote(self, request):
-        body = {'request': wire_request(request)}
+        body = {"protocol": PROTOCOL, "request": wire_request(request)}
         if self.business_id:
-            body['business_id'] = self.business_id
-        quote = self._call('POST', '/quote', body)
-        if self.business_id and quote.get('business_id') != self.business_id:
-            raise BudgetError('MrCall billing business changed; request refused.')
+            body["business_id"] = self.business_id
+        quote = self._call("POST", "/quote", body)
+        if not isinstance(quote, dict):
+            raise BudgetError("AI paused: MrCall returned an invalid debit quote.")
+        if self.business_id and quote.get("business_id") != self.business_id:
+            raise BudgetError("MrCall billing business changed; request refused.")
+        if quote.get("protocol") != PROTOCOL:
+            raise BudgetError(UPDATE_SERVER)  # a v1 answer: never fall back to v1
         return quote
 
     def execute(self, request, quote, reservation):
         body = {
-            'request': wire_request(request), 'quote': quote, 'request_id': reservation.id,
-            'max_debit_micro_usd': reservation.reserved_micro_usd,
+            "protocol": PROTOCOL,
+            "request": wire_request(request),
+            "quote": quote,
+            "request_id": reservation.id,
+            "max_debit_micro_usd": reservation.reserved_micro_usd,
         }
         if self.business_id:
-            body['business_id'] = self.business_id
-        result = self._call('POST', '/execute', body)
-        if not isinstance(result, dict) or result.get('state') != 'settled':
-            raise BudgetError('MrCall request unresolved; reservation retained. Check its status.')
-        message = result.get('message')
-        if not isinstance(message, dict) or not isinstance(message.get('content'), list):
-            raise BudgetError('MrCall response unavailable; check billing status without repeating the request.')
-        blocks = message['content']
+            body["business_id"] = self.business_id
+        result = self._call("POST", "/execute", body)
+        if not isinstance(result, dict) or result.get("state") != "settled":
+            raise BudgetError("MrCall request unresolved; reservation retained. Check its status.")
+        message = result.get("message")
+        if not isinstance(message, dict) or not isinstance(message.get("content"), list):
+            raise BudgetError(
+                "MrCall response unavailable; check billing status without repeating the request."
+            )
+        blocks = message["content"]
         # Reasoning blocks come back to be replayed within a tool loop (D3).
         if any(
             not isinstance(b, dict) or b.get("type") not in ("text", "tool_use") + REASONING
             for b in blocks
         ):
-            raise BudgetError('MrCall response incomplete; reservation retained.')
-        return SimpleNamespace(content=[SimpleNamespace(**b) for b in blocks],
-                               model=message.get('model'), stop_reason=message.get('stop_reason'),
-                               original_stop_reason=message.get('original_stop_reason', message.get('stop_reason')),
-                               validation_error=message.get('validation_error'),
-                               usage=message.get('usage')), result.get('receipt')
+            raise BudgetError("MrCall response incomplete; reservation retained.")
+        return SimpleNamespace(
+            content=[SimpleNamespace(**b) for b in blocks],
+            model=message.get("model"),
+            stop_reason=message.get("stop_reason"),
+            original_stop_reason=message.get("original_stop_reason", message.get("stop_reason")),
+            validation_error=message.get("validation_error"),
+            usage=message.get("usage"),
+        ), result.get("receipt")
 
     def status(self, request_id):
-        return self._call('GET', '/status/' + request_id)
+        return self._call("GET", "/status/" + request_id)

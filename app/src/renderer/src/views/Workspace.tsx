@@ -7,7 +7,7 @@ import ReactMarkdown from 'react-markdown'
 import { useConversations, type Approval } from '../store/conversations'
 import { useTasks } from '../store/tasks'
 import { useThread } from '../store/thread'
-import { useNarration } from '../hooks/useNarration'
+import { narrationReply, useNarration } from '../hooks/useNarration'
 import ChatComposer, { type ChatComposerTaskContext } from '../components/ChatComposer'
 import ThreadPanel from '../components/ThreadPanel'
 import Icon from '../components/Icon'
@@ -447,7 +447,7 @@ export default function Workspace({ onGoToTasks }: Props = {}) {
       const historySnapshot = binding ? [] : active.history.map((m) => ({ role: m.role, content: m.content }))
       if (!binding) {
         window.zylch.narration.predict(text, '').then((r) => {
-          const t = (r && typeof r.text === 'string' ? r.text.trim() : '') || ''
+          const t = narrationReply(r)  // a paused NARRATION job shows its reason
           if (current() && t) setNarrationSeed(t)
         }).catch(() => {})
       }

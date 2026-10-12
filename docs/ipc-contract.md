@@ -404,8 +404,8 @@ auth | unreachable | tls | folder | invalid | secret | unknown | primary`;
 
 | Method | Declared parameters | Returns |
 |---|---|---|
-| `narration.predict` | `message?, context=""` | {"text": str} |
-| `narration.summarize` | `lines?, context=""` | {"text": str} |
+| `narration.predict` | `message?, context=""` | {"text": str, "paused"?: str} |
+| `narration.summarize` | `lines?, context=""` | {"text": str, "paused"?: str} |
 
 **`qonto.*`**
 
@@ -820,8 +820,15 @@ caller can log what it retired. Missing `draft_id` is a `-32602`.
 
 Free model discovery for the requested or saved billing provider. Returns
 `{provider, available, models: [{id, label, provider}], reason}`. MrCall mode
-uses authenticated server capabilities; personal OpenRouter mode uses the
-locally priced allowlist. Missing/older server catalogs return unavailable,
+uses the authenticated server's v2 capabilities (`?protocol=mrcall-bounded-v2`,
+read at most once an hour); personal modes propose the rankings of the model
+table in force (the published `table.json` the engine downloads daily, else
+its build copy): the direct ids on a personal Anthropic key, the catalogue ids
+on OpenRouter. No excluded model family is offered. A model the profile saved
+(base model, `DEFAULT_MODEL` or a role override) that can run on the provider
+stays listed after them. Missing/older (v1) or malformed server catalogs, or
+one that serves no model, and a personal catalog with no valid model table in
+force, return unavailable with the reason,
 without altering saved model choices or falling back to another provider.
 The renderer fetches on provider/settings reload changes and invalidates stale
 catalogs on account or connection changes; reopen Settings to fetch again.
@@ -1420,7 +1427,11 @@ action from the user's message (the immediate placeholder, before
 stderr-driven narration kicks in); `summarize` condenses recent sidecar
 stderr lines with the configured engine model. Both **never raise** — any failure, including
 the no-argument call, returns `{"text": ""}`, which is why both
-parameters are optional. Output is first-person Italian.
+parameters are optional. Output is first-person Italian. When the
+NARRATION role is paused on the profile's billing choice (no Anthropic
+model ranked for it on a personal Anthropic key, or none of its ranked
+models served on MrCall credits), the reply adds `paused`: the message
+naming the role and why (`engine/zylch/llm/role_pause.py`).
 
 ### `usage.today()`
 
@@ -1444,6 +1455,14 @@ Today's LLM spend for the active profile, since UTC midnight:
 
 `billing_reason` may provide details when a transport is unavailable. `model_policy` reports the saved
 provider, preset and effective role models, including unmeasured GLM quality.
+A role paused on the billing choice reads as null in `model_policy.roles`,
+and `model_policy.paused` (`{MODEL_<ROLE>: message}`, empty when none)
+gives the message naming it and why, the same for an empty Anthropic
+ranking on a personal key and an unserved role on MrCall credits. The
+message ends with what the user can do: choose a model for the job in
+Settings when Settings has a field for it (`roles/table.py` `SETTINGS_ROLES`),
+else choose the custom preset with a default model the billing choice runs,
+or another billing choice.
 `usage.reconcile(cursor?)` checks up to ten outstanding MrCall receipts without
 paid inference and returns `recovered`, `unresolved`, `message` and `next_cursor`.
 See [daily spending contract](../engine/docs/features/daily-llm-budget.md).

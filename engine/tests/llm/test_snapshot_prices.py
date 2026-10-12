@@ -121,18 +121,17 @@ def test_the_fixture_is_the_capture_s_snapshot_and_passes_the_gates():
 
 
 @pytest.fixture
-def successor_is_the_pick(price_snapshot, monkeypatch):
-    """A newer Sonnet in the snapshot, and 10a's table picking it wherever it
-    picked Sonnet 5.5 (the pick path stays 10a's until the switch-over)."""
+def successor_is_the_pick(price_snapshot):
+    """A newer Sonnet in the snapshot, and the table in force ranking it wherever
+    it ranked Sonnet 5.5 (since the switch-over, slice S6, the rankings of
+    `table.json`: here the fixture table the root conftest puts in force, as a
+    published refresh would replace it; 10a's `resolved.json` is no pick path)."""
     newer = fx.successor(price_snapshot)
     catalogue.set_layers(newer, build=False)
-    text = json.dumps(table._load("resolved.json"))
+    text = json.dumps(table.document())
     text = text.replace(f'"{fx.SONNET}"', f'"{fx.SUCCESSOR}"')
     text = text.replace('"claude-sonnet-5-5"', f'"{fx.SUCCESSOR_DIRECT}"')
-    resolved, real = json.loads(text), table._load
-    monkeypatch.setattr(
-        table, "_load", lambda name: resolved if name == "resolved.json" else real(name)
-    )
+    table.set_table(json.loads(text))  # the root conftest puts the fixture back after
     return newer
 
 
@@ -226,11 +225,10 @@ def test_direct_prices_equal_the_anthropic_endpoint_s(price_snapshot):
         assert PRICES[direct_id] == listed, direct_id
         compared += 1
     assert compared == 13
-    # The eleven direct ids billed before the snapshot keep their rate.
-    billed = requirements()["allowlist"]
-    for model, row in billed.items():
-        if row["transport"] == "direct":
-            assert PRICES[model] == (D(row["price"]["input"]), D(row["price"]["output"])), model
+    # The eleven direct ids billed before the snapshot keep their rate (10a's
+    # allowlist, which billed them, went at the switch-over: `fx.BILLED_10A_DIRECT`).
+    for model, (i, o) in fx.BILLED_10A_DIRECT.items():
+        assert PRICES[model] == (D(i), D(o)), model
 
 
 # ─── A dated snapshot settles as its alias ────────────────────────────
@@ -272,9 +270,10 @@ def test_the_response_model_is_the_requested_id_or_its_dated_snapshot(requested,
 
 
 def test_a_dated_direct_id_is_priced_as_its_alias(price_snapshot):
-    # Not one of 10a's allowlisted dated ids: only the alias rule prices it.
+    # Not one of the dated ids 10a billed, and no allowlist since the switch-over:
+    # only the alias rule prices it.
     dated = "claude-sonnet-5-5-20260928"
-    assert dated not in requirements()["allowlist"]
+    assert dated not in fx.BILLED_10A_DIRECT and "allowlist" not in requirements()
     assert PRICES[dated] == PRICES["claude-sonnet-5-5"] == (D(2), D(10))
     request = {"model": dated, "max_tokens": 64, "messages": MESSAGES}
     assert direct_bound(request, "direct") == _direct_hold(request, D(2), D(10))

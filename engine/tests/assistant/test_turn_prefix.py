@@ -23,6 +23,7 @@ from types import SimpleNamespace
 
 import pytest
 
+from tests.llm import model_table_fixture as fixture
 from zylch.assistant import core
 from zylch.llm import client as client_mod
 from zylch.llm import request_shape
@@ -86,6 +87,10 @@ def chat(tmp_path, monkeypatch):
     monkeypatch.setenv("OWNER_ID", "account")
     monkeypatch.setenv("LLM_DAILY_BUDGET_USD", "5")
     monkeypatch.delenv("ZYLCH_PROFILE_DIR", raising=False)
+    # The profile has no saved provider and no key: MrCall credits, whose chat
+    # model the agent's selector resolves from the billing server's served set
+    # (milestone 10 S6), here one serving every ranked model, already read.
+    fixture.serve(fixture.everything())
     database.dispose_engine()
     database.Base.metadata.create_all(
         database.get_engine(), tables=[LlmReservation.__table__, LlmUsage.__table__]

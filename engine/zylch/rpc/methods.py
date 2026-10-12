@@ -17,6 +17,7 @@ from collections import OrderedDict
 from datetime import datetime, timezone
 from typing import Any, Awaitable, Callable, Dict, Optional
 
+from zylch.llm.role_pause import narration_failed
 from zylch.qonto.task_access import desktop_task_rpc, ordinary_tasks
 from zylch.rpc.qonto import METHODS as _QONTO_METHODS
 
@@ -1686,9 +1687,8 @@ async def narration_summarize(
         text = text.strip().strip("\"'").strip()
         logger.debug(f"[rpc] narration.summarize -> {text!r}")
         return {"text": text}
-    except Exception as e:
-        logger.warning(f"[rpc] narration.summarize failed: {e}")
-        return {"text": ""}
+    except Exception as e:  # a paused NARRATION role says so (role_pause.py)
+        return narration_failed("summarize", e, logger)
 
 
 # ─── Emails ──────────────────────────────────────────────────
@@ -2082,9 +2082,8 @@ async def narration_predict(
 
         logger.debug(f"[rpc] narration.predict -> {cleaned!r}")
         return {"text": cleaned}
-    except Exception as e:
-        logger.warning(f"[rpc] narration.predict failed: {e}")
-        return {"text": ""}
+    except Exception as e:  # a paused NARRATION role says so (role_pause.py)
+        return narration_failed("predict", e, logger)
 
 
 # ─── Settings ────────────────────────────────────────────────

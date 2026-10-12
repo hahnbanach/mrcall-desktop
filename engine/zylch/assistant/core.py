@@ -17,12 +17,8 @@ from ..llm.response import assistant_blocks, without_reasoning
 from zylch.qonto import history as finance_history
 from zylch.qonto.logging import install as install_finance_logging, tool_event
 
-from .budget import (
-    PROMPT_TOKEN_BUDGET,
-    TOOL_RESULT_MAX_CHARS,
-    bound_tool_result,
-    check_prompt_budget,
-)
+from .budget import PROMPT_TOKEN_BUDGET, TOOL_RESULT_MAX_CHARS
+from .budget import bound_tool_result, check_prompt_budget
 from .models import ModelSelector
 from .prompts import get_system_prompt_base
 from .transcript import turn_context, user_turn, with_history_cache
