@@ -419,10 +419,21 @@
             "role": null,
             "spent_usd": "0.000665",
             "why": "pick of economy / SYNC_ANALYSIS / ranking"
+          },
+          {
+            "at": "2026-10-12T18:05:23Z",
+            "bound_usd": "2",
+            "check": "SYNC_ANALYSIS on xiaomi/mimo-v2.6-flash",
+            "kind": "measure",
+            "model": "xiaomi/mimo-v2.6-flash",
+            "outcome": "SYNC_ANALYSIS: failed",
+            "role": "SYNC_ANALYSIS",
+            "spent_usd": "0.001951",
+            "why": "pick of economy / SYNC_ANALYSIS / ranking"
           }
         ],
         "opened_at": "2026-10-12T17:44:44Z",
-        "reserved_usd": "2.281819",
+        "reserved_usd": "0.28377",
         "run": "2026-10-12T17:43:39Z",
         "settled_at": null,
         "spent_usd": null
