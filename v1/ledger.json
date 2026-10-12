@@ -111,10 +111,21 @@
             "role": "NARRATION",
             "spent_usd": "0.007275",
             "why": "pick of balanced / NARRATION / anthropic_ranking"
+          },
+          {
+            "at": "2026-10-12T17:48:29Z",
+            "bound_usd": "0.2",
+            "check": "smoke inclusionai/ling-3.0-flash-vl",
+            "kind": "smoke",
+            "model": "inclusionai/ling-3.0-flash-vl",
+            "outcome": "passed",
+            "role": null,
+            "spent_usd": "0.000012",
+            "why": "pick of economy / MEMORY_EXTRACT / ranking"
           }
         ],
         "opened_at": "2026-10-12T17:44:44Z",
-        "reserved_usd": "0.454865",
+        "reserved_usd": "0.254877",
         "run": "2026-10-12T17:43:39Z",
         "settled_at": null,
         "spent_usd": null
