@@ -1,0 +1,640 @@
+{
+ "summary": {
+  "cells": 4,
+  "leaked_key_in_logs": false,
+  "env_files_left": [],
+  "mismatched_cells": [],
+  "crashed": [],
+  "failed_checks": {}
+ },
+ "versions": {
+  "published_table.json": "f18475619e51a2f7b46a2ea4f5465af860ee5ac223170e4880fedb44bbf7f369",
+  "published_snapshot.json": "571b55d2d392fbc15cd239e4844bea4b29d0333acff94a467a412b3a8dd01cf3",
+  "build_table.json": "304ab3b7389d21be202d1a3178ecef145b4c24c5da83067db334a3b264fa2a40",
+  "build_snapshot.json": "b3196ae202a7cc190cbf6cc0e3ca230fa26e7b57d127ddb15fd981e763070a8b"
+ },
+ "servers": {
+  "downloaded": {
+   "all": [
+    "claude-sonnet-5-5 (anthropic)",
+    "claude-opus-5-5 (anthropic)",
+    "claude-sonnet-4-5 (anthropic)",
+    "claude-sonnet-5 (anthropic)",
+    "anthropic/claude-sonnet-5.5 (openrouter)",
+    "qwen/qwen3.8-max-0902 (openrouter)",
+    "z-ai/glm-5.3 (openrouter)",
+    "moonshotai/kimi-k3 (openrouter)",
+    "inclusionai/ling-3.0-flash-vl (openrouter)",
+    "deepseek/deepseek-v4-flash (openrouter)",
+    "inclusionai/ling-3.0-flash-fin (openrouter)",
+    "z-ai/glm-5.3-flash (openrouter)",
+    "openai/gpt-6-luna (openrouter)",
+    "xiaomi/mimo-v2.6-flash (openrouter)",
+    "xiaomi/mimo-v2.6-pro (openrouter)",
+    "inclusionai/ling-3.0-flash (openrouter)",
+    "google/gemini-3.8-flash (openrouter)",
+    "qwen/qwen3.8-2.4t-a95b (openrouter)",
+    "openai/gpt-6.1-sol (openrouter)",
+    "anthropic/claude-opus-5.5 (openrouter)",
+    "openai/gpt-6-sol (openrouter)",
+    "inception/mercury-2.5 (openrouter)",
+    "anthropic/claude-sonnet-4.5 (openrouter)",
+    "upstage/solar-pro4 (openrouter)",
+    "mistralai/ministral-8b-2512 (openrouter)",
+    "anthropic/claude-sonnet-5 (openrouter)"
+   ],
+   "some": [
+    "anthropic/claude-sonnet-5.5 (openrouter)",
+    "qwen/qwen3.8-max-0902 (openrouter)",
+    "z-ai/glm-5.3 (openrouter)",
+    "moonshotai/kimi-k3 (openrouter)",
+    "deepseek/deepseek-v4-flash (openrouter)",
+    "inclusionai/ling-3.0-flash-fin (openrouter)",
+    "z-ai/glm-5.3-flash (openrouter)",
+    "openai/gpt-6-luna (openrouter)",
+    "xiaomi/mimo-v2.6-flash (openrouter)",
+    "xiaomi/mimo-v2.6-pro (openrouter)",
+    "inclusionai/ling-3.0-flash (openrouter)",
+    "google/gemini-3.8-flash (openrouter)",
+    "qwen/qwen3.8-2.4t-a95b (openrouter)",
+    "openai/gpt-6.1-sol (openrouter)",
+    "anthropic/claude-opus-5.5 (openrouter)",
+    "openai/gpt-6-sol (openrouter)",
+    "inception/mercury-2.5 (openrouter)",
+    "anthropic/claude-sonnet-4.5 (openrouter)",
+    "upstage/solar-pro4 (openrouter)",
+    "mistralai/ministral-8b-2512 (openrouter)",
+    "anthropic/claude-sonnet-5 (openrouter)"
+   ],
+   "none": [
+    "vendor/unranked-model-1 (openrouter)"
+   ]
+  }
+ },
+ "cells": [
+  {
+   "scenario": "downloaded",
+   "profile": "ac10-downloaded-openrouter-economy",
+   "provider": "openrouter",
+   "preset": "economy",
+   "server": null,
+   "explicit": null,
+   "in_force": {
+    "sources": {
+     "snapshot": "downloaded",
+     "table": "downloaded"
+    },
+    "table": "f18475619e51a2f7b46a2ea4f5465af860ee5ac223170e4880fedb44bbf7f369",
+    "snapshot": "571b55d2d392fbc15cd239e4844bea4b29d0333acff94a467a412b3a8dd01cf3"
+   },
+   "roles": {
+    "MNEMONIC": {
+     "expected": "openai/gpt-6.1-sol",
+     "actual": "openai/gpt-6.1-sol",
+     "ok": true
+    },
+    "MEMORY_EXTRACT": {
+     "expected": "inclusionai/ling-3.0-flash",
+     "actual": "inclusionai/ling-3.0-flash",
+     "ok": true
+    },
+    "MEMORY_MERGE": {
+     "expected": "openai/gpt-6.1-sol",
+     "actual": "openai/gpt-6.1-sol",
+     "ok": true
+    },
+    "TASK_DETECTION": {
+     "expected": "mistralai/ministral-8b-2512",
+     "actual": "mistralai/ministral-8b-2512",
+     "ok": true
+    },
+    "REANALYZE": {
+     "expected": "inclusionai/ling-3.0-flash-vl",
+     "actual": "inclusionai/ling-3.0-flash-vl",
+     "ok": true
+    },
+    "DEDUP": {
+     "expected": "inclusionai/ling-3.0-flash-vl",
+     "actual": "inclusionai/ling-3.0-flash-vl",
+     "ok": true
+    },
+    "REPLY_NEED": {
+     "expected": "inclusionai/ling-3.0-flash-vl",
+     "actual": "inclusionai/ling-3.0-flash-vl",
+     "ok": true
+    },
+    "INTENT": {
+     "expected": "inclusionai/ling-3.0-flash-vl",
+     "actual": "inclusionai/ling-3.0-flash-vl",
+     "ok": true
+    },
+    "CHAT": {
+     "expected": "anthropic/claude-sonnet-5.5",
+     "actual": "anthropic/claude-sonnet-5.5",
+     "ok": true
+    },
+    "TASK_SOLVE": {
+     "expected": "anthropic/claude-sonnet-5.5",
+     "actual": "anthropic/claude-sonnet-5.5",
+     "ok": true
+    },
+    "TRAIN": {
+     "expected": "inclusionai/ling-3.0-flash-vl",
+     "actual": "inclusionai/ling-3.0-flash-vl",
+     "ok": true
+    },
+    "COMPACTION": {
+     "expected": "inclusionai/ling-3.0-flash-vl",
+     "actual": "inclusionai/ling-3.0-flash-vl",
+     "ok": true
+    },
+    "SYNC_ANALYSIS": {
+     "expected": "deepseek/deepseek-v4-flash",
+     "actual": "deepseek/deepseek-v4-flash",
+     "ok": true
+    },
+    "WEB_SEARCH": {
+     "expected": "inclusionai/ling-3.0-flash",
+     "actual": "inclusionai/ling-3.0-flash",
+     "ok": true
+    },
+    "CORRECTION_LEARNING": {
+     "expected": "inclusionai/ling-3.0-flash-fin",
+     "actual": "inclusionai/ling-3.0-flash-fin",
+     "ok": true
+    },
+    "NARRATION": {
+     "expected": "inception/mercury-2.5",
+     "actual": "inception/mercury-2.5",
+     "ok": true
+    }
+   },
+   "settings_paused": [],
+   "failed_checks": [],
+   "paid": {
+    "role": "TASK_DETECTION",
+    "model": "mistralai/ministral-8b-2512",
+    "transport": "openrouter",
+    "bound_usd": 0.001023,
+    "answer": "Understood. **Ready.**",
+    "answered_by": "mistralai/ministral-8b-2512",
+    "stop_reason": "end_turn",
+    "ledger": {
+     "usage": [
+      {
+       "model": "mistralai/ministral-8b-2512",
+       "transport": "openrouter",
+       "call_site": "ac10.task_detection",
+       "est_cost_usd": 9e-06,
+       "input_tokens": 52,
+       "output_tokens": 7
+      }
+     ],
+     "reservations": [
+      {
+       "model": "mistralai/ministral-8b-2512",
+       "reserved_usd": 0.001023,
+       "settled": true
+      }
+     ],
+     "budget": {
+      "spent_usd": 9e-06,
+      "budget_usd": 0.3,
+      "exceeded": false,
+      "reserved_usd": 0.0,
+      "remaining_usd": 0.299991,
+      "pricing_fault": false,
+      "resets_at": "2026-10-13T00:00:00Z",
+      "paused": false,
+      "stale_holds": 0,
+      "stale_holds_usd": 0.0
+     }
+    }
+   }
+  },
+  {
+   "scenario": "downloaded",
+   "profile": "ac10-downloaded-anthropic-economy",
+   "provider": "anthropic",
+   "preset": "economy",
+   "server": null,
+   "explicit": null,
+   "in_force": {
+    "sources": {
+     "snapshot": "downloaded",
+     "table": "downloaded"
+    },
+    "table": "f18475619e51a2f7b46a2ea4f5465af860ee5ac223170e4880fedb44bbf7f369",
+    "snapshot": "571b55d2d392fbc15cd239e4844bea4b29d0333acff94a467a412b3a8dd01cf3"
+   },
+   "roles": {
+    "MNEMONIC": {
+     "expected": "claude-sonnet-5",
+     "actual": "claude-sonnet-5",
+     "ok": true
+    },
+    "MEMORY_EXTRACT": {
+     "expected": "claude-sonnet-5",
+     "actual": "claude-sonnet-5",
+     "ok": true
+    },
+    "MEMORY_MERGE": {
+     "expected": "claude-sonnet-5",
+     "actual": "claude-sonnet-5",
+     "ok": true
+    },
+    "TASK_DETECTION": {
+     "expected": "claude-sonnet-5-5",
+     "actual": "claude-sonnet-5-5",
+     "ok": true
+    },
+    "REANALYZE": {
+     "expected": "claude-sonnet-5-5",
+     "actual": "claude-sonnet-5-5",
+     "ok": true
+    },
+    "DEDUP": {
+     "expected": "claude-sonnet-5-5",
+     "actual": "claude-sonnet-5-5",
+     "ok": true
+    },
+    "REPLY_NEED": {
+     "expected": "claude-sonnet-5-5",
+     "actual": "claude-sonnet-5-5",
+     "ok": true
+    },
+    "INTENT": {
+     "expected": "claude-sonnet-5-5",
+     "actual": "claude-sonnet-5-5",
+     "ok": true
+    },
+    "CHAT": {
+     "expected": "claude-sonnet-5-5",
+     "actual": "claude-sonnet-5-5",
+     "ok": true
+    },
+    "TASK_SOLVE": {
+     "expected": "claude-sonnet-5-5",
+     "actual": "claude-sonnet-5-5",
+     "ok": true
+    },
+    "TRAIN": {
+     "expected": "claude-sonnet-5-5",
+     "actual": "claude-sonnet-5-5",
+     "ok": true
+    },
+    "COMPACTION": {
+     "expected": "claude-sonnet-5-5",
+     "actual": "claude-sonnet-5-5",
+     "ok": true
+    },
+    "SYNC_ANALYSIS": {
+     "expected": "claude-sonnet-5-5",
+     "actual": "claude-sonnet-5-5",
+     "ok": true
+    },
+    "WEB_SEARCH": {
+     "expected": "claude-sonnet-5-5",
+     "actual": "claude-sonnet-5-5",
+     "ok": true
+    },
+    "CORRECTION_LEARNING": {
+     "expected": "claude-sonnet-5-5",
+     "actual": "claude-sonnet-5-5",
+     "ok": true
+    },
+    "NARRATION": {
+     "expected": "PAUSED",
+     "actual": "PAUSED: AI paused: no Anthropic model for role NARRATION: none of the models ranked for it under the economy preset is an Anthropic model, so a personal Anthropic key cannot run it. In Settings, choose the custom preset with an Anthropic model as the default model, or another billing choice.",
+     "ok": true
+    }
+   },
+   "settings_paused": [
+    "MODEL_NARRATION"
+   ],
+   "failed_checks": [],
+   "paid": {
+    "role": "MEMORY_EXTRACT",
+    "model": "claude-sonnet-5",
+    "transport": "direct",
+    "bound_usd": 0.03258,
+    "error": {
+     "type": "AuthenticationError",
+     "status": 401,
+     "message": "Error code: 401 - {'type': 'error', 'error': {'type': 'authentication_error', 'message': 'invalid x-api-key'}, 'request_id': 'req_011CfxtRE7EpR5zjL4vmc2mR'}"
+    },
+    "ledger": {
+     "usage": [
+      {
+       "model": "claude-sonnet-5",
+       "transport": "direct",
+       "call_site": "ac10.memory_extract",
+       "est_cost_usd": 0.0,
+       "input_tokens": 0,
+       "output_tokens": 0
+      }
+     ],
+     "reservations": [
+      {
+       "model": "claude-sonnet-5",
+       "reserved_usd": 0.03258,
+       "settled": true
+      }
+     ],
+     "budget": {
+      "spent_usd": 0.0,
+      "budget_usd": 0.3,
+      "exceeded": false,
+      "reserved_usd": 0.0,
+      "remaining_usd": 0.3,
+      "pricing_fault": false,
+      "resets_at": "2026-10-13T00:00:00Z",
+      "paused": false,
+      "stale_holds": 0,
+      "stale_holds_usd": 0.0
+     }
+    }
+   }
+  },
+  {
+   "scenario": "downloaded",
+   "profile": "ac10-downloaded-openrouter-balanced",
+   "provider": "openrouter",
+   "preset": "balanced",
+   "server": null,
+   "explicit": null,
+   "in_force": {
+    "sources": {
+     "snapshot": "downloaded",
+     "table": "downloaded"
+    },
+    "table": "f18475619e51a2f7b46a2ea4f5465af860ee5ac223170e4880fedb44bbf7f369",
+    "snapshot": "571b55d2d392fbc15cd239e4844bea4b29d0333acff94a467a412b3a8dd01cf3"
+   },
+   "roles": {
+    "MNEMONIC": {
+     "expected": "anthropic/claude-opus-5.5",
+     "actual": "anthropic/claude-opus-5.5",
+     "ok": true
+    },
+    "MEMORY_EXTRACT": {
+     "expected": "inclusionai/ling-3.0-flash",
+     "actual": "inclusionai/ling-3.0-flash",
+     "ok": true
+    },
+    "MEMORY_MERGE": {
+     "expected": "anthropic/claude-opus-5.5",
+     "actual": "anthropic/claude-opus-5.5",
+     "ok": true
+    },
+    "TASK_DETECTION": {
+     "expected": "mistralai/ministral-8b-2512",
+     "actual": "mistralai/ministral-8b-2512",
+     "ok": true
+    },
+    "REANALYZE": {
+     "expected": "inclusionai/ling-3.0-flash-vl",
+     "actual": "inclusionai/ling-3.0-flash-vl",
+     "ok": true
+    },
+    "DEDUP": {
+     "expected": "inclusionai/ling-3.0-flash-vl",
+     "actual": "inclusionai/ling-3.0-flash-vl",
+     "ok": true
+    },
+    "REPLY_NEED": {
+     "expected": "inclusionai/ling-3.0-flash-vl",
+     "actual": "inclusionai/ling-3.0-flash-vl",
+     "ok": true
+    },
+    "INTENT": {
+     "expected": "inclusionai/ling-3.0-flash-vl",
+     "actual": "inclusionai/ling-3.0-flash-vl",
+     "ok": true
+    },
+    "CHAT": {
+     "expected": "anthropic/claude-sonnet-5.5",
+     "actual": "anthropic/claude-sonnet-5.5",
+     "ok": true
+    },
+    "TASK_SOLVE": {
+     "expected": "anthropic/claude-opus-5.5",
+     "actual": "anthropic/claude-opus-5.5",
+     "ok": true
+    },
+    "TRAIN": {
+     "expected": "inclusionai/ling-3.0-flash-vl",
+     "actual": "inclusionai/ling-3.0-flash-vl",
+     "ok": true
+    },
+    "COMPACTION": {
+     "expected": "inclusionai/ling-3.0-flash-vl",
+     "actual": "inclusionai/ling-3.0-flash-vl",
+     "ok": true
+    },
+    "SYNC_ANALYSIS": {
+     "expected": "deepseek/deepseek-v4-flash",
+     "actual": "deepseek/deepseek-v4-flash",
+     "ok": true
+    },
+    "WEB_SEARCH": {
+     "expected": "inclusionai/ling-3.0-flash",
+     "actual": "inclusionai/ling-3.0-flash",
+     "ok": true
+    },
+    "CORRECTION_LEARNING": {
+     "expected": "inclusionai/ling-3.0-flash-fin",
+     "actual": "inclusionai/ling-3.0-flash-fin",
+     "ok": true
+    },
+    "NARRATION": {
+     "expected": "inception/mercury-2.5",
+     "actual": "inception/mercury-2.5",
+     "ok": true
+    }
+   },
+   "settings_paused": [],
+   "failed_checks": [],
+   "paid": {
+    "role": "NARRATION",
+    "model": "inception/mercury-2.5",
+    "transport": "openrouter",
+    "bound_usd": 0.000475,
+    "answer": "\n\nready",
+    "answered_by": "inception/mercury-2.5",
+    "stop_reason": "end_turn",
+    "ledger": {
+     "usage": [
+      {
+       "model": "inception/mercury-2.5",
+       "transport": "openrouter",
+       "call_site": "ac10.narration",
+       "est_cost_usd": 3.9e-05,
+       "input_tokens": 68,
+       "output_tokens": 236
+      }
+     ],
+     "reservations": [
+      {
+       "model": "inception/mercury-2.5",
+       "reserved_usd": 0.000475,
+       "settled": true
+      }
+     ],
+     "budget": {
+      "spent_usd": 3.9e-05,
+      "budget_usd": 0.3,
+      "exceeded": false,
+      "reserved_usd": 0.0,
+      "remaining_usd": 0.299961,
+      "pricing_fault": false,
+      "resets_at": "2026-10-13T00:00:00Z",
+      "paused": false,
+      "stale_holds": 0,
+      "stale_holds_usd": 0.0
+     }
+    }
+   }
+  },
+  {
+   "scenario": "downloaded",
+   "profile": "ac10-downloaded-openrouter-custom-z-ai_glm-5.3-flash",
+   "provider": "openrouter",
+   "preset": "custom",
+   "server": null,
+   "explicit": "z-ai/glm-5.3-flash",
+   "in_force": {
+    "sources": {
+     "snapshot": "downloaded",
+     "table": "downloaded"
+    },
+    "table": "f18475619e51a2f7b46a2ea4f5465af860ee5ac223170e4880fedb44bbf7f369",
+    "snapshot": "571b55d2d392fbc15cd239e4844bea4b29d0333acff94a467a412b3a8dd01cf3"
+   },
+   "roles": {
+    "MNEMONIC": {
+     "expected": "z-ai/glm-5.3-flash",
+     "actual": "z-ai/glm-5.3-flash",
+     "ok": true
+    },
+    "MEMORY_EXTRACT": {
+     "expected": "z-ai/glm-5.3-flash",
+     "actual": "z-ai/glm-5.3-flash",
+     "ok": true
+    },
+    "MEMORY_MERGE": {
+     "expected": "z-ai/glm-5.3-flash",
+     "actual": "z-ai/glm-5.3-flash",
+     "ok": true
+    },
+    "TASK_DETECTION": {
+     "expected": "z-ai/glm-5.3-flash",
+     "actual": "z-ai/glm-5.3-flash",
+     "ok": true
+    },
+    "REANALYZE": {
+     "expected": "z-ai/glm-5.3-flash",
+     "actual": "z-ai/glm-5.3-flash",
+     "ok": true
+    },
+    "DEDUP": {
+     "expected": "z-ai/glm-5.3-flash",
+     "actual": "z-ai/glm-5.3-flash",
+     "ok": true
+    },
+    "REPLY_NEED": {
+     "expected": "z-ai/glm-5.3-flash",
+     "actual": "z-ai/glm-5.3-flash",
+     "ok": true
+    },
+    "INTENT": {
+     "expected": "z-ai/glm-5.3-flash",
+     "actual": "z-ai/glm-5.3-flash",
+     "ok": true
+    },
+    "CHAT": {
+     "expected": "z-ai/glm-5.3-flash",
+     "actual": "z-ai/glm-5.3-flash",
+     "ok": true
+    },
+    "TASK_SOLVE": {
+     "expected": "z-ai/glm-5.3-flash",
+     "actual": "z-ai/glm-5.3-flash",
+     "ok": true
+    },
+    "TRAIN": {
+     "expected": "z-ai/glm-5.3-flash",
+     "actual": "z-ai/glm-5.3-flash",
+     "ok": true
+    },
+    "COMPACTION": {
+     "expected": "z-ai/glm-5.3-flash",
+     "actual": "z-ai/glm-5.3-flash",
+     "ok": true
+    },
+    "SYNC_ANALYSIS": {
+     "expected": "z-ai/glm-5.3-flash",
+     "actual": "z-ai/glm-5.3-flash",
+     "ok": true
+    },
+    "WEB_SEARCH": {
+     "expected": "z-ai/glm-5.3-flash",
+     "actual": "z-ai/glm-5.3-flash",
+     "ok": true
+    },
+    "CORRECTION_LEARNING": {
+     "expected": "z-ai/glm-5.3-flash",
+     "actual": "z-ai/glm-5.3-flash",
+     "ok": true
+    },
+    "NARRATION": {
+     "expected": "z-ai/glm-5.3-flash",
+     "actual": "z-ai/glm-5.3-flash",
+     "ok": true
+    }
+   },
+   "settings_paused": [],
+   "failed_checks": [],
+   "paid": {
+    "role": "NARRATION",
+    "model": "z-ai/glm-5.3-flash",
+    "transport": "openrouter",
+    "bound_usd": 0.001696,
+    "answer": "ready",
+    "answered_by": "z-ai/glm-5.3-flash",
+    "stop_reason": "end_turn",
+    "ledger": {
+     "usage": [
+      {
+       "model": "z-ai/glm-5.3-flash",
+       "transport": "openrouter",
+       "call_site": "ac10.narration",
+       "est_cost_usd": 4e-06,
+       "input_tokens": 51,
+       "output_tokens": 3
+      }
+     ],
+     "reservations": [
+      {
+       "model": "z-ai/glm-5.3-flash",
+       "reserved_usd": 0.001696,
+       "settled": true
+      }
+     ],
+     "budget": {
+      "spent_usd": 4e-06,
+      "budget_usd": 0.3,
+      "exceeded": false,
+      "reserved_usd": 0.0,
+      "remaining_usd": 0.299996,
+      "pricing_fault": false,
+      "resets_at": "2026-10-13T00:00:00Z",
+      "paused": false,
+      "stale_holds": 0,
+      "stale_holds_usd": 0.0
+     }
+    }
+   }
+  }
+ ]
+}
