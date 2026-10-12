@@ -1271,8 +1271,8 @@
         "opened_at": "2026-10-12T17:44:44Z",
         "reserved_usd": "1.225405",
         "run": "2026-10-12T17:43:39Z",
-        "settled_at": null,
-        "spent_usd": null
+        "settled_at": "2026-10-12T19:07:43Z",
+        "spent_usd": "1.225405"
       }
     ]
   },
