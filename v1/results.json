@@ -515,6 +515,14 @@
       "model": "upstage/solar-mini4",
       "outcome": "passed",
       "run": "2026-10-12T17:43:39Z"
+    },
+    {
+      "at": "2026-10-12T18:02:45Z",
+      "detail": "",
+      "metadata_sha256": "05a8a0033046d188d903c74d761f85dc9a3ccda1099d210829cf821aeac474fc",
+      "model": "nvidia/nemotron-3.5-lightning",
+      "outcome": "passed",
+      "run": "2026-10-12T17:43:39Z"
     }
   ],
   "stops": []
