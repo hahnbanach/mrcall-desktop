@@ -628,6 +628,57 @@
       },
       "role": "NARRATION",
       "run": "2026-10-12T17:43:39Z"
+    },
+    {
+      "case_set_sha256": "36354885b64b012cca7ea365a9f88f31ecdd838df8ec0de0594fa4387ab8d42e",
+      "measured_at": "2026-10-12T18:10:37Z",
+      "model": "x-ai/grok-4.7",
+      "prompt_sha256": "9d4a1fdfe1f5fbb8e4f3876e602c24e3c729e05f7786f4d59a71a64164715d1b",
+      "result": {
+        "bars_ok": true,
+        "complete": true,
+        "critical": false,
+        "index_score": 46.4,
+        "n": 10,
+        "passes": 9,
+        "score": 0.9
+      },
+      "role": "MNEMONIC",
+      "run": "2026-10-12T17:43:39Z"
+    },
+    {
+      "case_set_sha256": "36354885b64b012cca7ea365a9f88f31ecdd838df8ec0de0594fa4387ab8d42e",
+      "measured_at": "2026-10-12T18:10:37Z",
+      "model": "x-ai/grok-4.7",
+      "prompt_sha256": "352eaba92e38fd718125eb3572a6b429b6a4b35be57ba4498ebcb6b6f3f84cc1",
+      "result": {
+        "bars_ok": true,
+        "complete": true,
+        "critical": false,
+        "index_score": 46.4,
+        "n": 6,
+        "passes": 5,
+        "score": 0.833333
+      },
+      "role": "MEMORY_EXTRACT",
+      "run": "2026-10-12T17:43:39Z"
+    },
+    {
+      "case_set_sha256": "36354885b64b012cca7ea365a9f88f31ecdd838df8ec0de0594fa4387ab8d42e",
+      "measured_at": "2026-10-12T18:10:37Z",
+      "model": "x-ai/grok-4.7",
+      "prompt_sha256": "9d4a1fdfe1f5fbb8e4f3876e602c24e3c729e05f7786f4d59a71a64164715d1b",
+      "result": {
+        "bars_ok": true,
+        "complete": true,
+        "critical": false,
+        "index_score": 46.4,
+        "n": 7,
+        "passes": 6,
+        "score": 0.857143
+      },
+      "role": "MEMORY_MERGE",
+      "run": "2026-10-12T17:43:39Z"
     }
   ],
   "schema": 1,
