@@ -706,12 +706,18 @@
     "xiaomi/mimo-v2.6-pro": "run s4c: its shaped request is not today's: dedup-01, dedup-02, dedup-03, dedup-04, dedup-05, dedup-06, dedup-07, dedup-08, dedup-09, dedup-10, dedup-11, dedup-14, dedup-20, dedup-21"
    },
    "index": "intelligence",
-   "measured_only": false,
+   "measured_only": true,
    "prompt_sha256": "23e00d3e08fc90c9fd4851c2816c0f3046405261bb67b73011eba3bc149166d3",
    "reference": {
     "id": "moonshotai/kimi-k3",
     "runs": {
      "rerun7": {
+      "n": 14,
+      "passes": 14,
+      "score": 1.0,
+      "se": 0.0
+     },
+     "rerun8": {
       "n": 14,
       "passes": 14,
       "score": 1.0,
@@ -726,6 +732,42 @@
     }
    },
    "results": {
+    "anthropic/claude-opus-5.5": {
+     "bars_ok": true,
+     "complete": true,
+     "critical": false,
+     "index_score": 57.6,
+     "judged_by": "rerun8",
+     "n": 14,
+     "pass": true,
+     "passes": 14,
+     "reasons": [],
+     "score": 1.0
+    },
+    "anthropic/claude-sonnet-4.6": {
+     "bars_ok": true,
+     "complete": true,
+     "critical": false,
+     "index_score": 30.1,
+     "judged_by": "rerun8",
+     "n": 14,
+     "pass": true,
+     "passes": 14,
+     "reasons": [],
+     "score": 1.0
+    },
+    "anthropic/claude-sonnet-5": {
+     "bars_ok": true,
+     "complete": true,
+     "critical": false,
+     "index_score": 38.2,
+     "judged_by": "rerun8",
+     "n": 14,
+     "pass": true,
+     "passes": 14,
+     "reasons": [],
+     "score": 1.0
+    },
     "anthropic/claude-sonnet-5.5": {
      "bars_ok": true,
      "complete": true,
@@ -754,7 +796,7 @@
      "bars_ok": true,
      "complete": true,
      "critical": false,
-     "index_score": null,
+     "index_score": 34.3,
      "judged_by": "rerun7",
      "n": 14,
      "pass": true,
@@ -766,7 +808,7 @@
      "bars_ok": true,
      "complete": true,
      "critical": false,
-     "index_score": null,
+     "index_score": 24.6,
      "judged_by": "rerun7",
      "n": 14,
      "pass": true,
@@ -781,11 +823,12 @@
      "index_score": 43.6,
      "judged_by": [
       "rerun7",
+      "rerun8",
       "s4c"
      ],
-     "n": 28,
+     "n": 42,
      "pass": true,
-     "passes": 28,
+     "passes": 42,
      "reasons": [],
      "runs": {
       "rerun7": {
@@ -794,6 +837,18 @@
        "critical": false,
        "index_score": 43.6,
        "judged_by": "rerun7",
+       "n": 14,
+       "pass": true,
+       "passes": 14,
+       "reasons": [],
+       "score": 1.0
+      },
+      "rerun8": {
+       "bars_ok": true,
+       "complete": true,
+       "critical": false,
+       "index_score": 43.6,
+       "judged_by": "rerun8",
        "n": 14,
        "pass": true,
        "passes": 14,
@@ -815,11 +870,23 @@
      },
      "score": 1.0
     },
+    "openai/gpt-6-luna": {
+     "bars_ok": true,
+     "complete": true,
+     "critical": false,
+     "index_score": 38.1,
+     "judged_by": "rerun8",
+     "n": 14,
+     "pass": true,
+     "passes": 14,
+     "reasons": [],
+     "score": 1.0
+    },
     "upstage/solar-pro4": {
      "bars_ok": true,
      "complete": true,
      "critical": false,
-     "index_score": null,
+     "index_score": 28.2,
      "judged_by": "rerun7",
      "n": 14,
      "pass": false,
@@ -833,7 +900,7 @@
      "bars_ok": false,
      "complete": true,
      "critical": true,
-     "index_score": null,
+     "index_score": 37.9,
      "judged_by": "rerun7",
      "n": 14,
      "pass": false,
@@ -864,13 +931,13 @@
     "81998270380cb1927ada4bddf4d8869802edb73a9b042fb8560e2db95c610e05",
     "b3196ae202a7cc190cbf6cc0e3ca230fa26e7b57d127ddb15fd981e763070a8b"
    ],
-   "threshold": 24.4
+   "threshold": null
   },
   "INTENT": {
    "case_set_sha256": "f5e69d7c6def194444e13614357539d60c4e2a9582d6a30a44679a4a59e7a7e0",
    "incomplete": {},
    "index": "intelligence",
-   "measured_only": false,
+   "measured_only": true,
    "prompt_sha256": "8700cebf859ebd6c91ece0a16079a865d18a108a0d03ca2831b36c144af6c438",
    "reference": {
     "id": "moonshotai/kimi-k3",
@@ -887,6 +954,12 @@
       "score": 1.0,
       "se": 0.0
      },
+     "rerun8": {
+      "n": 14,
+      "passes": 14,
+      "score": 1.0,
+      "se": 0.0
+     },
      "s4c": {
       "n": 14,
       "passes": 14,
@@ -896,6 +969,42 @@
     }
    },
    "results": {
+    "anthropic/claude-opus-5.5": {
+     "bars_ok": true,
+     "complete": true,
+     "critical": false,
+     "index_score": 57.6,
+     "judged_by": "rerun8",
+     "n": 14,
+     "pass": true,
+     "passes": 14,
+     "reasons": [],
+     "score": 1.0
+    },
+    "anthropic/claude-sonnet-4.6": {
+     "bars_ok": true,
+     "complete": true,
+     "critical": false,
+     "index_score": 30.1,
+     "judged_by": "rerun8",
+     "n": 14,
+     "pass": true,
+     "passes": 14,
+     "reasons": [],
+     "score": 1.0
+    },
+    "anthropic/claude-sonnet-5": {
+     "bars_ok": true,
+     "complete": true,
+     "critical": false,
+     "index_score": 38.2,
+     "judged_by": "rerun8",
+     "n": 14,
+     "pass": true,
+     "passes": 14,
+     "reasons": [],
+     "score": 1.0
+    },
     "anthropic/claude-sonnet-5.5": {
      "bars_ok": true,
      "complete": true,
@@ -924,7 +1033,7 @@
      "bars_ok": true,
      "complete": true,
      "critical": false,
-     "index_score": null,
+     "index_score": 34.3,
      "judged_by": "rerun7",
      "n": 14,
      "pass": true,
@@ -936,7 +1045,7 @@
      "bars_ok": true,
      "complete": true,
      "critical": false,
-     "index_score": null,
+     "index_score": 24.6,
      "judged_by": "rerun7",
      "n": 14,
      "pass": true,
@@ -952,11 +1061,12 @@
      "judged_by": [
       "rerun6",
       "rerun7",
+      "rerun8",
       "s4c"
      ],
-     "n": 42,
+     "n": 56,
      "pass": true,
-     "passes": 42,
+     "passes": 56,
      "reasons": [],
      "runs": {
       "rerun6": {
@@ -983,6 +1093,18 @@
        "reasons": [],
        "score": 1.0
       },
+      "rerun8": {
+       "bars_ok": true,
+       "complete": true,
+       "critical": false,
+       "index_score": 43.6,
+       "judged_by": "rerun8",
+       "n": 14,
+       "pass": true,
+       "passes": 14,
+       "reasons": [],
+       "score": 1.0
+      },
       "s4c": {
        "bars_ok": true,
        "complete": true,
@@ -1002,7 +1124,7 @@
      "bars_ok": false,
      "complete": true,
      "critical": false,
-     "index_score": null,
+     "index_score": 28.2,
      "judged_by": "rerun7",
      "n": 14,
      "pass": false,
@@ -1056,7 +1178,7 @@
     "81998270380cb1927ada4bddf4d8869802edb73a9b042fb8560e2db95c610e05",
     "b3196ae202a7cc190cbf6cc0e3ca230fa26e7b57d127ddb15fd981e763070a8b"
    ],
-   "threshold": 24.4
+   "threshold": null
   },
   "MEMORY_EXTRACT": {
    "case_set_sha256": "36354885b64b012cca7ea365a9f88f31ecdd838df8ec0de0594fa4387ab8d42e",
@@ -1592,7 +1714,7 @@
      "bars_ok": true,
      "complete": true,
      "critical": false,
-     "index_score": null,
+     "index_score": 34.3,
      "judged_by": "rerun7",
      "n": 15,
      "pass": true,
@@ -1604,7 +1726,7 @@
      "bars_ok": true,
      "complete": true,
      "critical": false,
-     "index_score": null,
+     "index_score": 24.6,
      "judged_by": "rerun7",
      "n": 15,
      "pass": true,
@@ -1667,7 +1789,7 @@
      "bars_ok": true,
      "complete": true,
      "critical": false,
-     "index_score": null,
+     "index_score": 28.2,
      "judged_by": "rerun7",
      "n": 15,
      "pass": true,
@@ -1679,7 +1801,7 @@
      "bars_ok": true,
      "complete": true,
      "critical": false,
-     "index_score": null,
+     "index_score": 37.9,
      "judged_by": "rerun7",
      "n": 15,
      "pass": true,
@@ -2043,7 +2165,7 @@
    "case_set_sha256": "d0e55fbbe9945264e0819d449a2c4003428b690fc49fb4edcfd35d63c09f4f55",
    "incomplete": {},
    "index": "intelligence",
-   "measured_only": false,
+   "measured_only": true,
    "prompt_sha256": "6d3996452d7e3d138fa237322655e89b04527fdb1252b60e2140ac95f16cf627",
    "reference": {
     "id": "moonshotai/kimi-k3",
@@ -2060,6 +2182,12 @@
       "score": 1.0,
       "se": 0.0
      },
+     "rerun8": {
+      "n": 5,
+      "passes": 5,
+      "score": 1.0,
+      "se": 0.0
+     },
      "s4c": {
       "n": 5,
       "passes": 5,
@@ -2069,6 +2197,44 @@
     }
    },
    "results": {
+    "anthropic/claude-opus-5.5": {
+     "bars_ok": false,
+     "complete": true,
+     "critical": false,
+     "index_score": 57.6,
+     "judged_by": "rerun8",
+     "n": 5,
+     "pass": false,
+     "passes": 5,
+     "reasons": [
+      "mechanical bar"
+     ],
+     "score": 1.0
+    },
+    "anthropic/claude-sonnet-4.6": {
+     "bars_ok": true,
+     "complete": true,
+     "critical": false,
+     "index_score": 30.1,
+     "judged_by": "rerun8",
+     "n": 5,
+     "pass": true,
+     "passes": 5,
+     "reasons": [],
+     "score": 1.0
+    },
+    "anthropic/claude-sonnet-5": {
+     "bars_ok": true,
+     "complete": true,
+     "critical": false,
+     "index_score": 38.2,
+     "judged_by": "rerun8",
+     "n": 5,
+     "pass": true,
+     "passes": 5,
+     "reasons": [],
+     "score": 1.0
+    },
     "anthropic/claude-sonnet-5.5": {
      "bars_ok": true,
      "complete": true,
@@ -2097,7 +2263,7 @@
      "bars_ok": false,
      "complete": true,
      "critical": false,
-     "index_score": null,
+     "index_score": 34.3,
      "judged_by": "rerun7",
      "n": 5,
      "pass": false,
@@ -2111,7 +2277,7 @@
      "bars_ok": true,
      "complete": true,
      "critical": false,
-     "index_score": null,
+     "index_score": 24.6,
      "judged_by": "rerun7",
      "n": 5,
      "pass": true,
@@ -2127,11 +2293,12 @@
      "judged_by": [
       "rerun6",
       "rerun7",
+      "rerun8",
       "s4c"
      ],
-     "n": 15,
+     "n": 20,
      "pass": true,
-     "passes": 15,
+     "passes": 20,
      "reasons": [],
      "runs": {
       "rerun6": {
@@ -2158,6 +2325,18 @@
        "reasons": [],
        "score": 1.0
       },
+      "rerun8": {
+       "bars_ok": true,
+       "complete": true,
+       "critical": false,
+       "index_score": 43.6,
+       "judged_by": "rerun8",
+       "n": 5,
+       "pass": true,
+       "passes": 5,
+       "reasons": [],
+       "score": 1.0
+      },
       "s4c": {
        "bars_ok": true,
        "complete": true,
@@ -2173,11 +2352,23 @@
      },
      "score": 1.0
     },
+    "openai/gpt-6-luna": {
+     "bars_ok": true,
+     "complete": true,
+     "critical": false,
+     "index_score": 38.1,
+     "judged_by": "rerun8",
+     "n": 5,
+     "pass": true,
+     "passes": 5,
+     "reasons": [],
+     "score": 1.0
+    },
     "upstage/solar-pro4": {
      "bars_ok": false,
      "complete": true,
      "critical": false,
-     "index_score": null,
+     "index_score": 28.2,
      "judged_by": "rerun7",
      "n": 5,
      "pass": false,
@@ -2230,7 +2421,7 @@
     "81998270380cb1927ada4bddf4d8869802edb73a9b042fb8560e2db95c610e05",
     "b3196ae202a7cc190cbf6cc0e3ca230fa26e7b57d127ddb15fd981e763070a8b"
    ],
-   "threshold": 24.4
+   "threshold": null
   },
   "WEB_SEARCH": {
    "case_set_sha256": "4767cdb13895a5a64098342593c76099fa363898be9b79bef0d2c1553c50ae3c",
