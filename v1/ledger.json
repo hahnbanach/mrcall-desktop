@@ -1189,10 +1189,21 @@
             "role": null,
             "spent_usd": "0.00016",
             "why": "ranking of economy / MEMORY_EXTRACT / ranking"
+          },
+          {
+            "at": "2026-10-12T19:05:42Z",
+            "bound_usd": "0.2",
+            "check": "smoke openai/gpt-4.1-mini",
+            "kind": "smoke",
+            "model": "openai/gpt-4.1-mini",
+            "outcome": "passed",
+            "role": null,
+            "spent_usd": "0.000144",
+            "why": "ranking of economy / MEMORY_EXTRACT / ranking"
           }
         ],
         "opened_at": "2026-10-12T17:44:44Z",
-        "reserved_usd": "1.422594",
+        "reserved_usd": "1.222738",
         "run": "2026-10-12T17:43:39Z",
         "settled_at": null,
         "spent_usd": null
