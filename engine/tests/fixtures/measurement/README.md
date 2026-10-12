@@ -240,9 +240,29 @@ entry. Each entry states a kind whose claim `measurement_plan` verifies:
 - `denied`: the cells were refused before inference, and the arm answered in
   full in a later run.
 
-A stale-shape run needs no entry. It is dropped only when the same arm has a
-complete current-shape run of the role (`measurement_runs.supersede_stale`).
-A current-shape row is never dropped, whatever its verdict.
+A stale-shape run needs no entry. A run whose every row is stale is dropped
+only when the same arm has a complete current-shape run of the role
+(`measurement_runs.supersede_stale`). A current-shape row is never dropped,
+whatever its verdict. A run mixing stale and current rows is never
+superseded: its stale rows leave the arm incomplete until an exclusion
+decides.
+
+**Corpus records.** One corpus record per arm, chosen by this rule: the
+latest record that holds a live result for every corpus case. A corpus run is
+one pytest invocation per arm, so a re-run replaces the arm's record rather
+than adding a run to it. The records the plan omits:
+
+| Record | Arm | Why omitted |
+|---|---|---|
+| `2026-10-02-corpus-anthropic_claude-sonnet-5.5` | Sonnet 5.5 | Complete (10 cases), but later re-run complete as `2026-10-11c` (S4b5's re-run, to record the raw text of a failed extraction). |
+| `2026-10-02-corpus-xiaomi_mimo-v2.6-pro` | mimo-v2.6-pro | Complete, but later re-run complete as `2026-10-04` (same reason). |
+| `2026-10-04-corpus-anthropic_claude-sonnet-5.5` | Sonnet 5.5 | No case result: the 0.40 cap refused every case before dispatch; only the checks ran. |
+| `2026-10-11-corpus-anthropic_claude-sonnet-5.5` | Sonnet 5.5 | No case result: HTTP 402 (account out of credit) on its first case. |
+
+Two attempts wrote no record at all: the 2026-10-03 K3 corpus run
+(aborted) and the 2026-10-11b Sonnet run (stopped by its 0.60 cap). The
+omitted records stay out of the repo; their figures are in the measurement
+record's spend table.
 
 `tests/measurement/test_measurement_plan.py` derives the plan and requires
 the committed `measured.json` byte for byte. Its record is

@@ -146,3 +146,24 @@ def test_a_stale_run_is_superseded_only_by_a_complete_current_run_and_never_a_cu
     }
     partial = narration("s4c", "mimo", ["stale_request"] * 2) + narration("r6", "mimo", ["scored"])
     assert runs.supersede_stale(partial, cases)[1] == {}  # the later run is not complete
+
+
+def test_a_mixed_run_is_never_superseded_and_keeps_its_current_rows():
+    """S4b11: one stale and one current row in s4c, a complete current r6."""
+    cases = ["n-0", "n-1"]
+    mixed = narration("s4c", "mimo", ["stale_request", "scored"])
+    rows = mixed + narration("r6", "mimo", ["scored"] * 2)
+    kept, dropped = runs.supersede_stale(rows, cases)
+    assert dropped == {} and len(kept) == 4  # no current row lost, nothing superseded
+    current = [r for r in kept if r["run"] == "s4c" and r["status"] == "scored"]
+    assert [r["case_id"] for r in current] == ["n-1"]
+
+
+def test_only_a_refusal_before_inference_counts_as_denied():
+    """401, 402 and 403 prove no work was done; a 429 is a retryable refusal, not a denial."""
+    assert plan.DENIED == ("HTTP 401", "HTTP 402", "HTTP 403")
+    cut = chat_rows("r3", OPUS, "new", ("scored", "error", "error"), "OpenRouter (HTTP 429)")
+    later = chat_rows("r4", OPUS, "new")
+    denied = entry(run="r3", arms=[OPUS], kind="denied", superseded_by="r4")
+    with pytest.raises(plan.ExclusionRefused, match="refused before inference"):
+        plan.apply_exclusions(cut + later, [denied], today)

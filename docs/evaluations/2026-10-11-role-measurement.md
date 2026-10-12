@@ -62,13 +62,24 @@ Two tests guard it:
 ### The selection rule
 
 S4b8 and S4b9 chose rows with an uncommitted script, which dropped every s4c
-NARRATION row (IR3, blocking). Now a row leaves the derivation only in two
+NARRATION row (IR3, blocking). Now a row leaves the derivation only in three
 ways.
 
-**By a rule in code.** `measurement_runs.supersede_stale` drops an arm's
-stale-shape run only when the same arm has a complete current-shape run of
-the role. A stale run is one the shape check refuses: see "The shaped
-request" below. A current-shape row is never dropped, whatever its verdict.
+**By a rule in code.** `measurement_runs.supersede_stale` drops an arm's run
+only when every row of it is stale, and the same arm has a complete
+current-shape run of the role. A stale row is one the shape check refuses:
+see "The shaped request" below. A current-shape row is never dropped,
+whatever its verdict. A run mixing stale and current rows is never
+superseded (S4b11); none occurs in these records.
+
+**By the corpus record choice.** One corpus record per arm: the latest that
+holds a live result for every corpus case. The plan omits four records,
+each listed with its reason in the fixtures README ("Corpus records"):
+
+- the 2026-10-02 Sonnet and mimo-v2.6-pro records, each replaced by a later
+  complete re-run;
+- the 2026-10-04 Sonnet attempt, refused by its cap before any case;
+- the 2026-10-11 Sonnet attempt, refused with HTTP 402 on its first case.
 
 **By a committed exclusion.** Each entry in `exclusions.json` states a claim
 that `measurement_plan.apply_exclusions` verifies before it applies the

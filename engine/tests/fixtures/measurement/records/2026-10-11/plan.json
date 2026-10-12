@@ -1,6 +1,6 @@
 {
  "schema": 1,
- "about": "The derivation of zylch/llm/roles/measured.json: python scripts/derive_thresholds.py --plan tests/fixtures/measurement/records/2026-10-11/plan.json --write (README.md beside this file). Paths are relative to this directory.",
+ "about": "The derivation of zylch/llm/roles/measured.json: python scripts/derive_thresholds.py --plan tests/fixtures/measurement/records/2026-10-11/plan.json --write (tests/fixtures/measurement/README.md, section 'The committed derivation'). Paths are relative to this directory.",
  "arms": ["arms/arms-final.json", "arms/arms-scores.json"],
  "runs": [
   {"id": "s4c", "commit": "8b18ea69", "results": "runs/s4c-results.jsonl"},
