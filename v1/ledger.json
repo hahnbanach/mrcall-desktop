@@ -353,10 +353,21 @@
             "role": null,
             "spent_usd": "0.000038",
             "why": "pick of economy / SYNC_ANALYSIS / ranking"
+          },
+          {
+            "at": "2026-10-12T18:02:52Z",
+            "bound_usd": "2",
+            "check": "SYNC_ANALYSIS on nvidia/nemotron-3.5-lightning",
+            "kind": "measure",
+            "model": "nvidia/nemotron-3.5-lightning",
+            "outcome": "SYNC_ANALYSIS: failed",
+            "role": "SYNC_ANALYSIS",
+            "spent_usd": "0.001115",
+            "why": "pick of economy / SYNC_ANALYSIS / ranking"
           }
         ],
         "opened_at": "2026-10-12T17:44:44Z",
-        "reserved_usd": "2.274471",
+        "reserved_usd": "0.275586",
         "run": "2026-10-12T17:43:39Z",
         "settled_at": null,
         "spent_usd": null
