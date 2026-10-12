@@ -288,6 +288,23 @@
       },
       "role": "TASK_DETECTION",
       "run": "2026-10-12T17:43:39Z"
+    },
+    {
+      "case_set_sha256": "2f927825d4cd22052a5e72efe4945dc037b665f6f0340940f954352f8798c977",
+      "measured_at": "2026-10-12T17:56:17Z",
+      "model": "inclusionai/ling-3.0-flash-vl",
+      "prompt_sha256": "40a0042bd314c25258bbcb9110d0912e9c86f8f32f2b37f5f9ee6d9b77370f0d",
+      "result": {
+        "bars_ok": true,
+        "complete": true,
+        "critical": false,
+        "index_score": 24.6,
+        "n": 14,
+        "passes": 14,
+        "score": 1.0
+      },
+      "role": "REPLY_NEED",
+      "run": "2026-10-12T17:43:39Z"
     }
   ],
   "schema": 1,
