@@ -237,6 +237,23 @@
       },
       "role": "TASK_DETECTION",
       "run": "2026-10-12T17:43:39Z"
+    },
+    {
+      "case_set_sha256": "7b78399bca018c37807b5ff051f1cfacf7b5d87be37b477d8435ea816d224d92",
+      "measured_at": "2026-10-12T17:52:57Z",
+      "model": "inclusionai/ling-3.0-flash-fin",
+      "prompt_sha256": "589521323a76cdc38ea3597caf9804945ddb92ca9ae7577f5bca649759891737",
+      "result": {
+        "bars_ok": false,
+        "complete": true,
+        "critical": true,
+        "index_score": 22.6,
+        "n": 16,
+        "passes": 13,
+        "score": 0.8125
+      },
+      "role": "TASK_DETECTION",
+      "run": "2026-10-12T17:43:39Z"
     }
   ],
   "schema": 1,
