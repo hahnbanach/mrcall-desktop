@@ -60,6 +60,28 @@ def proxy_url(values):
     return str(values.get("MRCALL_PROXY_URL") or "").strip() or PROXY_URL
 
 
+def credits_client(values, model):
+    """The MrCall credits client for `model` (`make_llm_client`'s credits branch):
+    the signed-in session, the profile's billing server and business, and the
+    policy fingerprint the client keeps."""
+    from zylch.auth import get_session
+
+    from .client import LLMClient
+
+    session = get_session()
+    if session is None:
+        raise RuntimeError("Sign in to use the selected MrCall credits billing mode.")
+    client = LLMClient(
+        transport="proxy",
+        firebase_session=session,
+        model=model,
+        proxy_base_url=proxy_url(values),
+        billing_business_id=str(values.get("SMS_BUSINESS_ID") or "").strip(),
+    )
+    client._saved_policy_fingerprint = client_fingerprint(values)
+    return client
+
+
 def resolve_model(role=None, model=None, *, values=None):
     """The model a call runs: an explicit model, else the saved MODEL_<ROLE>
     under every preset, else the role's pick in the table for `economy` /
