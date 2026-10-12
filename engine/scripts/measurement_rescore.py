@@ -155,15 +155,16 @@ def rescore_rows(
         today_hash = common.load_requests(row["role"])["case_set_sha256"]
         case_hash = row.get("case_set_sha256")
         if case_hash in old_hashes or (every and case_hash == today_hash):
-            key = (row["role"], case_hash, row["prompt_sha256"])
+            key = (row["role"], case_hash, row["prompt_sha256"], row.get("run_commit"))
             groups.setdefault(key, []).append(row)
         else:
             out.append(row)
-    for (role, case_hash, prompt_hash), mine in groups.items():
+    for (role, case_hash, prompt_hash, commit), mine in groups.items():
         today = common.load_requests(role)
         if prompt_hash != today["prompt_sha256"]:
             raise RescoreRefused(f"{role}: measured on another prompt; nothing to re-score")
-        changed = _changed_cases(role, case_hash, prompt_hash, today, answered_at)
+        pins = [commit] if commit else answered_at  # a run names its own commit
+        changed = _changed_cases(role, case_hash, prompt_hash, today, pins)
         new = {e["case_id"]: e for e in today["requests"]}
         document = common.load_document(role)
         cases = {case["id"]: case for case in document["cases"]}
