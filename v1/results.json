@@ -826,6 +826,14 @@
       "model": "x-ai/grok-4.7",
       "outcome": "passed",
       "run": "2026-10-12T17:43:39Z"
+    },
+    {
+      "at": "2026-10-12T18:18:23Z",
+      "detail": "",
+      "metadata_sha256": "ac6f1cc3c678d2054e866065e4c15886f6ae5b0613b3d62181bcccbac1b87741",
+      "model": "xiaomi/mimo-v2.6-pro",
+      "outcome": "passed",
+      "run": "2026-10-12T17:43:39Z"
     }
   ],
   "stops": []

@@ -573,10 +573,21 @@
             "role": "MNEMONIC",
             "spent_usd": "0.223688",
             "why": "ranking of economy / MNEMONIC / ranking"
+          },
+          {
+            "at": "2026-10-12T18:18:23Z",
+            "bound_usd": "0.2",
+            "check": "smoke xiaomi/mimo-v2.6-pro",
+            "kind": "smoke",
+            "model": "xiaomi/mimo-v2.6-pro",
+            "outcome": "passed",
+            "role": null,
+            "spent_usd": "0.000207",
+            "why": "ranking of economy / MNEMONIC / ranking"
           }
         ],
         "opened_at": "2026-10-12T17:44:44Z",
-        "reserved_usd": "0.73033",
+        "reserved_usd": "0.530537",
         "run": "2026-10-12T17:43:39Z",
         "settled_at": null,
         "spent_usd": null
