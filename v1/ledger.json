@@ -507,10 +507,21 @@
             "role": "NARRATION",
             "spent_usd": "0.000047",
             "why": "pick of economy / NARRATION / ranking"
+          },
+          {
+            "at": "2026-10-12T18:09:14Z",
+            "bound_usd": "2",
+            "check": "NARRATION on inclusionai/ling-3.0-flash",
+            "kind": "measure",
+            "model": "inclusionai/ling-3.0-flash",
+            "outcome": "NARRATION: failed",
+            "role": "NARRATION",
+            "spent_usd": "0.000042",
+            "why": "pick of economy / NARRATION / ranking"
           }
         ],
         "opened_at": "2026-10-12T17:44:44Z",
-        "reserved_usd": "2.284867",
+        "reserved_usd": "0.284909",
         "run": "2026-10-12T17:43:39Z",
         "settled_at": null,
         "spent_usd": null
