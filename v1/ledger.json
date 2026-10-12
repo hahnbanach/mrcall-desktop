@@ -639,10 +639,21 @@
             "role": null,
             "spent_usd": "0.00178",
             "why": "ranking of economy / MNEMONIC / ranking"
+          },
+          {
+            "at": "2026-10-12T18:46:43Z",
+            "bound_usd": "2",
+            "check": "MNEMONIC on x-ai/grok-4.6",
+            "kind": "measure",
+            "model": "x-ai/grok-4.6",
+            "outcome": "MNEMONIC: failed; MEMORY_EXTRACT: failed; MEMORY_MERGE: failed",
+            "role": "MNEMONIC",
+            "spent_usd": "0.144258",
+            "why": "ranking of economy / MNEMONIC / ranking"
           }
         ],
         "opened_at": "2026-10-12T17:44:44Z",
-        "reserved_usd": "2.808567",
+        "reserved_usd": "0.952825",
         "run": "2026-10-12T17:43:39Z",
         "settled_at": null,
         "spent_usd": null
