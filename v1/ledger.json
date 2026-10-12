@@ -1167,10 +1167,21 @@
             "role": null,
             "spent_usd": "0.000197",
             "why": "ranking of economy / MEMORY_EXTRACT / ranking"
+          },
+          {
+            "at": "2026-10-12T19:05:28Z",
+            "bound_usd": "0.2",
+            "check": "smoke google/gemini-3.1-flash-lite-preview",
+            "kind": "smoke",
+            "model": "google/gemini-3.1-flash-lite-preview",
+            "outcome": "passed",
+            "role": null,
+            "spent_usd": "0.000386",
+            "why": "ranking of economy / MEMORY_EXTRACT / ranking"
           }
         ],
         "opened_at": "2026-10-12T17:44:44Z",
-        "reserved_usd": "1.422048",
+        "reserved_usd": "1.222434",
         "run": "2026-10-12T17:43:39Z",
         "settled_at": null,
         "spent_usd": null
