@@ -22,6 +22,7 @@ function load(relative, extra = '') {
     if (name.endsWith('/config')) return { auth }
     if (name.endsWith('/authUtils')) return { ensureEngineSession: async () => true }
     if (name.endsWith('/errors')) return { errorMessage: String }
+    if (name.endsWith('/modelRoles')) return load('lib/modelRoles.ts')
     return { default: empty }
   }
   mod._compile(ts.transpileModule(fs.readFileSync(file, 'utf8') + extra, {
@@ -83,7 +84,7 @@ assert.equal(sidecar.size, 0)
 
 await render(React.createElement(Budget))
 // The effective per-role models are the engine's (usage.today), shown per job.
-assert.ok(view.root.findAll(node => node.type === 'p' && node.children.join('') === 'Read messages: saved-reader').length === 1)
+assert.ok(view.root.findAll(node => node.type === 'p' && node.children.join('') === 'Memory extraction: saved-reader').length === 1)
 assert.ok(view.root.findAll(node => node.type === 'p' && node.children.join('') === 'Conversation: saved-model').length === 1)
 assert.match(text(), /unmeasured/)
 assert.match(text(), /reserved/)
