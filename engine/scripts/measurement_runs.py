@@ -128,6 +128,37 @@ def arm_result(mine: list[dict], cases: list[str]) -> tuple[dict, str | None]:
     return result, None if complete else why_incomplete(first, cases)
 
 
+def supersede_stale(rows: list[dict], cases: list[str]) -> tuple[list[dict], dict]:
+    """``(rows, {arm: [runs dropped]})``: an arm's stale-shape run, measured again, is dropped.
+
+    A run holding a ``stale_request`` row (``measurement_shape``: the shaped
+    request is not today's) is no measurement of that arm. When the same arm
+    has another run of the role with no stale row and every case answered, the
+    stale run is superseded and its rows leave. Without such a run they stay,
+    and the arm is incomplete (unmeasured). The rule is mechanical: it never
+    drops a current-shape row, whatever its verdict.
+    """
+    by_run: dict[tuple, list[dict]] = {}
+    for row in rows:
+        by_run.setdefault((row["arm"], row.get("run", "")), []).append(row)
+
+    def stale(mine: list[dict]) -> bool:
+        return any(r["status"] == "stale_request" for r in mine)
+
+    current = {
+        arm
+        for (arm, _run), mine in by_run.items()
+        if not stale(mine) and arm_result(mine, cases)[1] is None
+    }
+    kept, dropped = [], {}
+    for (arm, run), mine in by_run.items():
+        if arm in current and stale(mine):
+            dropped.setdefault(arm, []).append(run)
+        else:
+            kept += mine
+    return kept, {arm: sorted(runs) for arm, runs in sorted(dropped.items())}
+
+
 def judge_runs(per_run: dict, yardsticks: dict, incomplete: dict) -> dict:
     """``{arm: result}``, each run's result judged against that run's yardstick."""
     by_arm: dict[str, dict] = {}

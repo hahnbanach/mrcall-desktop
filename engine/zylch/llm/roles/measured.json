@@ -1,4 +1,25 @@
 {
+ "excluded": [
+  {
+   "arms": "*",
+   "kind": "prompt",
+   "role": "CHAT",
+   "rows": 55,
+   "run": "s4c",
+   "why": "Measured on CHAT's prompt 64a1a517, which main replaced (86bf2f10, a68ea7b8; re-captured in 185bd1a3, today's c55f551c). Every arm was measured again on today's prompt in rerun3 and rerun4."
+  },
+  {
+   "arms": [
+    "anthropic/claude-opus-5.5"
+   ],
+   "kind": "denied",
+   "role": "CHAT",
+   "rows": 11,
+   "run": "rerun3",
+   "superseded_by": "rerun4",
+   "why": "Cut short when the OpenRouter account ran out of credit: chat-13 and chat-14 were refused with HTTP 402 before any inference. Opus 5.5 answered every CHAT case in rerun4, with that run's K3."
+  }
+ ],
  "rescored_from": {
   "CHAT": {
    "case_set_sha256": {
@@ -413,7 +434,9 @@
     "to": "4767cdb13895a5a64098342593c76099fa363898be9b79bef0d2c1553c50ae3c"
    },
    "cases_refused": [],
-   "verdicts_changed": []
+   "verdicts_changed": [
+    "xiaomi/mimo-v2.6-pro web_search-03 r1"
+   ]
   }
  },
  "roles": {
@@ -931,6 +954,11 @@
     "81998270380cb1927ada4bddf4d8869802edb73a9b042fb8560e2db95c610e05",
     "b3196ae202a7cc190cbf6cc0e3ca230fa26e7b57d127ddb15fd981e763070a8b"
    ],
+   "superseded_stale": {
+    "xiaomi/mimo-v2.6-flash": [
+     "s4c"
+    ]
+   },
    "threshold": null
   },
   "INTENT": {
@@ -1178,6 +1206,14 @@
     "81998270380cb1927ada4bddf4d8869802edb73a9b042fb8560e2db95c610e05",
     "b3196ae202a7cc190cbf6cc0e3ca230fa26e7b57d127ddb15fd981e763070a8b"
    ],
+   "superseded_stale": {
+    "xiaomi/mimo-v2.6-flash": [
+     "s4c"
+    ],
+    "xiaomi/mimo-v2.6-pro": [
+     "s4c"
+    ]
+   },
    "threshold": null
   },
   "MEMORY_EXTRACT": {
@@ -1566,10 +1602,14 @@
       "passes": 5,
       "score": 1.0,
       "se": 0.0
+     },
+     "s4c": {
+      "n": 5,
+      "passes": 5,
+      "score": 1.0,
+      "se": 0.0
      }
-    },
-    "score": 1.0,
-    "se": 0.0
+    }
    },
    "results": {
     "anthropic/claude-sonnet-5.5": {
@@ -1577,37 +1617,134 @@
      "complete": true,
      "critical": false,
      "index_score": 56,
-     "judged_by": "rerun6",
-     "n": 5,
+     "judged_by": [
+      "rerun6",
+      "s4c"
+     ],
+     "n": 10,
      "pass": false,
-     "passes": 5,
+     "passes": 10,
      "reasons": [
       "mechanical bar"
      ],
+     "runs": {
+      "rerun6": {
+       "bars_ok": false,
+       "complete": true,
+       "critical": false,
+       "index_score": 56,
+       "judged_by": "rerun6",
+       "n": 5,
+       "pass": false,
+       "passes": 5,
+       "reasons": [
+        "mechanical bar"
+       ],
+       "score": 1.0
+      },
+      "s4c": {
+       "bars_ok": false,
+       "complete": true,
+       "critical": false,
+       "index_score": 56,
+       "judged_by": "s4c",
+       "n": 5,
+       "pass": false,
+       "passes": 5,
+       "reasons": [
+        "mechanical bar"
+       ],
+       "score": 1.0
+      }
+     },
      "score": 1.0
     },
     "deepseek/deepseek-v4-flash": {
-     "bars_ok": true,
+     "bars_ok": false,
      "complete": true,
      "critical": false,
      "index_score": 24.4,
-     "judged_by": "rerun6",
-     "n": 5,
-     "pass": true,
-     "passes": 5,
-     "reasons": [],
-     "score": 1.0
+     "judged_by": [
+      "rerun6",
+      "s4c"
+     ],
+     "n": 10,
+     "pass": false,
+     "passes": 9,
+     "reasons": [
+      "below the reference less its standard error",
+      "mechanical bar"
+     ],
+     "runs": {
+      "rerun6": {
+       "bars_ok": true,
+       "complete": true,
+       "critical": false,
+       "index_score": 24.4,
+       "judged_by": "rerun6",
+       "n": 5,
+       "pass": true,
+       "passes": 5,
+       "reasons": [],
+       "score": 1.0
+      },
+      "s4c": {
+       "bars_ok": false,
+       "complete": true,
+       "critical": false,
+       "index_score": 24.4,
+       "judged_by": "s4c",
+       "n": 5,
+       "pass": false,
+       "passes": 4,
+       "reasons": [
+        "mechanical bar",
+        "below the reference less its standard error"
+       ],
+       "score": 0.8
+      }
+     },
+     "score": 0.9
     },
     "moonshotai/kimi-k3": {
      "bars_ok": true,
      "complete": true,
      "critical": false,
      "index_score": 43.6,
-     "judged_by": "rerun6",
-     "n": 5,
+     "judged_by": [
+      "rerun6",
+      "s4c"
+     ],
+     "n": 10,
      "pass": true,
-     "passes": 5,
+     "passes": 10,
      "reasons": [],
+     "runs": {
+      "rerun6": {
+       "bars_ok": true,
+       "complete": true,
+       "critical": false,
+       "index_score": 43.6,
+       "judged_by": "rerun6",
+       "n": 5,
+       "pass": true,
+       "passes": 5,
+       "reasons": [],
+       "score": 1.0
+      },
+      "s4c": {
+       "bars_ok": true,
+       "complete": true,
+       "critical": false,
+       "index_score": 43.6,
+       "judged_by": "s4c",
+       "n": 5,
+       "pass": true,
+       "passes": 5,
+       "reasons": [],
+       "score": 1.0
+      }
+     },
      "score": 1.0
     },
     "xiaomi/mimo-v2.6-flash": {
@@ -1641,19 +1778,63 @@
      "complete": true,
      "critical": false,
      "index_score": 41.8,
-     "judged_by": "rerun6",
-     "n": 5,
+     "judged_by": [
+      "rerun6",
+      "s4c"
+     ],
+     "n": 10,
      "pass": false,
-     "passes": 5,
+     "passes": 10,
      "reasons": [
       "mechanical bar"
      ],
+     "runs": {
+      "rerun6": {
+       "bars_ok": false,
+       "complete": true,
+       "critical": false,
+       "index_score": 41.8,
+       "judged_by": "rerun6",
+       "n": 5,
+       "pass": false,
+       "passes": 5,
+       "reasons": [
+        "mechanical bar"
+       ],
+       "score": 1.0
+      },
+      "s4c": {
+       "bars_ok": false,
+       "complete": true,
+       "critical": false,
+       "index_score": 41.8,
+       "judged_by": "s4c",
+       "n": 5,
+       "pass": false,
+       "passes": 5,
+       "reasons": [
+        "mechanical bar"
+       ],
+       "score": 1.0
+      }
+     },
      "score": 1.0
     }
    },
    "rule": "satisfice",
    "second_repetition": {},
-   "snapshot_version": "b3196ae202a7cc190cbf6cc0e3ca230fa26e7b57d127ddb15fd981e763070a8b",
+   "snapshot_version": [
+    "81998270380cb1927ada4bddf4d8869802edb73a9b042fb8560e2db95c610e05",
+    "b3196ae202a7cc190cbf6cc0e3ca230fa26e7b57d127ddb15fd981e763070a8b"
+   ],
+   "superseded_stale": {
+    "xiaomi/mimo-v2.6-flash": [
+     "s4c"
+    ],
+    "xiaomi/mimo-v2.6-pro": [
+     "s4c"
+    ]
+   },
    "threshold": null
   },
   "REANALYZE": {
@@ -1828,6 +2009,11 @@
     "81998270380cb1927ada4bddf4d8869802edb73a9b042fb8560e2db95c610e05",
     "b3196ae202a7cc190cbf6cc0e3ca230fa26e7b57d127ddb15fd981e763070a8b"
    ],
+   "superseded_stale": {
+    "xiaomi/mimo-v2.6-flash": [
+     "s4c"
+    ]
+   },
    "threshold": null
   },
   "REPLY_NEED": {
@@ -2421,6 +2607,14 @@
     "81998270380cb1927ada4bddf4d8869802edb73a9b042fb8560e2db95c610e05",
     "b3196ae202a7cc190cbf6cc0e3ca230fa26e7b57d127ddb15fd981e763070a8b"
    ],
+   "superseded_stale": {
+    "xiaomi/mimo-v2.6-flash": [
+     "s4c"
+    ],
+    "xiaomi/mimo-v2.6-pro": [
+     "s4c"
+    ]
+   },
    "threshold": null
   },
   "WEB_SEARCH": {
@@ -2560,6 +2754,14 @@
     "81998270380cb1927ada4bddf4d8869802edb73a9b042fb8560e2db95c610e05",
     "b3196ae202a7cc190cbf6cc0e3ca230fa26e7b57d127ddb15fd981e763070a8b"
    ],
+   "superseded_stale": {
+    "xiaomi/mimo-v2.6-flash": [
+     "s4c"
+    ],
+    "xiaomi/mimo-v2.6-pro": [
+     "s4c"
+    ]
+   },
    "threshold": null
   }
  },
@@ -2616,6 +2818,22 @@
    ]
   },
   "DEDUP": {
+   "s4c|xiaomi/mimo-v2.6-flash": [
+    "dedup-01",
+    "dedup-02",
+    "dedup-03",
+    "dedup-04",
+    "dedup-05",
+    "dedup-06",
+    "dedup-07",
+    "dedup-08",
+    "dedup-09",
+    "dedup-10",
+    "dedup-11",
+    "dedup-14",
+    "dedup-20",
+    "dedup-21"
+   ],
    "s4c|xiaomi/mimo-v2.6-pro": [
     "dedup-01",
     "dedup-02",
@@ -2631,6 +2849,40 @@
     "dedup-14",
     "dedup-20",
     "dedup-21"
+   ]
+  },
+  "INTENT": {
+   "s4c|xiaomi/mimo-v2.6-flash": [
+    "intent-01",
+    "intent-02",
+    "intent-03",
+    "intent-04",
+    "intent-05",
+    "intent-06",
+    "intent-09",
+    "intent-10",
+    "intent-12",
+    "intent-13",
+    "intent-15",
+    "intent-16",
+    "intent-18",
+    "intent-19"
+   ],
+   "s4c|xiaomi/mimo-v2.6-pro": [
+    "intent-01",
+    "intent-02",
+    "intent-03",
+    "intent-04",
+    "intent-05",
+    "intent-06",
+    "intent-09",
+    "intent-10",
+    "intent-12",
+    "intent-13",
+    "intent-15",
+    "intent-16",
+    "intent-18",
+    "intent-19"
    ]
   },
   "MEMORY_EXTRACT": {
@@ -2697,7 +2949,40 @@
     "unrelated_same_name_people"
    ]
   },
+  "NARRATION": {
+   "s4c|xiaomi/mimo-v2.6-flash": [
+    "narration-01",
+    "narration-02",
+    "narration-03",
+    "narration-04",
+    "narration-05"
+   ],
+   "s4c|xiaomi/mimo-v2.6-pro": [
+    "narration-01",
+    "narration-02",
+    "narration-03",
+    "narration-04",
+    "narration-05"
+   ]
+  },
   "REANALYZE": {
+   "s4c|xiaomi/mimo-v2.6-flash": [
+    "reanalyze-01",
+    "reanalyze-02",
+    "reanalyze-03",
+    "reanalyze-04",
+    "reanalyze-05",
+    "reanalyze-06",
+    "reanalyze-07",
+    "reanalyze-08",
+    "reanalyze-09",
+    "reanalyze-15",
+    "reanalyze-16",
+    "reanalyze-17",
+    "reanalyze-18",
+    "reanalyze-19",
+    "reanalyze-20"
+   ],
    "s4c|xiaomi/mimo-v2.6-pro": [
     "reanalyze-01",
     "reanalyze-02",
@@ -2820,6 +3105,38 @@
     "task_detection-20",
     "task_detection-21",
     "task_detection-22"
+   ]
+  },
+  "TRAIN": {
+   "s4c|xiaomi/mimo-v2.6-flash": [
+    "train-01",
+    "train-02",
+    "train-03",
+    "train-04",
+    "train-05"
+   ],
+   "s4c|xiaomi/mimo-v2.6-pro": [
+    "train-01",
+    "train-02",
+    "train-03",
+    "train-04",
+    "train-05"
+   ]
+  },
+  "WEB_SEARCH": {
+   "s4c|xiaomi/mimo-v2.6-flash": [
+    "web_search-01",
+    "web_search-02",
+    "web_search-03",
+    "web_search-04",
+    "web_search-05"
+   ],
+   "s4c|xiaomi/mimo-v2.6-pro": [
+    "web_search-01",
+    "web_search-02",
+    "web_search-03",
+    "web_search-04",
+    "web_search-05"
    ]
   }
  },

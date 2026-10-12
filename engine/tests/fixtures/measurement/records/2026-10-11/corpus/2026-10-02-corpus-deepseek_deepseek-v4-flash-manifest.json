@@ -1,0 +1,187 @@
+{
+  "arm": "openrouter:deepseek/deepseek-v4-flash",
+  "arm_id": "deepseek/deepseek-v4-flash",
+  "arm_source": "arms-final.json:deepseek/deepseek-v4-flash",
+  "provider": "openrouter",
+  "mode": "live",
+  "model": "deepseek/deepseek-v4-flash",
+  "case_set_sha256": "acb2e22448a6569da3707a2a8df7d7919d2cecc920237f088ea704af3970a01d",
+  "snapshot_version": "81998270380cb1927ada4bddf4d8869802edb73a9b042fb8560e2db95c610e05",
+  "prompt_version_sha256": "9d4a1fdfe1f5fbb8e4f3876e602c24e3c729e05f7786f4d59a71a64164715d1b",
+  "extraction_prompt_sha256": "352eaba92e38fd718125eb3572a6b429b6a4b35be57ba4498ebcb6b6f3f84cc1",
+  "mnemonic_max_tokens": 2048,
+  "cap_usd": 0.05,
+  "engine_commit": "8b18ea69f183dcbbefc73e7814f354232448b221",
+  "kernel_commit": "unavailable",
+  "embedder": "EmbeddingEngine",
+  "cases": [
+    "unrelated_same_name_people",
+    "shared_switchboard",
+    "corroborated_same_person",
+    "customer_forwarding_number_correction",
+    "customer_price_correction",
+    "global_opening_hours",
+    "account_feedback",
+    "planned_not_completed",
+    "contradictory_legacy_fact_rule",
+    "multi_entity_source"
+  ],
+  "excluded": [
+    "malformed_output"
+  ],
+  "checks": {
+    "canary": {
+      "verdict": "refused",
+      "validator": "accepted",
+      "calls": 1,
+      "cost_usd": 8.3e-05
+    },
+    "budget_refusal": {
+      "outcome": "retryable_failure",
+      "reason": "paid decision unavailable: AI paused: daily budget $0.00; used or reserved $0.00. This request needs up to $0.00. Daily usage resets at 2026-10-05T00:00:00Z; unresolved calls remain reserved.",
+      "allowance_untouched": true,
+      "open_holds": 0,
+      "wire_calls": "live",
+      "calls": 0,
+      "cost_usd": 0.0
+    },
+    "unpriced_refusal": {
+      "outcome": "retryable_failure",
+      "reason": "paid decision unavailable: AI paused: OpenRouter model has no verified price ceiling.",
+      "message_matches": true,
+      "label": "fail-closed behaviour, not semantic health",
+      "calls": 0,
+      "cost_usd": 0.0
+    },
+    "truncation_refusal": {
+      "override": 16,
+      "restored": true,
+      "outcome": "committed",
+      "attempts": 1,
+      "calls": 1,
+      "cost_usd": 0.000105
+    }
+  },
+  "record_only_rewrites": 0,
+  "intents": [
+    {
+      "intent_id": "0b15c6c1d12a445493e427084ed86f70",
+      "case_id": "unrelated_same_name_people",
+      "bound_micro_usd": 3379,
+      "committed_before_micro_usd": 0,
+      "opened_at": "2026-10-04T17:32:06.843730",
+      "open": false
+    },
+    {
+      "intent_id": "206ebe1bbc0742ebaba1cadb7193fc08",
+      "case_id": "shared_switchboard",
+      "bound_micro_usd": 3384,
+      "committed_before_micro_usd": 214,
+      "opened_at": "2026-10-04T17:32:42.837850",
+      "open": false
+    },
+    {
+      "intent_id": "7e580299a2e74bf29346c26c072edbb7",
+      "case_id": "corroborated_same_person",
+      "bound_micro_usd": 3380,
+      "committed_before_micro_usd": 701,
+      "opened_at": "2026-10-04T17:34:05.564795",
+      "open": false
+    },
+    {
+      "intent_id": "2156a836c1c84403a30cc7f2eed70ebf",
+      "case_id": "planned_not_completed",
+      "bound_micro_usd": 3360,
+      "committed_before_micro_usd": 968,
+      "opened_at": "2026-10-04T17:34:49.822024",
+      "open": false
+    },
+    {
+      "intent_id": "9b2fc0cb6fed495eb139ec7a17815ebe",
+      "case_id": "contradictory_legacy_fact_rule",
+      "bound_micro_usd": 3415,
+      "committed_before_micro_usd": 1005,
+      "opened_at": "2026-10-04T17:34:57.912993",
+      "open": false
+    },
+    {
+      "intent_id": "ad4f61f6477342f59fae51d071418af8",
+      "case_id": "multi_entity_source",
+      "bound_micro_usd": 6058,
+      "committed_before_micro_usd": 1257,
+      "opened_at": "2026-10-04T17:35:39.335239",
+      "open": false
+    },
+    {
+      "intent_id": "ef89003ced284606b78874c091989a7d",
+      "case_id": "customer_forwarding_number_correction",
+      "bound_micro_usd": 2792,
+      "committed_before_micro_usd": 2055,
+      "opened_at": "2026-10-04T17:38:18.901622",
+      "open": false
+    },
+    {
+      "intent_id": "eee0c017538d4bf094c8d7f62c6bf822",
+      "case_id": "customer_price_correction",
+      "bound_micro_usd": 2796,
+      "committed_before_micro_usd": 2260,
+      "opened_at": "2026-10-04T17:38:50.253313",
+      "open": false
+    },
+    {
+      "intent_id": "0d5177e04f3841a2b671e47f72109b40",
+      "case_id": "global_opening_hours",
+      "bound_micro_usd": 2728,
+      "committed_before_micro_usd": 2438,
+      "opened_at": "2026-10-04T17:39:22.202058",
+      "open": false
+    },
+    {
+      "intent_id": "3d588e58650d4a3980ee94288bf1a0ad",
+      "case_id": "account_feedback",
+      "bound_micro_usd": 2740,
+      "committed_before_micro_usd": 2560,
+      "opened_at": "2026-10-04T17:39:36.543371",
+      "open": false
+    },
+    {
+      "intent_id": "4f8c6070c3cb46059b6c59866aad99ab",
+      "case_id": "check:canary",
+      "bound_micro_usd": 2046,
+      "committed_before_micro_usd": 2691,
+      "opened_at": "2026-10-04T17:39:53.550028",
+      "open": false
+    },
+    {
+      "intent_id": "b48169a5ab0b4a66b6c144e3297b14cd",
+      "case_id": "check:budget",
+      "bound_micro_usd": 2046,
+      "committed_before_micro_usd": 2774,
+      "opened_at": "2026-10-04T17:40:00.575207",
+      "open": false
+    },
+    {
+      "intent_id": "f7732d2d63dd4ae4a3862850707490f7",
+      "case_id": "check:unpriced",
+      "bound_micro_usd": 2046,
+      "committed_before_micro_usd": 2774,
+      "opened_at": "2026-10-04T17:40:00.816745",
+      "open": false
+    },
+    {
+      "intent_id": "93492cdbaf414b8d8fe02105613e29fe",
+      "case_id": "check:truncation",
+      "bound_micro_usd": 2046,
+      "committed_before_micro_usd": 2774,
+      "opened_at": "2026-10-04T17:40:01.182062",
+      "open": false
+    }
+  ],
+  "totals_usd": {
+    "settled": 0.002879,
+    "held": 0.0,
+    "open_intents": 0.0
+  },
+  "open_holds": 0,
+  "written_at": "2026-10-04T17:40:11.447953"
+}
