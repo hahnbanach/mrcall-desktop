@@ -540,10 +540,21 @@
             "role": "NARRATION",
             "spent_usd": "0.000266",
             "why": "pick of economy / NARRATION / ranking"
+          },
+          {
+            "at": "2026-10-12T18:09:55Z",
+            "bound_usd": "0.2",
+            "check": "smoke meta/muse-spark-1.3",
+            "kind": "smoke",
+            "model": "meta/muse-spark-1.3",
+            "outcome": "failed: BudgetError: OpenRouter request failed (HTTP 403); no automatic retry.",
+            "role": null,
+            "spent_usd": "0.018935",
+            "why": "ranking of economy / MNEMONIC / ranking"
           }
         ],
         "opened_at": "2026-10-12T17:44:44Z",
-        "reserved_usd": "0.485255",
+        "reserved_usd": "0.30419",
         "run": "2026-10-12T17:43:39Z",
         "settled_at": null,
         "spent_usd": null
