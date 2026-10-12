@@ -958,10 +958,21 @@
             "role": null,
             "spent_usd": "0.000325",
             "why": "ranking of economy / MEMORY_EXTRACT / ranking"
+          },
+          {
+            "at": "2026-10-12T19:02:57Z",
+            "bound_usd": "0.2",
+            "check": "smoke qwen/qwen3-coder-next",
+            "kind": "smoke",
+            "model": "qwen/qwen3-coder-next",
+            "outcome": "passed",
+            "role": null,
+            "spent_usd": "0.000117",
+            "why": "ranking of economy / MEMORY_EXTRACT / ranking"
           }
         ],
         "opened_at": "2026-10-12T17:44:44Z",
-        "reserved_usd": "1.41819",
+        "reserved_usd": "1.218307",
         "run": "2026-10-12T17:43:39Z",
         "settled_at": null,
         "spent_usd": null

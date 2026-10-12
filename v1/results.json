@@ -1313,6 +1313,14 @@
       "model": "arcee-ai/trinity-large-thinking",
       "outcome": "passed",
       "run": "2026-10-12T17:43:39Z"
+    },
+    {
+      "at": "2026-10-12T19:02:57Z",
+      "detail": "",
+      "metadata_sha256": "09f0a0e337633dbc8514742096261588bc624c8a146768cff0e9fe61ca67ca52",
+      "model": "qwen/qwen3-coder-next",
+      "outcome": "passed",
+      "run": "2026-10-12T17:43:39Z"
     }
   ],
   "stops": [
