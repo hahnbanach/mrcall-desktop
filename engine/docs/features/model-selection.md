@@ -333,10 +333,11 @@ built from a splatted dict, is not seen.
 - The memory corpus's 16-token truncation check did not bind on OpenRouter
   for seven of nine arms. "SKIP + reason" and prose extraction answers stay
   pending and are re-paid.
-- Empty Anthropic rankings in the first table: `NARRATION` under both
-  presets, and `MNEMONIC`, `MEMORY_EXTRACT` and `MEMORY_MERGE` under
-  `economy`. A personal Anthropic key pauses on those roles, including a
-  legacy profile with no saved preset or base model (it resolves under
-  `economy`).
+- Empty Anthropic rankings: the first table (the build copy) had none for
+  `NARRATION` under both presets and for `MNEMONIC`, `MEMORY_EXTRACT` and
+  `MEMORY_MERGE` under `economy`; the table published 2026-10-12 (`f1847561`)
+  leaves only `NARRATION` under `economy` empty. A personal Anthropic key
+  pauses on an empty one, including a legacy profile with no saved preset or
+  base model (it resolves under `economy`).
 - A credits profile pauses with "update the billing server" until the billing
   server answers protocol v2.

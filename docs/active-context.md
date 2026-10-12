@@ -89,7 +89,8 @@ source and sandbox acceptance do not close its product gates. The corpus
 criterion that failed on Haiku is met on M10's measured picks. M10's [model
 selection](../engine/docs/features/model-selection.md) switch-over is merged on
 `model-selection-m10a`: each role's model comes from the model table, first
-published on the `model-table` branch (`8087fbf2`). The billing server serves it
+published on the `model-table` branch (`8087fbf2`) and republished by the
+daily job's local run (`4bbbdf89`). The billing server serves it
 in protocol v2 on `main`/`dev` (`bb8f553`), not in production (`37f330d`). The
 merge to `main` awaits the job's CI proof run (its push trigger is TEMPORARY),
 production promotion and the CTO's go. The [engine
@@ -120,10 +121,12 @@ unverified. Runtime contracts belong to [IPC](ipc-contract.md),
   `main` never uses Qonto credential lines left in a profile `.env`; deleting them is operator work.
 - Remaining Café124 billing choices and funded K3 credits are open. The reviewed
   comparison's 60 cases/240 outputs do not establish production equivalence.
-- M10 with the CTO: legacy Anthropic-key profiles pause on memory and narration
-  (recommended: accept); the `OPENROUTER_API_KEY` repository secret; billing
-  server egress to `raw.githubusercontent.com`. Builds after 2026-10-24T12:01Z
-  fail the snapshot age gate unless the job republishes.
+- M10 with the CTO: legacy Anthropic-key profiles pause on NARRATION under
+  economy (recommended: accept); the `OPENROUTER_API_KEY` repository secret;
+  billing server egress to `raw.githubusercontent.com`; a valid Anthropic key
+  and the Firebase test account for AC 10's remaining paid legs. The job's
+  2026-10-12 publish (snapshot read that day) moves the age-gate date to
+  2026-10-26.
 - Sandbox final review, shared-key provisioning and operational floor remain
   open. One handset's speech is not transcribed by the voice provider.
 - Installed/fresh-account GUI acceptance is open. Windows remains opt-in and
@@ -145,7 +148,7 @@ unverified. Runtime contracts belong to [IPC](ipc-contract.md),
 3. Resolve remaining billing choices and preserve actual saved controls;
    release verification initiates no paid preparation run.
 4. Exercise installed Mac/Windows GUI and add an external WhatsApp status reader.
-5. Finish M10: proof run, end to end, final review; merge on the CTO's go.
+5. Finish M10: CI proof run (needs the secret), final review; merge on the CTO's go.
 6. Resume deferred work from its existing briefs when requested. Electron stays
    primary; the [thin-client brief](execution-plans/cross-machine-thin-clients.md)
    remains parked.

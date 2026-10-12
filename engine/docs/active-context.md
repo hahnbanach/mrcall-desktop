@@ -113,32 +113,42 @@ allowlist, `mrcall_served` and the `mrcall` column are gone. Prices and
 request metadata come from the catalogue snapshot; every request has the one
 shape (`zylch/llm/request_shape.py`).
 
-The first table is the build copy and is published on the `model-table` data
-branch (`8087fbf2`: table `304ab3b7…`, snapshot `b3196ae2…` read
-2026-10-10T12:01:52Z); engines download it daily (`roles/distribution.py`).
-Its picks, economy / balanced where they differ:
+The first table is the build copy (`304ab3b7…`, snapshot `b3196ae2…`) and was
+the first publish on the `model-table` data branch (`8087fbf2`). Engines
+download the published table daily (`roles/distribution.py`) and keep the
+last good copy; a fresh profile with the download blocked uses the build copy.
+The measurement ([record](../../docs/evaluations/2026-10-11-role-measurement.md))
+spent USD 14.15 settled, 15.03 counted, of 20; every satisfice role is
+measured-only.
+
+The daily job (`scripts/model_table_job.py`, `model-resolution.yml`, 05:17
+UTC, USD 10 a month) has not run from CI: the repository has no
+`OPENROUTER_API_KEY` secret. After its first local live run was killed by an
+outer timeout, S5b added a 90-minute deadline, a reservation and a checkpoint
+per check (`v1/results.json`), recovery of an open run at its reserved amount,
+cached smoke outcomes and time-limit stops, a lock on the data checkout and a
+child that dies with the job. The second local run (2026-10-12T17:43Z)
+recovered the first at USD 4.146243, spent USD 1.225405 in 114 calls, deferred
+795 checks at its deadline and published table `f1847561…`, snapshot
+`571b55d2…` (`4bbbdf89`); October has used USD 5.37 of 10. Its picks, economy /
+balanced where they differ:
 
 - MNEMONIC, MEMORY_MERGE: GPT-6.1 Sol / Opus 5.5.
-- MEMORY_EXTRACT, TASK_DETECTION, COMPACTION, CORRECTION_LEARNING,
-  SYNC_ANALYSIS: deepseek-v4-flash.
+- MEMORY_EXTRACT: ling-3.0-flash. TASK_DETECTION: ministral-8b.
+- COMPACTION, REPLY_NEED: ling-3.0-flash-vl. CORRECTION_LEARNING:
+  ling-3.0-flash-fin. SYNC_ANALYSIS: deepseek-v4-flash. WEB_SEARCH:
+  ling-3.0-flash.
 - CHAT: Sonnet 5.5. TASK_SOLVE: Sonnet 5.5 / Opus 5.5.
 - REANALYZE, DEDUP, INTENT, TRAIN: ling-3.0-flash-vl.
-- NARRATION: mimo-v2.6-pro. REPLY_NEED: glm-5.3-flash. WEB_SEARCH:
-  mimo-v2.6-flash.
+- NARRATION: mercury-2.5.
 
-Anthropic rankings are empty for NARRATION under both presets and for the
-three memory roles under economy. The measurement
-([record](../../docs/evaluations/2026-10-11-role-measurement.md)) spent USD
-14.15 settled, 15.03 counted, of 20; every satisfice role is measured-only.
-The daily job (`scripts/model_table_job.py`, `model-resolution.yml`, 05:17
-UTC, USD 10 a month) has not run from CI yet. Its first live run, local on
-2026-10-12, was killed by an outer timeout after 7000 s. It published
-nothing and left reservation `2026-10-12T14:13:04Z` (USD 4.146243) open in
-`v1/ledger.json`. Its journals show USD 2.155 spent, counting open intents
-at their bound. S5b adds the run's deadline (90 min), pushes of each check's
-call and results (`v1/results.json`) as the check ends, and recovery of an
-open reservation at its reserved amount. The workflow carries a
-TEMPORARY push trigger on the milestone branch for one proof run; it is
+Sonnet 5 now heads the economy Anthropic rankings of the three memory roles
+and Sonnet 4.5 the balanced one of NARRATION; only NARRATION under economy has
+no Anthropic model. The [end-to-end check](../../docs/evaluations/2026-10-12-m10-end-to-end.md)
+(AC 10) resolved 896 role cells across downloaded, blocked and successor
+tables with no mismatch; its Anthropic-direct paid legs wait for a valid key
+and its credits leg for the CTO's test account. The workflow carries a
+TEMPORARY push trigger on the milestone branch for the CI proof run; it is
 removed before the merge to `main`.
 
 The local hardening closure repairs the model-catalog parameter declaration and
@@ -158,12 +168,13 @@ acceptance is implied.
   `OPENROUTER_API_KEY`), the billing server's production promotion (`main`
   and `dev` at `bb8f553`; production `37f330d` lacks the M10 code, so a
   credits profile would pause with "update the billing server") and the
-  CTO's go. Open with the CTO: legacy Anthropic-key profiles (no saved
-  preset, so economy) pause on memory and narration; the recommendation is
+  CTO's go. Open with the CTO: legacy Anthropic-key profiles with no saved
+  preset or base model (economy) pause on NARRATION only, now that the
+  published table ranks Sonnet 5 for the memory roles; the recommendation is
   to accept the pause.
 - Until the job republishes, a Desktop release with M10's `release.yml` or a
-  billing-server image built after 2026-10-24T12:01:52Z fails the 14-day
-  snapshot gate.
+  billing-server image built after 2026-10-26T17:43:41Z (14 days after the
+  published snapshot `571b55d2…` was read) fails the 14-day snapshot gate.
 - Several mnemonic items remain open:
   - the OpenRouter truncation check, which did not bind on seven of nine
     arms;

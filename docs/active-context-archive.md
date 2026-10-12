@@ -1188,3 +1188,11 @@ harness v3 bootstrap. It was the "Recent landings (last ~2 weeks)" table.*
 | 2026-05-22 | Current datetime injected into EVERY LLM request (single LLMClient chokepoint + chat_compaction bypass). | engine | `5f5c73e8` |
 | 2026-05-20 | MrCall channel: delegated/PKCE OAuth + `/mrcall` removed (Firebase-JWT only); MrCall tab lists + searches businesses; onboarding unblocked for MrCall-only users; in-wizard Calendar session fix. | engine + app + IPC | `770522e8..2b0a54ce` |
 | 2026-05-20 | WhatsApp voice-note transcription — event-time download + deferred faster-whisper `small`/int8 pass; archived chats excluded from memory/task analysis. Live download + packaged bundling still pending. | engine + app + IPC | [`../engine/docs/execution-plans/whatsapp-voice-transcription.md`](../engine/docs/execution-plans/whatsapp-voice-transcription.md) |
+
+
+## Archived 2026-10-12: M10 open items before the job's second live run
+
+- M10 with the CTO: legacy Anthropic-key profiles pause on memory and narration
+  (recommended: accept); the `OPENROUTER_API_KEY` repository secret; billing
+  server egress to `raw.githubusercontent.com`. Builds after 2026-10-24T12:01Z
+  fail the snapshot age gate unless the job republishes.
