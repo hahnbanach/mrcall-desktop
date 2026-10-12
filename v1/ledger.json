@@ -386,10 +386,21 @@
             "role": "SYNC_ANALYSIS",
             "spent_usd": "0.002307",
             "why": "pick of economy / SYNC_ANALYSIS / ranking"
+          },
+          {
+            "at": "2026-10-12T18:04:22Z",
+            "bound_usd": "0.2",
+            "check": "smoke nvidia/nemotron-3-nano-30b-a3b",
+            "kind": "smoke",
+            "model": "nvidia/nemotron-3-nano-30b-a3b",
+            "outcome": "passed",
+            "role": null,
+            "spent_usd": "0.00008",
+            "why": "pick of economy / SYNC_ANALYSIS / ranking"
           }
         ],
         "opened_at": "2026-10-12T17:44:44Z",
-        "reserved_usd": "0.477946",
+        "reserved_usd": "0.278026",
         "run": "2026-10-12T17:43:39Z",
         "settled_at": null,
         "spent_usd": null

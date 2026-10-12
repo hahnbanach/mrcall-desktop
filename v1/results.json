@@ -565,6 +565,14 @@
       "model": "mistralai/ministral-14b-2512",
       "outcome": "passed",
       "run": "2026-10-12T17:43:39Z"
+    },
+    {
+      "at": "2026-10-12T18:04:22Z",
+      "detail": "",
+      "metadata_sha256": "1aba9af18001b567e32d40254901fc86691d7bfbfb27d397147ec5e991c06da3",
+      "model": "nvidia/nemotron-3-nano-30b-a3b",
+      "outcome": "passed",
+      "run": "2026-10-12T17:43:39Z"
     }
   ],
   "stops": []
