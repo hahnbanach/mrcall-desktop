@@ -100,10 +100,21 @@
             "role": null,
             "spent_usd": "0.005064",
             "why": "pick of balanced / NARRATION / anthropic_ranking"
+          },
+          {
+            "at": "2026-10-12T17:48:11Z",
+            "bound_usd": "2",
+            "check": "NARRATION on anthropic/claude-sonnet-4.5",
+            "kind": "measure",
+            "model": "anthropic/claude-sonnet-4.5",
+            "outcome": "NARRATION: passed",
+            "role": "NARRATION",
+            "spent_usd": "0.007275",
+            "why": "pick of balanced / NARRATION / anthropic_ranking"
           }
         ],
         "opened_at": "2026-10-12T17:44:44Z",
-        "reserved_usd": "2.24759",
+        "reserved_usd": "0.254865",
         "run": "2026-10-12T17:43:39Z",
         "settled_at": null,
         "spent_usd": null
