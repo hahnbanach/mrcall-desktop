@@ -1,0 +1,31 @@
+{
+ "schema": 1,
+ "about": "The derivation of zylch/llm/roles/measured.json: python scripts/derive_thresholds.py --plan tests/fixtures/measurement/records/2026-10-11/plan.json --write (README.md beside this file). Paths are relative to this directory.",
+ "arms": ["arms/arms-final.json", "arms/arms-scores.json"],
+ "runs": [
+  {"id": "s4c", "commit": "8b18ea69", "results": "runs/s4c-results.jsonl"},
+  {"id": "rerun3", "commit": "1785352c", "results": "runs/rerun3-results.jsonl"},
+  {"id": "rerun4", "commit": "f827ae19", "results": "runs/rerun4-results.jsonl"},
+  {"id": "rerun6", "commit": "1221b0a4", "results": "runs/rerun6-results.jsonl"},
+  {"id": "rerun7", "commit": "1221b0a4", "results": "runs/rerun7-results.jsonl"},
+  {"id": "rerun8", "commit": "1221b0a4", "results": "runs/rerun8-results.jsonl"}
+ ],
+ "corpus": [
+  {"run": "corpus", "manifest": "corpus/2026-10-02-corpus-anthropic_claude-opus-5.5-manifest.json"},
+  {"run": "corpus", "manifest": "corpus/2026-10-02-corpus-deepseek_deepseek-v4-flash-manifest.json"},
+  {"run": "corpus", "manifest": "corpus/2026-10-02-corpus-moonshotai_kimi-k3-manifest.json"},
+  {"run": "corpus", "manifest": "corpus/2026-10-02-corpus-openai_gpt-6-sol-manifest.json"},
+  {"run": "corpus", "manifest": "corpus/2026-10-02-corpus-openai_gpt-6.1-sol-manifest.json"},
+  {"run": "corpus", "manifest": "corpus/2026-10-02-corpus-xiaomi_mimo-v2.6-flash-manifest.json"},
+  {"run": "corpus", "manifest": "corpus/2026-10-02-corpus-z-ai_glm-5.3-flash-manifest.json"},
+  {"run": "corpus", "manifest": "corpus/2026-10-04-corpus-xiaomi_mimo-v2.6-pro-manifest.json"},
+  {"run": "corpus", "manifest": "corpus/2026-10-11c-corpus-anthropic_claude-sonnet-5.5-manifest.json"}
+ ],
+ "exclusions": "exclusions.json",
+ "rescore": true,
+ "rescore_from": [
+  "fa1518f070e5af386d7f4a2a6e99457a9610f2492f8f2a1c5f48ea24be9a83e2",
+  "acb2e22448a6569da3707a2a8df7d7919d2cecc920237f088ea704af3970a01d"
+ ],
+ "shape_check": true
+}

@@ -282,7 +282,8 @@ action; until it exists, `test_resolved_table.py` is the guard.
 - Whether OpenRouter passes `between_tools` through for
   `anthropic/claude-sonnet-5.5` is unverified until 10b's paid run.
 - The paid measurement is in `zylch/llm/roles/measured.json` (branch
-  `m10-s4b8`, written by `scripts/derive_thresholds.py`).
+  `m10-s4b10`, written by `scripts/derive_thresholds.py --plan` from the committed
+  records in `tests/fixtures/measurement/records/2026-10-11/`).
   - Each arm is judged against the reference from its own run.
   - A reference case that misses a bar and the label is credited to the
     yardstick, never counted against it.
