@@ -34,10 +34,21 @@
             "role": null,
             "spent_usd": "0.00014",
             "why": "metadata changed (models parameters)"
+          },
+          {
+            "at": "2026-10-12T17:45:01Z",
+            "bound_usd": "0.2",
+            "check": "smoke anthropic/claude-sonnet-5",
+            "kind": "smoke",
+            "model": "anthropic/claude-sonnet-5",
+            "outcome": "passed",
+            "role": null,
+            "spent_usd": "0.00293",
+            "why": "pick of economy / MNEMONIC / anthropic_ranking"
           }
         ],
         "opened_at": "2026-10-12T17:44:44Z",
-        "reserved_usd": "0.2002",
+        "reserved_usd": "0.00313",
         "run": "2026-10-12T17:43:39Z",
         "settled_at": null,
         "spent_usd": null

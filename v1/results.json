@@ -17,6 +17,14 @@
       "model": "z-ai/glm-5.3",
       "outcome": "passed",
       "run": "2026-10-12T17:43:39Z"
+    },
+    {
+      "at": "2026-10-12T17:45:01Z",
+      "detail": "",
+      "metadata_sha256": "2780000ecd9d4c16712d9fa53f62b0e334887dc7aeeceafa4fc795a60961188f",
+      "model": "anthropic/claude-sonnet-5",
+      "outcome": "passed",
+      "run": "2026-10-12T17:43:39Z"
     }
   ],
   "stops": []
