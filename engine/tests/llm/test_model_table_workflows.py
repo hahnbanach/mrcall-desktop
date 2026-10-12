@@ -65,6 +65,11 @@ def test_the_daily_job_checks_out_the_data_branch_and_uploads_its_report():
     run = next(s for s in steps if s.get("name") == "Resolve, verify and publish")["run"]
     assert "engine/scripts/model_table_job.py" in run and "--data model-table" in run
     assert "--dry-run" not in run
+    # No paid check may outlive the run's deadline, which leaves the setup before
+    # the job and the decisions, gates and push after it a margin under the timeout.
+    deadline = float(run.split("--deadline-minutes ")[1].split()[0])
+    timeout = load("model-resolution.yml")["jobs"]["publish"]["timeout-minutes"]
+    assert deadline == 90 and deadline + 20 <= timeout
     upload = next(s for s in steps if str(s.get("uses", "")).startswith("actions/upload-artifact"))
     assert upload["if"] == "always()" and upload["with"]["path"] == "model-table-report.md"
     # The memory roles' measurement is the M9 corpus runner: a pytest module.

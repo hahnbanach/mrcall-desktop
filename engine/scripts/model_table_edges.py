@@ -59,7 +59,9 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import logging
 import os
+import signal
 import subprocess
 import sys
 import tempfile
@@ -71,11 +73,14 @@ from typing import Callable
 
 import derive_thresholds as dt
 import measurement_common as common
+import model_table_deadline as deadline_of
 import model_table_decide as decide
 import model_table_measured as measured_of
 import resolve_models as rm
 
-FILES = ("table.json", "snapshot.json", "measured.json", "ledger.json")
+logger = logging.getLogger(__name__)
+FILES = ("table.json", "snapshot.json", "measured.json", "ledger.json", "results.json")
+GRACE_SECONDS = 30
 TRANSPORT = "openrouter"
 KEY = "OPENROUTER_API_KEY"
 MICRO = Decimal(10) ** 6
@@ -191,6 +196,27 @@ def _lines(path: Path) -> list[dict]:
     return [json.loads(line) for line in text.splitlines() if line.strip()]
 
 
+def limited_run(command, *, timeout=None, **kwargs):
+    """`subprocess.run` whose time limit interrupts the process first (SIGINT:
+    its `finally` blocks run, so a measurement profile's key file is
+    deleted), then kills it after `GRACE_SECONDS`; raises TimeoutExpired."""
+    kwargs.pop("check", None)
+    if kwargs.pop("capture_output", False):
+        kwargs.update(stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    with subprocess.Popen(command, **kwargs) as proc:
+        try:
+            out, err = proc.communicate(timeout=timeout)
+        except subprocess.TimeoutExpired:
+            proc.send_signal(signal.SIGINT)
+            try:
+                out, err = proc.communicate(timeout=GRACE_SECONDS)
+            except subprocess.TimeoutExpired:
+                proc.kill()
+                out, err = proc.communicate()
+            raise subprocess.TimeoutExpired(command, timeout, out, err) from None
+    return subprocess.CompletedProcess(command, proc.returncode, out, err)
+
+
 def _why(done) -> str:
     """The last line a finished process wrote (its refusal), or its exit code."""
     lines = [line for line in f"{done.stdout or ''}\n{done.stderr or ''}".splitlines() if line]
@@ -221,7 +247,7 @@ class Measurement:
 
     def __init__(self, work, cap, reference, *, dry=False, python=sys.executable, run=None):
         self.work, self.cap, self.reference = Path(work), Decimal(cap), reference
-        self.dry, self.python, self.run = dry, python, run or subprocess.run
+        self.dry, self.python, self.run = dry, python, run or limited_run
         self.count = 0
         # Each process started: its argv and its corpus variables (never the key).
         self.commands: list[tuple[list[str], dict]] = []
@@ -284,11 +310,26 @@ class Measurement:
             return self._corpus(model, scores, out)
         return self._harness(role, model, scores, out)
 
-    def _start(self, command: list[str], env: dict):
+    def _start(self, command: list[str], env: dict, role: str):
+        """Run one measurement process under its time limit
+        (`model_table_deadline.limit_minutes`): stopped there, it is a
+        process that failed, and what its ledger recorded is charged."""
         self.commands.append((command, {k: v for k, v in env.items() if k.startswith(CORPUS_ENV)}))
-        return self.run(
-            command, cwd=str(rm.ENGINE), env=env, capture_output=True, text=True, check=False
-        )
+        minutes = deadline_of.limit_minutes("measure", role)
+        try:
+            return self.run(
+                command,
+                cwd=str(rm.ENGINE),
+                env=env,
+                capture_output=True,
+                text=True,
+                check=False,
+                timeout=minutes * 60,
+            )
+        except subprocess.TimeoutExpired as stopped:
+            logger.debug(f"[model-table] measurement {role} stopped after {minutes} min")
+            why = f"stopped at its time limit of {minutes} min"
+            return subprocess.CompletedProcess(stopped.cmd, -signal.SIGINT, "", why)
 
     def _result(self, role: str, rows: list[dict], cases: list[str], spent: Decimal) -> dict:
         """The arm's result from its rows of `role`, or Incomplete (module docstring)."""
@@ -305,7 +346,7 @@ class Measurement:
         (out / "arms.json").write_text(json.dumps([self._arm(role, model, scores)]), "utf-8")
         command = [self.python, str(DRIVER), "--role", role, "--arms", str(out / "arms.json")]
         command += ["--out", str(out), "--cap", str(self.cap)] + (["--dry-run"] if self.dry else [])
-        done = self._start(command, _environment({}))
+        done = self._start(command, _environment({}), role)
         try:  # receipts, plus the bound of every missing receipt and open intent
             spent = Decimal(Ledger(out / "ledger.jsonl", 0).committed()) / MICRO
         except LedgerCorrupt:  # what it dispatched cannot be read: counted in full
@@ -341,7 +382,7 @@ class Measurement:
             contract["MNEMONIC_CORPUS_EXECUTE"] = "1"
         command = [self.python, "-m", "pytest", "-q", "-p", "no:cacheprovider", CORPUS_TESTS]
         try:
-            done = self._start(command, _environment(contract))
+            done = self._start(command, _environment(contract), common.CORPUS_ROLES[0])
         finally:
             (profile / ".env").unlink(missing_ok=True)  # the key's one copy on disk
         path = record / f"{CORPUS_PREFIX}-manifest.json"
@@ -375,9 +416,21 @@ def default(data: Path, fixture: Path | None, work: Path | None, budget: Decimal
     """The real edges: the data branch's checkout `data`, the live read (or
     `fixture`), the paid checks journaled under `work` (a temporary directory
     when None, created private when missing: the first paid check may be a
-    measurement), the smoke profile's daily budget `budget`."""
+    measurement), the smoke profile's daily budget `budget`.
+
+    Each run journals in a directory of its own, `work/run-<start>-*`: the
+    smokes' journals are numbered per run, and a run reusing an earlier
+    run's journal would count that run's spend as its own. A key file an
+    earlier run left in a corpus profile under `work` (it was killed before
+    deleting it) is deleted first."""
     work = Path(work or tempfile.mkdtemp(prefix="model-table-job-"))
     work.mkdir(mode=0o700, parents=True, exist_ok=True)
+    stale = [path for path in work.rglob(".env") if path.parent.name == "profile"]
+    for path in stale:
+        path.unlink(missing_ok=True)
+    logger.debug(f"[model-table] default(work) -> {len(stale)} stale profile key files deleted")
+    start = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    work = Path(tempfile.mkdtemp(prefix=f"run-{start}-", dir=work))
     branch = DataBranch(data)
     reference = json.loads(rm.REQUIREMENTS.read_text(encoding="utf-8"))["reference"]
     smoke = Smoke(work, decide.SMOKE_CAP_USD, budget)

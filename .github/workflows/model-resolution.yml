@@ -12,12 +12,15 @@ name: Model table
 # then the whole role with it), unless a measurement cached by model,
 # role, case-set hash and prompt hash exists — and smokes a ranked model whose
 # metadata changed; all inside USD 10 a month, kept in v1/ledger.json, the run's
-# reservation pushed to the data branch before its first paid call and settled
-# after. It publishes table.json, snapshot.json, measured.json and ledger.json
-# under v1/ on the model-table data branch, which the engines and the billing
-# server read at run time, so it runs before the billing server's 06:00 UTC
-# refresh. A run that cannot publish (a gate failed, a raised ceiling, a pick
-# with no verified replacement) goes red and the last published record stays;
+# reservation pushed to the data branch before each paid check, each check's
+# call and results (v1/results.json) pushed after it, and settled at the end.
+# It publishes table.json, snapshot.json, measured.json and ledger.json
+# under v1/ on the model-table data branch (the engines and the billing server
+# read table.json and snapshot.json at run time), so it runs before the billing
+# server's 06:00 UTC refresh. No paid check starts that could end after the
+# run's deadline (--deadline-minutes, below). A run that cannot publish (a gate
+# failed, a raised ceiling, a pick with no verified replacement) goes red and
+# the last published record stays;
 # a price-only change updates the snapshot alone. Schedule and dispatch only,
 # never on a push or a pull request: a paid run happens once a day or by hand,
 # and the key never meets code a pull request proposes. The report is uploaded
@@ -83,6 +86,11 @@ jobs:
           git -C model-table config user.name "github-actions[bot]"
           git -C model-table config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
+      # --deadline-minutes stays well under timeout-minutes: no paid check is
+      # started that could end after it, and the 30 minutes left cover the
+      # setup above and the decisions, gates and push after the last check. A
+      # run the timeout kills anyway has pushed every paid result and call as
+      # it went; the next run settles its reservation (recovered).
       - name: Resolve, verify and publish
         env:
           OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
@@ -90,6 +98,7 @@ jobs:
           python engine/scripts/model_table_job.py
           --data model-table
           --report model-table-report.md
+          --deadline-minutes 90
           --work "$RUNNER_TEMP/model-table-job"
 
       - name: Upload the report

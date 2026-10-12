@@ -142,3 +142,72 @@ def test_ordered_is_the_resolvers_rank_without_its_cut():
     view = decide.view(rule, body, [c["id"] for c in options])
     full = decide.ordered(rule, options, view, Decimal("10"))
     assert len(full) == 8 and full[:5] == job.rm.resolver.rank(rule, options, view, Decimal("10"))
+
+
+# ------------------------------------------- results.json (paid, not yet published)
+
+results_of = job.results_of
+
+
+def raw(model: str) -> dict:
+    return {k: v for k, v in result(model).items() if k not in ("pass", "reasons")}
+
+
+def test_the_results_file_keeps_one_entry_per_cache_key_in_measuring_order():
+    doc = results_of.empty()
+    doc = results_of.add(doc, "r1", QWEN, "CHAT", (CS, PH), "2026-10-12T14:20:00Z", raw(QWEN))
+    doc = results_of.add(doc, "r1", K3, "CHAT", (CS, PH), "2026-10-12T14:30:00Z", raw(K3))
+    doc = results_of.add(doc, "r2", QWEN, "CHAT", (CS, PH), "2026-10-13T05:20:00Z", raw(QWEN))
+    doc = results_of.add(doc, "r2", QWEN, "CHAT", (CS, STALE), "2026-10-13T05:30:00Z", raw(QWEN))
+    assert [(e["model"], e["run"], e["prompt_sha256"]) for e in doc["results"]] == [
+        (K3, "r1", PH),
+        (QWEN, "r2", PH),
+        (QWEN, "r2", STALE),
+    ]
+    assert results_of.check(copy.deepcopy(doc)) == doc
+
+
+ENTRY = {f: "x" for f in ("run", "model", "role", "measured_at", "case_set_sha256")}
+
+
+@pytest.mark.parametrize(
+    "doc, says",
+    [
+        ({"schema": 2, "results": []}, "schema 1"),
+        ({"schema": 1, "results": {}}, "must be a list"),
+        ({"schema": 1, "results": [{"model": QWEN}]}, "lacks run"),
+        ({"schema": 1, "results": [ENTRY | {"prompt_sha256": PH}]}, "no measurement result"),
+    ],
+)
+def test_a_results_file_the_job_cannot_read_is_refused(doc, says):
+    with pytest.raises(ValueError, match=says):
+        results_of.check(doc)
+
+
+def test_replay_records_what_is_pending_under_todays_hashes_once_and_in_order():
+    measured = {"schema": 1, "roles": {"CHAT": outcome(passed=[SONNET])}}
+    doc = results_of.empty()
+    entries = [
+        (QWEN, (CS, PH), "2026-10-12T14:20:00Z"),  # pending: recorded
+        (SONNET, (CS, PH), "2026-10-12T14:21:00Z"),  # newer than the held (undated) one
+        (K3, (CS, STALE), "2026-10-12T14:22:00Z"),  # other hashes: not today's
+        ("acme/unjudged", (CS, PH), "2026-10-12T14:23:00Z"),  # its store cannot judge it
+    ]
+    for model, hashes, at in entries:
+        doc = results_of.add(doc, "r1", model, "CHAT", hashes, at, raw(model))
+    stored = []
+
+    def store(role, model, result, at):
+        if model == "acme/unjudged":
+            return "no reference result"
+        measured["roles"][role]["results"][model] = {**result, "pass": True, "measured_at": at}
+        stored.append(model)
+        return ""
+
+    lines = results_of.replay(doc, measured, {"CHAT": (CS, PH)}, store)
+    assert stored == [QWEN, SONNET] and lines[-1].endswith("no reference result, kept")
+    again = results_of.replay(doc, measured, {"CHAT": (CS, PH)}, store)
+    assert stored == [QWEN, SONNET] and len(again) == 1  # never twice; the unjudged retried
+    assert results_of.replay(doc, measured, {"CHAT": None}, store) == []  # hashes unknown
+    pruned = results_of.prune(doc, measured, {"CHAT": (CS, PH)})
+    assert [e["model"] for e in pruned["results"]] == ["acme/unjudged"]  # held and stale gone
