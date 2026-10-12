@@ -111,9 +111,10 @@ published metadata, reasoning blocks kept and replayed within a tool loop and
 stripped where history is rewritten.
 
 The paid role measurement is written to `roles/measured.json` on branch
-`m10-s4b8`. It ran 2026-10-04. On 2026-10-11 three things were re-measured:
-CHAT on main's new prompt; NARRATION and MiMo after the headroom fix; and
-the threshold entrants. Spend: USD 12.32 settled, 13.20 counted, of 20.
+`m10-s4b8`. It ran 2026-10-04. On 2026-10-11 four things were re-measured:
+CHAT on main's new prompt; NARRATION and MiMo after the headroom fix; the
+threshold entrants; and the D8 entrants. Spend: USD 14.15 settled, 15.03
+counted, of 20.
 
 - Each arm is judged against K3 from its own run. A K3 case that misses a
   bar and the label is credited to the yardstick, never counted against it.
@@ -122,10 +123,11 @@ the threshold entrants. Spend: USD 12.32 settled, 13.20 counted, of 20.
   unmeasured on the roles not re-measured.
 - On today's labels every critical corpus case passes on both MNEMONIC picks:
   Opus 5.5 (balanced) and GPT-6.1 Sol (economy).
-- `resolve_models.py --apply` writes a table that passes the gates. It is not
-  published, because it fails D8: DEDUP, INTENT and TRAIN still rank four
-  unmeasured models below their measured heads (gpt-6-luna, Sonnet 5,
-  Sonnet 4.6, and Opus 5.5 on these roles).
+- Every satisfice role is `measured_only`, with every measured arm's index
+  score in the ladder.
+- `resolve_models.py --apply` writes a `table.json` that passes
+  `gates.check_table` and D8: every ranked model is measured and passing.
+  It is not committed; it lands with S6.
 
 See the [record](../../docs/evaluations/2026-10-11-role-measurement.md).
 
@@ -143,9 +145,7 @@ acceptance is implied.
 - Remaining Café124 billing choices and funded credit acceptance remain open;
   do not replay uncertain requests or resume preparation implicitly.
 - Several M10 and mnemonic items remain open:
-  - M10's table (D8): four unmeasured entries remain in the DEDUP, INTENT
-    and TRAIN rankings. They must be measured, or the rankings must exclude
-    them;
+  - M10's table: committing it at S6's switch-over;
   - the OpenRouter truncation check, which did not bind on seven of nine
     arms;
   - the extraction parser's refusal of "SKIP + reason";
@@ -167,8 +167,7 @@ acceptance is implied.
 2. Resolve billing choices without replaying uncertain requests; preserve actual
    saved controls and initiate no paid preparation for release verification.
 3. Finish milestone 10 (branch `model-selection-m10a`, not merged):
-   - clear D8's four unmeasured ranking entries;
-   - publish `table.json` at S6's switch-over;
+   - publish `table.json` at S6's switch-over (it passes the gates and D8);
    - review the mnemonic rollout and the migration rehearsal before product
      acceptance.
 

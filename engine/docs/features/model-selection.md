@@ -290,9 +290,11 @@ action; until it exists, `test_resolved_table.py` is the guard.
 
   Its record, with spend, per-role results, picks and limits, is
   [`docs/evaluations/2026-10-11-role-measurement.md`](../../../docs/evaluations/2026-10-11-role-measurement.md).
-  `resolve_models.py --apply` writes a table that passes the gates, but it is
-  not published: DEDUP, INTENT and TRAIN still rank unmeasured models below
-  their measured heads (D8).
+  An arm recorded without an index score takes the resolver's, so every
+  measured arm is in the threshold ladder; every satisfice role is
+  `measured_only`. `resolve_models.py --apply` writes a table that passes
+  `gates.check_table` and D8 (every ranked model is measured and passing);
+  it is committed at S6's switch-over.
 - The measurement ran through OpenRouter only. The direct-Anthropic transport
   and the `mrcall` column are unmeasured. The memory corpus's 16-token
   truncation check did not bind on OpenRouter for seven of nine arms.

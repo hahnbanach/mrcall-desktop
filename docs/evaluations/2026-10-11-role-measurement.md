@@ -1,8 +1,8 @@
 # Role measurement: milestone 10's paid run and `measured.json`, 2026-10-11
 
 Scope: the record of the one-off paid measurement behind
-`engine/zylch/llm/roles/measured.json` (branch `m10-s4b8`, commit `9bb8cb5d`;
-the code that derives it is `fcd5a0a1` and `12ef7b08`). It covers:
+`engine/zylch/llm/roles/measured.json` (branch `m10-s4b8`, commit `aaf9a7aa`;
+the code that derives it is `fcd5a0a1`, `12ef7b08` and `f8e70f89`). It covers:
 
 - what was run, on which prompts, snapshots and commits, and what it cost;
 - the per-run reference rule and the shaped-request check;
@@ -26,6 +26,7 @@ The role, rule and table contract is in
 | `rerun4`, CHAT, 2026-10-11 | Opus 5.5, K3 | `f827ae19` | `b3196ae2` |
 | `rerun6`, the headroom re-measure, 2026-10-11 | NARRATION: every arm and K3. INTENT, WEB_SEARCH, TRAIN: MiMo flash, MiMo pro and K3. | `1221b0a4`, inferred (below) | `b3196ae2` |
 | `rerun7`, the threshold entrants, 2026-10-11 | REANALYZE, DEDUP, INTENT, TRAIN: ling-3.0-flash-vl, deepseek-v4-flash-0731 and upstage/solar-pro4. REANALYZE and DEDUP also: mimo-v2.6-flash. K3 in every role. s4c's MiMo-flash rows on REANALYZE and DEDUP are not used. | `1221b0a4` (`head.txt`) | `b3196ae2` |
+| `rerun8`, the D8 entrants, 2026-10-11 | DEDUP: gpt-6-luna, Sonnet 5, Sonnet 4.6, Opus 5.5. INTENT: Sonnet 5, Sonnet 4.6, Opus 5.5. TRAIN: gpt-6-luna, Sonnet 5, Sonnet 4.6, Opus 5.5. K3 in every role. | `1221b0a4` (`head.txt`) | `b3196ae2` |
 | `corpus`, memory corpus (MNEMONIC, MEMORY_EXTRACT, MEMORY_MERGE) | The 2026-10-02 records of seven arms, mimo-pro's re-run (10-04, `e9bd6d02`) and Sonnet's (10-11c, `f827ae19`) | `8b18ea69` | `81998270` |
 
 `measure_roles` records no commit. Rerun 6 started at 18:17Z, three minutes
@@ -37,13 +38,13 @@ The **build snapshot in force** is `b3196ae2…` (read 2026-10-10T12:01:52Z).
 `measured.json` records each role's snapshot version(s).
 
 `measured.json` was written by `scripts/derive_thresholds.py` alone, from the
-row sets in `scratchpad/s4b8/runs/`:
+row sets in `scratchpad/s4b9/runs/`:
 
 ```
-derive_thresholds.py --arms arms-final.json
+derive_thresholds.py --arms arms-final.json arms-scores.json
   --run s4c@8b18ea69=s4c.jsonl  --run rerun3@1785352c=rerun3.jsonl
   --run rerun4@f827ae19=rerun4.jsonl  --run rerun6@1221b0a4=rerun6.jsonl
-  --run rerun7@1221b0a4=rerun7.jsonl
+  --run rerun7@1221b0a4=rerun7.jsonl  --run rerun8@1221b0a4=rerun8.jsonl
   --corpus corpus=<nine manifests>
   --rescore --rescore-from fa1518f0… acb2e224… --shape-check
 ```
@@ -51,6 +52,17 @@ derive_thresholds.py --arms arms-final.json
 `check_measured` passes. Its hashes are today's `requests.json` and corpus
 prompts, and its passes, yardsticks and thresholds follow from its own
 results.
+
+**Index scores.** `arms-scores.json` (written by `scratchpad/s4b9/arms_scores.py`)
+holds the resolver's own index score for every model measured, from the
+same 2026-10-10T12:01Z fixture the table is resolved on. The entrant arms
+files of reruns 7 and 8 carried no score, so their rows had `arm_score`
+null. `threshold_of` left those arms out of the ladder. In S4b8 this kept
+DEDUP at a 24.4 threshold while mimo-v2.6-flash (37.9) and solar-pro4 (28.2)
+failed it. `derive_thresholds` now fills a missing score from the `--arms`
+files (`f8e70f89`) and never replaces a recorded one. Only the imputed
+agentic scores of Opus and Sonnet differ between the two reads. They feed
+CHAT and TASK_SOLVE, which are maximise roles with no threshold.
 
 ## Each arm against the reference of its own run
 
@@ -74,7 +86,8 @@ The rule applied to this data:
 - INTENT, WEB_SEARCH and TRAIN: MiMo is judged against rerun 6's K3, the
   other arms against s4c's K3.
 - REANALYZE, DEDUP, INTENT and TRAIN: rerun 7's entrants are judged against
-  rerun 7's K3.
+  rerun 7's K3. DEDUP, INTENT and TRAIN: rerun 8's entrants are judged
+  against rerun 8's K3.
 - The corpus has one K3 record, 2026-10-02's, and each arm's record is its
   own pytest run. All nine records are therefore judged against that one K3
   record. There was no choice among K3 records.
@@ -159,7 +172,8 @@ profile's `llm_usage` and `llm_reservations` tables.
 | Sonnet corpus, rerun 5 (the record used) | 0.157 | |
 | Headroom re-measure, rerun 6 | 0.591 | 102 intents, all settled |
 | Threshold entrants, rerun 7 | 0.745 | 221 intents, all settled |
-| **Total** | **12.32 settled; 13.20 counted** | Counted takes the aborted attempt at its 0.97 bound. Of the USD 20 the CTO approved. |
+| D8 entrants, rerun 8 | 1.831 | 151 intents, all settled, none open (cap 5.5) |
+| **Total** | **14.15 settled; 15.03 counted** | Counted takes the aborted attempt at its 0.97 bound. Of the USD 20 the CTO approved. |
 
 The 2026-10-03 rehearsal ledger's 4.57 is a dry run's scripted receipts, not
 spend.
@@ -181,12 +195,12 @@ critical failure and scores at least p − se of its own run's K3.
 | MEMORY_MERGE | maximise | corpus 7/7 | – | Opus, deepseek, K3, GPT-6 Sol, GPT-6.1 Sol | Sonnet (bar), glm-flash | mimo flash, pro | Opus 5.5 |
 | TASK_DETECTION | satisfice | s4c 16/16 | measured_only | Sonnet, deepseek, K3 | glm-flash (bar) | mimo flash, pro | Sonnet 5.5 |
 | REANALYZE | satisfice | s4c 15/15; rerun7 15/15 (2 bar misses credited) | measured_only | Sonnet, deepseek, glm-flash (s4c); ling-3.0-flash-vl, v4-flash-0731, solar-pro4, mimo-flash (rerun7) | **K3** (bar in rerun7) | mimo-pro | Sonnet 5.5 |
-| DEDUP | satisfice | s4c 14/14; rerun7 14/14 | **24.4** | Sonnet, deepseek, glm-flash (s4c); ling-3.0-flash-vl, v4-flash-0731 (rerun7); K3 | solar-pro4 13/14, mimo-flash (critical, bars) | mimo-pro | Sonnet 5.5 |
+| DEDUP | satisfice | s4c, rerun7, rerun8 14/14 | measured_only | Sonnet 5.5, deepseek, glm-flash (s4c); ling-3.0-flash-vl, v4-flash-0731 (rerun7); gpt-6-luna, Sonnet 5, Sonnet 4.6, Opus 5.5 (rerun8); K3 | solar-pro4 13/14, mimo-flash (critical, bars) | mimo-pro | Sonnet 5.5, Sonnet 5, Sonnet 4.6, Opus 5.5 |
 | REPLY_NEED | satisfice | s4c 13/14 | measured_only | Sonnet, glm-flash | deepseek, K3 (critical) | mimo flash, pro | Sonnet 5.5 |
-| INTENT | satisfice | s4c, rerun6, rerun7 14/14 | **24.4** | Sonnet, deepseek, glm-flash (s4c); mimo flash, pro (rerun6); ling-3.0-flash-vl, v4-flash-0731 (rerun7); K3 | solar-pro4 (bar, 13/14) | – | Sonnet 5.5 |
+| INTENT | satisfice | s4c, rerun6, rerun7, rerun8 14/14 | measured_only | Sonnet 5.5, deepseek, glm-flash (s4c); mimo flash, pro (rerun6); ling-3.0-flash-vl, v4-flash-0731 (rerun7); Sonnet 5, Sonnet 4.6, Opus 5.5 (rerun8); K3 | solar-pro4 (bar, 13/14) | – | Sonnet 5.5, Sonnet 5, Sonnet 4.6, Opus 5.5 |
 | CHAT | maximise | rerun3 10/11 (0.909 ± 0.087); rerun4 11/11 | – | Sonnet 10/11, Qwen 11/11, GLM 5.3 11/11 (rerun3); K3 (both) | **Opus 5.5 10/11 (rerun4)** | – | Sonnet 5.5 |
 | TASK_SOLVE | maximise | s4c 10/11 | – | Opus, Sonnet, GLM 5.3 | K3, Qwen (bar) | – | Opus, Sonnet |
-| TRAIN | satisfice | s4c, rerun6, rerun7 5/5 | **24.4** | Sonnet, deepseek, glm-flash (s4c); mimo flash, pro (rerun6); ling-3.0-flash-vl (rerun7); K3 | v4-flash-0731, solar-pro4 (bars) | – | Sonnet 5.5 |
+| TRAIN | satisfice | s4c, rerun6, rerun7, rerun8 5/5 | measured_only | Sonnet 5.5, deepseek, glm-flash (s4c); mimo flash, pro (rerun6); ling-3.0-flash-vl (rerun7); gpt-6-luna, Sonnet 5, Sonnet 4.6 (rerun8); K3 | **Opus 5.5** (5/5, a bar, rerun8), v4-flash-0731, solar-pro4 (bars) | – | Sonnet 5.5, Sonnet 5, Sonnet 4.6 |
 | COMPACTION | satisfice | s4c 5/5 | measured_only | Sonnet, deepseek, K3 | glm-flash (bar) | mimo flash, pro | Sonnet 5.5 |
 | SYNC_ANALYSIS | satisfice | s4c 13/14 | measured_only | Sonnet, deepseek, K3 | glm-flash | mimo flash, pro | Sonnet 5.5 |
 | WEB_SEARCH | satisfice | s4c 5/5; rerun6 5/5 | measured_only | Sonnet, glm-flash (s4c); mimo-flash (rerun6); K3 | deepseek (critical), mimo-pro (bar) | – | Sonnet 5.5 |
@@ -197,9 +211,15 @@ critical failure and scores at least p − se of its own run's K3.
 called, or an operation left pending. The reference fails two roles itself:
 REPLY_NEED (critical) and TASK_SOLVE (a bar).
 
-**Thresholds.** DEDUP, INTENT and TRAIN have a threshold of 24.4: every
-measured arm at or above it passes. REANALYZE is `measured_only`, because
-K3 (43.6) fails it on its rerun 7 bar while lower-scored arms pass.
+**Thresholds.** With every measured arm's index score in the ladder, **every
+satisfice role is `measured_only`**: in each, an arm fails while a
+lower-scored arm passes. Only measured, passing models rank, so no threshold
+admits an unmeasured model.
+
+- REANALYZE: K3 (43.6) fails on its rerun 7 bar.
+- DEDUP: mimo-flash (37.9) and solar-pro4 (28.2) fail.
+- INTENT: solar-pro4 fails.
+- TRAIN: Opus 5.5 (57.6), v4-flash-0731 (34.3) and solar-pro4 fail.
 
 ## The audit and its fixes
 
@@ -266,27 +286,32 @@ rule.
 ## The table (`resolve_models.py --apply`)
 
 The resolver ran on the 2026-10-10T12:01Z payloads (`--fixture`).
-`snapshot.json` was rewritten byte-identical (`b3196ae2`). The resolver wrote
-a table (version `153def31…`) and `gates.check_table` passes. **The table is
-not published**, because it fails D8.
+`snapshot.json` was rewritten byte-identical (`b3196ae2`). **The table was
+written and passes both checks:**
+
+- `table.json` version `cd45b6fa…`;
+- `gates.check_table` passes;
+- D8 holds.
+
+It is not committed: it lands with S6 at the switch-over. It is saved at
+`scratchpad/s4b8/table.json`, sha256
+`ed317e0d7c892f3d5267cbf32f5fbe8e13ce291f594075d5fb7ee269614c414b`.
 
 **D8** is the rule the daily job applies: no unmeasured model enters a
-published satisfice ranking for the first table. Rerun 7 measured every
-entrant the S4b7 rankings held. Solar-pro4 failed DEDUP, INTENT and TRAIN,
-and v4-flash-0731 failed TRAIN. That let the next unmeasured models move up
-into the five-place rankings:
+published satisfice ranking for the first table. It took two rounds:
 
-| Unmeasured entry | Where |
-|---|---|
-| `openai/gpt-6-luna` | ranking, 5th: DEDUP and TRAIN, both presets |
-| `anthropic/claude-sonnet-5` | Anthropic ranking: DEDUP, INTENT, TRAIN, both presets |
-| `anthropic/claude-sonnet-4.6` | Anthropic ranking: DEDUP, INTENT, TRAIN, balanced |
-| `anthropic/claude-opus-5.5` | Anthropic ranking: DEDUP, INTENT, TRAIN, balanced (measured on other roles, not these) |
+- **S4b8:** rerun 7's failures let four unmeasured models move up: gpt-6-luna,
+  Sonnet 5, Sonnet 4.6, and Opus 5.5 on these roles.
+- **Rerun 8:** measured all four. All passed, except Opus 5.5 on TRAIN.
 
-The candidate is kept as `scratchpad/s4b8/table.candidate-fails-D8.json`; it
-is neither committed nor offered as the table. Every pick and every
-Anthropic head below is measured and passing. Only lower places of the
-rankings are unmeasured.
+Every entry of every ranking and every Anthropic ranking under both presets
+is now a model `measured.json` shows measured and passing; the check found
+0 exceptions. Opus's TRAIN failure removed Opus from TRAIN's balanced
+Anthropic ranking and pulled no new model in. Every satisfice role is
+`measured_only`, so none can.
+
+The picks and Anthropic heads are unchanged from S4b8. The only ranking
+change is Opus 5.5 leaving TRAIN's balanced Anthropic ranking.
 
 The economy ceiling stays at 10: NARRATION now has deepseek-v4-flash and
 mimo-v2.6-pro. The zero-priced model is screened out (`558ff4ad`).
@@ -355,10 +380,10 @@ the corpus K3:
   answered once. Where K3 scores 1.0, se is 0 and one miss fails an arm. In
   CHAT, Opus's pass turns on rerun 4's K3 answering chat-09, which rerun 3's
   K3 missed.
-- **Unmeasured models above a threshold.** DEDUP, INTENT and TRAIN still
-  admit unmeasured models at or above 24.4. The rankings carry four such
-  entries below their measured heads (D8, above), so the table is not
-  published until they are measured or the rankings exclude them.
+- **Only measured models rank.** Every satisfice role is `measured_only`, so
+  a model never measured is never ranked. The table is therefore no better
+  than the arms measured, and a cheaper unmeasured model is never
+  considered.
 - **Imputed agentic scores.** Opus's and Sonnet's agentic scores (60.4,
   58.3) are imputed from intelligence.
 - **The truncation check.** M9's D6 check patches the decision call's
