@@ -4,10 +4,12 @@
       {
         "calls": [],
         "opened_at": "2026-10-12T14:14:38Z",
+        "recovered": true,
+        "recovered_by": "2026-10-12T17:43:39Z",
         "reserved_usd": "4.146243",
         "run": "2026-10-12T14:13:04Z",
-        "settled_at": null,
-        "spent_usd": null
+        "settled_at": "2026-10-12T17:43:39Z",
+        "spent_usd": "4.146243"
       }
     ]
   },
