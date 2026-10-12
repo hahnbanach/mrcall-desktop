@@ -1345,6 +1345,14 @@
       "model": "meta-llama/llama-4-maverick",
       "outcome": "passed",
       "run": "2026-10-12T17:43:39Z"
+    },
+    {
+      "at": "2026-10-12T19:03:23Z",
+      "detail": "",
+      "metadata_sha256": "45e53de06e1843619dda5c02a1b63b254c3c2fbf240d6af88f99d0c495fe773e",
+      "model": "qwen/qwen3-vl-30b-a3b-thinking",
+      "outcome": "passed",
+      "run": "2026-10-12T17:43:39Z"
     }
   ],
   "stops": [
