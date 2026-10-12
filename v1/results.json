@@ -1521,6 +1521,14 @@
       "model": "x-ai/grok-build-0.1",
       "outcome": "passed",
       "run": "2026-10-12T17:43:39Z"
+    },
+    {
+      "at": "2026-10-12T19:06:23Z",
+      "detail": "",
+      "metadata_sha256": "06b5c6afb7c0d5bf51bb3ad3551d1a790d442aa68a66245b16058fc268d91b7c",
+      "model": "openai/gpt-5-mini",
+      "outcome": "passed",
+      "run": "2026-10-12T17:43:39Z"
     }
   ],
   "stops": [
