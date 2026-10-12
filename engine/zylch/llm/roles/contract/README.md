@@ -35,10 +35,12 @@ published contract").
   every one is in, which the resolver does not read), `ledger.json`
   (its spend by month, a run's reservation and calls pushed check by check)
   and `results.json` (each measurement result paid for and not yet in
-  `measured.json`, pushed as its measurement ends) are the job's own
+  `measured.json`; each smoke's outcome, by model and request-metadata
+  fingerprint; each measurement stopped at its time limit; every entry pushed
+  as its check ends) are the job's own
   records: no engine or server reads them
   (`engine/scripts/model_table_records.py`, `model_table_measured.py`,
-  `model_table_results.py`).
+  `model_table_results.py`, `model_table_outcomes.py`).
 - Run-time URL, engine and billing server alike:
   `https://raw.githubusercontent.com/hahnbanach/mrcall-desktop/model-table/v1/<file>`.
 - The engine downloads `table.json` and `snapshot.json` at start and every

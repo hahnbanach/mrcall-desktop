@@ -103,9 +103,11 @@ python scripts/resolve_models.py --fixture DIR  # read saved payloads, no networ
   Engines and the billing server read only `table.json` and `snapshot.json`;
   the other three are the daily job's own records. `results.json` holds each
   measurement result the job has paid for and not yet published in
-  `measured.json`, keyed by model, role, case-set hash and prompt hash. Each
-  result is pushed when its measurement ends
-  (`scripts/model_table_results.py`).
+  `measured.json`, keyed by model, role, case-set hash and prompt hash
+  (`scripts/model_table_results.py`). It also holds the smokes' outcomes, keyed
+  by model and the fingerprint of its request metadata, and the measurements
+  stopped at their time limit (`scripts/model_table_outcomes.py`). Each entry
+  is pushed when its check ends.
   The first publish is `8087fbf2`: table version `304ab3b7…` (file sha256
   `9d40bbf3…`), snapshot `b3196ae2…` read 2026-10-10T12:01:52Z.
 - **Build copies** `roles/table.json` and `roles/snapshot.json`, written by
@@ -252,18 +254,39 @@ spend and per-role results are in the
   to what it spent, and the check's results (`results.json`) in one commit.
   Nothing is retried;
 - stops at a deadline (`--deadline-minutes`; the workflow passes 90 under its
-  120-minute timeout). No check starts whose time limit (smoke 3 min,
-  measurement 10, memory corpus run 20) would end after the deadline. Later
-  checks are deferred unpaid and reported; the run still decides, publishes
-  and settles. A measurement process is stopped at its limit: interrupted,
-  so it deletes its key file, then killed. Its ledger is charged;
+  120-minute timeout). No check starts whose time limit would end after the
+  deadline. A smoke's limit is its worst case under the engine's HTTP
+  timeouts: 7 min, or 21 on the K3 path. A measurement is stopped at 10 min,
+  a memory corpus run at 20. Later checks are deferred unpaid and reported;
+  the run still decides, publishes and settles. Every check ends by the
+  deadline; a stopped one is killed 30 s later; then the decisions and one
+  push. With the runner's setup that stays well under 120;
+- stops a measurement at its limit: interrupted, so it deletes its key file,
+  then killed. A harness measurement is charged what its ledger recorded.
+  A corpus run that wrote no record is charged its settled cases plus each
+  open case at its bound, from `profile/corpus-intents.jsonl`; only when that
+  journal is unreadable is it charged the whole USD 2. A measurement stopped
+  at its limit is not tried again for 14 days, unless the role's case-set or
+  prompt hash or the model's request metadata changes;
+- smokes a model once a week at most. A smoke's outcome stands 7 days while
+  the model's request metadata (`reasoning`, `parameters`, `forced_tool`) is
+  unchanged. A passed model is not smoked again: a measurement the deadline
+  deferred follows it the next day. A failed model stays out of the
+  rankings. An uncertain entrant smoke (no settled answer, or an error) is
+  not retried, but a smoke the publication waits for (a ranked model whose
+  metadata changed) is retried by every run. No smoke is sent twice in a
+  run, and one that sent nothing is not kept;
+- runs alone on its data checkout: an exclusive `flock` for the whole run,
+  and a second run is refused. A commit left unpushed is pushed by the next
+  push, or the push fails and the run reports it;
 - survives a hard kill: the branch keeps every paid result and an honest
   bound of the spend, the recorded calls plus one check's bound. The next
   run takes the results free of charge. It settles the open reservation at
   its reserved amount, marked `recovered`, before reserving anything. Under
-  the monthly cap that amount counts as spent, once. An interrupted run, such
-  as a cancelled workflow, settles itself and counts a check in flight at its
-  bound;
+  the monthly cap that amount counts as spent, once. An interrupted run
+  (SIGINT or SIGTERM, as a cancelled workflow sends) stops its measurement
+  process and may settle itself, counting a check in flight at its bound.
+  Otherwise the next run recovers it;
 - publishes, or exits 1 and leaves the last record in force; a price-only
   change updates `snapshot.json` alone, and a raised ceiling is never
   published.
