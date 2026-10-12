@@ -804,10 +804,21 @@
             "role": null,
             "spent_usd": "0.000056",
             "why": "ranking of economy / MEMORY_EXTRACT / ranking"
+          },
+          {
+            "at": "2026-10-12T19:01:06Z",
+            "bound_usd": "0.2",
+            "check": "smoke upstage/solar-pro4",
+            "kind": "smoke",
+            "model": "upstage/solar-pro4",
+            "outcome": "passed",
+            "role": null,
+            "spent_usd": "0.000133",
+            "why": "ranking of economy / MEMORY_EXTRACT / ranking"
           }
         ],
         "opened_at": "2026-10-12T17:44:44Z",
-        "reserved_usd": "1.408687",
+        "reserved_usd": "1.20882",
         "run": "2026-10-12T17:43:39Z",
         "settled_at": null,
         "spent_usd": null
