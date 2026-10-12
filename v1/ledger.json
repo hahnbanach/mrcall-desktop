@@ -45,10 +45,21 @@
             "role": null,
             "spent_usd": "0.00293",
             "why": "pick of economy / MNEMONIC / anthropic_ranking"
+          },
+          {
+            "at": "2026-10-12T17:45:08Z",
+            "bound_usd": "2",
+            "check": "MNEMONIC on anthropic/claude-sonnet-5",
+            "kind": "measure",
+            "model": "anthropic/claude-sonnet-5",
+            "outcome": "MNEMONIC: passed; MEMORY_EXTRACT: passed; MEMORY_MERGE: passed",
+            "role": "MNEMONIC",
+            "spent_usd": "0.219746",
+            "why": "pick of economy / MNEMONIC / anthropic_ranking"
           }
         ],
         "opened_at": "2026-10-12T17:44:44Z",
-        "reserved_usd": "2.00313",
+        "reserved_usd": "0.222876",
         "run": "2026-10-12T17:43:39Z",
         "settled_at": null,
         "spent_usd": null
