@@ -716,10 +716,21 @@
             "role": null,
             "spent_usd": "0.018935",
             "why": "ranking of economy / MNEMONIC / ranking"
+          },
+          {
+            "at": "2026-10-12T19:00:00Z",
+            "bound_usd": "0.2",
+            "check": "smoke deepseek/deepseek-v4.1-flash",
+            "kind": "smoke",
+            "model": "deepseek/deepseek-v4.1-flash",
+            "outcome": "passed",
+            "role": null,
+            "spent_usd": "0.000056",
+            "why": "ranking of economy / MNEMONIC / ranking"
           }
         ],
         "opened_at": "2026-10-12T17:44:44Z",
-        "reserved_usd": "1.405533",
+        "reserved_usd": "1.205589",
         "run": "2026-10-12T17:43:39Z",
         "settled_at": null,
         "spent_usd": null
