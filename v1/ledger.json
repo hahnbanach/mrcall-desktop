@@ -1068,10 +1068,21 @@
             "role": null,
             "spent_usd": "0.000219",
             "why": "ranking of economy / MEMORY_EXTRACT / ranking"
+          },
+          {
+            "at": "2026-10-12T19:04:17Z",
+            "bound_usd": "0.2",
+            "check": "smoke thinkingmachines/inkling-small",
+            "kind": "smoke",
+            "model": "thinkingmachines/inkling-small",
+            "outcome": "passed",
+            "role": null,
+            "spent_usd": "0.000142",
+            "why": "ranking of economy / MEMORY_EXTRACT / ranking"
           }
         ],
         "opened_at": "2026-10-12T17:44:44Z",
-        "reserved_usd": "1.419989",
+        "reserved_usd": "1.220131",
         "run": "2026-10-12T17:43:39Z",
         "settled_at": null,
         "spent_usd": null

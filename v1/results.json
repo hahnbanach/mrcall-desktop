@@ -1393,6 +1393,14 @@
       "model": "minimax/minimax-m3",
       "outcome": "passed",
       "run": "2026-10-12T17:43:39Z"
+    },
+    {
+      "at": "2026-10-12T19:04:17Z",
+      "detail": "",
+      "metadata_sha256": "d9588e7e5f3c0d85130626a288a1be859da9906ae5a3692f281c3b25e0c8679e",
+      "model": "thinkingmachines/inkling-small",
+      "outcome": "passed",
+      "run": "2026-10-12T17:43:39Z"
     }
   ],
   "stops": [
