@@ -834,6 +834,14 @@
       "model": "xiaomi/mimo-v2.6-pro",
       "outcome": "passed",
       "run": "2026-10-12T17:43:39Z"
+    },
+    {
+      "at": "2026-10-12T18:38:40Z",
+      "detail": "",
+      "metadata_sha256": "b5be9ffaf081ebaa56cc52a69e1de627e72380bd3a257a73497d886e483257e7",
+      "model": "qwen/qwen3.8-max-0902",
+      "outcome": "passed",
+      "run": "2026-10-12T17:43:39Z"
     }
   ],
   "stops": [
