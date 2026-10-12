@@ -144,10 +144,21 @@
             "role": null,
             "spent_usd": "0.000012",
             "why": "pick of economy / MEMORY_EXTRACT / ranking"
+          },
+          {
+            "at": "2026-10-12T17:50:08Z",
+            "bound_usd": "2",
+            "check": "MEMORY_EXTRACT on inclusionai/ling-3.0-flash",
+            "kind": "measure",
+            "model": "inclusionai/ling-3.0-flash",
+            "outcome": "MNEMONIC: failed; MEMORY_EXTRACT: passed; MEMORY_MERGE: failed",
+            "role": "MEMORY_EXTRACT",
+            "spent_usd": "0.001056",
+            "why": "pick of economy / MEMORY_EXTRACT / ranking"
           }
         ],
         "opened_at": "2026-10-12T17:44:44Z",
-        "reserved_usd": "2.255946",
+        "reserved_usd": "0.257002",
         "run": "2026-10-12T17:43:39Z",
         "settled_at": null,
         "spent_usd": null
