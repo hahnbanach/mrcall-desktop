@@ -166,10 +166,21 @@
             "role": "TASK_DETECTION",
             "spent_usd": "0.000999",
             "why": "pick of economy / TASK_DETECTION / ranking"
+          },
+          {
+            "at": "2026-10-12T17:52:12Z",
+            "bound_usd": "2",
+            "check": "TASK_DETECTION on inclusionai/ling-3.0-flash",
+            "kind": "measure",
+            "model": "inclusionai/ling-3.0-flash",
+            "outcome": "TASK_DETECTION: failed",
+            "role": "TASK_DETECTION",
+            "spent_usd": "0.000882",
+            "why": "pick of economy / TASK_DETECTION / ranking"
           }
         ],
         "opened_at": "2026-10-12T17:44:44Z",
-        "reserved_usd": "2.258001",
+        "reserved_usd": "0.258883",
         "run": "2026-10-12T17:43:39Z",
         "settled_at": null,
         "spent_usd": null
