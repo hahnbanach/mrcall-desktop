@@ -615,6 +615,14 @@
       "model": "amazon/nova-lite-v1",
       "outcome": "failed",
       "run": "2026-10-12T17:43:39Z"
+    },
+    {
+      "at": "2026-10-12T18:06:45Z",
+      "detail": "no lookup_order call (stop_reason=end_turn)",
+      "metadata_sha256": "716e3ea44416248d2947660ab9d4b877f557895ca5e47cc7bbdcc9a593baa160",
+      "model": "deepseek/deepseek-v4-flash-0731",
+      "outcome": "failed",
+      "run": "2026-10-12T17:43:39Z"
     }
   ],
   "stops": []

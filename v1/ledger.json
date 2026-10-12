@@ -430,10 +430,21 @@
             "role": "SYNC_ANALYSIS",
             "spent_usd": "0.001951",
             "why": "pick of economy / SYNC_ANALYSIS / ranking"
+          },
+          {
+            "at": "2026-10-12T18:06:45Z",
+            "bound_usd": "0.2",
+            "check": "smoke deepseek/deepseek-v4-flash-0731",
+            "kind": "smoke",
+            "model": "deepseek/deepseek-v4-flash-0731",
+            "outcome": "failed: no lookup_order call (stop_reason=end_turn)",
+            "role": null,
+            "spent_usd": "0.000116",
+            "why": "pick of economy / SYNC_ANALYSIS / ranking"
           }
         ],
         "opened_at": "2026-10-12T17:44:44Z",
-        "reserved_usd": "0.48377",
+        "reserved_usd": "0.283886",
         "run": "2026-10-12T17:43:39Z",
         "settled_at": null,
         "spent_usd": null
