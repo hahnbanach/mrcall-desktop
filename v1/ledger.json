@@ -254,10 +254,21 @@
             "role": "REPLY_NEED",
             "spent_usd": "0.000228",
             "why": "pick of economy / REPLY_NEED / ranking"
+          },
+          {
+            "at": "2026-10-12T17:56:46Z",
+            "bound_usd": "2",
+            "check": "COMPACTION on inclusionai/ling-3.0-flash-vl",
+            "kind": "measure",
+            "model": "inclusionai/ling-3.0-flash-vl",
+            "outcome": "COMPACTION: passed",
+            "role": "COMPACTION",
+            "spent_usd": "0.000128",
+            "why": "pick of economy / COMPACTION / ranking"
           }
         ],
         "opened_at": "2026-10-12T17:44:44Z",
-        "reserved_usd": "2.267103",
+        "reserved_usd": "0.267231",
         "run": "2026-10-12T17:43:39Z",
         "settled_at": null,
         "spent_usd": null
