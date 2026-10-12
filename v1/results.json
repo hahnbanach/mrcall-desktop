@@ -1409,6 +1409,14 @@
       "model": "minimax/minimax-m2.7",
       "outcome": "passed",
       "run": "2026-10-12T17:43:39Z"
+    },
+    {
+      "at": "2026-10-12T19:04:36Z",
+      "detail": "",
+      "metadata_sha256": "cbb1579a0a1b2b9ba1828e07b9fd3bacea15c17e29df395411ab4a46291f6e90",
+      "model": "minimax/minimax-m2.1",
+      "outcome": "passed",
+      "run": "2026-10-12T17:43:39Z"
     }
   ],
   "stops": [
