@@ -321,6 +321,14 @@
       "model": "inclusionai/ling-3.0-flash-fin",
       "outcome": "passed",
       "run": "2026-10-12T17:43:39Z"
+    },
+    {
+      "at": "2026-10-12T17:53:57Z",
+      "detail": "",
+      "metadata_sha256": "90553a27c3dcdcbf3c714b1533eb5d6f1b20eb229efe0d1923a65de410a81a84",
+      "model": "inception/mercury-2.5",
+      "outcome": "passed",
+      "run": "2026-10-12T17:43:39Z"
     }
   ],
   "stops": []

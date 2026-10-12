@@ -199,10 +199,21 @@
             "role": "TASK_DETECTION",
             "spent_usd": "0.001838",
             "why": "pick of economy / TASK_DETECTION / ranking"
+          },
+          {
+            "at": "2026-10-12T17:53:57Z",
+            "bound_usd": "0.2",
+            "check": "smoke inception/mercury-2.5",
+            "kind": "smoke",
+            "model": "inception/mercury-2.5",
+            "outcome": "passed",
+            "role": null,
+            "spent_usd": "0.000077",
+            "why": "pick of economy / TASK_DETECTION / ranking"
           }
         ],
         "opened_at": "2026-10-12T17:44:44Z",
-        "reserved_usd": "0.460744",
+        "reserved_usd": "0.260821",
         "run": "2026-10-12T17:43:39Z",
         "settled_at": null,
         "spent_usd": null
