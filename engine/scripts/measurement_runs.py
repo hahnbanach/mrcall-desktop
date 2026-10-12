@@ -129,14 +129,22 @@ def arm_result(mine: list[dict], cases: list[str]) -> tuple[dict, str | None]:
 
 
 def supersede_stale(rows: list[dict], cases: list[str]) -> tuple[list[dict], dict]:
-    """``(rows, {arm: [runs dropped]})``: an arm's stale-shape run, measured again, is dropped.
+    """``(rows, {arm: [runs dropped]})``: an arm's wholly stale run, measured again, is dropped.
 
-    A run holding a ``stale_request`` row (``measurement_shape``: the shaped
-    request is not today's) is no measurement of that arm. When the same arm
-    has another run of the role with no stale row and every case answered, the
-    stale run is superseded and its rows leave. Without such a run they stay,
-    and the arm is incomplete (unmeasured). The rule is mechanical: it never
-    drops a current-shape row, whatever its verdict.
+    A run whose every row is ``stale_request`` (``measurement_shape``: the
+    shaped request is not today's) is no measurement of that arm. When the
+    same arm has another run of the role with no stale row and every case
+    answered, that stale run is superseded and its rows leave. Without such a
+    run they stay, and the arm is incomplete (unmeasured).
+
+    The rule never drops a current-shape row, whatever its verdict. A
+    **mixed** run, some rows stale and some current, is therefore never
+    superseded (S4b11). Dropping only its stale rows would leave a partial
+    run that makes the arm incomplete anyway, and a wrong one to judge.
+    Dropping the whole run would discard current answers on a rule meant for
+    stale ones. Kept whole, its stale rows leave the arm incomplete, named by
+    case under ``incomplete``. Deciding what a mixed run is worth takes a
+    committed exclusion (``measurement_plan``), not this rule.
     """
     by_run: dict[tuple, list[dict]] = {}
     for row in rows:
@@ -145,6 +153,9 @@ def supersede_stale(rows: list[dict], cases: list[str]) -> tuple[list[dict], dic
     def stale(mine: list[dict]) -> bool:
         return any(r["status"] == "stale_request" for r in mine)
 
+    def wholly_stale(mine: list[dict]) -> bool:
+        return all(r["status"] == "stale_request" for r in mine)
+
     current = {
         arm
         for (arm, _run), mine in by_run.items()
@@ -152,7 +163,7 @@ def supersede_stale(rows: list[dict], cases: list[str]) -> tuple[list[dict], dic
     }
     kept, dropped = [], {}
     for (arm, run), mine in by_run.items():
-        if arm in current and stale(mine):
+        if arm in current and wholly_stale(mine):
             dropped.setdefault(arm, []).append(run)
         else:
             kept += mine
