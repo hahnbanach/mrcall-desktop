@@ -738,10 +738,21 @@
             "role": null,
             "spent_usd": "0.001122",
             "why": "ranking of economy / MNEMONIC / ranking"
+          },
+          {
+            "at": "2026-10-12T19:00:13Z",
+            "bound_usd": "0.2",
+            "check": "smoke openai/gpt-5.6-sol",
+            "kind": "smoke",
+            "model": "openai/gpt-5.6-sol",
+            "outcome": "passed",
+            "role": null,
+            "spent_usd": "0.000844",
+            "why": "ranking of balanced / MNEMONIC / ranking"
           }
         ],
         "opened_at": "2026-10-12T17:44:44Z",
-        "reserved_usd": "1.406711",
+        "reserved_usd": "1.207555",
         "run": "2026-10-12T17:43:39Z",
         "settled_at": null,
         "spent_usd": null
