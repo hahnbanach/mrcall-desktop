@@ -1297,6 +1297,14 @@
       "model": "qwen/qwen3-vl-8b-instruct",
       "outcome": "failed",
       "run": "2026-10-12T17:43:39Z"
+    },
+    {
+      "at": "2026-10-12T19:02:44Z",
+      "detail": "BudgetError: OpenRouter request failed (HTTP 429); no automatic retry.",
+      "metadata_sha256": "8f36c8b5ca903013dcf8561ede401ccb4a24c8230881cf966f7a0032bec1d8c3",
+      "model": "qwen/qwen3-235b-a22b-2507",
+      "outcome": "failed",
+      "run": "2026-10-12T17:43:39Z"
     }
   ],
   "stops": [
