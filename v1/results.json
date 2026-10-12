@@ -1457,6 +1457,14 @@
       "model": "qwen/qwen3.7-plus",
       "outcome": "passed",
       "run": "2026-10-12T17:43:39Z"
+    },
+    {
+      "at": "2026-10-12T19:05:22Z",
+      "detail": "",
+      "metadata_sha256": "716e3ea44416248d2947660ab9d4b877f557895ca5e47cc7bbdcc9a593baa160",
+      "model": "deepseek/deepseek-v4-flash-vision-exp",
+      "outcome": "passed",
+      "run": "2026-10-12T17:43:39Z"
     }
   ],
   "stops": [
