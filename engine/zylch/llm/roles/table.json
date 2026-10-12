@@ -1,6 +1,6 @@
 {
  "catalogue_read_at": "2026-10-10T12:01:52Z",
- "measured_sha256": "c08005641162fdaf0017035459b720d319c5918b2e5f995bcfd0c18a52fc98ff",
+ "measured_sha256": "403601759cfec5f960e97a85ad6c7ae1adeb92fd21b29a5c24808b3da2aaa71f",
  "presets": {
   "balanced": {
    "ceiling": "20",
@@ -13,7 +13,7 @@
     "MEMORY_EXTRACT": {"anthropic_ranking": [{"direct_id": "claude-opus-5-5", "id": "anthropic/claude-opus-5.5"}], "ranking": [{"direct_id": null, "id": "deepseek/deepseek-v4-flash"}, {"direct_id": null, "id": "openai/gpt-6.1-sol"}, {"direct_id": null, "id": "openai/gpt-6-sol"}, {"direct_id": null, "id": "moonshotai/kimi-k3"}, {"direct_id": "claude-opus-5-5", "id": "anthropic/claude-opus-5.5"}]},
     "MEMORY_MERGE": {"anthropic_ranking": [{"direct_id": "claude-opus-5-5", "id": "anthropic/claude-opus-5.5"}], "ranking": [{"direct_id": "claude-opus-5-5", "id": "anthropic/claude-opus-5.5"}, {"direct_id": null, "id": "openai/gpt-6.1-sol"}, {"direct_id": null, "id": "openai/gpt-6-sol"}, {"direct_id": null, "id": "moonshotai/kimi-k3"}, {"direct_id": null, "id": "deepseek/deepseek-v4-flash"}]},
     "MNEMONIC": {"anthropic_ranking": [{"direct_id": "claude-opus-5-5", "id": "anthropic/claude-opus-5.5"}], "ranking": [{"direct_id": "claude-opus-5-5", "id": "anthropic/claude-opus-5.5"}, {"direct_id": null, "id": "openai/gpt-6.1-sol"}, {"direct_id": null, "id": "openai/gpt-6-sol"}, {"direct_id": null, "id": "moonshotai/kimi-k3"}]},
-    "NARRATION": {"anthropic_ranking": [], "ranking": [{"direct_id": null, "id": "deepseek/deepseek-v4-flash"}, {"direct_id": null, "id": "xiaomi/mimo-v2.6-pro"}, {"direct_id": null, "id": "moonshotai/kimi-k3"}]},
+    "NARRATION": {"anthropic_ranking": [], "ranking": [{"direct_id": null, "id": "xiaomi/mimo-v2.6-pro"}, {"direct_id": null, "id": "moonshotai/kimi-k3"}]},
     "REANALYZE": {"anthropic_ranking": [{"direct_id": "claude-sonnet-5-5", "id": "anthropic/claude-sonnet-5.5"}], "ranking": [{"direct_id": null, "id": "inclusionai/ling-3.0-flash-vl"}, {"direct_id": null, "id": "xiaomi/mimo-v2.6-flash"}, {"direct_id": null, "id": "deepseek/deepseek-v4-flash-0731"}, {"direct_id": null, "id": "deepseek/deepseek-v4-flash"}, {"direct_id": null, "id": "upstage/solar-pro4"}]},
     "REPLY_NEED": {"anthropic_ranking": [{"direct_id": "claude-sonnet-5-5", "id": "anthropic/claude-sonnet-5.5"}], "ranking": [{"direct_id": null, "id": "z-ai/glm-5.3-flash"}, {"direct_id": "claude-sonnet-5-5", "id": "anthropic/claude-sonnet-5.5"}]},
     "SYNC_ANALYSIS": {"anthropic_ranking": [{"direct_id": "claude-sonnet-5-5", "id": "anthropic/claude-sonnet-5.5"}], "ranking": [{"direct_id": null, "id": "deepseek/deepseek-v4-flash"}, {"direct_id": "claude-sonnet-5-5", "id": "anthropic/claude-sonnet-5.5"}, {"direct_id": null, "id": "moonshotai/kimi-k3"}]},
@@ -34,7 +34,7 @@
     "MEMORY_EXTRACT": {"anthropic_ranking": [], "ranking": [{"direct_id": null, "id": "deepseek/deepseek-v4-flash"}, {"direct_id": null, "id": "openai/gpt-6.1-sol"}, {"direct_id": null, "id": "openai/gpt-6-sol"}]},
     "MEMORY_MERGE": {"anthropic_ranking": [], "ranking": [{"direct_id": null, "id": "openai/gpt-6.1-sol"}, {"direct_id": null, "id": "openai/gpt-6-sol"}, {"direct_id": null, "id": "deepseek/deepseek-v4-flash"}]},
     "MNEMONIC": {"anthropic_ranking": [], "ranking": [{"direct_id": null, "id": "openai/gpt-6.1-sol"}, {"direct_id": null, "id": "openai/gpt-6-sol"}]},
-    "NARRATION": {"anthropic_ranking": [], "ranking": [{"direct_id": null, "id": "deepseek/deepseek-v4-flash"}, {"direct_id": null, "id": "xiaomi/mimo-v2.6-pro"}]},
+    "NARRATION": {"anthropic_ranking": [], "ranking": [{"direct_id": null, "id": "xiaomi/mimo-v2.6-pro"}]},
     "REANALYZE": {"anthropic_ranking": [{"direct_id": "claude-sonnet-5-5", "id": "anthropic/claude-sonnet-5.5"}], "ranking": [{"direct_id": null, "id": "inclusionai/ling-3.0-flash-vl"}, {"direct_id": null, "id": "xiaomi/mimo-v2.6-flash"}, {"direct_id": null, "id": "deepseek/deepseek-v4-flash-0731"}, {"direct_id": null, "id": "deepseek/deepseek-v4-flash"}, {"direct_id": null, "id": "upstage/solar-pro4"}]},
     "REPLY_NEED": {"anthropic_ranking": [{"direct_id": "claude-sonnet-5-5", "id": "anthropic/claude-sonnet-5.5"}], "ranking": [{"direct_id": null, "id": "z-ai/glm-5.3-flash"}, {"direct_id": "claude-sonnet-5-5", "id": "anthropic/claude-sonnet-5.5"}]},
     "SYNC_ANALYSIS": {"anthropic_ranking": [{"direct_id": "claude-sonnet-5-5", "id": "anthropic/claude-sonnet-5.5"}], "ranking": [{"direct_id": null, "id": "deepseek/deepseek-v4-flash"}, {"direct_id": "claude-sonnet-5-5", "id": "anthropic/claude-sonnet-5.5"}]},
@@ -45,8 +45,8 @@
    }
   }
  },
- "requirements_sha256": "b0cf3a38bc3af7e4c4ad259b6d3c28f51dfeff4a6247c0f7998bb2241b2fb355",
- "resolved_at": "2026-10-12T10:16:13Z",
+ "requirements_sha256": "91f203752a717456df4ffa61d6b1ea680288d16a025dc01a358edca8ad11e5f6",
+ "resolved_at": "2026-10-12T11:57:32Z",
  "schema": 1,
- "version": "cd45b6fa69d5f33230df35c979294e5ba4435dae701f9276c6990309d8f4e5b8"
+ "version": "304ab3b7389d21be202d1a3178ecef145b4c24c5da83067db334a3b264fa2a40"
 }
