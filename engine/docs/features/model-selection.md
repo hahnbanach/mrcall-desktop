@@ -98,8 +98,14 @@ python scripts/resolve_models.py --fixture DIR  # read saved payloads, no networ
   expiry ranked; every ranked id priced positively within its ceiling;
   versions matching their content.
 - **Published** on the orphan branch `model-table` under `v1/`: `table.json`,
-  `snapshot.json`, `measured.json` and `ledger.json`, read at
+  `snapshot.json`, `measured.json`, `ledger.json` and `results.json`, read at
   `https://raw.githubusercontent.com/hahnbanach/mrcall-desktop/model-table/v1/<file>`.
+  Engines and the billing server read only `table.json` and `snapshot.json`;
+  the other three are the daily job's own records. `results.json` holds each
+  measurement result the job has paid for and not yet published in
+  `measured.json`, keyed by model, role, case-set hash and prompt hash. Each
+  result is pushed when its measurement ends
+  (`scripts/model_table_results.py`).
   The first publish is `8087fbf2`: table version `304ab3b7…` (file sha256
   `9d40bbf3…`), snapshot `b3196ae2…` read 2026-10-10T12:01:52Z.
 - **Build copies** `roles/table.json` and `roles/snapshot.json`, written by
@@ -240,8 +246,24 @@ spend and per-role results are in the
   that fails a gate with the first ranked model with a passing result;
 - treats unmeasured pool models as challengers; the first run's backlog is
   about 128 entrant smokes, so it is worked through over months;
-- stays within USD 10 a month, reserved in `ledger.json` and pushed before
-  the first paid call; nothing is retried;
+- stays within USD 10 a month, kept in `ledger.json`. Before each paid check
+  the run reserves what it has spent plus that check's bound, and pushes the
+  reservation. After the check it pushes the call, the reservation lowered
+  to what it spent, and the check's results (`results.json`) in one commit.
+  Nothing is retried;
+- stops at a deadline (`--deadline-minutes`; the workflow passes 90 under its
+  120-minute timeout). No check starts whose time limit (smoke 3 min,
+  measurement 10, memory corpus run 20) would end after the deadline. Later
+  checks are deferred unpaid and reported; the run still decides, publishes
+  and settles. A measurement process is stopped at its limit: interrupted,
+  so it deletes its key file, then killed. Its ledger is charged;
+- survives a hard kill: the branch keeps every paid result and an honest
+  bound of the spend, the recorded calls plus one check's bound. The next
+  run takes the results free of charge. It settles the open reservation at
+  its reserved amount, marked `recovered`, before reserving anything. Under
+  the monthly cap that amount counts as spent, once. An interrupted run, such
+  as a cancelled workflow, settles itself and counts a check in flight at its
+  bound;
 - publishes, or exits 1 and leaves the last record in force; a price-only
   change updates `snapshot.json` alone, and a raised ceiling is never
   published.
