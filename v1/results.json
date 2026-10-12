@@ -1401,6 +1401,14 @@
       "model": "thinkingmachines/inkling-small",
       "outcome": "passed",
       "run": "2026-10-12T17:43:39Z"
+    },
+    {
+      "at": "2026-10-12T19:04:28Z",
+      "detail": "",
+      "metadata_sha256": "c23502ae5b9f76d4aa110a9655217eeec3ef6fb819bd1db0b24b07413722ca9f",
+      "model": "minimax/minimax-m2.7",
+      "outcome": "passed",
+      "run": "2026-10-12T17:43:39Z"
     }
   ],
   "stops": [
