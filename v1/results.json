@@ -1425,6 +1425,14 @@
       "model": "meituan/longcat-2.0",
       "outcome": "passed",
       "run": "2026-10-12T17:43:39Z"
+    },
+    {
+      "at": "2026-10-12T19:04:52Z",
+      "detail": "",
+      "metadata_sha256": "d4981897303bb8af3c1f265fb829444926bd6b0817469994f0efa555935ed703",
+      "model": "minimax/minimax-m2",
+      "outcome": "passed",
+      "run": "2026-10-12T17:43:39Z"
     }
   ],
   "stops": [
