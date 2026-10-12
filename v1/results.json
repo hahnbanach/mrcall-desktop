@@ -1497,6 +1497,14 @@
       "model": "qwen/qwen3-coder",
       "outcome": "passed",
       "run": "2026-10-12T17:43:39Z"
+    },
+    {
+      "at": "2026-10-12T19:05:54Z",
+      "detail": "",
+      "metadata_sha256": "c42510061dc60175936de6ed6a937ec3b4d7b360ac833018a4c291322cad4679",
+      "model": "qwen/qwen3-vl-235b-a22b-instruct",
+      "outcome": "passed",
+      "run": "2026-10-12T17:43:39Z"
     }
   ],
   "stops": [

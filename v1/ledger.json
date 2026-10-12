@@ -1211,10 +1211,21 @@
             "role": null,
             "spent_usd": "0.000224",
             "why": "ranking of economy / MEMORY_EXTRACT / ranking"
+          },
+          {
+            "at": "2026-10-12T19:05:54Z",
+            "bound_usd": "0.2",
+            "check": "smoke qwen/qwen3-vl-235b-a22b-instruct",
+            "kind": "smoke",
+            "model": "qwen/qwen3-vl-235b-a22b-instruct",
+            "outcome": "passed",
+            "role": null,
+            "spent_usd": "0.000129",
+            "why": "ranking of economy / MEMORY_EXTRACT / ranking"
           }
         ],
         "opened_at": "2026-10-12T17:44:44Z",
-        "reserved_usd": "1.422962",
+        "reserved_usd": "1.223091",
         "run": "2026-10-12T17:43:39Z",
         "settled_at": null,
         "spent_usd": null
