@@ -331,10 +331,21 @@
             "role": null,
             "spent_usd": "0.000052",
             "why": "pick of economy / SYNC_ANALYSIS / ranking"
+          },
+          {
+            "at": "2026-10-12T17:59:43Z",
+            "bound_usd": "2",
+            "check": "SYNC_ANALYSIS on upstage/solar-mini4",
+            "kind": "measure",
+            "model": "upstage/solar-mini4",
+            "outcome": "SYNC_ANALYSIS: failed",
+            "role": "SYNC_ANALYSIS",
+            "spent_usd": "0.002676",
+            "why": "pick of economy / SYNC_ANALYSIS / ranking"
           }
         ],
         "opened_at": "2026-10-12T17:44:44Z",
-        "reserved_usd": "2.271757",
+        "reserved_usd": "0.274433",
         "run": "2026-10-12T17:43:39Z",
         "settled_at": null,
         "spent_usd": null
