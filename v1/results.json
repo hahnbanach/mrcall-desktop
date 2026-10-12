@@ -1129,6 +1129,14 @@
       "model": "google/gemini-3.7-flash",
       "outcome": "passed",
       "run": "2026-10-12T17:43:39Z"
+    },
+    {
+      "at": "2026-10-12T18:59:55Z",
+      "detail": "BudgetError: OpenRouter request failed (HTTP 403); no automatic retry.",
+      "metadata_sha256": "56d7221a8bc475126ec94b7d65b529e336a5eae2f2e93fd4b3eadcdab0e35d36",
+      "model": "meta/muse-spark-1.2",
+      "outcome": "failed",
+      "run": "2026-10-12T17:43:39Z"
     }
   ],
   "stops": [
