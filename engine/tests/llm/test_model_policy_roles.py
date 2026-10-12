@@ -69,7 +69,7 @@ def saved(provider: str, preset: str, **extra: str) -> dict:
 def test_every_role_resolves_to_the_tables_pick(role, preset, provider):
     model = expected(preset, role, provider)
     if model is None:  # nothing ranked on this provider: an explicit pause, never a guess
-        with pytest.raises(BudgetError, match=f"no Anthropic model is ranked for role {role} "):
+        with pytest.raises(BudgetError, match=f"no Anthropic model for role {role}: "):
             resolve_model("MODEL_" + role, values=saved(provider, preset))
         return
     assert resolve_model("MODEL_" + role, values=saved(provider, preset)) == model
@@ -158,8 +158,9 @@ def test_an_empty_anthropic_ranking_pauses_only_the_personal_anthropic_key(monke
     with pytest.raises(BudgetError) as paused:
         resolve_model("MODEL_MNEMONIC", values=saved("anthropic", "balanced"))
     assert str(paused.value) == (
-        "AI paused: no Anthropic model is ranked for role MNEMONIC under the balanced "
-        "preset, so a personal Anthropic key cannot run it; choose a model for it in Settings."
+        "AI paused: no Anthropic model for role MNEMONIC: none of the models ranked for it "
+        "under the balanced preset is an Anthropic model, so a personal Anthropic key cannot "
+        "run it. Choose a model for it in Settings."
     )
     assert resolve_model("MODEL_MNEMONIC", values=saved("openrouter", "balanced")) == (
         "moonshotai/kimi-k3"

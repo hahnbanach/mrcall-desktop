@@ -44,9 +44,23 @@ NO_TABLE = (
 )
 NO_RANKED_MODEL = "AI paused: no model is ranked for role {role} under the {preset} preset."
 NO_ANTHROPIC_MODEL = (
-    "AI paused: no Anthropic model is ranked for role {role} under the {preset} "
-    "preset, so a personal Anthropic key cannot run it; choose a model for it in Settings."
+    "AI paused: no Anthropic model for role {role}: none of the models ranked for it "
+    "under the {preset} preset is an Anthropic model, so a personal Anthropic key cannot "
+    "run it. Choose a model for it in Settings."
 )
+
+
+class RolePaused(BudgetError):
+    """One role paused on this billing choice, named, never guessed: an empty
+    Anthropic ranking on a personal Anthropic key (`NO_ANTHROPIC_MODEL`) or no
+    ranked model the billing server serves on MrCall credits
+    (`served.NO_SERVED_MODEL`). Callers that skip the role say so where the
+    user sees it (`zylch/llm/role_pause.py`) rather than failing silently."""
+
+    def __init__(self, message: str, role: str, preset: str):
+        super().__init__(message)
+        self.role, self.preset = role, preset
+
 
 # The table the run-time distribution put in force (already through the
 # gates), replaced whole; None means the build copy.
@@ -123,7 +137,8 @@ def pick(preset: str, role: str, provider: str) -> str:
     if provider == "anthropic":
         entries = ranking(preset, role, "anthropic_ranking")
         if not entries:
-            raise BudgetError(NO_ANTHROPIC_MODEL.format(role=role, preset=preset))
+            message = NO_ANTHROPIC_MODEL.format(role=role, preset=preset)
+            raise RolePaused(message, role, preset)
         return entries[0]["direct_id"]
     raise ValueError(f"Unknown provider {provider!r}")
 

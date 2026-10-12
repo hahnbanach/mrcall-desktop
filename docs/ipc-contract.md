@@ -404,8 +404,8 @@ auth | unreachable | tls | folder | invalid | secret | unknown | primary`;
 
 | Method | Declared parameters | Returns |
 |---|---|---|
-| `narration.predict` | `message?, context=""` | {"text": str} |
-| `narration.summarize` | `lines?, context=""` | {"text": str} |
+| `narration.predict` | `message?, context=""` | {"text": str, "paused"?: str} |
+| `narration.summarize` | `lines?, context=""` | {"text": str, "paused"?: str} |
 
 **`qonto.*`**
 
@@ -1427,7 +1427,11 @@ action from the user's message (the immediate placeholder, before
 stderr-driven narration kicks in); `summarize` condenses recent sidecar
 stderr lines with the configured engine model. Both **never raise** — any failure, including
 the no-argument call, returns `{"text": ""}`, which is why both
-parameters are optional. Output is first-person Italian.
+parameters are optional. Output is first-person Italian. When the
+NARRATION role is paused on the profile's billing choice (no Anthropic
+model ranked for it on a personal Anthropic key, or none of its ranked
+models served on MrCall credits), the reply adds `paused`: the message
+naming the role and why (`engine/zylch/llm/role_pause.py`).
 
 ### `usage.today()`
 
@@ -1451,6 +1455,10 @@ Today's LLM spend for the active profile, since UTC midnight:
 
 `billing_reason` may provide details when a transport is unavailable. `model_policy` reports the saved
 provider, preset and effective role models, including unmeasured GLM quality.
+A role paused on the billing choice reads as null in `model_policy.roles`,
+and `model_policy.paused` (`{MODEL_<ROLE>: message}`, empty when none)
+gives the message naming it and why, the same for an empty Anthropic
+ranking on a personal key and an unserved role on MrCall credits.
 `usage.reconcile(cursor?)` checks up to ten outstanding MrCall receipts without
 paid inference and returns `recovered`, `unresolved`, `message` and `next_cursor`.
 See [daily spending contract](../engine/docs/features/daily-llm-budget.md).

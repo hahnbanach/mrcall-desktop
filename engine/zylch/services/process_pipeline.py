@@ -409,11 +409,10 @@ async def _run_pipeline(
                 console.print(f"  {wa_count}/{pending_wa} WhatsApp messages processed")
         except company_fenced() as e:
             raise PreparationStopped(str(e)) from e
-        except Exception as e:
-            logger.error(f"[/process] memory failed: {e}", exc_info=True)
-            console.print(f"[red]  Memory extraction failed:" f" {e}[/red]")
-            if errors_out is not None:
-                errors_out.append({"stage": "memory", "error": e})
+        except Exception as e:  # noqa: BLE001 - role_pause reports a paused role as a pause
+            from zylch.llm.role_pause import memory_failed
+
+            memory_failed(e, errors_out, console, logger)
     else:
         console.print("\n[bold cyan][3/5] Memory[/bold cyan]" " — nothing to process")
         _p(30, "Memory — nothing to process", None)

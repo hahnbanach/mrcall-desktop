@@ -5,6 +5,7 @@ from pathlib import Path
 
 from dotenv import dotenv_values
 
+from . import role_pause
 from .budget_pricing import BudgetError
 from .roles import served, table
 
@@ -122,6 +123,8 @@ def policy_snapshot():
         "preset": str(values.get("LLM_MODEL_PRESET") or "custom"),
         "model": _snapshot_model(None, values),
         "roles": {role: _snapshot_model(role, values) for role in ROLES},
+        # A role read as None above because it pauses, and why (role_pause.py).
+        "paused": role_pause.reasons(ROLES, values),
         "quality_status": (
             "OpenRouter memory/task quality has not been measured."
             if provider == "openrouter"

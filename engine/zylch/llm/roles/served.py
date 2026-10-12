@@ -122,7 +122,7 @@ def choose(preset: str, role: str, ranking: list[dict], models: tuple[dict, ...]
             return direct
         if providers.get(entry["id"]) == "openrouter":
             return entry["id"]
-    raise BudgetError(NO_SERVED_MODEL.format(role=role, preset=preset))
+    raise table.RolePaused(NO_SERVED_MODEL.format(role=role, preset=preset), role, preset)
 
 
 def pick(preset: str, role: str, url: str, *, online: bool = True, client=None) -> str:
