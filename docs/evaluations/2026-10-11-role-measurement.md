@@ -1,8 +1,10 @@
 # Role measurement: milestone 10's paid run and `measured.json`, 2026-10-11
 
 Scope: the record of the one-off paid measurement behind
-`engine/zylch/llm/roles/measured.json` (branch `m10-s4b8`, commit `aaf9a7aa`;
-the code that derives it is `fcd5a0a1`, `12ef7b08` and `f8e70f89`). It covers:
+`engine/zylch/llm/roles/measured.json` (branch `m10-s4b10`, commit `679cfa47`).
+The file is derived from committed data only:
+`engine/tests/fixtures/measurement/records/2026-10-11/plan.json`. The code
+that derives it is `fcd5a0a1`, `12ef7b08`, `f8e70f89` and `679cfa47`. It covers:
 
 - what was run, on which prompts, snapshots and commits, and what it cost;
 - the per-run reference rule and the shaped-request check;
@@ -21,11 +23,11 @@ The role, rule and table contract is in
 
 | Run | Rows used | Engine commit | Snapshot |
 |---|---|---|---|
-| `s4c`, `measure_roles.py`, 2026-10-04 | 10 roles with case sets. Not used: CHAT (old prompt) and NARRATION (re-measured). MiMo flash/pro on INTENT, WEB_SEARCH and TRAIN were also re-measured; their old rows are not used. | `8b18ea69` | `81998270` (read 2026-10-02T19:57Z) |
-| `rerun3`, CHAT on today's prompt, 2026-10-11 | Sonnet 5.5, Qwen 3.8 Max, GLM 5.3, K3 | `1785352c` | `8df61cff` (read 2026-10-10T12:01Z, before S2's forced_tool change) |
+| `s4c`, `measure_roles.py`, 2026-10-04 | 12 roles with case sets. CHAT is excluded (old prompt). MiMo's stale-shape rows are superseded where MiMo was measured again. Both follow the selection rule below. | `8b18ea69` | `81998270` (read 2026-10-02T19:57Z) |
+| `rerun3`, CHAT on today's prompt, 2026-10-11 | Sonnet 5.5, Qwen 3.8 Max, GLM 5.3, K3. Opus 5.5 is excluded (HTTP 402). | `1785352c` | `8df61cff` (read 2026-10-10T12:01Z, before S2's forced_tool change) |
 | `rerun4`, CHAT, 2026-10-11 | Opus 5.5, K3 | `f827ae19` | `b3196ae2` |
 | `rerun6`, the headroom re-measure, 2026-10-11 | NARRATION: every arm and K3. INTENT, WEB_SEARCH, TRAIN: MiMo flash, MiMo pro and K3. | `1221b0a4`, inferred (below) | `b3196ae2` |
-| `rerun7`, the threshold entrants, 2026-10-11 | REANALYZE, DEDUP, INTENT, TRAIN: ling-3.0-flash-vl, deepseek-v4-flash-0731 and upstage/solar-pro4. REANALYZE and DEDUP also: mimo-v2.6-flash. K3 in every role. s4c's MiMo-flash rows on REANALYZE and DEDUP are not used. | `1221b0a4` (`head.txt`) | `b3196ae2` |
+| `rerun7`, the threshold entrants, 2026-10-11 | REANALYZE, DEDUP, INTENT, TRAIN: ling-3.0-flash-vl, deepseek-v4-flash-0731 and upstage/solar-pro4. REANALYZE and DEDUP also: mimo-v2.6-flash. K3 in every role. | `1221b0a4` (`head.txt`) | `b3196ae2` |
 | `rerun8`, the D8 entrants, 2026-10-11 | DEDUP: gpt-6-luna, Sonnet 5, Sonnet 4.6, Opus 5.5. INTENT: Sonnet 5, Sonnet 4.6, Opus 5.5. TRAIN: gpt-6-luna, Sonnet 5, Sonnet 4.6, Opus 5.5. K3 in every role. | `1221b0a4` (`head.txt`) | `b3196ae2` |
 | `corpus`, memory corpus (MNEMONIC, MEMORY_EXTRACT, MEMORY_MERGE) | The 2026-10-02 records of seven arms, mimo-pro's re-run (10-04, `e9bd6d02`) and Sonnet's (10-11c, `f827ae19`) | `8b18ea69` | `81998270` |
 
@@ -37,23 +39,52 @@ one the run recorded or the run script enforced.
 The **build snapshot in force** is `b3196ae2…` (read 2026-10-10T12:01:52Z).
 `measured.json` records each role's snapshot version(s).
 
-`measured.json` was written by `scripts/derive_thresholds.py` alone, from the
-row sets in `scratchpad/s4b9/runs/`:
+`measured.json` was written by `scripts/derive_thresholds.py` alone, from
+records committed byte for byte in
+`engine/tests/fixtures/measurement/records/2026-10-11/`: the six runs'
+`results.jsonl`, the nine corpus records, the arms documents, `plan.json`
+and `exclusions.json`.
 
 ```
-derive_thresholds.py --arms arms-final.json arms-scores.json
-  --run s4c@8b18ea69=s4c.jsonl  --run rerun3@1785352c=rerun3.jsonl
-  --run rerun4@f827ae19=rerun4.jsonl  --run rerun6@1221b0a4=rerun6.jsonl
-  --run rerun7@1221b0a4=rerun7.jsonl  --run rerun8@1221b0a4=rerun8.jsonl
-  --corpus corpus=<nine manifests>
-  --rescore --rescore-from fa1518f0… acb2e224… --shape-check
+python scripts/derive_thresholds.py --plan tests/fixtures/measurement/records/2026-10-11/plan.json --write
 ```
 
-`check_measured` passes. Its hashes are today's `requests.json` and corpus
-prompts, and its passes, yardsticks and thresholds follow from its own
-results.
+Two tests guard it:
 
-**Index scores.** `arms-scores.json` (written by `scratchpad/s4b9/arms_scores.py`)
+- `test_measurement_plan.py::test_the_committed_measured_json_is_derived_from_the_committed_plan`
+  derives the plan and requires the committed file byte for byte. The
+  derivation reads git history: the re-score and the shape check look up
+  earlier committed versions.
+- `check_measured` (`test_derive_thresholds.py`) passes: the hashes are
+  today's `requests.json` and corpus prompts, and the passes, yardsticks
+  and thresholds follow from the file's own results.
+
+### The selection rule
+
+S4b8 and S4b9 chose rows with an uncommitted script, which dropped every s4c
+NARRATION row (IR3, blocking). Now a row leaves the derivation only in two
+ways.
+
+**By a rule in code.** `measurement_runs.supersede_stale` drops an arm's
+stale-shape run only when the same arm has a complete current-shape run of
+the role. A stale run is one the shape check refuses: see "The shaped
+request" below. A current-shape row is never dropped, whatever its verdict.
+
+**By a committed exclusion.** Each entry in `exclusions.json` states a claim
+that `measurement_plan.apply_exclusions` verifies before it applies the
+entry.
+
+| Rows | Status | Rule or kind | Why |
+|---|---|---|---|
+| s4c CHAT, every arm | excluded | `prompt` | Measured on the replaced prompt `64a1a517`; today's is `c55f551c`. |
+| rerun3 CHAT, Opus 5.5 | excluded | `denied` | chat-13 and chat-14 refused with HTTP 402 before inference; Opus answered in full in rerun4. |
+| s4c NARRATION, MiMo flash and pro | superseded | stale shape | Re-measured in rerun6. |
+| s4c NARRATION, deepseek, Sonnet 5.5, GLM-flash, K3 | **kept** | current shape | S4b8–S4b9 dropped them by hand; IR3's finding. |
+| s4c INTENT, WEB_SEARCH, TRAIN, MiMo flash and pro | superseded | stale shape | Re-measured in rerun6. |
+| s4c REANALYZE, DEDUP, MiMo-flash | superseded | stale shape | Re-measured in rerun7. |
+| s4c other roles, MiMo; corpus, MiMo | kept, MiMo unmeasured | stale shape, no current run | MiMo is `incomplete` on these roles. |
+
+**Index scores.** `arms-scores.json` (in `records/2026-10-11/arms/`)
 holds the resolver's own index score for every model measured, from the
 same 2026-10-10T12:01Z fixture the table is resolved on. The entrant arms
 files of reruns 7 and 8 carried no score, so their rows had `arm_score`
@@ -120,6 +151,16 @@ What derive now does (`12ef7b08`, `measurement_runs.bar_misses` and
 
 No other run's reference missed a bar on a missed label.
 
+**An accepted deviation from D7.** D7 sets the yardstick at "the binomial
+standard error of its score", the reference's score as recorded. The credit
+departs from that literal reading on purpose. A reference that answered
+nothing measured no judgement, and counting that as a miss would lower the
+bar for its run's arms without anyone deciding so.
+
+Its effect here is one yardstick: rerun 7's REANALYZE, 15/15, se 0, instead
+of 13/15, se 0.088. **No verdict changed.** All four rerun 7 entrants scored
+15/15, which passes either yardstick. Only the se went to 0.
+
 ## The shaped request
 
 The re-score compares the captured request, before the shape, case by case
@@ -156,7 +197,9 @@ transport's routing and caps (provider object, `max_price`).
 ## Spend
 
 Checked against the ledgers: `measure_roles`'s `ledger.jsonl`, and each corpus
-profile's `llm_usage` and `llm_reservations` tables.
+profile's `llm_usage` and `llm_reservations` tables. IR3's ledger audit
+confirmed the total: **USD 14.15 settled, 15.03 counting the aborted attempt
+at its 0.97 bound.**
 
 | Item | USD | Source |
 |---|---|---|
@@ -205,11 +248,19 @@ critical failure and scores at least p − se of its own run's K3.
 | SYNC_ANALYSIS | satisfice | s4c 13/14 | measured_only | Sonnet, deepseek, K3 | glm-flash | mimo flash, pro | Sonnet 5.5 |
 | WEB_SEARCH | satisfice | s4c 5/5; rerun6 5/5 | measured_only | Sonnet, glm-flash (s4c); mimo-flash (rerun6); K3 | deepseek (critical), mimo-pro (bar) | – | Sonnet 5.5 |
 | CORRECTION_LEARNING | satisfice | s4c 14/14 | measured_only | Sonnet, deepseek, K3 | glm-flash | mimo flash, pro | Sonnet 5.5 |
-| NARRATION | satisfice | rerun6 5/5 | measured_only | deepseek, K3, mimo-pro | Sonnet, mimo-flash, glm-flash (bar) | – | **empty** |
+| NARRATION | satisfice | s4c 5/5; rerun6 5/5 | measured_only | K3 10/10 (both); mimo-pro 5/5 (rerun6) | **deepseek-v4-flash 9/10** (bar: s4c narration-04, empty), Sonnet, mimo-flash, glm-flash (bars) | – | **empty** |
 
 "Bar" means a mechanical bar was missed: truncation, language, a tool not
-called, or an operation left pending. The reference fails two roles itself:
-REPLY_NEED (critical) and TASK_SOLVE (a bar).
+called, or an operation left pending. The reference fails three roles itself:
+REPLY_NEED (critical), TASK_SOLVE (a bar) and REANALYZE (its rerun 7 bar).
+
+**NARRATION (S4b10).** deepseek-v4-flash's s4c NARRATION request is today's
+request, so its s4c rows count. On narration-04 it spent 1064 output tokens
+thinking, reached `max_tokens` and returned empty text, so it missed the
+non-empty bar (4/5). In rerun 6 it scored 5/5. Measured in two runs, it
+passes only when it passes in both, the rule that fails K3 on REANALYZE. So
+**deepseek fails NARRATION**. S4b8–S4b9 had passed it only because the s4c
+rows were dropped by hand. NARRATION's pick moves to mimo-v2.6-pro (below).
 
 **Thresholds.** With every measured arm's index score in the ladder, **every
 satisfice role is `measured_only`**: in each, an arm fails while a
@@ -285,17 +336,25 @@ rule.
 
 ## The table (`resolve_models.py --apply`)
 
-The resolver ran on the 2026-10-10T12:01Z payloads (`--fixture`).
-`snapshot.json` was rewritten byte-identical (`b3196ae2`). **The table was
-written and passes both checks:**
+The resolve ran on **the requirements in force after S6**, which removes the
+allowlist and `mrcall_served`. It used the S6 candidate's
+`requirements.json` (sha256 `91f20375…`), resolver and roles code, with
+this `measured.json`, on the 2026-10-10T12:01Z payloads (`--fixture`). The
+table's `requirements_sha256` therefore matches what ships. The roster,
+rules and reference in those requirements are the same as before S6, so the
+derivation does not change. `snapshot.json` was rewritten byte-identical
+(`b3196ae2`). **The table was written and passes both checks:**
 
-- `table.json` version `cd45b6fa…`;
+- `table.json` version `304ab3b7…`; its `requirements_sha256` is
+  `91f203752a717456df4ffa61d6b1ea680288d16a025dc01a358edca8ad11e5f6`, and
+  its `measured_sha256` is `403601759cfe…`;
 - `gates.check_table` passes;
-- D8 holds.
+- D8 holds: 0 ranked entries are unmeasured or failing.
 
 It is not committed: it lands with S6 at the switch-over. It is saved at
-`scratchpad/s4b8/table.json`, sha256
-`ed317e0d7c892f3d5267cbf32f5fbe8e13ce291f594075d5fb7ee269614c414b`.
+`scratchpad/s4b10/table.json`, sha256
+`9d40bbf363670c4dd5b964af19b5088d66884155513825c3bb1980eea47c1c15`. The
+table stamps `resolved_at`, so another `--apply` gives another sha256.
 
 **D8** is the rule the daily job applies: no unmeasured model enters a
 published satisfice ranking for the first table. It took two rounds:
@@ -310,11 +369,15 @@ is now a model `measured.json` shows measured and passing; the check found
 Anthropic ranking and pulled no new model in. Every satisfice role is
 `measured_only`, so none can.
 
-The picks and Anthropic heads are unchanged from S4b8. The only ranking
-change is Opus 5.5 leaving TRAIN's balanced Anthropic ranking.
+Changes against S4b9's table:
 
-The economy ceiling stays at 10: NARRATION now has deepseek-v4-flash and
-mimo-v2.6-pro. The zero-priced model is screened out (`558ff4ad`).
+- **NARRATION's pick moves from deepseek-v4-flash to mimo-v2.6-pro** under
+  both presets (above).
+- Opus 5.5 leaves TRAIN's balanced Anthropic ranking.
+- No other pick or Anthropic head changes.
+
+The economy ceiling stays at 10: NARRATION has mimo-v2.6-pro under it. The
+zero-priced model is screened out (`558ff4ad`).
 
 | Role | Economy pick (10) | Economy Anthropic head | Balanced pick (20) | Balanced Anthropic head |
 |---|---|---|---|---|
@@ -333,7 +396,7 @@ mimo-v2.6-pro. The zero-priced model is screened out (`558ff4ad`).
 | SYNC_ANALYSIS | deepseek-v4-flash | Sonnet 5.5 | deepseek-v4-flash | Sonnet 5.5 |
 | WEB_SEARCH | mimo-v2.6-flash | Sonnet 5.5 | mimo-v2.6-flash | Sonnet 5.5 |
 | CORRECTION_LEARNING | deepseek-v4-flash | Sonnet 5.5 | deepseek-v4-flash | Sonnet 5.5 |
-| NARRATION | deepseek-v4-flash | **none** | deepseek-v4-flash | **none** |
+| NARRATION | **mimo-v2.6-pro** | **none** | **mimo-v2.6-pro** | **none** |
 
 **Empty Anthropic rankings:**
 
@@ -378,12 +441,26 @@ the corpus K3:
 
 - **Small samples, one repetition.** Each role has 5 to 16 synthetic cases,
   answered once. Where K3 scores 1.0, se is 0 and one miss fails an arm. In
-  CHAT, Opus's pass turns on rerun 4's K3 answering chat-09, which rerun 3's
-  K3 missed.
-- **Only measured models rank.** Every satisfice role is `measured_only`, so
-  a model never measured is never ranked. The table is therefore no better
-  than the arms measured, and a cheaper unmeasured model is never
-  considered.
+  CHAT, Opus fails because rerun 4's K3 answered chat-09, which rerun 3's K3
+  missed. In NARRATION, deepseek fails on one empty answer in one run.
+- **The first table ranks only measured models; the daily job does not stop
+  there.** Every satisfice role is `measured_only`, so this hand-resolved
+  table ranks only models measured here. The daily job
+  (`model_table_decide.view`) treats every pool model without a recorded
+  result as a challenger that would pass in a role that ranks only passing
+  models. A cheaper unmeasured model is therefore considered: it is smoked
+  and measured before it may enter.
+- **The job's backlog.** On its first run against this record, the IR3 dry
+  run listed 128 entrant smokes, plus a CHAT measurement deferred as over
+  the per-role cap. The budget is USD 10 a month (`MONTHLY_CAP_USD`), with
+  at most USD 2 per role measurement and USD 0.20 per smoke admitted
+  (about USD 0.05 expected). So the backlog takes months, not one run.
+  The job makes checks in this priority order:
+  - urgency first: an empty ranking or a pick that failed a gate, then a
+    challenger to a pick, then an entrant lower in a ranking;
+  - then the roster's role order, then the preset (economy before balanced),
+    then the main ranking before the Anthropic one.
+  A check the month cannot cover is deferred, and its entrant is skipped.
 - **Imputed agentic scores.** Opus's and Sonnet's agentic scores (60.4,
   58.3) are imputed from intelligence.
 - **The truncation check.** M9's D6 check patches the decision call's

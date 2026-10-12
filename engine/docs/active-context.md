@@ -69,7 +69,7 @@ correctly classified. Current contracts: [decisions](features/mnemonic-decisions
 [writer inventory](features/mnemonic-writer-inventory.md).
 
 Mnemonic product rollout remains pending. AC 5 failed on the rejected Haiku arm.
-On M10's measured picks (branch `m10-s4b8`, not merged) it passes on today's
+On M10's measured picks (branch `m10-s4b10`, not merged) it passes on today's
 labels, Opus 5.5 only after the B2 scorer fix; that awaits merge and the
 published table. Haiku's paid corpus retains one critical failure; incomplete automatic extraction can remain pending
 without a reason and be repaid. The corpus also lacks per-round proposal/latency
@@ -111,7 +111,7 @@ published metadata, reasoning blocks kept and replayed within a tool loop and
 stripped where history is rewritten.
 
 The paid role measurement is written to `roles/measured.json` on branch
-`m10-s4b8`. It ran 2026-10-04. On 2026-10-11 four things were re-measured:
+`m10-s4b10`. It ran 2026-10-04. On 2026-10-11 four things were re-measured:
 CHAT on main's new prompt; NARRATION and MiMo after the headroom fix; the
 threshold entrants; and the D8 entrants. Spend: USD 14.15 settled, 15.03
 counted, of 20.
@@ -125,9 +125,14 @@ counted, of 20.
   Opus 5.5 (balanced) and GPT-6.1 Sol (economy).
 - Every satisfice role is `measured_only`, with every measured arm's index
   score in the ladder.
-- `resolve_models.py --apply` writes a `table.json` that passes
-  `gates.check_table` and D8: every ranked model is measured and passing.
-  It is not committed; it lands with S6.
+- `measured.json` is derived from committed records only
+  (`tests/fixtures/measurement/records/2026-10-11/plan.json`). Every
+  excluded row is a verified entry; a stale-shape run is superseded by rule.
+  Keeping deepseek's current-shape s4c NARRATION rows fails it on NARRATION,
+  whose pick is now mimo-v2.6-pro.
+- `resolve_models.py --apply`, on S6's requirements, writes a `table.json`
+  that passes `gates.check_table` and D8: every ranked model is measured and
+  passing. It is not committed; it lands with S6.
 
 See the [record](../../docs/evaluations/2026-10-11-role-measurement.md).
 
