@@ -121,12 +121,11 @@ unverified. Runtime contracts belong to [IPC](ipc-contract.md),
   `main` never uses Qonto credential lines left in a profile `.env`; deleting them is operator work.
 - Remaining Café124 billing choices and funded K3 credits are open. The reviewed
   comparison's 60 cases/240 outputs do not establish production equivalence.
-- M10 with the CTO: legacy Anthropic-key profiles pause on NARRATION under
-  economy (recommended: accept); the `OPENROUTER_API_KEY` repository secret;
-  billing server egress to `raw.githubusercontent.com`; a valid Anthropic key
-  and the Firebase test account for AC 10's remaining paid legs. The job's
-  2026-10-12 publish (snapshot read that day) moves the age-gate date to
-  2026-10-26.
+- M10 with the CTO/operator: the `OPENROUTER_API_KEY` repository secret; the
+  billing server promoted first, with egress to `raw.githubusercontent.com`
+  and push protection on `model-table`; a valid Anthropic key and the Firebase
+  test account for the remaining paid legs; the NARRATION pause for legacy
+  Anthropic-key profiles (recommended: accept). Snapshot age gate: 2026-10-26.
 - Sandbox final review, shared-key provisioning and operational floor remain
   open. One handset's speech is not transcribed by the voice provider.
 - Installed/fresh-account GUI acceptance is open. Windows remains opt-in and

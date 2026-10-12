@@ -1196,3 +1196,13 @@ harness v3 bootstrap. It was the "Recent landings (last ~2 weeks)" table.*
   (recommended: accept); the `OPENROUTER_API_KEY` repository secret; billing
   server egress to `raw.githubusercontent.com`. Builds after 2026-10-24T12:01Z
   fail the snapshot age gate unless the job republishes.
+
+
+## Archived 2026-10-12: M10 open items before the final review's revisions
+
+- M10 with the CTO: legacy Anthropic-key profiles pause on NARRATION under
+  economy (recommended: accept); the `OPENROUTER_API_KEY` repository secret;
+  billing server egress to `raw.githubusercontent.com`; a valid Anthropic key
+  and the Firebase test account for AC 10's remaining paid legs. The job's
+  2026-10-12 publish (snapshot read that day) moves the age-gate date to
+  2026-10-26.

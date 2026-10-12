@@ -341,3 +341,13 @@ built from a splatted dict, is not seen.
   base model (it resolves under `economy`).
 - A credits profile pauses with "update the billing server" until the billing
   server answers protocol v2.
+- A legacy profile with no saved preset or base model resolves under
+  `economy`. On `main` such a profile ran `claude-haiku-4-5` or GLM 5.2; it
+  now runs the table's measured picks, which on an Anthropic key are Sonnet 5 /
+  5.5 (about twice Haiku's price per call; Haiku was rejected as a product
+  choice on 2026-10-01). Spend stays bounded by the daily budget.
+- Egress: hosted tenant policies already allow `raw.githubusercontent.com`
+  (sandbox plan R4); the billing server's deployment needs it too, or it
+  serves the table baked into its image while engines download the daily
+  one, and a credits role whose ranking shares no model with the server's
+  list pauses.

@@ -998,3 +998,76 @@ removed before the merge to `main`.
 CTO's go. Open with the CTO: legacy Anthropic-key profiles (no saved
   preset, so economy) pause on memory and narration; the recommendation is
   to accept the pause.
+
+
+## Archived 2026-10-12: M10 detail condensed in active-context (final review)
+
+Milestone 10 ([model selection](features/model-selection.md)): the S6
+switch-over is merged on `model-selection-m10a` (`08858d1f`, IR3 APPROVED);
+not merged to `main`, not deployed. No model is a default in engine code:
+every paid call names one of sixteen roles, and its model comes from the
+model table's rankings per preset. OpenRouter runs the first ranked model; a
+personal Anthropic key the first of the Anthropic ranking, pausing the role
+(`RolePaused`, with a remedy) when it is empty; credits the first ranked id
+the billing server serves on its v2 `/capabilities`. `resolved.json`, the
+allowlist, `mrcall_served` and the `mrcall` column are gone. Prices and
+request metadata come from the catalogue snapshot; every request has the one
+shape (`zylch/llm/request_shape.py`).
+
+The first table is the build copy (`304ab3b7…`, snapshot `b3196ae2…`) and was
+the first publish on the `model-table` data branch (`8087fbf2`). Engines
+download the published table daily (`roles/distribution.py`) and keep the
+last good copy; a fresh profile with the download blocked uses the build copy.
+The measurement ([record](../../docs/evaluations/2026-10-11-role-measurement.md))
+spent USD 14.15 settled, 15.03 counted, of 20; every satisfice role is
+measured-only.
+
+The daily job (`scripts/model_table_job.py`, `model-resolution.yml`, 05:17
+UTC, USD 10 a month) has not run from CI: the repository has no
+`OPENROUTER_API_KEY` secret. After its first local live run was killed by an
+outer timeout, S5b added a 90-minute deadline, a reservation and a checkpoint
+per check (`v1/results.json`), recovery of an open run at its reserved amount,
+cached smoke outcomes and time-limit stops, a lock on the data checkout and a
+child that dies with the job. The second local run (2026-10-12T17:43Z)
+recovered the first at USD 4.146243, spent USD 1.225405 in 114 calls, deferred
+795 checks at its deadline and published table `f1847561…`, snapshot
+`571b55d2…` (`4bbbdf89`); October has used USD 5.37 of 10. Its picks, economy /
+balanced where they differ:
+
+- MNEMONIC, MEMORY_MERGE: GPT-6.1 Sol / Opus 5.5.
+- MEMORY_EXTRACT: ling-3.0-flash. TASK_DETECTION: ministral-8b.
+- COMPACTION, REPLY_NEED: ling-3.0-flash-vl. CORRECTION_LEARNING:
+  ling-3.0-flash-fin. SYNC_ANALYSIS: deepseek-v4-flash. WEB_SEARCH:
+  ling-3.0-flash.
+- CHAT: Sonnet 5.5. TASK_SOLVE: Sonnet 5.5 / Opus 5.5.
+- REANALYZE, DEDUP, INTENT, TRAIN: ling-3.0-flash-vl.
+- NARRATION: mercury-2.5.
+
+Sonnet 5 now heads the economy Anthropic rankings of the three memory roles
+and Sonnet 4.5 the balanced one of NARRATION; only NARRATION under economy has
+no Anthropic model. The [end-to-end check](../../docs/evaluations/2026-10-12-m10-end-to-end.md)
+(AC 10) resolved 896 role cells across downloaded, blocked and successor
+tables with no mismatch; its Anthropic-direct paid legs wait for a valid key
+and its credits leg for the CTO's test account. The workflow carries a
+TEMPORARY push trigger on the milestone branch for the CI proof run; it is
+removed before the merge to `main`.
+
+- M10's merge to `main` waits for the job's proof run (the repository secret
+  `OPENROUTER_API_KEY`), the billing server's production promotion (`main`
+  and `dev` at `bb8f553`; production `37f330d` lacks the M10 code, so a
+  credits profile would pause with "update the billing server") and the
+  CTO's go. Open with the CTO: legacy Anthropic-key profiles with no saved
+  preset or base model (economy) pause on NARRATION only, now that the
+  published table ranks Sonnet 5 for the memory roles; the recommendation is
+  to accept the pause.
+- Until the job republishes, a Desktop release with M10's `release.yml` or a
+  billing-server image built after 2026-10-26T17:43:41Z (14 days after the
+  published snapshot `571b55d2…` was read) fails the 14-day snapshot gate.
+
+3. Finish milestone 10 (branch `model-selection-m10a`):
+   - the job's proof run, then S8's end to end and final review; remove the
+     temporary push trigger before the merge;
+   - review the mnemonic rollout and the migration rehearsal before product
+     acceptance.
+
+   Preserve the rejected corpus evidence.
