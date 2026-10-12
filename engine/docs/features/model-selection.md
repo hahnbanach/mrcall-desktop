@@ -1,301 +1,288 @@
 # Model selection by requirements
 
 Scope: how the engine chooses the model each paid call runs, where its prices
-come from, and the tests that keep a model name from becoming a default again.
-Milestone 10a, on branch `model-selection-m10a`. The brief and the build plan
-are in hb: `docs/briefs/2026-10-01-model-selection-by-requirements.md` and
-`docs/execution-plans/2026-10-01-model-selection-m10a.md`.
+and request metadata come from, how the model table is measured, published and
+refreshed, and the tests that keep a model name from becoming a default again.
+Milestone 10, on branch `model-selection-m10a`. The brief and the plan are in
+hb: `docs/briefs/2026-10-01-model-selection-by-requirements.md` and
+`docs/execution-plans/2026-10-02-model-selection-m10.md`. The published
+contract (schemas, gates, credits protocol) is
+[`zylch/llm/roles/contract/`](../../zylch/llm/roles/contract/README.md).
 
 ## Why
 
 Milestone 9's paid corpus run used `claude-haiku-4-5` because that was the
-engine's default everywhere: three settings defaults in `config.py`, the
-`economy` preset, two hand-written price catalogues, the `llm.models` answer,
-the Settings schema and two app strings. The run failed one critical case and
-translated every Italian correction into English, and the CTO rejected the arm:
-Haiku is not a default or an arm anywhere. The cause was general, not
-Haiku-specific: model names were fixed in code, prices were copied by hand, and
-nobody revisited the choice when a model aged. Now each call site names a
-**role**; a role declares requirements; a resolver turns them into a committed
-table, the one source for the model and its price.
+engine's default everywhere. The run failed one critical case and translated
+every Italian correction into English, and the CTO rejected the arm: Haiku is
+not a default or an arm anywhere. The cause was general: model names were
+fixed in code, prices were copied by hand, and nobody revisited the choice
+when a model aged. Now each call site names a **role**; a role declares a
+rule and an index; a resolver turns the requirements, OpenRouter's catalogue
+and a measurement into a published **model table**. No model is a default in
+code.
 
-## The roster and the two rules
+## The requirements
 
-`zylch/llm/roles/requirements.json` holds:
+`zylch/llm/roles/requirements.json` holds choices, never a model list:
 
-- `common`: what every candidate must meet: tool support, a 200,000-token
-  context, no `:free` or `:batch` variant, no catalogue id starting with an
-  `excluded_prefixes` entry (`anthropic/claude-haiku` today), and a score on
-  every `required_scores` index (`intelligence`).
-- `presets`: a price ceiling in USD per million **output** tokens:
-  `economy` 10, `balanced` 20. `custom` has no ceiling and no table column.
-- `roles`: sixteen roles, one per kind of paid call site (`MNEMONIC`,
+- `common`: tool support, a 200,000-token context, no `:free` or `:batch`
+  variant, an `intelligence` score.
+- `presets`: a ceiling in USD per million **output** tokens: `economy` 10,
+  `balanced` 20. `custom` has no ceiling and no table column.
+- `excluded_families`: `anthropic` + `haiku`, matched on the catalogue id,
+  its `canonical_slug` and an alias's target. Aliases (`~` ids) and entries
+  with an announced `expiration_date` are excluded too.
+- `margin` (1.25), `provider_policy` (admitted quantizations, 8-bit and up
+  plus `unknown`; K3 pinned to its `digitalocean` endpoint),
+  `excluded_endpoint_variants` (`flex`), and the measurement `reference`
+  (K3, the production model).
+- `roles`: sixteen, one per kind of paid call site (`MNEMONIC`,
   `MEMORY_EXTRACT`, `MEMORY_MERGE`, `TASK_DETECTION`, `REANALYZE`, `DEDUP`,
   `REPLY_NEED`, `INTENT`, `CHAT`, `TASK_SOLVE`, `TRAIN`, `COMPACTION`,
-  `SYNC_ANALYSIS`, `WEB_SEARCH`, `CORRECTION_LEARNING`, `NARRATION`), each with
-  a `rule`, an `index` (`intelligence`, `coding`, `agentic`) and, for
-  `satisfice`, a `floor`.
-- `allowlist`, `mrcall_served` and `request_rules` (below).
-
-The two rules, as in `mrcall-ai-kit`:
-
-- **maximise**: the highest score on the role's index among candidates at or
-  under the ceiling; a tie goes to the cheaper model.
-- **satisfice**: the cheapest candidate at or under the ceiling that clears the
-  floor; a tie goes to the higher score. When nothing clears the floor, the
-  role takes the highest score under the ceiling and the row is marked
-  `below_floor`.
-
-The starting numbers are maximise on intelligence for `MNEMONIC` and
-`MEMORY_MERGE`, maximise on agentic for `CHAT` and `TASK_SOLVE`, and satisfice
-on intelligence for the rest, with floors of 40, 35 or 30. The plan's
-roster table lists the rule, floor and call sites of each role. These are
-proposals: the CTO sets the ceilings and floors.
+  `SYNC_ANALYSIS`, `WEB_SEARCH`, `CORRECTION_LEARNING`, `NARRATION`), each
+  with a `rule` and an `index`. `MNEMONIC` and `MEMORY_MERGE` maximise
+  `intelligence`, `CHAT` and `TASK_SOLVE` maximise `agentic`, the rest
+  satisfice `intelligence`. No floor is typed: thresholds come from the
+  measurement.
 
 ## The resolver
 
 `engine/scripts/resolve_models.py` (I/O, flags, report) and the pure
-`zylch/llm/roles/resolver.py` are ported from `mrcall-ai-kit`'s
-`resolve-models.py` (MIT, `c88b024`); standard library only.
+`zylch/llm/roles/` modules (`candidates.py`, `impute.py`, `resolver.py`,
+`snapshot.py`, `gates.py`), ported from `mrcall-ai-kit` (`c88b024`, MIT).
 
-**Sources.** OpenRouter's catalogue (`/api/v1/models`, public: prices, context
-length, supported parameters, `canonical_slug`) and its benchmarks
-(`/api/v1/benchmarks`, key required: the Artificial Analysis
-`intelligence_index`, `coding_index`, `agentic_index`, keyed by
-`model_permaslug`). The resolver joins them on `canonical_slug`. If a slug's
-benchmark records disagree, that slug gets no score and the report lists it.
-
-**Candidates.** The kit's filter (variant, tools, context, a fixed output
-price, the required scores) plus the engine's prefix exclusion. For each role,
-only candidates scored on that role's index count. A model without an agentic
-score is therefore never a `CHAT` candidate.
-
-**Billed versus catalogue price.** If an allowlist row bills a candidate
-above its catalogue output price (K3: 13.28 billed against 10 listed), the
-candidate is compared at the billed price, the price the engine reserves at.
-The catalogue pair is kept in the row as `catalogue_price`.
-
-**The ceiling raise.** If a role has no candidate under a preset's ceiling,
-that preset's ceiling rises to the lowest price at which every role has one,
-and the table records it as `raised_to`.
-
-**Three columns per preset and role:**
-- The main pick: `catalogue_id`, plus `direct_id` when the model is
-  Anthropic's (`anthropic/claude-sonnet-5.5` becomes `claude-sonnet-5-5`),
-  the scores, the price pair and `below_floor`.
-- `anthropic_fallback`: the same rule over the `anthropic/*` subset only,
-  bounded by the same ceiling and raising it the same way
-  (`anthropic_raised_to`). This is what a BYOK-Anthropic profile runs when the
-  main pick is not Anthropic's.
-- `mrcall`: the same rule over the models the MrCall credits server serves
-  (`mrcall_served`), raising as `mrcall_raised_to`. Its `id` is the one sent to
-  the server: the direct id for an Anthropic model, the catalogue id for K3.
-  It is null when no served model fits at any price, and such a role pauses on
-  credits instead of guessing.
-
-**Degrade, never guess.** The script exits 1 and leaves `resolved.json`
-untouched in each of these cases: a source cannot be read (a missing fixture
-file, no key, an HTTP error, a paged or short catalogue, benchmarks shorter
-than their count), a role has no candidate at any price, or the main or
-fallback pool has no candidate scored on a role's index. A malformed
-`requirements.json` exits 2.
-
-### Running it
-
-From `engine/`, with `OPENROUTER_API_KEY` in the environment, the only place
-the script reads it (never argv or a file; never printed).
+- **Sources.** OpenRouter's catalogue (`/models`), the endpoints of every
+  entry a role may rank (`/models/<id>/endpoints`) and the benchmarks
+  (`/benchmarks`, with `OPENROUTER_API_KEY` from the environment only, never
+  printed): Artificial Analysis's `intelligence`, `coding` and `agentic`
+  indices.
+- **Pool.** The screen keeps a candidate with tools, the context, a fixed
+  price and at least one up endpoint admitted by the provider policy within
+  its price × the margin. A missing index is imputed from intelligence (a
+  regression on the same read, minus one residual standard deviation) and
+  marked `imputed`; a model with no record is listed, never scored by name.
+- **Rankings.** Per preset and role, up to five entries, best first; the
+  first is the pick. A `maximise` role ranks the models that passed its
+  measurement by its index (a tie to the cheaper). A `satisfice` role ranks,
+  cheapest first, the models at or above its measured threshold, or, when it
+  is `measured_only`, the models that passed. A model measured as failing a
+  role is never ranked for it. A second ranking, `anthropic_ranking`, applies
+  the same rule to the candidates with a direct Anthropic id and may be empty.
+- **Ceiling raise.** A run by hand may report a ceiling raised so that every
+  role ranks a model; a raised ceiling is never published.
+- **Degrade, never guess.** A source that cannot be read or a role with no
+  candidate at any price exits 1 and writes nothing; a malformed
+  `requirements.json` or `measured.json` exits 2.
 
 ```bash
-python scripts/resolve_models.py                  # report + diff against the committed table
-python scripts/resolve_models.py --apply          # also write zylch/llm/roles/resolved.json
-python scripts/resolve_models.py --check          # exit 1 when the committed table has drifted
-python scripts/resolve_models.py --save DIR       # keep what was read (models.json, benchmarks.json, read-at.txt)
-python scripts/resolve_models.py --fixture DIR    # read those files instead of the network, no key needed
+python scripts/resolve_models.py                # print the screen, scores and rankings
+python scripts/resolve_models.py --apply        # write snapshot.json; table.json only when measured.json covers every role
+python scripts/resolve_models.py --check        # exit 1 when the decision record (ceilings, rankings in order) would change
+python scripts/resolve_models.py --bootstrap    # print the measurement's arms as JSON
+python scripts/resolve_models.py --save DIR     # keep what was read
+python scripts/resolve_models.py --fixture DIR  # read saved payloads, no network, no key
 ```
 
-`--apply` and `--check` exclude each other; `--check` ignores the `as_of`
-stamps. A changed table is reviewed like code. The committed one came from
-`tests/fixtures/llm/resolver/`, the catalogue read on 2026-10-01.
-`tests/llm/test_resolved_table.py` fails when the table no longer follows from
-that fixture and `requirements.json` (a hand edit, a floor changed without
-`--apply`).
+## The table, the snapshot and where they come from
 
-## The table is the one model source; the snapshot the one price source
+- **`table.json`**, the decision record: per preset its ceiling, per role a
+  `ranking` and an `anthropic_ranking` of `{id, direct_id}`. No price, score
+  or metadata, so a price refresh moves no record.
+- **`snapshot.json`**: every catalogue entry's price, request metadata
+  (reasoning, parameters, `forced_tool`, structured outputs, context,
+  expiry) and admitted endpoints, plus the direct Anthropic ids and the
+  provider policy.
+- **Static gates** (`roles/gates.py`, the same rules on the billing server):
+  the schema; a non-empty `ranking` for every preset and role (an empty
+  `anthropic_ranking` is allowed); no alias, excluded family or announced
+  expiry ranked; every ranked id priced positively within its ceiling;
+  versions matching their content.
+- **Published** on the orphan branch `model-table` under `v1/`: `table.json`,
+  `snapshot.json`, `measured.json` and `ledger.json`, read at
+  `https://raw.githubusercontent.com/hahnbanach/mrcall-desktop/model-table/v1/<file>`.
+  The first publish is `8087fbf2`: table version `304ab3b7…` (file sha256
+  `9d40bbf3…`), snapshot `b3196ae2…` read 2026-10-10T12:01:52Z.
+- **Build copies** `roles/table.json` and `roles/snapshot.json`, written by
+  `resolve_models.py --apply` and refreshed from the data branch by
+  `release.yml`.
+- **Run time** (`roles/distribution.py`): the engine downloads both files when
+  a profile is activated and every 24 hours (ETag), re-checks them with the
+  gates and caches them in `<profile>/model-table/`, never in a directory
+  shared between profiles. A blocked, failed or failing download falls back,
+  file by file, to the last good copy, then to the build copy. The engine
+  never refuses a copy for its age; only the release gate does.
 
-`zylch/llm/roles/resolved.json` is generated; nobody edits it by hand.
-`zylch/llm/roles/table.py` reads it to answer which model a role runs (until
-the switch-over to the measured `table.json`).
+## Prices
 
-**Prices come from the model snapshot** (since milestone 10, slice S3; brief
-D5). `zylch/llm/roles/prices.py` answers what a model costs from the snapshot
-layers `roles/catalogue.py` holds — the downloaded and last good copies in
-front once the run-time distribution lands, the build copy
-`roles/snapshot.json` behind — read at every call, never frozen at import: on
-OpenRouter a catalogue id at its snapshot price — its reference price: the
-model-level catalogue price (the list price OpenRouter shows) whenever at
-least half its eligible endpoints are priced within it × the margin, else
-the lower median
-of its eligible endpoints by Artificial Analysis's blended price
-(3 × input + output) / 4; the model-level price too when its
-endpoints were not read, none is eligible or that price is not fixed (a
-variable one stays null: no cap, no admitted endpoint) — on the direct
-transport a direct id at its `anthropic` endpoint's price (Anthropic's list
-price), and a dated id `<alias>-YYYYMMDD` at its alias's (a response naming
-`<requested>-YYYYMMDD` settles as the requested id). `budget_pricing.PRICES`
-and `openrouter_pricing.RATES` / `LABELS` are views over it, and `usage.py`'s
-estimate reads it ([spending protection](daily-llm-budget.md)). An OpenRouter
-request is reserved and capped (`max_price`) at the price × `margin` (1.25,
-`requirements.json`); K3 at its pinned DigitalOcean endpoint's price × the
-margin, or its reference price × the margin on a day the snapshot does not
-admit that endpoint — the snapshot admits a pinned endpoint
-(`provider_policy.pinned_endpoints`) whenever it is eligible, whatever its
-price, so only a pin that is down falls back. The provider object also carries `requirements.json`'s
-`quantizations` and, where the snapshot read the model's endpoints, `only`
-its admitted ones, so a cheaper `flex` service tier is never routed to; it is
-the object the billing server builds for the same model and snapshot. With
-`only` it allows fallbacks, which stay within those admitted endpoints, so a
-cheapest endpoint answering 429 does not fail every request (K3, pinned to
-one endpoint, never falls back); a refused call (429, 402 from an account out of credit, or another status that
-proves no work was done) releases its hold, while a 5xx keeps it. The
-direct transport reserves at the list price, without the margin. A `:free`
-catalogue id is priced at 0 like any other snapshot price, deliberately: a
-saved one runs on a personal OpenRouter key with a zero hold and `max_price`
-0, so OpenRouter can route it only to a free endpoint, while the gates never
-rank it (they require positive prices) and the billing server's refusal of
-non-positive prices is its own credits policy.
+`zylch/llm/roles/prices.py` is the one price source. It reads the snapshot
+layers `roles/catalogue.py` holds (the downloaded copy, the one before it,
+then the build copy) at every call:
 
-**The allowlist** priced, in milestone 10a, every model billed before the
-table existed, at the rate it was billed at: the eleven direct Anthropic ids,
-and on OpenRouter `moonshotai/kimi-k3`, `z-ai/glm-5.2`,
-`anthropic/claude-sonnet-5`, `anthropic/claude-opus-5` and
-`anthropic/claude-haiku-4.5`. Until the switch-over it answers only for an id
-no snapshot layer prices; every id the snapshot prices is priced by the
-snapshot (the direct rates are unchanged; GLM 5.2 and K3 moved from 10a's
-billed rates to the catalogue's). Haiku 4.5, direct and on OpenRouter, is a
-priced choice a `custom` profile may name. It is never a default or an arm:
-the excluded families keep it out of every pool. A model in no source is
-refused before dispatch with the existing messages ("model pricing is not
+- On OpenRouter a catalogue id is priced at its reference price. That is the
+  model-level catalogue price whenever at least half its eligible endpoints
+  are priced within it × the margin. Otherwise it is the lower median of its
+  eligible endpoints by Artificial Analysis's blended price
+  (3 × input + output) / 4. A variable price stays unpriced.
+- On the direct transport a direct id is priced at its `anthropic` endpoint's
+  price (Anthropic's list price). A dated id `<alias>-YYYYMMDD` is priced as
+  its alias, and a response naming `<requested>-YYYYMMDD` settles as the
+  requested id.
+
+`budget_pricing.PRICES`, `openrouter_pricing.RATES` / `LABELS` and `usage.py`'s
+estimate are views over it ([spending protection](daily-llm-budget.md)). An
+OpenRouter request is reserved and capped (`max_price`) at the price × the
+margin. K3 uses its pinned endpoint's price × the margin, or its reference
+price × the margin on a day that endpoint is down. The provider object
+carries the admitted quantizations and `only` the admitted endpoints;
+fallbacks stay within them, and K3 never falls back. A refused call (429,
+402 or another status proving no work) releases its hold; a 5xx keeps it.
+The direct transport reserves at the list price, without the margin.
+
+Every id the snapshot prices is priced, so a model a profile saved keeps
+running when a successor appears. Haiku 4.5 is a priced choice a `custom`
+profile may name; it is never a default, a ranked model or an arm. An id no
+snapshot layer prices is refused before dispatch ("model pricing is not
 configured", "OpenRouter model has no verified price ceiling").
 
-**How `resolve_model` decides** (`zylch/llm/model_policy.py`), in order:
+## How `resolve_model` decides
+
+`zylch/llm/model_policy.py`, in order:
 
 1. An explicit `model=` argument.
-2. The saved `MODEL_<ROLE>` key, under **every** preset. Explicit role
-   overrides stay active, as Settings promises.
+2. The saved `MODEL_<ROLE>`, under **every** preset.
 3. The preset (unset means `custom`):
-   - `economy` / `balanced`: the table's row for that role, in the saved
-     provider's column. `anthropic` gets the direct id, or the
-     `anthropic_fallback`'s when the pick is not Anthropic's. `openrouter`
-     gets the catalogue id. `mrcall` gets the `mrcall` id, or the call pauses
-     with "this role has no model the MrCall credits server serves" when that
-     id is null.
+   - `economy` / `balanced`, by the saved provider:
+     - `openrouter`: the first `ranking` entry's catalogue id.
+     - `anthropic` (a personal key): the first `anthropic_ranking` entry's
+       direct id. An empty Anthropic ranking pauses the role (`RolePaused`).
+     - `mrcall` (credits): `roles/served.py` reads the billing server's
+       `GET /capabilities?protocol=mrcall-bounded-v2` (5 s timeout, cached one
+       hour) and runs the first ranked id it serves: the direct id when the
+       server lists it as Anthropic's, else the catalogue id. None served
+       pauses the role. A v1 answer pauses with "update the billing server".
+       A malformed answer is the explicit `MALFORMED` error.
    - `custom`: the provider's base key (`ANTHROPIC_MODEL`, `OPENROUTER_MODEL`,
-     `MRCALL_CREDITS_MODEL`), else `DEFAULT_MODEL`. With neither saved, the
-     role resolves under `economy`, so no profile is left without a model.
+     `MRCALL_CREDITS_MODEL`), else `DEFAULT_MODEL`; with neither, the role
+     resolves under `economy`.
 
 A call with no role resolves as `CHAT`. Call sites use
-`routed_model("MODEL_<ROLE>")` (`zylch/llm/__init__.py`), which never returns
-None. The fourteen **probes** that built a client only to ask whether AI can
-run call `llm_available()` instead: the saved provider and its credential
-only, no model, no client, and unreadable settings read as unavailable.
+`routed_model("MODEL_<ROLE>")`; the fourteen probes that only ask whether AI
+can run call `llm_available()`. There is no fallback model and no preset
+escalation.
 
-**Settings and labels.** The Settings schema's model choices, suggested value
-and preset help, and the labels `llm.models` returns, come from the table and
-the allowlist through `zylch/llm/roles/__init__.py`; a label is derived from
-the id itself (`z-ai/glm-5.3-flash` reads "GLM 5.3 Flash (Z.ai)"). The five
-existing role fields stay; new roles are overridable through the profile
-`.env` only.
+**Pauses** (`zylch/llm/role_pause.py`). A paused role's message names the
+role, the preset and a remedy. For a role Settings offers a field for
+(`TASK_DETECTION`, `REANALYZE`, `DEDUP`, `MEMORY_EXTRACT`, `MEMORY_MERGE`) the
+remedy is that field. For any other role it is the custom preset with a
+default model the billing choice can run, or another billing choice. The
+pause surfaces in `usage.today` (`model_policy.paused`), in a narration reply
+(`paused`), and as a memory-stage warning in the update result while the
+other stages run.
 
-## Request rules
+**Fingerprint.** `policy_fingerprint` covers the model each role resolves to,
+computed without network (credits from the cached served set). A table
+refresh that changes a model this profile runs aborts runs in progress like a
+settings change; a price refresh or a reorder that changes none does not.
 
-Some current models refuse request shapes that older call sites send.
-`requirements.json`'s `request_rules` records, per model-id prefix (direct and
-OpenRouter forms; the longest prefix wins), what each model refuses, from
-Anthropic's model reference as of 2026-10-01.
-`zylch/llm/roles/request_rules.py` applies them:
+**Settings and `llm.models`.** Model choices are the models the table in force
+ranks (both rankings, every preset and role): direct ids on a personal
+Anthropic key, catalogue ids on OpenRouter, the server's v2 list on credits.
+No excluded family is offered; a saved value stays listed and runs. Labels
+are derived from the id (`z-ai/glm-5.3-flash` reads "GLM 5.3 Flash (Z.ai)",
+`zylch/llm/roles/__init__.py`). The preset help says the presets are price
+ceilings and names no model.
 
-- **Sampling** (`temperature`, `top_p`, `top_k`). Opus 4.7 and later, Sonnet 5,
-  Opus 5.5, Fable 5 and Fable 5.1 refuse any sampling field, so it is dropped. Sonnet
-  5.5 direct drops only a non-default value; its OpenRouter id drops all of
-  them.
-- **Forced `tool_choice`** (`any` / `tool`). Opus 5.5, Sonnet 5.5 and Fable 5.1
-  refuse it, so it is downgraded to `auto`.
-- **Default thinking.** Sonnet 5 and Opus 5 think when `thinking` is omitted.
-  On a short request (`max_tokens` ≤ 1024) or a forced tool, the rule adds the
-  field that turns thinking off (`disabled`; `between_tools` for Sonnet 5.5).
-  Opus 5.5 cannot turn thinking off, and a transport's `disabled` is removed
-  for it.
+## The one request shape
 
-The rules are applied after the budget reservation on the direct
-(`sdk_request.py`) and OpenRouter (`openrouter_client.py`) transports; a rule
-only removes or relaxes a field, so the reserved bound still holds. On credits
-they are applied before the quote, so quote, reservation and executed body are
-one request, and they add no `thinking` field there: the server quotes the
-exact body it runs, and a field it may not accept is its contract to change.
-A model with no rule is sent unchanged.
+`zylch/llm/request_shape.py` gives every request one shape on every transport,
+from the snapshot's metadata, never from the model's name: no sampling field;
+`tool_choice` never forced (`any` / `tool` sent as `auto`); reasoning at the
+lowest published effort, never `disabled` where efforts are published;
+`strict` on closed tool schemas when supported; 1024 tokens of headroom
+whenever the model may reason. K3 keeps its adapter. Reasoning blocks are
+parsed, admitted and replayed unchanged within a tool loop, and stripped where
+history is rewritten. 10a's per-prefix request rules are deleted.
 
-## The two boundaries
+## The measurement
 
-- `tests/llm/test_model_name_boundary.py` scans `zylch/` for model names:
-  `claude-`, every vendor prefix in the OpenRouter catalogue fixture plus the
-  engine's earlier seven, `gpt-`, and dated snapshot ids. Each occurrence must
-  be covered by a row of `tests/fixtures/llm/model_name_inventory.json` with
-  the same file and literal. Each row carries a purpose: `adapter`,
-  `snapshot`, `price`, `placeholder`, `label` or `doc`. Every row must be
-  exercised. Only `requirements.json` and `resolved.json` are allowed whole.
-  Adding a row is a reviewed change.
-- `tests/llm/test_role_inventory.py` finds every `make_llm_client` /
-  `try_make_llm_client` / `LLMClient(...)` construction, including aliases. It
-  classifies each as a caller, a caller with a model, or a probe, and freezes
-  the counts per file in `tests/fixtures/llm/role_inventory.json`. It also
-  checks that each `routed_model("MODEL_…")` carries its row's role and that
-  there are fourteen probes.
+`zylch/llm/roles/measured.json` is written only by `scripts/derive_thresholds.py
+--plan` from records committed in `tests/fixtures/measurement/records/2026-10-11/`
+(the run selection in `plan.json` and `exclusions.json`, built by
+`scripts/measurement_plan.py`). A test requires the committed file byte for
+byte. The method is in `tests/fixtures/measurement/README.md`; the run, its
+spend and per-role results are in the
+[record](../../../docs/evaluations/2026-10-11-role-measurement.md).
 
-What they do not catch: both guard against accidents, not evasion. The name
-scan is textual and case-sensitive. It does not see a name built by
-concatenation, read from the environment or a file outside `zylch/`, written
-in another case, or placed on a comment-only line. Rows match by file, literal
-and count, not by line, so a `doc` name moved into code in the same file still
-passes. The inventory does not see a builder reached through `getattr`,
-`functools.partial`, a container, a parameter or a re-export under a new name.
+- An arm passes when it is complete, meets every mechanical bar, has no
+  critical failure and scores at least p − se of the reference **from its
+  own run**.
+- A reference case that misses a bar and its label is credited to its run's
+  yardstick (an accepted deviation from D7). The reference's own result
+  keeps the failure.
+- Every satisfice role is `measured_only`: index scores and results disagree,
+  so only measured, passing models rank.
+- Spend: USD 14.15 settled, 15.03 counting the aborted attempt, of the USD 20
+  cap.
 
-## The CI drift job
+## The daily job and the release gate
 
-`.github/workflows/model-resolution.yml` runs on manual dispatch and weekly
-(Mondays 06:17 UTC). It runs `resolve_models.py --check` against the live
-sources with `OPENROUTER_API_KEY` from the repository secret, fails when the
-committed table would change (or when the secret is missing), and uploads the
-report as an artifact. A red run is answered by `--apply` by hand and a
-reviewed commit; drift is never applied unreviewed. The secret is the CTO's
-action; until it exists, `test_resolved_table.py` is the guard.
+`engine/scripts/model_table_job.py`, run by
+`.github/workflows/model-resolution.yml` daily at 05:17 UTC and on dispatch
+(GitHub runs both only from the default branch), with the repository secret
+`OPENROUTER_API_KEY`:
+
+- resolves against the published record and checks each changed pick or
+  ranking order: a cached result by (model, role, case-set hash, prompt
+  hash), else a smoke admitted at USD 0.20 (expected at most 0.05) and the
+  role's measurement (at most USD 2), judged against the reference's recorded
+  result;
+- keeps an incumbent pick unless a challenger beats it, and replaces a pick
+  that fails a gate with the first ranked model with a passing result;
+- treats unmeasured pool models as challengers; the first run's backlog is
+  about 128 entrant smokes, so it is worked through over months;
+- stays within USD 10 a month, reserved in `ledger.json` and pushed before
+  the first paid call; nothing is retried;
+- publishes, or exits 1 and leaves the last record in force; a price-only
+  change updates `snapshot.json` alone, and a raised ceiling is never
+  published.
+
+`release.yml` fetches `v1/table.json` and `v1/snapshot.json` into the build
+copies and refuses (`scripts/model_table_release.py --max-age-days 14`) a
+copy that fails the gates or whose snapshot was read more than 14 days ago.
+
+## The boundaries
+
+- `tests/llm/test_model_name_boundary.py` scans `zylch/` for model names
+  (`claude-`, every vendor prefix in the catalogue fixture, `gpt-`, dated
+  ids). Each occurrence must match a row of
+  `tests/fixtures/llm/model_name_inventory.json`. The data files
+  `requirements.json`, `snapshot.json`, `measured.json`, `table.json` and
+  `contract/` are allowed whole. Adding a row is a reviewed change.
+- `tests/llm/test_role_inventory.py` freezes every client construction per
+  file and the fourteen probes.
+- `tests/llm/test_request_scan.py` is an AST scan that fails on a caller
+  passing sampling fields or a forced `tool_choice`.
+- `tests/llm/test_model_table.py` ties the fixture table to its capture and
+  both tables to the gates and the requirements in force.
+
+These guard against accidents, not evasion: a name built by concatenation,
+read from outside `zylch/` or placed on a comment-only line, or a request
+built from a splatted dict, is not seen.
 
 ## Known limits
 
-- `mrcall_served` is a client-side copy of the credits server's catalogue as
-  of 2026-10-01 (the direct ids of the old price table plus K3). It is an
-  assumption about the server, not read from it. A quote whose model differs
-  from the request is still refused client-side, so a substitution cannot be
-  silent.
-- On credits, narration (40 and 60 output tokens) and intent run with Sonnet
-  5's default thinking, because that path adds no `thinking` field. Narration
-  may come back empty. 10b or a server change will show whether it does.
-- Whether OpenRouter passes `between_tools` through for
-  `anthropic/claude-sonnet-5.5` is unverified until 10b's paid run.
-- The paid measurement is in `zylch/llm/roles/measured.json` (branch
-  `m10-s4b10`, written by `scripts/derive_thresholds.py --plan` from the committed
-  records in `tests/fixtures/measurement/records/2026-10-11/`).
-  - Each arm is judged against the reference from its own run.
-  - A reference case that misses a bar and the label is credited to the
-    yardstick, never counted against it.
-  - Rows whose shaped request is not today's are unmeasured.
-
-  Its record, with spend, per-role results, picks and limits, is
-  [`docs/evaluations/2026-10-11-role-measurement.md`](../../../docs/evaluations/2026-10-11-role-measurement.md).
-  An arm recorded without an index score takes the resolver's, so every
-  measured arm is in the threshold ladder; every satisfice role is
-  `measured_only`. `resolve_models.py --apply` writes a table that passes
-  `gates.check_table` and D8 (every ranked model is measured and passing);
-  it is committed at S6's switch-over.
-- The measurement ran through OpenRouter only. The direct-Anthropic transport
-  and the `mrcall` column are unmeasured. The memory corpus's 16-token
-  truncation check did not bind on OpenRouter for seven of nine arms.
+- The measurement ran through OpenRouter only. The direct-Anthropic and
+  credits transports are unmeasured.
+- Small synthetic case sets (5 to 16 per role), answered once; Opus's and
+  Sonnet's agentic scores are imputed.
+- K3, the reference, fails REANALYZE, REPLY_NEED and TASK_SOLVE.
+- The memory corpus's 16-token truncation check did not bind on OpenRouter
+  for seven of nine arms. "SKIP + reason" and prose extraction answers stay
+  pending and are re-paid.
+- Empty Anthropic rankings in the first table: `NARRATION` under both
+  presets, and `MNEMONIC`, `MEMORY_EXTRACT` and `MEMORY_MERGE` under
+  `economy`. A personal Anthropic key pauses on those roles, including a
+  legacy profile with no saved preset or base model (it resolves under
+  `economy`).
+- A credits profile pauses with "update the billing server" until the billing
+  server answers protocol v2.
