@@ -1527,6 +1527,45 @@ not started.
      `/root/r5-final-20261011/rollback.json`, and the retained
      private journal at `reconcile-current.private.jsonl` in that directory.
 
+   - **Next attempt — 2026-10-12, cloud session.**
+     - *The 35/36 is most likely a measurement artefact, not a
+       configuration change.* `systemctl show -p ExecStart` carries runtime
+       state as well as the configured command: per entry, `start_time`,
+       `stop_time`, `pid`, `code` and `status`. A hash of that value changes
+       whenever the process is restarted or its runtime status differs
+       between two snapshots, even though the command is the same. That
+       the post-reload hash equals the 10-10 baseline fits this. From now
+       on the `ExecStart` hash covers only each entry's `path` and
+       `argv[]`, up to ` ; ignore_errors=`. The other five properties are
+       configuration only and keep their hashes.
+     - *Production's `zz-qonto-identity.conf`* is a second pin added by the
+       Qonto workstream, refused by the same rule. It is treated exactly
+       like the assignment pins:
+       - record its keys, names only;
+       - allowed: `[Service]` and `Environment=` lines, none of which sets
+         `HOME`, `ZYLCH_HOME`, `MEMORY_DB_DIR`, `PATH` or `PYTHONPATH`;
+         anything else, stop and report;
+       - renamed `t0-qonto-identity.conf`, which keeps its order after
+         `t0-assignment-release.conf`, as `zz-q…` after `zz-a…`.
+
+       Whether production still needs it after the Qonto bootstrap
+       removal (`7af6208b`) is for the Qonto workstream to decide, not R5.
+
+     *VPS steps:*
+     1. Under the reconcile lock, take a new baseline for the seven units
+        with the `zz-…` names:
+        - the configuration-only `ExecStart` hash and the five other
+          hashes;
+        - the keys of the six assignment pins (already checked) and of
+          production's Qonto pin.
+     2. Rename all seven files to `t0-…` and run `daemon-reload`. Compare
+        the six hashes per unit immediately before and after: they must be
+        equal. If any differs, put every name back, run `daemon-reload` and
+        stop, recording which unit and which property.
+     3. Reconcile: exit 0, seven `ready`.
+     4. Run the scratch lifecycle as described above.
+     5. Two fresh final reviews, then `status: completed`.
+
    - **Open after this plan, not part of it:**
      - one handset whose speech the voice provider does not transcribe
        (voice path, not the host; 2026-10-03 diagnosis above);
