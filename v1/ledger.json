@@ -551,10 +551,21 @@
             "role": null,
             "spent_usd": "0.018935",
             "why": "ranking of economy / MNEMONIC / ranking"
+          },
+          {
+            "at": "2026-10-12T18:09:59Z",
+            "bound_usd": "0.2",
+            "check": "smoke x-ai/grok-4.7",
+            "kind": "smoke",
+            "model": "x-ai/grok-4.7",
+            "outcome": "passed",
+            "role": null,
+            "spent_usd": "0.002452",
+            "why": "ranking of economy / MNEMONIC / ranking"
           }
         ],
         "opened_at": "2026-10-12T17:44:44Z",
-        "reserved_usd": "0.50419",
+        "reserved_usd": "0.306642",
         "run": "2026-10-12T17:43:39Z",
         "settled_at": null,
         "spent_usd": null

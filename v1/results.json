@@ -767,6 +767,14 @@
       "model": "meta/muse-spark-1.3",
       "outcome": "failed",
       "run": "2026-10-12T17:43:39Z"
+    },
+    {
+      "at": "2026-10-12T18:09:59Z",
+      "detail": "",
+      "metadata_sha256": "c30e035b636a9f847ca679f67e6aae8d443e6910ecfed85b7bba87578803435b",
+      "model": "x-ai/grok-4.7",
+      "outcome": "passed",
+      "run": "2026-10-12T17:43:39Z"
     }
   ],
   "stops": []
