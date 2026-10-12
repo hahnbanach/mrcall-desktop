@@ -66,10 +66,17 @@ def test_a_server_serving_only_k3_runs_k3_where_it_is_ranked_and_pauses_elsewher
     assert set(picks(server, "balanced").values()) == {fixture.K3}  # every balanced role ranks K3
     economy = picks(server, "economy")  # K3 is above economy's ceiling: ranked nowhere
     for role, outcome in economy.items():
+        # The remedy is what Settings offers for the role: its own field, else the
+        # custom preset (or another billing choice).
+        remedy = (
+            "Choose a model for it in Settings."
+            if role in ("TASK_DETECTION", "REANALYZE", "DEDUP", "MEMORY_EXTRACT", "MEMORY_MERGE")
+            else "In Settings, choose the custom preset with a model the billing server serves "
+            "as the default model, or another billing choice."
+        )
         assert outcome == (
             f"AI paused: no model served for role {role}: the MrCall billing server serves none "
-            "of the models ranked for it under the economy preset. Choose a model for it in "
-            "Settings."
+            f"of the models ranked for it under the economy preset. {remedy}"
         )
     assert server.reads == [
         ("GET", "/api/desktop/llm/bounded/capabilities", {"protocol": "mrcall-bounded-v2"})

@@ -197,3 +197,31 @@ def test_a_refused_v2_capabilities_read_says_nothing_was_reserved():
     assert seen and seen[0].endswith("/capabilities?protocol=" + PROTOCOL)
     assert "HTTP 403 (account_disabled)" in str(refused.value)
     assert "Refused before any reservation" in str(refused.value)
+
+
+@pytest.mark.parametrize(
+    "answer, cause",
+    [
+        ([], "MALFORMED"),  # not an object
+        ("v2", "MALFORMED"),
+        ({"protocol": PROTOCOL, "currency": "EUR", "models": []}, "MALFORMED"),
+        ({"protocol": PROTOCOL, "models": []}, "MALFORMED"),  # no currency
+        ({"protocol": V1, "currency": "USD", "models": []}, "UPDATE_SERVER"),  # an old server
+        ({"currency": "USD", "models": []}, "UPDATE_SERVER"),
+    ],
+)
+def test_a_capabilities_answer_names_its_cause(answer, cause):
+    """A v2 answer that is not an object or not in USD is malformed; only one in
+    another protocol asks to update the billing server."""
+    from zylch.llm import bounded_proxy
+
+    client = BoundedProxyClient(
+        "https://billing.example",
+        SimpleNamespace(id_token="t"),
+        http_client=httpx.Client(
+            transport=httpx.MockTransport(lambda request: httpx.Response(200, json=answer))
+        ),
+    )
+    with pytest.raises(BudgetError) as paused:
+        client.capabilities()
+    assert str(paused.value) == getattr(bounded_proxy, cause)

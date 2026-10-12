@@ -1458,7 +1458,11 @@ provider, preset and effective role models, including unmeasured GLM quality.
 A role paused on the billing choice reads as null in `model_policy.roles`,
 and `model_policy.paused` (`{MODEL_<ROLE>: message}`, empty when none)
 gives the message naming it and why, the same for an empty Anthropic
-ranking on a personal key and an unserved role on MrCall credits.
+ranking on a personal key and an unserved role on MrCall credits. The
+message ends with what the user can do: choose a model for the job in
+Settings when Settings has a field for it (`roles/table.py` `SETTINGS_ROLES`),
+else choose the custom preset with a default model the billing choice runs,
+or another billing choice.
 `usage.reconcile(cursor?)` checks up to ten outstanding MrCall receipts without
 paid inference and returns `recovered`, `unresolved`, `message` and `next_cursor`.
 See [daily spending contract](../engine/docs/features/daily-llm-budget.md).

@@ -103,7 +103,13 @@ async def test_narration_on_a_personal_anthropic_key_says_the_role_paused(
         == again
         == {
             "text": "",
-            "paused": table.NO_ANTHROPIC_MODEL.format(role="NARRATION", preset=preset),
+            # Settings has no NARRATION field: the remedy is the custom preset.
+            "paused": (
+                "AI paused: no Anthropic model for role NARRATION: none of the models ranked for it "
+                f"under the {preset} preset is an Anthropic model, so a personal Anthropic "
+                "key cannot run it. In Settings, choose the custom preset with an Anthropic "
+                "model as the default model, or another billing choice."
+            ),
         }
     )
     assert "no Anthropic model for role NARRATION: " in first["paused"]
@@ -119,6 +125,10 @@ async def test_narration_on_credits_pauses_in_the_same_shape(profile, kind):
     reply = await _narrate(kind)
     assert set(reply) == {"text", "paused"} and reply["text"] == ""
     assert reply["paused"].startswith("AI paused: no model served for role NARRATION: ")
+    assert reply["paused"].endswith(
+        "In Settings, choose the custom preset with a model the billing server serves as the "
+        "default model, or another billing choice."
+    )
 
 
 def test_only_the_personal_anthropic_key_pauses_narration(profile):
@@ -208,13 +218,15 @@ async def test_an_economy_anthropic_key_records_each_paused_memory_role_and_runs
         tasks.assert_awaited_once()  # the other stages ran
         memory = _memory(errors)
         assert [str(e["error"]) for e in memory] == [
-            table.NO_ANTHROPIC_MODEL.format(role=role, preset="economy")
+            f"AI paused: no Anthropic model for role {role}: none of the models ranked for it "
+            "under the economy preset is an Anthropic model, so a personal Anthropic key "
+            "cannot run it. Choose a model for it in Settings."  # both have a Settings field
             for role in ("MEMORY_MERGE", "MEMORY_EXTRACT")
         ]
         assert all(isinstance(e["error"], RolePaused) for e in memory)
         for entry in map(humanize_entry, memory):
             assert entry["severity"] == "warning" and entry["kind"] == "model_paused"
-            assert "Choose a model for this job in Settings" in entry["action"]
+            assert entry["action"] == "Choose a model for it in Settings."
         # Never an error with a traceback; each pause a warning the first time only.
         assert not [r for r in caplog.records if r.levelno >= logging.ERROR]
         caplog.clear()
@@ -249,7 +261,8 @@ async def test_credits_record_an_unserved_memory_role_in_the_same_shape(pending_
     memory = _memory(errors)
     assert [str(e["error"]) for e in memory] == [
         f"AI paused: no model served for role {role}: the MrCall billing server serves none "
-        "of the models ranked for it under the economy preset. Choose a model for it in Settings."
+        "of the models ranked for it under the economy preset. Choose a model for it in "
+        "Settings."
         for role in ("MEMORY_MERGE", "MEMORY_EXTRACT")
     ]
     assert {humanize_entry(e)["kind"] for e in memory} == {"model_paused"}
@@ -270,7 +283,7 @@ def test_the_settings_snapshot_reads_a_paused_role_as_null_with_its_reason(profi
         if role in paused:
             assert snapshot["roles"][role] is None
             name = role.removeprefix("MODEL_")
-            reason = table.NO_ANTHROPIC_MODEL.format(role=name, preset=preset)
+            reason = table.anthropic_pause(name, preset)
             assert snapshot["paused"][role] == reason
         else:
             assert snapshot["roles"][role]
@@ -288,3 +301,54 @@ def test_the_settings_snapshot_gives_an_unserved_credits_role_its_reason(profile
 def test_a_profile_that_pauses_nothing_reports_no_pause(profile):
     profile(LLM_PROVIDER="openrouter", LLM_MODEL_PRESET="economy", OPENROUTER_API_KEY="sk-or")
     assert model_policy.policy_snapshot()["paused"] == {}
+
+
+# ── the remedy names what Settings actually offers ─────────
+
+
+def test_the_roles_with_a_settings_field_are_the_settings_schema_s():
+    from zylch.services.settings_schema import SETTINGS_SCHEMA
+
+    fields = {f["key"] for f in SETTINGS_SCHEMA if f["type"] == "model"}
+    assert {f"MODEL_{role}" for role in table.SETTINGS_ROLES} == fields
+
+
+@pytest.mark.parametrize("preset", ["economy", "balanced"])
+def test_each_paused_role_names_a_remedy_the_user_can_follow(profile, preset):
+    """A role Settings has a field for: choose a model for it there. Any other
+    role (NARRATION, MNEMONIC, ...): the custom preset with a model the billing
+    choice runs as the default, or another billing choice."""
+    anthropic(profile, preset)
+    for role, message in model_policy.policy_snapshot()["paused"].items():
+        if role.removeprefix("MODEL_") in table.SETTINGS_ROLES:
+            assert message.endswith(" Choose a model for it in Settings."), role
+        else:
+            assert message.endswith(
+                " In Settings, choose the custom preset with an Anthropic model as the default "
+                "model, or another billing choice."
+            ), role
+    credits_serving_nothing(profile, preset)
+    for role, message in model_policy.policy_snapshot()["paused"].items():
+        overridable = role.removeprefix("MODEL_") in table.SETTINGS_ROLES
+        assert message.endswith(
+            " Choose a model for it in Settings."
+            if overridable
+            else " In Settings, choose the custom preset with a model the billing server serves "
+            "as the default model, or another billing choice."
+        ), role
+
+
+def test_the_update_card_action_is_the_pause_s_own_remedy():
+    from zylch.services.error_messages import humanize_error
+
+    pause = RolePaused(
+        table.anthropic_pause("MNEMONIC", "economy"),
+        "MNEMONIC",
+        "economy",
+        table.remedy("MNEMONIC", "an Anthropic model"),
+    )
+    action = humanize_error(pause, "memory")["action"]
+    assert action == (
+        "In Settings, choose the custom preset with an Anthropic model as the default model, "
+        "or another billing choice."
+    )

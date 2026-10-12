@@ -31,7 +31,9 @@ const Budget = load('components/DailyBudget.tsx').default
 const { narrationReply, useNarration } = load('hooks/useNarration.ts')
 
 // Synthetic reasons in the engine's two shapes (role_pause.py): the app shows them verbatim.
-const ANTHROPIC = 'AI paused: no Anthropic model for role NARRATION: none of the models ranked for it under the economy preset is an Anthropic model, so a personal Anthropic key cannot run it. Choose a model for it in Settings.'
+// NARRATION has no Settings field, so its remedy is the custom preset (roles/table.py remedy).
+const ANTHROPIC = 'AI paused: no Anthropic model for role NARRATION: none of the models ranked for it under the economy preset is an Anthropic model, so a personal Anthropic key cannot run it. In Settings, choose the custom preset with an Anthropic model as the default model, or another billing choice.'
+// MEMORY_MERGE has its own Settings field (Advanced job models): the remedy names it.
 const CREDITS = 'AI paused: no model served for role MEMORY_MERGE: the MrCall billing server serves none of the models ranked for it under the economy preset. Choose a model for it in Settings.'
 const stderr = new Set()
 let snapshot

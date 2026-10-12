@@ -48,6 +48,12 @@ def note(where: str, pause: RolePaused) -> None:
 def reasons(roles, values=None) -> dict[str, str]:
     """``{role: message}`` for each of `roles` that pauses on the saved profile
     now, resolved with no network (credits from the cached served set)."""
+    return {role: str(pause) for role, pause in pauses(roles, values).items()}
+
+
+def pauses(roles, values=None) -> dict[str, RolePaused]:
+    """``{role: pause}`` for each of `roles` that pauses on the saved profile now
+    (`reasons`, keeping each pause's role, preset and remedy)."""
     from .model_policy import _resolve, profile_values, resolve_provider
 
     try:
@@ -60,7 +66,7 @@ def reasons(roles, values=None) -> dict[str, str]:
         try:
             _resolve(role, values, provider, online=False)
         except RolePaused as pause:
-            found[role] = str(pause)
+            found[role] = pause
         except (BudgetError, ValueError):
             continue
     return found
@@ -81,13 +87,12 @@ def memory_failed(error: Exception, errors_out, console, log: logging.Logger) ->
     per paused memory role (each its own message) and a warning; anything else
     is the stage failure it always was, with its traceback."""
     if isinstance(error, RolePaused):
-        found = reasons(MEMORY_ROLES) or {error.role: str(error)}
-        pauses = [RolePaused(m, r.removeprefix("MODEL_"), error.preset) for r, m in found.items()]
-        for pause in pauses:
+        found = list(pauses(MEMORY_ROLES).values()) or [error]
+        for pause in found:
             note("memory", pause)
             console.print(f"[yellow]  Memory paused: {pause}[/yellow]")
         if errors_out is not None:
-            errors_out.extend({"stage": "memory", "error": pause} for pause in pauses)
+            errors_out.extend({"stage": "memory", "error": pause} for pause in found)
         return
     log.error(f"[/process] memory failed: {error}", exc_info=error)
     console.print(f"[red]  Memory extraction failed: {error}[/red]")

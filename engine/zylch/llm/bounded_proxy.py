@@ -36,6 +36,9 @@ UPDATE_SERVER = (
     "AI paused: update the billing server; it does not answer in the credits protocol "
     "mrcall-bounded-v2 this engine speaks."
 )
+# A v2 capabilities answer that is not an object, or not in USD: a server fault,
+# not an old server (`roles/served.py` uses it for a bad model list too).
+MALFORMED = "AI paused: the MrCall billing server returned a malformed model catalogue."
 
 
 def digest(value):
@@ -201,15 +204,16 @@ class BoundedProxyClient:
             ) from None
 
     def capabilities(self):
-        """The server's v2 capabilities; an answer in another protocol (or currency)
-        pauses with `UPDATE_SERVER`. The model list is read by `roles/served.py`."""
+        """The server's v2 capabilities; an answer in another protocol pauses
+        with `UPDATE_SERVER`, one that is not an object or not in USD with
+        `MALFORMED`. The model list is read by `roles/served.py`."""
         result = self._call("GET", "/capabilities?protocol=" + PROTOCOL)
-        if (
-            not isinstance(result, dict)
-            or result.get("protocol") != PROTOCOL
-            or result.get("currency") != "USD"
-        ):
+        if not isinstance(result, dict):
+            raise BudgetError(MALFORMED)
+        if result.get("protocol") != PROTOCOL:
             raise BudgetError(UPDATE_SERVER)
+        if result.get("currency") != "USD":
+            raise BudgetError(MALFORMED)
         return result
 
     def check_account(self):

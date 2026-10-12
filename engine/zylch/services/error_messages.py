@@ -127,7 +127,8 @@ def _classify(error: BaseException, stage: Optional[str]) -> Dict[str, Any]:
             "warning",
             f"{label or 'AI'} paused: no model for this job",
             str(error),
-            "Choose a model for this job in Settings, or change the billing choice.",
+            error.remedy
+            or "Choose a model for this job in Settings, or change the billing choice.",
         )
     if isinstance(error, BudgetError):
         return _mk(

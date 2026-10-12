@@ -160,7 +160,8 @@ def test_an_empty_anthropic_ranking_pauses_only_the_personal_anthropic_key(monke
     assert str(paused.value) == (
         "AI paused: no Anthropic model for role MNEMONIC: none of the models ranked for it "
         "under the balanced preset is an Anthropic model, so a personal Anthropic key cannot "
-        "run it. Choose a model for it in Settings."
+        "run it. In Settings, choose the custom preset with an Anthropic model as the default "
+        "model, or another billing choice."  # Settings has no MNEMONIC field
     )
     assert resolve_model("MODEL_MNEMONIC", values=saved("openrouter", "balanced")) == (
         "moonshotai/kimi-k3"

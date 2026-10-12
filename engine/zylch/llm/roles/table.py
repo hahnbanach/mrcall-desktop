@@ -46,8 +46,32 @@ NO_RANKED_MODEL = "AI paused: no model is ranked for role {role} under the {pres
 NO_ANTHROPIC_MODEL = (
     "AI paused: no Anthropic model for role {role}: none of the models ranked for it "
     "under the {preset} preset is an Anthropic model, so a personal Anthropic key cannot "
-    "run it. Choose a model for it in Settings."
+    "run it. {remedy}"
 )
+# The roles Settings offers a per-job model for (`settings_schema.py`'s
+# ``type: "model"`` fields, the app's Advanced job models; held equal by
+# tests/llm/test_role_pause.py): a paused one is fixed there. Any other role
+# follows the profile's default model only under the custom preset.
+SETTINGS_ROLES = ("TASK_DETECTION", "REANALYZE", "DEDUP", "MEMORY_EXTRACT", "MEMORY_MERGE")
+OVERRIDE = "Choose a model for it in Settings."
+CUSTOM = (
+    "In Settings, choose the custom preset with {default} as the default model, "
+    "or another billing choice."
+)
+
+
+def remedy(role: str, default: str) -> str:
+    """What the user can do about a paused `role`: its own Settings field when
+    Settings has one, else the custom preset with `default` (the kind of model
+    the billing choice can run) as the default model, or another billing choice."""
+    return OVERRIDE if role in SETTINGS_ROLES else CUSTOM.format(default=default)
+
+
+def anthropic_pause(role: str, preset: str) -> str:
+    """`NO_ANTHROPIC_MODEL` for `role` under `preset`, with its remedy."""
+    return NO_ANTHROPIC_MODEL.format(
+        role=role, preset=preset, remedy=remedy(role, "an Anthropic model")
+    )
 
 
 class RolePaused(BudgetError):
@@ -57,9 +81,10 @@ class RolePaused(BudgetError):
     (`served.NO_SERVED_MODEL`). Callers that skip the role say so where the
     user sees it (`zylch/llm/role_pause.py`) rather than failing silently."""
 
-    def __init__(self, message: str, role: str, preset: str):
+    def __init__(self, message: str, role: str, preset: str, remedy: str = ""):
         super().__init__(message)
-        self.role, self.preset = role, preset
+        # `remedy`: what the user can do about it (`remedy()`), also in the message.
+        self.role, self.preset, self.remedy = role, preset, remedy
 
 
 # The table the run-time distribution put in force (already through the
@@ -137,8 +162,8 @@ def pick(preset: str, role: str, provider: str) -> str:
     if provider == "anthropic":
         entries = ranking(preset, role, "anthropic_ranking")
         if not entries:
-            message = NO_ANTHROPIC_MODEL.format(role=role, preset=preset)
-            raise RolePaused(message, role, preset)
+            fix = remedy(role, "an Anthropic model")
+            raise RolePaused(anthropic_pause(role, preset), role, preset, fix)
         return entries[0]["direct_id"]
     raise ValueError(f"Unknown provider {provider!r}")
 

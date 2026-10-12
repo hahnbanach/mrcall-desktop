@@ -30,7 +30,7 @@ import logging
 import threading
 import time
 
-from ..bounded_proxy import PROTOCOL, UPDATE_SERVER
+from ..bounded_proxy import MALFORMED, PROTOCOL, UPDATE_SERVER
 from ..budget_pricing import BudgetError
 from . import table
 
@@ -40,9 +40,8 @@ CACHE_SECONDS = 60 * 60
 PROVIDERS = ("anthropic", "openrouter")
 NO_SERVED_MODEL = (
     "AI paused: no model served for role {role}: the MrCall billing server serves none "
-    "of the models ranked for it under the {preset} preset. Choose a model for it in Settings."
+    "of the models ranked for it under the {preset} preset. {remedy}"
 )
-MALFORMED = "AI paused: the MrCall billing server returned a malformed model catalogue."
 UNREAD = "AI paused: the MrCall billing server's model catalogue has not been read yet."
 
 # The monotonic clock the cache ages by (a seam for tests).
@@ -122,7 +121,14 @@ def choose(preset: str, role: str, ranking: list[dict], models: tuple[dict, ...]
             return direct
         if providers.get(entry["id"]) == "openrouter":
             return entry["id"]
-    raise table.RolePaused(NO_SERVED_MODEL.format(role=role, preset=preset), role, preset)
+    fix = table.remedy(role, "a model the billing server serves")
+    raise table.RolePaused(unserved_pause(role, preset), role, preset, fix)
+
+
+def unserved_pause(role: str, preset: str) -> str:
+    """`NO_SERVED_MODEL` for `role` under `preset`, with its remedy (`table.remedy`)."""
+    remedy = table.remedy(role, "a model the billing server serves")
+    return NO_SERVED_MODEL.format(role=role, preset=preset, remedy=remedy)
 
 
 def pick(preset: str, role: str, url: str, *, online: bool = True, client=None) -> str:
