@@ -463,10 +463,21 @@
             "role": "WEB_SEARCH",
             "spent_usd": "0.000098",
             "why": "pick of economy / WEB_SEARCH / ranking"
+          },
+          {
+            "at": "2026-10-12T18:07:37Z",
+            "bound_usd": "2",
+            "check": "CORRECTION_LEARNING on inclusionai/ling-3.0-flash-vl",
+            "kind": "measure",
+            "model": "inclusionai/ling-3.0-flash-vl",
+            "outcome": "CORRECTION_LEARNING: failed",
+            "role": "CORRECTION_LEARNING",
+            "spent_usd": "0.000269",
+            "why": "pick of economy / CORRECTION_LEARNING / ranking"
           }
         ],
         "opened_at": "2026-10-12T17:44:44Z",
-        "reserved_usd": "2.284031",
+        "reserved_usd": "0.2843",
         "run": "2026-10-12T17:43:39Z",
         "settled_at": null,
         "spent_usd": null
