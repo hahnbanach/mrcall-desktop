@@ -1265,6 +1265,14 @@
       "model": "tencent/hy3-preview",
       "outcome": "passed",
       "run": "2026-10-12T17:43:39Z"
+    },
+    {
+      "at": "2026-10-12T19:02:21Z",
+      "detail": "no text answer (stop_reason=tool_use)",
+      "metadata_sha256": "d5484e507d9861423b13d0fe600cb50f730154eb794dd5c09c8fe95a3d6bf1cd",
+      "model": "mistralai/mistral-small-2603",
+      "outcome": "failed",
+      "run": "2026-10-12T17:43:39Z"
     }
   ],
   "stops": [

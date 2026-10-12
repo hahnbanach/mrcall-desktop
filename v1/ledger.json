@@ -892,10 +892,21 @@
             "role": null,
             "spent_usd": "0.000118",
             "why": "ranking of economy / MEMORY_EXTRACT / ranking"
+          },
+          {
+            "at": "2026-10-12T19:02:21Z",
+            "bound_usd": "0.2",
+            "check": "smoke mistralai/mistral-small-2603",
+            "kind": "smoke",
+            "model": "mistralai/mistral-small-2603",
+            "outcome": "failed: no text answer (stop_reason=tool_use)",
+            "role": null,
+            "spent_usd": "0.000096",
+            "why": "ranking of economy / MEMORY_EXTRACT / ranking"
           }
         ],
         "opened_at": "2026-10-12T17:44:44Z",
-        "reserved_usd": "1.410713",
+        "reserved_usd": "1.210809",
         "run": "2026-10-12T17:43:39Z",
         "settled_at": null,
         "spent_usd": null
