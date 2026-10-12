@@ -991,10 +991,21 @@
             "role": null,
             "spent_usd": "0.000197",
             "why": "ranking of economy / MEMORY_EXTRACT / ranking"
+          },
+          {
+            "at": "2026-10-12T19:03:15Z",
+            "bound_usd": "0.2",
+            "check": "smoke meta-llama/llama-4-maverick",
+            "kind": "smoke",
+            "model": "meta-llama/llama-4-maverick",
+            "outcome": "passed",
+            "role": null,
+            "spent_usd": "0.000084",
+            "why": "ranking of economy / MEMORY_EXTRACT / ranking"
           }
         ],
         "opened_at": "2026-10-12T17:44:44Z",
-        "reserved_usd": "1.418626",
+        "reserved_usd": "1.21871",
         "run": "2026-10-12T17:43:39Z",
         "settled_at": null,
         "spent_usd": null

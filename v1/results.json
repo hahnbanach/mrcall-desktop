@@ -1337,6 +1337,14 @@
       "model": "qwen/qwen3.5-35b-a3b",
       "outcome": "passed",
       "run": "2026-10-12T17:43:39Z"
+    },
+    {
+      "at": "2026-10-12T19:03:15Z",
+      "detail": "",
+      "metadata_sha256": "080108dfeec664a040d1611f290bdbb7a9c5c13876e713866eba33fd355d18e6",
+      "model": "meta-llama/llama-4-maverick",
+      "outcome": "passed",
+      "run": "2026-10-12T17:43:39Z"
     }
   ],
   "stops": [
