@@ -25,7 +25,7 @@ and for the task roles `score.py`. `MNEMONIC`, `MEMORY_EXTRACT` and
 | Rehearse | `python scripts/measure_roles.py --arms ARMS.json --out DIR --dry-run` | no |
 | Measure the roles with case sets | `python scripts/measure_roles.py --arms ARMS.json --out DIR --cap 20` | yes |
 | Measure the memory roles, one run per arm | `MNEMONIC_CORPUS_EXECUTE=1 MNEMONIC_CORPUS_ARMS=ARMS.json MNEMONIC_CORPUS_ARM=<id> MNEMONIC_CORPUS_PROFILE_DIR=… MNEMONIC_CORPUS_CAP_USD=… pytest tests/memory/test_mnemonic_corpus_live.py` | yes |
-| Derive the thresholds | `python scripts/derive_thresholds.py --arms ARMS.json --results DIR/results.jsonl --corpus REC/*-manifest.json --write` | no |
+| Derive the thresholds | `python scripts/derive_thresholds.py --plan records/<date>/plan.json --write` (or `--arms ARMS.json --run ID@COMMIT=DIR/results.jsonl --corpus RUN=REC/*-manifest.json`) | no |
 
 Keys come from the environment only (`OPENROUTER_API_KEY`), are written to a
 disposable profile's `.env` (mode 600, deleted after) and never printed.
@@ -217,6 +217,33 @@ code and build snapshot. A row that differs is `stale_request`, an
 unmeasured cell rather than a failed one. The headroom fix made every older
 MiMo v2.6 row stale this way.
 
-The published `roles/measured.json` and its record
-(`docs/evaluations/2026-10-11-role-measurement.md` at the monorepo root) were
-written this way.
+## The committed derivation (S4b10)
+
+`roles/measured.json` is derived from committed data only:
+
+```bash
+python scripts/derive_thresholds.py --plan tests/fixtures/measurement/records/2026-10-11/plan.json --write
+```
+
+`records/2026-10-11/` holds the following, copied byte for byte:
+
+- `runs/`: every paid run's `results.jsonl`;
+- `corpus/`: the nine corpus records used;
+- `arms/`: `arms-final.json`, plus `arms-scores.json`. The second is the
+  resolver's index score for every measured model on the 2026-10-10T12:01Z
+  read; the entrant arms files of reruns 7 and 8 carried none.
+
+It also holds `plan.json`, and `exclusions.json`, the only rows left out by
+entry. Each entry states a kind whose claim `measurement_plan` verifies:
+
+- `prompt`: the rows were measured on another prompt than today's;
+- `denied`: the cells were refused before inference, and the arm answered in
+  full in a later run.
+
+A stale-shape run needs no entry. It is dropped only when the same arm has a
+complete current-shape run of the role (`measurement_runs.supersede_stale`).
+A current-shape row is never dropped, whatever its verdict.
+
+`tests/measurement/test_measurement_plan.py` derives the plan and requires
+the committed `measured.json` byte for byte. Its record is
+`docs/evaluations/2026-10-11-role-measurement.md` at the monorepo root.

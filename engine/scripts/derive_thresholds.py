@@ -59,6 +59,12 @@ on the committed file: S2's reader accepts it, its hashes are today's, no
 result in it is incomplete, and its passes and thresholds are the ones these
 rules derive from its own results.
 
+**The plan** (``--plan PATH``, ``measurement_plan``): the committed inputs
+of a derivation (runs, corpus records, arms, re-score, shape check) and its
+exclusions, each a claim the code verifies. ``roles/measured.json`` is
+derived from ``tests/fixtures/measurement/records/2026-10-11/plan.json``,
+and ``test_measurement_plan`` checks it byte for byte.
+
 **Runs** (``--run ID@COMMIT=PATH``, ``--corpus RUN=MANIFEST``,
 ``measurement_runs``): every arm is judged against the reference from its
 own run, and each result names it (``judged_by``); the role's ``reference``
@@ -251,6 +257,7 @@ def role_entry(role: str, rows: list[dict], cases: list[str], rule: dict, refere
         raise Refused(f"{role}: rows from {len(hashes)} different case sets or prompts")
     if hashes != {current_hashes(role)}:
         raise Refused(f"{role}: measured on other cases or prompts than today's")
+    rows, superseded = runs.supersede_stale(rows, cases)
     second, incomplete, per_run = {}, {}, {}
     for run in sorted({r.get("run", "") for r in rows}):
         for arm in sorted({r["arm"] for r in rows if r.get("run", "") == run}):
@@ -277,7 +284,9 @@ def role_entry(role: str, rows: list[dict], cases: list[str], rule: dict, refere
     results = judge_runs(per_run, yardsticks, incomplete)
     threshold, measured_only = threshold_of(rule["rule"], results)
     versions = sorted({str(r.get("snapshot_version")) for r in rows})
+    entry = {"superseded_stale": superseded} if superseded else {}  # none: the daily job's shape
     return {
+        **entry,
         "rule": rule["rule"],
         "index": rule["index"],
         "threshold": threshold,
@@ -353,87 +362,93 @@ def check_measured(document: dict) -> list[str]:
     return problems
 
 
-def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description="Write roles/measured.json from the results.")
-    parser.add_argument(
-        "--arms",
-        type=Path,
-        nargs="+",
-        required=True,
-        help="index scores; the first file to score a model wins",
-    )
-    parser.add_argument("--results", type=Path, nargs="*", default=[])
-    parser.add_argument(
-        "--run",
-        action="append",
-        default=[],
-        metavar="ID@COMMIT=PATH",
-        help="a results.jsonl measured as one run, on COMMIT (measurement_runs)",
-    )
-    parser.add_argument("--corpus", nargs="*", default=[], metavar="[RUN=]MANIFEST")
-    parser.add_argument(
-        "--shape-check",
-        action="store_true",
-        help="refuse rows whose shaped request is not today's (measurement_shape)",
-    )
-    parser.add_argument("--write", action="store_true", help=f"write {common.MEASURED.name}")
-    parser.add_argument("--out", type=Path, help="write the document here instead")
-    parser.add_argument(
-        "--rescore-from",
-        nargs="*",
-        default=[],
-        metavar="OLD_CASE_HASH",
-        help="re-score rows of these case-set hashes on today's labels (measurement_rescore)",
-    )
-    parser.add_argument(
-        "--rescore",
-        action="store_true",
-        help="score every recorded answer again with today's scorer and labels",
-    )
-    parser.add_argument(
-        "--answered-at",
-        nargs="*",
-        default=[],
-        metavar="COMMIT",
-        help="the commits the results were answered on (measurement_rescore)",
-    )
-    args = parser.parse_args(argv)
+def build(spec: dict) -> tuple[dict, dict]:
+    """``(document, unmeasured)`` from a derivation spec (``measurement_plan``), or Refused."""
+    import measurement_plan as plan
+    import measurement_rescore as rescore
+    import measurement_shape as shape
 
     def read(path: Path, **fields) -> list[dict]:
         lines = path.read_text().splitlines()
         return [{**json.loads(line), **fields} for line in lines if line.strip()]
 
-    rows = [row for path in args.results for row in read(path)]
-    for spec in args.run:
-        run, commit, path = runs.parse_run(spec)
+    rows = [row for path in spec["results"] for row in read(path)]
+    for run, commit, path in spec["runs"]:
         rows += read(path, run=run, run_commit=commit)
+    try:
+        rows, excluded = plan.apply_exclusions(
+            rows, spec["exclusions"], lambda role: current_hashes(role)[1]
+        )
+    except plan.ExclusionRefused as err:
+        raise Refused(str(err)) from err
     rules = common.requirements()["roles"]
     scores: dict = {}
-    for path in args.arms:  # a later file fills what an earlier one leaves unscored
+    for path in spec["arms"]:  # a later file fills what an earlier one leaves unscored
         for key, value in index_scores(json.loads(path.read_text(encoding="utf-8"))).items():
             scores.setdefault(key, value)
     rows = fill_scores(rows, scores, rules)
-    import measurement_rescore as rescore
-    import measurement_shape as shape
-
     record: dict = {}
+    old, every = set(spec["rescore_from"]), spec["rescore"]
     try:
-        old, every = set(args.rescore_from), args.rescore
-        rows = rescore.rescore_rows(rows, old, record, every=every, answered_at=args.answered_at)
-        for run, manifest in map(runs.parse_corpus, args.corpus):
+        rows = rescore.rescore_rows(rows, old, record, every=every, answered_at=spec["answered_at"])
+        for run, manifest in spec["corpus"]:
             found = rescore.corpus(manifest, old, scores, rules, record, every=every)
             rows += [{**row, "run": run} for row in found]
-    except (Refused, rescore.RescoreRefused) as refused:
-        print(f"refused: {refused}", file=sys.stderr)
-        return 1
+    except rescore.RescoreRefused as err:
+        raise Refused(str(err)) from err
     stale: dict = {}
-    if args.shape_check:
+    if spec["shape_check"]:
         rows = shape.mark_stale(rows, stale)
     document, unmeasured = derive(rows)
     if record:
         document["rescored_from"] = record
-    if args.shape_check:
+    if spec["shape_check"]:
         document["shape_refused"] = stale
+    if excluded:
+        document["excluded"] = excluded
+    return document, unmeasured
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(description="Write roles/measured.json from the results.")
+    add = parser.add_argument
+    add("--plan", type=Path, help="a committed derivation plan (measurement_plan)")
+    add("--arms", type=Path, nargs="+", default=[], help="index scores; the first to score wins")
+    add("--results", type=Path, nargs="*", default=[])
+    add("--run", action="append", default=[], metavar="ID@COMMIT=PATH", help="one run's rows")
+    add("--corpus", nargs="*", default=[], metavar="[RUN=]MANIFEST")
+    add("--exclusions", type=Path, help="exclusions file (measurement_plan)")
+    add("--shape-check", action="store_true", help="refuse stale shaped requests")
+    add("--write", action="store_true", help=f"write {common.MEASURED.name}")
+    add("--out", type=Path, help="write the document here instead")
+    add("--rescore-from", nargs="*", default=[], metavar="OLD_CASE_HASH")
+    add("--rescore", action="store_true", help="score every recorded answer again")
+    add("--answered-at", nargs="*", default=[], metavar="COMMIT")
+    args = parser.parse_args(argv)
+    import measurement_plan as plan
+
+    if args.plan:
+        spec = plan.from_plan(args.plan)
+    else:
+        exclusions = []
+        if args.exclusions:
+            exclusions = json.loads(args.exclusions.read_text(encoding="utf-8"))["exclusions"]
+        spec = {
+            "arms": args.arms,
+            "results": args.results,
+            "runs": [runs.parse_run(text) for text in args.run],
+            "corpus": [runs.parse_corpus(text) for text in args.corpus],
+            "rescore": args.rescore,
+            "rescore_from": args.rescore_from,
+            "answered_at": args.answered_at,
+            "shape_check": args.shape_check,
+            "exclusions": exclusions,
+        }
+    try:
+        document, unmeasured = build(spec)
+    except Refused as refused:
+        print(f"refused: {refused}", file=sys.stderr)
+        return 1
     for role, why in unmeasured.items():
         print(f"unmeasured, blocks the table: {role}: {why}")
     text = json.dumps(document, indent=1, sort_keys=True) + "\n"
