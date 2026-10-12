@@ -210,10 +210,21 @@
             "role": null,
             "spent_usd": "0.000077",
             "why": "pick of economy / TASK_DETECTION / ranking"
+          },
+          {
+            "at": "2026-10-12T17:54:03Z",
+            "bound_usd": "2",
+            "check": "TASK_DETECTION on inception/mercury-2.5",
+            "kind": "measure",
+            "model": "inception/mercury-2.5",
+            "outcome": "TASK_DETECTION: failed",
+            "role": "TASK_DETECTION",
+            "spent_usd": "0.002495",
+            "why": "pick of economy / TASK_DETECTION / ranking"
           }
         ],
         "opened_at": "2026-10-12T17:44:44Z",
-        "reserved_usd": "2.260821",
+        "reserved_usd": "0.263316",
         "run": "2026-10-12T17:43:39Z",
         "settled_at": null,
         "spent_usd": null
