@@ -84,11 +84,16 @@ active in the release preflight. Preserve actual controls during rollout. Person
 passes; funded credit acceptance remains open. See
 [K3 adoption](execution-plans/2026-09-16-k3-production.md).
 
-Mnemonic M9 source is active in all six company engines, including production.
-The failed Haiku corpus criterion is deferred to M10 on the resolver-selected
-model; source activation and sandbox acceptance do not close mnemonic
-product/corpus gates. The [engine snapshot](../engine/docs/active-context.md)
-owns the detailed state.
+Mnemonic M9 source is active in all six company engines, including production;
+source and sandbox acceptance do not close its product gates. The corpus
+criterion that failed on Haiku is met on M10's measured picks. M10's [model
+selection](../engine/docs/features/model-selection.md) switch-over is merged on
+`model-selection-m10a`: each role's model comes from the model table, first
+published on the `model-table` branch (`8087fbf2`). The billing server serves it
+in protocol v2 on `main`/`dev` (`bb8f553`), not in production (`37f330d`). The
+merge to `main` awaits the job's CI proof run (its push trigger is TEMPORARY),
+production promotion and the CTO's go. The [engine
+snapshot](../engine/docs/active-context.md) owns the detail.
 
 Settings separates provider/model selection, daily budgets and bounded
 preparation. Setup verifies an engine and hands off a descriptor-based kernel
@@ -115,6 +120,10 @@ unverified. Runtime contracts belong to [IPC](ipc-contract.md),
   `main` never uses Qonto credential lines left in a profile `.env`; deleting them is operator work.
 - Remaining Café124 billing choices and funded K3 credits are open. The reviewed
   comparison's 60 cases/240 outputs do not establish production equivalence.
+- M10 with the CTO: legacy Anthropic-key profiles pause on memory and narration
+  (recommended: accept); the `OPENROUTER_API_KEY` repository secret; billing
+  server egress to `raw.githubusercontent.com`. Builds after 2026-10-24T12:01Z
+  fail the snapshot age gate unless the job republishes.
 - Sandbox final review, shared-key provisioning and operational floor remain
   open. One handset's speech is not transcribed by the voice provider.
 - Installed/fresh-account GUI acceptance is open. Windows remains opt-in and
@@ -136,6 +145,7 @@ unverified. Runtime contracts belong to [IPC](ipc-contract.md),
 3. Resolve remaining billing choices and preserve actual saved controls;
    release verification initiates no paid preparation run.
 4. Exercise installed Mac/Windows GUI and add an external WhatsApp status reader.
-5. Resume deferred work from its existing briefs when requested. Electron stays
+5. Finish M10: proof run, end to end, final review; merge on the CTO's go.
+6. Resume deferred work from its existing briefs when requested. Electron stays
    primary; the [thin-client brief](execution-plans/cross-machine-thin-clients.md)
    remains parked.

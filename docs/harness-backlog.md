@@ -87,6 +87,11 @@ materialises) `app/docs/harness-backlog.md`.
   not in YAML → warn, don't fail (we may not be ready to bill them).
   This is a `mrcall-agent` harness gap technically, listed here for
   cross-cutting visibility.
+  Status 2026-10-12: superseded by milestone 10 on `mrcall-agent` `main`
+  and `dev` (`bb8f553`): the YAML holds no model price and refuses a
+  `models:` section; prices come from the catalogue snapshot published on
+  mrcall-desktop's `model-table` branch. Production (`37f330d`) keeps the
+  YAML prices until it is promoted.
 
 - [ ] **faster-whisper packaging (ctranslate2 + av) unverified in a packaged build; no test for the live WhatsApp download path.**
   Discovered: 2026-05-20 (WhatsApp voice-note transcription landing —

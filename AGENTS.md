@@ -110,7 +110,7 @@ carry the detailed contracts. Firebase ID tokens stay in memory; profile identit
 is the immutable UID; company memory requires its capability key. Hosted tools
 stay within their tenant folders and refuse `run_python`. Provider selection
 never falls back, paid requests reserve maximum cost before dispatch, and each
-role's model comes from the resolved table: no model is a default in code.
+role's model comes from the published model table: no model is a default in code.
 
 ## Naming and identifiers — the rename in flight
 

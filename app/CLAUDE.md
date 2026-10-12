@@ -1,6 +1,6 @@
 # CLAUDE.md
 
-MrCall Desktop — Electron + React frontend that embeds the Python sidecar (`zylch`) over JSON-RPC on stdio. Runs on macOS arm64 (Apple Silicon) and Windows x64; macOS Intel x64 is opt-in (paid runner). All user data lives under `~/.zylch/profiles/<email>/` — nothing syncs to a cloud.
+MrCall Desktop — Electron + React frontend that embeds the Python sidecar (`zylch`) over JSON-RPC on stdio. Runs on macOS arm64 (Apple Silicon) and Windows x64; macOS Intel x64 is opt-in (paid runner). All user data lives under `~/.zylch/profiles/<firebase_uid>/` — nothing syncs to a cloud.
 
 ## Sibling code in this monorepo
 
@@ -63,7 +63,7 @@ The workflow builds the sidecar in `engine/` via PyInstaller in the same run and
 ## Architecture notes
 
 - **Sidecar-first.** The renderer never imports zylch logic — it sends JSON-RPC requests through preload → main → sidecar stdio. If you need a new feature, add an RPC method on the Python side first, then expose it through preload.
-- **Profile-aware.** Each Electron window owns one profile (one email). The sidecar acquires an fcntl lock on the profile dir; if you see "profile already in use", another window or CLI invocation has it open.
+- **Profile-aware.** Each Electron window owns one profile (one Firebase UID). The sidecar acquires an fcntl lock on the profile dir; if you see "profile already in use", another window or CLI invocation has it open.
 - **No telemetry.** No analytics SDK, no error reporter. If you find yourself reaching for one, talk to the user first.
 
 ## Settings — LLM billing mode (since 2026-05)

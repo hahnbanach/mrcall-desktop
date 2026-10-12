@@ -108,14 +108,18 @@ use their saved Anthropic key when present, otherwise MrCall credits.
 The engine reserves each request's maximum cost against the saved daily USD
 budget before dispatch. Uncertain requests retain their holds across restarts
 and UTC midnight. MrCall calls use the versioned bounded quote/execute/status
-contract; an older server without that contract refuses paid work. OpenRouter
-supports an explicitly priced catalog (the resolved table plus an allowlist of
-every model billed before it) with provider price caps,
-through either personal keys or MrCall credits. Payment and model selection
-are separate; `llm.models` discovers available models. Economy and balanced
-are output-price ceilings: each role's model is resolved from requirements
-into a committed table, and no model is a default in code. Explicit
-`MODEL_<ROLE>` overrides win under every preset. A small synthetic comparison
+contract (protocol `mrcall-bounded-v2`); a server answering in v1 pauses paid
+work with "update the billing server". Every model the published catalogue
+snapshot prices can run, with provider price caps, through either personal
+keys or MrCall credits. Payment and model selection are separate;
+`llm.models` discovers available models. Economy and balanced are
+output-price ceilings: each role's model comes from the model table, published
+daily on the `model-table` data branch and shipped as a build copy, and no
+model is a default in code. OpenRouter runs a role's first ranked model, a
+personal Anthropic key the first of its Anthropic ranking, and credits the
+first ranked model the billing server serves; a role with none pauses with a
+remedy instead of guessing. Explicit `MODEL_<ROLE>` overrides and the custom
+preset's base model win. A small synthetic comparison
 does not certify production quality. Automatic preparation is off by default and explicit runs have
 a saved batch limit (default 25 steps).
 

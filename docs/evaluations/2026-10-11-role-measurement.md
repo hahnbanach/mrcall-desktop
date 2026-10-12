@@ -367,6 +367,10 @@ It is not committed: it lands with S6 at the switch-over. It is saved at
 `9d40bbf363670c4dd5b964af19b5088d66884155513825c3bb1980eea47c1c15`. The
 table stamps `resolved_at`, so another `--apply` gives another sha256.
 
+*Landed (2026-10-12):* that file is the build copy since `eae914c4` (the
+switch-over merge `08858d1f`) and the first publish on the `model-table`
+data branch, `8087fbf2`.
+
 **D8** is the rule the daily job applies: no unmeasured model enters a
 published satisfice ranking for the first table. It took two rounds:
 

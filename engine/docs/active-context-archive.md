@@ -1,3 +1,69 @@
+## 2026-10-12 — Before the M10 switch-over and first publish
+
+Mnemonic product rollout remains pending. AC 5 failed on the rejected Haiku arm.
+On M10's measured picks (branch `m10-s4b10`, not merged) it passes on today's
+labels, Opus 5.5 only after the B2 scorer fix; that awaits merge and the
+published table. Haiku's paid corpus retains one critical failure; incomplete automatic extraction can remain pending
+without a reason and be repaid. The corpus also lacks per-round proposal/latency
+evidence and recorded Italian preservation misses. The hb plan at
+`docs/execution-plans/2026-09-30-mnemonic-rollout.md` is present as historical
+planned work. Refresh its host/source pins and prerequisites, review the current
+product-rollout plan and rehearse migration on a store copy before use. Accepted
+source activation and sandbox acceptance do not establish mnemonic product quality.
+
+Milestone 10 ([model selection](features/model-selection.md)) is on branch
+`model-selection-m10a`, integrated with `main` on `m10-main-sync`; not merged,
+not deployed. No model or price is a default in engine code: every paid call
+site names one of sixteen roles, and `zylch/llm/roles/requirements.json` plus
+the resolver produce the committed table that is the one model and price
+source. Every request has one shape (`zylch/llm/request_shape.py`): no
+sampling fields, never a forced `tool_choice`, reasoning from the model's
+published metadata, reasoning blocks kept and replayed within a tool loop and
+stripped where history is rewritten.
+
+The paid role measurement is written to `roles/measured.json` on branch
+`m10-s4b10`. It ran 2026-10-04. On 2026-10-11 four things were re-measured:
+CHAT on main's new prompt; NARRATION and MiMo after the headroom fix; the
+threshold entrants; and the D8 entrants. Spend: USD 14.15 settled, 15.03
+counted, of 20.
+
+- Each arm is judged against K3 from its own run. A K3 case that misses a
+  bar and the label is credited to the yardstick, never counted against it.
+- Answers are re-scored on today's labels and scorer, only where the captured
+  and the shaped request are today's. MiMo's older rows are not, so MiMo is
+  unmeasured on the roles not re-measured.
+- On today's labels every critical corpus case passes on both MNEMONIC picks:
+  Opus 5.5 (balanced) and GPT-6.1 Sol (economy).
+- Every satisfice role is `measured_only`, with every measured arm's index
+  score in the ladder.
+- `measured.json` is derived from committed records only
+  (`tests/fixtures/measurement/records/2026-10-11/plan.json`). Every
+  excluded row is a verified entry; a stale-shape run is superseded by rule.
+  Keeping deepseek's current-shape s4c NARRATION rows fails it on NARRATION,
+  whose pick is now mimo-v2.6-pro.
+- `resolve_models.py --apply`, on S6's requirements, writes a `table.json`
+  that passes `gates.check_table` and D8: every ranked model is measured and
+  passing. It is not committed; it lands with S6.
+
+See the [record](../../docs/evaluations/2026-10-11-role-measurement.md).
+
+- Several M10 and mnemonic items remain open:
+  - M10's table: committing it at S6's switch-over;
+  - the OpenRouter truncation check, which did not bind on seven of nine
+    arms;
+  - the extraction parser's refusal of "SKIP + reason";
+  - extraction retry observability;
+  - reviewed rollout and migration rehearsal.
+
+  A M8-migrated store cannot reopen in a M5–M7 build.
+
+3. Finish milestone 10 (branch `model-selection-m10a`, not merged):
+   - publish `table.json` at S6's switch-over (it passes the gates and D8);
+   - review the mnemonic rollout and the migration rehearsal before product
+     acceptance.
+
+   Preserve the rejected corpus evidence.
+
 ## 2026-10-08 — Before restored mnemonic rollout-plan reference
 
 Mnemonic product rollout remains pending. AC 5 failed on the rejected Haiku arm
