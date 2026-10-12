@@ -144,7 +144,8 @@ class GuardedTransport:
             record["error"] = f"{type(exc).__name__}: {exc}"
             if isinstance(exc, Exception) and _rejected_before_inference(exc):
                 # Refused before inference: nothing spent. A 429 may go once more; a
-                # denied key (401, 403) stops the run and is never sent again.
+                # denied key (401, 403) or an account out of credit (402) stops the run
+                # and is never sent again.
                 status, wait = getattr(exc, "status_code", None), retry_after_of(exc)
                 denied = status in DENIED_STATUSES
                 record.update(refused=not denied, denied=denied, status_code=status)

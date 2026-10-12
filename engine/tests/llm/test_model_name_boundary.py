@@ -15,7 +15,7 @@ company memory:
   file the resolver reads (``requirements.json``; 10a's ``resolved.json`` was
   the second until the switch-over deleted it, slice S6), or, since milestone
   10's published contract, in the snapshot it writes (``snapshot.json``), the
-  build copy of the decision
+  measurement it reads (``measured.json``, S4b6), the build copy of the decision
   record it writes and the engine reads at run time (``table.json``, slice
   S6) or the contract's two examples and protocol document (``contract/``):
   data and documentation no code takes a model from; the resolver's code beside them is held to rows like any
@@ -76,10 +76,12 @@ PURPOSES = frozenset(
 # The file the brief allows whole: the requirements (10a's resolved table, the
 # second, is deleted since the switch-over); and the contract's data: the
 # snapshot, the decision record's build copy, the two examples, the protocol
-# document.
+# document; and the measurement the resolver reads (milestone 10, S4b6):
+# written by scripts/derive_thresholds.py only, checked whole by test_derive_thresholds.
 ROLE_FILES = (
     "zylch/llm/roles/requirements.json",
     "zylch/llm/roles/snapshot.json",
+    "zylch/llm/roles/measured.json",
     "zylch/llm/roles/table.json",
     "zylch/llm/roles/contract/table.example.json",
     "zylch/llm/roles/contract/snapshot.example.json",

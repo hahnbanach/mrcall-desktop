@@ -68,9 +68,10 @@ correctly classified. Current contracts: [decisions](features/mnemonic-decisions
 [commit](features/mnemonic-commit.md), [join](features/company-memory-join.md) and
 [writer inventory](features/mnemonic-writer-inventory.md).
 
-Mnemonic product rollout remains pending. AC 5 failed on the rejected Haiku arm
-and awaits M10 re-measurement using the resolver-selected model. The paid corpus
-retains one critical failure; incomplete automatic extraction can remain pending
+Mnemonic product rollout remains pending. AC 5 failed on the rejected Haiku arm.
+On M10's measured picks (branch `m10-s4b8`, not merged) it passes on today's
+labels, Opus 5.5 only after the B2 scorer fix; that awaits merge and the
+published table. Haiku's paid corpus retains one critical failure; incomplete automatic extraction can remain pending
 without a reason and be repaid. The corpus also lacks per-round proposal/latency
 evidence and recorded Italian preservation misses. The hb plan at
 `docs/execution-plans/2026-09-30-mnemonic-rollout.md` is present as historical
@@ -107,10 +108,28 @@ the resolver produce the committed table that is the one model and price
 source. Every request has one shape (`zylch/llm/request_shape.py`): no
 sampling fields, never a forced `tool_choice`, reasoning from the model's
 published metadata, reasoning blocks kept and replayed within a tool loop and
-stripped where history is rewritten. The paid role measurement ran once
-(2026-10-03/04, about USD 7.80 of 20); its results are re-scored, not
-published, and a result is accepted only while its request bytes equal
-today's. Mnemonic AC 5 waits for that measurement's published pick.
+stripped where history is rewritten.
+
+The paid role measurement is written to `roles/measured.json` on branch
+`m10-s4b8`. It ran 2026-10-04. On 2026-10-11 four things were re-measured:
+CHAT on main's new prompt; NARRATION and MiMo after the headroom fix; the
+threshold entrants; and the D8 entrants. Spend: USD 14.15 settled, 15.03
+counted, of 20.
+
+- Each arm is judged against K3 from its own run. A K3 case that misses a
+  bar and the label is credited to the yardstick, never counted against it.
+- Answers are re-scored on today's labels and scorer, only where the captured
+  and the shaped request are today's. MiMo's older rows are not, so MiMo is
+  unmeasured on the roles not re-measured.
+- On today's labels every critical corpus case passes on both MNEMONIC picks:
+  Opus 5.5 (balanced) and GPT-6.1 Sol (economy).
+- Every satisfice role is `measured_only`, with every measured arm's index
+  score in the ladder.
+- `resolve_models.py --apply` writes a `table.json` that passes
+  `gates.check_table` and D8: every ranked model is measured and passing.
+  It is not committed; it lands with S6.
+
+See the [record](../../docs/evaluations/2026-10-11-role-measurement.md).
 
 The local hardening closure repairs the model-catalog parameter declaration and
 preserves typed preparation refusal through task dispatch. Synthetic contract,
@@ -125,8 +144,15 @@ acceptance is implied.
   Qonto installed Electron and provider UI remain open in their owning plans.
 - Remaining Café124 billing choices and funded credit acceptance remain open;
   do not replay uncertain requests or resume preparation implicitly.
-- Mnemonic AC 5/M10, extraction retry observability and reviewed rollout/migration
-  rehearsal remain open. A M8-migrated store cannot reopen in a M5–M7 build.
+- Several M10 and mnemonic items remain open:
+  - M10's table: committing it at S6's switch-over;
+  - the OpenRouter truncation check, which did not bind on seven of nine
+    arms;
+  - the extraction parser's refusal of "SKIP + reason";
+  - extraction retry observability;
+  - reviewed rollout and migration rehearsal.
+
+  A M8-migrated store cannot reopen in a M5–M7 build.
 - Telephone detail/repetition/adverse cases and quantitative latency remain open.
 - Installed/fresh-account Desktop GUI and Windows launch remain unverified.
 - The app still renders a refused company join's reason only; `joining` and
@@ -140,9 +166,11 @@ acceptance is implied.
 1. Continue Qonto/PEC GUI and provider acceptance under their existing plans.
 2. Resolve billing choices without replaying uncertain requests; preserve actual
    saved controls and initiate no paid preparation for release verification.
-3. Finish milestone 10 (branch `model-selection-m10a`, not merged), then
-   re-measure mnemonic AC 5 on the resolver-chosen model and review rollout plus
-   migration rehearsal before product acceptance. Preserve the rejected corpus
-   evidence.
+3. Finish milestone 10 (branch `model-selection-m10a`, not merged):
+   - publish `table.json` at S6's switch-over (it passes the gates and D8);
+   - review the mnemonic rollout and the migration rehearsal before product
+     acceptance.
+
+   Preserve the rejected corpus evidence.
 4. Continue telephone knowledge detail/adverse/latency acceptance from its plan.
 5. Resume other workstreams from their existing owners when requested.

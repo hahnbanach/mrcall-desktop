@@ -214,7 +214,7 @@
           "$ref": "#/$defs/names"
         },
         "forced_tool": {
-          "description": "An admitted endpoint accepts a forced named tool choice (supports_tool_choice.function); false when the endpoints were not read.",
+          "description": "An admitted endpoint accepts a forced named tool choice (supports_tool_choice.function) and lists tool_choice in its supported_parameters (with require_parameters, the only endpoint a forced choice can reach); false when the endpoints were not read.",
           "type": "boolean"
         },
         "structured_outputs": {

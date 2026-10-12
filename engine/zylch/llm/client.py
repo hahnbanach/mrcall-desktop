@@ -393,8 +393,8 @@ class LLMClient:
 # rejected on its way in, so no token was ever produced and nothing was
 # charged. 5xx is deliberately absent — a server error can follow work that
 # was already done — and so is every timeout, where the request may well have
-# been processed after we stopped listening.
-_NO_WORK_STATUSES = frozenset({400, 401, 403, 404, 413, 422, 429})
+# been processed after we stopped listening. 402: an account out of credit (OpenRouter).
+_NO_WORK_STATUSES = frozenset({400, 401, 402, 403, 404, 413, 422, 429})
 
 
 def _rejected_before_inference(exc: BaseException) -> bool:

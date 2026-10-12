@@ -155,7 +155,7 @@ its admitted ones, so a cheaper `flex` service tier is never routed to; it is
 the object the billing server builds for the same model and snapshot. With
 `only` it allows fallbacks, which stay within those admitted endpoints, so a
 cheapest endpoint answering 429 does not fail every request (K3, pinned to
-one endpoint, never falls back); a refused call (429 or another status that
+one endpoint, never falls back); a refused call (429, 402 from an account out of credit, or another status that
 proves no work was done) releases its hold, while a 5xx keeps it. The
 direct transport reserves at the list price, without the margin. A `:free`
 catalogue id is priced at 0 like any other snapshot price, deliberately: a
@@ -281,5 +281,20 @@ action; until it exists, `test_resolved_table.py` is the guard.
   may come back empty. 10b or a server change will show whether it does.
 - Whether OpenRouter passes `between_tools` through for
   `anthropic/claude-sonnet-5.5` is unverified until 10b's paid run.
-- No pick is measured on the engine's workloads yet; 10b runs the memory
-  corpus once on the `economy` `MNEMONIC` pick through OpenRouter.
+- The paid measurement is in `zylch/llm/roles/measured.json` (branch
+  `m10-s4b8`, written by `scripts/derive_thresholds.py`).
+  - Each arm is judged against the reference from its own run.
+  - A reference case that misses a bar and the label is credited to the
+    yardstick, never counted against it.
+  - Rows whose shaped request is not today's are unmeasured.
+
+  Its record, with spend, per-role results, picks and limits, is
+  [`docs/evaluations/2026-10-11-role-measurement.md`](../../../docs/evaluations/2026-10-11-role-measurement.md).
+  An arm recorded without an index score takes the resolver's, so every
+  measured arm is in the threshold ladder; every satisfice role is
+  `measured_only`. `resolve_models.py --apply` writes a table that passes
+  `gates.check_table` and D8 (every ranked model is measured and passing);
+  it is committed at S6's switch-over.
+- The measurement ran through OpenRouter only. The direct-Anthropic transport
+  and the `mrcall` column are unmeasured. The memory corpus's 16-token
+  truncation check did not bind on OpenRouter for seven of nine arms.

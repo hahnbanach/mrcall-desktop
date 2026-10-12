@@ -68,7 +68,11 @@ may rank, before scores: not a variant, not an alias, no announced
 token matched on the id, on the `canonical_slug` — Haiku's slug puts the
 version first — and on an alias's `alias_target.slug`), tools and the
 minimum context, a fixed model-level input and output price, and at least
-one admitted endpoint. An alias or an entry with an announced expiry stays
+one admitted endpoint; and both its model-level and its reference input and
+output prices strictly positive (`NOT_POSITIVE`: a model priced at 0, a
+free tier or an unpriced listing, can be no ranked candidate — the table's
+gates require positive prices, and a ceiling compares nothing against 0).
+An alias or an entry with an announced expiry stays
 priced in the snapshot (an explicit choice keeps running); it is only
 never ranked, picked or measured. A kept entry is ranked at its reference
 price, and carries its direct id when one of its endpoints is tagged
@@ -91,6 +95,8 @@ ALIAS = "~"
 UP = 0
 UNKNOWN = "unknown"
 DIRECT_TAG = "anthropic"
+# The screen's reason for an entry priced at 0 (model-level or reference).
+NOT_POSITIVE = "not a positive price"
 # A price as the snapshot names it, and the payload field it is read from.
 PRICE_FIELDS = (
     ("input", "prompt"),
@@ -412,12 +418,18 @@ def exclusion(entry: dict, listed: list[dict] | None, req: dict, rules: dict) ->
     context = score(entry.get("context_length"))
     if context is None or context < common["min_context"]:
         return f"a context under {common['min_context']}"
-    if model_price(entry) is None:
+    level = model_price(entry)
+    if level is None:
         return "no fixed price"
+    if min(level) <= 0:
+        return NOT_POSITIVE
     if listed is None:
         return "its endpoints were not read"
-    if not admitted(entry, listed, rules):
+    price, kept = anchored(entry, listed, rules)
+    if not kept:
         return "no admitted endpoint"
+    if price["input"] <= 0 or price["output"] <= 0:
+        return NOT_POSITIVE
     return None
 
 

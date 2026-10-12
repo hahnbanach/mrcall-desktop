@@ -125,6 +125,33 @@ def test_forced_tool_needs_an_admitted_endpoint_that_accepts_a_named_choice(buil
     assert built_two["models"][model["id"]]["metadata"]["forced_tool"] is True
 
 
+def test_forced_tool_needs_that_endpoint_to_list_tool_choice(built):
+    """With `require_parameters` a forced choice reaches only an endpoint listing
+    `tool_choice`; the billing server keeps a forced `tool_choice` whenever
+    `forced_tool` is true. Nova Lite/Pro/Premier (Bedrock: a named choice
+    accepted, `tool_choice` unlisted) and, on 2026-10-10, Nemotron 3 Super
+    (one endpoint each way) have no endpoint doing both."""
+    src, rules = sources(), candidates.policy(requirements())
+    for model in ("amazon/nova-lite-v1", "amazon/nova-pro-v1", "amazon/nova-premier-v1"):
+        listed = candidates.admitted(by_id(src["catalogue"])[model], src["endpoints"][model], rules)
+        assert listed and all(e["supports_tool_choice"]["function"] is True for e in listed)
+        assert not [e for e in listed if "tool_choice" in e["supported_parameters"]], model
+        assert built["models"][model]["metadata"]["forced_tool"] is False, model
+    named = {"auto": True, "function": True, "none": True, "required": True}
+    auto = {"auto": True, "function": False, "none": True, "required": False}
+    unlisted = ["max_tokens", "tools"]
+    model = entry()
+    nemotron = [
+        endpoint("dekallm/fp8", supports_tool_choice=named, supported_parameters=unlisted),
+        endpoint("deepinfra/bf16", supports_tool_choice=auto),
+    ]
+    one = snapshot.build([model], {model["id"]: nemotron}, rules, READ_AT)
+    assert one["models"][model["id"]]["metadata"]["forced_tool"] is False
+    both = [*nemotron, endpoint("acme/both", supports_tool_choice=named)]
+    two = snapshot.build([model], {model["id"]: both}, rules, READ_AT)
+    assert two["models"][model["id"]]["metadata"]["forced_tool"] is True
+
+
 def test_reasoning_is_as_published(built):
     opus = built["models"][OPUS]["metadata"]["reasoning"]
     assert opus == {

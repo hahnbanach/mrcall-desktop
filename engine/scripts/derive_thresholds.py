@@ -59,11 +59,22 @@ on the committed file: S2's reader accepts it, its hashes are today's, no
 result in it is incomplete, and its passes and thresholds are the ones these
 rules derive from its own results.
 
+**Runs** (``--run ID@COMMIT=PATH``, ``--corpus RUN=MANIFEST``,
+``measurement_runs``): every arm is judged against the reference from its
+own run, and each result names it (``judged_by``); the role's ``reference``
+lists each run's yardstick. **The shaped request** (``--shape-check``,
+``measurement_shape``): a row whose request, shaped as the run's commit and
+snapshot shaped it, is not the one today's code and build snapshot send, is
+no measurement of today's request (``stale_request``, the arm incomplete).
+
 **Re-scoring** (``--rescore-from OLD_CASE_HASH ...``, ``measurement_rescore``):
 rows recorded under an older case set, after a label edit, are scored again
 on today's labels only where every request is still today's, byte for byte;
 a case whose request changed is refused, and the document's ``rescored_from``
-records the old and new hashes. ``--out`` writes the document elsewhere than
+records the old and new hashes. ``--rescore`` scores every recorded answer
+again, those of today's case set too, so a scorer fix reaches rows recorded
+before it; ``--answered-at COMMIT ...`` names the commits the runs were made
+on. ``--out`` writes the document elsewhere than
 ``roles/measured.json`` (a candidate for review).
 
     python scripts/derive_thresholds.py --arms ARMS.json --results OUT/results.jsonl \\
@@ -74,14 +85,19 @@ from __future__ import annotations
 
 import argparse
 import json
-import math
 import sys
-from fractions import Fraction
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import measurement_common as common  # noqa: E402
+import measurement_runs as runs  # noqa: E402
+from measurement_runs import (  # noqa: E402
+    arm_result,
+    judge_runs,
+    reference_entry,
+)
+from measurement_runs import judged, reference_yardstick  # noqa: E402,F401 (model_table_*)
 
 WRITTEN_BY = "engine/scripts/derive_thresholds.py"
 CORPUS_MAP = {"MNEMONIC": "all", "MEMORY_EXTRACT": "automatic", "MEMORY_MERGE": "automatic"}
@@ -124,6 +140,25 @@ def index_scores(arms_document: dict) -> dict:
     return out
 
 
+def fill_scores(rows: list[dict], scores: dict, rules: dict) -> list[dict]:
+    """``rows`` with a missing ``arm_score`` taken from ``scores`` (``--arms``).
+
+    An arms file written by hand for a re-measure may carry no score (S4b9:
+    rerun 7's and rerun 8's entrants). A complete arm without an index score
+    sits outside ``threshold_of``'s ladder, so a failing entrant scored above
+    a passing one could not make the role ``measured_only``. A recorded score
+    is never replaced.
+    """
+    out = []
+    for row in rows:
+        if row.get("arm_score") is None and row["role"] in rules:
+            score = scores.get((row["arm"], rules[row["role"]]["index"]))
+            if score is not None:
+                row = {**row, "arm_score": score}
+        out.append(row)
+    return out
+
+
 def corpus_rows(
     manifest_path: Path, scores: dict, rules: dict, records: list | None = None
 ) -> list[dict]:
@@ -156,6 +191,7 @@ def corpus_rows(
             "case_set_sha256": manifest.get("case_set_sha256"),
             "prompt_sha256": prompt,
             "snapshot_version": manifest.get("snapshot_version"),
+            "run_commit": manifest.get("engine_commit"),
         }
         for record in records:
             if scope == "automatic" and record["caller_class"] != "automatic_observation":
@@ -173,27 +209,6 @@ def corpus_rows(
             scoring = {"label_match": healthy, "critical": not healthy, "bars_ok": True}
             out.append({**common_fields, "case_id": "canary", "scoring": scoring})
     return out
-
-
-def reference_yardstick(result: dict) -> tuple[Fraction, float]:
-    """The reference's score and its binomial standard error, from its own counts."""
-    p = Fraction(result["passes"], result["n"])
-    return p, math.sqrt(float(p * (1 - p)) / result["n"])
-
-
-def judged(result: dict, reference: dict) -> tuple[bool, list[str]]:
-    """Whether an arm's result passes against the reference (module docstring)."""
-    p, se = reference_yardstick(reference)
-    reasons = []
-    if not result["complete"]:
-        reasons.append("incomplete")
-    if not result["bars_ok"]:
-        reasons.append("mechanical bar")
-    if result["critical"]:
-        reasons.append("critical failure")
-    if result["n"] and float(Fraction(result["passes"], result["n"])) < float(p) - se:
-        reasons.append("below the reference less its standard error")
-    return not reasons, reasons
 
 
 def threshold_of(rule: str, results: dict) -> tuple[float | None, bool]:
@@ -229,35 +244,6 @@ def second_answers(rows: list[dict]) -> dict:
     }
 
 
-INCOMPLETE = {
-    "cap": "stopped by the cap",
-    "skipped": "skipped after two failures in a row",
-    "unpriced": "no price",
-    "interrupted": "interrupted after its dispatch",
-    "refused": "refused before inference, not yet sent again",
-    "denied": "the key denied",
-    "error": "failed",
-}
-
-
-def why_incomplete(first: list[dict], cases: list[str]) -> str:
-    """Each case an arm's first repetition did not score, under its status; refusals named."""
-    by_case = {row["case_id"]: row for row in first}
-    groups: dict[str, list[str]] = {}
-    for case in cases:
-        row = by_case.get(case)
-        if row is not None and row["status"] == "scored":
-            continue
-        if row is None:
-            label = "not run"
-        elif row["status"] == "error" and row.get("refusals"):
-            label = str(row.get("error") or "refused").split(":")[0]
-        else:
-            label = INCOMPLETE.get(row["status"], row["status"])
-        groups.setdefault(label, []).append(case)
-    return "; ".join(f"{label}: {', '.join(ids)}" for label, ids in groups.items())
-
-
 def role_entry(role: str, rows: list[dict], cases: list[str], rule: dict, reference: str) -> dict:
     """One role of measured.json from its rows, or Refused."""
     hashes = {(r["case_set_sha256"], r["prompt_sha256"]) for r in rows}
@@ -265,41 +251,31 @@ def role_entry(role: str, rows: list[dict], cases: list[str], rule: dict, refere
         raise Refused(f"{role}: rows from {len(hashes)} different case sets or prompts")
     if hashes != {current_hashes(role)}:
         raise Refused(f"{role}: measured on other cases or prompts than today's")
-    results, second, incomplete = {}, {}, {}
-    for arm in sorted({r["arm"] for r in rows}):
-        mine = [r for r in rows if r["arm"] == arm]
-        # Judged on the first repetition alone (module docstring): a second
-        # answer is recorded in second_repetition and changes no pass or fail.
-        first = [r for r in mine if r.get("repetition", 1) == 1]
-        scored = [r for r in first if r["status"] == "scored"]
-        complete = all(r["status"] == "scored" for r in first) and {
-            r["case_id"] for r in first
-        } >= set(cases)
-        again = second_answers(mine)
-        if again:
-            second[arm] = again
-        result = {
-            "n": len(scored),
-            "passes": sum(bool(r["scoring"]["label_match"]) for r in scored),
-            "bars_ok": all(r["scoring"]["bars_ok"] for r in scored),
-            "critical": any(r["scoring"]["critical"] for r in scored),
-            "complete": complete,
-            "index_score": next(
-                (r["arm_score"] for r in mine if r.get("arm_score") is not None), None
-            ),
-        }
-        result["score"] = round(result["passes"] / max(1, result["n"]), 6)
-        if complete:
-            results[arm] = result
-        else:  # cut short: no measurement of this model (module docstring)
-            incomplete[arm] = why_incomplete(first, cases)
-    if reference not in results:
+    second, incomplete, per_run = {}, {}, {}
+    for run in sorted({r.get("run", "") for r in rows}):
+        for arm in sorted({r["arm"] for r in rows if r.get("run", "") == run}):
+            mine = [r for r in rows if r["arm"] == arm and r.get("run", "") == run]
+            again = second_answers(mine)
+            if again:
+                second.setdefault(arm, {}).update(again)
+            result, why = arm_result(mine, cases)
+            if arm == reference and runs.bar_misses(mine):
+                result["bar_misses"] = runs.bar_misses(mine)  # credited to its yardstick
+            if why is None:
+                named = {"judged_by": run} if run else {}  # the unnamed run: the daily job's shape
+                per_run.setdefault(run, {})[arm] = {**result, **named}
+            else:  # cut short: no measurement of this model (module docstring)
+                incomplete[arm] = f"run {run}: {why}" if run else why
+    yardsticks = {
+        run: runs.yardstick_of(arms[reference])
+        for run, arms in per_run.items()
+        if reference in arms
+    }
+    if not yardsticks:
         why = incomplete.get(reference, "no results")
         raise Refused(f"{role}: the reference {reference} is not completely measured: {why}")
-    for result in results.values():
-        result["pass"], result["reasons"] = judged(result, results[reference])
+    results = judge_runs(per_run, yardsticks, incomplete)
     threshold, measured_only = threshold_of(rule["rule"], results)
-    p, se = reference_yardstick(results[reference])
     versions = sorted({str(r.get("snapshot_version")) for r in rows})
     return {
         "rule": rule["rule"],
@@ -307,7 +283,7 @@ def role_entry(role: str, rows: list[dict], cases: list[str], rule: dict, refere
         "threshold": threshold,
         "measured_only": measured_only,
         "results": results,
-        "reference": {"id": reference, "score": round(float(p), 6), "se": round(se, 6)},
+        "reference": reference_entry(reference, yardsticks),
         "second_repetition": second,
         "incomplete": incomplete,
         "case_set_sha256": rows[0]["case_set_sha256"],
@@ -362,11 +338,15 @@ def check_measured(document: dict) -> list[str]:
         if reference not in results:
             problems.append(f"{role}: no reference result")
             continue
+        own = results[reference]  # each run's yardstick is the reference's own result there
+        own_runs = own.get("runs") or {own.get("judged_by", ""): own}
+        yardsticks = {run: runs.yardstick_of(result) for run, result in own_runs.items()}
+        if body["reference"] != reference_entry(reference, yardsticks):
+            problems.append(f"{role}: the reference's yardsticks are not its own results")
         for arm, result in results.items():
             if result.get("complete") is False:
                 problems.append(f"{role}: {arm} is incomplete; it belongs under incomplete")
-            if result.get("pass") != judged(result, results[reference])[0]:
-                problems.append(f"{role}: {arm}'s pass is not the one its results give")
+            problems += runs.pass_problems(role, arm, result, yardsticks)
         rule = requirements["roles"][role]["rule"]
         if (body["threshold"], body["measured_only"]) != threshold_of(rule, results):
             problems.append(f"{role}: threshold not derived from its results")
@@ -375,9 +355,27 @@ def check_measured(document: dict) -> list[str]:
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Write roles/measured.json from the results.")
-    parser.add_argument("--arms", type=Path, required=True)
+    parser.add_argument(
+        "--arms",
+        type=Path,
+        nargs="+",
+        required=True,
+        help="index scores; the first file to score a model wins",
+    )
     parser.add_argument("--results", type=Path, nargs="*", default=[])
-    parser.add_argument("--corpus", type=Path, nargs="*", default=[])
+    parser.add_argument(
+        "--run",
+        action="append",
+        default=[],
+        metavar="ID@COMMIT=PATH",
+        help="a results.jsonl measured as one run, on COMMIT (measurement_runs)",
+    )
+    parser.add_argument("--corpus", nargs="*", default=[], metavar="[RUN=]MANIFEST")
+    parser.add_argument(
+        "--shape-check",
+        action="store_true",
+        help="refuse rows whose shaped request is not today's (measurement_shape)",
+    )
     parser.add_argument("--write", action="store_true", help=f"write {common.MEASURED.name}")
     parser.add_argument("--out", type=Path, help="write the document here instead")
     parser.add_argument(
@@ -387,25 +385,55 @@ def main(argv: list[str] | None = None) -> int:
         metavar="OLD_CASE_HASH",
         help="re-score rows of these case-set hashes on today's labels (measurement_rescore)",
     )
+    parser.add_argument(
+        "--rescore",
+        action="store_true",
+        help="score every recorded answer again with today's scorer and labels",
+    )
+    parser.add_argument(
+        "--answered-at",
+        nargs="*",
+        default=[],
+        metavar="COMMIT",
+        help="the commits the results were answered on (measurement_rescore)",
+    )
     args = parser.parse_args(argv)
-    rows = []
-    for path in args.results:
-        rows += [json.loads(line) for line in path.read_text().splitlines() if line.strip()]
+
+    def read(path: Path, **fields) -> list[dict]:
+        lines = path.read_text().splitlines()
+        return [{**json.loads(line), **fields} for line in lines if line.strip()]
+
+    rows = [row for path in args.results for row in read(path)]
+    for spec in args.run:
+        run, commit, path = runs.parse_run(spec)
+        rows += read(path, run=run, run_commit=commit)
     rules = common.requirements()["roles"]
-    scores = index_scores(json.loads(args.arms.read_text(encoding="utf-8")))
+    scores: dict = {}
+    for path in args.arms:  # a later file fills what an earlier one leaves unscored
+        for key, value in index_scores(json.loads(path.read_text(encoding="utf-8"))).items():
+            scores.setdefault(key, value)
+    rows = fill_scores(rows, scores, rules)
     import measurement_rescore as rescore
+    import measurement_shape as shape
 
     record: dict = {}
     try:
-        rows = rescore.rescore_rows(rows, set(args.rescore_from), record)
-        for manifest in args.corpus:
-            rows += rescore.corpus(manifest, set(args.rescore_from), scores, rules, record)
+        old, every = set(args.rescore_from), args.rescore
+        rows = rescore.rescore_rows(rows, old, record, every=every, answered_at=args.answered_at)
+        for run, manifest in map(runs.parse_corpus, args.corpus):
+            found = rescore.corpus(manifest, old, scores, rules, record, every=every)
+            rows += [{**row, "run": run} for row in found]
     except (Refused, rescore.RescoreRefused) as refused:
         print(f"refused: {refused}", file=sys.stderr)
         return 1
+    stale: dict = {}
+    if args.shape_check:
+        rows = shape.mark_stale(rows, stale)
     document, unmeasured = derive(rows)
     if record:
         document["rescored_from"] = record
+    if args.shape_check:
+        document["shape_refused"] = stale
     for role, why in unmeasured.items():
         print(f"unmeasured, blocks the table: {role}: {why}")
     text = json.dumps(document, indent=1, sort_keys=True) + "\n"
