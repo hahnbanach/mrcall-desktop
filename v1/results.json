@@ -1433,6 +1433,14 @@
       "model": "minimax/minimax-m2",
       "outcome": "passed",
       "run": "2026-10-12T17:43:39Z"
+    },
+    {
+      "at": "2026-10-12T19:04:59Z",
+      "detail": "",
+      "metadata_sha256": "e9e56166cd1f0863a86fdf9f837afe02d2c5f1d28d03047aba1d27d1a0a74211",
+      "model": "qwen/qwen3-next-80b-a3b-thinking",
+      "outcome": "passed",
+      "run": "2026-10-12T17:43:39Z"
     }
   ],
   "stops": [
