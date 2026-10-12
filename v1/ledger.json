@@ -672,10 +672,21 @@
             "role": "MNEMONIC",
             "spent_usd": "0.046166",
             "why": "ranking of economy / MNEMONIC / ranking"
+          },
+          {
+            "at": "2026-10-12T18:52:24Z",
+            "bound_usd": "0.2",
+            "check": "smoke qwen/qwen3.8-2.4t-a95b",
+            "kind": "smoke",
+            "model": "qwen/qwen3.8-2.4t-a95b",
+            "outcome": "passed",
+            "role": null,
+            "spent_usd": "0.002246",
+            "why": "ranking of economy / MNEMONIC / ranking"
           }
         ],
         "opened_at": "2026-10-12T17:44:44Z",
-        "reserved_usd": "1.199292",
+        "reserved_usd": "1.001538",
         "run": "2026-10-12T17:43:39Z",
         "settled_at": null,
         "spent_usd": null

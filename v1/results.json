@@ -1062,6 +1062,14 @@
       "model": "google/gemini-3.8-flash",
       "outcome": "passed",
       "run": "2026-10-12T17:43:39Z"
+    },
+    {
+      "at": "2026-10-12T18:52:24Z",
+      "detail": "",
+      "metadata_sha256": "2f474534d81b84a41dc4a3adccfa8d6a309d3811eb09222a5ce6e07136305946",
+      "model": "qwen/qwen3.8-2.4t-a95b",
+      "outcome": "passed",
+      "run": "2026-10-12T17:43:39Z"
     }
   ],
   "stops": [
