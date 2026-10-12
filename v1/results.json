@@ -94,6 +94,14 @@
       "model": "anthropic/claude-sonnet-5",
       "outcome": "passed",
       "run": "2026-10-12T17:43:39Z"
+    },
+    {
+      "at": "2026-10-12T17:47:39Z",
+      "detail": "",
+      "metadata_sha256": "604dcea0574a17bb1e06763b08fd07f5307b27fb5661d847078db7ee6b359f0a",
+      "model": "anthropic/claude-sonnet-4.6",
+      "outcome": "passed",
+      "run": "2026-10-12T17:43:39Z"
     }
   ],
   "stops": []

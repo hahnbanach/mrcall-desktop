@@ -67,10 +67,21 @@
             "role": "NARRATION",
             "spent_usd": "0.006486",
             "why": "pick of economy / NARRATION / anthropic_ranking"
+          },
+          {
+            "at": "2026-10-12T17:47:39Z",
+            "bound_usd": "0.2",
+            "check": "smoke anthropic/claude-sonnet-4.6",
+            "kind": "smoke",
+            "model": "anthropic/claude-sonnet-4.6",
+            "outcome": "passed",
+            "role": null,
+            "spent_usd": "0.005709",
+            "why": "pick of balanced / NARRATION / anthropic_ranking"
           }
         ],
         "opened_at": "2026-10-12T17:44:44Z",
-        "reserved_usd": "0.429362",
+        "reserved_usd": "0.235071",
         "run": "2026-10-12T17:43:39Z",
         "settled_at": null,
         "spent_usd": null
