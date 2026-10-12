@@ -914,10 +914,21 @@
             "role": null,
             "spent_usd": "0.000097",
             "why": "ranking of economy / MEMORY_EXTRACT / ranking"
+          },
+          {
+            "at": "2026-10-12T19:02:35Z",
+            "bound_usd": "0.2",
+            "check": "smoke meta-llama/llama-4-scout",
+            "kind": "smoke",
+            "model": "meta-llama/llama-4-scout",
+            "outcome": "failed: BudgetError: OpenRouter request failed (HTTP 404); no automatic retry.",
+            "role": null,
+            "spent_usd": "0.002583",
+            "why": "ranking of economy / MEMORY_EXTRACT / ranking"
           }
         ],
         "opened_at": "2026-10-12T17:44:44Z",
-        "reserved_usd": "1.410906",
+        "reserved_usd": "1.213489",
         "run": "2026-10-12T17:43:39Z",
         "settled_at": null,
         "spent_usd": null
