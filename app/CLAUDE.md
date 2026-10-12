@@ -76,7 +76,9 @@ Switching provider preserves keys and requires Save. Top-up opens the dashboard
 without requiring an API key. Economy/balanced presets replace individual role
 overrides on Save; custom preserves them. DailyBudget shows settled spending,
 uncertain holds, remaining daily capacity and effective role models, with free
-receipt recovery. See [bounded preparation](docs/bounded-preparation.md).
+receipt recovery. A job paused on the billing choice shows the engine's reason
+(`model_policy.paused`), and a paused narration reply's `paused` message
+replaces the fallback narration (`scripts/test-role-pause-ui.mjs`). See [bounded preparation](docs/bounded-preparation.md).
 
 When MrCall credits is selected, the card calls `window.zylch.account.balance()`
 on mount and on every `window` focus event (so a top-up done in another

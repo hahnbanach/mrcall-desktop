@@ -189,7 +189,7 @@ const api = {
       pricing_fault: boolean
       billing_supported: boolean
       billing_reason?: string
-      model_policy?: { provider: string; preset: string; model: string | null; roles: Record<string, string | null>; quality_status: string; credential_configured: boolean }
+      model_policy?: { provider: string; preset: string; model: string | null; roles: Record<string, string | null>; paused?: Record<string, string>; quality_status: string; credential_configured: boolean }
       remaining_usd: number
       exceeded: boolean
       paused: boolean
@@ -626,9 +626,9 @@ const api = {
   },
   narration: {
     summarize: (lines: string[], context: string = '') =>
-      call<{ text: string }>('narration.summarize', { lines, context }, 15000),
+      call<{ text: string; paused?: string }>('narration.summarize', { lines, context }, 15000),
     predict: (message: string, context: string = '') =>
-      call<{ text: string }>('narration.predict', { message, context }, 15000)
+      call<{ text: string; paused?: string }>('narration.predict', { message, context }, 15000)
   },
   settings: {
     schema: () =>
