@@ -140,6 +140,25 @@ def index_scores(arms_document: dict) -> dict:
     return out
 
 
+def fill_scores(rows: list[dict], scores: dict, rules: dict) -> list[dict]:
+    """``rows`` with a missing ``arm_score`` taken from ``scores`` (``--arms``).
+
+    An arms file written by hand for a re-measure may carry no score (S4b9:
+    rerun 7's and rerun 8's entrants). A complete arm without an index score
+    sits outside ``threshold_of``'s ladder, so a failing entrant scored above
+    a passing one could not make the role ``measured_only``. A recorded score
+    is never replaced.
+    """
+    out = []
+    for row in rows:
+        if row.get("arm_score") is None and row["role"] in rules:
+            score = scores.get((row["arm"], rules[row["role"]]["index"]))
+            if score is not None:
+                row = {**row, "arm_score": score}
+        out.append(row)
+    return out
+
+
 def corpus_rows(
     manifest_path: Path, scores: dict, rules: dict, records: list | None = None
 ) -> list[dict]:
@@ -336,7 +355,13 @@ def check_measured(document: dict) -> list[str]:
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Write roles/measured.json from the results.")
-    parser.add_argument("--arms", type=Path, required=True)
+    parser.add_argument(
+        "--arms",
+        type=Path,
+        nargs="+",
+        required=True,
+        help="index scores; the first file to score a model wins",
+    )
     parser.add_argument("--results", type=Path, nargs="*", default=[])
     parser.add_argument(
         "--run",
@@ -383,7 +408,11 @@ def main(argv: list[str] | None = None) -> int:
         run, commit, path = runs.parse_run(spec)
         rows += read(path, run=run, run_commit=commit)
     rules = common.requirements()["roles"]
-    scores = index_scores(json.loads(args.arms.read_text(encoding="utf-8")))
+    scores: dict = {}
+    for path in args.arms:  # a later file fills what an earlier one leaves unscored
+        for key, value in index_scores(json.loads(path.read_text(encoding="utf-8"))).items():
+            scores.setdefault(key, value)
+    rows = fill_scores(rows, scores, rules)
     import measurement_rescore as rescore
     import measurement_shape as shape
 

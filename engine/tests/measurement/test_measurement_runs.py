@@ -103,6 +103,22 @@ def test_a_reference_missing_a_bar_never_lowers_its_runs_yardstick():
 
 
 @pytest.mark.usefixtures("synthetic_role")
+def test_an_entrant_recorded_without_a_score_takes_it_from_the_arms_and_joins_the_ladder():
+    """S4b9: rerun 8's arms file scored no entrant; Opus (57.6) failing TRAIN must count."""
+    every = in_run("R", rows(K3, 43.6, 22) + rows("cheap", 24.4, 22))
+    every += in_run("R", rows("opus", None, 22, bars_ok=False))
+    rules = {ROLE: {"rule": "satisfice", "index": "x"}}
+    unscored, _ = derive.derive(every, roles=rules)
+    assert unscored["roles"][ROLE]["threshold"] == 24.4  # the failing arm outside the ladder
+    filled = derive.fill_scores(every, {("opus", "x"): 57.6, ("cheap", "x"): 99.0}, rules)
+    assert {r["arm_score"] for r in filled if r["arm"] == "cheap"} == {24.4}  # never replaced
+    document, _ = derive.derive(filled, roles=rules)
+    role = document["roles"][ROLE]
+    assert role["results"]["opus"]["index_score"] == 57.6 and not role["results"]["opus"]["pass"]
+    assert role["threshold"] is None and role["measured_only"] is True
+
+
+@pytest.mark.usefixtures("synthetic_role")
 def test_an_arm_of_a_run_without_its_reference_is_not_judged():
     every = in_run("A", rows(K3, 43.6, 22)) + in_run("C", rows("lonely", 30.0, 22))
     document, _ = derive.derive(every, roles={ROLE: {"rule": "satisfice", "index": "x"}})
