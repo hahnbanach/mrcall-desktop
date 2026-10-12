@@ -1505,6 +1505,14 @@
       "model": "qwen/qwen3-vl-235b-a22b-instruct",
       "outcome": "passed",
       "run": "2026-10-12T17:43:39Z"
+    },
+    {
+      "at": "2026-10-12T19:06:01Z",
+      "detail": "",
+      "metadata_sha256": "62000cc276fcd3bcd00e060043a360a75a4aa5dc76ef25abefb4a22499909ad2",
+      "model": "qwen/qwen3.6-plus",
+      "outcome": "passed",
+      "run": "2026-10-12T17:43:39Z"
     }
   ],
   "stops": [
