@@ -793,10 +793,21 @@
             "role": null,
             "spent_usd": "0.000021",
             "why": "ranking of economy / MEMORY_EXTRACT / ranking"
+          },
+          {
+            "at": "2026-10-12T19:00:58Z",
+            "bound_usd": "0.2",
+            "check": "smoke qwen/qwen3-30b-a3b-instruct-2507",
+            "kind": "smoke",
+            "model": "qwen/qwen3-30b-a3b-instruct-2507",
+            "outcome": "passed",
+            "role": null,
+            "spent_usd": "0.000056",
+            "why": "ranking of economy / MEMORY_EXTRACT / ranking"
           }
         ],
         "opened_at": "2026-10-12T17:44:44Z",
-        "reserved_usd": "1.408631",
+        "reserved_usd": "1.208687",
         "run": "2026-10-12T17:43:39Z",
         "settled_at": null,
         "spent_usd": null
