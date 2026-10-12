@@ -276,7 +276,10 @@ of one cheap call.
   uncertain calls are held at their maxima.
 - No call was retried or rerun. `spend.jsonl` is now exhausted against a 1.00
   cap. Running the remaining calls needs a fixed `generation_id` handling and
-  a fresh ledger, with a new authorization for that spend.
+  a fresh ledger, with a new authorization for that spend. (Run 2 used a fresh
+  ledger capped at USD 0.95 under the CTO's standing instruction for this
+  milestone to finish within the approved caps without further go for small
+  spends; real spend across both runs was about USD 0.05, inside S7's USD 1.)
 
 ### Files (s7-paid/)
 

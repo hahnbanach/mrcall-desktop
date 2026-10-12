@@ -112,7 +112,11 @@ python scripts/resolve_models.py --fixture DIR  # read saved payloads, no networ
   `9d40bbf3…`), snapshot `b3196ae2…` read 2026-10-10T12:01:52Z.
 - **Build copies** `roles/table.json` and `roles/snapshot.json`, written by
   `resolve_models.py --apply` and refreshed from the data branch by
-  `release.yml`.
+  `release.yml`. A copy refreshed from the data branch names the data
+  branch's `measured.json` in its `measured_sha256`, not the committed
+  `roles/measured.json` (the one-off measurement); nothing at run time reads
+  it, but a hand `resolve_models.py --apply` resolves from the committed file
+  and so from the older measurement.
 - **Run time** (`roles/distribution.py`): the engine downloads both files when
   a profile is activated and every 24 hours (ETag), re-checks them with the
   gates and caches them in `<profile>/model-table/`, never in a directory

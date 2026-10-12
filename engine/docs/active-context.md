@@ -126,6 +126,12 @@ acceptance is implied.
 
 - Live PEC.net acceptance and provider marker comparison,
   Qonto installed Electron and provider UI remain open in their owning plans.
+- Production billing server `37f330d` answers 502 on every MrCall-credits
+  call to an OpenRouter Messages-path model (only K3 with controls settles),
+  holding the reservation at its maximum; a hotfix with the fix and the
+  recovery fix is prepared (mrcall-agent local branch
+  `hotfix-openrouter-generation-id`) for the CTO's go. Rows stuck before the
+  fix need manual reconciliation.
 - Remaining Café124 billing choices and funded credit acceptance remain open;
   do not replay uncertain requests or resume preparation implicitly.
 - M10's merge to `main` waits on CTO and operator actions: the
