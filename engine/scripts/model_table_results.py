@@ -11,7 +11,9 @@ what it bought land together, before the next check is sent. A hard kill
 then loses at most the check in flight, whose bound the pushed reservation
 still holds.
 
-**The file.** `{"schema": 1, "results": [entry, ...]}`, in the order the
+**The file.** `{"schema": 1, "results": [entry, ...], "smokes": [...],
+"stops": [...]}` (the smokes' outcomes and the measurements' time-limit
+stops: `model_table_outcomes.py`). `results` is in the order the
 results were measured; an entry is `run`, `model`, `role`,
 `case_set_sha256`, `prompt_sha256`, `measured_at` and `result`: the
 measurement's result as `model_table_measured.aggregate` gives it, not yet
@@ -38,13 +40,15 @@ from __future__ import annotations
 
 import copy
 
+import model_table_outcomes as outcomes
+
 SCHEMA = 1
 FIELDS = ("run", "model", "role", "case_set_sha256", "prompt_sha256", "measured_at")
 JUDGEABLE = ("n", "passes", "bars_ok", "critical", "complete")
 
 
 def empty() -> dict:
-    return {"schema": SCHEMA, "results": []}
+    return {"schema": SCHEMA, "results": [], "smokes": [], "stops": []}
 
 
 def check(doc: object) -> dict:
@@ -63,6 +67,7 @@ def check(doc: object) -> dict:
         result = entry.get("result")
         if not isinstance(result, dict) or not all(field in result for field in JUDGEABLE):
             raise ValueError(f"results.json: entry {number} holds no measurement result")
+    outcomes.check(doc)
     return doc
 
 

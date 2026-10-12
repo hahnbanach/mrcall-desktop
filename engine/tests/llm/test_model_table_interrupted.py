@@ -50,23 +50,29 @@ class Clocked(FakeEdges):
         super().__init__(*args, **kwargs)
         self.minutes = minutes or {"smoke": 1, "measure": 5}
         self.kill_at, self.dead, self.starts, self.hard = kill_at, False, [], True
+        self.measure_timeouts: set = set()  # (role, model) stopped at its time limit
 
     def push(self, files, message):
         if not self.dead:
             super().push(files, message)
 
     def smoke(self, model):
-        self.starts.append(("smoke", None, self.now))
+        self.starts.append(("smoke", None, model, self.now))
         out = super().smoke(model)
         self.now += timedelta(minutes=self.minutes["smoke"])
         return out
 
     def measure(self, role, model, scores):
-        self.starts.append(("measure", role, self.now))
+        self.starts.append(("measure", role, model, self.now))
         if (role, model) == self.kill_at:
             self._reserved(f"{role} on {model}", Decimal("2"))
             self.dead = self.hard
             raise Killed() if self.hard else Interrupted()
+        if (role, model) in self.measure_timeouts:
+            self._reserved(f"{role} on {model}", Decimal("2"))
+            self.measured.append((role, model))
+            why = "stopped at its time limit of 10 min"
+            raise self.job.edges_of.Incomplete(why, Decimal("0.3"), (role,), True)
         out = super().measure(role, model, scores)
         self.now += timedelta(minutes=self.minutes["measure"])
         return out
@@ -123,8 +129,9 @@ def test_no_check_starts_that_could_end_after_the_deadline_and_the_run_still_pub
     assert rig.go("--deadline-minutes", "15") == 0
     assert rig.fake.smoked == [GENIUS] and rig.fake.measured == [("CHAT", GENIUS)]
     deadline = NOW + timedelta(minutes=15)
-    for kind, role, start in rig.fake.starts:
-        assert start + timedelta(minutes=job.deadline_of.limit_minutes(kind, role)) <= deadline
+    for kind, role, model, start in rig.fake.starts:
+        limit = job.deadline_of.limit_minutes(kind, role, model)
+        assert start + timedelta(minutes=limit) <= deadline
     assert f"TASK_DETECTION on {GENIUS}: deferred: the run's deadline (05:32:30Z, 15 min" in (
         rig.report
     )
@@ -139,7 +146,7 @@ def test_the_deadline_defaults_to_ninety_minutes_and_a_long_check_is_deferred_ne
     late = NOW + timedelta(minutes=75)  # a corpus run (20 min) would not fit; a smoke would
     deadline = job.deadline_of.Deadline(NOW, job.deadline_of.DEADLINE_MINUTES)
     assert deadline.at == NOW + timedelta(minutes=90)
-    assert deadline.late("smoke", None, late) is None
+    assert deadline.late("smoke", None, late, GENIUS) is None
     assert deadline.late("measure", "CHAT", NOW + timedelta(minutes=80)) is None  # ends at 90
     assert "may take 20 min" in deadline.late("measure", "MEMORY_MERGE", late)
     assert rig.go() == 0 and len(rig.fake.measured) == 2  # 90 min: everything fits

@@ -12,9 +12,12 @@ or stand-ins.
 from __future__ import annotations
 
 import json
+import os
+import signal
 import subprocess
 import sys
 import time
+from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from pathlib import Path
 
@@ -25,6 +28,7 @@ from .model_table_world import K3, load_job
 job = load_job()
 edges = job.edges_of
 FLASH = "acme/flash-1"
+CORPUS = ("MNEMONIC", "MEMORY_EXTRACT", "MEMORY_MERGE")
 
 HOLDS_A_KEY = """
 import pathlib, sys, time
@@ -58,7 +62,7 @@ def test_a_process_at_its_limit_is_interrupted_and_cleans_up(tmp_path):
 
 
 def test_a_process_that_ignores_the_interrupt_is_killed_after_the_grace(monkeypatch):
-    monkeypatch.setattr(edges, "GRACE_SECONDS", 1)
+    monkeypatch.setattr(job.process, "GRACE_SECONDS", 1)
     began = time.monotonic()
     with pytest.raises(subprocess.TimeoutExpired):
         edges.limited_run([sys.executable, "-c", IGNORES_INTERRUPTS], timeout=1, text=True)
@@ -99,32 +103,141 @@ def test_a_measurement_stopped_at_its_limit_is_charged_what_its_ledger_holds(tmp
     assert seen["timeout"] == 600
 
 
-def test_a_corpus_run_stopped_at_its_limit_counts_its_cap_and_loses_its_key_file(tmp_path):
+SETTLED = {"intent_id": "a", "settled": True, "calls": 1, "cost_micro_usd": 912}
+INTENTS = [
+    {"intent_id": "a", "case_id": "one", "bound_micro_usd": 8204},
+    SETTLED,
+    {"intent_id": "b", "case_id": "two", "bound_micro_usd": 8214},  # open at the stop
+]
+
+
+@pytest.mark.parametrize(
+    "journal, charged",
+    [
+        ("".join(json.dumps(row) + "\n" for row in INTENTS), Decimal("0.009126")),
+        ('{"intent_id": "a", "case_id"\n', Decimal("2")),  # unreadable: the whole cap
+        (None, Decimal("2")),  # no journal at all: the whole cap
+    ],
+)
+def test_a_corpus_run_stopped_at_its_limit_is_charged_its_intents_and_loses_its_key_file(
+    tmp_path, journal, charged
+):
     def key_file(kwargs, command):
         profile = Path(kwargs["env"]["MNEMONIC_CORPUS_PROFILE_DIR"])
         profile.mkdir(parents=True)
         (profile / ".env").write_text("not a key")
+        if journal is not None:
+            (profile / "corpus-intents.jsonl").write_text(journal)
 
     run, seen = stopped(key_file)
     measure = edges.Measurement(tmp_path, Decimal("2"), K3, run=run)
     with pytest.raises(edges.Incomplete, match="stopped at its time limit of 20 min") as raised:
         measure("MEMORY_EXTRACT", FLASH, {})
-    assert raised.value.spent_usd == Decimal("2")  # no record: the whole cap counts
+    # The first run's killed corpus run: one case settled (912), one open at its bound.
+    assert raised.value.spent_usd == charged
+    assert raised.value.timed_out and raised.value.roles == CORPUS
     assert seen["timeout"] == 1200
     assert list(tmp_path.rglob(".env")) == []
+
+
+def test_a_harness_measurement_makes_its_profile_where_the_sweep_finds_it(tmp_path):
+    seen = {}
+
+    def run(command, **kwargs):
+        seen["tmpdir"] = kwargs["env"]["TMPDIR"]
+        seen["out"] = command[command.index("--out") + 1]
+        return subprocess.CompletedProcess(command, 1, "", "refused: test")
+
+    with pytest.raises(edges.Incomplete) as raised:
+        edges.Measurement(tmp_path, Decimal("2"), K3, run=run)("CHAT", FLASH, {})
+    assert seen["tmpdir"] == seen["out"] and not raised.value.timed_out
+
+
+def test_a_smokes_limit_is_its_worst_case_under_the_engines_http_timeouts():
+    limit = job.deadline_of.limit_minutes
+    assert limit("smoke", None, FLASH) == 7  # two calls of at most 180 s, and setup
+    assert limit("smoke", None, K3) == 21  # the K3 Chat path: two of at most 600 s
+    assert limit("smoke", None, None) == 21  # unknown: the worst case
+    assert limit("measure", "CHAT") == 10 and limit("measure", "MNEMONIC") == 20
+    start = datetime(2026, 10, 14, 5, 17, tzinfo=timezone.utc)
+    deadline = job.deadline_of.Deadline(start, 90)
+    assert deadline.late("smoke", None, start + timedelta(minutes=83), FLASH) is None
+    assert "may take 7 min" in deadline.late("smoke", None, start + timedelta(minutes=84), FLASH)
+    assert "may take 21 min" in deadline.late("smoke", None, start + timedelta(minutes=70), K3)
+    # Every check ends by the deadline; a stopped one is killed after the grace.
+    longest = max(job.deadline_of.LIMIT_MINUTES.values())
+    assert longest < 90 and 90 + job.process.GRACE_SECONDS / 60 + 10 <= 120
+
+
+PARENT = """
+import sys
+sys.path.insert(0, sys.argv[1])
+import model_table_process as process
+process.interrupt_on_terminate()
+try:
+    process.limited_run([sys.executable, "-c", sys.argv[2], sys.argv[3], sys.argv[4]], timeout=120)
+except KeyboardInterrupt:
+    sys.exit(3)
+"""
+CHILD = """
+import os, pathlib, sys, time
+key, pid = pathlib.Path(sys.argv[1]), pathlib.Path(sys.argv[2])
+key.write_text("not a key")
+pid.write_text(str(os.getpid()))
+try:
+    time.sleep(120)
+finally:
+    key.unlink()
+"""
+
+
+def _alive(pid: int) -> bool:
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    return True
+
+
+@pytest.mark.parametrize("signum", [signal.SIGINT, signal.SIGTERM])
+def test_an_interrupted_job_stops_its_measurement_process_before_it_goes(tmp_path, signum):
+    key, pid = tmp_path / ".env", tmp_path / "child.pid"
+    scripts = str(Path(job.__file__).parent)
+    parent = subprocess.Popen(
+        [sys.executable, "-c", PARENT, scripts, CHILD, str(key), str(pid)],
+        start_new_session=True,  # the signal below reaches the job alone
+    )
+    try:
+        for _ in range(400):
+            if pid.exists() and pid.read_text() and key.exists():
+                break
+            time.sleep(0.05)
+        child = int(pid.read_text())
+        parent.send_signal(signum)  # the job only: as `kill -INT <pid>`, or a terminate
+        assert parent.wait(timeout=30) == 3  # it went on as an interrupt, after the child
+        for _ in range(100):
+            if not _alive(child):
+                break
+            time.sleep(0.05)
+        assert not _alive(child)  # no orphan with no time limit
+        assert not key.exists()  # its finally ran: the key file is gone
+    finally:
+        parent.kill()
 
 
 def test_each_run_journals_apart_and_a_killed_runs_key_file_is_deleted(tmp_path):
     work, data = tmp_path / "work", tmp_path / "data"
     left = work / "run-20261012T141304Z-x" / "measure-51-y" / "profile" / ".env"
-    left.parent.mkdir(parents=True)
-    left.write_text("not a key")
+    harness = work / "run-20261012T141304Z-x" / "measure-2-z" / "measurement-profile-q" / ".env"
+    for path in (left, harness):
+        path.parent.mkdir(parents=True)
+        path.write_text("not a key")
     kept = work / "notes" / ".env"  # not a measurement profile's: untouched
     kept.parent.mkdir()
     kept.write_text("x")
     first = edges.default(data, None, work, Decimal("10"))
     second = edges.default(data, None, work, Decimal("10"))
-    assert not left.exists() and kept.exists()
+    assert not left.exists() and not harness.exists() and kept.exists()
     for real in (first, second):
         assert real.smoke.work.parent == work and real.smoke.work.name.startswith("run-")
         assert real.measure.work == real.smoke.work

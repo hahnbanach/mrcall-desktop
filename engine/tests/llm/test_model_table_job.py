@@ -287,8 +287,9 @@ def test_a_ranked_models_metadata_change_is_smoked_before_publishing(rig, field)
     assert rig.run() == 0
     assert rig.fake.smoked == [SONNET] and rig.fake.measured == []
     assert rig.fake.files["table.json"] == rig.files["table.json"]
-    # Reserved, the smoke recorded, then published with the settlement.
-    assert rig.pushed() == [["ledger.json"], ["ledger.json"], ["ledger.json", "snapshot.json"]]
+    # Reserved, the smoke recorded (its outcome cached), then published with the settlement.
+    recorded = ["ledger.json", "results.json"]
+    assert rig.pushed() == [["ledger.json"], recorded, ["ledger.json", "snapshot.json"]]
     assert f"metadata of ranked {SONNET}: models {field}" in rig.report
 
 
@@ -309,8 +310,8 @@ def test_a_metadata_change_the_cap_leaves_unsmoked_publishes_nothing(rig):
 def test_an_error_is_no_result_counts_at_its_bound_and_never_replaces_a_pick(rig):
     rig.world.models[SONNET]["efforts"] = ["max"]
     assert rig.run(smoke_errors={SONNET}) == 1  # left unsmoked: nothing published
-    # Reserved, the error recorded, then settled alone.
-    assert rig.pushed() == [["ledger.json"], ["ledger.json"], ["ledger.json"]]
+    # Reserved, the error recorded (an uncertain smoke, cached), then settled alone.
+    assert rig.pushed() == [["ledger.json"], ["ledger.json", "results.json"], ["ledger.json"]]
     assert rig.fake.files["table.json"] == rig.files["table.json"]
     settled = rig.doc("ledger.json")["months"]["2026-10"][0]
     assert settled["spent_usd"] == "0.2" and "error (ConnectionError)" in str(settled["calls"])

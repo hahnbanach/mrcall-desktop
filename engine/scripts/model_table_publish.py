@@ -13,6 +13,7 @@ import hashlib
 import json
 
 import model_table_decide as decide
+import model_table_outcomes as outcomes
 import model_table_records as records
 import model_table_results as results_of
 import resolve_models as rm
@@ -36,7 +37,7 @@ class Publish:
             return None
         text = records.dump(self.results)
         before = self.published.get("results.json")
-        if before is None and not self.results["results"]:
+        if before is None and not any(self.results.get(k) for k in ("results", "smokes", "stops")):
             return None
         return None if before == text.encode("utf-8") else text
 
@@ -112,6 +113,7 @@ class Publish:
         if published.get("measured.json") is None or not unchanged:
             files["measured.json"] = text
         self.results = results_of.prune(self.results, measured, self.ctx["hashes"])
+        self.results = outcomes.prune(self.results, self.now, self._fp, self.ctx["hashes"])
         pruned = self._results_text()
         if pruned is not None:
             files["results.json"] = pruned

@@ -53,7 +53,14 @@ and caps (plan, S5). One run:
    **The deadline** (`--deadline-minutes`, 90 by default, under the
    workflow's 120): a check whose time limit would end after it is
    deferred, unpaid, and the run goes on to decide and publish
-   (`model_table_deadline.py`).
+   (`model_table_deadline.py`). **What it remembers**
+   (`model_table_outcomes.py`): a smoke's outcome for 7 days while the
+   model's request metadata holds, and a measurement stopped at its time
+   limit for 14 days, so neither is paid for daily. **One run per
+   checkout**: the run holds an exclusive lock on `--data`, and a second is
+   refused (`model_table_branch.py`). SIGTERM is handled as SIGINT: the run
+   stops its measurement process and settles if it is given the time
+   (`model_table_process.py`).
 5. **Re-sampling.** On the month's last day (UTC) each role's current picks
    and its reference, the oldest-measured first, are measured again, as many
    as the month's remainder covers, and the decisions are made again.
@@ -112,7 +119,7 @@ from __future__ import annotations
 import argparse
 import json
 import sys
-from decimal import ROUND_UP, Decimal
+from decimal import Decimal
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
@@ -122,7 +129,9 @@ if str(HERE) not in sys.path:
 import model_table_deadline as deadline_of  # noqa: E402
 import model_table_decide as decide  # noqa: E402
 import model_table_edges as edges_of  # noqa: E402
-import model_table_measured as measured_of  # noqa: E402
+import model_table_measured as measured_of  # noqa: E402,F401 - the tests reach it here
+import model_table_checks as checks  # noqa: E402
+import model_table_process as process  # noqa: E402
 import model_table_publish as publish  # noqa: E402
 import model_table_records as records  # noqa: E402
 import model_table_results as results_of  # noqa: E402
@@ -147,7 +156,7 @@ def _doc(raw: bytes | None, what: str):
         raise Failed(f"{what} cannot be read: not JSON") from None
 
 
-class Run(publish.Publish):
+class Run(checks.Checks, publish.Publish):
     """One run of the job (module docstring); `__call__` returns its summary."""
 
     def __init__(self, edges, roles: Path, cap: Decimal, dry_run: bool, minutes=None):
@@ -161,11 +170,13 @@ class Run(publish.Publish):
         self.s.update(problems=[], notes=[], calls=[], deferred=[], resampled=[], flags=[])
         self.state = {"smokes": {}, "deferred": {}, "fresh": set(), "projected": {}}
         self.unavailable: str | None = None
+        self.uncertain: dict[str, str] = {}  # model -> why its cached smoke is not retried
         self.spend: records.Spend | None = None
 
     def __call__(self) -> dict:
         try:
-            self._run()
+            with self.edges.lock():  # one run per data checkout (`model_table_branch`)
+                self._run()
         except rm.resolver.ConfigError as err:
             self.s.update(status="configuration error", code=2)
             self.s["problems"].append(str(err))
@@ -280,6 +291,7 @@ class Run(publish.Publish):
         }
         replayed = results_of.replay(self.results, measured, hashes, self._replayed)
         self.s["notes"] += [f"cached: {line}" for line in replayed]
+        self._seed()
         self.spend = records.Spend(rec["ledger"], self.now, self.cap, self.edges)
         try:
             d = self._verify()
@@ -301,7 +313,7 @@ class Run(publish.Publish):
                 return self.state["deferred"][check]
         if self.dry_run:
             return f"dry run (at most USD {records.usd(check.bound)})"
-        late = self.deadline.late(check.kind, check.role, self.edges.now())
+        late = self.deadline.late(check.kind, check.role, self.edges.now(), check.model)
         if late:
             return late
         if self.unavailable is None:
@@ -322,132 +334,12 @@ class Run(publish.Publish):
             if check.kind == "project":
                 self._project(check)
                 continue
-            reason = self._blocked(check)
+            reason = self._cached_smoke(check, why) or self._blocked(check)
             if reason:
                 self.state["deferred"][check] = reason
             else:
                 self._perform(check, why)
         raise RuntimeError("the decisions did not settle")
-
-    def _perform(self, check: decide.Check, why: str) -> None:
-        """Make one paid check and record it; an error is no result, never retried."""
-        at = self.edges.now().strftime(STAMP)
-        try:
-            if check.kind == "smoke":
-                out = self.edges.smoke(check.model)
-                spent, passed, detail = Decimal(str(out["spent_usd"])), out["passed"], out["detail"]
-                if passed is None:  # not completed under its cap: no result, like an error
-                    self.state["deferred"][check] = f"not completed: {detail}"
-                    outcome = f"not completed: {detail}"
-                else:
-                    self.state["smokes"][check.model] = passed is True
-                    outcome = "passed" if passed is True else f"failed: {detail or 'no detail'}"
-            else:
-                spent, outcome = self._measure(check, at)
-        except edges_of.Incomplete as err:  # its own ledger says what it spent
-            self.state["deferred"][check] = f"not completed: {err}"
-            spent, outcome = err.spent_usd, f"not completed: {err}"
-        except Exception as err:  # noqa: BLE001 - recorded; its whole bound counts
-            self.state["deferred"][check] = f"error: {type(err).__name__}: {err}"
-            spent, outcome = check.bound, f"error ({type(err).__name__}), counted at its bound"
-        call = {
-            "check": str(check),
-            "kind": check.kind,
-            "model": check.model,
-            "role": check.role,
-            "why": why,
-            "at": at,
-            "bound_usd": records.usd(check.bound),
-            "spent_usd": records.usd(spent),
-            "outcome": outcome,
-        }
-        if check.kind == "smoke" and spent > decide.SMOKE_EXPECTED_USD:
-            expected = records.usd(decide.SMOKE_EXPECTED_USD)
-            call["flag"] = f"settled at USD {records.usd(spent)}, above the USD {expected} expected"
-            self.s["flags"].append(f"{check}: {call['flag']}")
-        self.s["calls"].append(call)
-        self._checkpoint(check, call, self.spend.spent(call, spent))
-
-    def _checkpoint(self, check: decide.Check, call: dict, ledger: str) -> None:
-        """Push the finished check — its call, the reservation lowered to what
-        the run spent, its measurement results — before anything else is
-        paid for (module docstring, step 4). A push the data branch refuses
-        stops the run like a reservation it refuses."""
-        files = {"ledger.json": ledger}
-        held = self._results_text()
-        if held is not None:
-            files["results.json"] = held
-        message = f"model-table: run {self.spend.run} records {check}: USD {call['spent_usd']}"
-        self.edges.push(files, message)
-        self.published.update({name: text.encode("utf-8") for name, text in files.items()})
-
-    def _store(self, role: str, model: str, result: dict, at: str) -> tuple[dict | None, str]:
-        """Record one role's result of `model`, judged against the role's
-        reference (`model_table_measured.record`): the result as stored, or
-        None and why it cannot be judged. A completed re-measurement replaces
-        its role."""
-        req, reference = self.ctx["req"], self.ctx["reference"]
-        hashes, rule = self.ctx["hashes"][role], req["roles"][role]
-        try:
-            where, stored = measured_of.record(
-                self.ctx["measured"], role, model, result, hashes, at, rule, reference
-            )
-        except measured_of.Unjudgeable as err:
-            return None, str(err)
-        if where == "stage" and decide.remeasured(self.ctx, role):
-            measured_of.swap(self.ctx["measured"], role, rule, reference)
-            self.s["notes"].append(f"{role} re-measured whole under today's prompt and cases")
-        return stored, ""
-
-    def _replayed(self, role: str, model: str, result: dict, at: str) -> str:
-        """`model_table_results.replay`'s store: why an entry was not recorded."""
-        return self._store(role, model, result, at)[1]
-
-    def _project(self, check: decide.Check) -> None:
-        """The free projection of a measurement (`edges.project`): one over the
-        per-role cap, or one that cannot be projected, is deferred and nothing
-        is sent for it, not even its smoke."""
-        measure = decide.Check("measure", check.model, check.role)
-        scores = (self.ctx["by_id"].get(check.model) or {}).get("scores", {})
-        try:
-            expected = Decimal(str(self.edges.project(check.role, check.model, scores)))
-        except Exception as err:  # noqa: BLE001 - reported; nothing is sent
-            self.state["projected"][(check.role, check.model)] = None
-            self.state["deferred"][measure] = f"not projected: {type(err).__name__}: {err}"
-            return
-        self.state["projected"][(check.role, check.model)] = expected
-        if expected > decide.MEASURE_USD:
-            # Rounded up: a projection over the cap never reads as the cap itself.
-            shown = expected.quantize(Decimal("0.01"), rounding=ROUND_UP)
-            cap = records.usd(decide.MEASURE_USD)
-            why = f"deferred: over the per-role cap (projected USD {shown}, cap USD {cap})"
-            self.state["deferred"][measure] = why
-
-    def _measure(self, check: decide.Check, at: str) -> tuple[Decimal, str]:
-        """One measurement (a corpus run measures the three memory roles), each
-        role's result judged against its reference and recorded
-        (`model_table_measured.py`); a completed re-measurement replaces its role."""
-        scores = (self.ctx["by_id"].get(check.model) or {}).get("scores", {})
-        out = self.edges.measure(check.role, check.model, scores)
-        spent, verdicts = Decimal(str(out["spent_usd"])), []
-        for role, result in out["results"].items():
-            if role not in self.ctx["req"]["roles"]:
-                continue
-            hashes = self.ctx["hashes"][role] or measured_of.key(
-                self.ctx["measured"]["roles"][role]
-            )
-            # Cached on the data branch with this check's record (`_checkpoint`).
-            self.results = results_of.add(
-                self.results, self.spend.run, check.model, role, hashes, at, result
-            )
-            stored, why = self._store(role, check.model, result, at)
-            if stored is None:
-                self.state["deferred"].setdefault(decide.Check("measure", check.model, role), why)
-                verdicts.append(f"{role}: {why}")
-                continue
-            self.state["fresh"].add((role, check.model))
-            verdicts.append(f"{role}: {'passed' if stored['pass'] else 'failed'}")
-        return spent, "; ".join(verdicts) or "no result"
 
     def _resample(self, d: dict) -> dict:
         """The month's last day: the oldest-measured picks and references again."""
@@ -495,4 +387,5 @@ def main(
 
 
 if __name__ == "__main__":
+    process.interrupt_on_terminate()  # SIGTERM settles like SIGINT (`model_table_process`)
     sys.exit(main())
