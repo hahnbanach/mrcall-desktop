@@ -54,6 +54,9 @@ global.window = {
 }
 let view
 const text = () => JSON.stringify(view.toJSON())
+// Each element's own text with its string children joined (JSX splits {expr} into parts).
+const lines = () => view.root.findAll(node => typeof node.type === 'string')
+  .map(node => node.children.filter(child => typeof child === 'string').join('')).join('\n')
 const button = label => view.root.findAllByType('button').find(node => node.children.join('') === label)
 const render = async element => { await act(async () => { view = create(element) }) }
 const unmount = () => act(() => view.unmount())
@@ -79,7 +82,9 @@ unmount()
 assert.equal(sidecar.size, 0)
 
 await render(React.createElement(Budget))
-assert.match(text(), /saved-reader/)
+// The effective per-role models are the engine's (usage.today), shown per job.
+assert.ok(view.root.findAll(node => node.type === 'p' && node.children.join('') === 'Read messages: saved-reader').length === 1)
+assert.ok(view.root.findAll(node => node.type === 'p' && node.children.join('') === 'Conversation: saved-model').length === 1)
 assert.match(text(), /unmeasured/)
 assert.match(text(), /reserved/)
 await act(async () => button('Check MrCall receipts').props.onClick())
@@ -111,18 +116,29 @@ window.zylch.llm = { models: provider => new Promise(resolve => catalogs.push({ 
 const modelProps = { provider: 'mrcall', values: { LLM_MODEL_PRESET: 'balanced', MRCALL_CREDITS_MODEL: 'claude-opus-5', MODEL_MEMORY_MERGE: 'claude-opus-5' }, refreshKey: 'A', onChange: (key, value) => modelEdits.push([key, value]) }
 await render(React.createElement(Models, modelProps))
 assert.match(text(), /no personal API key is needed/)
-assert.match(text(), /preset controls the default:/)
-assert.match(text(), /Claude Sonnet 5/)
+// The preset is a price ceiling the engine resolves each job within: the app names
+// no model for it (the effective models are Saved models' rows, asserted above).
+assert.match(lines(), /^balanced preset is a price ceiling: the engine resolves each job's model within it/m)
+assert.doesNotMatch(text(), /Kimi K3|Claude/, 'no hard-coded preset model before the catalog answers')
 assert.match(text(), /saved custom model below is inactive/)
 assert.match(text(), /saved job override\(s\) remain active/)
 assert.equal(view.root.findByType('details').props.open, undefined)
 await act(async () => catalogs[0].resolve({ available: true, models: [{ id: 'moonshotai/kimi-k3', label: 'Kimi K3', provider: 'openrouter' }], reason: '' }))
 assert.match(text(), /saved; unavailable/)
+assert.match(lines(), /^Kimi K3 · openrouter$/m, 'the catalog fills the model controls')
+// The explicit job choice: the saved override is the role control's value.
+const roleSelect = label => view.root.findAllByType('select').find(node => node.props['aria-label'] === label)
+assert.equal(roleSelect('Memory comparison').props.value, 'claude-opus-5')
+assert.equal(roleSelect('Memory extraction').props.value, '')
 await act(async () => view.update(React.createElement(Models, { ...modelProps, values: { ...modelProps.values, LLM_MODEL_PRESET: 'economy' } })))
-assert.match(text(), /Claude Haiku 4.5/)
+assert.match(lines(), /^economy preset is a price ceiling/m)
+assert.doesNotMatch(lines(), /balanced preset/)
 assert.match(text(), /Saved custom model — inactive while preset is selected/)
 await act(async () => view.root.findAllByType('select')[0].props.onChange({ target: { value: 'moonshotai/kimi-k3' } }))
 assert.deepEqual(modelEdits, [['LLM_MODEL_PRESET', 'custom'], ['MRCALL_CREDITS_MODEL', 'moonshotai/kimi-k3']])
+// An explicit job choice saves that role only; the preset stays as it is.
+await act(async () => roleSelect('Memory extraction').props.onChange({ target: { value: 'moonshotai/kimi-k3' } }))
+assert.deepEqual(modelEdits.slice(2), [['MODEL_MEMORY_EXTRACT', 'moonshotai/kimi-k3']])
 // Choosing a model does not clear role overrides or alter credentials/payment.
 await act(async () => view.update(React.createElement(Models, { ...modelProps, provider: 'openrouter' })))
 assert.equal(catalogs[1].provider, 'openrouter')
