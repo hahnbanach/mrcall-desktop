@@ -130,7 +130,7 @@ acceptance is implied.
   do not replay uncertain requests or resume preparation implicitly.
 - M10's merge to `main` waits on CTO and operator actions: the
   `OPENROUTER_API_KEY` repository secret for the CI proof run; the billing
-  server promoted to production first (`main`/`dev` `bb8f553`, production
+  server promoted to production first (`main`/`dev` `89deceb`, production
   `37f330d`), with its egress to `raw.githubusercontent.com` and push
   protection on `model-table`; a valid Anthropic key and the Firebase test
   account for the remaining paid legs; the CTO's go, including on the

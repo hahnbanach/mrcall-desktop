@@ -91,7 +91,7 @@ selection](../engine/docs/features/model-selection.md) switch-over is merged on
 `model-selection-m10a`: each role's model comes from the model table, first
 published on the `model-table` branch (`8087fbf2`) and republished by the
 daily job's local run (`4bbbdf89`). The billing server serves it
-in protocol v2 on `main`/`dev` (`bb8f553`), not in production (`37f330d`). The
+in protocol v2 on `main`/`dev` (`89deceb`), not in production (`37f330d`). The
 merge to `main` awaits the job's CI proof run (its push trigger is TEMPORARY),
 production promotion and the CTO's go. The [engine
 snapshot](../engine/docs/active-context.md) owns the detail.

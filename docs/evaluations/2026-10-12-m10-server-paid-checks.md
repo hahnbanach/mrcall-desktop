@@ -288,3 +288,16 @@ Run 2 files: `dry2.out`, `dry2.jsonl`, `dry2-report.json`, `listing2.err`,
 `live2.out`, `spend2.jsonl`, `report2.json`, `admissions-states2.csv`,
 `status_check.py`, `status2.tsv`, `binding_diag.py`, `binding2.tsv`,
 `table2.md`
+
+# Follow-up: recovery binding fixed (mrcall-agent bdc2666)
+
+The status-recovery finding of run 2 is fixed on mrcall-agent `main` and `dev`
+(`bdc2666`, reviewed APPROVED): recovery binds the persisted generation id and
+accepts the generation record's model when it equals the requested id or that
+id's `canonical_slug` in OpenRouter's public catalogue (read without a key,
+3 s bound, cached one hour, a failed or empty read never kept). All 43 live
+records of run 2 recover under the rule (fixture
+`tests/fixtures/openrouter_generation_models.json`). Production `37f330d` has
+both defects; a hotfix carrying both fixes is prepared, unpushed, for the CTO's
+go. Rows that ended `dispatched` without a generation id before the fix
+(including run 1's 17) cannot be recovered and need manual reconciliation.
