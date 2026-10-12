@@ -267,12 +267,21 @@ spend and per-role results are in the
   open case at its bound, from `profile/corpus-intents.jsonl`; only when that
   journal is unreadable is it charged the whole USD 2. A measurement stopped
   at its limit is not tried again for 14 days, unless the role's case-set or
-  prompt hash or the model's request metadata changes;
+  prompt hash or the model's request metadata changes. A stop that freezes
+  its role (on the reference, or on a model the role's re-measurement needs)
+  is flagged in the report. If the job is killed outright, its measurement
+  process dies with it (Linux: `PR_SET_PDEATHSIG`); any key file left is
+  deleted by the next run's sweep;
 - smokes a model once a week at most. A smoke's outcome stands 7 days while
   the model's request metadata (`reasoning`, `parameters`, `forced_tool`) is
   unchanged. A passed model is not smoked again: a measurement the deadline
   deferred follows it the next day. A failed model stays out of the
-  rankings. An uncertain entrant smoke (no settled answer, or an error) is
+  rankings until it passes a smoke. It is not smoked again for 7 days; after
+  that it is smoked before anything of it counts, so neither a published
+  entry nor an old passing measurement brings it back. A change to its
+  metadata clears the failure, and the changed model is smoked like any
+  other. An outcome is kept only for a model the snapshot holds (a
+  fingerprint), and only if the smoke sent a call. An uncertain entrant smoke (no settled answer, or an error) is
   not retried, but a smoke the publication waits for (a ranked model whose
   metadata changed) is retried by every run. No smoke is sent twice in a
   run, and one that sent nothing is not kept;
@@ -284,7 +293,7 @@ spend and per-role results are in the
   run takes the results free of charge. It settles the open reservation at
   its reserved amount, marked `recovered`, before reserving anything. Under
   the monthly cap that amount counts as spent, once. An interrupted run
-  (SIGINT or SIGTERM, as a cancelled workflow sends) stops its measurement
+  (SIGINT, SIGTERM or SIGHUP, as a cancelled workflow sends) stops its measurement
   process and may settle itself, counting a check in flight at its bound.
   Otherwise the next run recovers it;
 - publishes, or exits 1 and leaves the last record in force; a price-only
