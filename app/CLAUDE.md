@@ -76,7 +76,9 @@ Switching provider preserves keys and requires Save. Top-up opens the dashboard
 without requiring an API key. Economy/balanced presets replace individual role
 overrides on Save; custom preserves them. DailyBudget shows settled spending,
 uncertain holds, remaining daily capacity and effective role models, with free
-receipt recovery. A job paused on the billing choice shows the engine's reason
+receipt recovery. Every role in `model_policy.roles` is one line named by its
+job from `lib/modelRoles.ts`, the map the Settings job-model fields also read;
+an unknown key reads as its title-cased name without `MODEL_`. A job paused on the billing choice shows the engine's reason
 (`model_policy.paused`), and a paused narration reply's `paused` message
 replaces the fallback narration (`scripts/test-role-pause-ui.mjs`). See [bounded preparation](docs/bounded-preparation.md).
 

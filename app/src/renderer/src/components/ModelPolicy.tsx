@@ -1,12 +1,11 @@
 import { useEffect, useState } from 'react'
+import { SETTINGS_ROLES, roleLabel } from '../lib/modelRoles'
 
 const BASE_KEYS: Record<string, string> = {
   anthropic: 'ANTHROPIC_MODEL', openrouter: 'OPENROUTER_MODEL', mrcall: 'MRCALL_CREDITS_MODEL'
 }
-const ROLES: Record<string, string> = {
-  MODEL_MEMORY_EXTRACT: 'Memory extraction', MODEL_MEMORY_MERGE: 'Memory comparison',
-  MODEL_TASK_DETECTION: 'Task detection', MODEL_REANALYZE: 'Task review', MODEL_DEDUP: 'Task deduplication'
-}
+// The job-model fields, named as Saved models names their lines (lib/modelRoles).
+const ROLES: Record<string, string> = Object.fromEntries(SETTINGS_ROLES.map(key => [key, roleLabel(key)]))
 export const MODEL_FIELDS = new Set([...Object.values(BASE_KEYS), ...Object.keys(ROLES)])
 type Model = { id: string; label: string; provider: string }
 
