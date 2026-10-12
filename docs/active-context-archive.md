@@ -1,3 +1,11 @@
+## 2026-10-12 — Before the M10 switch-over and first publish
+
+Mnemonic M9 source is active in all six company engines, including production.
+The failed Haiku corpus criterion is deferred to M10 on the resolver-selected
+model; source activation and sandbox acceptance do not close mnemonic
+product/corpus gates. The [engine snapshot](../engine/docs/active-context.md)
+owns the detailed state.
+
 ## 2026-10-08 — Launcher integration into clone main
 
 The local [contextual-email

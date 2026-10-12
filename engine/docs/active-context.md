@@ -68,10 +68,11 @@ correctly classified. Current contracts: [decisions](features/mnemonic-decisions
 [commit](features/mnemonic-commit.md), [join](features/company-memory-join.md) and
 [writer inventory](features/mnemonic-writer-inventory.md).
 
-Mnemonic product rollout remains pending. AC 5 failed on the rejected Haiku arm.
-On M10's measured picks (branch `m10-s4b10`, not merged) it passes on today's
-labels, Opus 5.5 only after the B2 scorer fix; that awaits merge and the
-published table. Haiku's paid corpus retains one critical failure; incomplete automatic extraction can remain pending
+Mnemonic product rollout remains pending. AC 5 failed on the rejected Haiku arm
+and is met on M10's measured MNEMONIC picks on today's labels: Opus 5.5
+(balanced, only after the B2 scorer fix) and GPT-6.1 Sol (economy)
+([restatement](../../docs/evaluations/2026-10-01-mnemonic-corpus.md)). Those
+picks run only once M10 merges. Haiku's paid corpus retains one critical failure; incomplete automatic extraction can remain pending
 without a reason and be repaid. The corpus also lacks per-round proposal/latency
 evidence and recorded Italian preservation misses. The hb plan at
 `docs/execution-plans/2026-09-30-mnemonic-rollout.md` is present as historical
@@ -100,41 +101,39 @@ Support exposes approval-gated [outbound calls](features/outbound-calls.md) with
 prior authenticated started/conversation evidence. Automatic diagnostic scripting
 is not configured; caller permission and assistant ID remain required.
 
-Milestone 10 ([model selection](features/model-selection.md)) is on branch
-`model-selection-m10a`, integrated with `main` on `m10-main-sync`; not merged,
-not deployed. No model or price is a default in engine code: every paid call
-site names one of sixteen roles, and `zylch/llm/roles/requirements.json` plus
-the resolver produce the committed table that is the one model and price
-source. Every request has one shape (`zylch/llm/request_shape.py`): no
-sampling fields, never a forced `tool_choice`, reasoning from the model's
-published metadata, reasoning blocks kept and replayed within a tool loop and
-stripped where history is rewritten.
+Milestone 10 ([model selection](features/model-selection.md)): the S6
+switch-over is merged on `model-selection-m10a` (`08858d1f`, IR3 APPROVED);
+not merged to `main`, not deployed. No model is a default in engine code:
+every paid call names one of sixteen roles, and its model comes from the
+model table's rankings per preset. OpenRouter runs the first ranked model; a
+personal Anthropic key the first of the Anthropic ranking, pausing the role
+(`RolePaused`, with a remedy) when it is empty; credits the first ranked id
+the billing server serves on its v2 `/capabilities`. `resolved.json`, the
+allowlist, `mrcall_served` and the `mrcall` column are gone. Prices and
+request metadata come from the catalogue snapshot; every request has the one
+shape (`zylch/llm/request_shape.py`).
 
-The paid role measurement is written to `roles/measured.json` on branch
-`m10-s4b10`. It ran 2026-10-04. On 2026-10-11 four things were re-measured:
-CHAT on main's new prompt; NARRATION and MiMo after the headroom fix; the
-threshold entrants; and the D8 entrants. Spend: USD 14.15 settled, 15.03
-counted, of 20.
+The first table is the build copy and is published on the `model-table` data
+branch (`8087fbf2`: table `304ab3b7…`, snapshot `b3196ae2…` read
+2026-10-10T12:01:52Z); engines download it daily (`roles/distribution.py`).
+Its picks, economy / balanced where they differ:
 
-- Each arm is judged against K3 from its own run. A K3 case that misses a
-  bar and the label is credited to the yardstick, never counted against it.
-- Answers are re-scored on today's labels and scorer, only where the captured
-  and the shaped request are today's. MiMo's older rows are not, so MiMo is
-  unmeasured on the roles not re-measured.
-- On today's labels every critical corpus case passes on both MNEMONIC picks:
-  Opus 5.5 (balanced) and GPT-6.1 Sol (economy).
-- Every satisfice role is `measured_only`, with every measured arm's index
-  score in the ladder.
-- `measured.json` is derived from committed records only
-  (`tests/fixtures/measurement/records/2026-10-11/plan.json`). Every
-  excluded row is a verified entry; a stale-shape run is superseded by rule.
-  Keeping deepseek's current-shape s4c NARRATION rows fails it on NARRATION,
-  whose pick is now mimo-v2.6-pro.
-- `resolve_models.py --apply`, on S6's requirements, writes a `table.json`
-  that passes `gates.check_table` and D8: every ranked model is measured and
-  passing. It is not committed; it lands with S6.
+- MNEMONIC, MEMORY_MERGE: GPT-6.1 Sol / Opus 5.5.
+- MEMORY_EXTRACT, TASK_DETECTION, COMPACTION, CORRECTION_LEARNING,
+  SYNC_ANALYSIS: deepseek-v4-flash.
+- CHAT: Sonnet 5.5. TASK_SOLVE: Sonnet 5.5 / Opus 5.5.
+- REANALYZE, DEDUP, INTENT, TRAIN: ling-3.0-flash-vl.
+- NARRATION: mimo-v2.6-pro. REPLY_NEED: glm-5.3-flash. WEB_SEARCH:
+  mimo-v2.6-flash.
 
-See the [record](../../docs/evaluations/2026-10-11-role-measurement.md).
+Anthropic rankings are empty for NARRATION under both presets and for the
+three memory roles under economy. The measurement
+([record](../../docs/evaluations/2026-10-11-role-measurement.md)) spent USD
+14.15 settled, 15.03 counted, of 20; every satisfice role is measured-only.
+The daily job (`scripts/model_table_job.py`, `model-resolution.yml`, 05:17
+UTC, USD 10 a month) has not run from CI yet. The workflow carries a
+TEMPORARY push trigger on the milestone branch for one proof run; it is
+removed before the merge to `main`.
 
 The local hardening closure repairs the model-catalog parameter declaration and
 preserves typed preparation refusal through task dispatch. Synthetic contract,
@@ -149,8 +148,17 @@ acceptance is implied.
   Qonto installed Electron and provider UI remain open in their owning plans.
 - Remaining Café124 billing choices and funded credit acceptance remain open;
   do not replay uncertain requests or resume preparation implicitly.
-- Several M10 and mnemonic items remain open:
-  - M10's table: committing it at S6's switch-over;
+- M10's merge to `main` waits for the job's proof run (the repository secret
+  `OPENROUTER_API_KEY`), the billing server's production promotion (`main`
+  and `dev` at `bb8f553`; production `37f330d` lacks the M10 code, so a
+  credits profile would pause with "update the billing server") and the
+  CTO's go. Open with the CTO: legacy Anthropic-key profiles (no saved
+  preset, so economy) pause on memory and narration; the recommendation is
+  to accept the pause.
+- Until the job republishes, a Desktop release with M10's `release.yml` or a
+  billing-server image built after 2026-10-24T12:01:52Z fails the 14-day
+  snapshot gate.
+- Several mnemonic items remain open:
   - the OpenRouter truncation check, which did not bind on seven of nine
     arms;
   - the extraction parser's refusal of "SKIP + reason";
@@ -171,8 +179,9 @@ acceptance is implied.
 1. Continue Qonto/PEC GUI and provider acceptance under their existing plans.
 2. Resolve billing choices without replaying uncertain requests; preserve actual
    saved controls and initiate no paid preparation for release verification.
-3. Finish milestone 10 (branch `model-selection-m10a`, not merged):
-   - publish `table.json` at S6's switch-over (it passes the gates and D8);
+3. Finish milestone 10 (branch `model-selection-m10a`):
+   - the job's proof run, then S8's end to end and final review; remove the
+     temporary push trigger before the merge;
    - review the mnemonic rollout and the migration rehearsal before product
      acceptance.
 
