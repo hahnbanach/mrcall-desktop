@@ -1305,6 +1305,14 @@
       "model": "qwen/qwen3-235b-a22b-2507",
       "outcome": "failed",
       "run": "2026-10-12T17:43:39Z"
+    },
+    {
+      "at": "2026-10-12T19:02:51Z",
+      "detail": "",
+      "metadata_sha256": "0426e592e7b44deaf978ffde54b3483da0294bb3f8ac82e85fa659d1ef3514ab",
+      "model": "arcee-ai/trinity-large-thinking",
+      "outcome": "passed",
+      "run": "2026-10-12T17:43:39Z"
     }
   ],
   "stops": [
