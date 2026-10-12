@@ -168,7 +168,9 @@ class ZylchAIAgent(BaseConversationalAgent):
         self.unlimited_voice = (
             customer_service_instructions is not None and isolated_voice_unlimited()
         )
-        self.client: LLMClient = client if client is not None else make_llm_client(model=routed_model("MODEL_CHAT"))
+        self.client: LLMClient = (
+            client if client is not None else make_llm_client(model=routed_model("MODEL_CHAT"))
+        )
         self.tools = tools
         self.tool_map = {tool.name: tool for tool in tools}
         self.model_selector = model_selector or ModelSelector()
