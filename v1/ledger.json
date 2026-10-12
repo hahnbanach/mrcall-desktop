@@ -760,10 +760,21 @@
             "role": null,
             "spent_usd": "0.0009",
             "why": "ranking of balanced / MNEMONIC / ranking"
+          },
+          {
+            "at": "2026-10-12T19:00:30Z",
+            "bound_usd": "0.2",
+            "check": "smoke qwen/qwen3-coder-30b-a3b-instruct",
+            "kind": "smoke",
+            "model": "qwen/qwen3-coder-30b-a3b-instruct",
+            "outcome": "passed",
+            "role": null,
+            "spent_usd": "0.00006",
+            "why": "ranking of economy / MEMORY_EXTRACT / ranking"
           }
         ],
         "opened_at": "2026-10-12T17:44:44Z",
-        "reserved_usd": "1.408455",
+        "reserved_usd": "1.208515",
         "run": "2026-10-12T17:43:39Z",
         "settled_at": null,
         "spent_usd": null
