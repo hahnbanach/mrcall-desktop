@@ -815,10 +815,21 @@
             "role": null,
             "spent_usd": "0.000133",
             "why": "ranking of economy / MEMORY_EXTRACT / ranking"
+          },
+          {
+            "at": "2026-10-12T19:01:14Z",
+            "bound_usd": "0.2",
+            "check": "smoke z-ai/glm-4.7-flash",
+            "kind": "smoke",
+            "model": "z-ai/glm-4.7-flash",
+            "outcome": "passed",
+            "role": null,
+            "spent_usd": "0.000042",
+            "why": "ranking of economy / MEMORY_EXTRACT / ranking"
           }
         ],
         "opened_at": "2026-10-12T17:44:44Z",
-        "reserved_usd": "1.40882",
+        "reserved_usd": "1.208862",
         "run": "2026-10-12T17:43:39Z",
         "settled_at": null,
         "spent_usd": null
