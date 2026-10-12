@@ -98,8 +98,16 @@ python scripts/resolve_models.py --fixture DIR  # read saved payloads, no networ
   expiry ranked; every ranked id priced positively within its ceiling;
   versions matching their content.
 - **Published** on the orphan branch `model-table` under `v1/`: `table.json`,
-  `snapshot.json`, `measured.json` and `ledger.json`, read at
+  `snapshot.json`, `measured.json`, `ledger.json` and `results.json`, read at
   `https://raw.githubusercontent.com/hahnbanach/mrcall-desktop/model-table/v1/<file>`.
+  Engines and the billing server read only `table.json` and `snapshot.json`;
+  the other three are the daily job's own records. `results.json` holds each
+  measurement result the job has paid for and not yet published in
+  `measured.json`, keyed by model, role, case-set hash and prompt hash
+  (`scripts/model_table_results.py`). It also holds the smokes' outcomes, keyed
+  by model and the fingerprint of its request metadata, and the measurements
+  stopped at their time limit (`scripts/model_table_outcomes.py`). Each entry
+  is pushed when its check ends.
   The first publish is `8087fbf2`: table version `304ab3b7…` (file sha256
   `9d40bbf3…`), snapshot `b3196ae2…` read 2026-10-10T12:01:52Z.
 - **Build copies** `roles/table.json` and `roles/snapshot.json`, written by
@@ -240,8 +248,54 @@ spend and per-role results are in the
   that fails a gate with the first ranked model with a passing result;
 - treats unmeasured pool models as challengers; the first run's backlog is
   about 128 entrant smokes, so it is worked through over months;
-- stays within USD 10 a month, reserved in `ledger.json` and pushed before
-  the first paid call; nothing is retried;
+- stays within USD 10 a month, kept in `ledger.json`. Before each paid check
+  the run reserves what it has spent plus that check's bound, and pushes the
+  reservation. After the check it pushes the call, the reservation lowered
+  to what it spent, and the check's results (`results.json`) in one commit.
+  Nothing is retried;
+- stops at a deadline (`--deadline-minutes`; the workflow passes 90 under its
+  120-minute timeout). No check starts whose time limit would end after the
+  deadline. A smoke's limit is its worst case under the engine's HTTP
+  timeouts: 7 min, or 21 on the K3 path. A measurement is stopped at 10 min,
+  a memory corpus run at 20. Later checks are deferred unpaid and reported;
+  the run still decides, publishes and settles. Every check ends by the
+  deadline; a stopped one is killed 30 s later; then the decisions and one
+  push. With the runner's setup that stays well under 120;
+- stops a measurement at its limit: interrupted, so it deletes its key file,
+  then killed. A harness measurement is charged what its ledger recorded.
+  A corpus run that wrote no record is charged its settled cases plus each
+  open case at its bound, from `profile/corpus-intents.jsonl`; only when that
+  journal is unreadable is it charged the whole USD 2. A measurement stopped
+  at its limit is not tried again for 14 days, unless the role's case-set or
+  prompt hash or the model's request metadata changes. A stop that freezes
+  its role (on the reference, or on a model the role's re-measurement needs)
+  is flagged in the report. If the job is killed outright, its measurement
+  process dies with it (Linux: `PR_SET_PDEATHSIG`); any key file left is
+  deleted by the next run's sweep;
+- smokes a model once a week at most. A smoke's outcome stands 7 days while
+  the model's request metadata (`reasoning`, `parameters`, `forced_tool`) is
+  unchanged. A passed model is not smoked again: a measurement the deadline
+  deferred follows it the next day. A failed model stays out of the
+  rankings until it passes a smoke. It is not smoked again for 7 days; after
+  that it is smoked before anything of it counts, so neither a published
+  entry nor an old passing measurement brings it back. A change to its
+  metadata clears the failure, and the changed model is smoked like any
+  other. An outcome is kept only for a model the snapshot holds (a
+  fingerprint), and only if the smoke sent a call. An uncertain entrant smoke (no settled answer, or an error) is
+  not retried, but a smoke the publication waits for (a ranked model whose
+  metadata changed) is retried by every run. No smoke is sent twice in a
+  run, and one that sent nothing is not kept;
+- runs alone on its data checkout: an exclusive `flock` for the whole run,
+  and a second run is refused. A commit left unpushed is pushed by the next
+  push, or the push fails and the run reports it;
+- survives a hard kill: the branch keeps every paid result and an honest
+  bound of the spend, the recorded calls plus one check's bound. The next
+  run takes the results free of charge. It settles the open reservation at
+  its reserved amount, marked `recovered`, before reserving anything. Under
+  the monthly cap that amount counts as spent, once. An interrupted run
+  (SIGINT, SIGTERM or SIGHUP, as a cancelled workflow sends) stops its measurement
+  process and may settle itself, counting a check in flight at its bound.
+  Otherwise the next run recovers it;
 - publishes, or exits 1 and leaves the last record in force; a price-only
   change updates `snapshot.json` alone, and a raised ceiling is never
   published.

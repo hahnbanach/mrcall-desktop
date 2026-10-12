@@ -6,12 +6,29 @@ USD as canonical decimal strings (`rm.snapshot.text`), never floats.
 **`ledger.json`** (data branch, `v1/`) holds the job's paid calls by month
 (UTC, `YYYY-MM`): `{"schema": 1, "months": {"2026-10": [run, ...]}}`, one row
 per run that paid for anything: `run` (its id), `reserved_usd`, `opened_at`,
-`spent_usd` and `settled_at` (null until settled) and `calls` (filled at
-settlement: kind, model, role, why, bound, spend, outcome). A run pushes its
-reservation before its first paid call and settles it after; a month's use
-is what its runs spent, or reserved where a run never settled (it stopped
-mid-way: its outcome is uncertain, so its whole reservation stays counted,
-as the engine's own ledger keeps an uncertain hold).
+`spent_usd` and `settled_at` (null until settled) and `calls` (kind, model,
+role, why, bound, spend, outcome). A month's use is what its runs spent, or
+reserved where a run never settled (it stopped mid-way: its outcome is
+uncertain, so its whole reservation stays counted, as the engine's own
+ledger keeps an uncertain hold).
+
+**The reservation follows the run, check by check** (`Spend`). Before a paid
+check the run raises its reservation to exactly what it has spent plus that
+check's bound, and pushes it; after the check it records the call, lowers
+the reservation to what it has spent, and pushes that (`checkpoint`, with
+the check's results: `model_table_results.py`). So at every moment the
+pushed reservation is the run's recorded spend plus the bound of the one
+check it may have in flight, and a run killed at any point leaves on the
+data branch an honest upper bound of what it spent.
+
+**Recovery** (`recover`). A run finds on the ledger any earlier run still
+open (`settled_at` null) — it was killed, or its settlement push failed —
+and, before reserving anything, settles it at its reserved amount, marked
+`recovered` (with `recovered_by`, the run that settled it), its recorded
+calls kept. The job reads no local journal to settle for less: in CI the
+journals are gone, and the reservation above already is the recorded spend
+plus one check's bound. A recovered row is settled, so it counts once (its
+`spent_usd`) and is never recovered again.
 
 **`measured.json`** (data branch) is the engine's `roles/measured.json` as
 the job last used it: the measurement's file, with each result the job adds
@@ -112,6 +129,24 @@ def settle(ledger: dict, month: str, run: str, spent: Decimal, calls: list, at: 
     return out
 
 
+def recover(ledger: dict, run: str, at: str) -> tuple[dict, list[str]]:
+    """A copy of `ledger` with every open row but `run`'s settled at its
+    reserved amount, marked recovered (module docstring), and a line per row."""
+    out, lines = copy.deepcopy(ledger), []
+    for month, rows in out["months"].items():
+        for row in rows:
+            if row["run"] == run or row.get("settled_at") is not None:
+                continue
+            row.update(spent_usd=row["reserved_usd"], settled_at=at, recovered=True)
+            row["recovered_by"] = run
+            calls = len(row.get("calls") or [])
+            lines.append(
+                f"run {row['run']} ({month}) was never settled: settled at its reserved "
+                f"USD {row['reserved_usd']}, recovered ({calls} calls recorded)"
+            )
+    return out, lines
+
+
 def dump(doc: dict) -> str:
     """The file layout of the job's own records: sorted keys, two-space indent."""
     return json.dumps(doc, indent=2, sort_keys=True, ensure_ascii=False) + "\n"
@@ -119,43 +154,62 @@ def dump(doc: dict) -> str:
 
 class Spend:
     """A run's spending under the monthly cap (`model_table_job.py`, step 4):
-    its reservation in `ledger.json`, pushed through `edges.push` before any
-    call it does not cover, and its settlement."""
+    its reservation in `ledger.json`, raised and pushed through `edges.push`
+    before each paid check, lowered and pushed after it (module docstring),
+    and its settlement."""
 
     def __init__(self, ledger: dict, now, cap: Decimal, edges):
         self.ledger, self.cap, self.edges = ledger, cap, edges
         self.month, self.run = now.strftime("%Y-%m"), now.strftime(STAMP)
         self.before = month_used(ledger, self.month, skip=self.run)
         self.reserved = self.consumed = Decimal(0)
+        self.peak, self.opened = Decimal(0), False
+        self.inflight = Decimal(0)  # the bound of a check admitted and not yet recorded
         self.calls: list[dict] = []
 
-    def admit(self, bound: Decimal, pending: Decimal) -> str | None:
-        """None when a call of `bound` may be sent — the reservation covering
-        it pushed first — else why it may not."""
+    def admit(self, bound: Decimal) -> str | None:
+        """None when a call of `bound` may be sent — the reservation of what
+        the run spent plus `bound` pushed first — else why it may not."""
         room = self.cap - self.before
         need = self.consumed + bound
         if need > room:
             left = usd(max(room - self.consumed, Decimal(0)))
             return f"the monthly cap of USD {usd(self.cap)} leaves USD {left}"
-        if need > self.reserved:
-            target = min(room, max(need, self.consumed + pending))
+        if need != self.reserved or not self.opened:
             at = self.edges.now().strftime(STAMP)
-            ledger = reserve(self.ledger, self.month, self.run, target, at)
-            message = f"model-table: run {self.run} reserves USD {usd(target)}"
+            ledger = reserve(self.ledger, self.month, self.run, need, at)
+            message = f"model-table: run {self.run} reserves USD {usd(need)}"
             self.edges.push({"ledger.json": dump(ledger)}, message)
-            self.ledger, self.reserved = ledger, target
+            self.ledger, self.reserved, self.opened = ledger, need, True
+            self.peak = max(self.peak, need)
+        self.inflight = bound
         return None
 
-    def spent(self, call: dict, amount: Decimal) -> None:
+    def spent(self, call: dict, amount: Decimal) -> str:
+        """Record a finished call; the ledger to push now (`checkpoint`): the
+        call in the run's row, the reservation lowered to what it spent."""
         self.consumed += amount
         self.calls.append(call)
+        self.inflight = Decimal(0)
+        at = self.edges.now().strftime(STAMP)
+        ledger = reserve(self.ledger, self.month, self.run, self.consumed, at)
+        _row(ledger, self.month, self.run)["calls"] = copy.deepcopy(self.calls)
+        self.ledger, self.reserved = ledger, self.consumed
+        return dump(ledger)
 
     def settled(self) -> str | None:
-        """The ledger with this run settled, or None when it reserved nothing."""
-        if not self.reserved:
+        """The ledger with this run settled, or None when it reserved nothing.
+        A check interrupted in flight (the run's process was interrupted while
+        waiting for it) is settled at its bound: what it spent is unknown."""
+        if not self.opened:
             return None
         at = self.edges.now().strftime(STAMP)
-        doc = settle(self.ledger, self.month, self.run, self.consumed, self.calls, at)
+        calls = list(self.calls)
+        if self.inflight:
+            what = f"a check interrupted in flight, counted at its bound USD {usd(self.inflight)}"
+            calls.append({"outcome": what, "spent_usd": usd(self.inflight)})
+        spent = self.consumed + self.inflight
+        doc = settle(self.ledger, self.month, self.run, spent, calls, at)
         return dump(doc)
 
     def summary(self) -> dict:
@@ -163,8 +217,8 @@ class Spend:
             "month": self.month,
             "cap": usd(self.cap),
             "used_before": usd(self.before),
-            "reserved": usd(self.reserved),
-            "spent": usd(self.consumed),
+            "reserved": usd(self.peak),
+            "spent": usd(self.consumed + self.inflight),
         }
 
 
@@ -213,12 +267,15 @@ def report(s: dict) -> str:
     if spend:
         lines.append(
             f"- Spend {spend['month']}: USD {spend['used_before']} used before this run, "
-            f"USD {spend['reserved']} reserved and USD {spend['spent']} spent by it, "
+            f"at most USD {spend['reserved']} reserved and USD {spend['spent']} spent by it, "
             f"monthly cap USD {spend['cap']}"
         )
+    if s.get("deadline"):
+        late = sum("the run's deadline" in why for _, why in s.get("deferred", []))
+        lines.append(f"- Deadline {s['deadline']}: {late} checks deferred by it")
     sections = (
         ("Problems (nothing published)", "problems"),
-        ("Flags: smokes settled above their expected spend", "flags"),
+        ("Flags: smokes settled above their expected spend; roles waiting on a stop", "flags"),
         ("Notes", "notes"),
     )
     for title, key in sections:

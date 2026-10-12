@@ -3,13 +3,8 @@
 `model_table_job.py` takes each of these as a plain callable, so its tests
 replace every one with a fake and nothing is paid or pushed.
 
-- `DataBranch`: the checkout of the `model-table` data branch. `read` returns
-  the bytes of its `v1/` files (None for one it lacks); `push` writes files
-  under `v1/`, commits them and pushes the branch with the credentials the
-  checkout holds (the workflow token in CI). A push the remote refuses (a
-  checkout behind the branch) raises, so a run never pays after a
-  reservation it could not record. One publisher at a time: the workflow's
-  `concurrency`, and before the desktop merge only the coordinator.
+- `DataBranch` (`model_table_branch.py`): the checkout of the `model-table`
+  data branch: `read`, `push`, and `lock`, held for the whole run.
 - `Smoke`: the paid smoke of one model on the engine's real transport — the
   two-turn tool loop of `model_smoke.py`, through its own disposable profile
   and its own journal, which admits each call against the engine's bound
@@ -36,7 +31,12 @@ replace every one with a fake and nothing is paid or pushed.
   `MNEMONIC_CORPUS_EXECUTE=1` only on a paid run. What a measurement spent is
   what its own ledger says: S4b's receipts plus the bound of every missing
   receipt and open intent, or the corpus record's `totals_usd` (settled, held,
-  open intents; the whole cap when the runner wrote no record). That settled
+  open intents). A corpus run that wrote no record (stopped at its time
+  limit, or killed) is charged from its intents journal
+  (`profile/corpus-intents.jsonl`: each settled case's cost plus the bound of
+  every open one), and its whole cap only when that journal cannot be read.
+  A measurement process runs under its time limit (`model_table_process`);
+  one stopped there raises `Incomplete` with `timed_out`. That settled
   spend is what the job charges to the month, never an estimate. The rows are
   read with S4b's readers (`derive_thresholds.corpus_rows` for a corpus
   record; it refuses a dry one) and aggregated as `derive_thresholds` does
@@ -58,12 +58,14 @@ replace every one with a fake and nothing is paid or pushed.
 from __future__ import annotations
 
 import importlib.util
+import contextlib
 import json
+import logging
 import os
 import subprocess
 import sys
 import tempfile
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from decimal import Decimal
 from pathlib import Path
@@ -71,11 +73,15 @@ from typing import Callable
 
 import derive_thresholds as dt
 import measurement_common as common
+import model_table_deadline as deadline_of
 import model_table_decide as decide
 import model_table_measured as measured_of
 import resolve_models as rm
+from model_table_branch import FILES, DataBranch
+from model_table_process import limited_run, sweep_keys
 
-FILES = ("table.json", "snapshot.json", "measured.json", "ledger.json")
+logger = logging.getLogger(__name__)
+__all__ = ["FILES", "DataBranch", "limited_run"]
 TRANSPORT = "openrouter"
 KEY = "OPENROUTER_API_KEY"
 MICRO = Decimal(10) ** 6
@@ -98,41 +104,7 @@ class Edges:
     project: Callable[[str, str, dict], object]
     preflight: Callable[[], None]
     now: Callable[[], datetime]
-
-
-class DataBranch:
-    """The data branch's checkout (see the module docstring)."""
-
-    def __init__(self, root: Path, branch: str = "model-table", remote: str = "origin"):
-        self.root, self.branch, self.remote = Path(root), branch, remote
-
-    def _git(self, *args: str) -> str:
-        done = subprocess.run(
-            ["git", "-C", str(self.root), *args], capture_output=True, text=True, check=False
-        )
-        if done.returncode != 0:
-            raise RuntimeError(
-                f"git {args[0]} failed: {done.stderr.strip() or done.stdout.strip()}"
-            )
-        return done.stdout
-
-    def read(self) -> dict:
-        """`{name: bytes or None}` for the `v1/` files."""
-        folder = self.root / "v1"
-        return {n: (folder / n).read_bytes() if (folder / n).is_file() else None for n in FILES}
-
-    def push(self, files: dict, message: str) -> None:
-        """Write `files` (`{name: text}`) under `v1/`, commit and push; no commit
-        when nothing changed."""
-        folder = self.root / "v1"
-        folder.mkdir(exist_ok=True)
-        for name, text in files.items():
-            rm.write_atomically(folder / name, text)
-        self._git("add", "--", *(f"v1/{name}" for name in files))
-        if not self._git("diff", "--cached", "--name-only").strip():
-            return
-        self._git("commit", "-q", "-m", message)
-        self._git("push", "-q", self.remote, f"HEAD:{self.branch}")
+    lock: Callable[[], object] = field(default=contextlib.nullcontext)
 
 
 class Smoke:
@@ -177,11 +149,30 @@ class Smoke:
 
 class Incomplete(RuntimeError):
     """A measurement that gave no result (module docstring); `spent_usd` is
-    what its own ledger says it spent, charged to the month all the same."""
+    what its own ledger says it spent, charged to the month all the same.
+    `timed_out`: it was stopped at its time limit, for `roles`."""
 
-    def __init__(self, message: str, spent_usd: Decimal):
+    def __init__(self, message: str, spent_usd: Decimal, roles=(), timed_out=False):
         super().__init__(message)
-        self.spent_usd = spent_usd
+        self.spent_usd, self.roles, self.timed_out = spent_usd, tuple(roles), timed_out
+
+
+def corpus_intents_spend(path: Path) -> Decimal | None:
+    """What a corpus run's intents journal says it spent — each settled case
+    at its cost, each open one at its bound — or None when it cannot be read."""
+    if not path.is_file():
+        return None
+    try:
+        rows = _lines(path)
+        settled = {r["intent_id"]: r for r in rows if r.get("settled")}
+        total = 0
+        for row in rows:
+            if "case_id" in row:
+                done = settled.get(row["intent_id"])
+                total += int(done["cost_micro_usd"] if done else row["bound_micro_usd"])
+    except (OSError, ValueError, KeyError, TypeError, AttributeError):
+        return None
+    return Decimal(total) / MICRO
 
 
 def _lines(path: Path) -> list[dict]:
@@ -221,7 +212,7 @@ class Measurement:
 
     def __init__(self, work, cap, reference, *, dry=False, python=sys.executable, run=None):
         self.work, self.cap, self.reference = Path(work), Decimal(cap), reference
-        self.dry, self.python, self.run = dry, python, run or subprocess.run
+        self.dry, self.python, self.run = dry, python, run or limited_run
         self.count = 0
         # Each process started: its argv and its corpus variables (never the key).
         self.commands: list[tuple[list[str], dict]] = []
@@ -284,11 +275,28 @@ class Measurement:
             return self._corpus(model, scores, out)
         return self._harness(role, model, scores, out)
 
-    def _start(self, command: list[str], env: dict):
+    def _start(self, command: list[str], env: dict, role: str):
+        """Run one measurement process under its time limit
+        (`model_table_deadline.limit_minutes`): stopped there, it is a
+        process that failed, and what its ledger recorded is charged."""
         self.commands.append((command, {k: v for k, v in env.items() if k.startswith(CORPUS_ENV)}))
-        return self.run(
-            command, cwd=str(rm.ENGINE), env=env, capture_output=True, text=True, check=False
-        )
+        minutes = deadline_of.limit_minutes("measure", role)
+        try:
+            return self.run(
+                command,
+                cwd=str(rm.ENGINE),
+                env=env,
+                capture_output=True,
+                text=True,
+                check=False,
+                timeout=minutes * 60,
+            )
+        except subprocess.TimeoutExpired as stopped:
+            logger.debug(f"[model-table] measurement {role} stopped after {minutes} min")
+            why = f"stopped at its time limit of {minutes} min"
+            done = subprocess.CompletedProcess(stopped.cmd, -2, "", why)
+            done.timed_out = True
+            return done
 
     def _result(self, role: str, rows: list[dict], cases: list[str], spent: Decimal) -> dict:
         """The arm's result from its rows of `role`, or Incomplete (module docstring)."""
@@ -305,13 +313,16 @@ class Measurement:
         (out / "arms.json").write_text(json.dumps([self._arm(role, model, scores)]), "utf-8")
         command = [self.python, str(DRIVER), "--role", role, "--arms", str(out / "arms.json")]
         command += ["--out", str(out), "--cap", str(self.cap)] + (["--dry-run"] if self.dry else [])
-        done = self._start(command, _environment({}))
+        # Its disposable profile (and key file) is made under `out`, where
+        # `model_table_process.sweep_keys` finds it should the job be killed.
+        done = self._start(command, _environment({"TMPDIR": str(out)}), role)
         try:  # receipts, plus the bound of every missing receipt and open intent
             spent = Decimal(Ledger(out / "ledger.jsonl", 0).committed()) / MICRO
         except LedgerCorrupt:  # what it dispatched cannot be read: counted in full
             spent = self.cap
         if done.returncode != 0:
-            raise Incomplete(f"{role} on {model}: {_why(done)}", spent)
+            stopped = getattr(done, "timed_out", False)
+            raise Incomplete(f"{role} on {model}: {_why(done)}", spent, (role,), stopped)
         rows = [r for r in _lines(out / "results.jsonl") if (r["role"], r["arm"]) == (role, model)]
         cases = [case["id"] for case in common.load_document(role)["cases"]]
         return {"results": {role: self._result(role, rows, cases, spent)}, "spent_usd": spent}
@@ -341,12 +352,16 @@ class Measurement:
             contract["MNEMONIC_CORPUS_EXECUTE"] = "1"
         command = [self.python, "-m", "pytest", "-q", "-p", "no:cacheprovider", CORPUS_TESTS]
         try:
-            done = self._start(command, _environment(contract))
+            done = self._start(command, _environment(contract), common.CORPUS_ROLES[0])
         finally:
             (profile / ".env").unlink(missing_ok=True)  # the key's one copy on disk
         path = record / f"{CORPUS_PREFIX}-manifest.json"
-        if not path.is_file():  # the runner's ledger is unread: its whole cap counts
-            raise Incomplete(f"the corpus runner wrote no record: {_why(done)}", self.cap)
+        if not path.is_file():  # its intents say what it spent; unreadable: its whole cap
+            spent = corpus_intents_spend(profile / "corpus-intents.jsonl")
+            spent = self.cap if spent is None else spent
+            why = f"the corpus runner wrote no record: {_why(done)}"
+            stopped = getattr(done, "timed_out", False)
+            raise Incomplete(why, spent, common.CORPUS_ROLES, stopped)
         manifest = json.loads(path.read_text(encoding="utf-8"))
         spent = sum((Decimal(str(v)) for v in manifest["totals_usd"].values()), Decimal(0))
         if self.dry and manifest.get("mode") == "dry":
@@ -375,9 +390,18 @@ def default(data: Path, fixture: Path | None, work: Path | None, budget: Decimal
     """The real edges: the data branch's checkout `data`, the live read (or
     `fixture`), the paid checks journaled under `work` (a temporary directory
     when None, created private when missing: the first paid check may be a
-    measurement), the smoke profile's daily budget `budget`."""
+    measurement), the smoke profile's daily budget `budget`.
+
+    Each run journals in a directory of its own, `work/run-<start>-*`: the
+    smokes' journals are numbered per run, and a run reusing an earlier
+    run's journal would count that run's spend as its own. A key file an
+    earlier run left in a measurement profile under `work` (it was killed
+    before deleting it) is deleted first (`model_table_process.sweep_keys`)."""
     work = Path(work or tempfile.mkdtemp(prefix="model-table-job-"))
     work.mkdir(mode=0o700, parents=True, exist_ok=True)
+    sweep_keys(work)
+    start = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    work = Path(tempfile.mkdtemp(prefix=f"run-{start}-", dir=work))
     branch = DataBranch(data)
     reference = json.loads(rm.REQUIREMENTS.read_text(encoding="utf-8"))["reference"]
     smoke = Smoke(work, decide.SMOKE_CAP_USD, budget)
@@ -398,4 +422,5 @@ def default(data: Path, fixture: Path | None, work: Path | None, budget: Decimal
         project=measure.project,
         preflight=preflight,
         now=lambda: datetime.now(timezone.utc),
+        lock=branch.lock,
     )

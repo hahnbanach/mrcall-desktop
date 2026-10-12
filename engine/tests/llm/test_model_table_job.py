@@ -96,7 +96,9 @@ def test_a_changed_pick_is_published_only_after_its_smoke_and_measurement_pass(r
     assert rig.fake.measured == [("CHAT", GENIUS), ("TASK_DETECTION", GENIUS)]
     assert rig.ranking("economy", "CHAT") == [GENIUS, SONNET, QWEN, GLM, CHEAP]
     assert rig.ranking("economy", "TASK_DETECTION") == [GLM, QWEN, GENIUS, SONNET]
-    assert rig.pushed()[-1] == ["ledger.json", "measured.json", "snapshot.json", "table.json"]
+    # The publication carries the results, and empties results.json of them.
+    published = ["ledger.json", "measured.json", "results.json", "snapshot.json", "table.json"]
+    assert rig.pushed()[-1] == published and rig.doc("results.json")["results"] == []
     table = rig.doc("table.json")
     job.rm.gates.check_table(table, rig.req, rig.doc("snapshot.json"))
     assert table["resolved_at"] == "2026-10-14T05:17:30Z"
@@ -196,7 +198,8 @@ def test_the_monthly_cap_stops_the_run_before_a_paid_call(rig, settled):
     # An earlier run that never settled counts at its whole reservation.
     assert rig.run(ledger=ledger_with("9.98", settled)) == 0
     assert rig.fake.smoked == [] and rig.fake.measured == []
-    assert rig.pushed() == [["snapshot.json"]]  # no reservation; the record untouched
+    # No reservation; the record untouched. An earlier run left open is recovered first.
+    assert rig.pushed() == [["ledger.json"]] * (not settled) + [["snapshot.json"]]
     assert rig.fake.files["table.json"] == rig.files["table.json"]
     assert f"smoke {GENIUS}: the monthly cap of USD 10 leaves USD 0.02" in rig.report
 
@@ -284,7 +287,9 @@ def test_a_ranked_models_metadata_change_is_smoked_before_publishing(rig, field)
     assert rig.run() == 0
     assert rig.fake.smoked == [SONNET] and rig.fake.measured == []
     assert rig.fake.files["table.json"] == rig.files["table.json"]
-    assert rig.pushed() == [["ledger.json"], ["ledger.json", "snapshot.json"]]
+    # Reserved, the smoke recorded (its outcome cached), then published with the settlement.
+    recorded = ["ledger.json", "results.json"]
+    assert rig.pushed() == [["ledger.json"], recorded, ["ledger.json", "snapshot.json"]]
     assert f"metadata of ranked {SONNET}: models {field}" in rig.report
 
 
@@ -305,7 +310,8 @@ def test_a_metadata_change_the_cap_leaves_unsmoked_publishes_nothing(rig):
 def test_an_error_is_no_result_counts_at_its_bound_and_never_replaces_a_pick(rig):
     rig.world.models[SONNET]["efforts"] = ["max"]
     assert rig.run(smoke_errors={SONNET}) == 1  # left unsmoked: nothing published
-    assert rig.pushed() == [["ledger.json"], ["ledger.json"]]  # reserved, then settled alone
+    # Reserved, the error recorded (an uncertain smoke, cached), then settled alone.
+    assert rig.pushed() == [["ledger.json"], ["ledger.json", "results.json"], ["ledger.json"]]
     assert rig.fake.files["table.json"] == rig.files["table.json"]
     settled = rig.doc("ledger.json")["months"]["2026-10"][0]
     assert settled["spent_usd"] == "0.2" and "error (ConnectionError)" in str(settled["calls"])
@@ -410,6 +416,7 @@ def test_without_a_published_or_reviewed_table_the_run_stops(rig):
         ("ledger.json", b'{"schema": 2}', "not a schema 1 ledger"),
         ("ledger.json", b'{"schema": 1, "months": {"2026-10": [{"run": "x"}]}}', "reserved_usd"),
         ("table.json", b"<html>502</html>", "not JSON"),
+        ("results.json", b'{"schema": 1, "results": {}}', "results must be a list"),
     ],
 )
 def test_a_record_the_job_cannot_read_stops_it_before_anything(rig, name, content, says):

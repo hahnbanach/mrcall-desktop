@@ -131,7 +131,13 @@ three memory roles under economy. The measurement
 ([record](../../docs/evaluations/2026-10-11-role-measurement.md)) spent USD
 14.15 settled, 15.03 counted, of 20; every satisfice role is measured-only.
 The daily job (`scripts/model_table_job.py`, `model-resolution.yml`, 05:17
-UTC, USD 10 a month) has not run from CI yet. The workflow carries a
+UTC, USD 10 a month) has not run from CI yet. Its first live run, local on
+2026-10-12, was killed by an outer timeout after 7000 s. It published
+nothing and left reservation `2026-10-12T14:13:04Z` (USD 4.146243) open in
+`v1/ledger.json`. Its journals show USD 2.155 spent, counting open intents
+at their bound. S5b adds the run's deadline (90 min), pushes of each check's
+call and results (`v1/results.json`) as the check ends, and recovery of an
+open reservation at its reserved amount. The workflow carries a
 TEMPORARY push trigger on the milestone branch for one proof run; it is
 removed before the merge to `main`.
 
