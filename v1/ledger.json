@@ -870,10 +870,21 @@
             "role": null,
             "spent_usd": "0.001554",
             "why": "ranking of economy / MEMORY_EXTRACT / ranking"
+          },
+          {
+            "at": "2026-10-12T19:02:04Z",
+            "bound_usd": "0.2",
+            "check": "smoke openai/gpt-6-luna",
+            "kind": "smoke",
+            "model": "openai/gpt-6-luna",
+            "outcome": "passed",
+            "role": null,
+            "spent_usd": "0.000043",
+            "why": "ranking of economy / MEMORY_EXTRACT / ranking"
           }
         ],
         "opened_at": "2026-10-12T17:44:44Z",
-        "reserved_usd": "1.410552",
+        "reserved_usd": "1.210595",
         "run": "2026-10-12T17:43:39Z",
         "settled_at": null,
         "spent_usd": null
