@@ -1177,6 +1177,14 @@
       "model": "qwen/qwen3-coder-30b-a3b-instruct",
       "outcome": "passed",
       "run": "2026-10-12T17:43:39Z"
+    },
+    {
+      "at": "2026-10-12T19:00:37Z",
+      "detail": "",
+      "metadata_sha256": "c86778a8db4d836d3d55aee445713105d2921008ac8e5603f85e642c70c19d69",
+      "model": "stepfun/step-3.5-flash",
+      "outcome": "passed",
+      "run": "2026-10-12T17:43:39Z"
     }
   ],
   "stops": [
