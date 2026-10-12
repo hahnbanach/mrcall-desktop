@@ -944,6 +944,14 @@
       "model": "qwen/qwen3.8-max-0902",
       "outcome": "passed",
       "run": "2026-10-12T17:43:39Z"
+    },
+    {
+      "at": "2026-10-12T18:46:35Z",
+      "detail": "",
+      "metadata_sha256": "0141ccb89b663d464fe28776acceb2176684affa1b3a2a457ff0c1ea7d42b82b",
+      "model": "x-ai/grok-4.6",
+      "outcome": "passed",
+      "run": "2026-10-12T17:43:39Z"
     }
   ],
   "stops": [
