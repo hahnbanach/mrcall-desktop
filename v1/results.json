@@ -1385,6 +1385,14 @@
       "model": "openai/gpt-5.6-luna",
       "outcome": "passed",
       "run": "2026-10-12T17:43:39Z"
+    },
+    {
+      "at": "2026-10-12T19:04:08Z",
+      "detail": "",
+      "metadata_sha256": "860334dbaa2590d0a72353251ffedbe6ee1a8fcf01dfc6b46c332f83b518e873",
+      "model": "minimax/minimax-m3",
+      "outcome": "passed",
+      "run": "2026-10-12T17:43:39Z"
     }
   ],
   "stops": [
