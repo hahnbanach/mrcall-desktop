@@ -661,10 +661,21 @@
             "role": null,
             "spent_usd": "0.000301",
             "why": "ranking of economy / MNEMONIC / ranking"
+          },
+          {
+            "at": "2026-10-12T18:50:49Z",
+            "bound_usd": "2",
+            "check": "MNEMONIC on google/gemini-3.8-flash",
+            "kind": "measure",
+            "model": "google/gemini-3.8-flash",
+            "outcome": "MNEMONIC: passed; MEMORY_EXTRACT: passed; MEMORY_MERGE: passed",
+            "role": "MNEMONIC",
+            "spent_usd": "0.046166",
+            "why": "ranking of economy / MNEMONIC / ranking"
           }
         ],
         "opened_at": "2026-10-12T17:44:44Z",
-        "reserved_usd": "2.953126",
+        "reserved_usd": "0.999292",
         "run": "2026-10-12T17:43:39Z",
         "settled_at": null,
         "spent_usd": null
