@@ -232,10 +232,21 @@
             "role": null,
             "spent_usd": "0.000037",
             "why": "pick of economy / TASK_DETECTION / ranking"
+          },
+          {
+            "at": "2026-10-12T17:54:53Z",
+            "bound_usd": "2",
+            "check": "TASK_DETECTION on mistralai/ministral-8b-2512",
+            "kind": "measure",
+            "model": "mistralai/ministral-8b-2512",
+            "outcome": "TASK_DETECTION: passed",
+            "role": "TASK_DETECTION",
+            "spent_usd": "0.003522",
+            "why": "pick of economy / TASK_DETECTION / ranking"
           }
         ],
         "opened_at": "2026-10-12T17:44:44Z",
-        "reserved_usd": "2.263353",
+        "reserved_usd": "0.266875",
         "run": "2026-10-12T17:43:39Z",
         "settled_at": null,
         "spent_usd": null
