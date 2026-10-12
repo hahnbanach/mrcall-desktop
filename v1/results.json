@@ -1273,6 +1273,14 @@
       "model": "mistralai/mistral-small-2603",
       "outcome": "failed",
       "run": "2026-10-12T17:43:39Z"
+    },
+    {
+      "at": "2026-10-12T19:02:28Z",
+      "detail": "",
+      "metadata_sha256": "31c4466e903369fb134bf94d108edba3d9824121c2fc38b56571ba072adf20b3",
+      "model": "qwen/qwen3-vl-30b-a3b-instruct",
+      "outcome": "passed",
+      "run": "2026-10-12T17:43:39Z"
     }
   ],
   "stops": [
