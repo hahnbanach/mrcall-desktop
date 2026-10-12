@@ -46,8 +46,8 @@ import logging
 import os
 import tempfile
 import threading
+from collections.abc import Callable
 from pathlib import Path
-from typing import Callable, Optional
 
 from . import catalogue, gates, table
 
@@ -62,7 +62,7 @@ TIMEOUT = 15.0
 
 # A GET of `url` sent with ``If-None-Match: etag`` (None: no header) ->
 # (status, body when 200, the response's ETag).
-Fetch = Callable[[str, Optional[str]], "tuple[int, bytes | None, str | None]"]
+Fetch = Callable[[str, str | None], "tuple[int, bytes | None, str | None]"]
 
 
 def http_fetch(url: str, etag: str | None) -> tuple[int, bytes | None, str | None]:

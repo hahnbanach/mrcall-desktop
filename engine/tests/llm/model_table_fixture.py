@@ -33,7 +33,7 @@ from __future__ import annotations
 import copy
 import hashlib
 import json
-from functools import lru_cache
+from functools import cache, lru_cache
 from pathlib import Path
 
 from zylch.llm.roles import candidates, gates, snapshot
@@ -128,7 +128,7 @@ def text(name: str, document: dict) -> str:
     return gates.dump(document, 2 if name == "snapshot.json" else 4) + "\n"
 
 
-@lru_cache(maxsize=None)
+@cache
 def _committed(name: str) -> str:
     return (FIXTURE / name).read_text(encoding="utf-8")
 

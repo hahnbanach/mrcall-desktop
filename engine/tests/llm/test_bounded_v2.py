@@ -19,14 +19,14 @@ from types import SimpleNamespace
 import httpx
 import pytest
 
-from zylch.llm.bounded_proxy import V1, BoundedProxyClient, PROTOCOL, digest, validate_receipt
+from zylch.llm.bounded_proxy import PROTOCOL, V1, BoundedProxyClient, digest, validate_receipt
 from zylch.llm.budget import BudgetError, budget_snapshot
 from zylch.llm.client import LLMClient
 from zylch.storage import database
 from zylch.storage.models import LlmBillingAuthorization, LlmReservation, LlmUsage
 
 SNAPSHOT = hashlib.sha256(b"priced with").hexdigest()
-ARGS = dict(messages=[{"role": "user", "content": "synthetic"}], max_tokens=20)
+ARGS = {"messages": [{"role": "user", "content": "synthetic"}], "max_tokens": 20}
 
 
 @pytest.fixture
@@ -52,20 +52,20 @@ def server(*, quote_edit=None, receipt_edit=None):
         body = json.loads(request.content)
         bodies.append((request.url.path.rsplit("/", 1)[1], body))
         if request.url.path.endswith("/quote"):
-            quote = dict(
-                protocol=body.get("protocol", V1),
-                currency="USD",
-                account_id="account",
-                business_id="business",
-                payload_hash=digest(body["request"]),
-                tariff_version="test-tariff",
-                model=body["request"]["model"],
-                credit_value_micro_usd=11000,
-                markup_factor="1.5",
-                max_credits=2,
-                max_debit_micro_usd=22000,
-                snapshot_version=SNAPSHOT,
-            )
+            quote = {
+                "protocol": body.get("protocol", V1),
+                "currency": "USD",
+                "account_id": "account",
+                "business_id": "business",
+                "payload_hash": digest(body["request"]),
+                "tariff_version": "test-tariff",
+                "model": body["request"]["model"],
+                "credit_value_micro_usd": 11000,
+                "markup_factor": "1.5",
+                "max_credits": 2,
+                "max_debit_micro_usd": 22000,
+                "snapshot_version": SNAPSHOT,
+            }
             if quote_edit:
                 quote_edit(quote)
             quote["quote_hash"] = digest({k: v for k, v in quote.items() if k != "quote_hash"})
@@ -155,18 +155,18 @@ def test_a_receipt_must_repeat_the_quote_s_protocol_and_snapshot(ledger, edit):
 
 
 def test_a_reservation_quoted_in_v1_before_an_upgrade_still_settles():
-    quote = dict(
-        protocol=V1,
-        currency="USD",
-        account_id="account",
-        business_id="business",
-        payload_hash="p",
-        tariff_version="t",
-        model="claude-sonnet-5",
-        credit_value_micro_usd=11000,
-        max_credits=2,
-        max_debit_micro_usd=22000,
-    )
+    quote = {
+        "protocol": V1,
+        "currency": "USD",
+        "account_id": "account",
+        "business_id": "business",
+        "payload_hash": "p",
+        "tariff_version": "t",
+        "model": "claude-sonnet-5",
+        "credit_value_micro_usd": 11000,
+        "max_credits": 2,
+        "max_debit_micro_usd": 22000,
+    }
     quote["quote_hash"] = digest(quote)
     reservation = SimpleNamespace(id="r-1", reserved_micro_usd=22000)
     receipt = {

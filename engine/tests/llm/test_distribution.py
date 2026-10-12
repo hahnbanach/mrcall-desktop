@@ -113,7 +113,7 @@ def test_a_downloaded_table_and_snapshot_are_used_and_cached_in_the_profile(buil
     assert table.document() == newer_table
     assert table.pick("economy", "CHAT", "openrouter") == fixture.SONNET5  # reversed
     assert catalogue.layers() == (newer_snapshot, build["snapshot"])
-    assert catalogue.rates(fixture.K3, "openrouter") == (Decimal("2.7"), Decimal("14"))
+    assert catalogue.rates(fixture.K3, "openrouter") == (Decimal("2.7"), Decimal(14))
     # Cached in the profile's own directory, and only there.
     files = cached(profile)
     assert set(files) == {"table.json", "snapshot.json", "etags.json"}
@@ -280,7 +280,7 @@ def test_a_newer_snapshot_keeps_the_one_it_replaces_as_a_layer(build, profile):
     branch.files["snapshot.json"] = (second, '"s2"')
     assert distribution.refresh(profile, fetch=branch)["snapshot"] == "downloaded"
     assert catalogue.layers() == (second, first, build["snapshot"])
-    assert catalogue.rates(fixture.K3, "openrouter")[1] == Decimal("15")  # the newest first
+    assert catalogue.rates(fixture.K3, "openrouter")[1] == Decimal(15)  # the newest first
     # The older copy keeps a price for an id only it knows (brief D5).
     assert catalogue.rates(fixture.OPUS5, "openrouter") == (Decimal(5), Decimal(25))
     assert catalogue.rates("claude-opus-5", "direct") == (Decimal(5), Decimal(25))
@@ -329,7 +329,7 @@ def test_start_loads_now_and_downloads_in_the_background(build, monkeypatch, pro
 
 
 def test_activating_a_profile_starts_the_distribution_on_its_directory(monkeypatch, tmp_path):
-    import zylch.config as config
+    from zylch import config
     from zylch.cli import profiles
 
     started = []

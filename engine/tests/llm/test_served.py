@@ -179,7 +179,7 @@ def test_capabilities_are_read_with_the_v2_marker_and_a_five_second_timeout(monk
         def __init__(self, **kwargs):
             seen.update(kwargs)
             answer = listing((fixture.K3, "openrouter"))
-            handler = lambda request: (  # noqa: E731
+            handler = lambda request: (
                 seen.update(url=str(request.url)) or httpx.Response(200, json=answer)
             )
             super().__init__(transport=httpx.MockTransport(handler))
