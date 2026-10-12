@@ -287,10 +287,21 @@
             "role": "SYNC_ANALYSIS",
             "spent_usd": "0.000364",
             "why": "pick of economy / SYNC_ANALYSIS / ranking"
+          },
+          {
+            "at": "2026-10-12T17:58:06Z",
+            "bound_usd": "2",
+            "check": "SYNC_ANALYSIS on inclusionai/ling-3.0-flash-fin",
+            "kind": "measure",
+            "model": "inclusionai/ling-3.0-flash-fin",
+            "outcome": "SYNC_ANALYSIS: failed",
+            "role": "SYNC_ANALYSIS",
+            "spent_usd": "0.00062",
+            "why": "pick of economy / SYNC_ANALYSIS / ranking"
           }
         ],
         "opened_at": "2026-10-12T17:44:44Z",
-        "reserved_usd": "2.268022",
+        "reserved_usd": "0.268642",
         "run": "2026-10-12T17:43:39Z",
         "settled_at": null,
         "spent_usd": null
