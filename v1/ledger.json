@@ -408,10 +408,21 @@
             "role": "SYNC_ANALYSIS",
             "spent_usd": "0.003128",
             "why": "pick of economy / SYNC_ANALYSIS / ranking"
+          },
+          {
+            "at": "2026-10-12T18:05:17Z",
+            "bound_usd": "0.2",
+            "check": "smoke amazon/nova-lite-v1",
+            "kind": "smoke",
+            "model": "amazon/nova-lite-v1",
+            "outcome": "failed: BudgetError: OpenRouter request failed (HTTP 404); no automatic retry.",
+            "role": null,
+            "spent_usd": "0.000665",
+            "why": "pick of economy / SYNC_ANALYSIS / ranking"
           }
         ],
         "opened_at": "2026-10-12T17:44:44Z",
-        "reserved_usd": "0.481154",
+        "reserved_usd": "0.281819",
         "run": "2026-10-12T17:43:39Z",
         "settled_at": null,
         "spent_usd": null

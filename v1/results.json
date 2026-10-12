@@ -590,6 +590,14 @@
       "model": "nvidia/nemotron-3-nano-30b-a3b",
       "outcome": "passed",
       "run": "2026-10-12T17:43:39Z"
+    },
+    {
+      "at": "2026-10-12T18:05:17Z",
+      "detail": "BudgetError: OpenRouter request failed (HTTP 404); no automatic retry.",
+      "metadata_sha256": "aaa2b602230c9a90180475458a9369ed3f3b2ad36a477ec7019656e6aec06d3f",
+      "model": "amazon/nova-lite-v1",
+      "outcome": "failed",
+      "run": "2026-10-12T17:43:39Z"
     }
   ],
   "stops": []
