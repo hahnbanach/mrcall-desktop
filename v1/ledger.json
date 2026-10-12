@@ -529,10 +529,21 @@
             "role": "NARRATION",
             "spent_usd": "0.00008",
             "why": "pick of economy / NARRATION / ranking"
+          },
+          {
+            "at": "2026-10-12T18:09:41Z",
+            "bound_usd": "2",
+            "check": "NARRATION on inception/mercury-2.5",
+            "kind": "measure",
+            "model": "inception/mercury-2.5",
+            "outcome": "NARRATION: passed",
+            "role": "NARRATION",
+            "spent_usd": "0.000266",
+            "why": "pick of economy / NARRATION / ranking"
           }
         ],
         "opened_at": "2026-10-12T17:44:44Z",
-        "reserved_usd": "2.284989",
+        "reserved_usd": "0.285255",
         "run": "2026-10-12T17:43:39Z",
         "settled_at": null,
         "spent_usd": null
