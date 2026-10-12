@@ -584,10 +584,21 @@
             "role": null,
             "spent_usd": "0.000207",
             "why": "ranking of economy / MNEMONIC / ranking"
+          },
+          {
+            "at": "2026-10-12T18:18:32Z",
+            "bound_usd": "2",
+            "check": "MNEMONIC on xiaomi/mimo-v2.6-pro",
+            "kind": "measure",
+            "model": "xiaomi/mimo-v2.6-pro",
+            "outcome": "not completed: the corpus runner wrote no record: stopped at its time limit of 20 min",
+            "role": "MNEMONIC",
+            "spent_usd": "0.07327",
+            "why": "ranking of economy / MNEMONIC / ranking"
           }
         ],
         "opened_at": "2026-10-12T17:44:44Z",
-        "reserved_usd": "2.530537",
+        "reserved_usd": "0.603807",
         "run": "2026-10-12T17:43:39Z",
         "settled_at": null,
         "spent_usd": null
