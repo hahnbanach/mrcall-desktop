@@ -490,6 +490,14 @@
       "model": "mistralai/ministral-8b-2512",
       "outcome": "passed",
       "run": "2026-10-12T17:43:39Z"
+    },
+    {
+      "at": "2026-10-12T17:59:36Z",
+      "detail": "",
+      "metadata_sha256": "066d24994330ae3d5b99027d830b65213b1431874219aff48148426aa0b321d1",
+      "model": "upstage/solar-mini4",
+      "outcome": "passed",
+      "run": "2026-10-12T17:43:39Z"
     }
   ],
   "stops": []
