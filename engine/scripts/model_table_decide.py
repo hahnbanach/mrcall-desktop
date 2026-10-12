@@ -186,6 +186,9 @@ def reference_ready(ctx: dict, role: str) -> bool:
 def _status(c: dict, role: str, published: list[str] | None, ctx: dict, run: dict):
     """VERIFIED, WAITING, or the next Check the entrant `c` waits for (module docstring)."""
     model = c["id"]
+    if model in run.get("resmoke", ()) and model not in run["smokes"]:
+        # Its last smoke failed (`model_table_outcomes`): nothing counts until one passes.
+        return Check("smoke", model)
     if published is not None and model in published:
         return VERIFIED
     result = current(ctx["measured"], role, model, ctx["hashes"])
@@ -298,6 +301,7 @@ def decide(ctx: dict, run: dict) -> dict:
     `measurable` (the roles the job's harness measures), `table` and
     `published_snapshot` (the record the run compares with),
     `snapshot` (this read's). `run`: `smokes` (model -> passed, this run),
+    `resmoke` (models whose last cached smoke failed: smoked before they count),
     `deferred` (Check -> why it could not run). Returns `presets` (the
     resolver's `rankings` shape: per preset its ceiling and per role both
     rankings), `needs` (`[(Check, why)]`, the most urgent first), `problems`

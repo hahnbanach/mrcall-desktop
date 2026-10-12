@@ -275,7 +275,7 @@ def report(s: dict) -> str:
         lines.append(f"- Deadline {s['deadline']}: {late} checks deferred by it")
     sections = (
         ("Problems (nothing published)", "problems"),
-        ("Flags: smokes settled above their expected spend", "flags"),
+        ("Flags: smokes settled above their expected spend; roles waiting on a stop", "flags"),
         ("Notes", "notes"),
     )
     for title, key in sections:

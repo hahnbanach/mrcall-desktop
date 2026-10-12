@@ -40,11 +40,26 @@ class Checks:
         for model, (outcome, why) in smokes.items():
             if outcome == "uncertain":
                 self.uncertain[model] = why
+            elif outcome == "retry":
+                self.state["resmoke"].add(model)
             else:
                 self.state["smokes"][model] = outcome == "passed"
             self.s["notes"].append(f"cached: {model}: {why}")
         for (model, role), why in stops.items():
             self.state["deferred"][decide.Check("measure", model, role)] = why
+            self._flag_frozen(model, role, why)
+
+    def _flag_frozen(self, model: str, role: str, why: str) -> None:
+        """Flag a stop that freezes its role: on the reference, or on a model
+        the role's re-measurement needs. Nothing of the role moves meanwhile."""
+        frozen = model == self.ctx["reference"] or (
+            decide.stale(self.ctx, role) and model in decide.remeasure_set(self.ctx, role)
+        )
+        if frozen:
+            self.s["flags"].append(
+                f"{role} waits on {model}, which {why}: the role is not re-measured "
+                "and no challenger of it is judged until then"
+            )
 
     def _cached_smoke(self, check: decide.Check, why: str) -> str | None:
         """Why an entrant's smoke is not retried (a cached uncertain outcome);
@@ -55,22 +70,26 @@ class Checks:
 
     def _remember_smoke(self, check, at: str, spent: Decimal, passed, detail) -> None:
         """Keep a smoke's outcome in `results.json`, unless it sent nothing."""
-        if spent <= 0:
+        fp = self._fp(check.model)
+        if spent <= 0 or fp is None:  # nothing sent; or no metadata to key it by
             return
         outcome = {True: "passed", False: "failed"}.get(passed, "uncertain")
         self.results = outcomes.add_smoke(
-            self.results, self.spend.run, check.model, self._fp(check.model), at, outcome, detail
+            self.results, self.spend.run, check.model, fp, at, outcome, detail
         )
 
     def _remember_stop(self, check, at: str, err) -> None:
         """Keep a measurement's time-limit stop for each role it measured."""
+        fp = self._fp(check.model)
         for role in err.roles or (check.role,):
             hashes = self.ctx["hashes"].get(role)
-            if hashes is not None:
+            if hashes is not None and fp is not None:
                 self.results = outcomes.add_stop(
                     self.results, self.spend.run, check.model, role, hashes,
-                    self._fp(check.model), at, str(err),
+                    fp, at, str(err),
                 )  # fmt: skip
+                why = f"was stopped at its time limit at {at}; not tried again for 14 days"
+                self._flag_frozen(check.model, role, why)
 
     def _perform(self, check: decide.Check, why: str) -> None:
         """Make one paid check and record it; an error is no result, never retried."""

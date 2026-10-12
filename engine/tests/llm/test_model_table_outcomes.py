@@ -17,7 +17,7 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 
-from .model_table_world import CS, GENIUS, NOW, PH, SONNET, load_job
+from .model_table_world import CS, GENIUS, K3, NOW, PH, SONNET, load_job
 from .test_model_table_interrupted import Rig
 
 job = load_job()
@@ -88,6 +88,62 @@ def test_a_measurement_stopped_at_its_time_limit_is_not_tried_again_for_two_week
     rig.world.models[GENIUS]["efforts"] = ["max", "low"]  # or as soon as the model changes
     assert rig.go(files=files, now=NOW + DAY) == 0
     assert ("CHAT", GENIUS) in rig.fake.measured
+
+
+def with_spent(files: dict, used: str) -> dict:
+    """`files` with a settled run of `used` USD added to October's ledger."""
+    ledger = json.loads(files["ledger.json"])
+    row = {"run": "2026-10-20T05:17:00Z", "opened_at": "2026-10-20T05:17:00Z", "calls": []}
+    row.update(reserved_usd=used, spent_usd=used, settled_at="2026-10-20T05:40:00Z")
+    ledger["months"]["2026-10"].append(row)
+    return dict(files, **{"ledger.json": json.dumps(ledger).encode()})
+
+
+def test_a_model_whose_smoke_failed_reenters_only_after_a_passing_smoke(rig):
+    del rig.world.models[GENIUS]
+    rig.world.models[SONNET]["efforts"] = ["max"]  # a ranked model changed, and fails
+    assert rig.go(smoke_fails={SONNET}) == 0
+    assert SONNET not in rig.ranking("economy", "CHAT")
+    files, later = dict(rig.fake.files), NOW + 8 * DAY
+    assert rig.go(files=files, now=NOW + DAY) == 0  # within the week: not smoked, still out
+    assert rig.fake.smoked == [] and SONNET not in rig.ranking("economy", "CHAT")
+    # A week on, its old passing measurement does not bring it back by itself:
+    assert rig.go(files=with_spent(files, "9.9"), now=later) == 0  # no room for a smoke
+    assert rig.fake.smoked == [] and SONNET not in rig.ranking("economy", "CHAT")
+    assert rig.go(files=files, now=later, smoke_fails={SONNET}) == 0  # smoked: fails again
+    assert rig.fake.smoked == [SONNET] and SONNET not in rig.ranking("economy", "CHAT")
+    assert rig.go(files=files, now=later) == 0  # smoked: passes, and re-enters
+    assert rig.fake.smoked == [SONNET] and SONNET in rig.ranking("economy", "CHAT")
+    assert smokes(rig) == [(SONNET, "passed")]
+
+
+def test_a_stop_that_freezes_a_role_is_flagged(rig):
+    del rig.world.models[GENIUS]
+    today = {"CHAT": (CS, "1" * 64)}  # CHAT's prompt changed: its reference is measured first
+    assert rig.go(hashes=today, measure_timeouts={("CHAT", K3)}) == 0
+    assert rig.fake.measured == [("CHAT", K3)]
+    flag = f"CHAT waits on {K3}, which was stopped at its time limit at"
+    flags = rig.report.split("## Flags")[1].split("\n## ")[0]
+    assert flag in flags
+    assert rig.go(files=rig.fake.files, now=NOW + DAY, hashes=today) == 0
+    assert rig.fake.measured == []  # not tried again, and said so among the flags
+    flags = rig.report.split("## Flags")[1].split("\n## ")[0]
+    assert f"CHAT waits on {K3}, which stopped at its time limit at" in flags
+
+
+def test_a_smoke_that_sent_nothing_is_not_remembered(rig):
+    assert rig.go(smoke_unsent={GENIUS}) == 0  # its cap refused the first call
+    assert rig.fake.files.get("results.json") is None
+    assert rig.go(files=rig.fake.files, now=NOW + DAY) == 0
+    assert rig.fake.smoked == [GENIUS]  # tried again: nothing was paid for
+
+
+def test_an_outcome_without_a_fingerprint_is_not_remembered(rig, monkeypatch):
+    monkeypatch.setattr(outcomes, "fingerprint", lambda snapshot, model, direct: None)
+    assert rig.go(measure_timeouts={("CHAT", GENIUS)}) == 0  # a smoke paid, a stop
+    doc = rig.doc("results.json")
+    assert doc["smokes"] == [] and doc["stops"] == []  # nothing to key them by
+    assert rig.go(files=rig.fake.files, now=NOW + DAY) == 0  # the file stays readable
 
 
 def test_the_publication_prunes_what_no_longer_stands(rig):

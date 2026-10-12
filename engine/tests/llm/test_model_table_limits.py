@@ -192,14 +192,38 @@ finally:
 
 
 def _alive(pid: int) -> bool:
+    """Whether `pid` still runs (a zombie nobody reaped yet does not)."""
     try:
         os.kill(pid, 0)
     except ProcessLookupError:
         return False
+    stat = Path(f"/proc/{pid}/stat")
+    if stat.is_file():
+        try:
+            return stat.read_text().rsplit(")", 1)[1].split()[0] != "Z"
+        except (OSError, IndexError):
+            return False
     return True
 
 
-@pytest.mark.parametrize("signum", [signal.SIGINT, signal.SIGTERM])
+def _started(parent, key: Path, pid: Path) -> int:
+    for _ in range(400):
+        if pid.exists() and pid.read_text() and key.exists():
+            return int(pid.read_text())
+        time.sleep(0.05)
+    parent.kill()
+    raise AssertionError("the measurement process never started")
+
+
+def _gone(child: int) -> bool:
+    for _ in range(200):
+        if not _alive(child):
+            return True
+        time.sleep(0.05)
+    return False
+
+
+@pytest.mark.parametrize("signum", [signal.SIGINT, signal.SIGTERM, signal.SIGHUP])
 def test_an_interrupted_job_stops_its_measurement_process_before_it_goes(tmp_path, signum):
     key, pid = tmp_path / ".env", tmp_path / "child.pid"
     scripts = str(Path(job.__file__).parent)
@@ -208,21 +232,31 @@ def test_an_interrupted_job_stops_its_measurement_process_before_it_goes(tmp_pat
         start_new_session=True,  # the signal below reaches the job alone
     )
     try:
-        for _ in range(400):
-            if pid.exists() and pid.read_text() and key.exists():
-                break
-            time.sleep(0.05)
-        child = int(pid.read_text())
-        parent.send_signal(signum)  # the job only: as `kill -INT <pid>`, or a terminate
+        child = _started(parent, key, pid)
+        parent.send_signal(signum)  # the job only: `kill -INT <pid>`, a terminate, a hang-up
         assert parent.wait(timeout=30) == 3  # it went on as an interrupt, after the child
-        for _ in range(100):
-            if not _alive(child):
-                break
-            time.sleep(0.05)
-        assert not _alive(child)  # no orphan with no time limit
+        assert _gone(child)  # no orphan with no time limit
         assert not key.exists()  # its finally ran: the key file is gone
     finally:
         parent.kill()
+
+
+@pytest.mark.skipif(not sys.platform.startswith("linux"), reason="PR_SET_PDEATHSIG is Linux's")
+def test_a_job_killed_outright_takes_its_measurement_process_with_it(tmp_path):
+    key, pid = tmp_path / ".env", tmp_path / "child.pid"
+    scripts = str(Path(job.__file__).parent)
+    parent = subprocess.Popen(
+        [sys.executable, "-c", PARENT, scripts, CHILD, str(key), str(pid)],
+        start_new_session=True,
+    )
+    child = _started(parent, key, pid)
+    try:
+        parent.kill()  # SIGKILL: an OOM kill, `timeout -k`; no handler runs
+        parent.wait(timeout=30)
+        assert _gone(child)  # the kernel killed it with its parent
+    finally:
+        if _alive(child):
+            os.kill(child, signal.SIGKILL)
 
 
 def test_each_run_journals_apart_and_a_killed_runs_key_file_is_deleted(tmp_path):

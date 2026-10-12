@@ -128,9 +128,8 @@ def test_a_smoke_settled_above_its_expected_spend_is_flagged(tmp_path):
     rig.world.add(GENIUS, **CHALLENGER)
     assert rig.run(smoke_costs={GENIUS: Decimal("0.08")}) == 0
     flag = "settled at USD 0.08, above the USD 0.05 expected"
-    assert f"## Flags: smokes settled above their expected spend\n\n- smoke {GENIUS}: {flag}" in (
-        rig.report
-    )
+    title = "## Flags: smokes settled above their expected spend; roles waiting on a stop"
+    assert f"{title}\n\n- smoke {GENIUS}: {flag}" in (rig.report)
     assert f"| smoke {GENIUS} | pick of economy / CHAT / ranking | 0.2 | 0.08 | passed |" in (
         rig.report
     )

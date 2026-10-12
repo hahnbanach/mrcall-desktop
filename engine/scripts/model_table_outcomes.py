@@ -14,13 +14,18 @@ was paid for:
 - `passed`: the model is not smoked again; its measurement may follow (a
   measurement the deadline deferred is not paid for with a second smoke).
 - `failed`: the model is out of the run's options, as a smoke failed in the
-  run is (a ranked model is replaced).
+  run is (a ranked model is replaced). After the 7 days the failure still
+  stands, as `retry`, until the model passes a smoke or its metadata
+  changes: the model is smoked again before anything else of it counts —
+  a published entry or a passing measurement does not bring it back
+  without a passing smoke (`model_table_decide._status`).
 - `uncertain` (a call with no settled answer, an error, a smoke stopped by
   its own cap after a paid call): an entrant's smoke is not retried. A smoke
   the publication waits for — a ranked model whose metadata changed — is
   retried by every run, since without it nothing can be published.
 
-A smoke that sent nothing (spent nothing) is not kept. Within a run no
+A smoke that sent nothing (spent nothing) is not kept, nor an outcome of
+a model today's snapshot does not hold (no fingerprint). Within a run no
 smoke is sent twice.
 
 **Stops** (`stops`: one entry per model and role). A measurement stopped at
@@ -105,9 +110,15 @@ def add_stop(doc, run, model, role, hashes, metadata, at, detail) -> dict:
     return out
 
 
+def _fresh(entry: dict, now: datetime) -> bool:
+    return now < _when(entry["at"]) + timedelta(days=SMOKE_DAYS)
+
+
 def _stands_smoke(entry: dict, now: datetime, fp) -> bool:
-    fresh = now < _when(entry["at"]) + timedelta(days=SMOKE_DAYS)
-    return fresh and entry["metadata_sha256"] == fp(entry["model"])
+    """Whether the outcome still counts: under today's fingerprint, and
+    fresh, or a failure (it stands until a smoke passes)."""
+    lasting = _fresh(entry, now) or entry["outcome"] == "failed"
+    return lasting and entry["metadata_sha256"] == fp(entry["model"])
 
 
 def _stands_stop(entry: dict, now: datetime, fp, hashes: dict) -> bool:
@@ -122,13 +133,20 @@ def live(doc: dict, now: datetime, fp, hashes: dict) -> tuple[dict, dict]:
     `{(model, role): why}` of the stops; `fp(model)` is today's fingerprint."""
     smokes, stops = {}, {}
     for e in doc.get("smokes", []):
-        if _stands_smoke(e, now, fp):
-            until = (_when(e["at"]) + timedelta(days=SMOKE_DAYS)).strftime(STAMP)
-            detail = f": {e['detail']}" if e["detail"] else ""
+        if not _stands_smoke(e, now, fp):
+            continue
+        until = (_when(e["at"]) + timedelta(days=SMOKE_DAYS)).strftime(STAMP)
+        detail = f": {e['detail']}" if e["detail"] else ""
+        if _fresh(e, now):
             smokes[e["model"]] = (
                 e["outcome"],
                 f"smoke {e['outcome']} at {e['at']}{detail}; it stands until {until} "
                 "unless the model's request metadata changes",
+            )
+        else:  # a failure past its week: smoked again before it counts
+            smokes[e["model"]] = (
+                "retry",
+                f"smoke failed at {e['at']}{detail}; it re-enters only after a passing smoke",
             )
     for e in doc.get("stops", []):
         if _stands_stop(e, now, fp, hashes):

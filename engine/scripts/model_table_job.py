@@ -169,6 +169,7 @@ class Run(checks.Checks, publish.Publish):
         self.s["deadline"] = self.deadline.at.strftime(STAMP)
         self.s.update(problems=[], notes=[], calls=[], deferred=[], resampled=[], flags=[])
         self.state = {"smokes": {}, "deferred": {}, "fresh": set(), "projected": {}}
+        self.state["resmoke"] = set()  # models whose last smoke failed: smoked before they count
         self.unavailable: str | None = None
         self.uncertain: dict[str, str] = {}  # model -> why its cached smoke is not retried
         self.spend: records.Spend | None = None
