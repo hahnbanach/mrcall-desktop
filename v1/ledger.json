@@ -782,10 +782,21 @@
             "role": null,
             "spent_usd": "0.000095",
             "why": "ranking of economy / MEMORY_EXTRACT / ranking"
+          },
+          {
+            "at": "2026-10-12T19:00:45Z",
+            "bound_usd": "0.2",
+            "check": "smoke google/gemma-4-26b-a4b-it",
+            "kind": "smoke",
+            "model": "google/gemma-4-26b-a4b-it",
+            "outcome": "passed",
+            "role": null,
+            "spent_usd": "0.000021",
+            "why": "ranking of economy / MEMORY_EXTRACT / ranking"
           }
         ],
         "opened_at": "2026-10-12T17:44:44Z",
-        "reserved_usd": "1.40861",
+        "reserved_usd": "1.208631",
         "run": "2026-10-12T17:43:39Z",
         "settled_at": null,
         "spent_usd": null

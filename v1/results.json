@@ -1185,6 +1185,14 @@
       "model": "stepfun/step-3.5-flash",
       "outcome": "passed",
       "run": "2026-10-12T17:43:39Z"
+    },
+    {
+      "at": "2026-10-12T19:00:45Z",
+      "detail": "",
+      "metadata_sha256": "3db32451aa0516b638c74301420a8cae59f2fcf2ac3b8b00c63f83542f27c857",
+      "model": "google/gemma-4-26b-a4b-it",
+      "outcome": "passed",
+      "run": "2026-10-12T17:43:39Z"
     }
   ],
   "stops": [
