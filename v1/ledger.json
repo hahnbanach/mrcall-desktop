@@ -441,10 +441,21 @@
             "role": null,
             "spent_usd": "0.000116",
             "why": "pick of economy / SYNC_ANALYSIS / ranking"
+          },
+          {
+            "at": "2026-10-12T18:06:58Z",
+            "bound_usd": "2",
+            "check": "WEB_SEARCH on inclusionai/ling-3.0-flash-vl",
+            "kind": "measure",
+            "model": "inclusionai/ling-3.0-flash-vl",
+            "outcome": "not completed: WEB_SEARCH: not every case was scored",
+            "role": "WEB_SEARCH",
+            "spent_usd": "0.000047",
+            "why": "pick of economy / WEB_SEARCH / ranking"
           }
         ],
         "opened_at": "2026-10-12T17:44:44Z",
-        "reserved_usd": "2.283886",
+        "reserved_usd": "0.283933",
         "run": "2026-10-12T17:43:39Z",
         "settled_at": null,
         "spent_usd": null
