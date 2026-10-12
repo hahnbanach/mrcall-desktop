@@ -9,6 +9,14 @@
       "model": "xiaomi/mimo-v2.6-flash",
       "outcome": "passed",
       "run": "2026-10-12T17:43:39Z"
+    },
+    {
+      "at": "2026-10-12T17:44:55Z",
+      "detail": "",
+      "metadata_sha256": "ae42c12f5fff0fc41e4b7e78189430b37ee7672081f1c7467527d478f4a89d60",
+      "model": "z-ai/glm-5.3",
+      "outcome": "passed",
+      "run": "2026-10-12T17:43:39Z"
     }
   ],
   "stops": []

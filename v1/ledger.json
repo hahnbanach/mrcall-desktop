@@ -23,10 +23,21 @@
             "role": null,
             "spent_usd": "0.00006",
             "why": "metadata changed (models parameters)"
+          },
+          {
+            "at": "2026-10-12T17:44:55Z",
+            "bound_usd": "0.2",
+            "check": "smoke z-ai/glm-5.3",
+            "kind": "smoke",
+            "model": "z-ai/glm-5.3",
+            "outcome": "passed",
+            "role": null,
+            "spent_usd": "0.00014",
+            "why": "metadata changed (models parameters)"
           }
         ],
         "opened_at": "2026-10-12T17:44:44Z",
-        "reserved_usd": "0.20006",
+        "reserved_usd": "0.0002",
         "run": "2026-10-12T17:43:39Z",
         "settled_at": null,
         "spent_usd": null
