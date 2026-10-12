@@ -375,10 +375,21 @@
             "role": null,
             "spent_usd": "0.000053",
             "why": "pick of economy / SYNC_ANALYSIS / ranking"
+          },
+          {
+            "at": "2026-10-12T18:03:49Z",
+            "bound_usd": "2",
+            "check": "SYNC_ANALYSIS on mistralai/ministral-14b-2512",
+            "kind": "measure",
+            "model": "mistralai/ministral-14b-2512",
+            "outcome": "SYNC_ANALYSIS: failed",
+            "role": "SYNC_ANALYSIS",
+            "spent_usd": "0.002307",
+            "why": "pick of economy / SYNC_ANALYSIS / ranking"
           }
         ],
         "opened_at": "2026-10-12T17:44:44Z",
-        "reserved_usd": "2.275639",
+        "reserved_usd": "0.277946",
         "run": "2026-10-12T17:43:39Z",
         "settled_at": null,
         "spent_usd": null
