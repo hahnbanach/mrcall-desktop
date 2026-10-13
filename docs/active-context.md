@@ -1,6 +1,6 @@
 ---
-doc_baseline_commit: 5e693d5fd1b840ddca8265560a6b6e6012c06d1c
-doc_baseline_date: 2026-10-11
+doc_baseline_commit: c5b25fd98dde97d4f23309168df5357ae79c032d
+doc_baseline_date: 2026-10-13
 ---
 
 # Active Context — Cross-cutting
@@ -56,21 +56,18 @@ All seven hosted profiles run as separate Unix users with enforced outbound
 allow-lists. Production voice preserves its interpreter/configuration and available
 listener; support preserves its Qonto host binding. Six company profiles use the
 reviewed assignment release source pin. Company stores use hashed hosted paths. Self-serve provisioning
-remains closed; template/provisiond still use the shared key. Sandbox final
-acceptance and its operational floor remain open in the
+remains closed; template/provisiond still use the shared key. Sandbox acceptance and its retained operational obligations are recorded in the
 [rollout plan](execution-plans/2026-09-29-toward-sandbox.md).
 Mario Gmail has CTO-reported installed-app acceptance for mail, attachment
 transfer and document lookup/read by basename. Its attachment source pin is
-separate from the service checkout. R5 needs the pin comparison, successful
-reconcile and runtime company-file/egress offboarding acceptance. Its latest
-preflight is blocked by production's `zz-qonto-identity.conf`: the additional
-`ReadWritePaths` directive is outside the CTO's permitted keys. All seven pin
-files retain their original names and bytes; all seven daemons are active.
-The new 42-hash reference excludes runtime state from `ExecStart`. No rename,
-reload, reconcile or scratch lifecycle ran in this attempt. Prior isolation,
-dual-identity rule removal and the historical failed reconcile remain in the
-rollout plan. The Qonto workstream owns resolution of its pin and must use
-`t0-…` names.
+separate from the service checkout. Representative dual-holder offboarding,
+actual egress cleanup and fresh Mario Gmail/support host isolation pass.
+Seven operator pins use `t0-…`; production's existing Qonto write permission
+has its own earlier file with identical effective configuration. Reconcile
+succeeds with seven ready. The accepted app journey and dated concurrency
+proof remain distinct from fresh auxiliary host probes. Final verdicts and
+lifecycle status belong to the rollout plan. Provisioning stays closed and
+its shared-key dependency is retained.
 
 Production uses GPT-Live for telephone service and the scoped company-knowledge
 trial. Its pinned release reads revisioned `operator-instructions/phone.md`;
@@ -125,8 +122,8 @@ unverified. Runtime contracts belong to [IPC](ipc-contract.md),
   `main` never uses Qonto credential lines left in a profile `.env`; deleting them is operator work.
 - Remaining Café124 billing choices and funded K3 credits are open. The reviewed
   comparison's 60 cases/240 outputs do not establish production equivalence.
-- Sandbox final review, shared-key provisioning and operational floor remain
-  open. One handset's speech is not transcribed by the voice provider.
+- Shared-key provisioning and the broader operational floor retain their
+  separate obligations. One handset's speech is not transcribed by the voice provider.
 - Installed/fresh-account GUI acceptance is open. Windows remains opt-in and
   `continue-on-error`; Intel is outside the release matrix. Windows voice-note
   transcription is excluded.

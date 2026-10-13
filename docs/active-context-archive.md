@@ -7,6 +7,19 @@ source binding. It is unreleased and inactive in the hosted fleet and installed 
 separate MrCall launcher patch is committed on a separate branch and remains uninstalled.
 Future candidate rollout requires separate authority.
 
+## 2026-10-13 — R5 state before the preserving repair
+
+separate from the service checkout. R5 needs the pin comparison, successful
+reconcile and runtime company-file/egress offboarding acceptance. Its latest
+preflight is blocked by production's `zz-qonto-identity.conf`: the additional
+`ReadWritePaths` directive is outside the CTO's permitted keys. All seven pin
+files retain their original names and bytes; all seven daemons are active.
+The new 42-hash reference excludes runtime state from `ExecStart`. No rename,
+reload, reconcile or scratch lifecycle ran in this attempt. Prior isolation,
+dual-identity rule removal and the historical failed reconcile remain in the
+rollout plan. The Qonto workstream owns resolution of its pin and must use
+`t0-…` names.
+
 ## 2026-10-13 — R5 state before the permitted-key preflight
 
 separate from the service checkout. R5 still needs runtime acceptance of the

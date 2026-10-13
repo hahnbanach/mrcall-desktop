@@ -1,5 +1,5 @@
 ---
-status: active
+status: completed
 ---
 
 # Toward a sandbox: execution plan
@@ -434,7 +434,7 @@ not started.
      multi-tenant caveat, plus a new egress caveat on how to find a missing
      host and add one), `docs/active-context.md` and
      `engine/docs/active-context.md`. Criterion 8 is met on the docs side.
-   - **Final review: pending, VPS session.** It runs once through the user
+   - **Final acceptance procedure, VPS session.** It runs once through the user
      path, on two hosted profiles A and B of different companies. A
      signed-in app on A:
      - reads mail;
@@ -1615,6 +1615,139 @@ not started.
      | `Gn9IcuWzYyY7DBMHkVUGB7bIiTp2` | `dc59ed6430a3cbe568c6a873bd4a88b4cd9b496be31c29fbdaecb81e0c02d0a5` | `08a5c881e8786f8c42045503d06592d941566403736556b27b9917a93daf71dd` | `f9dacf54fb642ecf30bb4f880146532d0fc4e69551788ec7d8acbbef0364e6fa` | `02dae179e16841345a4e5cb7996e022ea6f45aeb4cbfa4811a76934328c2d24e` | `43e2ecc3b8e083f8f76c0a9883bcf953b47abc260000f9392bf54aa211c3f932` | `d7effd8380f430c1bfd24c9c0560d4487f9e2d42377fb242dce614cb1d2713d9` |
      | `ZwpLepFDghWhQEBO4WJRIFcEr7p1` | `2bcc9c8c942a0e518ace26f8ead2316bb75a7767a0ac00df164d7c8a28a65e9e` | `5832ab83aa81ceace3db56c602b03e329a0be955292384d49fd958dbed478518` | `88a402313a2868bd2ff212ece1adf496f5b5d3a8c94050e58217d1afbb664b36` | `02dae179e16841345a4e5cb7996e022ea6f45aeb4cbfa4811a76934328c2d24e` | `fd0aead599e04779152a7943a91ae9af1f305a75165a2b134932e638047d402d` | `b839cbb97f4ec86f8665b9a7c833a09379ff780c50de7bf5c11182cdb27e690c` |
      | `YZNI2ZLDjFOxcvF0zmptW3vRZxV2` | `e456c1636ed17334239f187f347323688bfdad460ebf8beb0e0dec67a8b9d98c` | `70b12f472e34b79481201316fff4879f750149a8652ab2d67921fff026e1f5af` | `754036e1e6512d7c586a7a16baaa815bb517cd9374759aaea06bbee86f99183d` | `02dae179e16841345a4e5cb7996e022ea6f45aeb4cbfa4811a76934328c2d24e` | `f6f550c91c80affcdd16495460e66fddcc6e87c6220937045073b4fbd61fad14` | `1806abf0fbac3a68ce6d200a1e74e3c33ee4ee4aa10c453f1ef01c15d52964f8` |
+
+   - **Preserve the Qonto permission while closing R5 — 2026-10-13.**
+     The CTO requests resolution of the blocker and completion of R5.
+     Production's existing `ReadWritePaths` permission is retained exactly:
+     hosted Qonto reads its identity outside the profile and takes a private
+     sibling lock (`engine/zylch/qonto/identity.py:host_identity`). Removing
+     the permission is outside this repair. No identity-file contents or
+     connection credentials change.
+
+     Reviewed operational amendment, before execution:
+     1. Under the reconcile lock, retain root-only backups of the seven
+        original pins. Record the 42 configuration-only property hashes
+        and seven additional effective `ReadWritePaths` hashes.
+     2. Split only production's existing `ReadWritePaths` directive into a
+        new earlier instance-local `90-qonto-identity-paths.conf`, keeping
+        its exact value. The identity pin keeps its existing Environment
+        line. Both files remain root-owned; no writable path is added or
+        removed. Refuse an existing destination file rather than overwrite it.
+     3. Check the now Environment-only identity pin and six assignment pins
+        against the permitted-key procedure. Rename all seven pins to
+        `t0-…`, run `daemon-reload`, then compare all 49 configuration
+        hashes immediately before/after. A difference or execution failure
+        restores the seven original file bytes and names, removes the new
+        permission file, reloads and stops. Record any differing property.
+     4. Reconcile must exit 0 with seven ready. Then run the existing two-new-
+        scratch-holder lifecycle, including actual host egress cleanup,
+        company-file handoff, surviving-holder writes and last-holder removal.
+        No real profile is deleted or reseeded.
+     5. Two new independent final reviewers must approve actual acceptance
+        before the existing plan can become completed. Historical STOP
+        evidence stays historical; no earlier verdict is relabeled.
+
+     This is a split of existing operator configuration, with no source
+     feature or permission expansion. The Qonto workstream must keep future
+     identity pins named `t0-…`; its write-path directive has its own earlier
+     operator file. Whether it needs that identity remains its decision.
+
+   - **VPS closing evidence — 2026-10-13: runtime gates pass.**
+     The operational amendment above and its separate integration milestone
+     both returned **APPROVED** before dependent execution. Production's
+     original identity Environment line remains unchanged in
+     `t0-qonto-identity.conf`; its existing write-path directive remains
+     byte-identical in earlier `90-qonto-identity-paths.conf`. The six
+     assignment pins are `t0-assignment-release.conf`. All seven permitted-
+     key checks pass; original root ownership and modes are preserved.
+     Immediate-before/after comparison passes **49/49** configuration hashes
+     (the required 42, plus seven `ReadWritePaths` hashes). A fresh comparison
+     after reconcile also passes 49/49. No writable path, source pin,
+     interpreter, key, voice setting or saved control was changed.
+
+     Reconcile at 10:25:22–10:25:47 UTC returns command exit `0`,
+     `Result=success`, `ExecMainStatus=0`, seven distinct tenant `ready`
+     records, no helper error/refusal, and seven active daemons. The initial
+     journal collection ended too early for logger flush; the corrected
+     collection selects the reconcile identifier from the actual start
+     through collection time. This is one reconcile, not a successful retry.
+
+     **Representative offboarding: PASS**, command exit `0`,
+     10:27:03–10:32:12 UTC. Two new scratch holders each have one email rule,
+     one UID rule and one company fact. Before deletion: six rows. After
+     the first deletion: exactly its two rules are removed, its fact stays,
+     and the other holder keeps its two rules and fact (four rows). Across
+     all company directories, deleted-UID files = `0`, no-user files = `0`.
+     Handoff fixtures in a second synthetic company directory confirm broad
+     ownership transfer to root with unchanged modes; that auxiliary fixture
+     is removed by the test's teardown, not attributed to helper last-holder
+     cleanup. The first holder's actual host DNS/firewall and UID-bound sets
+     were active before deletion; its egress units, table and directory are
+     absent after deletion. The survivor commits and reads back a new fact
+     as Unix UID `984` (five rows). Last-holder deletion removes its company
+     store, sidecars, migration backup and group. Both scratch profiles,
+     users, keys, runtime/socket paths and generated unit artifacts are absent.
+     Full physical-root, `/run` and `/dev` ownership scans use the actual
+     UID/primary-GID pairs `985/974`, `984/972`: no remaining owned files.
+     All seven real PIDs, key/environment digests, checked profile/company/
+     store metadata and tenant-table bytes remain unchanged during the cycle.
+
+     The documented migration-backup exception still applies: one backup
+     after first deletion can retain removed-holder rows and was not scrubbed;
+     it disappears with the final company-directory removal. No real profile
+     was offboarded. Actual scratch startup without its encryption key refuses
+     with exit `3`.
+
+     **Fresh host acceptance**, command exit `0`, 10:36:46–10:37:13 UTC,
+     uses A = Mario Gmail and B = support in their actual daemon namespaces
+     and owning Unix identities, with current interpreter/module digests.
+     Settings overrides are auxiliary process memory only; no saved settings
+     update or new GUI journey is claimed.
+
+     | Criterion | Accepted evidence |
+     |---|---|
+     | 1 | Fresh A/B cross-profile absolute reads, globs, OS reads and key/store access refuse; document/download overrides are ignored. |
+     | 2 | Fresh six locally crafted MIME attachment names stay basenames, including `.env`; four external targets refuse; own synthetic document reads; all fixtures removed. |
+     | 3 | Fresh both hosted Python execution paths refuse; source/sibling writes and outgoing foreign attachment reads refuse. |
+     | 4 | Retained 2026-10-04 actual concurrent-store acceptance: distinct Unix UIDs, same store inode, overlapping locks, successful commits. Fresh third-user store read/list refusal remains effective. No new concurrent real-store write is claimed. |
+     | 5 | Fresh seven distinct root-owned `0400` keyfiles; seven OAuth rows, 21 encrypted values checked as owning users, zero decrypt failures. Actual missing-key scratch startup refuses. |
+     | 6 | Fresh A DNS negative returns NXDOMAIN with one scoped journal record; TEST-NET TCP refuses with one scoped kernel record; 30 firewall sets and resolver binding checked. |
+     | 7 | The new representative dual-holder offboarding and actual egress cleanup pass as recorded above. |
+     | 8 | Current AGENTS, host guide, cross-cutting contracts and per-tree context describe the deployed boundary; owning plan and living snapshot carry this acceptance and its limits. |
+
+     The accepted signed-app mail → attachment → document lookup/read journey
+     on Mario Gmail remains the CTO-reported evidence dated above. Fresh host
+     probes bind its A identity to B = support; they do not relabel synthetic
+     MIME checks as real IMAP downloads or filename lookup as full-text search.
+     No mail send, provider/bank/voice call or paid inference was added.
+
+     Root-only evidence (`0600`, parent `0700`) in
+     `/root/r5-final-20261013/`: `pin-repair.json`,
+     `post-reconcile-configuration.json`, `reconcile-repair.json`,
+     `scratch-offboard.json`, `scratch-runtime-receipt.json`, `host-probes.json`
+     and retained executable probe sources. Protected originals are in
+     `pin-repair-backups/`. Actual pre-execution plan and milestone reports,
+     plus the immutable approved amendment, are retained in
+     `/home/mal/.cache/mrcall-review/r5-preflight-20261013/`.
+     Final closure uses task `r5-close-20261013-stable` for this authorized
+     repair and current workflow versions; the earlier failed preflight and
+     its actual REVISE report remain retained, not reset or relabeled.
+
+     **Fresh final reviews: APPROVED / APPROVED, 2026-10-13.** Independent
+     reviewers `r5_20261013_final_a` and `r5_20261013_final_b` both approve
+     all eight criteria and the closing evidence. Each independently checks
+     current 49-property hashes, seven live identities/source bindings,
+     protected executable evidence, scratch cleanup and checker readiness.
+     Actual reports are retained as `final-a.txt` and `final-b.txt` under
+     `/home/mal/.cache/mrcall-review/r5-close-20261013/`; the initial approved
+     versions remain retained separately. Nonblocking limits remain explicit:
+     GUI acceptance is dated CTO-reported evidence, concurrency is retained
+     actual October 4 evidence, and historical lock acquisition is not
+     independently observed. The approved lifecycle transition is
+     `active` → `completed`; no earlier approval substitutes for these gates.
+     A later scheduled reconcile replaces the recorded manual InvocationID;
+     current success/0 and unchanged daemon configuration/PIDs are verified,
+     not an assertion that systemd's last invocation is immutable.
 
    - **Open after this plan, not part of it:**
      - one handset whose speech the voice provider does not transcribe
