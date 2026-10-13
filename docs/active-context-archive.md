@@ -7,6 +7,18 @@ source binding. It is unreleased and inactive in the hosted fleet and installed 
 separate MrCall launcher patch is committed on a separate branch and remains uninstalled.
 Future candidate rollout requires separate authority.
 
+## 2026-10-13 — R5 state before the permitted-key preflight
+
+separate from the service checkout. R5 still needs runtime acceptance of the
+company-file handoff and egress cleanup repair; dual-identity rule removal and
+Mario Gmail/support isolation checks pass. The six assignment pins retain
+`zz-…` after rollback: the attempted rename matched the 36 recorded hashes,
+but one immediate-before/after `ExecStart` comparison changed.
+Reconcile exits `3`: six ready, production refused because its independent
+`zz-qonto-identity.conf` sorts after `tenant.conf`. All seven daemons remain
+active. Both fresh final reviews are REVISE. No new scratch lifecycle has run. The rollout plan owns the remaining
+gates and the unexplained pre-reload `mc-fd58d04802f1` `ExecStart` hash discrepancy.
+
 ## 2026-10-11 — R5 state before pin rename and reconcile
 
 separate from the service checkout. R5 is blocked by scratch offboarding that

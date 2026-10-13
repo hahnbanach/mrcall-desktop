@@ -1566,6 +1566,56 @@ not started.
      4. Run the scratch lifecycle as described above.
      5. Two fresh final reviews, then `status: completed`.
 
+   - **Next-attempt VPS preflight — 2026-10-13, 08:58 UTC: STOP.**
+     Clone `main` is `67b36e5a`, containing the requested commit. A new
+     reference of all 42 effective property hashes was captured under
+     `/run/mrcalld/reconcile.lock` with all seven operator files still
+     named `zz-…`. `ExecStart` now covers only each entry's `path` and
+     `argv[]`, ending before ` ; ignore_errors=`; no runtime status
+     fields are hashed. The five other properties retain the prior method.
+     Raw values are processed only in memory, never printed or retained.
+
+     All six assignment pins pass: allowed keys only = `true` and
+     `PYTHONDONTWRITEBYTECODE` equals `1` = `true` for each. Production's
+     `zz-qonto-identity.conf` has these keys, names only:
+     `[Service]`, `Environment=QONTO_HOST_ID_FILE`, and **`ReadWritePaths`**.
+     `QONTO_HOST_ID_FILE` does not set a prohibited environment variable;
+     `ReadWritePaths` is an additional directive forbidden by the explicit
+     preflight. The requested STOP condition therefore applies.
+
+     Zero files were renamed. No `daemon-reload`, reconcile, DNS/firewall
+     change or scratch lifecycle ran. All seven original pin names and
+     file hashes are unchanged; all seven daemons are active. The service
+     checkout was not changed. R5 remains `active`; the before/after hash
+     comparison and steps 2–5 have not been reached. No new final approval
+     or baseline advancement is claimed.
+
+     **Notice to the Qonto workstream (Git coordination channel):** operator
+     pins must use `t0-…`, never `zz-…`; production's intended name is
+     `t0-qonto-identity.conf`. Its present `ReadWritePaths` directive blocks
+     this authorized preflight. This session neither removes that directive
+     nor decides whether the identity pin is still needed. The workstream
+     must resolve it against the permitted-key procedure before a new VPS
+     attempt. No direct cross-session messaging interface is available;
+     this published plan is the retained notification.
+
+     Root-only receipt: `/root/r5-final-20261013/pins.json` (`0600`,
+     parent `0700`). SHA-256 method for `ExecStart`: normalize each
+     configured `path`/`argv[]` entry with `shlex`, preserve entry order,
+     then hash the newline join. Other properties: hash the newline join
+     of sorted `shlex` tokens. This is a new reference, not proof of a
+     successful rename comparison.
+
+     | Unit UID | Environment | ExecStart | User | ProtectHome | EnvironmentFiles | BindReadOnlyPaths |
+     |---|---|---|---|---|---|---|
+     | `9nXeYF8OXPetUFsSP4zDC3F2i673` | `b48d2776af6c4d24c069b30d56a366b8949d7c665d4593624d7bb77f2f019178` | `6de18631baafc05f330feaa9efa1e74e1c517e7d1f9f3158dd51fc88144b27ff` | `3c6a6627c53f919ed365ae22f98dcd1c585d4d0bcc0952027c2ebf4957f81b2a` | `02dae179e16841345a4e5cb7996e022ea6f45aeb4cbfa4811a76934328c2d24e` | `6124dfbefef4a7fdbb7b44f3ce36d9664ed7c951e111542f2383a8c89935466e` | `ad138c3145c65ba02478e6d9b72082d55945ccaedb83beebb03d300ea825a4a7` |
+     | `C06xHKoRcfdz94FaLPKuJuo0xVo1` | `31e720f1cb338a731e0bbcf6800519ae6e8c161131a32239950f054f1058c078` | `245bbbe27ea4c881fd71f7129894f49879599edce78e12918bfcb59020e27c88` | `a9312059c94c9eda40efd3af3b0764f8ac4ae9463eaf7f849d39e7cd3303d1cf` | `02dae179e16841345a4e5cb7996e022ea6f45aeb4cbfa4811a76934328c2d24e` | `3e200e1b36fd927453d8c2732fcde4a3ccca82dd9a077608d852d5fb5d806144` | `d084519f66d553d67f3a9ee8ddadc4274d4f33204d3d46003971746eb4de35e9` |
+     | `HxiZhWEBoRUarPzqX8eRWP21FuJ3` | `bd4bb7f4dcece1329f1109ec6089d6f1a85525991258ae18e82906c305e97e53` | `8dd13d5ec9a732163c214b6b50b5ba1a6e2f3678e26b0f8b45090d6bac29c3f8` | `0247e14dab77a35b9943b2d49e48114ab11c99db3c8550bdf4edc6d6274d6a93` | `02dae179e16841345a4e5cb7996e022ea6f45aeb4cbfa4811a76934328c2d24e` | `9bd25779ee4d8974e3cd0b6eb879c4632b54cf9f94fe8bdc0d932bb999cdbea1` | `635a6fe9313e3a2f5f014378008eb0bdf800f8e61ac07f241184642abcbd8bec` |
+     | `x59G6SnymAN2lkFny0JDGJgdFz33` | `fec57ebbcf9978deebff51e796190263b820cdbd258c6ff867d865c145927589` | `f3cc109ed1e14656c354990e0cc6958c129895303c418a8f1ea66d296473e702` | `3612e92ce72bf5643ab1a777b216d772d9939f1543614f376754559334781046` | `02dae179e16841345a4e5cb7996e022ea6f45aeb4cbfa4811a76934328c2d24e` | `5bfe7e565c9b7c957d533348ce92f622555bee2069ddffa3d1cdee7a663f7e5d` | `9a5d1bd25606cdda6d14ec61bd83c98c9a944f2859fddc820245f9e8e8577ad8` |
+     | `Gn9IcuWzYyY7DBMHkVUGB7bIiTp2` | `dc59ed6430a3cbe568c6a873bd4a88b4cd9b496be31c29fbdaecb81e0c02d0a5` | `08a5c881e8786f8c42045503d06592d941566403736556b27b9917a93daf71dd` | `f9dacf54fb642ecf30bb4f880146532d0fc4e69551788ec7d8acbbef0364e6fa` | `02dae179e16841345a4e5cb7996e022ea6f45aeb4cbfa4811a76934328c2d24e` | `43e2ecc3b8e083f8f76c0a9883bcf953b47abc260000f9392bf54aa211c3f932` | `d7effd8380f430c1bfd24c9c0560d4487f9e2d42377fb242dce614cb1d2713d9` |
+     | `ZwpLepFDghWhQEBO4WJRIFcEr7p1` | `2bcc9c8c942a0e518ace26f8ead2316bb75a7767a0ac00df164d7c8a28a65e9e` | `5832ab83aa81ceace3db56c602b03e329a0be955292384d49fd958dbed478518` | `88a402313a2868bd2ff212ece1adf496f5b5d3a8c94050e58217d1afbb664b36` | `02dae179e16841345a4e5cb7996e022ea6f45aeb4cbfa4811a76934328c2d24e` | `fd0aead599e04779152a7943a91ae9af1f305a75165a2b134932e638047d402d` | `b839cbb97f4ec86f8665b9a7c833a09379ff780c50de7bf5c11182cdb27e690c` |
+     | `YZNI2ZLDjFOxcvF0zmptW3vRZxV2` | `e456c1636ed17334239f187f347323688bfdad460ebf8beb0e0dec67a8b9d98c` | `70b12f472e34b79481201316fff4879f750149a8652ab2d67921fff026e1f5af` | `754036e1e6512d7c586a7a16baaa815bb517cd9374759aaea06bbee86f99183d` | `02dae179e16841345a4e5cb7996e022ea6f45aeb4cbfa4811a76934328c2d24e` | `f6f550c91c80affcdd16495460e66fddcc6e87c6220937045073b4fbd61fad14` | `1806abf0fbac3a68ce6d200a1e74e3c33ee4ee4aa10c453f1ef01c15d52964f8` |
+
    - **Open after this plan, not part of it:**
      - one handset whose speech the voice provider does not transcribe
        (voice path, not the host; 2026-10-03 diagnosis above);

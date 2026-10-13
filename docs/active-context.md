@@ -61,15 +61,16 @@ acceptance and its operational floor remain open in the
 [rollout plan](execution-plans/2026-09-29-toward-sandbox.md).
 Mario Gmail has CTO-reported installed-app acceptance for mail, attachment
 transfer and document lookup/read by basename. Its attachment source pin is
-separate from the service checkout. R5 still needs runtime acceptance of the
-company-file handoff and egress cleanup repair; dual-identity rule removal and
-Mario Gmail/support isolation checks pass. The six assignment pins retain
-`zz-…` after rollback: the attempted rename matched the 36 recorded hashes,
-but one immediate-before/after `ExecStart` comparison changed.
-Reconcile exits `3`: six ready, production refused because its independent
-`zz-qonto-identity.conf` sorts after `tenant.conf`. All seven daemons remain
-active. Both fresh final reviews are REVISE. No new scratch lifecycle has run. The rollout plan owns the remaining
-gates and the unexplained pre-reload `mc-fd58d04802f1` `ExecStart` hash discrepancy.
+separate from the service checkout. R5 needs the pin comparison, successful
+reconcile and runtime company-file/egress offboarding acceptance. Its latest
+preflight is blocked by production's `zz-qonto-identity.conf`: the additional
+`ReadWritePaths` directive is outside the CTO's permitted keys. All seven pin
+files retain their original names and bytes; all seven daemons are active.
+The new 42-hash reference excludes runtime state from `ExecStart`. No rename,
+reload, reconcile or scratch lifecycle ran in this attempt. Prior isolation,
+dual-identity rule removal and the historical failed reconcile remain in the
+rollout plan. The Qonto workstream owns resolution of its pin and must use
+`t0-…` names.
 
 Production uses GPT-Live for telephone service and the scoped company-knowledge
 trial. Its pinned release reads revisioned `operator-instructions/phone.md`;
