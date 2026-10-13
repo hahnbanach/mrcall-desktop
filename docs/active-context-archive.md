@@ -1,3 +1,22 @@
+## 2026-10-13 — Detailed sandbox closure snapshot
+
+All seven hosted profiles run as separate Unix users with enforced outbound
+allow-lists. Production voice preserves its interpreter/configuration and available
+listener; support preserves its Qonto host binding. Six company profiles use the
+reviewed assignment release source pin. Company stores use hashed hosted paths. Self-serve provisioning
+remains closed; template/provisiond still use the shared key. Sandbox acceptance and its retained operational obligations are recorded in the
+[rollout plan](execution-plans/2026-09-29-toward-sandbox.md).
+Mario Gmail has CTO-reported installed-app acceptance for mail, attachment
+transfer and document lookup/read by basename. Its attachment source pin is
+separate from the service checkout. Representative dual-holder offboarding,
+actual egress cleanup and fresh Mario Gmail/support host isolation pass.
+Seven operator pins use `t0-…`; production's existing Qonto write permission
+has its own earlier file with identical effective configuration. Reconcile
+succeeds with seven ready. The accepted app journey and dated concurrency
+proof remain distinct from fresh auxiliary host probes. Final verdicts and
+lifecycle status belong to the rollout plan. Provisioning stays closed and
+its shared-key dependency is retained.
+
 ## 2026-10-08 — Launcher integration into clone main
 
 The local [contextual-email

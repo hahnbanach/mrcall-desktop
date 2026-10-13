@@ -1,5 +1,5 @@
 ---
-doc_baseline_commit: c5b25fd98dde97d4f23309168df5357ae79c032d
+doc_baseline_commit: 1c46cde3b86243aa6d3bf455de6db3e42ce71889
 doc_baseline_date: 2026-10-13
 ---
 
@@ -52,22 +52,19 @@ GUI and provider UI acceptance remain unverified. `main` takes Qonto credentials
 no published Desktop or hosted engine has that change ([removal](execution-plans/2026-10-08-qonto-bootstrap-removal.md)). Exact release, usage, rollback and remaining criteria belong
 to the active [Qonto plan](execution-plans/2026-10-04-qonto-connection.md).
 
-All seven hosted profiles run as separate Unix users with enforced outbound
-allow-lists. Production voice preserves its interpreter/configuration and available
-listener; support preserves its Qonto host binding. Six company profiles use the
-reviewed assignment release source pin. Company stores use hashed hosted paths. Self-serve provisioning
-remains closed; template/provisiond still use the shared key. Sandbox acceptance and its retained operational obligations are recorded in the
-[rollout plan](execution-plans/2026-09-29-toward-sandbox.md).
-Mario Gmail has CTO-reported installed-app acceptance for mail, attachment
-transfer and document lookup/read by basename. Its attachment source pin is
-separate from the service checkout. Representative dual-holder offboarding,
-actual egress cleanup and fresh Mario Gmail/support host isolation pass.
-Seven operator pins use `t0-…`; production's existing Qonto write permission
-has its own earlier file with identical effective configuration. Reconcile
-succeeds with seven ready. The accepted app journey and dated concurrency
-proof remain distinct from fresh auxiliary host probes. Final verdicts and
-lifecycle status belong to the rollout plan. Provisioning stays closed and
-its shared-key dependency is retained.
+All seven existing hosted profiles run as separate Unix users with enforced
+outbound allow-lists; the [sandbox rollout](execution-plans/2026-09-29-toward-sandbox.md)
+is completed with two independent final approvals. Company groups share one
+store per company while private profile files stay separate; the
+[contract](cross-cutting-contracts.md#separate-profiles-shared-company-memory)
+distinguishes OS isolation from engine-filtered personal rules.
+Production preserves its voice interpreter/configuration and listener;
+support preserves Qonto. Six company profiles retain assignment source pins,
+and Mario Gmail retains its attachment pin and CTO-reported mail/attachment/
+document acceptance. Seven operator pins use `t0-…`; production's Qonto
+permission has a separate earlier drop-in. Reconcile succeeds with seven ready.
+Self-serve provisioning stays closed; template/provisiond retain their shared
+key dependency and the broader operational obligations remain separate.
 
 Production uses GPT-Live for telephone service and the scoped company-knowledge
 trial. Its pinned release reads revisioned `operator-instructions/phone.md`;

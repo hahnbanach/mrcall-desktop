@@ -3,9 +3,9 @@
 Local AI assistant for business communication — email (IMAP / SMTP),
 WhatsApp, SMS, and phone (via MrCall) — with **one memory per company**:
 what every colleague's mailbox teaches it about your customers, suppliers
-and deals, digested into a single memory that every account draws on.
-It watches your inbox, figures out what needs doing, and
-drafts replies for you to review.
+and deals, digested into a shared memory for the profiles joined to it.
+It helps you find messages, identify what needs doing, and draft replies
+for you to review. Automatic processing is optional and off by default.
 
 ## What stays on your machine
 
@@ -17,68 +17,42 @@ business lookups and credit billing. Company memory stays on the engine host.
 
 ## Get started
 
-1. **Create a (free) MrCall account** if you don't have one — the app
+1. **Create a MrCall account** if you don't have one — the app
    signs in with the same account as the
    [web dashboard](https://mrcall.ai).
 2. **Download** the installer from
    [Releases](https://github.com/hahnbanach/mrcall-desktop/releases).
-3. **First launch on Mac:** the app is signed but not yet notarized, so macOS
-   will refuse to open it with *"Apple could not verify…"* — the usual
-   right-click → Open trick no longer works around this on current
-   macOS. Instead:
-   - **System Settings → Privacy & Security**, scroll down, click
-     **Open Anyway** next to the MrCall Desktop warning, or
-   - run this once in a terminal:
-     ```bash
-     xattr -d com.apple.quarantine "/Applications/MrCall Desktop.app"
-     ```
+3. **First launch on Mac:** check the installer release notes for signing
+   and notarization status. If macOS blocks an installer you obtained from
+   the official release, open **System Settings → Privacy & Security** and
+   look for **Open Anyway** next to the MrCall Desktop warning.
 4. **Sign in**, then follow the onboarding wizard to connect your email
-   and, optionally, WhatsApp and your MrCall phone number.
+   and, optionally, WhatsApp and Google Calendar.
 
 That's it — the assistant runs locally while the app is open. (For the AI
-itself you pick a mode in **Settings**: your own LLM key, or MrCall
-credits.)
+itself you pick a mode in **Settings**: an Anthropic or OpenRouter key,
+or MrCall credits.)
 
 ## Keep it running when your laptop is closed
 
-In the app's left
-sidebar, a row shows whether this profile is running on MrCall's servers,
-with an **Activate** button.
+A profile can run on an always-on server, so you can use the same assistant
+from the app while its engine stays running after your laptop closes.
+Hosted activation currently requires operator setup; self-serve enrollment
+is not open. Contact your administrator to set up remote access.
 
-Click it and, in under a minute, a copy of your profile is running on
-MrCall's servers — same assistant, same mailbox, still syncing and
-drafting replies overnight, on weekends, while you travel. Nothing to
-configure.
-
-If you'd rather run your own always-on server instead of using MrCall's,
-that's the advanced route: see
-[`docs/remote-backend.md`](docs/remote-backend.md).
+For your own server, see the [remote setup guide](docs/remote-backend.md).
 
 ## One memory for the whole company
 
-Every mailbox the assistant reads teaches it something — who a customer
-is, what was agreed, which supplier answers slowly. MrCall Desktop keeps
-all of it in **one memory per company**, not one per inbox: what
-`production@` learns this morning, the colleague writing from `sales@`
-uses this afternoon. The memory holds people, companies and facts,
-digested from the mail and WhatsApp of everyone who shares it, and
-duplicates unite by themselves as new mail comes in. What stays personal
-is how *you* write: your reply templates and preferences never leave your
-own account.
+Colleagues on the same server can share what their assistants learn about
+customers, suppliers and agreements. Each hosted profile runs separately:
+its mailbox, credentials and downloaded files stay private, while the
+assistant uses shared company knowledge and each person's reply preferences.
+Other companies have separate memories.
 
-The company is a **memory key** — a random 22-character string minted the
-first time an account is created, shown once and always available in
-**Settings → Company memory** with a copy button. To bring a colleague
-in, send them the key the way you would send a Wi-Fi password: they paste
-it in the "memory key" field when they create their account (or later, in
-the same Settings card), the app echoes what they are about to join — the
-company's name and how much it already knows — and their account joins
-the shared memory. Whoever holds the key is in; nobody else can read it.
-
-The memory is shared between accounts running on the same server:
-MrCall's always-on servers (the **Activate** button above) or a server of
-your own ([`docs/remote-backend.md`](docs/remote-backend.md)). Two
-laptops each running the app locally keep two separate memories.
+Hosted sharing requires administrator setup. Separate laptops running
+locally do not automatically share memory. See
+[how sharing and isolation work](docs/cross-cutting-contracts.md#separate-profiles-shared-company-memory).
 
 ---
 
@@ -91,27 +65,19 @@ Claude/ChatGPT authorization, all nine candidate MCP tools, local-file access
 and revocation. The diagrams distinguish existing Desktop behavior, the
 unreleased local connector candidate and the proposed remote service.
 
-### Repository layout
+### Development documentation
 
-- **[`engine/`](engine/)** — Python 3.11+ sidecar (the brain). IMAP /
-  SMTP, WhatsApp (neonize), SMS, MrCall phone, blob memory, hybrid
-  lexical + semantic search over local SQLite. BYOK LLM (Anthropic or
-  OpenAI).
-- **[`app/`](app/)** — Electron + React desktop frontend that embeds
-  the engine via JSON-RPC over stdio. Builds `.dmg` and `.exe`
-  installers via `electron-builder`.
-- **[`docs/`](docs/)** — monorepo-wide documentation.
-
-This is a monorepo containing both halves: the Python engine that talks
-to mail / WhatsApp / phone / LLMs, and the Electron + React desktop
-frontend that embeds it.
+[AGENTS.md](AGENTS.md) maps the repository and its responsibilities.
+See [engine development](engine/README.md), [app development](app/README.md)
+and the [documentation index](docs/README.md) for technical guidance.
 
 ### The sign-in token, mechanically
 
 On signin the renderer pushes a short-lived Firebase ID token to the
 engine, which uses it to authenticate outgoing calls to MrCall's
-backends (phone, SMS, business lookups, and MrCall-credits billing); the
-token itself is held in memory only and never persisted.
+backends (phone, SMS, business lookups, and MrCall-credits billing).
+The engine keeps that ID token in memory. Refresh tokens have a separate
+storage contract; see [authentication and credentials](docs/cross-cutting-contracts.md#identity-firebase--added-2026-05-02).
 
 ### Run from source (dev)
 
@@ -133,12 +99,11 @@ Full dev / packaging details: [`app/README.md`](app/README.md) and
 
 ### Windows and Intel Mac builds
 
-Windows (x64) and macOS Intel x64 are not published on
-[Releases](https://github.com/hahnbanach/mrcall-desktop/releases) yet —
-both are opt-in legs of the CI build, off by default. Until they're
-published, get them by building from source (above) on the target
-platform, or by triggering the opt-in CI build yourself; see
-[`app/README.md`](app/README.md) for the flags.
+The default release build targets macOS Apple Silicon. Windows x64 and
+macOS Intel x64 builds are opt-in and off by default; check the
+[release assets](https://github.com/hahnbanach/mrcall-desktop/releases)
+for available installers. Developers can build on the target platform or
+trigger the opt-in CI build; see [app development](app/README.md) for flags.
 
 For Linux: install the engine directly from source via the CLI; see
 [`engine/README.md`](engine/README.md). The Electron frontend isn't
