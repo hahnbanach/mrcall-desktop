@@ -14,7 +14,7 @@ approved 2026-09-29 by two independent reviews. This plan was revised once on
 two independent plan reviews (conformance; adversarial mechanisms), whose
 findings are folded in below.
 
-## Remaining work (index, as of 2026-10-02 after `35f8840`)
+## Remaining work (index, opened 2026-10-02; all items closed 2026-10-13)
 
 This is the entry point for any session picking this up. Each item names:
 - **where it runs:** *cloud* is a session on this repository with no host

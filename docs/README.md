@@ -23,6 +23,7 @@ The repo has three parallel doc trees, mirroring the three index files. Each tre
 ## Index
 
 - [Cross-cutting runtime contracts](cross-cutting-contracts.md) — identity, shared company memory with separate profile users, hosted isolation and LLM billing; operating rules remain in AGENTS.md.
+- [Tenant write paths](briefs/2026-10-15-tenant-write-paths.md) — `mrcall-tenant create` bounds what a hosted daemon can write; [plan](execution-plans/2026-10-15-tenant-write-paths.md).
 
 - [Qonto connection](briefs/2026-10-04-qonto-connection.md) — native Desktop setup and engine-owned financial source; [development plan](execution-plans/2026-10-04-qonto-connection.md), including the authorized support-only rollout.
 - [Qonto IPC](qonto-ipc.md) — native bank methods, managed chat history and verification boundaries.

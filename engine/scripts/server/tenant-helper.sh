@@ -27,6 +27,7 @@
 # /etc/mrcalld/tenant-exec/<uid> (0600 root):
 #   INTERPRETER=/home/mrcalld/releases/<release>/venv/bin/zylch
 #   VOICE_CONFIG=/etc/mrcalld/<file>.env
+#   WRITE_PATH=/var/lib/<dir>        # one extra writable directory, the tenant's own
 # `create` validates both, copies the voice file to a 0640 root:<tenant>
 # copy the sandboxed daemon can read, and writes the command line itself;
 # the operator's own command drop-ins stay in place (tenant.conf sorts last
@@ -213,7 +214,7 @@ EXEC_BIN="$VENV/bin/zylch"; VOICE_ARG=""
 # refusal further down would leave the unit unable to restart (scratch VM
 # probe 2026-10-02); `create` removes it once nothing is left to refuse.
 # Called plainly (never in `&&`/`||`), so `set -e` holds inside.
-declared=0; VOICE_SRC=""
+declared=0; VOICE_SRC=""; WRITE_PATH=""
 # Deliberately narrow line/name grammar for dotenv and systemd EnvironmentFile:
 # one assignment per physical line; quotes may only wrap the whole value.
 # Backslash escapes and controls (apart from horizontal tab) are refused.
@@ -338,7 +339,7 @@ sandbox_sees() { # sandbox_sees <absolute path of an executable>
   [ -f "$p" ] && [ -x "$p" ]
 }
 read_tenant_exec() {
-  declared=0
+  declared=0; WRITE_PATH=""
   if [ ! -e "$exec_decl" ] && [ ! -L "$exec_decl" ]; then return 0; fi
   [ -L "$exec_decl" ] && die "$exec_decl is a symlink; refusing"
   [ -f "$exec_decl" ] || die "$exec_decl is not a regular file"
@@ -346,19 +347,39 @@ read_tenant_exec() {
   case "$(stat -c '%a' "$exec_decl")" in 600|400|640|644) ;; *) die "$exec_decl must not be group/other-writable (0600)";; esac
   # A declaration says something or is refused: with a misspelt key the
   # unit would migrate onto the standard command line, voice silently gone
-  # (scratch VM probe 2026-10-02). Only the two keys, each at most once.
-  if grep -qvE '^([[:space:]]*(#.*)?|(INTERPRETER|VOICE_CONFIG)=.+)$' "$exec_decl"; then
-    die "$exec_decl has a line that is not INTERPRETER=<path>, VOICE_CONFIG=<path> or a comment"
+  # (scratch VM probe 2026-10-02). Only the three keys, each at most once.
+  if grep -qvE '^([[:space:]]*(#.*)?|(INTERPRETER|VOICE_CONFIG|WRITE_PATH)=.+)$' "$exec_decl"; then
+    die "$exec_decl has a line that is not INTERPRETER=<path>, VOICE_CONFIG=<path>, WRITE_PATH=<dir> or a comment"
   fi
   # a quoted value is unquoted by this reader: `VOICE_CONFIG=""` would be
   # a valid line that declares nothing
-  if grep -q "[\"']" "$exec_decl"; then die "$exec_decl has a quote; write the two paths bare"; fi
-  local interp vconf rp shebang sp k
-  for k in INTERPRETER VOICE_CONFIG; do
+  if grep -q "[\"']" "$exec_decl"; then die "$exec_decl has a quote; write the paths bare"; fi
+  local interp vconf wpath rp shebang sp k mode
+  for k in INTERPRETER VOICE_CONFIG WRITE_PATH; do
     [ "$(grep -cE "^$k=" "$exec_decl" || true)" -le 1 ] || die "$exec_decl sets $k more than once"
   done
   interp=$(env_value "$exec_decl" INTERPRETER); vconf=$(env_value "$exec_decl" VOICE_CONFIG)
-  [ -n "$interp" ] || [ -n "$vconf" ] || die "$exec_decl declares neither INTERPRETER nor VOICE_CONFIG; remove it or fill it in"
+  wpath=$(env_value "$exec_decl" WRITE_PATH)
+  [ -n "$interp" ] || [ -n "$vconf" ] || [ -n "$wpath" ] || die "$exec_decl declares none of INTERPRETER, VOICE_CONFIG, WRITE_PATH; remove it or fill it in"
+  # One extra writable directory (production's Qonto host identity, outside
+  # the profile). It must be this tenant's alone: owned by its user, no
+  # group/other write, a real directory outside every tree another tenant,
+  # the service or the keys live in. Shared, it would be a write channel
+  # between tenants; a root-owned or system tree, a way out of the sandbox.
+  if [ -n "$wpath" ]; then
+    plain_path WRITE_PATH "$wpath"
+    rp=$(realpath -e -- "$wpath" 2>/dev/null) || die "WRITE_PATH $wpath does not exist"
+    [ "$rp" = "$wpath" ] || die "WRITE_PATH $wpath is not the real path (it is $rp)"
+    [ -d "$wpath" ] && [ ! -L "$wpath" ] || die "WRITE_PATH $wpath is not a directory"
+    case "$wpath/" in
+      /|"$PROFILES"/*|"$MEMORY"/*|"$RUN_ROOT"/*|"$REPO"/*|"$RELEASES"/*|/etc/*|/usr/*|/boot/*|/proc/*|/sys/*|/dev/*|/run/*|/root/*)
+        die "WRITE_PATH $wpath is inside a tree the tenant must not write: use a directory of its own, e.g. under /var/lib";;
+    esac
+    [ "$(stat -c %U -- "$wpath")" = "$user" ] || die "WRITE_PATH $wpath must be owned by $user (chown $user: $wpath)"
+    mode=$(stat -c %a -- "$wpath")
+    (( (8#$mode & 8#022) == 0 )) || die "WRITE_PATH $wpath is group/other-writable ($mode): chmod go-w $wpath, and make sure no other tenant uses it"
+    WRITE_PATH="$wpath"
+  fi
   if [ -n "$interp" ]; then
     plain_path INTERPRETER "$interp"
     rp=$(realpath -e -- "$interp" 2>/dev/null) || die "INTERPRETER $interp does not exist"
@@ -495,6 +516,7 @@ write_dropin() { # write_dropin <group or empty>
     echo "ReadWritePaths=$profile_dir"
     [ -n "$group" ] && echo "ReadWritePaths=$MEMORY/$group"
     echo "ReadWritePaths=$RUN_ROOT/$uid"
+    [ -n "$WRITE_PATH" ] && echo "ReadWritePaths=$WRITE_PATH"
     echo "PrivateTmp=yes"
     echo "NoNewPrivileges=yes"
     echo "CapabilityBoundingSet="
@@ -659,6 +681,19 @@ create)
   efs=$(systemctl show -p EnvironmentFiles --value "$unit" | sed -E 's/ \(ignore_errors=[a-z]+\)$//' | tr '\n' ' ')
   [ "$efs" = "${VOICE_ARG:+$voice_copy }$keyfile " ] \
     || die "the unit's effective EnvironmentFile list is not tenant.conf's (the voice copy, then the key file): another drop-in adds to it (systemctl cat $unit)"
+  # 6b'. what the tenant can write: tenant.conf's paths and the declared
+  #    WRITE_PATH, nothing else. An operator drop-in that adds a writable or
+  #    bound path widens the sandbox without any check, so it is refused;
+  #    the declaration is the one way in, and it is validated above.
+  rw_have=$(systemctl show -p ReadWritePaths --value "$unit" | tr ' ' '\n' | sed 's/^-//' | sed '/^$/d' | sort -u | tr '\n' ' ')
+  rw_want=$(printf '%s\n' "$profile_dir" ${group:+"$MEMORY/$group"} "$RUN_ROOT/$uid" ${WRITE_PATH:+"$WRITE_PATH"} | sort -u | tr '\n' ' ')
+  [ "$rw_have" = "$rw_want" ] \
+    || die "the unit's effective ReadWritePaths are not tenant.conf's plus the declared WRITE_PATH: have [$rw_have] want [$rw_want]; declare one extra directory as WRITE_PATH in $exec_decl and drop the others (systemctl cat $unit)"
+  bp_have=$(systemctl show -p BindPaths --value "$unit" | tr ' ' '\n' | sed '/^$/d' | while IFS=: read -r src dst _; do
+      src=${src#-}; [ -z "$dst" ] || [ "$dst" = "$src" ] || echo "MOVED:$src->$dst"; echo "$src"; done | sort -u | tr '\n' ' ')
+  bp_want=$(printf '%s\n' "$profile_dir" ${group:+"$MEMORY/$group"} | sort -u | tr '\n' ' ')
+  [ "$bp_have" = "$bp_want" ] \
+    || die "the unit's effective BindPaths are not tenant.conf's: have [$bp_have] want [$bp_want] (systemctl cat $unit)"
   # 6c. a pinned PYTHONPATH must be a real path inside the bound trees,
   #    readable by the tenant, or the daemon would silently import the
   #    checkout: the sandbox hides every other path under /home, and

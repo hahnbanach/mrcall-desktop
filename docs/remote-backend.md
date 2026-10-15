@@ -110,10 +110,16 @@ The model:
   operator drop-in `t0-<name>.conf`: that still sorts before
   `tenant.conf`, and the order among the others is kept. A source pin
   carries `Environment=PYTHONPATH=` and may preserve
-  `Environment=PYTHONDONTWRITEBYTECODE=1`. Put additional permissions in an
-  earlier, separate operator drop-in; production's Qonto write permission
-  uses `90-qonto-identity-paths.conf`, with its identity Environment setting
-  in `t0-qonto-identity.conf`. A different command line goes in the
+  `Environment=PYTHONDONTWRITEBYTECODE=1`. A drop-in does not grant write
+  access. `create` checks the unit's effective `ReadWritePaths` and
+  `BindPaths` and refuses anything beyond `tenant.conf`'s own (profile,
+  company directory, runtime directory) plus one directory declared as
+  `WRITE_PATH=<dir>` in `/etc/mrcalld/tenant-exec/<uid>`. That directory
+  must belong to the tenant's user, have no group or other write
+  permission, and lie outside the profiles, the memory, `/run`, the
+  checkout, the releases and system trees; `tenant.conf` then grants it.
+  Production's Qonto host identity uses it; its identity Environment
+  setting stays in `t0-qonto-identity.conf`. A different command line goes in the
   `tenant-exec` declaration below. A reconcile in which any `create` is
   refused exits 3, naming the profiles, so `zylch-reconcile.service` ends
   `ActiveState=failed`, `Result=exit-code`, `ExecMainStatus=3`; the units
@@ -132,8 +138,9 @@ The model:
   a later user may be given.
 - A unit that needs **its own interpreter or the production voice
   listener** is declared by the operator in `/etc/mrcalld/tenant-exec/<uid>`
-  (`0600 root`): `INTERPRETER=<release>/venv/bin/zylch` and/or
-  `VOICE_CONFIG=<root-owned voice env file>`, nothing else. `create` then
+  (`0600 root`): `INTERPRETER=<release>/venv/bin/zylch`,
+  `VOICE_CONFIG=<root-owned voice env file>` and/or one
+  `WRITE_PATH=<the tenant's own directory>`, nothing else. `create` then
   writes that command itself (the operator's command drop-ins stay and
   are what `unmigrate` returns the unit to), copies the voice file to
   `<uid>.voice.env` beside the declaration (`0640 root:<tenant>`) and
