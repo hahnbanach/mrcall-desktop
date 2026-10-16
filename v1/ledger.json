@@ -1319,10 +1319,21 @@
             "role": null,
             "spent_usd": "0.000043",
             "why": "metadata changed (models parameters)"
+          },
+          {
+            "at": "2026-10-16T12:37:45Z",
+            "bound_usd": "0.2",
+            "check": "smoke deepseek/deepseek-v4-flash-0731",
+            "kind": "smoke",
+            "model": "deepseek/deepseek-v4-flash-0731",
+            "outcome": "passed",
+            "role": null,
+            "spent_usd": "0.000049",
+            "why": "metadata changed (models reasoning)"
           }
         ],
         "opened_at": "2026-10-16T12:37:16Z",
-        "reserved_usd": "0.205263",
+        "reserved_usd": "0.005312",
         "run": "2026-10-16T12:36:59Z",
         "settled_at": null,
         "spent_usd": null
