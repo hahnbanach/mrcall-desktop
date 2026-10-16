@@ -1572,10 +1572,21 @@
             "role": "CORRECTION_LEARNING",
             "spent_usd": "0.001307",
             "why": "pick of economy / CORRECTION_LEARNING / ranking"
+          },
+          {
+            "at": "2026-10-16T13:06:31Z",
+            "bound_usd": "2",
+            "check": "CORRECTION_LEARNING on nvidia/nemotron-3.5-lightning",
+            "kind": "measure",
+            "model": "nvidia/nemotron-3.5-lightning",
+            "outcome": "not completed: CORRECTION_LEARNING on nvidia/nemotron-3.5-lightning: stopped at its time limit of 10 min",
+            "role": "CORRECTION_LEARNING",
+            "spent_usd": "0.00212",
+            "why": "pick of economy / CORRECTION_LEARNING / ranking"
           }
         ],
         "opened_at": "2026-10-16T12:37:16Z",
-        "reserved_usd": "2.051301",
+        "reserved_usd": "0.053421",
         "run": "2026-10-16T12:36:59Z",
         "settled_at": null,
         "spent_usd": null

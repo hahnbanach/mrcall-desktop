@@ -964,6 +964,16 @@
       "prompt_sha256": "9d4a1fdfe1f5fbb8e4f3876e602c24e3c729e05f7786f4d59a71a64164715d1b",
       "role": "MEMORY_MERGE",
       "run": "2026-10-12T17:43:39Z"
+    },
+    {
+      "at": "2026-10-16T13:06:31Z",
+      "case_set_sha256": "801ace2db488587b6d5ad21b6789ff80d018c3e15be2fc0cdbeb7a49c5a4f184",
+      "detail": "CORRECTION_LEARNING on nvidia/nemotron-3.5-lightning: stopped at its time limit of 10 min",
+      "metadata_sha256": "05a8a0033046d188d903c74d761f85dc9a3ccda1099d210829cf821aeac474fc",
+      "model": "nvidia/nemotron-3.5-lightning",
+      "prompt_sha256": "3e6e88fecfeb96673b98b1d65243229c0f873778e53bb3e26e7fcb246160717d",
+      "role": "CORRECTION_LEARNING",
+      "run": "2026-10-16T12:36:59Z"
     }
   ]
 }
