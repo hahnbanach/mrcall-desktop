@@ -11,14 +11,6 @@
       "run": "2026-10-12T17:43:39Z"
     },
     {
-      "at": "2026-10-12T17:47:39Z",
-      "detail": "",
-      "metadata_sha256": "604dcea0574a17bb1e06763b08fd07f5307b27fb5661d847078db7ee6b359f0a",
-      "model": "anthropic/claude-sonnet-4.6",
-      "outcome": "passed",
-      "run": "2026-10-12T17:43:39Z"
-    },
-    {
       "at": "2026-10-12T17:48:03Z",
       "detail": "",
       "metadata_sha256": "3096669cd59cd122cf79b3f9b85e1a23948769711da40019d8d00ed6e5bfa748",
@@ -623,6 +615,14 @@
       "detail": "",
       "metadata_sha256": "146d9787514d14f1c04dc4903ff9d147540af4fdd0e2676c169e3b87ecea0271",
       "model": "moonshotai/kimi-k3",
+      "outcome": "passed",
+      "run": "2026-10-16T12:36:59Z"
+    },
+    {
+      "at": "2026-10-16T12:38:01Z",
+      "detail": "",
+      "metadata_sha256": "f6fee187b547cd5199dd491c7b92cb794b4dd38ecc9654bcca296487f19f5e9b",
+      "model": "anthropic/claude-sonnet-4.6",
       "outcome": "passed",
       "run": "2026-10-16T12:36:59Z"
     }

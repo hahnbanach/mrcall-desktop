@@ -1352,10 +1352,21 @@
             "role": null,
             "spent_usd": "0.002598",
             "why": "metadata changed (models reasoning)"
+          },
+          {
+            "at": "2026-10-16T12:38:01Z",
+            "bound_usd": "0.2",
+            "check": "smoke anthropic/claude-sonnet-4.6",
+            "kind": "smoke",
+            "model": "anthropic/claude-sonnet-4.6",
+            "outcome": "passed",
+            "role": null,
+            "spent_usd": "0.005709",
+            "why": "metadata changed (models reasoning, direct reasoning)"
           }
         ],
         "opened_at": "2026-10-16T12:37:16Z",
-        "reserved_usd": "0.207936",
+        "reserved_usd": "0.013645",
         "run": "2026-10-16T12:36:59Z",
         "settled_at": null,
         "spent_usd": null
