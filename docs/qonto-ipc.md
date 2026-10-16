@@ -14,8 +14,8 @@ See [engine behavior](../engine/docs/features/qonto.md) and
 | Method | Parameters | Result |
 |---|---|---|
 | `qonto.status` | none | `status`, `generation`, `credential_stored`, `account_count`, `source_access`; `sync` (persisted coverage) when connected, `error` (safe outcome) when unavailable |
-| `qonto.test` | typed `login` and `api_key`; optional `account_ids`; optional `credential_source`, accepted only as `input` | organization/accounts, challenge, expiry, consent version and `company_name: string|null` |
-| `qonto.connect` | the tested `login` and `api_key`, `challenge_id`, `account_ids`, `authority_confirmed=true`, `consent_version`; optional `credential_source`, accepted only as `input` | saved state and bounded initial sync |
+| `qonto.test` | `credential_source?` (`input` default or explicit `bootstrap`); typed `login`/`api_key` for input only; optional `account_ids` | organization/accounts, challenge, expiry, consent version and `company_name: string|null` |
+| `qonto.connect` | `challenge_id`, `account_ids`, `authority_confirmed=true`, `consent_version`; same `credential_source?` and credentials as Test (typed arguments omitted for bootstrap) | saved state and bounded initial sync |
 | `qonto.sync` | none | bounded source-only sync outcome and coverage |
 | `qonto.accounts` | optional `account_ids` | authorized provider balances with source metadata |
 | `qonto.transactions` | date basis/from/to, statuses; optional accounts/currency/side/page/page size | bounded source rows, pagination and coverage |
@@ -27,14 +27,15 @@ See [engine behavior](../engine/docs/features/qonto.md) and
 | `qonto.disconnect` | none | application-copy removal, disconnected status and generation |
 | `qonto.delete_imported_data` | `confirmed=true` | private-source deletion and removed-row count; historical published facts retained |
 
-Credentials have one source: the `login` and `api_key` arguments of Test and
-Save. Both are secret arguments. `credential_source` is optional and `input` is
-its only accepted value. Desktop sends `credential_source: "input"` with both
-fields on every Test and repeats the same three values on Save. The retired
-`bootstrap` value is refused with
-`credentials_required` and any other value with `invalid_credentials`. Both
-refusals follow the identity checks and, on Save, the `authority_required`
-check; both precede the challenge and any provider request. Test does not save
+Desktop sends `credential_source: "input"` with both typed secret fields on
+Test and repeats those values on Save. Input is the default selector. The
+readiness candidate also preserves explicit `credential_source: "bootstrap"`,
+with both typed arguments omitted, for the installed read-only profile-file
+source. Combining bootstrap and typed arguments or using an unknown selector
+returns `invalid_credentials`; unavailable bootstrap returns its safe outcome.
+Identity and Save authority checks precede credential/provider work. Source
+selection, override refusal and retained-file boundaries are in
+[engine Qonto](../engine/docs/features/qonto.md). Test does not save
 the credentials: Desktop retains a short-lived request-only copy until Save,
 edit, expiry, error or context change. Save consumes the exact tested context
 and account selection. `login` and `api_key` are declared optional, so the

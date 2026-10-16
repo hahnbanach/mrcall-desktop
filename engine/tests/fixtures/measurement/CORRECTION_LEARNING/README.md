@@ -64,7 +64,8 @@ Correct answers:
 - Labelled false: `no_record`.
 - Labelled true: `record`, with every group of the label met. For a rule, the
   text contains, case-insensitively, one alternative of each group and is in
-  `expect_lang`. For a fact, the value contains one alternative of each group
+  `expect_lang`, unless neither function-word list has a hit (the no-hit
+  exemption below). For a fact, the value contains one alternative of each group
   (as written) and no forbidden spelling, and `category` equals the label's
   (case-insensitive, trimmed).
 
@@ -92,8 +93,8 @@ critical failures for the case; `[]` means none is, and `critical` is derived
 **Language.** `expect_lang` is the language the measurement requires for the
 scored free text; no language bar applies when it is `null`. It is the
 correction's language (`lang`) on the six must-record rule cases. The judge's
-prompt names no language; the bar is the brief's, so an Italian correction is
-learned in Italian, which milestone 9's rejected arm failed. It is `null`
+prompt names no language; language preservation is a measurement requirement.
+It is `null`
 elsewhere: a fact's value and category are figures and existing names, and a
 must-not case has no text to score.
 
@@ -102,8 +103,17 @@ The method is `text_language` in `tests/measurement/capture_support.py`:
 1. Lowercase the text and split it into words on anything that is not a letter.
 2. Count the words found in a fixed Italian and a fixed English function-word
    list.
-3. The language with strictly more hits wins. A tie, including no hit, is
-   undecided and fails the bar.
+3. The language with strictly more hits wins. A tie, including no hit, returns
+   an undecided detector result.
+
+The replay scorer in `engine/scripts/measurement_scoring.py` distinguishes that
+detector result from a failed bar. `language_bar` applies no language bar
+(`ok=null`) when `expect_lang` is null, the text has fewer than eight words, or
+neither function-word list has a hit. For other texts, a positive-hit tie or a
+detected language different from `expect_lang` fails the bar. Rule label matching
+separately requires the expected language or the no-hit exemption, as well as
+all required content groups. Short text alone does not exempt that label check.
+These exemptions limit what the measurement establishes about language quality.
 
 The test checks it on the memories' rules and on every must-record case's
 sent text.

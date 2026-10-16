@@ -135,20 +135,12 @@ def _context_tokens(payload_bytes):
     return -(-payload_bytes // ADMISSION_BYTES_PER_TOKEN) + ADMISSION_PROTOCOL_TOKENS
 
 
-def request_bound(request, transport):
-    """Return micro-USD hold; bytes + protocol allowance bound text input."""
-    if transport == "openai_voice":
-        from .openai_voice import request_bound as openai_bound
+def validate_features(request, *, model_prices=None):
+    """Validate the priced text/function shape without deciding input context fit.
 
-        return openai_bound(request)
-    if transport == "openrouter":
-        from .openrouter_pricing import request_bound as router_bound
-
-        return router_bound(request)
-    if transport != "direct":
-        raise BudgetError(
-            "AI paused: MrCall credit pricing must include its markup before budgeted calls can resume."
-        )
+    Return its serialized byte length for conservative monetary reservation.
+    A direct caller also supplies its allowed model prices.
+    """
     if set(request) - _ALLOWED:
         raise BudgetError("AI paused: request includes an unpriced option.")
     # The effort a provider accepts: the shape's vocabulary (low..max), never a
@@ -161,7 +153,7 @@ def request_bound(request, transport):
     if request.get("service_tier", "standard_only") != "standard_only":
         raise BudgetError("AI paused: only standard service-tier pricing is supported.")
     model = request.get("model")
-    if model not in PRICES:
+    if model_prices is not None and model not in model_prices:
         raise BudgetError("AI paused: model pricing is not configured for this model.")
     output = request.get("max_tokens")
     if type(output) is not int or not 1 <= output <= 131072:
@@ -195,6 +187,26 @@ def request_bound(request, transport):
         )
     except (TypeError, ValueError):
         raise BudgetError("AI paused: request cannot be priced safely.") from None
+    return payload_bytes
+
+
+def request_bound(request, transport):
+    """Return micro-USD hold; bytes + protocol allowance bound text input."""
+    if transport == "openai_voice":
+        from .openai_voice import request_bound as openai_bound
+
+        return openai_bound(request)
+    if transport == "openrouter":
+        from .openrouter_pricing import request_bound as router_bound
+
+        return router_bound(request)
+    if transport != "direct":
+        raise BudgetError(
+            "AI paused: MrCall credit pricing must include its markup before budgeted calls can resume."
+        )
+    payload_bytes = validate_features(request, model_prices=PRICES)
+    model, output = request["model"], request["max_tokens"]
+    messages, tools = request["messages"], request.get("tools") or []
     input_bound = payload_bytes + 4096 + 1024 * (len(messages) + len(tools))
     if _context_tokens(payload_bytes) + output > CONTEXT_WINDOW_TOKENS:
         raise BudgetError("AI paused: request exceeds the supported 200000-token context window.")

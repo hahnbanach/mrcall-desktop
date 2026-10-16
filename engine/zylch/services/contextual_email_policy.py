@@ -40,9 +40,14 @@ def intersect(left, right):
         if left == right:
             return left
         raise AssignmentError("Known task/context email authority unavailable or conflicting")
-    if any(a is not None and b is not None and a != b for a, b in (
-        (left.root, right.root), (left.target, right.target), (left.source, right.source),
-    )):
+    if any(
+        a is not None and b is not None and a != b
+        for a, b in (
+            (left.root, right.root),
+            (left.target, right.target),
+            (left.source, right.source),
+        )
+    ):
         raise AssignmentError("Known contextual email binding cannot change")
     allowed = left.sources or right.sources
     if left.sources and right.sources:
@@ -52,9 +57,9 @@ def intersect(left, right):
     source = left.source or right.source
     if allowed and source is not None and source not in allowed:
         raise AssignmentError("Selected email is not an authoritative task source")
-    return Binding(left.owner, left.root or right.root, left.target or right.target,
-                   source, sources=allowed)
-
+    return Binding(
+        left.owner, left.root or right.root, left.target or right.target, source, sources=allowed
+    )
 
 
 @contextlib.contextmanager
@@ -71,9 +76,17 @@ def source_binding(owner, values):
     from zylch.storage.storage import Storage
     from .task_assignment_email_effect import resolve
 
-    if not isinstance(values, dict) or not values or set(values) - {
-        "thread_key", "source_email_id", "target_message_id", "draft_id",
-    }:
+    if (
+        not isinstance(values, dict)
+        or not values
+        or set(values)
+        - {
+            "thread_key",
+            "source_email_id",
+            "target_message_id",
+            "draft_id",
+        }
+    ):
         raise AssignmentError("Explicit contextual email source required", -32602)
     if any(not isinstance(v, str) or not v.strip() for v in values.values()):
         raise AssignmentError("Invalid contextual email source", -32602)
@@ -89,8 +102,9 @@ def source_binding(owner, values):
         elif len(values) != 1:
             raise AssignmentError("Standalone draft disagrees with contextual original source")
     if values.get("source_email_id"):
-        email = (store.get_email_by_supabase_id(owner, values["source_email_id"])
-                 or store.get_email_by_id(owner, values["source_email_id"]))
+        email = store.get_email_by_supabase_id(
+            owner, values["source_email_id"]
+        ) or store.get_email_by_id(owner, values["source_email_id"])
         if email is None or not email.get("message_id_header"):
             raise AssignmentError("Exact contextual email source unavailable")
         sources.append(resolve(owner, {"in_reply_to": email["message_id_header"]}))
@@ -99,6 +113,11 @@ def source_binding(owner, values):
     if sources and any(item != sources[0] for item in sources):
         raise AssignmentError("Supplied contextual source identities disagree")
     root = thread(values["thread_key"]) if values.get("thread_key") else None
+    if root is not None:
+        from types import SimpleNamespace
+        from . import task_assignment_mail as mail
+
+        _, root, _ = mail.component(SimpleNamespace(mailbox=owner), root)
     if sources:
         source = sources[0]
         if root is not None and root != source["root"]:
@@ -132,11 +151,15 @@ def from_task(owner, task):
     if not ids:
         return Binding(owner, unavailable="Known email task has no source") if email_kind else None
     try:
-        bindings = [source_binding(owner, {"source_email_id": value}) for value in dict.fromkeys(ids)]
+        bindings = [
+            source_binding(owner, {"source_email_id": value}) for value in dict.fromkeys(ids)
+        ]
         if not bindings or any(value.root != bindings[0].root for value in bindings):
             return Binding(owner, unavailable="Known task has conflicting email threads")
         if any(value != bindings[0] for value in bindings):
-            return Binding(owner, bindings[0].root, sources=tuple(value.source for value in bindings))
+            return Binding(
+                owner, bindings[0].root, sources=tuple(value.source for value in bindings)
+            )
         return bindings[0]
     except (AssignmentError, TypeError, ValueError):
         return Binding(owner, unavailable="Known task original email source unavailable")
@@ -152,10 +175,15 @@ def from_context(owner, context, *, task_id=None):
         provided.append(source_binding(owner, explicit))
     if context.get("email_id"):
         provided.append(source_binding(owner, {"source_email_id": context["email_id"]}))
-    legacy = {field: context[key] for field, key in (
-        ("thread_key", "thread_id"), ("source_email_id", "source_email_id"),
-        ("target_message_id", "in_reply_to"),
-    ) if context.get(key)}
+    legacy = {
+        field: context[key]
+        for field, key in (
+            ("thread_key", "thread_id"),
+            ("source_email_id", "source_email_id"),
+            ("target_message_id", "in_reply_to"),
+        )
+        if context.get(key)
+    }
     if legacy:
         provided.append(source_binding(owner, legacy))
     task_id = context.get("task_id") or task_id
@@ -177,16 +205,31 @@ def from_context(owner, context, *, task_id=None):
 
 def chat_scope(method):
     @functools.wraps(method)
-    async def wrapped(self, user_message, user_id, conversation_history=None, session_id=None,
-                      context=None, approval_callback=None):
+    async def wrapped(
+        self,
+        user_message,
+        user_id,
+        conversation_history=None,
+        session_id=None,
+        context=None,
+        approval_callback=None,
+    ):
         from zylch.tools.factory import ToolFactory
 
         state = ToolFactory._session_state
         task_id = state.get_task_id() if state and state.is_task_mode() else None
         binding = from_context(user_id, context, task_id=task_id)
         with scope(binding):
-            return await method(self, user_message, user_id, conversation_history,
-                                session_id, context, approval_callback)
+            return await method(
+                self,
+                user_message,
+                user_id,
+                conversation_history,
+                session_id,
+                context,
+                approval_callback,
+            )
+
     return wrapped
 
 
@@ -197,10 +240,14 @@ def validate(owner, source):
     if bound.owner != owner or bound.unavailable:
         raise AssignmentError(bound.unavailable or "Contextual email owner mismatch")
     if source is None:
-        raise AssignmentError("Known contextual email cannot become standalone by dropping reply metadata")
+        raise AssignmentError(
+            "Known contextual email cannot become standalone by dropping reply metadata"
+        )
     if bound.sources and source["source"] not in bound.sources:
         raise AssignmentError("Email effect is not an authoritative original task source")
-    if source["root"] != bound.root or (bound.target is not None and source["target"] != bound.target) or (
-        bound.source is not None and source["source"] != bound.source
+    if (
+        source["root"] != bound.root
+        or (bound.target is not None and source["target"] != bound.target)
+        or (bound.source is not None and source["source"] != bound.source)
     ):
         raise AssignmentError("Email effect disagrees with known original reply source")

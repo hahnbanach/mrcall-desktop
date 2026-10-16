@@ -2118,7 +2118,13 @@ class Storage:
             # read decides only the window — the UPDATE below is still what
             # picks the single winner, so two callers cannot both claim.
             row = (
-                session.query(Draft.to_addresses, Draft.cc_addresses, Draft.bcc_addresses, Draft.status, Draft.updated_at)
+                session.query(
+                    Draft.to_addresses,
+                    Draft.cc_addresses,
+                    Draft.bcc_addresses,
+                    Draft.status,
+                    Draft.updated_at,
+                )
                 .filter(Draft.owner_id == owner_id, Draft.id == draft_id)
                 .one_or_none()
             )
@@ -2132,7 +2138,10 @@ class Storage:
             stale_before = now - timedelta(minutes=send_claim_window_minutes(recipients))
             # Fresh claims need no writer attempt: a live transport retains the
             # private reservation, so waiting here would stall a losing caller.
-            if row is not None and (row[3] == "sent" or (row[3] == "sending" and row[4] is not None and row[4] >= stale_before)):
+            if row is not None and (
+                row[3] == "sent"
+                or (row[3] == "sending" and row[4] is not None and row[4] >= stale_before)
+            ):
                 return False
             claimed = (
                 session.query(Draft)
@@ -2294,6 +2303,7 @@ class Storage:
         sent_at: datetime,
         attachment_filenames: Optional[List[str]] = None,
         in_reply_to: Optional[str] = None,
+        references: Optional[str] = None,
     ) -> Optional[Dict[str, Any]]:
         """Persist a just-sent email as a row in the `emails` table.
 
@@ -2384,7 +2394,7 @@ class Storage:
                     labels="[]",
                     message_id_header=message_id,
                     in_reply_to=in_reply_to,
-                    references=None,
+                    references=clean_references(references),
                     is_auto_reply=False,
                     task_processed_at=None,
                     has_attachments=bool(attachment_list),
@@ -4436,7 +4446,8 @@ class Storage:
                 user_edit(task, "completed_at")
                 session.flush()
                 logger.debug(
-                    f"[complete_task_item] task_id={task_id} actor={actor} " f"why={audit_why!r} rows=1"
+                    f"[complete_task_item] task_id={task_id} actor={actor} "
+                    f"why={audit_why!r} rows=1"
                 )
                 return True
         except Exception as e:
@@ -4496,7 +4507,8 @@ class Storage:
                     r.close_actor = "age_sweep.phone"
                 session.flush()
                 logger.info(
-                    f"[age-sweep] auto-closed {len(rows)} phone task(s) " f"older than {max_age_days}d"
+                    f"[age-sweep] auto-closed {len(rows)} phone task(s) "
+                    f"older than {max_age_days}d"
                 )
                 return len(rows)
         except Exception as e:

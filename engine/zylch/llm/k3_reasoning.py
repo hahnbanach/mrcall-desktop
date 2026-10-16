@@ -79,8 +79,6 @@ def request_bound(request):
         + 4096
         + 1024 * (len(wire["messages"]) + len(wire.get("tools", [])))
     )
-    if tokens + wire["max_tokens"] > 200000:
-        raise BudgetError("K3 Chat request exceeds supported context bound.")
     i, o = pricing.capped(MODEL)
     return max(
         original,
@@ -146,6 +144,7 @@ def chat_request(request):
         "stream": False,
         "provider": provider_policy(),
         "reasoning": {"effort": "max"},
+        "plugins": [{"id": "context-compression", "enabled": False}],
     }
     if source.get("tools"):
         translated = []

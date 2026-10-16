@@ -15,7 +15,10 @@ Since slice S3 one more value differs, by brief D5: the Chat body's
 ``provider.max_price`` is K3's pinned endpoint's price in the model snapshot ×
 the margin (1.25). The prices come from the committed fixture snapshot with
 K3's endpoint at the rate 40b84ed capped it at (``billed_snapshot``), so the
-cap moves by exactly the margin and every other byte of the body is 40b84ed's.
+cap moves by exactly the margin. The local Chat wire also explicitly disables
+context compression to preserve evidence, including on endpoints whose default
+is compression. Apart from these declared differences, the body is 40b84ed's;
+the credits quote request remains unchanged and does not prove server policy.
 """
 
 from __future__ import annotations
@@ -135,6 +138,7 @@ def test_k3_openrouter_body_is_40b84ed_s(pinned, name):
     assert body.pop("temperature") == 1
     assert golden["provider"].pop("max_price") == CAP_40B84ED
     assert body["provider"].pop("max_price") == CAP
+    assert body.pop("plugins") == [{"id": "context-compression", "enabled": False}]
     assert body == golden
 
 

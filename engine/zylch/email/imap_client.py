@@ -12,6 +12,12 @@ import os
 import re
 import smtplib
 import threading
+import time
+import socket
+import subprocess
+import sys
+import json
+from contextlib import contextmanager
 import email as email_lib
 from dataclasses import dataclass
 from email.header import decode_header
@@ -682,6 +688,8 @@ class IMAPClient:
             587,
         )
 
+        self._provider_deadline = None
+        self._deadline_connection = None
         self._conn: Optional[imaplib.IMAP4_SSL] = None
         self._sent_folder: Optional[str] = None
         self._sent_folder_resolved: bool = False
@@ -694,6 +702,317 @@ class IMAPClient:
             f"imap={self.imap_host}:{self.imap_port} "
             f"smtp={self.smtp_host}:{self.smtp_port}"
         )
+
+    def _resolve_provider_addresses(self):
+        if getattr(sys, "frozen", False):
+            raise IMAPError("Bounded DNS resolver unavailable in frozen engine")
+        command = [
+            sys.executable,
+            "-I",
+            "-c",
+            "import json,socket,sys; print(json.dumps(socket.getaddrinfo(sys.argv[1],int(sys.argv[2]),type=socket.SOCK_STREAM)[:32]))",
+            self.imap_host,
+            str(self.imap_port),
+        ]
+        child = subprocess.Popen(
+            command,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL,
+            stdin=subprocess.DEVNULL,
+            env={},
+        )
+        try:
+            output, _ = child.communicate(
+                timeout=self._remaining_timeout(IMAP_CONNECT_TIMEOUT_SECONDS)
+            )
+        except BaseException:
+            child.kill()
+            child.wait()
+            raise
+        finally:
+            child.stdout.close()
+        if child.returncode != 0 or len(output) > 65536:
+            raise IMAPError("IMAP provider name resolution failed")
+        try:
+            addresses = json.loads(output)
+        except (ValueError, TypeError):
+            raise IMAPError("IMAP provider name resolution failed") from None
+        if not addresses:
+            raise IMAPError("IMAP provider name resolution failed")
+        return addresses
+
+    def _remaining_timeout(self, maximum):
+        if self._provider_deadline is None:
+            return maximum
+        remaining = self._provider_deadline - time.monotonic()
+        if remaining <= 0:
+            raise IMAPError("IMAP evidence deadline expired")
+        return min(maximum, remaining)
+
+    def _deadline_check(self):
+        timeout = self._remaining_timeout(IMAP_COMMAND_TIMEOUT_SECONDS)
+        conn = self._conn or self._deadline_connection
+        sock = getattr(conn, "sock", None)
+        if sock is not None:
+            sock.settimeout(timeout)
+
+    def _abort_provider(self):
+        conn = self._conn or self._deadline_connection
+        sock = getattr(conn, "sock", None)
+        if sock is not None:
+            try:
+                sock.shutdown(socket.SHUT_RDWR)
+            except OSError:
+                pass
+        self._discard_connection(conn)
+        self._conn = None
+        self._deadline_connection = None
+
+    @contextmanager
+    def provider_deadline(self, deadline):
+        remaining = deadline - time.monotonic()
+        if remaining <= 0 or not self._imap_lock.acquire(timeout=max(0, remaining)):
+            raise IMAPError("IMAP evidence deadline expired")
+        previous = self._provider_deadline
+        timer = None
+        try:
+            self._provider_deadline = min(previous, deadline) if previous is not None else deadline
+            self._deadline_check()
+            timer = threading.Timer(self._remaining_timeout(float("inf")), self._abort_provider)
+            timer.daemon = True
+            timer.start()
+            yield self
+            self._deadline_check()
+        except Exception:
+            self._abort_provider()
+            raise
+        finally:
+            if timer is not None:
+                timer.cancel()
+                timer.join()
+            self._provider_deadline = previous
+            if previous is None:
+                self._deadline_connection = None
+            if previous is None and self._conn is not None:
+                sock = getattr(self._conn, "sock", None)
+                if sock is not None:
+                    sock.settimeout(IMAP_COMMAND_TIMEOUT_SECONDS)
+            self._imap_lock.release()
+
+    def examine_existing(self, folder, *, deadline):
+        with self.provider_deadline(deadline):
+            conn = self._ensure_connected()
+            self._deadline_check()
+            status, data = conn.select(folder, readonly=True)
+            if status != "OK" or not isinstance(data, list) or len(data) != 1:
+                raise IMAPFolderError("Incomplete folder state")
+            try:
+                exists = int(data[0])
+                _, values = conn.response("UIDVALIDITY")
+                uidvalidity = int(values[0])
+                _, values = conn.response("UIDNEXT")
+                uidnext = int(values[0])
+            except (ValueError, TypeError, IndexError):
+                raise IMAPFolderError("Incomplete folder state") from None
+            if uidvalidity <= 0 or uidnext <= 0 or exists < 0:
+                raise IMAPFolderError("Incomplete folder state")
+            return FolderState(folder, uidvalidity, uidnext, exists)
+
+    def folder_headers(
+        self,
+        folder,
+        *,
+        deadline,
+        max_messages=50000,
+        max_bytes=32 * 1024 * 1024,
+        uids=None,
+        criteria=None,
+        byte_budget=None,
+        proof=False,
+    ):
+        with self.provider_deadline(deadline):
+            if type(proof) is not bool:
+                raise IMAPError("Invalid header proof mode")
+            if max_messages <= 0 or max_bytes <= 0:
+                raise IMAPError("Invalid inventory limits")
+            if byte_budget is not None:
+                if (
+                    not isinstance(byte_budget, list)
+                    or len(byte_budget) != 1
+                    or type(byte_budget[0]) is not int
+                    or byte_budget[0] <= 0
+                ):
+                    raise IMAPError("Invalid aggregate header byte limit")
+                max_bytes = min(max_bytes, byte_budget[0])
+            if criteria is not None and (
+                uids is not None
+                or not isinstance(criteria, str)
+                or not criteria
+                or len(criteria) > 16384
+                or not criteria.isascii()
+                or any(c in criteria for c in "\r\n\x00")
+            ):
+                raise IMAPError("Invalid header search criteria")
+            conn = self._ensure_connected()
+            originals = {}
+            wire_bytes = 0
+            for method_name in ("read", "readline"):
+                original = getattr(conn, method_name, None)
+                if original is None:
+                    continue
+                originals[method_name] = original
+
+                def bounded_read(*args, _original=original, **kwargs):
+                    nonlocal wire_bytes
+                    self._deadline_check()
+                    if args and isinstance(args[0], int) and args[0] > max_bytes - wire_bytes:
+                        raise IMAPError("Header inventory response exceeds byte limit")
+                    data = _original(*args, **kwargs)
+                    wire_bytes += len(data)
+                    if wire_bytes > max_bytes:
+                        raise IMAPError("Header inventory response exceeds byte limit")
+                    return data
+
+                setattr(conn, method_name, bounded_read)
+            try:
+                before = self.examine_existing(folder, deadline=deadline)
+                if criteria is None and before.exists > max_messages:
+                    raise IMAPError("Header inventory exceeds message limit")
+                if uids is None:
+                    self._deadline_check()
+                    status, data = conn.uid("SEARCH", None, "ALL" if criteria is None else criteria)
+                    if (
+                        status != "OK"
+                        or not isinstance(data, list)
+                        or len(data) != 1
+                        or not isinstance(data[0], bytes)
+                    ):
+                        raise IMAPError("Incomplete header inventory search")
+                    tokens = data[0].split()
+                    if len(data[0]) > max_bytes or len(tokens) > max_messages:
+                        raise IMAPError("Header inventory search exceeds limits")
+                    if any(not token.isdigit() or int(token) <= 0 for token in tokens):
+                        raise IMAPError("Malformed header inventory UID")
+                    wanted = [int(token) for token in tokens]
+                    if (
+                        len(set(wanted)) != len(wanted)
+                        or (criteria is None and len(wanted) != before.exists)
+                        or len(wanted) > before.exists
+                        or any(uid >= before.uidnext for uid in wanted)
+                    ):
+                        raise IMAPError("Header inventory UID set is incomplete")
+                    search_bytes = len(data[0])
+                else:
+                    wanted = list(uids)
+                    if (
+                        len(wanted) > 200
+                        or any(
+                            type(uid) is not int or uid <= 0 or uid >= before.uidnext
+                            for uid in wanted
+                        )
+                        or len(set(wanted)) != len(wanted)
+                    ):
+                        raise IMAPError("Invalid candidate UID set")
+                    search_bytes = 0
+                result = {}
+                payload_bytes = search_bytes
+                fields = "MESSAGE-ID FROM TO CC REFERENCES IN-REPLY-TO AUTO-SUBMITTED X-AUTOREPLY PRECEDENCE X-AUTO-RESPONSE-SUPPRESS"
+                if proof:
+                    from zylch.email.pec import MARKER_HEADERS, detect_envelope
+
+                    fields += " DATE " + " ".join(MARKER_HEADERS)
+                for start in range(0, len(wanted), 200):
+                    batch = set(wanted[start : start + 200])
+                    self._deadline_check()
+                    status, data = conn.uid(
+                        "FETCH",
+                        ",".join(map(str, sorted(batch))),
+                        f"(UID FLAGS BODY.PEEK[HEADER.FIELDS ({fields})])",
+                    )
+                    if status != "OK" or not isinstance(data, list):
+                        raise IMAPError("Incomplete header inventory fetch")
+                    seen = set()
+                    flag_data = {}
+                    last_uid = None
+                    for entry in data:
+                        if isinstance(entry, bytes):
+                            uid = _parse_uid_from_prefix(entry)
+                            match = re.search(rb"\bFLAGS\s+\(([^)]*)\)", entry, re.I)
+                            uid = uid if uid is not None else last_uid
+                            if uid in batch and match is not None:
+                                flag_data[uid] = tuple(match.group(1).decode("ascii").split())
+                            elif entry.strip() != b")":
+                                raise IMAPError("Malformed header inventory fetch")
+                            continue
+                        if (
+                            not isinstance(entry, tuple)
+                            or len(entry) != 2
+                            or not all(isinstance(part, bytes) for part in entry)
+                        ):
+                            raise IMAPError("Malformed header inventory fetch")
+                        prefix, payload = entry
+                        uid = _parse_uid_from_prefix(prefix)
+                        last_uid = uid
+                        if (
+                            uid not in batch
+                            or uid in seen
+                            or b"BODY[HEADER.FIELDS" not in prefix.upper()
+                        ):
+                            raise IMAPError("Unexpected header inventory UID or body")
+                        payload_bytes += len(prefix) + len(payload)
+                        if payload_bytes > max_bytes:
+                            raise IMAPError("Header inventory response exceeds byte limit")
+                        parsed = email_lib.message_from_bytes(payload)
+                        allowed = {field.lower() for field in fields.split()}
+                        if (
+                            parsed.get_payload()
+                            or any(name.lower() not in allowed for name in parsed.keys())
+                            or any(len(parsed.get_all(name, [])) > 1 for name in allowed)
+                        ):
+                            raise IMAPError("Unexpected or duplicate inventory header")
+
+                        def value(name):
+                            return " ".join(str(parsed.get(name, "")).split())
+
+                        if not value("Message-ID"):
+                            raise IMAPError("Missing inventory message identity")
+                        row = {
+                            "message_id": value("Message-ID"),
+                            "from_email": value("From"),
+                            "to": value("To"),
+                            "cc": value("Cc"),
+                            "references": value("References"),
+                            "in_reply_to": value("In-Reply-To"),
+                        }
+                        for field in (
+                            "Auto-Submitted",
+                            "X-Autoreply",
+                            "Precedence",
+                            "X-Auto-Response-Suppress",
+                        ):
+                            row[field.lower().replace("-", "_")] = value(field)
+                        if proof:
+                            marker = detect_envelope(parsed)
+                            row["date"] = value("Date")
+                            row["pec_markers"] = marker.to_markers() if marker else None
+                        match = re.search(rb"\bFLAGS\s+\(([^)]*)\)", prefix, re.I)
+                        if match is not None:
+                            flag_data[uid] = tuple(match.group(1).decode("ascii").split())
+                        result[uid] = row
+                        seen.add(uid)
+                    if seen != batch or set(flag_data) != batch:
+                        raise IMAPError("Header inventory fetch is incomplete")
+                    for uid in batch:
+                        result[uid]["flags"] = flag_data[uid]
+                after = self.examine_existing(folder, deadline=deadline)
+                if after != before:
+                    raise IMAPError("Folder changed during header inventory")
+                if byte_budget is not None:
+                    byte_budget[0] -= max(wire_bytes, payload_bytes)
+                return result, after
+            finally:
+                for method_name, original in originals.items():
+                    setattr(conn, method_name, original)
 
     @_imap_serialized
     def connect(self) -> None:
@@ -716,16 +1035,44 @@ class IMAPClient:
         )
         conn = None
         try:
-            conn = imaplib.IMAP4_SSL(
+            factory = imaplib.IMAP4_SSL
+            if self._provider_deadline is not None:
+                owner = self
+
+                class BoundedIMAP(factory):
+                    def _create_socket(inner, timeout):
+                        addresses = owner._resolve_provider_addresses()
+                        last_error = None
+                        for family, kind, protocol, _, address in addresses:
+                            sock = socket.socket(family, kind, protocol)
+                            inner.sock = sock
+                            owner._deadline_connection = inner
+                            try:
+                                sock.settimeout(owner._remaining_timeout(timeout))
+                                sock.connect(tuple(address))
+                                owner._deadline_check()
+                                sock = inner.ssl_context.wrap_socket(
+                                    sock, server_hostname=inner.host
+                                )
+                                inner.sock = sock
+                                owner._deadline_check()
+                                return sock
+                            except OSError as error:
+                                sock.close()
+                                last_error = error
+                        raise last_error or IMAPError("IMAP provider connection failed")
+
+                factory = BoundedIMAP
+            conn = factory(
                 self.imap_host,
                 self.imap_port,
-                timeout=IMAP_CONNECT_TIMEOUT_SECONDS,
+                timeout=self._remaining_timeout(IMAP_CONNECT_TIMEOUT_SECONDS),
             )
             conn.login(self.email_addr, self.password)
             # Authenticated: give ordinary commands room to breathe.
             sock = getattr(conn, "sock", None)
             if sock is not None:
-                sock.settimeout(IMAP_COMMAND_TIMEOUT_SECONDS)
+                sock.settimeout(self._remaining_timeout(IMAP_COMMAND_TIMEOUT_SECONDS))
         except OSError as e:
             # socket.timeout is an OSError subclass, as are refusals and
             # TLS/DNS failures. Never leave a half-built connection
@@ -1595,7 +1942,8 @@ class IMAPClient:
                     lookup_failed = True
                     continue
                 status, data = conn.uid(
-                    "SEARCH", None,
+                    "SEARCH",
+                    None,
                     f'(HEADER Message-ID "{message_id}")',
                 )
                 if status != "OK":
@@ -1607,7 +1955,8 @@ class IMAPClient:
                 # that do not enforce EXAMINE's read-only semantics.
                 status, fetched = conn.uid("FETCH", data[0].split()[-1], "(BODY.PEEK[])")
                 bodies = [
-                    item[1] for item in (fetched or [])
+                    item[1]
+                    for item in (fetched or [])
                     if isinstance(item, tuple) and len(item) > 1 and isinstance(item[1], bytes)
                 ]
                 if status != "OK" or not bodies:
@@ -1792,6 +2141,11 @@ class IMAPClient:
             msg["In-Reply-To"] = in_reply_to
         if references:
             msg["References"] = references
+
+        from zylch.services.operator_reply_origin import automatic
+
+        if automatic(self.email_addr, in_reply_to, references):
+            msg["Auto-Submitted"] = "auto-replied"
 
         if has_attachments:
             for path in attachment_paths or []:

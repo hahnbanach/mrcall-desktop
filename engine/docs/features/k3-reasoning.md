@@ -12,6 +12,14 @@ does not admit that endpoint. The snapshot admits it whenever it is eligible
 (up, an allowed quantization, tools), whatever its price against K3's
 reference price (`requirements.json` `provider_policy.pinned_endpoints`), so
 an outlier reference never prices the pin out of its own cap.
+Input fit is decided by the provider's tokenizer; monetary payload bytes are
+not a context estimate. The local Chat wire explicitly disables context
+compression and preserves evidence. Output reserves also respect positive
+snapshot context metadata. Existing assistant prompt/result bounds remain
+visible through their refusal/truncation metadata. The credits server builds
+its own wire and needs matching admission/compression behavior; local engine
+acceptance does not establish that server compatibility.
+
 Other configured models retain their existing transport. There is no automatic
 model/provider fallback or inference retry.
 

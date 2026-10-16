@@ -22,6 +22,8 @@ The repo has three parallel doc trees, mirroring the three index files. Each tre
 
 ## Index
 
+- [M10 company-memory readiness](execution-plans/2026-10-15-m10-memory-production-readiness.md) — reviewed local source candidate, preserved installed runtime, incident cases and owned deployment gates; [brief](briefs/2026-10-15-m10-memory-production-readiness.md), [runtime preservation](evaluations/2026-10-15-m10-runtime-preservation.md), [admission](evaluations/2026-10-15-m10-admission.md) and [integrated evidence](evaluations/2026-10-15-m10-integrated-candidate.md).
+
 - [Cross-cutting runtime contracts](cross-cutting-contracts.md) — identity, company memory, hosted isolation and LLM billing; operating rules remain in AGENTS.md.
 
 - [Qonto connection](briefs/2026-10-04-qonto-connection.md) — native Desktop setup and engine-owned financial source; [development plan](execution-plans/2026-10-04-qonto-connection.md), including the authorized support-only rollout.

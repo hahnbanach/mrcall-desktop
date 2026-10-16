@@ -55,6 +55,18 @@ def _without_cache(request):
     return body
 
 
+def messages_request(request):
+    """Build the Messages wire body with evidence-preserving compression disabled."""
+    body = _without_cache(request)
+    body.pop("service_tier", None)
+    body.update(
+        provider=provider_policy(body["model"]),
+        stream=False,
+        plugins=[{"id": "context-compression", "enabled": False}],
+    )
+    return body
+
+
 class OpenRouterClient:
     def __init__(self, api_key, *, http_client=None):
         if not api_key or not api_key.strip():
@@ -67,9 +79,7 @@ class OpenRouterClient:
         request_bound(request)
         if request.get("model") == "moonshotai/kimi-k3" and "thinking" in request:
             return self._create_k3(request)
-        body = _without_cache(deepcopy(request))
-        body.pop("service_tier", None)
-        body.update(provider=provider_policy(body["model"]), stream=False)
+        body = messages_request(request)
 
         def dispatch(client):
             return client.post(

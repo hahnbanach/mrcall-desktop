@@ -145,6 +145,19 @@ Company-wide assignment reads do not expose private mailbox rows. A local kernel
 handled record alone cannot close ownership; only the exact engine acknowledgement
 can settle it, and failed acknowledgement leaves held work visible.
 
+## Preserved source projection
+
+The readiness candidate retains the installed bounded, memoized RFC ancestry
+walk, one shared 40-second provider-evidence deadline and complete Sent discovery.
+Stored/live ancestry disagreement, unsynced manual Sent candidates or incomplete
+observations hold automatic reply. Active human assignment remains authoritative
+without waiting for closure I/O. Genuine scheduled-reply provenance is admitted
+against the exact source before the send claim, rechecked on the claimed draft
+and passed only through its transport handoff. Existing incomplete Sent rows
+are not backfilled. Runtime wiring and local evidence are documented in
+[operator runtime](operator-runtime.md); installed operational acceptance is
+separate from source preservation.
+
 ## Joins and rollback
 
 Company joins refuse source stores containing assignment state or history, and

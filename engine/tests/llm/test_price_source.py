@@ -12,8 +12,9 @@ force (the fixture table the root conftest puts in force). Every price here is
 read from the committed fixture snapshot as 10a billed it (`billed_snapshot`:
 the 2026-10-02 capture, whose rates are 10a's for every id below but two
 OpenRouter rates, put back), never from the build copy. The direct rates and
-holds are unchanged; on OpenRouter the hold and the cap are the rate × the
-margin (1.25), the one change the brief makes to these expected values.
+holds are unchanged. On OpenRouter the hold and the cap use the rate × the
+margin (1.25). The hold covers the larger original or dispatched body,
+including the explicit policy that disables context compression.
 """
 
 import json
@@ -25,6 +26,7 @@ import pytest
 
 from zylch.llm import budget_pricing, openrouter_pricing, usage
 from zylch.llm.budget_pricing import BudgetError, request_bound
+from zylch.llm.openrouter_client import messages_request
 from zylch.llm.roles import catalogue, prices, table
 
 ROLES = Path(prices.__file__).resolve().parent
@@ -88,6 +90,10 @@ def _expected_hold(model, transport, max_tokens=1000):
     """The hold `request_bound` must take, from the price source's rate."""
     request = {"model": model, "max_tokens": max_tokens, "messages": MESSAGES}
     payload = len(json.dumps(request, ensure_ascii=False).encode("utf-8"))
+    if transport == "openrouter":
+        payload = max(
+            payload, len(json.dumps(messages_request(request), ensure_ascii=False).encode("utf-8"))
+        )
     i, o = prices.price(model, transport)
     tokens = payload + 4096 + 1024 * len(MESSAGES)
     if transport == "openrouter":

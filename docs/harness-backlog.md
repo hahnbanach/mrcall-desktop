@@ -234,6 +234,11 @@ split indexes.**
   pruning and subject-level separation; recording its size verdict does not
   begin that separate workstream.
 
+| doc | lines at review | verdict | date |
+|---|---|---|---|
+| docs/evaluations/2026-10-11-role-measurement.md | 494 | keep whole — one measured run and its evidence limits, read by section | 2026-10-15 |
+| docs/evaluations/2026-10-12-m10-end-to-end.md | 401 | keep whole — one end-to-end matrix and its reproducible evidence, read by section | 2026-10-15 |
+
 ## Resolved
 
 - RPC signature enforcement includes `llm.models(provider?)` (2026-10-07).

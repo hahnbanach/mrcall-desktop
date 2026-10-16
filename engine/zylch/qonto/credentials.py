@@ -1,8 +1,9 @@
 """Qonto credential value type, format validation and request parsing.
 
-Credentials reach the engine as the typed ``login`` and ``api_key`` arguments
-of ``qonto.test`` and ``qonto.connect``. Nothing in this module reads a
-credential from a file or from the process environment.
+This module validates typed ``login`` and ``api_key`` inputs without reading
+files or the process environment. The connection lifecycle uses the explicit
+read-only source selector in ``bootstrap.request_credentials``; its bootstrap
+path shares this value type and parser.
 """
 
 from __future__ import annotations
@@ -42,12 +43,10 @@ def credentials(login, key) -> Credentials:
 
 
 def request_credentials(params: dict) -> Credentials:
-    """Credentials carried by a ``qonto.test`` or ``qonto.connect`` request.
+    """Parse a typed-only credential request without consulting a file.
 
-    ``credential_source`` is optional and ``input`` is its only accepted value.
-    The retired ``bootstrap`` value is refused with ``credentials_required``
-    whatever else the request carries; any other value is refused with
-    ``invalid_credentials``.
+    Lifecycle RPCs select their source through ``bootstrap.request_credentials``.
+    This narrower parser accepts only the optional ``input`` source.
     """
     source = params.get("credential_source", "input")
     if source == "bootstrap":

@@ -138,6 +138,7 @@ async def handle_process(
     try:
         with pipeline_single_flight(caller):
             from zylch.services.preparation import preparation_run, PreparationStopped
+
             try:
                 with preparation_run(owner_id, explicit="--resume" in args):
                     return await _run_pipeline(args, config, owner_id, progress, errors_out)
@@ -246,7 +247,11 @@ async def _run_pipeline(
     console.print("\n[bold cyan][1/5] Syncing emails...[/bold cyan]")
     _p(5, "Syncing emails…", None)
     try:
-        sync_result = ({"new_messages": 0} if "--analyze-only" in args else await _run_sync(owner_id, store, days_back))
+        sync_result = (
+            {"new_messages": 0}
+            if "--analyze-only" in args
+            else await _run_sync(owner_id, store, days_back)
+        )
         new = sync_result.get("new_messages", 0)
         summary_stats["sync_new"] = int(new or 0)
         if errors_out is not None:
@@ -265,7 +270,11 @@ async def _run_pipeline(
     console.print("\n[bold cyan][2/5] Syncing WhatsApp...[/bold cyan]")
     _p(20, "Syncing WhatsApp…", None)
     try:
-        wa_result = ({"skipped": True, "reason": "Analyze only"} if "--analyze-only" in args else _run_whatsapp_sync(owner_id, store))
+        wa_result = (
+            {"skipped": True, "reason": "Analyze only"}
+            if "--analyze-only" in args
+            else _run_whatsapp_sync(owner_id, store)
+        )
         if wa_result.get("skipped"):
             console.print(f"  Skipped: {wa_result.get('reason', 'not configured')}")
         else:
@@ -328,7 +337,9 @@ async def _run_pipeline(
         try:
             budget = budget_state(owner_id)
             if budget.get("pricing_fault"):
-                raise BudgetError("AI paused: provider usage exceeded its estimate; pricing reconciliation is required.")
+                raise BudgetError(
+                    "AI paused: provider usage exceeded its estimate; pricing reconciliation is required."
+                )
             if budget["exceeded"]:
                 raise BudgetError(
                     f"Daily AI budget unavailable: spent=${budget['spent_usd']:.2f}, "
@@ -360,6 +371,7 @@ async def _run_pipeline(
             try:
                 from zylch.llm import routed_model
                 from zylch.llm.client import make_llm_client
+
                 _probe = make_llm_client(model=routed_model("MODEL_SYNC_ANALYSIS"))
                 await _probe.check_transport()
             except Exception as e:
@@ -399,6 +411,7 @@ async def _run_pipeline(
             _eta_for_memory(pending_mem + pending_wa),
         )
         from zylch.services.preparation import PreparationStopped, company_fenced
+
         try:
             mem_count, wa_count = await _run_memory(owner_id, store)
             summary_stats["memory_processed"] = int(mem_count or 0)
@@ -562,6 +575,7 @@ async def run_sync_only(
     days_back: int = 60,
     progress: Optional[ProgressFn] = None,
     errors_out: Optional[list] = None,
+    include_whatsapp: bool = True,
 ) -> dict:
     """Run only the data-fetch phases of the pipeline (email + WhatsApp),
     skipping memory extraction and task detection.
@@ -591,7 +605,7 @@ async def run_sync_only(
         "sync_new": 0,
         "wa_messages": 0,
         "wa_contacts": 0,
-        "wa_skipped_reason": None,
+        "wa_skipped_reason": None if include_whatsapp else "Email-only scope.",
     }
 
     # --- Step 1: Email ---
@@ -611,6 +625,10 @@ async def run_sync_only(
         if errors_out is not None:
             errors_out.extend(sync_failure_entries(e))
         _p(100, f"Sync failed: {e}", None)
+        return result
+
+    if not include_whatsapp:
+        _p(100, "Email sync complete", None)
         return result
 
     # --- Step 2: WhatsApp ---

@@ -5,12 +5,13 @@ import pytest
 
 from zylch.llm.budget_pricing import BudgetError
 from zylch.llm.model_policy import profile_value, resolve_model, resolve_provider
-from zylch.llm.openrouter_client import OpenRouterClient
+from zylch.llm.openrouter_client import OpenRouterClient, messages_request
 from zylch.llm.openrouter_pricing import request_bound, usage_cost
-MODEL = "z-ai/glm-5.2"  # an allowlisted OpenRouter model, billed at 0.6/2
 
 from .model_table_fixture import everything, serve
 from .test_model_policy_roles import expected
+
+MODEL = "z-ai/glm-5.2"  # an allowlisted OpenRouter model, billed at 0.6/2
 
 
 @pytest.fixture(autouse=True)
@@ -276,7 +277,14 @@ def test_anthropic_router_reserves_cache_write_upper_bound():
     from decimal import Decimal, ROUND_CEILING
 
     payload = {**request(), "model": "anthropic/claude-sonnet-5"}
-    tokens = len(json.dumps(payload, ensure_ascii=False, allow_nan=False).encode()) + 4096 + 1024
+    tokens = (
+        max(
+            len(json.dumps(body, ensure_ascii=False, allow_nan=False).encode())
+            for body in (payload, messages_request(payload))
+        )
+        + 4096
+        + 1024
+    )
     # Sonnet 5 at 2/10 × the margin 1.25 (brief D5), input doubled for cache
     # writes: before slice S3, `tokens * 4 + 64 * 10`.
     assert request_bound(payload) == int(

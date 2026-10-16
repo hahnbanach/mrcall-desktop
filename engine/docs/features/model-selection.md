@@ -9,17 +9,14 @@ hb: `docs/briefs/2026-10-01-model-selection-by-requirements.md` and
 contract (schemas, gates, credits protocol) is
 [`zylch/llm/roles/contract/`](../../zylch/llm/roles/contract/README.md).
 
-## Why
+## Selection boundary
 
-Milestone 9's paid corpus run used `claude-haiku-4-5` because that was the
-engine's default everywhere. The run failed one critical case and translated
-every Italian correction into English, and the CTO rejected the arm: Haiku is
-not a default or an arm anywhere. The cause was general: model names were
-fixed in code, prices were copied by hand, and nobody revisited the choice
-when a model aged. Now each call site names a **role**; a role declares a
-rule and an index; a resolver turns the requirements, OpenRouter's catalogue
-and a measurement into a published **model table**. No model is a default in
-code.
+Each call site names a **role**; a role declares a rule and an index. The
+resolver combines requirements, OpenRouter's catalogue and measurements into
+the published **model table**. No model is a default in code. Haiku is excluded
+from rankings and measurement arms; an explicit saved custom choice remains
+priced. Historical quality findings and their limits belong to the
+[measurement record](../../../docs/evaluations/2026-10-11-role-measurement.md).
 
 ## The requirements
 
@@ -326,6 +323,17 @@ copy that fails the gates or whose snapshot was read more than 14 days ago.
 These guard against accidents, not evasion: a name built by concatenation,
 read from outside `zylch/` or placed on a comment-only line, or a request
 built from a splatted dict, is not seen.
+
+## Runtime and acceptance boundary
+
+The [readiness candidate](../../../docs/execution-plans/2026-10-15-m10-memory-production-readiness.md)
+preserves installed runtime protections alongside M10 and separates OpenRouter
+input fit from monetary byte bounds. A saved custom/role override still wins;
+installing M10 does not switch such a profile to the measured picks. The
+[integrated evaluation](../../../docs/evaluations/2026-10-15-m10-integrated-candidate.md)
+records actual production/Mario forecasts, local path evidence, a fresh free
+distribution matrix and the mandatory real-read/server/CI/paid gates. No local
+scripted answer certifies company facts or deployment readiness.
 
 ## Known limits
 

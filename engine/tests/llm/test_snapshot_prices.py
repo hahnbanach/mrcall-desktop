@@ -39,6 +39,7 @@ from zylch.llm.budget_pricing import PRICES, BudgetError, validate_response_mode
 from zylch.llm.budget_pricing import request_bound as direct_bound
 from zylch.llm.client import LLMClient
 from zylch.llm.model_policy import resolve_model
+from zylch.llm.openrouter_client import messages_request
 from zylch.llm.openrouter_pricing import LABELS, RATES, capped, provider_policy
 from zylch.llm.openrouter_pricing import request_bound as routed_bound
 from zylch.llm.roles import candidates, catalogue, gates, prices, table
@@ -59,6 +60,10 @@ def _payload_tokens(request: dict) -> int:
     return payload + 4096 + 1024 * (len(request["messages"]) + len(request.get("tools") or []))
 
 
+def _routed_tokens(request: dict) -> int:
+    return max(_payload_tokens(request), _payload_tokens(messages_request(request)))
+
+
 def _ceil(amount: Decimal) -> int:
     return int(amount.to_integral_value(rounding=ROUND_CEILING))
 
@@ -73,7 +78,7 @@ def _routed_hold(request: dict, i: Decimal, o: Decimal) -> int:
     i, o = i * D("1.25"), o * D("1.25")
     if request["model"].startswith("anthropic/"):
         i *= 2
-    return _ceil(_payload_tokens(request) * i + request["max_tokens"] * o)
+    return _ceil(_routed_tokens(request) * i + request["max_tokens"] * o)
 
 
 @pytest.fixture
@@ -313,7 +318,7 @@ def test_openrouter_holds_and_caps_at_the_snapshot_price_times_the_margin(price_
         "request": "0",
     }
     request = {"model": fx.GLM_5_2, "max_tokens": 1000, "messages": MESSAGES}
-    assert routed_bound(request) == _ceil(_payload_tokens(request) * D("1.475") + 1000 * D("5.5"))
+    assert routed_bound(request) == _ceil(_routed_tokens(request) * D("1.475") + 1000 * D("5.5"))
     # The direct transport reserves at the list price: no margin there.
     direct = {"model": "claude-sonnet-5-5", "max_tokens": 1000, "messages": MESSAGES}
     assert direct_bound(direct, "direct") == _ceil(
@@ -451,7 +456,7 @@ def _k3_hold(i: Decimal, o: Decimal) -> int:
     plain = {k: v for k, v in K3_REQUEST.items() if k not in ("thinking", "output_config")}
     wire = k3.chat_request(K3_REQUEST)
     return max(
-        _ceil(_payload_tokens(plain) * i + 8192 * o),
+        _ceil(_routed_tokens(plain) * i + 8192 * o),
         _ceil(_payload_tokens(wire) * i + 8192 * o),
     )
 

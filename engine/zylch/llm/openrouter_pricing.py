@@ -36,10 +36,9 @@ import json
 from collections.abc import Iterator, Mapping, MutableMapping
 from decimal import ROUND_CEILING, Decimal
 
-from .budget_pricing import PRICES, BudgetError, micro_usd
-from .budget_pricing import request_bound as validate_direct
+from .budget_pricing import BudgetError, micro_usd, validate_features
 from .roles import label
-from .roles.catalogue import endpoint_tags
+from .roles.catalogue import endpoint_tags, metadata
 from .roles.prices import margin, price, priced, quantizations
 
 Rate = tuple[Decimal, Decimal]
@@ -127,6 +126,23 @@ def price_text(value: Decimal) -> str:
     return format(value.normalize(), "f")
 
 
+def validate_output_limit(request):
+    """Bound output by the snapshot context and the existing finite output cap.
+
+    Schema 1 publishes context_length, not an output capability. Keep the
+    existing 131072 output ceiling when context metadata is absent. Provider
+    tokenization decides input fit; no byte count is an input context estimate.
+    """
+    output = request.get("max_tokens")
+    if type(output) is not int or not 1 <= output <= 131072:
+        raise BudgetError("AI paused: a supported output-token limit is required.")
+    context = (metadata(request.get("model")) or {}).get("context_length")
+    if type(context) is int and context > 0 and output >= context:
+        raise BudgetError(
+            "AI paused: output-token limit leaves no room in the model context window."
+        )
+
+
 def request_bound(request):
     if request.get("model") == "moonshotai/kimi-k3" and (
         "thinking" in request or "output_config" in request
@@ -137,12 +153,17 @@ def request_bound(request):
     model = request.get("model")
     if model not in RATES:
         raise BudgetError("AI paused: OpenRouter model has no verified price ceiling.")
-    # Reuse the central text/function feature validation, never its model price.
-    validate_direct({**request, "model": next(iter(PRICES))}, "direct")
-    payload = len(json.dumps(request, ensure_ascii=False, allow_nan=False).encode())
-    tokens = payload + 4096 + 1024 * (len(request["messages"]) + len(request.get("tools") or []))
-    if tokens + request["max_tokens"] > 200000:
-        raise BudgetError("AI paused: OpenRouter request exceeds the supported context bound.")
+    payload = validate_features(request)
+    validate_output_limit(request)
+    from .openrouter_client import messages_request
+
+    wire = messages_request(request)
+    wire_bytes = len(json.dumps(wire, ensure_ascii=False, allow_nan=False).encode())
+    tokens = (
+        max(payload, wire_bytes)
+        + 4096
+        + 1024 * (len(request["messages"]) + len(request.get("tools") or []))
+    )
     i, o = capped(model)
     # Anthropic cache writes may be introduced upstream even after dropping
     # caller cache hints. Reserve the documented one-hour write ceiling (2x).

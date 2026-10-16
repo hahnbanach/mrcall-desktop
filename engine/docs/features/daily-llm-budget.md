@@ -76,13 +76,19 @@ its previously recorded estimates. Neither value should be described as an invoi
 
 ## Supported billing surface
 
-The guard uses the model snapshot's prices (below), UTF-8
-text size plus protocol allowance, full maximum output, and conservative cache
-creation costs. Admission and pricing read that size differently: the hold
-prices one token per payload byte, which no tokenizer exceeds, while the
-context check converts bytes to tokens at the densest measured ratio and
-refuses a combined input and output above 200,000 tokens — the smallest
-window among the priced models. Unknown models, premium options, multimodal and
+The guard uses the model snapshot's prices (below), UTF-8 payload bytes plus
+protocol allowance, full maximum output and conservative cache creation costs.
+The monetary hold prices one token per payload byte. Direct Anthropic context
+admission keeps its measured conversion and 200,000-token combined bound.
+OpenRouter input fit instead uses provider tokenization, for both Messages and
+translated K3 Chat: monetary bytes are not context tokens. Output reserves stay
+finite (131072 narrowed by positive snapshot context length; K3 max 8192 including
+reasoning). Both OpenRouter wire formats explicitly disable context compression;
+no automatic model change, inference retry or overflow retry occurs. Existing
+assistant prompt/result limits remain, with partial results marked in metadata.
+Messages holds cover the larger original/dispatched body and K3 the larger
+original/translated bound. Local evidence and the separate server-compatibility
+gate are in the [admission evaluation](../../../docs/evaluations/2026-10-15-m10-admission.md). Unknown models, premium options, multimodal and
 provider-side tools refuse before dispatch. Ordinary client-executed function
 tools remain supported and each subsequent LLM request gets its own reservation.
 

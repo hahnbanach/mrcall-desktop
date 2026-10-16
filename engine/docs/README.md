@@ -50,6 +50,7 @@ Documentation for the MrCall Desktop engine: local sidecar and per-profile hoste
 | [features/email-archive.md](features/email-archive.md) | Email archive with IMAP sync |
 | [features/mailboxes.md](features/mailboxes.md) | Additional IMAP mailboxes: table, secrets, per-mailbox sync, PEC unwrap, migration |
 | [features/email-triage.md](features/email-triage.md) | Email triage and auto-reply detection |
+| [features/operator-runtime.md](features/operator-runtime.md) | Preserved optional MCP reads, exact drafts, scheduled reply origin, email-only sync and installation boundary |
 | [features/model-selection.md](features/model-selection.md) | Roles, requirements, the measured model table (model source) and the catalogue snapshot (price source), daily job |
 | [features/qonto.md](features/qonto.md) | Native private Qonto source, authority and managed finance history |
 | [features/mnemonic-writer-inventory.md](features/mnemonic-writer-inventory.md) | The sealed memory write boundary: frozen writer graph and exempt primitives |

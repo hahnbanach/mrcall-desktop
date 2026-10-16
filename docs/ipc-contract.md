@@ -92,6 +92,29 @@ receive the same checks. Enrollment and source-free semantic limits are in the
 The source-level [RPC inventory](rpc-contract-inventory.json) is generated from
 actual registration and signatures.
 
+## Preserved operator integration
+
+The readiness candidate registers `drafts.inspect(draft_id)`,
+`drafts.discard_exact(draft_id, expected_snapshot, dry_run=false)` and
+`drafts.reconcile_external(draft_id, sent_message_id)`. Inspection returns the
+owner-scoped row and snapshot. Exact discard checks the current snapshot and
+write authority; its explicit dry run acknowledges preflight without deletion.
+External reconciliation independently verifies an already delivered Sent message;
+it does not send or automatically settle an uncertain draft.
+
+`system.capabilities.operator_reply_provenance=1` advertises validated scheduled
+origin. `chat.send` accepts `operator_origin="scheduled_operator"` only with
+integer `operator_origin_version=1`; partial/unknown controls refuse before
+ChatService construction. This restricts and labels exact admitted transport
+handoffs; it grants no assignment, send or read-only mutation authority.
+
+`sync.run(days_back?, scope="all")` supports explicit `scope="email"`, bounded
+to integer 1–60 days, without WhatsApp or AI preparation. Its worker retains the
+single-flight lock after caller cancellation until it finishes. Unknown RPC
+keys refuse at the registry. Optional MCP startup, dependency identity and the
+local/install acceptance boundary are in
+[operator runtime](../engine/docs/features/operator-runtime.md).
+
 ## Transports
 
 Transport: JSON-RPC 2.0, transport-agnostic on the engine side
@@ -1075,13 +1098,13 @@ Returns the worker summary verbatim:
   "skipped_recently_reopened": 0,    // dedup_skip_until in the future
   "skipped_too_few_tasks": false,    // < MIN_TASKS_FOR_TOPIC_DEDUP=4
   "skipped_too_many_tasks": false,   // > MAX_TASKS_FOR_TOPIC_DEDUP=120
-  "no_llm": false                    // true if no Anthropic key + no Firebase session
+  "no_llm": false                    // true if the selected provider has no usable credential/session
 }
 ```
 
 Idempotent: a second call right after the first returns
-`clusters_with_dups: 0, tasks_closed: 0`. One Opus 4.6 call per
-invocation (~$0.30 list price on a 50-task profile).
+`clusters_with_dups: 0, tasks_closed: 0`. One role-resolved DEDUP call per invocation; its cost follows the selected
+model, request size and current snapshot, inside preparation/daily bounds.
 
 The companion F8 endpoint `tasks.dedup_now()` (same-contact /
 blob-overlap deterministic dedup) remains. Both are exposed; the
@@ -1113,7 +1136,7 @@ Returns:
 
 `ok` is `false` if **any** step failed; per-step `results[<key>].ok` carries the granular status and `error` string. The dispatcher does not stop on a single failure — subsequent steps still run.
 
-If no LLM is configured (no Anthropic key + no Firebase session) the method short-circuits with `{ ok: false, error: "No LLM configured…", results: {} }` and emits a single explanatory progress event.
+If the selected LLM provider has no usable credential/session the method short-circuits with `{ ok: false, error: "No LLM configured…", results: {} }` and emits a single explanatory progress event.
 
 Notification stream — `agents.train.progress`:
 
@@ -1159,9 +1182,10 @@ A refused call answers `busy: true`, `success: false`, an empty
 caller that treats it as a completed pass would present stale state as
 fresh; the auto-update loop logs it as a skipped tick.
 
-### `sync.run(days_back?)`
+### `sync.run(days_back?, scope="all")`
 
-Data-fetch phase of the pipeline (IMAP email + WhatsApp). Skips memory
+The default `all` scope fetches IMAP email and WhatsApp. Explicit `email`
+uses the preserved bounded scope documented above. Both skip memory
 extraction and task detection — those still belong to `update.run`.
 Backs the new **Sync** card on the Update view; the full `update.run`
 button calls this implicitly as its first step.
