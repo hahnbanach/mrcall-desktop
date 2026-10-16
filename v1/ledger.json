@@ -1429,10 +1429,21 @@
             "role": "DEDUP",
             "spent_usd": "0.000408",
             "why": "pick of economy / DEDUP / ranking"
+          },
+          {
+            "at": "2026-10-16T12:50:35Z",
+            "bound_usd": "2",
+            "check": "DEDUP on mistralai/ministral-8b-2512",
+            "kind": "measure",
+            "model": "mistralai/ministral-8b-2512",
+            "outcome": "DEDUP: failed",
+            "role": "DEDUP",
+            "spent_usd": "0.001555",
+            "why": "pick of economy / DEDUP / ranking"
           }
         ],
         "opened_at": "2026-10-16T12:37:16Z",
-        "reserved_usd": "2.032385",
+        "reserved_usd": "0.03394",
         "run": "2026-10-16T12:36:59Z",
         "settled_at": null,
         "spent_usd": null
