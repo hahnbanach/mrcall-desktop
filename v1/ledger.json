@@ -1627,10 +1627,21 @@
             "role": "NARRATION",
             "spent_usd": "0.000868",
             "why": "pick of economy / NARRATION / ranking"
+          },
+          {
+            "at": "2026-10-16T13:21:01Z",
+            "bound_usd": "2",
+            "check": "NARRATION on nvidia/nemotron-3.5-lightning",
+            "kind": "measure",
+            "model": "nvidia/nemotron-3.5-lightning",
+            "outcome": "NARRATION: failed",
+            "role": "NARRATION",
+            "spent_usd": "0.000805",
+            "why": "pick of economy / NARRATION / ranking"
           }
         ],
         "opened_at": "2026-10-16T12:37:16Z",
-        "reserved_usd": "2.058681",
+        "reserved_usd": "0.059486",
         "run": "2026-10-16T12:36:59Z",
         "settled_at": null,
         "spent_usd": null
