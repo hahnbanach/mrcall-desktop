@@ -1,3 +1,4 @@
+import type { StripeConnectParams, StripeStatus, StripeTestResult } from '../renderer/src/stripe'
 import { contextBridge, ipcRenderer } from 'electron'
 import type {
   QontoConnectResult, QontoPublicationResult, QontoRemovalResult, QontoSyncResult,
@@ -161,6 +162,12 @@ const call = <T = unknown>(method: string, params: unknown = {}, timeout?: numbe
 const api = {
   system: {
     capabilities: () => call<{ chat_history_binding?: number }>('system.capabilities', {}, 15_000)
+  },
+  stripe: {
+    status: () => call<StripeStatus>('stripe.status', {}, 30_000),
+    test: (params: { api_key: string }) => call<StripeTestResult>('stripe.test', params, 60_000),
+    connect: (params: StripeConnectParams) => call<StripeStatus>('stripe.connect', params, 60_000),
+    disconnect: () => call<StripeStatus>('stripe.disconnect', {}, 30_000)
   },
   qonto: {
     status: () => call<{
