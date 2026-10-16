@@ -1715,10 +1715,21 @@
             "role": "MNEMONIC",
             "spent_usd": "0.161862",
             "why": "ranking of balanced / MNEMONIC / ranking"
+          },
+          {
+            "at": "2026-10-16T13:37:26Z",
+            "bound_usd": "2",
+            "check": "MNEMONIC on openai/gpt-5.6-terra",
+            "kind": "measure",
+            "model": "openai/gpt-5.6-terra",
+            "outcome": "MNEMONIC: failed; MEMORY_EXTRACT: failed; MEMORY_MERGE: failed",
+            "role": "MNEMONIC",
+            "spent_usd": "0.08006",
+            "why": "ranking of balanced / MNEMONIC / ranking"
           }
         ],
         "opened_at": "2026-10-16T12:37:16Z",
-        "reserved_usd": "2.288537",
+        "reserved_usd": "0.368597",
         "run": "2026-10-16T12:36:59Z",
         "settled_at": null,
         "spent_usd": null
