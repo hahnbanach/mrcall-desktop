@@ -1440,10 +1440,21 @@
             "role": "DEDUP",
             "spent_usd": "0.001555",
             "why": "pick of economy / DEDUP / ranking"
+          },
+          {
+            "at": "2026-10-16T12:51:05Z",
+            "bound_usd": "2",
+            "check": "DEDUP on upstage/solar-mini4",
+            "kind": "measure",
+            "model": "upstage/solar-mini4",
+            "outcome": "DEDUP: failed",
+            "role": "DEDUP",
+            "spent_usd": "0.003309",
+            "why": "pick of economy / DEDUP / ranking"
           }
         ],
         "opened_at": "2026-10-16T12:37:16Z",
-        "reserved_usd": "2.03394",
+        "reserved_usd": "0.037249",
         "run": "2026-10-16T12:36:59Z",
         "settled_at": null,
         "spent_usd": null
