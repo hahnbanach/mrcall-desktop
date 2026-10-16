@@ -73,6 +73,20 @@ voice-smoke = ["openai==3.19.0", "aiohttp>=3.12,<4", "websockets>=14,<18"]
 [project.scripts]
 zylch = "zylch.cli.main:main"
 
+[tool.setuptools]
+include-package-data = false
+
+[tool.setuptools.package-data]
+"zylch" = ["prompts/email_thread_classify.txt"]
+"zylch.llm.roles" = [
+    "requirements.json",
+    "table.json",
+    "snapshot.json",
+    "measured.json",
+    "contract/snapshot.schema.json",
+    "contract/table.schema.json",
+]
+
 [tool.setuptools.packages.find]
 include = ["zylch*"]
 
