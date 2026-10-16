@@ -1605,10 +1605,21 @@
             "role": "CORRECTION_LEARNING",
             "spent_usd": "0.003216",
             "why": "pick of economy / CORRECTION_LEARNING / ranking"
+          },
+          {
+            "at": "2026-10-16T13:19:56Z",
+            "bound_usd": "2",
+            "check": "NARRATION on mistralai/ministral-8b-2512",
+            "kind": "measure",
+            "model": "mistralai/ministral-8b-2512",
+            "outcome": "NARRATION: failed",
+            "role": "NARRATION",
+            "spent_usd": "0.000256",
+            "why": "pick of economy / NARRATION / ranking"
           }
         ],
         "opened_at": "2026-10-16T12:37:16Z",
-        "reserved_usd": "2.057557",
+        "reserved_usd": "0.057813",
         "run": "2026-10-16T12:36:59Z",
         "settled_at": null,
         "spent_usd": null
