@@ -611,6 +611,22 @@
           "reasons": [],
           "score": 1.0
         },
+        "inclusionai/ling-3.0-flash": {
+          "bars_ok": false,
+          "case_set_sha256": "5aca578fb06e00d2a8526510ea1dc6da3de65f5e660bc4658ae9cb803bcaa69b",
+          "complete": true,
+          "critical": false,
+          "index_score": 20.1,
+          "measured_at": "2026-10-16T13:04:24Z",
+          "n": 5,
+          "pass": false,
+          "passes": 5,
+          "prompt_sha256": "f99a21dda12f11c4d22961fe8bfdec5a4fdadc63fa6bc3cffcc94dea0ebdb860",
+          "reasons": [
+            "mechanical bar"
+          ],
+          "score": 1.0
+        },
         "inclusionai/ling-3.0-flash-vl": {
           "bars_ok": true,
           "case_set_sha256": "5aca578fb06e00d2a8526510ea1dc6da3de65f5e660bc4658ae9cb803bcaa69b",
@@ -618,6 +634,20 @@
           "critical": false,
           "index_score": 24.6,
           "measured_at": "2026-10-12T17:56:46Z",
+          "n": 5,
+          "pass": true,
+          "passes": 5,
+          "prompt_sha256": "f99a21dda12f11c4d22961fe8bfdec5a4fdadc63fa6bc3cffcc94dea0ebdb860",
+          "reasons": [],
+          "score": 1.0
+        },
+        "mistralai/ministral-8b-2512": {
+          "bars_ok": true,
+          "case_set_sha256": "5aca578fb06e00d2a8526510ea1dc6da3de65f5e660bc4658ae9cb803bcaa69b",
+          "complete": true,
+          "critical": false,
+          "index_score": 5.5,
+          "measured_at": "2026-10-16T13:04:33Z",
           "n": 5,
           "pass": true,
           "passes": 5,
@@ -751,6 +781,40 @@
           ],
           "score": 0.928571
         },
+        "mistralai/ministral-14b-2512": {
+          "bars_ok": true,
+          "case_set_sha256": "801ace2db488587b6d5ad21b6789ff80d018c3e15be2fc0cdbeb7a49c5a4f184",
+          "complete": true,
+          "critical": true,
+          "index_score": 6,
+          "measured_at": "2026-10-16T13:16:35Z",
+          "n": 14,
+          "pass": false,
+          "passes": 13,
+          "prompt_sha256": "3e6e88fecfeb96673b98b1d65243229c0f873778e53bb3e26e7fcb246160717d",
+          "reasons": [
+            "critical failure",
+            "below the reference less its standard error"
+          ],
+          "score": 0.928571
+        },
+        "mistralai/ministral-8b-2512": {
+          "bars_ok": true,
+          "case_set_sha256": "801ace2db488587b6d5ad21b6789ff80d018c3e15be2fc0cdbeb7a49c5a4f184",
+          "complete": true,
+          "critical": true,
+          "index_score": 5.5,
+          "measured_at": "2026-10-16T13:04:53Z",
+          "n": 14,
+          "pass": false,
+          "passes": 12,
+          "prompt_sha256": "3e6e88fecfeb96673b98b1d65243229c0f873778e53bb3e26e7fcb246160717d",
+          "reasons": [
+            "critical failure",
+            "below the reference less its standard error"
+          ],
+          "score": 0.857143
+        },
         "moonshotai/kimi-k3": {
           "bars_ok": true,
           "complete": true,
@@ -762,6 +826,37 @@
           "passes": 14,
           "reasons": [],
           "score": 1.0
+        },
+        "nvidia/nemotron-3-nano-30b-a3b": {
+          "bars_ok": true,
+          "case_set_sha256": "801ace2db488587b6d5ad21b6789ff80d018c3e15be2fc0cdbeb7a49c5a4f184",
+          "complete": true,
+          "critical": false,
+          "index_score": 8.9,
+          "measured_at": "2026-10-16T13:17:04Z",
+          "n": 14,
+          "pass": true,
+          "passes": 14,
+          "prompt_sha256": "3e6e88fecfeb96673b98b1d65243229c0f873778e53bb3e26e7fcb246160717d",
+          "reasons": [],
+          "score": 1.0
+        },
+        "upstage/solar-mini4": {
+          "bars_ok": true,
+          "case_set_sha256": "801ace2db488587b6d5ad21b6789ff80d018c3e15be2fc0cdbeb7a49c5a4f184",
+          "complete": true,
+          "critical": true,
+          "index_score": 24.1,
+          "measured_at": "2026-10-16T13:05:13Z",
+          "n": 14,
+          "pass": false,
+          "passes": 12,
+          "prompt_sha256": "3e6e88fecfeb96673b98b1d65243229c0f873778e53bb3e26e7fcb246160717d",
+          "reasons": [
+            "critical failure",
+            "below the reference less its standard error"
+          ],
+          "score": 0.857143
         },
         "z-ai/glm-5.3-flash": {
           "bars_ok": false,
@@ -888,6 +983,23 @@
           "reasons": [],
           "score": 1.0
         },
+        "inclusionai/ling-3.0-flash": {
+          "bars_ok": true,
+          "case_set_sha256": "4eef61b9d1ee1a0e2748186662dabab836de5e0e9943b16c2f2d6d7fca94e375",
+          "complete": true,
+          "critical": true,
+          "index_score": 20.1,
+          "measured_at": "2026-10-16T12:50:12Z",
+          "n": 14,
+          "pass": false,
+          "passes": 12,
+          "prompt_sha256": "23e00d3e08fc90c9fd4851c2816c0f3046405261bb67b73011eba3bc149166d3",
+          "reasons": [
+            "critical failure",
+            "below the reference less its standard error"
+          ],
+          "score": 0.857143
+        },
         "inclusionai/ling-3.0-flash-vl": {
           "bars_ok": true,
           "complete": true,
@@ -899,6 +1011,40 @@
           "passes": 14,
           "reasons": [],
           "score": 1.0
+        },
+        "mistralai/ministral-14b-2512": {
+          "bars_ok": true,
+          "case_set_sha256": "4eef61b9d1ee1a0e2748186662dabab836de5e0e9943b16c2f2d6d7fca94e375",
+          "complete": true,
+          "critical": true,
+          "index_score": 6,
+          "measured_at": "2026-10-16T12:58:14Z",
+          "n": 14,
+          "pass": false,
+          "passes": 12,
+          "prompt_sha256": "23e00d3e08fc90c9fd4851c2816c0f3046405261bb67b73011eba3bc149166d3",
+          "reasons": [
+            "critical failure",
+            "below the reference less its standard error"
+          ],
+          "score": 0.857143
+        },
+        "mistralai/ministral-8b-2512": {
+          "bars_ok": true,
+          "case_set_sha256": "4eef61b9d1ee1a0e2748186662dabab836de5e0e9943b16c2f2d6d7fca94e375",
+          "complete": true,
+          "critical": true,
+          "index_score": 5.5,
+          "measured_at": "2026-10-16T12:50:35Z",
+          "n": 14,
+          "pass": false,
+          "passes": 12,
+          "prompt_sha256": "23e00d3e08fc90c9fd4851c2816c0f3046405261bb67b73011eba3bc149166d3",
+          "reasons": [
+            "critical failure",
+            "below the reference less its standard error"
+          ],
+          "score": 0.857143
         },
         "moonshotai/kimi-k3": {
           "bars_ok": true,
@@ -954,6 +1100,40 @@
           },
           "score": 1.0
         },
+        "nvidia/nemotron-3-nano-30b-a3b": {
+          "bars_ok": false,
+          "case_set_sha256": "4eef61b9d1ee1a0e2748186662dabab836de5e0e9943b16c2f2d6d7fca94e375",
+          "complete": true,
+          "critical": true,
+          "index_score": 8.9,
+          "measured_at": "2026-10-16T12:59:08Z",
+          "n": 14,
+          "pass": false,
+          "passes": 9,
+          "prompt_sha256": "23e00d3e08fc90c9fd4851c2816c0f3046405261bb67b73011eba3bc149166d3",
+          "reasons": [
+            "mechanical bar",
+            "critical failure",
+            "below the reference less its standard error"
+          ],
+          "score": 0.642857
+        },
+        "nvidia/nemotron-3.5-lightning": {
+          "bars_ok": true,
+          "case_set_sha256": "4eef61b9d1ee1a0e2748186662dabab836de5e0e9943b16c2f2d6d7fca94e375",
+          "complete": true,
+          "critical": false,
+          "index_score": 12.9,
+          "measured_at": "2026-10-16T12:54:01Z",
+          "n": 14,
+          "pass": false,
+          "passes": 12,
+          "prompt_sha256": "23e00d3e08fc90c9fd4851c2816c0f3046405261bb67b73011eba3bc149166d3",
+          "reasons": [
+            "below the reference less its standard error"
+          ],
+          "score": 0.857143
+        },
         "openai/gpt-6-luna": {
           "bars_ok": true,
           "complete": true,
@@ -965,6 +1145,23 @@
           "passes": 14,
           "reasons": [],
           "score": 1.0
+        },
+        "upstage/solar-mini4": {
+          "bars_ok": true,
+          "case_set_sha256": "4eef61b9d1ee1a0e2748186662dabab836de5e0e9943b16c2f2d6d7fca94e375",
+          "complete": true,
+          "critical": true,
+          "index_score": 24.1,
+          "measured_at": "2026-10-16T12:51:05Z",
+          "n": 14,
+          "pass": false,
+          "passes": 13,
+          "prompt_sha256": "23e00d3e08fc90c9fd4851c2816c0f3046405261bb67b73011eba3bc149166d3",
+          "reasons": [
+            "critical failure",
+            "below the reference less its standard error"
+          ],
+          "score": 0.928571
         },
         "upstage/solar-pro4": {
           "bars_ok": true,
@@ -1127,6 +1324,20 @@
           "n": 14,
           "pass": true,
           "passes": 14,
+          "reasons": [],
+          "score": 1.0
+        },
+        "inclusionai/ling-3.0-flash": {
+          "bars_ok": true,
+          "case_set_sha256": "f5e69d7c6def194444e13614357539d60c4e2a9582d6a30a44679a4a59e7a7e0",
+          "complete": true,
+          "critical": false,
+          "index_score": 20.1,
+          "measured_at": "2026-10-16T13:03:44Z",
+          "n": 14,
+          "pass": true,
+          "passes": 14,
+          "prompt_sha256": "8700cebf859ebd6c91ece0a16079a865d18a108a0d03ca2831b36c144af6c438",
           "reasons": [],
           "score": 1.0
         },
@@ -1312,6 +1523,39 @@
           "reasons": [],
           "score": 1.0
         },
+        "anthropic/claude-sonnet-4.5": {
+          "bars_ok": false,
+          "case_set_sha256": "36354885b64b012cca7ea365a9f88f31ecdd838df8ec0de0594fa4387ab8d42e",
+          "complete": true,
+          "critical": false,
+          "index_score": 20.7,
+          "measured_at": "2026-10-16T13:43:12Z",
+          "n": 6,
+          "pass": false,
+          "passes": 4,
+          "prompt_sha256": "352eaba92e38fd718125eb3572a6b429b6a4b35be57ba4498ebcb6b6f3f84cc1",
+          "reasons": [
+            "mechanical bar",
+            "below the reference less its standard error"
+          ],
+          "score": 0.666667
+        },
+        "anthropic/claude-sonnet-4.6": {
+          "bars_ok": true,
+          "case_set_sha256": "36354885b64b012cca7ea365a9f88f31ecdd838df8ec0de0594fa4387ab8d42e",
+          "complete": true,
+          "critical": false,
+          "index_score": 30.1,
+          "measured_at": "2026-10-16T13:41:06Z",
+          "n": 6,
+          "pass": false,
+          "passes": 4,
+          "prompt_sha256": "352eaba92e38fd718125eb3572a6b429b6a4b35be57ba4498ebcb6b6f3f84cc1",
+          "reasons": [
+            "below the reference less its standard error"
+          ],
+          "score": 0.666667
+        },
         "anthropic/claude-sonnet-5": {
           "bars_ok": true,
           "case_set_sha256": "36354885b64b012cca7ea365a9f88f31ecdd838df8ec0de0594fa4387ab8d42e",
@@ -1350,6 +1594,20 @@
           "n": 6,
           "pass": true,
           "passes": 6,
+          "reasons": [],
+          "score": 1.0
+        },
+        "google/gemini-3.7-flash": {
+          "bars_ok": true,
+          "case_set_sha256": "36354885b64b012cca7ea365a9f88f31ecdd838df8ec0de0594fa4387ab8d42e",
+          "complete": true,
+          "critical": false,
+          "index_score": 39.6,
+          "measured_at": "2026-10-16T13:33:10Z",
+          "n": 6,
+          "pass": true,
+          "passes": 6,
+          "prompt_sha256": "352eaba92e38fd718125eb3572a6b429b6a4b35be57ba4498ebcb6b6f3f84cc1",
           "reasons": [],
           "score": 1.0
         },
@@ -1398,6 +1656,24 @@
           ],
           "score": 0.5
         },
+        "mistralai/ministral-8b-2512": {
+          "bars_ok": false,
+          "case_set_sha256": "36354885b64b012cca7ea365a9f88f31ecdd838df8ec0de0594fa4387ab8d42e",
+          "complete": true,
+          "critical": true,
+          "index_score": 5.5,
+          "measured_at": "2026-10-16T13:45:13Z",
+          "n": 6,
+          "pass": false,
+          "passes": 3,
+          "prompt_sha256": "352eaba92e38fd718125eb3572a6b429b6a4b35be57ba4498ebcb6b6f3f84cc1",
+          "reasons": [
+            "mechanical bar",
+            "critical failure",
+            "below the reference less its standard error"
+          ],
+          "score": 0.5
+        },
         "moonshotai/kimi-k3": {
           "bars_ok": true,
           "complete": true,
@@ -1409,6 +1685,37 @@
           "passes": 6,
           "reasons": [],
           "score": 1.0
+        },
+        "openai/gpt-5.6-sol": {
+          "bars_ok": true,
+          "case_set_sha256": "36354885b64b012cca7ea365a9f88f31ecdd838df8ec0de0594fa4387ab8d42e",
+          "complete": true,
+          "critical": false,
+          "index_score": 47,
+          "measured_at": "2026-10-16T13:34:24Z",
+          "n": 6,
+          "pass": true,
+          "passes": 6,
+          "prompt_sha256": "352eaba92e38fd718125eb3572a6b429b6a4b35be57ba4498ebcb6b6f3f84cc1",
+          "reasons": [],
+          "score": 1.0
+        },
+        "openai/gpt-5.6-terra": {
+          "bars_ok": false,
+          "case_set_sha256": "36354885b64b012cca7ea365a9f88f31ecdd838df8ec0de0594fa4387ab8d42e",
+          "complete": true,
+          "critical": false,
+          "index_score": 42.1,
+          "measured_at": "2026-10-16T13:37:26Z",
+          "n": 6,
+          "pass": false,
+          "passes": 5,
+          "prompt_sha256": "352eaba92e38fd718125eb3572a6b429b6a4b35be57ba4498ebcb6b6f3f84cc1",
+          "reasons": [
+            "mechanical bar",
+            "below the reference less its standard error"
+          ],
+          "score": 0.833333
         },
         "openai/gpt-6-sol": {
           "bars_ok": true,
@@ -1575,6 +1882,39 @@
           "reasons": [],
           "score": 1.0
         },
+        "anthropic/claude-sonnet-4.5": {
+          "bars_ok": false,
+          "case_set_sha256": "36354885b64b012cca7ea365a9f88f31ecdd838df8ec0de0594fa4387ab8d42e",
+          "complete": true,
+          "critical": false,
+          "index_score": 20.7,
+          "measured_at": "2026-10-16T13:43:12Z",
+          "n": 7,
+          "pass": false,
+          "passes": 5,
+          "prompt_sha256": "9d4a1fdfe1f5fbb8e4f3876e602c24e3c729e05f7786f4d59a71a64164715d1b",
+          "reasons": [
+            "mechanical bar",
+            "below the reference less its standard error"
+          ],
+          "score": 0.714286
+        },
+        "anthropic/claude-sonnet-4.6": {
+          "bars_ok": true,
+          "case_set_sha256": "36354885b64b012cca7ea365a9f88f31ecdd838df8ec0de0594fa4387ab8d42e",
+          "complete": true,
+          "critical": false,
+          "index_score": 30.1,
+          "measured_at": "2026-10-16T13:41:06Z",
+          "n": 7,
+          "pass": false,
+          "passes": 5,
+          "prompt_sha256": "9d4a1fdfe1f5fbb8e4f3876e602c24e3c729e05f7786f4d59a71a64164715d1b",
+          "reasons": [
+            "below the reference less its standard error"
+          ],
+          "score": 0.714286
+        },
         "anthropic/claude-sonnet-5": {
           "bars_ok": true,
           "case_set_sha256": "36354885b64b012cca7ea365a9f88f31ecdd838df8ec0de0594fa4387ab8d42e",
@@ -1613,6 +1953,20 @@
           "n": 7,
           "pass": true,
           "passes": 7,
+          "reasons": [],
+          "score": 1.0
+        },
+        "google/gemini-3.7-flash": {
+          "bars_ok": true,
+          "case_set_sha256": "36354885b64b012cca7ea365a9f88f31ecdd838df8ec0de0594fa4387ab8d42e",
+          "complete": true,
+          "critical": false,
+          "index_score": 39.6,
+          "measured_at": "2026-10-16T13:33:10Z",
+          "n": 7,
+          "pass": true,
+          "passes": 7,
+          "prompt_sha256": "9d4a1fdfe1f5fbb8e4f3876e602c24e3c729e05f7786f4d59a71a64164715d1b",
           "reasons": [],
           "score": 1.0
         },
@@ -1664,6 +2018,24 @@
           ],
           "score": 0.571429
         },
+        "mistralai/ministral-8b-2512": {
+          "bars_ok": false,
+          "case_set_sha256": "36354885b64b012cca7ea365a9f88f31ecdd838df8ec0de0594fa4387ab8d42e",
+          "complete": true,
+          "critical": true,
+          "index_score": 5.5,
+          "measured_at": "2026-10-16T13:45:13Z",
+          "n": 7,
+          "pass": false,
+          "passes": 4,
+          "prompt_sha256": "9d4a1fdfe1f5fbb8e4f3876e602c24e3c729e05f7786f4d59a71a64164715d1b",
+          "reasons": [
+            "mechanical bar",
+            "critical failure",
+            "below the reference less its standard error"
+          ],
+          "score": 0.571429
+        },
         "moonshotai/kimi-k3": {
           "bars_ok": true,
           "complete": true,
@@ -1675,6 +2047,37 @@
           "passes": 7,
           "reasons": [],
           "score": 1.0
+        },
+        "openai/gpt-5.6-sol": {
+          "bars_ok": true,
+          "case_set_sha256": "36354885b64b012cca7ea365a9f88f31ecdd838df8ec0de0594fa4387ab8d42e",
+          "complete": true,
+          "critical": false,
+          "index_score": 47,
+          "measured_at": "2026-10-16T13:34:24Z",
+          "n": 7,
+          "pass": true,
+          "passes": 7,
+          "prompt_sha256": "9d4a1fdfe1f5fbb8e4f3876e602c24e3c729e05f7786f4d59a71a64164715d1b",
+          "reasons": [],
+          "score": 1.0
+        },
+        "openai/gpt-5.6-terra": {
+          "bars_ok": false,
+          "case_set_sha256": "36354885b64b012cca7ea365a9f88f31ecdd838df8ec0de0594fa4387ab8d42e",
+          "complete": true,
+          "critical": false,
+          "index_score": 42.1,
+          "measured_at": "2026-10-16T13:37:26Z",
+          "n": 7,
+          "pass": false,
+          "passes": 6,
+          "prompt_sha256": "9d4a1fdfe1f5fbb8e4f3876e602c24e3c729e05f7786f4d59a71a64164715d1b",
+          "reasons": [
+            "mechanical bar",
+            "below the reference less its standard error"
+          ],
+          "score": 0.857143
         },
         "openai/gpt-6-sol": {
           "bars_ok": true,
@@ -1841,6 +2244,39 @@
           "reasons": [],
           "score": 1.0
         },
+        "anthropic/claude-sonnet-4.5": {
+          "bars_ok": false,
+          "case_set_sha256": "36354885b64b012cca7ea365a9f88f31ecdd838df8ec0de0594fa4387ab8d42e",
+          "complete": true,
+          "critical": false,
+          "index_score": 20.7,
+          "measured_at": "2026-10-16T13:43:12Z",
+          "n": 10,
+          "pass": false,
+          "passes": 8,
+          "prompt_sha256": "9d4a1fdfe1f5fbb8e4f3876e602c24e3c729e05f7786f4d59a71a64164715d1b",
+          "reasons": [
+            "mechanical bar",
+            "below the reference less its standard error"
+          ],
+          "score": 0.8
+        },
+        "anthropic/claude-sonnet-4.6": {
+          "bars_ok": true,
+          "case_set_sha256": "36354885b64b012cca7ea365a9f88f31ecdd838df8ec0de0594fa4387ab8d42e",
+          "complete": true,
+          "critical": false,
+          "index_score": 30.1,
+          "measured_at": "2026-10-16T13:41:06Z",
+          "n": 10,
+          "pass": false,
+          "passes": 8,
+          "prompt_sha256": "9d4a1fdfe1f5fbb8e4f3876e602c24e3c729e05f7786f4d59a71a64164715d1b",
+          "reasons": [
+            "below the reference less its standard error"
+          ],
+          "score": 0.8
+        },
         "anthropic/claude-sonnet-5": {
           "bars_ok": true,
           "case_set_sha256": "36354885b64b012cca7ea365a9f88f31ecdd838df8ec0de0594fa4387ab8d42e",
@@ -1884,6 +2320,20 @@
             "below the reference less its standard error"
           ],
           "score": 0.9
+        },
+        "google/gemini-3.7-flash": {
+          "bars_ok": true,
+          "case_set_sha256": "36354885b64b012cca7ea365a9f88f31ecdd838df8ec0de0594fa4387ab8d42e",
+          "complete": true,
+          "critical": false,
+          "index_score": 39.6,
+          "measured_at": "2026-10-16T13:33:10Z",
+          "n": 10,
+          "pass": true,
+          "passes": 10,
+          "prompt_sha256": "9d4a1fdfe1f5fbb8e4f3876e602c24e3c729e05f7786f4d59a71a64164715d1b",
+          "reasons": [],
+          "score": 1.0
         },
         "google/gemini-3.8-flash": {
           "bars_ok": true,
@@ -1932,6 +2382,24 @@
           ],
           "score": 0.4
         },
+        "mistralai/ministral-8b-2512": {
+          "bars_ok": false,
+          "case_set_sha256": "36354885b64b012cca7ea365a9f88f31ecdd838df8ec0de0594fa4387ab8d42e",
+          "complete": true,
+          "critical": true,
+          "index_score": 5.5,
+          "measured_at": "2026-10-16T13:45:13Z",
+          "n": 10,
+          "pass": false,
+          "passes": 5,
+          "prompt_sha256": "9d4a1fdfe1f5fbb8e4f3876e602c24e3c729e05f7786f4d59a71a64164715d1b",
+          "reasons": [
+            "mechanical bar",
+            "critical failure",
+            "below the reference less its standard error"
+          ],
+          "score": 0.5
+        },
         "moonshotai/kimi-k3": {
           "bars_ok": true,
           "complete": true,
@@ -1943,6 +2411,39 @@
           "passes": 10,
           "reasons": [],
           "score": 1.0
+        },
+        "openai/gpt-5.6-sol": {
+          "bars_ok": true,
+          "case_set_sha256": "36354885b64b012cca7ea365a9f88f31ecdd838df8ec0de0594fa4387ab8d42e",
+          "complete": true,
+          "critical": false,
+          "index_score": 47,
+          "measured_at": "2026-10-16T13:34:24Z",
+          "n": 10,
+          "pass": false,
+          "passes": 9,
+          "prompt_sha256": "9d4a1fdfe1f5fbb8e4f3876e602c24e3c729e05f7786f4d59a71a64164715d1b",
+          "reasons": [
+            "below the reference less its standard error"
+          ],
+          "score": 0.9
+        },
+        "openai/gpt-5.6-terra": {
+          "bars_ok": false,
+          "case_set_sha256": "36354885b64b012cca7ea365a9f88f31ecdd838df8ec0de0594fa4387ab8d42e",
+          "complete": true,
+          "critical": false,
+          "index_score": 42.1,
+          "measured_at": "2026-10-16T13:37:26Z",
+          "n": 10,
+          "pass": false,
+          "passes": 8,
+          "prompt_sha256": "9d4a1fdfe1f5fbb8e4f3876e602c24e3c729e05f7786f4d59a71a64164715d1b",
+          "reasons": [
+            "mechanical bar",
+            "below the reference less its standard error"
+          ],
+          "score": 0.8
         },
         "openai/gpt-6-sol": {
           "bars_ok": true,
@@ -2239,6 +2740,20 @@
           },
           "score": 0.9
         },
+        "deepseek/deepseek-v4-flash-0731": {
+          "bars_ok": true,
+          "case_set_sha256": "6ff98e4da9d148b3d534d977a8f6723b6ba644904e11e77acefe21d63fd9ab43",
+          "complete": true,
+          "critical": false,
+          "index_score": 34.3,
+          "measured_at": "2026-10-16T13:31:18Z",
+          "n": 5,
+          "pass": true,
+          "passes": 5,
+          "prompt_sha256": "e073f77edfa189bbf21f8069ad691b6754043d105c45204724a30fb1103249ca",
+          "reasons": [],
+          "score": 1.0
+        },
         "inception/mercury-2.5": {
           "bars_ok": true,
           "case_set_sha256": "6ff98e4da9d148b3d534d977a8f6723b6ba644904e11e77acefe21d63fd9ab43",
@@ -2301,6 +2816,38 @@
           ],
           "score": 1.0
         },
+        "mistralai/ministral-14b-2512": {
+          "bars_ok": false,
+          "case_set_sha256": "6ff98e4da9d148b3d534d977a8f6723b6ba644904e11e77acefe21d63fd9ab43",
+          "complete": true,
+          "critical": false,
+          "index_score": 6,
+          "measured_at": "2026-10-16T13:29:47Z",
+          "n": 5,
+          "pass": false,
+          "passes": 5,
+          "prompt_sha256": "e073f77edfa189bbf21f8069ad691b6754043d105c45204724a30fb1103249ca",
+          "reasons": [
+            "mechanical bar"
+          ],
+          "score": 1.0
+        },
+        "mistralai/ministral-8b-2512": {
+          "bars_ok": false,
+          "case_set_sha256": "6ff98e4da9d148b3d534d977a8f6723b6ba644904e11e77acefe21d63fd9ab43",
+          "complete": true,
+          "critical": false,
+          "index_score": 5.5,
+          "measured_at": "2026-10-16T13:19:56Z",
+          "n": 5,
+          "pass": false,
+          "passes": 5,
+          "prompt_sha256": "e073f77edfa189bbf21f8069ad691b6754043d105c45204724a30fb1103249ca",
+          "reasons": [
+            "mechanical bar"
+          ],
+          "score": 1.0
+        },
         "moonshotai/kimi-k3": {
           "bars_ok": true,
           "complete": true,
@@ -2341,6 +2888,57 @@
             }
           },
           "score": 1.0
+        },
+        "nvidia/nemotron-3-nano-30b-a3b": {
+          "bars_ok": false,
+          "case_set_sha256": "6ff98e4da9d148b3d534d977a8f6723b6ba644904e11e77acefe21d63fd9ab43",
+          "complete": true,
+          "critical": false,
+          "index_score": 8.9,
+          "measured_at": "2026-10-16T13:29:55Z",
+          "n": 5,
+          "pass": false,
+          "passes": 1,
+          "prompt_sha256": "e073f77edfa189bbf21f8069ad691b6754043d105c45204724a30fb1103249ca",
+          "reasons": [
+            "mechanical bar",
+            "below the reference less its standard error"
+          ],
+          "score": 0.2
+        },
+        "nvidia/nemotron-3.5-lightning": {
+          "bars_ok": false,
+          "case_set_sha256": "6ff98e4da9d148b3d534d977a8f6723b6ba644904e11e77acefe21d63fd9ab43",
+          "complete": true,
+          "critical": false,
+          "index_score": 12.9,
+          "measured_at": "2026-10-16T13:21:01Z",
+          "n": 5,
+          "pass": false,
+          "passes": 0,
+          "prompt_sha256": "e073f77edfa189bbf21f8069ad691b6754043d105c45204724a30fb1103249ca",
+          "reasons": [
+            "mechanical bar",
+            "below the reference less its standard error"
+          ],
+          "score": 0.0
+        },
+        "upstage/solar-mini4": {
+          "bars_ok": false,
+          "case_set_sha256": "6ff98e4da9d148b3d534d977a8f6723b6ba644904e11e77acefe21d63fd9ab43",
+          "complete": true,
+          "critical": false,
+          "index_score": 24.1,
+          "measured_at": "2026-10-16T13:20:04Z",
+          "n": 5,
+          "pass": false,
+          "passes": 3,
+          "prompt_sha256": "e073f77edfa189bbf21f8069ad691b6754043d105c45204724a30fb1103249ca",
+          "reasons": [
+            "mechanical bar",
+            "below the reference less its standard error"
+          ],
+          "score": 0.6
         },
         "xiaomi/mimo-v2.6-flash": {
           "bars_ok": false,
@@ -2498,6 +3096,22 @@
           "reasons": [],
           "score": 1.0
         },
+        "inclusionai/ling-3.0-flash": {
+          "bars_ok": false,
+          "case_set_sha256": "d20d4defa5d259ace3a1c31f9ab6270d2ac50a9f2ddcee4256b08428bd3a9d43",
+          "complete": true,
+          "critical": false,
+          "index_score": 20.1,
+          "measured_at": "2026-10-16T12:38:07Z",
+          "n": 15,
+          "pass": false,
+          "passes": 15,
+          "prompt_sha256": "67387d06d4a0a2759c85f01038885a93bc31e9c640017ad835beb95654ff1769",
+          "reasons": [
+            "mechanical bar"
+          ],
+          "score": 1.0
+        },
         "inclusionai/ling-3.0-flash-vl": {
           "bars_ok": true,
           "complete": true,
@@ -2509,6 +3123,37 @@
           "passes": 15,
           "reasons": [],
           "score": 1.0
+        },
+        "mistralai/ministral-14b-2512": {
+          "bars_ok": true,
+          "case_set_sha256": "d20d4defa5d259ace3a1c31f9ab6270d2ac50a9f2ddcee4256b08428bd3a9d43",
+          "complete": true,
+          "critical": false,
+          "index_score": 6,
+          "measured_at": "2026-10-16T12:49:31Z",
+          "n": 15,
+          "pass": true,
+          "passes": 15,
+          "prompt_sha256": "67387d06d4a0a2759c85f01038885a93bc31e9c640017ad835beb95654ff1769",
+          "reasons": [],
+          "score": 1.0
+        },
+        "mistralai/ministral-8b-2512": {
+          "bars_ok": true,
+          "case_set_sha256": "d20d4defa5d259ace3a1c31f9ab6270d2ac50a9f2ddcee4256b08428bd3a9d43",
+          "complete": true,
+          "critical": true,
+          "index_score": 5.5,
+          "measured_at": "2026-10-16T12:38:32Z",
+          "n": 15,
+          "pass": false,
+          "passes": 12,
+          "prompt_sha256": "67387d06d4a0a2759c85f01038885a93bc31e9c640017ad835beb95654ff1769",
+          "reasons": [
+            "critical failure",
+            "below the reference less its standard error"
+          ],
+          "score": 0.8
         },
         "moonshotai/kimi-k3": {
           "bars_ok": false,
@@ -2560,6 +3205,39 @@
             }
           },
           "score": 0.933333
+        },
+        "nvidia/nemotron-3.5-lightning": {
+          "bars_ok": false,
+          "case_set_sha256": "d20d4defa5d259ace3a1c31f9ab6270d2ac50a9f2ddcee4256b08428bd3a9d43",
+          "complete": true,
+          "critical": false,
+          "index_score": 12.9,
+          "measured_at": "2026-10-16T12:43:44Z",
+          "n": 15,
+          "pass": false,
+          "passes": 14,
+          "prompt_sha256": "67387d06d4a0a2759c85f01038885a93bc31e9c640017ad835beb95654ff1769",
+          "reasons": [
+            "mechanical bar"
+          ],
+          "score": 0.933333
+        },
+        "upstage/solar-mini4": {
+          "bars_ok": false,
+          "case_set_sha256": "d20d4defa5d259ace3a1c31f9ab6270d2ac50a9f2ddcee4256b08428bd3a9d43",
+          "complete": true,
+          "critical": false,
+          "index_score": 24.1,
+          "measured_at": "2026-10-16T12:39:01Z",
+          "n": 15,
+          "pass": false,
+          "passes": 7,
+          "prompt_sha256": "67387d06d4a0a2759c85f01038885a93bc31e9c640017ad835beb95654ff1769",
+          "reasons": [
+            "mechanical bar",
+            "below the reference less its standard error"
+          ],
+          "score": 0.466667
         },
         "upstage/solar-pro4": {
           "bars_ok": true,
@@ -2660,6 +3338,20 @@
           ],
           "score": 0.928571
         },
+        "inclusionai/ling-3.0-flash": {
+          "bars_ok": true,
+          "case_set_sha256": "2f927825d4cd22052a5e72efe4945dc037b665f6f0340940f954352f8798c977",
+          "complete": true,
+          "critical": false,
+          "index_score": 20.1,
+          "measured_at": "2026-10-16T13:03:27Z",
+          "n": 14,
+          "pass": true,
+          "passes": 14,
+          "prompt_sha256": "40a0042bd314c25258bbcb9110d0912e9c86f8f32f2b37f5f9ee6d9b77370f0d",
+          "reasons": [],
+          "score": 1.0
+        },
         "inclusionai/ling-3.0-flash-vl": {
           "bars_ok": true,
           "case_set_sha256": "2f927825d4cd22052a5e72efe4945dc037b665f6f0340940f954352f8798c977",
@@ -2750,6 +3442,20 @@
           "n": 14,
           "pass": true,
           "passes": 13,
+          "reasons": [],
+          "score": 0.928571
+        },
+        "deepseek/deepseek-v4-flash-0731": {
+          "bars_ok": true,
+          "case_set_sha256": "c350923ac7d44a1e89a69caf74a993133c975c48c0bf971366d7b228b84a4e06",
+          "complete": true,
+          "critical": false,
+          "index_score": 34.3,
+          "measured_at": "2026-10-16T13:31:39Z",
+          "n": 14,
+          "pass": true,
+          "passes": 13,
+          "prompt_sha256": "baa23965f58f7353b4d676e4e4d00e104a22350e69a2674ba77278e4ac704bdb",
           "reasons": [],
           "score": 0.928571
         },
@@ -3322,6 +4028,20 @@
           "reasons": [
             "mechanical bar"
           ],
+          "score": 1.0
+        },
+        "inclusionai/ling-3.0-flash": {
+          "bars_ok": true,
+          "case_set_sha256": "d0e55fbbe9945264e0819d449a2c4003428b690fc49fb4edcfd35d63c09f4f55",
+          "complete": true,
+          "critical": false,
+          "index_score": 20.1,
+          "measured_at": "2026-10-16T13:03:59Z",
+          "n": 5,
+          "pass": true,
+          "passes": 5,
+          "prompt_sha256": "6d3996452d7e3d138fa237322655e89b04527fdb1252b60e2140ac95f16cf627",
+          "reasons": [],
           "score": 1.0
         },
         "inclusionai/ling-3.0-flash-vl": {
