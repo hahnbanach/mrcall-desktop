@@ -617,6 +617,14 @@
       "model": "z-ai/glm-5.3-flash",
       "outcome": "passed",
       "run": "2026-10-16T12:36:59Z"
+    },
+    {
+      "at": "2026-10-16T12:37:55Z",
+      "detail": "",
+      "metadata_sha256": "146d9787514d14f1c04dc4903ff9d147540af4fdd0e2676c169e3b87ecea0271",
+      "model": "moonshotai/kimi-k3",
+      "outcome": "passed",
+      "run": "2026-10-16T12:36:59Z"
     }
   ],
   "stops": [

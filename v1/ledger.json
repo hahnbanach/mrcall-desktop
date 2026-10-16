@@ -1341,10 +1341,21 @@
             "role": null,
             "spent_usd": "0.000026",
             "why": "metadata changed (models parameters)"
+          },
+          {
+            "at": "2026-10-16T12:37:55Z",
+            "bound_usd": "0.2",
+            "check": "smoke moonshotai/kimi-k3",
+            "kind": "smoke",
+            "model": "moonshotai/kimi-k3",
+            "outcome": "passed",
+            "role": null,
+            "spent_usd": "0.002598",
+            "why": "metadata changed (models reasoning)"
           }
         ],
         "opened_at": "2026-10-16T12:37:16Z",
-        "reserved_usd": "0.205338",
+        "reserved_usd": "0.007936",
         "run": "2026-10-16T12:36:59Z",
         "settled_at": null,
         "spent_usd": null
