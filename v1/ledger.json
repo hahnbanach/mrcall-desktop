@@ -1748,10 +1748,21 @@
             "role": "MNEMONIC",
             "spent_usd": "0.258195",
             "why": "ranking of balanced / MNEMONIC / anthropic_ranking"
+          },
+          {
+            "at": "2026-10-16T13:45:13Z",
+            "bound_usd": "2",
+            "check": "MEMORY_EXTRACT on mistralai/ministral-8b-2512",
+            "kind": "measure",
+            "model": "mistralai/ministral-8b-2512",
+            "outcome": "MNEMONIC: failed; MEMORY_EXTRACT: failed; MEMORY_MERGE: failed",
+            "role": "MEMORY_EXTRACT",
+            "spent_usd": "0.002901",
+            "why": "ranking of economy / MEMORY_EXTRACT / ranking"
           }
         ],
         "opened_at": "2026-10-16T12:37:16Z",
-        "reserved_usd": "2.839903",
+        "reserved_usd": "0.842804",
         "run": "2026-10-16T12:36:59Z",
         "settled_at": null,
         "spent_usd": null
