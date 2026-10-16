@@ -1506,10 +1506,21 @@
             "role": "REPLY_NEED",
             "spent_usd": "0.000184",
             "why": "pick of economy / REPLY_NEED / ranking"
+          },
+          {
+            "at": "2026-10-16T13:03:44Z",
+            "bound_usd": "2",
+            "check": "INTENT on inclusionai/ling-3.0-flash",
+            "kind": "measure",
+            "model": "inclusionai/ling-3.0-flash",
+            "outcome": "INTENT: passed",
+            "role": "INTENT",
+            "spent_usd": "0.000218",
+            "why": "pick of economy / INTENT / ranking"
           }
         ],
         "opened_at": "2026-10-16T12:37:16Z",
-        "reserved_usd": "2.047466",
+        "reserved_usd": "0.047684",
         "run": "2026-10-16T12:36:59Z",
         "settled_at": null,
         "spent_usd": null
