@@ -1330,10 +1330,21 @@
             "role": null,
             "spent_usd": "0.000049",
             "why": "metadata changed (models reasoning)"
+          },
+          {
+            "at": "2026-10-16T12:37:48Z",
+            "bound_usd": "0.2",
+            "check": "smoke z-ai/glm-5.3-flash",
+            "kind": "smoke",
+            "model": "z-ai/glm-5.3-flash",
+            "outcome": "passed",
+            "role": null,
+            "spent_usd": "0.000026",
+            "why": "metadata changed (models parameters)"
           }
         ],
         "opened_at": "2026-10-16T12:37:16Z",
-        "reserved_usd": "0.205312",
+        "reserved_usd": "0.005338",
         "run": "2026-10-16T12:36:59Z",
         "settled_at": null,
         "spent_usd": null

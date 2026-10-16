@@ -609,6 +609,14 @@
       "model": "deepseek/deepseek-v4-flash-0731",
       "outcome": "passed",
       "run": "2026-10-16T12:36:59Z"
+    },
+    {
+      "at": "2026-10-16T12:37:48Z",
+      "detail": "",
+      "metadata_sha256": "cb23e11ad92a6a1d96ed0e3ac4572c1fb02689ae7fecb87a3a8f95c8d28b94a0",
+      "model": "z-ai/glm-5.3-flash",
+      "outcome": "passed",
+      "run": "2026-10-16T12:36:59Z"
     }
   ],
   "stops": [
