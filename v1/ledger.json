@@ -1451,10 +1451,21 @@
             "role": "DEDUP",
             "spent_usd": "0.003309",
             "why": "pick of economy / DEDUP / ranking"
+          },
+          {
+            "at": "2026-10-16T12:54:01Z",
+            "bound_usd": "2",
+            "check": "DEDUP on nvidia/nemotron-3.5-lightning",
+            "kind": "measure",
+            "model": "nvidia/nemotron-3.5-lightning",
+            "outcome": "DEDUP: failed",
+            "role": "DEDUP",
+            "spent_usd": "0.002102",
+            "why": "pick of economy / DEDUP / ranking"
           }
         ],
         "opened_at": "2026-10-16T12:37:16Z",
-        "reserved_usd": "2.037249",
+        "reserved_usd": "0.039351",
         "run": "2026-10-16T12:36:59Z",
         "settled_at": null,
         "spent_usd": null
