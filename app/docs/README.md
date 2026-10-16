@@ -30,3 +30,5 @@ index.
 - [Bounded preparation](bounded-preparation.md): sync, batches and pause UI.
 - [Qonto](qonto.md): native connection, private source review and managed chat.
 - [Context archive](active-context-archive.md): historical app snapshots.
+
+- [Stripe](stripe.md): restricted-key connection Settings and fixture boundaries.

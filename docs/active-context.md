@@ -19,6 +19,13 @@ what is *current*, targeting ≤ ~120 lines.
 
 ## State now
 
+The isolated [Stripe test candidate](execution-plans/2026-10-16-stripe-test-installer.md)
+adds restricted-key setup and explicit read-only RPCs. App version is
+`0.1.57-stripe.1`; engine version is `0.1.57.dev1`. Local build, typecheck,
+13 Stripe tests, two egress tests and the Chromium fixture pass. This is a test
+installer candidate, not a published release or hosted activation. Signed installer
+and real Stripe account acceptance remain unverified.
+
 Desktop `v0.1.56` and kernel `v0.51.0` are published. Six hosted company engines have verified
 assignment reads and root-owned trust; both maintained clones install the release. Ordinary/Qonto
 tasks remain private. Café 124 shares one space; MrCall support/Mario share support's company
