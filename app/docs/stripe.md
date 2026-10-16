@@ -6,8 +6,8 @@ Scope: native Stripe Settings configuration and renderer/preload verification bo
 
 Settings includes a Stripe card for the selected local or hosted engine. Enter a
 restricted `rk_test_` or `rk_live_` account key and Test. Review the provider account,
-environment, available read capabilities and MrCall company, confirm authority,
-then Save. Enter and Test a new key to replace a connection. Disconnect removes
+environment, available read capabilities and MrCall company, then Save to connect.
+Enter and Test a new key to replace a connection. Disconnect removes
 the engine's saved copy; provider-side revocation remains a separate Stripe action.
 
 The card reads no saved secret. Input clears when testing starts; the request-only
@@ -25,7 +25,7 @@ previously disclosed agent output.
 `node scripts/test-stripe-browser.mjs` exercises the real StripeCard and preload
 bridge in Chromium with fixture IPC/provider dispatch. Configure
 `MRCALL_PLAYWRIGHT_MODULE` and `MRCALL_BROWSER_BINARY` for existing local browser
-dependencies. The fixture verifies Test/confirm/Save/disconnect, key clearing,
+dependencies. The fixture verifies Test/Save/disconnect, key clearing,
 expiry, generation, company, transport and session invalidation, delayed replies
 and old-engine behavior. It does not establish packaged Electron transport,
 authenticated hosted operation or a real Stripe account connection.

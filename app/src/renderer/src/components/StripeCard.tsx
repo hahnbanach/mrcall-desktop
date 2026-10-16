@@ -10,7 +10,7 @@ export function stripeError(cause: unknown): string {
   if (/startup_timeout/i.test(raw)) return 'The selected engine did not respond in time. Retry the connection check.'
   if (/identity_required|session_expired/i.test(raw)) return 'Sign in to the selected engine profile again, then retry the connection check.'
   if (/revoked|invalid_credentials|auth|permission/i.test(raw)) return 'Stripe rejected the key or required read permissions. Check the restricted key and Test again.'
-  if (/challenge|generation|company_changed|context_changed|binding_changed/i.test(raw)) return 'The tested connection expired or its context changed. Test and confirm again.'
+  if (/challenge|generation|company_changed|context_changed|binding_changed/i.test(raw)) return 'The tested connection expired or its context changed. Test again.'
   if (/rate_limit/i.test(raw)) return 'Stripe is limiting requests. Wait before testing again.'
   return 'Stripe request failed. Check the selected engine and restricted key, then try again.'
 }
@@ -23,7 +23,6 @@ export default function StripeCard() {
   const [notice, setNotice] = useState('')
   const [key, setKey] = useState('')
   const [tested, setTested] = useState<StripeTestResult | null>(null)
-  const [authority, setAuthority] = useState(false)
   const [company, setCompany] = useState('')
   const [host, setHost] = useState('')
   const secret = useRef<string | null>(null)
@@ -33,7 +32,7 @@ export default function StripeCard() {
   const sequence = useRef(0)
   const version = useRef(0)
   const refreshRef = useRef<() => Promise<void>>(async () => {})
-  const clear = () => { secret.current = null; setKey(''); setTested(null); setAuthority(false) }
+  const clear = () => { secret.current = null; setKey(''); setTested(null) }
   const reset = () => {
     sequence.current++; version.current++; clear(); loaded.current = null; loadedCompany.current = null
     generation.current = null; setStatus(null); setReady(false); setLoading(false); setBusy(false); setCompany(''); setHost('')
@@ -121,10 +120,10 @@ export default function StripeCard() {
     const memory = await window.zylch.memory.status()
     if (!context.current(token) || form !== version.current) return
     if (!memory.available || companyLabel(memory) !== loadedCompany.current) { context.invalidate(); return }
-    secret.current = apiKey; setTested(result); setNotice('Test passed. Confirm the account, environment and company before saving.')
+    secret.current = apiKey; setTested(result); setNotice('Test passed. Save to connect this Stripe account.')
   })
   const save = () => run(async (token, form) => {
-    if (!tested || !secret.current || !authority || tested.expires_at * 1000 <= Date.now()) throw new Error('challenge_invalid')
+    if (!tested || !secret.current || tested.expires_at * 1000 <= Date.now()) throw new Error('challenge_invalid')
     const params = { api_key: secret.current, challenge_id: tested.challenge_id, authority_confirmed: true as const }
     clear()
     const result = await window.zylch.stripe.connect(params)
@@ -153,8 +152,7 @@ export default function StripeCard() {
     {tested && <div className="border rounded p-3 space-y-2">
       <p className="text-sm">Stripe account: {tested.account.name || 'Unnamed account'} · {tested.account.id} · {tested.mode} environment</p>
       <p className="text-xs">Available reads: {tested.capabilities.join(', ') || 'none'}. Credentials are hidden and held only until this tested Save expires.</p>
-      <label className="flex gap-2 text-sm"><input aria-label="Confirm Stripe authority" type="checkbox" checked={authority} disabled={!enabled} onChange={event => setAuthority(event.target.checked)} />I am authorized to connect this Stripe account and environment to the MrCall company and engine displayed above.</label>
-      <button className={style} disabled={!enabled || !authority} onClick={save}>Save Stripe</button>
+      <button className={style} disabled={!enabled} onClick={save}>Save Stripe</button>
     </div>}
     {status?.status === 'connected' && <p className="text-xs">Available reads: {status.capabilities.join(', ') || 'none'}. Enter and Test a new restricted key to replace this connection.</p>}
     <div className="flex gap-2"><button className={style} disabled={busy} onClick={() => void refresh()}>Refresh Stripe status</button><button className={style} disabled={!enabled || !status || status.status === 'disconnected'} onClick={disconnect}>Disconnect Stripe</button></div>

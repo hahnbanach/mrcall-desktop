@@ -43,7 +43,6 @@ try {
   const key = card.getByLabel('Stripe restricted API key')
   const test = card.getByRole('button', { name: 'Test Stripe', exact: true })
   const save = card.getByRole('button', { name: 'Save Stripe', exact: true })
-  const confirm = card.getByLabel('Confirm Stripe authority')
   const testKey = async () => {
     await key.fill('rk_test_fixture')
     await test.click()
@@ -55,8 +54,8 @@ try {
   await key.fill('sk_test_forbidden')
   assert.equal(await test.isDisabled(), true)
   await testKey()
-  assert.equal(await save.isDisabled(), true)
-  await confirm.check()
+  assert.equal(await card.getByRole('checkbox').count(), 0)
+  assert.equal(await save.isEnabled(), true)
   await save.click()
   await card.getByText(/Connection: connected/).waitFor()
   await card.getByRole('button', { name: 'Disconnect Stripe', exact: true }).click()
@@ -66,7 +65,6 @@ try {
   assert.equal(await save.count(), 0)
   await testKey()
   await page.evaluate(() => window.fixture.generation())
-  await confirm.check()
   await save.click()
   await card.getByText(/tested connection expired/).waitFor()
   assert.equal(await save.count(), 0)
@@ -123,5 +121,5 @@ try {
     assert.equal(await key.isEnabled(), true, scenario + ' recovers on retry')
   }
   assert.deepEqual(errors, [])
-  console.log('PASS: Chromium native StripeCard + actual preload bridge: startup session repair, cached status replay, identity/memory failure, timeout/retry, pending reconnect, restricted keys, test/confirm/save/disconnect, secret clearing, edit/expiry/generation/company/transport/session invalidation, delayed same-UID reply and old-engine message. Provider/RPC dispatch is a fixture. Artifacts:', output)
+  console.log('PASS: Chromium native StripeCard + actual preload bridge: startup session repair, cached status replay, identity/memory failure, timeout/retry, pending reconnect, restricted keys, test/save/disconnect, secret clearing, edit/expiry/generation/company/transport/session invalidation, delayed same-UID reply and old-engine message. Provider/RPC dispatch is a fixture. Artifacts:', output)
 } finally { await browser.close(); await new Promise(done => server.close(done)) }
