@@ -1495,10 +1495,21 @@
             "role": "DEDUP",
             "spent_usd": "0.005736",
             "why": "pick of economy / DEDUP / ranking"
+          },
+          {
+            "at": "2026-10-16T13:03:27Z",
+            "bound_usd": "2",
+            "check": "REPLY_NEED on inclusionai/ling-3.0-flash",
+            "kind": "measure",
+            "model": "inclusionai/ling-3.0-flash",
+            "outcome": "REPLY_NEED: passed",
+            "role": "REPLY_NEED",
+            "spent_usd": "0.000184",
+            "why": "pick of economy / REPLY_NEED / ranking"
           }
         ],
         "opened_at": "2026-10-16T12:37:16Z",
-        "reserved_usd": "2.047282",
+        "reserved_usd": "0.047466",
         "run": "2026-10-16T12:36:59Z",
         "settled_at": null,
         "spent_usd": null
