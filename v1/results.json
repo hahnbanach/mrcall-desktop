@@ -179,14 +179,6 @@
       "run": "2026-10-12T17:43:39Z"
     },
     {
-      "at": "2026-10-12T18:52:24Z",
-      "detail": "",
-      "metadata_sha256": "2f474534d81b84a41dc4a3adccfa8d6a309d3811eb09222a5ce6e07136305946",
-      "model": "qwen/qwen3.8-2.4t-a95b",
-      "outcome": "passed",
-      "run": "2026-10-12T17:43:39Z"
-    },
-    {
       "at": "2026-10-12T18:59:48Z",
       "detail": "",
       "metadata_sha256": "3496f9da850aaf4832fe4a0d4ad16ef4fe574b0075c5c6953a457dd3747f0074",
@@ -601,6 +593,14 @@
       "model": "openai/gpt-5.1-codex-mini",
       "outcome": "passed",
       "run": "2026-10-12T17:43:39Z"
+    },
+    {
+      "at": "2026-10-16T12:37:17Z",
+      "detail": "",
+      "metadata_sha256": "21f12b12ca068c14b8ae9015997eb34d218f569bc9992be3407b18d2d29f12f0",
+      "model": "qwen/qwen3.8-2.4t-a95b",
+      "outcome": "passed",
+      "run": "2026-10-16T12:36:59Z"
     }
   ],
   "stops": [

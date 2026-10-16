@@ -1275,9 +1275,21 @@
         "spent_usd": "1.225405"
       },
       {
-        "calls": [],
+        "calls": [
+          {
+            "at": "2026-10-16T12:37:17Z",
+            "bound_usd": "0.2",
+            "check": "smoke qwen/qwen3.8-2.4t-a95b",
+            "kind": "smoke",
+            "model": "qwen/qwen3.8-2.4t-a95b",
+            "outcome": "passed",
+            "role": null,
+            "spent_usd": "0.00221",
+            "why": "metadata changed (models parameters)"
+          }
+        ],
         "opened_at": "2026-10-16T12:37:16Z",
-        "reserved_usd": "0.2",
+        "reserved_usd": "0.00221",
         "run": "2026-10-16T12:36:59Z",
         "settled_at": null,
         "spent_usd": null
