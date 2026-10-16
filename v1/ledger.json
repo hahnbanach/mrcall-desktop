@@ -1396,10 +1396,21 @@
             "role": "REANALYZE",
             "spent_usd": "0.005865",
             "why": "pick of economy / REANALYZE / ranking"
+          },
+          {
+            "at": "2026-10-16T12:43:44Z",
+            "bound_usd": "2",
+            "check": "REANALYZE on nvidia/nemotron-3.5-lightning",
+            "kind": "measure",
+            "model": "nvidia/nemotron-3.5-lightning",
+            "outcome": "REANALYZE: failed",
+            "role": "REANALYZE",
+            "spent_usd": "0.004191",
+            "why": "pick of economy / REANALYZE / ranking"
           }
         ],
         "opened_at": "2026-10-16T12:37:16Z",
-        "reserved_usd": "2.023403",
+        "reserved_usd": "0.027594",
         "run": "2026-10-16T12:36:59Z",
         "settled_at": null,
         "spent_usd": null
