@@ -1,5 +1,4 @@
 name: Model table
-# Authorized CI proof run: 2026-10-16; remove the temporary push trigger before main.
 
 # The daily model-table job (milestone 10, brief D8): engine/scripts/model_table_job.py
 # resolves each role's rankings per preset from OpenRouter's live catalogue,
@@ -31,13 +30,6 @@ on:
   schedule:
     - cron: '17 5 * * *'  # daily 05:17 UTC
   workflow_dispatch:
-  # TEMPORARY (plan S5, deviation after IR3): GitHub runs schedule and dispatch
-  # only from the default branch, so this push trigger, limited to this file on
-  # the milestone branch, gives the one proof run before the merge. S8 removes
-  # it before the merge to main.
-  push:
-    branches: [model-selection-m10a]
-    paths: ['.github/workflows/model-resolution.yml']
 
 # One run at a time, and a run in progress is never cancelled: it may hold a
 # reservation it has yet to settle.

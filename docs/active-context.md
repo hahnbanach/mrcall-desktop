@@ -1,5 +1,5 @@
 ---
-doc_baseline_commit: c4593726f69199f15f36a317216893efe4bf3927
+doc_baseline_commit: 652c00079e8a59770bd242a7a63fa3529ff17703
 doc_baseline_date: 2026-10-16
 ---
 
@@ -19,91 +19,81 @@ what is *current*, targeting ≤ ~120 lines.
 
 ## State now
 
-Company-memory reliability is the immediate workstream. The local
-[M10 integration](execution-plans/2026-10-16-m10-current-runtime-integration.md)
-preserves the selected effective V8 packages alongside M10 authority and model
-routing. Source review passes: 746 affected tests and 20 independent authority
-checks, all without skips. Replacement wheel, copied-data and installed
-client/server proofs pass fresh M2 review; they are separate from deployment.
-Earlier frozen-base wheel evidence cannot authorize the current runtime switch.
+Company-memory reliability remains the immediate workstream. M10 source routing,
+read-only authority and the earlier effective-V8 artifact have local review.
+The current hosted packages additionally contain Stripe and IMAP projection
+changes. Their successor source has376 modules,303 affected passing tests and
+seven independent authority checks; installation/copy/dependency review is in
+progress in a separate isolated checkout. The earlier wheel is historical proof
+for its own bytes and cannot authorize a current hosted switch.
 
-Installed mnemonic source remains M9. Production's saved custom policy retains
-K3 for all sixteen roles at USD20/day. The selected Mario profile retains
-Anthropic/economy, CHAT Sonnet5.5, paused NARRATION and USD15/day. Both selected
-UIDs belong to Café124's company store, verified from protected current identity;
-older prose about a different Mario profile must not select their company.
-Both captured profiles enable automatic updates and preparation is unpaused.
-Profile loading overrides environment-only automatic-update settings.
+The temporary [additional acceptance guard](execution-plans/2026-10-16-m10-paid-acceptance-bound.md)
+has approved M1 source/installed-client proof and47 passing M2 control/lifecycle
+checks. The concrete four-allocation packet has M2 approval; documentation/final review
+remain open.
+No live ledger is guarded and no new paid acceptance has started. Its ceiling is
+USD5 additional activity, excluding old unknown liabilities and other consumers.
 
-The billing correction is reviewed and committed locally at `01909353` in
-mrcall-agent. Production still runs `prod-37f330d0`; test still runs
-`dev-a999c18c`. The candidate has 551 affected and 1,507 full-CI passing tests,
-plus six scripted engine continuations. Real provider/debit receipts remain open.
+The billing correction01909353 is deployed on TEST and production with the same
+verified ARM digest. All68 Python modules match source. Both environments pass
+six free health/auth/catalog/quote/status checks using real saved Firebase users;
+no inference/debit occurs. Real provider/funding/credit settlement remains open.
+The TEST CI deploy credential is still broken; its reviewed operator-equivalent
+promotion is an exception, not a credential repair.
 
-Desktop `v0.1.56` and kernel `v0.51.0` are published. Six hosted company engines
-have assignment source/trust; ordinary mail/tasks remain private. The broader
-contextual-email enrollment candidate remains unreleased. Its authority and
-external review-copy limits belong to the
-[assignment plan](execution-plans/2026-10-08-contextual-email-assignment-guard.md).
+The model-table CI proof38901708899 is green and published data commit3e127359.
+The new table/snapshot passes static and14-day release gates; snapshot read_at is
+2026-10-16T12:36:59Z. Secret/protection are configured. The proof records
+USD0.876144 and45 checks;661 further checks are deferred by its deadline.
+October ledger count isUSD6.247792 including preserved recovered unknown maxima,
+not an invoice. The temporary push trigger is removed locally, pending publication.
 
-All seven hosted profiles have separate Unix users and egress policies. The
-[sandbox plan](execution-plans/2026-09-29-toward-sandbox.md) records completed
-acceptance and two final approvals. Self-serve provisioning remains closed and
-the template retains its shared-key dependency. Later assignment runtime pins
-require exact source/configuration capture; historical generic reconciliation
-does not approve a new per-unit switch. Production retains independent voice/MCP
-flags and interpreter requirements; personal Gmail retains its attachment pin.
+Installed mnemonic source remains M9. Production retains saved K3/custom policy
+and USD20/day; selected Mario retains Anthropic/economy and USD15/day. Both selected
+UIDs bind to Café124's company store. Model-table refresh can change preset picks;
+current effective rankings/pauses must be checked before acceptance. Captured
+profiles have automatic updates enabled and preparation unpaused; environment-only
+overrides do not replace saved controls.
 
-Qonto has support-only authenticated banking, restart/source and managed-answer
-acceptance. Installed Desktop/provider UI remain unverified. The M10 candidate
-retains explicit bootstrap input until that GUI gate passes; typed-only source
-is not an installed rollout. See [Qonto](execution-plans/2026-10-04-qonto-connection.md).
+The runtime owner's engine source/verification hold is released. Its three clone
+cron locks remain owned by that session. The last full ordinary batch failed on
+transport/capacity; source approval does not establish ordinary acceptance.
+Current unit template/v9 drop-ins and production voice/MCP configuration are
+protected inputs. The existing production kernel distribution has three missing
+requirements; original pip check fails, Mario passes. Candidate dependency
+preservation and any qualification require their own review.
 
-Production telephone service reads revisioned `phone.md`. Private archives and
-the owner-handset trial have acceptance; spoken detail and latency remain in the
-[knowledge plan](execution-plans/2026-09-28-voice-company-knowledge.md).
-Mario has no operator schedule; the124 schedule reads his inbox and denies
-project instruction writes. StarChat transcript upload is cancelled.
-
-External-client MCP has a separately owned unreleased local candidate; proposed
-remote service, grant and procedure behavior remains unimplemented. The
-[data flows](operator-data-flows.md) distinguish it from Desktop behavior and
-the five-tool optional hosted read listener preserved by this M10 candidate.
-Engine budgets and preparation controls remain separate from clone headless
-Claude and kernel classifiers; see [operator setup](operator-setup.md#ai-execution-and-controls).
+Desktop v0.1.56 and kernel v0.51.0 are published. Broader assignment enrollment,
+external-client MCP, Qonto GUI/typed-only acceptance, live PEC and telephone
+spoken detail/latency retain separate owners. Hosted Unix/egress isolation and
+private ordinary mail/tasks remain. Provisioning is closed. Engine budgets do
+not cover clone headless Claude or direct kernel classifiers; see
+[operator setup](operator-setup.md#ai-execution-and-controls).
 
 ## Unresolved
 
-- Twenty ordinary answers across five incident cases and the two selected UIDs
-  must be compared with original sources. Summaries can themselves conflict or
-  overclaim; no reset, rewrite, re-extraction or reconsolidation is authorized.
-- New wheel/private install, six effective V8 copied boots, installed-engine
-  continuations and current-main reconciliation pass local review. The task's
-  completion record owns documentation closure and separate final approval.
-- CI proof, repository secret, model-table protection and server-first promotion
-  remain open. Existing provider keys pass free authentication; Firebase refresh
-  and funded business binding require actual acceptance. Snapshot age gate:
-  2026-10-26T17:43:41Z. October job allowance remaining is USD4.628352 of USD10.
-- Billing production retains known generation/recovery defects. Historical
-  liabilities require real provider/StarChat evidence; no blanket hold release.
-  The test CI deploy credential fails; the reviewed packet proposes an explicit
-  operator-equivalent test rollout after verified CI build, without exporting
-  an operator administrator credential into CI.
-- The concurrent runtime owner retains the live stability window after a failed
-  full ordinary batch on timeouts/capacity. Successful normal operational outcome,
-  exact accepted descriptor, bounded paid checks, protected
-  two-clone operations and per-unit canary/rollback remain required.
-- Qonto GUI/provider UI, live PEC, fresh-account Desktop/Windows, telephone
-  detail/latency, provisioning and broader operational obligations retain their
-  existing owners. Windows remains opt-in; Intel is outside the release matrix.
-- Settings same-value reload, product chat, delegated sending, approval isolation,
-  Calendar, historical imports and broad security review remain separately owned.
+- Current post-Stripe artifact/copy/SDK/receipt review, installed helper integration,
+  documentation closure and separate final approval must pass before a new canary.
+- Actual additional-spend guard/control authority, fresh full descriptors, protected
+  backups, exclusive stopped/drained writers, exact cron custody and per-unit
+  canary/verified rollback remain required. No live pause/guard exists yet.
+- Real direct and business-funded credit receipts plus20 independent ordinary
+  company answers across five original-source cases and both UIDs remain unrun.
+  Insufficient retrieval is not full recall acceptance. No memory reset/rewrite,
+  extraction or reconsolidation belongs to the rollout.
+- Full ordinary operation remains failed. Both-clone acceptance also needs separate
+  actual-consumer headless/classifier bounds and exact fixture/grant/effect authority.
+- Historical unknown billing liabilities require actual receipt/provider evidence;
+  no blanket release, deletion or budget reset is authorized. TEST deploy credential
+  repair, production kernel dependency health and later table freshness stay explicit.
+- Qonto GUI/provider UI, live PEC, fresh-account Desktop/Windows, provisioning,
+  telephone detail/latency and broader security/Calendar obligations retain owners.
 
 ## Next
 
-1. Use the reviewed current-main-integrated replacement candidate and its
-   completion record for the concrete external execution packet.
-2. Obtain scoped authority for the concrete verified publication, spending and
-   rollout packet, then execute its gates through actual company acceptance.
-3. Preserve each profile's controls, memory and accounting history. Stop on
-   runtime/configuration drift or an unmet gate; retain every pending obligation.
+1. Finish the independently reviewed current-runtime artifact and guard/control
+   closure, preserving all original data, saved model policy and historical reports.
+2. Complete the concrete paid/control/operational packet and obtain only the
+   missing external authority after all independently preparable evidence is ready.
+3. Execute actual receipts, source-grounded answers and protected operations, then
+   per-unit canary/rollback and final integration. Keep every failed gate explicit.
