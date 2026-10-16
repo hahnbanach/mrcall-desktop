@@ -1308,10 +1308,21 @@
             "role": null,
             "spent_usd": "0.00008",
             "why": "metadata changed (models reasoning)"
+          },
+          {
+            "at": "2026-10-16T12:37:40Z",
+            "bound_usd": "0.2",
+            "check": "smoke xiaomi/mimo-v2.6-flash",
+            "kind": "smoke",
+            "model": "xiaomi/mimo-v2.6-flash",
+            "outcome": "passed",
+            "role": null,
+            "spent_usd": "0.000043",
+            "why": "metadata changed (models parameters)"
           }
         ],
         "opened_at": "2026-10-16T12:37:16Z",
-        "reserved_usd": "0.20522",
+        "reserved_usd": "0.005263",
         "run": "2026-10-16T12:36:59Z",
         "settled_at": null,
         "spent_usd": null

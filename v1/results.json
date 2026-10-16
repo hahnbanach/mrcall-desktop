@@ -3,14 +3,6 @@
   "schema": 1,
   "smokes": [
     {
-      "at": "2026-10-12T17:44:46Z",
-      "detail": "",
-      "metadata_sha256": "ffa33aeb3f7ed6f9413ce3051bb37f9785ecc5658e30b76ca2b35329cab937c2",
-      "model": "xiaomi/mimo-v2.6-flash",
-      "outcome": "passed",
-      "run": "2026-10-12T17:43:39Z"
-    },
-    {
       "at": "2026-10-12T17:44:55Z",
       "detail": "",
       "metadata_sha256": "ae42c12f5fff0fc41e4b7e78189430b37ee7672081f1c7467527d478f4a89d60",
@@ -607,6 +599,14 @@
       "detail": "",
       "metadata_sha256": "4290c48f7cdf9ccbd1df3421bf6390c4e305e856ac0a6d55c2e53d15f684b30d",
       "model": "deepseek/deepseek-v4-flash",
+      "outcome": "passed",
+      "run": "2026-10-16T12:36:59Z"
+    },
+    {
+      "at": "2026-10-16T12:37:40Z",
+      "detail": "",
+      "metadata_sha256": "ac6f1cc3c678d2054e866065e4c15886f6ae5b0613b3d62181bcccbac1b87741",
+      "model": "xiaomi/mimo-v2.6-flash",
       "outcome": "passed",
       "run": "2026-10-16T12:36:59Z"
     }
