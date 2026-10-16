@@ -1660,10 +1660,21 @@
             "role": "NARRATION",
             "spent_usd": "0.001261",
             "why": "pick of economy / NARRATION / ranking"
+          },
+          {
+            "at": "2026-10-16T13:31:18Z",
+            "bound_usd": "2",
+            "check": "NARRATION on deepseek/deepseek-v4-flash-0731",
+            "kind": "measure",
+            "model": "deepseek/deepseek-v4-flash-0731",
+            "outcome": "NARRATION: passed",
+            "role": "NARRATION",
+            "spent_usd": "0.000337",
+            "why": "pick of economy / NARRATION / ranking"
           }
         ],
         "opened_at": "2026-10-16T12:37:16Z",
-        "reserved_usd": "2.061046",
+        "reserved_usd": "0.061383",
         "run": "2026-10-16T12:36:59Z",
         "settled_at": null,
         "spent_usd": null
