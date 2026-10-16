@@ -1363,10 +1363,21 @@
             "role": null,
             "spent_usd": "0.005709",
             "why": "metadata changed (models reasoning, direct reasoning)"
+          },
+          {
+            "at": "2026-10-16T12:38:07Z",
+            "bound_usd": "2",
+            "check": "REANALYZE on inclusionai/ling-3.0-flash",
+            "kind": "measure",
+            "model": "inclusionai/ling-3.0-flash",
+            "outcome": "REANALYZE: failed",
+            "role": "REANALYZE",
+            "spent_usd": "0.000673",
+            "why": "pick of economy / REANALYZE / ranking"
           }
         ],
         "opened_at": "2026-10-16T12:37:16Z",
-        "reserved_usd": "2.013645",
+        "reserved_usd": "0.014318",
         "run": "2026-10-16T12:36:59Z",
         "settled_at": null,
         "spent_usd": null
