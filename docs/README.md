@@ -22,9 +22,11 @@ The repo has three parallel doc trees, mirroring the three index files. Each tre
 
 ## Index
 
-- [M10 company-memory readiness](execution-plans/2026-10-15-m10-memory-production-readiness.md) — reviewed local source candidate, preserved installed runtime, incident cases and owned deployment gates; [brief](briefs/2026-10-15-m10-memory-production-readiness.md), [runtime preservation](evaluations/2026-10-15-m10-runtime-preservation.md), [admission](evaluations/2026-10-15-m10-admission.md) and [integrated evidence](evaluations/2026-10-15-m10-integrated-candidate.md).
+- [M10 effective-runtime integration](execution-plans/2026-10-16-m10-current-runtime-integration.md) — [brief](briefs/2026-10-16-m10-current-runtime-integration.md), complete selected-runtime preservation, replacement artifact and deployment prerequisites; [source evidence](evaluations/2026-10-16-m10-current-runtime-preservation.md).
 
-- [Cross-cutting runtime contracts](cross-cutting-contracts.md) — identity, company memory, hosted isolation and LLM billing; operating rules remain in AGENTS.md.
+- [Earlier M10 readiness](execution-plans/2026-10-15-m10-memory-production-readiness.md) — historical local source/admission/RPC evidence; its frozen-base preservation and wheel require the effective-runtime successor above.
+
+- [Cross-cutting runtime contracts](cross-cutting-contracts.md) — identity, shared company memory with separate profile users, hosted isolation and LLM billing; operating rules remain in AGENTS.md.
 
 - [Qonto connection](briefs/2026-10-04-qonto-connection.md) — native Desktop setup and engine-owned financial source; [development plan](execution-plans/2026-10-04-qonto-connection.md), including the authorized support-only rollout.
 - [Qonto IPC](qonto-ipc.md) — native bank methods, managed chat history and verification boundaries.
@@ -37,9 +39,6 @@ The repo has three parallel doc trees, mirroring the three index files. Each tre
 - [Shared company knowledge for GPT-Live](briefs/2026-09-28-voice-company-knowledge.md) — approved brief for shared sources, initial company context and detail retrieval; [reviewed execution plan](execution-plans/2026-09-28-voice-company-knowledge.md) with source authority and caller disclosure as its first gate.
 - [Telephone source migration](briefs/2026-10-01-telephone-notes-source-is-phone-md.md) — production uses stored `phone.md`; [execution and review](execution-plans/2026-10-01-telephone-notes-source-is-phone-md.md), including Mario’s migrated reader; [initial Astra review](evaluations/2026-10-01-astra-company-instructions-migration-review.md) and [APPROVED P1 repair](evaluations/2026-10-01-astra-instruction-write-denial-rereview.md).
 
-- [M10 server paid checks](evaluations/2026-10-12-m10-server-paid-checks.md): the billing server's bounded routes against OpenRouter; the `x-generation-id` defect found and fixed (mrcall-agent `5191263`); the recovery-binding follow-up.
-- [M10 end to end (AC 10)](evaluations/2026-10-12-m10-end-to-end.md): three providers, both presets and a custom model across downloaded, blocked and successor tables; paid legs and what remains pending.
-- [Role measurement (M10)](evaluations/2026-10-11-role-measurement.md): the paid run behind `engine/zylch/llm/roles/measured.json`, covering spend, per-role results, the resolver's picks, mnemonic AC 5 and what it does not certify.
 - [Complete selected-case review](evaluations/2026-09-16-reviewed-model-comparison.md) — all 60 selected cases / 240 outputs, concrete errors, separate uncertainty and measured costs.
 - [Disputed case evidence](evaluations/2026-09-16-disputed-case-review.md) — exact source/model excerpts, equal Opus/K3 criteria and withdrawn operational-error claims.
 - [Grading correction](evaluations/2026-09-16-grading-correction.md) — corrected company facts, concrete payment evidence, revised labels and withdrawn quality recommendations.
@@ -50,7 +49,8 @@ The repo has three parallel doc trees, mirroring the three index files. Each tre
 - [Model comparison](evaluations/2026-09-13-openrouter-models.md) — blinded synthetic evidence and limitations.
 - [Actual-prompt comparison](evaluations/2026-09-15-real-engine-prompts.md) — K3/GLM source-grounded checks, availability and prompt corrections.
 
-- [Desktop setup to operator workspace](briefs/2026-09-10-desktop-to-operator-onboarding.md) — proposed end-to-end setup journey, current evidence, and future delegation boundary.
+- [Desktop setup to operator workspace](briefs/2026-09-10-desktop-to-operator-onboarding.md) — original coding-agent delivery and proposed remote MCP architecture, consent, data/cost controls, procedures and native draft requirements.
+- [Desktop, MCP and daemon data flows](operator-data-flows.md) — English sequences for authentication, nine candidate tools, local files and revocation, plus proposed remote governance, budgets, audit, procedure authority and native drafts; implementation states remain separate.
 - [Chat approval isolation](briefs/2026-09-10-chat-approval-isolation.md) — scoped existing cross-client approval defect and acceptance criteria.
 - [`active-context.md`](active-context.md) — cross-cutting living snapshot: `State now` / `Unresolved` / `Next`, nothing else
 - [`active-context-archive.md`](active-context-archive.md) — dated narrative pruned out of the living snapshot

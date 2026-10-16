@@ -74,8 +74,8 @@ The model:
   (the **deploy identity**) and runs provisiond and every **unmigrated**
   daemon (system-level systemd — no per-human `systemctl --user` / linger).
 - **One Unix user per profile** (since plan
-  [toward-sandbox](execution-plans/2026-09-29-toward-sandbox.md) M2, in
-  rollout): a migrated profile's daemon runs as `mc-<sha256(uid)[:12]>`,
+  [toward-sandbox](execution-plans/2026-09-29-toward-sandbox.md) M2): a
+  migrated profile's daemon runs as `mc-<sha256(uid)[:12]>`,
   owns only its profile directory, is a member of its company's group
   `mc-c-<sha256(key)[:12]>` for the shared memory store, and runs inside a
   systemd sandbox (read-only checkout, `ProtectHome=tmpfs`, private `/tmp`,
@@ -108,8 +108,12 @@ The model:
   with an applied drop-in whose name sorts after it, so a pin named
   `zz-<name>.conf` is refused. Name a pin meant to apply after every other
   operator drop-in `t0-<name>.conf`: that still sorts before
-  `tenant.conf`, and the order among the others is kept. A pin carries
-  only `Environment=PYTHONPATH=`; a different command line goes in the
+  `tenant.conf`, and the order among the others is kept. A source pin
+  carries `Environment=PYTHONPATH=` and may preserve
+  `Environment=PYTHONDONTWRITEBYTECODE=1`. Put additional permissions in an
+  earlier, separate operator drop-in; production's Qonto write permission
+  uses `90-qonto-identity-paths.conf`, with its identity Environment setting
+  in `t0-qonto-identity.conf`. A different command line goes in the
   `tenant-exec` declaration below. A reconcile in which any `create` is
   refused exits 3, naming the profiles, so `zylch-reconcile.service` ends
   `ActiveState=failed`, `Result=exit-code`, `ExecMainStatus=3`; the units
@@ -145,8 +149,8 @@ The model:
   migrated, is its Unix user: another company's daemon cannot read or write
   this profile's files; and the engine's own tools are confined to the
   profile's `downloads/` and `scratch/` folders on a hosted engine (M1, on
-  `main` since `c2b3ca5`). Rollout state (2026-10-04): all four company
-  stores are derived; all seven profiles run as `mc-…` and have their own
+  `main` since `c2b3ca5`). All seven existing profiles run as `mc-…`, use
+  derived company-store paths and have their own
   egress enforcement, including production voice on its pinned release
   through a tenant-exec declaration. Newly provisioned profiles still use
   the transitional shared-key template until explicit tenant migration.
@@ -408,11 +412,18 @@ curl -s -o /dev/null -w 'gate %{http_code}\n' https://<host>/ws/$PROF   # expect
 
 ## Shared company memory on the host (since 2026-09)
 
+Separate daemon users share memory through their supplementary company
+group and a writable bind of only that company's directory. Their private
+profile directories remain separate. See the
+[sharing and isolation contract](cross-cutting-contracts.md#separate-profiles-shared-company-memory)
+for permissions, SQLite coordination, application-level rule visibility
+and offboarding limits.
+
 The six original entity-memory tables no longer live in a profile's `zylch.db`: each
 company has one SQLite store under `~mrcalld/.zylch/memory/`, and every
 profile holding that key shares it. Its file is named after a hash of the
 key, in a per-company subdirectory owned by the company group
-(`mc-c-<sha256(key)[:12]>/<sha256(key)[:32]>.db`, mode `2770`); stores
+(`mc-c-<sha256(key)[:12]>/<sha256(key)[:32]>.db`; directory mode `2770`); stores
 created before the toward-sandbox plan still carry the legacy name
 `<MEMORY_KEY>.db` until the operator relocates them (`zylch -p <uid>
 memory-relocate-store`, with **all** of the company's daemons stopped —
@@ -440,8 +451,8 @@ engine/scripts/server/join-company.sh table                  # uid, email, key, 
 engine/scripts/server/join-company.sh <uid> <MEMORY_KEY>     # stop the daemon, echo, confirm, join, start it
 ```
 
-The second form runs `zylch -p <uid> memory-join <key>` as the service
-user: the preview echo (self-notion, size, contributors), a confirmation
+The second form runs `zylch -p <uid> memory-join <key>` as the profile's
+tenant user: the preview echo (self-notion, size, contributors), a confirmation
 prompt, then the merge and the switch (`--yes` as a third argument skips
 the prompt, for scripts). **There is no company check**: the key is the
 capability, so joining `support@` to a Café 124 key merges MrCall's memory
@@ -461,9 +472,11 @@ This candidate is not installed by the current hosted release.
 While a join runs, the source company's memory writes are refused for every
 profile on it; a join that stopped is finished or undone by its profile's
 next boot, or `memory-join --release-fence` releases it
-([contract](../engine/docs/features/company-memory-join.md)). The same join is available to a signed-in user from
-the desktop app (Settings → Company memory → paste, Test, Join) over the
-WebSocket.
+([contract](../engine/docs/features/company-memory-join.md)). A hosted
+`memory.join` RPC refuses with `operator_action`: changing the company also
+requires Unix group and sandbox updates, so the operator uses
+this host workflow. Settings → Company memory provides preview and local
+join controls; the local join applies only to a store on that engine host.
 
 **New profiles (provisiond).** `provisiond` injects the company key from
 the host's map, `PROVISIOND_COMPANY_MAP` (default

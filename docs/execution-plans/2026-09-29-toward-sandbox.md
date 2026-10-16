@@ -1,5 +1,5 @@
 ---
-status: active
+status: completed
 ---
 
 # Toward a sandbox: execution plan
@@ -434,7 +434,7 @@ not started.
      multi-tenant caveat, plus a new egress caveat on how to find a missing
      host and add one), `docs/active-context.md` and
      `engine/docs/active-context.md`. Criterion 8 is met on the docs side.
-   - **Final review: pending, VPS session.** It runs once through the user
+   - **Final acceptance procedure, VPS session.** It runs once through the user
      path, on two hosted profiles A and B of different companies. A
      signed-in app on A:
      - reads mail;
@@ -1397,9 +1397,14 @@ not started.
 
      *VPS, to close R5:*
      1. For each of the six units, record:
-        - the keys of `zz-assignment-release.conf` (expected: `[Service]`
-          and `Environment=PYTHONPATH=…` only; anything else, stop and
-          report);
+        - the keys of `zz-assignment-release.conf` (expected: `[Service]`,
+          `Environment=PYTHONPATH=…` and, as the 2026-10-10 preflight
+          found, `Environment=PYTHONDONTWRITEBYTECODE=1`; anything else,
+          stop and report). `tenant.conf` sets `PYTHONDONTWRITEBYTECODE=1`
+          itself, so after the rename that line is the same variable with
+          the same value and changes nothing. Check the value is `1` as a
+          true/false only. Any other value would change behaviour, and the
+          hash check below stops on it;
         - the sorted effective `Environment`, `ExecStart`, `User`,
           `ProtectHome`, `EnvironmentFiles` and `BindReadOnlyPaths`, as
           hashes.
@@ -1419,6 +1424,330 @@ not started.
      5. Two fresh final reviews, then `status: completed`.
 
      The assignment workstream names future pins `t0-…`, not `zz-…`.
+
+   - **Repair VPS preflight — 2026-10-10, 11:39 UTC: STOP.**
+     Clone `main` is `3876c093`, containing required `08ea112c`.
+     All six `zz-assignment-release.conf` files contain the same keys:
+     `[Service]`, `Environment=PYTHONPATH`, and the additional
+     `Environment=PYTHONDONTWRITEBYTECODE`. No values are recorded.
+     The CTO's explicit condition is to stop and report any additional key;
+     this preflight therefore stops before every host-changing step.
+     No pin was renamed, no `daemon-reload` or reconcile was executed,
+     and zero scratch profiles were created. The scratch harness worker was
+     stopped before execution. R5 stays `active`; no new runtime acceptance,
+     final approval or baseline advancement is claimed.
+
+     Effective property hashes before any rename are recorded below.
+     Method: SHA-256 of newline-joined, lexically sorted `shlex` tokens from
+     each `systemctl show --value -p <property>` result. Only hashes are
+     retained; raw effective environment and command values are not logged.
+     Since no rename occurred, there is no after-rename comparison.
+
+     | Profile | Environment | ExecStart | User | ProtectHome | EnvironmentFiles | BindReadOnlyPaths |
+     |---|---|---|---|---|---|---|
+     | support | `b48d2776af6c4d24c069b30d56a366b8949d7c665d4593624d7bb77f2f019178` | `08f869128cdc3e4422b380e58633e1d182f4f32a4f26327537fa1938a947d9b5` | `3c6a6627c53f919ed365ae22f98dcd1c585d4d0bcc0952027c2ebf4957f81b2a` | `02dae179e16841345a4e5cb7996e022ea6f45aeb4cbfa4811a76934328c2d24e` | `6124dfbefef4a7fdbb7b44f3ce36d9664ed7c951e111542f2383a8c89935466e` | `ad138c3145c65ba02478e6d9b72082d55945ccaedb83beebb03d300ea825a4a7` |
+     | Café124 | `31e720f1cb338a731e0bbcf6800519ae6e8c161131a32239950f054f1058c078` | `5020354555416dda5198ad850a3f58a9c4e4f98396f1913d833fd648525115c5` | `a9312059c94c9eda40efd3af3b0764f8ac4ae9463eaf7f849d39e7cd3303d1cf` | `02dae179e16841345a4e5cb7996e022ea6f45aeb4cbfa4811a76934328c2d24e` | `3e200e1b36fd927453d8c2732fcde4a3ccca82dd9a077608d852d5fb5d806144` | `d084519f66d553d67f3a9ee8ddadc4274d4f33204d3d46003971746eb4de35e9` |
+     | Mario MrCall | `fec57ebbcf9978deebff51e796190263b820cdbd258c6ff867d865c145927589` | `f0a4dc4f5b8096eb44327c6b6281c00f7bd686b50379b35f6eef88040a8d2c37` | `3612e92ce72bf5643ab1a777b216d772d9939f1543614f376754559334781046` | `02dae179e16841345a4e5cb7996e022ea6f45aeb4cbfa4811a76934328c2d24e` | `5bfe7e565c9b7c957d533348ce92f622555bee2069ddffa3d1cdee7a663f7e5d` | `9a5d1bd25606cdda6d14ec61bd83c98c9a944f2859fddc820245f9e8e8577ad8` |
+     | production | `dc59ed6430a3cbe568c6a873bd4a88b4cd9b496be31c29fbdaecb81e0c02d0a5` | `a9e8757f32f5f9ca2fa96365ca553355d3e477e445dddf5a2a1b5aeaf4aa6d57` | `f9dacf54fb642ecf30bb4f880146532d0fc4e69551788ec7d8acbbef0364e6fa` | `02dae179e16841345a4e5cb7996e022ea6f45aeb4cbfa4811a76934328c2d24e` | `43e2ecc3b8e083f8f76c0a9883bcf953b47abc260000f9392bf54aa211c3f932` | `d7effd8380f430c1bfd24c9c0560d4487f9e2d42377fb242dce614cb1d2713d9` |
+     | Ivan | `2bcc9c8c942a0e518ace26f8ead2316bb75a7767a0ac00df164d7c8a28a65e9e` | `ef9fa834035d8b25e9639bbd67e6ebf0ea2ba460f414c358c1e01e14692bbc4a` | `88a402313a2868bd2ff212ece1adf496f5b5d3a8c94050e58217d1afbb664b36` | `02dae179e16841345a4e5cb7996e022ea6f45aeb4cbfa4811a76934328c2d24e` | `fd0aead599e04779152a7943a91ae9af1f305a75165a2b134932e638047d402d` | `b839cbb97f4ec86f8665b9a7c833a09379ff780c50de7bf5c11182cdb27e690c` |
+     | Riccardo | `e456c1636ed17334239f187f347323688bfdad460ebf8beb0e0dec67a8b9d98c` | `a05230837e3ed6de70d4695c2086d4abd79ecc74cda7714edf1edd0949751894` | `754036e1e6512d7c586a7a16baaa815bb517cd9374759aaea06bbee86f99183d` | `02dae179e16841345a4e5cb7996e022ea6f45aeb4cbfa4811a76934328c2d24e` | `f6f550c91c80affcdd16495460e66fddcc6e87c6220937045073b4fbd61fad14` | `1806abf0fbac3a68ce6d200a1e74e3c33ee4ee4aa10c453f1ef01c15d52964f8` |
+
+     Root-only receipt: `/root/r5-final-20261010/pins-preflight.json`
+     (`0600`, parent `0700`), including the file hashes and all 36 effective
+     property hashes. No service checkout was directly modified.
+
+     **Notice to the assignment workstream (Git coordination channel):**
+     future operator pins must be named `t0-…`, not `zz-…`, as documented in
+     [the host runbook](../remote-backend.md#b--production-many-profiles-behind-one-url-mrcalld--caddy).
+     The current six pins additionally set `PYTHONDONTWRITEBYTECODE`; the
+     requested PYTHONPATH-only preflight has not been accepted or applied.
+
+   - **Repair VPS continuation — 2026-10-11, 14:31 UTC: STOP at reconcile.**
+     Clone `main` is `6516163b`, containing required `d158c865` and
+     `08ea112c`. All six pin preflights pass: allowed keys only = `true`,
+     `PYTHONDONTWRITEBYTECODE` equals `1` = `true` for every pin. No values
+     are recorded. The files were renamed in place from
+     `zz-assignment-release.conf` to `t0-assignment-release.conf` under the
+     reconcile lock, followed by `daemon-reload`.
+
+     All 36 effective property hashes **after that reload** match the
+     2026-10-10 recorded baseline above. The immediate pre-rename snapshot
+     had one discrepancy from that baseline (tenant `mc-fd58d04802f1`,
+     UID `x59G6SnymAN2lkFny0JDGJgdFz33`, `ExecStart`); its
+     post-reload hash matches the recorded baseline. Consequently the
+     immediate-before/after comparison is 35/36, while the CTO-requested
+     recorded-baseline comparison is 36/36. The initial discrepancy is not
+     explained by these hash-only receipts. The rename was initially retained on the historical-baseline comparison;
+     the strict immediate-before/after condition was not met. After the
+     independent final review, all six names were restored to `zz-…`,
+     followed by a successful `daemon-reload` (exit `0`). Every restored
+     pin has its original file hash. This rollback changes only the six
+     filenames; the additional production pin remains untouched. The
+     unexplained hash change still blocks acceptance.
+
+     `systemctl start zylch-reconcile.service` ran from 14:31:19 to
+     14:31:41 UTC: command exit `1`, `Result=exit-code`,
+     `ExecMainStatus=3`. Six tenant reapplications are `ready`; production
+     (`mc-18f855d535e9`) is refused. Exact helper error, containing no
+     configuration values:
+
+     ```text
+     applied drop-in zz-qonto-identity.conf sorts after tenant.conf: rename it to sort before it, keeping its order among the others (a pin applied last: t0-<name>.conf); a different command line goes in /etc/mrcalld/tenant-exec/<uid>
+     ```
+
+     The additional file belongs to production's instance directory, not
+     support's. Its contents were not inspected or changed. All seven
+     daemons remain active. The installed helper silently matches this
+     clone's `engine/scripts/server/tenant-helper.sh` (`cmp` exit `0`).
+     The service checkout was updated only by the authorized reconcile.
+     Future assignment pins must use `t0-…`; the six existing pins are
+     back under `zz-…` after the required rollback. The independent late
+     production pin remains unresolved. No reconcile was repeated after
+     restoring the names.
+
+     Initial invocation-ID and unit-journal selections did not establish
+     this reconcile's tenant results. The corrected receipt selects the
+     14:31:19–14:31:45 UTC host journal and
+     `SYSLOG_IDENTIFIER=zylch-reconcile`: six ready, one refused. Old
+     six-refusal records are not evidence for this attempt.
+
+     Zero scratch profiles were created; the offboarding harness was held
+     before execution. Criterion 7 runtime repair, the required successful
+     reconcile, and final acceptance remain pending. R5 stays `active`;
+     no new offboarding acceptance, final approval or baseline advancement
+     is claimed. Both fresh final reviews returned **REVISE**: the
+     successful reconcile and scratch lifecycle are missing; review B also
+     required resolution of the immediate-before/after hash change and
+     application of the rollback condition. The rollback is now applied;
+     its cause and the remaining acceptance gates are unresolved. Actual
+     reports: `/home/mal/.cache/mrcall-review/r5-vps-20261011/final-a.txt`
+     and `final-b.txt` in that directory. Root-only receipts (`0600`, parent `0700`):
+     `/root/r5-final-20261011/pins.json`,
+     `/root/r5-final-20261011/reconcile-corrected.json`,
+     `/root/r5-final-20261011/rollback.json`, and the retained
+     private journal at `reconcile-current.private.jsonl` in that directory.
+
+   - **Next attempt — 2026-10-12, cloud session.**
+     - *The 35/36 is most likely a measurement artefact, not a
+       configuration change.* `systemctl show -p ExecStart` carries runtime
+       state as well as the configured command: per entry, `start_time`,
+       `stop_time`, `pid`, `code` and `status`. A hash of that value changes
+       whenever the process is restarted or its runtime status differs
+       between two snapshots, even though the command is the same. That
+       the post-reload hash equals the 10-10 baseline fits this. From now
+       on the `ExecStart` hash covers only each entry's `path` and
+       `argv[]`, up to ` ; ignore_errors=`. The other five properties are
+       configuration only and keep their hashes.
+     - *Production's `zz-qonto-identity.conf`* is a second pin added by the
+       Qonto workstream, refused by the same rule. It is treated exactly
+       like the assignment pins:
+       - record its keys, names only;
+       - allowed: `[Service]` and `Environment=` lines, none of which sets
+         `HOME`, `ZYLCH_HOME`, `MEMORY_DB_DIR`, `PATH` or `PYTHONPATH`;
+         anything else, stop and report;
+       - renamed `t0-qonto-identity.conf`, which keeps its order after
+         `t0-assignment-release.conf`, as `zz-q…` after `zz-a…`.
+
+       Whether production still needs it after the Qonto bootstrap
+       removal (`7af6208b`) is for the Qonto workstream to decide, not R5.
+
+     *VPS steps:*
+     1. Under the reconcile lock, take a new baseline for the seven units
+        with the `zz-…` names:
+        - the configuration-only `ExecStart` hash and the five other
+          hashes;
+        - the keys of the six assignment pins (already checked) and of
+          production's Qonto pin.
+     2. Rename all seven files to `t0-…` and run `daemon-reload`. Compare
+        the six hashes per unit immediately before and after: they must be
+        equal. If any differs, put every name back, run `daemon-reload` and
+        stop, recording which unit and which property.
+     3. Reconcile: exit 0, seven `ready`.
+     4. Run the scratch lifecycle as described above.
+     5. Two fresh final reviews, then `status: completed`.
+
+   - **Next-attempt VPS preflight — 2026-10-13, 08:58 UTC: STOP.**
+     Clone `main` is `67b36e5a`, containing the requested commit. A new
+     reference of all 42 effective property hashes was captured under
+     `/run/mrcalld/reconcile.lock` with all seven operator files still
+     named `zz-…`. `ExecStart` now covers only each entry's `path` and
+     `argv[]`, ending before ` ; ignore_errors=`; no runtime status
+     fields are hashed. The five other properties retain the prior method.
+     Raw values are processed only in memory, never printed or retained.
+
+     All six assignment pins pass: allowed keys only = `true` and
+     `PYTHONDONTWRITEBYTECODE` equals `1` = `true` for each. Production's
+     `zz-qonto-identity.conf` has these keys, names only:
+     `[Service]`, `Environment=QONTO_HOST_ID_FILE`, and **`ReadWritePaths`**.
+     `QONTO_HOST_ID_FILE` does not set a prohibited environment variable;
+     `ReadWritePaths` is an additional directive forbidden by the explicit
+     preflight. The requested STOP condition therefore applies.
+
+     Zero files were renamed. No `daemon-reload`, reconcile, DNS/firewall
+     change or scratch lifecycle ran. All seven original pin names and
+     file hashes are unchanged; all seven daemons are active. The service
+     checkout was not changed. R5 remains `active`; the before/after hash
+     comparison and steps 2–5 have not been reached. No new final approval
+     or baseline advancement is claimed.
+
+     **Notice to the Qonto workstream (Git coordination channel):** operator
+     pins must use `t0-…`, never `zz-…`; production's intended name is
+     `t0-qonto-identity.conf`. Its present `ReadWritePaths` directive blocks
+     this authorized preflight. This session neither removes that directive
+     nor decides whether the identity pin is still needed. The workstream
+     must resolve it against the permitted-key procedure before a new VPS
+     attempt. No direct cross-session messaging interface is available;
+     this published plan is the retained notification.
+
+     Root-only receipt: `/root/r5-final-20261013/pins.json` (`0600`,
+     parent `0700`). SHA-256 method for `ExecStart`: normalize each
+     configured `path`/`argv[]` entry with `shlex`, preserve entry order,
+     then hash the newline join. Other properties: hash the newline join
+     of sorted `shlex` tokens. This is a new reference, not proof of a
+     successful rename comparison.
+
+     | Unit UID | Environment | ExecStart | User | ProtectHome | EnvironmentFiles | BindReadOnlyPaths |
+     |---|---|---|---|---|---|---|
+     | `9nXeYF8OXPetUFsSP4zDC3F2i673` | `b48d2776af6c4d24c069b30d56a366b8949d7c665d4593624d7bb77f2f019178` | `6de18631baafc05f330feaa9efa1e74e1c517e7d1f9f3158dd51fc88144b27ff` | `3c6a6627c53f919ed365ae22f98dcd1c585d4d0bcc0952027c2ebf4957f81b2a` | `02dae179e16841345a4e5cb7996e022ea6f45aeb4cbfa4811a76934328c2d24e` | `6124dfbefef4a7fdbb7b44f3ce36d9664ed7c951e111542f2383a8c89935466e` | `ad138c3145c65ba02478e6d9b72082d55945ccaedb83beebb03d300ea825a4a7` |
+     | `C06xHKoRcfdz94FaLPKuJuo0xVo1` | `31e720f1cb338a731e0bbcf6800519ae6e8c161131a32239950f054f1058c078` | `245bbbe27ea4c881fd71f7129894f49879599edce78e12918bfcb59020e27c88` | `a9312059c94c9eda40efd3af3b0764f8ac4ae9463eaf7f849d39e7cd3303d1cf` | `02dae179e16841345a4e5cb7996e022ea6f45aeb4cbfa4811a76934328c2d24e` | `3e200e1b36fd927453d8c2732fcde4a3ccca82dd9a077608d852d5fb5d806144` | `d084519f66d553d67f3a9ee8ddadc4274d4f33204d3d46003971746eb4de35e9` |
+     | `HxiZhWEBoRUarPzqX8eRWP21FuJ3` | `bd4bb7f4dcece1329f1109ec6089d6f1a85525991258ae18e82906c305e97e53` | `8dd13d5ec9a732163c214b6b50b5ba1a6e2f3678e26b0f8b45090d6bac29c3f8` | `0247e14dab77a35b9943b2d49e48114ab11c99db3c8550bdf4edc6d6274d6a93` | `02dae179e16841345a4e5cb7996e022ea6f45aeb4cbfa4811a76934328c2d24e` | `9bd25779ee4d8974e3cd0b6eb879c4632b54cf9f94fe8bdc0d932bb999cdbea1` | `635a6fe9313e3a2f5f014378008eb0bdf800f8e61ac07f241184642abcbd8bec` |
+     | `x59G6SnymAN2lkFny0JDGJgdFz33` | `fec57ebbcf9978deebff51e796190263b820cdbd258c6ff867d865c145927589` | `f3cc109ed1e14656c354990e0cc6958c129895303c418a8f1ea66d296473e702` | `3612e92ce72bf5643ab1a777b216d772d9939f1543614f376754559334781046` | `02dae179e16841345a4e5cb7996e022ea6f45aeb4cbfa4811a76934328c2d24e` | `5bfe7e565c9b7c957d533348ce92f622555bee2069ddffa3d1cdee7a663f7e5d` | `9a5d1bd25606cdda6d14ec61bd83c98c9a944f2859fddc820245f9e8e8577ad8` |
+     | `Gn9IcuWzYyY7DBMHkVUGB7bIiTp2` | `dc59ed6430a3cbe568c6a873bd4a88b4cd9b496be31c29fbdaecb81e0c02d0a5` | `08a5c881e8786f8c42045503d06592d941566403736556b27b9917a93daf71dd` | `f9dacf54fb642ecf30bb4f880146532d0fc4e69551788ec7d8acbbef0364e6fa` | `02dae179e16841345a4e5cb7996e022ea6f45aeb4cbfa4811a76934328c2d24e` | `43e2ecc3b8e083f8f76c0a9883bcf953b47abc260000f9392bf54aa211c3f932` | `d7effd8380f430c1bfd24c9c0560d4487f9e2d42377fb242dce614cb1d2713d9` |
+     | `ZwpLepFDghWhQEBO4WJRIFcEr7p1` | `2bcc9c8c942a0e518ace26f8ead2316bb75a7767a0ac00df164d7c8a28a65e9e` | `5832ab83aa81ceace3db56c602b03e329a0be955292384d49fd958dbed478518` | `88a402313a2868bd2ff212ece1adf496f5b5d3a8c94050e58217d1afbb664b36` | `02dae179e16841345a4e5cb7996e022ea6f45aeb4cbfa4811a76934328c2d24e` | `fd0aead599e04779152a7943a91ae9af1f305a75165a2b134932e638047d402d` | `b839cbb97f4ec86f8665b9a7c833a09379ff780c50de7bf5c11182cdb27e690c` |
+     | `YZNI2ZLDjFOxcvF0zmptW3vRZxV2` | `e456c1636ed17334239f187f347323688bfdad460ebf8beb0e0dec67a8b9d98c` | `70b12f472e34b79481201316fff4879f750149a8652ab2d67921fff026e1f5af` | `754036e1e6512d7c586a7a16baaa815bb517cd9374759aaea06bbee86f99183d` | `02dae179e16841345a4e5cb7996e022ea6f45aeb4cbfa4811a76934328c2d24e` | `f6f550c91c80affcdd16495460e66fddcc6e87c6220937045073b4fbd61fad14` | `1806abf0fbac3a68ce6d200a1e74e3c33ee4ee4aa10c453f1ef01c15d52964f8` |
+
+   - **Preserve the Qonto permission while closing R5 — 2026-10-13.**
+     The CTO requests resolution of the blocker and completion of R5.
+     Production's existing `ReadWritePaths` permission is retained exactly:
+     hosted Qonto reads its identity outside the profile and takes a private
+     sibling lock (`engine/zylch/qonto/identity.py:host_identity`). Removing
+     the permission is outside this repair. No identity-file contents or
+     connection credentials change.
+
+     Reviewed operational amendment, before execution:
+     1. Under the reconcile lock, retain root-only backups of the seven
+        original pins. Record the 42 configuration-only property hashes
+        and seven additional effective `ReadWritePaths` hashes.
+     2. Split only production's existing `ReadWritePaths` directive into a
+        new earlier instance-local `90-qonto-identity-paths.conf`, keeping
+        its exact value. The identity pin keeps its existing Environment
+        line. Both files remain root-owned; no writable path is added or
+        removed. Refuse an existing destination file rather than overwrite it.
+     3. Check the now Environment-only identity pin and six assignment pins
+        against the permitted-key procedure. Rename all seven pins to
+        `t0-…`, run `daemon-reload`, then compare all 49 configuration
+        hashes immediately before/after. A difference or execution failure
+        restores the seven original file bytes and names, removes the new
+        permission file, reloads and stops. Record any differing property.
+     4. Reconcile must exit 0 with seven ready. Then run the existing two-new-
+        scratch-holder lifecycle, including actual host egress cleanup,
+        company-file handoff, surviving-holder writes and last-holder removal.
+        No real profile is deleted or reseeded.
+     5. Two new independent final reviewers must approve actual acceptance
+        before the existing plan can become completed. Historical STOP
+        evidence stays historical; no earlier verdict is relabeled.
+
+     This is a split of existing operator configuration, with no source
+     feature or permission expansion. The Qonto workstream must keep future
+     identity pins named `t0-…`; its write-path directive has its own earlier
+     operator file. Whether it needs that identity remains its decision.
+
+   - **VPS closing evidence — 2026-10-13: runtime gates pass.**
+     The operational amendment above and its separate integration milestone
+     both returned **APPROVED** before dependent execution. Production's
+     original identity Environment line remains unchanged in
+     `t0-qonto-identity.conf`; its existing write-path directive remains
+     byte-identical in earlier `90-qonto-identity-paths.conf`. The six
+     assignment pins are `t0-assignment-release.conf`. All seven permitted-
+     key checks pass; original root ownership and modes are preserved.
+     Immediate-before/after comparison passes **49/49** configuration hashes
+     (the required 42, plus seven `ReadWritePaths` hashes). A fresh comparison
+     after reconcile also passes 49/49. No writable path, source pin,
+     interpreter, key, voice setting or saved control was changed.
+
+     Reconcile at 10:25:22–10:25:47 UTC returns command exit `0`,
+     `Result=success`, `ExecMainStatus=0`, seven distinct tenant `ready`
+     records, no helper error/refusal, and seven active daemons. The initial
+     journal collection ended too early for logger flush; the corrected
+     collection selects the reconcile identifier from the actual start
+     through collection time. This is one reconcile, not a successful retry.
+
+     **Representative offboarding: PASS**, command exit `0`,
+     10:27:03–10:32:12 UTC. Two new scratch holders each have one email rule,
+     one UID rule and one company fact. Before deletion: six rows. After
+     the first deletion: exactly its two rules are removed, its fact stays,
+     and the other holder keeps its two rules and fact (four rows). Across
+     all company directories, deleted-UID files = `0`, no-user files = `0`.
+     Handoff fixtures in a second synthetic company directory confirm broad
+     ownership transfer to root with unchanged modes; that auxiliary fixture
+     is removed by the test's teardown, not attributed to helper last-holder
+     cleanup. The first holder's actual host DNS/firewall and UID-bound sets
+     were active before deletion; its egress units, table and directory are
+     absent after deletion. The survivor commits and reads back a new fact
+     as Unix UID `984` (five rows). Last-holder deletion removes its company
+     store, sidecars, migration backup and group. Both scratch profiles,
+     users, keys, runtime/socket paths and generated unit artifacts are absent.
+     Full physical-root, `/run` and `/dev` ownership scans use the actual
+     UID/primary-GID pairs `985/974`, `984/972`: no remaining owned files.
+     All seven real PIDs, key/environment digests, checked profile/company/
+     store metadata and tenant-table bytes remain unchanged during the cycle.
+
+     The documented migration-backup exception still applies: one backup
+     after first deletion can retain removed-holder rows and was not scrubbed;
+     it disappears with the final company-directory removal. No real profile
+     was offboarded. Actual scratch startup without its encryption key refuses
+     with exit `3`.
+
+     **Fresh host acceptance**, command exit `0`, 10:36:46–10:37:13 UTC,
+     uses A = Mario Gmail and B = support in their actual daemon namespaces
+     and owning Unix identities, with current interpreter/module digests.
+     Settings overrides are auxiliary process memory only; no saved settings
+     update or new GUI journey is claimed.
+
+     | Criterion | Accepted evidence |
+     |---|---|
+     | 1 | Fresh A/B cross-profile absolute reads, globs, OS reads and key/store access refuse; document/download overrides are ignored. |
+     | 2 | Fresh six locally crafted MIME attachment names stay basenames, including `.env`; four external targets refuse; own synthetic document reads; all fixtures removed. |
+     | 3 | Fresh both hosted Python execution paths refuse; source/sibling writes and outgoing foreign attachment reads refuse. |
+     | 4 | Retained 2026-10-04 actual concurrent-store acceptance: distinct Unix UIDs, same store inode, overlapping locks, successful commits. Fresh third-user store read/list refusal remains effective. No new concurrent real-store write is claimed. |
+     | 5 | Fresh seven distinct root-owned `0400` keyfiles; seven OAuth rows, 21 encrypted values checked as owning users, zero decrypt failures. Actual missing-key scratch startup refuses. |
+     | 6 | Fresh A DNS negative returns NXDOMAIN with one scoped journal record; TEST-NET TCP refuses with one scoped kernel record; 30 firewall sets and resolver binding checked. |
+     | 7 | The new representative dual-holder offboarding and actual egress cleanup pass as recorded above. |
+     | 8 | Current AGENTS, host guide, cross-cutting contracts and per-tree context describe the deployed boundary; owning plan and living snapshot carry this acceptance and its limits. |
+
+     The accepted signed-app mail → attachment → document lookup/read journey
+     on Mario Gmail remains the CTO-reported evidence dated above. Fresh host
+     probes bind its A identity to B = support; they do not relabel synthetic
+     MIME checks as real IMAP downloads or filename lookup as full-text search.
+     No mail send, provider/bank/voice call or paid inference was added.
+
+     Root-only evidence (`0600`, parent `0700`) in
+     `/root/r5-final-20261013/`: `pin-repair.json`,
+     `post-reconcile-configuration.json`, `reconcile-repair.json`,
+     `scratch-offboard.json`, `scratch-runtime-receipt.json`, `host-probes.json`
+     and retained executable probe sources. Protected originals are in
+     `pin-repair-backups/`. Actual pre-execution plan and milestone reports,
+     plus the immutable approved amendment, are retained in
+     `/home/mal/.cache/mrcall-review/r5-preflight-20261013/`.
+     Final closure uses task `r5-close-20261013-stable` for this authorized
+     repair and current workflow versions; the earlier failed preflight and
+     its actual REVISE report remain retained, not reset or relabeled.
+
+     **Fresh final reviews: APPROVED / APPROVED, 2026-10-13.** Independent
+     reviewers `r5_20261013_final_a` and `r5_20261013_final_b` both approve
+     all eight criteria and the closing evidence. Each independently checks
+     current 49-property hashes, seven live identities/source bindings,
+     protected executable evidence, scratch cleanup and checker readiness.
+     Actual reports are retained as `final-a.txt` and `final-b.txt` under
+     `/home/mal/.cache/mrcall-review/r5-close-20261013/`; the initial approved
+     versions remain retained separately. Nonblocking limits remain explicit:
+     GUI acceptance is dated CTO-reported evidence, concurrency is retained
+     actual October 4 evidence, and historical lock acquisition is not
+     independently observed. The approved lifecycle transition is
+     `active` → `completed`; no earlier approval substitutes for these gates.
+     A later scheduled reconcile replaces the recorded manual InvocationID;
+     current success/0 and unchanged daemon configuration/PIDs are verified,
+     not an assertion that systemd's last invocation is immutable.
 
    - **Open after this plan, not part of it:**
      - one handset whose speech the voice provider does not transcribe

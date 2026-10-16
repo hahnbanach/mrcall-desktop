@@ -59,7 +59,7 @@ Company families (`user:<key>`, `facts:<key>`) are visible to every key
 holder; rule families (`template:<owner>`, `prefs:<owner>`) only to their
 owner; `owner_id` on a company row is provenance, not a wall — the one
 predicate is `engine/zylch/memory/scope.py:blob_visible`. The key is a
-capability: `memory.join` is its only write path (`settings.update` refuses
+capability: `memory.join` is its controlled join path (`settings.update` refuses
 it), a key the host does not know is refused rather than turned into an
 empty store, and duplicates left by a join are united by the sweep that
 runs after each update. Design:
@@ -73,6 +73,57 @@ The local unreleased contextual-email candidate adds durable assignment
 preserve the stricter company classification and its provenance; knowing a memory
 key does not grant trusted assignment membership. Ordinary mail/tasks remain in
 the private profile store.
+
+### Separate profiles, shared company memory
+
+The hosted boundary has two levels: **private profile files** and an
+**explicitly shared company store**. Separate Unix users do not require
+separate company databases: Linux grants access through a supplementary
+company group.
+
+| Resource | Access on the migrated host |
+|---|---|
+| Profile directory, mail database, credentials and downloaded files | The profile's own Unix user; sibling profiles do not gain access by sharing a company. |
+| Company memory database and its SQLite sidecars | The Unix users enrolled in that company's group. |
+| Another company's memory directory | Not exposed in the daemon's sandbox; its group permissions also deny access. |
+
+`mrcall-tenant create` derives the company group from the memory key, adds
+the profile user to it, and writes `SupplementaryGroups` in the unit.
+The company directory has mode `2770`: its members can access it, others
+cannot, and setgid makes new entries inherit the company group. The daemon
+uses `UMask=0007`; its sandbox exposes its own profile directory and the
+bound company directory as writable. Company files need group read/write
+permissions, including the database, `-wal`, `-shm` and coordination files.
+
+Two authorized daemons therefore open **the same SQLite file**, using the
+same company capability and distinct Unix identities. WAL allows concurrent
+readers; SQLite transactions and the engine's write locks coordinate writes.
+This is sharing on one engine host, not replication between computers.
+
+**Rule privacy within a company is enforced by the engine, not by Linux.**
+Company facts and entity memory are shared. `memory/scope.py:blob_visible`
+restricts personal template/preference rows to their owner during engine
+reads and writes. Those rules are stored in the shared database; company
+members have filesystem access to that database. This is not an OS-level
+secrecy boundary between coworkers. Trusted company-task membership also
+has its own authorization contract; knowing the memory key alone does not
+grant assignment authority.
+
+Hosted joins require the operator's `join-company.sh` workflow to update
+group membership and the sandbox; `memory.join` refuses a hosted RPC join.
+A local join can open an existing store on that host after preview and
+confirmation. The key alone cannot bypass hosted Unix permissions.
+
+When a hosted profile leaves, the helper removes its email- and UID-owned
+personal rules while company facts remain for the other holders. It hands
+off company files owned by the departing user to root with the company
+group and unchanged modes, so the surviving daemons keep write access.
+Deleting the last holder removes the company directory and group.
+Migration backups may retain removed personal rows until that final
+company-directory deletion; first-holder offboarding does not scrub them.
+Host procedures are in the [remote guide](remote-backend.md#shared-company-memory-on-the-host-since-2026-09);
+accepted runtime evidence and retained limits are in the
+[sandbox rollout plan](execution-plans/2026-09-29-toward-sandbox.md).
 
 ## Hosted engines: one Unix user per profile (since 2026-10)
 
