@@ -1,4 +1,5 @@
 name: Model table
+# Authorized CI proof run: 2026-10-16; remove the temporary push trigger before main.
 
 # The daily model-table job (milestone 10, brief D8): engine/scripts/model_table_job.py
 # resolves each role's rankings per preset from OpenRouter's live catalogue,
