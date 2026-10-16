@@ -1638,10 +1638,21 @@
             "role": "NARRATION",
             "spent_usd": "0.000805",
             "why": "pick of economy / NARRATION / ranking"
+          },
+          {
+            "at": "2026-10-16T13:29:47Z",
+            "bound_usd": "2",
+            "check": "NARRATION on mistralai/ministral-14b-2512",
+            "kind": "measure",
+            "model": "mistralai/ministral-14b-2512",
+            "outcome": "NARRATION: failed",
+            "role": "NARRATION",
+            "spent_usd": "0.000299",
+            "why": "pick of economy / NARRATION / ranking"
           }
         ],
         "opened_at": "2026-10-16T12:37:16Z",
-        "reserved_usd": "2.059486",
+        "reserved_usd": "0.059785",
         "run": "2026-10-16T12:36:59Z",
         "settled_at": null,
         "spent_usd": null
