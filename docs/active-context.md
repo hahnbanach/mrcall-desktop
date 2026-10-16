@@ -1,6 +1,6 @@
 ---
-doc_baseline_commit: 5877822203ccb3e1d53951ead331574bff38fbb6
-doc_baseline_date: 2026-10-15
+doc_baseline_commit: c4593726f69199f15f36a317216893efe4bf3927
+doc_baseline_date: 2026-10-16
 ---
 
 # Active Context — Cross-cutting
@@ -23,8 +23,8 @@ Company-memory reliability is the immediate workstream. The local
 [M10 integration](execution-plans/2026-10-16-m10-current-runtime-integration.md)
 preserves the selected effective V8 packages alongside M10 authority and model
 routing. Source review passes: 746 affected tests and 20 independent authority
-checks, all without skips. The replacement artifact, copied-data and installed
-client/server proofs are in progress; they are separate from deployment.
+checks, all without skips. Replacement wheel, copied-data and installed
+client/server proofs pass fresh M2 review; they are separate from deployment.
 Earlier frozen-base wheel evidence cannot authorize the current runtime switch.
 
 Installed mnemonic source remains M9. Production's saved custom policy retains
@@ -77,9 +77,9 @@ Claude and kernel classifiers; see [operator setup](operator-setup.md#ai-executi
 - Twenty ordinary answers across five incident cases and the two selected UIDs
   must be compared with original sources. Summaries can themselves conflict or
   overclaim; no reset, rewrite, re-extraction or reconsolidation is authorized.
-- New wheel/private install, effective V8 copied reopening, installed-engine
-  continuations, current-main reconciliation and final documentation review
-  remain active local integration gates.
+- New wheel/private install, six effective V8 copied boots, installed-engine
+  continuations and current-main reconciliation pass local review. The task's
+  completion record owns documentation closure and separate final approval.
 - CI proof, repository secret, model-table protection and server-first promotion
   remain open. Existing provider keys pass free authentication; Firebase refresh
   and funded business binding require actual acceptance. Snapshot age gate:
@@ -89,8 +89,9 @@ Claude and kernel classifiers; see [operator setup](operator-setup.md#ai-executi
   The test CI deploy credential fails; the reviewed packet proposes an explicit
   operator-equivalent test rollout after verified CI build, without exporting
   an operator administrator credential into CI.
-- The concurrent runtime owner retains the live stability window. Final normal
-  operational outcome, exact accepted descriptor, bounded paid checks, protected
+- The concurrent runtime owner retains the live stability window after a failed
+  full ordinary batch on timeouts/capacity. Successful normal operational outcome,
+  exact accepted descriptor, bounded paid checks, protected
   two-clone operations and per-unit canary/rollback remain required.
 - Qonto GUI/provider UI, live PEC, fresh-account Desktop/Windows, telephone
   detail/latency, provisioning and broader operational obligations retain their
@@ -100,8 +101,8 @@ Claude and kernel classifiers; see [operator setup](operator-setup.md#ai-executi
 
 ## Next
 
-1. Finish replacement artifact/copy/continuation checks, integrate current-main
-   documentation and obtain critic/final approval on the combined candidate.
+1. Use the reviewed current-main-integrated replacement candidate and its
+   completion record for the concrete external execution packet.
 2. Obtain scoped authority for the concrete verified publication, spending and
    rollout packet, then execute its gates through actual company acceptance.
 3. Preserve each profile's controls, memory and accounting history. Stop on

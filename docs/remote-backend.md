@@ -535,20 +535,41 @@ establish mnemonic product/corpus acceptance. Host prerequisites to refresh:
   zylch-server@<uid>` per profile) and record it here. If no per-unit pin
   exists, the plan's proposal is a second checkout with its own venv and a
   systemd drop-in `zylch-server@<uid>.service.d/release.conf` that resets
-  `ExecStart=` to that venv — a host change the CTO authorizes.
+  `ExecStart=` to that venv — a host change the CTO authorizes. Capture actual
+  regular-package resolution and every effective module: a complete package
+  selected on PYTHONPATH hides the interpreter's base package. Preserve voice/MCP
+  flags and compare the complete ordered drop-in set immediately before action.
+  The [M10 integration](execution-plans/2026-10-16-m10-current-runtime-integration.md)
+  owns its exact artifact/configuration proposal; generic fleet updates do not
+  substitute for its per-unit acceptance.
 - *The rehearsal on a copy.* Before the first live unit, copy the profile's
-  `zylch.db`, its `.env` and the company store through the SQLite backup API
+  `zylch.db` and the company store through the SQLite backup API; copy its `.env`
+  separately with private permissions
   (see Caveats: never open a live DB as another user) under a scratch root,
   and boot the new engine on the copy twice with `ZYLCH_HOME` and
   `MEMORY_DB_DIR` pointing at it: the first boot runs the store steps (the
   destructive one is preceded by a backup under `<store dir>/backups/`), the
   second is a no-op. A store the new build migrates cannot be opened by a
-  milestone 5–7 build; the hosted engines never ran one.
+  milestone 5–7 build; the hosted engines never ran one. Reopen the copied store
+  with the complete actual previous runtime, not only its frozen base package.
+  Keep original row/column projections, enrollment and private connection state.
 - *The order per unit:* pause saved (preparation paused, `AUTO_UPDATE_ENABLED`
   not `Yes`, the clone's operator paused with `CS_PAUSE`) → restart the unit
   on the new commit → `zylch -p <uid> memory-status` and `memory-reviews`
   clean → one bounded run and one supervised correction → soak on the plan's
-  measures → resume only on the CTO's yes.
+  measures → resume only on the CTO's yes. Profile loading uses dotenv override,
+  so an environment-only automatic-update override does not disable saved work.
+  Record exact saved values, use compare-and-set for temporary controls, wait for
+  running work to finish and restore those exact values after acceptance. A
+  separately owned service stability window must be released before a canary.
+
+An installed wheel must contain its runtime model JSON, schemas and prompts;
+Python import parity alone cannot establish a usable LLM installation. The
+[replacement-artifact evidence](evaluations/2026-10-16-m10-current-runtime-integration.md)
+records actual offline resource loading and copied-runtime checks. Real paid
+receipts, complete ordinary operational cases and repeated company answers
+compared with originals remain separate rollout gates. Retain a fresh pre-switch
+backup; copied-reader compatibility alone is not live rollback acceptance.
 
 The milestone's paid corpus never runs on a host profile: it runs on a
 disposable profile under a scratch root, the provider key enters only as

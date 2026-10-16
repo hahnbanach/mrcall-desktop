@@ -76,11 +76,33 @@ not represented as direct process observations.
 
 ## Gate and remaining work
 
-Fresh M1 review is pending. No replacement wheel has been built. Approval must
-precede the new wheel, private offline installation, two copied candidate boots
-and full actual-runtime reopening per profile, and six installed-engine/server
-continuation cases. Current-main documentation reconciliation, documentation
-critic and separate final review also remain required. CI/data publication,
+The first fresh M1 review approved the source composition and independently
+passed 20 guarded authority/race checks. Its immutable source evaluation is
+`approved-M1.md`, SHA256
+`0e888f4473b9c18a26548d37d61c1b1fb48aa8c0a71f0727eed32e8e86d00aa8`;
+the report is `M1-review/report.md` in the private root. Subsequent installed
+artifact checks found an additional packaging defect: the wheel omitted runtime
+JSON assets, including `llm/roles/snapshot.json`. All six installed-engine/server
+cases failed before dispatch with FileNotFoundError. The wheel and failed command,
+log, JUnit and import identities remain retained under M2; they cannot establish
+an installable LLM candidate. The affected M1 rereview approves the packaging
+repair in `M1-review/report-r2.md`; its immutable evaluation is `approved-M1-r2.md`.
+The 369 Python source hashes and passing source tests remain unchanged.
+
+The affected repair declares seven explicit package-data files in
+`engine/pyproject.toml`: role requirements, table, snapshot and retained measurement
+JSON, the table/snapshot validation schemas and `prompts/email_thread_classify.txt`.
+The five nonmeasurement model files and classification prompt have actual runtime
+readers; `measured.json` retains the resolver's measurement input. Incidental
+package-data inclusion is disabled. Contract prose/examples, the unused older
+triage prompt and unreferenced legacy migration SQL are excluded. The replacement
+wheel must prove each declared file's source/wheel/installed byte equality and
+exercise actual metadata, table and schema loading before continuation acceptance.
+
+The [M2 evaluation](2026-10-16-m10-current-runtime-integration.md) records the
+subsequent replacement build, runtime-resource parity, copied-data reopening and
+six installed continuations. Documentation critic and separate final review
+remain required. CI/data publication,
 billing promotion, real paid receipts, repeated source-grounded company answers,
 protected clone operations and authorized rollout/rollback still determine
 whether the CTO's overall goal is complete.

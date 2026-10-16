@@ -3,7 +3,8 @@
 Scope: how the engine chooses the model each paid call runs, where its prices
 and request metadata come from, how the model table is measured, published and
 refreshed, and the tests that keep a model name from becoming a default again.
-Milestone 10, on branch `model-selection-m10a`. The brief and the plan are in
+Milestone 10, with feature branch `model-selection-m10a` preserved in the local
+effective-runtime integration candidate. The brief and the plan are in
 hb: `docs/briefs/2026-10-01-model-selection-by-requirements.md` and
 `docs/execution-plans/2026-10-02-model-selection-m10.md`. The published
 contract (schemas, gates, credits protocol) is
@@ -326,13 +327,16 @@ built from a splatted dict, is not seen.
 
 ## Runtime and acceptance boundary
 
-The [readiness candidate](../../../docs/execution-plans/2026-10-15-m10-memory-production-readiness.md)
+The [effective-runtime candidate](../../../docs/execution-plans/2026-10-16-m10-current-runtime-integration.md)
 preserves installed runtime protections alongside M10 and separates OpenRouter
 input fit from monetary byte bounds. A saved custom/role override still wins;
 installing M10 does not switch such a profile to the measured picks. The
-[integrated evaluation](../../../docs/evaluations/2026-10-15-m10-integrated-candidate.md)
-records actual production/Mario forecasts, local path evidence, a fresh free
-distribution matrix and the mandatory real-read/server/CI/paid gates. No local
+[replacement evaluation](../../../docs/evaluations/2026-10-16-m10-current-runtime-integration.md)
+records installed source/resource proof and mandatory real-read/server/CI/paid
+gates; the earlier readiness record retains its free distribution matrix and
+saved-policy forecasts. The wheel explicitly includes requirements/table/snapshot
+JSON and validation schemas. Installed metadata and schema loading must pass
+without a source checkout; Python-module parity alone is insufficient. No local
 scripted answer certifies company facts or deployment readiness.
 
 ## Known limits

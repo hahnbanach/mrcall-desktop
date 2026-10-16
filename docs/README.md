@@ -39,6 +39,9 @@ The repo has three parallel doc trees, mirroring the three index files. Each tre
 - [Shared company knowledge for GPT-Live](briefs/2026-09-28-voice-company-knowledge.md) — approved brief for shared sources, initial company context and detail retrieval; [reviewed execution plan](execution-plans/2026-09-28-voice-company-knowledge.md) with source authority and caller disclosure as its first gate.
 - [Telephone source migration](briefs/2026-10-01-telephone-notes-source-is-phone-md.md) — production uses stored `phone.md`; [execution and review](execution-plans/2026-10-01-telephone-notes-source-is-phone-md.md), including Mario’s migrated reader; [initial Astra review](evaluations/2026-10-01-astra-company-instructions-migration-review.md) and [APPROVED P1 repair](evaluations/2026-10-01-astra-instruction-write-denial-rereview.md).
 
+- [M10 server paid checks](evaluations/2026-10-12-m10-server-paid-checks.md) — historical bounded-route provider evidence, generation-ID defect and recovery follow-up.
+- [M10 end to end](evaluations/2026-10-12-m10-end-to-end.md) — provider/preset/table cases and outstanding paid legs.
+- [Role measurement](evaluations/2026-10-11-role-measurement.md) — retained measurement spend, role outcomes and mnemonic corpus limits.
 - [Complete selected-case review](evaluations/2026-09-16-reviewed-model-comparison.md) — all 60 selected cases / 240 outputs, concrete errors, separate uncertainty and measured costs.
 - [Disputed case evidence](evaluations/2026-09-16-disputed-case-review.md) — exact source/model excerpts, equal Opus/K3 criteria and withdrawn operational-error claims.
 - [Grading correction](evaluations/2026-09-16-grading-correction.md) — corrected company facts, concrete payment evidence, revised labels and withdrawn quality recommendations.

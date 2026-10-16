@@ -1,5 +1,13 @@
 # M10 runtime preservation source evidence
 
+> Historical acceptance record, qualified on 2026-10-16. The initial package
+> captures are frozen bases, not the complete effective V4/V8 runtimes. Both
+> earlier wheels omit runtime model JSON and cannot authorize an installation.
+> Current preservation, replacement artifact and rollout gates belong to the
+> [effective-runtime integration](../execution-plans/2026-10-16-m10-current-runtime-integration.md).
+> Original evidence and approvals remain retained; dated statements below describe
+> that earlier candidate, not current deployment readiness.
+
 This candidate composes the installed runtime protections with the approved M10
 implementation. This is source preservation and isolated local acceptance. It
 establishes no installed GUI acceptance, provider fit, deployment readiness or

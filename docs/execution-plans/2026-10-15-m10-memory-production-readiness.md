@@ -6,6 +6,14 @@ kind: execution-plan
 
 # M10 company-memory source candidate and deployment gates
 
+> Historical acceptance record, qualified on 2026-10-16. The initial package
+> captures are frozen bases, not the complete effective V4/V8 runtimes. Both
+> earlier wheels omit runtime model JSON and cannot authorize an installation.
+> Current preservation, replacement artifact and rollout gates belong to the
+> [effective-runtime integration](../execution-plans/2026-10-16-m10-current-runtime-integration.md).
+> Original evidence and approvals remain retained; dated statements below describe
+> that earlier candidate, not current deployment readiness.
+
 Approved brief: `docs/briefs/2026-10-15-m10-memory-production-readiness.md`,
 SHA256 `29b3a3f82c953285fdf26a45e621094eaaa850cbe5dfbcf7e429d4db4a42eada`.
 Approval: `/tmp/mrcall-ai-kit/m10-memory-readiness-20261015/m10_takeover_brief_review.log`.

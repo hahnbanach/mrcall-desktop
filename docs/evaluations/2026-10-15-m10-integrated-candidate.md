@@ -1,5 +1,13 @@
 # M10 company-memory integrated candidate
 
+> Historical acceptance record, qualified on 2026-10-16. The initial package
+> captures are frozen bases, not the complete effective V4/V8 runtimes. Both
+> earlier wheels omit runtime model JSON and cannot authorize an installation.
+> Current preservation, replacement artifact and rollout gates belong to the
+> [effective-runtime integration](../execution-plans/2026-10-16-m10-current-runtime-integration.md).
+> Original evidence and approvals remain retained; dated statements below describe
+> that earlier candidate, not current deployment readiness.
+
 Scope: local M3 evidence and the remaining deployment gates of the
 [readiness plan](../execution-plans/2026-10-15-m10-memory-production-readiness.md).
 The original M10 conditional approval and measurements remain historical evidence.

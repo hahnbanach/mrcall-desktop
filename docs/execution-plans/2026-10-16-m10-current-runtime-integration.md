@@ -1,7 +1,7 @@
 ---
 date: 2026-10-16
 kind: execution-plan
-status: active
+status: completed
 task: m10-current-runtime-20261016
 brief: ../briefs/2026-10-16-m10-current-runtime-integration.md
 ---
@@ -231,3 +231,46 @@ CTO's goal. Continue all authorized local preparation; present a concrete scoped
 external execution packet only when that is the next genuine authority boundary.
 No pushes, secret/protection changes, paid requests, sends/drafts, live
 memory changes or deployment are authorized by this plan.
+
+## Acceptance record and continuing obligations
+
+The source inputs advanced from provisional V7 to actually activated V8, manifest
+`ff55134005c0e11c89affee5eb2df767cfdf24d970fe74e35250a1e3de035897`.
+Complete stable captures cover both selected regular packages and configuration.
+Both selected UIDs are currently Café124 identities; historical Mario/support
+prose is not authority for selecting their company.
+
+M1 source composition passed 746 affected cases and twenty independently executed
+authority/race cases, all without skips. The first M2 wheel exposed missing runtime
+JSON before any provider dispatch. The same M1 reviewer approved the narrow
+package-data repair; its immutable evaluation is `approved-M1-r2.md` in private
+evidence, with actual report `M1-review/report-r2.md`. All 369 Python modules
+remain unchanged; seven explicit JSON/schema/prompt resources are included.
+
+The replacement wheel is SHA256
+`3fb25d395d8896e3ba10baa2014aef96a6b602329e1f5da0f078771ae784b541`.
+Offline installation, 369-module/seven-resource parity, actual metadata/table/schema
+loading and 26 installed SDK/read/auth/listener cases pass. Six fresh copied boots
+preserve every original row/column, managed enrollment and Qonto one/zero, with
+stable warm/V8 reopening. Six installed-engine/server continuations pass, including
+lost-answer receipt recovery without inference replay. New working-copy archives
+have verified streaming byte/hash roundtrips. The first failure artifacts remain.
+
+Owned source checkpoint `0a4261f8`, current-main merge `e48dcdef` and packaging
+repair `c4593726` are local. The merge reconciles main's fourteen documentation
+paths while preserving product bytes and both previous living-context bodies.
+Billing-server candidate `01909353` contains its separately reviewed correction.
+None of these commits is published by this preparation.
+
+Fresh M2 review approves local preparation; documentation closure and separate
+final approval are tracked by this task's completion record. The
+runtime owner's full ordinary batch failed on transport timeouts/capacity; its
+six-service stability window remains held. `external-execution/proposal.json`
+therefore keeps engine activation blocked until successful operational acceptance,
+final descriptor, window release, source/configuration freshness and sufficient
+staging/backup space. CI/billing preparation is independent of that window.
+
+Local artifact acceptance never closes the overall rollout goal. Required external
+publication/CI/data, server promotion, real provider/credits receipts, twenty
+company answers against originals, protected clone operations and controlled
+canary/rollback remain open, with scoped authority required for external effects.

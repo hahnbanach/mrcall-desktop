@@ -2,7 +2,7 @@
 
 Scope: the engine's optional read-only MCP listener, exact-draft RPCs, scheduled
 reply provenance and email-only sync. Hosted installation and acceptance state
-belong to the [readiness plan](../../../docs/execution-plans/2026-10-15-m10-memory-production-readiness.md),
+belong to the [effective-runtime plan](../../../docs/execution-plans/2026-10-16-m10-current-runtime-integration.md),
 not to this source contract.
 
 ## Optional Linux listener
@@ -64,9 +64,13 @@ scheduled reply receives automatic provenance. Manual, delayed, failed or
 identity-changed requests cannot inherit it. Emitted RFC References are stored;
 old incomplete Sent rows are not backfilled.
 
-The [assignment contract](task-assignment.md) retains bounded memoized ancestry,
-the shared provider deadline, complete Sent inventory and refusal on conflicting
-or incomplete observations. These checks complement M10's contextual-email
+The [assignment contract](task-assignment.md) retains bounded component ancestry,
+the shared provider deadline, complete Sent discovery and refusal on conflicting
+or incomplete observations. Component aliases retain the exact reply target and
+owner-scoped original source. Exact live ancestry proof may supply missing
+historical References; historical rows are not rewritten. Known UNKNOWN
+observations precede positive-witness shortcuts, and malformed Sent observations
+grant no complete assignment or send authority. These checks complement M10's contextual-email
 company authority; they do not replace it or authorize external/manual mailbox
 writes.
 
@@ -82,10 +86,13 @@ processing is started by this route.
 
 ## Acceptance and installation limits
 
-Local source, actual SDK and isolated listener tests establish their fixture
-cases. They do not establish protected production configuration, real issuer
-introspection, installed dependency compatibility, real source quality or
-two-clone operational acceptance. The [integrated evaluation](../../../docs/evaluations/2026-10-15-m10-integrated-candidate.md)
-binds the wheel/source identity, both old runtime identities, proposed per-unit
-switch/rollback and every unrun deployment gate. A generic shared-checkout or
+Installed SDK and isolated listener tests establish their fixture cases and
+private dependency compatibility. They do not establish live protected
+configuration, real issuer introspection, source quality or two-clone operational
+acceptance. The [replacement evaluation](../../../docs/evaluations/2026-10-16-m10-current-runtime-integration.md)
+binds complete effective-runtime inventories, installed wheel/runtime resources,
+copied reopening, per-unit switch/rollback and unrun deployment gates. Earlier
+base-only captures and wheels without model JSON cannot authorize a current
+switch. Successful operational acceptance and the runtime owner's service-window
+release remain prerequisites. A generic shared-checkout or
 tenant-helper update is not equivalent to that scoped installation proposal.
