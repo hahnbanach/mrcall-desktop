@@ -254,6 +254,23 @@
       },
       "role": "COMPACTION",
       "run": "2026-10-16T12:36:59Z"
+    },
+    {
+      "case_set_sha256": "5aca578fb06e00d2a8526510ea1dc6da3de65f5e660bc4658ae9cb803bcaa69b",
+      "measured_at": "2026-10-16T13:04:33Z",
+      "model": "mistralai/ministral-8b-2512",
+      "prompt_sha256": "f99a21dda12f11c4d22961fe8bfdec5a4fdadc63fa6bc3cffcc94dea0ebdb860",
+      "result": {
+        "bars_ok": true,
+        "complete": true,
+        "critical": false,
+        "index_score": 5.5,
+        "n": 5,
+        "passes": 5,
+        "score": 1.0
+      },
+      "role": "COMPACTION",
+      "run": "2026-10-16T12:36:59Z"
     }
   ],
   "schema": 1,

@@ -1539,10 +1539,21 @@
             "role": "COMPACTION",
             "spent_usd": "0.000134",
             "why": "pick of economy / COMPACTION / ranking"
+          },
+          {
+            "at": "2026-10-16T13:04:33Z",
+            "bound_usd": "2",
+            "check": "COMPACTION on mistralai/ministral-8b-2512",
+            "kind": "measure",
+            "model": "mistralai/ministral-8b-2512",
+            "outcome": "COMPACTION: passed",
+            "role": "COMPACTION",
+            "spent_usd": "0.000616",
+            "why": "pick of economy / COMPACTION / ranking"
           }
         ],
         "opened_at": "2026-10-16T12:37:16Z",
-        "reserved_usd": "2.048645",
+        "reserved_usd": "0.049261",
         "run": "2026-10-16T12:36:59Z",
         "settled_at": null,
         "spent_usd": null
