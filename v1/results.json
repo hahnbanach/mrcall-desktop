@@ -1085,6 +1085,14 @@
       "model": "anthropic/claude-sonnet-4.6",
       "outcome": "passed",
       "run": "2026-10-16T12:36:59Z"
+    },
+    {
+      "at": "2026-10-16T13:33:08Z",
+      "detail": "BudgetError: OpenRouter request failed (HTTP 404); no automatic retry.",
+      "metadata_sha256": "c9a74aec5e43211497a73dd1daac5b9627a5e6eb942799641b6bb4db4b7202d3",
+      "model": "stepfun/step-5-preview",
+      "outcome": "failed",
+      "run": "2026-10-16T12:36:59Z"
     }
   ],
   "stops": [

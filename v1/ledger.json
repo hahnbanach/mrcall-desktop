@@ -1682,10 +1682,21 @@
             "role": "SYNC_ANALYSIS",
             "spent_usd": "0.002492",
             "why": "pick of economy / SYNC_ANALYSIS / ranking"
+          },
+          {
+            "at": "2026-10-16T13:33:08Z",
+            "bound_usd": "0.2",
+            "check": "smoke stepfun/step-5-preview",
+            "kind": "smoke",
+            "model": "stepfun/step-5-preview",
+            "outcome": "failed: BudgetError: OpenRouter request failed (HTTP 404); no automatic retry.",
+            "role": null,
+            "spent_usd": "0.014189",
+            "why": "ranking of economy / MNEMONIC / ranking"
           }
         ],
         "opened_at": "2026-10-16T12:37:16Z",
-        "reserved_usd": "0.263875",
+        "reserved_usd": "0.078064",
         "run": "2026-10-16T12:36:59Z",
         "settled_at": null,
         "spent_usd": null
