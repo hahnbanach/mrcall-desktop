@@ -22,6 +22,10 @@ The repo has three parallel doc trees, mirroring the three index files. Each tre
 
 ## Index
 
+- [M10 CI publication](evaluations/2026-10-16-m10-ci-publication.md) — actual green run, published pair, retained spend/deferrals and temporary-trigger cleanup.
+
+- [Current post-Stripe M10 preservation](execution-plans/2026-10-16-m10-poststripe-preservation.md) — [brief](briefs/2026-10-16-m10-poststripe-preservation.md), current 376-module successor, exact per-profile dependencies and conditional installed/runtime acceptance; [Stripe contract](../engine/docs/features/stripe.md).
+
 - [M10 effective-runtime integration](execution-plans/2026-10-16-m10-current-runtime-integration.md) — [brief](briefs/2026-10-16-m10-current-runtime-integration.md), complete selected-runtime preservation, replacement artifact and deployment prerequisites; [source evidence](evaluations/2026-10-16-m10-current-runtime-preservation.md).
 
 - [Earlier M10 readiness](execution-plans/2026-10-15-m10-memory-production-readiness.md) — historical local source/admission/RPC evidence; its frozen-base preservation and wheel require the effective-runtime successor above.

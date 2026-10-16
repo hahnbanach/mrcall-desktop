@@ -689,6 +689,8 @@ class IMAPClient:
         )
 
         self._provider_deadline = None
+        self._provider_thread = None
+        self._projection_connection = None
         self._deadline_connection = None
         self._conn: Optional[imaplib.IMAP4_SSL] = None
         self._sent_folder: Optional[str] = None
@@ -774,9 +776,11 @@ class IMAPClient:
         if remaining <= 0 or not self._imap_lock.acquire(timeout=max(0, remaining)):
             raise IMAPError("IMAP evidence deadline expired")
         previous = self._provider_deadline
+        previous_thread = self._provider_thread
         timer = None
         try:
             self._provider_deadline = min(previous, deadline) if previous is not None else deadline
+            self._provider_thread = threading.get_ident()
             self._deadline_check()
             timer = threading.Timer(self._remaining_timeout(float("inf")), self._abort_provider)
             timer.daemon = True
@@ -791,6 +795,7 @@ class IMAPClient:
                 timer.cancel()
                 timer.join()
             self._provider_deadline = previous
+            self._provider_thread = previous_thread
             if previous is None:
                 self._deadline_connection = None
             if previous is None and self._conn is not None:
@@ -1120,6 +1125,29 @@ class IMAPClient:
             logger.debug("[IMAP] Disconnected")
 
     @_imap_serialized
+    @contextmanager
+    def projection_connection(self, deadline):
+        if (
+            self._provider_deadline is None
+            or self._provider_thread != threading.get_ident()
+            or self._provider_deadline != deadline
+            or self._projection_connection is not None
+        ):
+            raise IMAPError("Projection connection scope unavailable")
+        self._deadline_check()
+        self._projection_connection = {
+            "thread": threading.get_ident(),
+            "deadline": deadline,
+            "connection": self._conn,
+            "started": self._conn is not None,
+        }
+        try:
+            yield self
+            self._deadline_check()
+        finally:
+            self._projection_connection = None
+
+    @_imap_serialized
     def _ensure_connected(self) -> imaplib.IMAP4_SSL:
         """Ensure IMAP connection is active.
 
@@ -1132,6 +1160,25 @@ class IMAPClient:
             IMAPError: If a connection cannot be established inside
                 `IMAP_CONNECT_TIMEOUT_SECONDS`.
         """
+        scope = self._projection_connection
+        if scope is not None:
+            if (
+                scope["thread"] != threading.get_ident()
+                or scope["deadline"] != self._provider_deadline
+            ):
+                raise IMAPError("Projection connection scope changed")
+            self._deadline_check()
+            if scope["started"]:
+                if self._conn is None or self._conn is not scope["connection"]:
+                    raise IMAPError("Projection connection changed")
+            else:
+                scope["started"] = True
+                self.connect()
+                scope["connection"] = self._conn
+            self._deadline_check()
+            if self._conn is None:
+                raise IMAPError("Projection connection unavailable")
+            return self._conn
         if self._conn is None:
             self.connect()
             return self._conn

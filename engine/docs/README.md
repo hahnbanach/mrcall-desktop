@@ -23,7 +23,7 @@ Documentation for the MrCall Desktop engine: local sidecar and per-profile hoste
 | [execution-plans/claude-code-patterns.md](execution-plans/claude-code-patterns.md) | Active: prompt caching, parallel LLM, dream, digest |
 | [execution-plans/next-features.md](execution-plans/next-features.md) | Backlog: agentic solve, CalDAV, dedup, cleanup, tests |
 | [execution-plans/task-pipeline-overhaul.md](execution-plans/task-pipeline-overhaul.md) | Live: 4-phase plan that landed 2026-05-06 morning (F1–F8 + channel + age sweeps) |
-| [execution-plans/topic-dedup-playbook.md](execution-plans/topic-dedup-playbook.md) | Live: F9 cross-contact topic dedup + diagnostic playbook for "4 task per UN problema" |
+| [execution-plans/topic-dedup-playbook.md](execution-plans/topic-dedup-playbook.md) | Live: F9 cross-contact topic dedup and diagnostic playbook for four tasks describing one problem |
 | [execution-plans/fix-task-autoclose-stale.md](execution-plans/fix-task-autoclose-stale.md) | Completed: F1–F4 ExampleCorp / examplebiz fixes (2026-05-01) |
 
 ## Guides
@@ -53,6 +53,7 @@ Documentation for the MrCall Desktop engine: local sidecar and per-profile hoste
 | [features/operator-runtime.md](features/operator-runtime.md) | Preserved optional MCP reads, exact drafts, scheduled reply origin, email-only sync and installation boundary |
 | [features/model-selection.md](features/model-selection.md) | Roles, requirements, the measured model table (model source) and the catalogue snapshot (price source), daily job |
 | [features/qonto.md](features/qonto.md) | Native private Qonto source, authority and managed finance history |
+| [features/stripe.md](features/stripe.md) | Private restricted-key connection, consent/revocation and bounded read RPCs |
 | [features/mnemonic-writer-inventory.md](features/mnemonic-writer-inventory.md) | The sealed memory write boundary: frozen writer graph and exempt primitives |
 | [features/mnemonic-decisions.md](features/mnemonic-decisions.md) | Mnemonic memory events, validator and origin-bound paid admission |
 | [features/mnemonic-commit.md](features/mnemonic-commit.md) | Atomic semantic commit, commit permit and the operation journal |

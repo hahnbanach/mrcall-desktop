@@ -107,7 +107,16 @@ def test_request_cleanup_checks_guard_before_disconnect_even_on_failure(env, mai
             events.append("guard")
             raise AssignmentError("changed provider")
 
-    fake = SimpleNamespace(provider_deadline=guard, disconnect=lambda: events.append("disconnect"))
+    @contextmanager
+    def projection_scope(limit):
+        assert limit > time.monotonic()
+        yield
+
+    fake = SimpleNamespace(
+        provider_deadline=guard,
+        projection_connection=projection_scope,
+        disconnect=lambda: events.append("disconnect"),
+    )
     monkeypatch.setattr(evidence.mailboxes, "build_imap_client", lambda box: fake)
     with pytest.raises(AssignmentError, match="changed provider"):
         with evidence.observation(ROOT, deadline := time.monotonic() + 3):

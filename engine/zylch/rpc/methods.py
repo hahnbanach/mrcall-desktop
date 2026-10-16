@@ -1219,6 +1219,7 @@ async def system_capabilities(params: Dict[str, Any], notify: NotifyFn) -> Any:
         "assignment_draft_policy": 1,
         "contextual_email_policy": 1,
         "operator_reply_provenance": 1,
+        "stripe": 1,
     }
 
 
@@ -2761,4 +2762,12 @@ for _name, _fn in _ASSIGNMENT_METHODS.items():
 for _name, _fn in _EXACT_DRAFT_METHODS.items():
     if _name in METHODS:
         raise RuntimeError(f"Duplicate RPC method name: {_name}")
+    METHODS[_name] = _fn
+
+
+from zylch.rpc.stripe import METHODS as _STRIPE_METHODS
+
+for _name, _fn in _STRIPE_METHODS.items():
+    if _name in METHODS:
+        raise RuntimeError(f"duplicate RPC method registration: {_name}")
     METHODS[_name] = _fn
