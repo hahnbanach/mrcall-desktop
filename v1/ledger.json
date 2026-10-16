@@ -1561,10 +1561,21 @@
             "role": "CORRECTION_LEARNING",
             "spent_usd": "0.000733",
             "why": "pick of economy / CORRECTION_LEARNING / ranking"
+          },
+          {
+            "at": "2026-10-16T13:05:13Z",
+            "bound_usd": "2",
+            "check": "CORRECTION_LEARNING on upstage/solar-mini4",
+            "kind": "measure",
+            "model": "upstage/solar-mini4",
+            "outcome": "CORRECTION_LEARNING: failed",
+            "role": "CORRECTION_LEARNING",
+            "spent_usd": "0.001307",
+            "why": "pick of economy / CORRECTION_LEARNING / ranking"
           }
         ],
         "opened_at": "2026-10-16T12:37:16Z",
-        "reserved_usd": "2.049994",
+        "reserved_usd": "0.051301",
         "run": "2026-10-16T12:36:59Z",
         "settled_at": null,
         "spent_usd": null
