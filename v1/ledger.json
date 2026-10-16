@@ -1517,10 +1517,21 @@
             "role": "INTENT",
             "spent_usd": "0.000218",
             "why": "pick of economy / INTENT / ranking"
+          },
+          {
+            "at": "2026-10-16T13:03:59Z",
+            "bound_usd": "2",
+            "check": "TRAIN on inclusionai/ling-3.0-flash",
+            "kind": "measure",
+            "model": "inclusionai/ling-3.0-flash",
+            "outcome": "TRAIN: passed",
+            "role": "TRAIN",
+            "spent_usd": "0.000827",
+            "why": "pick of economy / TRAIN / ranking"
           }
         ],
         "opened_at": "2026-10-16T12:37:16Z",
-        "reserved_usd": "2.047684",
+        "reserved_usd": "0.048511",
         "run": "2026-10-16T12:36:59Z",
         "settled_at": null,
         "spent_usd": null

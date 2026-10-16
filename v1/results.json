@@ -220,6 +220,23 @@
       },
       "role": "INTENT",
       "run": "2026-10-16T12:36:59Z"
+    },
+    {
+      "case_set_sha256": "d0e55fbbe9945264e0819d449a2c4003428b690fc49fb4edcfd35d63c09f4f55",
+      "measured_at": "2026-10-16T13:03:59Z",
+      "model": "inclusionai/ling-3.0-flash",
+      "prompt_sha256": "6d3996452d7e3d138fa237322655e89b04527fdb1252b60e2140ac95f16cf627",
+      "result": {
+        "bars_ok": true,
+        "complete": true,
+        "critical": false,
+        "index_score": 20.1,
+        "n": 5,
+        "passes": 5,
+        "score": 1.0
+      },
+      "role": "TRAIN",
+      "run": "2026-10-16T12:36:59Z"
     }
   ],
   "schema": 1,
