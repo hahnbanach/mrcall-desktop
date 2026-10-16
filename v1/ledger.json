@@ -1473,10 +1473,21 @@
             "role": "DEDUP",
             "spent_usd": "0.002195",
             "why": "pick of economy / DEDUP / ranking"
+          },
+          {
+            "at": "2026-10-16T12:59:04Z",
+            "bound_usd": "0.2",
+            "check": "smoke inclusionai/ling-3.1-flash",
+            "kind": "smoke",
+            "model": "inclusionai/ling-3.1-flash",
+            "outcome": "failed: BudgetError: OpenRouter request failed (HTTP 404); no automatic retry.",
+            "role": null,
+            "spent_usd": "0",
+            "why": "pick of economy / DEDUP / ranking"
           }
         ],
         "opened_at": "2026-10-16T12:37:16Z",
-        "reserved_usd": "0.241546",
+        "reserved_usd": "0.041546",
         "run": "2026-10-16T12:36:59Z",
         "settled_at": null,
         "spent_usd": null
