@@ -1704,10 +1704,21 @@
             "role": "MNEMONIC",
             "spent_usd": "0.048611",
             "why": "ranking of economy / MNEMONIC / ranking"
+          },
+          {
+            "at": "2026-10-16T13:34:24Z",
+            "bound_usd": "2",
+            "check": "MNEMONIC on openai/gpt-5.6-sol",
+            "kind": "measure",
+            "model": "openai/gpt-5.6-sol",
+            "outcome": "MNEMONIC: failed; MEMORY_EXTRACT: passed; MEMORY_MERGE: passed",
+            "role": "MNEMONIC",
+            "spent_usd": "0.161862",
+            "why": "ranking of balanced / MNEMONIC / ranking"
           }
         ],
         "opened_at": "2026-10-16T12:37:16Z",
-        "reserved_usd": "2.126675",
+        "reserved_usd": "0.288537",
         "run": "2026-10-16T12:36:59Z",
         "settled_at": null,
         "spent_usd": null
