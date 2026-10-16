@@ -1737,10 +1737,21 @@
             "role": "MNEMONIC",
             "spent_usd": "0.213111",
             "why": "ranking of balanced / MNEMONIC / anthropic_ranking"
+          },
+          {
+            "at": "2026-10-16T13:43:12Z",
+            "bound_usd": "2",
+            "check": "MNEMONIC on anthropic/claude-sonnet-4.5",
+            "kind": "measure",
+            "model": "anthropic/claude-sonnet-4.5",
+            "outcome": "MNEMONIC: failed; MEMORY_EXTRACT: failed; MEMORY_MERGE: failed",
+            "role": "MNEMONIC",
+            "spent_usd": "0.258195",
+            "why": "ranking of balanced / MNEMONIC / anthropic_ranking"
           }
         ],
         "opened_at": "2026-10-16T12:37:16Z",
-        "reserved_usd": "2.581708",
+        "reserved_usd": "0.839903",
         "run": "2026-10-16T12:36:59Z",
         "settled_at": null,
         "spent_usd": null
