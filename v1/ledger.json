@@ -1616,10 +1616,21 @@
             "role": "NARRATION",
             "spent_usd": "0.000256",
             "why": "pick of economy / NARRATION / ranking"
+          },
+          {
+            "at": "2026-10-16T13:20:04Z",
+            "bound_usd": "2",
+            "check": "NARRATION on upstage/solar-mini4",
+            "kind": "measure",
+            "model": "upstage/solar-mini4",
+            "outcome": "NARRATION: failed",
+            "role": "NARRATION",
+            "spent_usd": "0.000868",
+            "why": "pick of economy / NARRATION / ranking"
           }
         ],
         "opened_at": "2026-10-16T12:37:16Z",
-        "reserved_usd": "2.057813",
+        "reserved_usd": "0.058681",
         "run": "2026-10-16T12:36:59Z",
         "settled_at": null,
         "spent_usd": null
