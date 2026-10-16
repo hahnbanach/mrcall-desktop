@@ -1484,10 +1484,21 @@
             "role": null,
             "spent_usd": "0",
             "why": "pick of economy / DEDUP / ranking"
+          },
+          {
+            "at": "2026-10-16T12:59:08Z",
+            "bound_usd": "2",
+            "check": "DEDUP on nvidia/nemotron-3-nano-30b-a3b",
+            "kind": "measure",
+            "model": "nvidia/nemotron-3-nano-30b-a3b",
+            "outcome": "DEDUP: failed",
+            "role": "DEDUP",
+            "spent_usd": "0.005736",
+            "why": "pick of economy / DEDUP / ranking"
           }
         ],
         "opened_at": "2026-10-16T12:37:16Z",
-        "reserved_usd": "2.041546",
+        "reserved_usd": "0.047282",
         "run": "2026-10-16T12:36:59Z",
         "settled_at": null,
         "spent_usd": null
