@@ -1273,6 +1273,14 @@
         "run": "2026-10-12T17:43:39Z",
         "settled_at": "2026-10-12T19:07:43Z",
         "spent_usd": "1.225405"
+      },
+      {
+        "calls": [],
+        "opened_at": "2026-10-16T12:37:16Z",
+        "reserved_usd": "0.2",
+        "run": "2026-10-16T12:36:59Z",
+        "settled_at": null,
+        "spent_usd": null
       }
     ]
   },
