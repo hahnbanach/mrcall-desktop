@@ -27,9 +27,13 @@ Current-session logs and exact file hashes are under
 ## Remaining acceptance and rollback
 
 Workflow dispatch [38878411430](https://github.com/hahnbanach/mrcall-desktop/actions/runs/38878411430)
-is building exact source `e2004d745d53f50c73802fb00715d9e2130aa04d`.
-Signed/notarized installer production, installed Electron, real restricted-key
-Stripe reads and authenticated hosted acceptance remain unverified.
+completed for exact source `e2004d745d53f50c73802fb00715d9e2130aa04d`.
+Signed/notarized artifact production passed. The user reports frozen initial
+Settings controls; the [startup recovery plan](2026-10-16-stripe-startup-recovery.md)
+owns the replacement. Successful installed Electron and real restricted-key
+Stripe reads remain unverified. Hosted activation was separately authorized
+and verified for Mario Gmail only in HB
+`docs/execution-plans/2026-10-16-stripe-remote-test.md`.
 No release tag or hosted activation is implied. Discard this isolated
 candidate branch to roll back source; Stripe Disconnect removes a saved key,
 while provider key revocation remains an independent action.

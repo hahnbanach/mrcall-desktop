@@ -19,12 +19,15 @@ what is *current*, targeting ≤ ~120 lines.
 
 ## State now
 
-The isolated [Stripe test candidate](execution-plans/2026-10-16-stripe-test-installer.md)
-adds restricted-key setup and explicit read-only RPCs. App version is
-`0.1.57-stripe.1`; engine version is `0.1.57.dev1`. Local build, typecheck,
-13 Stripe tests, two egress tests and the Chromium fixture pass. This is a test
-installer candidate, not a published release or hosted activation. Signed installer
-and real Stripe account acceptance remain unverified.
+The [Stripe test installer](execution-plans/2026-10-16-stripe-test-installer.md)
+`0.1.57-stripe.1` was signed/notarized in Actions run `38878411430` and delivered
+as a test artifact. Mario Gmail's remote engine has the separately authorized
+Stripe activation; no other profile was changed. The user reports disabled
+Settings controls with company/host stuck at Checking. The bounded
+[startup recovery](execution-plans/2026-10-16-stripe-startup-recovery.md) produced
+signed/notarized replacement test app `0.1.57-stripe.2` in Actions `38883997676`; engine version remains `0.1.57.dev1`.
+Real restricted-key and successful installed-GUI acceptance remain pending.
+No stable Stripe release or fleet rollout is implied.
 
 Desktop `v0.1.56` and kernel `v0.51.0` are published. Six hosted company engines have verified
 assignment reads and root-owned trust; both maintained clones install the release. Ordinary/Qonto

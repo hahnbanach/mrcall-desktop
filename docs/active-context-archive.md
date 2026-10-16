@@ -1180,3 +1180,13 @@ harness v3 bootstrap. It was the "Recent landings (last ~2 weeks)" table.*
 | 2026-05-22 | Current datetime injected into EVERY LLM request (single LLMClient chokepoint + chat_compaction bypass). | engine | `5f5c73e8` |
 | 2026-05-20 | MrCall channel: delegated/PKCE OAuth + `/mrcall` removed (Firebase-JWT only); MrCall tab lists + searches businesses; onboarding unblocked for MrCall-only users; in-wizard Calendar session fix. | engine + app + IPC | `770522e8..2b0a54ce` |
 | 2026-05-20 | WhatsApp voice-note transcription — event-time download + deferred faster-whisper `small`/int8 pass; archived chats excluded from memory/task analysis. Live download + packaged bundling still pending. | engine + app + IPC | [`../engine/docs/execution-plans/whatsapp-voice-transcription.md`](../engine/docs/execution-plans/whatsapp-voice-transcription.md) |
+
+
+## 2026-10-16 — Stripe test candidate before startup recovery
+
+The isolated [Stripe test candidate](execution-plans/2026-10-16-stripe-test-installer.md)
+adds restricted-key setup and explicit read-only RPCs. App version is
+`0.1.57-stripe.1`; engine version is `0.1.57.dev1`. Local build, typecheck,
+13 Stripe tests, two egress tests and the Chromium fixture pass. This is a test
+installer candidate, not a published release or hosted activation. Signed installer
+and real Stripe account acceptance remain unverified.
