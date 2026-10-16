@@ -89,9 +89,13 @@ processing is started by this route.
 Installed SDK and isolated listener tests establish their fixture cases and
 private dependency compatibility. They do not establish live protected
 configuration, real issuer introspection, source quality or two-clone operational
-acceptance. The [replacement evaluation](../../../docs/evaluations/2026-10-16-m10-current-runtime-integration.md)
+acceptance. The [current post-Stripe evaluation](../../../docs/evaluations/2026-10-16-m10-poststripe-artifact.md)
 binds complete effective-runtime inventories, installed wheel/runtime resources,
-copied reopening, per-unit switch/rollback and unrun deployment gates. Earlier
+separate actual production/Mario dependency environments, copied reopening and
+unrun deployment gates. The original production kernel distribution reports three
+missing requirements; unchanged metadata alone establishes neither full kernel
+health nor operational MCP. Any qualified result requires exact dependency bytes
+and actual native voice/MCP/read-contract proof. Earlier
 base-only captures and wheels without model JSON cannot authorize a current
 switch. Successful operational acceptance and the runtime owner's service-window
 release remain prerequisites. A generic shared-checkout or

@@ -54,6 +54,7 @@ Documentation for the MrCall Desktop engine: local sidecar and per-profile hoste
 | [features/model-selection.md](features/model-selection.md) | Roles, requirements, the measured model table (model source) and the catalogue snapshot (price source), daily job |
 | [features/m10-acceptance-budget.md](features/m10-acceptance-budget.md) | Temporary additional-spend guard, historical liabilities and operator activation limits |
 | [features/qonto.md](features/qonto.md) | Native private Qonto source, authority and managed finance history |
+| [features/stripe.md](features/stripe.md) | Private restricted-key connection, consent/revocation and bounded read RPCs |
 | [features/mnemonic-writer-inventory.md](features/mnemonic-writer-inventory.md) | The sealed memory write boundary: frozen writer graph and exempt primitives |
 | [features/mnemonic-decisions.md](features/mnemonic-decisions.md) | Mnemonic memory events, validator and origin-bound paid admission |
 | [features/mnemonic-commit.md](features/mnemonic-commit.md) | Atomic semantic commit, commit permit and the operation journal |

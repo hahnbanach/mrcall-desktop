@@ -58,5 +58,6 @@ guard remains. The lead explicitly confirmed this existing trusted-writer limit.
 
 This M1 proof performed no live activation, paid/funding calls or product/dependency
 change. M2 controls now have separate implementation evidence and a concrete packet
-in the [controls evaluation](2026-10-16-m10-paid-acceptance-controls.md). Lead-owned
-closure and all actual M3 rollout acceptance remain open.
+in the [controls evaluation](2026-10-16-m10-paid-acceptance-controls.md). Qualified component critic/final closure is complete and published atd8df989e.
+The [reviewed assembly](2026-10-16-m10-reviewed-assembly.md) additionally binds
+the current376-module artifact; all actual M3 rollout acceptance remains open.

@@ -1,5 +1,5 @@
 ---
-doc_baseline_commit: 652c00079e8a59770bd242a7a63fa3529ff17703
+doc_baseline_commit: d8df989ed0b90b667a138d9b0806c1eab6dafaa1
 doc_baseline_date: 2026-10-16
 ---
 
@@ -19,20 +19,27 @@ what is *current*, targeting ≤ ~120 lines.
 
 ## State now
 
-Company-memory reliability remains the immediate workstream. M10 source routing,
-read-only authority and the earlier effective-V8 artifact have local review.
-The current hosted packages additionally contain Stripe and IMAP projection
-changes. Their successor source has376 modules,303 affected passing tests and
-seven independent authority checks; installation/copy/dependency review is in
-progress in a separate isolated checkout. The earlier wheel is historical proof
-for its own bytes and cannot authorize a current hosted switch.
+Company-memory reliability remains the immediate workstream. The
+[reviewed assembly](execution-plans/2026-10-16-m10-reviewed-assembly.md) combines
+the approved current post-Stripe engine and temporary acceptance helper. Its
+376 product modules, seven assets, packaging declaration and12 helper/test files
+match the immutable approved inputs. Both actual native dependency cohorts pass
+SDK/read-only tool-loop refusal, proxy receipt and OpenRouter checks; installed
+CLI/schema/parity checks pass. The additive SQL-test inventory correction retains
+all existing scanner/assertion/exemption logic. The full CI boundary selection
+passes87 cases with zero skips. Independent M1 review approves local integration.
+Documentation critic and separate final review govern qualified feature readiness;
+feature publication does not authorize an engine switch or main merge.
 
-The temporary [additional acceptance guard](execution-plans/2026-10-16-m10-paid-acceptance-bound.md)
-has approved M1 source/installed-client proof and47 passing M2 control/lifecycle
-checks. The concrete four-allocation packet has M2 approval; documentation/final review
-remain open.
-No live ledger is guarded and no new paid acceptance has started. Its ceiling is
-USD5 additional activity, excluding old unknown liabilities and other consumers.
+The [post-Stripe component](execution-plans/2026-10-16-m10-poststripe-preservation.md)
+has approved source/artifact/critic/final gates and qualified completion atd52f68f.
+It retains303 source passes,179 installed pytest passes, one qualified SDK
+signature assertion failure,14 Unix cases and six lossless copied boots. The
+[temporary additional acceptance guard](../engine/docs/features/m10-acceptance-budget.md)
+has approved M1/M2/critic/final closure published atd8df989e, with86 M1 and47 M2
+passing cases. Its four-allocation USD5 packet remains inactive. Old unknown
+liabilities and headless/kernel consumers are outside that additional ceiling.
+The earlier369-module/V8 artifact remains historical proof for its own bytes.
 
 The billing correction01909353 is deployed on TEST and production with the same
 verified ARM digest. All68 Python modules match source. Both environments pass
@@ -46,7 +53,8 @@ The new table/snapshot passes static and14-day release gates; snapshot read_at i
 2026-10-16T12:36:59Z. Secret/protection are configured. The proof records
 USD0.876144 and45 checks;661 further checks are deferred by its deadline.
 October ledger count isUSD6.247792 including preserved recovered unknown maxima,
-not an invoice. The temporary push trigger is removed locally, pending publication.
+not an invoice. Feature commit d8df989e publishes removal of the temporary push trigger;
+this assembly contains that exact reviewed workflow cleanup.
 
 Installed mnemonic source remains M9. Production retains saved K3/custom policy
 and USD20/day; selected Mario retains Anthropic/economy and USD15/day. Both selected
@@ -60,8 +68,8 @@ cron locks remain owned by that session. The last full ordinary batch failed on
 transport/capacity; source approval does not establish ordinary acceptance.
 Current unit template/v9 drop-ins and production voice/MCP configuration are
 protected inputs. The existing production kernel distribution has three missing
-requirements; original pip check fails, Mario passes. Candidate dependency
-preservation and any qualification require their own review.
+requirements; original and candidate pip checks fail identically, Mario passes.
+The explicit qualification has plan approval and has independent native-path proof approval; full kernel health is not established.
 
 Desktop v0.1.56 and kernel v0.51.0 are published. Broader assignment enrollment,
 external-client MCP, Qonto GUI/typed-only acceptance, live PEC and telephone
@@ -72,8 +80,8 @@ not cover clone headless Claude or direct kernel classifiers; see
 
 ## Unresolved
 
-- Current post-Stripe artifact/copy/SDK/receipt review, installed helper integration,
-  documentation closure and separate final approval must pass before a new canary.
+- Local assembly readiness preserves all component qualifications; it establishes
+  neither current hosted installation nor release acceptance.
 - Actual additional-spend guard/control authority, fresh full descriptors, protected
   backups, exclusive stopped/drained writers, exact cron custody and per-unit
   canary/verified rollback remain required. No live pause/guard exists yet.
@@ -91,8 +99,8 @@ not cover clone headless Claude or direct kernel classifiers; see
 
 ## Next
 
-1. Finish the independently reviewed current-runtime artifact and guard/control
-   closure, preserving all original data, saved model policy and historical reports.
+1. Use the reviewed current assembly and preserve original data, saved model
+   policy, historical evidence and qualified failures for the next phase.
 2. Complete the concrete paid/control/operational packet and obtain only the
    missing external authority after all independently preparable evidence is ready.
 3. Execute actual receipts, source-grounded answers and protected operations, then

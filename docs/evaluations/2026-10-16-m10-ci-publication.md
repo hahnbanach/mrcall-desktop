@@ -43,11 +43,14 @@ data commit and per-file hashes. `ci-proof-result.json` holds the compact result
 uploaded report, SHA256
 `cc83619333f1157fea2b9d7497e463535282c5d445032c4cf78d333c249d8016`.
 
-The temporary push trigger is removed in the local workflow; publication of that
-cleanup remains pending. Schedule05:17UTC and explicit dispatch remain unchanged,
+The temporary push trigger removal is published at feature commit
+`d8df989ed0b90b667a138d9b0806c1eab6dafaa1`, verified against remote workflow bytes.
+The reviewed assembly contains that exact published cleanup; its parsed workflow
+retains only schedule and explicit dispatch. Schedule05:17UTC and explicit dispatch remain unchanged,
 with serialized non-cancelling execution, repository-secret-only environment and
 the existing monthly cap. Four native workflow tests pass without skips; parsed
-trigger inspection must confirm only schedule/dispatch before publication.
+trigger inspection confirms schedule/dispatch only in that published feature.
+Recheck the assembled tree before main integration.
 
 Billing01909353 is separately deployed and passes free checks. Real paid
 direct/credits acceptance, company-answer quality, current engine artifact,

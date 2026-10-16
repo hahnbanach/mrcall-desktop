@@ -24,8 +24,9 @@ _observation = ContextVar("assignment_read_observation", default=None)
 
 
 class _Observation:
-    def __init__(self, root, deadline):
+    def __init__(self, root, deadline, reuse_protocol):
         self.root, self.deadline = root, deadline
+        self.reuse_protocol = reuse_protocol
         self.thread = threading.get_ident()
         self.actor = None
         self.scope = None
@@ -52,9 +53,9 @@ class _Observation:
 
 
 @contextmanager
-def observation(root, deadline):
+def observation(root, deadline, *, reuse_protocol=True):
     thread(root)
-    state = _Observation(root, deadline)
+    state = _Observation(root, deadline, reuse_protocol)
     token = _observation.set(state)
     try:
         yield
@@ -69,7 +70,7 @@ def observation(root, deadline):
 def provider_client(actor, box, root, deadline):
     state = _observation.get()
     if state is None:
-        with observation(root, deadline):
+        with observation(root, deadline, reuse_protocol=False):
             with provider_client(actor, box, root, deadline) as client:
                 yield client
         return
@@ -91,6 +92,8 @@ def provider_client(actor, box, root, deadline):
             client = mailboxes.build_imap_client(box)
             try:
                 state.guards.enter_context(client.provider_deadline(deadline))
+                if state.reuse_protocol:
+                    state.guards.enter_context(client.projection_connection(deadline))
             except BaseException:
                 client.disconnect()
                 raise
@@ -439,13 +442,12 @@ def malformed_own_sent(root: str, *, deadline=None) -> dict:
         senders = mail.addresses(row["from_email"] or "")
         if len(senders) != 1 or not senders <= set(current["members"][actor.uid]):
             raise AssignmentError("Malformed outgoing member unavailable")
-        client = mailboxes.build_imap_client(box)
         guard = ExitStack()
-        guard.enter_context(client.provider_deadline(deadline))
+        client = guard.enter_context(provider_client(actor, box, root, deadline))
         sent = client._find_sent_folder()
         if not sent:
             raise AssignmentError("Actual Sent folder unavailable")
-        found, provider = mail.fetch(client, sent, root, exact=True)
+        found, provider = _target(client, sent, root, deadline)
         if len(found) != 1:
             raise AssignmentError("Exact malformed Sent source unavailable")
         message = found[0]
@@ -517,21 +519,17 @@ def malformed_own_sent(root: str, *, deadline=None) -> dict:
             "[tasks.assignment] malformed source unavailable type=%s", type(error).__name__
         )
     finally:
-        try:
-            if guard is not None:
-                try:
-                    guard.close()
-                except Exception:
-                    result.update(
-                        complete=False,
-                        judgement="UNKNOWN",
-                        reason="SOURCE_UNAVAILABLE",
-                        source=None,
-                        digest=None,
-                    )
-        finally:
-            if client is not None:
-                client.disconnect()
+        if guard is not None:
+            try:
+                guard.close()
+            except Exception:
+                result.update(
+                    complete=False,
+                    judgement="UNKNOWN",
+                    reason="SOURCE_UNAVAILABLE",
+                    source=None,
+                    digest=None,
+                )
     return result
 
 

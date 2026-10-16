@@ -1,3 +1,264 @@
+## 2026-10-16 — Published helper tree before reviewed assembly
+
+## State now
+
+M10 preserves model/spend, read-only and contextual-email authority alongside
+selected hosted behavior. The current post-Stripe successor source has376 Python
+modules and seven required assets,303 affected passing tests and seven independent
+authority checks. Its new wheel and two actual dependency environments are under
+installed/copy/receipt review. Earlier369-module/V8 proof remains historical and
+cannot approve a current switch. Stripe read-only and IMAP projection reuse are
+preserved source capabilities, not a new hosted deployment.
+
+The [temporary acceptance guard](features/m10-acceptance-budget.md) is outside the
+product package. Approved M1 has86 passing cases and12 independent checks; M2 has
+47 passing control/lifecycle cases and a concrete activation/recovery proposal.
+M2 is independently approved; documentation/final review remains open. No live guard, saved-control change
+or paid acceptance occurs. USD5 covers only additional activity in four unique
+ledgers; old unknown maxima and headless/kernel consumers remain separate.
+
+Billing01909353 is deployed on TEST and production with matching verified image
+and all68 source modules. Both pass six free checks with actual saved Firebase
+users and business binding. No inference, funding or debit acceptance follows
+from a free quote. TEST CI's deployment credential is still invalid.
+
+The CI model-table proof38901708899 published commit3e127359, tableeaebab50 and
+snapshot7172404b, read2026-10-16T12:36:59Z; release gates pass. Repository secret
+and branch protection are configured. Current runUSD0.876144,45 checks and661
+deadline deferrals are retained. October countedUSD6.247792 includes historical
+recovered unknown maxima. The one-off push trigger is removed locally only.
+
+Installed mnemonic implementation remains M9. Production retains saved K3/custom
+policy and USD20/day; selected Mario retains Anthropic/economy and USD15/day.
+Both selected UIDs belong to Café124's company store. Preset models/pauses depend
+on the table in force and need fresh preflight. Captured automatic updates are
+enabled and preparation unpaused; saved profile settings override ambient values.
+No memory reset, extraction or reconsolidation is part of this rollout.
+
+Production and Mario have different actual SDK/dependency versions. Production's
+existing pip check fails for three missing cs-kernel requirements; Mario passes.
+Preserve runtime package bytes and exact production voice/MCP flags; any qualified
+artifact result requires actual native paths and independent approval. The optional
+[read listener](features/operator-runtime.md) retains its exact five-tool contract.
+
+Read-only chat policy1 refuses writes before routing and at tool boundaries.
+Local fixture answers preserve evidence/conflicts and accounting, but do not score
+company facts. Assignment source/route/task/actor authority remains bound through
+transport handoff; incomplete Sent evidence grants no reply authority. Ordinary
+mail/tasks stay private. Broader enrollment and external-client MCP are unreleased.
+
+The runtime source/verification hold is released, while three clone cron locks
+remain owned elsewhere. Last full ordinary operation failed on timeouts/capacity.
+The shared unit template and current v9 drop-ins remain protected runtime state.
+Qonto support-only banking, existing mailboxes/PEC source, hosted Unix/egress
+isolation and revisioned telephone instructions retain their existing boundaries.
+Provisioning remains closed; GUI/provider UI and spoken detail/latency stay open.
+
+## Unresolved
+
+- Complete current post-Stripe installed/copy/dependency/receipt review,
+  documentation critic and separate final approvals. Source approval is insufficient.
+- Require actual paid/live-control authority, fresh complete descriptors, protected
+  backups, exclusive writer/intake drain, exact cron custody and verified per-unit
+  canary/rollback. The lease proposal deliberately asserts no current exclusion.
+- Run real direct and business-funded credits receipts, then20 independent ordinary
+  answers against five original-source cases and both UIDs. Insufficient evidence
+  is not a recall pass; no memory repair may manufacture acceptance.
+- Successful full ordinary operation and separately bounded protected both-clone
+  effects remain required. Engine ceilings do not cover Claude/kernel classifiers.
+- Preserve historical reservations/unknown charges. TEST deploy credential repair,
+  production kernel dependency health and current table freshness remain explicit.
+- Qonto GUI/provider UI, live PEC, provisioning, Desktop/Windows, telephone
+  detail/latency, Calendar and broad security retain their existing owners.
+
+## Next
+
+1. Finish current artifact/helper proofs and qualified documentation closure.
+2. Bind the concrete current execution packet before requesting missing authority;
+   then execute actual funding, company-quality and operational gates.
+3. Complete controlled canary/rollback and reviewed integration only after all
+   required outcomes pass; preserve data, saved policy and accounting uncertainty.
+
+
+## 2026-10-16 — Qualified post-Stripe tree before source assembly
+
+## State now
+
+M10 preserves model/spend, read-only and contextual-email authority alongside
+selected hosted behavior. The current post-Stripe successor source has376 Python
+modules and seven required assets,303 affected passing tests and seven independent
+authority checks. Its new wheel and two actual dependency environments have179 pytest passes,
+one qualified SDK-signature assertion failure,14 additional Unix cases and six
+lossless copied boots. Installed/copy/receipt review approves these qualified results. Earlier369-module/V8 proof remains historical and
+cannot approve a current switch. Stripe read-only and IMAP projection reuse are
+preserved source capabilities, not a new hosted deployment.
+
+The separate temporary acceptance-guard candidate is outside this checkout and the
+product package. Approved M1 has86 passing cases and12 independent checks; M2 has
+47 passing control/lifecycle cases and a concrete activation/recovery proposal.
+Its M2 and qualified documentation/final closure are approved and published at
+feature commit d8df989e; assembly with this artifact checkout remains pending. No live guard, saved-control change
+or paid acceptance occurs. USD5 covers only additional activity in four unique
+ledgers; old unknown maxima and headless/kernel consumers remain separate.
+
+Billing01909353 is deployed on TEST and production with matching verified image
+and all68 source modules. Both pass six free checks with actual saved Firebase
+users and business binding. No inference, funding or debit acceptance follows
+from a free quote. TEST CI's deployment credential is still invalid.
+
+The CI model-table proof38901708899 published commit3e127359, tableeaebab50 and
+snapshot7172404b, read2026-10-16T12:36:59Z; release gates pass. Repository secret
+and branch protection are configured. Current runUSD0.876144,45 checks and661
+deadline deferrals are retained. October countedUSD6.247792 includes historical
+recovered unknown maxima. Feature commit d8df989e publishes push-trigger removal; integration here is pending.
+
+Installed mnemonic implementation remains M9. Production retains saved K3/custom
+policy and USD20/day; selected Mario retains Anthropic/economy and USD15/day.
+Both selected UIDs belong to Café124's company store. Preset models/pauses depend
+on the table in force and need fresh preflight. Captured automatic updates are
+enabled and preparation unpaused; saved profile settings override ambient values.
+No memory reset, extraction or reconsolidation is part of this rollout.
+
+Production and Mario have different actual SDK/dependency versions. Production's
+original and candidate pip checks fail for the same three missing cs-kernel
+requirements; Mario passes. The qualification has plan approval, with actual
+native-path proof independently approved at M2.
+Preserve runtime package bytes and exact production voice/MCP flags; any qualified
+artifact result requires actual native paths and independent approval. The optional
+[read listener](features/operator-runtime.md) retains its exact five-tool contract.
+
+Read-only chat policy1 refuses writes before routing and at tool boundaries.
+Local fixture answers preserve evidence/conflicts and accounting, but do not score
+company facts. Assignment source/route/task/actor authority remains bound through
+transport handoff; incomplete Sent evidence grants no reply authority. Ordinary
+mail/tasks stay private. Broader enrollment and external-client MCP are unreleased.
+
+The runtime source/verification hold is released, while three clone cron locks
+remain owned elsewhere. Last full ordinary operation failed on timeouts/capacity.
+The shared unit template and current v9 drop-ins remain protected runtime state.
+Qonto support-only banking, existing mailboxes/PEC source, hosted Unix/egress
+isolation and revisioned telephone instructions retain their existing boundaries.
+Provisioning remains closed; GUI/provider UI and spoken detail/latency stay open.
+
+## Unresolved
+
+- Complete documentation critic and separate final approvals; current post-Stripe
+  installed/copy/dependency/receipt and separate helper integration proofs pass
+  with their explicit qualifications. Source approval alone is insufficient.
+- Require actual paid/live-control authority, fresh complete descriptors, protected
+  backups, exclusive writer/intake drain, exact cron custody and verified per-unit
+  canary/rollback. The lease proposal deliberately asserts no current exclusion.
+- Run real direct and business-funded credits receipts, then20 independent ordinary
+  answers against five original-source cases and both UIDs. Insufficient evidence
+  is not a recall pass; no memory repair may manufacture acceptance.
+- Successful full ordinary operation and separately bounded protected both-clone
+  effects remain required. Engine ceilings do not cover Claude/kernel classifiers.
+- Preserve historical reservations/unknown charges. TEST deploy credential repair,
+  production kernel dependency health and current table freshness remain explicit.
+- Qonto GUI/provider UI, live PEC, provisioning, Desktop/Windows, telephone
+  detail/latency, Calendar and broad security retain their existing owners.
+
+## Next
+
+1. Finish current artifact/helper proofs and qualified documentation closure.
+2. Bind the concrete current execution packet before requesting missing authority;
+   then execute actual funding, company-quality and operational gates.
+3. Complete controlled canary/rollback and reviewed integration only after all
+   required outcomes pass; preserve data, saved policy and accounting uncertainty.
+
+
+## 2026-10-16 — Before current post-Stripe artifact and execution refresh
+
+## State now
+
+The local [M10 integration](../../docs/execution-plans/2026-10-16-m10-current-runtime-integration.md)
+contains reviewed effective-V8 assignment behavior with M10 model/spend and
+contextual-email authority. Source regression passes 746 cases; independent
+authority/race checks pass 20 more, without skips. Complete disposition covers
+369 modules: 15 composed and 354 unchanged from the earlier reviewed M10 wheel.
+Storage retains immutable reply bindings, emitted References, CAS and claim rules.
+
+The candidate packages seven explicit model/schema/prompt assets. Its replacement
+wheel has exact source/wheel/installed parity, actual table/schema/model loading,
+and 26 installed SDK/read/auth/listener checks without skips. Both earlier wheels
+omit runtime JSON and cannot serve LLM calls. Six fresh copied boots and six
+installed-engine/server cases pass M2 review; source approval is not deployment.
+
+OpenRouter/K3 input fit uses provider tokenization instead of the monetary byte
+allowance. Both wires disable compression; conservative holds, direct Anthropic
+admission, price ceilings, K3 endpoint pin and no inference retry remain.
+The billing correction is reviewed local commit `01909353` in mrcall-agent;
+production remains `37f330d0` with known generation/recovery defects.
+
+The published sixteen-role table is on data branch `4bbbdf89`, snapshot `571b55d2`.
+Production's saved custom/override policy retains K3 for every role at USD20/day.
+The selected Mario profile retains Anthropic/economy: Sonnet 5 for mnemonic,
+extract and merge, Sonnet 5.5 for twelve other roles including CHAT, NARRATION
+paused, USD15/day. Both selected UIDs resolve to Café124's company store; older
+Mario/support prose cannot establish these identities. Captured automatic updates
+are enabled and preparation unpaused. Profile loading overrides environment-only
+automatic-update settings. M10 preparation changes no live settings or memory.
+
+Actual selected units run complete V8 packages. Their interpreter, voice/MCP
+flags and protected configuration are frozen inputs, not base-package labels.
+The optional [read listener](features/operator-runtime.md) retains the exact
+operator contract, five authenticated tools and private Unix sockets.
+External-client MCP/remote connector work is separately owned.
+
+Read-only chat policy1 is enforced before routing and at tool boundaries.
+Local RPC cases preserve large evidence, dates/conflicts, partial-result narrowing,
+SQL holds and exact settlement. Scripted results do not score company facts.
+Installed mnemonic source remains M9; M10 measured picks meet the selected corpus
+criterion, but M10 does not replace saved custom choices. No memory reset,
+re-extraction or reconsolidation belongs to this work.
+
+The broader [enrollment](features/assignment-enrollment.md) candidate is unreleased.
+Managed authority, join fences and source/route/task rechecks span the company-
+then-private writer through exact transport handoff. Complete Sent discovery
+precedes positive-witness shortcuts; UNKNOWN or malformed observations grant no
+reply authority. External mailbox effects remain outside engine enforcement.
+
+Native [Qonto](features/qonto.md) retains support-only banking/restart/source and
+managed-answer acceptance. This candidate retains bootstrap input until installed
+GUI acceptance. Mailboxes/PEC have released source and six-profile startup evidence;
+personal Gmail retains its attachment pin. All seven hosted profiles have Unix-
+user/egress isolation; provisioning remains closed.
+
+Production telephone service uses revisioned `phone.md`. Private archives and the
+handset trial do not establish spoken detail/latency. Mario has no operator schedule
+or project instruction-write permission. Email-only sync retains single-flight
+worker cancellation and starts no paid preparation.
+
+## Unresolved
+
+- Replacement copied-data and installed-engine/server gates pass M2 review;
+  documentation closure and final approval belong to the task completion record.
+- Five incident cases need two independent ordinary answers per selected UID:
+  twenty answers compared with original sources, including dates, certification,
+  patent authority and commercial scope. Insufficient evidence is not a recall pass.
+- The runtime owner's full ordinary batch failed on transport timeouts/capacity;
+  its stability window remains held. Exact accepted descriptor and successful
+  operational outcome are required before an engine canary.
+- CI proof, repository key/protection, billing main→dev→production, real direct
+  and credits receipts, funded business binding and controlled clone operations
+  remain open. Existing keys pass free authentication; effective Firebase session
+  is unproved. Snapshot expiry: 2026-10-26T17:43:41Z.
+- Live controls, pre-switch backups, one-unit canary and verified rollback need
+  scoped authority. Preserve K3/custom policy, Mario's NARRATION pause, daily
+  budgets and accounting uncertainty.
+- Qonto GUI/provider UI, live PEC, provisioning, fresh-account Desktop/Windows,
+  telephone detail/latency, Calendar and broad security retain existing owners.
+
+## Next
+
+1. Use the current-main-integrated candidate, replacement-artifact proof and
+   completion record for the bounded external rollout gates.
+2. Execute authorized CI/billing/paid gates, then controlled engine acceptance
+   after the runtime owner releases its window. Stop on changed inputs.
+3. Compare real company answers with originals and retain unresolved defects
+   until the overall memory-reliability goal is met.
+
+
 ## 2026-10-16 — Before CI/billing execution and current-runtime refresh
 
 ## State now
