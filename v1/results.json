@@ -407,6 +407,23 @@
       },
       "role": "NARRATION",
       "run": "2026-10-16T12:36:59Z"
+    },
+    {
+      "case_set_sha256": "6ff98e4da9d148b3d534d977a8f6723b6ba644904e11e77acefe21d63fd9ab43",
+      "measured_at": "2026-10-16T13:29:55Z",
+      "model": "nvidia/nemotron-3-nano-30b-a3b",
+      "prompt_sha256": "e073f77edfa189bbf21f8069ad691b6754043d105c45204724a30fb1103249ca",
+      "result": {
+        "bars_ok": false,
+        "complete": true,
+        "critical": false,
+        "index_score": 8.9,
+        "n": 5,
+        "passes": 1,
+        "score": 0.2
+      },
+      "role": "NARRATION",
+      "run": "2026-10-16T12:36:59Z"
     }
   ],
   "schema": 1,

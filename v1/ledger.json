@@ -1649,10 +1649,21 @@
             "role": "NARRATION",
             "spent_usd": "0.000299",
             "why": "pick of economy / NARRATION / ranking"
+          },
+          {
+            "at": "2026-10-16T13:29:55Z",
+            "bound_usd": "2",
+            "check": "NARRATION on nvidia/nemotron-3-nano-30b-a3b",
+            "kind": "measure",
+            "model": "nvidia/nemotron-3-nano-30b-a3b",
+            "outcome": "NARRATION: failed",
+            "role": "NARRATION",
+            "spent_usd": "0.001261",
+            "why": "pick of economy / NARRATION / ranking"
           }
         ],
         "opened_at": "2026-10-16T12:37:16Z",
-        "reserved_usd": "2.059785",
+        "reserved_usd": "0.061046",
         "run": "2026-10-16T12:36:59Z",
         "settled_at": null,
         "spent_usd": null
