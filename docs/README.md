@@ -22,6 +22,8 @@ The repo has three parallel doc trees, mirroring the three index files. Each tre
 
 ## Index
 
+- [M10 ordinary preservation](execution-plans/2026-10-17-m10-ordinary-preservation.md) — [brief](briefs/2026-10-17-m10-ordinary-preservation.md), [source](evaluations/2026-10-17-m10-ordinary-source.md) and [installed artifact](evaluations/2026-10-17-m10-ordinary-artifact.md); exact approved ordinary-read correction and remaining live gates.
+
 - [Reviewed M10 assembly](execution-plans/2026-10-16-m10-reviewed-assembly.md) — [brief](briefs/2026-10-16-m10-reviewed-assembly.md), [integration evidence](evaluations/2026-10-16-m10-reviewed-assembly.md), exact approved source/artifact integration and remaining release gates.
 
 - [M10 additional acceptance bound](execution-plans/2026-10-16-m10-paid-acceptance-bound.md) — [brief](briefs/2026-10-16-m10-paid-acceptance-bound.md), persistent guard and saved-control proof; [operator contract](../engine/docs/features/m10-acceptance-budget.md). Real paid/runtime gates remain open.

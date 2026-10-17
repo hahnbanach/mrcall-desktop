@@ -1,6 +1,6 @@
 ---
-doc_baseline_commit: d8df989ed0b90b667a138d9b0806c1eab6dafaa1
-doc_baseline_date: 2026-10-16
+doc_baseline_commit: c9789150226e474967d4aa3528bd4fd65e326aad
+doc_baseline_date: 2026-10-17
 ---
 
 # Active Context — Cross-cutting
@@ -19,89 +19,76 @@ what is *current*, targeting ≤ ~120 lines.
 
 ## State now
 
-Company-memory reliability remains the immediate workstream. The
-[reviewed assembly](execution-plans/2026-10-16-m10-reviewed-assembly.md) combines
-the approved current post-Stripe engine and temporary acceptance helper. Its
-376 product modules, seven assets, packaging declaration and12 helper/test files
-match the immutable approved inputs. Both actual native dependency cohorts pass
-SDK/read-only tool-loop refusal, proxy receipt and OpenRouter checks; installed
-CLI/schema/parity checks pass. The additive SQL-test inventory correction retains
-all existing scanner/assertion/exemption logic. The full CI boundary selection
-passes87 cases with zero skips. Independent M1 review approves local integration.
-Documentation critic and separate final review govern qualified feature readiness;
-feature publication does not authorize an engine switch or main merge.
+The [ordinary-preservation candidate](execution-plans/2026-10-17-m10-ordinary-preservation.md)
+is the offline successor of published M10 assembly c9789150. Its independently
+approved source milestone preserves375 modules, seven assets and five temporary
+acceptance helpers, adopting only the owner's exact approved projection file.
+The source selection has171 distinct passing cases and no skips/errors. Its
+separately identified wheel0.1.52+ordinary.20261017.1 has376 modules/seven assets;
+both native layers pass84 installed cases each with zero skips/errors and exact
+product origins. Local documentation and separate final review govern qualified feature readiness.
+Source and packaging approval establish neither hosted installation nor release.
 
-The [post-Stripe component](execution-plans/2026-10-16-m10-poststripe-preservation.md)
-has approved source/artifact/critic/final gates and qualified completion atd52f68f.
-It retains303 source passes,179 installed pytest passes, one qualified SDK
-signature assertion failure,14 Unix cases and six lossless copied boots. The
-[temporary additional acceptance guard](../engine/docs/features/m10-acceptance-budget.md)
-has approved M1/M2/critic/final closure published atd8df989e, with86 M1 and47 M2
-passing cases. Its four-allocation USD5 packet remains inactive. Old unknown
-liabilities and headless/kernel consumers are outside that additional ceiling.
-The earlier369-module/V8 artifact remains historical proof for its own bytes.
+The runtime owner retains six-engine live/guard/provider exclusion and three
+clone cron locks. Its56 native checks pass; a final ordinary case and explicit
+handoff remain pending. No M10 live switch or acceptance guard is active.
+Both-clone adoption and any operational results require that owner's actual
+receipts; intermediate progress is not full ordinary acceptance.
 
-The billing correction01909353 is deployed on TEST and production with the same
-verified ARM digest. All68 Python modules match source. Both environments pass
-six free health/auth/catalog/quote/status checks using real saved Firebase users;
-no inference/debit occurs. Real provider/funding/credit settlement remains open.
-The TEST CI deploy credential is still broken; its reviewed operator-equivalent
-promotion is an exception, not a credential repair.
+The [additional acceptance guard](../engine/docs/features/m10-acceptance-budget.md)
+has approved source/control closure. The authorized next test phase retains one
+immutable four-allocation USD5 ceiling: production2, Mario2, private direct0.5,
+private credits0.5. Technical exclusion, all four guards and reviewed current
+execution bindings remain prerequisites. Old unknown liabilities and clone
+headless/direct-classifier spending are separate; no reset replenishes the bound.
 
-The model-table CI proof38901708899 is green and published data commit3e127359.
-The new table/snapshot passes static and14-day release gates; snapshot read_at is
-2026-10-16T12:36:59Z. Secret/protection are configured. The proof records
-USD0.876144 and45 checks;661 further checks are deferred by its deadline.
-October ledger count isUSD6.247792 including preserved recovered unknown maxima,
-not an invoice. Feature commit d8df989e publishes removal of the temporary push trigger;
-this assembly contains that exact reviewed workflow cleanup.
+Billing01909353 is deployed on TEST and production with matching verified ARM
+image/all68 modules. Real saved Firebase users pass six free checks on both.
+Real inference, funding and debit receipts remain open. TEST CI deployment
+credentials remain broken under the recorded operator-promotion exception.
 
-Installed mnemonic source remains M9. Production retains saved K3/custom policy
-and USD20/day; selected Mario retains Anthropic/economy and USD15/day. Both selected
-UIDs bind to Café124's company store. Model-table refresh can change preset picks;
-current effective rankings/pauses must be checked before acceptance. Captured
-profiles have automatic updates enabled and preparation unpaused; environment-only
-overrides do not replace saved controls.
+Model-table CI proof38901708899 is green; published commit3e127359 and its
+2026-10-16T12:36:59Z snapshot pass schema/freshness checks. Secret/protection and
+push-trigger removal are in place. ItsUSD0.876144/45 checks,661 deadline deferrals
+and OctoberUSD6.247792 ledger count remain qualified accounting, not an invoice.
+No repeat paid CI proof belongs to this phase.
 
-The runtime owner's engine source/verification hold is released. Its three clone
-cron locks remain owned by that session. The last full ordinary batch failed on
-transport/capacity; source approval does not establish ordinary acceptance.
-Current unit template/v9 drop-ins and production voice/MCP configuration are
-protected inputs. The existing production kernel distribution has three missing
-requirements; original and candidate pip checks fail identically, Mario passes.
-The explicit qualification has plan approval and has independent native-path proof approval; full kernel health is not established.
+Installed mnemonic behavior remains M9. Production retains saved K3/custom and
+USD20/day; Mario retains Anthropic/economy and USD15/day. Both selected UIDs bind
+to Café124's company store. Saved settings and table picks require fresh preflight.
+Current production voice/MCP, authenticated finance and unit/drop-in behavior
+remain protected inputs. Native cohorts and all earlier evidence stay immutable.
+The post-Stripe component retains its dependency, SDK-assertion, live Stripe-file,
+style and operational qualifications in its owning plan.
 
-Desktop v0.1.56 and kernel v0.51.0 are published. Broader assignment enrollment,
-external-client MCP, Qonto GUI/typed-only acceptance, live PEC and telephone
-spoken detail/latency retain separate owners. Hosted Unix/egress isolation and
-private ordinary mail/tasks remain. Provisioning is closed. Engine budgets do
-not cover clone headless Claude or direct kernel classifiers; see
-[operator setup](operator-setup.md#ai-execution-and-controls).
+Desktopv0.1.56/kernelv0.51.0 remain published. Qonto GUI/typed-only acceptance,
+live PEC, broader assignment enrollment, external-client MCP, provisioning,
+Desktop/Windows, telephone detail/latency, Calendar and broad security have their
+existing owners. Engine budgets do not cover clone headless Claude or kernel
+classifiers; see [operator setup](operator-setup.md#ai-execution-and-controls).
 
 ## Unresolved
 
-- Local assembly readiness preserves all component qualifications; it establishes
-  neither current hosted installation nor release acceptance.
-- Actual additional-spend guard/control authority, fresh full descriptors, protected
-  backups, exclusive stopped/drained writers, exact cron custody and per-unit
-  canary/verified rollback remain required. No live pause/guard exists yet.
-- Real direct and business-funded credit receipts plus20 independent ordinary
-  company answers across five original-source cases and both UIDs remain unrun.
-  Insufficient retrieval is not full recall acceptance. No memory reset/rewrite,
-  extraction or reconsolidation belongs to the rollout.
-- Full ordinary operation remains failed. Both-clone acceptance also needs separate
-  actual-consumer headless/classifier bounds and exact fixture/grant/effect authority.
-- Historical unknown billing liabilities require actual receipt/provider evidence;
-  no blanket release, deletion or budget reset is authorized. TEST deploy credential
-  repair, production kernel dependency health and later table freshness stay explicit.
-- Qonto GUI/provider UI, live PEC, fresh-account Desktop/Windows, provisioning,
-  telephone detail/latency and broader security/Calendar obligations retain owners.
+- Local critic/final closure governs qualified feature readiness. Main merge,
+  tag and fleet release remain separate from this component.
+- Obtain successful ordinary handoff, refresh complete source/dependency/config/
+  PID/argv/drop-in descriptors and backups, establish actual stopped/drained
+  writers and intake, then execute the reviewed protected control packet.
+- Run real direct and business-funded credits receipts plus20 independent
+  ordinary company answers against five original-source cases/both UIDs.
+  Insufficient retrieval is not full recall. No memory rewrite, extraction,
+  reconsolidation or reset may manufacture acceptance.
+- Require protected both-clone actual-consumer authority/bounds and per-unit
+  canary/verified rollback. Keep all old qualification and failure receipts.
+- Historical unknown billing liabilities need provider evidence; no blanket
+  release/deletion is authorized. TEST CI credentials, production kernel's three
+  missing dependencies and later table freshness remain explicit obligations.
 
 ## Next
 
-1. Use the reviewed current assembly and preserve original data, saved model
-   policy, historical evidence and qualified failures for the next phase.
-2. Complete the concrete paid/control/operational packet and obtain only the
-   missing external authority after all independently preparable evidence is ready.
-3. Execute actual receipts, source-grounded answers and protected operations, then
-   per-unit canary/rollback and final integration. Keep every failed gate explicit.
+1. Complete the ordinary-preservation component using affected proof and exact
+   unchanged-input reuse; keep all earlier finalized components closed.
+2. After actual runtime-owner handoff, bind and review the current execution
+   packet, then run the authorized controlled acceptance under the original bound.
+3. Complete funding, factual quality and protected operational/canary/rollback
+   gates before release approval; retain restrictive recovery state on failure.

@@ -151,10 +151,15 @@ can settle it, and failed acknowledgement leaves held work visible.
 
 ## Preserved source projection
 
-The readiness candidate retains bounded transitive RFC components, one shared
-40-second provider-evidence deadline and complete bounded Sent discovery before
-positive-witness shortcuts. Known UNKNOWN observations cannot be hidden by a
-positive witness. Exact live target proof may supply omitted historical References
+The readiness candidate retains bounded transitive RFC components and one shared
+120-second provider-evidence deadline. At most20 eligible archived own-message
+candidates may establish an early positive hold after complete live reply proof
+and a fresh exact-UID/MID/UIDVALIDITY check excluding Draft messages. That result
+remains incomplete needs-assignment and grants no reply or absence authority.
+Automatic-only or ineligible early candidates fall back to complete bounded Sent
+discovery. Known UNKNOWN observations cannot be hidden by a positive witness;
+final actor, route, component and assignment checks still apply. Exact live target
+proof may supply omitted historical References
 without changing the reply target or backfilling stored rows. Malformed own Sent
 may hold an exact observation, but cannot grant complete assignment authority.
 Stored/live ancestry disagreement, unsynced manual Sent candidates or incomplete

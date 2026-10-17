@@ -65,8 +65,9 @@ identity-changed requests cannot inherit it. Emitted RFC References are stored;
 old incomplete Sent rows are not backfilled.
 
 The [assignment contract](task-assignment.md) retains bounded component ancestry,
-the shared provider deadline, complete Sent discovery and refusal on conflicting
-or incomplete observations. Component aliases retain the exact reply target and
+the shared provider deadline, complete Sent discovery for absence/automatic-only
+results, source-verified early positive holds and refusal on conflicting or
+incomplete observations. Component aliases retain the exact reply target and
 owner-scoped original source. Exact live ancestry proof may supply missing
 historical References; historical rows are not rewritten. Known UNKNOWN
 observations precede positive-witness shortcuts, and malformed Sent observations
@@ -97,6 +98,8 @@ missing requirements; unchanged metadata alone establishes neither full kernel
 health nor operational MCP. Any qualified result requires exact dependency bytes
 and actual native voice/MCP/read-contract proof. Earlier
 base-only captures and wheels without model JSON cannot authorize a current
-switch. Successful operational acceptance and the runtime owner's service-window
+switch. The [ordinary-preservation successor](../../../docs/evaluations/2026-10-17-m10-ordinary-artifact.md)
+retains those unchanged-input qualifications and separately verifies its changed
+projection in both native installed layers. Successful operational acceptance and the runtime owner's service-window
 release remain prerequisites. A generic shared-checkout or
 tenant-helper update is not equivalent to that scoped installation proposal.
