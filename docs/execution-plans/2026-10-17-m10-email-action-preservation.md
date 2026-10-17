@@ -2,7 +2,7 @@
 date: 2026-10-17
 kind: execution-plan
 task: m10-email-action-preservation-20261017
-status: active
+status: completed
 brief: ../briefs/2026-10-17-m10-email-action-preservation.md
 owner: M10 release lead
 ---
@@ -97,3 +97,13 @@ canary/verified rollback remain required. No credential read, memory rewrite/
 extraction/reset, backlog or unknown-liability release. Retain restrictive recovery
 on failure. Discard only unaccepted owned local state after retaining evidence;
 never reset published history, old artifacts, owner locks or live databases.
+
+## Actual component progress
+
+Fresh M1 independently approves exact12-hunk/reverse-AST composition and132 passing
+source cases, preserving original15 cases plus three M10 origin cases. Actual .3
+wheelc8388b04 and both native18-case/165-origin proofs pass; separate48-origin
+CLI/resource/freshness checks and all35,424 dependency-byte comparisons pass.
+No failed .3 build/native attempts. Source843666f8 is local; critic/final/completion
+then one normal feature publication and actual final-head CI remain required.
+No live effect or actual ordinary success/handoff is inferred from these proofs.

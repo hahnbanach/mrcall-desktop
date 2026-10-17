@@ -22,6 +22,8 @@ The repo has three parallel doc trees, mirroring the three index files. Each tre
 
 ## Index
 
+- [M10 email-action preservation](execution-plans/2026-10-17-m10-email-action-preservation.md) — [brief](briefs/2026-10-17-m10-email-action-preservation.md), [source/native evidence](evaluations/2026-10-17-m10-email-action-preservation.md); truthful request-local errors with existing authority preserved.
+
 - [M10 draft-thread preservation](execution-plans/2026-10-17-m10-draft-thread-preservation.md) — [brief](briefs/2026-10-17-m10-draft-thread-preservation.md), [source/native evidence](evaluations/2026-10-17-m10-draft-thread-preservation.md); exact ordinary repair with M10 authority preserved.
 
 - [Current-main M10 integration](execution-plans/2026-10-17-m10-current-main-integration.md) — [brief](briefs/2026-10-17-m10-current-main-integration.md), [source](evaluations/2026-10-17-m10-current-main-source.md) and [metadata-only artifact](evaluations/2026-10-17-m10-current-main-artifact.md); upstream Stripe UI preservation and actual delivery gates.

@@ -49,6 +49,12 @@ without rewriting stored rows. Dedup and exact delivery CAS share that serialize
 identity; contextual creation retains its existing canonical-source checks. Opaque
 or unsupported legacy values retain their identity and require source authority.
 
+Scoped draft chat forwards the same request-local email-action failure collector
+as ordinary chat. A failed create/update/send outcome returns technical failure
+metadata even if response prose claims success; it establishes no delivery proof
+or retry authority. The existing source, projection, ownership, finance and command
+exclusions remain enforced. See [operator outcomes](operator-runtime.md#email-action-outcomes).
+
 Provider/source evidence is gathered before the company writer lock. Final
 admission rechecks enrollment, identity, membership, company binding, join fence
 and assignment revision under that lock. Private draft mutation checks the

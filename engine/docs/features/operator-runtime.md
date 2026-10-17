@@ -1,7 +1,7 @@
 # Preserved operator runtime
 
 Scope: the engine's optional read-only MCP listener, exact-draft RPCs, scheduled
-reply provenance and email-only sync. Hosted installation and acceptance state
+reply provenance, email-action failure metadata and email-only sync. Hosted installation and acceptance state
 belong to the [effective-runtime plan](../../../docs/execution-plans/2026-10-16-m10-current-runtime-integration.md),
 not to this source contract.
 
@@ -81,6 +81,25 @@ their original bytes. Contextual creation retains canonical-source admission;
 opaque/unsupported legacy identities retain their values and require the existing
 source authority. The [draft-thread evaluation](../../../docs/evaluations/2026-10-17-m10-draft-thread-preservation.md)
 binds source, both native cohorts and the separate live acceptance gates.
+
+## Email action outcomes
+
+Ordinary and scoped assignment chat share a request-local failure collector for
+actual create_draft, update_draft and send_draft ToolResult.ERROR outcomes.
+`metadata.action_failures` contains at most16 sanitized tool/attempt identities,
+`failure_kind=tool_error` and `delivery_certainty=unknown`. `metadata.error` exposes
+the execution failure even when the assistant's response prose narrates success.
+No body, raw provider error or credential enters this metadata. Consumers must
+inspect the technical outcome before treating prose as successful execution;
+unknown delivery requires verification rather than a blind retry.
+
+Success/read-error/declined-approval metadata stays unchanged; sequential and
+concurrent turns keep independent collectors. Existing exceptions/cancellation,
+finance disclosure and read-only/source/assignment/approval checks retain their
+boundaries. A read-only refusal before tool execution is not an attempted action.
+The [evaluation](../../../docs/evaluations/2026-10-17-m10-email-action-preservation.md)
+binds deterministic source/native/local-kernel consumer proof; real delivery and
+protected both-clone operational acceptance remain separate gates.
 
 ## Email-only synchronization
 

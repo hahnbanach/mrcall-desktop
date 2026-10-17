@@ -8,16 +8,16 @@ are preserved in [active-context-archive.md](active-context-archive.md).
 
 ## State now
 
-The [draft-thread successor](../../docs/evaluations/2026-10-17-m10-draft-thread-preservation.md)
-preserves the approved ordinary repair in source47aa227e. Exactly three product
-resources change against8f00d9f3;380 other entries/all seven assets remain exact.
-Source182 cases and30 installed companion cases per native cohort pass, with
-241 loaded module origins each. Wheel0.1.57.dev1+m10.20261017.2, SHA2562a8121e2,
-passes CLI/resources/14-day/import checks; all35,424 native dependency files match.
-This is private installed-layer proof, not a complete hosted environment.
-The earlier7875d1ff feature/CI proves the preceding candidate. Final-head nonpaid
-CI is checked after reviewed successor publication and retained in its private
-gate ledger. Hosted installation and main/tag/fleet release have separate gates.
+The [email-action successor](../../docs/evaluations/2026-10-17-m10-email-action-preservation.md)
+preserves the reviewed request-local error correction in source843666f8. Exactly
+three product resources change against2a8121e2;380 others/all seven assets stay
+exact. Source132 cases and18 installed cases per native cohort pass with165 loaded
+origins each; separate CLI/resources/14-day checks verify48 origins each. Wheel
+0.1.57.dev1+m10.20261017.3, SHAc8388b04, matches all383 source/installed entries
+and35,424 unchanged dependency files. These are private installed layers, not
+complete hosted environments. Previouscba3cda9 is published with6/6 nonpaid CI;
+actual successor final-head CI is retained after reviewed feature publication.
+Hosted installation and main/tag/fleet release require their separate gates.
 
 Projection shares a120-second evidence deadline. A fully live-verified own reply
 with fresh exact source identity/flags may establish an early incomplete human
@@ -27,12 +27,12 @@ component/task rechecks and current SMTP/private/company fences remain enforced.
 See [task assignments](features/task-assignment.md). Ordinary mail/tasks remain
 private; read-only chat1 rejects mutations before routing and at tool boundaries.
 
-The runtime owner has not issued an M10 service-window handoff. It reports the
-three-file repair installed and independently checked on six services; the fresh
-ordinary reception case remains pending. Previous56 native checks and the failed
-ordinary case remain historical evidence. Fresh custody, complete current runtime
-and actual acceptance receipts are required before M10 operations. No M10 live
-switch or acceptance guard is active. Authenticated finance, voice/MCP and actual
+The runtime owner retains all six services/cron custody and has issued no M10
+handoff. It reports the email-outcome composition installed and checked; real
+ordinary send/reception, usable draft, three completed jobs and cleanup remain
+unaccepted. Previous failed ordinary cases remain historical evidence. Fresh
+custody and complete actual runtime/acceptance receipts are required. No M10 live
+switch or acceptance guard is active; authenticated finance, voice/MCP and exact
 unit/drop-in state remain protected inputs.
 
 The temporary [additional acceptance guard](features/m10-acceptance-budget.md)
@@ -82,7 +82,7 @@ security retain their owners.
 ## Next
 
 1. Obtain actual ordinary success/handoff and refresh all runtime descriptors;
-   bind the draft-thread successor before controlled per-unit staging.
+   bind the email-action successor before controlled per-unit staging.
 2. After actual owner handoff, bind and review current execution prerequisites,
    then execute the authorized bounded phase without resetting prior evidence.
 3. Complete funding, source-grounded quality and protected runtime/canary/rollback

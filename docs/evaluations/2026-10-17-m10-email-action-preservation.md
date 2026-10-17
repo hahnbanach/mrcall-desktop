@@ -1,6 +1,6 @@
 # M10 email-action failure preservation
 
-## M1 source integration
+## M1 source integration — approved milestone snapshot
 
 Base featurecba3cda9 already includes current main/Stripe and the approved ordinary
 projection/draft-thread corrections. Incoming source manifest54899861/source
@@ -60,3 +60,30 @@ success or M10 handoff. Full current descriptors/backups/intake exclusion,
 original four-allocationUSD5 guards/controls, funded direct/credit receipts,
 20 original-source company answers, protected both-clone actual-consumer bounds,
 per-unit canary/verified rollback and separate main/tag/fleet authority remain open.
+
+## M2 actual installed artifact
+
+The separately built wheel0.1.57.dev1+m10.20261017.3 SHA256
+c8388b04d0554d608f02e7268332f683ef97544ad484fd52ca500aa09e202c88
+matches all383 current source/wheel/installed product entries. Three reviewed
+resources change;380 other entries/all seven assets remain exact against2a8121e2.
+Actual offline build/install used12,537,856 allocated bytes, no dependency download
+or native environment replacement, within500MB free/50MB output/90s limits.
+The full hosted staging2GB minimum remains unchanged.
+
+Both immutable native interpreters run isolated -I -B with the new product layer
+first, test-only harness last and private state/external-network denial. Each
+executes all15 original cases plus three M10 origin cases:18 PASS, zero skipped/
+errors. Each validates165 loaded product origins/hashes from the new layer.
+Separate actual CLI/serve/schema/table/measured/prompt/14-day proofs pass with48
+loaded origins each. Full commands/logs/XML/native receipts and35424 fresh
+unchanged-dependency comparisons are retained. There are no failed .3 build/native
+attempts. Source843666f8 is committed locally; documentation closure, separate
+final review/checker finalization then one feature publication and actual final-
+head nonpaid CI govern delivery. No earlier CI is claimed for this new head.
+
+The owner reports its ordinary composition installed/checked; real ordinary
+send/reception, usable draft, three completed jobs, cleanup and handoff still lack
+an accepted receipt here. All live/paid/funding/factual/clone/canary/rollback and
+release gates listed above remain open. No M10 credential read, provider dispatch,
+live control/guard activation or source switch has occurred in this component.

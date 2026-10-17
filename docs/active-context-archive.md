@@ -1,3 +1,27 @@
+## 2026-10-17 — Email-action successor and native proof
+
+The [draft-thread successor](execution-plans/2026-10-17-m10-draft-thread-preservation.md)
+preserves the approved ordinary repair in source47aa227e. Exactly three product
+resources change against8f00d9f3;380 other entries/all seven assets remain exact.
+Source182 cases and30 installed companion cases per native cohort pass, with
+241 loaded module origins each. Wheel0.1.57.dev1+m10.20261017.2, SHA2562a8121e2,
+passes CLI/resources/14-day/import checks; all35,424 native dependency files match.
+This is private installed-layer proof, not a complete hosted environment.
+The earlier7875d1ff feature/CI proves the preceding candidate. Final-head nonpaid
+CI is checked after reviewed successor publication and retained in its private
+gate ledger. Hosted installation and main/tag/fleet release have separate gates.
+
+The runtime owner has not issued an M10 service-window handoff. It reports the
+three-file repair installed and independently checked on six services; the fresh
+ordinary reception case remains pending. Previous56 native checks and the failed
+ordinary case remain historical evidence. Fresh custody, complete current runtime
+and actual acceptance receipts are required before M10 operations. No M10 live
+switch or acceptance guard is active. Authenticated finance, voice/MCP and actual
+unit/drop-in state remain protected inputs.
+
+1. Obtain actual successful ordinary handoff and bind the draft-thread successor
+   to the complete freshly accepted runtime; keep earlier components closed.
+
 ## 2026-10-17 — Draft-thread successor and native proof
 
 The [current-main integration](execution-plans/2026-10-17-m10-current-main-integration.md)
