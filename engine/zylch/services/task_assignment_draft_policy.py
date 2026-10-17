@@ -64,7 +64,7 @@ def guard(method):
     return wrapped
 
 
-async def process_chat(service, message, owner, history, session_id, approval_callback):
+async def process_chat(service, message, owner, history, session_id, approval_callback, *, action_failures=None):
     """Run the existing agent without command/task routing or background writes."""
     from zylch.qonto import history as finance_history
     from zylch.assistant.turn_context import set_turn_observation
@@ -88,6 +88,7 @@ async def process_chat(service, message, owner, history, session_id, approval_ca
         user_message=f"Draft only for exact RFC thread {root}. Retain that thread_id and exact reply headers.\n\n{message}",
         context={"user_id": owner, "thread_id": root},
         approval_callback=approval_callback,
+        action_failures=action_failures,
     )
     return {
         "response": response,

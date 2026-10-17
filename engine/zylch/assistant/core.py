@@ -3,6 +3,7 @@
 import asyncio
 import atexit
 import contextvars
+import hashlib
 import logging
 import os
 import threading
@@ -206,6 +207,8 @@ class ZylchAIAgent(BaseConversationalAgent):
         user_message: str,
         context: Optional[Dict[str, Any]] = None,
         approval_callback: Optional[ApprovalCallback] = None,
+        *,
+        action_failures: Optional[List[Dict[str, str]]] = None,
     ) -> str:
         """Process user message with tool use.
 
@@ -325,7 +328,8 @@ class ZylchAIAgent(BaseConversationalAgent):
 
             # Extract tool calls from response
             tool_results, direct_response = await self._execute_tools(
-                response.content, approval_callback, turn_id=turn_id, step=step
+                response.content, approval_callback, turn_id=turn_id, step=step,
+                action_failures=action_failures,
             )
 
             # Check for direct response tools (e.g., get_tasks)
@@ -432,6 +436,8 @@ class ZylchAIAgent(BaseConversationalAgent):
         approval_callback: Optional[ApprovalCallback] = None,
         turn_id: Optional[str] = None,
         step: int = 0,
+        *,
+        action_failures: Optional[List[Dict[str, str]]] = None,
     ) -> tuple[List[Dict[str, Any]], str | None]:
         """Execute tool calls from response.
 
@@ -449,7 +455,7 @@ class ZylchAIAgent(BaseConversationalAgent):
         direct_response = None
         tid = turn_id or get_turn_id()
 
-        for block in content:
+        for block_index, block in enumerate(content):
             if block.type == "tool_use":
                 tool_name = block.name
                 tool_input = block.input
@@ -568,6 +574,19 @@ class ZylchAIAgent(BaseConversationalAgent):
                 # Execute tool
                 finance_history.check_before_disclosure()
                 tool_result = await self._call_tool(tool_name, tool_input)
+                if (
+                    action_failures is not None
+                    and len(action_failures) < 16
+                    and tool_name in {"create_draft", "update_draft", "send_draft"}
+                    and tool_result.status == ToolStatus.ERROR
+                ):
+                    attempt = f"{tid}:{step}:{block_index}:{block.id}"
+                    action_failures.append({
+                        "tool": tool_name,
+                        "attempt_id": "attempt_" + hashlib.sha256(attempt.encode()).hexdigest()[:16],
+                        "failure_kind": "tool_error",
+                        "delivery_certainty": "unknown",
+                    })
                 finance_history.check_before_disclosure()
                 if finance_history.is_managed():
                     tool_event(
