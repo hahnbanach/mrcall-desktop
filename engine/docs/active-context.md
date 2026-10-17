@@ -8,17 +8,16 @@ are preserved in [active-context-archive.md](active-context-archive.md).
 
 ## State now
 
-The [current-main integration](../../docs/evaluations/2026-10-17-m10-current-main-source.md)
-retains accepted ordinary parent ce86428d's376 modules/seven assets while
-integrating main955138f7's Stripe UI and tests. All61 combined Stripe cases and
-two egress cases pass; actual TypeScript/model/Chromium checks pass. Wheel
-0.1.57.dev1+m10.20261017.1, SHA2568f00d9f3, changes metadata only against2514cb98.
-Both actual native cohorts pass metadata/CLI/resources/14-day gate and48 loaded
-module origins each from the new private layer. Prior source171/native84+84,
-248-module installed origins and35,424 unchanged dependency files remain exact
-input-bound evidence. Source merge82c5c8ae is published on model-selection-m10a; all six actual
-nonpaid push/PR CI runs pass. Current critic/final closure governs qualified local
-readiness; no hosted environment or operational acceptance follows.
+The [draft-thread successor](../../docs/evaluations/2026-10-17-m10-draft-thread-preservation.md)
+preserves the approved ordinary repair in source47aa227e. Exactly three product
+resources change against8f00d9f3;380 other entries/all seven assets remain exact.
+Source182 cases and30 installed companion cases per native cohort pass, with
+241 loaded module origins each. Wheel0.1.57.dev1+m10.20261017.2, SHA2562a8121e2,
+passes CLI/resources/14-day/import checks; all35,424 native dependency files match.
+This is private installed-layer proof, not a complete hosted environment.
+The earlier7875d1ff feature/CI proves the preceding candidate. Final-head nonpaid
+CI is checked after reviewed successor publication and retained in its private
+gate ledger. Hosted installation and main/tag/fleet release have separate gates.
 
 Projection shares a120-second evidence deadline. A fully live-verified own reply
 with fresh exact source identity/flags may establish an early incomplete human
@@ -28,12 +27,13 @@ component/task rechecks and current SMTP/private/company fences remain enforced.
 See [task assignments](features/task-assignment.md). Ordinary mail/tasks remain
 private; read-only chat1 rejects mutations before routing and at tool boundaries.
 
-The runtime owner has not released the M10 service window. Its56 native checks
-pass, but final ordinary reception failed and the draft correction remains with
-that owner. It reports restored original crons and terminated test processes;
-fresh custody and actual handoff remain required. Current authenticated-finance,
-voice/MCP and unit/drop-in state are protected. Refresh actual loaded-module,
-configuration and process descriptors before any canary.
+The runtime owner has not issued an M10 service-window handoff. It reports the
+three-file repair installed and independently checked on six services; the fresh
+ordinary reception case remains pending. Previous56 native checks and the failed
+ordinary case remain historical evidence. Fresh custody, complete current runtime
+and actual acceptance receipts are required before M10 operations. No M10 live
+switch or acceptance guard is active. Authenticated finance, voice/MCP and actual
+unit/drop-in state remain protected inputs.
 
 The temporary [additional acceptance guard](features/m10-acceptance-budget.md)
 has approved86-case source and47-case control evidence. Its original four-target
@@ -66,8 +66,8 @@ security retain their owners.
 
 ## Unresolved
 
-- Local critic/final closure governs qualified readiness; a private product layer
-  is not a complete hosted deployment environment.
+- Complete actual hosted environments, per-unit canary and verified rollback
+  remain required; private product layers establish only their offline cases.
 - Require actual ordinary handoff, complete fresh runtime descriptors/backups,
   owned cron exclusion, stopped/drained writers and all intake, reviewed saved
   controls and guarded acceptance. No lease assertion substitutes for exclusion.
@@ -81,8 +81,8 @@ security retain their owners.
 
 ## Next
 
-1. Close the published current-main integration using actual green CI, artifact
-   origins, unchanged-input reuse and independent documentation/final review.
+1. Obtain actual ordinary success/handoff and refresh all runtime descriptors;
+   bind the draft-thread successor before controlled per-unit staging.
 2. After actual owner handoff, bind and review current execution prerequisites,
    then execute the authorized bounded phase without resetting prior evidence.
 3. Complete funding, source-grounded quality and protected runtime/canary/rollback

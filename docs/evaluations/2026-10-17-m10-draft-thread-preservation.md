@@ -1,5 +1,8 @@
 # M10 draft-thread preservation evidence
 
+The source sections record the approved M1 state. Actual subsequent native
+results and preserved failure receipts appear below.
+
 ## Source composition
 
 Base7875d1ff retains the qualified current-main source/artifact/CI component.
@@ -65,10 +68,55 @@ new-layer module origins with zero skips/errors. The380 unchanged entries permit
 scoped reuse of earlier proof, not a wholesale fresh runtime-acceptance claim.
 All native environments and earlier wheels/evidence remain immutable.
 
-The runtime owner retains live/cron custody. Its installed composition and fresh
-ordinary case remain pending; this source proof grants no service-window handoff.
+The runtime owner retains live/cron custody and reports accepted installed
+three-file composition. Its fresh ordinary case and explicit service-window
+handoff remain pending; source approval grants no operational acceptance.
 The four-target USD5 guard is inactive. Real direct/business-credit receipts,
 twenty independent ordinary source-grounded answers, protected both-clone effects
 and per-unit canary/verified rollback remain open. No live overlay, paid call,
 memory rewrite/extraction/reset or main/tag/fleet release occurs here. Actual
 final-head nonpaid CI will be checked after the single reviewed feature delivery.
+
+## Actual installed artifact
+
+Independent M1 approval precedes the offline build. Wheel
+zylch-0.1.57.dev1+m10.20261017.2-py3-none-any.whl has SHA256
+2a8121e2c53dec1b574b7608e8289ab228650fc1735f400ef1136eb4f46b19ce.
+All383 entries match accepted source, with only the three declared differences
+against8f00d9f3. Metadata changes only version; packaging declarations and native
+dependencies stay unchanged. The small build/install allocates12,521,472 bytes
+under the reviewed50MB bound, with500MB minimum free and actual process/file/
+output/time controls. Prior build cache is retired only after exact383-entry
+comparison to the retained previous wheel; wheels and native environments stay.
+
+Both actual native cohorts run30 companion cases, zero failures/errors/skips:
+production29.61s, Mario29.57s. All241 loaded product module origins per cohort
+belong to the new private layer and match wheel hashes. Separate actual native
+CLI/serve, metadata, resources and14-day checks pass with48 loaded origins each.
+The first native attempts execute zero cases because the isolated test helper
+mail_fixture is absent from the test-only path. Complete failed commands/logs/XML/
+origin reports remain as R1. Adding only that test-helper path and using new
+private state provides the actual R2 acceptance; no product/guard repair occurs.
+
+All35,424 native dependency files are independently rehashed: production19,459/
+598,652,754 bytes and Mario15,965/551,447,157 bytes match their retained original
+manifests. Exact unaffected SDK/proxy/Stripe/voice/MCP/projection/copied-boot proof
+is reused with its original qualifications. Three production missing requirements,
+earlier Mario SDK assertion, live Stripe-file/style and operational limits remain.
+A shared private installed product layer is not a complete hosted environment.
+
+Completed owned source fixtures are retained losslessly in compacted-fixtures/;
+all bytes/hash/size/mode/UID/GID/symlink members are verified before retiring
+expanded copies. Old fixture-path citations describe those earlier observations;
+archives permit reconstruction. Original protected backups, all environments,
+wheels, records and actual four-allocation stores are preserved. Public immutable
+unused image-cache retirement separately restores the2GB staging prerequisite;
+recheck current free space immediately before actual staging.
+
+The source commit is47aa227e. Qualified local documentation/final closure and
+normal feature publication precede the actual final-head nonpaid CI observation.
+Its real head/parity/CI results are retained in the private continuation ledger;
+no CI pass is inferred from earlier7875d1ff results. PR19 remains draft. The
+runtime owner reports installed three-file composition accepted; its fresh ordinary
+case and explicit handoff remain required. All original paid/factual/guard/clone/
+canary/rollback and separate main/tag/fleet authority obligations above remain.

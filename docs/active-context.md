@@ -1,5 +1,5 @@
 ---
-doc_baseline_commit: 82c5c8ae38d550e77c4b6e548044505fa416e442
+doc_baseline_commit: 47aa227ec21270b1db977f2936ae95af49def06d
 doc_baseline_date: 2026-10-17
 ---
 
@@ -19,22 +19,24 @@ what is *current*, targeting ≤ ~120 lines.
 
 ## State now
 
-The [current-main integration](execution-plans/2026-10-17-m10-current-main-integration.md)
-combines accepted ordinary parent ce86428d and main955138f7's Stripe Settings/UI.
-All376 product modules/seven assets match the accepted ordinary engine;61 combined
-Stripe cases, two egress cases, both TypeScript projects, model-name boundary and
-actual Chromium card/preload fixture pass. The metadata-only wheel is
-0.1.57.dev1+m10.20261017.1, SHA2568f00d9f3. Both native cohorts pass actual new
-metadata/CLI/resource/import-origin checks. Source171/native84+84 and other
-unchanged-input proofs remain qualified evidence. Source merge82c5c8ae is published on model-selection-m10a. All six nonpaid
-push/PR CI runs pass. Qualified local readiness requires the current critic/final
-closure; hosted installation and main/tag/fleet release have separate gates.
+The [draft-thread successor](execution-plans/2026-10-17-m10-draft-thread-preservation.md)
+preserves the approved ordinary repair in source47aa227e. Exactly three product
+resources change against8f00d9f3;380 other entries/all seven assets remain exact.
+Source182 cases and30 installed companion cases per native cohort pass, with
+241 loaded module origins each. Wheel0.1.57.dev1+m10.20261017.2, SHA2562a8121e2,
+passes CLI/resources/14-day/import checks; all35,424 native dependency files match.
+This is private installed-layer proof, not a complete hosted environment.
+The earlier7875d1ff feature/CI proves the preceding candidate. Final-head nonpaid
+CI is checked after reviewed successor publication and retained in its private
+gate ledger. Hosted installation and main/tag/fleet release have separate gates.
 
-The runtime owner has not issued an M10 service-window handoff. Its56 native
-checks pass, but the final ordinary case failed on missing reception; that owner
-is correcting the draft path. It reports original cron restoration and terminated
-test processes. Fresh custody and full acceptance receipts are required before
-M10 operations. No M10 live switch or acceptance guard is active.
+The runtime owner has not issued an M10 service-window handoff. It reports the
+three-file repair installed and independently checked on six services; the fresh
+ordinary reception case remains pending. Previous56 native checks and the failed
+ordinary case remain historical evidence. Fresh custody, complete current runtime
+and actual acceptance receipts are required before M10 operations. No M10 live
+switch or acceptance guard is active. Authenticated finance, voice/MCP and actual
+unit/drop-in state remain protected inputs.
 
 The [additional acceptance guard](../engine/docs/features/m10-acceptance-budget.md)
 has approved source/control closure. The authorized next test phase retains one
@@ -70,8 +72,8 @@ classifiers; see [operator setup](operator-setup.md#ai-execution-and-controls).
 
 ## Unresolved
 
-- Local critic/final closure governs qualified feature readiness. Main merge,
-  tag and fleet release remain separate from this component.
+- Complete staged hosted environments, current per-unit canary and verified
+  rollback have no accepted M10 receipts. Main/tag/fleet authority remains separate.
 - Obtain successful ordinary handoff, refresh complete source/dependency/config/
   PID/argv/drop-in descriptors and backups, establish actual stopped/drained
   writers and intake, then execute the reviewed protected control packet.
@@ -87,8 +89,8 @@ classifiers; see [operator setup](operator-setup.md#ai-execution-and-controls).
 
 ## Next
 
-1. Finish current-main integration closure against the published source and
-   actual CI; keep earlier finalized components closed.
+1. Obtain actual successful ordinary handoff and bind the draft-thread successor
+   to the complete freshly accepted runtime; keep earlier components closed.
 2. After actual runtime-owner handoff, bind and review the current execution
    packet, then run the authorized controlled acceptance under the original bound.
 3. Complete funding, factual quality and protected operational/canary/rollback

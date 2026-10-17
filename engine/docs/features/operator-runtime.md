@@ -75,6 +75,13 @@ grant no complete assignment or send authority. These checks complement M10's co
 company authority; they do not replace it or authorize external/manual mailbox
 writes.
 
+Draft storage and ORM serialization use the same strict bare dot-atom thread
+canonicalization for dedup and exact delivery snapshots. Legacy stored rows keep
+their original bytes. Contextual creation retains canonical-source admission;
+opaque/unsupported legacy identities retain their values and require the existing
+source authority. The [draft-thread evaluation](../../../docs/evaluations/2026-10-17-m10-draft-thread-preservation.md)
+binds source, both native cohorts and the separate live acceptance gates.
+
 ## Email-only synchronization
 
 `sync.run(days_back?, scope="all")` uses the existing full source-only sync by
@@ -84,6 +91,7 @@ invalid scope/history or a busy worker. Unknown parameter names refuse at the
 RPC dispatcher. Cancellation does not release the single-flight lock while
 its worker still runs; the worker owns release on completion. No paid memory
 processing is started by this route.
+
 
 ## Acceptance and installation limits
 

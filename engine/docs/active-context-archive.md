@@ -1,3 +1,31 @@
+## 2026-10-17 — Draft-thread successor and native proof
+
+The [current-main integration](../../docs/evaluations/2026-10-17-m10-current-main-source.md)
+retains accepted ordinary parent ce86428d's376 modules/seven assets while
+integrating main955138f7's Stripe UI and tests. All61 combined Stripe cases and
+two egress cases pass; actual TypeScript/model/Chromium checks pass. Wheel
+0.1.57.dev1+m10.20261017.1, SHA2568f00d9f3, changes metadata only against2514cb98.
+Both actual native cohorts pass metadata/CLI/resources/14-day gate and48 loaded
+module origins each from the new private layer. Prior source171/native84+84,
+248-module installed origins and35,424 unchanged dependency files remain exact
+input-bound evidence. Source merge82c5c8ae is published on model-selection-m10a; all six actual
+nonpaid push/PR CI runs pass. Current critic/final closure governs qualified local
+readiness; no hosted environment or operational acceptance follows.
+
+The runtime owner has not released the M10 service window. Its56 native checks
+pass, but final ordinary reception failed and the draft correction remains with
+that owner. It reports restored original crons and terminated test processes;
+fresh custody and actual handoff remain required. Current authenticated-finance,
+voice/MCP and unit/drop-in state are protected. Refresh actual loaded-module,
+configuration and process descriptors before any canary.
+
+- Local critic/final closure governs qualified readiness; a private product layer
+  is not a complete hosted deployment environment.
+
+1. Close the published current-main integration using actual green CI, artifact
+   origins, unchanged-input reuse and independent documentation/final review.
+
+
 ## 2026-10-17 — Current-main publication and ordinary reception update
 
 input-bound evidence. Local publication/CI/critic/final gates govern qualified

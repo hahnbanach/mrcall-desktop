@@ -44,6 +44,11 @@ hold the write or send. Only a verified later inbound outside closed coverage ca
 return operator work. Unrelated threads from the same sender remain independent.
 Generic tool approval never overrides company ownership.
 
+Legacy Draft reads serialize strict bare dot-atom thread identities with brackets
+without rewriting stored rows. Dedup and exact delivery CAS share that serialized
+identity; contextual creation retains its existing canonical-source checks. Opaque
+or unsupported legacy values retain their identity and require source authority.
+
 Provider/source evidence is gathered before the company writer lock. Final
 admission rechecks enrollment, identity, membership, company binding, join fence
 and assignment revision under that lock. Private draft mutation checks the

@@ -2,7 +2,7 @@
 date: 2026-10-17
 kind: execution-plan
 task: m10-draft-thread-preservation-20261017
-status: active
+status: completed
 brief: ../briefs/2026-10-17-m10-draft-thread-preservation.md
 owner: M10 release lead
 ---
@@ -100,3 +100,14 @@ remain required. No memory rewrite/extraction/reset, backlog or unknown-liabilit
 release. Main merge/tag/fleet authority remains separate. Undo only unaccepted
 owned local source/build state, retaining proof; never reset published history or
 live stores, and preserve every earlier wheel/environment/receipt.
+
+## Actual component progress
+
+M1 independently approves exact three-resource composition,380 unchanged product
+entries, original before/after failure dispositions and182 passing M10 cases.
+Actual M2 wheel2a8121e2 and both native30-case/241-origin proofs pass; separate
+CLI/resource proofs and all35,424 dependency-byte comparisons pass. Initial native
+collection failures remain retained; only the missing test-helper path is added.
+Source47aa227e is local. Critic/final/completion then one normal feature publication
+and actual final-head CI govern delivery; no earlier CI result is reused as new.
+No M10 paid/live/control effect occurs, and ordinary success/handoff remains open.

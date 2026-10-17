@@ -1,3 +1,29 @@
+## 2026-10-17 — Draft-thread successor and native proof
+
+The [current-main integration](execution-plans/2026-10-17-m10-current-main-integration.md)
+combines accepted ordinary parent ce86428d and main955138f7's Stripe Settings/UI.
+All376 product modules/seven assets match the accepted ordinary engine;61 combined
+Stripe cases, two egress cases, both TypeScript projects, model-name boundary and
+actual Chromium card/preload fixture pass. The metadata-only wheel is
+0.1.57.dev1+m10.20261017.1, SHA2568f00d9f3. Both native cohorts pass actual new
+metadata/CLI/resource/import-origin checks. Source171/native84+84 and other
+unchanged-input proofs remain qualified evidence. Source merge82c5c8ae is published on model-selection-m10a. All six nonpaid
+push/PR CI runs pass. Qualified local readiness requires the current critic/final
+closure; hosted installation and main/tag/fleet release have separate gates.
+
+The runtime owner has not issued an M10 service-window handoff. Its56 native
+checks pass, but the final ordinary case failed on missing reception; that owner
+is correcting the draft path. It reports original cron restoration and terminated
+test processes. Fresh custody and full acceptance receipts are required before
+M10 operations. No M10 live switch or acceptance guard is active.
+
+- Local critic/final closure governs qualified feature readiness. Main merge,
+  tag and fleet release remain separate from this component.
+
+1. Finish current-main integration closure against the published source and
+   actual CI; keep earlier finalized components closed.
+
+
 ## 2026-10-17 — Current-main publication and ordinary reception update
 
 unchanged-input proofs remain qualified evidence. Feature publication, actual
