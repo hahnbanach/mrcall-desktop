@@ -13,7 +13,7 @@ from sqlalchemy.orm import aliased
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 
 from zylch.services.preparation import task_checkpoint
-from zylch.utils.msgid import clean_message_id, clean_references
+from zylch.utils.msgid import canonical_draft_thread_id, clean_message_id, clean_references
 
 from .database import get_session
 from .models import (
@@ -274,7 +274,7 @@ def _draft_identity(
         tuple(_normalize_addresses(to)),
         (subject or ""),
         (body or ""),
-        (thread_id or ""),
+        (canonical_draft_thread_id(thread_id) or ""),
         tuple(_normalize_addresses(cc)),
         tuple(_normalize_addresses(bcc)),
         tuple(sorted(p for p in (attachment_paths or []) if isinstance(p, str))),
@@ -1893,6 +1893,7 @@ class Storage:
         # parent, so the conversation reads as unanswered forever. Normalise
         # before the identity is computed, so a repaired draft still dedups
         # against its twin. See `zylch/utils/msgid.py`.
+        thread_id = canonical_draft_thread_id(thread_id)
         in_reply_to = clean_message_id(in_reply_to)
         references = clean_references(references)
         wanted = _draft_identity(
@@ -2053,7 +2054,7 @@ class Storage:
                 return None
             for k, v in updates.items():
                 if hasattr(row, k):
-                    setattr(row, k, v)
+                    setattr(row, k, canonical_draft_thread_id(v) if k == "thread_id" else v)
             session.flush()
             return row.to_dict()
 
