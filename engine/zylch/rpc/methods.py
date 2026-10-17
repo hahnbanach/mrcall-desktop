@@ -1116,7 +1116,7 @@ async def system_capabilities(params: Dict[str, Any], notify: NotifyFn) -> Any:
     """system.capabilities() -> protocol capabilities supported by this engine."""
     from zylch.services.request_policy import READ_ONLY_POLICY_VERSION
 
-    return {"chat_read_only_policy": READ_ONLY_POLICY_VERSION, "chat_history_binding": 1, "assignment_draft_policy": 1, "contextual_email_policy": 1}
+    return {"chat_read_only_policy": READ_ONLY_POLICY_VERSION, "chat_history_binding": 1, "stripe": 1, "assignment_draft_policy": 1, "contextual_email_policy": 1}
 
 
 async def chat_approve(params: Dict[str, Any], notify: NotifyFn) -> Any:
@@ -2649,6 +2649,13 @@ for _name, _fn in _QONTO_METHODS.items():
 from zylch.rpc.task_assignments import METHODS as _ASSIGNMENT_METHODS
 
 for _name, _fn in _ASSIGNMENT_METHODS.items():
+    if _name in METHODS:
+        raise RuntimeError(f"Duplicate RPC method name: {_name}")
+    METHODS[_name] = _fn
+
+from zylch.rpc.stripe import METHODS as _STRIPE_METHODS
+
+for _name, _fn in _STRIPE_METHODS.items():
     if _name in METHODS:
         raise RuntimeError(f"Duplicate RPC method name: {_name}")
     METHODS[_name] = _fn

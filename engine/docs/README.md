@@ -51,6 +51,7 @@ Documentation for the MrCall Desktop engine: local sidecar and per-profile hoste
 | [features/mailboxes.md](features/mailboxes.md) | Additional IMAP mailboxes: table, secrets, per-mailbox sync, PEC unwrap, migration |
 | [features/email-triage.md](features/email-triage.md) | Email triage and auto-reply detection |
 | [features/qonto.md](features/qonto.md) | Native private Qonto source, authority and managed finance history |
+| [features/stripe.md](features/stripe.md) | Private restricted-key Stripe connection and explicit read-only evidence |
 | [features/mnemonic-writer-inventory.md](features/mnemonic-writer-inventory.md) | The sealed memory write boundary: frozen writer graph and exempt primitives |
 | [features/mnemonic-decisions.md](features/mnemonic-decisions.md) | Mnemonic memory events, validator and origin-bound paid admission |
 | [features/mnemonic-commit.md](features/mnemonic-commit.md) | Atomic semantic commit, commit permit and the operation journal |

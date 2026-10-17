@@ -19,6 +19,16 @@ what is *current*, targeting ≤ ~120 lines.
 
 ## State now
 
+Stripe is available on all seven hosted engines, including support@mrcall.ai.
+Support has authenticated connected/live status and one bounded invoice read.
+Both maintained operators have canonical Stripe/bootstrap routing on all three
+host paths using fixed RPC reads without generic finance chat. Desktop prerelease
+`0.1.57-stripe.3` is signed/notarized and removes the extra checkbox.
+Installed-GUI, all-host native selection and full stable/public-package acceptance
+remain separate. The [fleet rollout](../../docs/execution-plans/2026-10-16-stripe-hosted-fleet.md)
+and [operator adoption](../../docs/execution-plans/2026-10-16-stripe-operator-discovery.md)
+own the runtime and installed-surface evidence.
+
 Desktop `v0.1.56` and kernel `v0.51.0` are published. Six hosted company engines have verified
 assignment reads and root-owned trust; both maintained clones install the release. Ordinary/Qonto
 tasks remain private. Café 124 shares one space; MrCall support/Mario share support's company

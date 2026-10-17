@@ -22,6 +22,9 @@ The repo has three parallel doc trees, mirroring the three index files. Each tre
 
 ## Index
 
+- [Stripe test installer](execution-plans/2026-10-16-stripe-test-installer.md) — isolated test candidate, source checks and unverified installed acceptance; [brief](briefs/2026-10-16-stripe-test-installer.md).
+- [Stripe startup recovery](execution-plans/2026-10-16-stripe-startup-recovery.md) — bounded Settings startup, session recovery and replacement test installer; [brief](briefs/2026-10-16-stripe-startup-recovery.md).
+
 - [Cross-cutting runtime contracts](cross-cutting-contracts.md) — identity, company memory, hosted isolation and LLM billing; operating rules remain in AGENTS.md.
 
 - [Qonto connection](briefs/2026-10-04-qonto-connection.md) — native Desktop setup and engine-owned financial source; [development plan](execution-plans/2026-10-04-qonto-connection.md), including the authorized support-only rollout.

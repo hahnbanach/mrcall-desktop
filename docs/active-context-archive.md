@@ -1,3 +1,41 @@
+## 2026-10-17 — Stripe state before source publication
+
+Stripe is available on all seven hosted engines, including support@mrcall.ai.
+Six exact V9 sources gained only Stripe files/RPC hooks; Gmail's existing source
+and process were preserved. Owner-authenticated capability/status, company memory,
+private controls and tenant-network checks pass. Canonical and installed service
+templates also select Stripe for future profiles. Desktop test installer
+`0.1.57-stripe.2` is signed/notarized; no reinstall is needed for this rollout.
+Real-key reads, installed GUI and native-agent/full public-release acceptance
+remain pending. The [fleet rollout](../../docs/execution-plans/2026-10-16-stripe-hosted-fleet.md) owns source/activation evidence.
+
+## 2026-10-16 — Stripe before installer and remote enablement
+
+The [Stripe connection](../../docs/execution-plans/2026-10-16-stripe-connection.md)
+is a local development candidate: native Settings and engine-owned read-only
+customer/payment/invoice/subscription access for the shared kernel skill. It has
+no engine-model path or automatic import/publication. Provider, packaged UI and
+operational acceptance remain pending; existing hosted services are unchanged.
+
+## 2026-10-16 — Stripe before Settings startup repair
+
+The Stripe test installer `0.1.57-stripe.1` is signed/notarized and available from
+[Actions run 38878411430](https://github.com/hahnbanach/mrcall-desktop/actions/runs/38878411430).
+Mario Gmail's remote engine has independently reviewed Stripe enablement on its
+preserved attachment source; authenticated status and tenant HTTPS connectivity
+pass. Other hosted profiles are unchanged. Real-key reads, installed GUI and
+full operational/public-release acceptance remain open.
+
+## 2026-10-16 — Stripe before full hosted rollout
+
+The Stripe test installer `0.1.57-stripe.2` is signed/notarized in
+[Actions 38883997676](https://github.com/hahnbanach/mrcall-desktop/actions/runs/38883997676).
+It repairs session startup, bounds loading and exposes retry instead of leaving
+Settings at Checking. Source/fixture/typecheck/build and integration review pass;
+installed-user recovery and real-key reads remain pending. Mario Gmail retains
+its reviewed remote Stripe enablement; this repair did not alter hosted runtimes.
+Full native-agent/operational acceptance and a stable Stripe release remain open.
+
 ## 2026-10-08 — Launcher integration into clone main
 
 The local [contextual-email
