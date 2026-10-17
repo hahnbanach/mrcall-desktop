@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import { appendFileSync, mkdtempSync, readFileSync, rmSync } from 'node:fs'
+import { appendFileSync, mkdtempSync, readdirSync, readFileSync, rmSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -42,7 +42,15 @@ try {
     QONTO_BOOTSTRAP_ENV_FILE: '/private/source', QONTO_HOST_ID_FILE: '/private/host', qonto_api_key: 'fixture-key'
   })).ok, true)
   assert.deepEqual(payload, { EMAIL_ADDRESS: 'fixture@example.test' })
-  console.log('PASS: Qonto credentials excluded from onboarding, readback, edits and provisioning')
+  // No app source file names a Qonto credential variable: credentials reach the engine only as typed RPC arguments.
+  const source = fileURLToPath(new URL('../src', import.meta.url))
+  const files = directory => readdirSync(directory, { withFileTypes: true }).flatMap(entry =>
+    entry.isDirectory() ? files(join(directory, entry.name)) : entry.isFile() ? [join(directory, entry.name)] : [])
+  const scanned = files(source)
+  for (const required of ['main/profileFS.ts', 'preload/index.ts', 'renderer/src/components/QontoCard.tsx']) assert(scanned.includes(join(source, required)), 'The scan covers ' + required)
+  const names = ['QONTO_API_LOGIN', 'QONTO_API_KEY', 'QONTO_BOOTSTRAP_ENV_FILE']
+  assert.deepEqual(scanned.filter(file => names.some(name => readFileSync(file).includes(name))), [])
+  console.log(`PASS: Qonto credentials excluded from onboarding, readback, edits and provisioning; none of ${scanned.length} files under app/src names a Qonto credential variable`)
 } finally {
   os.homedir = oldHome
   globalThis.fetch = oldFetch

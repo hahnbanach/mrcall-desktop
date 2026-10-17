@@ -4,7 +4,7 @@ import { useFinanceContext, type FinanceContextToken } from '../hooks/useFinance
 import { auth } from '../firebase/config'
 
 const OUTCOMES: Record<string, string> = {
-  login_required: 'The engine bootstrap key needs the Qonto organization API login. Add the login to the engine configuration or enter both fields here.',
+  login_required: 'Enter the Qonto organization API login together with the key.',
   credentials_required: 'Enter your Qonto organization API login and key, then Test.',
   invalid_credentials: 'The Qonto login or key format is invalid.',
   auth: 'Qonto rejected these credentials. Check the API login and key, then Test again.',
@@ -42,7 +42,6 @@ export default function QontoCard() {
   const [notice, setNotice] = useState('')
   const [login, setLogin] = useState('')
   const [key, setKey] = useState('')
-  const [bootstrap, setBootstrap] = useState(false)
   const [tested, setTested] = useState<QontoTestResult | null>(null)
   const [accounts, setAccounts] = useState<string[]>([])
   const [authority, setAuthority] = useState(false)
@@ -138,7 +137,7 @@ export default function QontoCard() {
   }
   const test = () => run('Testing Qonto…', async token => {
     const version = formVersion.current
-    const credentials: QontoCredentials = bootstrap ? { credential_source: 'bootstrap' } : { credential_source: 'input', login, api_key: key }
+    const credentials: QontoCredentials = { credential_source: 'input', login, api_key: key }
     clearTest()
     try {
       const result = await window.zylch.qonto.test(credentials)
@@ -195,10 +194,10 @@ export default function QontoCard() {
   })
   const disconnect = () => run('Disconnecting Qonto…', async token => {
     clearTest(); setPreview(null); setPublicationConsent(false); setLogin(''); setKey('')
-    const result = await window.zylch.qonto.disconnect()
+    await window.zylch.qonto.disconnect()
     if (!context.current(token)) return
     window.dispatchEvent(new Event('mrcall:qonto-changed'))
-    setNotice(result.bootstrap_retained ? 'Disconnected. MrCall removed its connection credentials; engine bootstrap configuration remains user-managed.' : 'Qonto disconnected.')
+    setNotice('Qonto disconnected.')
     await refresh()
   })
   const deleteData = () => run('Deleting imported finance data…', async token => {
@@ -220,14 +219,12 @@ export default function QontoCard() {
     <p className="text-sm">MrCall company: {tested ? tested.company_name || 'Current company memory (name not set)' : company || 'Checking…'} · Host: {host || 'Checking…'}</p>
     {status && <p className="text-sm">Connection: {status.status} · Selected accounts: {status.account_count}</p>}
     {status?.error && <p role="alert">{qontoError(new Error(status.error))}</p>}
-    {status?.bootstrap && <p className="text-xs">Engine bootstrap: {status.bootstrap.available ? 'available' : status.bootstrap.status || 'unavailable'}. It is used only when you explicitly Test and Save.</p>}
     <div className="space-y-2">
-      <label className="flex gap-2 items-center text-sm"><input type="checkbox" checked={bootstrap} disabled={!enabled} onChange={event => edit(() => setBootstrap(event.target.checked))} />Use engine bootstrap</label>
-      {!bootstrap && <div className="grid grid-cols-2 gap-2">
+      <div className="grid grid-cols-2 gap-2">
         <label className="text-sm">Qonto API login<input aria-label="Qonto API login" type="password" autoComplete="off" value={login} disabled={!ready || (!!busy && busy !== 'Testing Qonto…')} onChange={event => edit(() => setLogin(event.target.value))} className="block border rounded px-2 py-1 w-full" /></label>
         <label className="text-sm">Qonto API key<input aria-label="Qonto API key" type="password" autoComplete="new-password" value={key} disabled={!ready || (!!busy && busy !== 'Testing Qonto…')} onChange={event => edit(() => setKey(event.target.value))} className="block border rounded px-2 py-1 w-full" /></label>
-      </div>}
-      <button className={style} disabled={!enabled || (!bootstrap && (!login || !key))} onClick={test}>Test Qonto</button>
+      </div>
+      <button className={style} disabled={!enabled || !login || !key} onClick={test}>Test Qonto</button>
       {tested && <div className="border rounded p-3 space-y-2">
         <p className="text-sm font-medium">Qonto legal company: {tested.organization.legal_name} · {tested.organization.id}</p>
         <p className="text-xs">Confirmed engine location: {tested.engine_location}. Credentials are hidden and held only for this tested Save; editing credentials requires a new Test.</p>
@@ -259,7 +256,7 @@ export default function QontoCard() {
       <button className={style} disabled={!enabled || !publicationConsent} onClick={publish}>Publish confirmed fact</button>
     </div>}
     <div className="border-t pt-3 space-y-2">
-      <p className="text-xs">Disconnect hides retained imported records. Delete imported data also removes private source rows and generated source-only task evidence. Published company facts remain historical shared knowledge. Neither action regenerates the Qonto key; provider key regeneration is a separate Qonto action that may affect other integrations. Engine bootstrap configuration remains user-managed.</p>
+      <p className="text-xs">Disconnect hides retained imported records. Delete imported data also removes private source rows and generated source-only task evidence. Published company facts remain historical shared knowledge. Neither action regenerates the Qonto key; provider key regeneration is a separate Qonto action that may affect other integrations.</p>
       <label className="flex gap-2 text-sm"><input aria-label="Confirm deletion of Qonto imported data" type="checkbox" checked={deleteConsent} disabled={!enabled} onChange={event => setDeleteConsent(event.target.checked)} />Delete imported finance data on this engine; keep historical shared facts.</label>
       <button className={style} disabled={!enabled || !deleteConsent} onClick={deleteData}>Delete imported Qonto data</button>
     </div>

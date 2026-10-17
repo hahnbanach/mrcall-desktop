@@ -6,7 +6,8 @@ the native Qonto engine source, including source-fixture verification limits.
 <!-- doc-scope:end -->
 
 Settings contains a Qonto card for the selected local or hosted engine. Enter
-the organization API login and key, or select that engine's bootstrap input.
+the organization API login and key; the card has no other credential source,
+and Test stays disabled until both fields are filled.
 Test shows the legal company and accounts. Select an account subset and confirm
 authority before Save connects and starts initial source sync. A provider API
 key may allow writes; this integration exposes bank reads only.
@@ -37,7 +38,8 @@ Tasks offers a Qonto channel and Review source. Evidence comes from the bounded
 reopen use existing authorized task actions. An unavailable source has no email
 fallback. Delete imported data preserves user-edited private task shells and
 historical published facts; disconnect separately removes the application
-credential copy while leaving user-managed bootstrap configuration.
+credential copy. Reconnecting takes a typed login and key and a new Test, as
+every connection does.
 
 Choosing Qonto starts a separately labelled empty chat. Client transcripts are
 display-only; subsequent turns use the engine's exact history handle/revision.

@@ -9,7 +9,7 @@ from pathlib import Path
 from cryptography.fernet import Fernet, InvalidToken
 
 from zylch import runtime
-from zylch.qonto.bootstrap import Credentials, credentials
+from zylch.qonto.credentials import Credentials, credentials
 from zylch.qonto.errors import QontoError
 from zylch.qonto.private_files import exclusive_write, private_lock, private_read
 

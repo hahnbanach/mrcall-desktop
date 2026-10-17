@@ -6,6 +6,52 @@ materialises) `app/docs/harness-backlog.md`.
 
 ## Open
 
+- [ ] **A failing UI fixture assertion can exhaust host memory.**
+  Discovered: 2026-10-09. On Node 22 a failing
+  `assert.equal(<react-test-renderer instance>, undefined)` formats the instance
+  for its failure message and allocates without bound; one such run exhausted
+  the memory of the VPS that also serves the hosted engines. No assertion of
+  that form remains under `app/scripts`: absence is asserted with
+  `assert.ok(!instance)`, which reports in under a second. Nothing prevents the
+  form from returning, and the documented commands set no heap limit.
+  Recommendation: a check over `app/scripts` that rejects equality assertions
+  on test instances, and `--max-old-space-size` in the documented commands.
+
+- [ ] **No workflow runs the Qonto engine suite or a Qonto UI script.**
+  Discovered: 2026-10-09. `rpc-contracts.yml`, `memory-boundary.yml` and
+  `mnemonic-journey.yml` run their own named test files and `release.yml` runs
+  no test. `engine/tests/qonto` and the six `app/scripts/test-qonto*.mjs`
+  scripts run only on a developer machine; of Qonto, the workflows check the
+  RPC parameter declarations only.
+  Recommendation: a workflow for the engine Qonto suite and the Qonto scripts
+  that need no browser.
+
+- [ ] **The RPC contract check ignores result shapes and inventory currency.**
+  Discovered: 2026-10-09. `npm run test:rpc-contracts` passed while the client
+  types still declared two removed Qonto result fields as required. Nothing
+  fails when `docs/rpc-contract-inventory.json` is stale. `rpc-contracts.yml`
+  pins cs-kernel `ba79cc13`, which yields 54 kernel calls; the committed
+  inventory lists 64 and reproduces only from kernel `eb6dc1a`, a revision the
+  file does not record.
+  Recommendation: compare declared client result fields with engine results
+  for the methods that have fixtures, regenerate the inventory in the workflow
+  and fail on a diff, and record one kernel revision for both.
+
+- [ ] **Qonto results differ from the client types, and Test returns balances before authority is confirmed.**
+  Discovered: 2026-10-09. The preload type of `qonto.status` omits `sync`,
+  which the engine returns when connected and the card reads.
+  `app/src/renderer/src/finance.ts` declares `last_sync_at`, which no engine
+  returns, so its card line never renders. The `qonto.test` result is
+  `Organization.public()`: each account carries `balance` and
+  `authorized_balance`, which the client types do not declare and the card
+  does not render. The HTTP fixture that the native journey runs through
+  returns the values at Test; the in-process `FixtureProvider` leaves them
+  empty. They reach the renderer before account selection and authority
+  confirmation.
+  Recommendation: type the preload status call with the renderer's status
+  type; drop `last_sync_at` or return it from the engine; return from Test
+  only what the confirmation step shows.
+
 - [ ] **Deployed server gzip/SSE contract lacks automated acceptance.**
   Offline Desktop parser/transport regression exists in
   `engine/tests/llm/test_proxy_boundaries.py` and passes locally. This remaining

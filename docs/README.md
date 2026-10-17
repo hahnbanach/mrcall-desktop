@@ -25,10 +25,11 @@ The repo has three parallel doc trees, mirroring the three index files. Each tre
 - [Stripe test installer](execution-plans/2026-10-16-stripe-test-installer.md) — isolated test candidate, source checks and unverified installed acceptance; [brief](briefs/2026-10-16-stripe-test-installer.md).
 - [Stripe startup recovery](execution-plans/2026-10-16-stripe-startup-recovery.md) — bounded Settings startup, session recovery and replacement test installer; [brief](briefs/2026-10-16-stripe-startup-recovery.md).
 
-- [Cross-cutting runtime contracts](cross-cutting-contracts.md) — identity, company memory, hosted isolation and LLM billing; operating rules remain in AGENTS.md.
+- [Cross-cutting runtime contracts](cross-cutting-contracts.md) — identity, shared company memory with separate profile users, hosted isolation and LLM billing; operating rules remain in AGENTS.md.
 
 - [Qonto connection](briefs/2026-10-04-qonto-connection.md) — native Desktop setup and engine-owned financial source; [development plan](execution-plans/2026-10-04-qonto-connection.md), including the authorized support-only rollout.
 - [Qonto IPC](qonto-ipc.md) — native bank methods, managed chat history and verification boundaries.
+- [Qonto bootstrap removal](briefs/2026-10-08-qonto-bootstrap-removal.md) — typed login and key as the only Qonto credential source, and what Desktop `v0.1.56` does against it; [plan and evidence](execution-plans/2026-10-08-qonto-bootstrap-removal.md).
 - [Additional mailboxes and PEC](../engine/docs/features/mailboxes.md) — multiple IMAP sources, PEC envelope extraction and Desktop Settings; [original plan](execution-plans/2026-09-30-pec-net-mailbox-integration.md).
 - [PEC and Qonto next-release integration](execution-plans/2026-10-05-mailboxes-qonto-release-integration.md) — combined source, migration/auth verification and shared-main delivery; no installer or hosted rollout.
 - [GPT-Live customer-service channel](brief/2026-09-23-gpt-live-engine-integration.md) — incoming calls with asynchronous company memory first; agent configured by cs-operator. [Four-milestone plan](execution-plans/2026-09-23-gpt-live-engine-integration.md); repeatable integrations and outbound support follow.
@@ -47,7 +48,8 @@ The repo has three parallel doc trees, mirroring the three index files. Each tre
 - [Model comparison](evaluations/2026-09-13-openrouter-models.md) — blinded synthetic evidence and limitations.
 - [Actual-prompt comparison](evaluations/2026-09-15-real-engine-prompts.md) — K3/GLM source-grounded checks, availability and prompt corrections.
 
-- [Desktop setup to operator workspace](briefs/2026-09-10-desktop-to-operator-onboarding.md) — proposed end-to-end setup journey, current evidence, and future delegation boundary.
+- [Desktop setup to operator workspace](briefs/2026-09-10-desktop-to-operator-onboarding.md) — original coding-agent delivery and proposed remote MCP architecture, consent, data/cost controls, procedures and native draft requirements.
+- [Desktop, MCP and daemon data flows](operator-data-flows.md) — English sequences for authentication, nine candidate tools, local files and revocation, plus proposed remote governance, budgets, audit, procedure authority and native drafts; implementation states remain separate.
 - [Chat approval isolation](briefs/2026-09-10-chat-approval-isolation.md) — scoped existing cross-client approval defect and acceptance criteria.
 - [`active-context.md`](active-context.md) — cross-cutting living snapshot: `State now` / `Unresolved` / `Next`, nothing else
 - [`active-context-archive.md`](active-context-archive.md) — dated narrative pruned out of the living snapshot

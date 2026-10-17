@@ -13,8 +13,6 @@ MESSAGES = {
     "credentials_required": "Enter the organization login and API key.",
     "login_required": "The Qonto organization API login is required.",
     "invalid_credentials": "The Qonto credential format is invalid or ambiguous.",
-    "bootstrap_unavailable": "No Qonto bootstrap credential is available.",
-    "bootstrap_override_disabled": "Development bootstrap overrides are disabled on hosted engines.",
     "encryption_unavailable": "The private encryption key is missing, invalid or unsafe.",
     "credentials_unreadable": "Stored Qonto credentials could not be decrypted.",
     "host_identity_unavailable": "The private engine identity is missing, invalid or unsafe.",

@@ -5,7 +5,7 @@ from __future__ import annotations
 import time
 
 from zylch.qonto import challenges, guard, repository
-from zylch.qonto.bootstrap import bootstrap_availability, request_credentials
+from zylch.qonto.credentials import request_credentials
 from zylch.qonto.errors import QontoError
 from zylch.qonto.identity import current_authority, profile_identity, require_same
 from zylch.qonto.models import (
@@ -182,7 +182,6 @@ def status() -> dict:
     result = {
         "status": binding.status if binding else "disconnected",
         "generation": binding.generation if binding else 0,
-        "bootstrap": bootstrap_availability(),
         "credential_stored": bool(binding and binding.encrypted_credentials),
         "account_count": 0,
         "source_access": False,
@@ -224,8 +223,6 @@ def disconnect() -> dict:
         "ok": True,
         "status": "disconnected",
         "generation": generation,
-        "bootstrap": bootstrap_availability(),
-        "bootstrap_retained": True,
     }
 
 

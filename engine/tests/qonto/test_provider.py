@@ -7,7 +7,7 @@ import httpx
 import pytest
 
 from zylch.qonto import provider
-from zylch.qonto.bootstrap import Credentials
+from zylch.qonto.credentials import Credentials
 from zylch.qonto.errors import QontoError
 from zylch.qonto.models import QontoAccount
 from zylch.qonto.repository import profile_transaction

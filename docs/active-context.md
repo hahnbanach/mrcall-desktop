@@ -1,6 +1,6 @@
 ---
-doc_baseline_commit: a53376621a37656b78545b5a90d2d6798568a44a
-doc_baseline_date: 2026-10-08
+doc_baseline_commit: 1c46cde3b86243aa6d3bf455de6db3e42ce71889
+doc_baseline_date: 2026-10-13
 ---
 
 # Active Context — Cross-cutting
@@ -58,23 +58,23 @@ A real managed assistant uses the bank tool and cites its source. Its
 engine-formatted UTC retrieval strings match the accepted managed answer.
 The six company daemons run the combined release source with their saved
 controls restored; support Qonto connection and encryption checks pass. Packaged
-GUI and provider UI acceptance remain unverified. Exact release, usage, rollback and remaining criteria belong
+GUI and provider UI acceptance remain unverified. `main` takes Qonto credentials only as typed login and key;
+no published Desktop or hosted engine has that change ([removal](execution-plans/2026-10-08-qonto-bootstrap-removal.md)). Exact release, usage, rollback and remaining criteria belong
 to the active [Qonto plan](execution-plans/2026-10-04-qonto-connection.md).
 
-All seven hosted profiles run as separate Unix users with enforced outbound
-allow-lists. Production voice preserves its interpreter/configuration and available
-listener; support preserves its Qonto host binding. Six company profiles use the
-reviewed assignment release source pin. Company stores use hashed hosted paths. Self-serve provisioning
-remains closed; template/provisiond still use the shared key. Sandbox final
-acceptance and its operational floor remain open in the
-[rollout plan](execution-plans/2026-09-29-toward-sandbox.md).
-Mario Gmail has CTO-reported installed-app acceptance for mail, attachment
-transfer and document lookup/read by basename. Its attachment source pin is
-separate from the service checkout. R5 is blocked by scratch offboarding that
-leaves company database/WAL/SHM ownership with the deleted user; dual-identity
-rule removal and Mario Gmail/support isolation checks pass. Six assignment
-release pins also cause helper reapplication refusals despite reconcile wrapper
-success; their units remain untouched. The rollout plan owns both blockers.
+All seven existing hosted profiles run as separate Unix users with enforced
+outbound allow-lists; the [sandbox rollout](execution-plans/2026-09-29-toward-sandbox.md)
+is completed with two independent final approvals. Company groups share one
+store per company while private profile files stay separate; the
+[contract](cross-cutting-contracts.md#separate-profiles-shared-company-memory)
+distinguishes OS isolation from engine-filtered personal rules.
+Production preserves its voice interpreter/configuration and listener;
+support preserves Qonto. Six company profiles retain assignment source pins,
+and Mario Gmail retains its attachment pin and CTO-reported mail/attachment/
+document acceptance. Seven operator pins use `t0-…`; production's Qonto
+permission has a separate earlier drop-in. Reconcile succeeds with seven ready.
+Self-serve provisioning stays closed; template/provisiond retain their shared
+key dependency and the broader operational obligations remain separate.
 
 Production uses GPT-Live for telephone service and the scoped company-knowledge
 trial. Its pinned release reads revisioned `operator-instructions/phone.md`;
@@ -106,6 +106,11 @@ written projects are revisioned company records. See
 [operator setup](operator-setup.md#ai-execution-and-controls) and
 [project memory](../engine/docs/features/project-memory.md).
 
+External-client MCP is an unreleased local candidate in isolated worktrees;
+the remote design selects profile-local Linux MCP endpoints, central grant
+introspection and revisioned engine procedures; all are unimplemented.
+[Data flows](operator-data-flows.md) separate these states and their authority boundaries.
+
 Desktop `v0.1.56` combines Qonto, additional mailboxes/PEC and the auth/billing
 fixes. Its Mac Apple Silicon DMG is published; installed Qonto GUI and live PEC
 provider acceptance remain open. Six company profiles have mailbox migration,
@@ -119,10 +124,13 @@ unverified. Runtime contracts belong to [IPC](ipc-contract.md),
 - Qonto installed/packaged Electron and provider-UI comparison remain unverified.
   Hosted authentication, banking, restart/reconnect and source-grounded assistant
   acceptance have passed; the corrected UTC timestamp matches its source.
+  Until one typed connection from an installed Desktop passes, no hosted engine
+  holding a Qonto connection takes source without the bootstrap credential source.
+  `main` never uses Qonto credential lines left in a profile `.env`; deleting them is operator work.
 - Remaining Café124 billing choices and funded K3 credits are open. The reviewed
   comparison's 60 cases/240 outputs do not establish production equivalence.
-- Sandbox final review, shared-key provisioning and operational floor remain
-  open. One handset's speech is not transcribed by the voice provider.
+- Shared-key provisioning and the broader operational floor retain their
+  separate obligations. One handset's speech is not transcribed by the voice provider.
 - Installed/fresh-account GUI acceptance is open. Windows remains opt-in and
   `continue-on-error`; Intel is outside the release matrix. Windows voice-note
   transcription is excluded.

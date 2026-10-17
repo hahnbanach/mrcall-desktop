@@ -146,7 +146,7 @@ try {
   await fill('Confirm Qonto publication', true)
   assert.ok(button('Publish confirmed fact'))
   await logout()
-  assert.equal(button('Publish confirmed fact'), undefined)
+  assert.ok(!button('Publish confirmed fact'))
   assert.doesNotMatch(text(), /Synthetic fixture evidence|Exact company fact/)
   unmount()
   await relogin()
@@ -158,7 +158,7 @@ try {
   await fill('Confirm Qonto authority', true)
   assert.equal(button('Save Qonto and sync').props.disabled, false)
   await logout()
-  assert.equal(button('Save Qonto and sync'), undefined, 'Tested secret reference and consent are discarded')
+  assert.ok(!button('Save Qonto and sync'), 'Tested secret reference and consent are discarded')
   unmount()
   await relogin()
 
@@ -172,7 +172,7 @@ try {
   await relogin()
   await act(async () => fixture.release('qonto.publication_preview'))
   await previewPromise
-  assert.equal(button('Publish confirmed fact'), undefined, 'Old preview stays rejected after same-UID login')
+  assert.ok(!button('Publish confirmed fact'), 'Old preview stays rejected after same-UID login')
 
   await click('New Qonto chat')
   const delayedStart = button('New Qonto chat').props.onClick
@@ -184,7 +184,7 @@ try {
   const priorCalls = fixture.calls().length
   const priorChats = chatCalls
   await logout()
-  assert.equal(button('New Qonto chat'), undefined)
+  assert.ok(!button('New Qonto chat'))
   assert.doesNotMatch(text(), /Delayed bank question/)
   await act(async () => { await delayedStart(); await send('Refused while revoked', []) })
   assert.equal(chatCalls, priorChats)
@@ -218,7 +218,7 @@ try {
   assert.equal(typeof finishTasks, 'function')
   await logout()
   assert.doesNotMatch(text(), /Review this declined outgoing transaction/)
-  assert.equal(button('Review Qonto source'), undefined, 'Actual App gate unmounts private tasks immediately')
+  assert.ok(!button('Review Qonto source'), 'Actual App gate unmounts private tasks immediately')
   // Remove tasks before a new login, then resolve the old private list only
   // after the new same-UID shell has mounted. It must not enter that store.
   fixture.changeUid('fixture-uid')

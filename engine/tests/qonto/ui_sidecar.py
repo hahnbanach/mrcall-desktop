@@ -49,7 +49,6 @@ def boot(root):
         "MEMORY_DB_DIR": str(home / "memory"),
     }.items():
         patch.setenv(key, value)
-    patch.delenv("QONTO_BOOTSTRAP_ENV_FILE", raising=False)
     patch.delenv("QONTO_HOST_ID_FILE", raising=False)
     patch.setattr(runtime, "_serving", False)
     patch.setattr(profiles, "_active_profile", UID)
