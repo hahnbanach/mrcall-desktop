@@ -16,8 +16,9 @@ two egress cases pass; actual TypeScript/model/Chromium checks pass. Wheel
 Both actual native cohorts pass metadata/CLI/resources/14-day gate and48 loaded
 module origins each from the new private layer. Prior source171/native84+84,
 248-module installed origins and35,424 unchanged dependency files remain exact
-input-bound evidence. Local publication/CI/critic/final gates govern qualified
-readiness; no current hosted environment or operational acceptance follows.
+input-bound evidence. Source merge82c5c8ae is published on model-selection-m10a; all six actual
+nonpaid push/PR CI runs pass. Current critic/final closure governs qualified local
+readiness; no hosted environment or operational acceptance follows.
 
 Projection shares a120-second evidence deadline. A fully live-verified own reply
 with fresh exact source identity/flags may establish an early incomplete human
@@ -27,11 +28,12 @@ component/task rechecks and current SMTP/private/company fences remain enforced.
 See [task assignments](features/task-assignment.md). Ordinary mail/tasks remain
 private; read-only chat1 rejects mutations before routing and at tool boundaries.
 
-The runtime owner controls six-engine live/guard/provider changes and three
-clone cron locks. Its56 native checks pass, but final ordinary acceptance and
-explicit handoff remain pending. Source approval alone cannot lift the freeze.
-Current authenticated-finance, voice/MCP and unit/drop-in state are protected;
-refresh actual loaded-module/config/process descriptors before a canary.
+The runtime owner has not released the M10 service window. Its56 native checks
+pass, but final ordinary reception failed and the draft correction remains with
+that owner. It reports restored original crons and terminated test processes;
+fresh custody and actual handoff remain required. Current authenticated-finance,
+voice/MCP and unit/drop-in state are protected. Refresh actual loaded-module,
+configuration and process descriptors before any canary.
 
 The temporary [additional acceptance guard](features/m10-acceptance-budget.md)
 has approved86-case source and47-case control evidence. Its original four-target
@@ -79,8 +81,8 @@ security retain their owners.
 
 ## Next
 
-1. Finish the current ordinary-preservation artifact with both native cohorts,
-   exact product origins and unchanged-input proof reuse.
+1. Close the published current-main integration using actual green CI, artifact
+   origins, unchanged-input reuse and independent documentation/final review.
 2. After actual owner handoff, bind and review current execution prerequisites,
    then execute the authorized bounded phase without resetting prior evidence.
 3. Complete funding, source-grounded quality and protected runtime/canary/rollback

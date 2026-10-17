@@ -2,7 +2,7 @@
 date: 2026-10-17
 kind: execution-plan
 task: m10-current-main-integration-20261017
-status: active
+status: completed
 brief: ../briefs/2026-10-17-m10-current-main-integration.md
 owner: M10 release lead
 ---
@@ -97,3 +97,17 @@ Before acceptance, abort only the owned uncommitted merge and retain evidence.
 After reviewed local commit, keep the accepted earlier parent for comparison;
 never reset published history, restore a live database, touch another owner's
 locks or use an alternate spending manifest.
+
+## Actual delivery progress
+
+M1 is independently approved with all383 product entries unchanged,61 combined
+Stripe cases, two egress cases and actual TypeScript/model/Chromium checks. M2
+build/native proof passes for wheel8f00d9f3 and both native cohorts. Actual new
+outputs use13,996,032 bytes under the separately approved small-build bound.
+Source merge82c5c8ae is normally published on model-selection-m10a; its parents
+are ce86428d and955138f7. All six actual nonpaid push/PR CI runs pass, as bound
+by the source delivery record and private ci-proof.json. PR19 remains draft.
+Critic/final/completion and the metadata/docs follow-up govern component closure.
+Runtime ordinary reception failed in the owning session; no service-window
+handoff or operational acceptance is inferred. All real acceptance obligations
+and original spending/authority constraints above remain unchanged.

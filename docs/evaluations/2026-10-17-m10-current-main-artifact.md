@@ -57,8 +57,10 @@ does not establish hosted installation, funding, factual quality or rollback.
 
 Private build/native receipts, exact identity and all product hashes are under
 /home/mal/worktrees/.evidence/m10-execution-20261016/live-acceptance-20261017/current-main-integration/artifact/.
-The original source/ordinary component records stay closed. Feature publication
-and actual nonpaid CI outcomes must precede this integration's final completion.
+The original source/ordinary component records stay closed. Source82c5c8ae is
+published on model-selection-m10a and all six actual nonpaid push/PR CI runs pass;
+the [source delivery record](2026-10-17-m10-current-main-source.md#delivery) binds
+each run URL to that head. Current critic/final closure remains required.
 Runtime-owner ordinary acceptance/handoff, exclusive intake/writers, four-target
 USD5 guards, actual direct/business-credit receipts, twenty ordinary source-grounded
 answers, protected both-clone effects and complete per-unit canary/verified rollback

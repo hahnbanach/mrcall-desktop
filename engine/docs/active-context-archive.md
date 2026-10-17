@@ -1,3 +1,18 @@
+## 2026-10-17 — Current-main publication and ordinary reception update
+
+input-bound evidence. Local publication/CI/critic/final gates govern qualified
+readiness; no current hosted environment or operational acceptance follows.
+
+The runtime owner controls six-engine live/guard/provider changes and three
+clone cron locks. Its56 native checks pass, but final ordinary acceptance and
+explicit handoff remain pending. Source approval alone cannot lift the freeze.
+Current authenticated-finance, voice/MCP and unit/drop-in state are protected;
+refresh actual loaded-module/config/process descriptors before a canary.
+
+1. Finish the current ordinary-preservation artifact with both native cohorts,
+   exact product origins and unchanged-input proof reuse.
+
+
 ## 2026-10-17 — Before current-main M10 integration
 
 The [ordinary-preservation source](../../docs/evaluations/2026-10-17-m10-ordinary-source.md)

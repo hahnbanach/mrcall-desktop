@@ -1,5 +1,5 @@
 ---
-doc_baseline_commit: c9789150226e474967d4aa3528bd4fd65e326aad
+doc_baseline_commit: 82c5c8ae38d550e77c4b6e548044505fa416e442
 doc_baseline_date: 2026-10-17
 ---
 
@@ -26,15 +26,15 @@ Stripe cases, two egress cases, both TypeScript projects, model-name boundary an
 actual Chromium card/preload fixture pass. The metadata-only wheel is
 0.1.57.dev1+m10.20261017.1, SHA2568f00d9f3. Both native cohorts pass actual new
 metadata/CLI/resource/import-origin checks. Source171/native84+84 and other
-unchanged-input proofs remain qualified evidence. Feature publication, actual
-nonpaid CI and local critic/final closure govern readiness; none authorizes a
-hosted switch or main/tag/fleet release.
+unchanged-input proofs remain qualified evidence. Source merge82c5c8ae is published on model-selection-m10a. All six nonpaid
+push/PR CI runs pass. Qualified local readiness requires the current critic/final
+closure; hosted installation and main/tag/fleet release have separate gates.
 
-The runtime owner retains six-engine live/guard/provider exclusion and three
-clone cron locks. Its56 native checks pass; a final ordinary case and explicit
-handoff remain pending. No M10 live switch or acceptance guard is active.
-Both-clone adoption and any operational results require that owner's actual
-receipts; intermediate progress is not full ordinary acceptance.
+The runtime owner has not issued an M10 service-window handoff. Its56 native
+checks pass, but the final ordinary case failed on missing reception; that owner
+is correcting the draft path. It reports original cron restoration and terminated
+test processes. Fresh custody and full acceptance receipts are required before
+M10 operations. No M10 live switch or acceptance guard is active.
 
 The [additional acceptance guard](../engine/docs/features/m10-acceptance-budget.md)
 has approved source/control closure. The authorized next test phase retains one
@@ -87,8 +87,8 @@ classifiers; see [operator setup](operator-setup.md#ai-execution-and-controls).
 
 ## Next
 
-1. Complete the ordinary-preservation component using affected proof and exact
-   unchanged-input reuse; keep all earlier finalized components closed.
+1. Finish current-main integration closure against the published source and
+   actual CI; keep earlier finalized components closed.
 2. After actual runtime-owner handoff, bind and review the current execution
    packet, then run the authorized controlled acceptance under the original bound.
 3. Complete funding, factual quality and protected operational/canary/rollback

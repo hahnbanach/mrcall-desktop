@@ -1,5 +1,8 @@
 # Current main integration — source evidence
 
+The following M1 observations describe the reviewed pre-commit state. The actual
+published merge and CI evidence appear in Delivery below.
+
 ## Composition
 
 The accepted ordinary-preservation parent is ce86428d. The pending merge parent
@@ -57,3 +60,21 @@ to exact unchanged inputs. No live handoff, full ordinary success, four-target
 guard activation, paid/factual/clone/canary/rollback or main/tag/fleet acceptance
 follows. Feature publication and actual nonpaid CI must precede final completion;
 all inherited dependency/SDK/live-Stripe/style qualifications remain.
+
+## Delivery
+
+Source merge82c5c8ae38d550e77c4b6e548044505fa416e442 has accepted parent
+ce86428d and exact main955138f7 as its two parents. Normal fast-forward
+publication updates model-selection-m10a; main is unchanged and PR19 stays draft.
+All six actual push/PR checks pass at that source head.
+
+- [Memory write boundary (pull_request)](https://github.com/hahnbanach/mrcall-desktop/actions/runs/39023221493) — success.
+- [RPC parameter and task contracts (pull_request)](https://github.com/hahnbanach/mrcall-desktop/actions/runs/39023221521) — success.
+- [Mnemonic kernel journey (pull_request)](https://github.com/hahnbanach/mrcall-desktop/actions/runs/39023221467) — success.
+- [Mnemonic kernel journey (push)](https://github.com/hahnbanach/mrcall-desktop/actions/runs/39023217727) — success.
+- [RPC parameter and task contracts (push)](https://github.com/hahnbanach/mrcall-desktop/actions/runs/39023217670) — success.
+- [Memory write boundary (push)](https://github.com/hahnbanach/mrcall-desktop/actions/runs/39023217672) — success.
+
+Private ci-proof.json and source-publication.json retain exact head/parent and
+run bindings. No paid model-table run is repeated. M1 approval preceded the
+metadata-only artifact; publication and these CI results precede final closure.

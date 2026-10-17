@@ -1,3 +1,19 @@
+## 2026-10-17 — Current-main publication and ordinary reception update
+
+unchanged-input proofs remain qualified evidence. Feature publication, actual
+nonpaid CI and local critic/final closure govern readiness; none authorizes a
+hosted switch or main/tag/fleet release.
+
+The runtime owner retains six-engine live/guard/provider exclusion and three
+clone cron locks. Its56 native checks pass; a final ordinary case and explicit
+handoff remain pending. No M10 live switch or acceptance guard is active.
+Both-clone adoption and any operational results require that owner's actual
+receipts; intermediate progress is not full ordinary acceptance.
+
+1. Complete the ordinary-preservation component using affected proof and exact
+   unchanged-input reuse; keep all earlier finalized components closed.
+
+
 ## 2026-10-17 — Before current-main M10 integration
 
 The [ordinary-preservation candidate](execution-plans/2026-10-17-m10-ordinary-preservation.md)
