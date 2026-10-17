@@ -1,30 +1,32 @@
 """Explicit prices and conservative admission for supported text Messages calls.
 
-USD per million tokens; verified against Anthropic's pricing page 2026-09-11.
+USD per million tokens, from `roles/prices.py`: Anthropic's list prices as the
+model snapshot records them (each direct id at its `anthropic` endpoint's
+price, a dated id at its alias's), read at every call. The eleven direct ids
+billed before the snapshot were verified against Anthropic's pricing page
+2026-09-11 and are unchanged by it. The direct transport reserves at the list
+price, without OpenRouter's margin (brief D5).
 Unknown billing shapes refuse admission. This does not model invoices or taxes.
 """
 
 import json
 from decimal import ROUND_CEILING, Decimal
 
+from .request_shape import EFFORTS
+from .roles.catalogue import DATED
+from .roles.prices import priced
+
 
 class BudgetError(RuntimeError):
     """Paid work is paused; callers must preserve unfinished work."""
 
 
-PRICES = {
-    "claude-opus-5": (5, 25),
-    "claude-opus-4-7": (5, 25),
-    "claude-opus-4-6": (5, 25),
-    "claude-opus-4-5": (5, 25),
-    "claude-opus-4-5-20251101": (5, 25),
-    "claude-sonnet-5": (2, 10),
-    "claude-sonnet-4-6": (3, 15),
-    "claude-sonnet-4-5": (3, 15),
-    "claude-sonnet-4-5-20250929": (3, 15),
-    "claude-haiku-4-5": (1, 5),
-    "claude-haiku-4-5-20251001": (1, 5),
-}
+# Direct-transport prices come from the one price source (`roles/prices.py`:
+# the model snapshot's direct ids, a dated id as its alias; 10a's allowlist
+# went at the switch-over). A read-only mapping view that looks each id up when asked, so
+# `from budget_pricing import PRICES`, `model in PRICES` and `PRICES[model]`
+# keep working and see a snapshot layer installed after import.
+PRICES = priced("direct")
 # Input plus output tokens one request may occupy. This is the smallest
 # window among the priced models — exact for Haiku 4.5, Sonnet 4.5 and
 # Opus 4.5, and well inside the 1M the Opus 4.6+ and Sonnet 4.6+ families
@@ -47,7 +49,12 @@ _ALLOWED = {
     "stop_sequences",
     "metadata",
     "service_tier",
+    # The one request shape's reasoning (request_shape.py): bounded by max_tokens.
+    "thinking",
+    "output_config",
 }
+_THINKING = ({"type": "adaptive"}, {"type": "disabled"})
+_TOOL_KEYS = {"name", "description", "input_schema", "cache_control", "type", "strict"}
 
 
 def micro_usd(value):
@@ -82,6 +89,17 @@ def _content(content):
             if set(block) - {"type", "tool_use_id", "content", "is_error", "cache_control"}:
                 raise BudgetError("AI paused: unsupported tool result block.")
             _content(block.get("content", ""))
+        elif kind == "thinking":
+            # Replayed reasoning is priced as input like any other history.
+            if (
+                set(block) - {"type", "thinking", "signature"}
+                or not isinstance(block.get("thinking"), str)
+                or not isinstance(block.get("signature", ""), str)
+            ):
+                raise BudgetError("AI paused: unsupported reasoning block.")
+        elif kind == "redacted_thinking":
+            if set(block) - {"type", "data"} or not isinstance(block.get("data"), str):
+                raise BudgetError("AI paused: unsupported reasoning block.")
         else:
             raise BudgetError("AI paused: multimodal or server-tool costs are not supported.")
         cache = block.get("cache_control")
@@ -117,25 +135,25 @@ def _context_tokens(payload_bytes):
     return -(-payload_bytes // ADMISSION_BYTES_PER_TOKEN) + ADMISSION_PROTOCOL_TOKENS
 
 
-def request_bound(request, transport):
-    """Return micro-USD hold; bytes + protocol allowance bound text input."""
-    if transport == "openai_voice":
-        from .openai_voice import request_bound as openai_bound
-        return openai_bound(request)
-    if transport == "openrouter":
-        from .openrouter_pricing import request_bound as router_bound
+def validate_features(request, *, model_prices=None):
+    """Validate the priced text/function shape without deciding input context fit.
 
-        return router_bound(request)
-    if transport != "direct":
-        raise BudgetError(
-            "AI paused: MrCall credit pricing must include its markup before budgeted calls can resume."
-        )
+    Return its serialized byte length for conservative monetary reservation.
+    A direct caller also supplies its allowed model prices.
+    """
     if set(request) - _ALLOWED:
         raise BudgetError("AI paused: request includes an unpriced option.")
+    # The effort a provider accepts: the shape's vocabulary (low..max), never a
+    # catalogue's `minimal` or `none`, which the Messages API refuses.
+    config = request.get("output_config", {"effort": EFFORTS[0]})
+    if request.get("thinking", _THINKING[0]) not in _THINKING or not (
+        isinstance(config, dict) and set(config) == {"effort"} and config["effort"] in EFFORTS
+    ):
+        raise BudgetError("AI paused: unsupported reasoning option.")
     if request.get("service_tier", "standard_only") != "standard_only":
         raise BudgetError("AI paused: only standard service-tier pricing is supported.")
     model = request.get("model")
-    if model not in PRICES:
+    if model_prices is not None and model not in model_prices:
         raise BudgetError("AI paused: model pricing is not configured for this model.")
     output = request.get("max_tokens")
     if type(output) is not int or not 1 <= output <= 131072:
@@ -154,8 +172,9 @@ def request_bound(request, transport):
     for tool in tools:
         if (
             not isinstance(tool, dict)
-            or set(tool) - {"name", "description", "input_schema", "cache_control", "type"}
+            or set(tool) - _TOOL_KEYS
             or tool.get("type", "custom") != "custom"
+            or type(tool.get("strict", False)) is not bool
         ):
             raise BudgetError("AI paused: server-tool costs require an explicit bound.")
         if "cache_control" in tool:
@@ -168,12 +187,33 @@ def request_bound(request, transport):
         )
     except (TypeError, ValueError):
         raise BudgetError("AI paused: request cannot be priced safely.") from None
+    return payload_bytes
+
+
+def request_bound(request, transport):
+    """Return micro-USD hold; bytes + protocol allowance bound text input."""
+    if transport == "openai_voice":
+        from .openai_voice import request_bound as openai_bound
+
+        return openai_bound(request)
+    if transport == "openrouter":
+        from .openrouter_pricing import request_bound as router_bound
+
+        return router_bound(request)
+    if transport != "direct":
+        raise BudgetError(
+            "AI paused: MrCall credit pricing must include its markup before budgeted calls can resume."
+        )
+    payload_bytes = validate_features(request, model_prices=PRICES)
+    model, output = request["model"], request["max_tokens"]
+    messages, tools = request["messages"], request.get("tools") or []
     input_bound = payload_bytes + 4096 + 1024 * (len(messages) + len(tools))
     if _context_tokens(payload_bytes) + output > CONTEXT_WINDOW_TOKENS:
         raise BudgetError("AI paused: request exceeds the supported 200000-token context window.")
     in_rate, out_rate = PRICES[model]
     # All input at one-hour cache-write rate: no assumed cache hit savings.
-    return input_bound * in_rate * 2 + output * out_rate
+    bound = input_bound * in_rate * 2 + output * out_rate
+    return int(bound.to_integral_value(rounding=ROUND_CEILING))
 
 
 def usage_cost(model, usage):
@@ -212,14 +252,17 @@ def usage_cost(model, usage):
     split = usage.get("cache_creation")
     if split is not None:
         if not isinstance(split, dict) or set(split) - {
-            "ephemeral_5m_input_tokens", "ephemeral_1h_input_tokens"
+            "ephemeral_5m_input_tokens",
+            "ephemeral_1h_input_tokens",
         }:
             raise BudgetError("AI paused: invalid cache usage; reservation remains.")
         short = split.get("ephemeral_5m_input_tokens", 0)
         long = split.get("ephemeral_1h_input_tokens", 0)
         if (
-            type(short) is not int or type(long) is not int
-            or short < 0 or long < 0
+            type(short) is not int
+            or type(long) is not int
+            or short < 0
+            or long < 0
             or short + long != counts["cache_creation_input_tokens"]
         ):
             raise BudgetError("AI paused: inconsistent cache usage; reservation remains.")
@@ -234,11 +277,15 @@ def usage_cost(model, usage):
 
 
 def validate_response_model(requested, returned):
-    """Only the admitted model or a vetted same-price snapshot can settle."""
-    snapshots = {
-        "claude-haiku-4-5": "claude-haiku-4-5-20251001",
-        "claude-sonnet-4-5": "claude-sonnet-4-5-20250929",
-        "claude-opus-4-5": "claude-opus-4-5-20251101",
-    }
-    if returned != requested and returned != snapshots.get(requested, requested):
-        raise BudgetError("AI paused: response model differs from the authorized model; reservation retained.")
+    """Only the admitted model or a dated snapshot of it can settle.
+
+    A response may name the requested id or ``<requested>-YYYYMMDD``: a dated
+    snapshot is priced as its alias (brief D5, `roles/catalogue.DATED`), so
+    the reservation taken for the requested id settles it. Any other id keeps
+    the reservation.
+    """
+    dated = DATED.fullmatch(returned) if isinstance(returned, str) else None
+    if returned != requested and not (dated and dated["alias"] == requested):
+        raise BudgetError(
+            "AI paused: response model differs from the authorized model; reservation retained."
+        )

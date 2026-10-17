@@ -146,6 +146,22 @@ jobs:
         with:
           python-version: '3.11'
 
+      - name: Embed the published model table (refuse a stale or failing copy)
+        # The engine falls back to zylch/llm/roles/{table,snapshot}.json when its
+        # run-time download fails (milestone 10, brief D8-D9), so the release
+        # bundles what the daily model-table job last published on the
+        # model-table data branch (v1/), checked with the static gates against
+        # this build's requirements.json and refused when its snapshot was read
+        # more than 14 days ago: the job republishes the snapshot on every run
+        # that publishes, so an older one means the job has stopped.
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch --no-tags --depth=1 origin model-table
+          git show FETCH_HEAD:v1/table.json > zylch/llm/roles/table.json
+          git show FETCH_HEAD:v1/snapshot.json > zylch/llm/roles/snapshot.json
+          python scripts/model_table_release.py --max-age-days 14
+
       - name: Install libmagic (macOS only)
         if: runner.os == 'macOS'
         shell: bash

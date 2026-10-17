@@ -25,7 +25,6 @@ import subprocess
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Dict, List, Sequence
-from unittest.mock import Mock
 
 from zylch.memory.mnemonic import agent
 from zylch.memory.mnemonic import contracts as c
@@ -35,12 +34,11 @@ from zylch.storage.database import get_session
 from zylch.storage.models import Blob, MemoryOperation
 
 from tests.memory import corpus_live_env as env
+from tests.memory import corpus_live_provider as provider
 from tests.memory import mnemonic_cases as cases
-from tests.memory.mnemonic_env import client, text_response
 
 OUTCOME_ACTION = {"skipped": "SKIP", "review_needed": "REVIEW"}
 UNPRICED_MODEL = "claude-corpus-unpriced"
-UNPRICED_MESSAGE = "AI paused: model pricing is not configured for this model."
 CANARY_NOTE = (
     "The canary is `merge_gate_selfcheck` called directly inside an explicit preparation run of "
     "the profile: `merge_canary_policy` and `record_merge_canary` are not exercised and the "
@@ -120,7 +118,9 @@ def judge(spec: dict, row: dict, seeded: env.Seeded) -> dict:
         kids = [o for o in row["operations"] if o["parent_event_id"]]
         if len(kids) < len(expected["children"]) or any(o["state"] == "pending" for o in kids):
             critical.append("children truncated or left pending")
-        if any(f"sender-{spec['id']}@corpus.invalid" in t for t in texts):
+        # The identifier header only: a body may quote the sender's address (audit B2).
+        sender = f"sender-{spec['id']}@corpus.invalid"
+        if any(sender in (parse_header(t).get("email") or "") for t in texts):
             critical.append("a child inherited the sender's identity")
     if not committed:
         outcomes = {OUTCOME_ACTION.get(o["outcome"], o["outcome"]) for o in row["operations"]}
@@ -129,7 +129,9 @@ def judge(spec: dict, row: dict, seeded: env.Seeded) -> dict:
             noncritical.append(f"no commit and no allowed outcome: {reasons}")
     joined = "\n".join(texts).lower()
     for token in expected.get("must_preserve", []):
-        if committed and token.lower() not in joined:
+        # An entry may list alternatives, the same substance in either language (audit C1).
+        alternatives = [token] if isinstance(token, str) else token
+        if committed and not any(a.lower() in joined for a in alternatives):
             noncritical.append(f"must_preserve missing: {token}")
     for token in expected.get("must_not_assert", []):
         if token.lower() in joined:
@@ -158,7 +160,8 @@ def canary_check(runner: env.Runner) -> dict:
     from zylch.memory.llm_merge import merge_gate_selfcheck
 
     if runner.transport.dry:
-        service = SimpleNamespace(client=client('{"action": "SKIP", "reason": "two subjects"}'))
+        skip = '{"action": "SKIP", "reason": "two subjects"}'
+        service = SimpleNamespace(client=provider.scripted_client(runner.profile.arm, skip))
     else:
         from zylch.llm import routed_model
         from zylch.memory.llm_merge import LLMMergeService
@@ -195,15 +198,13 @@ def budget_refusal_check(runner: env.Runner) -> dict:
 
 def unpriced_refusal_check(runner: env.Runner) -> dict:
     """A role model the catalog does not price is refused before dispatch; not semantic health."""
-    spec = cases.case("customer_price_correction")
-    scripted = None
-    if runner.transport.dry:
-        from zylch.llm.client import LLMClient
-
-        scripted = LLMClient(transport="direct", api_key="fake", model=UNPRICED_MODEL)
-        scripted._client.messages.create = Mock(side_effect=[text_response("{}")])
+    spec, arm = cases.case("customer_price_correction"), runner.profile.arm
+    scripted = provider.unpriced_client(arm, UNPRICED_MODEL) if runner.transport.dry else None
     kwargs = runner.transport.decision_kwargs([], scripted=scripted)
-    runner.profile.write_env(extra=[f"MODEL_MEMORY_EXTRACT={UNPRICED_MODEL}"])
+    # An interactive decision routes through MODEL_MNEMONIC, which the profile
+    # sets to the arm (M10); the later line wins, so the turn runs unpriced.
+    unpriced = [f"{role_key}={UNPRICED_MODEL}" for role_key in provider.ROLE_KEYS[:2]]
+    runner.profile.write_env(extra=unpriced)
     try:
         (op,), spent = checked(runner, "unpriced", lambda: runner.interactive(spec, kwargs))
     finally:
@@ -211,7 +212,7 @@ def unpriced_refusal_check(runner: env.Runner) -> dict:
     return {
         "outcome": op["outcome"],
         "reason": op["reason"],
-        "message_matches": UNPRICED_MESSAGE in op["reason"],
+        "message_matches": arm.unpriced_message in op["reason"],
         "label": "fail-closed behaviour, not semantic health",
         **spent,
     }
@@ -221,10 +222,11 @@ def truncation_check(runner: env.Runner) -> dict:
     """``MNEMONIC_MAX_TOKENS`` patched low for one run: three refused rounds, then review."""
     spec = cases.case("global_opening_hours")
     texts = runner.seeded.decisions(spec) * c.MAX_DECISION_ATTEMPTS
-    scripted = client() if runner.transport.dry else None
-    if scripted is not None:
-        replies = [text_response(t, "max_tokens") for t in texts]
-        scripted._client.messages.create = Mock(side_effect=replies)
+    scripted = None
+    if runner.transport.dry:
+        arm = runner.profile.arm
+        replies = [provider.text_response(arm, t, "max_tokens") for t in texts]
+        scripted = provider.scripted_client(arm, *replies)
     kwargs = runner.transport.decision_kwargs(texts, scripted=scripted)
     original = agent.MNEMONIC_MAX_TOKENS
     agent.MNEMONIC_MAX_TOKENS = 16
@@ -263,10 +265,18 @@ def ledger_fields(runner: env.Runner) -> dict:
 
 
 def manifest_for(runner: env.Runner) -> dict:
+    from zylch.llm.roles import catalogue
+
+    arm, incidents = runner.profile.arm, cases.FIXTURES / "incidents.json"
     return {
-        "arm": "anthropic-byok",
+        "arm": f"{arm.provider}:{arm.model}",
+        "arm_id": arm.id,
+        "arm_source": arm.source,
+        "provider": arm.provider,
         "mode": "dry" if runner.transport.dry else "live",
-        "model": env.ARM_MODEL,
+        "model": arm.model,
+        "case_set_sha256": hashlib.sha256(incidents.read_bytes()).hexdigest(),
+        "snapshot_version": catalogue.layers()[0]["version"],
         "prompt_version_sha256": hashlib.sha256(prompts.MNEMONIC_INSTRUCTIONS.encode()).hexdigest(),
         "extraction_prompt_sha256": hashlib.sha256(env.EXTRACTION_PROMPT.encode()).hexdigest(),
         "mnemonic_max_tokens": c.MNEMONIC_MAX_TOKENS,

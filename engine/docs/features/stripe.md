@@ -1,71 +1,74 @@
-# Stripe account connection
+# Private Stripe connection and reads
 
-<!-- doc-scope:start -->
-Scope: engine-owned read-only Stripe lifecycle, private credentials, RPC evidence
-and the limits of local acceptance. Desktop configuration uses the same RPCs.
-<!-- doc-scope:end -->
+Scope: the native `stripe.*` RPC lifecycle and bounded private Stripe evidence.
+These are preserved current-runtime capabilities in the local M10 successor;
+source or synthetic installed proof does not establish live provider acceptance.
+No payment mutation or automatic company-memory import is provided here.
 
-The authenticated `stripe` RPC namespace connects one restricted test or live
-account key per verified profile. `system.capabilities.stripe = 1` advertises it.
-A Qonto account connection is unnecessary. Immutable Firebase UID, selected
-profile/database, private installation identity and current company memory must
-agree. Missing identity, expired sessions, company joins and unsafe private files
-fail closed. Hosted identity uses `STRIPE_HOST_ID_FILE` outside the transferable
-profile, with the existing `QONTO_HOST_ID_FILE` accepted as an installation-only
-fallback. A hosted service needs a persistent service-owned private directory
-(mode 0700); the engine creates the installation file privately (mode 0600).
-The company binding has a separate Stripe namespace.
+## Connection and consent
 
-`stripe.test(api_key)` probes `/v1/account`, customers, payment intents, charges,
-invoices and subscriptions. All six endpoints must be readable. A restricted key
-needs account identity and read access to every named resource; successful probes
-establish available reads, not the absence of other permissions on the key.
-Restricted-key permission labels and real-account acceptance still require a
-configured provider account. Unrestricted secret, publishable and organization
-keys are rejected. Test does not persist credentials.
+`system.capabilities` advertises `stripe:1`. The dispatcher registers nine
+methods from `rpc/stripe.py` and refuses duplicate registrations:
 
-Test returns `account: {id,name}`, `mode`, resource `capabilities`, `company_name`,
-`challenge_id` and numeric Unix-seconds `expires_at`. Save calls
-`stripe.connect(api_key, challenge_id, authority_confirmed=true)`. It consumes the
-10-minute challenge bound to the exact key digest, account, mode, generation,
-Firebase session instance, profile, installation and company, then re-probes.
-Status returns safe metadata; disconnect erases the saved key and advances the
-generation. Local state is private encrypted profile configuration in
-`stripe.connection`, with its separate private Fernet key `stripe.key`; hosted
-state uses the injected `ENCRYPTION_KEY`. No credential appears in settings or
-read responses. Private atomic replacement and process locks serialize state.
-An unreadable envelope fails closed. Disconnect does not revoke Stripe's key.
+| Method | Contract |
+|---|---|
+| `stripe.status` | Safe connection/account/mode/generation metadata. |
+| `stripe.test` | Probe a restricted API key and return account, capabilities and an expiring consent challenge. |
+| `stripe.connect` | Consume that exact challenge with `authority_confirmed=true`, re-probe and save the encrypted connection. |
+| `stripe.disconnect` | Remove the saved credential, advance generation and invalidate challenges. |
+| `stripe.customers` | Bounded customer page, optional exact email filter. |
+| `stripe.payments` | Bounded payment-intent page, optional customer filter. |
+| `stripe.invoices` | Bounded invoice page, optional customer filter. |
+| `stripe.subscriptions` | Bounded subscription page, optional customer filter. |
+| `stripe.detail` | One exact supported resource and validated identifier. |
 
-The adapter sends only GET requests to `https://api.stripe.com`, with redirects
-disabled, a 15-second timeout, one bounded 429 retry and the pinned
-`Stripe-Version: 2026-02-25.clover`. This supported version was checked against
-[Stripe's versioning reference](https://docs.stripe.com/api/versioning?lang=dotnet).
-Hosted tenant egress additionally needs the explicit `api.stripe.com` TCP 443
-endpoint. Connection RPCs do not alter firewall policy; hosted deployment must
-permit that endpoint before testing.
+Only restricted `rk_test_` or `rk_live_` keys with the validated shape are
+accepted. Test probes the account and supported resources. The challenge expires
+after 600 seconds and binds the exact key digest, verified session, UID/profile,
+host/company identity, connection generation and observed account/mode/capabilities.
+It is single-use; changed or stale identity/result refuses connection.
+The displayed company name is a bounded, capability-redacted label, not authority.
 
-`stripe.customers`, `payments`, `invoices` and `subscriptions` return one bounded
-page (`limit` 1–50, optional `starting_after`). Customers accept exact `email`;
-the other lists accept `customer`. Subscriptions request `status=all` so canceled
-records are included. Payments lists payment intents; `latest_charge` connects
-related charge evidence. `stripe.detail(resource,id)` accepts only customers,
-payment_intents, charges, invoices or subscriptions. No generic URL, connected
-account or owner override exists. Every read rechecks provider account identity;
-results and delayed responses are fenced against session and connection changes.
-Rejected authentication or permissions revoke the stored connection.
+Hosted calls require the selected immutable UID/profile, matching unexpired
+verified Firebase session, bound company store/key and a stable host identity
+outside the profile. A pending company join or active join fence refuses. The
+hosted identity file is selected by `STRIPE_HOST_ID_FILE`, falling back to the
+existing `QONTO_HOST_ID_FILE`; a Qonto connection is not required.
 
-Results carry account ID, mode, generation, UTC retrieval time, bounded coverage,
-minimal scalar data and list cursors. Money stays integer Stripe minor units with
-its original currency; no decimal conversion or cross-currency sum is performed.
-Payment intents and charges must not be counted twice. Resource status meanings
-remain distinct. Provider metadata, descriptions, addresses and payment secrets
-are excluded. Customer name/email may repeat: callers must disambiguate returned
-IDs. Failures return constant safe errors rather than empty-success evidence.
+## Storage and revocation
 
-These explicit RPC/CLI reads do not create model calls, finance history, imports,
-tasks, mail or shared memory. Invoking the kernel skill can expose returned
-financial evidence to that agent's selected model and transcript; it has no
-Desktop managed-history guarantee. Disconnect cannot retract earlier disclosure.
-The fixture suite exercises real dispatch and HTTP request construction, private
-restart persistence, identity fences, revocation and minimal money projection.
-It does not prove a real Stripe account, packaged Electron or hosted transport.
+`stripe.connection` is a private encrypted profile file. Hosted encryption uses
+the configured `ENCRYPTION_KEY`; local operation uses private `stripe.key`.
+Private file/lock helpers and atomic replacement preserve the scoped lifecycle.
+Secrets stay out of RPC logs/errors and public connection metadata. Disconnect
+replaces saved content with a disconnected generation; it does not revoke the
+upstream Stripe API key or delete historical backups.
+
+Reads bind the same actor/session/generation before and after provider awaits.
+Each read rechecks the Stripe account. Disconnect, changed credentials/account,
+expired session or changed company/host refuses delivery. Authentication or
+permission failures revoke the current saved generation. No operation changes
+an external Stripe object.
+
+## Bounded evidence
+
+The transport sends GET only to `https://api.stripe.com/v1/`, fixes the API
+version and refuses redirects. One 429 response may retry once after 0.2 seconds;
+other errors map to safe fixed outcomes. Responses above 2 MB refuse.
+
+List limits are 1–50, default 25, with validated `starting_after` cursors. Detail
+supports customers, payment_intents, charges, invoices and subscriptions.
+Resource prefixes, live/test mode, types, amounts, currencies, page bounds,
+customer binding and returned IDs are validated. Only allowlisted scalar fields
+and selected linked IDs are returned. Responses carry account/mode/generation,
+retrieval time and explicit `bounded_page` or `single_record` coverage; a page is
+not a complete financial statement or a proof that no other records exist.
+
+Preservation acceptance uses scripted HTTP and disposable encrypted files. Live
+Stripe access, actual production file compatibility, user-interface flow and
+company/funding conclusions require their own evidence; none follows from RPC
+discovery or a passing source suite.
+
+The [Desktop Stripe card](../../../app/docs/stripe.md) and upstream tests are
+retained by the [current-main integration](../../../docs/evaluations/2026-10-17-m10-current-main-source.md).
+Its source/UI fixtures do not replace real provider or installed-user acceptance.

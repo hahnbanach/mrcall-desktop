@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "zylch"
-version = "0.1.57.dev1"
+version = "0.1.57.dev1+m10.20261017.3"
 description = "Intelligent sales agent"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -66,11 +66,26 @@ dependencies = [
 
 [project.optional-dependencies]
 evaluation = ["jsonschema>=4.23,<5"]
+operator-mcp = ["mcp==1.30.0", "uvicorn>=0.54,<0.55", "jsonschema>=4.23,<5"]
 # Isolated M1 runner only; do not upgrade the packaged engine's SDK for a smoke.
 voice-smoke = ["openai==3.19.0", "aiohttp>=3.12,<4", "websockets>=14,<18"]
 
 [project.scripts]
 zylch = "zylch.cli.main:main"
+
+[tool.setuptools]
+include-package-data = false
+
+[tool.setuptools.package-data]
+"zylch" = ["prompts/email_thread_classify.txt"]
+"zylch.llm.roles" = [
+    "requirements.json",
+    "table.json",
+    "snapshot.json",
+    "measured.json",
+    "contract/snapshot.schema.json",
+    "contract/table.schema.json",
+]
 
 [tool.setuptools.packages.find]
 include = ["zylch*"]

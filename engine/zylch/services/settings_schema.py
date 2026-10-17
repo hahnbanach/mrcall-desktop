@@ -14,13 +14,14 @@ from __future__ import annotations
 
 from typing import Any, Dict, List, TypedDict
 
+from zylch.llm import roles
 from zylch.services.credential_policy import excluded_finance_setting
 
 
 class ModelChoice(TypedDict, total=False):
-    value: str  # canonical Anthropic model id written to the .env
-    label: str  # friendly tier name shown in the dropdown
-    note: str  # one-line hint (speed / cost positioning)
+    value: str  # model id written to the .env (direct or OpenRouter catalogue id)
+    label: str  # readable name derived from the id (`roles.label`)
+    note: str  # one-line hint: the transport the id runs on
 
 
 class SettingsField(TypedDict, total=False):
@@ -38,17 +39,10 @@ class SettingsField(TypedDict, total=False):
 
 
 # Legacy schema choices; Desktop uses the billing-specific llm.models catalog.
-MODEL_CHOICES: List[ModelChoice] = [
-    {"value": "claude-haiku-4-5", "label": "Haiku", "note": "Fastest & cheapest"},
-    {"value": "claude-sonnet-5", "label": "Sonnet", "note": "Balanced"},
-    {"value": "claude-opus-5", "label": "Opus", "note": "Strongest everyday"},
-    {"value": "z-ai/glm-5.2", "label": "GLM 5.2", "note": "OpenRouter only; task quality unmeasured"},
-]
-
-# Convenience ids for per-knob `suggested` values (never suggest Fable).
-_HAIKU = "claude-haiku-4-5"
-_SONNET = "claude-sonnet-5"
-_OPUS = "claude-opus-5"
+# Choices, role suggestions, the OpenRouter default and the preset help come
+# from the role table through its reader (`zylch/llm/roles/__init__.py`), at
+# each `get_schema()` call: the table in force is refreshed at run time
+# (`zylch/llm/roles/distribution.py`), so nothing is read at import.
 
 
 # Order = display order. Groups are also rendered in this order.
@@ -74,7 +68,6 @@ SETTINGS_SCHEMA: List[SettingsField] = [
         "optional": True,
         "options": ["economy", "balanced", "custom"],
         "default": "custom",
-        "help": "Economy: Haiku or GLM. Balanced: Sonnet or GLM. Explicit role overrides remain active. OpenRouter task quality is unmeasured.",
     },
     {
         "key": "OPENROUTER_API_KEY",
@@ -91,8 +84,7 @@ SETTINGS_SCHEMA: List[SettingsField] = [
         "type": "text",
         "group": "LLM",
         "optional": True,
-        "default": "z-ai/glm-5.2",
-        "help": "Only models with a verified price ceiling can run. GLM memory quality is unmeasured.",
+        "help": "Only models with a verified price ceiling can run. Memory quality on OpenRouter is unmeasured.",
     },
     {
         "key": "PREPARATION_BATCH_SIZE",
@@ -147,7 +139,7 @@ SETTINGS_SCHEMA: List[SettingsField] = [
         ),
     },
     # Per-worker model overrides. Each pins ONE background job to a specific
-    # Anthropic model so extraction-shaped jobs can drop to a cheaper tier
+    # model so extraction-shaped jobs can drop to a cheaper tier
     # while judgment-shaped jobs stay strong. Blank = engine default (current
     # behaviour). Applied on the worker's next call — no daemon restart.
     {
@@ -156,8 +148,6 @@ SETTINGS_SCHEMA: List[SettingsField] = [
         "type": "model",
         "group": "LLM",
         "optional": True,
-        "model_choices": MODEL_CHOICES,
-        "suggested": _OPUS,
         "help": (
             "Which model reads new mail and decides what becomes a task. "
             "Judgment-shaped work on customer mail — the suggestion keeps it "
@@ -171,8 +161,6 @@ SETTINGS_SCHEMA: List[SettingsField] = [
         "type": "model",
         "group": "LLM",
         "optional": True,
-        "model_choices": MODEL_CHOICES,
-        "suggested": _SONNET,
         "help": (
             "Which model re-judges open tasks when their thread gets new "
             "activity. Applies on the next call — no restart."
@@ -184,8 +172,6 @@ SETTINGS_SCHEMA: List[SettingsField] = [
         "type": "model",
         "group": "LLM",
         "optional": True,
-        "model_choices": MODEL_CHOICES,
-        "suggested": _SONNET,
         "help": (
             "Which model runs the cluster- and topic-dedup sweeps over the "
             "open-task list. Applies on the next call — no restart."
@@ -197,8 +183,6 @@ SETTINGS_SCHEMA: List[SettingsField] = [
         "type": "model",
         "group": "LLM",
         "optional": True,
-        "model_choices": MODEL_CHOICES,
-        "suggested": _HAIKU,
         "help": (
             "Which model extracts facts into memory. Rigid structured "
             "output — a smaller model usually suffices. Applies on the next "
@@ -211,8 +195,6 @@ SETTINGS_SCHEMA: List[SettingsField] = [
         "type": "model",
         "group": "LLM",
         "optional": True,
-        "model_choices": MODEL_CHOICES,
-        "suggested": _OPUS,
         "help": (
             "Which model guards the memory merge gate. Keep this strong — "
             "the 2026-06 broken-open incident showed this is not where to "
@@ -484,5 +466,30 @@ KNOWN_KEYS = {f["key"] for f in SETTINGS_SCHEMA if not excluded_finance_setting(
 
 
 def get_schema() -> List[Dict[str, Any]]:
-    """Return the schema as a plain list of dicts (JSON-serialisable)."""
-    return [dict(f) for f in SETTINGS_SCHEMA if not excluded_finance_setting(f["key"])]
+    """Return the schema as a plain list of dicts (JSON-serialisable).
+
+    The model fields are filled at the call from the table in force: every
+    ``type: "model"`` field offers `roles.model_choices()` (the rankings, no
+    excluded family) and greys its role's suggestion when the table has one;
+    the preset help states the ceilings and the OpenRouter field's placeholder
+    is the economy CHAT pick when the table has one. An excluded finance
+    setting (`credential_policy.excluded_finance_setting`) is not listed."""
+    choices: List[ModelChoice] = roles.model_choices()
+    fields = []
+    for template in SETTINGS_SCHEMA:
+        if excluded_finance_setting(template["key"]):
+            continue
+        field = dict(template)
+        if field["type"] == "model":
+            field["model_choices"] = choices
+            suggestion = roles.suggested(field["key"])
+            if suggestion:
+                field["suggested"] = suggestion
+        elif field["key"] == "LLM_MODEL_PRESET":
+            field["help"] = roles.preset_help()
+        elif field["key"] == "OPENROUTER_MODEL":
+            default = roles.default_model("openrouter")
+            if default:
+                field["default"] = default
+        fields.append(field)
+    return fields

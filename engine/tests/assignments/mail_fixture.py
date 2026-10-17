@@ -116,6 +116,8 @@ class MailFixture:
             if self.fail_search:
                 return "NO", [b"fixture unavailable"]
             criteria = args[-1]
+            if criteria == "ALL":
+                return "OK", [b" ".join(str(uid).encode() for uid in self.messages[self.selected])]
             targets = re.findall(r'"(<[^" ]+>)"', criteria)
             result = []
             for uid, raw in self.messages[self.selected].items():
@@ -139,9 +141,19 @@ class MailFixture:
                     continue
                 assert "BODY.PEEK" in args[1]
                 if "HEADER.FIELDS" in args[1]:
+                    message = message_from_bytes(raw)
+                    fields = re.search(r"HEADER.FIELDS \(([^)]*)\)", args[1]).group(1).split()
                     raw = (
-                        "Message-ID: " + str(message_from_bytes(raw)["Message-ID"]) + "\r\n\r\n"
+                        "".join(
+                            f"{name}: {value}\r\n"
+                            for name in fields
+                            for value in message.get_all(name, [])
+                        )
+                        + "\r\n"
                     ).encode()
-                result.append((f"1 (UID {uid} BODY[] {{{len(raw)}}}".encode(), raw))
+                    prefix = f"1 (UID {uid} FLAGS () BODY[HEADER.FIELDS ({' '.join(fields)})] {{{len(raw)}}}"
+                else:
+                    prefix = f"1 (UID {uid} BODY[] {{{len(raw)}}}"
+                result.append((prefix.encode(), raw))
             return "OK", result
         raise AssertionError(command)

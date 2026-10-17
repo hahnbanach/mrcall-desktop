@@ -5,6 +5,21 @@ uses maximum reasoning through OpenRouter Chat completions, pinned to
 DigitalOcean. The engine promotes the request to a combined 8192-token ceiling
 before quotation or budget admission. This ceiling includes hidden reasoning;
 actual receipt cost, not the reserved ceiling, is settled after completion.
+Its price cap (`max_price`) and reservation follow the DigitalOcean endpoint's
+price in the model snapshot × the margin 1.25 (`k3_reasoning.rates`), or K3's
+reference price (the snapshot's price for K3) × 1.25 on a day the snapshot
+does not admit that endpoint. The snapshot admits it whenever it is eligible
+(up, an allowed quantization, tools), whatever its price against K3's
+reference price (`requirements.json` `provider_policy.pinned_endpoints`), so
+an outlier reference never prices the pin out of its own cap.
+Input fit is decided by the provider's tokenizer; monetary payload bytes are
+not a context estimate. The local Chat wire explicitly disables context
+compression and preserves evidence. Output reserves also respect positive
+snapshot context metadata. Existing assistant prompt/result bounds remain
+visible through their refusal/truncation metadata. The credits server builds
+its own wire and needs matching admission/compression behavior; local engine
+acceptance does not establish that server compatibility.
+
 Other configured models retain their existing transport. There is no automatic
 model/provider fallback or inference retry.
 
@@ -20,8 +35,10 @@ retains its reservation for reconciliation. The timeout is 600 seconds for K3
 max (reasoning is slower than the legacy disabled-reasoning transport).
 
 Auxiliary narration, correction learning, compaction and solve helpers follow
-the configured model instead of pinning Anthropic. An explicit
-`ZYLCH_COMPACTION_MODEL` override is preserved. Reply classification uses K3's
+the configured model instead of pinning Anthropic. Since milestone 10a
+compaction is the `COMPACTION` role: `ZYLCH_COMPACTION_MODEL` is no longer read,
+and an explicit override is `MODEL_COMPACTION` ([model selection](model-selection.md)).
+Reply classification uses K3's
 supported default sampling when K3 is selected.
 
 Saved memory extraction prompts receive a final serialization-only instruction:

@@ -24,7 +24,7 @@ try:
 except ModuleNotFoundError:  # legacy optional agent was removed from this tree
     MrCallAgent = None  # type: ignore[assignment,misc]
     MRCALL_AGENT_TOOLS = []
-from zylch.llm import make_llm_client
+from zylch.llm import make_llm_client, routed_model
 from zylch.services.approval_gate import (
     APPROVED,
     draft_approval_card,
@@ -158,7 +158,7 @@ class TaskOrchestratorAgent(BaseConversationalAgent):
         self.approval_callback = approval_callback
 
         # LLM client for orchestration decisions
-        self.llm = make_llm_client()
+        self.llm = make_llm_client(model=routed_model("MODEL_CHAT"))
 
         # Lazy-loaded sub-agents
         self._emailer_agent: Optional[EmailerAgent] = None

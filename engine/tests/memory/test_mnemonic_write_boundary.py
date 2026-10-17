@@ -94,6 +94,17 @@ PERMIT_CALLERS = Counter({("zylch/memory/mnemonic/commit.py", "_commit", PERMIT_
 BUILT_SQL = Counter(
     {
         ("scripts/backfill_notifier_task_contacts.py", "run", "execute"): 1,
+        # Reviewed acceptance helper: private ledgers and owned guard objects only.
+        # These are dynamic-SQL sites, not company-memory writer exemptions.
+        ("scripts/m10_acceptance_budget.py", "activate", "execute"): 4,
+        ("scripts/m10_acceptance_budget.py", "activate", "executemany"): 2,
+        ("scripts/m10_acceptance_budget.py", "baseline", "execute"): 1,
+        ("scripts/m10_acceptance_budget.py", "deactivate", "execute"): 2,
+        ("scripts/m10_acceptance_budget.py", "inspect", "execute"): 2,
+        ("scripts/m10_acceptance_budget.py", "product_schema", "execute"): 1,
+        ("scripts/m10_acceptance_budget.py", "retained_baseline", "execute"): 1,
+        ("scripts/m10_acceptance_budget.py", "status_row", "execute"): 5,
+        ("scripts/m10_acceptance_budget.py", "validate_active", "execute"): 3,
         ("zylch/email/sync_cursor.py", "drop_cursor", "exec_driver_sql"): 1,
         ("zylch/email/sync_cursor.py", "get_cursor", "exec_driver_sql"): 1,
         ("zylch/email/sync_cursor.py", "list_cursors", "exec_driver_sql"): 2,

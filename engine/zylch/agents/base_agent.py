@@ -12,7 +12,7 @@ Agents should inherit from this base class and define their own:
 import logging
 from typing import Any, Dict, List, Optional
 
-from zylch.llm import LLMClient, make_llm_client
+from zylch.llm import LLMClient, make_llm_client, routed_model
 from zylch.storage import Storage
 from zylch.memory import HybridSearchEngine, EmbeddingEngine, MemoryConfig
 
@@ -35,7 +35,7 @@ class SpecializedAgent:
         """
         self.storage = storage
         self.owner_id = owner_id
-        self.llm: LLMClient = make_llm_client()
+        self.llm: LLMClient = make_llm_client(model=routed_model("MODEL_CHAT"))
         self.model = self.llm.model
 
         # Initialize hybrid search for context gathering

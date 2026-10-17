@@ -76,13 +76,19 @@ its previously recorded estimates. Neither value should be described as an invoi
 
 ## Supported billing surface
 
-The guard uses an exact Anthropic standard-tier model-price allowlist, UTF-8
-text size plus protocol allowance, full maximum output, and conservative cache
-creation costs. Admission and pricing read that size differently: the hold
-prices one token per payload byte, which no tokenizer exceeds, while the
-context check converts bytes to tokens at the densest measured ratio and
-refuses a combined input and output above 200,000 tokens — the smallest
-window among the priced models. Unknown models, premium options, multimodal and
+The guard uses the model snapshot's prices (below), UTF-8 payload bytes plus
+protocol allowance, full maximum output and conservative cache creation costs.
+The monetary hold prices one token per payload byte. Direct Anthropic context
+admission keeps its measured conversion and 200,000-token combined bound.
+OpenRouter input fit instead uses provider tokenization, for both Messages and
+translated K3 Chat: monetary bytes are not context tokens. Output reserves stay
+finite (131072 narrowed by positive snapshot context length; K3 max 8192 including
+reasoning). Both OpenRouter wire formats explicitly disable context compression;
+no automatic model change, inference retry or overflow retry occurs. Existing
+assistant prompt/result limits remain, with partial results marked in metadata.
+Messages holds cover the larger original/dispatched body and K3 the larger
+original/translated bound. Local evidence and the separate server-compatibility
+gate are in the [admission evaluation](../../../docs/evaluations/2026-10-15-m10-admission.md). Unknown models, premium options, multimodal and
 provider-side tools refuse before dispatch. Ordinary client-executed function
 tools remain supported and each subsequent LLM request gets its own reservation.
 
@@ -92,7 +98,10 @@ rejects a quote for another business, and invalidates existing clients when the
 saved selection changes. An unset selection leaves the server's existing sole-
 business resolution in force; it refuses an ambiguous account.
 
-MrCall credits use the additive `mrcall-bounded-v1` server contract. A free quote
+MrCall credits use the bounded server contract in protocol `mrcall-bounded-v2`
+([protocol](../../zylch/llm/roles/contract/protocol-v2.md)); a server that
+answers in v1 pauses paid work with "update the billing server", and a
+reservation quoted under v1 before an upgrade still settles. A free quote
 binds the account, business, request and frozen tariff, including markup and
 credit rounding. Its maximum debit is reserved atomically with the quote in
 `llm_billing_authorizations` before execute. Only a matching receipt of actual
@@ -100,12 +109,20 @@ committed credit consumption can settle the reservation. Legacy proxy servers
 refuse with upgrade guidance. Lost answers can recover their billing receipt
 through read-only status without repeating inference or consumption.
 
-OpenRouter supports GLM 5.2, Kimi K3 and namespaced Claude Opus 5, Sonnet 5
-and Haiku 4.5. Legacy requests use the Messages API with thinking disabled;
+OpenRouter supports any model the model snapshot prices
+([model selection](model-selection.md)), so an explicit choice keeps running.
+Requests use the Messages API in the engine's one request shape (reasoning
+from the model's published metadata);
 [K3 max](k3-reasoning.md) uses Chat completions with maximum reasoning. Both
-adapters send decimal price caps, disable fallbacks and validate the
-actual charge returned in `usage.cost`. Missing or invalid receipts keep holds.
-Explicit model/feature allowlists apply; this is not unlimited model routing.
+adapters send decimal price caps and validate the actual charge returned in
+`usage.cost`. Fallbacks between providers happen only within the admitted
+set: a request whose `only` lists the endpoints the snapshot admitted may
+fall back among them, and no further; a request without `only` never falls
+back, and K3's pin to its one endpoint never does (the billing server's M10
+release applies the same rule). A refused call (429, 402 from an account out of
+credit, or another status proving no work was done) releases its hold.
+Missing or invalid receipts keep holds. Unpriced models and unsupported
+features refuse; this is not unlimited model routing.
 
 The limit covers this engine/profile store. Other hosts, copied databases,
 external scripts, kernel direct API calls and Codex/Claude Code subscriptions
@@ -145,10 +162,13 @@ Implementation evidence: [incident](../investigations/2026-09-11-llm-spend-incid
 `LLM_PROVIDER` selects `anthropic`, `openrouter` or `mrcall`, even when more than
 one credential is stored. Only an unset selector uses legacy saved-Anthropic-key
 routing; an ambient key cannot override an active profile. `LLM_MODEL_PRESET`
-selects economy (Haiku/GLM), balanced (Sonnet5/GLM) or custom. Saved explicit
+selects economy (output-price ceiling USD 10 per million tokens), balanced
+(USD 20) or custom; each role's model under a ceiling comes from the model
+table's rankings ([model selection](model-selection.md)). Saved explicit
 role models take priority; the Desktop preset gesture clears individual overrides
 when saved. Existing explicit models are preserved until such a deliberate edit.
-Unconfigured models default to inexpensive Haiku or GLM. Model choice never
+No model is a default in code: a custom profile with no saved model resolves
+each role under economy. Model choice never
 changes billing provider. Long-lived clients refuse dispatch after relevant
 saved settings change; start a new run or conversation to create fresh clients.
 
@@ -175,15 +195,39 @@ results do not establish extraction or merge quality for these workloads.
 ## Model catalog and payment selection
 
 `llm.models(provider?)` is read-only and free. For `mrcall` it returns the
-billing server's authenticated capability catalog; absent or malformed catalogs
+billing server's authenticated v2 capability catalog; absent or malformed catalogs
 return `available=false`, never a fabricated local credit-model list. For BYOK
-it returns the engine's supported provider models, without needing a personal
-key or contacting a paid endpoint. Entries contain `id`, `label`, `provider`.
-The OpenRouter rates frozen on 2026-09-13 are GLM 0.6/2, Kimi K3
-2.648138063/13.28272425, Opus 5/25, Sonnet 2/10 and Haiku 1/5 USD per
-million input/output tokens. Each request enforces these provider ceilings;
-actual accounting still uses `usage.cost`. Anthropic models reserve twice the
-input ceiling to cover possible upstream one-hour cache writes.
+it returns the models the model table ranks for that provider, without needing
+a personal key or contacting a paid endpoint; no table in force returns
+`available=false`. A saved model that can run on the provider stays listed.
+Entries contain `id`, `label`, `provider`. No rate is frozen: each OpenRouter
+request is capped at, and reserved at, its model's price in the model snapshot
+× the margin 1.25 (K3: its pinned DigitalOcean endpoint's price × 1.25). Each
+request enforces these provider ceilings; actual accounting still uses
+`usage.cost`. Anthropic models reserve twice the input ceiling to cover
+possible upstream one-hour cache writes.
+
+### Where prices come from
+
+One price source, `zylch/llm/roles/prices.py`, reading the model snapshot
+(`roles/catalogue.py`: the downloaded copy, the one before it, then the build
+copy `roles/snapshot.json`) at every call. A catalogue id is priced on
+OpenRouter at its reference price, a direct id at its `anthropic` endpoint's
+price (Anthropic's list price), a dated id `<alias>-YYYYMMDD` at its alias's;
+the reference-price rule is in [model selection](model-selection.md#prices).
+`budget_pricing.PRICES` (direct) and `openrouter_pricing.RATES` are views over
+it, so a snapshot installed later reaches every request. OpenRouter holds and
+`max_price` are the price × the margin of `requirements.json`, with the
+provider policy (fallbacks only within the admitted endpoints `only` lists,
+never for K3's pin; parameters required, price sorting, the admitted
+quantizations); the direct transport reserves at the list price. A response
+may name the requested id or `<requested>-YYYYMMDD`. Tests hold the direct
+rates equal to the `anthropic` endpoint's. `usage.py`'s estimate prices an id
+at its snapshot rate; an unpriced one, which admission refuses anyway, at the
+dearest direct rate the snapshot holds, with no family matched by name. The
+reservation, settlement, unpriced refusal and corpus cap contracts above are
+unchanged since milestone 10 moved the source of the numbers to the snapshot
+and added the OpenRouter margin.
 
 Settings exposes `ANTHROPIC_MODEL`, `OPENROUTER_MODEL` and
 `MRCALL_CREDITS_MODEL` separately. Selecting a default model explicitly sets

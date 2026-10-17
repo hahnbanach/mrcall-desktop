@@ -1,9 +1,13 @@
 """routed_model() + per-worker model-routing wiring (P4 / FIX 3).
 
 routed_model() reads a MODEL_* knob LIVE from saved profile settings (blank/unset →
-None = engine default). The wiring tests assert each worker passes the
+the role's table pick; under the default `custom` preset with no base model,
+the role under `economy`, never None). The wiring tests assert each worker passes the
 resolved value straight to its client factory, so flipping a knob in the
 profile .env re-routes exactly that worker on its next call — no restart.
+The profile these tests save has no provider and no key, so it bills MrCall
+credits: an unset knob runs the first ranked id the billing server serves
+(milestone 10 S6), here a server serving every model the fixture table ranks.
 """
 
 import types
@@ -13,9 +17,13 @@ import pytest
 
 from zylch.llm import routed_model
 
+from . import model_table_fixture as fixture
+from .test_model_policy_roles import expected
+
 
 @pytest.fixture
 def saved_model(tmp_path, monkeypatch):
+    fixture.serve(fixture.everything())
     monkeypatch.setenv("ZYLCH_PROFILE_DIR", str(tmp_path))
     path = tmp_path / ".env"
     values = {}
@@ -42,21 +50,21 @@ def test_routed_model_strips_whitespace(monkeypatch, saved_model):
     assert routed_model("MODEL_UNIT_TEST") == "claude-haiku-4-5"
 
 
-def test_routed_model_blank_is_none(monkeypatch, saved_model):
-    saved_model("MODEL_UNIT_TEST", "   ")
-    assert routed_model("MODEL_UNIT_TEST") is None
+def test_routed_model_blank_is_the_role_default(monkeypatch, saved_model):
+    saved_model("MODEL_DEDUP", "   ")
+    assert routed_model("MODEL_DEDUP") == expected("economy", "DEDUP", "mrcall")
 
 
-def test_routed_model_unset_is_none(monkeypatch, saved_model):
-    saved_model("MODEL_UNIT_TEST")
-    assert routed_model("MODEL_UNIT_TEST") is None
+def test_routed_model_unset_is_the_role_default(monkeypatch, saved_model):
+    saved_model("MODEL_DEDUP")
+    assert routed_model("MODEL_DEDUP") == expected("economy", "DEDUP", "mrcall")
 
 
 def test_routed_model_is_isolated_per_key(monkeypatch, saved_model):
     saved_model("MODEL_A", "model-a")
-    saved_model("MODEL_B")
+    saved_model("MODEL_INTENT")
     assert routed_model("MODEL_A") == "model-a"
-    assert routed_model("MODEL_B") is None
+    assert routed_model("MODEL_INTENT") == expected("economy", "INTENT", "mrcall")
 
 
 # ── wiring: MODEL_TASK_DETECTION → TaskWorker.__init__ ──────────────────
@@ -86,7 +94,7 @@ def test_task_detection_knob_wired(monkeypatch, saved_model):
     assert captured["model"] == "claude-detect-x"
 
 
-def test_task_detection_knob_default_is_none(monkeypatch, saved_model):
+def test_task_detection_knob_default_is_the_role_default(monkeypatch, saved_model):
     import zylch.workers.task_creation as tc
 
     captured = {}
@@ -101,7 +109,7 @@ def test_task_detection_knob_default_is_none(monkeypatch, saved_model):
 
     saved_model("MODEL_TASK_DETECTION")
     tc.TaskWorker(MagicMock(), "owner@x.io", "owner@x.io")
-    assert captured["model"] is None
+    assert captured["model"] == expected("economy", "TASK_DETECTION", "mrcall")
 
 
 # ── wiring: MODEL_MEMORY_EXTRACT + MODEL_MEMORY_MERGE → MemoryWorker ─────

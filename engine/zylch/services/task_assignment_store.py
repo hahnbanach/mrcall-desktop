@@ -52,16 +52,56 @@ def listing() -> dict:
         return {"complete": True, "space_id": space, "items": items}
 
 
-def get(thread_key: str) -> dict:
+def authority(actor, space, root, conn, *, locked=False, deadline=None, profile_connection=None):
+    from . import task_assignment_mail as mail
+
+    schema = None
+    if locked and profile_connection is None:
+        attached = {row[1]: row[2] for row in conn.exec_driver_sql("PRAGMA database_list")}
+        path = actor.binding[2]
+        if "assignment_profile" in attached and attached["assignment_profile"] != path:
+            conn.exec_driver_sql("DETACH DATABASE assignment_profile")
+            attached.pop("assignment_profile")
+        if "assignment_profile" not in attached:
+            conn.exec_driver_sql("ATTACH DATABASE ? AS assignment_profile", (path,))
+        conn.exec_driver_sql("UPDATE assignment_profile.emails SET id=id WHERE 0")
+        schema = "assignment_profile"
+    keys, earliest, known = mail.component(
+        actor,
+        root,
+        profile_connection if profile_connection is not None else (conn if schema else None),
+        schema,
+        deadline=deadline,
+    )
+    matches = [
+        dict(row)
+        for row in conn.execute(
+            select(T).where(T.c.space_id == space, T.c.thread_key.in_(keys))
+        ).mappings()
+    ]
+    if len(matches) > 1:
+        raise AssignmentError("Conflicting assignments in RFC component", -32061)
+    old = matches[0] if matches else None
+    return old, old["thread_key"] if old else earliest, keys
+
+
+def get(thread_key: str, *, deadline=None) -> dict:
     thread(thread_key)
+    from . import task_assignment_mail as mail
+
     actor = identity.actor()
     with project_store.connection() as (conn, space):
         _admit(actor, space, conn)
-        row = (
-            conn.execute(select(T).where(T.c.space_id == space, T.c.thread_key == thread_key))
-            .mappings()
-            .one_or_none()
-        )
+        try:
+            row, authoritative, keys = authority(actor, space, thread_key, conn, deadline=deadline)
+            complete = True
+        except AssignmentError:
+            row = (
+                conn.execute(select(T).where(T.c.space_id == space, T.c.thread_key == thread_key))
+                .mappings()
+                .one_or_none()
+            )
+            authoritative, keys, complete = thread_key, [thread_key], False
         events = (
             []
             if row is None
@@ -73,8 +113,13 @@ def get(thread_key: str) -> dict:
             ]
         )
         return {
-            "complete": True,
+            "complete": complete,
             "space_id": space,
+            "thread_key": thread_key,
+            "authoritative_thread_key": authoritative,
+            "component_thread_keys": keys,
+            "component_scope_present": complete
+            and (len(keys) > 1 or bool(mail.rows(actor, thread_key, deadline=deadline))),
             "task": dict(row) if row else None,
             "events": events,
         }
@@ -99,13 +144,17 @@ def preview(
         current = _admit(actor, space, conn)
         if assignee_uid is not None:
             trust.member(current, assignee_uid)
-        old = (
-            conn.execute(select(T).where(T.c.space_id == space, T.c.thread_key == thread_key))
-            .mappings()
-            .one_or_none()
-        )
+        old, thread_key, _ = authority(actor, space, thread_key, conn)
+        if old is None:
+            from . import task_assignment_mail as mail
+
+            if not mail.rows(actor, thread_key):
+                raise AssignmentError("New assignment requires owner-scoped RFC source")
+        from . import task_assignment_mail as mail
+
         intent = {
             "version": 1,
+            "component_digest": mail.component_digest(actor, thread_key),
             "operation": operation,
             "operation_id": str(uuid.uuid4()),
             "actor_uid": actor.uid,
@@ -170,6 +219,8 @@ def commit(intent: dict, grant: dict, *, evidence: Evidence | None = None) -> di
         if replay is not None:
             return replay
     validate_intent(intent)
+    if "component_digest" not in intent:
+        raise AssignmentError("RFC component binding required; preview again", -32061)
     required = intent["operation"] == "close" or intent["source_confirmation"] is not None
     if required and evidence is None:
         raise AssignmentError("Current verified source evidence is required")
@@ -183,13 +234,21 @@ def commit(intent: dict, grant: dict, *, evidence: Evidence | None = None) -> di
         validate_intent(intent)
         if intent["assignee_uid"] is not None:
             trust.member(current, intent["assignee_uid"])
-        old = (
-            conn.execute(
-                select(T).where(T.c.space_id == space, T.c.thread_key == intent["thread_key"])
-            )
-            .mappings()
-            .one_or_none()
-        )
+        old, authoritative, _ = authority(actor, space, intent["thread_key"], conn, locked=True)
+        from . import task_assignment_mail as mail
+
+        if (
+            mail.component_digest(actor, intent["thread_key"], conn, "assignment_profile")
+            != intent["component_digest"]
+        ):
+            raise AssignmentError("RFC component changed; preview again", -32061)
+        if authoritative != intent["thread_key"]:
+            raise AssignmentError("Assignment component changed; preview again", -32061)
+        if old is None:
+            from . import task_assignment_mail as mail
+
+            if not mail.rows(actor, intent["thread_key"], conn, "assignment_profile"):
+                raise AssignmentError("New assignment requires owner-scoped RFC source")
         _check_old(old, intent)
         if required:
             evidence.validate_locked(conn, intent, prepared)

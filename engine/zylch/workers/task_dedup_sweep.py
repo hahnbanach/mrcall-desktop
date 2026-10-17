@@ -260,7 +260,7 @@ def _build_arbiter_prompt(cluster: List[Dict[str, Any]]) -> str:
         "tentatively grouped (same contact_email or significant memory-blob "
         "overlap). Your job is to decide whether they describe the SAME "
         "underlying problem — true duplicates safe to merge — or distinct "
-        "problems that just happen to share a contact / topic.",
+        "problems that just happen to share a contact / topic. Answer by calling dedup_decision.",
         "",
         "Examples:",
         "  * Two tasks for the same person about ONE Stripe subscription "
@@ -443,7 +443,7 @@ async def run_dedup_sweep(owner_id: str) -> Dict[str, Any]:
                     messages=[{"role": "user", "content": prompt}],
                     max_tokens=400,
                     tools=[ARBITER_TOOL],
-                    tool_choice={"type": "tool", "name": "dedup_decision"},
+                    tool_choice={"type": "auto"},
                 )
             consecutive_overload = 0
         except Exception as e:

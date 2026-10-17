@@ -62,7 +62,8 @@ class ToolConfig:
     user_display_name: str = ""
 
     # LLM Model
-    default_model: str = "claude-opus-4-6-20260205"
+    # Blank: the model is resolved per role (assistant/models.py reads role CHAT).
+    default_model: str | None = None
 
     @classmethod
     def from_settings(cls) -> "ToolConfig":

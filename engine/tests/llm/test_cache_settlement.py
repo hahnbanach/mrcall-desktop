@@ -4,6 +4,13 @@ import pytest
 from zylch.llm.budget_pricing import BudgetError, usage_cost
 
 
+@pytest.fixture(autouse=True)
+def prices(price_snapshot):
+    """Milestone 10 S3: prices from the committed fixture snapshot, never the
+    build copy the coordinator refreshes; every expected value is unchanged."""
+    yield price_snapshot
+
+
 def usage(**changes):
     return dict(input_tokens=10, output_tokens=10, cache_creation_input_tokens=100,
                 cache_creation={"ephemeral_5m_input_tokens": 80,

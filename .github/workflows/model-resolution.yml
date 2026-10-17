@@ -1,0 +1,103 @@
+name: Model table
+
+# The daily model-table job (milestone 10, brief D8): engine/scripts/model_table_job.py
+# resolves each role's rankings per preset from OpenRouter's live catalogue,
+# benchmarks and endpoints; checks every changed pick or ranking order before
+# publishing it — a smoke on the engine's real transport (admitted against USD
+# 0.20 of the engine's conservative bound, expected to settle at most at USD
+# 0.05, flagged in the report above that) and
+# the role's measurement (at most USD 2; a challenger projected over it is
+# deferred unpaid; judged against the reference's recorded result, which is
+# measured again only when the role's case-set or prompt hash changes, and
+# then the whole role with it), unless a measurement cached by model,
+# role, case-set hash and prompt hash exists — and smokes a ranked model whose
+# metadata changed; all inside USD 10 a month, kept in v1/ledger.json, the run's
+# reservation pushed to the data branch before each paid check, each check's
+# call and results (v1/results.json) pushed after it, and settled at the end.
+# It publishes table.json, snapshot.json, measured.json and ledger.json
+# under v1/ on the model-table data branch (the engines and the billing server
+# read table.json and snapshot.json at run time), so it runs before the billing
+# server's 06:00 UTC refresh. No paid check starts that could end after the
+# run's deadline (--deadline-minutes, below). A run that cannot publish (a gate
+# failed, a raised ceiling, a pick with no verified replacement) goes red and
+# the last published record stays;
+# a price-only change updates the snapshot alone. Schedule and dispatch only,
+# never on a push or a pull request: a paid run happens once a day or by hand,
+# and the key never meets code a pull request proposes. The report is uploaded
+# on every run.
+
+on:
+  schedule:
+    - cron: '17 5 * * *'  # daily 05:17 UTC
+  workflow_dispatch:
+
+# One run at a time, and a run in progress is never cancelled: it may hold a
+# reservation it has yet to settle.
+concurrency:
+  group: model-table
+  cancel-in-progress: false
+
+permissions:
+  contents: write  # push the model-table data branch
+
+jobs:
+  publish:
+    name: Resolve, verify within the caps, publish
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check out the model-table data branch
+        uses: actions/checkout@v4
+        with:
+          ref: model-table
+          path: model-table
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      # The smoke and the measurement run the engine's own client and transport;
+      # the memory roles are measured by the M9 corpus runner, a pytest module.
+      - name: Install the engine
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e engine pytest pytest-asyncio
+
+      - name: Require the OpenRouter key
+        env:
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+        run: |
+          if [ -z "$OPENROUTER_API_KEY" ]; then
+            echo "::error::OPENROUTER_API_KEY secret is not set; add it in the repository's Actions secrets"
+            exit 1
+          fi
+
+      - name: Name the publisher
+        run: |
+          git -C model-table config user.name "github-actions[bot]"
+          git -C model-table config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+      # --deadline-minutes stays well under timeout-minutes: no paid check is
+      # started that could end after it, and the 30 minutes left cover the
+      # setup above and the decisions, gates and push after the last check. A
+      # run the timeout kills anyway has pushed every paid result and call as
+      # it went; the next run settles its reservation (recovered).
+      - name: Resolve, verify and publish
+        env:
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+        run: >-
+          python engine/scripts/model_table_job.py
+          --data model-table
+          --report model-table-report.md
+          --deadline-minutes 90
+          --work "$RUNNER_TEMP/model-table-job"
+
+      - name: Upload the report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: model-table-report
+          path: model-table-report.md
+          if-no-files-found: warn

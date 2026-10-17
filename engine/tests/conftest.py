@@ -44,6 +44,63 @@ def _isolate_profile_dir(tmp_path_factory, monkeypatch):
     yield
 
 
+def _no_network(url, etag):
+    raise RuntimeError(f"no network in tests: {url}")
+
+
+def _offline_billing_server(url):
+    """The reader a credits choice uses, on an in-process v2 billing server: its
+    capabilities list every model the fixture table ranks (as the billing server
+    derives its served set from the published table), so a credits profile
+    resolves each role to its first ranked model, as the 10a `mrcall` column did
+    offline; every other request is refused (no paid path). The session check
+    and the error a failed read gives stay the engine's own."""
+    import httpx
+
+    from tests.llm import model_table_fixture
+    from zylch.auth import get_session
+    from zylch.llm.bounded_proxy import BoundedProxyClient
+
+    def refuse(request):
+        if request.method == "GET" and request.url.path.endswith("/capabilities"):
+            listing = model_table_fixture.capabilities(model_table_fixture.everything())
+            return httpx.Response(200, json=listing)
+        raise httpx.ConnectError(f"no network in tests: {request.url}")
+
+    offline = httpx.Client(transport=httpx.MockTransport(refuse))
+    return BoundedProxyClient(url, get_session(), http_client=offline)
+
+
+@pytest.fixture(autouse=True)
+def _fixture_model_table(monkeypatch):
+    """Every test resolves models from the fixture table, never the build copy or a download.
+
+    Milestone 10 (slice S6): at run time the table in force is the one the
+    distribution downloaded or cached in the profile (`zylch/llm/roles/
+    distribution.py`), else the build copy. Tests read
+    `tests/fixtures/llm/model-table/table.json` instead (built from the
+    contract by `tests/llm/model_table_fixture.py`), so no expectation moves
+    when the coordinator refreshes the build copies; the distribution's
+    fetcher refuses, and the billing server a credits choice reads answers in
+    process: its capabilities serve every model the fixture table ranks and
+    every other request is refused (no test reaches the network: a test that
+    needs another served set fills it or passes its own client), and the
+    served set starts unread, so the first credits choice of a test reads it.
+    Everything is put back after the test.
+    """
+    from tests.llm import model_table_fixture
+    from zylch.llm.roles import catalogue, distribution, served, table
+
+    monkeypatch.setattr(distribution, "_fetch", _no_network)
+    monkeypatch.setattr(served, "_reader", _offline_billing_server)
+    served._cache.clear()
+    model_table_fixture.install()
+    yield
+    table.set_table(None)
+    catalogue.set_layers()
+    served._cache.clear()
+
+
 @pytest.fixture(scope="session")
 def event_loop():
     """Create an event loop for async tests."""

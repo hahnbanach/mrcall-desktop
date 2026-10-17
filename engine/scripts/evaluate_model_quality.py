@@ -141,6 +141,7 @@ def run(cleanup):
             reviewed_experiment=True,
             protocol=manifest['reasoning_experiment'].get('wire_protocol', 'messages-v1')))
     from zylch.llm.openrouter_pricing import RATES, request_bound
+    from zylch.llm.request_shape import shaped
     from zylch.llm.usage import call_site
     # Fixed accounting day retains prior experiment liabilities across midnight.
     accounting_time = datetime.fromisoformat(marker['accounting_time'])
@@ -162,12 +163,17 @@ def run(cleanup):
         raise ValueError('Saved cap and reviewed marker disagree')
     bounds = {}
     for cell in cells:
-        request = {'temperature': 1.0, 'service_tier': 'standard_only',
-                   **cases[cell['case_id']]['request'], 'model': cell['model']}
+        # The client's own request: no sampling default, then the one shape
+        # (request_shape.py), so the journaled bound is the hold it reserves.
+        request = {
+            "service_tier": "standard_only",
+            **cases[cell["case_id"]]["request"],
+            "model": cell["model"],
+        }
         clock_token = request_clock.set(cases[cell['case_id']].get('datetime_line', manifest['as_of']))
         try:
             request['system'] = llm._with_datetime(request.get('system'))
-            bounds[cell['id']] = request_bound(request)
+            bounds[cell["id"]] = request_bound(shaped(request))
         finally:
             request_clock.reset(clock_token)
     fingerprint = digest(manifest)
@@ -231,7 +237,9 @@ def run(cleanup):
                     def post(self, url, *, json, headers):
                         override = routing.get(cell['model'])
                         if override:
+                            # A reviewed pin: those providers alone, no fallback.
                             json['provider']['only'] = override['only']
+                            json["provider"]["allow_fallbacks"] = False
                         response_meta['wire_sha256'] = digest(json)
                         if reasoning is not None:
                             response_meta['reasoning_controls'] = {k: json.get(k) for k in ('thinking', 'output_config', 'reasoning', 'max_tokens')}

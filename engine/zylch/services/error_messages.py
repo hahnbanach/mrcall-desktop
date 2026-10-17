@@ -116,7 +116,20 @@ def _classify(error: BaseException, stage: Optional[str]) -> Dict[str, Any]:
     label = _STAGE_LABEL.get(stage or "", "")
 
     from zylch.llm.budget import BudgetError
+    from zylch.llm.roles.table import RolePaused
 
+    if isinstance(error, RolePaused):
+        # One role has no model on this billing choice: the rest of the run
+        # goes on, and the message names the role and why (role_pause.py).
+        return _mk(
+            stage,
+            "model_paused",
+            "warning",
+            f"{label or 'AI'} paused: no model for this job",
+            str(error),
+            error.remedy
+            or "Choose a model for this job in Settings, or change the billing choice.",
+        )
     if isinstance(error, BudgetError):
         return _mk(
             stage, "llm_budget", "error", "AI spending protection stopped this request",

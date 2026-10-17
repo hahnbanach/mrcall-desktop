@@ -13,6 +13,8 @@ import socket
 from typing import List, Optional
 
 from ..services.approval_gate import draft_approval_card, draft_updates_from_card
+from ..services import operator_reply_origin
+from ..utils.msgid import clean_references
 from ..utils.safe_paths import PathRefused
 from .base import Tool, ToolResult, ToolStatus
 
@@ -407,7 +409,9 @@ class CreateDraftTool(Tool):
             try:
                 norm_paths = _normalize_attachment_paths(attachment_paths)
             except PathRefused as e:
-                return ToolResult(status=ToolStatus.ERROR, data=None, error=f"Attachment refused: {e}")
+                return ToolResult(
+                    status=ToolStatus.ERROR, data=None, error=f"Attachment refused: {e}"
+                )
             for p in norm_paths:
                 if not os.path.isfile(p):
                     return ToolResult(
@@ -1050,6 +1054,7 @@ class SendDraftTool(Tool):
                         data=None,
                         error=(f"Attachment no longer exists: {p}." " Email NOT sent."),
                     )
+            origin_binding = await operator_reply_origin.admit(self.owner_id, draft)
         except DraftHandleError as e:
             # An unclear handle, not a missing draft: say which, so the
             # operator adds characters instead of hunting for a lost draft.
@@ -1093,6 +1098,11 @@ class SendDraftTool(Tool):
                     self.storage.update_draft(self.owner_id, draft_id, edits)
                 draft = self.storage.get_draft(self.owner_id, draft_id) or draft
 
+            if origin_binding is not None:
+                draft = self.storage.get_draft(self.owner_id, draft_id)
+                if not draft:
+                    raise ValueError("Scheduled reply draft disappeared after claim")
+
             to_addresses = draft.get("to_addresses", [])
             to_str = ", ".join(to_addresses) if to_addresses else None
             subject = draft.get("subject", "")
@@ -1126,16 +1136,20 @@ class SendDraftTool(Tool):
         try:
             from zylch.services.task_assignment_email_effect import send as guarded_send
 
-            sent_message = guarded_send(self.imap.send_message, owner_id=self.owner_id, draft=draft,
-                to=to_str,
-                subject=subject,
-                body=body,
-                cc=cc_addresses or None,
-                bcc=bcc_addresses or None,
-                in_reply_to=in_reply_to,
-                references=(" ".join(references) if references else None),
-                attachment_paths=attachment_paths or None,
-            )
+            with operator_reply_origin.handoff(origin_binding, self.owner_id, draft):
+                sent_message = guarded_send(
+                    self.imap.send_message,
+                    owner_id=self.owner_id,
+                    draft=draft,
+                    to=to_str,
+                    subject=subject,
+                    body=body,
+                    cc=cc_addresses or None,
+                    bcc=bcc_addresses or None,
+                    in_reply_to=in_reply_to,
+                    references=(" ".join(references) if references else None),
+                    attachment_paths=attachment_paths or None,
+                )
         except Exception as e:
             logger.error(f"Failed to send draft: {e}")
             uncertain = delivery_is_uncertain(e)
@@ -1234,6 +1248,7 @@ class SendDraftTool(Tool):
                 sent_at=datetime.now(timezone.utc),
                 attachment_filenames=attachment_filenames,
                 in_reply_to=in_reply_to,
+                references=clean_references(" ".join(references) if references else None),
             )
         except Exception as e:
             logger.warning(f"[send_draft] persist failed (non-blocking): {e}")

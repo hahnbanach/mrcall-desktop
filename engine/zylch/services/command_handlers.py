@@ -1837,9 +1837,9 @@ Run `/tasks` to see items needing action."""
 Run `/agent task process` to recreate all tasks."""
 
         # Verify an LLM transport is available
-        from zylch.llm import try_make_llm_client
+        from zylch.llm import llm_available
 
-        if try_make_llm_client() is None:
+        if not llm_available():
             return """❌ **No LLM configured**
 
 Set `ANTHROPIC_API_KEY` in the profile `.env`, or sign in with Firebase
@@ -2238,7 +2238,7 @@ Shows your running/pending background jobs.
             import asyncio
             from zylch.services.job_executor import JobExecutor
             from zylch.api.token_storage import get_email
-            from zylch.llm import try_make_llm_client
+            from zylch.llm import llm_available
 
             # Get pending jobs for this user
             pending_jobs = storage.get_user_background_jobs(owner_id, status="pending", limit=10)
@@ -2246,7 +2246,7 @@ Shows your running/pending background jobs.
             if not pending_jobs:
                 return "📭 No pending jobs to resume."
 
-            if try_make_llm_client() is None:
+            if not llm_available():
                 return (
                     "❌ No LLM configured. Set ANTHROPIC_API_KEY in the "
                     "profile .env, or sign in with Firebase to use MrCall credits."
@@ -2455,9 +2455,9 @@ async def handle_agent(
                 return f"❌ Unknown channel: `{channel}`\n\nValid channels: `email`, `all`"
 
         # Verify a transport is available before doing any agent work.
-        from zylch.llm import try_make_llm_client
+        from zylch.llm import llm_available
 
-        if try_make_llm_client() is None:
+        if not llm_available():
             return (
                 "❌ No LLM configured. Set ANTHROPIC_API_KEY in the "
                 "profile .env, or sign in with Firebase to use MrCall credits."
@@ -2577,9 +2577,9 @@ async def _handle_memory_train(
 ) -> str:
     """Train memory extraction agent for specified channel."""
     from zylch.agents.trainers import MessageMemoryAgentTrainer
-    from zylch.llm import try_make_llm_client
+    from zylch.llm import llm_available
 
-    if try_make_llm_client() is None:
+    if not llm_available():
         return """❌ **No LLM configured**
 
 Set `ANTHROPIC_API_KEY` in the profile `.env`, or sign in with Firebase
@@ -2650,9 +2650,9 @@ async def _handle_memory_run(storage, owner_id: str, channel: str) -> str:
     """
     import asyncio
     from zylch.services.job_executor import JobExecutor
-    from zylch.llm import try_make_llm_client
+    from zylch.llm import llm_available
 
-    if try_make_llm_client() is None:
+    if not llm_available():
         return """❌ **No LLM configured**
 
 Set `ANTHROPIC_API_KEY` in the profile `.env`, or sign in with Firebase
@@ -2733,9 +2733,9 @@ async def _handle_task_train(
     """
     import asyncio
     from zylch.services.job_executor import JobExecutor
-    from zylch.llm import try_make_llm_client
+    from zylch.llm import llm_available
 
-    if try_make_llm_client() is None:
+    if not llm_available():
         return """❌ **No LLM configured**
 
 Set `ANTHROPIC_API_KEY` in the profile `.env`, or sign in with Firebase
@@ -2798,9 +2798,9 @@ async def _handle_task_run(
     """
     import asyncio
     from zylch.services.job_executor import JobExecutor
-    from zylch.llm import try_make_llm_client
+    from zylch.llm import llm_available
 
-    if try_make_llm_client() is None:
+    if not llm_available():
         return """❌ **No LLM configured**
 
 Set `ANTHROPIC_API_KEY` in the profile `.env`, or sign in with Firebase
@@ -2874,9 +2874,9 @@ async def _handle_emailer_train(
 ) -> str:
     """Train emailer agent to learn user's writing style."""
     from zylch.agents.trainers import EmailerAgentTrainer
-    from zylch.llm import try_make_llm_client
+    from zylch.llm import llm_available
 
-    if try_make_llm_client() is None:
+    if not llm_available():
         return """❌ **No LLM configured**
 
 Set `ANTHROPIC_API_KEY` in the profile `.env`, or sign in with Firebase
@@ -2983,7 +2983,7 @@ async def _handle_emailer_run(
     The agent decides which tool to use based on the instructions.
     """
     from zylch.agents.emailer_agent import EmailerAgent
-    from zylch.llm import try_make_llm_client
+    from zylch.llm import llm_available
 
     if not instructions.strip():
         return """❌ **Missing instructions**
@@ -2995,7 +2995,7 @@ Examples:
 • `/agent email run "What can I answer to this guy?"`
 • `/agent email run "cerca info su Acme Corp"`"""
 
-    if try_make_llm_client() is None:
+    if not llm_available():
         return """❌ **No LLM configured**
 
 Set `ANTHROPIC_API_KEY` in the profile `.env`, or sign in with Firebase

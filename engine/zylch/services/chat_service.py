@@ -90,9 +90,9 @@ class ChatService:
 
         # Verify an LLM transport is available — either a BYOK
         # Anthropic key in .env or a live Firebase session for credits.
-        from zylch.llm import try_make_llm_client
+        from zylch.llm import llm_available
 
-        if try_make_llm_client() is None:
+        if not llm_available():
             raise ValueError(
                 "No LLM configured. Set ANTHROPIC_API_KEY in the profile "
                 ".env, or sign in with Firebase to use MrCall credits."
@@ -190,9 +190,11 @@ class ChatService:
         from zylch.qonto import history as finance_history
         from zylch.services.task_assignment_draft_policy import current, process_chat
 
+        action_failures: List[Dict[str, str]] = []
         if current() is not None:
-            return await process_chat(self, user_message, user_id, conversation_history,
-                                      session_id, approval_callback)
+            result = await process_chat(self, user_message, user_id, conversation_history,
+                                        session_id, approval_callback, action_failures=action_failures)
+            return self._with_action_failures(result, action_failures)
         if finance_history.is_managed():
             from zylch.qonto.chat import process
 
@@ -680,6 +682,7 @@ class ChatService:
                 user_message=user_message,
                 context=agent_context,
                 approval_callback=approval_callback,
+                action_failures=action_failures,
             )
 
             execution_time_ms = (time.time() - start_time) * 1000
@@ -699,7 +702,7 @@ class ChatService:
                 result["session_id"] = session_id
 
             logger.info(f"Message processed successfully in {execution_time_ms:.0f}ms")
-            return result
+            return self._with_action_failures(result, action_failures)
 
         except ValueError as e:
             # Missing BYOK credentials (e.g., Anthropic API key)
@@ -812,6 +815,18 @@ class ChatService:
                 },
                 "session_id": session_id if session_id else None,
             }
+
+    def _with_action_failures(
+        self, result: Dict[str, Any], action_failures: List[Dict[str, str]]
+    ) -> Dict[str, Any]:
+        if action_failures:
+            result["metadata"]["action_failures"] = [dict(item) for item in action_failures]
+            first = action_failures[0]
+            result["metadata"]["error"] = (
+                f"Email attempted action failed: {first['tool']} ({first['attempt_id']}); "
+                "delivery unknown. Do not retry blindly; verify the action outcome first."
+            )
+        return result
 
     def _truncation_metadata(self) -> Dict[str, Any]:
         """Tool results cut for size this turn, for the response metadata.

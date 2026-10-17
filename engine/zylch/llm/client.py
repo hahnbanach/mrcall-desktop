@@ -13,6 +13,9 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any, Dict, List, Literal, Optional, Union
 
+# The response objects live in response.py; callers keep importing them from here.
+from .response import LLMResponse, TextBlock, ToolUseBlock, _coerce_messages  # noqa: F401
+
 logger = logging.getLogger(__name__)
 
 
@@ -42,8 +45,22 @@ def current_datetime_line() -> str:
     )
 
 
+@dataclass(frozen=True)
+class RunClock:
+    """The moment of one run: the datetime line every request of its loop carries.
+
+    An agent loop (the chat turn, the task solve) creates one at the start of
+    a turn and passes it with each request, so consecutive requests of one
+    tool loop send a byte-identical ``system`` — the prefix a reasoning block
+    is bound to (brief D3) — even when the minute changes mid-loop.
+    """
+
+    line: str = field(default_factory=lambda: current_datetime_line())
+
+
 def _with_datetime(
     system: Optional[Union[str, List[Dict[str, Any]]]],
+    clock: Optional[RunClock] = None,
 ) -> Union[str, List[Dict[str, Any]]]:
     """Return ``system`` with the current datetime appended.
 
@@ -54,172 +71,17 @@ def _with_datetime(
     prompt-cached (caching needs the blocks + ``cache_control`` form), so
     plain concatenation is safe there too. ``None`` becomes the line on
     its own — so a request with no system prompt still carries the date.
+
+    With a ``clock`` (:class:`RunClock`) the line is the run's, computed
+    once for every request of its loop; without one it is read fresh, as a
+    single call always did.
     """
-    line = current_datetime_line()
+    line = clock.line if clock is not None else current_datetime_line()
     if system is None:
         return line
     if isinstance(system, str):
         return f"{system}\n\n{line}"
     return list(system) + [{"type": "text", "text": line}]
-
-
-# ─── Anthropic-shape return objects (kept for backward compat) ────────
-
-
-@dataclass
-class ToolUseBlock:
-    """Tool-use block in Anthropic format."""
-
-    type: str = "tool_use"
-    id: str = ""
-    name: str = ""
-    input: Dict[str, Any] = field(default_factory=dict)
-
-
-@dataclass
-class TextBlock:
-    """Text block in Anthropic format."""
-
-    type: str = "text"
-    text: str = ""
-
-
-class LLMResponse:
-    """Adapter exposing the Anthropic-shape fields callers care about.
-
-    Both transports return Anthropic-shape Message objects (the proxy
-    reconstructs them from SSE), so this adapter only needs the
-    Anthropic branch.
-    """
-
-    def __init__(self, raw_response: Any, *, normalize_tool_completion: bool = True):
-        self._normalize_tool_completion = normalize_tool_completion
-        self._raw = raw_response
-        self._content: List[Union[TextBlock, ToolUseBlock]] = []
-        self._stop_reason: Optional[str] = None
-        self._parse_response()
-
-    def _parse_response(self) -> None:
-        if not (hasattr(self._raw, "stop_reason") and hasattr(self._raw, "content")):
-            return
-        if not isinstance(self._raw.content, list):
-            return
-        for block in self._raw.content:
-            btype = getattr(block, "type", None)
-            if btype == "text":
-                self._content.append(TextBlock(text=getattr(block, "text", "")))
-            elif btype == "tool_use":
-                raw_input = getattr(block, "input", None)
-                inp = raw_input if isinstance(raw_input, dict) else {}
-                self._content.append(
-                    ToolUseBlock(
-                        id=getattr(block, "id", ""),
-                        name=getattr(block, "name", ""),
-                        input=inp,
-                    )
-                )
-        self._stop_reason = self._raw.stop_reason
-        if self._normalize_tool_completion and self._complete_tool_turn():
-            self._stop_reason = "tool_use"
-
-    def _complete_tool_turn(self) -> bool:
-        """Recognize complete tool turns without repairing malformed provider data."""
-        if self._raw.stop_reason != "end_turn" or getattr(self._raw, "refusal", None):
-            return False
-        has_tool = False
-        for block in self._raw.content:
-            if getattr(block, "refusal", None):
-                return False
-            kind = getattr(block, "type", None)
-            if kind == "text":
-                if not isinstance(getattr(block, "text", None), str):
-                    return False
-            elif kind == "tool_use":
-                if not all(
-                    isinstance(getattr(block, field, None), str)
-                    and getattr(block, field).strip()
-                    for field in ("id", "name")
-                ) or not isinstance(getattr(block, "input", None), dict):
-                    return False
-                has_tool = True
-            else:
-                return False
-        return has_tool
-
-    @property
-    def original_stop_reason(self) -> Optional[str]:
-        return getattr(self._raw, "stop_reason", None)
-
-    @property
-    def content(self) -> List[Union[TextBlock, ToolUseBlock]]:
-        return self._content
-
-    @property
-    def stop_reason(self) -> Optional[str]:
-        return self._stop_reason
-
-    @property
-    def model(self) -> str:
-        return getattr(self._raw, "model", "")
-
-    @property
-    def usage(self) -> Dict[str, int]:
-        u = getattr(self._raw, "usage", None)
-        if not u:
-            return {
-                "input_tokens": 0,
-                "output_tokens": 0,
-                "cache_creation_input_tokens": 0,
-                "cache_read_input_tokens": 0,
-            }
-        read = u.get if isinstance(u, dict) else lambda key, default=0: getattr(u, key, default)
-        return {
-            "input_tokens": int(read("input_tokens", 0) or 0),
-            "output_tokens": int(read("output_tokens", 0) or 0),
-            "cache_creation_input_tokens": int(read("cache_creation_input_tokens", 0) or 0),
-            "cache_read_input_tokens": int(read("cache_read_input_tokens", 0) or 0),
-        }
-
-
-# ─── Message coercion helpers ─────────────────────────────────────────
-
-
-def _coerce_block(block: Any) -> Any:
-    """Convert SDK block objects (TextBlock/ToolUseBlock) into plain
-    dicts. Anthropic's request serializer raises on lingering SDK
-    objects, and the proxy's body builder forwards the value verbatim,
-    so we normalise here once.
-    """
-    if isinstance(block, dict):
-        return block
-    btype = getattr(block, "type", None)
-    if btype == "text":
-        return {"type": "text", "text": getattr(block, "text", "")}
-    if btype == "tool_use":
-        return {
-            "type": "tool_use",
-            "id": getattr(block, "id", ""),
-            "name": getattr(block, "name", ""),
-            "input": dict(getattr(block, "input", {}) or {}),
-        }
-    if hasattr(block, "model_dump"):
-        try:
-            return block.model_dump()
-        except Exception:  # noqa: BLE001
-            pass
-    return block
-
-
-def _coerce_messages(messages: List[Any]) -> List[Any]:
-    out: List[Any] = []
-    for m in messages:
-        if isinstance(m, dict):
-            content = m.get("content")
-            if isinstance(content, list):
-                out.append({**m, "content": [_coerce_block(b) for b in content]})
-                continue
-        out.append(m)
-    return out
 
 
 # ─── Client ───────────────────────────────────────────────────────────
@@ -281,10 +143,10 @@ class LLMClient:
             if not api_key:
                 raise ValueError("api_key is required for transport='openrouter'")
             from .openrouter_client import OpenRouterClient
-            from .openrouter_pricing import MODEL
+            from .roles.table import pick
 
             self._client = OpenRouterClient(api_key=api_key)
-            self.model = model or MODEL
+            self.model = model or pick("economy", "CHAT", "openrouter")
         elif transport == "proxy":
             if firebase_session is None:
                 raise ValueError(
@@ -320,8 +182,8 @@ class LLMClient:
         tools: Optional[List[Dict[str, Any]]] = None,
         tool_choice: Optional[Dict[str, Any]] = None,
         max_tokens: int = 4096,
-        temperature: float = 1.0,
         model: Optional[str] = None,
+        run_clock: Optional[RunClock] = None,
         **kwargs: Any,
     ) -> LLMResponse:
         """Async wrapper around :meth:`create_message_sync`.
@@ -342,12 +204,19 @@ class LLMClient:
                     tools=tools,
                     tool_choice=tool_choice,
                     max_tokens=max_tokens,
-                    temperature=temperature,
                     model=model,
+                    run_clock=run_clock,
                     **kwargs,
                 )
             ),
         )
+
+    async def check_transport(self) -> None:
+        """The pipeline's free preflight (``preflight.py``): no inference, nothing
+        reserved. Its reads run in a thread, as a request does."""
+        from .preflight import check_transport
+
+        await asyncio.get_event_loop().run_in_executor(None, check_transport, self)
 
     def _release_unused_reservation(self, reservation, settle) -> None:
         """Give back a hold for a call that provably never left this process.
@@ -367,7 +236,9 @@ class LLMClient:
         if self.transport == "proxy":
             return
         try:
-            settle(reservation, {"input_tokens": 0, "output_tokens": 0})
+            # Nothing was sent, so nothing cost anything; OpenRouter settles on a
+            # receipt's `cost`, so the release states it, as `_release_hold` does.
+            settle(reservation, {"input_tokens": 0, "output_tokens": 0, "cost": 0})
         except Exception as exc:  # noqa: BLE001 - never mask the real refusal
             logger.warning(f"[llm] could not release an undispatched reservation: {exc}")
 
@@ -378,12 +249,13 @@ class LLMClient:
         tools: Optional[List[Dict[str, Any]]] = None,
         tool_choice: Optional[Dict[str, Any]] = None,
         max_tokens: int = 4096,
-        temperature: float = 1.0,
         model: Optional[str] = None,
+        run_clock: Optional[RunClock] = None,
         **kwargs: Any,
     ) -> LLMResponse:
         """Send a Messages-API request and return a unified
-        :class:`LLMResponse`."""
+        :class:`LLMResponse`. ``run_clock`` fixes the datetime line for every
+        request of one loop (:class:`RunClock`)."""
         if getattr(self, "_saved_policy_fingerprint", None) is not None:
             from .model_policy import policy_fingerprint
             from .budget_pricing import BudgetError
@@ -401,18 +273,23 @@ class LLMClient:
             "model": model_name,
             "messages": coerced,
             "max_tokens": max_tokens,
-            "temperature": temperature,
             "service_tier": "standard_only",
         }
         # Always inject the current datetime (appended last → cache-safe).
         # Every LLM request carries the real moment; no exceptions.
-        request_kwargs["system"] = _with_datetime(system)
+        request_kwargs["system"] = _with_datetime(system, run_clock)
         if tools:
             request_kwargs["tools"] = tools
         if tool_choice:
             request_kwargs["tool_choice"] = tool_choice
         for key, value in kwargs.items():
             request_kwargs[key] = value
+        if self.transport != "openai_voice":
+            # The one shape (request_shape.py), before quote and admission, so
+            # the reserved dict is the dict sent; adapters come back untouched.
+            from .request_shape import shaped
+
+            request_kwargs = shaped(request_kwargs)
 
         if model_name == "moonshotai/kimi-k3" and self.transport in ("openrouter", "proxy") and not ({"thinking", "output_config"} & request_kwargs.keys()):
             # The combined cap includes reasoning: worker-specific final-output
@@ -448,7 +325,7 @@ class LLMClient:
         check_dispatch()
         finance_history.check_before_disclosure()
         publication_guard.check_before_disclosure()
-        quote = self._client.quote(request_kwargs) if self.transport == "proxy" else None
+        quote = self._client.quote(request_kwargs := sdk_request(request_kwargs, "proxy")) if self.transport == "proxy" else None
         finance_history.check_before_disclosure()
         publication_guard.check_before_disclosure()
         reservation = reserve(request_kwargs, self.transport, quote=quote)
@@ -516,8 +393,8 @@ class LLMClient:
 # rejected on its way in, so no token was ever produced and nothing was
 # charged. 5xx is deliberately absent — a server error can follow work that
 # was already done — and so is every timeout, where the request may well have
-# been processed after we stopped listening.
-_NO_WORK_STATUSES = frozenset({400, 401, 403, 404, 413, 422, 429})
+# been processed after we stopped listening. 402: an account out of credit (OpenRouter).
+_NO_WORK_STATUSES = frozenset({400, 401, 402, 403, 404, 413, 422, 429})
 
 
 def _rejected_before_inference(exc: BaseException) -> bool:
@@ -549,7 +426,9 @@ def _release_hold(reservation, settle) -> None:
     if reservation.transport == "proxy":
         return
     try:
-        settle(reservation, {"input_tokens": 0, "output_tokens": 0})
+        # A refused call cost nothing. OpenRouter settles on a receipt's `cost`,
+        # so the release states it; the other transports price the token counts.
+        settle(reservation, {"input_tokens": 0, "output_tokens": 0, "cost": 0})
     except Exception as release_error:  # noqa: BLE001
         logger.warning(
             "[budget] could not release the hold for a refused dispatch (%s: %s)",
@@ -580,8 +459,8 @@ def _settle_from_raw(reservation, raw, receipt, settle) -> None:
 
 def make_llm_client(model: Optional[str] = None) -> LLMClient:
     """Resolve saved billing and model policy without credential-driven fallback."""
-    from zylch.auth import get_session
-    from .model_policy import profile_values, resolve_model, resolve_provider, policy_fingerprint
+    from .model_policy import client_fingerprint, credits_client, profile_values, resolve_model
+    from .model_policy import resolve_provider
 
     values = profile_values()
     provider = resolve_provider(values)
@@ -596,16 +475,9 @@ def make_llm_client(model: Optional[str] = None) -> LLMClient:
             api_key=key,
             model=selected_model,
         )
-        client._saved_policy_fingerprint = policy_fingerprint(values)
+        client._saved_policy_fingerprint = client_fingerprint(values)
         return client
-    session = get_session()
-    if session is None:
-        raise RuntimeError("Sign in to use the selected MrCall credits billing mode.")
-    client = LLMClient(transport="proxy", firebase_session=session, model=selected_model,
-                       proxy_base_url=str(values.get("MRCALL_PROXY_URL") or "https://zylch.mrcall.ai").strip(),
-                       billing_business_id=str(values.get("SMS_BUSINESS_ID") or "").strip())
-    client._saved_policy_fingerprint = policy_fingerprint(values)
-    return client
+    return credits_client(values, selected_model)
 
 
 def try_make_llm_client(model: Optional[str] = None) -> Optional[LLMClient]:

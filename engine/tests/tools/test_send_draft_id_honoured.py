@@ -165,8 +165,12 @@ def test_an_ambiguous_prefix_errors_explicitly_and_sends_nothing(fresh_storage):
         owner_id=OWNER, to="two@example.com", subject="Two", body="Two body."
     )
     # Force the collision the prefix length makes unlikely but not impossible.
-    fresh_storage.update_draft(OWNER, first["id"], {"id": f"{shared}-1111"})
-    fresh_storage.update_draft(OWNER, second["id"], {"id": f"{shared}-2222"})
+    from zylch.storage import database as db
+    from zylch.storage.models import Draft
+
+    with db.get_session() as session:
+        session.query(Draft).filter(Draft.id == first["id"]).one().id = f"{shared}-1111"
+        session.query(Draft).filter(Draft.id == second["id"]).one().id = f"{shared}-2222"
 
     imap = MagicMock()
     tool = SendDraftTool(imap_client=imap, storage=fresh_storage, owner_id=OWNER)

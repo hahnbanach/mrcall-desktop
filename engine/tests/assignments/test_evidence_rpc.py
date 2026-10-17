@@ -62,7 +62,11 @@ def test_sent_candidate_supervised_grant(env, mail):
     projected = result("project", thread_key=ROOT)
     assert projected["state"] == "assigned" and projected["complete"]
     assert projected["task"]["assignee_uid"] == "bob" and mail.closed >= 4
-    assert all(call[2][1].startswith("(UID BODY.PEEK") for call in mail.calls if call[0] == "FETCH")
+    assert all(
+        "BODY.PEEK[" in call[2][1] and "BODY[" not in call[2][1]
+        for call in mail.calls
+        if call[0] == "FETCH"
+    )
 
 
 @pytest.mark.parametrize(
@@ -160,7 +164,8 @@ def test_unsynced_provider_inbound_holds(env, mail):
         reply=ROOT,
         store=False,
     )
-    assert result("project", thread_key=ROOT)["state"] == "unknown"
+    projected = result("project", thread_key=ROOT)
+    assert projected["state"] == "assigned" and projected["hold_auto_reply"]
     assert "error" in rpc(
         "preview",
         operation="close",
@@ -300,21 +305,11 @@ def test_manual_assignment_empty_creator_scope_cannot_close(env, mail):
 
     mailboxes.ensure_primary_mailbox()
     mail.messages = {"INBOX": {}, '"Archive"': {}, '"Sent"': {}}
-    intent = result(
+    response = rpc(
         "preview", operation="assign", thread_key=ROOT, expected_revision=0, assignee_uid="alice"
     )
-    assert result("commit", intent=intent, grant=env.sign(intent))["acknowledged"]
-    reply = rpc(
-        "preview",
-        operation="close",
-        thread_key=ROOT,
-        expected_revision=1,
-        reason="Done",
-        handled_ref="empty-scope",
-    )
-    assert reply["error"]["code"] == -32060
-    assert "inbound source coverage" in reply["error"]["message"]
-    assert result("get", thread_key=ROOT)["task"]["state"] == "assigned"
+    assert "owner-scoped RFC source" in response["error"]["message"]
+    assert result("list")["items"] == []
 
 
 def test_uidvalidity_changes_during_actual_fetch_are_unknown(env, mail, monkeypatch):

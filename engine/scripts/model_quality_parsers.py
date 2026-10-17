@@ -106,7 +106,7 @@ def _components() -> tuple[Any, Any, Any, Any, dict[str, str]]:
     from zylch.workers.memory import MemoryWorker
 
     imported_sources = [
-        (Path(inspect.getfile(LLMResponse)), ENGINE_ROOT / "zylch/llm/client.py"),
+        (Path(inspect.getfile(LLMResponse)), ENGINE_ROOT / "zylch/llm/response.py"),
         (Path(task_creation.__file__), TASK_SOURCE),
         (Path(inspect.getfile(MemoryWorker)), ENGINE_ROOT / "zylch/workers/memory.py"),
         (
@@ -155,7 +155,7 @@ def parser_provenance() -> dict[str, str]:
         **_components()[4],
         "default_completion_mode": "frozen_raw_completion_v1",
         "response_adapter_sha256": hashlib.sha256(
-            (ENGINE_ROOT / "zylch/llm/client.py").read_bytes()
+            (ENGINE_ROOT / "zylch/llm/response.py").read_bytes()
         ).hexdigest(),
     }
 

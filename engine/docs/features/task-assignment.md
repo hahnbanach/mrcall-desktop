@@ -7,11 +7,13 @@ RPC, provider protocol fixtures and scoped draft enforcement have executable
 local acceptance under the [delivery plan](../../../docs/execution-plans/2026-10-08-explicit-task-assignment.md).
 Six hosted company engines have compatible source, verified root-owned trust,
 tenant-inaccessible independent signing material and complete assignment reads.
-Both maintained clones install kernel `v0.51.0`. Café 124's four profiles share
-one space. MrCall support and Mario share support's company space after the
-separately authorized [fenced join](../../../docs/execution-plans/2026-10-08-mrcall-company-memory-sharing.md),
-with complete authenticated assignment reads for both members and private mailbox/task
-isolation. No real assignment or customer send is part of that acceptance.
+Both maintained clones install kernel `v0.51.0`. Dated sharing acceptance belongs
+to its separately authorized [fenced-join record](../../../docs/execution-plans/2026-10-08-mrcall-company-memory-sharing.md).
+Current company membership must come from the exact verified UID and capability
+binding, not a historical display name or join report. The M10-selected production
+and Mario UIDs currently bind to Café124's space; other profile identities and
+rollout state belong to the living context. No real assignment or customer send
+is part of the recorded sharing acceptance.
 
 Private [ordinary tasks](task-management.md), including Qonto financial rows,
 retain their own storage and visibility. Assignment records share only company
@@ -33,12 +35,25 @@ companies from managed or ambiguous legacy stores. An empty ledger or missing
 trust cannot disable a managed company's reply guard. Fresh never-enabled local
 profiles keep contextual email without privileged host configuration.
 
-A reply binds the exact owner-scoped archived original, RFC root and target.
+A reply binds the exact owner-scoped archived original, authoritative RFC
+component root and exact target. A proven alias in that same owner-scoped
+component resolves to its current authority; it cannot change the original target.
 All supplied threading identities must agree; private draft source metadata is
 retained. Assigned, pending, conflicting, unknown and acknowledged closed targets
 hold the write or send. Only a verified later inbound outside closed coverage can
 return operator work. Unrelated threads from the same sender remain independent.
 Generic tool approval never overrides company ownership.
+
+Legacy Draft reads serialize strict bare dot-atom thread identities with brackets
+without rewriting stored rows. Dedup and exact delivery CAS share that serialized
+identity; contextual creation retains its existing canonical-source checks. Opaque
+or unsupported legacy values retain their identity and require source authority.
+
+Scoped draft chat forwards the same request-local email-action failure collector
+as ordinary chat. A failed create/update/send outcome returns technical failure
+metadata even if response prose claims success; it establishes no delivery proof
+or retry authority. The existing source, projection, ownership, finance and command
+exclusions remain enforced. See [operator outcomes](operator-runtime.md#email-action-outcomes).
 
 Provider/source evidence is gathered before the company writer lock. Final
 admission rechecks enrollment, identity, membership, company binding, join fence
@@ -144,6 +159,28 @@ another member's empty private mailbox cannot establish closure coverage.
 Company-wide assignment reads do not expose private mailbox rows. A local kernel
 handled record alone cannot close ownership; only the exact engine acknowledgement
 can settle it, and failed acknowledgement leaves held work visible.
+
+## Preserved source projection
+
+The readiness candidate retains bounded transitive RFC components and one shared
+120-second provider-evidence deadline. At most20 eligible archived own-message
+candidates may establish an early positive hold after complete live reply proof
+and a fresh exact-UID/MID/UIDVALIDITY check excluding Draft messages. That result
+remains incomplete needs-assignment and grants no reply or absence authority.
+Automatic-only or ineligible early candidates fall back to complete bounded Sent
+discovery. Known UNKNOWN observations cannot be hidden by a positive witness;
+final actor, route, component and assignment checks still apply. Exact live target
+proof may supply omitted historical References
+without changing the reply target or backfilling stored rows. Malformed own Sent
+may hold an exact observation, but cannot grant complete assignment authority.
+Stored/live ancestry disagreement, unsynced manual Sent candidates or incomplete
+observations hold automatic reply. Active human assignment remains authoritative
+without waiting for closure I/O. Genuine scheduled-reply provenance is admitted
+against the exact source before the send claim, rechecked on the claimed draft
+and passed only through its transport handoff. Existing incomplete Sent rows
+are not backfilled. Runtime wiring and local evidence are documented in
+[operator runtime](operator-runtime.md); installed operational acceptance is
+separate from source preservation.
 
 ## Joins and rollback
 

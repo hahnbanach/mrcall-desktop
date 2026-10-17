@@ -17,7 +17,9 @@ This module backs (1) with ``sync.run`` and the gating in (2)/(3) with
 
 from __future__ import annotations
 
+import asyncio
 import logging
+import threading
 import os
 from typing import Any, Awaitable, Callable, Dict, Optional
 
@@ -33,7 +35,98 @@ def _owner_id() -> str:
     return get_owner_id()
 
 
+# Ownership belongs to the actual worker, not the request awaiting it.
+_email_intake_lock = threading.Lock()
+_email_intake_futures: set = set()
+
+
+def _email_intake_failure(title: str, action: str, *, busy: bool = False) -> dict:
+    return {
+        "scope": "email",
+        "success": False,
+        "busy": busy,
+        "summary": title,
+        "result": {
+            "sync_new": 0,
+            "wa_messages": 0,
+            "wa_contacts": 0,
+            "wa_skipped_reason": "Email-only scope.",
+        },
+        "errors": [{"severity": "error", "title": title, "detail": title, "action": action}],
+    }
+
+
 async def sync_run(params: Dict[str, Any], notify: NotifyFn) -> Any:
+    """sync.run(days_back?, scope='all') -> result dict."""
+    scope = params.get("scope", "all")
+    if not isinstance(scope, str) or scope not in ("all", "email"):
+        return {
+            "success": False,
+            "summary": "Unsupported synchronization scope.",
+            "result": {},
+            "errors": [
+                {
+                    "severity": "error",
+                    "title": "Unsupported synchronization scope.",
+                    "detail": "Use all or email.",
+                    "action": "Correct the synchronization scope.",
+                }
+            ],
+        }
+    if scope == "all":
+        return await _sync_run(params, notify)
+    days_back = params.get("days_back", 60)
+    if type(days_back) is not int or not 1 <= days_back <= 60:
+        return _email_intake_failure(
+            "Invalid email synchronization history.", "Use an integer from 1 to 60 days."
+        )
+    if not _email_intake_lock.acquire(blocking=False):
+        return _email_intake_failure(
+            "Email synchronization is already running.",
+            "Wait for the current synchronization to finish, then retry.",
+            busy=True,
+        )
+
+    def worker():
+        try:
+            result = asyncio.run(_sync_run(params, notify, email_only=True))
+            return {**result, "scope": "email", "busy": False}
+        finally:
+            _email_intake_lock.release()
+
+    try:
+        future = asyncio.get_running_loop().run_in_executor(None, worker)
+    except Exception:
+        _email_intake_lock.release()
+        logger.exception("[sync.run] could not start email intake worker")
+        return _email_intake_failure(
+            "Email synchronization could not start.",
+            "Retry synchronization after checking engine availability.",
+        )
+    except BaseException:
+        _email_intake_lock.release()
+        raise
+    _email_intake_futures.add(future)
+
+    def completed(done):
+        _email_intake_futures.discard(done)
+        if not done.cancelled():
+            # Consume an eventual exception even if the RPC request disconnected.
+            done.exception()
+
+    future.add_done_callback(completed)
+    try:
+        return await asyncio.shield(future)
+    except asyncio.CancelledError:
+        raise
+    except Exception:
+        logger.exception("[sync.run] email intake worker failed")
+        return _email_intake_failure(
+            "Email synchronization failed.", "Check mailbox access and retry synchronization."
+        )
+
+
+async def _sync_run(params: Dict[str, Any], notify: NotifyFn, *, email_only=False) -> Any:
     """sync.run(days_back?) -> result dict.
 
     Fetch new emails (IMAP) and WhatsApp messages, then return. Skips
@@ -100,6 +193,7 @@ async def sync_run(params: Dict[str, Any], notify: NotifyFn) -> Any:
             days_back=days_back,
             progress=_emit,
             errors_out=stage_errors,
+            include_whatsapp=not email_only,
         )
     except Exception as e:
         # Last-resort guard: run_sync_only already routes per-stage

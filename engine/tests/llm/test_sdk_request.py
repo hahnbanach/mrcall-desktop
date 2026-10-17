@@ -1,9 +1,11 @@
-"""The direct transport never hands the 1.x SDK a sampling keyword.
+"""No transport hands a provider a sampling keyword; the direct one adds the binding.
 
 ``anthropic`` 1.x raises ``TypeError`` for ``temperature`` / ``top_p`` /
-``top_k`` before any request leaves the process; the priced request dict
-keeps them for the quote, the proxy and the OpenRouter client. These tests
-pin the seam between the two.
+``top_k`` before any request leaves the process, and milestone 10's one
+request shape (brief D3) sends no sampling on any transport: a non-default
+value is dropped too, never moved to ``extra_body``. The priced request dict
+is never mutated. On the direct transport, adaptive reasoning gains the
+``drop_block`` binding and its beta header. These tests pin the seam.
 """
 
 from __future__ import annotations
@@ -42,21 +44,47 @@ def test_a_default_temperature_is_dropped_and_the_priced_dict_is_untouched():
     assert set(sent) <= set(inspect.signature(_messages_create()).parameters)
 
 
-def test_a_non_default_temperature_travels_in_extra_body():
+def test_a_non_default_temperature_is_dropped_too():
+    # Brief D3: no sampling on any transport (it used to travel in extra_body).
     sent = sdk_request(_request(temperature=0, top_k=5), "direct")
-    assert sent["extra_body"] == {"temperature": 0, "top_k": 5}
+    assert "extra_body" not in sent
     assert "temperature" not in sent and "top_k" not in sent
 
 
-def test_an_existing_extra_body_is_merged_not_replaced():
-    sent = sdk_request(_request(temperature=0, extra_body={"keep": 1}), "direct")
-    assert sent["extra_body"] == {"keep": 1, "temperature": 0}
+def test_an_existing_extra_body_keeps_its_other_keys_and_loses_sampling():
+    sent = sdk_request(_request(temperature=0, extra_body={"keep": 1, "top_p": 0.5}), "direct")
+    assert sent["extra_body"] == {"keep": 1}
 
 
-def test_other_transports_get_the_same_object_back():
-    priced = _request(temperature=0)
+def test_other_transports_get_the_request_without_sampling():
+    priced = _request(temperature=0, extra_body={"top_k": 5})
+    for transport in ("proxy", "openrouter", "openai_voice"):
+        sent = sdk_request(priced, transport)
+        assert not {"temperature", "top_p", "top_k", "extra_body"} & set(sent)
+        assert priced["temperature"] == 0 and priced["extra_body"] == {"top_k": 5}
+    plain = {k: v for k, v in _request().items() if k != "temperature"}
+    for transport in ("direct", "proxy", "openrouter"):
+        assert sdk_request(plain, transport) is plain
+
+
+def test_adaptive_reasoning_on_direct_gains_the_drop_block_binding_and_its_beta():
+    priced = _request(thinking={"type": "adaptive"}, output_config={"effort": "low"})
+    sent = sdk_request(priced, "direct")
+    assert sent["thinking"] == {
+        "type": "adaptive",
+        "block_binding": {"prefix_mismatch_behavior": "drop_block"},
+    }
+    assert sent["extra_headers"] == {"anthropic-beta": "thinking-binding-controls-2026-08-01"}
+    assert priced["thinking"] == {"type": "adaptive"} and "extra_headers" not in priced
+    inspect.signature(_messages_create()).bind(None, **sent)
+    other = sdk_request({**priced, "extra_headers": {"anthropic-beta": "other-beta"}}, "direct")
+    assert other["extra_headers"]["anthropic-beta"] == (
+        "other-beta,thinking-binding-controls-2026-08-01"
+    )
     for transport in ("proxy", "openrouter"):
-        assert sdk_request(priced, transport) is priced
+        assert sdk_request(priced, transport)["thinking"] == {"type": "adaptive"}
+    disabled = sdk_request(_request(thinking={"type": "disabled"}), "direct")
+    assert disabled["thinking"] == {"type": "disabled"} and "extra_headers" not in disabled
 
 
 def test_the_direct_client_calls_the_sdk_without_the_keyword(monkeypatch):
@@ -92,7 +120,7 @@ def test_the_direct_client_calls_the_sdk_without_the_keyword(monkeypatch):
     monkeypatch.setattr(preparation, "record_dispatch", lambda: None)
     llm.create_message_sync([{"role": "user", "content": "hi"}], max_tokens=8, temperature=0)
     assert "temperature" not in seen
-    assert seen["extra_body"] == {"temperature": 0}
+    assert "extra_body" not in seen  # brief D3: dropped, not moved to extra_body
 
 
 def _messages_create():
