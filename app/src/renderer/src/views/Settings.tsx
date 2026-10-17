@@ -1,3 +1,4 @@
+import StripeCard from '../components/StripeCard'
 import * as React from 'react'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { errorMessage, isProfileLockedError } from '../lib/errors'
@@ -277,6 +278,7 @@ export default function Settings(): JSX.Element {
           <ConnectGoogleCalendar />
           <ConnectWhatsApp />
           <QontoCard />
+          <StripeCard />
         </div>
       </section>
 

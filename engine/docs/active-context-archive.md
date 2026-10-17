@@ -1,3 +1,15 @@
+## 2026-10-17 — Before current-main M10 integration
+
+The [ordinary-preservation source](../../docs/evaluations/2026-10-17-m10-ordinary-source.md)
+has independent M1 approval: one exact projection module changes,375 modules,
+seven assets and five acceptance helpers match published assembly c9789150.
+All171 distinct current affected cases pass without skips/errors. The separately
+identified0.1.52+ordinary.20261017.1 wheel has376 Python modules/seven assets;
+both native layers pass84 installed cases each, zero skips/errors. Actual
+metadata, CLI/loaders and all248 loaded product-module origins pass per cohort.
+All35,424 retained native dependency files match their earlier audit; local
+closure and separate final review govern qualified feature readiness.
+
 ## 2026-10-17 — M10 assembly snapshot before ordinary preservation
 
 ## State now

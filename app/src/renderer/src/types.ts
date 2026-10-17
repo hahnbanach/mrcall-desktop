@@ -1,3 +1,4 @@
+import type { StripeAPI } from './stripe'
 import type { ChatSendOptions, ChatSendResult, QontoAPI } from './finance'
 
 export interface ZylchTask {
@@ -338,6 +339,7 @@ export interface PreparationResult extends PreparationStatus {
 
 export interface ZylchAPI {
   system: { capabilities: () => Promise<{ chat_history_binding?: number }> }
+  stripe: StripeAPI
   qonto: QontoAPI
   preparation: {
     status: () => Promise<PreparationStatus>

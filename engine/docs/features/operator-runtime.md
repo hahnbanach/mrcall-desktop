@@ -98,8 +98,8 @@ missing requirements; unchanged metadata alone establishes neither full kernel
 health nor operational MCP. Any qualified result requires exact dependency bytes
 and actual native voice/MCP/read-contract proof. Earlier
 base-only captures and wheels without model JSON cannot authorize a current
-switch. The [ordinary-preservation successor](../../../docs/evaluations/2026-10-17-m10-ordinary-artifact.md)
-retains those unchanged-input qualifications and separately verifies its changed
-projection in both native installed layers. Successful operational acceptance and the runtime owner's service-window
+switch. The [current-main successor](../../../docs/evaluations/2026-10-17-m10-current-main-artifact.md)
+retains those unchanged-input qualifications and the independently verified
+ordinary projection, with a metadata-only current-main artifact. Successful operational acceptance and the runtime owner's service-window
 release remain prerequisites. A generic shared-checkout or
 tenant-helper update is not equivalent to that scoped installation proposal.

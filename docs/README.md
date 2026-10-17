@@ -22,6 +22,11 @@ The repo has three parallel doc trees, mirroring the three index files. Each tre
 
 ## Index
 
+- [Current-main M10 integration](execution-plans/2026-10-17-m10-current-main-integration.md) — [brief](briefs/2026-10-17-m10-current-main-integration.md), [source](evaluations/2026-10-17-m10-current-main-source.md) and [metadata-only artifact](evaluations/2026-10-17-m10-current-main-artifact.md); upstream Stripe UI preservation and actual delivery gates.
+
+- [Stripe test installer](execution-plans/2026-10-16-stripe-test-installer.md) — isolated test candidate, source checks and unverified installed acceptance; [brief](briefs/2026-10-16-stripe-test-installer.md).
+- [Stripe startup recovery](execution-plans/2026-10-16-stripe-startup-recovery.md) — bounded Settings startup, session recovery and replacement test installer; [brief](briefs/2026-10-16-stripe-startup-recovery.md).
+
 - [M10 ordinary preservation](execution-plans/2026-10-17-m10-ordinary-preservation.md) — [brief](briefs/2026-10-17-m10-ordinary-preservation.md), [source](evaluations/2026-10-17-m10-ordinary-source.md) and [installed artifact](evaluations/2026-10-17-m10-ordinary-artifact.md); exact approved ordinary-read correction and remaining live gates.
 
 - [Reviewed M10 assembly](execution-plans/2026-10-16-m10-reviewed-assembly.md) — [brief](briefs/2026-10-16-m10-reviewed-assembly.md), [integration evidence](evaluations/2026-10-16-m10-reviewed-assembly.md), exact approved source/artifact integration and remaining release gates.

@@ -19,15 +19,16 @@ what is *current*, targeting ≤ ~120 lines.
 
 ## State now
 
-The [ordinary-preservation candidate](execution-plans/2026-10-17-m10-ordinary-preservation.md)
-is the offline successor of published M10 assembly c9789150. Its independently
-approved source milestone preserves375 modules, seven assets and five temporary
-acceptance helpers, adopting only the owner's exact approved projection file.
-The source selection has171 distinct passing cases and no skips/errors. Its
-separately identified wheel0.1.52+ordinary.20261017.1 has376 modules/seven assets;
-both native layers pass84 installed cases each with zero skips/errors and exact
-product origins. Local documentation and separate final review govern qualified feature readiness.
-Source and packaging approval establish neither hosted installation nor release.
+The [current-main integration](execution-plans/2026-10-17-m10-current-main-integration.md)
+combines accepted ordinary parent ce86428d and main955138f7's Stripe Settings/UI.
+All376 product modules/seven assets match the accepted ordinary engine;61 combined
+Stripe cases, two egress cases, both TypeScript projects, model-name boundary and
+actual Chromium card/preload fixture pass. The metadata-only wheel is
+0.1.57.dev1+m10.20261017.1, SHA2568f00d9f3. Both native cohorts pass actual new
+metadata/CLI/resource/import-origin checks. Source171/native84+84 and other
+unchanged-input proofs remain qualified evidence. Feature publication, actual
+nonpaid CI and local critic/final closure govern readiness; none authorizes a
+hosted switch or main/tag/fleet release.
 
 The runtime owner retains six-engine live/guard/provider exclusion and three
 clone cron locks. Its56 native checks pass; a final ordinary case and explicit

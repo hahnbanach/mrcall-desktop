@@ -68,3 +68,7 @@ Preservation acceptance uses scripted HTTP and disposable encrypted files. Live
 Stripe access, actual production file compatibility, user-interface flow and
 company/funding conclusions require their own evidence; none follows from RPC
 discovery or a passing source suite.
+
+The [Desktop Stripe card](../../../app/docs/stripe.md) and upstream tests are
+retained by the [current-main integration](../../../docs/evaluations/2026-10-17-m10-current-main-source.md).
+Its source/UI fixtures do not replace real provider or installed-user acceptance.

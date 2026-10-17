@@ -327,11 +327,11 @@ built from a splatted dict, is not seen.
 
 ## Runtime and acceptance boundary
 
-The [ordinary-preservation candidate](../../../docs/execution-plans/2026-10-17-m10-ordinary-preservation.md)
+The [current-main candidate](../../../docs/execution-plans/2026-10-17-m10-current-main-integration.md)
 preserves installed runtime protections alongside M10 and separates OpenRouter
 input fit from monetary byte bounds. A saved custom/role override still wins;
 installing M10 does not switch such a profile to the measured picks. The
-[replacement evaluation](../../../docs/evaluations/2026-10-17-m10-ordinary-artifact.md)
+[replacement evaluation](../../../docs/evaluations/2026-10-17-m10-current-main-artifact.md)
 records installed source/resource proof and mandatory real-read/server/CI/paid
 gates; the earlier readiness record retains its free distribution matrix and
 saved-policy forecasts. The wheel explicitly includes requirements/table/snapshot

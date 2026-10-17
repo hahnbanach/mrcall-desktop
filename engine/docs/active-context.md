@@ -8,15 +8,16 @@ are preserved in [active-context-archive.md](active-context-archive.md).
 
 ## State now
 
-The [ordinary-preservation source](../../docs/evaluations/2026-10-17-m10-ordinary-source.md)
-has independent M1 approval: one exact projection module changes,375 modules,
-seven assets and five acceptance helpers match published assembly c9789150.
-All171 distinct current affected cases pass without skips/errors. The separately
-identified0.1.52+ordinary.20261017.1 wheel has376 Python modules/seven assets;
-both native layers pass84 installed cases each, zero skips/errors. Actual
-metadata, CLI/loaders and all248 loaded product-module origins pass per cohort.
-All35,424 retained native dependency files match their earlier audit; local
-closure and separate final review govern qualified feature readiness.
+The [current-main integration](../../docs/evaluations/2026-10-17-m10-current-main-source.md)
+retains accepted ordinary parent ce86428d's376 modules/seven assets while
+integrating main955138f7's Stripe UI and tests. All61 combined Stripe cases and
+two egress cases pass; actual TypeScript/model/Chromium checks pass. Wheel
+0.1.57.dev1+m10.20261017.1, SHA2568f00d9f3, changes metadata only against2514cb98.
+Both actual native cohorts pass metadata/CLI/resources/14-day gate and48 loaded
+module origins each from the new private layer. Prior source171/native84+84,
+248-module installed origins and35,424 unchanged dependency files remain exact
+input-bound evidence. Local publication/CI/critic/final gates govern qualified
+readiness; no current hosted environment or operational acceptance follows.
 
 Projection shares a120-second evidence deadline. A fully live-verified own reply
 with fresh exact source identity/flags may establish an early incomplete human

@@ -8,6 +8,7 @@ import httpx
 import pytest
 
 from tests.assignments.conftest import env as company_env
+from tests.qonto.conftest import env
 from zylch.rpc.dispatch import dispatch_raw
 from zylch.stripe import connection, provider
 
