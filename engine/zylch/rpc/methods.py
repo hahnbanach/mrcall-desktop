@@ -1116,7 +1116,7 @@ async def system_capabilities(params: Dict[str, Any], notify: NotifyFn) -> Any:
     """system.capabilities() -> protocol capabilities supported by this engine."""
     from zylch.services.request_policy import READ_ONLY_POLICY_VERSION
 
-    return {"chat_read_only_policy": READ_ONLY_POLICY_VERSION, "chat_history_binding": 1, "stripe": 1, "assignment_draft_policy": 1, "contextual_email_policy": 1}
+    return {"chat_read_only_policy": READ_ONLY_POLICY_VERSION, "chat_history_binding": 1, "stripe": 1, "stripe_payment_links": 1, "assignment_draft_policy": 1, "contextual_email_policy": 1}
 
 
 async def chat_approve(params: Dict[str, Any], notify: NotifyFn) -> Any:

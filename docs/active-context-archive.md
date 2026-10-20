@@ -9,6 +9,19 @@ templates also select Stripe for future profiles. Desktop test installer
 Real-key reads, installed GUI and native-agent/full public-release acceptance
 remain pending. The [fleet rollout](../../docs/execution-plans/2026-10-16-stripe-hosted-fleet.md) owns source/activation evidence.
 
+## 2026-10-20 — Prior Stripe snapshot
+
+Stripe is available on all seven hosted engines, including support@mrcall.ai.
+Support has authenticated connected/live status and one bounded invoice read.
+Both maintained operators have canonical Stripe/bootstrap routing on all three
+host paths using fixed RPC reads without generic finance chat. Desktop prerelease
+`0.1.57-stripe.3` is signed/notarized and removes the extra checkbox.
+Installed-GUI, all-host native selection and full stable/public-package acceptance
+remain separate. The [fleet rollout](../../docs/execution-plans/2026-10-16-stripe-hosted-fleet.md)
+and [operator adoption](../../docs/execution-plans/2026-10-16-stripe-operator-discovery.md)
+own the runtime and installed-surface evidence.
+
+
 ## 2026-10-16 — Stripe before installer and remote enablement
 
 The [Stripe connection](../../docs/execution-plans/2026-10-16-stripe-connection.md)

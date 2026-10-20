@@ -1,6 +1,6 @@
 ---
-doc_baseline_commit: 1c46cde3b86243aa6d3bf455de6db3e42ce71889
-doc_baseline_date: 2026-10-13
+doc_baseline_commit: 9ad915d3922e12c6137209ca8f3e9fa8bbad7f3e
+doc_baseline_date: 2026-10-20
 ---
 
 # Active Context — Cross-cutting
@@ -19,15 +19,13 @@ what is *current*, targeting ≤ ~120 lines.
 
 ## State now
 
-Stripe is available on all seven hosted engines, including support@mrcall.ai.
-Support has authenticated connected/live status and one bounded invoice read.
-Both maintained operators have canonical Stripe/bootstrap routing on all three
-host paths using fixed RPC reads without generic finance chat. Desktop prerelease
-`0.1.57-stripe.3` is signed/notarized and removes the extra checkbox.
-Installed-GUI, all-host native selection and full stable/public-package acceptance
-remain separate. The [fleet rollout](../../docs/execution-plans/2026-10-16-stripe-hosted-fleet.md)
-and [operator adoption](../../docs/execution-plans/2026-10-16-stripe-operator-discovery.md)
-own the runtime and installed-surface evidence.
+Stripe supports fixed RPC reads and source-level explicit EUR Payment Link
+creation. The new engine operation has deterministic fixture acceptance and
+private resumable idempotency state; installed activation and real provider
+creation have separate evidence under the [delivery plan](execution-plans/2026-10-20-stripe-payment-links.md).
+Existing read rollout remains qualified by its retained evidence. Desktop
+prerelease `0.1.57-stripe.3` is signed/notarized; no new installer is required by
+this engine/skill change. Stable installer acceptance remains separate.
 
 Desktop `v0.1.56` and kernel `v0.51.0` are published. Six hosted company engines have verified
 assignment reads and root-owned trust; both maintained clones install the release. Ordinary/Qonto

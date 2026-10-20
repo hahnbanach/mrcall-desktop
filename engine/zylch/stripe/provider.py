@@ -1,4 +1,4 @@
-"""Fixed-host, GET-only Stripe transport and minimal resource projections."""
+"""Fixed-host Stripe transport and minimal resource projections."""
 
 from __future__ import annotations
 
@@ -205,3 +205,32 @@ async def probe(api_key: str) -> dict:
         "mode": mode,
         "capabilities": CAPABILITIES,
     }
+
+
+async def post(api_key: str, resource: str, fields: dict, idempotency_key: str) -> dict:
+    key(api_key)
+    if resource not in {"prices", "payment_links"}:
+        raise StripeError("invalid_params")
+    try:
+        async with httpx.AsyncClient(timeout=15, follow_redirects=False) as client:
+            response = await client.post(
+                "https://api.stripe.com/v1/" + resource,
+                data=fields,
+                headers={
+                    "Authorization": "Bearer " + api_key,
+                    "Stripe-Version": API_VERSION,
+                    "Idempotency-Key": idempotency_key,
+                },
+            )
+        if response.status_code != 200:
+            if response.status_code == 403:
+                raise StripeError("price_write_permission" if resource == "prices" else "payment_link_write_permission")
+            raise StripeError({401: "auth", 429: "rate_limited"}.get(response.status_code, "operation_pending"))
+        if len(response.content) > 2_000_000:
+            raise StripeError("invalid_response")
+        result = response.json()
+        if not isinstance(result, dict):
+            raise StripeError("invalid_response")
+        return result
+    except (httpx.HTTPError, ValueError):
+        raise StripeError("operation_pending") from None

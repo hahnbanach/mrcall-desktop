@@ -1,8 +1,8 @@
 {
   "version": 1,
   "source_sha256": {
-    "preload": "f55a049e15a2e0a16751b6346458a2c51a88825fe1295dac2820a5111f55184f",
-    "renderer": "853a661aac6641ad4399aa73cc67f327a0add1d5d741ebe771a0a7913951822b",
+    "preload": "47f7006d4871ff3d23b509f8abe2cf6f2a358efb2f64c183dab4cb4772b1dfc7",
+    "renderer": "601d5663d3473604d33ead7ab7a04cb4bc939fd2116183d4afe64cafa7e2b2c7",
     "finance": "85643cf1d0e4848ca801c5d177ef50451ad043ea86e25c8c16039e2bf246db6e"
   },
   "command": "ENGINE_PYTHON=../engine/venv/bin/python CS_KERNEL_ROOT=../../cs-kernel npm run test:rpc-contracts",
@@ -828,6 +828,108 @@
       "declared_return": "{sender, business_id} | {error: 'auth_expired'}.",
       "open": false
     },
+    "stripe.connect": {
+      "accepted": [
+        "api_key",
+        "authority_confirmed",
+        "challenge_id"
+      ],
+      "required": [
+        "api_key",
+        "authority_confirmed",
+        "challenge_id"
+      ],
+      "declared_return": "saved connection.",
+      "open": false
+    },
+    "stripe.customers": {
+      "accepted": [
+        "email",
+        "limit",
+        "starting_after"
+      ],
+      "required": [],
+      "declared_return": "bounded customer evidence.",
+      "open": false
+    },
+    "stripe.detail": {
+      "accepted": [
+        "id",
+        "resource"
+      ],
+      "required": [
+        "id",
+        "resource"
+      ],
+      "declared_return": "single bounded resource evidence.",
+      "open": false
+    },
+    "stripe.disconnect": {
+      "accepted": [],
+      "required": [],
+      "declared_return": "removal of encrypted credential and generation advance.",
+      "open": false
+    },
+    "stripe.invoices": {
+      "accepted": [
+        "customer",
+        "limit",
+        "starting_after"
+      ],
+      "required": [],
+      "declared_return": "bounded invoice evidence.",
+      "open": false
+    },
+    "stripe.payment_link_create": {
+      "accepted": [
+        "amount_minor",
+        "label",
+        "request_id"
+      ],
+      "required": [
+        "amount_minor",
+        "label",
+        "request_id"
+      ],
+      "declared_return": "dict",
+      "open": false
+    },
+    "stripe.payments": {
+      "accepted": [
+        "customer",
+        "limit",
+        "starting_after"
+      ],
+      "required": [],
+      "declared_return": "bounded payment-intent evidence.",
+      "open": false
+    },
+    "stripe.status": {
+      "accepted": [],
+      "required": [],
+      "declared_return": "safe connection metadata.",
+      "open": false
+    },
+    "stripe.subscriptions": {
+      "accepted": [
+        "customer",
+        "limit",
+        "starting_after"
+      ],
+      "required": [],
+      "declared_return": "bounded subscription evidence.",
+      "open": false
+    },
+    "stripe.test": {
+      "accepted": [
+        "api_key"
+      ],
+      "required": [
+        "api_key"
+      ],
+      "declared_return": "tested account, mode and expiring challenge.",
+      "open": false
+    },
     "sync.run": {
       "accepted": [
         "days_back"
@@ -1198,7 +1300,7 @@
   },
   "preload_calls": [
     {
-      "line": 163,
+      "line": 164,
       "method": "system.capabilities",
       "payload_keys": [],
       "guaranteed_keys": [],
@@ -1206,7 +1308,51 @@
       "declared_return": "Promise<{ chat_history_binding?: number | undefined; }>"
     },
     {
-      "line": 166,
+      "line": 167,
+      "method": "stripe.status",
+      "payload_keys": [],
+      "guaranteed_keys": [],
+      "dynamic_payload": false,
+      "declared_return": "Promise<StripeStatus>"
+    },
+    {
+      "line": 168,
+      "method": "stripe.test",
+      "payload_keys": [
+        "api_key"
+      ],
+      "guaranteed_keys": [
+        "api_key"
+      ],
+      "dynamic_payload": false,
+      "declared_return": "Promise<StripeTestResult>"
+    },
+    {
+      "line": 169,
+      "method": "stripe.connect",
+      "payload_keys": [
+        "api_key",
+        "authority_confirmed",
+        "challenge_id"
+      ],
+      "guaranteed_keys": [
+        "api_key",
+        "authority_confirmed",
+        "challenge_id"
+      ],
+      "dynamic_payload": false,
+      "declared_return": "Promise<StripeStatus>"
+    },
+    {
+      "line": 170,
+      "method": "stripe.disconnect",
+      "payload_keys": [],
+      "guaranteed_keys": [],
+      "dynamic_payload": false,
+      "declared_return": "Promise<StripeStatus>"
+    },
+    {
+      "line": 173,
       "method": "qonto.status",
       "payload_keys": [],
       "guaranteed_keys": [],
@@ -1214,7 +1360,7 @@
       "declared_return": "Promise<{ status: string; generation: number; account_count: number; source_access: boolean; credential_stored: boolean; error?: string | undefined; }>"
     },
     {
-      "line": 171,
+      "line": 178,
       "method": "qonto.test",
       "payload_keys": [
         "api_key",
@@ -1228,7 +1374,7 @@
       "declared_return": "Promise<QontoTestResult>"
     },
     {
-      "line": 173,
+      "line": 180,
       "method": "qonto.connect",
       "payload_keys": [
         "account_ids",
@@ -1250,7 +1396,7 @@
       "declared_return": "Promise<QontoConnectResult>"
     },
     {
-      "line": 174,
+      "line": 181,
       "method": "qonto.sync",
       "payload_keys": [],
       "guaranteed_keys": [],
@@ -1258,7 +1404,7 @@
       "declared_return": "Promise<QontoSyncResult>"
     },
     {
-      "line": 175,
+      "line": 182,
       "method": "qonto.disconnect",
       "payload_keys": [],
       "guaranteed_keys": [],
@@ -1266,7 +1412,7 @@
       "declared_return": "Promise<QontoRemovalResult>"
     },
     {
-      "line": 176,
+      "line": 183,
       "method": "qonto.delete_imported_data",
       "payload_keys": [
         "confirmed"
@@ -1278,7 +1424,7 @@
       "declared_return": "Promise<QontoRemovalResult>"
     },
     {
-      "line": 177,
+      "line": 184,
       "method": "qonto.prepare",
       "payload_keys": [
         "resume"
@@ -1290,7 +1436,7 @@
       "declared_return": "Promise<{ success?: boolean | undefined; summary?: string | undefined; attempted?: number | undefined; completed?: number | undefined; failed?: number | undefined; errors?: { detail: string; }[] | undefined; }>"
     },
     {
-      "line": 178,
+      "line": 185,
       "method": "qonto.publication_preview",
       "payload_keys": [],
       "guaranteed_keys": [],
@@ -1298,7 +1444,7 @@
       "declared_return": "Promise<{ preview_id: string; fact_text: string; disclosure: string; }>"
     },
     {
-      "line": 179,
+      "line": 186,
       "method": "qonto.publish",
       "payload_keys": [
         "confirmed",
@@ -1314,7 +1460,7 @@
       "declared_return": "Promise<QontoPublicationResult>"
     },
     {
-      "line": 180,
+      "line": 187,
       "method": "qonto.transaction",
       "payload_keys": [
         "source_id"
@@ -1326,7 +1472,7 @@
       "declared_return": "Promise<QontoTransactionResult>"
     },
     {
-      "line": 182,
+      "line": 189,
       "method": "llm.models",
       "payload_keys": [
         "provider"
@@ -1336,7 +1482,7 @@
       "declared_return": "Promise<{ provider: string; models: { id: string; label: string; provider: string; }[]; available: boolean; reason: string; }>"
     },
     {
-      "line": 184,
+      "line": 191,
       "method": "usage.reconcile",
       "payload_keys": [
         "cursor"
@@ -1346,7 +1492,7 @@
       "declared_return": "Promise<{ recovered: number; unresolved: number; message: string; next_cursor: string | null; }>"
     },
     {
-      "line": 185,
+      "line": 192,
       "method": "usage.today",
       "payload_keys": [],
       "guaranteed_keys": [],
@@ -1354,7 +1500,7 @@
       "declared_return": "Promise<{ spent_usd: number; budget_usd: number; reserved_usd: number; pricing_fault: boolean; billing_supported: boolean; billing_reason?: string | undefined; model_policy?: { provider: string; preset: string; model: string; roles: Record<string, string>; quality_status: string; credential_configured: boolean; } | undefined; remaining_usd: number; exceeded: boolean; paused: boolean; resets_at: string; calls_today: number; by_site: Record<string, { calls: number; est_usd: number; }>; }>"
     },
     {
-      "line": 203,
+      "line": 210,
       "method": "tasks.list",
       "payload_keys": [
         "include_completed",
@@ -1365,7 +1511,7 @@
       "declared_return": "Promise<any[]>"
     },
     {
-      "line": 205,
+      "line": 212,
       "method": "tasks.complete",
       "payload_keys": [
         "note",
@@ -1379,7 +1525,7 @@
       "declared_return": "Promise<{ ok: boolean; }>"
     },
     {
-      "line": 206,
+      "line": 213,
       "method": "tasks.reopen",
       "payload_keys": [
         "task_id"
@@ -1391,7 +1537,7 @@
       "declared_return": "Promise<{ ok: boolean; }>"
     },
     {
-      "line": 207,
+      "line": 214,
       "method": "tasks.skip",
       "payload_keys": [
         "task_id"
@@ -1403,7 +1549,7 @@
       "declared_return": "Promise<{ ok: boolean; }>"
     },
     {
-      "line": 209,
+      "line": 216,
       "method": "tasks.pin",
       "payload_keys": [
         "pinned",
@@ -1417,7 +1563,7 @@
       "declared_return": "Promise<{ ok: boolean; }>"
     },
     {
-      "line": 211,
+      "line": 218,
       "method": "tasks.reanalyze",
       "payload_keys": [
         "task_id"
@@ -1429,7 +1575,7 @@
       "declared_return": "Promise<{ ok: boolean; action: \"kept\" | \"closed\" | \"updated\"; reason: string; task_id: string; usage?: Record<string, unknown> | undefined; }>"
     },
     {
-      "line": 223,
+      "line": 230,
       "method": "tasks.list_by_thread",
       "payload_keys": [
         "thread_id"
@@ -1441,7 +1587,7 @@
       "declared_return": "Promise<any[]>"
     },
     {
-      "line": 230,
+      "line": 237,
       "method": "tasks.dedup_now",
       "payload_keys": [],
       "guaranteed_keys": [],
@@ -1449,7 +1595,7 @@
       "declared_return": "Promise<{ clusters_examined: number; clusters_with_dups: number; tasks_closed: number; skipped_recently_reopened: number; skipped_oversize: number; no_llm: boolean; }>"
     },
     {
-      "line": 246,
+      "line": 253,
       "method": "tasks.solve",
       "payload_keys": [
         "instructions",
@@ -1463,7 +1609,7 @@
       "declared_return": "Promise<{ ok: boolean; result?: unknown; error?: string | undefined; }>"
     },
     {
-      "line": 255,
+      "line": 262,
       "method": "tasks.solve.approve",
       "payload_keys": [
         "approved",
@@ -1479,7 +1625,7 @@
       "declared_return": "Promise<{ ok: boolean; }>"
     },
     {
-      "line": 265,
+      "line": 272,
       "method": "tasks.solve.cancel",
       "payload_keys": [
         "task_id"
@@ -1489,7 +1635,7 @@
       "declared_return": "Promise<{ ok: boolean; task_id?: string | undefined; cancelled_pending?: number | undefined; error?: string | undefined; }>"
     },
     {
-      "line": 273,
+      "line": 280,
       "method": "memory.reconsolidate_now",
       "payload_keys": [],
       "guaranteed_keys": [],
@@ -1497,7 +1643,7 @@
       "declared_return": "Promise<{ ok: boolean; error?: string | undefined; groups_examined?: number | undefined; blobs_examined?: number | undefined; blobs_merged?: number | undefined; blobs_kept_distinct?: number | undefined; pair_cap_hit?: boolean | undefined; no_llm?: boolean | undefined; skipped?: boolean | undefined; reason?: string | undefined; }>"
     },
     {
-      "line": 291,
+      "line": 298,
       "method": "memory.key_mint",
       "payload_keys": [],
       "guaranteed_keys": [],
@@ -1505,7 +1651,7 @@
       "declared_return": "Promise<{ key: string; minted: boolean; }>"
     },
     {
-      "line": 293,
+      "line": 300,
       "method": "memory.key_validate",
       "payload_keys": [
         "key"
@@ -1517,7 +1663,7 @@
       "declared_return": "Promise<{ well_formed: boolean; reason: string; }>"
     },
     {
-      "line": 295,
+      "line": 302,
       "method": "memory.status",
       "payload_keys": [],
       "guaranteed_keys": [],
@@ -1525,7 +1671,7 @@
       "declared_return": "Promise<{ has_key: boolean; available: boolean; reason: string; self_notion?: string | null | undefined; blob_count?: number | undefined; fact_count?: number | undefined; contributors?: string[] | undefined; }>"
     },
     {
-      "line": 305,
+      "line": 312,
       "method": "memory.join_preview",
       "payload_keys": [
         "key"
@@ -1537,7 +1683,7 @@
       "declared_return": "Promise<{ well_formed: boolean; exists: boolean; reason: string; self_notion?: string | null | undefined; blob_count?: number | undefined; fact_count?: number | undefined; contributors?: string[] | undefined; }>"
     },
     {
-      "line": 315,
+      "line": 322,
       "method": "memory.join",
       "payload_keys": [
         "key"
@@ -1549,7 +1695,7 @@
       "declared_return": "Promise<{ ok: boolean; reason?: string | undefined; already?: boolean | undefined; merged?: Record<string, number> | undefined; self_notion?: string | null | undefined; blob_count?: number | undefined; contributors?: string[] | undefined; }>"
     },
     {
-      "line": 334,
+      "line": 341,
       "method": "chat.send",
       "payload_keys": [
         "context",
@@ -1570,7 +1716,7 @@
       "declared_return": "Promise<any>"
     },
     {
-      "line": 366,
+      "line": 373,
       "method": "chat.approve",
       "payload_keys": [
         "approved",
@@ -1585,7 +1731,7 @@
       "declared_return": "Promise<{ ok: boolean; }>"
     },
     {
-      "line": 370,
+      "line": 377,
       "method": "preparation.status",
       "payload_keys": [],
       "guaranteed_keys": [],
@@ -1593,7 +1739,7 @@
       "declared_return": "Promise<any>"
     },
     {
-      "line": 371,
+      "line": 378,
       "method": "preparation.pause",
       "payload_keys": [],
       "guaranteed_keys": [],
@@ -1601,7 +1747,7 @@
       "declared_return": "Promise<any>"
     },
     {
-      "line": 373,
+      "line": 380,
       "method": "preparation.resume",
       "payload_keys": [],
       "guaranteed_keys": [],
@@ -1609,7 +1755,7 @@
       "declared_return": "Promise<any>"
     },
     {
-      "line": 375,
+      "line": 382,
       "method": "preparation.reset_failures",
       "payload_keys": [
         "source",
@@ -1623,7 +1769,7 @@
       "declared_return": "Promise<{ reset: boolean; }>"
     },
     {
-      "line": 382,
+      "line": 389,
       "method": "update.run",
       "payload_keys": [],
       "guaranteed_keys": [],
@@ -1631,7 +1777,7 @@
       "declared_return": "Promise<any>"
     },
     {
-      "line": 389,
+      "line": 396,
       "method": "sync.run",
       "payload_keys": [
         "days_back"
@@ -1641,7 +1787,7 @@
       "declared_return": "Promise<{ success: boolean; summary: string; result: { sync_new: number; wa_messages: number; wa_contacts: number; wa_skipped_reason?: string | null | undefined; }; errors: { severity?: string | undefined; title?: string | undefined; detail?: string | undefined; action?: string | undefined; mailbox?: string | undefined; }[]; }>"
     },
     {
-      "line": 413,
+      "line": 420,
       "method": "setup.state",
       "payload_keys": [],
       "guaranteed_keys": [],
@@ -1649,7 +1795,7 @@
       "declared_return": "Promise<{ has_synced: boolean; has_trained: boolean; emails_count: number; whatsapp_messages_count: number; agents_trained: string[]; emails_analyzed_count?: number | null | undefined; emails_pending_analysis?: number | null | undefined; last_email_analyzed_at?: string | null | undefined; mailboxes?: { mailbox_id: string; address: string; emails_count: number; emails_pending_analysis: number; }[] | undefined; }>"
     },
     {
-      "line": 444,
+      "line": 451,
       "method": "agents.train_all",
       "payload_keys": [],
       "guaranteed_keys": [],
@@ -1657,7 +1803,7 @@
       "declared_return": "Promise<{ ok: boolean; error?: string | undefined; results: Record<string, { ok: boolean; error?: string | undefined; threads_analyzed?: number | undefined; whatsapp_chats_analyzed?: number | undefined; }>; }>"
     },
     {
-      "line": 460,
+      "line": 467,
       "method": "emails.list_by_thread",
       "payload_keys": [
         "thread_id"
@@ -1669,7 +1815,7 @@
       "declared_return": "Promise<any>"
     },
     {
-      "line": 464,
+      "line": 471,
       "method": "emails.list_inbox",
       "payload_keys": [
         "limit",
@@ -1684,7 +1830,7 @@
       "declared_return": "Promise<{ threads: any[]; }>"
     },
     {
-      "line": 474,
+      "line": 481,
       "method": "emails.list_sent",
       "payload_keys": [
         "limit",
@@ -1699,7 +1845,7 @@
       "declared_return": "Promise<{ threads: any[]; }>"
     },
     {
-      "line": 493,
+      "line": 500,
       "method": "emails.search",
       "payload_keys": [
         "folder",
@@ -1718,7 +1864,7 @@
       "declared_return": "Promise<{ threads: any[]; }>"
     },
     {
-      "line": 505,
+      "line": 512,
       "method": "emails.pin",
       "payload_keys": [
         "pinned",
@@ -1732,7 +1878,7 @@
       "declared_return": "Promise<{ ok: boolean; affected: number; }>"
     },
     {
-      "line": 511,
+      "line": 518,
       "method": "emails.mark_read",
       "payload_keys": [
         "thread_id"
@@ -1744,7 +1890,7 @@
       "declared_return": "Promise<{ ok: boolean; affected: number; }>"
     },
     {
-      "line": 522,
+      "line": 529,
       "method": "emails.archive",
       "payload_keys": [
         "thread_id"
@@ -1756,7 +1902,7 @@
       "declared_return": "Promise<{ ok: boolean; archived: number; mailboxes: { mailbox_id: string; attempted: number; moved: number; error: string | null; }[]; }>"
     },
     {
-      "line": 536,
+      "line": 543,
       "method": "emails.delete",
       "payload_keys": [
         "thread_id"
@@ -1768,7 +1914,7 @@
       "declared_return": "Promise<{ ok: boolean; deleted: number; }>"
     },
     {
-      "line": 547,
+      "line": 554,
       "method": "mailboxes.list",
       "payload_keys": [],
       "guaranteed_keys": [],
@@ -1776,7 +1922,7 @@
       "declared_return": "Promise<{ mailboxes: any[]; }>"
     },
     {
-      "line": 548,
+      "line": 555,
       "method": "mailboxes.presets",
       "payload_keys": [],
       "guaranteed_keys": [],
@@ -1784,7 +1930,7 @@
       "declared_return": "Promise<{ presets: any[]; }>"
     },
     {
-      "line": 556,
+      "line": 563,
       "method": "mailboxes.test",
       "payload_keys": [
         "address",
@@ -1802,7 +1948,7 @@
       "declared_return": "Promise<MailboxTestResult>"
     },
     {
-      "line": 566,
+      "line": 573,
       "method": "mailboxes.add",
       "payload_keys": [
         "address",
@@ -1821,7 +1967,7 @@
       "declared_return": "Promise<MailboxMutationResult>"
     },
     {
-      "line": 580,
+      "line": 587,
       "method": "mailboxes.update",
       "payload_keys": [
         "imap_host",
@@ -1839,7 +1985,7 @@
       "declared_return": "Promise<MailboxMutationResult>"
     },
     {
-      "line": 586,
+      "line": 593,
       "method": "mailboxes.remove",
       "payload_keys": [
         "mailbox_id"
@@ -1851,7 +1997,7 @@
       "declared_return": "Promise<MailboxMutationResult>"
     },
     {
-      "line": 617,
+      "line": 624,
       "method": "profiles.create",
       "payload_keys": [
         "email",
@@ -1865,7 +2011,7 @@
       "declared_return": "Promise<{ ok: boolean; profile: string; }>"
     },
     {
-      "line": 629,
+      "line": 636,
       "method": "narration.summarize",
       "payload_keys": [
         "context",
@@ -1879,7 +2025,7 @@
       "declared_return": "Promise<{ text: string; }>"
     },
     {
-      "line": 631,
+      "line": 638,
       "method": "narration.predict",
       "payload_keys": [
         "context",
@@ -1893,7 +2039,7 @@
       "declared_return": "Promise<{ text: string; }>"
     },
     {
-      "line": 635,
+      "line": 642,
       "method": "settings.schema",
       "payload_keys": [],
       "guaranteed_keys": [],
@@ -1901,7 +2047,7 @@
       "declared_return": "Promise<{ fields: { key: string; label: string; type: \"number\" | \"text\" | \"password\" | \"select\" | \"textarea\"; group: string; optional?: boolean | undefined; options?: string[] | undefined; help?: string | undefined; secret?: boolean | undefined; }[]; }>"
     },
     {
-      "line": 647,
+      "line": 654,
       "method": "settings.get",
       "payload_keys": [],
       "guaranteed_keys": [],
@@ -1909,7 +2055,7 @@
       "declared_return": "Promise<{ values: Record<string, string>; }>"
     },
     {
-      "line": 653,
+      "line": 660,
       "method": "settings.get_secret",
       "payload_keys": [
         "key"
@@ -1921,7 +2067,7 @@
       "declared_return": "Promise<{ key: string; value: string; }>"
     },
     {
-      "line": 655,
+      "line": 662,
       "method": "settings.update",
       "payload_keys": [
         "updates"
@@ -1933,7 +2079,7 @@
       "declared_return": "Promise<{ ok: boolean; applied: string[]; skipped_unchanged: string[]; }>"
     },
     {
-      "line": 764,
+      "line": 771,
       "method": "account.set_firebase_token",
       "payload_keys": [
         "email",
@@ -1951,7 +2097,7 @@
       "declared_return": "Promise<{ ok: boolean; }>"
     },
     {
-      "line": 772,
+      "line": 779,
       "method": "account.sign_out",
       "payload_keys": [],
       "guaranteed_keys": [],
@@ -1959,7 +2105,7 @@
       "declared_return": "Promise<{ ok: boolean; }>"
     },
     {
-      "line": 780,
+      "line": 787,
       "method": "account.who_am_i",
       "payload_keys": [],
       "guaranteed_keys": [],
@@ -1967,7 +2113,7 @@
       "declared_return": "Promise<{ signed_in: boolean; uid?: string | undefined; email?: string | null | undefined; expires_at_ms?: number | undefined; }>"
     },
     {
-      "line": 795,
+      "line": 802,
       "method": "account.balance",
       "payload_keys": [],
       "guaranteed_keys": [],
@@ -1975,7 +2121,7 @@
       "declared_return": "Promise<{ balance_credits: number; balance_micro_usd: number; balance_usd: number; granularity_micro_usd?: number | undefined; estimate_messages_remaining?: number | undefined; } | { error: \"auth_expired\"; }>"
     },
     {
-      "line": 802,
+      "line": 809,
       "method": "sms.get_sender",
       "payload_keys": [],
       "guaranteed_keys": [],
@@ -1983,7 +2129,7 @@
       "declared_return": "Promise<{ sender: string; business_id?: string | undefined; } | { error: \"auth_expired\"; }>"
     },
     {
-      "line": 806,
+      "line": 813,
       "method": "sms.set_sender",
       "payload_keys": [
         "sender"
@@ -1995,7 +2141,7 @@
       "declared_return": "Promise<{ sender: string; business_id?: string | undefined; } | { error: \"auth_expired\"; }>"
     },
     {
-      "line": 815,
+      "line": 822,
       "method": "mrcall.list_my_businesses",
       "payload_keys": [
         "limit",
@@ -2009,7 +2155,7 @@
       "declared_return": "Promise<{ businesses: unknown[]; role: string; }>"
     },
     {
-      "line": 841,
+      "line": 848,
       "method": "mrcall.search_businesses",
       "payload_keys": [
         "address",
@@ -2034,7 +2180,7 @@
       "declared_return": "Promise<{ businesses: unknown[]; role: string; }>"
     },
     {
-      "line": 856,
+      "line": 863,
       "method": "google.calendar.connect",
       "payload_keys": [],
       "guaranteed_keys": [],
@@ -2042,7 +2188,7 @@
       "declared_return": "Promise<{ ok: boolean; email: string; scope: string; }>"
     },
     {
-      "line": 862,
+      "line": 869,
       "method": "google.calendar.disconnect",
       "payload_keys": [],
       "guaranteed_keys": [],
@@ -2050,7 +2196,7 @@
       "declared_return": "Promise<{ ok: boolean; }>"
     },
     {
-      "line": 869,
+      "line": 876,
       "method": "google.calendar.status",
       "payload_keys": [],
       "guaranteed_keys": [],
@@ -2058,7 +2204,7 @@
       "declared_return": "Promise<{ connected: boolean; signed_in?: boolean | undefined; email?: string | null | undefined; }>"
     },
     {
-      "line": 874,
+      "line": 881,
       "method": "google.calendar.cancel",
       "payload_keys": [],
       "guaranteed_keys": [],
@@ -2066,7 +2212,7 @@
       "declared_return": "Promise<{ cancelled: boolean; }>"
     },
     {
-      "line": 885,
+      "line": 892,
       "method": "whatsapp.connect",
       "payload_keys": [],
       "guaranteed_keys": [],
@@ -2074,7 +2220,7 @@
       "declared_return": "Promise<{ ok: boolean; phone?: string | null | undefined; display_name?: string | null | undefined; reason?: string | undefined; }>"
     },
     {
-      "line": 894,
+      "line": 901,
       "method": "whatsapp.disconnect",
       "payload_keys": [
         "forget_session"
@@ -2086,7 +2232,7 @@
       "declared_return": "Promise<{ ok: boolean; forgot: boolean; error?: string | undefined; }>"
     },
     {
-      "line": 901,
+      "line": 908,
       "method": "whatsapp.status",
       "payload_keys": [],
       "guaranteed_keys": [],
@@ -2094,7 +2240,7 @@
       "declared_return": "Promise<{ connected: boolean; has_session: boolean; phone?: string | null | undefined; display_name?: string | null | undefined; }>"
     },
     {
-      "line": 907,
+      "line": 914,
       "method": "whatsapp.cancel",
       "payload_keys": [],
       "guaranteed_keys": [],
@@ -2102,7 +2248,7 @@
       "declared_return": "Promise<{ cancelled: boolean; }>"
     },
     {
-      "line": 909,
+      "line": 916,
       "method": "whatsapp.list_threads",
       "payload_keys": [
         "limit",
@@ -2116,7 +2262,7 @@
       "declared_return": "Promise<{ threads: WhatsAppThread[]; total_messages?: number | undefined; owner_id?: string | undefined; breakdown_by_server?: Record<string, number> | undefined; error?: string | undefined; }>"
     },
     {
-      "line": 920,
+      "line": 927,
       "method": "whatsapp.list_messages",
       "payload_keys": [
         "chat_jid",
@@ -2132,7 +2278,7 @@
       "declared_return": "Promise<{ messages: WhatsAppMessage[]; error?: string | undefined; }>"
     },
     {
-      "line": 932,
+      "line": 939,
       "method": "whatsapp.search_messages",
       "payload_keys": [
         "limit",
@@ -2146,7 +2292,7 @@
       "declared_return": "Promise<{ threads: WhatsAppThread[]; query?: string | undefined; error?: string | undefined; }>"
     },
     {
-      "line": 942,
+      "line": 949,
       "method": "whatsapp.send_message",
       "payload_keys": [
         "chat_jid",
@@ -2165,6 +2311,34 @@
       "api": "system.capabilities",
       "renderer": "() => Promise<{ chat_history_binding?: number | undefined; }>",
       "preload": "() => Promise<{ chat_history_binding?: number | undefined; }>",
+      "renderer_arguments_accepted": true,
+      "declared_return_assignable": true
+    },
+    {
+      "api": "stripe.status",
+      "renderer": "() => Promise<StripeStatus>",
+      "preload": "() => Promise<StripeStatus>",
+      "renderer_arguments_accepted": true,
+      "declared_return_assignable": true
+    },
+    {
+      "api": "stripe.test",
+      "renderer": "(params: { api_key: string; }) => Promise<StripeTestResult>",
+      "preload": "(params: { api_key: string; }) => Promise<StripeTestResult>",
+      "renderer_arguments_accepted": true,
+      "declared_return_assignable": true
+    },
+    {
+      "api": "stripe.connect",
+      "renderer": "(params: StripeConnectParams) => Promise<StripeStatus>",
+      "preload": "(params: StripeConnectParams) => Promise<StripeStatus>",
+      "renderer_arguments_accepted": true,
+      "declared_return_assignable": true
+    },
+    {
+      "api": "stripe.disconnect",
+      "renderer": "() => Promise<StripeStatus>",
+      "preload": "() => Promise<StripeStatus>",
       "renderer_arguments_accepted": true,
       "declared_return_assignable": true
     },
@@ -3129,7 +3303,7 @@
     },
     {
       "file": "cs/cli.py",
-      "line": 164,
+      "line": 167,
       "callee": "rpc.call_sync",
       "method": null,
       "method_expression": "args.method",
@@ -3139,7 +3313,7 @@
     },
     {
       "file": "cs/cli.py",
-      "line": 169,
+      "line": 172,
       "callee": "rpc.call_sync",
       "method": "emails.search",
       "method_expression": "'emails.search'",
@@ -3153,7 +3327,7 @@
     },
     {
       "file": "cs/cli.py",
-      "line": 203,
+      "line": 206,
       "callee": "rpc.call_sync",
       "method": "emails.list_by_thread",
       "method_expression": "'emails.list_by_thread'",
@@ -3165,7 +3339,7 @@
     },
     {
       "file": "cs/cli.py",
-      "line": 569,
+      "line": 572,
       "callee": "rpc.call_sync",
       "method": "tasks.list",
       "method_expression": "'tasks.list'",
@@ -3178,7 +3352,7 @@
     },
     {
       "file": "cs/cli.py",
-      "line": 615,
+      "line": 618,
       "callee": "rpc.call_sync",
       "method": "tasks.create",
       "method_expression": "'tasks.create'",
@@ -3188,7 +3362,7 @@
     },
     {
       "file": "cs/cli.py",
-      "line": 637,
+      "line": 640,
       "callee": "rpc.call_sync",
       "method": "tasks.complete",
       "method_expression": "'tasks.complete'",
@@ -3198,7 +3372,7 @@
     },
     {
       "file": "cs/cli.py",
-      "line": 800,
+      "line": 803,
       "callee": "rpc.call_sync",
       "method": "tasks.list",
       "method_expression": "'tasks.list'",
@@ -3211,7 +3385,7 @@
     },
     {
       "file": "cs/cli.py",
-      "line": 813,
+      "line": 816,
       "callee": "rpc.call_sync",
       "method": "tasks.complete",
       "method_expression": "'tasks.complete'",
@@ -3226,7 +3400,7 @@
     },
     {
       "file": "cs/cli.py",
-      "line": 1140,
+      "line": 1143,
       "callee": "rpc.call_sync",
       "method": "tasks.list",
       "method_expression": "'tasks.list'",
@@ -3238,7 +3412,7 @@
     },
     {
       "file": "cs/cli.py",
-      "line": 1307,
+      "line": 1310,
       "callee": "rpc.call_sync",
       "method": "drafts.list",
       "method_expression": "'drafts.list'",
@@ -3250,7 +3424,7 @@
     },
     {
       "file": "cs/cli.py",
-      "line": 1604,
+      "line": 1607,
       "callee": "rpc.call_sync",
       "method": "drafts.list",
       "method_expression": "'drafts.list'",
@@ -3260,7 +3434,7 @@
     },
     {
       "file": "cs/cli.py",
-      "line": 1626,
+      "line": 1629,
       "callee": "rpc.call_sync",
       "method": "drafts.list",
       "method_expression": "'drafts.list'",
@@ -3270,7 +3444,7 @@
     },
     {
       "file": "cs/cli.py",
-      "line": 1712,
+      "line": 1715,
       "callee": "rpc.call_sync",
       "method": "drafts.list",
       "method_expression": "'drafts.list'",
@@ -3282,7 +3456,7 @@
     },
     {
       "file": "cs/cli.py",
-      "line": 1811,
+      "line": 1814,
       "callee": "rpc.call_sync",
       "method": "sync.run",
       "method_expression": "'sync.run'",
@@ -3292,7 +3466,7 @@
     },
     {
       "file": "cs/cli.py",
-      "line": 1816,
+      "line": 1819,
       "callee": "rpc.call_sync",
       "method": "update.run",
       "method_expression": "'update.run'",
@@ -3613,6 +3787,36 @@
       "method_expression": "'memory.status'",
       "keys": [],
       "dynamic_payload": false,
+      "return": "Any at EngineClient.call; no runtime return schema"
+    },
+    {
+      "file": "cs/stripe_cli.py",
+      "line": 36,
+      "callee": "client.call",
+      "method": null,
+      "method_expression": "method",
+      "keys": [],
+      "dynamic_payload": true,
+      "return": "Any at EngineClient.call; no runtime return schema"
+    },
+    {
+      "file": "cs/stripe_cli.py",
+      "line": 65,
+      "callee": "call",
+      "method": null,
+      "method_expression": "client",
+      "keys": [],
+      "dynamic_payload": true,
+      "return": "Any at EngineClient.call; no runtime return schema"
+    },
+    {
+      "file": "cs/stripe_cli.py",
+      "line": 90,
+      "callee": "call",
+      "method": null,
+      "method_expression": "client",
+      "keys": [],
+      "dynamic_payload": true,
       "return": "Any at EngineClient.call; no runtime return schema"
     },
     {

@@ -1630,3 +1630,11 @@ contract and live only in `app/src/preload/index.ts` /
 Document renderer IPC details in `app/CLAUDE.md` or a dedicated app contract
 document. `app/docs/active-context.md` carries current state and unresolved work,
 not a growing IPC method index.
+
+### Explicit Stripe Payment Link creation
+
+`stripe.payment_link_create` accepts only `amount_minor`, `label`, `request_id`
+and returns EUR amount, link/price IDs, URL and account/mode/generation/retrieval
+provenance. `stripe_payment_links: 1` advertises this fixed mutation separately
+from existing `stripe: 1` reads. The [engine contract](../engine/docs/features/stripe.md#explicit-fixed-eur-payment-links)
+owns validation, write permissions, encrypted retries and authorization limits.
