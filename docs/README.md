@@ -91,3 +91,5 @@ anywhere in the repo):
 - [Contextual email assignment enforcement](execution-plans/2026-10-08-contextual-email-assignment-guard.md) — local unreleased guard, exact caller binding and verification; [brief](briefs/2026-10-08-contextual-email-assignment-guard.md).
 
 - [MrCall company sharing](execution-plans/2026-10-08-mrcall-company-memory-sharing.md) — authorized fenced join, authenticated shared reads and private-data preservation; [brief](briefs/2026-10-08-mrcall-company-memory-sharing.md).
+
+- [Explicit Stripe Payment Links](execution-plans/2026-10-20-stripe-payment-links.md) — bounded EUR creation, retry safety and activation limits; [brief](briefs/2026-10-20-stripe-payment-links.md).
