@@ -1,6 +1,6 @@
 ---
-doc_baseline_commit: 843666f8a09cf7840ba7b9628cc4f1b88eef8c69
-doc_baseline_date: 2026-10-17
+doc_baseline_commit: 8815be2084d91093bfb038c3382e8d2c6fd081fb
+doc_baseline_date: 2026-10-21
 ---
 
 # Active Context — Cross-cutting
@@ -19,6 +19,9 @@ what is *current*, targeting ≤ ~120 lines.
 
 ## State now
 
+Operational/version claims retain their17Oct evidence and require fresh preflight;
+the latest21Oct owner status is explicitly attributed below.
+
 The [email-action successor](execution-plans/2026-10-17-m10-email-action-preservation.md)
 preserves the reviewed request-local error correction in source843666f8. Exactly
 three product resources change against2a8121e2;380 others/all seven assets stay
@@ -30,13 +33,15 @@ complete hosted environments. Previouscba3cda9 is published with6/6 nonpaid CI;
 actual successor final-head CI is retained after reviewed feature publication.
 Hosted installation and main/tag/fleet release require their separate gates.
 
-The runtime owner retains all six services/cron custody and has issued no M10
-handoff. It reports the email-outcome composition installed and checked; real
-ordinary send/reception, usable draft, three completed jobs and cleanup remain
-unaccepted. Previous failed ordinary cases remain historical evidence. Fresh
-custody and complete actual runtime/acceptance receipts are required. No M10 live
-switch or acceptance guard is active; authenticated finance, voice/MCP and exact
-unit/drop-in state remain protected inputs.
+M10 remains owned by MEMORY; SKILL-IN-ENGINE owns ordinary/context recovery and
+has explicitly declined the whole M10 handoff. Its latest report says the context
+fix is installed and one actual read-only K3 ask passes; full ordinary C38 remains
+blocked by kernel UNKNOWN production without actor/source UID. It promises a
+verified final event with runtime/service/cron custody. No such handoff is received.
+The final two-file context source packet is available for offline preservation
+comparison; source tests and a single ask do not establish full ordinary success.
+No M10 live switch/guard/paid acceptance is active. Fresh accepted runtime, finance,
+voice/MCP and exact unit/drop-in preservation remain prerequisites.
 
 The [additional acceptance guard](../engine/docs/features/m10-acceptance-budget.md)
 has approved source/control closure. The authorized next test phase retains one

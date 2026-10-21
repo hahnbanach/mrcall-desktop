@@ -1,3 +1,13 @@
+## 2026-10-21 — Ordinary ownership and context prerequisite
+
+The runtime owner retains all six services/cron custody and has issued no M10
+handoff. It reports the email-outcome composition installed and checked; real
+ordinary send/reception, usable draft, three completed jobs and cleanup remain
+unaccepted. Previous failed ordinary cases remain historical evidence. Fresh
+custody and complete actual runtime/acceptance receipts are required. No M10 live
+switch or acceptance guard is active; authenticated finance, voice/MCP and exact
+unit/drop-in state remain protected inputs.
+
 ## 2026-10-17 — Email-action successor and native proof
 
 The [draft-thread successor](execution-plans/2026-10-17-m10-draft-thread-preservation.md)
