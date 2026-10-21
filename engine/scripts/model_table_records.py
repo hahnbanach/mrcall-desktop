@@ -1,0 +1,312 @@
+"""The daily model-table job's records: the spend ledger, the working measurement, the report.
+
+Pure: the job (`model_table_job.py`) reads and writes the files. Amounts are
+USD as canonical decimal strings (`rm.snapshot.text`), never floats.
+
+**`ledger.json`** (data branch, `v1/`) holds the job's paid calls by month
+(UTC, `YYYY-MM`): `{"schema": 1, "months": {"2026-10": [run, ...]}}`, one row
+per run that paid for anything: `run` (its id), `reserved_usd`, `opened_at`,
+`spent_usd` and `settled_at` (null until settled) and `calls` (kind, model,
+role, why, bound, spend, outcome). A month's use is what its runs spent, or
+reserved where a run never settled (it stopped mid-way: its outcome is
+uncertain, so its whole reservation stays counted, as the engine's own
+ledger keeps an uncertain hold).
+
+**The reservation follows the run, check by check** (`Spend`). Before a paid
+check the run raises its reservation to exactly what it has spent plus that
+check's bound, and pushes it; after the check it records the call, lowers
+the reservation to what it has spent, and pushes that (`checkpoint`, with
+the check's results: `model_table_results.py`). So at every moment the
+pushed reservation is the run's recorded spend plus the bound of the one
+check it may have in flight, and a run killed at any point leaves on the
+data branch an honest upper bound of what it spent.
+
+**Recovery** (`recover`). A run finds on the ledger any earlier run still
+open (`settled_at` null) — it was killed, or its settlement push failed —
+and, before reserving anything, settles it at its reserved amount, marked
+`recovered` (with `recovered_by`, the run that settled it), its recorded
+calls kept. The job reads no local journal to settle for less: in CI the
+journals are gone, and the reservation above already is the recorded spend
+plus one check's bound. A recovered row is settled, so it counts once (its
+`spent_usd`) and is never recovered again.
+
+**`measured.json`** (data branch) is the engine's `roles/measured.json` as
+the job last used it: the measurement's file, with each result the job adds
+stamped with its own `case_set_sha256`, `prompt_sha256` and `measured_at`
+(the resolver ignores extra result fields), so a result stays keyed by
+(model, role, case-set hash, prompt hash). What a result is, how it is
+judged against the role's reference, how the threshold is derived again and
+how a role whose hashes changed is re-measured: `model_table_measured.py`.
+Here: which copy a run starts from (`working_measured`).
+"""
+
+from __future__ import annotations
+
+import copy
+import json
+import re
+from decimal import Decimal, InvalidOperation
+
+import resolve_models as rm
+
+LEDGER_SCHEMA = 1
+STAMP = "%Y-%m-%dT%H:%M:%SZ"
+MONTH = re.compile(r"^[0-9]{4}-[0-9]{2}$")
+
+
+def usd(amount: Decimal) -> str:
+    """An amount as the records write it."""
+    return rm.snapshot.text(amount)
+
+
+def _amount(value: object, where: str) -> Decimal:
+    try:
+        amount = Decimal(value) if isinstance(value, str) else None
+    except InvalidOperation:
+        amount = None
+    if amount is None or not amount.is_finite() or amount < 0:
+        raise ValueError(f"ledger.json: {where} is not an amount in USD")
+    return amount
+
+
+def empty_ledger() -> dict:
+    return {"schema": LEDGER_SCHEMA, "months": {}}
+
+
+def check_ledger(doc: object) -> dict:
+    """Return `doc` when it is a ledger the job reads, else raise ValueError:
+    the job never overwrites a spend record it cannot read."""
+    if not isinstance(doc, dict) or doc.get("schema") != LEDGER_SCHEMA:
+        raise ValueError(f"ledger.json: not a schema {LEDGER_SCHEMA} ledger")
+    months = doc.get("months")
+    if not isinstance(months, dict):
+        raise ValueError("ledger.json: months must be an object")
+    for month, runs in months.items():
+        if not MONTH.match(month) or not isinstance(runs, list):
+            raise ValueError(f"ledger.json: months.{month} must be a list of runs")
+        for row in runs:
+            where = f"months.{month}"
+            if not isinstance(row, dict) or not isinstance(row.get("run"), str):
+                raise ValueError(f"ledger.json: {where} holds a row without a run id")
+            _amount(row.get("reserved_usd"), f"{where} / {row['run']} reserved_usd")
+            if row.get("spent_usd") is not None:
+                _amount(row["spent_usd"], f"{where} / {row['run']} spent_usd")
+    return doc
+
+
+def month_used(ledger: dict, month: str, skip: str | None = None) -> Decimal:
+    """What `month`'s runs spent, or reserved where one never settled,
+    leaving out the run `skip`."""
+    used = Decimal(0)
+    for row in ledger["months"].get(month, []):
+        if row["run"] != skip:
+            used += Decimal(
+                row["spent_usd"] if row["spent_usd"] is not None else row["reserved_usd"]
+            )
+    return used
+
+
+def _row(ledger: dict, month: str, run: str) -> dict | None:
+    return next((row for row in ledger["months"].get(month, []) if row["run"] == run), None)
+
+
+def reserve(ledger: dict, month: str, run: str, amount: Decimal, at: str) -> dict:
+    """A copy of `ledger` holding `run`'s reservation of `amount` (opened, or raised)."""
+    out = copy.deepcopy(ledger)
+    row = _row(out, month, run)
+    if row is None:
+        row = {"run": run, "opened_at": at, "spent_usd": None, "settled_at": None, "calls": []}
+        out["months"].setdefault(month, []).append(row)
+    row["reserved_usd"] = usd(amount)
+    return out
+
+
+def settle(ledger: dict, month: str, run: str, spent: Decimal, calls: list, at: str) -> dict:
+    """A copy of `ledger` with `run` settled at `spent`, its calls recorded."""
+    out = copy.deepcopy(ledger)
+    row = _row(out, month, run)
+    row.update(spent_usd=usd(spent), settled_at=at, calls=calls)
+    return out
+
+
+def recover(ledger: dict, run: str, at: str) -> tuple[dict, list[str]]:
+    """A copy of `ledger` with every open row but `run`'s settled at its
+    reserved amount, marked recovered (module docstring), and a line per row."""
+    out, lines = copy.deepcopy(ledger), []
+    for month, rows in out["months"].items():
+        for row in rows:
+            if row["run"] == run or row.get("settled_at") is not None:
+                continue
+            row.update(spent_usd=row["reserved_usd"], settled_at=at, recovered=True)
+            row["recovered_by"] = run
+            calls = len(row.get("calls") or [])
+            lines.append(
+                f"run {row['run']} ({month}) was never settled: settled at its reserved "
+                f"USD {row['reserved_usd']}, recovered ({calls} calls recorded)"
+            )
+    return out, lines
+
+
+def dump(doc: dict) -> str:
+    """The file layout of the job's own records: sorted keys, two-space indent."""
+    return json.dumps(doc, indent=2, sort_keys=True, ensure_ascii=False) + "\n"
+
+
+class Spend:
+    """A run's spending under the monthly cap (`model_table_job.py`, step 4):
+    its reservation in `ledger.json`, raised and pushed through `edges.push`
+    before each paid check, lowered and pushed after it (module docstring),
+    and its settlement."""
+
+    def __init__(self, ledger: dict, now, cap: Decimal, edges):
+        self.ledger, self.cap, self.edges = ledger, cap, edges
+        self.month, self.run = now.strftime("%Y-%m"), now.strftime(STAMP)
+        self.before = month_used(ledger, self.month, skip=self.run)
+        self.reserved = self.consumed = Decimal(0)
+        self.peak, self.opened = Decimal(0), False
+        self.inflight = Decimal(0)  # the bound of a check admitted and not yet recorded
+        self.calls: list[dict] = []
+
+    def admit(self, bound: Decimal) -> str | None:
+        """None when a call of `bound` may be sent — the reservation of what
+        the run spent plus `bound` pushed first — else why it may not."""
+        room = self.cap - self.before
+        need = self.consumed + bound
+        if need > room:
+            left = usd(max(room - self.consumed, Decimal(0)))
+            return f"the monthly cap of USD {usd(self.cap)} leaves USD {left}"
+        if need != self.reserved or not self.opened:
+            at = self.edges.now().strftime(STAMP)
+            ledger = reserve(self.ledger, self.month, self.run, need, at)
+            message = f"model-table: run {self.run} reserves USD {usd(need)}"
+            self.edges.push({"ledger.json": dump(ledger)}, message)
+            self.ledger, self.reserved, self.opened = ledger, need, True
+            self.peak = max(self.peak, need)
+        self.inflight = bound
+        return None
+
+    def spent(self, call: dict, amount: Decimal) -> str:
+        """Record a finished call; the ledger to push now (`checkpoint`): the
+        call in the run's row, the reservation lowered to what it spent."""
+        self.consumed += amount
+        self.calls.append(call)
+        self.inflight = Decimal(0)
+        at = self.edges.now().strftime(STAMP)
+        ledger = reserve(self.ledger, self.month, self.run, self.consumed, at)
+        _row(ledger, self.month, self.run)["calls"] = copy.deepcopy(self.calls)
+        self.ledger, self.reserved = ledger, self.consumed
+        return dump(ledger)
+
+    def settled(self) -> str | None:
+        """The ledger with this run settled, or None when it reserved nothing.
+        A check interrupted in flight (the run's process was interrupted while
+        waiting for it) is settled at its bound: what it spent is unknown."""
+        if not self.opened:
+            return None
+        at = self.edges.now().strftime(STAMP)
+        calls = list(self.calls)
+        if self.inflight:
+            what = f"a check interrupted in flight, counted at its bound USD {usd(self.inflight)}"
+            calls.append({"outcome": what, "spent_usd": usd(self.inflight)})
+        spent = self.consumed + self.inflight
+        doc = settle(self.ledger, self.month, self.run, spent, calls, at)
+        return dump(doc)
+
+    def summary(self) -> dict:
+        return {
+            "month": self.month,
+            "cap": usd(self.cap),
+            "used_before": usd(self.before),
+            "reserved": usd(self.peak),
+            "spent": usd(self.consumed + self.inflight),
+        }
+
+
+def _key(body: dict) -> tuple[str, str]:
+    return body["case_set_sha256"], body["prompt_sha256"]
+
+
+def working_measured(published: dict | None, build: dict | None, hashes: dict) -> dict | None:
+    """The measurement the run starts from: the published one (the job's
+    latest), else the build copy; a role the build copy measured under the
+    current hashes while the published one did not (a re-measurement since)
+    is taken from the build copy."""
+    base = copy.deepcopy(published if published is not None else build)
+    if base is None or published is None or build is None:
+        return base
+    for role, body in build["roles"].items():
+        want, held = hashes.get(role), base["roles"].get(role)
+        if want is None or _key(body) != tuple(want):
+            continue
+        if held is None or _key(held) != tuple(want):
+            base["roles"][role] = copy.deepcopy(body)
+            # A re-measurement the job had begun is moot: the build copy's is whole.
+            (base.get("remeasure") or {}).pop(role, None)
+    if base.get("remeasure") == {}:
+        del base["remeasure"]
+    return base
+
+
+def _table(head: tuple, rows: list) -> list[str]:
+    lines = ["| " + " | ".join(head) + " |", "|" + "---|" * len(head)]
+    return lines + ["| " + " | ".join(str(cell) for cell in row) + " |" for row in rows]
+
+
+def report(s: dict) -> str:
+    """The run's markdown report from its summary `s` (built by the job)."""
+    lines = [
+        "# Model table: daily resolution",
+        "",
+        f"- Run `{s['run']}`: **{s['status']}** (exit {s['code']})",
+        (
+            f"- Catalogue read {s.get('read_at') or 'not read'}; "
+            f"benchmarks as of {s.get('benchmarks_as_of') or 'an unrecorded date'}"
+        ),
+    ]
+    spend = s.get("spend")
+    if spend:
+        lines.append(
+            f"- Spend {spend['month']}: USD {spend['used_before']} used before this run, "
+            f"at most USD {spend['reserved']} reserved and USD {spend['spent']} spent by it, "
+            f"monthly cap USD {spend['cap']}"
+        )
+    if s.get("deadline"):
+        late = sum("the run's deadline" in why for _, why in s.get("deferred", []))
+        lines.append(f"- Deadline {s['deadline']}: {late} checks deferred by it")
+    sections = (
+        ("Problems (nothing published)", "problems"),
+        ("Flags: smokes settled above their expected spend; roles waiting on a stop", "flags"),
+        ("Notes", "notes"),
+    )
+    for title, key in sections:
+        if s.get(key):
+            lines += ["", f"## {title}", ""] + [f"- {line}" for line in s[key]]
+    lines += ["", "## Decision record", ""]
+    if s.get("decision") is None:
+        lines.append("- not compared: the run stopped before a table could be published")
+    else:
+        lines += [f"- {line}" for line in s["decision"]] or ["- no pick or order changed"]
+    snap = s.get("snapshot")
+    if snap:
+        lines += ["", "## Snapshot", "", f"- version {snap['old']} -> {snap['new']}"]
+        lines.append(f"- catalogue entries: {snap['added']} added, {snap['removed']} removed")
+        lines += [f"- price of ranked {m}: {old} -> {new}" for m, old, new in snap["prices"]]
+        lines += [f"- metadata of ranked {m}: {', '.join(f)}" for m, f in snap["metadata"]]
+    if s.get("calls"):
+        lines += ["", "## Paid checks", ""]
+        head = ("check", "why", "bound USD", "spent USD", "outcome")
+        rows = [
+            (c["check"], c["why"], c["bound_usd"], c["spent_usd"], c["outcome"]) for c in s["calls"]
+        ]
+        lines += _table(head, rows)
+    if s.get("deferred"):
+        lines += ["", "## Checks not made", ""]
+        lines += [f"- {check}: {why}" for check, why in s["deferred"]]
+    if s.get("resampled"):
+        lines += ["", "## Monthly re-sampling", ""] + [f"- {c}" for c in s["resampled"]]
+    lines += ["", "## Empty Anthropic rankings", ""]
+    lines += [f"- {where}" for where in s.get("empty_anthropic", [])] or ["- none"]
+    lines += ["", "## Unscored models (never ranked until scored)", ""]
+    unscored = s.get("unscored") or {}
+    lines += [f"- {model}: {why}" for model, why in unscored.items()] or ["- none"]
+    return "\n".join(lines) + "\n"

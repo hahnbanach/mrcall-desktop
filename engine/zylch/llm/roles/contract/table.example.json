@@ -1,0 +1,36 @@
+{
+ "catalogue_read_at": "2026-10-02T13:36:42Z",
+ "measured_sha256": "260493893e9438e14759dbdb06856a0f684cf86d4d9b88d2ffa2efdbbc981871",
+ "presets": {
+  "balanced": {
+   "ceiling": "20",
+   "roles": {
+    "CHAT": {
+     "anthropic_ranking": [{"direct_id": "claude-opus-5-5", "id": "anthropic/claude-opus-5.5"}, {"direct_id": "claude-sonnet-5-5", "id": "anthropic/claude-sonnet-5.5"}],
+     "ranking": [{"direct_id": "claude-opus-5-5", "id": "anthropic/claude-opus-5.5"}, {"direct_id": "claude-sonnet-5-5", "id": "anthropic/claude-sonnet-5.5"}, {"direct_id": null, "id": "qwen/qwen3.8-max-0902"}, {"direct_id": null, "id": "moonshotai/kimi-k3"}]
+    },
+    "MNEMONIC": {
+     "anthropic_ranking": [{"direct_id": "claude-opus-5-5", "id": "anthropic/claude-opus-5.5"}],
+     "ranking": [{"direct_id": "claude-opus-5-5", "id": "anthropic/claude-opus-5.5"}, {"direct_id": null, "id": "moonshotai/kimi-k3"}]
+    }
+   }
+  },
+  "economy": {
+   "ceiling": "10",
+   "roles": {
+    "CHAT": {
+     "anthropic_ranking": [{"direct_id": "claude-sonnet-5-5", "id": "anthropic/claude-sonnet-5.5"}],
+     "ranking": [{"direct_id": "claude-sonnet-5-5", "id": "anthropic/claude-sonnet-5.5"}, {"direct_id": null, "id": "qwen/qwen3.8-max-0902"}]
+    },
+    "MNEMONIC": {
+     "anthropic_ranking": [],
+     "ranking": [{"direct_id": null, "id": "qwen/qwen3.8-max-0902"}]
+    }
+   }
+  }
+ },
+ "requirements_sha256": "2d9bfd2ae863bf160e48a71d656c6e06f189f73836300aab4b513d571327e90c",
+ "resolved_at": "2026-10-02T14:05:00Z",
+ "schema": 1,
+ "version": "cd6f17cd6c8262a59a3528b169a26f1aa8d1c5f0dad2021aa29465b71aadaafb"
+}

@@ -9,15 +9,7 @@ from types import SimpleNamespace
 import httpx
 import pytest
 
-pytest.importorskip("fastapi")
-from fastapi import FastAPI
-from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
-
-pytest.importorskip("mrcall_agent")
-from mrcall_agent.api.routes import desktop_bounded_llm as route
-from mrcall_agent.api.routes.desktop_auth import get_current_user_either_header
-from mrcall_agent.storage.bounded_billing import BillingLedger, admissions
 from zylch.llm.bounded_proxy import BoundedProxyClient
 from zylch.llm.billing_reconciliation import reconcile
 from zylch.llm.budget import BudgetError, budget_snapshot
@@ -25,9 +17,19 @@ from zylch.llm.client import LLMClient
 from zylch.storage import database
 from zylch.storage.models import LlmReservation, LlmUsage, LlmBillingAuthorization
 
+pytest.importorskip("fastapi")
+pytest.importorskip("mrcall_agent")
+
 
 @pytest.mark.parametrize("mode", ["normal", "lost", "zero", "partial"])
 def test_actual_crossrepo(tmp_path, monkeypatch, mode):
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+    from mrcall_agent.api.routes import desktop_bounded_llm as route
+    from mrcall_agent.api.routes.desktop_auth import get_current_user_either_header
+    from mrcall_agent.services.credit_business import AuthorizedBusiness
+    from mrcall_agent.storage.bounded_billing import BillingLedger, admissions
+
     monkeypatch.setenv("ZYLCH_DB_PATH", str(tmp_path / "profile.db"))
     monkeypatch.setenv("OWNER_ID", "crossrepo-review-account")
     monkeypatch.setenv("LLM_DAILY_BUDGET_USD", "0" if mode == "zero" else "5")
@@ -48,9 +50,14 @@ def test_actual_crossrepo(tmp_path, monkeypatch, mode):
     monkeypatch.setattr(route.settings, "openrouter_api_key", "synthetic-key")
     counts = {"dispatch": 0, "consume": 0, "execute": 0}
 
+    quoted_snapshots = []
+
     class Credit:
-        async def resolve_business_id(self, *a):
-            return "synthetic-business"
+        async def resolve_business(self, jwt, owner_uid, requested_id=None):
+            assert jwt == "synthetic-token"
+            assert owner_uid == "crossrepo-review-account"
+            assert requested_id is None
+            return AuthorizedBusiness("synthetic-business", None)
 
         async def balance(self, *a):
             return 10000
@@ -62,8 +69,10 @@ def test_actual_crossrepo(tmp_path, monkeypatch, mode):
         async def aclose(self):
             pass
 
-    async def upstream(request):
+    async def upstream(request, protocol, version):
         counts["dispatch"] += 1
+        assert protocol == "mrcall-bounded-v2"
+        assert version == quoted_snapshots[-1]
         assert request["thinking"] == {"type": "adaptive"}
         assert request["output_config"] == {"effort": "max"}
         assert request["max_tokens"] == 8192
@@ -92,6 +101,8 @@ def test_actual_crossrepo(tmp_path, monkeypatch, mode):
             content=req.content,
             headers={"auth": "synthetic-token", "content-type": "application/json"},
         )
+        if req.url.path.endswith("/quote") and response.status_code == 200:
+            quoted_snapshots.append(response.json()["snapshot_version"])
         if req.url.path.endswith("/execute"):
             counts["execute"] += 1
             assert budget_snapshot("crossrepo-review-account")["reserved_usd"] > 0

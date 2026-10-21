@@ -34,6 +34,16 @@ _MSGID = re.compile(r"^<[^<>\s]+@[^<>\s]+>$")
 _BARE = re.compile(r"^[^<>\s]+@[^<>\s]+$")
 
 
+def canonical_draft_thread_id(value: Optional[str]) -> Optional[str]:
+    if not isinstance(value, str):
+        return value
+    atom = r"[A-Za-z0-9!#$%&'*+/=?^_`{|}~-]+"
+    dot_atom = rf"{atom}(?:\.{atom})*"
+    if re.fullmatch(rf"{dot_atom}@{dot_atom}", value):
+        return f"<{value}>"
+    return value
+
+
 def clean_message_id(value: Optional[str]) -> Optional[str]:
     """One `msg-id`, normalised, or None when it cannot be made valid.
 

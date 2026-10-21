@@ -24,6 +24,8 @@ from __future__ import annotations
 import json
 from typing import Any, Dict, Tuple
 
+from zylch.llm.request_shape import tool_instruction
+
 # Per-event placeholders: their VALUES change every email, so in the cached
 # system block they become this fixed pointer and the real data rides in the
 # user message. Keeping them out of the cached prefix is what makes the cache
@@ -131,5 +133,7 @@ def build_detection_prompt(
         user_content += f"\nExisting task:\n{existing_task_context}"
     if calendar_context:
         user_content += f"\nCalendar context:\n{calendar_context}"
+    # The tool is named, not forced (brief D3: tool_choice stays auto).
+    user_content += f"\n\n{tool_instruction('task_decision')}"
 
     return system_text, user_content

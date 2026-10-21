@@ -508,7 +508,7 @@ def _handle_agent_run(
     conversation_history: list,
 ):
     """Run agentic loop with all tools (from chat)."""
-    from zylch.llm import try_make_llm_client
+    from zylch.llm import routed_model, try_make_llm_client
     from zylch.services.task_interactive import (
         SOLVE_SYSTEM_PROMPT,
         _get_personal_data_section,
@@ -516,7 +516,7 @@ def _handle_agent_run(
     )
     from zylch.storage.storage import Storage
 
-    client = try_make_llm_client()
+    client = try_make_llm_client(model=routed_model("MODEL_CHAT"))
     if client is None:
         console.print(
             "[red]No LLM configured. Set ANTHROPIC_API_KEY in your "

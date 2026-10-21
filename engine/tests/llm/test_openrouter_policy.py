@@ -5,8 +5,21 @@ import pytest
 
 from zylch.llm.budget_pricing import BudgetError
 from zylch.llm.model_policy import profile_value, resolve_model, resolve_provider
-from zylch.llm.openrouter_client import OpenRouterClient
-from zylch.llm.openrouter_pricing import MODEL, request_bound, usage_cost
+from zylch.llm.openrouter_client import OpenRouterClient, messages_request
+from zylch.llm.openrouter_pricing import request_bound, usage_cost
+
+from .model_table_fixture import everything, serve
+from .test_model_policy_roles import expected
+
+MODEL = "z-ai/glm-5.2"  # an allowlisted OpenRouter model, billed at 0.6/2
+
+
+@pytest.fixture(autouse=True)
+def prices(billed_snapshot):
+    """Milestone 10 S3: prices come from the committed fixture snapshot as 10a
+    billed them (GLM 5.2 still at 0.6/2), never from the build copy; only the
+    margin (1.25) moves this module's OpenRouter ceilings (brief AC 4)."""
+    yield billed_snapshot
 
 
 def request():
@@ -23,13 +36,15 @@ def test_saved_profile_wins_ambient_key(tmp_path, monkeypatch):
 
 
 def test_preserve_explicit_models_and_legacy_routing():
+    # Credits resolve from the served set (milestone 10 S6): a server serving all.
+    serve(everything())
     values = {"ANTHROPIC_API_KEY": "key", "ANTHROPIC_MODEL": "claude-opus-5"}
     assert resolve_provider(values) == "anthropic"
     assert resolve_model(values=values) == "claude-opus-5"
     values.update(LLM_MODEL_PRESET="economy", MODEL_MEMORY_MERGE="claude-sonnet-5")
-    assert resolve_model(values=values) == "claude-haiku-4-5"
+    assert resolve_model(values=values) == expected("economy", "CHAT", "anthropic")
     assert resolve_model("MODEL_MEMORY_MERGE", values=values) == "claude-sonnet-5"
-    assert resolve_model(values={}) == "claude-haiku-4-5"
+    assert resolve_model(values={}) == expected("economy", "CHAT", "mrcall")
     assert resolve_provider({"LLM_PROVIDER": "mrcall", "ANTHROPIC_API_KEY": "key"}) == "mrcall"
 
 
@@ -57,14 +72,41 @@ def test_http_controls_and_no_ambient_credentials(monkeypatch):
     response = client.create(**r)
     assert response.content[0].text == "ok"
     body = json.loads(seen[0].content)
-    assert body["provider"]["max_price"] == {"prompt": "0.6", "completion": "2", "request": "0"}
-    assert body["provider"]["allow_fallbacks"] is False
+    # 0.6/2 × the margin 1.25 (brief D5): the ceiling before slice S3 was 0.6/2.
+    assert body["provider"]["max_price"] == {"prompt": "0.75", "completion": "2.5", "request": "0"}
+    # S3c: fallbacks only within `only`, the endpoints the snapshot admitted.
+    assert body["provider"]["allow_fallbacks"] is True and body["provider"]["only"]
     assert body["provider"]["require_parameters"] is True
-    assert body["thinking"] == {"type": "disabled"}
+    # Brief D3: no blanket `disabled`; the adapter adds no reasoning of its own.
+    assert "thinking" not in body and "output_config" not in body
     assert "cache_control" not in body["system"][0]
     assert seen[0].headers["authorization"] == "Bearer chosen"
     assert "x-api-key" not in seen[0].headers
     assert usage_cost(MODEL, response.usage)[0] == 20
+
+
+def test_the_shaped_reasoning_is_forwarded_unchanged():
+    seen = []
+
+    def handler(req):
+        seen.append(json.loads(req.content))
+        return httpx.Response(
+            200,
+            json={
+                "model": MODEL,
+                "content": [{"type": "text", "text": "ok"}],
+                "stop_reason": "end_turn",
+                "usage": {"input_tokens": 10, "output_tokens": 2, "cost": 0.00002},
+            },
+        )
+
+    client = OpenRouterClient(
+        "chosen", http_client=httpx.Client(transport=httpx.MockTransport(handler))
+    )
+    shaped = {**request(), "thinking": {"type": "adaptive"}, "output_config": {"effort": "low"}}
+    client.create(**shaped)
+    assert seen[0]["thinking"] == {"type": "adaptive"}
+    assert seen[0]["output_config"] == {"effort": "low"}
 
 
 def test_failure_is_one_attempt():
@@ -155,12 +197,13 @@ def test_real_factory_saved_explicit_provider_and_live_model(tmp_path, monkeypat
     path.write_text(base + "LLM_PROVIDER=openrouter\n")
     first = make_llm_client()
     assert first.transport == "openrouter"
-    assert first.model == MODEL
+    assert first.model == expected("economy", "CHAT", "openrouter")
     assert first._client._key == "fake-router"
     path.write_text(base + "LLM_PROVIDER=anthropic\nLLM_MODEL_PRESET=balanced\n")
     second = make_llm_client()
     assert second.transport == "direct"
-    assert second.model == "claude-sonnet-5"
+    # The fixture table's pick (milestone 10 S6), no longer 10a's resolved.json.
+    assert second.model == expected("balanced", "CHAT", "anthropic")
     assert second._client.api_key == "fake-anthropic"
     second._client.close()
     path.write_text(base + "LLM_PROVIDER=mrcall\n")
@@ -186,43 +229,80 @@ def test_routed_model_presets_and_saved_values_override_ambient(tmp_path, monkey
     monkeypatch.setenv("MODEL_MEMORY_MERGE", "claude-opus-5")
     path = tmp_path / ".env"
     path.write_text("LLM_PROVIDER=anthropic\nLLM_MODEL_PRESET=economy\n")
-    assert routed_model("MODEL_MEMORY_MERGE") == "claude-haiku-4-5"
+    assert routed_model("MODEL_MEMORY_MERGE") == expected("economy", "MEMORY_MERGE", "anthropic")
     path.write_text("MODEL_MEMORY_MERGE=claude-sonnet-5\n")
     assert routed_model("MODEL_MEMORY_MERGE") == "claude-sonnet-5"
 
 
-@pytest.mark.parametrize('model', [
-    'moonshotai/kimi-k3', 'anthropic/claude-opus-5',
-    'anthropic/claude-sonnet-5', 'anthropic/claude-haiku-4.5', 'z-ai/glm-5.2'])
+@pytest.mark.parametrize(
+    "model",
+    [
+        "moonshotai/kimi-k3",
+        "anthropic/claude-opus-5",
+        "anthropic/claude-sonnet-5",
+        "anthropic/claude-haiku-4.5",
+        "z-ai/glm-5.2",
+    ],
+)
 def test_explicit_catalog_models_single_dispatch_exact_response_and_cost(model):
     from zylch.llm.openrouter_pricing import provider_policy
+
     calls = []
+
     def handler(req):
         body = json.loads(req.content)
-        assert body['model'] == model
-        assert body['provider'] == provider_policy(model)
+        assert body["model"] == model
+        assert body["provider"] == provider_policy(model)
         calls.append(body)
-        return httpx.Response(200, json={'model': model, 'content': [{'type': 'text', 'text': 'OK'}],
-            'stop_reason': 'end_turn', 'usage': {'input_tokens': 1, 'output_tokens': 1, 'cost': '0.00004321'}})
-    client = OpenRouterClient('personal', http_client=httpx.Client(transport=httpx.MockTransport(handler)))
-    response = client.create(**{**request(), 'model': model})
+        return httpx.Response(
+            200,
+            json={
+                "model": model,
+                "content": [{"type": "text", "text": "OK"}],
+                "stop_reason": "end_turn",
+                "usage": {"input_tokens": 1, "output_tokens": 1, "cost": "0.00004321"},
+            },
+        )
+
+    client = OpenRouterClient(
+        "personal", http_client=httpx.Client(transport=httpx.MockTransport(handler))
+    )
+    response = client.create(**{**request(), "model": model})
     assert usage_cost(model, response.usage)[0] == 44
     assert len(calls) == 1
-    assert resolve_model(values={'LLM_PROVIDER': 'openrouter', 'OPENROUTER_MODEL': model}) == model
+    assert resolve_model(values={"LLM_PROVIDER": "openrouter", "OPENROUTER_MODEL": model}) == model
 
 
 def test_anthropic_router_reserves_cache_write_upper_bound():
     from decimal import Decimal, ROUND_CEILING
-    payload = {**request(), 'model': 'anthropic/claude-sonnet-5'}
-    tokens = len(json.dumps(payload, ensure_ascii=False, allow_nan=False).encode()) + 4096 + 1024
-    assert request_bound(payload) == int((Decimal(tokens) * 4 + 64 * 10).to_integral_value(rounding=ROUND_CEILING))
+
+    payload = {**request(), "model": "anthropic/claude-sonnet-5"}
+    tokens = (
+        max(
+            len(json.dumps(body, ensure_ascii=False, allow_nan=False).encode())
+            for body in (payload, messages_request(payload))
+        )
+        + 4096
+        + 1024
+    )
+    # Sonnet 5 at 2/10 × the margin 1.25 (brief D5), input doubled for cache
+    # writes: before slice S3, `tokens * 4 + 64 * 10`.
+    assert request_bound(payload) == int(
+        (Decimal(tokens) * 5 + 64 * Decimal("12.5")).to_integral_value(rounding=ROUND_CEILING)
+    )
 
 
 def test_wire_cost_decimal_boundary_never_rounds_down():
     def handler(req):
-        return httpx.Response(200, text='''{"model":"z-ai/glm-5.2","content":[],
-          "usage":{"input_tokens":1,"output_tokens":1,"cost":0.0220000000000000001}}''')
-    adapter = OpenRouterClient('synthetic', http_client=httpx.Client(transport=httpx.MockTransport(handler)))
+        return httpx.Response(
+            200,
+            text="""{"model":"z-ai/glm-5.2","content":[],
+          "usage":{"input_tokens":1,"output_tokens":1,"cost":0.0220000000000000001}}""",
+        )
+
+    adapter = OpenRouterClient(
+        "synthetic", http_client=httpx.Client(transport=httpx.MockTransport(handler))
+    )
     result = adapter.create(**request())
     assert usage_cost(MODEL, result.usage)[0] == 22001
-    assert isinstance(result.usage['cost'], str)
+    assert isinstance(result.usage["cost"], str)

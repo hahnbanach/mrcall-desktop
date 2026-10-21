@@ -22,8 +22,28 @@ The repo has three parallel doc trees, mirroring the three index files. Each tre
 
 ## Index
 
+- [M10 email-action preservation](execution-plans/2026-10-17-m10-email-action-preservation.md) — [brief](briefs/2026-10-17-m10-email-action-preservation.md), [source/native evidence](evaluations/2026-10-17-m10-email-action-preservation.md); truthful request-local errors with existing authority preserved.
+
+- [M10 draft-thread preservation](execution-plans/2026-10-17-m10-draft-thread-preservation.md) — [brief](briefs/2026-10-17-m10-draft-thread-preservation.md), [source/native evidence](evaluations/2026-10-17-m10-draft-thread-preservation.md); exact ordinary repair with M10 authority preserved.
+
+- [Current-main M10 integration](execution-plans/2026-10-17-m10-current-main-integration.md) — [brief](briefs/2026-10-17-m10-current-main-integration.md), [source](evaluations/2026-10-17-m10-current-main-source.md) and [metadata-only artifact](evaluations/2026-10-17-m10-current-main-artifact.md); upstream Stripe UI preservation and actual delivery gates.
+
 - [Stripe test installer](execution-plans/2026-10-16-stripe-test-installer.md) — isolated test candidate, source checks and unverified installed acceptance; [brief](briefs/2026-10-16-stripe-test-installer.md).
 - [Stripe startup recovery](execution-plans/2026-10-16-stripe-startup-recovery.md) — bounded Settings startup, session recovery and replacement test installer; [brief](briefs/2026-10-16-stripe-startup-recovery.md).
+
+- [M10 ordinary preservation](execution-plans/2026-10-17-m10-ordinary-preservation.md) — [brief](briefs/2026-10-17-m10-ordinary-preservation.md), [source](evaluations/2026-10-17-m10-ordinary-source.md) and [installed artifact](evaluations/2026-10-17-m10-ordinary-artifact.md); exact approved ordinary-read correction and remaining live gates.
+
+- [Reviewed M10 assembly](execution-plans/2026-10-16-m10-reviewed-assembly.md) — [brief](briefs/2026-10-16-m10-reviewed-assembly.md), [integration evidence](evaluations/2026-10-16-m10-reviewed-assembly.md), exact approved source/artifact integration and remaining release gates.
+
+- [M10 additional acceptance bound](execution-plans/2026-10-16-m10-paid-acceptance-bound.md) — [brief](briefs/2026-10-16-m10-paid-acceptance-bound.md), persistent guard and saved-control proof; [operator contract](../engine/docs/features/m10-acceptance-budget.md). Real paid/runtime gates remain open.
+
+- [M10 CI publication](evaluations/2026-10-16-m10-ci-publication.md) — actual green run, published pair, retained spend/deferrals and temporary-trigger cleanup.
+
+- [Current post-Stripe M10 preservation](execution-plans/2026-10-16-m10-poststripe-preservation.md) — [brief](briefs/2026-10-16-m10-poststripe-preservation.md), current 376-module successor, exact per-profile dependencies and conditional installed/runtime acceptance; [Stripe contract](../engine/docs/features/stripe.md).
+
+- [M10 effective-runtime integration](execution-plans/2026-10-16-m10-current-runtime-integration.md) — [brief](briefs/2026-10-16-m10-current-runtime-integration.md), complete selected-runtime preservation, replacement artifact and deployment prerequisites; [source evidence](evaluations/2026-10-16-m10-current-runtime-preservation.md).
+
+- [Earlier M10 readiness](execution-plans/2026-10-15-m10-memory-production-readiness.md) — historical local source/admission/RPC evidence; its frozen-base preservation and wheel require the effective-runtime successor above.
 
 - [Cross-cutting runtime contracts](cross-cutting-contracts.md) — identity, shared company memory with separate profile users, hosted isolation and LLM billing; operating rules remain in AGENTS.md.
 
@@ -38,6 +58,9 @@ The repo has three parallel doc trees, mirroring the three index files. Each tre
 - [Shared company knowledge for GPT-Live](briefs/2026-09-28-voice-company-knowledge.md) — approved brief for shared sources, initial company context and detail retrieval; [reviewed execution plan](execution-plans/2026-09-28-voice-company-knowledge.md) with source authority and caller disclosure as its first gate.
 - [Telephone source migration](briefs/2026-10-01-telephone-notes-source-is-phone-md.md) — production uses stored `phone.md`; [execution and review](execution-plans/2026-10-01-telephone-notes-source-is-phone-md.md), including Mario’s migrated reader; [initial Astra review](evaluations/2026-10-01-astra-company-instructions-migration-review.md) and [APPROVED P1 repair](evaluations/2026-10-01-astra-instruction-write-denial-rereview.md).
 
+- [M10 server paid checks](evaluations/2026-10-12-m10-server-paid-checks.md) — historical bounded-route provider evidence, generation-ID defect and recovery follow-up.
+- [M10 end to end](evaluations/2026-10-12-m10-end-to-end.md) — provider/preset/table cases and outstanding paid legs.
+- [Role measurement](evaluations/2026-10-11-role-measurement.md) — retained measurement spend, role outcomes and mnemonic corpus limits.
 - [Complete selected-case review](evaluations/2026-09-16-reviewed-model-comparison.md) — all 60 selected cases / 240 outputs, concrete errors, separate uncertainty and measured costs.
 - [Disputed case evidence](evaluations/2026-09-16-disputed-case-review.md) — exact source/model excerpts, equal Opus/K3 criteria and withdrawn operational-error claims.
 - [Grading correction](evaluations/2026-09-16-grading-correction.md) — corrected company facts, concrete payment evidence, revised labels and withdrawn quality recommendations.

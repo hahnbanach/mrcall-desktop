@@ -212,7 +212,7 @@ def test_every_early_return_carries_the_whole_shape(store, monkeypatch):
     with db_file_lock(memory_db_path(COMPANY_A), suffix=".sweep.lock"):
         locked = sweep()
     rested = sweep(force=False)
-    monkeypatch.setattr(consolidation, "try_make_llm_client", lambda *a, **k: None)
+    monkeypatch.setattr(consolidation, "llm_available", lambda: False)
     no_llm = sweep()
     assert set(locked) == set(rested) == set(no_llm) == shape
     assert consolidation.failed(locked) is None and consolidation.failed(rested) is None
@@ -290,7 +290,7 @@ def test_without_an_llm_retention_still_ran(store, monkeypatch, embedder):
     monkeypatch.setenv("MEMORY_VERSION_FLOOR", "2")
     blob = seed(store, person(about=LONG))
     seed_versions(blob, 5)  # old, under the threshold: pruned to the floor
-    monkeypatch.setattr(consolidation, "try_make_llm_client", lambda *a, **k: None)
+    monkeypatch.setattr(consolidation, "llm_available", lambda: False)
 
     summary = sweep()
 

@@ -173,7 +173,7 @@ def _llm_filter(rows: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
                 }
             ],
             tools=[_CLASSIFY_TOOL],
-            tool_choice={"type": "tool", "name": "classify_rules"},
+            tool_choice={"type": "auto"},
             max_tokens=1500,
         )
     except Exception as e:

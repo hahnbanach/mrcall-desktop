@@ -108,6 +108,13 @@ Synthetic sources prove each spelling is caught. Not seen: SQL a caller passes
 into another function as a parameter, and a writer reached through a name the
 scan does not track.
 
+The temporary [M10 acceptance helper](m10-acceptance-budget.md) contributes nine
+literal dynamic-SQL inventory entries covering21 calls. Their targets are fixed
+private billing-ledger/schema reads and owned `_m10_acceptance_` objects, including
+the ledger admission triggers. They grant no company-memory writer exemption.
+The scanner still covers all `scripts/`; exact per-function counts, existing
+memory-writer exemptions and equality assertions remain enforced.
+
 ## The exempt primitives
 
 | Primitive | Precondition it checks |

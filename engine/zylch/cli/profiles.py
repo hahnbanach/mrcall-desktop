@@ -145,6 +145,15 @@ def activate_profile(profile_name: str):
 
     _cfg.settings = _cfg.Settings()
 
+    # The model table: this profile's last good copy now, a download in the
+    # background now and every 24 hours (cached in this profile directory).
+    try:
+        from zylch.llm.roles import distribution
+
+        distribution.start(profile_dir)
+    except Exception as exc:  # noqa: BLE001 - the build copies stay in force
+        logger.warning(f"[profile] model table distribution not started: {exc}")
+
     logger.info(f"[profile] Activated: {profile_name} ({profile_dir})")
 
 

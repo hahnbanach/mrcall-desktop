@@ -380,7 +380,7 @@ def _default_client():
     from zylch.llm import routed_model
     from zylch.llm.client import make_llm_client
 
-    return make_llm_client(model=routed_model("MODEL_MEMORY_EXTRACT"))
+    return make_llm_client(model=routed_model("MODEL_MNEMONIC"))
 
 
 __all__ = [

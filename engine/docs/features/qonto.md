@@ -28,26 +28,25 @@ tested account subset, authority confirmation and the consent version. The
 engine probes again before saving a direct-Fernet encrypted credential copy.
 Login and key never appear in Settings readback, provisioning, logs or model tools.
 
-Credentials have one source: the `login` and `api_key` arguments of
-`qonto.test` and `qonto.connect`, which the Desktop card fills from its typed
-fields. The key argument also accepts a strictly validated combined `login:key`
-value; a bare key without a login returns `login_required`. `credential_source`
-is optional and `input` is its only accepted value. The retired `bootstrap`
-value is refused with `credentials_required`, after the authority checks and
-before any provider request; any other value is refused with
-`invalid_credentials`.
+Default `credential_source="input"` takes `login` and `api_key` from Test/Save
+arguments, as the Desktop card does. A strictly validated combined `login:key`
+value is accepted; a bare key without login returns `login_required`.
 
-A Qonto request carries only credentials that arrived in those request
-arguments or come from the engine's own encrypted stored copy. That copy is
-decrypted with the profile's private `qonto.key` file on a local engine and
-with the tenant's injected `ENCRYPTION_KEY` on a hosted one. No engine code
-looks up a Qonto credential anywhere else: not in a profile `.env`, not in
-another file, not in the process environment. Credential lines left in a
-profile `.env` are never used as Qonto
-credentials, and every `QONTO_`-prefixed profile key is refused by Settings,
-`settings.get_secret` and provisioning. Profile activation loads such lines
-into the engine process environment like every other profile line; deleting
-them is operator work.
+The readiness candidate preserves the installed explicit
+`credential_source="bootstrap"` route until separate installed-GUI acceptance
+permits its retirement. It reads only `QONTO_API_LOGIN` and `QONTO_API_KEY` from
+the active profile's nonsymlink `.env`, without interpolation or mutation. A
+bootstrap request carrying either typed argument is refused; unknown selectors
+are refused. There is no automatic fallback. Local development may select a
+bootstrap file through `QONTO_BOOTSTRAP_ENV_FILE`; hosted serving refuses that
+override. Availability/errors disclose no credential values. The typed-only
+main change is a separate, unrolled-out workstream.
+
+Connected operations use the engine's encrypted stored credential copy,
+decrypted with local private `qonto.key` or hosted injected `ENCRYPTION_KEY`.
+Every `QONTO_`-prefixed profile key remains refused by Settings, secret readback
+and provisioning. Only the explicit bootstrap selector reads the allowed file
+values; ambient credential environment variables are not a credential source.
 
 Every bank operation binds the signed, unexpired Firebase UID to its immutable
 profile, engine installation, current company, organization, selected accounts
@@ -142,7 +141,8 @@ remove the shared memory.
 ## Disconnect and deletion
 
 Disconnect removes the encrypted application credential copy and hides bank
-reads; reconnecting takes typed credentials and a new Test. Delete imported
+reads; reconnecting requires an explicit credential source and a new Test.
+The read-only bootstrap file is retained; disconnect does not rewrite it. Delete imported
 data separately removes private source rows and sync/preparation records. It
 retains tombstones and historical published facts. Neither action revokes or
 regenerates the provider-side key.

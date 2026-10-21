@@ -1,0 +1,159 @@
+{
+ "data": [
+  {
+   "source": "artificial-analysis",
+   "model_permaslug": "anthropic/claude-mid-2-20260101",
+   "display_name": "anthropic/claude-mid-2",
+   "intelligence_index": 40,
+   "coding_index": 70,
+   "agentic_index": 40,
+   "pricing": {
+    "prompt": "0.000002",
+    "completion": "0.00001"
+   }
+  },
+  {
+   "source": "artificial-analysis",
+   "model_permaslug": "anthropic/claude-big-3.1-20260101",
+   "display_name": "anthropic/claude-big-3.1",
+   "intelligence_index": 55,
+   "coding_index": null,
+   "agentic_index": null,
+   "pricing": {
+    "prompt": "0.000004",
+    "completion": "0.00002"
+   }
+  },
+  {
+   "source": "artificial-analysis",
+   "model_permaslug": "anthropic/claude-huge-4-20260101",
+   "display_name": "anthropic/claude-huge-4",
+   "intelligence_index": 58,
+   "coding_index": 78,
+   "agentic_index": 50,
+   "pricing": {
+    "prompt": "0.000005",
+    "completion": "0.000025"
+   }
+  },
+  {
+   "source": "artificial-analysis",
+   "model_permaslug": "anthropic/claude-haiku-9-20260101",
+   "display_name": "anthropic/claude-haiku-9",
+   "intelligence_index": 99,
+   "coding_index": 99,
+   "agentic_index": 99,
+   "pricing": {
+    "prompt": "0.0000002",
+    "completion": "0.000001"
+   }
+  },
+  {
+   "source": "artificial-analysis",
+   "model_permaslug": "vendor/cheap-41-20260101",
+   "display_name": "vendor/cheap-41",
+   "intelligence_index": 41,
+   "coding_index": 60,
+   "agentic_index": 20,
+   "pricing": {
+    "prompt": "0.0000001",
+    "completion": "0.0000005"
+   }
+  },
+  {
+   "source": "artificial-analysis",
+   "model_permaslug": "vendor/no-agentic-20260101",
+   "display_name": "vendor/no-agentic",
+   "intelligence_index": 42,
+   "coding_index": 50,
+   "agentic_index": null,
+   "pricing": {
+    "prompt": "0.00000006",
+    "completion": "0.0000003"
+   }
+  },
+  {
+   "source": "artificial-analysis",
+   "model_permaslug": "vendor/agent-max-20260101",
+   "display_name": "vendor/agent-max",
+   "intelligence_index": 45,
+   "coding_index": null,
+   "agentic_index": 56,
+   "pricing": {
+    "prompt": "0.0000012",
+    "completion": "0.000006"
+   }
+  },
+  {
+   "source": "artificial-analysis",
+   "model_permaslug": "vendor/wise-8-20260101",
+   "display_name": "vendor/wise-8",
+   "intelligence_index": 52,
+   "coding_index": null,
+   "agentic_index": null,
+   "pricing": {
+    "prompt": "0.0000016",
+    "completion": "0.000008"
+   }
+  },
+  {
+   "source": "artificial-analysis",
+   "model_permaslug": "vendor/genius-20260101",
+   "display_name": "vendor/genius:free",
+   "intelligence_index": 99,
+   "coding_index": 99,
+   "agentic_index": 99,
+   "pricing": {
+    "prompt": "0.00000002",
+    "completion": "0.0000001"
+   }
+  },
+  {
+   "source": "artificial-analysis",
+   "model_permaslug": "vendor/no-tools-20260101",
+   "display_name": "vendor/no-tools",
+   "intelligence_index": 99,
+   "coding_index": 99,
+   "agentic_index": 99,
+   "pricing": {
+    "prompt": "0.0000002",
+    "completion": "0.000001"
+   }
+  },
+  {
+   "source": "artificial-analysis",
+   "model_permaslug": "vendor/short-context-20260101",
+   "display_name": "vendor/short-context",
+   "intelligence_index": 99,
+   "coding_index": 99,
+   "agentic_index": 99,
+   "pricing": {
+    "prompt": "0.0000002",
+    "completion": "0.000001"
+   }
+  },
+  {
+   "source": "artificial-analysis",
+   "model_permaslug": "vendor/no-intelligence-20260101",
+   "display_name": "vendor/no-intelligence",
+   "intelligence_index": null,
+   "coding_index": 99,
+   "agentic_index": 99,
+   "pricing": {
+    "prompt": "0.00000004",
+    "completion": "0.0000002"
+   }
+  },
+  {
+   "source": "design-arena",
+   "model_permaslug": "vendor/cheap-41-20260101",
+   "elo": 1400,
+   "win_rate": 60.0
+  }
+ ],
+ "meta": {
+  "as_of": "2026-10-01T00:00:00.000Z",
+  "version": "v1",
+  "model_count": 12
+ }
+}

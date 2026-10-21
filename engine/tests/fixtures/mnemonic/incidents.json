@@ -9,7 +9,7 @@
       "candidates": [
         {"id": "person-luca-beta", "entity_type": "PERSON", "scope": "entity", "identifiers": {"name": "Luca Bianchi", "email": "luca.bianchi@beta.example"}}
       ],
-      "expected": {"allowed_actions": ["CREATE"], "entity_type": "PERSON", "scope": "entity", "forbidden_targets": ["person-luca-beta"], "must_preserve": ["luca.bianchi@alpha.example", "Alpha"]}
+      "expected": {"allowed_actions": ["CREATE", "REVIEW"], "entity_type": "PERSON", "scope": "entity", "forbidden_targets": ["person-luca-beta"], "must_preserve": ["luca.bianchi@alpha.example", "Alpha"]}
     },
     {
       "id": "shared_switchboard",
@@ -39,7 +39,7 @@
       "candidates": [
         {"id": "company-acme", "entity_type": "COMPANY", "scope": "entity", "content": "Acme forwards calls to +39 02 999999."}
       ],
-      "expected": {"allowed_actions": ["UPDATE"], "entity_type": "COMPANY", "scope": "entity", "required_target": "company-acme", "must_preserve": ["+39 02 123456", "+39 02 999999", "correction"], "forbidden_types": ["FACT"]}
+      "expected": {"allowed_actions": ["UPDATE", "REVIEW"], "entity_type": "COMPANY", "scope": "entity", "required_target": "company-acme", "must_preserve": ["+39 02 123456", "+39 02 999999", ["correction", "corrected", "corrett"]], "forbidden_types": ["FACT"]}
     },
     {
       "id": "customer_price_correction",
@@ -49,7 +49,7 @@
       "candidates": [
         {"id": "company-boreale", "entity_type": "COMPANY", "scope": "entity", "content": "Boreale is renewing in October."}
       ],
-      "expected": {"allowed_actions": ["UPDATE"], "entity_type": "COMPANY", "scope": "entity", "required_target": "company-boreale", "must_preserve": ["74 euro", "ottobre", "concordato"], "forbidden_types": ["FACT"]}
+      "expected": {"allowed_actions": ["UPDATE", "REVIEW"], "entity_type": "COMPANY", "scope": "entity", "required_target": "company-boreale", "must_preserve": ["74 euro", ["ottobre", "october"], ["concordato", "agreed"]], "forbidden_types": ["FACT"]}
     },
     {
       "id": "global_opening_hours",
@@ -57,7 +57,7 @@
       "original_observation": "Siamo chiusi ogni sabato.",
       "subject_hint": null,
       "candidates": [],
-      "expected": {"allowed_actions": ["CREATE", "UPDATE"], "entity_type": "FACT", "scope": "company", "must_preserve": ["chiusi", "sabato"]}
+      "expected": {"allowed_actions": ["CREATE", "UPDATE"], "entity_type": "FACT", "scope": "company", "must_preserve": [["chiusi", "closed"], ["sabato", "saturday"]]}
     },
     {
       "id": "account_feedback",
@@ -65,7 +65,7 @@
       "original_observation": "Nelle mie risposte evita i punti esclamativi e proponi sempre il prossimo passo in una riga separata.",
       "subject_hint": null,
       "candidates": [],
-      "expected": {"allowed_actions": ["CREATE", "UPDATE"], "entity_type": "STYLE", "scope": "account", "must_preserve": ["punti esclamativi", "prossimo passo"], "forbidden_types": ["PERSON", "COMPANY", "FACT"]}
+      "expected": {"allowed_actions": ["CREATE", "UPDATE"], "entity_type": "STYLE", "scope": "account", "must_preserve": [["punti esclamativi", "exclamation"], ["prossimo passo", "next step"]], "forbidden_types": ["PERSON", "COMPANY", "FACT"]}
     },
     {
       "id": "planned_not_completed",
@@ -75,7 +75,7 @@
       "candidates": [
         {"id": "company-delta", "entity_type": "COMPANY", "scope": "entity", "content": "Delta is evaluating a trunk migration."}
       ],
-      "expected": {"allowed_actions": ["UPDATE", "SKIP"], "entity_type": "COMPANY", "scope": "entity", "required_target": "company-delta", "must_preserve": ["plan", "written approval", "next Tuesday"], "must_not_assert": ["migration completed", "approval received"]}
+      "expected": {"allowed_actions": ["UPDATE", "SKIP", "REVIEW"], "entity_type": "COMPANY", "scope": "entity", "required_target": "company-delta", "must_preserve": ["plan", "written approval", "next Tuesday"], "must_not_assert": ["migration completed", "approval received"]}
     },
     {
       "id": "contradictory_legacy_fact_rule",

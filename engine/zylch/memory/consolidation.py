@@ -52,7 +52,7 @@ import asyncio
 import logging
 from typing import Any, Dict, List, Optional, Set, Tuple
 
-from zylch.llm import routed_model, try_make_llm_client
+from zylch.llm import llm_available, routed_model
 from zylch.llm.budget import BudgetError
 
 from .blob_versions import (
@@ -210,7 +210,7 @@ async def _locked(
     policy = retention_policy()
     report, sinks = _retention(owner_id, company_key, policy)
     summary = empty_summary(**references, **report)
-    if try_make_llm_client() is None:
+    if not llm_available():
         logger.warning("[consolidate] no LLM transport configured — no pair decided")
         summary["no_llm"] = True
         return summary

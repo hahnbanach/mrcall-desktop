@@ -16,6 +16,7 @@
     "dist:mac": "npm run build && electron-builder --mac --publish never",
     "dist:win": "npm run build && electron-builder --win --publish never",
     "test:onboarding": "node scripts/test-onboarding.mjs",
+    "check:models": "node scripts/check-no-model-labels.mjs",
     "test:auth": "node scripts/test-auth-main.mjs && node scripts/test-auth-renderer.mjs",
     "test:rpc-contracts": "node scripts/rpc-contract-inventory.cjs --negative-proof",
     "inventory:rpc": "node scripts/rpc-contract-inventory.cjs --write"

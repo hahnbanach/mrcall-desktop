@@ -9,7 +9,7 @@ from typing import Any, Dict, List, Optional, TYPE_CHECKING
 
 from bs4 import BeautifulSoup
 
-from zylch.llm import try_make_llm_client
+from zylch.llm import routed_model, try_make_llm_client
 
 if TYPE_CHECKING:
     from zylch.storage import Storage
@@ -78,8 +78,10 @@ class EmailSyncManager:
             raise ValueError("owner_id and supabase_storage are required")
 
         self.archive = email_archive
-        # LLM is optional here — sync still works without analysis.
-        self.llm_client = try_make_llm_client()
+        try:  # LLM is optional here — sync still works without analysis.
+            self.llm_client = try_make_llm_client(model=routed_model("MODEL_SYNC_ANALYSIS"))
+        except RuntimeError:  # BudgetError: unreadable AI settings mean no LLM, as before
+            self.llm_client = None
         self.days_back = 30  # Fixed: always 1 month intelligence window
         self.owner_id = owner_id
         self.supabase = supabase_storage
@@ -94,7 +96,6 @@ class EmailSyncManager:
     def _save_cache(self, cache: Dict[str, Any]) -> None:
         """Save email threads to Supabase."""
         # Threads are saved via hybrid search, no-op here
-        pass
 
     def _save_analyzed_threads(self, threads: Dict[str, Any]) -> None:
         """Save analyzed threads. No-op - full cache is saved elsewhere."""
@@ -207,7 +208,6 @@ class EmailSyncManager:
                 processed += 1
                 continue
 
-            # Analyze thread with Sonnet
             try:
                 thread_data = self._analyze_thread(thread_id, last_message, thread_messages)
                 cache["threads"][thread_id] = thread_data
@@ -477,7 +477,7 @@ class EmailSyncManager:
                 messages=[{"role": "user", "content": prompt}],
                 max_tokens=800,
                 tools=[classify_tool],
-                tool_choice={"type": "tool", "name": "classify_thread"},
+                tool_choice={"type": "auto"},
             )
 
             # Extract tool use result
@@ -487,7 +487,7 @@ class EmailSyncManager:
                     logger.debug(f"Thread analysis: {result}")
                     return result
 
-            # No tool_use block found - this is an error (shouldn't happen with tool_choice)
+            # No tool_use block: the model answered in text (the tool is named, not forced)
             raise ValueError(
                 f"No tool_use block in LLM response for thread analysis. "
                 f"Response content: {response.content}"

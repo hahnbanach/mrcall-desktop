@@ -403,7 +403,7 @@ async def run_topic_dedup(owner_id: str) -> Dict[str, Any]:
                 messages=[{"role": "user", "content": prompt}],
                 max_tokens=4000,
                 tools=[TOPIC_DEDUP_TOOL],
-                tool_choice={"type": "tool", "name": "topic_dedup_decision"},
+                tool_choice={"type": "auto"},
             )
     except Exception as e:
         err_str = str(e)

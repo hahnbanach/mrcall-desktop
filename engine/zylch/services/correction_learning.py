@@ -209,7 +209,7 @@ def extract_rule(
             system=_JUDGE_SYSTEM,
             messages=[{"role": "user", "content": prompt}],
             tools=[_RECORD_RULE_TOOL],
-            tool_choice={"type": "tool", "name": "record_rule"},
+            tool_choice={"type": "auto"},
             max_tokens=300,
         )
     except Exception as e:
@@ -276,7 +276,7 @@ def extract_fact(
             system=_FACT_JUDGE_SYSTEM,
             messages=[{"role": "user", "content": prompt}],
             tools=[_RECORD_FACT_TOOL],
-            tool_choice={"type": "tool", "name": "record_fact"},
+            tool_choice={"type": "auto"},
             max_tokens=300,
         )
     except Exception as e:
@@ -388,9 +388,9 @@ def learn_from_corrections(
 
     if client is None:
         try:
-            from zylch.llm import try_make_llm_client
+            from zylch.llm import routed_model, try_make_llm_client
 
-            client = try_make_llm_client()
+            client = try_make_llm_client(model=routed_model("MODEL_CORRECTION_LEARNING"))
         except Exception as e:
             logger.warning(f"[learn] cannot make judge client: {e}")
             client = None

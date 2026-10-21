@@ -251,7 +251,7 @@ def drained_by(monkeypatch, worker):
 
     monkeypatch.setattr(mem_mod, "MemoryWorker", lambda *a, **k: worker)
     monkeypatch.setattr(merge_canary_gate, "merge_canary_policy", lambda owner: {"run": False})
-    monkeypatch.setattr(consolidation, "try_make_llm_client", lambda *a, **k: None)
+    monkeypatch.setattr(consolidation, "llm_available", lambda: False)
     return worker
 
 

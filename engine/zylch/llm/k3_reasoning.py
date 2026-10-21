@@ -1,15 +1,53 @@
 """Production K3 max-effort Chat wire adapter; no inference retries or repair."""
 
 import json
+import logging
 from copy import deepcopy
 from decimal import ROUND_CEILING, Decimal
 from types import SimpleNamespace
 
 from . import openrouter_pricing as pricing
 from .budget_pricing import BudgetError
+from .roles.catalogue import endpoint_rates
+from .roles.prices import price
+
+logger = logging.getLogger(__name__)
 
 MODEL = "moonshotai/kimi-k3"
 OUTPUT_CAP = 8192
+# K3's pinned provider: every K3 request is routed to it alone, and K3's cap
+# and reservation follow its price (brief D5: K3 keeps its provider pin).
+ENDPOINT = "digitalocean"
+# The keys of the provider object K3 was reviewed with; the generic admission
+# filters (quantizations, the admitted endpoints) give way to the pin.
+POLICY_KEYS = ("allow_fallbacks", "require_parameters", "sort", "max_price")
+
+
+def rates():
+    """K3's ``(input, output)`` per million tokens before the margin, or None.
+
+    Its pinned endpoint's price among the snapshot's admitted endpoints,
+    which carry the pin whenever it is eligible (up, an allowed quantization,
+    tools, no excluded tier), whatever its price against K3's reference
+    price (`requirements.json` `provider_policy.pinned_endpoints`, which
+    must name `ENDPOINT`). On a
+    day the snapshot does not admit that endpoint (degraded when the catalogue
+    was read, so absent from its `endpoints`), K3's snapshot price instead —
+    its reference price: its model-level price whenever at least half its
+    eligible endpoints are priced within it × the margin, else the lower-median eligible
+    endpoint's (contract README, "Prices in use"): K3 stays priced, and a
+    request its pin
+    cannot route fails at the provider as it would today. It is K3's
+    `openrouter_pricing.RATES` rate, which `capped` multiplies by the margin
+    for `max_price` and the reservation."""
+    rate = endpoint_rates(MODEL, ENDPOINT)
+    if rate is None:
+        rate = price(MODEL, "openrouter")
+        logger.warning(
+            f"[k3] rates(): the snapshot admits no {ENDPOINT} endpoint for K3; "
+            f"its cap falls back to the snapshot's (reference) price -> {rate}"
+        )
+    return rate
 
 
 def validate_controls(request):
@@ -28,8 +66,7 @@ def validate_controls(request):
 
 def provider_policy():
     policy = pricing.provider_policy(MODEL)
-    policy["only"] = ["digitalocean"]
-    return policy
+    return {**{key: policy[key] for key in POLICY_KEYS}, "only": [ENDPOINT]}
 
 
 def request_bound(request):
@@ -42,9 +79,7 @@ def request_bound(request):
         + 4096
         + 1024 * (len(wire["messages"]) + len(wire.get("tools", [])))
     )
-    if tokens + wire["max_tokens"] > 200000:
-        raise BudgetError("K3 Chat request exceeds supported context bound.")
-    i, o = pricing.RATES[MODEL]
+    i, o = pricing.capped(MODEL)
     return max(
         original,
         int((tokens * i + wire["max_tokens"] * o).to_integral_value(rounding=ROUND_CEILING)),
@@ -109,6 +144,7 @@ def chat_request(request):
         "stream": False,
         "provider": provider_policy(),
         "reasoning": {"effort": "max"},
+        "plugins": [{"id": "context-compression", "enabled": False}],
     }
     if source.get("tools"):
         translated = []

@@ -3,7 +3,7 @@
 import asyncio
 import atexit
 import contextvars
-import copy
+import hashlib
 import logging
 import os
 import threading
@@ -11,19 +11,18 @@ from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 from typing import Any, Awaitable, Callable, Dict, List, Optional, Tuple
 
-from ..llm import LLMClient, make_llm_client
+from ..llm import LLMClient, make_llm_client, routed_model
+from ..llm.client import RunClock
 from ..llm.exceptions import LLMPromptTooLargeError
+from ..llm.response import assistant_blocks, without_reasoning
 from zylch.qonto import history as finance_history
 from zylch.qonto.logging import install as install_finance_logging, tool_event
 
-from .budget import (
-    PROMPT_TOKEN_BUDGET,
-    TOOL_RESULT_MAX_CHARS,
-    bound_tool_result,
-    check_prompt_budget,
-)
+from .budget import PROMPT_TOKEN_BUDGET, TOOL_RESULT_MAX_CHARS
+from .budget import bound_tool_result, check_prompt_budget
 from .models import ModelSelector
 from .prompts import get_system_prompt_base
+from .transcript import turn_context, user_turn, with_history_cache
 from .turn_context import new_turn_id, get_turn_id
 from ..tools.base import Tool, ToolResult, ToolStatus
 from ..agents.base import BaseConversationalAgent
@@ -166,7 +165,9 @@ class ZylchAIAgent(BaseConversationalAgent):
         self.unlimited_voice = (
             customer_service_instructions is not None and isolated_voice_unlimited()
         )
-        self.client: LLMClient = client if client is not None else make_llm_client()
+        self.client: LLMClient = (
+            client if client is not None else make_llm_client(model=routed_model("MODEL_CHAT"))
+        )
         self.tools = tools
         self.tool_map = {tool.name: tool for tool in tools}
         self.model_selector = model_selector or ModelSelector()
@@ -201,61 +202,13 @@ class ZylchAIAgent(BaseConversationalAgent):
         logger.info(f"Tools available to Claude: {tool_names}")
         return schemas
 
-    def _messages_with_history_cache(
-        self,
-        messages: List[Dict[str, Any]],
-        volatile_suffix: Optional[str] = None,
-    ) -> List[Dict[str, Any]]:
-        """Return a deep copy of ``messages`` with a cache_control marker on
-        the last content block of the most recent message.
-
-        Anthropic caches the entire prefix up to the marker, so on the next
-        turn the whole history becomes a cache read. We never mutate
-        ``self.conversation_history`` — the marker is added only on the wire
-        representation, because history is serialized/restored elsewhere and
-        stale cache_control markers would accumulate.
-
-        If ``volatile_suffix`` is provided, it is appended as an EXTRA text
-        block AFTER the cache_control breakpoint on the last message. This
-        lets per-turn, minute-granular content (current time, notifications)
-        reach the model without invalidating the cached prefix.
-
-        Anthropic allows at most 4 ephemeral breakpoints; the system prompt
-        consumes 1, this adds 1, total = 2 — well within the limit.
-        """
-        if not messages:
-            return messages
-        out = copy.deepcopy(messages)
-        last = out[-1]
-        content = last.get("content")
-        if isinstance(content, str):
-            # Promote string content to a single text block so we can attach
-            # cache_control on it. Anthropic accepts both shapes.
-            blocks: List[Dict[str, Any]] = [
-                {
-                    "type": "text",
-                    "text": content,
-                    "cache_control": {"type": "ephemeral"},
-                }
-            ]
-            if volatile_suffix:
-                blocks.append({"type": "text", "text": volatile_suffix})
-            last["content"] = blocks
-            return out
-        if isinstance(content, list) and content:
-            # Attach cache_control to the last block — the stable prefix.
-            last_block = content[-1]
-            if isinstance(last_block, dict):
-                last_block["cache_control"] = {"type": "ephemeral"}
-            if volatile_suffix:
-                content.append({"type": "text", "text": volatile_suffix})
-        return out
-
     async def process_message(
         self,
         user_message: str,
         context: Optional[Dict[str, Any]] = None,
         approval_callback: Optional[ApprovalCallback] = None,
+        *,
+        action_failures: Optional[List[Dict[str, str]]] = None,
     ) -> str:
         """Process user message with tool use.
 
@@ -276,8 +229,14 @@ class ZylchAIAgent(BaseConversationalAgent):
         finance_history.check_before_disclosure()
         self.last_truncations = []
 
-        # Add user message to history
-        self.conversation_history.append({"role": "user", "content": user_message})
+        # A new turn (brief D3): the earlier turns' reasoning goes, this turn's
+        # loop keeps its own. One clock and the volatile context stored in the
+        # user turn keep every request of the loop on one prefix.
+        self.conversation_history = without_reasoning(self.conversation_history)
+        clock = RunClock()
+        status = get_channel_status_block() if self.customer_service_instructions is None else ""
+        context_now = turn_context(datetime.now(), status)
+        self.conversation_history.append(user_turn(user_message, context_now))
 
         # Select appropriate model (check for forced model in context)
         force_model = context.get("force_model") if context else None
@@ -287,9 +246,9 @@ class ZylchAIAgent(BaseConversationalAgent):
         # Build system prompt with context.
         # We use ``get_system_prompt_base()`` only (no datetime header) so
         # the cached prefix stays byte-identical across turns within the
-        # same day/hour. The current date/time is injected into the user
-        # message below, AFTER the cache breakpoint, so minute-granular
-        # time updates don't invalidate the cached history.
+        # same day/hour. The current date/time rides in the user turn above
+        # (``turn_context``), stored with it, so minute-granular time updates
+        # never edit an earlier message or the cached system block.
         if self.customer_service_instructions is not None:
             system_prompt = self.customer_service_instructions
         else:
@@ -328,22 +287,11 @@ class ZylchAIAgent(BaseConversationalAgent):
             }
         ]
 
-        # Volatile per-turn context (current date/time) goes AFTER the last
-        # cache_control breakpoint so minute-granular changes never
-        # invalidate the cached prefix.
-        now = datetime.now()
-        volatile_suffix = (
-            "\n\n[CURRENT DATE/TIME — "
-            f"{now.strftime('%A, %B %d, %Y')}, {now.strftime('%H:%M')}]"
-            "\n\n"
-            f"{get_channel_status_block() if self.customer_service_instructions is None else ''}"
-        )
-
         # Create message with tool support (with current date/time)
         # Note: model selection is now handled by LLMClient based on provider
         response = await self._create_message_within_budget(
             system_blocks=system_blocks,
-            volatile_suffix=volatile_suffix,
+            run_clock=clock,
             turn_id=turn_id,
             step=0,
         )
@@ -372,36 +320,16 @@ class ZylchAIAgent(BaseConversationalAgent):
                 f"[chat turn={turn_id} step={step}] tool_use stop_reason"
                 f" — entering tool loop iteration"
             )
-            # Normalize assistant content blocks to plain dicts so that
-            # conversation_history stays JSON-serializable across turns
-            # (SDK TextBlock/ToolUseBlock instances break re-serialization
-            # once we loop back with a declined tool_result).
-            assistant_content_dicts: List[Dict[str, Any]] = []
-            for block in response.content:
-                btype = getattr(block, "type", None)
-                if btype == "text":
-                    assistant_content_dicts.append(
-                        {"type": "text", "text": getattr(block, "text", "")}
-                    )
-                elif btype == "tool_use":
-                    assistant_content_dicts.append(
-                        {
-                            "type": "tool_use",
-                            "id": block.id,
-                            "name": block.name,
-                            "input": dict(block.input or {}),
-                        }
-                    )
-                else:
-                    # Unknown block type — best-effort model_dump
-                    try:
-                        assistant_content_dicts.append(block.model_dump())
-                    except Exception:
-                        pass
+            # The assistant turn as plain dicts, every block in order, its
+            # reasoning blocks included and unchanged: within the loop the
+            # provider needs them back exactly as sent, and plain dicts keep
+            # conversation_history JSON-serializable across turns.
+            assistant_content = assistant_blocks(response)
 
             # Extract tool calls from response
             tool_results, direct_response = await self._execute_tools(
-                response.content, approval_callback, turn_id=turn_id, step=step
+                response.content, approval_callback, turn_id=turn_id, step=step,
+                action_failures=action_failures,
             )
 
             # Check for direct response tools (e.g., get_tasks)
@@ -410,7 +338,7 @@ class ZylchAIAgent(BaseConversationalAgent):
                 logger.info("Direct response from tool, skipping second LLM call")
                 # Add assistant's tool use to history
                 self.conversation_history.append(
-                    {"role": "assistant", "content": assistant_content_dicts}
+                    {"role": "assistant", "content": assistant_content}
                 )
                 # Add the direct response as assistant message
                 self.conversation_history.append({"role": "assistant", "content": direct_response})
@@ -418,7 +346,7 @@ class ZylchAIAgent(BaseConversationalAgent):
                 return direct_response
 
             # Add assistant's tool use to history
-            self.conversation_history.append({"role": "assistant", "content": response.content})
+            self.conversation_history.append({"role": "assistant", "content": assistant_content})
 
             # Add tool results to history
             self.conversation_history.append({"role": "user", "content": tool_results})
@@ -426,7 +354,7 @@ class ZylchAIAgent(BaseConversationalAgent):
             # Continue conversation with tool results (with current date/time)
             response = await self._create_message_within_budget(
                 system_blocks=system_blocks,  # Same cached system prompt
-                volatile_suffix=volatile_suffix,
+                run_clock=clock,  # Same datetime line: one prefix per turn
                 turn_id=turn_id,
                 step=step,
             )
@@ -461,7 +389,7 @@ class ZylchAIAgent(BaseConversationalAgent):
         self,
         *,
         system_blocks: List[Dict[str, Any]],
-        volatile_suffix: str,
+        run_clock: RunClock,
         turn_id: str,
         step: int,
     ) -> Any:
@@ -473,10 +401,7 @@ class ZylchAIAgent(BaseConversationalAgent):
         `LLMPromptTooLargeError` with the numbers; nothing is sent.
         """
         finance_history.check_before_disclosure()
-        messages = self._messages_with_history_cache(
-            self.conversation_history,
-            volatile_suffix=volatile_suffix,
-        )
+        messages = with_history_cache(self.conversation_history)
         tools = self._get_tool_schemas()
         try:
             if self.unlimited_voice:
@@ -499,6 +424,7 @@ class ZylchAIAgent(BaseConversationalAgent):
             system=system_blocks,
             tools=tools,
             max_tokens=self.max_tokens,
+            run_clock=run_clock,
         )
 
     # Tools that return pre-formatted output and should bypass the second LLM call
@@ -510,6 +436,8 @@ class ZylchAIAgent(BaseConversationalAgent):
         approval_callback: Optional[ApprovalCallback] = None,
         turn_id: Optional[str] = None,
         step: int = 0,
+        *,
+        action_failures: Optional[List[Dict[str, str]]] = None,
     ) -> tuple[List[Dict[str, Any]], str | None]:
         """Execute tool calls from response.
 
@@ -527,7 +455,7 @@ class ZylchAIAgent(BaseConversationalAgent):
         direct_response = None
         tid = turn_id or get_turn_id()
 
-        for block in content:
+        for block_index, block in enumerate(content):
             if block.type == "tool_use":
                 tool_name = block.name
                 tool_input = block.input
@@ -646,6 +574,19 @@ class ZylchAIAgent(BaseConversationalAgent):
                 # Execute tool
                 finance_history.check_before_disclosure()
                 tool_result = await self._call_tool(tool_name, tool_input)
+                if (
+                    action_failures is not None
+                    and len(action_failures) < 16
+                    and tool_name in {"create_draft", "update_draft", "send_draft"}
+                    and tool_result.status == ToolStatus.ERROR
+                ):
+                    attempt = f"{tid}:{step}:{block_index}:{block.id}"
+                    action_failures.append({
+                        "tool": tool_name,
+                        "attempt_id": "attempt_" + hashlib.sha256(attempt.encode()).hexdigest()[:16],
+                        "failure_kind": "tool_error",
+                        "delivery_certainty": "unknown",
+                    })
                 finance_history.check_before_disclosure()
                 if finance_history.is_managed():
                     tool_event(

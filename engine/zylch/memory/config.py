@@ -1,6 +1,5 @@
 """Configuration for Memory system."""
 
-
 from pydantic import Field
 from pydantic_settings import BaseSettings
 
@@ -53,9 +52,6 @@ class MemoryConfig(BaseSettings):
     )
     llm_merge_enabled: bool = Field(
         default=True, description="Enable LLM-assisted merge for reconsolidation"
-    )
-    llm_merge_model: str = Field(
-        default="claude-opus-4-6-20260205", description="Model for LLM merge"
     )
 
     # Performance

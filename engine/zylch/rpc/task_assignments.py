@@ -30,6 +30,10 @@ async def get(params, notify):
 
 def _preview(params):
     root = thread(params["thread_key"])
+    resolved = store.get(root)
+    if not resolved["complete"]:
+        raise AssignmentError("RFC assignment component unavailable")
+    root = resolved["authoritative_thread_key"]
     extras = {}
     if params["operation"] == "close":
         if params.get("source_id") is not None:

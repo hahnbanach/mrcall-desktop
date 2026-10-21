@@ -127,3 +127,26 @@ def _happy_sse_bytes() -> bytes:
             ("message_stop", {"type": "message_stop"}),
         ]
     )
+
+
+def v2_quote(request: dict, account: str, business: str, credit: int, credits: int) -> dict:
+    """The quote a billing server speaking `mrcall-bounded-v2` answers for
+    `request` (`zylch/llm/roles/contract/protocol-v2.md`): v1's fields, the
+    snapshot version it priced with, and its own hash, as `validate_quote`
+    checks them."""
+    from zylch.llm.bounded_proxy import PROTOCOL, digest, wire_request
+
+    body = {
+        "protocol": PROTOCOL,
+        "currency": "USD",
+        "account_id": account,
+        "model": request["model"],
+        "payload_hash": digest(wire_request(request)),
+        "business_id": business,
+        "tariff_version": "v1",
+        "credit_value_micro_usd": credit,
+        "max_credits": credits,
+        "max_debit_micro_usd": credit * credits,
+        "snapshot_version": "0" * 64,
+    }
+    return {**body, "quote_hash": digest(body)}

@@ -1,0 +1,138 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "MrCall model table, schema 1: the decision record",
+  "description": "Per preset its output-price ceiling and per role two rankings of at most five catalogue models: `ranking` over every vendor, `anthropic_ranking` over the Anthropic subset (run on a personal Anthropic key). No price, score or request metadata: those are the snapshot's, so a refresh of prices moves no record. `version` is the SHA-256 of the canonical JSON of the document without `version` (contract/README.md). Static gates beyond this schema: zylch/llm/roles/gates.py:check_table.",
+  "type": "object",
+  "required": [
+    "schema",
+    "version",
+    "resolved_at",
+    "catalogue_read_at",
+    "requirements_sha256",
+    "measured_sha256",
+    "presets"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "schema": {
+      "description": "The contract version of this document.",
+      "const": 1
+    },
+    "version": {
+      "$ref": "#/$defs/sha256"
+    },
+    "resolved_at": {
+      "description": "When the resolver ran (UTC).",
+      "$ref": "#/$defs/timestamp"
+    },
+    "catalogue_read_at": {
+      "description": "When the OpenRouter catalogue it resolved was read (UTC).",
+      "$ref": "#/$defs/timestamp"
+    },
+    "requirements_sha256": {
+      "description": "SHA-256 of the bytes of the engine's roles/requirements.json it resolved.",
+      "$ref": "#/$defs/sha256"
+    },
+    "measured_sha256": {
+      "description": "SHA-256 of the bytes of the roles/measured.json whose results and thresholds it ranked by.",
+      "$ref": "#/$defs/sha256"
+    },
+    "presets": {
+      "description": "Keyed by preset name (economy, balanced).",
+      "type": "object",
+      "propertyNames": {
+        "pattern": "^[a-z][a-z0-9_]*$"
+      },
+      "additionalProperties": {
+        "$ref": "#/$defs/preset"
+      }
+    }
+  },
+  "$defs": {
+    "sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "timestamp": {
+      "type": "string",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$"
+    },
+    "price": {
+      "description": "USD per million tokens as a canonical decimal string: no sign, exponent, leading zero or trailing fractional zero.",
+      "type": "string",
+      "pattern": "^(0|[1-9][0-9]*)(\\.[0-9]*[1-9])?$"
+    },
+    "preset": {
+      "type": "object",
+      "required": [
+        "ceiling",
+        "roles"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "ceiling": {
+          "description": "The highest catalogue output price (USD per million tokens) a ranked model may have.",
+          "$ref": "#/$defs/price"
+        },
+        "roles": {
+          "description": "Keyed by role name, as requirements.json declares the roster.",
+          "type": "object",
+          "propertyNames": {
+            "pattern": "^[A-Z][A-Z0-9_]*$"
+          },
+          "additionalProperties": {
+            "$ref": "#/$defs/role"
+          }
+        }
+      }
+    },
+    "role": {
+      "type": "object",
+      "required": [
+        "ranking",
+        "anthropic_ranking"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "ranking": {
+          "description": "Best first; the first entry is the pick.",
+          "$ref": "#/$defs/ranking"
+        },
+        "anthropic_ranking": {
+          "description": "The same rule over the anthropic/* subset; may be empty.",
+          "$ref": "#/$defs/ranking"
+        }
+      }
+    },
+    "ranking": {
+      "type": "array",
+      "maxItems": 5,
+      "items": {
+        "$ref": "#/$defs/entry"
+      }
+    },
+    "entry": {
+      "type": "object",
+      "required": [
+        "id",
+        "direct_id"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "description": "The OpenRouter catalogue id.",
+          "type": "string",
+          "pattern": "^\\S+$"
+        },
+        "direct_id": {
+          "description": "Anthropic's own id when the snapshot prices the model on the direct transport, else null.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^\\S+$"
+        }
+      }
+    }
+  }
+}

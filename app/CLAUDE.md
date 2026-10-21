@@ -1,6 +1,6 @@
 # CLAUDE.md
 
-MrCall Desktop — Electron + React frontend that embeds the Python sidecar (`zylch`) over JSON-RPC on stdio. Runs on macOS arm64 (Apple Silicon) and Windows x64; macOS Intel x64 is opt-in (paid runner). All user data lives under `~/.zylch/profiles/<email>/` — nothing syncs to a cloud.
+MrCall Desktop — Electron + React frontend that embeds the Python sidecar (`zylch`) over JSON-RPC on stdio. Runs on macOS arm64 (Apple Silicon) and Windows x64; macOS Intel x64 is opt-in (paid runner). All user data lives under `~/.zylch/profiles/<firebase_uid>/` — nothing syncs to a cloud.
 
 ## Sibling code in this monorepo
 
@@ -63,7 +63,7 @@ The workflow builds the sidecar in `engine/` via PyInstaller in the same run and
 ## Architecture notes
 
 - **Sidecar-first.** The renderer never imports zylch logic — it sends JSON-RPC requests through preload → main → sidecar stdio. If you need a new feature, add an RPC method on the Python side first, then expose it through preload.
-- **Profile-aware.** Each Electron window owns one profile (one email). The sidecar acquires an fcntl lock on the profile dir; if you see "profile already in use", another window or CLI invocation has it open.
+- **Profile-aware.** Each Electron window owns one profile (one Firebase UID). The sidecar acquires an fcntl lock on the profile dir; if you see "profile already in use", another window or CLI invocation has it open.
 - **No telemetry.** No analytics SDK, no error reporter. If you find yourself reaching for one, talk to the user first.
 
 ## Settings — LLM billing mode (since 2026-05)
@@ -76,7 +76,11 @@ Switching provider preserves keys and requires Save. Top-up opens the dashboard
 without requiring an API key. Economy/balanced presets replace individual role
 overrides on Save; custom preserves them. DailyBudget shows settled spending,
 uncertain holds, remaining daily capacity and effective role models, with free
-receipt recovery. See [bounded preparation](docs/bounded-preparation.md).
+receipt recovery. Every role in `model_policy.roles` is one line named by its
+job from `lib/modelRoles.ts`, the map the Settings job-model fields also read;
+an unknown key reads as its title-cased name without `MODEL_`. A job paused on the billing choice shows the engine's reason
+(`model_policy.paused`), and a paused narration reply's `paused` message
+replaces the fallback narration (`scripts/test-role-pause-ui.mjs`). See [bounded preparation](docs/bounded-preparation.md).
 
 When MrCall credits is selected, the card calls `window.zylch.account.balance()`
 on mount and on every `window` focus event (so a top-up done in another
@@ -95,6 +99,13 @@ on `mrcall-agent`; personal BYOK keys are saved on the active engine profile.
 shows the active preset, and preserves explicit advanced role overrides. Cross-cutting context in
 [`../AGENTS.md`](../AGENTS.md), engine plumbing in
 [`../engine/CLAUDE.md`](../engine/CLAUDE.md).
+
+Model names and labels come from the engine (`llm.models`, the effective role
+models of `usage.today`, the settings schema); the app hard-codes none. The
+presets are price ceilings within which the engine resolves each job's model
+([model selection](../engine/docs/features/model-selection.md)).
+`npm run check:models` (`scripts/check-no-model-labels.mjs`) fails when a model
+name or id appears in `src/` outside a comment.
 
 ## Company memory — onboarding field and Settings card (since 2026-09)
 

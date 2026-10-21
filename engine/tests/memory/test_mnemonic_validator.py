@@ -97,7 +97,9 @@ def test_each_decision_preserves_what_the_incident_says_must_survive(case_id):
     proposal = proposal_for(case_id)
     body = f"{proposal.content}\n{proposal.reason}".lower()
     for fragment in case(case_id)["expected"].get("must_preserve", []):
-        assert fragment.lower() in body, f"{case_id} dropped {fragment!r}"
+        # An entry may list alternatives, the same substance in either language.
+        alternatives = [fragment] if isinstance(fragment, str) else fragment
+        assert any(a.lower() in body for a in alternatives), f"{case_id} dropped {fragment!r}"
 
 
 def test_planned_work_is_not_written_as_completed_work():

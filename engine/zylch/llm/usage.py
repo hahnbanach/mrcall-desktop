@@ -12,21 +12,20 @@ import contextlib
 import contextvars
 import logging
 from datetime import datetime
+from decimal import Decimal
 from typing import Any, Dict, Tuple
+
+from .roles.prices import price as listed_price
+from .roles.prices import priced
 
 logger = logging.getLogger(__name__)
 
 # Default daily cap when LLM_DAILY_BUDGET_USD is unset; zero pauses AI.
 DEFAULT_DAILY_BUDGET_USD = 10.0
 
-# Price table, $ per million tokens, (input, output). Matched by
-# substring against the model id (see _price_for). Keep the tiers here
-# aligned with Anthropic's published list pricing.
-_PRICES: Dict[str, Tuple[float, float]] = {
-    "opus": (5.0, 25.0),
-    "sonnet": (3.0, 15.0),
-    "haiku": (1.0, 5.0),
-}
+# No family table: an id the price source (`roles/prices.py`, the model
+# snapshot) does not price is estimated at the dearest direct prices the
+# snapshot holds (see _price_for), never by matching a name.
 
 # Cache-write (prompt-cache creation) tokens bill at 1.25x the input
 # rate; cache-read (prompt-cache hit) tokens at 0.10x.
@@ -77,16 +76,25 @@ def _utc_midnight() -> datetime:
 
 
 def _price_for(model: str) -> Tuple[float, float]:
-    """``(input, output)`` $/MTok for ``model``, matched by substring.
+    """``(input, output)`` $/MTok for ``model``, from the model snapshot.
 
-    Unknown model ids fall back to Opus — the most expensive tier — so
-    the estimate can only ever be an over-count, never an under-count.
+    A priced id (direct or OpenRouter, from ``roles/prices.py``: the
+    snapshot, read at call time) is estimated at its own price, so a GLM or
+    MiMo pick is not counted at Opus rates. An unpriced id is matched to no
+    model family by name: it is estimated at the dearest direct (Anthropic)
+    input and output prices the snapshot holds, so the estimate can only ever
+    be an over-count against any Anthropic model, as the Opus fallback was.
+    Admission refuses an unpriced id before dispatch, so this is a fallback a
+    recorded call does not reach.
     """
-    m = (model or "").lower()
-    for key, price in _PRICES.items():
-        if key in m:
-            return price
-    return _PRICES["opus"]
+    rate = listed_price(model, "direct") or listed_price(model, "openrouter")
+    if rate is None:
+        rates = list(priced("direct").values())
+        rate = (
+            max((r[0] for r in rates), default=Decimal(0)),
+            max((r[1] for r in rates), default=Decimal(0)),
+        )
+    return float(rate[0]), float(rate[1])
 
 
 def _tok(usage_dict: Dict[str, Any], key: str) -> int:
@@ -103,7 +111,7 @@ def estimate_cost_usd(model: str, usage_dict: Dict[str, Any]) -> float:
     ``input_tokens`` are the plain (uncached) input tokens.
     ``cache_creation_input_tokens`` bill at 1.25x the input rate and
     ``cache_read_input_tokens`` at 0.10x; ``output_tokens`` bill at the
-    output rate. Unknown model → Opus pricing (see :func:`_price_for`).
+    output rate. Unpriced model → the dearest direct estimate (see :func:`_price_for`).
     """
     in_rate, out_rate = _price_for(model)
 

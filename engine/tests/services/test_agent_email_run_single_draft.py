@@ -65,7 +65,7 @@ def _agent_email_run(instructions="write the customer a quote"):
         patch("zylch.agents.base_agent.make_llm_client", return_value=_fake_llm()),
         patch("zylch.agents.base_agent.EmbeddingEngine", MagicMock()),
         patch("zylch.agents.base_agent.HybridSearchEngine") as search_cls,
-        patch("zylch.llm.try_make_llm_client", return_value=MagicMock()),
+        patch("zylch.llm.llm_available", return_value=True),
     ):
         search_cls.return_value.search.return_value = []
         return _run(handle_agent(["email", "run", instructions], MagicMock(), OWNER))

@@ -324,7 +324,7 @@ def consolidate_now(monkeypatch):
 
     from tests.memory.consolidation_env import sweep
 
-    monkeypatch.setattr(consolidation, "try_make_llm_client", lambda *a, **k: None)
+    monkeypatch.setattr(consolidation, "llm_available", lambda: False)
     return sweep(OWNER_A)
 
 

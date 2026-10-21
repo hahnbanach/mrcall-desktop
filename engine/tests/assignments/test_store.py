@@ -19,6 +19,27 @@ from zylch.storage.models import TaskItem
 THREAD = "<root@example.test>"
 
 
+@pytest.fixture(autouse=True)
+def assignment_source(env):
+    from datetime import datetime
+    from zylch.storage.models import Email
+    from zylch.storage import database as db
+
+    with db.get_session() as session:
+        session.add(
+            Email(
+                id="assignment-source",
+                owner_id="alice@example.test",
+                gmail_id=THREAD,
+                thread_id=THREAD,
+                message_id_header=THREAD,
+                from_email="customer@example.test",
+                to_email="alice@example.test",
+                date=datetime(2026, 10, 8),
+            )
+        )
+
+
 def assign(env):
     intent = store.preview("assign", THREAD, 0, "bob")
     return intent, env.sign(intent)
@@ -102,6 +123,8 @@ def test_authenticated_exact_receipt_replay_survives_intent_expiry(env, monkeypa
         ("covered_inbound", [{}]),
         ("version", True),
         ("created_at", "now"),
+        ("component_digest", True),
+        ("component_digest", "invalid"),
     ],
 )
 def test_malformed_intent_refuses_without_changes(env, field, value):
@@ -299,3 +322,25 @@ def test_inbound_arriving_between_source_preparation_and_cas_refuses(env):
     with pytest.raises(AssignmentError, match="coverage"):
         store.commit(intent, env.sign(intent), evidence=Source())
     assert counts(env) == before
+
+
+def test_legacy_exact_receipt_replays_but_fresh_unbound_intent_refuses(env):
+    from zylch.services.task_assignment_types import digest
+
+    intent = store.preview("assign", THREAD, 0, "bob")
+    legacy = {key: value for key, value in intent.items() if key != "component_digest"}
+    grant = env.sign(legacy)
+    with pytest.raises(AssignmentError, match="component binding"):
+        store.commit(legacy, grant)
+    historical = {"acknowledged": True, "operation_id": legacy["operation_id"], "revision": 1}
+    with env.memory.begin() as conn:
+        conn.execute(
+            insert(store.R).values(
+                operation_id=legacy["operation_id"],
+                nonce=grant["approval"]["nonce"],
+                payload_digest=digest(legacy),
+                receipt=historical,
+            )
+        )
+    assert store.commit(legacy, grant) == historical
+    assert list(map(len, counts(env))) == [0, 0, 1]

@@ -1,0 +1,877 @@
+{
+ "schema": 1,
+ "read_at": "2026-10-10T12:01:52Z",
+ "reference": "moonshotai/kimi-k3",
+ "roles": {
+  "CHAT": {
+   "rule": "maximise",
+   "index": "agentic",
+   "arms": [
+    {
+     "id": "anthropic/claude-opus-5.5",
+     "why": "measured",
+     "direct_id": "claude-opus-5-5",
+     "output_price": "20",
+     "score": 60.42,
+     "imputed_sd": 4.8
+    },
+    {
+     "id": "anthropic/claude-sonnet-5.5",
+     "why": "measured",
+     "direct_id": "claude-sonnet-5-5",
+     "output_price": "10",
+     "score": 58.28,
+     "imputed_sd": 4.8
+    },
+    {
+     "id": "moonshotai/kimi-k3",
+     "why": "measured",
+     "direct_id": null,
+     "output_price": "14",
+     "score": 50,
+     "imputed_sd": null
+    },
+    {
+     "id": "qwen/qwen3.8-max-0902",
+     "why": "measured",
+     "direct_id": null,
+     "output_price": "6",
+     "score": 56,
+     "imputed_sd": null
+    },
+    {
+     "id": "z-ai/glm-5.3",
+     "why": "measured",
+     "direct_id": null,
+     "output_price": "6",
+     "score": 53.1,
+     "imputed_sd": null
+    }
+   ]
+  },
+  "COMPACTION": {
+   "rule": "satisfice",
+   "index": "intelligence",
+   "arms": [
+    {
+     "id": "anthropic/claude-sonnet-5.5",
+     "why": "measured",
+     "direct_id": "claude-sonnet-5-5",
+     "output_price": "10",
+     "score": 56,
+     "imputed_sd": null
+    },
+    {
+     "id": "deepseek/deepseek-v4-flash",
+     "why": "measured",
+     "direct_id": null,
+     "output_price": "0.28",
+     "score": 24.4,
+     "imputed_sd": null
+    },
+    {
+     "id": "moonshotai/kimi-k3",
+     "why": "measured",
+     "direct_id": null,
+     "output_price": "14",
+     "score": 43.6,
+     "imputed_sd": null
+    },
+    {
+     "id": "xiaomi/mimo-v2.6-flash",
+     "why": "measured",
+     "direct_id": null,
+     "output_price": "0.28",
+     "score": 37.9,
+     "imputed_sd": null
+    },
+    {
+     "id": "xiaomi/mimo-v2.6-pro",
+     "why": "measured",
+     "direct_id": null,
+     "output_price": "0.87",
+     "score": 46.3,
+     "imputed_sd": null
+    },
+    {
+     "id": "z-ai/glm-5.3-flash",
+     "why": "measured",
+     "direct_id": null,
+     "output_price": "0.5",
+     "score": 41.8,
+     "imputed_sd": null
+    }
+   ]
+  },
+  "CORRECTION_LEARNING": {
+   "rule": "satisfice",
+   "index": "intelligence",
+   "arms": [
+    {
+     "id": "anthropic/claude-sonnet-5.5",
+     "why": "measured",
+     "direct_id": "claude-sonnet-5-5",
+     "output_price": "10",
+     "score": 56,
+     "imputed_sd": null
+    },
+    {
+     "id": "deepseek/deepseek-v4-flash",
+     "why": "measured",
+     "direct_id": null,
+     "output_price": "0.28",
+     "score": 24.4,
+     "imputed_sd": null
+    },
+    {
+     "id": "moonshotai/kimi-k3",
+     "why": "measured",
+     "direct_id": null,
+     "output_price": "14",
+     "score": 43.6,
+     "imputed_sd": null
+    },
+    {
+     "id": "xiaomi/mimo-v2.6-flash",
+     "why": "measured",
+     "direct_id": null,
+     "output_price": "0.28",
+     "score": 37.9,
+     "imputed_sd": null
+    },
+    {
+     "id": "xiaomi/mimo-v2.6-pro",
+     "why": "measured",
+     "direct_id": null,
+     "output_price": "0.87",
+     "score": 46.3,
+     "imputed_sd": null
+    },
+    {
+     "id": "z-ai/glm-5.3-flash",
+     "why": "measured",
+     "direct_id": null,
+     "output_price": "0.5",
+     "score": 41.8,
+     "imputed_sd": null
+    }
+   ]
+  },
+  "DEDUP": {
+   "rule": "satisfice",
+   "index": "intelligence",
+   "arms": [
+    {
+     "id": "anthropic/claude-opus-5.5",
+     "why": "measured",
+     "direct_id": "claude-opus-5-5",
+     "output_price": "20",
+     "score": 57.6,
+     "imputed_sd": null
+    },
+    {
+     "id": "anthropic/claude-sonnet-4.6",
+     "why": "measured",
+     "direct_id": "claude-sonnet-4-6",
+     "output_price": "15",
+     "score": 30.1,
+     "imputed_sd": null
+    },
+    {
+     "id": "anthropic/claude-sonnet-5",
+     "why": "measured",
+     "direct_id": "claude-sonnet-5",
+     "output_price": "10",
+     "score": 38.2,
+     "imputed_sd": null
+    },
+    {
+     "id": "anthropic/claude-sonnet-5.5",
+     "why": "measured",
+     "direct_id": "claude-sonnet-5-5",
+     "output_price": "10",
+     "score": 56,
+     "imputed_sd": null
+    },
+    {
+     "id": "deepseek/deepseek-v4-flash",
+     "why": "measured",
+     "direct_id": null,
+     "output_price": "0.28",
+     "score": 24.4,
+     "imputed_sd": null
+    },
+    {
+     "id": "deepseek/deepseek-v4-flash-0731",
+     "why": "measured",
+     "direct_id": null,
+     "output_price": "0.28",
+     "score": 34.3,
+     "imputed_sd": null
+    },
+    {
+     "id": "inclusionai/ling-3.0-flash-vl",
+     "why": "measured",
+     "direct_id": null,
+     "output_price": "0.0616",
+     "score": 24.6,
+     "imputed_sd": null
+    },
+    {
+     "id": "moonshotai/kimi-k3",
+     "why": "measured",
+     "direct_id": null,
+     "output_price": "14",
+     "score": 43.6,
+     "imputed_sd": null
+    },
+    {
+     "id": "openai/gpt-6-luna",
+     "why": "measured",
+     "direct_id": null,
+     "output_price": "0.5",
+     "score": 38.1,
+     "imputed_sd": null
+    },
+    {
+     "id": "upstage/solar-pro4",
+     "why": "measured",
+     "direct_id": null,
+     "output_price": "0.36",
+     "score": 28.2,
+     "imputed_sd": null
+    },
+    {
+     "id": "xiaomi/mimo-v2.6-flash",
+     "why": "measured",
+     "direct_id": null,
+     "output_price": "0.28",
+     "score": 37.9,
+     "imputed_sd": null
+    },
+    {
+     "id": "xiaomi/mimo-v2.6-pro",
+     "why": "measured",
+     "direct_id": null,
+     "output_price": "0.87",
+     "score": 46.3,
+     "imputed_sd": null
+    },
+    {
+     "id": "z-ai/glm-5.3-flash",
+     "why": "measured",
+     "direct_id": null,
+     "output_price": "0.5",
+     "score": 41.8,
+     "imputed_sd": null
+    }
+   ]
+  },
+  "INTENT": {
+   "rule": "satisfice",
+   "index": "intelligence",
+   "arms": [
+    {
+     "id": "anthropic/claude-opus-5.5",
+     "why": "measured",
+     "direct_id": "claude-opus-5-5",
+     "output_price": "20",
+     "score": 57.6,
+     "imputed_sd": null
+    },
+    {
+     "id": "anthropic/claude-sonnet-4.6",
+     "why": "measured",
+     "direct_id": "claude-sonnet-4-6",
+     "output_price": "15",
+     "score": 30.1,
+     "imputed_sd": null
+    },
+    {
+     "id": "anthropic/claude-sonnet-5",
+     "why": "measured",
+     "direct_id": "claude-sonnet-5",
+     "output_price": "10",
+     "score": 38.2,
+     "imputed_sd": null
+    },
+    {
+     "id": "anthropic/claude-sonnet-5.5",
+     "why": "measured",
+     "direct_id": "claude-sonnet-5-5",
+     "output_price": "10",
+     "score": 56,
+     "imputed_sd": null
+    },
+    {
+     "id": "deepseek/deepseek-v4-flash",
+     "why": "measured",
+     "direct_id": null,
+     "output_price": "0.28",
+     "score": 24.4,
+     "imputed_sd": null
+    },
+    {
+     "id": "deepseek/deepseek-v4-flash-0731",
+     "why": "measured",
+     "direct_id": null,
+     "output_price": "0.28",
+     "score": 34.3,
+     "imputed_sd": null
+    },
+    {
+     "id": "inclusionai/ling-3.0-flash-vl",
+     "why": "measured",
+     "direct_id": null,
+     "output_price": "0.0616",
+     "score": 24.6,
+     "imputed_sd": null
+    },
+    {
+     "id": "moonshotai/kimi-k3",
+     "why": "measured",
+     "direct_id": null,
+     "output_price": "14",
+     "score": 43.6,
+     "imputed_sd": null
+    },
+    {
+     "id": "upstage/solar-pro4",
+     "why": "measured",
+     "direct_id": null,
+     "output_price": "0.36",
+     "score": 28.2,
+     "imputed_sd": null
+    },
+    {
+     "id": "xiaomi/mimo-v2.6-flash",
+     "why": "measured",
+     "direct_id": null,
+     "output_price": "0.28",
+     "score": 37.9,
+     "imputed_sd": null
+    },
+    {
+     "id": "xiaomi/mimo-v2.6-pro",
+     "why": "measured",
+     "direct_id": null,
+     "output_price": "0.87",
+     "score": 46.3,
+     "imputed_sd": null
+    },
+    {
+     "id": "z-ai/glm-5.3-flash",
+     "why": "measured",
+     "direct_id": null,
+     "output_price": "0.5",
+     "score": 41.8,
+     "imputed_sd": null
+    }
+   ]
+  },
+  "NARRATION": {
+   "rule": "satisfice",
+   "index": "intelligence",
+   "arms": [
+    {
+     "id": "anthropic/claude-sonnet-5.5",
+     "why": "measured",
+     "direct_id": "claude-sonnet-5-5",
+     "output_price": "10",
+     "score": 56,
+     "imputed_sd": null
+    },
+    {
+     "id": "deepseek/deepseek-v4-flash",
+     "why": "measured",
+     "direct_id": null,
+     "output_price": "0.28",
+     "score": 24.4,
+     "imputed_sd": null
+    },
+    {
+     "id": "moonshotai/kimi-k3",
+     "why": "measured",
+     "direct_id": null,
+     "output_price": "14",
+     "score": 43.6,
+     "imputed_sd": null
+    },
+    {
+     "id": "xiaomi/mimo-v2.6-flash",
+     "why": "measured",
+     "direct_id": null,
+     "output_price": "0.28",
+     "score": 37.9,
+     "imputed_sd": null
+    },
+    {
+     "id": "xiaomi/mimo-v2.6-pro",
+     "why": "measured",
+     "direct_id": null,
+     "output_price": "0.87",
+     "score": 46.3,
+     "imputed_sd": null
+    },
+    {
+     "id": "z-ai/glm-5.3-flash",
+     "why": "measured",
+     "direct_id": null,
+     "output_price": "0.5",
+     "score": 41.8,
+     "imputed_sd": null
+    }
+   ]
+  },
+  "REANALYZE": {
+   "rule": "satisfice",
+   "index": "intelligence",
+   "arms": [
+    {
+     "id": "anthropic/claude-sonnet-5.5",
+     "why": "measured",
+     "direct_id": "claude-sonnet-5-5",
+     "output_price": "10",
+     "score": 56,
+     "imputed_sd": null
+    },
+    {
+     "id": "deepseek/deepseek-v4-flash",
+     "why": "measured",
+     "direct_id": null,
+     "output_price": "0.28",
+     "score": 24.4,
+     "imputed_sd": null
+    },
+    {
+     "id": "deepseek/deepseek-v4-flash-0731",
+     "why": "measured",
+     "direct_id": null,
+     "output_price": "0.28",
+     "score": 34.3,
+     "imputed_sd": null
+    },
+    {
+     "id": "inclusionai/ling-3.0-flash-vl",
+     "why": "measured",
+     "direct_id": null,
+     "output_price": "0.0616",
+     "score": 24.6,
+     "imputed_sd": null
+    },
+    {
+     "id": "moonshotai/kimi-k3",
+     "why": "measured",
+     "direct_id": null,
+     "output_price": "14",
+     "score": 43.6,
+     "imputed_sd": null
+    },
+    {
+     "id": "upstage/solar-pro4",
+     "why": "measured",
+     "direct_id": null,
+     "output_price": "0.36",
+     "score": 28.2,
+     "imputed_sd": null
+    },
+    {
+     "id": "xiaomi/mimo-v2.6-flash",
+     "why": "measured",
+     "direct_id": null,
+     "output_price": "0.28",
+     "score": 37.9,
+     "imputed_sd": null
+    },
+    {
+     "id": "xiaomi/mimo-v2.6-pro",
+     "why": "measured",
+     "direct_id": null,
+     "output_price": "0.87",
+     "score": 46.3,
+     "imputed_sd": null
+    },
+    {
+     "id": "z-ai/glm-5.3-flash",
+     "why": "measured",
+     "direct_id": null,
+     "output_price": "0.5",
+     "score": 41.8,
+     "imputed_sd": null
+    }
+   ]
+  },
+  "REPLY_NEED": {
+   "rule": "satisfice",
+   "index": "intelligence",
+   "arms": [
+    {
+     "id": "anthropic/claude-sonnet-5.5",
+     "why": "measured",
+     "direct_id": "claude-sonnet-5-5",
+     "output_price": "10",
+     "score": 56,
+     "imputed_sd": null
+    },
+    {
+     "id": "deepseek/deepseek-v4-flash",
+     "why": "measured",
+     "direct_id": null,
+     "output_price": "0.28",
+     "score": 24.4,
+     "imputed_sd": null
+    },
+    {
+     "id": "moonshotai/kimi-k3",
+     "why": "measured",
+     "direct_id": null,
+     "output_price": "14",
+     "score": 43.6,
+     "imputed_sd": null
+    },
+    {
+     "id": "xiaomi/mimo-v2.6-flash",
+     "why": "measured",
+     "direct_id": null,
+     "output_price": "0.28",
+     "score": 37.9,
+     "imputed_sd": null
+    },
+    {
+     "id": "xiaomi/mimo-v2.6-pro",
+     "why": "measured",
+     "direct_id": null,
+     "output_price": "0.87",
+     "score": 46.3,
+     "imputed_sd": null
+    },
+    {
+     "id": "z-ai/glm-5.3-flash",
+     "why": "measured",
+     "direct_id": null,
+     "output_price": "0.5",
+     "score": 41.8,
+     "imputed_sd": null
+    }
+   ]
+  },
+  "SYNC_ANALYSIS": {
+   "rule": "satisfice",
+   "index": "intelligence",
+   "arms": [
+    {
+     "id": "anthropic/claude-sonnet-5.5",
+     "why": "measured",
+     "direct_id": "claude-sonnet-5-5",
+     "output_price": "10",
+     "score": 56,
+     "imputed_sd": null
+    },
+    {
+     "id": "deepseek/deepseek-v4-flash",
+     "why": "measured",
+     "direct_id": null,
+     "output_price": "0.28",
+     "score": 24.4,
+     "imputed_sd": null
+    },
+    {
+     "id": "moonshotai/kimi-k3",
+     "why": "measured",
+     "direct_id": null,
+     "output_price": "14",
+     "score": 43.6,
+     "imputed_sd": null
+    },
+    {
+     "id": "xiaomi/mimo-v2.6-flash",
+     "why": "measured",
+     "direct_id": null,
+     "output_price": "0.28",
+     "score": 37.9,
+     "imputed_sd": null
+    },
+    {
+     "id": "xiaomi/mimo-v2.6-pro",
+     "why": "measured",
+     "direct_id": null,
+     "output_price": "0.87",
+     "score": 46.3,
+     "imputed_sd": null
+    },
+    {
+     "id": "z-ai/glm-5.3-flash",
+     "why": "measured",
+     "direct_id": null,
+     "output_price": "0.5",
+     "score": 41.8,
+     "imputed_sd": null
+    }
+   ]
+  },
+  "TASK_DETECTION": {
+   "rule": "satisfice",
+   "index": "intelligence",
+   "arms": [
+    {
+     "id": "anthropic/claude-sonnet-5.5",
+     "why": "measured",
+     "direct_id": "claude-sonnet-5-5",
+     "output_price": "10",
+     "score": 56,
+     "imputed_sd": null
+    },
+    {
+     "id": "deepseek/deepseek-v4-flash",
+     "why": "measured",
+     "direct_id": null,
+     "output_price": "0.28",
+     "score": 24.4,
+     "imputed_sd": null
+    },
+    {
+     "id": "moonshotai/kimi-k3",
+     "why": "measured",
+     "direct_id": null,
+     "output_price": "14",
+     "score": 43.6,
+     "imputed_sd": null
+    },
+    {
+     "id": "xiaomi/mimo-v2.6-flash",
+     "why": "measured",
+     "direct_id": null,
+     "output_price": "0.28",
+     "score": 37.9,
+     "imputed_sd": null
+    },
+    {
+     "id": "xiaomi/mimo-v2.6-pro",
+     "why": "measured",
+     "direct_id": null,
+     "output_price": "0.87",
+     "score": 46.3,
+     "imputed_sd": null
+    },
+    {
+     "id": "z-ai/glm-5.3-flash",
+     "why": "measured",
+     "direct_id": null,
+     "output_price": "0.5",
+     "score": 41.8,
+     "imputed_sd": null
+    }
+   ]
+  },
+  "TASK_SOLVE": {
+   "rule": "maximise",
+   "index": "agentic",
+   "arms": [
+    {
+     "id": "anthropic/claude-opus-5.5",
+     "why": "measured",
+     "direct_id": "claude-opus-5-5",
+     "output_price": "20",
+     "score": 60.42,
+     "imputed_sd": 4.8
+    },
+    {
+     "id": "anthropic/claude-sonnet-5.5",
+     "why": "measured",
+     "direct_id": "claude-sonnet-5-5",
+     "output_price": "10",
+     "score": 58.28,
+     "imputed_sd": 4.8
+    },
+    {
+     "id": "moonshotai/kimi-k3",
+     "why": "measured",
+     "direct_id": null,
+     "output_price": "14",
+     "score": 50,
+     "imputed_sd": null
+    },
+    {
+     "id": "qwen/qwen3.8-max-0902",
+     "why": "measured",
+     "direct_id": null,
+     "output_price": "6",
+     "score": 56,
+     "imputed_sd": null
+    },
+    {
+     "id": "z-ai/glm-5.3",
+     "why": "measured",
+     "direct_id": null,
+     "output_price": "6",
+     "score": 53.1,
+     "imputed_sd": null
+    }
+   ]
+  },
+  "TRAIN": {
+   "rule": "satisfice",
+   "index": "intelligence",
+   "arms": [
+    {
+     "id": "anthropic/claude-opus-5.5",
+     "why": "measured",
+     "direct_id": "claude-opus-5-5",
+     "output_price": "20",
+     "score": 57.6,
+     "imputed_sd": null
+    },
+    {
+     "id": "anthropic/claude-sonnet-4.6",
+     "why": "measured",
+     "direct_id": "claude-sonnet-4-6",
+     "output_price": "15",
+     "score": 30.1,
+     "imputed_sd": null
+    },
+    {
+     "id": "anthropic/claude-sonnet-5",
+     "why": "measured",
+     "direct_id": "claude-sonnet-5",
+     "output_price": "10",
+     "score": 38.2,
+     "imputed_sd": null
+    },
+    {
+     "id": "anthropic/claude-sonnet-5.5",
+     "why": "measured",
+     "direct_id": "claude-sonnet-5-5",
+     "output_price": "10",
+     "score": 56,
+     "imputed_sd": null
+    },
+    {
+     "id": "deepseek/deepseek-v4-flash",
+     "why": "measured",
+     "direct_id": null,
+     "output_price": "0.28",
+     "score": 24.4,
+     "imputed_sd": null
+    },
+    {
+     "id": "deepseek/deepseek-v4-flash-0731",
+     "why": "measured",
+     "direct_id": null,
+     "output_price": "0.28",
+     "score": 34.3,
+     "imputed_sd": null
+    },
+    {
+     "id": "inclusionai/ling-3.0-flash-vl",
+     "why": "measured",
+     "direct_id": null,
+     "output_price": "0.0616",
+     "score": 24.6,
+     "imputed_sd": null
+    },
+    {
+     "id": "moonshotai/kimi-k3",
+     "why": "measured",
+     "direct_id": null,
+     "output_price": "14",
+     "score": 43.6,
+     "imputed_sd": null
+    },
+    {
+     "id": "openai/gpt-6-luna",
+     "why": "measured",
+     "direct_id": null,
+     "output_price": "0.5",
+     "score": 38.1,
+     "imputed_sd": null
+    },
+    {
+     "id": "upstage/solar-pro4",
+     "why": "measured",
+     "direct_id": null,
+     "output_price": "0.36",
+     "score": 28.2,
+     "imputed_sd": null
+    },
+    {
+     "id": "xiaomi/mimo-v2.6-flash",
+     "why": "measured",
+     "direct_id": null,
+     "output_price": "0.28",
+     "score": 37.9,
+     "imputed_sd": null
+    },
+    {
+     "id": "xiaomi/mimo-v2.6-pro",
+     "why": "measured",
+     "direct_id": null,
+     "output_price": "0.87",
+     "score": 46.3,
+     "imputed_sd": null
+    },
+    {
+     "id": "z-ai/glm-5.3-flash",
+     "why": "measured",
+     "direct_id": null,
+     "output_price": "0.5",
+     "score": 41.8,
+     "imputed_sd": null
+    }
+   ]
+  },
+  "WEB_SEARCH": {
+   "rule": "satisfice",
+   "index": "intelligence",
+   "arms": [
+    {
+     "id": "anthropic/claude-sonnet-5.5",
+     "why": "measured",
+     "direct_id": "claude-sonnet-5-5",
+     "output_price": "10",
+     "score": 56,
+     "imputed_sd": null
+    },
+    {
+     "id": "deepseek/deepseek-v4-flash",
+     "why": "measured",
+     "direct_id": null,
+     "output_price": "0.28",
+     "score": 24.4,
+     "imputed_sd": null
+    },
+    {
+     "id": "moonshotai/kimi-k3",
+     "why": "measured",
+     "direct_id": null,
+     "output_price": "14",
+     "score": 43.6,
+     "imputed_sd": null
+    },
+    {
+     "id": "xiaomi/mimo-v2.6-flash",
+     "why": "measured",
+     "direct_id": null,
+     "output_price": "0.28",
+     "score": 37.9,
+     "imputed_sd": null
+    },
+    {
+     "id": "xiaomi/mimo-v2.6-pro",
+     "why": "measured",
+     "direct_id": null,
+     "output_price": "0.87",
+     "score": 46.3,
+     "imputed_sd": null
+    },
+    {
+     "id": "z-ai/glm-5.3-flash",
+     "why": "measured",
+     "direct_id": null,
+     "output_price": "0.5",
+     "score": 41.8,
+     "imputed_sd": null
+    }
+   ]
+  }
+ }
+}

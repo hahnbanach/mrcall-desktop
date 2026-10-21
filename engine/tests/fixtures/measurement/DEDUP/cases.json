@@ -1,0 +1,204 @@
+{
+  "schema": 1,
+  "role": "DEDUP",
+  "builder": {
+    "dedup.f8": "zylch.workers.task_dedup_sweep.run_dedup_sweep",
+    "dedup.f9": "zylch.workers.task_topic_dedup.run_topic_dedup"
+  },
+  "cases": [
+    {
+      "id": "dedup-01", "lang": "it", "expect_lang": null, "call_site": "dedup.f8",
+      "input": {
+        "now": "2026-10-01T09:00:00Z",
+        "open_tasks": [
+          {"id": "61e90ab7-e6a2-4666-8e27-cc7086964f69", "event_type": "email", "event_id": "450b503a-9f8e-4b99-be9f-138074a638f9", "contact_email": "marco.bassi@impresaedileesempio.example", "contact_name": "Marco Bassi", "title": "Preventivo finestre Via Roma 18", "urgency": "medium", "suggested_action": "Rispondere a Marco Bassi sul preventivo per le finestre del cantiere di Via Roma 18", "reason": "Marco Bassi ha chiesto il preventivo per le finestre del cantiere di Via Roma 18", "channel": "email", "created_at": "2026-09-22T08:30:00Z", "analyzed_at": "2026-09-22T08:30:00Z", "sources": {"emails": ["199a240f-f5bf-430f-8373-5ad4774627e3"], "thread_id": "<20260922083000.59bfd5d7@mail.example>", "blobs": [], "calendar_events": []}},
+          {"id": "45dc5b67-3f3b-408c-b54d-a95ee1abfa49", "event_type": "email", "event_id": "d5cc541f-64a7-4734-a4bd-54171afca2d9", "contact_email": "marco.bassi@impresaedileesempio.example", "contact_name": "Marco Bassi", "title": "Preventivo 16 finestre Via Roma", "urgency": "high", "suggested_action": "Preparare e inviare all'Impresa Edile Esempio il preventivo per 16 finestre in PVC bianco (4 con vetro antisfondamento al piano terra) per il cantiere di Via Roma 18, entro metà ottobre", "reason": "Marco Bassi ha corretto la richiesta: le finestre sono 16 e non 12 e al piano terra serve vetro antisfondamento; scadenza metà ottobre", "channel": "email", "created_at": "2026-09-30T16:55:00Z", "analyzed_at": "2026-09-30T16:55:00Z", "sources": {"emails": ["82e20675-09a0-45ff-82d7-8311a77e42f7"], "thread_id": "<20260930165500.82975a8c@mail.example>", "blobs": [], "calendar_events": []}}
+        ]
+      },
+      "label": {"is_duplicate_group": true, "keeper_id": "45dc5b67-3f3b-408c-b54d-a95ee1abfa49"},
+      "critical_on": [], "critical": false,
+      "why": "Both tasks are the same quote for the windows of the Via Roma 18 site; the newer one is the most informative, the most urgent and the most recent, so all three keeper rules pick it."
+    },
+    {
+      "id": "dedup-02", "lang": "en", "expect_lang": null, "call_site": "dedup.f8",
+      "input": {
+        "now": "2026-10-01T09:00:00Z",
+        "open_tasks": [
+          {"id": "f829ff5f-9fa1-4280-9901-014839a56ee8", "event_type": "email", "event_id": "10533bbd-0220-47b3-a158-78709ca09362", "contact_email": "hannah@exampleyoga.example", "contact_name": "Hannah Brooks", "title": "Example Yoga autumn timetable poster", "urgency": "medium", "suggested_action": "Design the A3 autumn timetable poster for Example Yoga & Pilates by Wednesday 7 October", "reason": "Hannah sent the timetable text for the studio window poster", "channel": "email", "created_at": "2026-09-28T10:20:00Z", "analyzed_at": "2026-09-28T10:20:00Z", "sources": {"emails": ["51921399-162f-4de6-be0e-935d344f031c"], "thread_id": "<20260928102000.877c1ec1@mail.example>", "blobs": [], "calendar_events": []}},
+          {"id": "6236caf2-4623-448c-a6a6-8befb56aa683", "event_type": "email", "event_id": "c6d85659-2ab2-49e6-baae-f60e25c690a3", "contact_email": "hannah@exampleyoga.example", "contact_name": "Hannah Brooks", "title": "Example Yoga contact form", "urgency": "high", "suggested_action": "Check why the Example Yoga website contact form is not delivering students' messages", "reason": "Students say their enquiries get no answer and Hannah receives none of them", "channel": "email", "created_at": "2026-10-01T07:05:00Z", "analyzed_at": "2026-10-01T07:05:00Z", "sources": {"emails": ["a750a51b-fa0f-4515-a9f8-c42168afd426"], "thread_id": "<20261001070500.0143de34@mail.example>", "blobs": [], "calendar_events": []}}
+        ]
+      },
+      "label": {"is_duplicate_group": false},
+      "critical_on": ["merge"], "critical": true,
+      "why": "A poster to design and a broken website form are two distinct jobs for the same client; merging them closes one of them."
+    },
+    {
+      "id": "dedup-03", "lang": "it", "expect_lang": null, "call_site": "dedup.f8",
+      "input": {
+        "now": "2026-10-01T09:00:00Z",
+        "open_tasks": [
+          {"id": "0340f0db-8861-4893-b7b4-e13c8b28fb6d", "event_type": "email", "event_id": "4090256b-8fcc-4de4-9ecd-e23567349dd2", "contact_email": "amministrazione@amministrazioniesempio.example", "contact_name": "Paola Colombo", "title": "Preventivo vano scala Via Verdi 12", "urgency": "medium", "suggested_action": "Inviare ad Amministrazioni Esempio il preventivo per le 10 finestre del vano scala del Condominio Via Verdi 12", "reason": "L'assemblea del condominio chiede il preventivo per le parti comuni", "channel": "email", "created_at": "2026-09-18T10:15:00Z", "analyzed_at": "2026-09-18T10:15:00Z", "sources": {"emails": ["75d1b6b2-19e5-4605-ab34-553d68cd71a4"], "thread_id": "<20260918101500.cfb14b15@mail.example>", "blobs": [], "calendar_events": []}},
+          {"id": "c900f6dc-2f52-4c18-9b7f-9651a757d400", "event_type": "email", "event_id": "2126c7cc-0474-4951-b472-caa9b403566b", "contact_email": "amministrazione@amministrazioniesempio.example", "contact_name": "Paola Colombo", "title": "Infiltrazioni Via Manzoni 4", "urgency": "high", "suggested_action": "Fissare un sopralluogo al Condominio Via Manzoni 4 per le infiltrazioni dai serramenti del terzo piano", "reason": "Amministrazioni Esempio segnala acqua che entra dalle finestre di due appartamenti del terzo piano", "channel": "email", "created_at": "2026-09-29T15:30:00Z", "analyzed_at": "2026-09-29T15:30:00Z", "sources": {"emails": ["ee7a0535-2d51-4d58-b364-3f26651befa5"], "thread_id": "<20260929153000.233bac9f@mail.example>", "blobs": [], "calendar_events": []}}
+        ]
+      },
+      "label": {"is_duplicate_group": false},
+      "critical_on": ["merge"], "critical": true,
+      "why": "The same administrator manages two condominiums: a quote for one building and a leak inspection in another are distinct issues."
+    },
+    {
+      "id": "dedup-04", "lang": "en", "expect_lang": null, "call_site": "dedup.f8",
+      "input": {
+        "now": "2026-10-01T09:00:00Z",
+        "open_tasks": [
+          {"id": "a3d0d171-bfa6-4b42-8c98-fe16c8ea0351", "event_type": "email", "event_id": "0b370ca1-fa33-48a5-9312-6bc7a554c17e", "contact_email": "alerts@examplehosting.example", "contact_name": "Example Hosting", "title": "Renew SSL for examplebakery.example", "urgency": "low", "suggested_action": "Renew the SSL certificate for examplebakery.example", "reason": "Example Hosting reminder: the certificate expires on 10 October", "channel": "email", "created_at": "2026-09-20T07:00:00Z", "analyzed_at": "2026-09-20T07:00:00Z", "sources": {"emails": ["81a73e27-1d02-4c43-8ad0-61df771aa19d"], "thread_id": "<20260920070000.e6df1150@mail.example>", "blobs": [], "calendar_events": []}},
+          {"id": "e297fd34-f4ca-4912-bdb3-ea8d54f7b932", "event_type": "email", "event_id": "6a82f1f8-5b10-4b71-849d-71ee9e73dcb1", "contact_email": "alerts@examplehosting.example", "contact_name": "Example Hosting", "title": "Renew SSL for examplebakery.example", "urgency": "medium", "suggested_action": "Renew the SSL certificate for examplebakery.example before it expires on 10 October", "reason": "Second Example Hosting reminder for the same certificate", "channel": "email", "created_at": "2026-09-25T07:00:00Z", "analyzed_at": "2026-09-25T07:00:00Z", "sources": {"emails": ["fabee171-e8fc-4294-9f89-26211892461e"], "thread_id": "<20260925070000.340ed19d@mail.example>", "blobs": [], "calendar_events": []}},
+          {"id": "25fa72cb-b14b-44ce-8ce9-74b3611c7b2e", "event_type": "email", "event_id": "a345f467-c1c6-47a3-8a83-cf3f0bffdf0a", "contact_email": "alerts@examplehosting.example", "contact_name": "Example Hosting", "title": "SSL renewal failed for examplebakery.example", "urgency": "high", "suggested_action": "Update the expired card in Example Hosting and renew the SSL certificate for examplebakery.example before 10 October", "reason": "Third reminder: automatic renewal failed because the card on file expired; after 10 October the bakery's site shows a security warning", "channel": "email", "created_at": "2026-09-30T07:00:00Z", "analyzed_at": "2026-09-30T07:00:00Z", "sources": {"emails": ["003eebfa-b87d-464f-9320-d602ee50a3ba"], "thread_id": "<20260930070000.22f4de0d@mail.example>", "blobs": [], "calendar_events": []}}
+        ]
+      },
+      "label": {"is_duplicate_group": true, "keeper_id": "25fa72cb-b14b-44ce-8ce9-74b3611c7b2e"},
+      "critical_on": [], "critical": false,
+      "why": "Three reminders about the same certificate are one task; the third is the most informative (the renewal failed), the most urgent and the most recent."
+    },
+    {
+      "id": "dedup-05", "lang": "it", "expect_lang": null, "call_site": "dedup.f8",
+      "input": {
+        "now": "2026-10-01T09:00:00Z",
+        "open_tasks": [
+          {"id": "edb13887-ad89-4e54-9ec4-ea6416c0e444", "event_type": "email", "event_id": "c1b5bbe1-0619-4ee9-af80-1bc21252a8e0", "contact_email": "chiara.fontana@posta.example", "contact_name": "Chiara Fontana", "title": "Finestra camera Chiara Fontana", "urgency": "medium", "suggested_action": "Verificare la finestra della camera di Chiara Fontana che lascia entrare acqua", "reason": "La cliente segnala acqua sul davanzale", "channel": "email", "created_at": "2026-09-22T09:00:00Z", "analyzed_at": "2026-09-22T09:00:00Z", "sources": {"emails": ["f3106e0b-efa6-49fd-9f29-a112714369bd"], "thread_id": "<20260922090000.7f02b6c9@mail.example>", "blobs": [], "calendar_events": []}},
+          {"id": "faa29570-ab9a-4dae-829f-44f5aa14b6ad", "event_type": "email", "event_id": "944be97a-14d3-426c-9b1f-3de800d4d50d", "contact_email": "chiara.fontana@posta.example", "contact_name": "Chiara Fontana", "title": "Richiamare Chiara Fontana", "urgency": "medium", "suggested_action": "Richiamare Chiara Fontana: la finestra della camera perde ancora acqua", "reason": "Seconda segnalazione della stessa infiltrazione", "channel": "email", "created_at": "2026-09-26T09:00:00Z", "analyzed_at": "2026-09-26T09:00:00Z", "sources": {"emails": ["01052ddb-0d00-45b5-8a7d-1bed166a932c"], "thread_id": "<20260926090000.502c6f32@mail.example>", "blobs": [], "calendar_events": []}},
+          {"id": "cdea1c4c-6dc5-4674-987e-2221c37ecef3", "event_type": "email", "event_id": "a736532d-3ce2-4fe7-8374-15f66b2a48a6", "contact_email": "chiara.fontana@posta.example", "contact_name": "Chiara Fontana", "title": "Garanzia finestra Chiara Fontana", "urgency": "high", "suggested_action": "Mandare un tecnico in garanzia da Chiara Fontana (Via Esempio 7, Caravaggio): la finestra della camera installata a giugno lascia entrare acqua a ogni pioggia forte", "reason": "Terza segnalazione: l'infiltrazione continua e la finestra è in garanzia", "channel": "email", "created_at": "2026-09-30T09:00:00Z", "analyzed_at": "2026-09-30T09:00:00Z", "sources": {"emails": ["1ccef121-a7b9-4418-8b61-0c217621d51e"], "thread_id": "<20260930090000.a0a902c4@mail.example>", "blobs": [], "calendar_events": []}}
+        ]
+      },
+      "label": {"is_duplicate_group": true, "keeper_id": "cdea1c4c-6dc5-4674-987e-2221c37ecef3"},
+      "critical_on": [], "critical": false,
+      "why": "Three tasks about the same leaking bedroom window of the same customer are one problem; the third is the most complete, the most urgent and the most recent."
+    },
+    {
+      "id": "dedup-06", "lang": "en", "expect_lang": null, "call_site": "dedup.f8",
+      "input": {
+        "now": "2026-10-01T09:00:00Z",
+        "open_tasks": [
+          {"id": "2248e040-1b79-4a95-9d6c-b98f6bb0cd48", "event_type": "email", "event_id": "7bdf0a6a-aa9a-4ff0-abd6-395e5ab8f6d7", "contact_email": "owen@exampleplumbing.example", "contact_name": "Owen Price", "title": "Revised open day flyer for Owen", "urgency": "high", "suggested_action": "Send Owen the revised open day flyer proof with the new date (Saturday 10 October)", "reason": "The open day moved forward and the flyer is needed by Monday 5 October", "channel": "email", "created_at": "2026-09-30T16:45:00Z", "analyzed_at": "2026-09-30T16:45:00Z", "sources": {"emails": ["27376c9d-bcd9-47c3-aabd-b5f6231e9225"], "thread_id": "<20260930164500.bb1ec3f1@mail.example>", "blobs": [], "calendar_events": []}},
+          {"id": "bd77c444-3ea3-4277-a83b-20698a955a61", "event_type": "email", "event_id": "e5be994f-6258-4c95-a08b-269bb970607f", "contact_email": "owen@exampleplumbing.example", "contact_name": "Owen Price", "title": "Website refresh quote for Example Plumbing", "urgency": "medium", "suggested_action": "Prepare a quote for the Example Plumbing website refresh (new photos, service pages, online booking) including two years of hosting, budget up to £3,000", "reason": "Owen asked for the quote and added hosting and a budget", "channel": "email", "created_at": "2026-09-29T08:45:00Z", "analyzed_at": "2026-09-29T08:45:00Z", "sources": {"emails": ["b61b5dfe-74dc-4cf9-8bd0-e6a882eb999a"], "thread_id": "<20260929084500.03733a09@mail.example>", "blobs": [], "calendar_events": []}}
+        ]
+      },
+      "label": {"is_duplicate_group": false},
+      "critical_on": ["merge"], "critical": true,
+      "why": "A flyer proof and a website quote are separate deliverables for the same client; merging them loses one of them."
+    },
+    {
+      "id": "dedup-07", "lang": "it", "expect_lang": null, "call_site": "dedup.f8",
+      "input": {
+        "now": "2026-10-01T09:00:00Z",
+        "open_tasks": [
+          {"id": "8dbbbb58-dea7-4d7c-beb8-15a6d73f5d4f", "event_type": "email", "event_id": "2dbf3c11-10cb-4297-b689-a333c434e742", "contact_email": "ordini@vetreriaesempio.example", "contact_name": "Vetreria Esempio", "title": "Fattura 512 Vetreria Esempio", "urgency": "medium", "suggested_action": "Pagare la fattura n. 512 di Vetreria Esempio (vetri cantiere Bassi, 3.480 € + IVA) entro il 15 ottobre", "reason": "Fattura ricevuta per i vetri del cantiere di Via Roma", "channel": "email", "created_at": "2026-09-29T11:00:00Z", "analyzed_at": "2026-09-29T11:00:00Z", "sources": {"emails": ["505aa685-84f8-400a-8f44-0a59c3688968"], "thread_id": "<20260929110000.53fb0a79@mail.example>", "blobs": [], "calendar_events": []}},
+          {"id": "659b7ca2-fd91-4b96-b2ad-040596a42f00", "event_type": "email", "event_id": "c7cba7db-7265-47eb-a20d-0e6ddf81c16c", "contact_email": "ordini@vetreriaesempio.example", "contact_name": "Vetreria Esempio", "title": "Lastre rotte bolla 498", "urgency": "high", "suggested_action": "Contestare a Vetreria Esempio le 2 lastre arrivate rotte con la bolla n. 498 e chiederne la sostituzione", "reason": "Due vetrocamere della consegna del 29 settembre sono arrivate incrinate", "channel": "email", "created_at": "2026-09-30T08:30:00Z", "analyzed_at": "2026-09-30T08:30:00Z", "sources": {"emails": ["c2718f6f-a60d-41b8-b00b-c3a493ea5a6d"], "thread_id": "<20260930083000.7343cb07@mail.example>", "blobs": [], "calendar_events": []}}
+        ]
+      },
+      "label": {"is_duplicate_group": false},
+      "critical_on": ["merge"], "critical": true,
+      "why": "Paying invoice 512 and disputing the broken panes of delivery note 498 are different matters with the same supplier; closing either loses it."
+    },
+    {
+      "id": "dedup-08", "lang": "en", "expect_lang": null, "call_site": "dedup.f8",
+      "input": {
+        "now": "2026-10-01T09:00:00Z",
+        "open_tasks": [
+          {"id": "0df7fe08-97c2-46de-9939-9040334fe8c7", "event_type": "email", "event_id": "f207efdd-cf92-4b97-a95b-bc617e5d12db", "contact_email": "felix@examplecoffee.example", "contact_name": "Felix Andersson", "title": "Reply to Felix", "urgency": "medium", "suggested_action": "Reply to Felix about the checkout problem", "reason": "Felix wrote about the online shop", "channel": "email", "created_at": "2026-10-01T07:50:00Z", "analyzed_at": "2026-10-01T07:50:00Z", "sources": {"emails": ["117867a6-e4d7-446d-8483-a7aeaf2997c7"], "thread_id": "<20261001074100.5c2e8a1f@examplecoffee.example>", "blobs": [], "calendar_events": []}},
+          {"id": "aa4b9cf9-b485-45c5-88bd-869d60e83139", "event_type": "email", "event_id": "09c3a3b2-afb6-4ba9-ab07-aff9aa1a2f6d", "contact_email": "felix@examplecoffee.example", "contact_name": "Felix Andersson", "title": "Fix Example Coffee checkout today", "urgency": "critical", "suggested_action": "Fix the payment error at the last checkout step of the Example Coffee online shop today (third failure since the September update)", "reason": "Felix reports orders lost all weekend and this morning and threatens to move the shop to another agency", "channel": "email", "created_at": "2026-10-01T07:58:00Z", "analyzed_at": "2026-10-01T07:58:00Z", "sources": {"emails": ["117867a6-e4d7-446d-8483-a7aeaf2997c7"], "thread_id": "<20261001074100.5c2e8a1f@examplecoffee.example>", "blobs": [], "calendar_events": []}}
+        ]
+      },
+      "label": {"is_duplicate_group": true, "keeper_id": "aa4b9cf9-b485-45c5-88bd-869d60e83139"},
+      "critical_on": [], "critical": false,
+      "why": "Both tasks come from the same email thread about the same broken checkout; the second is the most informative, the most urgent and the most recent."
+    },
+    {
+      "id": "dedup-09", "lang": "it", "expect_lang": null, "call_site": "dedup.f8",
+      "input": {
+        "now": "2026-10-01T09:00:00Z",
+        "open_tasks": [
+          {"id": "889ced1b-326d-4466-84a9-c08128643065", "event_type": "email", "event_id": "8335cad5-46f2-454e-8d45-0deeb3a438eb", "contact_email": "sergio.galli@posta.example", "contact_name": "Sergio Galli", "title": "Documenti Ecobonus Sergio Galli", "urgency": "medium", "suggested_action": "Inviare a Sergio Galli la documentazione per la detrazione fiscale (Ecobonus) delle finestre installate a maggio", "reason": "Il suo commercialista la chiede per la dichiarazione", "channel": "email", "created_at": "2026-09-24T10:00:00Z", "analyzed_at": "2026-09-24T10:00:00Z", "sources": {"emails": ["1df3cbd9-164a-41fa-af5a-c54b2200deba"], "thread_id": "<20260924100000.c40770ed@mail.example>", "blobs": [], "calendar_events": []}},
+          {"id": "eeda36ed-665c-4d93-9c31-97827aa98a50", "event_type": "email", "event_id": "0845f27d-98a5-434b-94d1-28e35f384812", "contact_email": "sergio.galli@posta.example", "contact_name": "Sergio Galli", "title": "Maniglia bagno Sergio Galli", "urgency": "medium", "suggested_action": "Sostituire la maniglia rotta della finestra del bagno di Sergio Galli", "reason": "La maniglia è rotta e la finestra non si chiude", "channel": "email", "created_at": "2026-09-26T09:00:00Z", "analyzed_at": "2026-09-26T09:00:00Z", "sources": {"emails": ["3a19a157-360b-4daf-a4b4-c9ad60005cd9"], "thread_id": "<20260926090000.e37a37b0@mail.example>", "blobs": [], "calendar_events": []}}
+        ]
+      },
+      "label": {"is_duplicate_group": false},
+      "critical_on": ["merge"], "critical": true,
+      "why": "Tax paperwork and a broken handle are distinct problems of the same customer; merging them loses one."
+    },
+    {
+      "id": "dedup-10", "lang": "en", "expect_lang": null, "call_site": "dedup.f8",
+      "input": {
+        "now": "2026-10-01T09:00:00Z",
+        "open_tasks": [
+          {"id": "93565c3b-3715-4d7b-a14b-6f7665908af2", "event_type": "email", "event_id": "33bad7b1-9b3f-4890-8b95-65594838e763", "contact_email": "priya@examplebakery.example", "contact_name": "Priya Nair", "title": "Menu print files for Priya", "urgency": "medium", "suggested_action": "Send Priya the print files for the new autumn menus", "reason": "Priya asked for the print files of the new menus for the printer", "channel": "email", "created_at": "2026-09-29T16:50:00Z", "analyzed_at": "2026-09-29T16:50:00Z", "sources": {"emails": ["a6eb3b95-3d95-4d2d-8c18-7293515ccca6"], "thread_id": "<20260929165000.3129b9ea@mail.example>", "blobs": [], "calendar_events": []}},
+          {"id": "79132f15-0003-4b5f-ac88-8a5987332a48", "event_type": "email", "event_id": "3072e94a-64b4-42a5-b801-ef2d89184bf5", "contact_email": "priya@examplebakery.example", "contact_name": "Priya Nair", "title": "CMYK menu files for Example Bakery", "urgency": "high", "suggested_action": "Send Priya print-ready CMYK PDFs (3mm bleed) of the new menus by Friday 2 October; the printer cannot use the RGB files", "reason": "Example Print rejected the RGB files and the new menus must be in the shops on Monday", "channel": "email", "created_at": "2026-09-30T19:20:00Z", "analyzed_at": "2026-09-30T19:20:00Z", "sources": {"emails": ["e19e9439-3873-44ff-801c-0c4c1f94ebca"], "thread_id": "<20260930192000.d7e07254@mail.example>", "blobs": [], "calendar_events": []}}
+        ]
+      },
+      "label": {"is_duplicate_group": true, "keeper_id": "79132f15-0003-4b5f-ac88-8a5987332a48"},
+      "critical_on": [], "critical": false,
+      "why": "Both tasks are the same request for the menu print files; the second is the most informative, the most urgent and the most recent."
+    },
+    {
+      "id": "dedup-11", "lang": "it", "expect_lang": null, "call_site": "dedup.f9",
+      "input": {
+        "now": "2026-10-01T09:00:00Z",
+        "open_tasks": [
+          {"id": "27305d86-b966-46a4-9f88-d58b5b23e314", "event_type": "email", "event_id": "0db47dbd-6e54-472b-91a7-013b865c54df", "contact_email": "chiara.fontana@posta.example", "contact_name": "Chiara Fontana", "title": "Finestra camera Chiara Fontana", "urgency": "medium", "suggested_action": "Verificare la finestra della camera di Chiara Fontana che lascia entrare acqua", "reason": "La cliente segnala acqua sul davanzale", "channel": "email", "created_at": "2026-09-22T09:00:00Z", "analyzed_at": "2026-09-22T09:00:00Z", "sources": {"emails": ["248ea916-8719-4d7f-a172-fd9c585658b1"], "thread_id": "<20260922090000.5e79903b@mail.example>", "blobs": [], "calendar_events": []}},
+          {"id": "28dd836c-e6bb-4761-8784-3b173f02839b", "event_type": "email", "event_id": "4b9a57d6-ae2d-4a1a-a0df-40adb5a5b8dd", "contact_email": "chiara.fontana@posta.example", "contact_name": "Chiara Fontana", "title": "Garanzia finestra Chiara Fontana", "urgency": "high", "suggested_action": "Mandare un tecnico in garanzia da Chiara Fontana: la finestra della camera installata a giugno lascia entrare acqua a ogni pioggia forte", "reason": "Seconda segnalazione: l'infiltrazione continua e la finestra è in garanzia", "channel": "email", "created_at": "2026-09-30T09:00:00Z", "analyzed_at": "2026-09-30T09:00:00Z", "sources": {"emails": ["8413b8dc-afa7-4258-8988-f65df5ab5136"], "thread_id": "<20260930090000.68ee4f4d@mail.example>", "blobs": [], "calendar_events": []}},
+          {"id": "0ed8c702-85e2-43ce-9341-2af2cc7e9035", "event_type": "email", "event_id": "20348de7-78b9-46e1-83d3-d43a7055afcc", "contact_email": "anna.pellegrini@posta.example", "contact_name": "Anna Pellegrini", "title": "Finestra soggiorno Anna Pellegrini", "urgency": "medium", "suggested_action": "Verificare la finestra del soggiorno di Anna Pellegrini che lascia entrare acqua quando piove", "reason": "La cliente segnala un'infiltrazione dopo il temporale di ieri", "channel": "email", "created_at": "2026-09-29T18:00:00Z", "analyzed_at": "2026-09-29T18:00:00Z", "sources": {"emails": ["0851fb6c-aef6-4056-93df-e37ceeb3032f"], "thread_id": "<20260929180000.0ac0dab7@mail.example>", "blobs": [], "calendar_events": []}},
+          {"id": "61c042d1-3288-4e61-bfde-d6afb1f20c3f", "event_type": "email", "event_id": "690a4f15-f9e9-4640-83e3-ae2f5b9843a1", "contact_email": "sergio.galli@posta.example", "contact_name": "Sergio Galli", "title": "Maniglia bagno Sergio Galli", "urgency": "medium", "suggested_action": "Sostituire la maniglia rotta della finestra del bagno di Sergio Galli", "reason": "La maniglia è rotta e la finestra non si chiude", "channel": "email", "created_at": "2026-09-26T09:00:00Z", "analyzed_at": "2026-09-26T09:00:00Z", "sources": {"emails": ["dd347a0a-013b-4bcf-8a6a-3651727bd336"], "thread_id": "<20260926090000.f5d64d39@mail.example>", "blobs": [], "calendar_events": []}},
+          {"id": "7d863d38-8e05-4e22-b93d-5c40d3d2620b", "event_type": "email", "event_id": "ebb60fde-0847-48b3-a583-b1358ad72fa8", "contact_email": "marco.bassi@impresaedileesempio.example", "contact_name": "Marco Bassi", "title": "Preventivo 16 finestre Via Roma", "urgency": "high", "suggested_action": "Preparare e inviare all'Impresa Edile Esempio il preventivo per 16 finestre del cantiere di Via Roma 18", "reason": "Scadenza metà ottobre", "channel": "email", "created_at": "2026-09-30T16:55:00Z", "analyzed_at": "2026-09-30T16:55:00Z", "sources": {"emails": ["20e24383-a237-47e7-9900-af2212442044"], "thread_id": "<20260930165500.70e7f19b@mail.example>", "blobs": [], "calendar_events": []}}
+        ]
+      },
+      "label": {"clusters": [{"keeper_id": "28dd836c-e6bb-4761-8784-3b173f02839b", "duplicate_ids": ["27305d86-b966-46a4-9f88-d58b5b23e314"]}]},
+      "critical_on": [], "critical": false,
+      "why": "Chiara Fontana's two tasks are the same leaking window, and the second is the more complete; Anna Pellegrini has the same kind of problem but is another party and must stay separate."
+    },
+    {
+      "id": "dedup-14", "lang": "en", "expect_lang": null, "call_site": "dedup.f9",
+      "input": {
+        "now": "2026-10-01T09:00:00Z",
+        "open_tasks": [
+          {"id": "ab306311-7796-40bc-a886-9b915a55254f", "event_type": "email", "event_id": "d54e5601-34ec-49b5-b972-3793d9735470", "contact_email": "owen@exampleplumbing.example", "contact_name": "Owen Price", "title": "Revised open day flyer for Owen", "urgency": "high", "suggested_action": "Send Owen the revised open day flyer proof with the new date (Saturday 10 October)", "reason": "The flyer is needed by Monday 5 October", "channel": "email", "created_at": "2026-09-30T16:45:00Z", "analyzed_at": "2026-09-30T16:45:00Z", "sources": {"emails": ["dd88396b-d0d4-4d44-afd5-72b40b3d63ab"], "thread_id": "<20260930164500.ab699ea3@mail.example>", "blobs": [], "calendar_events": []}},
+          {"id": "d27190e8-fde4-44c8-b3cc-441a78bc88f1", "event_type": "email", "event_id": "ec1e2873-5e49-43c7-af05-03cd9cfd9ec4", "contact_email": "owen@exampleplumbing.example", "contact_name": "Owen Price", "title": "Website refresh quote for Example Plumbing", "urgency": "medium", "suggested_action": "Prepare a quote for the Example Plumbing website refresh including two years of hosting", "reason": "Budget up to £3,000", "channel": "email", "created_at": "2026-09-29T08:45:00Z", "analyzed_at": "2026-09-29T08:45:00Z", "sources": {"emails": ["c9e3f8f5-6caf-459c-bdd5-df34f5c2e40a"], "thread_id": "<20260929084500.88fd9a84@mail.example>", "blobs": [], "calendar_events": []}},
+          {"id": "2204675c-fda5-4e72-ac53-988ca20a7832", "event_type": "email", "event_id": "c6c7fd3f-5790-4116-9ae5-aacb39f14329", "contact_email": "owen@exampleplumbing.example", "contact_name": "Owen Price", "title": "Confirm 2pm meeting with Owen", "urgency": "medium", "suggested_action": "Reply to Owen to confirm moving Tuesday's meeting (6 October) from 10:00 to 14:00", "reason": "He has a boiler install in the morning", "channel": "email", "created_at": "2026-09-30T18:00:00Z", "analyzed_at": "2026-09-30T18:00:00Z", "sources": {"emails": ["f9e736fc-01f4-49c3-b4a1-414efabba544"], "thread_id": "<20260930180000.f3f47341@mail.example>", "blobs": [], "calendar_events": []}},
+          {"id": "b8f8a2f4-fb37-4173-b5fd-bf2be2934b8b", "event_type": "email", "event_id": "7fa3580c-f9b9-4314-9f75-9c24c090f02a", "contact_email": "felix@examplecoffee.example", "contact_name": "Felix Andersson", "title": "Meeting slots for Example Coffee winter campaign", "urgency": "medium", "suggested_action": "Send Felix two or three morning slots next week to plan Example Coffee's winter campaign", "reason": "Gift boxes, landing page and newsletter", "channel": "email", "created_at": "2026-09-30T13:20:00Z", "analyzed_at": "2026-09-30T13:20:00Z", "sources": {"emails": ["3ec25995-097a-4a0f-b967-19d24c9301f7"], "thread_id": "<20260930132000.e04ee840@mail.example>", "blobs": [], "calendar_events": []}}
+        ]
+      },
+      "label": {"clusters": []},
+      "critical_on": ["wrong_close"], "critical": true,
+      "why": "Owen's three tasks are three different jobs (a flyer, a quote, a meeting time) for the same party, so the engine lets a merge through and closes real work; Felix is another party."
+    },
+    {
+      "id": "dedup-20", "lang": "en", "expect_lang": null, "call_site": "dedup.f9",
+      "input": {
+        "now": "2026-10-01T09:00:00Z",
+        "open_tasks": [
+          {"id": "423cf7bc-d7c4-433e-b384-bc780e70050a", "event_type": "email", "event_id": "39be065d-d949-437c-abcc-ba1c17326f31", "contact_email": "owen@exampleplumbing.example", "contact_name": "Owen Price", "title": "Confirm 2pm meeting with Owen", "urgency": "medium", "suggested_action": "Reply to Owen to confirm moving Tuesday's website meeting (6 October) from 10:00 to 14:00", "reason": "Owen accepted Tuesday but asked to move the meeting to 2pm because of a morning job", "channel": "email", "created_at": "2026-09-30T18:00:00Z", "analyzed_at": "2026-09-30T18:00:00Z", "sources": {"emails": ["e9efd75c-7133-4c94-8fcb-37026dc04ffc"], "thread_id": "<20260930180000.43105860@mail.example>", "blobs": [], "calendar_events": []}},
+          {"id": "b0d7c917-52ad-47e8-8749-7d159aecfd2a", "event_type": "email", "event_id": "6502d932-1ffe-469f-a704-339bc0bf56dc", "contact_email": "owen@exampleplumbing.example", "contact_name": "Owen Price", "title": "Reply to Owen", "urgency": "low", "suggested_action": "Reply to Owen about Tuesday's meeting", "reason": "Owen asked about the meeting time", "channel": "email", "created_at": "2026-09-30T18:10:00Z", "analyzed_at": "2026-09-30T18:10:00Z", "sources": {"emails": ["55673cce-0a25-47b1-af9e-a2219ea4197d"], "thread_id": "<20260930181000.282a59f9@mail.example>", "blobs": [], "calendar_events": []}},
+          {"id": "e7b50a8c-8385-45b8-b3b0-128d128e2255", "event_type": "email", "event_id": "615eccd5-c104-47d3-9c17-bb291b53bc8d", "contact_email": "priya@examplebakery.example", "contact_name": "Priya Nair", "title": "August invoice copy for Priya", "urgency": "medium", "suggested_action": "Send Priya a copy of the August invoice (INV-2026-084)", "reason": "Her accountant asked for it", "channel": "email", "created_at": "2026-09-29T09:00:00Z", "analyzed_at": "2026-09-29T09:00:00Z", "sources": {"emails": ["5bc4ad80-42f9-43d6-8906-8f415b8984fc"], "thread_id": "<20260929090000.fcac8c40@mail.example>", "blobs": [], "calendar_events": []}},
+          {"id": "c0fad896-dc2b-4eb5-bf8a-702b157da2c8", "event_type": "email", "event_id": "0e1c718c-45f1-405e-914f-26514b3e903a", "contact_email": "hannah@exampleyoga.example", "contact_name": "Hannah Brooks", "title": "Example Yoga autumn timetable poster", "urgency": "medium", "suggested_action": "Design the A3 autumn timetable poster for Example Yoga & Pilates by Wednesday 7 October", "reason": "Poster for the studio window", "channel": "email", "created_at": "2026-09-28T10:20:00Z", "analyzed_at": "2026-09-28T10:20:00Z", "sources": {"emails": ["5bf5e163-45ef-4423-a480-bf86fb3fdeda"], "thread_id": "<20260928102000.6c1d7714@mail.example>", "blobs": [], "calendar_events": []}},
+          {"id": "94656f58-6c6f-41dd-8fcd-23646897189b", "event_type": "email", "event_id": "fdb4355a-1c84-4d32-ab6b-f3c51687c4c6", "contact_email": "felix@examplecoffee.example", "contact_name": "Felix Andersson", "title": "Meeting slots for Example Coffee winter campaign", "urgency": "medium", "suggested_action": "Send Felix two or three morning slots next week to plan Example Coffee's winter campaign", "reason": "Gift boxes, landing page and newsletter", "channel": "email", "created_at": "2026-09-30T13:20:00Z", "analyzed_at": "2026-09-30T13:20:00Z", "sources": {"emails": ["69240754-690c-4b82-af26-70cbbbf1bfd2"], "thread_id": "<20260930132000.c267c5b6@mail.example>", "blobs": [], "calendar_events": []}}
+        ]
+      },
+      "label": {"clusters": [{"keeper_id": "423cf7bc-d7c4-433e-b384-bc780e70050a", "duplicate_ids": ["b0d7c917-52ad-47e8-8749-7d159aecfd2a"]}]},
+      "critical_on": [], "critical": false,
+      "why": "Both of Owen's tasks are the same reply about moving Tuesday's meeting; the first states the action fully and is the keeper. The other three tasks belong to other clients."
+    },
+    {
+      "id": "dedup-21", "lang": "it", "expect_lang": null, "call_site": "dedup.f9",
+      "input": {
+        "now": "2026-10-01T09:00:00Z",
+        "open_tasks": [
+          {"id": "8b31fa29-188b-4066-9575-1af15177f499", "event_type": "email", "event_id": "7f395dea-732d-4b06-b3c1-af4cbafca4a3", "contact_email": "amministrazione@amministrazioniesempio.example", "contact_name": "Paola Colombo", "title": "Preventivo vano scala Via Verdi 12", "urgency": "medium", "suggested_action": "Inviare ad Amministrazioni Esempio il preventivo per le 10 finestre del vano scala del Condominio Via Verdi 12", "reason": "L'assemblea chiede il preventivo per le parti comuni", "channel": "email", "created_at": "2026-09-18T10:15:00Z", "analyzed_at": "2026-09-18T10:15:00Z", "sources": {"emails": ["7ee514f6-4a55-4f98-a264-b85eb215fe9f"], "thread_id": "<20260918101500.21a9ac5c@mail.example>", "blobs": [], "calendar_events": []}},
+          {"id": "57f5e510-e774-4e86-a00c-f11da29303e2", "event_type": "email", "event_id": "0059477d-6c2f-4ecf-8a8e-bb1887225c1e", "contact_email": "amministrazione@amministrazioniesempio.example", "contact_name": "Paola Colombo", "title": "Infiltrazioni Via Manzoni 4", "urgency": "high", "suggested_action": "Fissare un sopralluogo al Condominio Via Manzoni 4 per le infiltrazioni dai serramenti del terzo piano", "reason": "Amministrazioni Esempio segnala acqua che entra da due appartamenti", "channel": "email", "created_at": "2026-09-29T15:30:00Z", "analyzed_at": "2026-09-29T15:30:00Z", "sources": {"emails": ["58b19f7a-f105-42c3-a809-6c3a6a8b77ad"], "thread_id": "<20260929153000.e9ae4916@mail.example>", "blobs": [], "calendar_events": []}},
+          {"id": "15dc8640-67d8-4af7-839e-5c4ff58eb1d9", "event_type": "email", "event_id": "db52b04b-faac-4a12-af3d-bf26efb6b732", "contact_email": "amministrazione@amministrazioniesempio.example", "contact_name": "Paola Colombo", "title": "Preventivo tapparelle Via Manzoni 4", "urgency": "medium", "suggested_action": "Preparare e inviare ad Amministrazioni Esempio il preventivo per sostituire 24 tapparelle in PVC del Condominio Via Manzoni 4 prima dell'assemblea del 20 ottobre", "reason": "L'assemblea vuole il preventivo prima della riunione", "channel": "email", "created_at": "2026-09-25T10:00:00Z", "analyzed_at": "2026-09-25T10:00:00Z", "sources": {"emails": ["4563a358-c4e0-4d9a-9cb1-3ef57d5e6e51"], "thread_id": "<20260925100000.593da25e@mail.example>", "blobs": [], "calendar_events": []}},
+          {"id": "e31ec337-cd6f-43b5-9565-b49883d283a0", "event_type": "email", "event_id": "41045a4a-693b-403b-92e1-99753a7bf4f7", "contact_email": "marco.bassi@impresaedileesempio.example", "contact_name": "Marco Bassi", "title": "Preventivo 16 finestre Via Roma", "urgency": "high", "suggested_action": "Preparare e inviare all'Impresa Edile Esempio il preventivo per 16 finestre del cantiere di Via Roma 18", "reason": "Scadenza metà ottobre", "channel": "email", "created_at": "2026-09-30T16:55:00Z", "analyzed_at": "2026-09-30T16:55:00Z", "sources": {"emails": ["6645ffd9-26a4-4859-bf2e-b8f05b8abb93"], "thread_id": "<20260930165500.92635821@mail.example>", "blobs": [], "calendar_events": []}}
+        ]
+      },
+      "label": {"clusters": []},
+      "critical_on": ["wrong_close"], "critical": true,
+      "why": "Three different jobs for the same administrator, two of them in the same building (a leak inspection and a shutter quote); the engine lets a same-party merge through, so any cluster closes real work."
+    }
+  ]
+}

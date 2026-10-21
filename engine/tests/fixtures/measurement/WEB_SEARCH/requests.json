@@ -1,0 +1,73 @@
+{
+ "schema": 1,
+ "role": "WEB_SEARCH",
+ "prompt_sha256": "df56242761939a6ce8e2d0c24fa5a406ac9dc37745f788ed0cb4cde5d1597219",
+ "case_set_sha256": "4767cdb13895a5a64098342593c76099fa363898be9b79bef0d2c1553c50ae3c",
+ "requests": [
+  {
+   "case_id": "web_search-01",
+   "request": {
+    "messages": [
+     {
+      "role": "user",
+      "content": "Search the web and answer: codice destinatario SDI fatturazione elettronica: quanti caratteri ha?"
+     }
+    ],
+    "max_tokens": 1000
+   },
+   "capture_now": "2026-10-05T09:30:00"
+  },
+  {
+   "case_id": "web_search-02",
+   "request": {
+    "messages": [
+     {
+      "role": "user",
+      "content": "Search the web and answer: EU consumer right of withdrawal for online purchases: how many days?"
+     }
+    ],
+    "max_tokens": 1000
+   },
+   "capture_now": "2026-10-05T09:30:00"
+  },
+  {
+   "case_id": "web_search-03",
+   "request": {
+    "messages": [
+     {
+      "role": "user",
+      "content": "Search the web and answer: indirizzo PEC di Brentagrigia Costruzioni Srl, via Inesistente 1, Bergamo"
+     }
+    ],
+    "max_tokens": 1000
+   },
+   "capture_now": "2026-10-05T09:30:00"
+  },
+  {
+   "case_id": "web_search-04",
+   "request": {
+    "messages": [
+     {
+      "role": "user",
+      "content": "Search the web and answer: What is the standard VAT rate in Italy?"
+     }
+    ],
+    "max_tokens": 1000
+   },
+   "capture_now": "2026-10-05T09:30:00"
+  },
+  {
+   "case_id": "web_search-05",
+   "request": {
+    "messages": [
+     {
+      "role": "user",
+      "content": "Search the web and answer: DURC: cos'è e chi lo rilascia?"
+     }
+    ],
+    "max_tokens": 1000
+   },
+   "capture_now": "2026-10-05T09:30:00"
+  }
+ ]
+}

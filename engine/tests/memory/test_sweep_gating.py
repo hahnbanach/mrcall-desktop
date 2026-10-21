@@ -29,9 +29,7 @@ def test_sweep_runs_once_per_change_and_rests_otherwise(monkeypatch, tmp_path, s
     import zylch.memory.consolidation as lm
     from zylch.memory.blob_storage import BlobStorage
 
-    monkeypatch.setattr(
-        lm, "try_make_llm_client", lambda *a, **k: None
-    )  # no LLM: the run stops after retention
+    monkeypatch.setattr(lm, "llm_available", lambda: False)  # no LLM: the run stops after retention
     a = _boot(monkeypatch, tmp_path, "a", key=None, source=None)
     key = current_company_key()
     engine = dbm.current_memory_engine()
@@ -66,7 +64,7 @@ def test_a_new_identifier_alone_makes_the_sweep_due(monkeypatch, tmp_path, stub_
     from zylch.memory.blob_storage import BlobStorage
     from zylch.storage.storage import Storage
 
-    monkeypatch.setattr(lm, "try_make_llm_client", lambda *a, **k: None)
+    monkeypatch.setattr(lm, "llm_available", lambda: False)
     a = _boot(monkeypatch, tmp_path, "a", key=None, source=None)
     key = current_company_key()
     engine = dbm.current_memory_engine()

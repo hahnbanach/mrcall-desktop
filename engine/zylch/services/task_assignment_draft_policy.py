@@ -7,12 +7,7 @@ import functools
 import inspect
 import logging
 
-from sqlalchemy import select
-
-from zylch.services import project_store
-from zylch.storage.assigned_task_models import AssignedTask
 from . import task_assignment_evidence as evidence
-from . import task_assignment_identity as identity
 from . import task_assignment_mail as mail
 from . import task_assignment_projection as projection
 from .task_assignment_types import AssignmentError, thread
@@ -59,8 +54,9 @@ def guard(method):
         if not isinstance(refs, (list, str)):
             raise AssignmentError("Scoped draft references unavailable")
         refs = mail.references(refs if isinstance(refs, str) else " ".join(refs))
-        if (refs and refs[0] != root) or (not refs and target != root):
-            raise AssignmentError("Scoped draft must retain the exact RFC thread root")
+        keys, _, _ = mail.component(actor, root)
+        if target not in keys or any(ref not in keys for ref in refs):
+            raise AssignmentError("Scoped draft must retain the proven RFC component")
         # The shared effect guard covers scoped and ordinary contextual writes.
         # It owns the sole company transaction; do not nest another write lock.
         return method(*args, **kwargs)
@@ -68,7 +64,7 @@ def guard(method):
     return wrapped
 
 
-async def process_chat(service, message, owner, history, session_id, approval_callback):
+async def process_chat(service, message, owner, history, session_id, approval_callback, *, action_failures=None):
     """Run the existing agent without command/task routing or background writes."""
     from zylch.qonto import history as finance_history
     from zylch.assistant.turn_context import set_turn_observation
@@ -92,6 +88,7 @@ async def process_chat(service, message, owner, history, session_id, approval_ca
         user_message=f"Draft only for exact RFC thread {root}. Retain that thread_id and exact reply headers.\n\n{message}",
         context={"user_id": owner, "thread_id": root},
         approval_callback=approval_callback,
+        action_failures=action_failures,
     )
     return {
         "response": response,

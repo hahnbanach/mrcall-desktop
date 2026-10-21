@@ -1,0 +1,83 @@
+{
+ "schema": 1,
+ "role": "COMPACTION",
+ "prompt_sha256": "f99a21dda12f11c4d22961fe8bfdec5a4fdadc63fa6bc3cffcc94dea0ebdb860",
+ "case_set_sha256": "5aca578fb06e00d2a8526510ea1dc6da3de65f5e660bc4658ae9cb803bcaa69b",
+ "requests": [
+  {
+   "case_id": "compaction-01",
+   "request": {
+    "messages": [
+     {
+      "role": "user",
+      "content": "CHAT HISTORY:\n\nUSER: Partiamo da Lodi Arredamenti: cosa mi avevano chiesto?\n\nASSISTANT: Chiara Lodi (Lodi Arredamenti) il 30 settembre ha chiesto un preventivo per 200 maniglie MX-40 in private label con logo inciso, consegna entro metà novembre (email id 6a2e91c0).\n\nUSER: aspetta un attimo, mi chiamano al telefono\n\nASSISTANT: Certo, fai pure: riprendiamo quando vuoi.\n\nUSER: eccomi, scusa\n\nASSISTANT: Nessun problema, ti ascolto.\n\nUSER: un secondo che cerco gli occhiali\n\nASSISTANT: Fai con calma.\n\nUSER: Il prezzo private label è 6,80 € cad. Prepara la bozza.\n\nASSISTANT: Bozza creata (draft_id d-4c1e9a): 200 maniglie × 6,80 € = 1.360,00 € + IVA, consegna in 4 settimane dall'approvazione del logo.\n\nUSER: ok\n\nASSISTANT: Bene.\n\nUSER: ci sei?\n\nASSISTANT: Sì, sono qui.\n\nUSER: scusa, ho perso il filo\n\nASSISTANT: Nessun problema, riprendiamo da dove eravamo.\n\nUSER: Aspetta, avevo letto male: le maniglie sono 250, non 200. Correggi.\n\nASSISTANT: Corretto: la bozza d-4c1e9a ora indica 250 maniglie a 6,80 € = 1.700,00 € + IVA.\n\nUSER: niente, lascia stare quello che stavo per dire\n\nASSISTANT: Va bene.\n\nUSER: aspetta che finisco il caffè\n\nASSISTANT: Certo, nessuna fretta.\n\nUSER: grazie, stamattina sei veloce\n\nASSISTANT: Grazie a te!\n\nUSER: Aggiungi anche l'impianto logo, 90 € una tantum.\n\nASSISTANT: Fatto: aggiunta la voce impianto logo 90 € una tantum. Totale bozza d-4c1e9a: 1.790,00 € + IVA.\n\nUSER: mi è caduta la penna, un attimo\n\nASSISTANT: Fai pure.\n\n---\n\nWrite the summary now."
+     }
+    ],
+    "system": "You are a conversation summarizer. Produce a concise, faithful summary of the CHAT HISTORY below. Keep the same language as the conversation (mixed languages are fine). Capture: user intents, decisions made, drafts created, tools invoked and their results, any identifiers (task IDs, email IDs, draft IDs) the assistant must remember. Do NOT invent facts. Output prose only — no headings, no lists unless the original had lists.",
+    "max_tokens": 4096,
+    "model": "<role model>"
+   },
+   "capture_now": "2026-10-05T09:30:00"
+  },
+  {
+   "case_id": "compaction-02",
+   "request": {
+    "messages": [
+     {
+      "role": "user",
+      "content": "CHAT HISTORY:\n\nUSER: Start with the most urgent one.\n\nASSISTANT: Priya Shah (Shah & Co Architects): her accounts team needs the invoice number for the September samples.\n\nUSER: hang on, someone's at the door\n\nASSISTANT: Sure, take your time.\n\nUSER: back, sorry\n\nASSISTANT: No problem, go ahead.\n\nUSER: one sec, looking for my glasses\n\nASSISTANT: Take your time.\n\nUSER: Find it.\n\nASSISTANT: Found it in your sent mail (email id 3f8a2c41): invoice NW-2026-0917, £184.50 including VAT, sent on 17 September.\n\nUSER: ok\n\nASSISTANT: Great.\n\nUSER: are you there?\n\nASSISTANT: Yes, I'm here.\n\nUSER: sorry, lost my train of thought\n\nASSISTANT: No worries, we can pick up where we left off.\n\nUSER: Draft a reply with the number and amount, but don't send it — I want to check with accounts first.\n\nASSISTANT: Draft saved as d-90aa13 to priya@shahco-architects.example with invoice NW-2026-0917 and £184.50. Not sent.\n\nUSER: never mind what I was going to say\n\nASSISTANT: Okay.\n\nUSER: let me grab a coffee first\n\nASSISTANT: Sure, no rush.\n\nUSER: thanks, you're quick this morning\n\nASSISTANT: Happy to help!\n\nUSER: Good. Remind me to send it once accounts confirm.\n\nASSISTANT: Noted: send draft d-90aa13 after accounts confirm the amount.\n\nUSER: phone's ringing, give me a minute\n\nASSISTANT: Of course.\n\n---\n\nWrite the summary now."
+     }
+    ],
+    "system": "You are a conversation summarizer. Produce a concise, faithful summary of the CHAT HISTORY below. Keep the same language as the conversation (mixed languages are fine). Capture: user intents, decisions made, drafts created, tools invoked and their results, any identifiers (task IDs, email IDs, draft IDs) the assistant must remember. Do NOT invent facts. Output prose only — no headings, no lists unless the original had lists.",
+    "max_tokens": 4096,
+    "model": "<role model>"
+   },
+   "capture_now": "2026-10-05T09:30:00"
+  },
+  {
+   "case_id": "compaction-03",
+   "request": {
+    "messages": [
+     {
+      "role": "user",
+      "content": "CHAT HISTORY:\n\nUSER: Apri il task di Nordhavn.\n\nASSISTANT: Task t-5521: Erik Lindqvist (Nordhavn Yachts) chiede 60 bitte in acciaio inox AISI 316 da 150 mm. Scrive: \"We need them delivered to Gothenburg before 20 November, DAP Incoterms.\"\n\nUSER: un secondo che cerco gli occhiali\n\nASSISTANT: Fai con calma.\n\nUSER: ok\n\nASSISTANT: Bene.\n\nUSER: ci sei?\n\nASSISTANT: Sì, sono qui.\n\nUSER: Che vuol dire DAP?\n\nASSISTANT: DAP (Delivered At Place): il trasporto fino a Göteborg è a nostro carico; dazi e sdoganamento restano a carico di Erik.\n\nUSER: scusa, ho perso il filo\n\nASSISTANT: Nessun problema, riprendiamo da dove eravamo.\n\nUSER: niente, lascia stare quello che stavo per dire\n\nASSISTANT: Va bene.\n\nUSER: aspetta che finisco il caffè\n\nASSISTANT: Certo, nessuna fretta.\n\nUSER: Allora nel preventivo metti trasporto incluso: 340 € per la spedizione. Le bitte costano 24,50 € l'una.\n\nASSISTANT: Annotato per il task t-5521: 60 bitte × 24,50 € = 1.470,00 €, più trasporto 340 €, totale 1.810,00 €, resa DAP Göteborg, consegna entro il 20 novembre.\n\nUSER: grazie, stamattina sei veloce\n\nASSISTANT: Grazie a te!\n\nUSER: mi è caduta la penna, un attimo\n\nASSISTANT: Fai pure.\n\nUSER: rieccomi\n\nASSISTANT: Bentornata.\n\nUSER: Scrivi la bozza in inglese per Erik.\n\nASSISTANT: Bozza in inglese salvata (draft_id d-77b0e5): \"Dear Erik, please find our offer for 60 AISI 316 stainless steel cleats, 150 mm: EUR 24.50 each, EUR 1,470.00 in total, plus EUR 340.00 transport, DAP Gothenburg, delivery before 20 November.\"\n\nUSER: perfetto\n\nASSISTANT: Bene, andiamo avanti.\n\n---\n\nWrite the summary now."
+     }
+    ],
+    "system": "You are a conversation summarizer. Produce a concise, faithful summary of the CHAT HISTORY below. Keep the same language as the conversation (mixed languages are fine). Capture: user intents, decisions made, drafts created, tools invoked and their results, any identifiers (task IDs, email IDs, draft IDs) the assistant must remember. Do NOT invent facts. Output prose only — no headings, no lists unless the original had lists.",
+    "max_tokens": 4096,
+    "model": "<role model>"
+   },
+   "capture_now": "2026-10-05T09:30:00"
+  },
+  {
+   "case_id": "compaction-04",
+   "request": {
+    "messages": [
+     {
+      "role": "user",
+      "content": "CHAT HISTORY:\n\nASSISTANT: Let me check your tasks. [tool_use get_tasks({\"days_back\": 7})]\n\nUSER: [tool_result id=toolu_c04_1 -> 2 open tasks:\n1. [HIGH] Call back Rosa Bianchi (+44 20 7946 0377) about the curtain fitting — task t-8830\n2. [LOW] Send the moodboard to Tom Reed — task t-8831]\n\nASSISTANT: You owe one call: Rosa Bianchi (+44 20 7946 0377) about the curtain fitting (task t-8830).\n\nUSER: one sec, looking for my glasses\n\nASSISTANT: Take your time.\n\nUSER: ok\n\nASSISTANT: Great.\n\nUSER: are you there?\n\nASSISTANT: Yes, I'm here.\n\nUSER: sorry, lost my train of thought\n\nASSISTANT: No worries, we can pick up where we left off.\n\nUSER: What do we know about Rosa?\n\nASSISTANT: [tool_use search_local_memory({\"query\": \"Rosa Bianchi\"})]\n\nUSER: [tool_result id=toolu_c04_2 -> {\"status\": \"success\", \"data\": {\"found\": true, \"results\": [{\"blob_id\": \"b-3f9d27\", \"content\": \"Rosa Bianchi, owner of a flat in Hove; curtains ordered on 12 September, fitting postponed twice.\"}]}}]\n\nASSISTANT: Rosa Bianchi owns a flat in Hove (memory b-3f9d27); she ordered curtains on 12 September and the fitting has been postponed twice.\n\nUSER: never mind what I was going to say\n\nASSISTANT: Okay.\n\nUSER: let me grab a coffee first\n\nASSISTANT: Sure, no rush.\n\nUSER: thanks, you're quick this morning\n\nASSISTANT: Happy to help!\n\nUSER: phone's ringing, give me a minute\n\nASSISTANT: Of course.\n\nUSER: OK, I'll call her at 3 pm. Close the moodboard task, I sent it yesterday.\n\nASSISTANT: Task t-8831 closed. Reminder set: call Rosa Bianchi at 3 pm (task t-8830).\n\nUSER: right, I'm back\n\nASSISTANT: Welcome back.\n\nUSER: perfect\n\nASSISTANT: Good, let's carry on.\n\n---\n\nWrite the summary now."
+     }
+    ],
+    "system": "You are a conversation summarizer. Produce a concise, faithful summary of the CHAT HISTORY below. Keep the same language as the conversation (mixed languages are fine). Capture: user intents, decisions made, drafts created, tools invoked and their results, any identifiers (task IDs, email IDs, draft IDs) the assistant must remember. Do NOT invent facts. Output prose only — no headings, no lists unless the original had lists.",
+    "max_tokens": 4096,
+    "model": "<role model>"
+   },
+   "capture_now": "2026-10-05T09:30:00"
+  },
+  {
+   "case_id": "compaction-05",
+   "request": {
+    "messages": [
+     {
+      "role": "user",
+      "content": "CHAT HISTORY:\n\nUSER: Cosa ci avevano proposto?\n\nASSISTANT: L'ultima offerta di Bulloneria Gatti (email id 9b3c11d2): rinnovo annuale della fornitura di viteria inox a 1.200 € al mese, consegne settimanali il martedì.\n\nUSER: eccomi, scusa\n\nASSISTANT: Nessun problema, ti ascolto.\n\nUSER: un secondo che cerco gli occhiali\n\nASSISTANT: Fai con calma.\n\nUSER: ok\n\nASSISTANT: Bene.\n\nUSER: ci sei?\n\nASSISTANT: Sì, sono qui.\n\nUSER: No, guarda meglio: nella seconda email hanno corretto il prezzo a 1.250 € al mese, perché è aumentato l'acciaio.\n\nASSISTANT: Hai ragione: nell'email del 28 settembre (id 9b3c11d5) Gatti corregge il canone a 1.250 € al mese. Le consegne restano settimanali il martedì.\n\nUSER: scusa, ho perso il filo\n\nASSISTANT: Nessun problema, riprendiamo da dove eravamo.\n\nUSER: niente, lascia stare quello che stavo per dire\n\nASSISTANT: Va bene.\n\nUSER: aspetta che finisco il caffè\n\nASSISTANT: Certo, nessuna fretta.\n\nUSER: grazie, stamattina sei veloce\n\nASSISTANT: Grazie a te!\n\nUSER: Accettiamo a 1.250, ma chiediamo la consegna il lunedì invece del martedì.\n\nASSISTANT: Bozza di risposta salvata (draft_id d-2f8b40): accettiamo il rinnovo a 1.250 € al mese con consegna settimanale il lunedì anziché il martedì.\n\nUSER: mi è caduta la penna, un attimo\n\nASSISTANT: Fai pure.\n\nUSER: rieccomi\n\nASSISTANT: Bentornata.\n\n---\n\nWrite the summary now."
+     }
+    ],
+    "system": "You are a conversation summarizer. Produce a concise, faithful summary of the CHAT HISTORY below. Keep the same language as the conversation (mixed languages are fine). Capture: user intents, decisions made, drafts created, tools invoked and their results, any identifiers (task IDs, email IDs, draft IDs) the assistant must remember. Do NOT invent facts. Output prose only — no headings, no lists unless the original had lists.",
+    "max_tokens": 4096,
+    "model": "<role model>"
+   },
+   "capture_now": "2026-10-05T09:30:00"
+  }
+ ]
+}

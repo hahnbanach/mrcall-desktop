@@ -1,12 +1,11 @@
 import { useEffect, useState } from 'react'
+import { SETTINGS_ROLES, roleLabel } from '../lib/modelRoles'
 
 const BASE_KEYS: Record<string, string> = {
   anthropic: 'ANTHROPIC_MODEL', openrouter: 'OPENROUTER_MODEL', mrcall: 'MRCALL_CREDITS_MODEL'
 }
-const ROLES: Record<string, string> = {
-  MODEL_MEMORY_EXTRACT: 'Memory extraction', MODEL_MEMORY_MERGE: 'Memory comparison',
-  MODEL_TASK_DETECTION: 'Task detection', MODEL_REANALYZE: 'Task review', MODEL_DEDUP: 'Task deduplication'
-}
+// The job-model fields, named as Saved models names their lines (lib/modelRoles).
+const ROLES: Record<string, string> = Object.fromEntries(SETTINGS_ROLES.map(key => [key, roleLabel(key)]))
 export const MODEL_FIELDS = new Set([...Object.values(BASE_KEYS), ...Object.keys(ROLES)])
 type Model = { id: string; label: string; provider: string }
 
@@ -31,8 +30,6 @@ export default function ModelPolicy({ provider, values, refreshKey, onChange }: 
   }, [provider, refreshKey])
   const base = BASE_KEYS[provider]
   const preset = values.LLM_MODEL_PRESET || 'custom'
-  const activePresetModel = provider === 'openrouter' ? 'GLM 5.2'
-    : preset === 'balanced' ? 'Claude Sonnet 5' : 'Claude Haiku 4.5'
   const overrides = Object.keys(ROLES).filter(key => values[key])
   const control = (key: string, label: string) => {
     const value = values[key] || ''
@@ -55,7 +52,7 @@ export default function ModelPolicy({ provider, values, refreshKey, onChange }: 
       : 'Paid directly using the personal API key saved on your engine.'}</p>
     {reason && <p role="status" className="text-sm">{reason}</p>}
     {preset !== 'custom' && <p role="status" className="text-sm font-medium">
-      {preset} preset controls the default: {activePresetModel}. The saved custom model below is inactive.
+      {preset} preset is a price ceiling: the engine resolves each job's model within it (Saved models shows the result after Save). The saved custom model below is inactive.
     </p>}
     {control(base, preset === 'custom' ? 'Default model' : 'Saved custom model — inactive while preset is selected')}
     {overrides.length > 0 && <p className="text-sm">{overrides.length} saved job override(s) remain active and take priority over the default. Review Advanced job models.</p>}

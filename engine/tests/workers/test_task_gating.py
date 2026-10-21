@@ -656,8 +656,8 @@ async def test_wa_task_pending_routes_to_detection_stage(fresh_db, monkeypatch, 
     _insert_wa(owner, chat_jid="391112223334@s.whatsapp.net", memory_processed=True)
 
     class _OkPreflight:
-        async def create_message(self, **kwargs):
-            return object()
+        async def check_transport(self):
+            return None
 
     from zylch.services import process_pipeline as pp
 

@@ -1,0 +1,466 @@
+"""The daily model-table job's decisions: pure, no I/O (brief D8, AC 7).
+
+`model_table_job.py` reads the published record and the live sources and
+performs the paid checks; this module decides, from what it is given, the
+rankings to publish and the next paid check a decision is waiting for. It is
+called again after every check, so a result (a passed or failed smoke, a
+role's measurement of a model) moves the decision until no check is left.
+
+**Challengers.** The resolver ranks only what the measurement admits, so a
+model nobody has measured never enters a `maximise` ranking by itself. The
+job looks at an optimistic view instead (`view`): every pool model without a
+recorded result is taken to pass where the role ranks only models that
+passed (`maximise`, or `measured_only`); a `satisfice` role already ranks an
+unmeasured model at or above its threshold. What the optimistic view ranks
+and the published record does not is a challenger.
+
+**Verified entries** (`_status`). A ranked model is published only when it
+is verified for that ranking: it was already in the published ranking (it
+was verified when it entered), or it has a passing result for the role under
+the current case-set and prompt hashes — cached from an earlier measurement
+(that costs nothing) or measured in this run after a passing smoke. Any
+other entrant waits for its checks: first the free projection of its
+measurement on the role (a `project` check: one projected over the per-role
+cap of USD 2 is deferred and nothing is sent, not even its smoke), then the
+smoke (admitted against USD 0.20, `SMOKE_CAP_USD`, and expected to cost at
+most USD 0.05, `SMOKE_EXPECTED_USD`: see `model_table_job.py`), then the
+role's measurement (at most USD 2), judged against the role's reference
+result (`model_table_measured.py`). A check the run cannot make (the monthly
+cap, a dry run, no harness for the role) is deferred and the entrant is
+skipped, so the ranking keeps only verified models.
+
+**The reference** (`reference_ready`). A challenger is judged against the
+reference's recorded result while the role's case-set and prompt hashes are
+today's. A role without one — its hashes changed (`stale`), or no complete
+reference result — first measures the reference and, when its hashes
+changed, every model its published rankings name (`remeasure_set`); its
+entrants wait meanwhile, and the published record keeps ranking on the old
+results until the re-measurement is whole.
+
+**The incumbent** (`_incumbent`) is the published pick. It stays the pick
+while it is eligible — in the pool (still in the catalogue, no announced
+expiry, no excluded family, an admitted endpoint), under the ceiling, not
+failed by its measurement, its smoke not failed in this run — unless the
+challenger beats it: for a `maximise` role, when either score is imputed,
+only by leading by more than the imputation's residual deviation; otherwise
+(and for every `satisfice` role, which orders by price) by the resolver's
+order. An incumbent that fails a gate is replaced by the first ranked model
+with a passing result, the verified entries in the resolver's order.
+
+**Metadata.** A ranked model whose request metadata (`reasoning`,
+`parameters`, `forced_tool`, in the catalogue or the direct entry) changed
+between the published snapshot and the new one is smoked before anything is
+published (plan, deviation 2); a failed smoke removes it like any gate.
+
+**Problems** block publication: `measured.json` not covering a role; a
+ceiling the optimistic view would already have to raise (a raised ceiling is
+never published, so the run stops before any paid call); a main ranking with
+no verified model; an Anthropic ranking emptied while its checks were
+deferred; a changed model whose smoke could not run.
+"""
+
+from __future__ import annotations
+
+from dataclasses import dataclass
+from datetime import date, timedelta
+from decimal import Decimal
+
+import model_table_measured as measured_of
+import resolve_models as rm
+
+resolver = rm.resolver
+# A smoke is admitted (journaled, reserved against the month) against the
+# engine's conservative bound under this cap; D8's USD 0.05 is what a smoke
+# is expected to actually cost, and a settled spend above it is flagged.
+SMOKE_CAP_USD = Decimal("0.20")
+SMOKE_EXPECTED_USD = Decimal("0.05")
+MEASURE_USD = Decimal("2")
+COLUMNS = ("ranking", "anthropic_ranking")
+METADATA = ("reasoning", "parameters", "forced_tool")
+VERIFIED, WAITING = "verified", "waiting"
+BOUNDS = {"smoke": SMOKE_CAP_USD, "measure": MEASURE_USD, "project": Decimal(0)}
+
+
+@dataclass(frozen=True)
+class Check:
+    """One check: the smoke of a model, a role's measurement of it (both
+    paid), or the free projection of that measurement."""
+
+    kind: str
+    model: str
+    role: str | None = None
+
+    @property
+    def bound(self) -> Decimal:
+        """The most the check may cost: its own cap (a projection is free)."""
+        return BOUNDS[self.kind]
+
+    def __str__(self) -> str:
+        if self.kind == "smoke":
+            return f"smoke {self.model}"
+        prefix = "projection of " if self.kind == "project" else ""
+        return f"{prefix}{self.role} on {self.model}"
+
+
+def result_hashes(body: dict, result: dict) -> tuple[str, str]:
+    """The case-set and prompt hashes a recorded result was measured under:
+    its own when it carries them (the job stamps every result it writes),
+    else its role's."""
+    return (
+        result.get("case_set_sha256", body["case_set_sha256"]),
+        result.get("prompt_sha256", body["prompt_sha256"]),
+    )
+
+
+def current(measured: dict, role: str, model: str, hashes: dict) -> dict | None:
+    """The cached result of `model` for `role` — the cache key is (model,
+    role, case-set hash, prompt hash) — or None. A role whose current hashes
+    are unknown (`hashes[role]` None) takes its recorded results as current."""
+    body = measured["roles"].get(role)
+    result = (body or {}).get("results", {}).get(model)
+    if result is None:
+        return None
+    want = hashes.get(role)
+    return result if want is None or result_hashes(body, result) == tuple(want) else None
+
+
+def view(rule: dict, body: dict, pool: list[str]) -> dict:
+    """The optimistic outcome `resolver.qualifies` reads for a role (see the
+    module docstring): its recorded results, plus a pass assumed for every
+    pool model without one where the role ranks only models that passed."""
+    results = dict(body["results"])
+    if rule["rule"] == "maximise" or body["measured_only"]:
+        for model in pool:
+            results.setdefault(model, {"pass": True})
+    return {**body, "results": results}
+
+
+def ordered(rule: dict, options: list[dict], outcome: dict, ceiling: Decimal) -> list[dict]:
+    """`resolver.rank` without its cut at five: every option the outcome
+    admits at or under `ceiling`, in the role's order."""
+    index = rule["index"]
+    fit = [
+        c
+        for c in options
+        if c["scores"][index] is not None
+        and c["price"] <= ceiling
+        and resolver.qualifies(rule, outcome, c)
+    ]
+    return sorted(fit, key=resolver.order(rule))
+
+
+def beats(rule: dict, challenger: dict, incumbent: dict) -> bool:
+    """Whether `challenger` displaces `incumbent` as the pick (module docstring)."""
+    index = rule["index"]
+    if rule["rule"] == "maximise":
+        deviations = [c["imputed"][index] for c in (challenger, incumbent) if index in c["imputed"]]
+        if deviations:
+            return challenger["scores"][index] - incumbent["scores"][index] > max(deviations)
+    key = resolver.order(rule)
+    return key(challenger) < key(incumbent)
+
+
+def published_ids(table: dict, preset: str, role: str, column: str) -> list[str] | None:
+    """The ids of a published ranking in order, or None when the record has none."""
+    row = table.get("presets", {}).get(preset, {}).get("roles", {}).get(role)
+    return None if row is None else [entry["id"] for entry in row.get(column, [])]
+
+
+def stale(ctx: dict, role: str) -> bool:
+    """Whether the role was measured under other case-set or prompt hashes
+    than today's (unknown hashes: never stale)."""
+    want = ctx["hashes"].get(role)
+    body = ctx["measured"]["roles"][role]
+    return want is not None and (body["case_set_sha256"], body["prompt_sha256"]) != tuple(want)
+
+
+def reference_ready(ctx: dict, role: str) -> bool:
+    """Whether a challenger of the role can be judged now: the role is not
+    stale and holds a complete reference result under today's hashes."""
+    if stale(ctx, role):
+        return False
+    result = current(ctx["measured"], role, ctx["reference"], ctx["hashes"])
+    return isinstance(result, dict) and result.get("complete") is True and "passes" in result
+
+
+def _status(c: dict, role: str, published: list[str] | None, ctx: dict, run: dict):
+    """VERIFIED, WAITING, or the next Check the entrant `c` waits for (module docstring)."""
+    model = c["id"]
+    if model in run.get("resmoke", ()) and model not in run["smokes"]:
+        # Its last smoke failed (`model_table_outcomes`): nothing counts until one passes.
+        return Check("smoke", model)
+    if published is not None and model in published:
+        return VERIFIED
+    result = current(ctx["measured"], role, model, ctx["hashes"])
+    if result is not None and result["pass"] is True:
+        return VERIFIED
+    measure = Check("measure", model, role)
+    if role not in ctx["measurable"] or measure in run["deferred"]:
+        # Deferred unpaid; no smoke either, a smoke alone verifies nothing.
+        return measure
+    if not reference_ready(ctx, role):
+        return WAITING
+    if (role, model) not in run["projected"]:
+        return Check("project", model, role)
+    return measure if model in run["smokes"] else Check("smoke", model)
+
+
+def _walk(cands: list[dict], published, role: str, ctx: dict, run: dict):
+    """(chosen, wants, skipped): the first five verified candidates in order;
+    each wanted check of an entrant ahead of the fifth, with whether it stands
+    before the first verified one (the pick's place); `(check, why)` of each
+    entrant skipped: its check deferred, or waiting for the role's reference."""
+    chosen, wants, skipped = [], [], []
+    for c in cands:
+        status = _status(c, role, published, ctx, run)
+        if status == VERIFIED:
+            chosen.append(c)
+        elif status == WAITING:
+            skipped.append((f"{role} on {c['id']}", "waits for the role's reference"))
+        elif status in run["deferred"]:
+            skipped.append((str(status), run["deferred"][status]))
+        else:
+            wants.append((status, not chosen))
+        if len(chosen) == resolver.RANKED:
+            break
+    return chosen, wants, skipped
+
+
+def _incumbent(rule, chosen, cands, published, where: str, notes: list) -> list[dict]:
+    """`chosen` with the published pick kept first while it holds (module docstring)."""
+    if not published or not chosen or chosen[0]["id"] == published[0]:
+        return chosen
+    held = next((c for c in cands if c["id"] == published[0]), None)
+    if held is None or beats(rule, chosen[0], held):
+        return chosen
+    notes.append(
+        f"{where}: {held['id']} stays the pick; {chosen[0]['id']} does not lead it by more "
+        "than the imputation's deviation"
+    )
+    return ([held] + [c for c in chosen if c["id"] != held["id"]])[: resolver.RANKED]
+
+
+def metadata_changes(old: dict, new: dict, model: str, direct_id: str | None) -> list[str]:
+    """The request-metadata fields of `model` (and of its direct id) that
+    differ between two snapshots; [] for a model one of them lacks."""
+    changes = []
+    for section, key in (("models", model), ("direct", direct_id)):
+        before = (old.get(section, {}).get(key) or {}).get("metadata") if key else None
+        after = (new.get(section, {}).get(key) or {}).get("metadata") if key else None
+        if before is None or after is None:
+            continue
+        changes += [f"{section} {field}" for field in METADATA if before[field] != after[field]]
+    return changes
+
+
+def snapshot_changes(old: dict, new: dict, table: dict) -> tuple[dict, list[str]]:
+    """For the report: the snapshot's change as the ranked models of `table`
+    see it (prices, metadata), and the presets and roles whose Anthropic
+    ranking is empty."""
+    ranked, empty = {}, []
+    for preset, body in table["presets"].items():
+        for role, row in body["roles"].items():
+            for entry in row["ranking"] + row["anthropic_ranking"]:
+                ranked.setdefault(entry["id"], entry["direct_id"])
+            if not row["anthropic_ranking"]:
+                empty.append(f"{preset} / {role}")
+    before, after = old["models"], new["models"]
+    both = [m for m in ranked if m in before and m in after]
+    changes = {m: metadata_changes(old, new, m, ranked[m]) for m in both}
+    return {
+        "old": old["version"],
+        "new": new["version"],
+        "added": len(set(after) - set(before)),
+        "removed": len(set(before) - set(after)),
+        "prices": [
+            (m, before[m]["pricing"]["output"], after[m]["pricing"]["output"])
+            for m in both
+            if before[m]["pricing"] != after[m]["pricing"]
+        ],
+        "metadata": [(m, fields) for m, fields in changes.items() if fields],
+    }, empty
+
+
+def _raised(req: dict, options: list[dict], views: dict) -> list[str]:
+    """The ceilings the optimistic view would already raise: never published."""
+    ranked = resolver.rankings(req, options, {"roles": views})
+    return [
+        f"{preset}'s ceiling of {rm.snapshot.text(body['ceiling'])} would be raised to "
+        f"{rm.snapshot.text(body['raised_to'])}, and a raised ceiling is never published"
+        for preset, body in ranked["presets"].items()
+        if body["raised_to"] is not None
+    ]
+
+
+def decide(ctx: dict, run: dict) -> dict:
+    """The rankings to publish and the checks they wait for.
+
+    `ctx`: `req` (the requirements in force), `pool` (`resolver.pool`'s),
+    `measured` (the job's working `measured.json`), `hashes` (per role the
+    current `(case_set_sha256, prompt_sha256)`, or None when unknown),
+    `measurable` (the roles the job's harness measures), `table` and
+    `published_snapshot` (the record the run compares with),
+    `snapshot` (this read's). `run`: `smokes` (model -> passed, this run),
+    `resmoke` (models whose last cached smoke failed: smoked before they count),
+    `deferred` (Check -> why it could not run). Returns `presets` (the
+    resolver's `rankings` shape: per preset its ceiling and per role both
+    rankings), `needs` (`[(Check, why)]`, the most urgent first), `problems`
+    (what blocks publication if the run stopped now), `fatal` (problems no
+    check can lift) and `notes`."""
+    req, measured = ctx["req"], ctx["measured"]
+    uncovered = [role for role in req["roles"] if role not in measured["roles"]]
+    if uncovered:
+        problem = f"measured.json does not cover {', '.join(uncovered)}"
+        return {"presets": {}, "needs": [], "problems": [problem], "fatal": True, "notes": []}
+    failed = {model for model, passed in run["smokes"].items() if not passed}
+    options = [c for c in ctx["pool"] if c["id"] not in failed]
+    names = [c["id"] for c in options]
+    views = {
+        role: view(rule, measured["roles"][role], names) for role, rule in req["roles"].items()
+    }
+    raised = _raised(req, options, views)
+    if raised:
+        return {"presets": {}, "needs": [], "problems": raised, "fatal": True, "notes": []}
+    roster, presets = list(req["roles"]), {}
+    wanted: dict[Check, tuple] = {}
+    problems, notes = [], []
+    for p_rank, (preset, spec) in enumerate(req["presets"].items()):
+        ceiling = Decimal(str(spec["ceiling"]))
+        roles = {}
+        for role, rule in req["roles"].items():
+            roles[role] = {}
+            for c_rank, column in enumerate(COLUMNS):
+                where = f"{preset} / {role} / {column}"
+                pool = options if column == "ranking" else [c for c in options if c["direct_id"]]
+                cands = ordered(rule, pool, views[role], ceiling)
+                published = published_ids(ctx["table"], preset, role, column)
+                chosen, wants, skipped = _walk(cands, published, role, ctx, run)
+                chosen = _incumbent(rule, chosen, cands, published, where, notes)
+                roles[role][column] = chosen
+                held = bool(chosen) and bool(published) and chosen[0]["id"] == published[0]
+                for check, at_pick in wants:
+                    if not chosen or (at_pick and published and not held):
+                        urgency = 1  # an empty ranking, or a pick that failed a gate
+                    else:
+                        urgency = 2 if at_pick else 3  # a challenger to the pick, an entrant
+                    key = (urgency, roster.index(role), p_rank, c_rank)
+                    why = f"{'pick' if at_pick else 'ranking'} of {where}"
+                    if check not in wanted or key < wanted[check][0]:
+                        wanted[check] = (key, why)
+                waiting = "; ".join(f"{check}: {why}" for check, why in skipped)
+                if not chosen and column == "ranking":
+                    problems.append(
+                        f"{where}: no ranked model with a passing result"
+                        + (f" (deferred: {waiting})" if waiting else "")
+                    )
+                elif not chosen and published and skipped:
+                    problems.append(f"{where}: emptied while its checks wait ({waiting})")
+        presets[preset] = {"ceiling": ceiling, "raised_to": None, "roles": roles}
+    _reference_needs(ctx, run, wanted)
+    _metadata_needs(ctx, run, presets, wanted, problems)
+    needs = sorted(wanted.items(), key=lambda item: item[1][0])
+    return {
+        "presets": presets,
+        "needs": [(check, why) for check, (_, why) in needs],
+        "problems": problems,
+        "fatal": False,
+        "notes": notes,
+    }
+
+
+def _metadata_needs(ctx: dict, run: dict, presets: dict, wanted: dict, problems: list) -> None:
+    """Add the smoke of every ranked model whose metadata changed (module
+    docstring) to `wanted`, most urgent of all; a problem when it was deferred."""
+    seen: dict[str, dict] = {}
+    for body in presets.values():
+        for row in body["roles"].values():
+            for column in COLUMNS:
+                for c in row[column]:
+                    seen.setdefault(c["id"], c)
+    for model, c in seen.items():
+        changes = metadata_changes(
+            ctx["published_snapshot"], ctx["snapshot"], model, c["direct_id"]
+        )
+        if not changes or model in run["smokes"]:
+            continue
+        check = Check("smoke", model)
+        why = f"metadata changed ({', '.join(changes)})"
+        if check in run["deferred"]:
+            problems.append(
+                f"{model}: {why} and its smoke could not run ({run['deferred'][check]})"
+            )
+        else:
+            wanted[check] = ((0, 0, 0, 0), why)
+
+
+def resample_due(day: date) -> bool:
+    """Whether `day` (UTC) is the month's last: the monthly re-sampling spends
+    what the month's cap leaves after the month's decision checks."""
+    return (day + timedelta(days=1)).month != day.month
+
+
+def resample_order(ctx: dict, presets: dict, run: dict) -> list[Check]:
+    """The re-sampling checks, oldest first: per role its current pick under
+    every preset and its reference, each pair ordered by its own result's
+    `measured_at` (none counts as oldest; ties in roster order). A role whose
+    reference is not ready is being re-measured instead; a pair measured in
+    this run is not measured again."""
+    roster, pairs = list(ctx["req"]["roles"]), []
+    for role in roster:
+        if not reference_ready(ctx, role):
+            continue
+        picks = [
+            b["roles"][role]["ranking"][0]["id"]
+            for b in presets.values()
+            if b["roles"][role]["ranking"]
+        ]
+        for model in dict.fromkeys(picks + [ctx["reference"]]):
+            result = ctx["measured"]["roles"][role]["results"].get(model) or {}
+            when = result.get("measured_at", "")
+            pairs.append((when, roster.index(role), len(pairs), Check("measure", model, role)))
+    return [c for *_, c in sorted(pairs) if (c.role, c.model) not in run["fresh"]]
+
+
+def remeasure_set(ctx: dict, role: str) -> list[str]:
+    """The models a stale role's re-measurement covers after its reference:
+    every one its published rankings name that is still in the pool."""
+    pool, out = {c["id"] for c in ctx["pool"]}, []
+    for body in ctx["table"].get("presets", {}).values():
+        row = body.get("roles", {}).get(role, {})
+        for column in COLUMNS:
+            for entry in row.get(column, []):
+                if entry["id"] in pool and entry["id"] not in out:
+                    out.append(entry["id"])
+    return [model for model in out if model != ctx["reference"]]
+
+
+def remeasured(ctx: dict, role: str) -> bool:
+    """Whether a stale role's re-measurement holds the reference and every
+    model of `remeasure_set`: it can replace the role's entry."""
+    stage = measured_of.staged(ctx["measured"], role, ctx["hashes"][role]) or {"results": {}}
+    wanted = [ctx["reference"], *remeasure_set(ctx, role)]
+    return all(model in stage["results"] for model in wanted)
+
+
+def _reference_needs(ctx: dict, run: dict, wanted: dict) -> None:
+    """The measurements a role without a ready reference waits for (module
+    docstring): the reference first, the others only once it is measured,
+    each after its free projection."""
+    reference, roster = ctx["reference"], list(ctx["req"]["roles"])
+    for rank, role in enumerate(roster):
+        if role not in ctx["measurable"] or reference_ready(ctx, role):
+            continue
+        models, stage = [reference], {"results": {}}
+        if stale(ctx, role):
+            models += remeasure_set(ctx, role)
+            stage = measured_of.staged(ctx["measured"], role, ctx["hashes"][role]) or stage
+        why = f"re-measure {role} under today's prompt and cases"
+        for model in models:
+            measure = Check("measure", model, role)
+            if model in stage["results"] or measure in run["deferred"]:
+                if model == reference and model not in stage["results"]:
+                    break  # the reference could not be measured: nothing to judge against
+                continue
+            need = measure if (role, model) in run["projected"] else Check("project", model, role)
+            # Equal keys keep their order: the reference's check comes before the others'.
+            wanted.setdefault(need, ((1, rank, 0, 0), why))

@@ -61,16 +61,24 @@ def env(tmp_path, monkeypatch):
     )
     monkeypatch.setattr(trust, "TRUST_DIRECTORY", trust_dir)
     monkeypatch.setattr(trust, "SIGNING_DIRECTORY", signing_dir)
-    monkeypatch.setattr(trust, "protected_read", lambda path, **kwargs: None if kwargs.get("missing_ok") and not path.exists() else path.read_bytes())
+    monkeypatch.setattr(
+        trust,
+        "protected_read",
+        lambda path, **kwargs: (
+            None if kwargs.get("missing_ok") and not path.exists() else path.read_bytes()
+        ),
+    )
 
     from zylch.services.task_assignment_enrollment import finish_install
 
     finish_install(memory)
 
+    fixture_expiry = int(time.time()) + 3600
+
     def verify(token):
         if not token.startswith("fixture:"):
             raise firebase_auth.FirebaseAuthError("fixture refusal")
-        return {"sub": token.removeprefix("fixture:"), "exp": time.time() + 3600}
+        return {"sub": token.removeprefix("fixture:"), "exp": fixture_expiry}
 
     monkeypatch.setattr(firebase_auth, "verify_firebase_id_token", verify)
 

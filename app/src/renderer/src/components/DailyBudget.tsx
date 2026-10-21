@@ -1,10 +1,26 @@
 import { useEffect, useRef, useState } from 'react'
 import { errorMessage } from '../lib/errors'
+import { orderedRoles, roleLabel } from '../lib/modelRoles'
 
 type Snapshot = Awaited<ReturnType<typeof window.zylch.usage.today>>
-const roleNames: Record<string, string> = {
-  MODEL_MEMORY_EXTRACT: 'Read messages', MODEL_MEMORY_MERGE: 'Update memory',
-  MODEL_TASK_DETECTION: 'Find tasks', MODEL_REANALYZE: 'Review tasks', MODEL_DEDUP: 'Merge duplicate tasks'
+// The engine reports a job it cannot run with this billing choice as null: its
+// table ranks no model the billing provider can run for it (it pauses, naming the job).
+// `model_policy.paused` gives the engine's reason for each such job (an empty
+// Anthropic ranking on a personal key, or nothing served on MrCall credits);
+// PAUSED is shown only when an older engine sends no reason.
+const PAUSED = 'paused: no model available for this job with this billing choice'
+type Policy = NonNullable<Snapshot['model_policy']>
+// Every role the engine reports, each once and named by its job (lib/modelRoles).
+// MODEL_CHAT is one of them; `policy.model` (the same resolution) stands in for
+// it only when an older engine leaves it out of `roles`.
+function roleLines(policy: Policy): [string, string | null][] {
+  const roles: Record<string, string | null> = { ...(policy.roles ?? {}) }
+  if (!('MODEL_CHAT' in roles)) roles.MODEL_CHAT = policy.model
+  return orderedRoles(Object.keys(roles)).map(role => [role, roles[role]])
+}
+function RoleLine({ label, role, model, policy }: { label: string; role: string; model: string | null; policy: Policy }): JSX.Element {
+  if (model) return <p>{label}: {model}</p>
+  return <p role="status" className="text-brand-orange">{label}: {policy.paused?.[role] ?? PAUSED}</p>
 }
 
 export default function DailyBudget(): JSX.Element {
@@ -64,8 +80,7 @@ export default function DailyBudget(): JSX.Element {
       <p className="text-brand-grey-80">Completed spending resets at 00:00 UTC. In-flight or uncertain requests remain reserved after reset. This limit covers this engine account; other apps using your API key are separate. Direct-provider totals are usage-based estimates; MrCall totals include credit rounding and markup.</p>
       {snapshot.model_policy && <div className="space-y-1">
         <p className="font-medium">Saved models · {snapshot.model_policy.provider} · {snapshot.model_policy.preset}</p>
-        <p>Conversation: {snapshot.model_policy.model}</p>
-        {Object.entries(snapshot.model_policy.roles).map(([role, model]) => <p key={role}>{roleNames[role] || role}: {model}</p>)}
+        {roleLines(snapshot.model_policy).map(([role, model]) => <RoleLine key={role} label={roleLabel(role)} role={role} model={model} policy={snapshot.model_policy!} />)}
         <p className="text-brand-grey-80">{snapshot.model_policy.quality_status} After changing models or billing, start a new run or conversation.</p>
       </div>}
       {snapshot.reserved_usd > 0 && <button type="button" disabled={checking} onClick={() => void reconcile()} className="underline disabled:opacity-50">{checking ? 'Checking receipts…' : cursor ? 'Check next receipts' : 'Check MrCall receipts'}</button>}

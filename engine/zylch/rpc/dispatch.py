@@ -244,13 +244,6 @@ async def dispatch_raw(raw: str, notify: NotifyFn) -> Optional[Dict[str, Any]]:
         else:
             result = await handler(params, notify)
     except Exception as e:
-        if method.startswith("stripe."):
-            from zylch.stripe.errors import StripeError
-
-            code = e.code if isinstance(e, StripeError) else INTERNAL_ERROR
-            message = str(e) if isinstance(e, StripeError) else "Stripe operation unavailable"
-            logger.warning("[rpc] Stripe operation refused code=%s", code)
-            return None if is_notification else _error(req_id, code, message)
         if method.startswith("tasks.assignment."):
             from zylch.services.task_assignment_types import AssignmentError
 
@@ -289,6 +282,13 @@ async def dispatch_raw(raw: str, notify: NotifyFn) -> Optional[Dict[str, Any]]:
             code = e.code if isinstance(e, QontoError) else INTERNAL_ERROR
             message = str(e) if isinstance(e, QontoError) else "Chat operation failed"
             logger.warning("[rpc] chat operation failed code=%s", code)
+            return None if is_notification else _error(req_id, code, message)
+        if method.startswith("stripe."):
+            from zylch.stripe.errors import StripeError
+
+            code = e.code if isinstance(e, StripeError) else INTERNAL_ERROR
+            message = str(e) if isinstance(e, StripeError) else "Stripe operation failed"
+            logger.warning("[rpc] Stripe operation failed code=%s", code)
             return None if is_notification else _error(req_id, code, message)
         if method.startswith("qonto."):
             from zylch.qonto.errors import QontoError

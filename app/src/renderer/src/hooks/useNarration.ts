@@ -18,6 +18,18 @@ import { useEffect, useRef, useState } from 'react'
 const BUFFER_CAP = 50
 const POLL_MS = 4000
 
+/**
+ * The line a narration reply shows: the engine's pause message when the
+ * NARRATION job is paused on this billing choice (`paused`, naming the job
+ * and why), so the pause is visible in place of the fallback text; else the
+ * narrated text. Empty when neither is present.
+ */
+export function narrationReply(res: unknown): string {
+  const reply = (res ?? {}) as { text?: unknown; paused?: unknown }
+  if (typeof reply.paused === 'string' && reply.paused.trim()) return reply.paused.trim()
+  return typeof reply.text === 'string' ? reply.text.trim() : ''
+}
+
 export function useNarration(busy: boolean, context: string, seed: string): string {
   const [narration, setNarration] = useState<string>('')
   const bufferRef = useRef<string[]>([])
@@ -77,10 +89,8 @@ export function useNarration(busy: boolean, context: string, seed: string): stri
       lastSeenCountRef.current = newCount
       try {
         const res = await (window as any).zylch?.narration?.summarize(snapshot, context)
-        if (!cancelled && res && typeof res.text === 'string') {
-          const t = res.text.trim()
-          if (t) setNarration(t)
-        }
+        const t = narrationReply(res)
+        if (!cancelled && t) setNarration(t)
       } catch (e) {
         // eslint-disable-next-line no-console
         console.warn('[useNarration] summarize failed', e)
