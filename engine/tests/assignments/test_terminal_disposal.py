@@ -141,6 +141,56 @@ def test_snapshot_success_and_provider_failure_use_local_disposal():
         assert done.wait(1) and b'LOGOUT' not in events
 
 
+def test_partial_provider_construction_preserves_error_and_releases_all_clients():
+    first, first_native, first_events, first_done = native_pair()
+    second, second_native, second_events, second_done = native_pair()
+    actor = SimpleNamespace(uid='owner', mailbox='owner')
+    failure = RuntimeError('second guard entry failed')
+    sequence = []
+    root = '<root@example.test>'
+    deadline = time.monotonic() + 1
+
+    @contextmanager
+    def fail_entry(limit):
+        second_native.sock.settimeout(.1)
+        raise failure
+        yield
+
+    @contextmanager
+    def check_retained_sockets():
+        yield
+        first_native.sock.settimeout(.1)
+        second_native.sock.settimeout(.1)
+        sequence.append('guards')
+
+    discard = second._discard_connection
+    def dispose(connection):
+        assert sequence == ['guards']
+        sequence.append('dispose')
+        discard(connection)
+
+    second.provider_deadline = fail_entry
+    second._discard_connection = dispose
+    with patch.object(evidence.mail, 'mailbox_digest', return_value='stable'), patch.object(evidence.mailboxes, 'build_imap_client', side_effect=[first, second]):
+        with unittest.TestCase().assertRaises(RuntimeError) as caught:
+            with evidence.observation(root, deadline):
+                state = evidence._observation.get()
+                with evidence.provider_client(actor, SimpleNamespace(id='first'), root, deadline):
+                    pass
+                state.guards.enter_context(check_retained_sockets())
+                with evidence.provider_client(actor, SimpleNamespace(id='second'), root, deadline):
+                    raise AssertionError('failed provider must not yield a success result')
+    assert caught.exception is failure
+    assert evidence._observation.get() is None and state.closed and not state.clients
+    assert sequence == ['guards', 'dispose']
+    for client, native, events, done in [(first, first_native, first_events, first_done), (second, second_native, second_events, second_done)]:
+        assert client._conn is None and native.sock.fileno() == -1
+        assert client._provider_deadline is None and client._deadline_connection is None
+        assert done.wait(1) and b'LOGOUT' not in events
+        assert client._imap_lock.acquire(blocking=False)
+        client._imap_lock.release()
+
+
 class TerminalDisposalTests(unittest.TestCase):
     pass
 
