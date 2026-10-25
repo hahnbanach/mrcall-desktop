@@ -35,20 +35,28 @@ class _Observation:
         self.closed = False
 
     def close(self):
+        if self.closed:
+            return
         self.closed = True
         error = None
         try:
             self.guards.close()
         except BaseException as failure:
             error = failure
-        for client in self.clients.values():
+        for client in list(self.clients.values()):
             try:
-                client.disconnect()
+                _dispose_client(client)
             except BaseException as failure:
                 if error is None:
                     error = failure
+        self.clients.clear()
         if error is not None:
             raise error
+
+
+def _dispose_client(client):
+    connection, client._conn = client._conn, None
+    client._discard_connection(connection)
 
 
 @contextmanager
@@ -92,7 +100,14 @@ def provider_client(actor, box, root, deadline):
             try:
                 state.guards.enter_context(client.provider_deadline(deadline))
             except BaseException:
-                client.disconnect()
+                try:
+                    state.guards.close()
+                except BaseException:
+                    pass
+                try:
+                    _dispose_client(client)
+                except BaseException:
+                    pass
                 raise
             state.clients[box.id] = client
         yield state.clients[box.id]
@@ -531,7 +546,7 @@ def malformed_own_sent(root: str, *, deadline=None) -> dict:
                     )
         finally:
             if client is not None:
-                client.disconnect()
+                _dispose_client(client)
     return result
 
 
@@ -611,7 +626,7 @@ def snapshot(root: str, *, deadline=None) -> dict:
                     provider_guard.close()
             finally:
                 if client is not None:
-                    client.disconnect()
+                    _dispose_client(client)
     if represented != {row["id"] for row in inbound_rows}:
         raise AssignmentError("Synced inbound lacks complete live coverage")
     identity.recheck(actor, space)
