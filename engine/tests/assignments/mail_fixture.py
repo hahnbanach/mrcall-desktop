@@ -1,6 +1,7 @@
 """Real IMAP protocol bytes and private SQLite rows for task acceptance."""
 
 import re
+import socket
 import uuid
 from datetime import datetime
 from email.message import EmailMessage
@@ -12,6 +13,29 @@ from zylch.storage.models import Email
 
 ROOT = "<customer-root@example.test>"
 REPLY = "<alice-reply@example.test>"
+
+
+class MailConnection:
+    def __init__(self, fixture):
+        self.fixture = fixture
+        self.sock, self.peer = socket.socketpair()
+        self.on_close = lambda: None
+
+    def __getattr__(self, name):
+        return getattr(self.fixture, name)
+
+    def shutdown(self):
+        if self.sock.fileno() == -1:
+            return
+        self.sock.close()
+        assert self.peer.recv(1) == b''
+        self.peer.close()
+        self.fixture.closed += 1
+        self.on_close()
+
+    def logout(self):
+        self.shutdown()
+        return 'BYE', []
 
 
 class MailFixture:
@@ -28,7 +52,7 @@ class MailFixture:
 
     def client(self, mailbox):
         client = IMAPClient(mailbox.address, "fixture-only")
-        client._conn = self
+        client._conn = MailConnection(self)
         return client
 
     def add(
@@ -93,10 +117,6 @@ class MailFixture:
 
     def noop(self):
         return "OK", []
-
-    def logout(self):
-        self.closed += 1
-        return "BYE", []
 
     def list(self):
         return "OK", [b'(\\Sent) "/" "Sent"', b'(\\Archive) "/" "Archive"']

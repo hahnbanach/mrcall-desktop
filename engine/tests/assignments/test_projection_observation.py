@@ -97,6 +97,9 @@ def test_request_cleanup_checks_guard_before_disconnect_even_on_failure(env, mai
     actor, _, current = evidence.admission()
     box = evidence.mail.configured(actor, current)[0]
     events = []
+    fake = mail.client(box)
+    connection = fake._conn
+    connection.on_close = lambda: events.append("dispose")
 
     @contextmanager
     def guard(deadline):
@@ -104,16 +107,18 @@ def test_request_cleanup_checks_guard_before_disconnect_even_on_failure(env, mai
         try:
             yield
         finally:
+            connection.sock.settimeout(.1)
             events.append("guard")
             raise AssignmentError("changed provider")
 
-    fake = SimpleNamespace(provider_deadline=guard, disconnect=lambda: events.append("disconnect"))
+    fake.provider_deadline = guard
     monkeypatch.setattr(evidence.mailboxes, "build_imap_client", lambda box: fake)
     with pytest.raises(AssignmentError, match="changed provider"):
         with evidence.observation(ROOT, deadline := time.monotonic() + 3):
             with evidence.provider_client(actor, box, ROOT, deadline):
                 pass
-    assert events == ["enter", "guard", "disconnect"]
+    assert events == ["enter", "guard", "dispose"]
+    assert connection.sock.fileno() == -1 and mail.closed == 1
     assert evidence._observation.get() is None
 
 
@@ -123,13 +128,7 @@ def test_projection_cleanup_failure_cannot_certify_normal(env, mail, monkeypatch
 
     def build(box):
         client = original(box)
-        disconnect = client.disconnect
-
-        def close():
-            disconnected.append(1)
-            disconnect()
-
-        client.disconnect = close
+        client._conn.on_close = lambda: disconnected.append(1)
         native = client.provider_deadline
 
         @contextmanager
