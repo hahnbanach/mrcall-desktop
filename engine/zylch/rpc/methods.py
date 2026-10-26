@@ -1214,6 +1214,7 @@ async def system_capabilities(params: Dict[str, Any], notify: NotifyFn) -> Any:
     from zylch.services.request_policy import READ_ONLY_POLICY_VERSION
 
     return {
+        "observability": 1,
         "chat_read_only_policy": READ_ONLY_POLICY_VERSION,
         "chat_history_binding": 1,
         "assignment_draft_policy": 1,
@@ -2759,6 +2760,14 @@ for _name, _fn in _ASSIGNMENT_METHODS.items():
     METHODS[_name] = _fn
 
 for _name, _fn in _EXACT_DRAFT_METHODS.items():
+    if _name in METHODS:
+        raise RuntimeError(f"Duplicate RPC method name: {_name}")
+    METHODS[_name] = _fn
+
+
+from zylch.rpc.diagnostics import METHODS as _DIAGNOSTIC_METHODS
+
+for _name, _fn in _DIAGNOSTIC_METHODS.items():
     if _name in METHODS:
         raise RuntimeError(f"Duplicate RPC method name: {_name}")
     METHODS[_name] = _fn

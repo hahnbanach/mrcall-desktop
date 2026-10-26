@@ -44,12 +44,16 @@ def _diagnostic_result(command: str, root: str, started: float, value: dict, *, 
     _diagnostic(command, status, root, started, stage=stage, complete=value.get("complete"))
 
 
+def _read_deadline(started):
+    return started + 40
+
+
 @provider_diagnostics.projection
 def project(root: str) -> dict:
     started = time.monotonic()
-    deadline = started + 40
+    deadline = _read_deadline(started)
     value = None
-    _diagnostic("assignment.projection.start", "start", root, started, deadline_seconds=40)
+    _diagnostic("assignment.projection.start", "start", root, started, deadline_seconds=max(0, int(round(deadline - started))))
     try:
         with evidence.observation(root, deadline):
             value = _project(root, deadline)

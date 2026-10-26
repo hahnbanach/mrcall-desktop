@@ -161,7 +161,7 @@ def _redact_params(method: Optional[str], params: Dict[str, Any]) -> Dict[str, A
     return {k: redact(v, None if k in allowed else k) for k, v in params.items()}
 
 
-async def dispatch_raw(raw: str, notify: NotifyFn) -> Optional[Dict[str, Any]]:
+async def _dispatch_raw(raw: str, notify: NotifyFn) -> Optional[Dict[str, Any]]:
     """Parse + dispatch one JSON-RPC line. Performs NO I/O.
 
     Returns the response dict to send, or ``None`` if nothing should be
@@ -331,3 +331,22 @@ async def dispatch_raw(raw: str, notify: NotifyFn) -> Optional[Dict[str, Any]]:
     if is_notification:
         return None
     return {"jsonrpc": "2.0", "id": req_id, "result": result}
+
+
+async def dispatch_raw(raw: str, notify: NotifyFn) -> Optional[Dict[str, Any]]:
+    """Dispatch with isolated untrusted diagnostic correlation metadata."""
+    from zylch.observability_context import context
+
+    try:
+        request = json.loads(raw)
+    except (ValueError, TypeError):
+        request = None
+    metadata = request.get("diagnostics") if isinstance(request, dict) else None
+    if not isinstance(metadata, dict) or type(metadata.get("version")) is not int or metadata["version"] != 1:
+        metadata = {}
+    with context(metadata):
+        method = request.get("method") if isinstance(request, dict) else None
+        if isinstance(method, str) and method in METHODS and not method.startswith("diagnostics."):
+            from zylch.observability_producers import observed
+            return await observed("rpc", method)(_dispatch_raw)(raw, notify)
+        return await _dispatch_raw(raw, notify)
