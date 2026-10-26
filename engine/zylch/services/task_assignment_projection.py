@@ -18,23 +18,47 @@ def message_ids(identities: list[str]) -> list[str]:
     return sorted({value[65:] for value in identities if len(value) > 65 and value[64] == ":"})
 
 
+def _diagnostic(command: str, status: str, root: str, started: float, *, error=None, stage="authority", **metadata) -> None:
+    try:
+        from zylch.observability_producers import failure, observe
+
+        facts = {"command": command, "method": "tasks.assignment.project", "root_id": root,
+                 "elapsed_ms": max(0, (time.monotonic() - started) * 1000), **metadata}
+        if error is not None:
+            failure(stage, error, **facts)
+        else:
+            observe(stage, status, reason="incomplete-input" if status == "failed" else
+                    "policy-hold" if status == "held" else "none", **facts)
+    except Exception:
+        pass
+
+
+def _diagnostic_result(command: str, root: str, started: float, value: dict, *, stage="authority") -> None:
+    status = "failed" if value.get("state") == "unknown" else "held" if value.get("hold_auto_reply") else "result"
+    _diagnostic(command, status, root, started, stage=stage, complete=value.get("complete"))
+
+
 def project(root: str) -> dict:
-    deadline = time.monotonic() + 40
+    started = time.monotonic()
+    deadline = started + 40
     value = None
+    _diagnostic("assignment.projection.start", "start", root, started, deadline_seconds=40)
     try:
         with evidence.observation(root, deadline):
             value = _project(root, deadline)
-        return value
-    except Exception:
+    except Exception as error:
+        _diagnostic("assignment.projection.failed" if value is None else "assignment.cleanup.failed",
+                    "failed", root, started, error=error)
         if value is None:
             raise
         value.update(
             complete=False, state="unknown", hold_auto_reply=True, reason="SOURCE_UNAVAILABLE"
         )
-        return value
-
+    _diagnostic_result("assignment.projection.terminal", root, started, value)
+    return value
 
 def _project(root: str, deadline: float) -> dict:
+    started = time.monotonic()
     thread(root)
     actor, space, current = evidence.admission()
     stored = store.get(root, deadline=deadline)
@@ -190,6 +214,7 @@ def _project(root: str, deadline: float) -> dict:
             )
             value["task"], value["events"] = latest["task"], latest["events"]
     except Exception as error:
+        _diagnostic("assignment.source.failed", "failed", root, started, error=error)
         logger.warning("[tasks.assignment] projection held type=%s", type(error).__name__)
         value.update(
             complete=False, state="unknown", hold_auto_reply=True, reason="SOURCE_UNAVAILABLE"
