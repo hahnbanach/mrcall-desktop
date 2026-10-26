@@ -2,6 +2,7 @@
 
 import logging
 import time
+from zylch.email import provider_diagnostics
 
 from . import task_assignment_evidence as evidence
 from . import task_assignment_identity as identity
@@ -22,6 +23,11 @@ def _diagnostic(command: str, status: str, root: str, started: float, *, error=N
     try:
         from zylch.observability_producers import failure, observe
 
+        recorder = provider_diagnostics.current()
+        if recorder is not None:
+            recorder.flush()
+            if recorder.first_fault is not None and (status == "failed" or command == "assignment.projection.terminal"):
+                metadata["provider_diagnostic"] = dict(recorder.first_fault)
         facts = {"command": command, "method": "tasks.assignment.project", "root_id": root,
                  "elapsed_ms": max(0, (time.monotonic() - started) * 1000), **metadata}
         if error is not None:
@@ -38,6 +44,7 @@ def _diagnostic_result(command: str, root: str, started: float, value: dict, *, 
     _diagnostic(command, status, root, started, stage=stage, complete=value.get("complete"))
 
 
+@provider_diagnostics.projection
 def project(root: str) -> dict:
     started = time.monotonic()
     deadline = started + 40

@@ -120,6 +120,9 @@ def safe_metadata(values: dict) -> dict:
         and ".." not in value.split("/")
     ):
         out["error_file"] = value
+    if "provider_diagnostic" in values:
+        from .observability_provider import validate
+        out["provider_diagnostic"] = validate(values["provider_diagnostic"])
     return out
 
 

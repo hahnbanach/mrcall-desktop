@@ -27,6 +27,7 @@ from email.utils import formatdate, make_msgid, parseaddr
 from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple
 from datetime import datetime
 
+from . import provider_diagnostics
 from zylch.utils.msgid import clean_message_id, clean_references
 from zylch.utils.safe_paths import PathRefused, confine, safe_attachment_name
 
@@ -688,6 +689,7 @@ class IMAPClient:
             587,
         )
 
+        self._provider_diagnostic = provider_diagnostics.current()
         self._provider_deadline = None
         self._deadline_connection = None
         self._conn: Optional[imaplib.IMAP4_SSL] = None
@@ -749,6 +751,7 @@ class IMAPClient:
             raise IMAPError("IMAP evidence deadline expired")
         return min(maximum, remaining)
 
+    @provider_diagnostics.client_operation("guard")
     def _deadline_check(self):
         timeout = self._remaining_timeout(IMAP_COMMAND_TIMEOUT_SECONDS)
         conn = self._conn or self._deadline_connection
@@ -756,6 +759,7 @@ class IMAPClient:
         if sock is not None:
             sock.settimeout(timeout)
 
+    @provider_diagnostics.client_operation("abort")
     def _abort_provider(self):
         conn = self._conn or self._deadline_connection
         sock = getattr(conn, "sock", None)
@@ -777,8 +781,12 @@ class IMAPClient:
         timer = None
         try:
             self._provider_deadline = min(previous, deadline) if previous is not None else deadline
+            recorder = self._provider_diagnostic
+            if recorder is not None and recorder.deadline is None:
+                recorder.deadline = self._provider_deadline
             self._deadline_check()
-            timer = threading.Timer(self._remaining_timeout(float("inf")), self._abort_provider)
+            callback, target = recorder.timer(self, self._abort_provider) if recorder is not None else (self._abort_provider, None)
+            timer = threading.Timer(self._remaining_timeout(float("inf")), callback)
             timer.daemon = True
             timer.start()
             yield self
@@ -789,7 +797,11 @@ class IMAPClient:
         finally:
             if timer is not None:
                 timer.cancel()
+                if recorder is not None:
+                    recorder.record(self, self._conn or self._deadline_connection, "timer", "cancelled", target=target)
                 timer.join()
+                if recorder is not None:
+                    recorder.record(self, self._conn or self._deadline_connection, "timer", "joined", target=target)
             self._provider_deadline = previous
             if previous is None:
                 self._deadline_connection = None
@@ -1036,6 +1048,8 @@ class IMAPClient:
         conn = None
         try:
             factory = imaplib.IMAP4_SSL
+            if self._provider_diagnostic is not None:
+                factory = provider_diagnostics.factory(factory, self, self._provider_diagnostic)
             if self._provider_deadline is not None:
                 owner = self
 
@@ -1051,9 +1065,10 @@ class IMAPClient:
                                 sock.settimeout(owner._remaining_timeout(timeout))
                                 sock.connect(tuple(address))
                                 owner._deadline_check()
-                                sock = inner.ssl_context.wrap_socket(
-                                    sock, server_hostname=inner.host
-                                )
+                                with provider_diagnostics.operation(owner, inner, "tls"):
+                                    sock = inner.ssl_context.wrap_socket(
+                                        sock, server_hostname=inner.host
+                                    )
                                 inner.sock = sock
                                 owner._deadline_check()
                                 return sock
