@@ -20,6 +20,9 @@ MAX_BODY = 2 * 1024 * 1024
 def addresses(value: str) -> set[str]:
     if not isinstance(value, str) or len(value) > 16384:
         raise AssignmentError("Mail identity unavailable")
+    value = re.sub(r"\r?\n[ \t]+", " ", value)
+    if "\r" in value or "\n" in value:
+        raise AssignmentError("Mail identity unavailable")
     result = {address.strip().lower() for _, address in getaddresses([value]) if address}
     if len(result) > 100 or any(not re.fullmatch(r"[^\s<>@]+@[^\s<>@]+", a) for a in result):
         raise AssignmentError("Mail identity unavailable")
@@ -30,6 +33,10 @@ def references(value: str) -> list[str]:
     if not isinstance(value, str) or len(value) > 16384:
         raise AssignmentError("Mail thread identity unavailable")
     return [thread(part) for part in value.split()]
+
+
+class RFCAncestryConflict(AssignmentError):
+    """Contradictory stored ancestor chains; never grants thread authority."""
 
 
 class Ancestry:
@@ -61,23 +68,16 @@ class Ancestry:
         cached = self.nodes.get(mid)
         if cached is not None and cached[4] is row:
             return mid, cached[1], cached[2], cached[3]
-        if any(
-            not isinstance(row.get(k) or "", str) or len(row.get(k) or "") > 16384
-            for k in ("references", "in_reply_to")
-        ):
+        if any(not isinstance(row.get(k) or "", str) or len(row.get(k) or "") > 16384
+               for k in ("references", "in_reply_to")):
             raise AssignmentError("Mail thread identity unavailable")
-        signature = (
-            " ".join((row.get("references") or "").split()),
-            " ".join((row.get("in_reply_to") or "").split()),
-            row.get("mailbox_id"),
-        )
+        signature = (" ".join((row.get("references") or "").split()),
+                     " ".join((row.get("in_reply_to") or "").split()), row.get("mailbox_id"))
         if mid in self.nodes:
             previous, refs, reply, mailbox, _ = self.nodes[mid]
             # A provider copy may omit the private mailbox annotation; callers
             # establish that scope before asking for membership.
-            if previous[:2] != signature[:2] or (
-                mailbox and signature[2] and mailbox != signature[2]
-            ):
+            if previous[:2] != signature[:2] or (mailbox and signature[2] and mailbox != signature[2]):
                 raise AssignmentError("Conflicting RFC source identity")
             return mid, refs, reply, mailbox or signature[2]
         refs, reply = references(signature[0]), references(signature[1])
@@ -118,7 +118,7 @@ class Ancestry:
                 for ref in refs[1:]:
                     parent = self.ancestor(ref, mailbox)
                     if parent is not None and self.lineage(parent) != earliest:
-                        raise AssignmentError("Conflicting RFC ancestor chain")
+                        raise RFCAncestryConflict("Conflicting RFC ancestor chain")
                 result = earliest
             elif reply:
                 result = next(iter(roots))
@@ -136,11 +136,7 @@ class Ancestry:
 
 
 def belongs(message: dict, root: str, ancestors=(), *, deadline=None) -> bool:
-    graph = (
-        ancestors
-        if isinstance(ancestors, Ancestry)
-        else Ancestry(root, ancestors, deadline=deadline)
-    )
+    graph = ancestors if isinstance(ancestors, Ancestry) else Ancestry(root, ancestors, deadline=deadline)
     if graph.root != root:
         raise AssignmentError("RFC proof belongs to another root")
     return graph.resolve(message)
@@ -160,20 +156,8 @@ def rows(actor, root: str, connection=None, schema=None, *, deadline=None) -> li
         from sqlalchemy import MetaData
 
         table = table.to_metadata(MetaData(), schema=schema)
-    columns = [
-        table.c[name]
-        for name in (
-            "id",
-            "mailbox_id",
-            "message_id_header",
-            "thread_id",
-            "from_email",
-            "to_email",
-            "cc_email",
-            "in_reply_to",
-            "references",
-        )
-    ]
+    columns = [table.c[name] for name in ("id", "mailbox_id", "message_id_header", "thread_id",
+               "from_email", "to_email", "cc_email", "in_reply_to", "references")]
     limit = time.monotonic() + 40 if deadline is None else deadline
 
     def read(conn):
@@ -187,19 +171,10 @@ def rows(actor, root: str, connection=None, schema=None, *, deadline=None) -> li
             identities.update(keys)
             if len(identities) > MAX_MESSAGES:
                 raise AssignmentError("Mail thread exceeds evidence bounds")
-            clauses = [
-                table.c.message_id_header.in_(keys),
-                table.c.in_reply_to.in_(keys),
-                table.c.thread_id.in_(keys),
-            ]
-            clauses.extend(
-                table.c.references.contains(key, autoescape=True) for key in sorted(keys)
-            )
-            query = (
-                select(*columns)
-                .where(table.c.owner_id == actor.mailbox, or_(*clauses))
-                .limit(MAX_MESSAGES + 1)
-            )
+            clauses = [table.c.message_id_header.in_(keys), table.c.in_reply_to.in_(keys),
+                       table.c.thread_id.in_(keys)]
+            clauses.extend(table.c.references.contains(key, autoescape=True) for key in sorted(keys))
+            query = select(*columns).where(table.c.owner_id == actor.mailbox, or_(*clauses)).limit(MAX_MESSAGES + 1)
             for item in conn.execute(query).mappings():
                 row = dict(item)
                 found[row["id"]] = row

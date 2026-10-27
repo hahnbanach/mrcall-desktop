@@ -7,6 +7,8 @@ Configuration:
     BACKGROUND_JOB_WORKERS: Number of worker threads (default: 4)
 """
 
+from zylch.observability_producers import copied, observed, observe, failure
+
 import asyncio
 import contextvars
 import logging
@@ -118,6 +120,7 @@ class JobExecutor:
 
         self.storage: Storage = storage
 
+    @observed("job", "background.execute", private=True)
     async def execute_job(
         self, job_id: str, owner_id: str, user_email: str = ""
     ) -> None:
@@ -139,9 +142,11 @@ class JobExecutor:
             # Claim job atomically (pending → running)
             job = self.storage.claim_background_job(job_id)
             if not job:
+                observe("job", "deferred", job_id=job_id, reason="none")
                 logger.warning(f"Job {job_id} already claimed or not found")
                 return
 
+            observe("job", "running", job_id=job_id, reason="none")
             job_type = job["job_type"]
             channel = job.get("channel") or "all"
 
@@ -203,6 +208,7 @@ class JobExecutor:
                 raise ValueError(f"Unknown job type: {job_type}")
 
         except Exception as e:
+            failure("job", e, job_id=job_id)
             logger.error(f"Job {job_id} failed: {e}", exc_info=not isinstance(e, company_fenced()))
             self.storage.fail_background_job(job_id, str(e))
             error_msg = _normalize_error(str(e))
@@ -577,7 +583,7 @@ class JobExecutor:
             }
 
         loop = asyncio.get_event_loop()
-        result = await loop.run_in_executor(_executor, _sync_process)
+        result = await loop.run_in_executor(_executor, copied(_sync_process))
 
         # Don't complete if job was stopped (user will cancel it)
         if result.get("stopped"):
@@ -667,7 +673,7 @@ class JobExecutor:
             return {"results": results, "threads_analyzed": total_threads, "channel": channel}
 
         loop = asyncio.get_event_loop()
-        result = await loop.run_in_executor(_executor, _sync_train)
+        result = await loop.run_in_executor(_executor, copied(_sync_train))
 
         # Don't complete if job was stopped
         if result.get("stopped"):
@@ -765,7 +771,7 @@ class JobExecutor:
             return {"message": result_msg}
 
         loop = asyncio.get_event_loop()
-        result = await loop.run_in_executor(_executor, _sync_train)
+        result = await loop.run_in_executor(_executor, copied(_sync_train))
 
         if result.get("stopped"):
             logger.info(f"[mrcall_train] Job {job_id} stopped, not completing")
@@ -799,7 +805,7 @@ class JobExecutor:
             return {"message": result_msg}
 
         loop = asyncio.get_event_loop()
-        result = await loop.run_in_executor(_executor, _sync_train)
+        result = await loop.run_in_executor(_executor, copied(_sync_train))
 
         self.storage.complete_background_job(job_id, result)
         self.storage.create_notification(
@@ -830,7 +836,7 @@ class JobExecutor:
             return {"message": result_msg}
 
         loop = asyncio.get_event_loop()
-        result = await loop.run_in_executor(_executor, _sync_train)
+        result = await loop.run_in_executor(_executor, copied(_sync_train))
 
         self.storage.complete_background_job(job_id, result)
         self.storage.create_notification(owner_id, f"Memory training complete ({channel}).", "info")
@@ -925,7 +931,7 @@ class JobExecutor:
             return results
 
         loop = asyncio.get_event_loop()
-        result = await loop.run_in_executor(_executor, _sync_process)
+        result = await loop.run_in_executor(_executor, copied(_sync_process))
 
         # Don't complete if job was stopped
         if result.get("stopped"):
@@ -1044,7 +1050,7 @@ class JobExecutor:
 
         try:
             loop = asyncio.get_event_loop()
-            return await loop.run_in_executor(_executor, _sync_refresh)
+            return await loop.run_in_executor(_executor, copied(_sync_refresh))
         except Exception as e:
             logger.error(
                 f"[_refresh_task_prompt] Failed for" f" {owner_id}: {e}",
@@ -1064,7 +1070,7 @@ class JobExecutor:
         Only chains if the memory agent is trained, there are unprocessed
         items, and an LLM transport is available.
         """
-        from zylch.llm import llm_available
+        from zylch.llm import try_make_llm_client
 
         storage = self.storage
 
@@ -1087,7 +1093,7 @@ class JobExecutor:
 
         # Check that an LLM transport is available before starting
         # LLM-dependent processing.
-        if not llm_available():
+        if try_make_llm_client() is None:
             logger.debug(
                 f"[SYNC-CHAIN] No LLM transport for {owner_id},"
                 f" skipping processing"
@@ -1124,11 +1130,11 @@ class JobExecutor:
         self, owner_id: str, user_email: str
     ) -> None:
         """Chain task processing (called after memory processing completes)."""
-        from zylch.llm import llm_available
+        from zylch.llm import try_make_llm_client
 
         storage = self.storage
 
-        if not llm_available():
+        if try_make_llm_client() is None:
             logger.debug(
                 f"[SYNC-CHAIN] No LLM transport for {owner_id},"
                 f" skipping task prompt refresh"

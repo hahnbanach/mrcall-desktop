@@ -25,9 +25,6 @@ class Evidence(Protocol):
 
 
 def _admit(actor: identity.Actor, space: str, conn: Any) -> dict:
-    from .task_assignment_enrollment import require_managed
-
-    require_managed(conn, space)
     current = identity.recheck(actor, space)
     from zylch.storage.join_fence_model import MemoryJoinFence
 
@@ -52,11 +49,11 @@ def listing() -> dict:
         return {"complete": True, "space_id": space, "items": items}
 
 
-def authority(actor, space, root, conn, *, locked=False, deadline=None, profile_connection=None):
+def authority(actor, space, root, conn, *, locked=False, deadline=None):
     from . import task_assignment_mail as mail
 
     schema = None
-    if locked and profile_connection is None:
+    if locked:
         attached = {row[1]: row[2] for row in conn.exec_driver_sql("PRAGMA database_list")}
         path = actor.binding[2]
         if "assignment_profile" in attached and attached["assignment_profile"] != path:
@@ -66,19 +63,10 @@ def authority(actor, space, root, conn, *, locked=False, deadline=None, profile_
             conn.exec_driver_sql("ATTACH DATABASE ? AS assignment_profile", (path,))
         conn.exec_driver_sql("UPDATE assignment_profile.emails SET id=id WHERE 0")
         schema = "assignment_profile"
-    keys, earliest, known = mail.component(
-        actor,
-        root,
-        profile_connection if profile_connection is not None else (conn if schema else None),
-        schema,
-        deadline=deadline,
-    )
-    matches = [
-        dict(row)
-        for row in conn.execute(
-            select(T).where(T.c.space_id == space, T.c.thread_key.in_(keys))
-        ).mappings()
-    ]
+    keys, earliest, known = mail.component(actor, root, conn if schema else None, schema, deadline=deadline)
+    matches = [dict(row) for row in conn.execute(
+        select(T).where(T.c.space_id == space, T.c.thread_key.in_(keys))
+    ).mappings()]
     if len(matches) > 1:
         raise AssignmentError("Conflicting assignments in RFC component", -32061)
     old = matches[0] if matches else None
@@ -96,11 +84,7 @@ def get(thread_key: str, *, deadline=None) -> dict:
             row, authoritative, keys = authority(actor, space, thread_key, conn, deadline=deadline)
             complete = True
         except AssignmentError:
-            row = (
-                conn.execute(select(T).where(T.c.space_id == space, T.c.thread_key == thread_key))
-                .mappings()
-                .one_or_none()
-            )
+            row = conn.execute(select(T).where(T.c.space_id == space, T.c.thread_key == thread_key)).mappings().one_or_none()
             authoritative, keys, complete = thread_key, [thread_key], False
         events = (
             []
@@ -118,8 +102,7 @@ def get(thread_key: str, *, deadline=None) -> dict:
             "thread_key": thread_key,
             "authoritative_thread_key": authoritative,
             "component_thread_keys": keys,
-            "component_scope_present": complete
-            and (len(keys) > 1 or bool(mail.rows(actor, thread_key, deadline=deadline))),
+            "component_scope_present": complete and (len(keys) > 1 or bool(mail.rows(actor, thread_key, deadline=deadline))),
             "task": dict(row) if row else None,
             "events": events,
         }
@@ -237,10 +220,7 @@ def commit(intent: dict, grant: dict, *, evidence: Evidence | None = None) -> di
         old, authoritative, _ = authority(actor, space, intent["thread_key"], conn, locked=True)
         from . import task_assignment_mail as mail
 
-        if (
-            mail.component_digest(actor, intent["thread_key"], conn, "assignment_profile")
-            != intent["component_digest"]
-        ):
+        if mail.component_digest(actor, intent["thread_key"], conn, "assignment_profile") != intent["component_digest"]:
             raise AssignmentError("RFC component changed; preview again", -32061)
         if authoritative != intent["thread_key"]:
             raise AssignmentError("Assignment component changed; preview again", -32061)

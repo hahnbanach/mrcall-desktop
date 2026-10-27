@@ -16,7 +16,7 @@ TRUST_DIRECTORY = Path("/etc/mrcalld/assignment-trust")
 SIGNING_DIRECTORY = Path("/etc/mrcalld/assignment-signing")
 
 
-def protected_read(path: Path, *, private: bool = False, missing_ok: bool = False) -> bytes | None:
+def protected_read(path: Path, *, private: bool = False, optional: bool = False) -> bytes | None:
     if not path.is_absolute() or any(part in {".", ".."} for part in path.parts):
         raise AssignmentError("Assignment trust path refused")
     fd = None
@@ -41,7 +41,7 @@ def protected_read(path: Path, *, private: bool = False, missing_ok: bool = Fals
             raise AssignmentError("Assignment trust file is too large")
         return raw
     except FileNotFoundError:
-        if missing_ok:
+        if optional:
             return None
         raise AssignmentError("Assignment trust is unavailable") from None
     except OSError:
@@ -64,13 +64,8 @@ def _check(info: os.stat_result, *, directory: bool, private: bool = False) -> N
 
 def load(space_id: str) -> dict[str, Any]:
     identifier(space_id)
-    return parse(protected_read(TRUST_DIRECTORY / f"{space_id}.json"), space_id)
-
-
-def parse(raw: bytes, space_id: str) -> dict[str, Any]:
-    identifier(space_id)
     try:
-        trust = json.loads(raw)
+        trust = json.loads(protected_read(TRUST_DIRECTORY / f"{space_id}.json"))
         if (
             not isinstance(trust, dict)
             or set(trust) != {"version", "issuer", "space_id", "public_key", "members"}
@@ -118,28 +113,16 @@ def member(trust: dict[str, Any], uid: str, mailbox: str | None = None) -> None:
         raise AssignmentError("Current company membership refused")
 
 
-def probe(space_id: str) -> dict | None:
-    """Only safely inspected ENOENT is absence; malformed/unreadable refuses."""
-    identifier(space_id)
-    raw = protected_read(TRUST_DIRECTORY / f"{space_id}.json", missing_ok=True)
-    return None if raw is None else load(space_id)
-
-
 def _delivery_routes(space_id: str) -> dict | None:
     identifier(space_id)
-    raw = protected_read(TRUST_DIRECTORY / f"{space_id}.routes.json", missing_ok=True)
+    raw = protected_read(TRUST_DIRECTORY / f"{space_id}.routes.json", optional=True)
     if raw is None:
         return None
     try:
         value = json.loads(raw)
-        if (
-            not isinstance(value, dict)
-            or set(value) != {"version", "space_id", "members"}
-            or type(value["version"]) is not int
-            or value["version"] != 1
-            or value["space_id"] != space_id
-            or not isinstance(value["members"], dict)
-        ):
+        if (not isinstance(value, dict) or set(value) != {"version", "space_id", "members"}
+                or type(value["version"]) is not int or value["version"] != 1
+                or value["space_id"] != space_id or not isinstance(value["members"], dict)):
             raise ValueError
         for member_uid, boxes in value["members"].items():
             text(member_uid, 128)
@@ -152,11 +135,8 @@ def _delivery_routes(space_id: str) -> dict | None:
                 if len(set(routes)) != len(routes):
                     raise ValueError
                 for route in routes:
-                    if (
-                        not isinstance(route, str)
-                        or route != route.strip().lower()
-                        or not re.fullmatch(r"[^\s<>@]+@[^\s<>@]+", route)
-                    ):
+                    if (not isinstance(route, str) or route != route.strip().lower()
+                            or not re.fullmatch(r"[^\s<>@]+@[^\s<>@]+", route)):
                         raise ValueError
         return value
     except (ValueError, TypeError, KeyError):

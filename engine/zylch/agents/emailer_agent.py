@@ -15,6 +15,8 @@ in memory and not overloading the assistant."
 Inherits from SpecializedAgent for common functionality (init, prompt loading, etc.)
 """
 
+from zylch.observability_producers import observed, failure, observe
+
 import logging
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
@@ -378,6 +380,7 @@ class EmailerAgent(SpecializedAgent):
 
         logger.info(f"EmailerAgent initialized for owner={owner_id}")
 
+    @observed("generation", "email.compose", private=True)
     async def compose(
         self,
         user_request: str,
@@ -456,7 +459,7 @@ Use the write_email tool to output your composed email."""
         response = await self.llm.create_message(
             messages=[{"role": "user", "content": prompt}],
             tools=[WRITE_EMAIL_TOOL],
-            tool_choice={"type": "auto"},
+            tool_choice={"type": "tool", "name": "write_email"},
             max_tokens=2000,
         )
 
@@ -495,6 +498,7 @@ Use the write_email tool to output your composed email."""
 
         return result
 
+    @observed("generation", "email.run", private=True)
     async def run(
         self,
         instructions: str,
@@ -885,11 +889,13 @@ use that information to write the email or provide the answer. Don't just report
                 if draft:
                     draft_id = draft.get("id")
                     draft_created = draft.get("created", True)
+                    observe("persistence", "accepted", draft_id=draft_id, reason="none", effect_certainty="accepted")
                     logger.info(
                         f"[EMAILER] Draft saved to DB with id={draft_id}"
                         f" created={draft_created}"
                     )
             except Exception as e:
+                failure("persistence", e, method="email.write")
                 logger.error(f"[EMAILER] Failed to save draft to DB: {e}")
                 # Continue without draft_id - the email can still be shown but not sent
 

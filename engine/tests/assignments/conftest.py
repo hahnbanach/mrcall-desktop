@@ -65,13 +65,14 @@ def env(tmp_path, monkeypatch):
         trust,
         "protected_read",
         lambda path, **kwargs: (
-            None if kwargs.get("missing_ok") and not path.exists() else path.read_bytes()
+            None if (kwargs.get("missing_ok") or kwargs.get("optional")) and not path.exists() else path.read_bytes()
         ),
     )
 
-    from zylch.services.task_assignment_enrollment import finish_install
-
-    finish_install(memory)
+    import importlib.util
+    if importlib.util.find_spec("zylch.services.task_assignment_enrollment") is not None:
+        from zylch.services.task_assignment_enrollment import finish_install
+        finish_install(memory)
 
     fixture_expiry = int(time.time()) + 3600
 

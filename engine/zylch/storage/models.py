@@ -25,6 +25,7 @@ from sqlalchemy import (
 )
 
 from .database import Base
+from zylch.utils.msgid import canonical_draft_thread_id
 
 # -------------------------------------------------------------------
 # DictMixin — shared to_dict() for all models
@@ -680,7 +681,6 @@ class Draft(DictMixin, Base):
     body_format = Column(Text, default="html")
     in_reply_to = Column(Text)
     references = Column("references", JSON)
-    reply_binding = Column(JSON, nullable=True)
     thread_id = Column(Text)
     original_message_id = Column(Text)
     status = Column(Text, default="draft")
@@ -706,6 +706,12 @@ class Draft(DictMixin, Base):
             name="drafts_provider_check",
         ),
     )
+
+
+    def to_dict(self, include_vectors: bool = False) -> Dict[str, Any]:
+        result = super().to_dict(include_vectors=include_vectors)
+        result["thread_id"] = canonical_draft_thread_id(result.get("thread_id"))
+        return result
 
 
 # -------------------------------------------------------------------

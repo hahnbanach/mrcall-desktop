@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+from dataclasses import dataclass
 import json
 import re
 import time
@@ -213,27 +214,81 @@ def _strings(value):
 
 
 def reject_known_evidence(value):
+    from zylch.qonto.owner_content import content_recheck
+
+    owner_recheck = content_recheck()
+    if owner_recheck is not None:
+        owner_recheck()
+        return
+
     from zylch.qonto.logging import private_scope
 
     with private_scope():
         _reject_known_evidence(value)
 
 
-def _reject_known_evidence(value):
+@dataclass(frozen=True)
+class EvidenceMatch:
+    path: tuple
+    digest: str
+    start: int | None = None
+    end: int | None = None
+
+
+def retained_matches(value):
+    """Enumerate every original generic match, preserving normalized text locations."""
     engine = get_engine()
     if not inspect(engine).has_table(QontoEvidenceReceipt.__tablename__):
         return
     with profile_transaction() as session:
         rows = session.query(QontoEvidenceReceipt.digest, QontoEvidenceReceipt.text_length).all()
-    if not rows:
-        return
     known = {row.digest for row in rows}
-    if known.intersection(_candidates(value)):
-        raise HistoryAuthorizationError("history_invalid")
+    if not known:
+        return
     lengths = {row.text_length for row in rows if row.text_length}
-    for text in _strings(value):
-        for length in lengths:
-            if length < len(text):
-                for offset in range(len(text) - length + 1):
-                    if digest(text[offset : offset + length], text=True) in known:
-                        raise HistoryAuthorizationError("history_invalid")
+
+    def candidates(item, path):
+        if isinstance(item, (dict, list)):
+            key = digest(item) if item else None
+            if key in known:
+                yield EvidenceMatch(path, key)
+            children = item.items() if isinstance(item, dict) else enumerate(item)
+            for part, child in children:
+                yield from candidates(child, (*path, part))
+        elif isinstance(item, str):
+            key = digest(item, text=True)
+            if key in known:
+                start = len(item) - len(item.lstrip())
+                yield EvidenceMatch(path, key, start, len(item.rstrip()))
+            try:
+                parsed = json.loads(item)
+            except (ValueError, TypeError):
+                return
+            if isinstance(parsed, (list, dict)):
+                yield from candidates(parsed, (*path, "$json"))
+
+    def substrings(item, path):
+        if isinstance(item, str):
+            text = item.strip()
+            leading = len(item) - len(item.lstrip())
+            for length in lengths:
+                if length < len(text):
+                    for offset in range(len(text) - length + 1):
+                        window = text[offset:offset + length]
+                        key = digest(window, text=True)
+                        if key in known:
+                            start = leading + offset + len(window) - len(window.lstrip())
+                            end = leading + offset + len(window.rstrip())
+                            yield EvidenceMatch(path, key, start, end)
+        elif isinstance(item, (dict, list)):
+            children = item.items() if isinstance(item, dict) else enumerate(item)
+            for part, child in children:
+                yield from substrings(child, (*path, part))
+
+    yield from candidates(value, ())
+    yield from substrings(value, ())
+
+
+def _reject_known_evidence(value):
+    if next(retained_matches(value), None) is not None:
+        raise HistoryAuthorizationError("history_invalid")

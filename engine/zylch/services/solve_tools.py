@@ -325,9 +325,7 @@ def _send_email(args: Dict, store, owner_id: str) -> str:
             imap_host=os.environ.get("IMAP_HOST") or None,
             smtp_host=os.environ.get("SMTP_HOST") or None,
         )
-        from zylch.services.task_assignment_email_effect import send as guarded_send
-
-        result = guarded_send(client.send_message, owner_id=owner_id,
+        result = client.send_message(
             to=to,
             subject=subject,
             body=body,
@@ -632,9 +630,9 @@ def _web_search(args: Dict) -> str:
         return "No query provided"
 
     try:
-        from zylch.llm import routed_model, try_make_llm_client
+        from zylch.llm import try_make_llm_client
 
-        client = try_make_llm_client(model=routed_model("MODEL_WEB_SEARCH"))
+        client = try_make_llm_client()
         if client is None:
             return (
                 "No LLM configured for web search. Set ANTHROPIC_API_KEY "

@@ -691,6 +691,7 @@ class IMAPClient:
 
         self._provider_diagnostic = provider_diagnostics.current()
         self._provider_deadline = None
+        self._projection_connection = None
         self._deadline_connection = None
         self._conn: Optional[imaplib.IMAP4_SSL] = None
         self._sent_folder: Optional[str] = None
@@ -831,16 +832,7 @@ class IMAPClient:
             return FolderState(folder, uidvalidity, uidnext, exists)
 
     def folder_headers(
-        self,
-        folder,
-        *,
-        deadline,
-        max_messages=50000,
-        max_bytes=32 * 1024 * 1024,
-        uids=None,
-        criteria=None,
-        byte_budget=None,
-        proof=False,
+        self, folder, *, deadline, max_messages=50000, max_bytes=32 * 1024 * 1024, uids=None, criteria=None, byte_budget=None, proof=False
     ):
         with self.provider_deadline(deadline):
             if type(proof) is not bool:
@@ -848,22 +840,13 @@ class IMAPClient:
             if max_messages <= 0 or max_bytes <= 0:
                 raise IMAPError("Invalid inventory limits")
             if byte_budget is not None:
-                if (
-                    not isinstance(byte_budget, list)
-                    or len(byte_budget) != 1
-                    or type(byte_budget[0]) is not int
-                    or byte_budget[0] <= 0
-                ):
+                if (not isinstance(byte_budget, list) or len(byte_budget) != 1
+                        or type(byte_budget[0]) is not int or byte_budget[0] <= 0):
                     raise IMAPError("Invalid aggregate header byte limit")
                 max_bytes = min(max_bytes, byte_budget[0])
-            if criteria is not None and (
-                uids is not None
-                or not isinstance(criteria, str)
-                or not criteria
-                or len(criteria) > 16384
-                or not criteria.isascii()
-                or any(c in criteria for c in "\r\n\x00")
-            ):
+            if criteria is not None and (uids is not None or not isinstance(criteria, str)
+                    or not criteria or len(criteria) > 16384 or not criteria.isascii()
+                    or any(c in criteria for c in "\r\n\x00")):
                 raise IMAPError("Invalid header search criteria")
             conn = self._ensure_connected()
             originals = {}
@@ -982,10 +965,7 @@ class IMAPClient:
                             or any(len(parsed.get_all(name, [])) > 1 for name in allowed)
                         ):
                             raise IMAPError("Unexpected or duplicate inventory header")
-
-                        def value(name):
-                            return " ".join(str(parsed.get(name, "")).split())
-
+                        value = lambda name: " ".join(str(parsed.get(name, "")).split())
                         if not value("Message-ID"):
                             raise IMAPError("Missing inventory message identity")
                         row = {
@@ -1135,6 +1115,21 @@ class IMAPClient:
             logger.debug("[IMAP] Disconnected")
 
     @_imap_serialized
+    @contextmanager
+    def projection_connection(self, deadline):
+        if self._provider_deadline is None or self._provider_deadline != deadline or self._projection_connection is not None:
+            raise IMAPError("Projection connection scope unavailable")
+        self._deadline_check()
+        self._projection_connection = {
+            "thread": threading.get_ident(), "deadline": deadline,
+            "connection": self._conn, "started": self._conn is not None,
+        }
+        try:
+            yield self
+            self._deadline_check()
+        finally:
+            self._projection_connection = None
+
     def _ensure_connected(self) -> imaplib.IMAP4_SSL:
         """Ensure IMAP connection is active.
 
@@ -1147,6 +1142,22 @@ class IMAPClient:
             IMAPError: If a connection cannot be established inside
                 `IMAP_CONNECT_TIMEOUT_SECONDS`.
         """
+        scope = self._projection_connection
+        if scope is not None:
+            if scope["thread"] != threading.get_ident() or scope["deadline"] != self._provider_deadline:
+                raise IMAPError("Projection connection scope changed")
+            self._deadline_check()
+            if scope["started"]:
+                if self._conn is None or self._conn is not scope["connection"]:
+                    raise IMAPError("Projection connection changed")
+            else:
+                scope["started"] = True
+                self.connect()
+                scope["connection"] = self._conn
+            self._deadline_check()
+            if self._conn is None:
+                raise IMAPError("Projection connection unavailable")
+            return self._conn
         if self._conn is None:
             self.connect()
             return self._conn
@@ -1957,8 +1968,7 @@ class IMAPClient:
                     lookup_failed = True
                     continue
                 status, data = conn.uid(
-                    "SEARCH",
-                    None,
+                    "SEARCH", None,
                     f'(HEADER Message-ID "{message_id}")',
                 )
                 if status != "OK":
@@ -1970,8 +1980,7 @@ class IMAPClient:
                 # that do not enforce EXAMINE's read-only semantics.
                 status, fetched = conn.uid("FETCH", data[0].split()[-1], "(BODY.PEEK[])")
                 bodies = [
-                    item[1]
-                    for item in (fetched or [])
+                    item[1] for item in (fetched or [])
                     if isinstance(item, tuple) and len(item) > 1 and isinstance(item[1], bytes)
                 ]
                 if status != "OK" or not bodies:
@@ -2084,9 +2093,6 @@ class IMAPClient:
         """
         return self.search(query=query, limit=max_results)
 
-    from zylch.services.task_assignment_email_effect import transport_guard as _email_effect_guard
-
-    @_email_effect_guard
     def send(
         self,
         to: str,
@@ -2160,7 +2166,7 @@ class IMAPClient:
         from zylch.services.operator_reply_origin import automatic
 
         if automatic(self.email_addr, in_reply_to, references):
-            msg["Auto-Submitted"] = "auto-replied"
+            msg['Auto-Submitted'] = 'auto-replied'
 
         if has_attachments:
             for path in attachment_paths or []:
@@ -2219,7 +2225,6 @@ class IMAPClient:
             logger.error(f"[SMTP] Failed to send: {e}")
             raise
 
-    @_email_effect_guard
     def send_message(
         self,
         to: str,

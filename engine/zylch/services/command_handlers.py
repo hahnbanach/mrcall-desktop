@@ -1241,9 +1241,7 @@ For simple drafts without context, use the `compose_email` tool in chat."""
                     gmail = GmailClient(account=user_email, owner_id=owner_id)
 
                     # Build and send message
-                    from zylch.services.task_assignment_email_effect import send as guarded_send
-
-                    sent_message = guarded_send(gmail.send_message, owner_id=owner_id, draft=draft,
+                    sent_message = gmail.send_message(
                         to=to_str,
                         subject=draft.get("subject", ""),
                         body=draft.get("body", ""),
@@ -1268,9 +1266,7 @@ For simple drafts without context, use the `compose_email` tool in chat."""
                         graph_token=graph_token["access_token"], account=user_email
                     )
 
-                    from zylch.services.task_assignment_email_effect import send as guarded_send
-
-                    sent_message = guarded_send(outlook.send_message, owner_id=owner_id, draft=draft,
+                    sent_message = outlook.send_message(
                         to=to_str,
                         subject=draft.get("subject", ""),
                         body=draft.get("body", ""),
@@ -1319,9 +1315,7 @@ For simple drafts without context, use the `compose_email` tool in chat."""
                     if isinstance(refs, list):
                         refs = " ".join(refs) if refs else None
 
-                    from zylch.services.task_assignment_email_effect import send as guarded_send
-
-                    sent_message = guarded_send(imap_client.send_message, owner_id=owner_id, draft=draft,
+                    sent_message = imap_client.send_message(
                         to=to_str,
                         subject=draft.get("subject", ""),
                         body=draft.get("body", ""),
@@ -1837,9 +1831,9 @@ Run `/tasks` to see items needing action."""
 Run `/agent task process` to recreate all tasks."""
 
         # Verify an LLM transport is available
-        from zylch.llm import llm_available
+        from zylch.llm import try_make_llm_client
 
-        if not llm_available():
+        if try_make_llm_client() is None:
             return """❌ **No LLM configured**
 
 Set `ANTHROPIC_API_KEY` in the profile `.env`, or sign in with Firebase
@@ -2238,7 +2232,7 @@ Shows your running/pending background jobs.
             import asyncio
             from zylch.services.job_executor import JobExecutor
             from zylch.api.token_storage import get_email
-            from zylch.llm import llm_available
+            from zylch.llm import try_make_llm_client
 
             # Get pending jobs for this user
             pending_jobs = storage.get_user_background_jobs(owner_id, status="pending", limit=10)
@@ -2246,7 +2240,7 @@ Shows your running/pending background jobs.
             if not pending_jobs:
                 return "📭 No pending jobs to resume."
 
-            if not llm_available():
+            if try_make_llm_client() is None:
                 return (
                     "❌ No LLM configured. Set ANTHROPIC_API_KEY in the "
                     "profile .env, or sign in with Firebase to use MrCall credits."
@@ -2455,9 +2449,9 @@ async def handle_agent(
                 return f"❌ Unknown channel: `{channel}`\n\nValid channels: `email`, `all`"
 
         # Verify a transport is available before doing any agent work.
-        from zylch.llm import llm_available
+        from zylch.llm import try_make_llm_client
 
-        if not llm_available():
+        if try_make_llm_client() is None:
             return (
                 "❌ No LLM configured. Set ANTHROPIC_API_KEY in the "
                 "profile .env, or sign in with Firebase to use MrCall credits."
@@ -2577,9 +2571,9 @@ async def _handle_memory_train(
 ) -> str:
     """Train memory extraction agent for specified channel."""
     from zylch.agents.trainers import MessageMemoryAgentTrainer
-    from zylch.llm import llm_available
+    from zylch.llm import try_make_llm_client
 
-    if not llm_available():
+    if try_make_llm_client() is None:
         return """❌ **No LLM configured**
 
 Set `ANTHROPIC_API_KEY` in the profile `.env`, or sign in with Firebase
@@ -2650,9 +2644,9 @@ async def _handle_memory_run(storage, owner_id: str, channel: str) -> str:
     """
     import asyncio
     from zylch.services.job_executor import JobExecutor
-    from zylch.llm import llm_available
+    from zylch.llm import try_make_llm_client
 
-    if not llm_available():
+    if try_make_llm_client() is None:
         return """❌ **No LLM configured**
 
 Set `ANTHROPIC_API_KEY` in the profile `.env`, or sign in with Firebase
@@ -2733,9 +2727,9 @@ async def _handle_task_train(
     """
     import asyncio
     from zylch.services.job_executor import JobExecutor
-    from zylch.llm import llm_available
+    from zylch.llm import try_make_llm_client
 
-    if not llm_available():
+    if try_make_llm_client() is None:
         return """❌ **No LLM configured**
 
 Set `ANTHROPIC_API_KEY` in the profile `.env`, or sign in with Firebase
@@ -2798,9 +2792,9 @@ async def _handle_task_run(
     """
     import asyncio
     from zylch.services.job_executor import JobExecutor
-    from zylch.llm import llm_available
+    from zylch.llm import try_make_llm_client
 
-    if not llm_available():
+    if try_make_llm_client() is None:
         return """❌ **No LLM configured**
 
 Set `ANTHROPIC_API_KEY` in the profile `.env`, or sign in with Firebase
@@ -2874,9 +2868,9 @@ async def _handle_emailer_train(
 ) -> str:
     """Train emailer agent to learn user's writing style."""
     from zylch.agents.trainers import EmailerAgentTrainer
-    from zylch.llm import llm_available
+    from zylch.llm import try_make_llm_client
 
-    if not llm_available():
+    if try_make_llm_client() is None:
         return """❌ **No LLM configured**
 
 Set `ANTHROPIC_API_KEY` in the profile `.env`, or sign in with Firebase
@@ -2983,7 +2977,7 @@ async def _handle_emailer_run(
     The agent decides which tool to use based on the instructions.
     """
     from zylch.agents.emailer_agent import EmailerAgent
-    from zylch.llm import llm_available
+    from zylch.llm import try_make_llm_client
 
     if not instructions.strip():
         return """❌ **Missing instructions**
@@ -2995,7 +2989,7 @@ Examples:
 • `/agent email run "What can I answer to this guy?"`
 • `/agent email run "cerca info su Acme Corp"`"""
 
-    if not llm_available():
+    if try_make_llm_client() is None:
         return """❌ **No LLM configured**
 
 Set `ANTHROPIC_API_KEY` in the profile `.env`, or sign in with Firebase

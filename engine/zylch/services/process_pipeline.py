@@ -138,7 +138,6 @@ async def handle_process(
     try:
         with pipeline_single_flight(caller):
             from zylch.services.preparation import preparation_run, PreparationStopped
-
             try:
                 with preparation_run(owner_id, explicit="--resume" in args):
                     return await _run_pipeline(args, config, owner_id, progress, errors_out)
@@ -247,11 +246,7 @@ async def _run_pipeline(
     console.print("\n[bold cyan][1/5] Syncing emails...[/bold cyan]")
     _p(5, "Syncing emails…", None)
     try:
-        sync_result = (
-            {"new_messages": 0}
-            if "--analyze-only" in args
-            else await _run_sync(owner_id, store, days_back)
-        )
+        sync_result = ({"new_messages": 0} if "--analyze-only" in args else await _run_sync(owner_id, store, days_back))
         new = sync_result.get("new_messages", 0)
         summary_stats["sync_new"] = int(new or 0)
         if errors_out is not None:
@@ -270,11 +265,7 @@ async def _run_pipeline(
     console.print("\n[bold cyan][2/5] Syncing WhatsApp...[/bold cyan]")
     _p(20, "Syncing WhatsApp…", None)
     try:
-        wa_result = (
-            {"skipped": True, "reason": "Analyze only"}
-            if "--analyze-only" in args
-            else _run_whatsapp_sync(owner_id, store)
-        )
+        wa_result = ({"skipped": True, "reason": "Analyze only"} if "--analyze-only" in args else _run_whatsapp_sync(owner_id, store))
         if wa_result.get("skipped"):
             console.print(f"  Skipped: {wa_result.get('reason', 'not configured')}")
         else:
@@ -332,14 +323,12 @@ async def _run_pipeline(
         # This early check avoids entering known-paused AI stages. The
         # authoritative reservation gate runs before EVERY transport request.
         from zylch.llm.budget import BudgetError
-        from zylch.llm.usage import budget_state
+        from zylch.llm.usage import budget_state, call_site
 
         try:
             budget = budget_state(owner_id)
             if budget.get("pricing_fault"):
-                raise BudgetError(
-                    "AI paused: provider usage exceeded its estimate; pricing reconciliation is required."
-                )
+                raise BudgetError("AI paused: provider usage exceeded its estimate; pricing reconciliation is required.")
             if budget["exceeded"]:
                 raise BudgetError(
                     f"Daily AI budget unavailable: spent=${budget['spent_usd']:.2f}, "
@@ -361,19 +350,20 @@ async def _run_pipeline(
         # (402), or no provider configured — the run used to report "0 changes,
         # no errors" while silently doing nothing AND hammering the proxy with
         # hundreds of doomed calls per tick (a profile logged 31k proxy 401s in
-        # a day). One free check — no inference: the key or session read by the
-        # provider, the model admitted locally (zylch/llm/preflight.py) — turns
-        # that into a SINGLE structured, surfaced error (humanize_error maps the
-        # 401/402 it raises as it mapped the paid ping's) and lets us SKIP the
-        # doomed stages. Skipped entirely when the budget gate above already
-        # tripped — no check, no attempt.
+        # a day). One cheap probe turns that into a SINGLE structured, surfaced
+        # error (humanize_error already maps MrCallAuthError / InsufficientCredits
+        # / "no llm") and lets us SKIP the doomed stages. Skipped entirely when
+        # the budget gate above already tripped — no ping, no attempt.
         if llm_ok:
             try:
-                from zylch.llm import routed_model
                 from zylch.llm.client import make_llm_client
 
-                _probe = make_llm_client(model=routed_model("MODEL_SYNC_ANALYSIS"))
-                await _probe.check_transport()
+                _probe = make_llm_client()
+                with call_site("preflight"):
+                    await _probe.create_message(
+                        messages=[{"role": "user", "content": "ping"}],
+                        max_tokens=1,
+                    )
             except Exception as e:
                 llm_ok = False
                 logger.warning(f"[/process] LLM preflight failed: {type(e).__name__}: {e}")
@@ -411,7 +401,6 @@ async def _run_pipeline(
             _eta_for_memory(pending_mem + pending_wa),
         )
         from zylch.services.preparation import PreparationStopped, company_fenced
-
         try:
             mem_count, wa_count = await _run_memory(owner_id, store)
             summary_stats["memory_processed"] = int(mem_count or 0)
@@ -422,10 +411,11 @@ async def _run_pipeline(
                 console.print(f"  {wa_count}/{pending_wa} WhatsApp messages processed")
         except company_fenced() as e:
             raise PreparationStopped(str(e)) from e
-        except Exception as e:  # noqa: BLE001 - role_pause reports a paused role as a pause
-            from zylch.llm.role_pause import memory_failed
-
-            memory_failed(e, errors_out, console, logger)
+        except Exception as e:
+            logger.error(f"[/process] memory failed: {e}", exc_info=True)
+            console.print(f"[red]  Memory extraction failed:" f" {e}[/red]")
+            if errors_out is not None:
+                errors_out.append({"stage": "memory", "error": e})
     else:
         console.print("\n[bold cyan][3/5] Memory[/bold cyan]" " — nothing to process")
         _p(30, "Memory — nothing to process", None)

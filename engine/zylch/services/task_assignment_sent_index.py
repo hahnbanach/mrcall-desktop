@@ -5,6 +5,7 @@ import time
 from dataclasses import dataclass, field
 from contextlib import ExitStack
 
+from zylch.email import mailboxes
 from . import task_assignment_mail as mail
 from .task_assignment_types import AssignmentError
 
@@ -107,13 +108,9 @@ def _component_headers(client, folder, scoped, root, state, deadline):
         requests += 1
         if requests > 128 or query_bytes > 4 * 1024 * 1024:
             raise AssignmentError("Sent component exceeds query bounds")
-        found, observed = client.folder_headers(
-            folder,
-            deadline=deadline,
-            criteria=query,
-            max_messages=mail.MAX_MESSAGES,
-            byte_budget=byte_budget,
-        )
+        found, observed = client.folder_headers(folder, deadline=deadline, criteria=query,
+                                                max_messages=mail.MAX_MESSAGES,
+                                                byte_budget=byte_budget)
         if observed != state:
             raise AssignmentError("Sent identity changed during component search")
         searched.update(batch)
@@ -122,9 +119,7 @@ def _component_headers(client, folder, scoped, root, state, deadline):
             raise AssignmentError("Sent component exceeds message bounds")
         for uid, header in found.items():
             mid = header["message_id"]
-            raw = (
-                (header.get("references") or "") + " " + (header.get("in_reply_to") or "")
-            ).split()
+            raw = ((header.get("references") or "") + " " + (header.get("in_reply_to") or "")).split()
             if mid not in keys and not keys.intersection(raw):
                 continue
             mail.thread(mid)
@@ -168,9 +163,7 @@ def candidates(actor, current, known, root, *, deadline):
                     entry.headers = {}
                     entry.state = None
                     entry.component_key = None
-                    headers = _component_headers(
-                        client, entry.folder, scoped, root, state, deadline
-                    )
+                    headers = _component_headers(client, entry.folder, scoped, root, state, deadline)
                     entry.headers, entry.state, entry.component_key = headers, state, component_key
                 aliases = set(current["members"][actor.uid])
                 related = []
@@ -199,10 +192,8 @@ def candidates(actor, current, known, root, *, deadline):
                     mid = header.get("message_id") or header.get("message_id_header")
                     raw_refs = header.get("references") or ""
                     raw_reply = header.get("in_reply_to") or ""
-                    if (
-                        component_ids & set((raw_refs + " " + raw_reply).split())
-                        or mid in component_ids
-                    ):
+                    if (component_ids & set((raw_refs + " " + raw_reply).split())
+                            or mid in component_ids):
                         relevant_ids.add(mid)
                     for parent in (raw_refs + " " + raw_reply).split():
                         children.setdefault(parent, set()).add(mid)
@@ -218,17 +209,11 @@ def candidates(actor, current, known, root, *, deadline):
                     header = ancestry.get(pending.pop())
                     if header is None:
                         continue
-                    for parent in (
-                        (header.get("references") or "") + " " + (header.get("in_reply_to") or "")
-                    ).split():
+                    for parent in ((header.get("references") or "") + " " + (header.get("in_reply_to") or "")).split():
                         if parent in ancestry and parent not in proof_ids:
                             proof_ids.add(parent)
                             pending.append(parent)
-                graph = mail.Ancestry(
-                    root,
-                    {mid: ancestry[mid] for mid in proof_ids if mid in ancestry},
-                    deadline=deadline,
-                )
+                graph = mail.Ancestry(root, {mid: ancestry[mid] for mid in proof_ids if mid in ancestry}, deadline=deadline)
                 if duplicate_ids & relevant_ids:
                     raise AssignmentError("Ambiguous Sent RFC identity")
                 for uid, header in entry.headers.items():
@@ -244,16 +229,8 @@ def candidates(actor, current, known, root, *, deadline):
                         related.append(uid)
                 if len(related) > 20:
                     raise AssignmentError("Reply candidates exceed bounds")
-                fresh, observed = (
-                    client.folder_headers(
-                        entry.folder,
-                        deadline=deadline,
-                        uids=related,
-                        max_messages=max(state.exists, mail.MAX_MESSAGES),
-                    )
-                    if related
-                    else ({}, entry.state)
-                )
+                fresh, observed = (client.folder_headers(entry.folder, deadline=deadline, uids=related, max_messages=max(state.exists, mail.MAX_MESSAGES))
+                                   if related else ({}, entry.state))
                 if observed != entry.state:
                     raise AssignmentError("Sent identity changed during observation")
                 for uid in related:
@@ -266,18 +243,10 @@ def candidates(actor, current, known, root, *, deadline):
                             raise AssignmentError("Sent message identity changed")
                     if "\\Draft" in header["flags"]:
                         continue
-                    matches = [
-                        row for row in scoped if row["message_id_header"] == header["message_id"]
-                    ]
+                    matches = [row for row in scoped if row["message_id_header"] == header["message_id"]]
                     if len(matches) != 1:
-                        result.append(
-                            {
-                                "complete": False,
-                                "judgement": "UNKNOWN",
-                                "reason": "SENT_REPLY_NOT_SYNCED",
-                                "source": None,
-                            }
-                        )
+                        result.append({"complete": False, "judgement": "UNKNOWN",
+                                       "reason": "SENT_REPLY_NOT_SYNCED", "source": None})
                     else:
                         result.append({"source_id": matches[0]["id"]})
                 if client.examine_existing(entry.folder, deadline=deadline) != entry.state:

@@ -17,10 +17,7 @@ from collections import OrderedDict
 from datetime import datetime, timezone
 from typing import Any, Awaitable, Callable, Dict, Optional
 
-from zylch.llm.role_pause import narration_failed
 from zylch.qonto.task_access import desktop_task_rpc, ordinary_tasks
-from zylch.rpc.exact_drafts import METHODS as _EXACT_DRAFT_METHODS
-from zylch.rpc.task_assignments import METHODS as _ASSIGNMENT_METHODS
 from zylch.rpc.qonto import METHODS as _QONTO_METHODS
 
 logger = logging.getLogger(__name__)
@@ -163,6 +160,8 @@ def _owner_id() -> str:
 # ─── Tasks ───────────────────────────────────────────────────
 
 
+
+
 @desktop_task_rpc
 async def tasks_list(params: Dict[str, Any], notify: NotifyFn) -> Any:
     """tasks.list(include_completed=False, include_skipped=False,
@@ -203,6 +202,14 @@ async def tasks_list(params: Dict[str, Any], notify: NotifyFn) -> Any:
     )
     if not include_skipped:
         tasks = [t for t in tasks if not (t.get("sources") or {}).get("skipped_at")]
+    from zylch.services import task_assignment_identity, task_source_roots
+
+    if any(task_source_roots.email_backed(row) for row in tasks):
+        import time
+
+        actor = await asyncio.to_thread(task_assignment_identity.actor)
+        tasks = await asyncio.to_thread(task_source_roots.enrich, actor, owner_id, tasks,
+                                       deadline=time.monotonic() + 10)
     logger.debug(f"[rpc] tasks.list -> {len(tasks)} tasks")
     return tasks
 
@@ -263,7 +270,9 @@ async def tasks_create(params: Dict[str, Any], notify: NotifyFn) -> Any:
         f"reopen_if_closed={reopen_if_closed}"
     )
     store = Storage.get_instance()
-    existed = store.get_task_by_event(owner_id=owner_id, event_type=event_type, event_id=event_id)
+    existed = store.get_task_by_event(
+        owner_id=owner_id, event_type=event_type, event_id=event_id
+    )
     if existed and existed.get("completed_at") and not reopen_if_closed:
         logger.warning(
             f"[rpc] tasks.create REFUSED — task {existed.get('id')} for "
@@ -286,9 +295,13 @@ async def tasks_create(params: Dict[str, Any], notify: NotifyFn) -> Any:
         }
 
     reviving = bool(existed and existed.get("completed_at") and reopen_if_closed)
-    ok = store.store_task_item(owner_id=owner_id, item=item, reopen_if_closed=reviving)
+    ok = store.store_task_item(
+        owner_id=owner_id, item=item, reopen_if_closed=reviving
+    )
     task = (
-        store.get_task_by_event(owner_id=owner_id, event_type=event_type, event_id=event_id)
+        store.get_task_by_event(
+            owner_id=owner_id, event_type=event_type, event_id=event_id
+        )
         if ok
         else None
     )
@@ -344,7 +357,11 @@ async def tasks_complete(params: Dict[str, Any], notify: NotifyFn) -> Any:
     raw_why = params.get("why")
     if raw_why is not None and not isinstance(raw_why, str):
         raise ValueError("why must be a string when provided")
-    why = (raw_why or "").strip() or note or "closed by the user from the desktop Tasks view"
+    why = (
+        (raw_why or "").strip()
+        or note
+        or "closed by the user from the desktop Tasks view"
+    )
 
     owner_id = _owner_id()
     logger.debug(
@@ -567,7 +584,8 @@ async def _maybe_reanalyze_after_solve(
     if n <= 0:
         return None
     logger.info(
-        f"[rpc] tasks.solve post-run auto-reanalyze task_id={task_id} " f"mutating_actions={n}"
+        f"[rpc] tasks.solve post-run auto-reanalyze task_id={task_id} "
+        f"mutating_actions={n}"
     )
     try:
         result = await reanalyze_task(task_id=task_id, owner_id=owner_id)
@@ -587,7 +605,7 @@ async def tasks_solve(params: Dict[str, Any], notify: NotifyFn) -> Any:
     notifications; pauses on tool approval (waits for tasks.solve.approve).
     Returns {ok, result} when done.
     """
-    from zylch.llm import make_llm_client, routed_model
+    from zylch.llm import make_llm_client
     from zylch.services.solve_constants import (
         SOLVE_SYSTEM_PROMPT,
         SOLVE_TOOLS,
@@ -611,7 +629,9 @@ async def tasks_solve(params: Dict[str, Any], notify: NotifyFn) -> Any:
         # Same task already running or queued — second open is a no-op
         # rather than a queue insert (the renderer's "Open" button is
         # idempotent for a given task).
-        raise SolveInProgressError(f"solve already running or queued for task_id={task_id}")
+        raise SolveInProgressError(
+            f"solve already running or queued for task_id={task_id}"
+        )
 
     if len(_solve_tasks) >= _MAX_SOLVE_QUEUE:
         raise SolveQueueFullError(
@@ -632,7 +652,9 @@ async def tasks_solve(params: Dict[str, Any], notify: NotifyFn) -> Any:
     # down — events MUST carry their owning task_id.
     def _notify(event: Dict[str, Any]) -> None:
         event_with_id = {**event, "task_id": task_id}
-        logger.debug(f"[rpc] tasks.solve.event type={event.get('type')} task_id={task_id}")
+        logger.debug(
+            f"[rpc] tasks.solve.event type={event.get('type')} task_id={task_id}"
+        )
         notify("tasks.solve.event", event_with_id)
 
     try:
@@ -667,7 +689,7 @@ async def tasks_solve(params: Dict[str, Any], notify: NotifyFn) -> Any:
             user_email = os.environ.get("EMAIL_ADDRESS", "")
             user_name = user_email.split("@")[0] if user_email else "the user"
 
-            client = make_llm_client(model=routed_model("MODEL_TASK_SOLVE"))
+            client = make_llm_client()
             system = SOLVE_SYSTEM_PROMPT.format(
                 user_name=user_name,
                 personal_data_section=get_personal_data_section(owner_id=owner_id),
@@ -689,7 +711,6 @@ async def tasks_solve(params: Dict[str, Any], notify: NotifyFn) -> Any:
                 store,
                 owner_id,
                 SOLVE_TOOLS,
-                email_task=task,
             )
             _active_executor = executor
             # What this solve is working on, kept apart: the instruction the
@@ -700,13 +721,7 @@ async def tasks_solve(params: Dict[str, Any], notify: NotifyFn) -> Any:
             try:
                 final: Dict[str, Any] = {}
                 done_event: Dict[str, Any] = {}
-                from zylch.services.contextual_email_policy import from_task, scope as email_scope
-
-                with (
-                    revocable_turn(),
-                    solve_scope(solve_context),
-                    email_scope(from_task(owner_id, task)),
-                ):
+                with revocable_turn(), solve_scope(solve_context):
                     async for event in executor.run():
                         if event["type"] == "done":
                             # Hold the done event back — we may decorate it
@@ -735,7 +750,9 @@ async def tasks_solve(params: Dict[str, Any], notify: NotifyFn) -> Any:
                         )
 
                         bg = asyncio.create_task(
-                            asyncio.to_thread(learn_from_corrections, corrections, owner_id)
+                            asyncio.to_thread(
+                                learn_from_corrections, corrections, owner_id
+                            )
                         )
                         _bg_tasks.add(bg)
                         bg.add_done_callback(_bg_tasks.discard)
@@ -861,100 +878,67 @@ async def _admit_operator_reply(owner_id, draft, notify):
     from zylch.services.task_assignment_types import AssignmentError, thread
     from zylch.rpc import task_assignments
 
-    target = thread(draft.get("in_reply_to"))
+    target = thread(draft.get('in_reply_to'))
 
     def source():
         actor, space, _ = evidence.admission()
         if owner_id != actor.mailbox:
-            raise AssignmentError("Scheduled reply profile owner mismatch")
+            raise AssignmentError('Scheduled reply profile owner mismatch')
         with db.get_engine().connect() as conn:
-            found = list(
-                conn.execute(
-                    select(Email.__table__)
-                    .where(
-                        Email.owner_id == actor.mailbox,
-                        Email.message_id_header == target,
-                    )
-                    .limit(2)
-                ).mappings()
-            )
+            found = list(conn.execute(select(Email.__table__).where(
+                Email.owner_id == actor.mailbox, Email.message_id_header == target,
+            ).limit(2)).mappings())
         if len(found) != 1:
-            raise AssignmentError("Exact scheduled reply original unavailable")
+            raise AssignmentError('Exact scheduled reply original unavailable')
         original = dict(found[0])
-        root = thread(draft.get("thread_id"))
+        root = thread(draft.get('thread_id'))
         keys, _, known = mail.component(actor, root)
-        members = [row for row in known if row["id"] == original["id"]]
+        members = [row for row in known if row['id'] == original['id']]
         if len(members) != 1 or mail.row_identity(members[0]) != mail.row_identity(original):
-            raise AssignmentError("Scheduled reply original identity unavailable")
-        refs = draft.get("references") or []
-        refs = mail.references(" ".join(refs) if isinstance(refs, list) else refs)
+            raise AssignmentError('Scheduled reply original identity unavailable')
+        refs = draft.get('references') or []
+        refs = mail.references(' '.join(refs) if isinstance(refs, list) else refs)
         if not refs or refs[-1] != target or any(ref not in keys for ref in refs):
-            raise AssignmentError("Scheduled reply headers must retain exact original")
+            raise AssignmentError('Scheduled reply headers must retain exact original')
         identity.recheck(actor, space)
-        component = mail.digest(
-            {"component_thread_keys": keys, "row_digest": mail.row_digest(known)}
-        )
-        return actor, space, root, mail.row_identity(original), component
+        return actor, space, root, mail.row_identity(original)
 
-    actor, space, root, original, component = await asyncio.to_thread(source)
-    value = await task_assignments.project({"thread_key": root}, notify)
-    if (
-        not isinstance(value, dict)
-        or type(value.get("version")) is not int
-        or value["version"] != 1
-        or value.get("actor_uid") != actor.uid
-        or value.get("source_owner_uid") != actor.uid
-        or value.get("space_id") != space
-        or value.get("thread_key") != root
-        or value.get("complete") is not True
-        or value.get("hold_auto_reply") is not False
-        or value.get("state") not in {"normal", "later-inbound"}
-    ):
-        raise AssignmentError("Assignment authority holds the scheduled reply")
-    for name in ("current_message_ids", "covered_message_ids"):
+    actor, space, root, original = await asyncio.to_thread(source)
+    value = await task_assignments.project({'thread_key': root}, notify)
+    if (not isinstance(value, dict) or type(value.get('version')) is not int
+            or value['version'] != 1 or value.get('actor_uid') != actor.uid
+            or value.get('source_owner_uid') != actor.uid or value.get('space_id') != space
+            or value.get('thread_key') != root or value.get('complete') is not True
+            or value.get('hold_auto_reply') is not False
+            or value.get('state') not in {'normal', 'later-inbound'}):
+        raise AssignmentError('Assignment authority holds the scheduled reply')
+    for name in ('current_message_ids', 'covered_message_ids'):
         ids = value.get(name)
         if not isinstance(ids, list) or any(not isinstance(mid, str) for mid in ids):
-            raise AssignmentError("Scheduled reply coverage unavailable")
+            raise AssignmentError('Scheduled reply coverage unavailable')
         for mid in ids:
             thread(mid)
-    if (
-        target not in value["current_message_ids"]
-        or value["state"] == "later-inbound"
-        and target in value["covered_message_ids"]
-    ):
-        raise AssignmentError("Scheduled reply original is not current unanswered work")
-    current_actor, current_space, current_root, current_original, current_component = (
-        await asyncio.to_thread(source)
-    )
-    if (
-        current_actor != actor
-        or current_space != space
-        or current_root != root
-        or current_original != original
-        or current_component != component
-    ):
-        raise AssignmentError("Scheduled reply source changed during admission")
+    if (target not in value['current_message_ids']
+            or value['state'] == 'later-inbound' and target in value['covered_message_ids']):
+        raise AssignmentError('Scheduled reply original is not current unanswered work')
+    current_actor, current_space, current_root, current_original = await asyncio.to_thread(source)
+    if (current_actor != actor or current_space != space or current_root != root
+            or current_original != original):
+        raise AssignmentError('Scheduled reply source changed during admission')
     await asyncio.to_thread(identity.recheck, actor, space)
-    return {
-        **snapshot(owner_id, draft),
-        "_assignment": {
-            "space_id": space,
-            "task": value.get("task"),
-            "route_digest": value["route_digest"],
-            "authoritative_thread_key": value["authoritative_thread_key"],
-            "component_thread_keys": value["component_thread_keys"],
-            "source": original,
-            "component_digest": component,
-        },
-    }
+    return {**snapshot(owner_id, draft), '_assignment': {
+        'space_id': space, 'task': value.get('task'), 'route_digest': value['route_digest'],
+        'authoritative_thread_key': value['authoritative_thread_key'],
+        'component_thread_keys': value['component_thread_keys'],
+        'source': original,
+    }}
 
 
 async def chat_send(params: Dict[str, Any], notify: NotifyFn) -> Any:
     """chat.send(message, conversation_history=[], conversation_id="general",
     context={}, mutation_policy?, policy_version?, history_mode?,
     history_handle?, history_revision?, assignment_thread_key?,
-    assignment_policy_version?, email_context?, contextual_email_policy_version?,
-    operator_origin?, operator_origin_version?) -> ChatService result with managed binding fields.
+    assignment_policy_version?, operator_origin?, operator_origin_version?) -> ChatService result with managed binding fields.
 
     Destructive tools trigger `chat.pending_approval` notifications; the
     client must respond via `chat.approve` to resume.
@@ -980,17 +964,6 @@ async def chat_send(params: Dict[str, Any], notify: NotifyFn) -> Any:
     elif params.get("assignment_policy_version") is not None:
         raise AssignmentError("Assignment draft thread required", -32602)
 
-    from zylch.services.contextual_email_policy import VERSION as EMAIL_POLICY_VERSION
-
-    email_context = params.get("email_context")
-    if (
-        email_context is not None
-        and params.get("contextual_email_policy_version") != EMAIL_POLICY_VERSION
-    ):
-        raise AssignmentError("Contextual email policy version required", -32602)
-    if email_context is None and params.get("contextual_email_policy_version") is not None:
-        raise AssignmentError("Contextual email source required", -32602)
-
     message = params.get("message")
     if not message:
         raise ValueError("message is required")
@@ -999,16 +972,14 @@ async def chat_send(params: Dict[str, Any], notify: NotifyFn) -> Any:
     req_context = params.get("context") or {}
     if not isinstance(req_context, dict):
         req_context = {}
-    if email_context is not None:
-        if "email_context" in req_context and req_context["email_context"] != email_context:
-            raise AssignmentError("Contextual email sources disagree", -32602)
-        req_context = {**req_context, "email_context": email_context}
     mutation_policy = params.get("mutation_policy")
     policy_version = params.get("policy_version")
     if mutation_policy is not None and mutation_policy != READ_ONLY_POLICY:
         raise ValueError(f"unsupported mutation_policy: {mutation_policy!r}")
     if mutation_policy == READ_ONLY_POLICY and policy_version != READ_ONLY_POLICY_VERSION:
-        raise ValueError(f"read-only policy version {READ_ONLY_POLICY_VERSION} is required")
+        raise ValueError(
+            f"read-only policy version {READ_ONLY_POLICY_VERSION} is required"
+        )
 
     # This turn belongs to the client that asked for it: if that client
     # goes away, the turn goes with it rather than composing and
@@ -1131,7 +1102,8 @@ async def chat_send(params: Dict[str, Any], notify: NotifyFn) -> Any:
             _pending_approvals.pop(tool_use_id, None)
             _approval_meta.pop(tool_use_id, None)
         logger.debug(
-            f"[approval] tool={tool_name} approved={approved} " f"edited={edited_input is not None}"
+            f"[approval] tool={tool_name} approved={approved} "
+            f"edited={edited_input is not None}"
         )
         return (bool(approved), edited_input)
 
@@ -1166,8 +1138,7 @@ async def chat_send(params: Dict[str, Any], notify: NotifyFn) -> Any:
             revocable_turn(turn),
             operator_reply_origin.scope(
                 (lambda owner, draft: _admit_operator_reply(owner, draft, notify))
-                if scheduled_origin
-                else None
+                if scheduled_origin else None
             ),
         ):
             service = ChatService()
@@ -1213,14 +1184,9 @@ async def system_capabilities(params: Dict[str, Any], notify: NotifyFn) -> Any:
     """system.capabilities() -> protocol capabilities supported by this engine."""
     from zylch.services.request_policy import READ_ONLY_POLICY_VERSION
 
-    return {
-        "observability": 1,
-        "chat_read_only_policy": READ_ONLY_POLICY_VERSION,
-        "chat_history_binding": 1,
-        "assignment_draft_policy": 1,
-        "contextual_email_policy": 1,
-        "operator_reply_provenance": 1,
-    }
+    from zylch.workflows.resources import list_workflows
+
+    return {"observability": 1, "private_workflows": 1, "workflow_selection_method": "workflows.suggest", "workflows": list_workflows(), "chat_read_only_policy": READ_ONLY_POLICY_VERSION, "chat_history_binding": 1, "assignment_draft_policy": 1, "operator_reply_provenance": 1, "stripe": 1, "stripe_payment_method_links": 1}
 
 
 async def chat_approve(params: Dict[str, Any], notify: NotifyFn) -> Any:
@@ -1369,7 +1335,9 @@ def _estimate_update_eta(store, owner_id: str) -> str:
     # even when no new emails arrived — this is exactly the case where
     # the old estimator under-reported.
     try:
-        open_tasks = len(store.get_task_items(owner_id=owner_id, action_required=True, limit=10000))
+        open_tasks = len(
+            store.get_task_items(owner_id=owner_id, action_required=True, limit=10000)
+        )
     except Exception:
         open_tasks = 0
 
@@ -1699,7 +1667,7 @@ async def narration_summarize(
     """narration.summarize(lines?, context="") -> {"text": str}.
 
     Summarizes recent sidecar stderr lines into a short first-person
-    Italian sentence using the NARRATION role's model, while a chat.send is
+    Italian sentence using Haiku, for display while a chat.send is
     in flight. Never raises; returns {"text": ""} on any failure —
     including the no-`lines` call, which is why `lines` is optional.
     """
@@ -1714,7 +1682,7 @@ async def narration_summarize(
         return {"text": ""}
 
     # Layer 1 — pre-filter locally: drop init/startup/technical log lines
-    # before paying for a model call. These produce narrations like "Sto
+    # before paying for a Haiku call. These produce narrations like "Sto
     # inizializzando il client LLM…" which are noise to the user.
     init_patterns = [
         re.compile(r"initiali[sz]ing", re.IGNORECASE),
@@ -1744,7 +1712,7 @@ async def narration_summarize(
         return {"text": ""}
 
     joined = "\n".join(cleaned)
-    # Layer 2 — tighter narration prompt: explicitly tell the model to ignore
+    # Layer 2 — tighter Haiku prompt: explicitly tell the model to ignore
     # any remaining setup/SQL/startup noise and only narrate user-visible
     # actions.
     system = (
@@ -1767,11 +1735,11 @@ async def narration_summarize(
         user = f"Ultime righe di log:\n{joined}"
 
     try:
-        from zylch.llm import routed_model, try_make_llm_client
+        from zylch.llm import try_make_llm_client
 
         # Narration is a "nice to have" — silently skip if no LLM is
         # configured rather than surfacing an error toast.
-        client = try_make_llm_client(model=routed_model("MODEL_NARRATION"))
+        client = try_make_llm_client()
         if client is None:
             return {"text": ""}
 
@@ -1788,8 +1756,9 @@ async def narration_summarize(
         text = text.strip().strip("\"'").strip()
         logger.debug(f"[rpc] narration.summarize -> {text!r}")
         return {"text": text}
-    except Exception as e:  # a paused NARRATION role says so (role_pause.py)
-        return narration_failed("summarize", e, logger)
+    except Exception as e:
+        logger.warning(f"[rpc] narration.summarize failed: {e}")
+        return {"text": ""}
 
 
 # ─── Emails ──────────────────────────────────────────────────
@@ -2133,9 +2102,9 @@ async def narration_predict(
     fallback = "Sto pensando alla tua richiesta."
 
     try:
-        from zylch.llm import routed_model, try_make_llm_client
+        from zylch.llm import try_make_llm_client
 
-        client = try_make_llm_client(model=routed_model("MODEL_NARRATION"))
+        client = try_make_llm_client()
         if client is None:
             return {"text": ""}
 
@@ -2183,8 +2152,9 @@ async def narration_predict(
 
         logger.debug(f"[rpc] narration.predict -> {cleaned!r}")
         return {"text": cleaned}
-    except Exception as e:  # a paused NARRATION role says so (role_pause.py)
-        return narration_failed("predict", e, logger)
+    except Exception as e:
+        logger.warning(f"[rpc] narration.predict failed: {e}")
+        return {"text": ""}
 
 
 # ─── Settings ────────────────────────────────────────────────
@@ -2271,7 +2241,9 @@ async def settings_get_secret(params: Dict[str, Any], notify: NotifyFn) -> Any:
     if excluded_finance_setting(key):
         raise ValueError("Finance credentials are not available through Settings")
     if key not in SECRET_KEYS:
-        raise ValueError(f"{key!r} is not a secret field — read it with settings.get")
+        raise ValueError(
+            f"{key!r} is not a secret field — read it with settings.get"
+        )
     value = read_env().get(key, "")
     logger.info(f"[rpc] settings.get_secret {key} -> {'set' if value else 'unset'}")
     return {"key": key, "value": value}
@@ -2354,15 +2326,12 @@ async def profiles_create(params: Dict[str, Any], notify: NotifyFn) -> Any:
             value = "" if value is None else str(value)
         if key == "LLM_DAILY_BUDGET_USD" and value.strip():
             import math
-
             try:
                 amount = float(value)
                 if not math.isfinite(amount) or amount < 0:
                     raise ValueError()
             except (ValueError, OverflowError):
-                err = ValueError(
-                    "Daily LLM budget must be a finite non-negative USD amount; 0 pauses AI"
-                )
+                err = ValueError("Daily LLM budget must be a finite non-negative USD amount; 0 pauses AI")
                 err.code = -32602
                 raise err from None
         cleaned[key] = value
@@ -2481,11 +2450,7 @@ async def settings_update(params: Dict[str, Any], notify: NotifyFn) -> Any:
             raise err
         if key == "PREPARATION_BATCH_SIZE" and value.strip():
             try:
-                if (
-                    not value.strip().isascii()
-                    or not value.strip().isdigit()
-                    or not 1 <= int(value) <= 100
-                ):
+                if not value.strip().isascii() or not value.strip().isdigit() or not 1 <= int(value) <= 100:
                     raise ValueError()
             except ValueError:
                 err = ValueError("Preparation batch size must be an integer from 1 to 100")
@@ -2493,15 +2458,12 @@ async def settings_update(params: Dict[str, Any], notify: NotifyFn) -> Any:
                 raise err from None
         if key == "LLM_DAILY_BUDGET_USD" and value.strip():
             import math
-
             try:
                 amount = float(value)
                 if not math.isfinite(amount) or amount < 0:
                     raise ValueError()
             except (ValueError, OverflowError):
-                err = ValueError(
-                    "Daily LLM budget must be a finite non-negative USD amount; 0 pauses AI"
-                )
+                err = ValueError("Daily LLM budget must be a finite non-negative USD amount; 0 pauses AI")
                 err.code = -32602
                 raise err from None
         cleaned[key] = value
@@ -2754,16 +2716,30 @@ for _name, _fn in _QONTO_METHODS.items():
         raise RuntimeError(f"duplicate RPC method registration: {_name}")
     METHODS[_name] = _fn
 
+from zylch.rpc.task_assignments import METHODS as _ASSIGNMENT_METHODS
+
 for _name, _fn in _ASSIGNMENT_METHODS.items():
     if _name in METHODS:
         raise RuntimeError(f"Duplicate RPC method name: {_name}")
     METHODS[_name] = _fn
 
-for _name, _fn in _EXACT_DRAFT_METHODS.items():
+from zylch.rpc.exact_drafts import METHODS as _EXACT_DRAFT_METHODS
+METHODS.update(_EXACT_DRAFT_METHODS)
+
+# Scoped transitional workflow registry; existing actor methods are preserved.
+from zylch.rpc.workflows import METHODS as _workflow_bridge_methods
+for _name, _fn in _workflow_bridge_methods.items():
     if _name in METHODS:
-        raise RuntimeError(f"Duplicate RPC method name: {_name}")
+        raise RuntimeError("Duplicate workflow method")
     METHODS[_name] = _fn
 
+from zylch.rpc.stripe import METHODS as _STRIPE_METHODS
+
+
+for _name, _fn in _STRIPE_METHODS.items():
+    if _name in METHODS:
+        raise RuntimeError(f"duplicate RPC method registration: {_name}")
+    METHODS[_name] = _fn
 
 from zylch.rpc.diagnostics import METHODS as _DIAGNOSTIC_METHODS
 

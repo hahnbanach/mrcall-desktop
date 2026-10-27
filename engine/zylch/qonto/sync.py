@@ -3,9 +3,10 @@
 import asyncio
 import time
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from zylch.qonto import guard, repository, sync_store
+from zylch.qonto.amounts import utc
 from zylch.qonto.errors import QontoError
 from zylch.qonto.provider import get_provider, probe
 from zylch.qonto.secrets import decrypt_credentials
@@ -41,11 +42,33 @@ def release(authority, binding, token):
                 row.last_sync_at = time.time()
 
 
-async def run(*, initial=False):
+def history_range(date_from, date_to, started):
+    """Normalize explicit UTC history bounds before any credential/provider work."""
+    if date_from is None and date_to is None:
+        return None
+    try:
+        values = []
+        for value in (date_from, date_to):
+            if not isinstance(value, str) or len(value) > 40 or "T" not in value:
+                raise ValueError
+            parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+            if parsed.utcoffset() != timedelta(0):
+                raise ValueError
+            values.append(parsed)
+        start, end = values
+        if not timedelta(0) < end - start <= timedelta(days=366) or end > started:
+            raise ValueError
+        return utc(start), utc(end)
+    except (ValueError, TypeError, OverflowError):
+        raise QontoError("operation_failed") from None
+
+
+async def run(*, initial=False, date_from=None, date_to=None):
+    started = now()
+    history = history_range(date_from, date_to, started)
     authority, binding = guard.active_binding()
     value = decrypt_credentials(binding.encrypted_credentials, authority.profile_dir)
     token = acquire(authority, binding)
-    started = now()
     deadline = time.monotonic() + RUN_SECONDS
     requests = 0
     outcome = None
@@ -70,7 +93,7 @@ async def run(*, initial=False):
                 raise QontoError("binding_changed")
             with guard.commit_guard(authority, binding) as session:
                 sync_store.balances(session, binding, org)
-            keys = sync_store.plan(authority, binding, started, initial=initial)
+            keys = sync_store.plan(authority, binding, started, initial=initial, history=history)
             for key in keys[:MAX_WINDOWS]:
                 if requests >= MAX_REQUESTS or time.monotonic() >= deadline:
                     outcome = "sync_limit"

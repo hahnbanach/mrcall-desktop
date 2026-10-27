@@ -26,6 +26,7 @@ from worker threads (e.g. ``update.progress``); the queue + a thread-safe
 from __future__ import annotations
 
 import asyncio
+from zylch.observability_producers import observed, observe, failure
 import json
 import logging
 import os
@@ -129,10 +130,12 @@ async def _process_request(connection, request):
     try:
         claims, token = await asyncio.to_thread(_authenticate_blocking, request)
     except FirebaseAuthError as e:
-        logger.warning(f"[ws] handshake rejected (401): {e}")
+        failure("authority", e, reason="auth", method="engine.handshake")
+        logger.warning("[ws] handshake rejected (401)")
         return connection.respond(HTTPStatus.UNAUTHORIZED, f"unauthorized: {e}\n")
     except PermissionError as e:
-        logger.warning(f"[ws] handshake forbidden (403): {e}")
+        failure("authority", e, reason="auth", method="engine.handshake")
+        logger.warning("[ws] handshake forbidden (403)")
         return connection.respond(HTTPStatus.FORBIDDEN, f"forbidden: {e}\n")
     except Exception as e:
         logger.exception("[ws] handshake auth crashed")
@@ -164,8 +167,12 @@ async def _handle_connection(connection) -> None:
     # Reconstruct the in-memory session from the verified token. The stdio
     # session-update RPCs enforce the same signed identity/expiry admission.
     set_session(uid=uid, email=email, id_token=token, expires_at_ms=expires_at_ms)
-    logger.info(f"[ws] client connected uid={uid} email={email!r}")
+    observe("context", "start", method="engine.connection", reason="none")
+    logger.info("[ws] client connected")
 
+    from zylch.rpc.workflow_interactive import close_connection, open_connection
+
+    workflow_connection, workflow_token = open_connection(uid)
     loop = asyncio.get_running_loop()
     out_q: "asyncio.Queue[Optional[str]]" = asyncio.Queue()
     inflight: set[asyncio.Task] = set()
@@ -217,8 +224,10 @@ async def _handle_connection(connection) -> None:
             inflight.add(task)
             task.add_done_callback(inflight.discard)
     except Exception as e:
-        logger.warning(f"[ws] connection error uid={uid}: {type(e).__name__}: {e}")
+        failure("context", e, method="engine.connection")
+        logger.warning("[ws] connection failed")
     finally:
+        workflow_connection.closed = True
         # Cancel the handlers that belong to this client, then wait for
         # everything. Draining a `chat.send` instead let a turn whose
         # socket had died run to completion: it kept composing, committed
@@ -239,9 +248,11 @@ async def _handle_connection(connection) -> None:
                 if is_socket_bound(task):
                     task.cancel()
             await asyncio.gather(*inflight, return_exceptions=True)
+        await close_connection(workflow_connection, workflow_token)
         out_q.put_nowait(None)
         await asyncio.gather(writer_task, return_exceptions=True)
-        logger.info(f"[ws] client disconnected uid={uid}")
+        observe("context", "result", method="engine.connection", reason="none")
+        logger.info("[ws] client disconnected")
 
 
 def _warmup() -> None:
@@ -398,6 +409,7 @@ async def _whatsapp_refresh_loop() -> None:
         await asyncio.sleep(interval)
 
 
+@observed("launch", "engine.ws")
 async def serve_ws(
     host: Optional[str] = None,
     port: Optional[int] = None,
@@ -405,7 +417,6 @@ async def serve_ws(
     unix_path: Optional[str] = None,
     voice_listener=None,
     background: bool = True,
-    operator_listener=None,
 ) -> None:
     """Run the WebSocket JSON-RPC server until cancelled.
 
@@ -463,16 +474,8 @@ async def serve_ws(
         server = await lifecycle.enter_async_context(server_cm)
         if voice_listener is not None:
             await lifecycle.enter_async_context(voice_listener)
-        if operator_listener is not None:
-            await lifecycle.enter_async_context(operator_listener)
-
-        async def serve_forever():
-            if operator_listener is not None:
-                return await operator_listener.serve_with(server.serve_forever())
-            return await server.serve_forever()
-
         if not background:
-            await serve_forever()
+            await server.serve_forever()
             return
         if unix_path:
             # Guarantee the socket is group-writable so the reverse-proxy
@@ -499,7 +502,7 @@ async def serve_ws(
         reaper_task = asyncio.create_task(reap_orphans_loop())
         logger.info("[ws] zombie reaper started (reaps leaked c-shared children)")
         try:
-            await serve_forever()
+            await server.serve_forever()
         finally:
             auto_task.cancel()
             wa_task.cancel()

@@ -13,6 +13,7 @@ goes to stderr or the log file (configured in zylch.cli.main).
 from __future__ import annotations
 
 import asyncio
+from zylch.observability_producers import observed
 import json
 import logging
 import sys
@@ -149,6 +150,7 @@ async def _auto_reconnect_whatsapp() -> None:
         logger.error(f"[rpc] auto-reconnect: connect raised {type(e).__name__}: {e}")
 
 
+@observed("launch", "engine.stdio")
 async def serve() -> None:
     """Main loop: read stdin lines, dispatch concurrently, write responses."""
     logger.info("[rpc] server starting")

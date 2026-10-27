@@ -197,19 +197,10 @@ def _setup_log_file():
     if not profile_dir:
         return
 
-    log_path = os.path.join(profile_dir, "zylch.log")
-    # RotatingFileHandler (not plain FileHandler): a long-running `serve`
-    # daemon must never write an unbounded log. 100 MB × 5 backups caps the
-    # on-disk footprint at ~600 MB even if a profile loops on a failing LLM
-    # (a 1.6 GB zylch.log was observed before this cap).
-    from logging.handlers import RotatingFileHandler
+    from zylch.observability_retention import ProfileLogHandler
 
-    handler = RotatingFileHandler(
-        log_path,
-        maxBytes=100 * 1024 * 1024,
-        backupCount=5,
-        encoding="utf-8",
-    )
+    log_path = os.path.join(profile_dir, "zylch.log")
+    handler = ProfileLogHandler(Path(profile_dir))
     handler.setLevel(logging.DEBUG)
     handler.setFormatter(
         logging.Formatter(
@@ -369,9 +360,7 @@ def _pin_hosted_encryption_key(unit_key: str | None) -> None:
     """
     loaded = os.environ.get("ENCRYPTION_KEY")
     if unit_key and loaded != unit_key:
-        logger.warning(
-            "[CLI] serve: profile .env carries ENCRYPTION_KEY; ignored on a hosted engine"
-        )
+        logger.warning("[CLI] serve: profile .env carries ENCRYPTION_KEY; ignored on a hosted engine")
         os.environ["ENCRYPTION_KEY"] = unit_key
     elif not unit_key and loaded:
         logger.warning("[CLI] serve: ENCRYPTION_KEY came from the profile .env, not the unit")
@@ -460,14 +449,18 @@ def rpc(ctx):
     default=None,
     help="Protected production voice configuration for this one daemon.",
 )
-@click.pass_context
+@click.option("--mcp", default=None, help="Optional MCP HTTP bind address HOST:PORT.")
+@click.option("--mcp-unix", default=None, help="Optional separate MCP HTTP Unix socket.")
+@click.option("--mcp-host", multiple=True, help="Exact permitted MCP HTTP Host; repeatable.")
+@click.option("--mcp-origin", multiple=True, help="Exact permitted MCP Origin; repeatable.")
 @click.option(
-    "--operator-config",
-    type=click.Path(path_type=Path, exists=True, dir_okay=False),
+    "--mcp-trust-file",
+    type=click.Path(path_type=Path),
     default=None,
-    help="Protected opt-in Linux operator MCP configuration for this profile.",
+    help="Protected operator registration file for native legal sessions.",
 )
-def serve(ctx, ws_addr, unix_path, voice_config, operator_config):
+@click.pass_context
+def serve(ctx, ws_addr, unix_path, voice_config, mcp, mcp_unix, mcp_host, mcp_origin, mcp_trust_file):
     """WebSocket JSON-RPC backend for cross-machine clients.
 
     Same RPC surface as `rpc` (stdio) but over a WebSocket, so an
@@ -479,6 +472,10 @@ def serve(ctx, ws_addr, unix_path, voice_config, operator_config):
     """
     import asyncio
     import sys
+
+    from zylch.cli.mcp import run_with_listener, validate_listener
+
+    mcp_options = validate_listener(mcp, mcp_unix, mcp_host, mcp_origin, mcp_trust_file)
 
     _configure_logging()
 
@@ -525,11 +522,7 @@ def serve(ctx, ws_addr, unix_path, voice_config, operator_config):
     # Hosted start-time self-check (plan M2.6): a key must be present and
     # every stored credential must decrypt under it, or the unit fails
     # now rather than surfacing later as "no refresh token".
-    from zylch.utils.encryption import (
-        DecryptionError,
-        EncryptionUnavailable,
-        assert_encryption_ready,
-    )
+    from zylch.utils.encryption import DecryptionError, EncryptionUnavailable, assert_encryption_ready
     from zylch.qonto.errors import QontoError
     from zylch.qonto.secrets import assert_hosted_credentials_ready
 
@@ -567,24 +560,9 @@ def serve(ctx, ws_addr, unix_path, voice_config, operator_config):
         settings.firebase_web_api_key = config.firebase_web_api_key.get_secret_value()
         voice_context = voice_listener(config, 8787)
 
-    operator_context = None
-    if operator_config is not None:
-        if not unix_path:
-            raise click.UsageError("Operator MCP requires the hosted Unix socket")
-        try:
-            from zylch.operator_mcp.runtime import profile_listener
-
-            operator_context = profile_listener(operator_config)
-        except Exception:
-            raise click.ClickException(
-                "Operator MCP configuration or dependencies unavailable"
-            ) from None
-
     if unix_path:
         logger.info(f"[CLI] serve --unix {unix_path} profile={profile} owner={owner_uid}")
-        coro = serve_ws(
-            unix_path=unix_path, voice_listener=voice_context, operator_listener=operator_context
-        )
+        coro = serve_ws(unix_path=unix_path, voice_listener=voice_context)
     else:
         host, sep, port_str = ws_addr.rpartition(":")
         if not sep or not host or not port_str.isdigit():
@@ -595,7 +573,7 @@ def serve(ctx, ws_addr, unix_path, voice_config, operator_config):
         coro = serve_ws(host, port)
 
     try:
-        asyncio.run(coro)
+        asyncio.run(run_with_listener(coro, mcp_options))
     except KeyboardInterrupt:
         logger.info("[CLI] serve interrupted, shutting down")
 

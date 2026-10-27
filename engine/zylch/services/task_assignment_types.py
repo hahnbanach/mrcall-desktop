@@ -94,10 +94,8 @@ def validate_intent(value: Any, *, fresh: bool = True) -> dict[str, Any]:
     ):
         raise AssignmentError("Invalid assignment operation", -32602)
     canonical(value)
-    if "component_digest" in value and (
-        not isinstance(value["component_digest"], str)
-        or not re.fullmatch(r"[a-f0-9]{64}", value["component_digest"])
-    ):
+    if "component_digest" in value and (not isinstance(value["component_digest"], str)
+            or not re.fullmatch(r"[a-f0-9]{64}", value["component_digest"])):
         raise AssignmentError("Invalid RFC component binding", -32602)
     start, end = value["created_at"], value["expires_at"]
     if (

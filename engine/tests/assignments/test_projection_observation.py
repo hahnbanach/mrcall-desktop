@@ -315,3 +315,93 @@ def test_assignment_arriving_after_positive_witness_remains_conflict(env, mail, 
     assert held["state"] == "conflict" and held["reason"] == "ASSIGNMENT_CHANGED"
     assert held["task"]["assignee_uid"] == "bob" and held["hold_auto_reply"]
     assert not held["complete"]
+
+
+
+def test_actor_characterization_actual_positive_path(env, mail, monkeypatch):
+    observed = []
+    native_member = evidence._member_activity
+    native_sent = projection._early_source_sent
+
+    def member(*args, **kwargs):
+        before = len(mail.calls)
+        result = native_member(*args, **kwargs)
+        observed.append(("member", result.status.value, mail.calls[before:]))
+        return result
+
+    def sent(*args, **kwargs):
+        before = len(mail.calls)
+        result = native_sent(*args, **kwargs)
+        observed.append(("sent", result, mail.calls[before:]))
+        return result
+
+    monkeypatch.setattr(evidence, "_member_activity", member)
+    monkeypatch.setattr(projection, "_early_source_sent", sent)
+    held = projection.project(ROOT)
+    assert held["state"] == "needs-assignment"
+    assert not held["complete"] and held["hold_auto_reply"]
+    assert [entry[:2] for entry in observed] == [("member", "positive"), ("sent", True)]
+    commands = [call[0] for entry in observed for call in entry[2]]
+    assert commands.count("EXAMINE") == 9
+    assert commands.count("FETCH") == 4 and commands.count("SEARCH") == 1
+    assert held["reply_evidence"][0]["judgement"] == "MEMBER_ACTIVITY_REQUIRES_HUMAN_VERIFICATION"
+
+
+def test_actor_characterization_positive_does_not_mask_late_unknown(env, mail, monkeypatch):
+    source = mail.add("<later-unknown@example.test>", "alice@example.test",
+                      "customer@example.test", folder='"Sent"', reply=ROOT)
+    uid = max(mail.messages['"Sent"'])
+    native_uid = mail.uid
+    observed = []
+    native_member = evidence._member_activity
+
+    def unavailable_body(command, *args):
+        if command == "FETCH" and args[0] == str(uid) and "HEADER.FIELDS" not in args[1]:
+            return "NO", []
+        return native_uid(command, *args)
+
+    def member(source_id, *args, **kwargs):
+        result = native_member(source_id, *args, **kwargs)
+        observed.append((source_id, result.status.value))
+        return result
+
+    monkeypatch.setattr(mail, "uid", unavailable_body)
+    monkeypatch.setattr(evidence, "_member_activity", member)
+    held = projection.project(ROOT)
+    assert observed == [(mail.reply_id, "positive"), (source, "unknown")] * 2
+    assert held["state"] == "unknown" and not held["complete"] and held["hold_auto_reply"]
+    assert held["reason"] == "REPLY_SOURCE_UNAVAILABLE"
+    assert any(item["judgement"] == "MEMBER_ACTIVITY_REQUIRES_HUMAN_VERIFICATION" for item in held["reply_evidence"])
+    assert any(item["judgement"] == "UNKNOWN" for item in held["reply_evidence"])
+
+
+@pytest.mark.parametrize("fault", ["initial-uidvalidity", "final-uidnext", "fresh-draft", "fresh-deleted"])
+def test_actor_characterization_early_freshness_refuses_changes(env, mail, monkeypatch, fault):
+    native_member = evidence._member_activity
+    native_uid = mail.uid
+    phase = []
+
+    def member(*args, **kwargs):
+        result = native_member(*args, **kwargs)
+        assert result.status is evidence._ActivityStatus.POSITIVE
+        phase.append("early")
+        if fault == "initial-uidvalidity":
+            mail.uidvalidity += 1
+        return result
+
+    def alter(command, *args):
+        status, data = native_uid(command, *args)
+        if phase and command == "FETCH" and "HEADER.FIELDS" in args[1]:
+            if fault == "final-uidnext":
+                mail.next_uid += 1
+            elif fault in {"fresh-draft", "fresh-deleted"}:
+                flag = b"\\Draft" if fault == "fresh-draft" else b"\\Deleted"
+                data = [(prefix.replace(b"FLAGS ()", b"FLAGS (" + flag + b")"), body)
+                        for prefix, body in data]
+        return status, data
+
+    monkeypatch.setattr(evidence, "_member_activity", member)
+    monkeypatch.setattr(mail, "uid", alter)
+    held = projection.project(ROOT)
+    assert phase == ["early"]
+    assert held["state"] == "unknown" and not held["complete"] and held["hold_auto_reply"]

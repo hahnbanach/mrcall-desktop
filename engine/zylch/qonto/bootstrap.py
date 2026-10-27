@@ -3,13 +3,42 @@
 from __future__ import annotations
 
 import os
+import re
+from dataclasses import dataclass, field
 from pathlib import Path
 
 from dotenv import dotenv_values
 
 from zylch import runtime
-from zylch.qonto.credentials import Credentials, credentials
 from zylch.qonto.errors import QontoError
+
+
+@dataclass(frozen=True)
+class Credentials:
+    login: str = field(repr=False)
+    key: str = field(repr=False)
+
+
+def credentials(login, key) -> Credentials:
+    if not isinstance(key, str) or not key:
+        raise QontoError("credentials_required")
+    if login is not None and not isinstance(login, str):
+        raise QontoError("invalid_credentials")
+    login = login or ""
+    if ":" in key:
+        if key.count(":") != 1:
+            raise QontoError("invalid_credentials")
+        combined_login, key = key.split(":")
+        if login and login != combined_login:
+            raise QontoError("invalid_credentials")
+        login = combined_login
+    if not login:
+        raise QontoError("login_required")
+    if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.-]*", login) or not re.fullmatch(
+        r"[A-Za-z0-9][A-Za-z0-9_.-]*", key
+    ):
+        raise QontoError("invalid_credentials")
+    return Credentials(login, key)
 
 
 def bootstrap_path() -> Path:

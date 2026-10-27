@@ -185,11 +185,11 @@ def _solve_task(
     user_email: str,
 ):
     """Agentic solve: LLM uses tools to research and propose."""
-    from zylch.llm import make_llm_client, routed_model
+    from zylch.llm import make_llm_client
 
     context = build_task_context(task, store, owner_id)
     user_name = user_email.split("@")[0] if user_email else "the user"
-    client = make_llm_client(model=routed_model("MODEL_TASK_SOLVE"))
+    client = make_llm_client()
     system = SOLVE_SYSTEM_PROMPT.format(
         user_name=user_name,
         personal_data_section=get_personal_data_section(owner_id=owner_id),
@@ -213,7 +213,6 @@ def _solve_task(
         store,
         owner_id,
         SOLVE_TOOLS,
-        email_task=task,
     )
     messages = _cli_run_executor(executor, solve_context_from_task(task))
 
@@ -227,7 +226,7 @@ def _instruct_task(
     owner_id: str,
     user_email: str,
 ):
-    from zylch.llm import make_llm_client, routed_model
+    from zylch.llm import make_llm_client
 
     context = build_task_context(task, store, owner_id)
     user_name = user_email.split("@")[0] if user_email else "the user"
@@ -248,7 +247,7 @@ def _instruct_task(
     if not instructions.strip():
         return
 
-    client = make_llm_client(model=routed_model("MODEL_TASK_SOLVE"))
+    client = make_llm_client()
     system = SOLVE_SYSTEM_PROMPT.format(
         user_name=user_name,
         personal_data_section=get_personal_data_section(owner_id=owner_id),
@@ -273,7 +272,6 @@ def _instruct_task(
         store,
         owner_id,
         SOLVE_TOOLS,
-        email_task=task,
     )
     messages = _cli_run_executor(executor, solve_context_from_task(task, instructions))
 
@@ -333,6 +331,5 @@ def _post_solve_menu(
                 store,
                 owner_id,
                 SOLVE_TOOLS,
-                email_task=task,
             )
             messages = _cli_run_executor(executor, solve_context_from_task(task, choice))

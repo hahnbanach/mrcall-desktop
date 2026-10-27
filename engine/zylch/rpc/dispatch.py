@@ -129,7 +129,9 @@ def _redact_params(method: Optional[str], params: Dict[str, Any]) -> Dict[str, A
         return {key: "<redacted chat>" for key in params}
     if method in {"narration.predict", "narration.summarize"}:
         return {key: "<redacted narration>" for key in params}
-    if (method or "").startswith(("qonto.", "tasks.")):
+    if (method or "").startswith("workflows."):
+        return {"payload": "<redacted private workflow>"}
+    if (method or "").startswith(("qonto.", "stripe.", "tasks.")):
         return {key: "<redacted>" for key in params}
     extra = _SECRET_PARAM_KEYS_BY_METHOD.get(method or "", set())
     allowed = _NON_SECRET_PARAM_KEYS_BY_METHOD.get(method or "", set())
@@ -194,6 +196,15 @@ async def _dispatch_raw(raw: str, notify: NotifyFn) -> Optional[Dict[str, Any]]:
             return None
         return _error(req_id, INVALID_REQUEST, "Missing or invalid 'method'")
 
+    if (
+        method.startswith("workflows.")
+        and "params" in req
+        and not isinstance(req["params"], dict)
+    ):
+        return None if is_notification else _error(
+            req_id, INVALID_PARAMS, "Workflow params must be an object"
+        )
+
     if not isinstance(params, dict):
         if is_notification:
             return None
@@ -201,6 +212,10 @@ async def _dispatch_raw(raw: str, notify: NotifyFn) -> Optional[Dict[str, Any]]:
 
     handler = METHODS.get(method)
     if handler is None:
+        if method.startswith("workflows."):
+            return None if is_notification else _error(
+                req_id, METHOD_NOT_FOUND, "Workflow method unavailable"
+            )
         logger.debug(f"[rpc] unknown method={method}")
         if is_notification:
             return None
@@ -211,6 +226,11 @@ async def _dispatch_raw(raw: str, notify: NotifyFn) -> Optional[Dict[str, Any]]:
     # and looked like a filtered list. Refuse it by name instead.
     rejected = unknown_params(method, params)
     if rejected:
+        if method.startswith("workflows."):
+            logger.warning("[rpc] workflow parameters refused")
+            return None if is_notification else _error(
+                req_id, INVALID_PARAMS, "Unknown workflow parameter"
+            )
         logger.warning(
             f"[rpc] {method} called with unknown param(s) {rejected} — "
             f"rejected (they would have been ignored)"
@@ -236,7 +256,9 @@ async def _dispatch_raw(raw: str, notify: NotifyFn) -> Optional[Dict[str, Any]]:
 
     logger.debug(f"[rpc] method={method} params={_redact_params(method, params)}")
     try:
-        if method.startswith("tasks.") or method in {"narration.predict", "narration.summarize"}:
+        if method.startswith(("tasks.", "workflows.")) or method in {
+            "narration.predict", "narration.summarize"
+        }:
             from zylch.qonto.logging import private_scope
 
             with private_scope():
@@ -244,6 +266,15 @@ async def _dispatch_raw(raw: str, notify: NotifyFn) -> Optional[Dict[str, Any]]:
         else:
             result = await handler(params, notify)
     except Exception as e:
+        from zylch.observability_producers import failure
+        failure("rpc", e, method=method, rpc_id=req_id)
+        if method.startswith("workflows."):
+            from zylch.workflows.errors import WorkflowError
+
+            code = e.code if isinstance(e, WorkflowError) else INTERNAL_ERROR
+            message = str(e) if isinstance(e, WorkflowError) else "Private workflow operation failed"
+            logger.warning("[rpc] workflow operation refused code=%s", code)
+            return None if is_notification else _error(req_id, code, message)
         if method.startswith("tasks.assignment."):
             from zylch.services.task_assignment_types import AssignmentError
 
@@ -282,6 +313,13 @@ async def _dispatch_raw(raw: str, notify: NotifyFn) -> Optional[Dict[str, Any]]:
             code = e.code if isinstance(e, QontoError) else INTERNAL_ERROR
             message = str(e) if isinstance(e, QontoError) else "Chat operation failed"
             logger.warning("[rpc] chat operation failed code=%s", code)
+            return None if is_notification else _error(req_id, code, message)
+        if method.startswith("stripe."):
+            from zylch.stripe.errors import StripeError
+
+            code = e.code if isinstance(e, StripeError) else INTERNAL_ERROR
+            message = str(e) if isinstance(e, StripeError) else "Stripe operation failed"
+            logger.warning("[rpc] Stripe operation failed code=%s", code)
             return None if is_notification else _error(req_id, code, message)
         if method.startswith("qonto."):
             from zylch.qonto.errors import QontoError

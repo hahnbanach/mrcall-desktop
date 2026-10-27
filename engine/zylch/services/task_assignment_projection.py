@@ -10,7 +10,7 @@ from . import task_assignment_mail as mail
 from . import task_assignment_store as store
 from . import task_assignment_sent_index as sent_index
 from . import task_assignment_trust as trust
-from .task_assignment_types import AssignmentError, thread
+from .task_assignment_types import AssignmentError, identifier, thread
 
 logger = logging.getLogger(__name__)
 
@@ -45,7 +45,7 @@ def _diagnostic_result(command: str, root: str, started: float, value: dict, *, 
 
 
 def _read_deadline(started):
-    return started + 40
+    return started + 120
 
 
 @provider_diagnostics.projection
@@ -67,6 +67,76 @@ def project(root: str) -> dict:
         )
     _diagnostic_result("assignment.projection.terminal", root, started, value)
     return value
+
+def _early_source_sent(actor, current, observed, root, deadline):
+    source = observed["source"]
+    provider = source["provider"]
+    box = next((box for box in mail.configured(actor, current) if box.id == source["mailbox_id"]), None)
+    if box is None:
+        raise AssignmentError("Early reply mailbox unavailable")
+    with evidence.provider_client(actor, box, root, deadline) as client:
+        state = client.examine_existing(provider["folder"], deadline=deadline)
+        if state.uidvalidity != provider["uidvalidity"]:
+            raise AssignmentError("Early reply source identity changed")
+        headers, state = client.folder_headers(provider["folder"], deadline=deadline, uids=[provider["uid"]],
+                                               max_messages=max(state.exists, mail.MAX_MESSAGES))
+        header = headers.get(provider["uid"])
+        if (header is None or header["message_id"] != source["message_id"]
+                or state.uidvalidity != provider["uidvalidity"]):
+            raise AssignmentError("Early reply source identity changed")
+        return not {"\\Draft", "\\Deleted"}.intersection(header["flags"])
+
+
+class _EarlyReplies(list):
+    def __init__(self, values, force_full_scan):
+        super().__init__(values)
+        self.force_full_scan = force_full_scan
+
+
+def _early_replies(actor, current, known, root, deadline):
+    own = set(current["members"][actor.uid])
+    candidates, mids = {}, set()
+    try:
+        for row in known:
+            senders = mail.addresses(row["from_email"] or "")
+            if not senders or not senders <= own:
+                continue
+            mid = thread(row["message_id_header"])
+            if mid == root:
+                continue
+            source_id = identifier(row["id"])
+            if source_id in candidates or mid in mids:
+                return []
+            candidates[source_id] = mid
+            mids.add(mid)
+        if len(candidates) > 20:
+            return []
+    except (AssignmentError, KeyError, TypeError):
+        return []
+    replies = []
+    absent = False
+    for source_id in candidates:
+        if time.monotonic() >= deadline:
+            raise AssignmentError("Ownership evidence deadline exceeded")
+        activity = evidence._member_activity(source_id, root, deadline=deadline, local_hint=True)
+        if activity.status is evidence._ActivityStatus.ABSENT:
+            absent = True
+        elif activity.status is evidence._ActivityStatus.NON_WITNESS:
+            replies.append(evidence.reply(source_id, root, deadline=deadline))
+        else:
+            if activity.status is evidence._ActivityStatus.POSITIVE and not _early_source_sent(actor, current, activity.payload, root, deadline):
+                raise AssignmentError("Early member source no longer sent")
+            replies.append(activity.payload)
+    if absent:
+        scope = mail.mailbox_digest(actor)
+        for box in mail.configured(actor, current):
+            entry = sent_index._entry(actor, box, scope, deadline)
+            sent_index._acquire(entry.lock, deadline)
+            try:
+                entry.invalidate()
+            finally:
+                entry.lock.release()
+    return _EarlyReplies(replies if absent or any(not item["complete"] or item["judgement"] == "MEMBER_ACTIVITY_REQUIRES_HUMAN_VERIFICATION" for item in replies) else [], absent)
 
 def _project(root: str, deadline: float) -> dict:
     started = time.monotonic()
@@ -100,27 +170,30 @@ def _project(root: str, deadline: float) -> dict:
         value["route_digest"] = trust.delivery_routes_digest(space)
         if not stored["complete"]:
             if task is None:
-                observed = evidence.malformed_own_sent(root, deadline=deadline)
-                if observed["complete"]:
-                    value.update(
-                        state="needs-assignment",
-                        reason="NEEDS_HUMAN_VERIFICATION",
-                        authority_complete=False,
-                        hold_scope="exact_observed_message",
-                        reply_evidence=[observed],
-                    )
+                # Store lookup conservatively withholds component authority.
+                # Distinguish only the typed, reproducible graph contradiction;
+                # every other incomplete source retains its ordinary handling.
+                try:
+                    mail.component(actor, root, deadline=deadline)
+                except mail.RFCAncestryConflict:
+                    value.update(state="conflict", reason="RFC_ANCESTRY_CONFLICT")
+                except AssignmentError:
+                    pass
+                if value["state"] != "conflict":
+                    observed = evidence.malformed_own_sent(root, deadline=deadline)
+                    if observed["complete"]:
+                        value.update(state="needs-assignment", reason="NEEDS_HUMAN_VERIFICATION",
+                                     authority_complete=False, hold_scope="exact_observed_message",
+                                     reply_evidence=[observed])
             identity.recheck(actor, space)
             if trust.delivery_routes_digest(space) != value["route_digest"]:
                 raise AssignmentError("Delivery routes changed during projection")
             latest = store.get(root, deadline=deadline)
             if latest["task"] != task or latest["complete"] != stored["complete"]:
-                value.update(
-                    state="conflict",
-                    reason="ASSIGNMENT_CHANGED",
-                    task=latest["task"],
-                    events=latest["events"],
-                    source_owner_uid=latest["task"]["creator_uid"] if latest["task"] else actor.uid,
-                )
+                value.update(state="conflict", reason="ASSIGNMENT_CHANGED", task=latest["task"], events=latest["events"],
+                             source_owner_uid=latest["task"]["creator_uid"] if latest["task"] else actor.uid)
+            if time.monotonic() >= deadline:
+                raise AssignmentError("Ownership evidence deadline exceeded")
             return value
         if task and task["state"] == "closed" and task["creator_uid"] != actor.uid:
             value["reason"] = "SOURCE_OWNER_REQUIRED"
@@ -130,96 +203,49 @@ def _project(root: str, deadline: float) -> dict:
             snapshot = evidence.snapshot(root, deadline=deadline)
             value["current_inbound"] = snapshot["covered_inbound"]
             value["current_message_ids"] = message_ids(snapshot["covered_inbound"])
-            state = (
-                "later-inbound"
-                if set(snapshot["covered_inbound"]) - set(task["covered_inbound"])
-                else "closed"
-            )
-            value.update(
-                complete=True,
-                state=state,
-                hold_auto_reply=state != "later-inbound",
-                reason=(
-                    "NEW_INBOUND_AFTER_CLOSE"
-                    if state == "later-inbound"
-                    else "HANDLED_ACKNOWLEDGED"
-                ),
-            )
+            state = "later-inbound" if set(snapshot["covered_inbound"]) - set(task["covered_inbound"]) else "closed"
+            value.update(complete=True, state=state, hold_auto_reply=state != "later-inbound",
+                         reason="NEW_INBOUND_AFTER_CLOSE" if state == "later-inbound" else "HANDLED_ACKNOWLEDGED")
         else:
             known = mail.rows(actor, root, deadline=deadline)
             aliases = {alias for group in current["members"].values() for alias in group}
-            value["current_message_ids"] = sorted(
-                {
-                    row["message_id_header"]
-                    for row in known
-                    if not mail.addresses(row["from_email"] or "") <= aliases
-                }
-            )
+            value["current_message_ids"] = sorted({row["message_id_header"] for row in known
+                                                   if not mail.addresses(row["from_email"] or "") <= aliases})
             if task:
                 # Active company ownership is authoritative even without closure IO.
-                value.update(
-                    complete=True,
-                    state="assigned",
-                    hold_auto_reply=True,
-                    reason="HUMAN_ASSIGNMENT_ACTIVE",
-                )
+                value.update(complete=True, state="assigned", hold_auto_reply=True,
+                             reason="HUMAN_ASSIGNMENT_ACTIVE")
             else:
-                discovered = sent_index.candidates(actor, current, known, root, deadline=deadline)
-                replies = []
-                discovery_unknown = any(
-                    "source_id" not in item and not item["complete"] for item in discovered
-                )
-                for item in discovered:
-                    if time.monotonic() >= deadline:
-                        raise AssignmentError("Ownership evidence deadline exceeded")
-                    if "source_id" in item:
-                        # Signed-source confirmation retains the same live checks.
-                        replies.append(evidence.reply(item["source_id"], root, deadline=deadline))
-                    else:
-                        replies.append(item)
-                    if (
-                        not discovery_unknown
-                        and all(reply["complete"] for reply in replies)
-                        and replies[-1]["judgement"]
-                        in {
-                            "NONAUTOMATIC_MEMBER_REPLY_CANDIDATE",
-                            "INTERNAL_MEMBER_CORRESPONDENCE",
-                            "OWN_SENT_EXTERNAL_FOLLOWUP",
-                        }
-                    ):
-                        break
+                replies = _early_replies(actor, current, known, root, deadline)
+                if getattr(replies, "force_full_scan", False) or not replies or any(not item["complete"] for item in replies):
+                    discovered = sent_index.candidates(actor, current, known, root, deadline=deadline)
+                    for item in discovered:
+                        if time.monotonic() >= deadline:
+                            raise AssignmentError("Ownership evidence deadline exceeded")
+                        if "source_id" in item:
+                            # Signed-source confirmation retains the same live checks.
+                            activity = evidence._member_activity(item["source_id"], root, deadline=deadline)
+                            replies.append(evidence.reply(item["source_id"], root, deadline=deadline)
+                                           if activity.status is evidence._ActivityStatus.NON_WITNESS else activity.payload)
+                        else:
+                            replies.append(item)
+
                 if time.monotonic() >= deadline:
                     raise AssignmentError("Ownership evidence deadline exceeded")
                 value["reply_evidence"] = replies
                 if any(not item["complete"] for item in replies):
                     value["reason"] = "REPLY_SOURCE_UNAVAILABLE"
-                elif any(
-                    item["judgement"]
-                    in {
-                        "NONAUTOMATIC_MEMBER_REPLY_CANDIDATE",
-                        "INTERNAL_MEMBER_CORRESPONDENCE",
-                        "OWN_SENT_EXTERNAL_FOLLOWUP",
-                    }
-                    for item in replies
-                ):
+                elif any(item["judgement"] in {"NONAUTOMATIC_MEMBER_REPLY_CANDIDATE", "INTERNAL_MEMBER_CORRESPONDENCE", "OWN_SENT_EXTERNAL_FOLLOWUP", "MEMBER_ACTIVITY_REQUIRES_HUMAN_VERIFICATION"} for item in replies):
                     value.update(state="needs-assignment", reason="NEEDS_HUMAN_VERIFICATION")
                 else:
-                    value.update(
-                        complete=True,
-                        state="normal",
-                        hold_auto_reply=False,
-                        reason="NO_HUMAN_ASSIGNMENT",
-                    )
+                    value.update(complete=True, state="normal", hold_auto_reply=False,
+                                 reason="NO_HUMAN_ASSIGNMENT")
         identity.recheck(actor, space)
         if trust.delivery_routes_digest(space) != value["route_digest"]:
             raise AssignmentError("Delivery routes changed during projection")
         latest = store.get(root, deadline=deadline)
-        if (
-            not latest["complete"]
-            or latest["task"] != task
-            or latest["authoritative_thread_key"] != stored["authoritative_thread_key"]
-            or latest["component_thread_keys"] != stored["component_thread_keys"]
-        ):
+        if (not latest["complete"] or latest["task"] != task or latest["authoritative_thread_key"] != stored["authoritative_thread_key"]
+                or latest["component_thread_keys"] != stored["component_thread_keys"]):
             value.update(
                 complete=False, state="conflict", hold_auto_reply=True, reason="ASSIGNMENT_CHANGED"
             )

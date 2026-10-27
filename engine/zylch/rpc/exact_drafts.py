@@ -1,10 +1,12 @@
 """Explicit owner-scoped exact draft inspection, retirement and Sent recording."""
-
 import asyncio
 from datetime import datetime
 import os
 import logging
 from typing import Any, Awaitable, Callable
+
+logger = logging.getLogger(__name__)
+NotifyFn = Callable[[str, dict[str, Any]], None]
 
 from zylch.services import exact_draft_delivery as delivery
 from zylch.services.request_policy import assert_tool_allowed
@@ -13,9 +15,6 @@ from zylch.services.task_assignment_types import AssignmentError
 from zylch.storage.models import Draft
 from zylch.storage.storage import Storage
 from zylch.rpc.draft_actions import _owner_id, _discard_refusal
-
-logger = logging.getLogger(__name__)
-NotifyFn = Callable[[str, dict[str, Any]], None]
 
 
 def required(params: dict[str, Any], name: str) -> str:
@@ -36,21 +35,11 @@ def profile_binding() -> tuple[str, str]:
 
 
 def result(draft_id: str, **values: Any) -> dict[str, Any]:
-    logger.debug(
-        "[rpc:exact-drafts] result ok=%s reason=%s discarded=%s preflight=%s reconciled=%s",
-        values.get("ok"),
-        values.get("reason"),
-        values.get("discarded"),
-        values.get("would_discard"),
-        values.get("reconciled"),
-    )
-    return {
-        "draft_id": draft_id,
-        "engine_owner_uid": os.environ.get("OWNER_ID", ""),
-        "owner_id": _owner_id(),
-        "automatic_reconciliation": False,
-        **values,
-    }
+    logger.debug("[rpc:exact-drafts] result ok=%s reason=%s discarded=%s preflight=%s reconciled=%s",
+                 values.get("ok"), values.get("reason"), values.get("discarded"),
+                 values.get("would_discard"), values.get("reconciled"))
+    return {"draft_id": draft_id, "engine_owner_uid": os.environ.get("OWNER_ID", ""),
+            "owner_id": _owner_id(), "automatic_reconciliation": False, **values}
 
 
 async def drafts_inspect(params: dict[str, Any], notify: NotifyFn) -> dict[str, Any]:
@@ -96,19 +85,13 @@ async def drafts_discard_exact(params: dict[str, Any], notify: NotifyFn) -> dict
                 if profile_binding() != (owner, uid):
                     raise AssignmentError("Owner profile changed before effect")
                 with session() as current:
-                    row = (
-                        current.query(Draft)
-                        .filter(Draft.owner_id == owner, Draft.id == draft_id)
-                        .one()
-                    )
+                    row = current.query(Draft).filter(Draft.owner_id == owner, Draft.id == draft_id).one()
                     if not dry_run:
                         current.delete(row)
     except (AssignmentError, delivery.EvidenceRefusal):
         return result(draft_id, ok=False, discarded=False, reason="state_or_authority_changed")
     if dry_run:
-        return result(
-            draft_id, ok=True, discarded=False, would_discard=True, expected_snapshot=expected
-        )
+        return result(draft_id, ok=True, discarded=False, would_discard=True, expected_snapshot=expected)
     return result(draft_id, ok=True, discarded=True, consumed_snapshot=expected)
 
 
@@ -137,9 +120,7 @@ async def drafts_reconcile_external(params: dict[str, Any], notify: NotifyFn) ->
             # This records an already completed delivery. Send admission would
             # incorrectly refuse legitimate evidence after a later assignment.
             with session() as current:
-                row = (
-                    current.query(Draft).filter(Draft.owner_id == owner, Draft.id == draft_id).one()
-                )
+                row = current.query(Draft).filter(Draft.owner_id == owner, Draft.id == draft_id).one()
                 idempotent = row.status == "sent"
                 if idempotent and row.sent_at != sent_at:
                     raise delivery.EvidenceRefusal("conflicting_sent_evidence")
@@ -152,18 +133,9 @@ async def drafts_reconcile_external(params: dict[str, Any], notify: NotifyFn) ->
         return result(draft_id, ok=False, reconciled=False, reason=str(error))
     except AssignmentError:
         return result(draft_id, ok=False, reconciled=False, reason="stale_snapshot")
-    return result(
-        draft_id,
-        ok=True,
-        reconciled=True,
-        sent_message_id=message_id,
-        sent_at=sent_at.isoformat(),
-        idempotent=idempotent,
-    )
+    return result(draft_id, ok=True, reconciled=True, sent_message_id=message_id,
+                  sent_at=sent_at.isoformat(), idempotent=idempotent)
 
 
-METHODS: dict[str, Callable[[dict[str, Any], NotifyFn], Awaitable[dict[str, Any]]]] = {
-    "drafts.inspect": drafts_inspect,
-    "drafts.discard_exact": drafts_discard_exact,
-    "drafts.reconcile_external": drafts_reconcile_external,
-}
+METHODS: dict[str, Callable[[dict[str, Any], NotifyFn], Awaitable[dict[str, Any]]]] = {"drafts.inspect": drafts_inspect, "drafts.discard_exact": drafts_discard_exact,
+           "drafts.reconcile_external": drafts_reconcile_external}

@@ -215,7 +215,6 @@ def get_session() -> Generator[Session, None, None]:
 # MetaData would otherwise create every table in every file, and the
 # mis-binding would be silent instead of an error.
 MEMORY_TABLE_NAMES = (
-    "assignment_enrollment",
     "assigned_tasks",
     "assigned_task_events",
     "assigned_task_receipts",
@@ -389,7 +388,6 @@ def _apply_column_migrations(engine: Engine) -> None:
     existing column set via PRAGMA table_info and ALTER-ADD if missing.
     """
     migrations = [
-        ("drafts", "reply_binding", "JSON"),
         # 2026-04-17: chat attachments — absolute local paths attached to a
         # draft and transported to MIME at send time.
         ("drafts", "attachment_paths", "JSON DEFAULT '[]'"),

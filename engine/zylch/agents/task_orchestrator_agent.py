@@ -24,7 +24,7 @@ try:
 except ModuleNotFoundError:  # legacy optional agent was removed from this tree
     MrCallAgent = None  # type: ignore[assignment,misc]
     MRCALL_AGENT_TOOLS = []
-from zylch.llm import make_llm_client, routed_model
+from zylch.llm import make_llm_client
 from zylch.services.approval_gate import (
     APPROVED,
     draft_approval_card,
@@ -158,7 +158,7 @@ class TaskOrchestratorAgent(BaseConversationalAgent):
         self.approval_callback = approval_callback
 
         # LLM client for orchestration decisions
-        self.llm = make_llm_client(model=routed_model("MODEL_CHAT"))
+        self.llm = make_llm_client()
 
         # Lazy-loaded sub-agents
         self._emailer_agent: Optional[EmailerAgent] = None
@@ -527,10 +527,7 @@ The sub-agents can handle multi-step workflows. Give them the full picture.
             updates = draft_updates_from_card(edited)
             if updates:
                 try:
-                    from zylch.services.task_assignment_draft_transaction import claim_edits
-
-                    with claim_edits(self.owner_id, draft_id):
-                        self.storage.update_draft(self.owner_id, draft_id, updates)
+                    self.storage.update_draft(self.owner_id, draft_id, updates)
                     draft = self.storage.get_draft(self.owner_id, draft_id) or draft
                 except Exception as e:
                     logger.warning(f"[TaskOrchestrator] Failed to apply approval-card edits: {e}")
@@ -567,9 +564,7 @@ The sub-agents can handle multi-step workflows. Give them the full picture.
                 if references:
                     refs_str = " ".join(references) if isinstance(references, list) else references
 
-                from zylch.services.task_assignment_email_effect import send as guarded_send
-
-                sent_message = guarded_send(gmail.send_message, owner_id=self.owner_id, draft=draft,
+                sent_message = gmail.send_message(
                     to=to_str,
                     subject=subject,
                     body=body,
@@ -585,9 +580,7 @@ The sub-agents can handle multi-step workflows. Give them the full picture.
 
                 outlook = OutlookClient(graph_token=graph_token["access_token"], account=user_email)
 
-                from zylch.services.task_assignment_email_effect import send as guarded_send
-
-                sent_message = guarded_send(outlook.send_message, owner_id=self.owner_id, draft=draft,
+                sent_message = outlook.send_message(
                     to=to_str,
                     subject=subject,
                     body=body,

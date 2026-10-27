@@ -157,8 +157,8 @@ def _build_user_content(
         f"- Analyzed: {task.get('analyzed_at') or '(unknown)'}\n"
     )
     parts = [
-        "You are re-evaluating an existing task in light of the latest thread history. Decide "
-        "KEEP, CLOSE, or UPDATE, and answer only by calling the reanalyze_decision tool once.",
+        "You are re-evaluating an existing task in light of the latest thread "
+        "history. Decide KEEP, CLOSE, or UPDATE.",
         f"Today's date: {today_str}",
         existing,
     ]
@@ -451,7 +451,7 @@ async def reanalyze_task(
                 messages=[{"role": "user", "content": user_content}],
                 max_tokens=500,
                 tools=[REANALYZE_TOOL],
-                tool_choice={"type": "auto"},
+                tool_choice={"type": "tool", "name": "reanalyze_decision"},
             )
     except Exception as e:
         # 529 / overloaded is a known transient provider issue —

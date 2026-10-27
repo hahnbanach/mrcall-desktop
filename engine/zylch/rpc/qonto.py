@@ -25,10 +25,15 @@ async def qonto_disconnect(params, notify):
 
 
 async def qonto_sync(params, notify):
-    """qonto.sync() -> bounded source-only refresh and durable partial coverage."""
+    """qonto.sync(date_from?, date_to?) -> bounded source-only refresh and coverage."""
+    from zylch.qonto.errors import QontoError
     from zylch.qonto.sync import run
 
-    return await run()
+    if set(params) - {"date_from", "date_to"} or (
+        bool(params) and (set(params) != {"date_from", "date_to"} or None in params.values())
+    ):
+        raise QontoError("operation_failed")
+    return await run(**params)
 
 
 async def qonto_delete_imported_data(params, notify):

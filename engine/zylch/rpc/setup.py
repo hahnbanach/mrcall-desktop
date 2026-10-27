@@ -22,6 +22,7 @@ import logging
 import threading
 import os
 from typing import Any, Awaitable, Callable, Dict, Optional
+from zylch.observability_producers import copied, observed, observe, failure
 
 logger = logging.getLogger(__name__)
 
@@ -42,67 +43,55 @@ _email_intake_futures: set = set()
 
 def _email_intake_failure(title: str, action: str, *, busy: bool = False) -> dict:
     return {
-        "scope": "email",
-        "success": False,
-        "busy": busy,
+        "scope": "email", "success": False, "busy": busy,
         "summary": title,
-        "result": {
-            "sync_new": 0,
-            "wa_messages": 0,
-            "wa_contacts": 0,
-            "wa_skipped_reason": "Email-only scope.",
-        },
-        "errors": [{"severity": "error", "title": title, "detail": title, "action": action}],
+        "result": {"sync_new": 0, "wa_messages": 0, "wa_contacts": 0,
+                   "wa_skipped_reason": "Email-only scope."},
+        "errors": [{"severity": "error", "title": title,
+                    "detail": title, "action": action}],
     }
 
 
+@observed("acquisition", "sync.run", private=True)
 async def sync_run(params: Dict[str, Any], notify: NotifyFn) -> Any:
-    """sync.run(days_back?, scope='all') -> result dict."""
     scope = params.get("scope", "all")
     if not isinstance(scope, str) or scope not in ("all", "email"):
         return {
-            "success": False,
-            "summary": "Unsupported synchronization scope.",
-            "result": {},
-            "errors": [
-                {
-                    "severity": "error",
-                    "title": "Unsupported synchronization scope.",
-                    "detail": "Use all or email.",
-                    "action": "Correct the synchronization scope.",
-                }
-            ],
+            "success": False, "summary": "Unsupported synchronization scope.",
+            "result": {}, "errors": [{"severity": "error",
+                "title": "Unsupported synchronization scope.",
+                "detail": "Use all or email.", "action": "Correct the synchronization scope."}],
         }
     if scope == "all":
         return await _sync_run(params, notify)
     days_back = params.get("days_back", 60)
     if type(days_back) is not int or not 1 <= days_back <= 60:
         return _email_intake_failure(
-            "Invalid email synchronization history.", "Use an integer from 1 to 60 days."
-        )
+            "Invalid email synchronization history.", "Use an integer from 1 to 60 days.")
     if not _email_intake_lock.acquire(blocking=False):
         return _email_intake_failure(
             "Email synchronization is already running.",
-            "Wait for the current synchronization to finish, then retry.",
-            busy=True,
-        )
+            "Wait for the current synchronization to finish, then retry.", busy=True)
 
     def worker():
         try:
+            observe("job", "start", method="sync.run", reason="none")
             result = asyncio.run(_sync_run(params, notify, email_only=True))
+            observe("job", "failed" if result.get("success") is False else "result", method="sync.run", complete=result.get("success") is True)
             return {**result, "scope": "email", "busy": False}
+        except Exception as error:
+            failure("job", error, method="sync.run")
+            raise
         finally:
             _email_intake_lock.release()
 
     try:
-        future = asyncio.get_running_loop().run_in_executor(None, worker)
+        future = asyncio.get_running_loop().run_in_executor(None, copied(worker))
     except Exception:
         _email_intake_lock.release()
         logger.exception("[sync.run] could not start email intake worker")
         return _email_intake_failure(
-            "Email synchronization could not start.",
-            "Retry synchronization after checking engine availability.",
-        )
+            "Email synchronization could not start.", "Retry synchronization after checking engine availability.")
     except BaseException:
         _email_intake_lock.release()
         raise
@@ -122,8 +111,7 @@ async def sync_run(params: Dict[str, Any], notify: NotifyFn) -> Any:
     except Exception:
         logger.exception("[sync.run] email intake worker failed")
         return _email_intake_failure(
-            "Email synchronization failed.", "Check mailbox access and retry synchronization."
-        )
+            "Email synchronization failed.", "Check mailbox access and retry synchronization.")
 
 
 async def _sync_run(params: Dict[str, Any], notify: NotifyFn, *, email_only=False) -> Any:
@@ -196,6 +184,7 @@ async def _sync_run(params: Dict[str, Any], notify: NotifyFn, *, email_only=Fals
             include_whatsapp=not email_only,
         )
     except Exception as e:
+        failure("acquisition", e, method="sync.run")
         # Last-resort guard: run_sync_only already routes per-stage
         # failures into stage_errors, so this branch only fires if the
         # function itself blew up before reaching its try blocks.
