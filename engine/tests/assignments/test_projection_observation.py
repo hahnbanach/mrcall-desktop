@@ -342,7 +342,7 @@ def test_actor_characterization_actual_positive_path(env, mail, monkeypatch):
     assert not held["complete"] and held["hold_auto_reply"]
     assert [entry[:2] for entry in observed] == [("member", "positive"), ("sent", True)]
     commands = [call[0] for entry in observed for call in entry[2]]
-    assert commands.count("EXAMINE") == 9
+    assert commands.count("EXAMINE") == 6
     assert commands.count("FETCH") == 4 and commands.count("SEARCH") == 1
     assert held["reply_evidence"][0]["judgement"] == "MEMBER_ACTIVITY_REQUIRES_HUMAN_VERIFICATION"
 
@@ -405,3 +405,244 @@ def test_actor_characterization_early_freshness_refuses_changes(env, mail, monke
     held = projection.project(ROOT)
     assert phase == ["early"]
     assert held["state"] == "unknown" and not held["complete"] and held["hold_auto_reply"]
+
+
+def _actor_costed_projection(mail, monkeypatch, scale):
+    from zylch.email import imap_client, provider_diagnostics
+    started = time.monotonic()
+    clock = SimpleNamespace(value=started)
+    clock.monotonic = lambda: clock.value
+    clock.time = time.time
+    native_select, native_uid = mail.select, mail.uid
+
+    def select(*args, **kwargs):
+        clock.value += 3 * scale
+        return native_select(*args, **kwargs)
+
+    def uid(command, *args):
+        clock.value += (2 if command == "SEARCH" else 1.8) * scale
+        return native_uid(command, *args)
+
+    with monkeypatch.context() as patch:
+        for module in (projection, evidence, evidence.mail, index, imap_client, provider_diagnostics):
+            patch.setattr(module, "time", clock)
+        patch.setattr(mail, "select", select)
+        patch.setattr(mail, "uid", uid)
+        result = projection.project(ROOT)
+    return result, clock.value - started
+
+
+def test_actor_compound_read_preserves_four_positive_candidates_under_same_deadline(env, mail, monkeypatch):
+    for number in range(3):
+        mail.add(f"<positive-{number}@example.test>", "alice@example.test",
+                 "customer@example.test", folder='"Sent"', reply=ROOT)
+    baseline, _ = _actor_costed_projection(mail, monkeypatch, 0)
+    assert baseline["state"] == "needs-assignment" and baseline["hold_auto_reply"]
+    assert len(baseline["reply_evidence"]) == 4
+    assert all(item["complete"] for item in baseline["reply_evidence"])
+    mail.calls.clear()
+    result, elapsed = _actor_costed_projection(mail, monkeypatch, 1)
+    assert result["state"] == "needs-assignment" and result["hold_auto_reply"]
+    assert result["reply_evidence"] == baseline["reply_evidence"]
+    commands = [call[0] for call in mail.calls]
+    assert commands.count("EXAMINE") == 24
+    assert commands.count("FETCH") == 16 and commands.count("SEARCH") == 4
+    assert elapsed < 120
+
+
+@pytest.mark.parametrize("fault", ["uidvalidity", "uidnext", "exists", "missing-body", "duplicate-message", "draft", "deleted", "header-id", "header-sender", "header-recipient", "header-ancestry", "header-missing", "header-duplicate", "search-error"])
+def test_actor_compound_read_retains_source_failures(env, mail, monkeypatch, fault):
+    native_uid = mail.uid
+    applied = []
+    if fault == "duplicate-message":
+        from mail_fixture import REPLY
+        mail.add(REPLY, "alice@example.test", "customer@example.test", folder='"Sent"', reply=ROOT, store=False)
+
+    def alter(command, *args):
+        if command == "SEARCH" and fault == "search-error":
+            return "NO", []
+        status, data = native_uid(command, *args)
+        if command == "FETCH" and mail.selected == '"Sent"':
+            if "HEADER.FIELDS" not in args[1]:
+                if fault == "missing-body":
+                    return "OK", []
+                if not applied:
+                    applied.append(True)
+                    if fault == "uidvalidity":
+                        mail.uidvalidity += 1
+                    elif fault == "uidnext":
+                        mail.next_uid += 1
+                    elif fault == "exists":
+                        mail.messages['"Sent"'][999] = next(iter(mail.messages['"Sent"'].values()))
+            elif "FLAGS" in args[1] and fault in {"draft", "deleted"}:
+                flag = b"\\Draft" if fault == "draft" else b"\\Deleted"
+                data = [(prefix.replace(b"FLAGS ()", b"FLAGS (" + flag + b")"), body)
+                        for prefix, body in data]
+            if "FLAGS" in args[1]:
+                substitutions = {
+                    "header-id": (b"MESSAGE-ID: <alice-reply@example.test>", b"MESSAGE-ID: <other@example.test>"),
+                    "header-sender": (b"FROM: alice@example.test", b"FROM: outsider@example.test"),
+                    "header-recipient": (b"TO: customer@example.test", b"TO: outsider@example.test"),
+                    "header-ancestry": (b"REFERENCES: " + ROOT.encode(), b"REFERENCES: <other@example.test>"),
+                }
+                if fault in substitutions:
+                    before, after = substitutions[fault]
+                    assert any(before in body for _, body in data)
+                    data = [(prefix, body.replace(before, after)) for prefix, body in data]
+                elif fault == "header-missing":
+                    data = []
+                elif fault == "header-duplicate":
+                    data += data
+        return status, data
+
+    monkeypatch.setattr(mail, "uid", alter)
+    held = projection.project(ROOT)
+    assert held["state"] == "unknown" and not held["complete"] and held["hold_auto_reply"]
+
+
+@pytest.mark.parametrize("fault", ["folder", "connection", "thread", "expired", "after-exit"])
+def test_actor_compound_selected_scope_cannot_be_reused(env, mail, monkeypatch, fault):
+    from zylch.email import imap_client
+    actor, _, current = evidence.admission()
+    box = evidence.mail.configured(actor, current)[0]
+    client = mail.client(box)
+    replacement = None
+    try:
+        deadline = time.monotonic() + 3
+        with client.provider_deadline(deadline), client.projection_connection(deadline):
+            with client._selected_folder('"Sent"', deadline=deadline) as selected:
+                original = client._conn
+                if fault == "folder":
+                    client.examine_existing('"Archive"', deadline=deadline)
+                elif fault == "connection":
+                    replacement = mail.client(box)._conn
+                    client._conn = replacement
+                calls = len(mail.calls)
+                if fault == "thread":
+                    with ThreadPoolExecutor(max_workers=1) as pool:
+                        with pytest.raises(imap_client.IMAPError):
+                            pool.submit(client._scan_folder_selected, selected, lambda _: "ALL").result()
+                elif fault == "expired":
+                    with monkeypatch.context() as patch:
+                        patch.setattr(imap_client, "time", SimpleNamespace(monotonic=lambda: deadline + 1))
+                        with pytest.raises(imap_client.IMAPError):
+                            client._scan_folder_selected(selected, lambda _: "ALL")
+                elif fault != "after-exit":
+                    with pytest.raises(imap_client.IMAPError):
+                        client._scan_folder_selected(selected, lambda _: "ALL")
+                assert len(mail.calls) == calls
+                client._conn = original
+            if fault == "after-exit":
+                with pytest.raises(imap_client.IMAPError):
+                    client._scan_folder_selected(selected, lambda _: "ALL")
+    finally:
+        client._discard_connection(client._conn)
+        client._conn = None
+        if replacement is not None:
+            client._discard_connection(replacement)
+
+
+def test_actor_compound_native_tls_read_keeps_six_fresh_selections(env, mail, monkeypatch, tmp_path):
+    import imaplib
+    import socket
+    from test_daemon_provider_diagnostics import MailProtocolPeer
+    from zylch.email.imap_client import IMAPClient
+    peer = MailProtocolPeer(tmp_path, "success", mail)
+    native = imaplib.IMAP4_SSL
+
+    class TrustedSSL(native):
+        def __init__(self, *args, **kwargs):
+            super().__init__(*args, ssl_context=peer.client_context, **kwargs)
+
+    monkeypatch.setattr(imaplib, "IMAP4_SSL", TrustedSSL)
+    native_connect = socket.socket.connect
+
+    def local_connect(sock, address):
+        assert address[0] in {"127.0.0.1", "::1"} and address[1] == peer.port
+        return native_connect(sock, address)
+
+    monkeypatch.setattr(socket.socket, "connect", local_connect)
+    monkeypatch.setattr(evidence.mailboxes, "build_imap_client", lambda box: IMAPClient(
+        box.address, "fixture-only", imap_host="127.0.0.1", imap_port=peer.port))
+    held = projection.project(ROOT)
+    assert held["state"] == "needs-assignment" and held["hold_auto_reply"]
+    assert held["reply_evidence"][0]["complete"]
+    assert peer.commands.count(b"EXAMINE") == 6
+    assert peer.commands.count(b"UID") == 5
+    assert b"LOGOUT" not in peer.commands
+    assert peer.done.wait(2)
+    peer.thread.join(1)
+    assert not peer.thread.is_alive()
+
+
+def test_actor_compound_repeated_same_uid_does_not_invent_ambiguity(env, mail, monkeypatch):
+    native_uid = mail.uid
+
+    def duplicate_listing(command, *args):
+        status, data = native_uid(command, *args)
+        if command == "SEARCH" and data and data[0]:
+            data = [data[0] + b" " + data[0]]
+        return status, data
+
+    monkeypatch.setattr(mail, "uid", duplicate_listing)
+    held = projection.project(ROOT)
+    assert held["state"] == "needs-assignment" and held["hold_auto_reply"]
+    assert len(held["reply_evidence"]) == 1 and held["reply_evidence"][0]["complete"]
+
+
+def test_actor_compound_header_reader_expires_at_scope_exit(env, mail):
+    from zylch.email.imap_client import IMAPError
+    actor, _, current = evidence.admission()
+    client = mail.client(evidence.mail.configured(actor, current)[0])
+    try:
+        with client._folder_header_read('"Sent"', deadline=time.monotonic() + 3,
+                                       uids=[max(mail.messages['"Sent"'])]) as (_, read_selected):
+            pass
+        calls = len(mail.calls)
+        with pytest.raises(IMAPError):
+            read_selected()
+        assert len(mail.calls) == calls
+    finally:
+        client._discard_connection(client._conn)
+        client._conn = None
+
+
+@pytest.mark.parametrize("operation", ["fetch_emails", "find_message_folder", "sent_fallback"])
+def test_actor_compound_every_public_selection_invalidates_scope(operation):
+    from zylch.email.imap_client import IMAPClient, IMAPError
+
+    class Connection:
+        folder = None
+
+        def noop(self):
+            return "OK", []
+
+        def select(self, folder, readonly=False):
+            assert readonly
+            self.folder = folder
+            return "OK", [b"1"]
+
+        def response(self, code):
+            return code, [b"7" if code == "UIDVALIDITY" else b"2"]
+
+        def search(self, *args):
+            return "OK", [b""]
+
+        def uid(self, *args):
+            return "OK", [b""]
+
+        def list(self):
+            return "OK", []
+
+    client = IMAPClient("owner@example.test", "fixture-only")
+    client._conn = Connection()
+    with client._selected_folder('"Sent"') as selected:
+        if operation == "fetch_emails":
+            assert client.fetch_emails('"Archive"') == []
+        elif operation == "find_message_folder":
+            assert client.find_message_folder("<fixture@example.test>", ['"Archive"']) is None
+        else:
+            assert client._find_sent_folder_uncached() == '"[Gmail]/Sent Mail"'
+        assert client._conn.folder != selected["state"].name
+        with pytest.raises(IMAPError, match="Selected read scope changed"):
+            client._check_selected_read(selected)

@@ -24,7 +24,7 @@ from email.header import decode_header
 from email.message import EmailMessage
 from email.mime.text import MIMEText
 from email.utils import formatdate, make_msgid, parseaddr
-from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple
+from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple, Iterator
 from datetime import datetime
 
 from . import provider_diagnostics
@@ -692,6 +692,7 @@ class IMAPClient:
         self._provider_diagnostic = provider_diagnostics.current()
         self._provider_deadline = None
         self._projection_connection = None
+        self._selected_read = None
         self._deadline_connection = None
         self._conn: Optional[imaplib.IMAP4_SSL] = None
         self._sent_folder: Optional[str] = None
@@ -812,11 +813,59 @@ class IMAPClient:
                     sock.settimeout(IMAP_COMMAND_TIMEOUT_SECONDS)
             self._imap_lock.release()
 
+    def _select_folder(self, conn: Any, folder: str, *, readonly: bool = False) -> tuple:
+        self._selected_read = None
+        return conn.select(folder, readonly=readonly)
+
+    @contextmanager
+    def _selected_folder(self, folder: str, *, deadline: Optional[float] = None, connect_after: bool = False) -> Iterator[dict]:
+        with self._imap_lock:
+            state = (self.examine_existing(folder, deadline=deadline) if deadline is not None
+                     else self.examine_folder(folder))
+            conn = self._ensure_connected() if connect_after else self._conn
+            selected = {"connection": conn, "state": state, "thread": threading.get_ident(),
+                        "deadline": self._provider_deadline}
+            self._selected_read = selected
+            try:
+                self._check_selected_read(selected)
+                yield selected
+            finally:
+                if self._selected_read is selected:
+                    self._selected_read = None
+
+    def _check_selected_read(self, selected: dict) -> imaplib.IMAP4_SSL:
+        if (self._selected_read is not selected or selected["thread"] != threading.get_ident()
+                or selected["connection"] is not self._conn or self._conn is None
+                or selected["deadline"] != self._provider_deadline):
+            raise IMAPError("Selected read scope changed")
+        scope = self._projection_connection
+        if scope is not None and (scope["thread"] != threading.get_ident()
+                or scope["deadline"] != self._provider_deadline
+                or scope["connection"] is not self._conn):
+            raise IMAPError("Projection connection scope changed")
+        if self._provider_deadline is not None:
+            self._deadline_check()
+        return self._conn
+
+    def _scan_fetch_folder(self, folder: str, criteria_builder: Callable, validate_scan: Callable, validate_messages: Callable, *, deadline: float) -> tuple:
+        with self._imap_lock:
+            if self._provider_deadline is None or self._provider_deadline > deadline:
+                raise IMAPError("Provider read scope unavailable")
+            with self._selected_folder(folder, deadline=deadline) as selected:
+                scan = self._scan_folder_selected(selected, criteria_builder)
+                validate_scan(scan)
+                self._check_selected_read(selected)
+                messages, failed = self._fetch_messages_by_uid_selected(selected, scan.uids)
+                validate_messages(scan, messages, failed)
+                self._check_selected_read(selected)
+                after = self.examine_folder(folder)
+                return scan, messages, failed, after
+
     def examine_existing(self, folder, *, deadline):
         with self.provider_deadline(deadline):
             conn = self._ensure_connected()
             self._deadline_check()
-            status, data = conn.select(folder, readonly=True)
+            status, data = self._select_folder(conn, folder, readonly=True)
             if status != "OK" or not isinstance(data, list) or len(data) != 1:
                 raise IMAPFolderError("Incomplete folder state")
             try:
@@ -834,10 +883,21 @@ class IMAPClient:
     def folder_headers(
         self, folder, *, deadline, max_messages=50000, max_bytes=32 * 1024 * 1024, uids=None, criteria=None, byte_budget=None, proof=False
     ):
+        if max_messages is None:
+            raise IMAPError("Invalid inventory limits")
+        with self._folder_header_read(folder, deadline=deadline, max_messages=max_messages,
+                max_bytes=max_bytes, uids=uids, criteria=criteria, byte_budget=byte_budget,
+                proof=proof) as (_, read_selected):
+            return read_selected()
+
+    @contextmanager
+    def _folder_header_read(
+        self, folder, *, deadline, max_messages=50000, max_bytes=32 * 1024 * 1024, uids=None, criteria=None, byte_budget=None, proof=False
+    ):
         with self.provider_deadline(deadline):
             if type(proof) is not bool:
                 raise IMAPError("Invalid header proof mode")
-            if max_messages <= 0 or max_bytes <= 0:
+            if (max_messages is not None and max_messages <= 0) or max_bytes <= 0:
                 raise IMAPError("Invalid inventory limits")
             if byte_budget is not None:
                 if (not isinstance(byte_budget, list) or len(byte_budget) != 1
@@ -870,138 +930,150 @@ class IMAPClient:
 
                 setattr(conn, method_name, bounded_read)
             try:
-                before = self.examine_existing(folder, deadline=deadline)
-                if criteria is None and before.exists > max_messages:
-                    raise IMAPError("Header inventory exceeds message limit")
-                if uids is None:
-                    self._deadline_check()
-                    status, data = conn.uid("SEARCH", None, "ALL" if criteria is None else criteria)
-                    if (
-                        status != "OK"
-                        or not isinstance(data, list)
-                        or len(data) != 1
-                        or not isinstance(data[0], bytes)
-                    ):
-                        raise IMAPError("Incomplete header inventory search")
-                    tokens = data[0].split()
-                    if len(data[0]) > max_bytes or len(tokens) > max_messages:
-                        raise IMAPError("Header inventory search exceeds limits")
-                    if any(not token.isdigit() or int(token) <= 0 for token in tokens):
-                        raise IMAPError("Malformed header inventory UID")
-                    wanted = [int(token) for token in tokens]
-                    if (
-                        len(set(wanted)) != len(wanted)
-                        or (criteria is None and len(wanted) != before.exists)
-                        or len(wanted) > before.exists
-                        or any(uid >= before.uidnext for uid in wanted)
-                    ):
-                        raise IMAPError("Header inventory UID set is incomplete")
-                    search_bytes = len(data[0])
-                else:
-                    wanted = list(uids)
-                    if (
-                        len(wanted) > 200
-                        or any(
-                            type(uid) is not int or uid <= 0 or uid >= before.uidnext
-                            for uid in wanted
-                        )
-                        or len(set(wanted)) != len(wanted)
-                    ):
-                        raise IMAPError("Invalid candidate UID set")
-                    search_bytes = 0
-                result = {}
-                payload_bytes = search_bytes
-                fields = "MESSAGE-ID FROM TO CC REFERENCES IN-REPLY-TO AUTO-SUBMITTED X-AUTOREPLY PRECEDENCE X-AUTO-RESPONSE-SUPPRESS"
-                if proof:
-                    from zylch.email.pec import MARKER_HEADERS, detect_envelope
+                with self._selected_folder(folder, deadline=deadline) as selected:
+                    before = selected["state"]
+                    if selected["connection"] is not conn:
+                        raise IMAPError("Header inventory connection changed")
+                    if max_messages is None:
+                        if uids is None:
+                            raise IMAPError("Candidate header scope unavailable")
+                        max_messages = max(1, before.exists)
 
-                    fields += " DATE " + " ".join(MARKER_HEADERS)
-                for start in range(0, len(wanted), 200):
-                    batch = set(wanted[start : start + 200])
-                    self._deadline_check()
-                    status, data = conn.uid(
-                        "FETCH",
-                        ",".join(map(str, sorted(batch))),
-                        f"(UID FLAGS BODY.PEEK[HEADER.FIELDS ({fields})])",
-                    )
-                    if status != "OK" or not isinstance(data, list):
-                        raise IMAPError("Incomplete header inventory fetch")
-                    seen = set()
-                    flag_data = {}
-                    last_uid = None
-                    for entry in data:
-                        if isinstance(entry, bytes):
-                            uid = _parse_uid_from_prefix(entry)
-                            match = re.search(rb"\bFLAGS\s+\(([^)]*)\)", entry, re.I)
-                            uid = uid if uid is not None else last_uid
-                            if uid in batch and match is not None:
-                                flag_data[uid] = tuple(match.group(1).decode("ascii").split())
-                            elif entry.strip() != b")":
-                                raise IMAPError("Malformed header inventory fetch")
-                            continue
-                        if (
-                            not isinstance(entry, tuple)
-                            or len(entry) != 2
-                            or not all(isinstance(part, bytes) for part in entry)
-                        ):
-                            raise IMAPError("Malformed header inventory fetch")
-                        prefix, payload = entry
-                        uid = _parse_uid_from_prefix(prefix)
-                        last_uid = uid
-                        if (
-                            uid not in batch
-                            or uid in seen
-                            or b"BODY[HEADER.FIELDS" not in prefix.upper()
-                        ):
-                            raise IMAPError("Unexpected header inventory UID or body")
-                        payload_bytes += len(prefix) + len(payload)
-                        if payload_bytes > max_bytes:
-                            raise IMAPError("Header inventory response exceeds byte limit")
-                        parsed = email_lib.message_from_bytes(payload)
-                        allowed = {field.lower() for field in fields.split()}
-                        if (
-                            parsed.get_payload()
-                            or any(name.lower() not in allowed for name in parsed.keys())
-                            or any(len(parsed.get_all(name, [])) > 1 for name in allowed)
-                        ):
-                            raise IMAPError("Unexpected or duplicate inventory header")
-                        value = lambda name: " ".join(str(parsed.get(name, "")).split())
-                        if not value("Message-ID"):
-                            raise IMAPError("Missing inventory message identity")
-                        row = {
-                            "message_id": value("Message-ID"),
-                            "from_email": value("From"),
-                            "to": value("To"),
-                            "cc": value("Cc"),
-                            "references": value("References"),
-                            "in_reply_to": value("In-Reply-To"),
-                        }
-                        for field in (
-                            "Auto-Submitted",
-                            "X-Autoreply",
-                            "Precedence",
-                            "X-Auto-Response-Suppress",
-                        ):
-                            row[field.lower().replace("-", "_")] = value(field)
+                    def read_selected():
+                        self._check_selected_read(selected)
+                        if criteria is None and before.exists > max_messages:
+                            raise IMAPError("Header inventory exceeds message limit")
+                        if uids is None:
+                            self._check_selected_read(selected)
+                            status, data = conn.uid("SEARCH", None, "ALL" if criteria is None else criteria)
+                            if (
+                                status != "OK"
+                                or not isinstance(data, list)
+                                or len(data) != 1
+                                or not isinstance(data[0], bytes)
+                            ):
+                                raise IMAPError("Incomplete header inventory search")
+                            tokens = data[0].split()
+                            if len(data[0]) > max_bytes or len(tokens) > max_messages:
+                                raise IMAPError("Header inventory search exceeds limits")
+                            if any(not token.isdigit() or int(token) <= 0 for token in tokens):
+                                raise IMAPError("Malformed header inventory UID")
+                            wanted = [int(token) for token in tokens]
+                            if (
+                                len(set(wanted)) != len(wanted)
+                                or (criteria is None and len(wanted) != before.exists)
+                                or len(wanted) > before.exists
+                                or any(uid >= before.uidnext for uid in wanted)
+                            ):
+                                raise IMAPError("Header inventory UID set is incomplete")
+                            search_bytes = len(data[0])
+                        else:
+                            wanted = list(uids)
+                            if (
+                                len(wanted) > 200
+                                or any(
+                                    type(uid) is not int or uid <= 0 or uid >= before.uidnext
+                                    for uid in wanted
+                                )
+                                or len(set(wanted)) != len(wanted)
+                            ):
+                                raise IMAPError("Invalid candidate UID set")
+                            search_bytes = 0
+                        result = {}
+                        payload_bytes = search_bytes
+                        fields = "MESSAGE-ID FROM TO CC REFERENCES IN-REPLY-TO AUTO-SUBMITTED X-AUTOREPLY PRECEDENCE X-AUTO-RESPONSE-SUPPRESS"
                         if proof:
-                            marker = detect_envelope(parsed)
-                            row["date"] = value("Date")
-                            row["pec_markers"] = marker.to_markers() if marker else None
-                        match = re.search(rb"\bFLAGS\s+\(([^)]*)\)", prefix, re.I)
-                        if match is not None:
-                            flag_data[uid] = tuple(match.group(1).decode("ascii").split())
-                        result[uid] = row
-                        seen.add(uid)
-                    if seen != batch or set(flag_data) != batch:
-                        raise IMAPError("Header inventory fetch is incomplete")
-                    for uid in batch:
-                        result[uid]["flags"] = flag_data[uid]
-                after = self.examine_existing(folder, deadline=deadline)
-                if after != before:
-                    raise IMAPError("Folder changed during header inventory")
-                if byte_budget is not None:
-                    byte_budget[0] -= max(wire_bytes, payload_bytes)
-                return result, after
+                            from zylch.email.pec import MARKER_HEADERS, detect_envelope
+
+                            fields += " DATE " + " ".join(MARKER_HEADERS)
+                        for start in range(0, len(wanted), 200):
+                            batch = set(wanted[start : start + 200])
+                            self._check_selected_read(selected)
+                            status, data = conn.uid(
+                                "FETCH",
+                                ",".join(map(str, sorted(batch))),
+                                f"(UID FLAGS BODY.PEEK[HEADER.FIELDS ({fields})])",
+                            )
+                            if status != "OK" or not isinstance(data, list):
+                                raise IMAPError("Incomplete header inventory fetch")
+                            seen = set()
+                            flag_data = {}
+                            last_uid = None
+                            for entry in data:
+                                if isinstance(entry, bytes):
+                                    uid = _parse_uid_from_prefix(entry)
+                                    match = re.search(rb"\bFLAGS\s+\(([^)]*)\)", entry, re.I)
+                                    uid = uid if uid is not None else last_uid
+                                    if uid in batch and match is not None:
+                                        flag_data[uid] = tuple(match.group(1).decode("ascii").split())
+                                    elif entry.strip() != b")":
+                                        raise IMAPError("Malformed header inventory fetch")
+                                    continue
+                                if (
+                                    not isinstance(entry, tuple)
+                                    or len(entry) != 2
+                                    or not all(isinstance(part, bytes) for part in entry)
+                                ):
+                                    raise IMAPError("Malformed header inventory fetch")
+                                prefix, payload = entry
+                                uid = _parse_uid_from_prefix(prefix)
+                                last_uid = uid
+                                if (
+                                    uid not in batch
+                                    or uid in seen
+                                    or b"BODY[HEADER.FIELDS" not in prefix.upper()
+                                ):
+                                    raise IMAPError("Unexpected header inventory UID or body")
+                                payload_bytes += len(prefix) + len(payload)
+                                if payload_bytes > max_bytes:
+                                    raise IMAPError("Header inventory response exceeds byte limit")
+                                parsed = email_lib.message_from_bytes(payload)
+                                allowed = {field.lower() for field in fields.split()}
+                                if (
+                                    parsed.get_payload()
+                                    or any(name.lower() not in allowed for name in parsed.keys())
+                                    or any(len(parsed.get_all(name, [])) > 1 for name in allowed)
+                                ):
+                                    raise IMAPError("Unexpected or duplicate inventory header")
+                                value = lambda name: " ".join(str(parsed.get(name, "")).split())
+                                if not value("Message-ID"):
+                                    raise IMAPError("Missing inventory message identity")
+                                row = {
+                                    "message_id": value("Message-ID"),
+                                    "from_email": value("From"),
+                                    "to": value("To"),
+                                    "cc": value("Cc"),
+                                    "references": value("References"),
+                                    "in_reply_to": value("In-Reply-To"),
+                                }
+                                for field in (
+                                    "Auto-Submitted",
+                                    "X-Autoreply",
+                                    "Precedence",
+                                    "X-Auto-Response-Suppress",
+                                ):
+                                    row[field.lower().replace("-", "_")] = value(field)
+                                if proof:
+                                    marker = detect_envelope(parsed)
+                                    row["date"] = value("Date")
+                                    row["pec_markers"] = marker.to_markers() if marker else None
+                                match = re.search(rb"\bFLAGS\s+\(([^)]*)\)", prefix, re.I)
+                                if match is not None:
+                                    flag_data[uid] = tuple(match.group(1).decode("ascii").split())
+                                result[uid] = row
+                                seen.add(uid)
+                            if seen != batch or set(flag_data) != batch:
+                                raise IMAPError("Header inventory fetch is incomplete")
+                            for uid in batch:
+                                result[uid]["flags"] = flag_data[uid]
+                        self._check_selected_read(selected)
+                        after = self.examine_existing(folder, deadline=deadline)
+                        if after != before:
+                            raise IMAPError("Folder changed during header inventory")
+                        if byte_budget is not None:
+                            byte_budget[0] -= max(wire_bytes, payload_bytes)
+                        return result, after
+                    yield before, read_selected
             finally:
                 for method_name, original in originals.items():
                     setattr(conn, method_name, original)
@@ -1197,7 +1269,7 @@ class IMAPClient:
 
         logger.debug(f"[IMAP] fetch_emails(folder={folder}, " f"since={since}, limit={limit})")
 
-        status, _ = conn.select(folder, readonly=True)
+        status, _ = self._select_folder(conn, folder, readonly=True)
         if status != "OK":
             logger.error(f"[IMAP] Cannot select folder {folder}")
             return []
@@ -1312,7 +1384,7 @@ class IMAPClient:
             "INBOX.Sent",
         ):
             try:
-                status, _ = conn.select(name, readonly=True)
+                status, _ = self._select_folder(conn, name, readonly=True)
                 if status == "OK":
                     logger.debug(
                         f"[IMAP] Sent folder fallback:" f" {name}",
@@ -1372,7 +1444,7 @@ class IMAPClient:
             "INBOX.Archive",
         ):
             try:
-                status, _ = conn.select(name, readonly=True)
+                status, _ = self._select_folder(conn, name, readonly=True)
                 if status == "OK":
                     logger.debug(f"[IMAP] Archive folder fallback: {name}")
                     return name
@@ -1413,7 +1485,7 @@ class IMAPClient:
         conn = self._ensure_connected()
 
         # Open source folder read/write — MOVE/COPY require it.
-        status, _ = conn.select(source_folder, readonly=False)
+        status, _ = self._select_folder(conn, source_folder, readonly=False)
         if status != "OK":
             logger.warning(f"[IMAP] move: cannot select {source_folder}")
             return False
@@ -1482,7 +1554,7 @@ class IMAPClient:
         conn = self._ensure_connected()
         for folder in folders:
             try:
-                status, _ = conn.select(folder, readonly=True)
+                status, _ = self._select_folder(conn, folder, readonly=True)
             except Exception as e:
                 logger.debug(f"[IMAP] find_message_folder: select {folder} raised: {e}")
                 continue
@@ -1557,7 +1629,7 @@ class IMAPClient:
         conn = self._ensure_connected()
 
         try:
-            status, data = conn.select(folder, readonly=True)
+            status, data = self._select_folder(conn, folder, readonly=True)
         except Exception as e:
             raise IMAPFolderError(f"EXAMINE {folder} raised: {e}") from e
 
@@ -1787,10 +1859,19 @@ class IMAPClient:
         Raises:
             IMAPFolderError, IMAPSearchError: never swallowed here.
         """
-        state = self.examine_folder(folder)
+        with self._selected_folder(folder) as selected:
+            return self._scan_folder_selected(selected, criteria_builder)
+
+    def _scan_folder_selected(self, selected: dict, criteria_builder: Callable[[FolderState], str]) -> FolderScan:
+        conn = self._check_selected_read(selected)
+        state = selected["state"]
+        folder = state.name
         criteria = criteria_builder(state)
+        self._check_selected_read(selected)
         uids = self._uid_search_selected(folder, criteria)
+        self._check_selected_read(selected)
         message_ids, failed = self._fetch_message_ids_selected(folder, uids)
+        self._check_selected_read(selected)
         logger.info(
             f"[IMAP] scan_folder({folder}) criteria={criteria!r} -> {len(uids)} uid(s), "
             f"{len(message_ids)} resolved, {len(failed)} unresolved "
@@ -1827,13 +1908,18 @@ class IMAPClient:
         if not wanted:
             return {}, []
 
-        self.examine_folder(folder)
-        conn = self._ensure_connected()
+        with self._selected_folder(folder, connect_after=True) as selected:
+            return self._fetch_messages_by_uid_selected(selected, wanted)
 
+    def _fetch_messages_by_uid_selected(self, selected: dict, uids: Sequence[int]) -> Tuple[Dict[int, Dict[str, Any]], List[int]]:
+        conn = self._check_selected_read(selected)
+        folder = selected["state"].name
+        wanted = sorted(set(int(uid) for uid in uids))
         messages: Dict[int, Dict[str, Any]] = {}
         failed: List[int] = []
 
         for uid in wanted:
+            self._check_selected_read(selected)
             try:
                 status, data = conn.uid("FETCH", str(uid), "(UID BODY.PEEK[])")
             except Exception as e:
@@ -1890,7 +1976,7 @@ class IMAPClient:
 
         for folder in folders:
             try:
-                conn.select(folder, readonly=True)
+                self._select_folder(conn, folder, readonly=True)
             except Exception:
                 continue
 
@@ -1963,7 +2049,7 @@ class IMAPClient:
         msg = None
         for folder in candidates():
             try:
-                status, _ = conn.select(folder, readonly=True)
+                status, _ = self._select_folder(conn, folder, readonly=True)
                 if status != "OK":
                     lookup_failed = True
                     continue
@@ -2052,7 +2138,7 @@ class IMAPClient:
 
         logger.debug(f"[IMAP] search(query={query}, " f"folder={folder}, limit={limit})")
 
-        conn.select(folder, readonly=True)
+        self._select_folder(conn, folder, readonly=True)
 
         # Build IMAP search criteria from query
         imap_criteria = self._gmail_query_to_imap(query)

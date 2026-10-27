@@ -375,8 +375,7 @@ def _member_activity(source_id, root, *, deadline, local_hint=False):
             sent = client._find_sent_folder()
             if not sent:
                 raise AssignmentError("Actual Sent folder unavailable")
-            initial = client.examine_existing(sent, deadline=deadline)
-            found, provider = mail.fetch(client, sent, mid, exact=True)
+            found, provider, initial = mail._member_fetch(client, sent, mid, deadline=deadline)
             if not found and local_hint:
                 if client.examine_existing(sent, deadline=deadline) != initial:
                     raise AssignmentError("Absent member hint provider changed")

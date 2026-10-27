@@ -75,16 +75,16 @@ def _early_source_sent(actor, current, observed, root, deadline):
     if box is None:
         raise AssignmentError("Early reply mailbox unavailable")
     with evidence.provider_client(actor, box, root, deadline) as client:
-        state = client.examine_existing(provider["folder"], deadline=deadline)
-        if state.uidvalidity != provider["uidvalidity"]:
-            raise AssignmentError("Early reply source identity changed")
-        headers, state = client.folder_headers(provider["folder"], deadline=deadline, uids=[provider["uid"]],
-                                               max_messages=max(state.exists, mail.MAX_MESSAGES))
-        header = headers.get(provider["uid"])
-        if (header is None or header["message_id"] != source["message_id"]
-                or state.uidvalidity != provider["uidvalidity"]):
-            raise AssignmentError("Early reply source identity changed")
-        return not {"\\Draft", "\\Deleted"}.intersection(header["flags"])
+        with client._folder_header_read(provider["folder"], deadline=deadline,
+                uids=[provider["uid"]], max_messages=None) as (state, read_selected):
+            if state.uidvalidity != provider["uidvalidity"]:
+                raise AssignmentError("Early reply source identity changed")
+            headers, state = read_selected()
+            header = headers.get(provider["uid"])
+            if (header is None or header["message_id"] != source["message_id"]
+                    or state.uidvalidity != provider["uidvalidity"]):
+                raise AssignmentError("Early reply source identity changed")
+            return not {"\\Draft", "\\Deleted"}.intersection(header["flags"])
 
 
 class _EarlyReplies(list):

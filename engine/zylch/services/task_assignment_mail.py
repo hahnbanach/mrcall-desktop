@@ -4,6 +4,7 @@ import logging
 import re
 import time
 from email.utils import getaddresses
+from typing import Any
 
 from sqlalchemy import or_, select
 
@@ -236,8 +237,7 @@ def row_digest(values: list[dict]) -> str:
     return digest(sorted((row_identity(row) for row in values), key=lambda row: row["id"]))
 
 
-def fetch(client, folder: str, root: str, *, exact: bool = False) -> tuple[list[dict], dict]:
-    scan = client.scan_folder(folder, lambda state: criteria(root, exact=exact))
+def _validate_scan(scan: Any) -> None:
     if (
         scan.unresolved_uids
         or len(scan.uids) > MAX_MESSAGES
@@ -246,10 +246,15 @@ def fetch(client, folder: str, root: str, *, exact: bool = False) -> tuple[list[
         raise AssignmentError("Mail provider scope is incomplete")
     if any(not scan.message_ids[uid] for uid in scan.uids):
         raise AssignmentError("Mail provider identity unavailable")
-    messages, failed = client.fetch_messages_by_uid(folder, scan.uids)
+
+
+def _validate_messages(scan: Any, messages: dict, failed: list) -> None:
     if failed or set(messages) != set(scan.uids):
         raise AssignmentError("Mail provider scope is incomplete")
-    state = client.examine_folder(folder)
+
+
+def _fetched_result(scan: Any, messages: dict, failed: list, state: Any, folder: str, root: str, exact: bool) -> tuple[list[dict], dict]:
+    _validate_messages(scan, messages, failed)
     if state.uidvalidity != scan.state.uidvalidity or state.uidnext != scan.state.uidnext:
         raise AssignmentError("Mail provider identity changed")
     result = []
@@ -263,6 +268,23 @@ def fetch(client, folder: str, root: str, *, exact: bool = False) -> tuple[list[
             continue
         result.append({**message, "provider_uid": uid})
     return result, {"folder": folder, "uidvalidity": state.uidvalidity}
+
+
+def fetch(client, folder: str, root: str, *, exact: bool = False) -> tuple[list[dict], dict]:
+    scan = client.scan_folder(folder, lambda state: criteria(root, exact=exact))
+    _validate_scan(scan)
+    messages, failed = client.fetch_messages_by_uid(folder, scan.uids)
+    _validate_messages(scan, messages, failed)
+    state = client.examine_folder(folder)
+    return _fetched_result(scan, messages, failed, state, folder, root, exact)
+
+
+def _member_fetch(client: Any, folder: str, root: str, *, deadline: float) -> tuple[list[dict], dict, Any]:
+    scan, messages, failed, state = client._scan_fetch_folder(
+        folder, lambda state: criteria(root, exact=True), _validate_scan, _validate_messages,
+        deadline=deadline)
+    result, provider = _fetched_result(scan, messages, failed, state, folder, root, True)
+    return result, provider, scan.state
 
 
 def configured(actor, current: dict) -> list:
