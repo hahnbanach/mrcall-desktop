@@ -155,18 +155,37 @@ def block(email: str | None = None) -> str:
     return assemble(texts)
 
 
+def _authority(conn: Any, space_id: str) -> str:
+    """Read the existing management marker without creating or changing it."""
+    from sqlalchemy import column, inspect, select, table
+
+    name = "operator_instruction_management"
+    if not inspect(conn).has_table(name):
+        return "legacy"
+    management = table(name, column("space_id"), column("mode"))
+    modes = conn.execute(
+        select(management.c.mode).where(management.c.space_id == space_id)
+    ).scalars().all()
+    if not modes:
+        return "legacy"
+    if len(modes) != 1 or modes[0] not in ("legacy", "managed"):
+        raise InstructionsError(-32043, "Instruction authority is unavailable")
+    return modes[0]
+
+
 def preview(email: str | None = None) -> dict[str, Any]:
     """What the calling profile is injected: each source document and the assembled block."""
     docs = documents(email)
     space = None
     for d in docs:
         space = d.get("space_id", space)
-    if space is None:
-        with project_store.connection() as (_conn, space_id):
-            space = space_id
+    with project_store.connection(space) as (conn, space_id):
+        space = space_id
+        authority = _authority(conn, space)
     texts = [base64.b64decode(d["content_base64"]).decode("utf-8", errors="replace") for d in docs]
     return {
         "space_id": space,
+        "authority": authority,
         "documents": [
             {
                 "path": d["path"],

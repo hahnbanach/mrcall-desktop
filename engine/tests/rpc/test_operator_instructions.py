@@ -95,6 +95,7 @@ def test_block_and_preview_are_exact(space, monkeypatch):
     assert oi.block() == oi.FRAMING + "Identity." + oi.SEPARATOR + "Procedures."
     view = oi.preview()
     assert view["space_id"] == space
+    assert view["authority"] == "legacy"
     assert [d["path"] for d in view["documents"]] == [
         "mail/support@example.test.md",
         "procedures.md",
@@ -107,6 +108,56 @@ def test_block_and_preview_are_exact(space, monkeypatch):
     # Another mailbox of the same company: procedures only, never this identity.
     monkeypatch.setenv("EMAIL_ADDRESS", "staff@example.test")
     assert oi.block() == oi.FRAMING + "Procedures."
+
+
+@pytest.mark.parametrize("marker_space,mode,expected", [
+    (None, None, "legacy"),
+    ("foreign", "managed", "legacy"),
+    ("current", "legacy", "legacy"),
+    ("current", "managed", "managed"),
+    ("current", "unexpected", None),
+])
+def test_preview_reads_existing_authority_without_changing_documents(
+    space, marker_space, mode, expected
+):
+    from sqlalchemy import inspect, text
+
+    oi.store(space, "procedures.md", b64("Preserved procedures."), 0, "a")
+    oi.store(space, "mail/support@example.test.md", b64("Preserved identity."), 0, "a")
+    before = oi.preview()
+    with project_store.connection() as (conn, _):
+        assert not inspect(conn).has_table("operator_instruction_management")
+        if marker_space is not None:
+            conn.execute(text("CREATE TABLE operator_instruction_management "
+                              "(space_id TEXT PRIMARY KEY, mode TEXT NOT NULL)"))
+            conn.execute(text("INSERT INTO operator_instruction_management VALUES (:space, :mode)"),
+                         {"space": space if marker_space == "current" else "other-space", "mode": mode})
+    if expected is None:
+        with pytest.raises(oi.InstructionsError):
+            oi.preview()
+    else:
+        after = oi.preview()
+        assert after == {**before, "authority": expected}
+    with project_store.connection() as (conn, _):
+        assert inspect(conn).has_table("operator_instruction_management") == (marker_space is not None)
+        if marker_space is not None:
+            assert conn.execute(text("SELECT mode FROM operator_instruction_management")).scalars().all() == [mode]
+    assert oi.documents() == [project_store.read(oi.PROJECT, d["path"]) for d in before["documents"]]
+
+
+def test_preview_refuses_unavailable_or_malformed_authority(space, monkeypatch):
+    from sqlalchemy import text
+    from sqlalchemy.exc import OperationalError
+    from zylch.storage import database
+
+    with project_store.connection() as (conn, _):
+        conn.execute(text("CREATE TABLE operator_instruction_management (space_id TEXT)"))
+    with pytest.raises(OperationalError):
+        oi.preview()
+    monkeypatch.setattr(database, "current_memory_engine", lambda: None)
+    with pytest.raises(project_store.ProjectError) as error:
+        oi.preview()
+    assert error.value.code == -32043
 
 
 def test_personal_section_uses_only_stored_documents(space, monkeypatch):
