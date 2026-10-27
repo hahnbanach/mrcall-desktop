@@ -1,9 +1,17 @@
 """Complete bounded Sent components, cached only for their exact scoped identity."""
 
+import ctypes
+import os
+import sqlite3
+import stat
+import struct
+import sys
 import threading
 import time
+from collections import Counter
+from pathlib import Path
 from dataclasses import dataclass, field
-from contextlib import ExitStack
+from contextlib import ExitStack, contextmanager
 
 from zylch.email import mailboxes
 from . import task_assignment_mail as mail
@@ -137,6 +145,157 @@ def _component_headers(client, folder, scoped, root, state, deadline):
     return headers
 
 
+
+
+def _archive_namespace_unchanged(notification, watched, until):
+    consumed = 0
+    try:
+        while consumed < 65536 and time.monotonic() < until:
+            try:
+                raw = os.read(notification, min(4096, 65536 - consumed))
+            except BlockingIOError:
+                return time.monotonic() < until
+            if not raw:
+                return False
+            consumed += len(raw)
+            offset = 0
+            while offset < len(raw):
+                if len(raw) - offset < 16:
+                    return False
+                watch, mask, _, length = struct.unpack_from("=iIII", raw, offset)
+                end = offset + 16 + length
+                if end > len(raw) or mask & 0xEC00 or watch not in watched:
+                    return False
+                name = raw[offset + 16:end].split(b"\0", 1)[0]
+                if mask & 0x3C0 and name in watched[watch]:
+                    return False
+                offset = end
+        return False
+    except OSError:
+        return False
+
+
+@contextmanager
+def _archive_binding(database, until):
+    notification = None
+    descriptors = []
+    try:
+        path = Path(database)
+        if (not sys.platform.startswith("linux") or not path.is_absolute()
+                or path.parts[0] != "/" or len(path.parts) < 2 or ".." in path.parts):
+            raise OSError("Unsupported archive binding")
+        library = ctypes.CDLL(None, use_errno=True)
+        initialize = library.inotify_init1
+        initialize.argtypes, initialize.restype = [ctypes.c_int], ctypes.c_int
+        add = library.inotify_add_watch
+        add.argtypes = [ctypes.c_int, ctypes.c_char_p, ctypes.c_uint32]
+        add.restype = ctypes.c_int
+        notification = initialize(os.O_NONBLOCK | os.O_CLOEXEC)
+        if notification < 0:
+            notification = None
+            raise OSError("Archive namespace observation unavailable")
+        flags = os.O_RDONLY | os.O_CLOEXEC | os.O_NOFOLLOW
+        current = os.open("/", flags | os.O_DIRECTORY)
+        descriptors.append(current)
+        watched = {}
+        for position, name in enumerate(path.parts[1:], start=1):
+            if time.monotonic() >= until:
+                raise OSError("Archive observation deadline exceeded")
+            watch = add(notification, os.fsencode(f"/proc/self/fd/{current}"), 0x01002FC0)
+            if watch < 0:
+                raise OSError("Archive namespace observation unavailable")
+            watched.setdefault(watch, set()).add(os.fsencode(name))
+            current = os.open(name, flags | (os.O_DIRECTORY if position < len(path.parts) - 1 else os.O_NONBLOCK),
+                              dir_fd=current)
+            descriptors.append(current)
+        if not stat.S_ISREG(os.fstat(current).st_mode):
+            raise OSError("Archive binding is not a regular file")
+        if not _archive_namespace_unchanged(notification, watched, until):
+            raise OSError("Archive namespace changed during acquisition")
+        yield f"file:/proc/self/fd/{current}?mode=ro", notification, watched
+    finally:
+        for descriptor in reversed(descriptors):
+            try:
+                os.close(descriptor)
+            except OSError:
+                pass
+        if notification is not None:
+            try:
+                os.close(notification)
+            except OSError:
+                pass
+
+
+def _archive_matches(actor, box, mid, deadline):
+    from zylch.storage import database as db
+
+    engine = db._engine
+    until = min(deadline, time.monotonic() + 0.05)
+    try:
+        if engine is None or engine.url.get_backend_name() != "sqlite":
+            return None
+        database = engine.url.database
+        if not database or database == ":memory:":
+            return None
+        with ExitStack() as resources:
+            address, notification, watched = resources.enter_context(_archive_binding(database, until))
+            remaining = until - time.monotonic()
+            if remaining <= 0 or db._engine is not engine:
+                return None
+            connection = sqlite3.connect(address, uri=True, timeout=min(0.05, remaining))
+            resources.callback(connection.close)
+            connection.execute("PRAGMA query_only=ON")
+            connection.set_progress_handler(
+                lambda: int(time.monotonic() >= until or db._engine is not engine), 100
+            )
+            if (db._engine is not engine
+                    or not _archive_namespace_unchanged(notification, watched, until)):
+                return None
+            found = connection.execute(
+                "SELECT id FROM emails WHERE owner_id = ? AND mailbox_id = ? "
+                "AND message_id_header = ? LIMIT 2", (actor.mailbox, box.id, mid)
+            ).fetchall()
+            if (db._engine is not engine
+                    or not _archive_namespace_unchanged(notification, watched, until)):
+                return None
+            if time.monotonic() >= until:
+                return None
+            return len(found)
+    except Exception:
+        return None
+
+
+def _correspondence(actor, box, root, scoped, mid, count, deadline, folder, state, uid=None):
+    try:
+        from zylch import observability_producers as diagnostics
+
+        if diagnostics.store().owner_uid != actor.uid:
+            return
+        count = min(2, count)
+        archive = _archive_matches(actor, box, mid, deadline) if count == 0 else None
+        command = ("matched" if count == 1 else "scoped_multiple" if count == 2 else
+                   "archive_unknown" if archive is None else "archive_absent" if archive == 0 else
+                   "archive_present_unscoped" if archive == 1 else "archive_multiple_unscoped")
+        metadata = {
+            "command": "assignment.sent_correspondence." + command,
+            "method": "tasks.assignment.project", "root_id": root,
+            "request_revision": mail.digest({"actor_uid": actor.uid, "mailbox_id": box.id,
+                                             "root": root, "known": mail.row_digest(scoped)}),
+            "provider_id": mail.digest({"actor_uid": actor.uid, "mailbox_id": box.id,
+                                        "folder": folder, "uidvalidity": state.uidvalidity,
+                                        "uid": uid, "message_id": mid}),
+            "error_file": "services/task_assignment_sent_index.py",
+            "error_line": sys._getframe(1).f_lineno,
+            "count": count, "available": count == 1 or archive is not None,
+        }
+        if archive is not None:
+            metadata["pending_count"] = archive
+        diagnostics.observe("authority", "result" if count == 1 else "failed",
+                            reason="none" if count == 1 else "incomplete-input", **metadata)
+    except Exception:
+        pass
+
+
 def candidates(actor, current, known, root, *, deadline):
     """Fresh complete Sent membership; never publish another owner's mail content."""
     from . import task_assignment_evidence as evidence
@@ -170,6 +329,11 @@ def candidates(actor, current, known, root, *, deadline):
                 scoped = [row for row in known if row["mailbox_id"] == box.id]
                 ancestry = {row["message_id_header"]: row for row in scoped}
                 if len(ancestry) != len(scoped):
+                    duplicate = next(mid for mid, count in Counter(
+                        row["message_id_header"] for row in scoped
+                    ).items() if count > 1)
+                    _correspondence(actor, box, root, scoped, duplicate, 2, deadline,
+                                    entry.folder, state)
                     raise AssignmentError("Ambiguous scoped RFC identity")
                 provider_ids = set()
                 duplicate_ids = set()
@@ -244,6 +408,8 @@ def candidates(actor, current, known, root, *, deadline):
                     if "\\Draft" in header["flags"]:
                         continue
                     matches = [row for row in scoped if row["message_id_header"] == header["message_id"]]
+                    _correspondence(actor, box, root, scoped, header["message_id"],
+                                    len(matches), deadline, entry.folder, state, uid)
                     if len(matches) != 1:
                         result.append({"complete": False, "judgement": "UNKNOWN",
                                        "reason": "SENT_REPLY_NOT_SYNCED", "source": None})
