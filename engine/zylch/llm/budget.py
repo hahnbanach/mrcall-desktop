@@ -200,6 +200,9 @@ def reserve(request_kwargs, transport, *, quote=None):
                 reserved_micro_usd=amount,
             )
         )
+        from zylch.services.operator_reply_operations import link_reservation
+
+        link_reservation(conn, reservation, request_kwargs)
     return reservation
 
 

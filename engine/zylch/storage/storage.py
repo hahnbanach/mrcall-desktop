@@ -1883,6 +1883,9 @@ class Storage:
             report "a new draft is waiting" must read that flag — the id
             alone cannot tell the two cases apart.
         """
+        from zylch.services.operator_reply_operations import before_draft_write, finish_draft_write
+
+        before_draft_write(owner_id)
         to_list = to if isinstance(to, list) else [to]
         cc_list = list(cc) if cc else []
         bcc_list = list(bcc) if bcc else []
@@ -1957,7 +1960,9 @@ class Storage:
                         f"[create_draft] identical draft already exists"
                         f" (owner_id={owner_id}, draft_id={row.id}) -> reusing"
                     )
-                    return {**row.to_dict(), "created": False}
+                    result = {**row.to_dict(), "created": False}
+                    finish_draft_write(session, result)
+                    return result
 
             draft = Draft(
                 reply_binding=current_binding(),
@@ -1976,7 +1981,11 @@ class Storage:
             )
             session.add(draft)
             session.flush()
-            return {**draft.to_dict(), "created": True}
+            result = {**draft.to_dict(), "created": True}
+            finish_draft_write(session, result)
+            return result
+
+    create_draft.operator_reply_receipts = True
 
     def list_drafts(self, owner_id: str, status: str = "draft") -> List[Dict[str, Any]]:
         """List drafts for a user."""

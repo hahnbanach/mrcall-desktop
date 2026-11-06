@@ -458,8 +458,14 @@ def rpc(ctx):
     default=None,
     help="Protected production voice configuration for this one daemon.",
 )
+@click.option(
+    "--operator-config",
+    type=click.Path(path_type=Path, exists=True, dir_okay=False),
+    default=None,
+    help="Protected opt-in Linux operator MCP configuration for this profile.",
+)
 @click.pass_context
-def serve(ctx, ws_addr, unix_path, voice_config):
+def serve(ctx, ws_addr, unix_path, voice_config, operator_config):
     """WebSocket JSON-RPC backend for cross-machine clients.
 
     Same RPC surface as `rpc` (stdio) but over a WebSocket, so an
@@ -555,9 +561,19 @@ def serve(ctx, ws_addr, unix_path, voice_config):
         settings.firebase_web_api_key = config.firebase_web_api_key.get_secret_value()
         voice_context = voice_listener(config, 8787)
 
+    operator_context = None
+    if operator_config is not None:
+        if not unix_path:
+            raise click.UsageError("Operator MCP requires the hosted Unix socket")
+        try:
+            from zylch.operator_mcp.runtime import profile_listener
+            operator_context = profile_listener(operator_config)
+        except Exception:
+            raise click.ClickException("Operator MCP configuration or dependencies unavailable") from None
+
     if unix_path:
         logger.info(f"[CLI] serve --unix {unix_path} profile={profile} owner={owner_uid}")
-        coro = serve_ws(unix_path=unix_path, voice_listener=voice_context)
+        coro = serve_ws(unix_path=unix_path, voice_listener=voice_context, operator_listener=operator_context)
     else:
         host, sep, port_str = ws_addr.rpartition(":")
         if not sep or not host or not port_str.isdigit():

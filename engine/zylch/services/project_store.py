@@ -179,6 +179,27 @@ def write(
         }
 
 
+def write_in_transaction(
+    conn: Connection, space_id: str, project: str, path: str, raw: bytes,
+    expected_revision: int, author: str,
+) -> dict[str, Any]:
+    validate_project(project)
+    validate_path(path)
+    integer(expected_revision)
+    bound_space = conn.execute(select(S.c.space_id).where(S.c.id == 1)).scalar_one()
+    if bound_space != space_id:
+        raise ProjectError(-32041, "Working copy belongs to a different company space")
+    if not isinstance(raw, bytes) or len(raw) > MAX_BYTES:
+        invalid("Invalid document bytes")
+    old = current(conn, project, path)
+    if (old["revision"] if old else 0) != expected_revision:
+        raise ProjectError(-32040, "Document revision conflict; read current revision before retrying")
+    if old is not None and bytes(old["content"]) == raw:
+        return {"space_id": space_id, **metadata(old)}
+    return {"space_id": space_id, **append(conn, project, path, raw, expected_revision + 1, author)}
+
+
+
 def create(space_id: str, project: str, files: dict[str, str], author: str) -> dict[str, Any]:
     validate_project(project)
     if not isinstance(space_id, str) or not space_id:

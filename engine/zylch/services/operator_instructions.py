@@ -106,9 +106,17 @@ def store(
     space_id: str, path: str, content_base64: str, expected_revision: int, author: str
 ) -> dict[str, Any]:
     authorize(path)
-    return project_store.write(
-        space_id, PROJECT, path, content_base64, expected_revision, author=author
-    )
+    from zylch.services.operator_rule_proposals import managed_in_transaction
+
+    raw = project_store.decode(content_base64)
+    project_store.integer(expected_revision)
+    with project_store.connection(space_id, write=True) as (conn, space):
+        if managed_in_transaction(conn, space):
+            raise InstructionsError(-32046, "Managed instructions require an authorized rule-change writer")
+        old = project_store.current(conn, PROJECT, path)
+        if old is not None and bytes(old["content"]) == raw:
+            return {"space_id": space, **project_store.metadata(old)}
+        return project_store.write_in_transaction(conn, space, PROJECT, path, raw, expected_revision, author)
 
 
 def _read(path: str) -> dict[str, Any] | None:
@@ -157,16 +165,19 @@ def block(email: str | None = None) -> str:
 
 def preview(email: str | None = None) -> dict[str, Any]:
     """What the calling profile is injected: each source document and the assembled block."""
+    from zylch.services.operator_rule_proposals import managed_in_transaction
+
     docs = documents(email)
     space = None
     for d in docs:
         space = d.get("space_id", space)
-    if space is None:
-        with project_store.connection() as (_conn, space_id):
-            space = space_id
+    with project_store.connection(space) as (conn, space_id):
+        space = space_id
+        authority = "managed" if managed_in_transaction(conn, space) else "legacy"
     texts = [base64.b64decode(d["content_base64"]).decode("utf-8", errors="replace") for d in docs]
     return {
         "space_id": space,
+        "authority": authority,
         "documents": [
             {
                 "path": d["path"],

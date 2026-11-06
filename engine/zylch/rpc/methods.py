@@ -1774,6 +1774,7 @@ async def emails_list_by_thread(
             out.append(
                 {
                     "id": r.get("id") or "",
+                    "message_id_header": r.get("message_id_header"),
                     "from_email": from_email,
                     "from_name": r.get("from_name") or "",
                     "to_email": r.get("to_email") or "",
@@ -2656,6 +2657,12 @@ for _name, _fn in _ASSIGNMENT_METHODS.items():
 from zylch.rpc.stripe import METHODS as _STRIPE_METHODS
 
 for _name, _fn in _STRIPE_METHODS.items():
+    if _name in METHODS:
+        raise RuntimeError(f"Duplicate RPC method name: {_name}")
+    METHODS[_name] = _fn
+
+from zylch.rpc.operator_operations import METHODS as _OPERATOR_MANAGEMENT_METHODS
+for _name, _fn in _OPERATOR_MANAGEMENT_METHODS.items():
     if _name in METHODS:
         raise RuntimeError(f"Duplicate RPC method name: {_name}")
     METHODS[_name] = _fn

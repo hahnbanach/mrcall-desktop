@@ -193,7 +193,10 @@ async def _handle_connection(connection) -> None:
 
     async def _handle_one(raw: str) -> None:
         try:
-            resp = await dispatch_raw(raw, notify)
+            from zylch.rpc.native_owner_context import authenticated_owner_request
+
+            with authenticated_owner_request(uid):
+                resp = await dispatch_raw(raw, notify)
         except Exception:
             logger.exception("[ws] dispatch crashed")
             return
@@ -405,6 +408,7 @@ async def serve_ws(
     unix_path: Optional[str] = None,
     voice_listener=None,
     background: bool = True,
+    operator_listener=None,
 ) -> None:
     """Run the WebSocket JSON-RPC server until cancelled.
 
@@ -462,8 +466,14 @@ async def serve_ws(
         server = await lifecycle.enter_async_context(server_cm)
         if voice_listener is not None:
             await lifecycle.enter_async_context(voice_listener)
+        if operator_listener is not None:
+            await lifecycle.enter_async_context(operator_listener)
+        async def serve_forever():
+            if operator_listener is not None:
+                return await operator_listener.serve_with(server.serve_forever())
+            return await server.serve_forever()
         if not background:
-            await server.serve_forever()
+            await serve_forever()
             return
         if unix_path:
             # Guarantee the socket is group-writable so the reverse-proxy
@@ -490,7 +500,7 @@ async def serve_ws(
         reaper_task = asyncio.create_task(reap_orphans_loop())
         logger.info("[ws] zombie reaper started (reaps leaked c-shared children)")
         try:
-            await server.serve_forever()
+            await serve_forever()
         finally:
             auto_task.cancel()
             wa_task.cancel()
