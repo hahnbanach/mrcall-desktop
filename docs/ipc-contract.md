@@ -89,8 +89,13 @@ Final write and transport admission rechecks current company authority and the
 persisted draft under their writer reservations; old drafts and stale copies
 receive the same checks. Enrollment and source-free semantic limits are in the
 [assignment contract](../engine/docs/features/task-assignment.md#contextual-email-enforcement--unreleased-development).
-The source-level [RPC inventory](rpc-contract-inventory.json) is generated from
-actual registration and signatures.
+The source-level [RPC inventory](rpc-contract-inventory.json) records registration
+and declared signatures. Its six `operator.*` entries are refreshed from the
+current native dispatcher for the [MCP source pair](operator-source-build.md).
+All other inventory sections retain their earlier generation, including the
+preload, renderer and kernel-call audit; they do not establish full compatibility
+with the newly paired kernel CLI. The current `METHODS` registry remains the
+engine authority.
 
 ## Transports
 

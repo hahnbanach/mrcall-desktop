@@ -1,6 +1,6 @@
 ---
-doc_baseline_commit: 1c46cde3b86243aa6d3bf455de6db3e42ce71889
-doc_baseline_date: 2026-10-13
+doc_baseline_commit: 9ecd8aae418f71ea93b18695f9763858a6e10de4
+doc_baseline_date: 2026-11-06
 ---
 
 # Active Context — Cross-cutting
@@ -19,137 +19,74 @@ what is *current*, targeting ≤ ~120 lines.
 
 ## State now
 
-Stripe is available on all seven hosted engines, including support@mrcall.ai.
-Support has authenticated connected/live status and one bounded invoice read.
-Both maintained operators have canonical Stripe/bootstrap routing on all three
-host paths using fixed RPC reads without generic finance chat. Desktop prerelease
-`0.1.57-stripe.3` is signed/notarized and removes the extra checkbox.
-Installed-GUI, all-host native selection and full stable/public-package acceptance
-remain separate. The [fleet rollout](../../docs/execution-plans/2026-10-16-stripe-hosted-fleet.md)
-and [operator adoption](../../docs/execution-plans/2026-10-16-stripe-operator-discovery.md)
-own the runtime and installed-surface evidence.
+The [current-main operator source](execution-plans/2026-11-06-operator-mcp-main-integration.md)
+combines scoped MCP reads, managed rule writing and normal-engine draft/recovery
+with main's existing contextual guards. M1 admission/rule wiring and M2 guarded
+causal transactions and M3 packaging are independently APPROVED. Source commit
+`9ecd8aae418f71ea93b18695f9763858a6e10de4` rebuilds the same wheel hashes from
+fixed Git inputs; its combined guarded/SDK collection passes 42 cases. The [paired build contract](operator-source-build.md)
+binds 373 engine paths and 136 kernel paths to reviewed source, resources and guards.
+Kernel source `67bf9ddc` is published under main `f8085ba`; its broader exact-publication,
+sent-mirror and exact-send engine capabilities are outside this Desktop slice.
+Source/package verification and publication status belong to that plan and its
+completion record. Shared P5 sources and the original MCP candidates are preserved.
 
-Desktop `v0.1.56` and kernel `v0.51.0` are published. Six hosted company engines have verified
-assignment reads and root-owned trust; both maintained clones install the release. Ordinary/Qonto
-tasks remain private. Café 124 shares one space; MrCall support/Mario share support's company
-space after the authorized [fenced join](execution-plans/2026-10-08-mrcall-company-memory-sharing.md).
-Both members have authenticated project and complete assignment reads; no real assignment is created. The [assignment
-plan](execution-plans/2026-10-08-explicit-task-assignment.md) owns released local lifecycle
-acceptance; release verification creates no real assignment.
+Desktop is the configurator for accounts, services and client access. Opted-in
+ordinary rule changes use direct revisioned chat writes without per-rule Desktop
+confirmation. Native legacy decision/import APIs retain owner admission and the
+kernel scheduled denials. The existing operator has dated actual Codex evidence
+for identity, mail/context, memory/project reads, rules and saved results; these
+source packages do not establish a new native GUI or installed composition.
 
-The local [contextual-email
-candidate](execution-plans/2026-10-08-contextual-email-assignment-guard.md) extends holds to
-generic chat, known email-task context and final transport with durable enrollment and exact
-source binding. It is unreleased and inactive in the hosted fleet and installed clones. Its
-MrCall launcher patch is committed in the clone main branch and remains uninstalled.
-Future candidate rollout requires separate authority.
+Published Desktop v0.1.56 assignment reads and company sharing retain their
+[assignment](execution-plans/2026-10-08-explicit-task-assignment.md) and
+[fenced-join](execution-plans/2026-10-08-mrcall-company-memory-sharing.md) evidence.
+The new contextual guards are source-only relative to the hosted fleet. This
+source work activates no enrollment, real assignment or sending authority.
 
-Local Desktop/kernel reliability gates and task/RPC contract checks pass.
-The August umbrella is retired; exact source-only evidence, withdrawn work and
-remaining owners are in the [closure record](execution-plans/2026-10-07-desktop-kernel-hardening-closure.md).
-No new release, clone upgrade, installer/fleet acceptance or live cleanup is implied.
+The Stripe prerelease and hosted evidence remain with its
+[installer](execution-plans/2026-10-16-stripe-test-installer.md) and
+[startup](execution-plans/2026-10-16-stripe-startup-recovery.md) plans. Native Qonto
+banking and source-grounded answers retain their own
+[plan](execution-plans/2026-10-04-qonto-connection.md); typed-credential source,
+packaged GUI/provider comparison and runtime adoption remain distinct gates.
+No new installer, banking operation or provider comparison follows here.
 
-Native Qonto code has reviewed engine and Desktop browser-fixture acceptance,
-including private tasks, managed history and consented minimal company facts.
-Support's isolated release has real authenticated banking acceptance: its
-single account is connected, 30-day source sync completes across restart,
-and independent provider balances/movements/flows agree with source reads.
-A real managed assistant uses the bank tool and cites its source. Its
-engine-formatted UTC retrieval strings match the accepted managed answer.
-The six company daemons run the combined release source with their saved
-controls restored; support Qonto connection and encryption checks pass. Packaged
-GUI and provider UI acceptance remain unverified. `main` takes Qonto credentials only as typed login and key;
-no published Desktop or hosted engine has that change ([removal](execution-plans/2026-10-08-qonto-bootstrap-removal.md)). Exact release, usage, rollback and remaining criteria belong
-to the active [Qonto plan](execution-plans/2026-10-04-qonto-connection.md).
+Hosted separate-profile/company-store isolation retains its completed
+[sandbox plan](execution-plans/2026-09-29-toward-sandbox.md) and
+[contract](cross-cutting-contracts.md#separate-profiles-shared-company-memory).
+Self-serve provisioning stays closed. Production voice, revisioned phone
+instructions and archive acceptance retain their
+[source](execution-plans/2026-10-01-telephone-notes-source-is-phone-md.md) and
+[knowledge](execution-plans/2026-09-28-voice-company-knowledge.md) plans; broader
+spoken detail, repetition and latency remain separate.
 
-All seven existing hosted profiles run as separate Unix users with enforced
-outbound allow-lists; the [sandbox rollout](execution-plans/2026-09-29-toward-sandbox.md)
-is completed with two independent final approvals. Company groups share one
-store per company while private profile files stay separate; the
-[contract](cross-cutting-contracts.md#separate-profiles-shared-company-memory)
-distinguishes OS isolation from engine-filtered personal rules.
-Production preserves its voice interpreter/configuration and listener;
-support preserves Qonto. Six company profiles retain assignment source pins,
-and Mario Gmail retains its attachment pin and CTO-reported mail/attachment/
-document acceptance. Seven operator pins use `t0-…`; production's Qonto
-permission has a separate earlier drop-in. Reconcile succeeds with seven ready.
-Self-serve provisioning stays closed; template/provisiond retain their shared
-key dependency and the broader operational obligations remain separate.
-
-Production uses GPT-Live for telephone service and the scoped company-knowledge
-trial. Its pinned release reads revisioned `operator-instructions/phone.md`;
-StarChat transcript upload is cancelled. Private call archives are accepted.
-The source migration does not establish broader spoken-detail or latency
-acceptance. Mario has no operator schedule; the 124 schedule reads his inbox,
-and his project permissions deny instruction writes. Runtime/source identity
-and prior acceptance belong to the
-[source plan](execution-plans/2026-10-01-telephone-notes-source-is-phone-md.md)
-and [knowledge plan](execution-plans/2026-09-28-voice-company-knowledge.md).
-
-Production K3 uses its personal OpenRouter key with USD20/day; the other three
-Café124 profiles preserve prior billing choices and USD5/day. Their saved host
-configuration enables automatic work and has preparation unpaused; no run is
-active in the release preflight. Preserve actual controls during rollout. Personal-key synthetic K3 acceptance
-passes; funded credit acceptance remains open. See
-[K3 adoption](execution-plans/2026-09-16-k3-production.md).
-
-Mnemonic M9 source is active in all six company engines, including production.
-The failed Haiku corpus criterion is deferred to M10 on the resolver-selected
-model; source activation and sandbox acceptance do not close mnemonic
-product/corpus gates. The [engine snapshot](../engine/docs/active-context.md)
-owns the detailed state.
-
-Settings separates provider/model selection, daily budgets and bounded
-preparation. Setup verifies an engine and hands off a descriptor-based kernel
-workspace. Engine and operator billing/pause controls are separate. Shared
-written projects are revisioned company records. See
-[operator setup](operator-setup.md#ai-execution-and-controls) and
-[project memory](../engine/docs/features/project-memory.md).
-
-External-client MCP is an unreleased local candidate in isolated worktrees;
-the remote design selects profile-local Linux MCP endpoints, central grant
-introspection and revisioned engine procedures; all are unimplemented.
-[Data flows](operator-data-flows.md) separate these states and their authority boundaries.
-
-Desktop `v0.1.56` combines Qonto, additional mailboxes/PEC and the auth/billing
-fixes. Its Mac Apple Silicon DMG is published; installed Qonto GUI and live PEC
-provider acceptance remain open. Six company profiles have mailbox migration,
-primary registration and encryption startup checks; personal Gmail retains its
-separate attachment pin. Windows imports and loose-file loading remain
-unverified. Runtime contracts belong to [IPC](ipc-contract.md),
-[host operations](remote-backend.md) and per-tree docs.
+Settings separates API provider/models, budget and bounded preparation. Headless
+operator and direct kernel classifier controls remain independent; see
+[setup](operator-setup.md#ai-execution-and-controls). Existing spending/pause and
+profile configuration are preserved. K3/funded-credit and mnemonic corpus/model
+acceptance retain their owning engine and
+[K3](execution-plans/2026-09-16-k3-production.md) gates.
 
 ## Unresolved
 
-- Qonto installed/packaged Electron and provider-UI comparison remain unverified.
-  Hosted authentication, banking, restart/reconnect and source-grounded assistant
-  acceptance have passed; the corrected UTC timestamp matches its source.
-  Until one typed connection from an installed Desktop passes, no hosted engine
-  holding a Qonto connection takes source without the bootstrap credential source.
-  `main` never uses Qonto credential lines left in a profile `.env`; deleting them is operator work.
-- Remaining Café124 billing choices and funded K3 credits are open. The reviewed
-  comparison's 60 cases/240 outputs do not establish production equivalence.
-- Shared-key provisioning and the broader operational floor retain their
-  separate obligations. One handset's speech is not transcribed by the voice provider.
-- Installed/fresh-account GUI acceptance is open. Windows remains opt-in and
-  `continue-on-error`; Intel is outside the release matrix. Windows voice-note
-  transcription is excluded.
-- Remote provisioning needs UID/company membership. Settings catalog reload
-  has a same-value gap; reopen after changes. Product chat, delegated sending,
-  approval isolation, Calendar and broad security review retain their owners.
-- Telephone knowledge needs spoken detail, repeated/adverse cases and measured
-  latency; voice reserves remain provisional. Caller history requires a unique
-  selected-contact match. Historical task/import paths need verification.
+- Source Git-ref reconstruction, final documentation review and publication are
+  governed by the integration plan; source results do not certify a new
+  installation, native GUI, provider effects or complete dependency installation.
+- Native automatic bootstrap, broad RPC parity, customer reply quality and full
+  Desktop packaging retain the parent operator obligations. Wider kernel CLI,
+  P5 operational/FULL and exact-send adoption are outside MCP-helper pairing.
+- Qonto packaged/provider-UI comparison, Stripe installed GUI, live PEC and Windows
+  imports/loose-file behavior retain their existing owners. Intel installer
+  acceptance is separate from the old ARM release matrix.
+- Provisioning/membership, same-value Settings catalog reload, product chat,
+  approval isolation, Calendar, voice detail/latency and broader security review
+  retain their existing owners. No paid preparation run is part of source checks.
 
 ## Next
 
-1. Verify the installed Qonto Desktop workflow and provider UI comparison when
-   a signed-in GUI is available; preserve billing and pause controls.
-2. Continue the knowledge plan's detail/repetition/latency gates without
-   repeating completed archive acceptance.
-3. Resolve remaining billing choices and preserve actual saved controls;
-   release verification initiates no paid preparation run.
-4. Exercise installed Mac/Windows GUI and add an external WhatsApp status reader.
-5. Resume deferred work from its existing briefs when requested. Electron stays
-   primary; the [thin-client brief](execution-plans/cross-machine-thin-clients.md)
-   remains parked.
+1. Retain exact paired source/build/final receipts and publish only reviewed source.
+2. Coordinate any later installed/P5 adoption under its separate authorization,
+   preserving profile controls and actual-source identity.
+3. Continue parent native/product gates from their existing evidence without
+   repeating accepted memory, rule or recovery trials.

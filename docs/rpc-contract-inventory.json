@@ -512,6 +512,58 @@
       "declared_return": "{\"text\": str}.",
       "open": false
     },
+    "operator.operations.list": {
+      "accepted": [],
+      "required": [],
+      "declared_return": "recoverable reply operations for this owner.",
+      "open": false
+    },
+    "operator.operations.recover": {
+      "accepted": [
+        "operation_id"
+      ],
+      "required": [
+        "operation_id"
+      ],
+      "declared_return": "immutable saved result and current state.",
+      "open": false
+    },
+    "operator.rules.decide": {
+      "accepted": [
+        "decision",
+        "expected_digest",
+        "proposal_id"
+      ],
+      "required": [
+        "decision",
+        "expected_digest",
+        "proposal_id"
+      ],
+      "declared_return": "exact proposal outcome.",
+      "open": false
+    },
+    "operator.rules.import_confirm": {
+      "accepted": [
+        "expected_digest"
+      ],
+      "required": [
+        "expected_digest"
+      ],
+      "declared_return": "explicit canonical import confirmation.",
+      "open": false
+    },
+    "operator.rules.import_preview": {
+      "accepted": [],
+      "required": [],
+      "declared_return": "complete canonical import preview.",
+      "open": false
+    },
+    "operator.rules.list": {
+      "accepted": [],
+      "required": [],
+      "declared_return": "pending proposals for the verified owner.",
+      "open": false
+    },
     "preparation.pause": {
       "accepted": [],
       "required": [],
@@ -945,7 +997,7 @@
         "event_id",
         "title"
       ],
-      "declared_return": "{ok, task_id, created, reopened} | {ok: false, closed: true, …}.",
+      "declared_return": "{ok, task_id, created, reopened} | {ok: false, closed: true, \u2026}.",
       "open": false
     },
     "tasks.dedup_now": {
@@ -1038,7 +1090,7 @@
       "required": [
         "task_id"
       ],
-      "declared_return": "{ok, due_at, …}.",
+      "declared_return": "{ok, due_at, \u2026}.",
       "open": false
     },
     "tasks.solve": {

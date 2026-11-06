@@ -48,8 +48,8 @@ The repo has three parallel doc trees, mirroring the three index files. Each tre
 - [Model comparison](evaluations/2026-09-13-openrouter-models.md) — blinded synthetic evidence and limitations.
 - [Actual-prompt comparison](evaluations/2026-09-15-real-engine-prompts.md) — K3/GLM source-grounded checks, availability and prompt corrections.
 
-- [Desktop setup to operator workspace](briefs/2026-09-10-desktop-to-operator-onboarding.md) — original coding-agent delivery and proposed remote MCP architecture, consent, data/cost controls, procedures and native draft requirements.
-- [Desktop, MCP and daemon data flows](operator-data-flows.md) — English sequences for authentication, nine candidate tools, local files and revocation, plus proposed remote governance, budgets, audit, procedure authority and native drafts; implementation states remain separate.
+- [Desktop setup to operator workspace](briefs/2026-09-10-desktop-to-operator-onboarding.md) — historical coding-agent delivery and remote design; current backend scope lives in the operator source/build contract.
+- [Desktop, MCP and daemon data flows](operator-data-flows.md) — current scoped backend flow and authority boundaries, with earlier prototype sequences kept as historical design.
 - [Chat approval isolation](briefs/2026-09-10-chat-approval-isolation.md) — scoped existing cross-client approval defect and acceptance criteria.
 - [`active-context.md`](active-context.md) — cross-cutting living snapshot: `State now` / `Unresolved` / `Next`, nothing else
 - [`active-context-archive.md`](active-context-archive.md) — dated narrative pruned out of the living snapshot
@@ -74,7 +74,7 @@ anywhere in the repo):
 - [`../engine/docs/CONVENTIONS.md`](../engine/docs/CONVENTIONS.md) — engine code style, logging, security patterns
 - [`../app/CLAUDE.md`](../app/CLAUDE.md) — app-side index (long-form until `app/docs/` fills in)
 
-- [Desktop-to-operator setup guide](operator-setup.md) — released Desktop and public-kernel installation, with verification limits.
+- [Coding-agent workspace setup guide](operator-setup.md) — the existing local/developer workspace installation and independent AI controls; daily remote MCP users follow the operator data-flow contract.
 
 - [Shared written project memory](briefs/2026-09-10-shared-project-memory.md) — engine-owned project records and kernel workflows; [execution plan](execution-plans/2026-09-10-shared-project-memory.md).
 
@@ -91,3 +91,7 @@ anywhere in the repo):
 - [Contextual email assignment enforcement](execution-plans/2026-10-08-contextual-email-assignment-guard.md) — local unreleased guard, exact caller binding and verification; [brief](briefs/2026-10-08-contextual-email-assignment-guard.md).
 
 - [MrCall company sharing](execution-plans/2026-10-08-mrcall-company-memory-sharing.md) — authorized fenced join, authenticated shared reads and private-data preservation; [brief](briefs/2026-10-08-mrcall-company-memory-sharing.md).
+
+- [Current-main operator MCP integration](execution-plans/2026-11-06-operator-mcp-main-integration.md) — isolated guard-preserving source integration; [brief](briefs/2026-11-06-operator-mcp-main-integration.md).
+
+- [Current-main operator source build](operator-source-build.md) — fixed paired packages, native admission and source-verification limits.
