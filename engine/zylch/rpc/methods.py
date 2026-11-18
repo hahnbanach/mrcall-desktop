@@ -1186,7 +1186,7 @@ async def system_capabilities(params: Dict[str, Any], notify: NotifyFn) -> Any:
 
     from zylch.workflows.resources import list_workflows
 
-    return {"observability": 1, "private_workflows": 1, "workflow_selection_method": "workflows.suggest", "workflows": list_workflows(), "chat_read_only_policy": READ_ONLY_POLICY_VERSION, "chat_history_binding": 1, "assignment_draft_policy": 1, "operator_reply_provenance": 1, "stripe": 1, "stripe_payment_method_links": 1}
+    return {"observability": 1, "private_workflows": 1, "workflow_selection_method": "workflows.suggest", "workflows": list_workflows(), "chat_read_only_policy": READ_ONLY_POLICY_VERSION, "chat_history_binding": 1, "assignment_draft_policy": 1, "operator_reply_provenance": 1, "stripe": 1, "stripe_payment_method_links": 1, "exact_draft_publication": 1, "sent_mirror_recovery": 1, "interactive_exact_send": 1}
 
 
 async def chat_approve(params: Dict[str, Any], notify: NotifyFn) -> Any:

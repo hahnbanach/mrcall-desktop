@@ -100,3 +100,7 @@ def automatic(sender, target, references):
             or target != binding['in_reply_to'] or references != binding['references']):
         raise AssignmentError('Scheduled reply transport identity changed')
     return True
+
+
+def is_scheduled():
+    return _request.get() is not None

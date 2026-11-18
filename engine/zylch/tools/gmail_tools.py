@@ -1087,6 +1087,9 @@ class SendDraftTool(Tool):
                         data=None,
                         error=(f"Attachment no longer exists: {p}." " Email NOT sent."),
                     )
+            from zylch.services.exact_operator_send_context import preflight
+
+            preflight(self.owner_id, draft)
             origin_binding = await operator_reply_origin.admit(self.owner_id, draft)
         except DraftHandleError as e:
             # An unclear handle, not a missing draft: say which, so the
@@ -1169,7 +1172,9 @@ class SendDraftTool(Tool):
         try:
             with operator_reply_origin.handoff(origin_binding, self.owner_id, draft):
                 observe("provider", "start", draft_id=draft_id, reason="none")
-                sent_message = self.imap.send_message(
+                from zylch.services.exact_operator_send_admission import send as guarded_send
+
+                sent_message = guarded_send(self.imap.send_message, owner_id=self.owner_id, draft=draft,
                     to=to_str,
                     subject=subject,
                     body=body,

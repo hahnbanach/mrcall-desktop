@@ -133,6 +133,9 @@ def _redact_params(method: Optional[str], params: Dict[str, Any]) -> Dict[str, A
         return {"payload": "<redacted private workflow>"}
     if (method or "").startswith(("qonto.", "stripe.", "tasks.")):
         return {key: "<redacted>" for key in params}
+    if method in {"drafts.publish_review", "drafts.operation_status", "drafts.retire_sent_mirror",
+                  "drafts.operator_send_inspect", "drafts.send_operator"}:
+        return {key: "<redacted exact draft>" for key in params}
     extra = _SECRET_PARAM_KEYS_BY_METHOD.get(method or "", set())
     allowed = _NON_SECRET_PARAM_KEYS_BY_METHOD.get(method or "", set())
 

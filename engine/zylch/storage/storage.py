@@ -2114,12 +2114,16 @@ class Storage:
         if provider in ("google", "microsoft"):
             values["provider"] = provider
         with get_session() as session:
+            from zylch.services.exact_operator_send_context import claim_allowed
+
+            if not claim_allowed(session, owner_id, draft_id):
+                return False
             # Read the recipients first: the window a stale claim is measured
             # against is a property of THIS draft's send, not a constant. The
             # read decides only the window — the UPDATE below is still what
             # picks the single winner, so two callers cannot both claim.
             row = (
-                session.query(Draft.to_addresses, Draft.cc_addresses, Draft.bcc_addresses)
+                session.query(Draft.to_addresses, Draft.cc_addresses, Draft.bcc_addresses, Draft.status, Draft.updated_at)
                 .filter(Draft.owner_id == owner_id, Draft.id == draft_id)
                 .one_or_none()
             )
@@ -2131,6 +2135,10 @@ class Storage:
                 send_claim_recipient_count(row[0], row[1], row[2]) if row is not None else 0
             )
             stale_before = now - timedelta(minutes=send_claim_window_minutes(recipients))
+            # Fresh claims need no writer attempt: a live transport retains the
+            # private reservation, so waiting here would stall a losing caller.
+            if row is not None and (row[3] == "sent" or (row[3] == "sending" and row[4] is not None and row[4] >= stale_before)):
+                return False
             claimed = (
                 session.query(Draft)
                 .filter(
@@ -2154,6 +2162,8 @@ class Storage:
             f" draft_id={draft_id}, provider={provider},"
             f" recipients={recipients}) -> claimed={claimed}"
         )
+        from zylch.services.exact_operator_send_context import claimed as exact_claimed
+        exact_claimed(claimed == 1)
         return claimed == 1
 
     def mark_draft_sent(

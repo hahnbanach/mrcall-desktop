@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "zylch"
-version = "0.1.52"
+version = "0.1.57.dev1+interactive697.mrcall"
 description = "Intelligent sales agent"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -65,8 +65,8 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-evaluation = ["jsonschema>=4.23,<5"]
 operator-mcp = ["mcp==1.30.0", "uvicorn>=0.54,<0.55", "jsonschema>=4.23,<5"]
+evaluation = ["jsonschema>=4.23,<5"]
 # Isolated M1 runner only; do not upgrade the packaged engine's SDK for a smoke.
 voice-smoke = ["openai==3.19.0", "aiohttp>=3.12,<4", "websockets>=14,<18"]
 
@@ -75,6 +75,9 @@ zylch = "zylch.cli.main:main"
 
 [tool.setuptools.packages.find]
 include = ["zylch*"]
+
+[tool.setuptools.package-data]
+zylch = ["migrations/add_task_items.sql", "migrations/add_triage_tables.sql", "prompts/email_thread_classify.txt", "prompts/email_triage.txt", "workflows/bundles/cs-financial-statements/PROVENANCE.md", "workflows/bundles/cs-financial-statements/SKILL.md", "workflows/bundles/cs-financial-statements/references/reconstruction.md", "workflows/bundles/cs-legal-research/PROVENANCE.md", "workflows/bundles/cs-legal-research/SKILL.md", "workflows/bundles/cs-legal-research/references/administrative-remedies.md", "workflows/bundles/cs-legal-research/references/deadlines.md", "workflows/bundles/cs-legal-research/references/evidence.md", "workflows/bundles/cs-legal-research/references/sources.md", "workflows/migration/2026-10-12/manifest.json", "workflows/migration/2026-10-12/originals/financial-global/SKILL.md", "workflows/migration/2026-10-12/originals/financial-global/references/reconstruction.md", "workflows/migration/2026-10-12/originals/legal-global/PROVENANCE.md", "workflows/migration/2026-10-12/originals/legal-global/SKILL.md", "workflows/migration/2026-10-12/originals/legal-global/agents/openai.yaml", "workflows/migration/2026-10-12/originals/legal-global/references/administrative-remedies.md", "workflows/migration/2026-10-12/originals/legal-global/references/deadlines.md", "workflows/migration/2026-10-12/originals/legal-global/references/evidence.md", "workflows/migration/2026-10-12/originals/legal-global/references/sources.md", "workflows/migration/2026-10-12/originals/legal-kernel/PROVENANCE.md.j2", "workflows/migration/2026-10-12/originals/legal-kernel/SKILL.md.j2", "workflows/migration/2026-10-12/originals/legal-kernel/references/administrative-remedies.md.j2", "workflows/migration/2026-10-12/originals/legal-kernel/references/deadlines.md.j2", "workflows/migration/2026-10-12/originals/legal-kernel/references/evidence.md.j2", "workflows/migration/2026-10-12/originals/legal-kernel/references/sources.md.j2", "workflows/migration/2026-10-12/originals/legal-kernel/scripts/count_days.py.j2"]
 
 [tool.black]
 line-length = 100

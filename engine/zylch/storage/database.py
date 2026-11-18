@@ -249,8 +249,9 @@ def _tables(names: tuple[str, ...] | None, *, exclude: bool = False):
     from zylch.storage.models import Base as _Base
     from zylch.qonto import models as _qonto_models
     from zylch.storage import assigned_task_models as _assigned_task_models
+    from zylch.storage import draft_operation_models as _draft_operation_models
 
-    _ = _qonto_models, _assigned_task_models
+    _ = _qonto_models, _assigned_task_models, _draft_operation_models
     if names is None:
         return list(_Base.metadata.sorted_tables)
     wanted = set(names)
@@ -275,6 +276,8 @@ PROFILE_STEPS: list = []
 
 def _register_profile_steps() -> None:
     from zylch.storage.step_company_key import STEP as company_key_step
+    from zylch.storage.draft_operation_models import STEP as draft_operations_step
+    from zylch.storage.step_exact_send import STEP as exact_send_step
     from zylch.storage.step_emails_mailbox import STEP as emails_mailbox_step
     from zylch.storage.step_memory_split import STEP as memory_split_step
 
@@ -291,6 +294,8 @@ def _register_profile_steps() -> None:
         qonto_step,
         qonto_sync_step,
         qonto_history_step,
+        draft_operations_step,
+        exact_send_step,
     ):
         if step not in PROFILE_STEPS:
             PROFILE_STEPS.append(step)

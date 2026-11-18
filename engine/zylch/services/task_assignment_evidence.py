@@ -4,6 +4,8 @@ import logging
 import re
 import time
 import threading
+from copy import deepcopy
+from types import MappingProxyType
 from dataclasses import dataclass
 from enum import Enum
 from contextlib import ExitStack, contextmanager
@@ -36,17 +38,23 @@ class _Observation:
         self.guards = ExitStack()
         self.lock = threading.RLock()
         self.closed = False
+        self.envelopes = {}
+
+    def connection_changed(self, client):
+        self.envelopes = {key: value for key, value in self.envelopes.items() if value.client is not client}
 
     def close(self):
         if self.closed:
             return
         self.closed = True
+        self.envelopes.clear()
         error = None
         try:
             self.guards.close()
         except BaseException as failure:
             error = failure
         for client in list(self.clients.values()):
+            client._connection_change_callback = None
             try:
                 _dispose_client(client)
             except BaseException as failure:
@@ -86,12 +94,14 @@ def provider_client(actor, box, root, deadline):
         return
     if (state.closed or state.thread != threading.get_ident() or state.root != root
             or state.deadline != deadline or time.monotonic() >= deadline):
+        state.envelopes.clear()
         raise AssignmentError("Provider observation scope changed or expired")
     with state.lock:
         scope = mail.mailbox_digest(actor)
         if state.actor is None:
             state.actor, state.scope = actor, scope
         elif state.actor != actor or state.scope != scope:
+            state.envelopes.clear()
             raise AssignmentError("Provider observation profile or mailbox changed")
         if box.id not in state.clients:
             client = mailboxes.build_imap_client(box)
@@ -109,9 +119,15 @@ def provider_client(actor, box, root, deadline):
                 except BaseException:
                     pass
                 raise
+            client._connection_change_callback = state.connection_changed
             state.clients[box.id] = client
-        yield state.clients[box.id]
+        try:
+            yield state.clients[box.id]
+        except BaseException:
+            state.envelopes.clear()
+            raise
         if mail.mailbox_digest(actor) != state.scope:
+            state.envelopes.clear()
             raise AssignmentError("Provider observation mailbox changed")
 
 
@@ -149,6 +165,75 @@ def _date(value):
         raise AssignmentError("Reply timestamp unavailable") from None
 
 
+@dataclass(frozen=True)
+class _SourceEnvelope:
+    key: tuple
+    client: object
+    connection: object
+    message: object
+    provider: object
+    initial: object
+
+
+def _body_reuse_supported(client):
+    if client.imap_host != "imap.gmail.com" or client.imap_port != 993 or client._conn is None:
+        return False
+    capabilities = getattr(client._conn, "capabilities", None)
+    if not isinstance(capabilities, tuple) or not capabilities:
+        return False
+    try:
+        normalized = tuple(value.decode("ascii").upper() if isinstance(value, bytes) else value.upper()
+                           for value in capabilities)
+        return all(isinstance(value, str) and value and value.isascii() for value in normalized) and "IMAP4REV1" in normalized
+    except (AttributeError, UnicodeError):
+        return False
+
+
+def _envelope_key(state, actor, space, current, source_id, root, box, client, folder, deadline):
+    if (state is not _observation.get() or state.closed or state.thread != threading.get_ident()
+            or state.deadline != deadline or state.root != root or time.monotonic() >= deadline):
+        state.envelopes.clear()
+        raise AssignmentError("Source envelope scope changed or expired")
+    return (state, state.thread, actor.uid, actor.mailbox, actor.binding, space, root, source_id,
+            mail.scoped_source(actor, source_id)["message_id_header"], box.id, client.imap_host, client.imap_port,
+            folder, mail.component_digest(actor, root, deadline=deadline),
+            mail.row_digest([mail.scoped_source(actor, source_id)]), digest(current),
+            trust.delivery_routes_digest(space), mail.mailbox_digest(actor), client,
+            client._conn, client._connection_generation, deadline)
+
+
+def _same_source_headers(header, message):
+    from email.utils import parseaddr
+    from zylch.email.imap_client import _decode_header_value
+
+    return (parseaddr(_decode_header_value(header["from_email"]))[1] == message["from_email"]
+        and all(mail.addresses(_decode_header_value(header.get(key) or "")) == mail.addresses(message.get(key) or "")
+                for key in ("to", "cc"))
+        and all(mail.references(header.get(key) or "") == mail.references(message.get(key) or "")
+                for key in ("references", "in_reply_to"))
+        and all((header.get(key) or "") == (message.get(key) or "")
+                for key in ("message_id", "date", "auto_submitted", "x_autoreply", "precedence",
+                            "x_auto_response_suppress", "pec_markers")))
+
+
+def _reply_source(actor, space, current, source_id, root, box, client, folder, mid, deadline):
+    state = _observation.get()
+    with client._imap_lock:
+        envelope = state.envelopes.pop(source_id, None) if state is not None else None
+        if envelope is not None and _body_reuse_supported(client):
+            key = _envelope_key(state, actor, space, current, source_id, root, box, client, folder, deadline)
+            if envelope.client is client and envelope.connection is client._conn and envelope.key == key:
+                headers, fresh = client.folder_headers(folder, deadline=deadline,
+                    criteria=mail.criteria(mid, exact=True), max_messages=mail.MAX_MESSAGES, proof=True)
+                uid = envelope.message["provider_uid"]
+                header = headers.get(uid)
+                if (len(headers) == 1 and header is not None and header["message_id"] == mid
+                        and fresh == envelope.initial and _same_source_headers(header, envelope.message)
+                        and envelope.key == _envelope_key(state, actor, space, current, source_id, root, box, client, folder, deadline)):
+                    return [deepcopy(dict(envelope.message))], dict(envelope.provider), envelope.initial
+        return mail._member_fetch(client, folder, mid, deadline=deadline)
+
+
 def reply(source_id: str, root: str, *, deadline=None) -> dict:
     deadline = time.monotonic() + 40 if deadline is None else deadline
     thread(root)
@@ -184,7 +269,7 @@ def reply(source_id: str, root: str, *, deadline=None) -> dict:
         sent = client._find_sent_folder()
         if not sent:
             raise AssignmentError("Actual Sent folder unavailable")
-        found, provider = mail.fetch(client, sent, mid, exact=True)
+        found, provider, _ = _reply_source(actor, space, current, source_id, root, box, client, sent, mid, deadline)
         if len(found) != 1:
             raise AssignmentError("Exact Sent reply unavailable")
         message = found[0]
@@ -375,7 +460,11 @@ def _member_activity(source_id, root, *, deadline, local_hint=False):
             sent = client._find_sent_folder()
             if not sent:
                 raise AssignmentError("Actual Sent folder unavailable")
-            found, provider, initial = mail._member_fetch(client, sent, mid, deadline=deadline)
+            state = _observation.get()
+            with client._imap_lock:
+                acquisition_key = (_envelope_key(state, actor, space, current, source_id, root, box, client, sent, deadline)
+                                   if state is not None and _body_reuse_supported(client) else None)
+                found, provider, initial = mail._member_fetch(client, sent, mid, deadline=deadline)
             if not found and local_hint:
                 if client.examine_existing(sent, deadline=deadline) != initial:
                     raise AssignmentError("Absent member hint provider changed")
@@ -432,7 +521,17 @@ def _member_activity(source_id, root, *, deadline, local_hint=False):
                 or mail.row_digest([mail.scoped_source(actor, source_id)]) != mail.row_digest([row])
                 or time.monotonic() >= deadline):
             raise AssignmentError("Member observation changed before completion")
+        if status is _ActivityStatus.NON_WITNESS and acquisition_key is not None:
+            with client._imap_lock:
+                if (state is _observation.get() and len(state.envelopes) < 20 and _body_reuse_supported(client)
+                        and acquisition_key == _envelope_key(state, actor, space, current, source_id, root, box, client, sent, deadline)):
+                    state.envelopes[source_id] = _SourceEnvelope(acquisition_key, client, client._conn,
+                        MappingProxyType(deepcopy(message)), MappingProxyType(dict(provider)), initial)
+
     except Exception as error:
+        state = _observation.get()
+        if state is not None:
+            state.envelopes.pop(source_id, None)
         logger.warning("[tasks.assignment] member activity unavailable type=%s", type(error).__name__)
         status = _ActivityStatus.UNKNOWN
         result.update(complete=False, judgement="UNKNOWN", reason="SOURCE_UNAVAILABLE", source=None, digest=None)

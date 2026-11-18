@@ -7,6 +7,7 @@ IMAP + app password. Works with any IMAP provider.
 import functools
 import imaplib
 import logging
+import itertools
 import mimetypes
 import os
 import re
@@ -694,6 +695,11 @@ class IMAPClient:
         self._projection_connection = None
         self._selected_read = None
         self._deadline_connection = None
+        self._connection_versions = itertools.count(1)
+        self._connection_generation = 0
+        self._connection = None
+        self._connection_change_callback = None
+        self._imap_lock = threading.RLock()
         self._conn: Optional[imaplib.IMAP4_SSL] = None
         self._sent_folder: Optional[str] = None
         self._sent_folder_resolved: bool = False
@@ -706,6 +712,20 @@ class IMAPClient:
             f"imap={self.imap_host}:{self.imap_port} "
             f"smtp={self.smtp_host}:{self.smtp_port}"
         )
+
+    @property
+    def _conn(self):
+        return self._connection
+
+    @_conn.setter
+    def _conn(self, connection):
+        previous = self._connection
+        self._connection = connection
+        if previous is not None or connection is not None:
+            self._connection_generation = next(self._connection_versions)
+            callback = self._connection_change_callback
+            if callback is not None:
+                callback(self)
 
     def _resolve_provider_addresses(self):
         if getattr(sys, "frozen", False):
@@ -1165,11 +1185,12 @@ class IMAPClient:
         self._conn = conn
         logger.info(f"[IMAP] Connected as {self.email_addr}")
 
-    @staticmethod
-    def _discard_connection(conn) -> None:
+    def _discard_connection(self, conn) -> None:
         """Close a connection we are about to stop referencing."""
         if conn is None:
             return
+        if self._conn is conn:
+            self._conn = None
         try:
             conn.shutdown()
         except Exception as e:
@@ -2179,38 +2200,7 @@ class IMAPClient:
         """
         return self.search(query=query, limit=max_results)
 
-    def send(
-        self,
-        to: str,
-        subject: str,
-        body: str,
-        cc: Optional[List[str]] = None,
-        bcc: Optional[List[str]] = None,
-        in_reply_to: Optional[str] = None,
-        references: Optional[str] = None,
-        attachment_paths: Optional[List[str]] = None,
-    ) -> Dict[str, Any]:
-        """Send email via SMTP.
-
-        Args:
-            to: Recipient email address (or comma-separated list).
-            subject: Email subject.
-            body: Plain text body.
-            cc: Optional list of CC email addresses. Added to the Cc
-                header and to the SMTP recipient list.
-            bcc: Optional list of BCC email addresses. Added to the
-                SMTP recipient list but NOT to any header (Bcc is
-                invisible to other recipients).
-            in_reply_to: Message-ID for reply threading.
-            references: References header for threading.
-            attachment_paths: Optional list of local file paths to attach.
-                When present, the message is built as a multipart using
-                ``email.message.EmailMessage``; when absent, legacy
-                ``MIMEText`` is used for backwards compatibility.
-
-        Returns:
-            Dict with message_id of sent email.
-        """
+    def prepare_message(self, to, subject, body, cc=None, bcc=None, in_reply_to=None, references=None, attachment_paths=None):
         cc_list = [a.strip() for a in (cc or []) if a and a.strip()]
         bcc_list = [a.strip() for a in (bcc or []) if a and a.strip()]
         # Last gate before the wire: a draft persisted before this check
@@ -2280,6 +2270,45 @@ class IMAPClient:
         recipients.extend(cc_list)
         recipients.extend(bcc_list)
 
+        return msg, recipients
+
+    def send(
+        self,
+        to: str,
+        subject: str,
+        body: str,
+        cc: Optional[List[str]] = None,
+        bcc: Optional[List[str]] = None,
+        in_reply_to: Optional[str] = None,
+        references: Optional[str] = None,
+        attachment_paths: Optional[List[str]] = None,
+    ) -> Dict[str, Any]:
+        """Send email via SMTP.
+
+        Args:
+            to: Recipient email address (or comma-separated list).
+            subject: Email subject.
+            body: Plain text body.
+            cc: Optional list of CC email addresses. Added to the Cc
+                header and to the SMTP recipient list.
+            bcc: Optional list of BCC email addresses. Added to the
+                SMTP recipient list but NOT to any header (Bcc is
+                invisible to other recipients).
+            in_reply_to: Message-ID for reply threading.
+            references: References header for threading.
+            attachment_paths: Optional list of local file paths to attach.
+                When present, the message is built as a multipart using
+                ``email.message.EmailMessage``; when absent, legacy
+                ``MIMEText`` is used for backwards compatibility.
+
+        Returns:
+            Dict with message_id of sent email.
+        """
+        msg, recipients = self.prepare_message(to, subject, body, cc, bcc, in_reply_to, references, attachment_paths)
+        from zylch.services.exact_operator_send_context import transport_message, wire_started
+        msg = transport_message(msg, self.email_addr, recipients)
+        has_attachments = bool(attachment_paths)
+
         # Bounded on purpose, and per socket operation. Unbounded, one
         # stalled send outlives the window after which its draft becomes
         # claimable again (`storage.send_claim_window_minutes`, computed
@@ -2292,6 +2321,7 @@ class IMAPClient:
                 smtp.starttls()
                 smtp.ehlo()
                 smtp.login(self.email_addr, self.password)
+                wire_started()
                 if has_attachments:
                     # EmailMessage: use send_message so envelope headers are
                     # handled consistently with multipart payloads.

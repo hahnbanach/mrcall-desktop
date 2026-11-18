@@ -137,5 +137,69 @@ async def drafts_reconcile_external(params: dict[str, Any], notify: NotifyFn) ->
                   sent_at=sent_at.isoformat(), idempotent=idempotent)
 
 
+async def drafts_publish_review(params: dict[str, Any], notify: NotifyFn) -> dict[str, Any]:
+    """drafts.publish_review(draft_id, expected_snapshot, thread_id, operation_id) -> exact review outcome."""
+    from zylch.services.exact_draft_publication import publish
+
+    assert_tool_allowed("create_draft")
+    owner, uid = profile_binding()
+    values = [required(params, key) for key in ("draft_id", "expected_snapshot", "thread_id", "operation_id")]
+    return await asyncio.to_thread(publish, owner, uid, *values, profile_binding)
+
+
+async def drafts_operation_status(params: dict[str, Any], notify: NotifyFn) -> dict[str, Any]:
+    """drafts.operation_status(operation_id) -> owner-scoped read-only operation journal."""
+    from zylch.storage.draft_operations import DraftOperations
+
+    _owner, uid = profile_binding()
+    value = DraftOperations().read(uid, required(params, "operation_id"))
+    return {"ok": value is not None, "operation": value}
+
+
 METHODS: dict[str, Callable[[dict[str, Any], NotifyFn], Awaitable[dict[str, Any]]]] = {"drafts.inspect": drafts_inspect, "drafts.discard_exact": drafts_discard_exact,
            "drafts.reconcile_external": drafts_reconcile_external}
+
+METHODS.update({"drafts.publish_review": drafts_publish_review, "drafts.operation_status": drafts_operation_status})
+
+
+async def drafts_retire_sent_mirror(params: dict[str, Any], notify: NotifyFn) -> dict[str, Any]:
+    """drafts.retire_sent_mirror(draft_id, expected_snapshot, thread_id, operation_id, target, commit=False) -> exact recovery."""
+    from zylch.services.exact_draft_retirement import retire
+
+    if not isinstance(params.get("target"), dict):
+        raise AssignmentError("target must be an object", -32602)
+    commit = params.get("commit", False)
+    if not isinstance(commit, bool):
+        raise AssignmentError("commit must be boolean", -32602)
+    if commit:
+        assert_tool_allowed("delete_draft")
+    owner, uid = profile_binding()
+    values = [required(params, key) for key in ("draft_id", "expected_snapshot", "thread_id", "operation_id")]
+    return await asyncio.to_thread(retire, owner, uid, *values, params.get("target"), commit, profile_binding)
+
+
+METHODS["drafts.retire_sent_mirror"] = drafts_retire_sent_mirror
+
+
+async def drafts_operator_send_inspect(params: dict[str, Any], notify: NotifyFn) -> dict[str, Any]:
+    """drafts.operator_send_inspect(draft_id) -> exact read-only operator send binding."""
+    from zylch.services.exact_operator_send import inspect
+    owner, uid = profile_binding()
+    return await asyncio.to_thread(inspect, owner, uid, required(params, "draft_id"))
+
+
+async def drafts_send_operator(params: dict[str, Any], notify: NotifyFn) -> dict[str, Any]:
+    """drafts.send_operator(draft_id, expected_snapshot, operation_id, binding, reason, version) -> exact operator send outcome."""
+    from zylch.services.exact_operator_send import send
+    if type(params.get("version")) is not int or params["version"] != 1:
+        raise AssignmentError("version must be integer 1", -32602)
+    if params.get("reason") != "explicit_operator_request" or not isinstance(params.get("binding"), dict):
+        raise AssignmentError("exact binding and explicit operator request required", -32602)
+    assert_tool_allowed("send_draft")
+    owner, uid = profile_binding()
+    values = [required(params, key) for key in ("draft_id", "expected_snapshot", "operation_id")]
+    return await asyncio.to_thread(lambda: asyncio.run(send(owner, uid, *values, params["binding"], profile_binding)))
+
+
+METHODS.update({"drafts.operator_send_inspect": drafts_operator_send_inspect,
+                "drafts.send_operator": drafts_send_operator})
