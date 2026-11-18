@@ -719,7 +719,7 @@ async def _run_sync(
         if progress is not None:
             progress(pct, message)
         if pct >= 90 or pct % 25 == 0:
-            console.print(f"  [dim]{message}[/dim]")
+            logger.info(f"[sync] {message}")
 
     result = await sync_service.sync_emails(
         days_back=days_back,

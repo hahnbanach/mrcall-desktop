@@ -110,7 +110,14 @@ handoffs; it grants no assignment, send or read-only mutation authority.
 
 `sync.run(days_back?, scope="all")` supports explicit `scope="email"`, bounded
 to integer 1–60 days, without WhatsApp or AI preparation. Its worker retains the
-single-flight lock after caller cancellation until it finishes. Unknown RPC
+single-flight lock after caller cancellation until it finishes. The hosted
+daemon runs that email scope by itself every `MAIL_SYNC_INTERVAL_MINUTES`
+(default 10, `0` disables, clamped to 2–360), first 90 seconds after start,
+with `days_back` 14. A `sync.run {scope: "email"}` that arrives during such a
+run returns that run's result with `busy: false`; two overlapping RPC calls
+keep the `busy` refusal. A mailbox progress line is a log record on either
+scope, `[sync] <mailbox>: <message>` at INFO, and no console line: the private
+log scope masks it. Unknown RPC
 keys refuse at the registry. Optional MCP startup, dependency identity and the
 local/install acceptance boundary are in
 [operator runtime](../engine/docs/features/operator-runtime.md).
