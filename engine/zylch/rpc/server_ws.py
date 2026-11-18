@@ -401,6 +401,90 @@ async def _whatsapp_refresh_loop() -> None:
         await asyncio.sleep(interval)
 
 
+#: Seconds the mail loop waits after start: after warmup and after the
+#: auto-update loop's own first tick.
+_MAIL_SYNC_FIRST_DELAY_SECONDS = 90
+#: How often a disabled mail loop re-reads its setting.
+_MAIL_SYNC_DISABLED_POLL_SECONDS = 600
+
+
+def _mail_sync_interval_seconds() -> int:
+    """Interval from MAIL_SYNC_INTERVAL_MINUTES (default 10, clamped 2..360).
+
+    ``0`` or a negative value disables the mail loop: the answer is then 0.
+    """
+    raw = (os.environ.get("MAIL_SYNC_INTERVAL_MINUTES") or "10").strip()
+    try:
+        minutes = int(raw)
+    except ValueError:
+        minutes = 10
+    if minutes <= 0:
+        return 0
+    return max(2, min(360, minutes)) * 60
+
+
+async def _mail_sync_tick() -> None:
+    """One interval of the mail loop: at most one intake, exactly one log line."""
+    from zylch.rpc.setup import email_intake_from_daemon
+    from zylch.services import process_pipeline
+
+    if _mail_sync_interval_seconds() == 0:
+        logger.info("[mail-sync] skipped: disabled")
+        return
+    if not (os.environ.get("EMAIL_ADDRESS") and os.environ.get("EMAIL_PASSWORD")):
+        logger.info("[mail-sync] skipped: no mail credentials")
+        return
+    if process_pipeline._pipeline_lock.locked():
+        # The paid pipeline fetches mail itself as its first stage.
+        logger.info("[mail-sync] skipped: pipeline run in flight")
+        return
+    result = await email_intake_from_daemon()
+    errors = result.get("errors") or []
+    if result.get("busy"):
+        logger.info("[mail-sync] skipped: intake already in flight")
+    elif result.get("success"):
+        new = (result.get("result") or {}).get("sync_new", 0)
+        warnings = f" warnings={len(errors)}" if errors else ""
+        logger.info(f"[mail-sync] run completed new={new}{warnings}")
+    else:
+        titles = "; ".join(str(e.get("title")) for e in errors if isinstance(e, dict))
+        logger.warning(f"[mail-sync] run finished with errors: {titles or 'no detail'}")
+
+
+async def _mail_sync_loop() -> None:
+    """Keep the mail archive current with no client asking for a sync.
+
+    A daemon whose clients only read it, such as the second account of an
+    operator clone or an MCP client, otherwise answers from an archive as old
+    as the last sync somebody asked for. A reply its owner sent by hand is
+    then in the provider's Sent folder and not in the archive, and
+    ``tasks.assignment.project`` cannot read the thread.
+
+    Every ``MAIL_SYNC_INTERVAL_MINUTES`` this runs the email-only intake of
+    ``sync.run {scope: "email"}``: IMAP fetch and local embeddings. It calls
+    no language model, no WhatsApp and none of the paid stages that
+    ``AUTO_UPDATE_ENABLED`` gates.
+
+    Single sequential loop, so its own runs never overlap. A failed run is
+    logged and the loop keeps running. Only the cancellation of this task
+    ends it: a ``CancelledError`` that arrives while the task is not being
+    cancelled came from the run it awaited, and is logged like any failure.
+    """
+    await asyncio.sleep(_MAIL_SYNC_FIRST_DELAY_SECONDS)
+    while True:
+        try:
+            await _mail_sync_tick()
+        except asyncio.CancelledError:
+            task = asyncio.current_task()
+            if task is not None and task.cancelling():
+                logger.info("[mail-sync] cancelled — exiting loop")
+                raise
+            logger.warning("[mail-sync] run cancelled outside the loop — will retry next interval")
+        except Exception:
+            logger.exception("[mail-sync] run crashed — will retry next interval")
+        await asyncio.sleep(_mail_sync_interval_seconds() or _MAIL_SYNC_DISABLED_POLL_SECONDS)
+
+
 async def serve_ws(
     host: Optional[str] = None,
     port: Optional[int] = None,
@@ -496,6 +580,13 @@ async def serve_ws(
             f"[ws] whatsapp refresh started "
             f"(every {_whatsapp_refresh_interval_seconds() // 60} min)"
         )
+        # Keep the mail archive current with no client asking for a sync.
+        mail_task = asyncio.create_task(_mail_sync_loop())
+        mail_interval = _mail_sync_interval_seconds()
+        logger.info(
+            "[ws] mail sync started "
+            + (f"(every {mail_interval // 60} min)" if mail_interval else "(disabled)")
+        )
         # Reap zombie children leaked by the whatsmeow Go c-shared lib.
         reaper_task = asyncio.create_task(reap_orphans_loop())
         logger.info("[ws] zombie reaper started (reaps leaked c-shared children)")
@@ -504,5 +595,6 @@ async def serve_ws(
         finally:
             auto_task.cancel()
             wa_task.cancel()
+            mail_task.cancel()
             reaper_task.cancel()
-            await asyncio.gather(auto_task, wa_task, reaper_task, return_exceptions=True)
+            await asyncio.gather(auto_task, wa_task, mail_task, reaper_task, return_exceptions=True)

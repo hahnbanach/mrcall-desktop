@@ -565,6 +565,7 @@ async def run_sync_only(
     days_back: int = 60,
     progress: Optional[ProgressFn] = None,
     errors_out: Optional[list] = None,
+    include_whatsapp: bool = True,
 ) -> dict:
     """Run only the data-fetch phases of the pipeline (email + WhatsApp),
     skipping memory extraction and task detection.
@@ -594,7 +595,7 @@ async def run_sync_only(
         "sync_new": 0,
         "wa_messages": 0,
         "wa_contacts": 0,
-        "wa_skipped_reason": None,
+        "wa_skipped_reason": None if include_whatsapp else "Email-only scope.",
     }
 
     # --- Step 1: Email ---
@@ -614,6 +615,10 @@ async def run_sync_only(
         if errors_out is not None:
             errors_out.extend(sync_failure_entries(e))
         _p(100, f"Sync failed: {e}", None)
+        return result
+
+    if not include_whatsapp:
+        _p(100, "Email sync complete", None)
         return result
 
     # --- Step 2: WhatsApp ---
@@ -714,7 +719,7 @@ async def _run_sync(
         if progress is not None:
             progress(pct, message)
         if pct >= 90 or pct % 25 == 0:
-            console.print(f"  [dim]{message}[/dim]")
+            logger.info(f"[sync] {message}")
 
     result = await sync_service.sync_emails(
         days_back=days_back,

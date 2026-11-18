@@ -449,7 +449,7 @@ Native bank methods and the additive managed finance-history contract are in
 
 | Method | Declared parameters | Returns |
 |---|---|---|
-| `sync.run` | `days_back?` | result dict |
+| `sync.run` | `days_back?`, `scope?` | result dict |
 
 **`tasks.*`**
 
@@ -1157,7 +1157,7 @@ A refused call answers `busy: true`, `success: false`, an empty
 caller that treats it as a completed pass would present stale state as
 fresh; the auto-update loop logs it as a skipped tick.
 
-### `sync.run(days_back?)`
+### `sync.run(days_back?, scope?)`
 
 Data-fetch phase of the pipeline (IMAP email + WhatsApp). Skips memory
 extraction and task detection — those still belong to `update.run`.
@@ -1166,7 +1166,47 @@ button calls this implicitly as its first step.
 
 | Param | Type | Required | Notes |
 |-------|------|----------|-------|
-| `days_back` | int | no | Default 60. Same semantics as the CLI `/process --days N`. |
+| `days_back` | int | no | Default 60. Same semantics as the CLI `/process --days N`. On the email scope it must be an integer from 1 to 60. |
+| `scope` | string | no | `all` (default: email, then WhatsApp) or `email`. Any other value is refused before any effect. |
+
+A mailbox progress line is a log record on either scope,
+`[sync] <mailbox>: <message>` at INFO, and no console line: the private log
+scope of a hosted family masks it.
+
+**Email scope.** `scope: "email"` fetches mail only: no WhatsApp, no memory
+extraction, no task detection, no language model. It runs in a worker thread,
+so the engine keeps answering other requests during a sync, and one intake
+runs at a time per process. The answer always echoes
+`scope: "email"` and carries `busy`:
+
+- no intake in flight: the call starts one and returns its result, `busy: false`;
+- an intake another RPC caller started is in flight: `busy: true`,
+  `success: false`, nothing ran;
+- an intake the daemon's own mail loop started is in flight: the call returns
+  that run's result when it ends, `busy: false`, and starts no second run.
+
+A caller that goes away does not stop the worker. The intake finishes and
+releases its lock on its own.
+
+**The daemon's mail loop.** A `zylch serve` daemon runs the email-scope intake
+by itself, with `{scope: "email", days_back: 14}`, every
+`MAIL_SYNC_INTERVAL_MINUTES` of its process environment: default 10, clamped
+to 2..360, `0` disables it. It starts 90 seconds after the daemon and writes
+one `[mail-sync]` log line per interval:
+
+- `run completed new=N`, with ` warnings=K` appended when the run reports
+  non-fatal errors;
+- `run finished with errors: …`, with the humanized error titles;
+- `skipped: disabled`, `skipped: no mail credentials`,
+  `skipped: pipeline run in flight` or `skipped: intake already in flight`;
+- `run crashed — will retry next interval`, with the traceback;
+- `run cancelled outside the loop — will retry next interval`.
+
+Stopping the daemon while a run is in flight writes
+`cancelled — exiting loop` instead. The loop calls no paid stage;
+`AUTO_UPDATE_ENABLED` keeps its own meaning. The stdio sidecar of the Desktop
+app starts no such loop. Implementation: `engine/zylch/rpc/server_ws.py`,
+`_mail_sync_loop`.
 
 Returns:
 
@@ -1195,6 +1235,10 @@ Notification stream — `sync.progress`:
 ```jsonc
 { "pct": 0..100, "message": string }
 ```
+
+On the email scope the result also carries `scope: "email"` and `busy`. When
+the run reaches the mailbox stage, `wa_skipped_reason` is `Email-only scope.`;
+the answer for missing credentials carries no such key.
 
 12-hour RPC timeout (same as `update.run` — a first sync on a busy
 inbox is the slow part). Implementation: `engine/zylch/rpc/setup.py`

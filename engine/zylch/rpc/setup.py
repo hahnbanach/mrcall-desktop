@@ -17,8 +17,11 @@ This module backs (1) with ``sync.run`` and the gating in (2)/(3) with
 
 from __future__ import annotations
 
+import asyncio
+import contextvars
 import logging
 import os
+import threading
 from typing import Any, Awaitable, Callable, Dict, Optional
 
 logger = logging.getLogger(__name__)
@@ -33,8 +36,176 @@ def _owner_id() -> str:
     return get_owner_id()
 
 
+# ── Email-only intake ───────────────────────────────────────────────
+#
+# One intake runs at a time per process, in a worker thread. Two callers
+# reach it: the RPC ``sync.run {scope: "email"}`` and the daemon's own mail
+# loop (``rpc/server_ws.py``, ``_mail_sync_loop``).
+#
+# Ownership belongs to the actual worker, not the request awaiting it: the
+# worker releases the lock when the mailbox work has really ended, whatever
+# happened to the caller in the meantime.
+_email_intake_lock = threading.Lock()
+_email_intake_futures: set = set()
+#: Written on the event loop thread by the caller that has just taken the
+#: lock: ``None`` first, then the run's future when the daemon's own loop is
+#: that caller. An RPC caller that finds the lock taken joins that future and
+#: is answered ``busy`` when the value is ``None``. Resetting it at every
+#: acquisition is what keeps an RPC caller from joining a loop run that ended
+#: before another RPC run began.
+_email_intake_loop_run: Optional["asyncio.Future[Any]"] = None
+
+#: What the daemon's mail loop asks for: the parameters the operator kernel
+#: sends before a tick.
+EMAIL_INTAKE_PARAMS: Dict[str, Any] = {"scope": "email", "days_back": 14}
+
+
+def _email_intake_failure(title: str, action: str, *, busy: bool = False) -> dict:
+    return {
+        "scope": "email",
+        "success": False,
+        "busy": busy,
+        "summary": title,
+        "result": {
+            "sync_new": 0,
+            "wa_messages": 0,
+            "wa_contacts": 0,
+            "wa_skipped_reason": "Email-only scope.",
+        },
+        "errors": [{"severity": "error", "title": title, "detail": title, "action": action}],
+    }
+
+
+def _no_notify(method: str, params: Dict[str, Any]) -> None:
+    return None
+
+
 async def sync_run(params: Dict[str, Any], notify: NotifyFn) -> Any:
-    """sync.run(days_back?) -> result dict.
+    """sync.run(days_back?, scope?) -> result dict.
+
+    ``scope`` is ``"all"`` (the default: email, then WhatsApp) or ``"email"``.
+    The result shape is the one :func:`_sync_run` documents.
+
+    The email scope fetches mail only: no WhatsApp, no memory extraction, no
+    task detection, no language model. It runs in a worker thread, so the
+    event loop keeps serving other requests during a sync. Its answer always
+    echoes ``scope: "email"`` and carries ``busy``:
+
+    - no intake in flight: this call starts one and returns its result;
+    - an intake started by another RPC caller is in flight: ``busy: true``,
+      ``success: false``, nothing ran;
+    - an intake started by the daemon's own mail loop is in flight: this call
+      returns that run's result when it ends and starts no second run.
+    """
+    scope = params.get("scope", "all")
+    if not isinstance(scope, str) or scope not in ("all", "email"):
+        return {
+            "success": False,
+            "summary": "Unsupported synchronization scope.",
+            "result": {},
+            "errors": [
+                {
+                    "severity": "error",
+                    "title": "Unsupported synchronization scope.",
+                    "detail": "Use all or email.",
+                    "action": "Correct the synchronization scope.",
+                }
+            ],
+        }
+    if scope == "all":
+        return await _sync_run(params, notify)
+    days_back = params.get("days_back", 60)
+    if type(days_back) is not int or not 1 <= days_back <= 60:
+        return _email_intake_failure(
+            "Invalid email synchronization history.", "Use an integer from 1 to 60 days."
+        )
+    return await _email_intake(params, notify, from_loop=False)
+
+
+async def email_intake_from_daemon() -> dict:
+    """One email-only intake asked for by the daemon's own mail loop.
+
+    It never queues and never joins: when any intake is already in flight the
+    answer is the ``busy`` refusal and the loop waits for its next interval.
+    """
+    return await _email_intake(dict(EMAIL_INTAKE_PARAMS), _no_notify, from_loop=True)
+
+
+async def _email_intake(params: Dict[str, Any], notify: NotifyFn, *, from_loop: bool) -> dict:
+    """Start one email-only intake in a worker thread, or join the daemon's own."""
+    global _email_intake_loop_run
+    if not _email_intake_lock.acquire(blocking=False):
+        running = _email_intake_loop_run
+        if from_loop or running is None:
+            return _email_intake_failure(
+                "Email synchronization is already running.",
+                "Wait for the current synchronization to finish, then retry.",
+                busy=True,
+            )
+        # The daemon's own run is in flight: its result is this caller's result.
+        return await _await_intake(running)
+    _email_intake_loop_run = None
+
+    def worker() -> dict:
+        try:
+            result = asyncio.run(_sync_run(params, notify, email_only=True))
+            return {**result, "scope": "email", "busy": False}
+        finally:
+            _email_intake_lock.release()
+
+    try:
+        future = asyncio.get_running_loop().run_in_executor(
+            None, contextvars.copy_context().run, worker
+        )
+    except Exception:
+        _email_intake_lock.release()
+        logger.exception("[sync.run] could not start email intake worker")
+        return _email_intake_failure(
+            "Email synchronization could not start.",
+            "Retry synchronization after checking engine availability.",
+        )
+    except BaseException:
+        _email_intake_lock.release()
+        raise
+    _email_intake_futures.add(future)
+    if from_loop:
+        _email_intake_loop_run = future
+
+    def completed(done) -> None:
+        _email_intake_futures.discard(done)
+        if not done.cancelled():
+            # Consume an eventual exception even if the RPC request disconnected.
+            done.exception()
+
+    future.add_done_callback(completed)
+    return await _await_intake(future)
+
+
+async def _await_intake(future: "asyncio.Future[Any]") -> dict:
+    """Await a run without owning it. The only place a run is awaited.
+
+    The shield keeps a cancelled caller from cancelling the shared future. An
+    unshielded cancel could reach a run still queued in the executor: its
+    worker would never start and never release the lock. It would also cancel
+    the await of every other caller of that run, the daemon's loop included.
+
+    A worker exception becomes the email scope's failure result for the
+    caller that started the run and for a caller that joined it alike.
+    """
+    try:
+        return await asyncio.shield(future)
+    except asyncio.CancelledError:
+        raise
+    except Exception:
+        logger.exception("[sync.run] email intake worker failed")
+        return _email_intake_failure(
+            "Email synchronization failed.",
+            "Check mailbox access and retry synchronization.",
+        )
+
+
+async def _sync_run(params: Dict[str, Any], notify: NotifyFn, *, email_only: bool = False) -> Any:
+    """Body of ``sync.run`` for both scopes.
 
     Fetch new emails (IMAP) and WhatsApp messages, then return. Skips
     memory extraction + task detection — those are the responsibility of
@@ -100,6 +271,7 @@ async def sync_run(params: Dict[str, Any], notify: NotifyFn) -> Any:
             days_back=days_back,
             progress=_emit,
             errors_out=stage_errors,
+            include_whatsapp=not email_only,
         )
     except Exception as e:
         # Last-resort guard: run_sync_only already routes per-stage

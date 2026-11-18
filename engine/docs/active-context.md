@@ -106,8 +106,24 @@ The [closure plan](../../docs/execution-plans/2026-10-07-desktop-kernel-hardenin
 owns exact results and limitations. No installed-app, fleet or live-data cleanup
 acceptance is implied.
 
+The hosted daemon has local source for a mail loop: every
+`MAIL_SYNC_INTERVAL_MINUTES` it runs the email-only intake of
+`sync.run {scope: "email"}` by itself, so an engine that clients only read
+keeps its archive current. The email scope and the loop pass their focused
+tests on this line. Both MrCall units, support and the second account, run
+the loop since 2026-11-18 from one release: branch
+`release/hosted-engine-20261118`, tag `hosted-engine-0.1.57.dev2`. That
+branch is the package support ran, recorded in git, plus the loop; it is not
+`main`. The
+[plan](../../docs/execution-plans/2026-11-18-engine-owned-mail-sync.md) owns
+milestones, evidence and rollback.
+
 ## Unresolved
 
+- `main` and the hosted release branch are two lines: the branch has 184
+  commits `main` lacks, `main` has 16 the branch lacks. The MrCall units run
+  the branch; the Café 124 unit runs a third build. Bringing them to one
+  line is not planned yet.
 - Live PEC.net acceptance and provider marker comparison,
   Qonto installed Electron and provider UI remain open in their owning plans.
 - Remaining Café124 billing choices and funded credit acceptance remain open;
