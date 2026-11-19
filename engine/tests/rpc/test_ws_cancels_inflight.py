@@ -37,6 +37,12 @@ from zylch.rpc import methods, server_ws
 UID = "uid-ws-cancel-test"
 
 
+@pytest.fixture(autouse=True)
+def _profile_owner(monkeypatch):
+    """The transport serves a request only inside the owner request context."""
+    monkeypatch.setenv("OWNER_ID", UID)
+
+
 class _FakeConnection:
     """The slice of a `websockets` connection `_handle_connection` uses."""
 

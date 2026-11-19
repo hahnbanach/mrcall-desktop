@@ -315,14 +315,16 @@ def test_manual_assignment_empty_creator_scope_cannot_close(env, mail):
 def test_uidvalidity_changes_during_actual_fetch_are_unknown(env, mail, monkeypatch):
     from zylch.email.imap_client import IMAPClient
 
-    original = IMAPClient.fetch_messages_by_uid
+    # The reply read fetches inside one selected folder
+    # (`IMAPClient._scan_fetch_folder`), so the change is injected there.
+    original = IMAPClient._fetch_messages_by_uid_selected
 
-    def changed(client, folder, uids):
-        value = original(client, folder, uids)
+    def changed(client, selected, uids):
+        value = original(client, selected, uids)
         mail.uidvalidity += 1
         return value
 
-    monkeypatch.setattr(IMAPClient, "fetch_messages_by_uid", changed)
+    monkeypatch.setattr(IMAPClient, "_fetch_messages_by_uid_selected", changed)
     source = result("reply_evidence", source_id=mail.reply_id, thread_key=ROOT)
     assert source["judgement"] == "UNKNOWN" and not source["complete"]
     assert mail.closed == 1
