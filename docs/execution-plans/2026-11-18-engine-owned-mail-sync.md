@@ -27,13 +27,14 @@ Four source lines carry the touched files:
 | Line | Location | Email-only intake | `observability_producers` |
 |---|---|---|---|
 | `origin/main` | this worktree, `engine/zylch` | absent | absent |
-| hosted release | branch `release/hosted-engine-20261118`, commit `c5bd4bb5`; both MrCall units run it | present | present |
+| hosted release | branch `release/hosted-engine-20261118`; commit `c5bd4bb5` carries the loop; both MrCall units run the branch's tag `hosted-engine-0.1.57.dev3` | present | present |
 | second account's earlier family | `/home/mrcalld/releases/source-read-repair-mario-20261027-d2f7e66c6078/zylch` | absent | present |
 | support's earlier family | `/home/mrcalld/releases/interactive-reply-d78411b2122a547a5f4d4760/mrcall/venv/lib/python3.12/site-packages/zylch` | present | present |
 
-The hosted release is not `main`: it has 184 commits that `main` lacks and
-lacks 16 that `main` has. The two earlier families stay on disk as rollback
-targets.
+The hosted release is not `main`. The
+[one-build plan](2026-11-19-one-hosted-engine-build.md) owns that line, what
+each hosted unit runs and the join with `main`. The two earlier families stay
+on disk.
 
 Tests run with `/home/mal/zylch-engine/venv/bin/python -m pytest` from the
 `engine` directory of the tree under test, one suite at a time.
@@ -250,22 +251,28 @@ The release is the environment that served support with the package replaced
 by the wheel built from `c5bd4bb5`:
 `/home/mrcalld/releases/hosted-engine-0.1.57.dev2-00fdc039d4e3/venv`. Each
 unit selects it with one drop-in named `…-hosted-engine-20261118.conf` that
-sorts last, resets `ExecStart` to the release's interpreter and sets
-`UnsetEnvironment=PYTHONPATH`.
+resets `ExecStart` to the release's interpreter and sets
+`UnsetEnvironment=PYTHONPATH`. Since 2026-11-19 each unit also carries a
+later drop-in, `…-hosted-engine-20261119.conf`, which sorts after it and
+selects release `hosted-engine-0.1.57.dev3-084d97ca9d8d`. Removing the later
+drop-in returns the unit to release `hosted-engine-0.1.57.dev2`.
 
-Rollback, per unit: remove that drop-in, `systemctl daemon-reload`, restart
-the unit. The second account's store keeps the table
+Rollback of release `hosted-engine-0.1.57.dev2`, per unit, once the later
+drop-in is gone: remove `…-hosted-engine-20261118.conf`,
+`systemctl daemon-reload`, restart the unit. The second account's store keeps the table
 `draft_provider_operations` and the stamps of steps `0007` and `0008`; its
 earlier family ignores step ids it does not know.
 
-The line's own `engine/tests/conftest.py` imports `zylch.llm.roles`, which the
-package does not ship, so its suite is not collectable as committed. The
-ported package is tested with `main`'s test tree and `PYTHONPATH` naming it.
+At `c5bd4bb5` the line's own `engine/tests/conftest.py` imports
+`zylch.llm.roles`, which the package does not ship, so its suite is not
+collectable there; the ported package is tested with `main`'s test tree and
+`PYTHONPATH` naming it. From `775d3248` that fixture skips when the module is
+absent and the line's tree is collectable.
 
-Open, each on the operator's word: the kernel change that drops
-`_mail_intake`; bringing `main` and the hosted branch to one line; the Café
-124 unit, which runs a third build. Scheduled ticks of the MrCall clone
-observed after the rollout close the plan.
+Open on the operator's word: the kernel change that drops `_mail_intake`.
+The one-build plan owns the other hosted units and the join with `main`.
+Scheduled ticks of the MrCall clone observed after the rollout close the
+plan.
 
 ## Verification evidence
 

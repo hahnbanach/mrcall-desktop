@@ -326,6 +326,11 @@ sudo /home/mrcalld/mrcall-desktop/engine/scripts/server/update-daemons.sh --prun
 - **Server clock must be ~correct.** Firebase ID-token verification checks
   `exp`; a skewed clock rejects valid tokens. `timedatectl` should report
   synchronized.
+- **A commit on `main` restarts every unit that night.**
+  `zylch-reconcile.timer` runs `update-daemons.sh` at 00:00 UTC. When the
+  pull brings a commit, documentation included, it restarts every daemon,
+  with no check for a telephone call in progress. A unit pinned by a drop-in
+  comes back on that drop-in.
 - **Never open a live profile DB or company store as any user but the
   daemon's — not even read-only.** `sqlite3 'file:.../zylch.db?mode=ro'` run
   as your login user (or as root, or as `mrcalld` on a migrated profile)

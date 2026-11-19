@@ -97,3 +97,5 @@ anywhere in the repo):
 - [Current-main operator source build](operator-source-build.md) — fixed paired packages, native admission and source-verification limits.
 
 - [Engine-owned mail sync](briefs/2026-11-18-engine-owned-mail-sync.md) — a free mail loop in the hosted daemon, so a client that only reads an engine finds a current archive; [execution plan](execution-plans/2026-11-18-engine-owned-mail-sync.md).
+
+- [One build for every hosted engine](briefs/2026-11-19-one-hosted-engine-build.md) — the seven hosted units on one tagged package and one Python environment; [execution plan](execution-plans/2026-11-19-one-hosted-engine-build.md) with the per-unit state, the release and each rollback.

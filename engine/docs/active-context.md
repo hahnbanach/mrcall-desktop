@@ -106,24 +106,56 @@ The [closure plan](../../docs/execution-plans/2026-10-07-desktop-kernel-hardenin
 owns exact results and limitations. No installed-app, fleet or live-data cleanup
 acceptance is implied.
 
-The hosted daemon has local source for a mail loop: every
-`MAIL_SYNC_INTERVAL_MINUTES` it runs the email-only intake of
-`sync.run {scope: "email"}` by itself, so an engine that clients only read
-keeps its archive current. The email scope and the loop pass their focused
-tests on this line. Both MrCall units, support and the second account, run
-the loop since 2026-11-18 from one release: branch
-`release/hosted-engine-20261118`, tag `hosted-engine-0.1.57.dev2`. That
-branch is the package support ran, recorded in git, plus the loop; it is not
-`main`. The
+The hosted daemon runs a mail loop: every `MAIL_SYNC_INTERVAL_MINUTES` it
+runs the email-only intake of `sync.run {scope: "email"}` by itself, so an
+engine that clients only read keeps its archive current. Its
 [plan](../../docs/execution-plans/2026-11-18-engine-owned-mail-sync.md) owns
-milestones, evidence and rollback.
+that evidence.
+
+Seven hosted units run four packages. The two MrCall units, support and the
+second account, run tag `hosted-engine-0.1.57.dev3` of branch
+`release/hosted-engine-20261118` since 2026-11-19: the support line united
+with the Café 124 production package, in the Café 124 dependency set. Café
+124 production, its three staff units and the personal mailbox unit run
+older packages that are in no commit as a whole. `main` runs on no unit. The
+[one-build plan](../../docs/execution-plans/2026-11-19-one-hosted-engine-build.md)
+owns the per-unit state, the release, the store rehearsals and each rollback.
 
 ## Unresolved
 
-- `main` and the hosted release branch are two lines: the branch has 184
-  commits `main` lacks, `main` has 16 the branch lacks. The MrCall units run
-  the branch; the Café 124 unit runs a third build. Bringing them to one
-  line is not planned yet.
+- Five hosted units are not on the united package. Café 124 production needs
+  a decision on its finance-content rule first: the united package lets a
+  session authenticated as the profile's owner reuse that profile's finance
+  content, as support does, where the Café 124 package refuses by text
+  similarity. 26 Qonto tests pin the older rule and no test covers
+  `qonto/owner_content.py`. The three Café 124 staff units and the personal
+  mailbox unit wait for the operator's word.
+- `main` and the hosted line are two lines. Commit `0cf4790c` replaced the
+  hosted line's tree with the production runtime, so its git ancestry does
+  not describe its content. A merge from the content ancestor `v0.1.56` has
+  32 conflicted paths, 17 in the engine package. `main` holds the contextual
+  email guard with its enrollment and the typed Qonto credentials, which no
+  unit ever ran.
+- Six hosted units carry drop-ins that sort after `tenant.conf`. The nightly
+  reconcile exits 3 and a `tenant.conf` change does not reach them.
+- The two MrCall units log RPC calls at DEBUG to the journal, mailbox and
+  customer addresses included. `checks/journal-address-shapes.txt` in the
+  one-build plan's evidence folder lists the line shapes with their counts.
+- On the MrCall support profile the assignment projection of three threads
+  that carry a waiting draft is `unknown` on the primary account: two with
+  `REPLY_SOURCE_UNAVAILABLE`, one of them from `SENT_REPLY_NOT_SYNCED`
+  evidence, and one with `SOURCE_UNAVAILABLE`. Each of the 29 operator ticks
+  since 2026-11-16 that kept its review lists them, on three engine
+  releases. The cause is not established. `rollout/m3-tick-1850.txt` in the
+  one-build plan's evidence folder holds the counts.
+- A member's message without automatic-reply headers in a thread's Sent mail
+  holds that thread as `needs-assignment` with no time limit
+  (`services/task_assignment_evidence.py`, `_member_activity`;
+  `services/task_assignment_projection.py`, `_project`). On 2026-11-19 that
+  rule holds 16 of the 18 inbound conversations of the MrCall support
+  mailbox, the oldest for 10 days, one of them in part through five replies
+  the engine itself sent in September. Whether the hold gets a limit is the
+  operator's decision.
 - Live PEC.net acceptance and provider marker comparison,
   Qonto installed Electron and provider UI remain open in their owning plans.
 - Remaining Café124 billing choices and funded credit acceptance remain open;
