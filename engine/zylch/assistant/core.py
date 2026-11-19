@@ -838,7 +838,14 @@ class ZylchAIAgent(BaseConversationalAgent):
         if result.error:
             formatted["error"] = result.error
 
-        return json.dumps(formatted, indent=2, default=str)
+        # Keep every value while avoiding JSON whitespace and ASCII expansion
+        # in the next request. Escape lone surrogates as JSON escapes so the
+        # resulting text remains valid UTF-8 without replacing evidence.
+        return (
+            json.dumps(formatted, ensure_ascii=False, separators=(",", ":"), default=str)
+            .encode("utf-8", errors="backslashreplace")
+            .decode("utf-8")
+        )
 
     def clear_history(self) -> None:
         """Clear conversation history."""

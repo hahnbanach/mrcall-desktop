@@ -38,6 +38,49 @@ INTERNAL_ERROR = -32603
 NotifyFn = Callable[[str, Dict[str, Any]], None]
 
 
+def _chat_failure_diagnostic(error: Exception) -> str:
+    """Describe trusted error types/engine locations without exception payloads."""
+    from collections import deque
+    from pathlib import Path
+    import re
+    import sys
+
+    try:
+        label = "Exception"
+        known = {
+            "builtins": ("ValueError", "RuntimeError", "TimeoutError", "TypeError", "KeyError"),
+            "zylch.llm.budget_pricing": ("BudgetError",),
+            "zylch.llm.exceptions": ("LLMPromptTooLargeError",),
+            "zylch.services.task_assignment_types": ("AssignmentError",),
+            "zylch.qonto.errors": ("QontoError",),
+            "httpx": ("ConnectError", "ReadTimeout", "HTTPStatusError"),
+            "anthropic": ("APIStatusError", "APIConnectionError", "RateLimitError"),
+        }
+        for module_name, names in known.items():
+            module = sys.modules.get(module_name)
+            for name in names:
+                if module is not None and type(error) is getattr(module, name, None):
+                    label = name
+        root = Path(__file__).resolve().parents[1]
+        locations = deque(maxlen=16)
+        trace = error.__traceback__
+        while trace is not None:
+            frame = trace.tb_frame
+            filename = Path(frame.f_code.co_filename).resolve()
+            module_file = frame.f_globals.get("__file__")
+            if isinstance(module_file, str) and Path(module_file).resolve() == filename:
+                try:
+                    relative = filename.relative_to(root)
+                except ValueError:
+                    relative = None
+                if (relative is not None and filename.is_file()
+                        and re.fullmatch(r"(?:[A-Za-z_][A-Za-z_0-9]*/)*[A-Za-z_][A-Za-z_0-9]*\.py", relative.as_posix())):
+                    locations.append(f"{relative.as_posix()}:{trace.tb_lineno}")
+            trace = trace.tb_next
+        return f"type={label} locations={','.join(locations) or 'unavailable'}"
+    except Exception:
+        return "type=Exception locations=unavailable"
+
 def _error(req_id: Optional[Any], code: int, message: str) -> Dict[str, Any]:
     return {"jsonrpc": "2.0", "id": req_id, "error": {"code": code, "message": message}}
 
@@ -315,7 +358,8 @@ async def _dispatch_raw(raw: str, notify: NotifyFn) -> Optional[Dict[str, Any]]:
 
             code = e.code if isinstance(e, QontoError) else INTERNAL_ERROR
             message = str(e) if isinstance(e, QontoError) else "Chat operation failed"
-            logger.warning("[rpc] chat operation failed code=%s", code)
+            logger.warning("[rpc] chat operation failed code=%s %s", code,
+                           _chat_failure_diagnostic(e))
             return None if is_notification else _error(req_id, code, message)
         if method.startswith("stripe."):
             from zylch.stripe.errors import StripeError

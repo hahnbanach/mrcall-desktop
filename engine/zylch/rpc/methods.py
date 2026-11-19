@@ -1186,7 +1186,7 @@ async def system_capabilities(params: Dict[str, Any], notify: NotifyFn) -> Any:
 
     from zylch.workflows.resources import list_workflows
 
-    return {"observability": 1, "private_workflows": 1, "workflow_selection_method": "workflows.suggest", "workflows": list_workflows(), "chat_read_only_policy": READ_ONLY_POLICY_VERSION, "chat_history_binding": 1, "assignment_draft_policy": 1, "operator_reply_provenance": 1, "stripe": 1, "stripe_payment_method_links": 1, "exact_draft_publication": 1, "sent_mirror_recovery": 1, "interactive_exact_send": 1}
+    return {"observability": 1, "private_workflows": 1, "workflow_selection_method": "workflows.suggest", "workflows": list_workflows(), "chat_read_only_policy": READ_ONLY_POLICY_VERSION, "chat_history_binding": 1, "assignment_draft_policy": 1, "operator_reply_provenance": 1, "stripe": 1, "stripe_payment_method_links": 1, "stripe_payment_links": 1, "exact_draft_publication": 1, "sent_mirror_recovery": 1, "interactive_exact_send": 1}
 
 
 async def chat_approve(params: Dict[str, Any], notify: NotifyFn) -> Any:
@@ -1844,6 +1844,7 @@ async def emails_list_by_thread(
             out.append(
                 {
                     "id": r.get("id") or "",
+                    "message_id_header": r.get("message_id_header"),
                     "from_email": from_email,
                     "from_name": r.get("from_name") or "",
                     "to_email": r.get("to_email") or "",
@@ -2739,6 +2740,12 @@ from zylch.rpc.stripe import METHODS as _STRIPE_METHODS
 for _name, _fn in _STRIPE_METHODS.items():
     if _name in METHODS:
         raise RuntimeError(f"duplicate RPC method registration: {_name}")
+    METHODS[_name] = _fn
+
+from zylch.rpc.operator_operations import METHODS as _OPERATOR_MANAGEMENT_METHODS
+for _name, _fn in _OPERATOR_MANAGEMENT_METHODS.items():
+    if _name in METHODS:
+        raise RuntimeError(f"Duplicate RPC method name: {_name}")
     METHODS[_name] = _fn
 
 from zylch.rpc.diagnostics import METHODS as _DIAGNOSTIC_METHODS

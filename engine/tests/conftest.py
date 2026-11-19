@@ -88,8 +88,13 @@ def _fixture_model_table(monkeypatch):
     served set starts unread, so the first credits choice of a test reads it.
     Everything is put back after the test.
     """
-    from tests.llm import model_table_fixture
-    from zylch.llm.roles import catalogue, distribution, served, table
+    try:
+        from tests.llm import model_table_fixture
+        from zylch.llm.roles import catalogue, distribution, served, table
+    except ImportError:
+        # The hosted line ships no `zylch.llm.roles`: there is no table to pin.
+        yield
+        return
 
     monkeypatch.setattr(distribution, "_fetch", _no_network)
     monkeypatch.setattr(served, "_reader", _offline_billing_server)
