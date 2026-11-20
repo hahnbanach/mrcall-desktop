@@ -4,6 +4,15 @@ This contract describes local, unreleased contextual-email enforcement. Desktop
 `v0.1.56`, kernel `v0.51.0` and their hosted activations retain the previous scoped
 reply policy. This development does not activate or migrate a live company.
 
+`main` does not carry the modules of this contract.
+`services/contextual_email_policy.py`,
+`services/task_assignment_draft_transaction.py`,
+`services/task_assignment_email_effect.py`,
+`services/task_assignment_enrollment.py` and
+`scripts/server/assignment_enroll.py` are in tag
+`main-before-hosted-line-20261120`. The engine on `main` looks the first three
+up with `find_spec` and applies the guard only when they are present.
+
 ## Durable applicability
 
 The company store holds one versioned `assignment_enrollment` row, bound to its

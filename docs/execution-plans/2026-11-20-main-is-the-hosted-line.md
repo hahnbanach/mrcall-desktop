@@ -160,3 +160,29 @@ Rollback, per unit: as M5 of the one-build plan.
 
 `~/.local/share/mrcall-operational-evidence/2026-11-20/main-is-the-hosted-line/`.
 Results of each milestone are added below as they exist.
+
+### Reviews
+
+- Brief: REVISE twice, then APPROVED. The first review counted the tick's
+  rows by the engine's component, asked for the reconcile as a stated
+  exception and for the cases in which a hold ends although a person
+  answered, and traced a second answer to a released thread. The second
+  found the window in which a mail sync flags the engine's own sent reply
+  automatic; the storage fix closes it.
+- Plan: APPROVED. Its notes are in the plan: `zylch-provisiond.service`, the
+  rollback of each milestone, `zylch-reconcile.path`, the expected result of
+  the first reconcile.
+- M1 and M2: APPROVED on commits `63b2fb5d`, `81bf192a`, `6244b480` and
+  `6454b9a2`. Its notes became the single release decision, the automatic
+  reply from outside and three test cases.
+
+### M1, 2026-11-20
+
+- Merge commit `63b2fb5d`, parents `e695ce0a` and `623b8cff`.
+  `git diff 623b8cff 63b2fb5d -- engine/zylch engine/pyproject.toml` is
+  empty. Against `623b8cff`, `engine/tests` adds the four `tests/stripe`
+  files of `main`. Against `e695ce0a`, the one path outside the package, its
+  tests and `pyproject.toml` is the removed
+  `engine/scripts/server/assignment_enroll.py`.
+- `tests/stripe` on the merged tree: 35 passed.
+- Tag `main-before-hosted-line-20261120` on `ecba4c06`.

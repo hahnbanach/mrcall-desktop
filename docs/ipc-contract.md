@@ -10,6 +10,13 @@ description: |
 
 # IPC Contract — Engine ↔ App
 
+The method registry on `main` is the production engine's. This file is not
+reconciled with it: it does not name several methods the registry holds,
+among them `drafts.publish_review`, `drafts.send_operator` and
+`instructions.store`, and its `chat.send` parameters `email_context` and
+`contextual_email_policy_version` belong to modules `main` does not carry
+(see [assignment enrollment](../engine/docs/features/assignment-enrollment.md)).
+
 ## Voice agent configuration (M2)
 
 The existing authenticated owner WebSocket exposes `voice.config.get()` and
