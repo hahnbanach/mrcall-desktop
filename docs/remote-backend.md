@@ -153,13 +153,16 @@ The model:
   `main` since `c2b3ca5`). All seven existing profiles run as `mc-…`, use
   derived company-store paths and have their own
   egress enforcement. All seven run release
-  `/home/mrcalld/releases/hosted-engine-0.1.57.dev4-9f6812dbd997`, tag
-  `hosted-engine-0.1.57.dev4` on `main`. Six of them, production voice
+  `/home/mrcalld/releases/hosted-engine-0.1.57.dev5-e1c1af32d0d0`, tag
+  `hosted-engine-0.1.57.dev5` on `main`. Six of them, production voice
   included, take their command line from a drop-in that sorts after
-  `tenant.conf`, `<z…>-hosted-engine-20261120.conf`, which sets `ExecStart`
+  `tenant.conf`, `<z…>-hosted-engine-20261120b.conf`, which sets `ExecStart`
   to the release's interpreter and unsets `PYTHONPATH`; `create` refuses
   such a unit, so the reconcile exits 3 for them. The personal mailbox unit
   takes its interpreter from a tenant-exec declaration and passes `create`.
+  The production voice unit runs without `--voice-config`, so without its
+  telephone listener: with it the daemon exits at start while the voice
+  admission is not ready.
   Newly provisioned profiles still use
   the transitional shared-key template until explicit tenant migration.
   Self-serve provisioning stays closed.

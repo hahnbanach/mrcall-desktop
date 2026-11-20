@@ -33,7 +33,10 @@ row preservation; the personal mailbox unit runs the same release. The
 [integration plan](../../docs/execution-plans/2026-10-05-mailboxes-qonto-release-integration.md)
 own remaining acceptance and rollout.
 
-Production telephone service uses GPT-Live and the scoped company-knowledge
+The production telephone listener is off: the Café 124 production unit runs
+without `--voice-config`, because with it the daemon exits at start while
+the voice admission is not ready. Production telephone service uses GPT-Live
+and the scoped company-knowledge
 trial. Its pinned release reads revisioned `operator-instructions/phone.md`;
 private call archives and the owner handset trial are accepted. Its saved test
 provider endpoint reaches production, so the absent isolated listener is not a
@@ -88,9 +91,9 @@ engine that clients only read keeps its archive current. Its
 [plan](../../docs/execution-plans/2026-11-18-engine-owned-mail-sync.md) owns
 that evidence.
 
-Seven hosted units run one package: tag `hosted-engine-0.1.57.dev4` on
+Seven hosted units run one package: tag `hosted-engine-0.1.57.dev5` on
 `main`, release
-`/home/mrcalld/releases/hosted-engine-0.1.57.dev4-9f6812dbd997`. `main`'s
+`/home/mrcalld/releases/hosted-engine-0.1.57.dev5-e1c1af32d0d0`. `main`'s
 `engine/zylch` is the tree they run. A member's own message holds a thread
 until the customer's newest mail has waited `MEMBER_ACTIVITY_HOLD_HOURS`, 72
 by default, with no member answer after it
@@ -123,11 +126,14 @@ name it.
 - One email intake of the Café 124 production unit took 177 seconds against
   the 180 the operator kernel waits; the cause is not established. The plan
   holds the record.
-- `create_draft` refuses a References chain that is folded over lines, as
-  the archive stores about half of them, and the operator kernel does not
-  send a reply whose preparation had a refused call. No reply has left on
-  this release. Branch `fix/draft-references-unfold-20261120` holds the
-  reviewed fix; its release waits for the operator's word.
+- No reply has left on this release. The operator kernel does not send a
+  reply whose preparation had a refused `create_draft` call; this release
+  removes one cause, the refusal of a References chain folded over lines.
+- With the telephone listener configured, a voice admission that is not
+  ready stops the whole daemon at start, its WebSocket and its MCP listener
+  included. The admission of the Café 124 number is not ready since
+  2026-11-20 16:39 UTC and its cause is not established; the plan holds the
+  record.
 - Staff units `C06x…` and `YZNI…` log about 230 `reanalyze_task` refusals a
   day (`llm/budget_pricing.py`, the 200000-token window). The mailbox of
   staff unit `ZwpL…` rejects its login.

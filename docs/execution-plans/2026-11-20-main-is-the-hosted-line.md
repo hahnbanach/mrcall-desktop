@@ -350,10 +350,8 @@ directory restart every unit at once.
   the reply was not sent and the tick ended with exit 1. The draft waits for
   a person.
 - In the support store 575 of 1,202 mails with a References value hold a
-  line break, 73 of 128 in the last 30 days. Branch
-  `fix/draft-references-unfold-20261120` (`fbcf0c8f`) makes a line break
-  between two identifiers whitespace; a fresh reviewer approved it. Its
-  release, a new package on the seven units, waits for the operator's word.
+  line break, 73 of 128 in the last 30 days. The fix is the section "The
+  draft references fix" below.
 - No reply has left on `dev4`. The criterion for the tick after a reply to a
   released thread is not exercised yet.
 
@@ -406,4 +404,63 @@ directory restart every unit at once.
   conversation escalated, one held for a person, the notice
   `assignment_read_incomplete`. Its mail intake took 5 seconds and the unit
   logged no error record through it.
+
+### The draft references fix, 2026-11-20
+
+The operator ordered the mail work first on 2026-11-20 16:45 UTC.
+
+- `create_draft` (`tools/gmail_tools.py`) no longer refuses a `references`
+  string with a line break: a line break between two identifiers is
+  whitespace, and each identifier is checked as before. Commit `84e1f812`
+  on `main`, version `0.1.57.dev5+hosted20261120.mrcall` in `e043c03c`, tag
+  `hosted-engine-0.1.57.dev5`.
+- Seven cases in `tests/tools/test_create_draft_references.py`. The
+  directories `tests/tools`, `tests/agents`, `tests/rpc` and
+  `tests/assignments` lose no case against the `dev4` results. A fresh
+  reviewer approved the fix: the refusal came from a commit that is not an
+  ancestor of `main`, a folded chain gives the token list of the one-line
+  chain, and the kernel's exit 4 comes from the failed first call.
+- Pushed at 16:47 UTC with a pull of the base checkout by hand; no unit
+  restarted by it. Release
+  `/home/mrcalld/releases/hosted-engine-0.1.57.dev5-e1c1af32d0d0`, built
+  and checked as `dev4` was, identical to
+  `git archive hosted-engine-0.1.57.dev5 engine/zylch`.
+- Switches, each with a drop-in `<z…>-hosted-engine-20261120b.conf` that
+  sorts last: staff `YZNI…` 16:49:14, staff `ZwpL…` 16:51:16, the second
+  MrCall account 16:51:33, support 16:51:51, staff `C06x…` 17:00:09 UTC.
+  The personal mailbox unit at 16:52:34 UTC, with its declaration pointed at
+  the new release and `mrcall-tenant create`: the reconcile that this
+  started ran at 16:52:33 UTC, exit 3, and restarted no unit. Each unit:
+  active, package digest `e1c1af32d0d0`, the mail loop started, no error
+  type it did not log before, the capability keys of before where a clone
+  reads it.
+- Rollback of a unit: remove its `…-hosted-engine-20261120b.conf`,
+  `daemon-reload`, restart; it returns to `dev4`.
+- The fleet inventory, `fleet-packages-after.txt` of
+  `~/.local/share/mrcall-operational-evidence/2026-11-20/draft-references-fix/`:
+  seven units, one package digest, `e1c1af32d0d0`.
+
+### Café 124 production runs without its telephone listener
+
+- From 16:39:15 UTC the unit logged `[voice] company notes preparation
+  unavailable` every minute and answered `calls_available: false`; from
+  12:19 to 16:38 UTC it had logged `status=supported` every minute. The
+  answer host named in the number's Vonage application did not resolve at
+  16:43 UTC. The operator set the telephone work aside at 16:45 UTC, and
+  the cause was not looked for.
+- The switch to `dev5` at 16:59:46 UTC restarted the unit with
+  `--voice-config`. The daemon exited at start: `RuntimeError: Production
+  voice admission is not ready` (`services/voice/listener.py`,
+  `prepare_carrier` returned nothing). With the listener configured, that
+  refusal stops the whole daemon, its WebSocket and its MCP listener
+  included. The same drop-in file given the `dev4` command line failed the
+  same way, and the unit reached its start limit at 17:01:28 UTC.
+- At 17:02:40 UTC the unit started on `dev5` without `--voice-config`:
+  active, `ws.sock` and `operator-mcp.sock` present, the public MCP route
+  401, both OAuth metadata documents 200, the mail loop running, 14
+  capability keys as before, no listener on `127.0.0.1:8787`. The engine
+  was down for three minutes; no tick of its clone ran in them.
+- The telephone listener returns with `"--voice-config"
+  "/etc/mrcalld/tenant-exec/<uid>.voice.env"` in the drop-in's command
+  line, once the admission is ready again.
 
