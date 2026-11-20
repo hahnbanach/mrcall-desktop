@@ -99,3 +99,5 @@ anywhere in the repo):
 - [Engine-owned mail sync](briefs/2026-11-18-engine-owned-mail-sync.md) — a free mail loop in the hosted daemon, so a client that only reads an engine finds a current archive; [execution plan](execution-plans/2026-11-18-engine-owned-mail-sync.md).
 
 - [One build for every hosted engine](briefs/2026-11-19-one-hosted-engine-build.md) — the seven hosted units on one tagged package and one Python environment; [execution plan](execution-plans/2026-11-19-one-hosted-engine-build.md) with the per-unit state, the release and each rollback.
+
+- [Main is the hosted line](briefs/2026-11-20-main-is-the-hosted-line.md) — `main` carries the engine that runs in production, and a thread a member answered by hand returns to the operator after three days; [execution plan](execution-plans/2026-11-20-main-is-the-hosted-line.md).

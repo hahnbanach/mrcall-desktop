@@ -132,6 +132,21 @@ candidate needing human verification. A separately signed exact-source
 confirmation records supervised provenance. Manual assignment is explicit
 operator authority and is labelled separately from answer confirmation.
 
+The hold of a member's own message has a limit. `_project`
+(`services/task_assignment_projection.py`) releases the thread when the
+newest message from outside the company is newer than every holding member
+message and older than `MEMBER_ACTIVITY_HOLD_HOURS`: the customer wrote last
+and nobody answered in time. The default is 72; `0` or a negative value keeps
+the hold without a limit. The released projection is `normal` with reason
+`MEMBER_ACTIVITY_HOLD_EXPIRED` and keeps its reply evidence. While a member
+wrote last, the thread stays held. A release reads the complete Sent
+membership first, so a newer member message that only the Sent folder holds
+keeps the thread `unknown` until the archive stores it. A missing message
+time keeps the hold. Each engine judges with its own archive and the Sent
+folders of its own mailboxes: when a member answered last from their own
+mailbox and the customer then wrote only to another account's mailbox, that
+member's engine keeps the hold.
+
 Close requires nonempty complete fresh inbound identity coverage, including archived mail.
 It rechecks source immediately before commit and rechecks private-store identities
 inside the company CAS transaction. Dates are annotations, not a closure cutoff:

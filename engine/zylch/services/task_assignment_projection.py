@@ -1,6 +1,7 @@
 """Visible task ownership with exact inbound coverage and explicit uncertainty."""
 
 import logging
+import os
 import time
 from zylch.email import provider_diagnostics
 
@@ -138,6 +139,50 @@ def _early_replies(actor, current, known, root, deadline):
                 entry.lock.release()
     return _EarlyReplies(replies if absent or any(not item["complete"] or item["judgement"] == "MEMBER_ACTIVITY_REQUIRES_HUMAN_VERIFICATION" for item in replies) else [], absent)
 
+#: Judgements of a member's own message that keep a thread for people.
+_HOLDING = frozenset({"NONAUTOMATIC_MEMBER_REPLY_CANDIDATE", "INTERNAL_MEMBER_CORRESPONDENCE",
+                      "OWN_SENT_EXTERNAL_FOLLOWUP", "MEMBER_ACTIVITY_REQUIRES_HUMAN_VERIFICATION"})
+
+
+def _member_hold_seconds():
+    """Length of the member-activity hold from MEMBER_ACTIVITY_HOLD_HOURS.
+
+    Default 72. ``0`` or a negative value keeps the hold without a limit: the
+    answer is then None.
+    """
+    raw = (os.environ.get("MEMBER_ACTIVITY_HOLD_HOURS") or "72").strip()
+    try:
+        hours = int(raw)
+    except ValueError:
+        hours = 72
+    return None if hours <= 0 else hours * 3600
+
+
+def _member_hold_lapsed(actor, known, replies, aliases) -> bool:
+    """Whether the member-activity hold of this thread has run out.
+
+    A member's own message keeps a thread for people. The hold ends when the
+    newest message from outside the company is older than the limit and newer
+    than every holding member message: the customer wrote last and nobody
+    answered in time. While a member wrote last the hold stays. A missing
+    time keeps the hold.
+    """
+    limit = _member_hold_seconds()
+    if limit is None:
+        return False
+    holding = {item.get("source_id") for item in replies if item["judgement"] in _HOLDING}
+    if not holding or not all(isinstance(value, str) for value in holding):
+        return False
+    times = mail.timestamps(actor, [row["id"] for row in known])
+    outside = [times.get(row["id"]) for row in known
+               if not mail.addresses(row["from_email"] or "") <= aliases]
+    members = [times.get(value) for value in holding]
+    if not outside or None in outside or None in members:
+        return False
+    newest = max(outside)
+    return max(members) < newest and time.time() - newest > limit
+
+
 def _project(root: str, deadline: float) -> dict:
     started = time.monotonic()
     thread(root)
@@ -217,11 +262,18 @@ def _project(root: str, deadline: float) -> dict:
                              reason="HUMAN_ASSIGNMENT_ACTIVE")
             else:
                 replies = _early_replies(actor, current, known, root, deadline)
-                if getattr(replies, "force_full_scan", False) or not replies or any(not item["complete"] for item in replies):
+                full = getattr(replies, "force_full_scan", False) or not replies or any(not item["complete"] for item in replies)
+                # A hold ends only on the complete Sent membership: a newer
+                # member message can sit in Sent before the archive holds it.
+                recheck = not full and _member_hold_lapsed(actor, known, replies, aliases)
+                if full or recheck:
                     discovered = sent_index.candidates(actor, current, known, root, deadline=deadline)
+                    seen = {item.get("source_id") for item in replies} if recheck else set()
                     for item in discovered:
                         if time.monotonic() >= deadline:
                             raise AssignmentError("Ownership evidence deadline exceeded")
+                        if "source_id" in item and item["source_id"] in seen:
+                            continue
                         if "source_id" in item:
                             # Signed-source confirmation retains the same live checks.
                             activity = evidence._member_activity(item["source_id"], root, deadline=deadline)
@@ -235,8 +287,13 @@ def _project(root: str, deadline: float) -> dict:
                 value["reply_evidence"] = replies
                 if any(not item["complete"] for item in replies):
                     value["reason"] = "REPLY_SOURCE_UNAVAILABLE"
-                elif any(item["judgement"] in {"NONAUTOMATIC_MEMBER_REPLY_CANDIDATE", "INTERNAL_MEMBER_CORRESPONDENCE", "OWN_SENT_EXTERNAL_FOLLOWUP", "MEMBER_ACTIVITY_REQUIRES_HUMAN_VERIFICATION"} for item in replies):
-                    value.update(state="needs-assignment", reason="NEEDS_HUMAN_VERIFICATION")
+                elif any(item["judgement"] in _HOLDING for item in replies):
+                    if _member_hold_lapsed(actor, known, replies, aliases):
+                        logger.info("[tasks.assignment] member hold expired")
+                        value.update(complete=True, state="normal", hold_auto_reply=False,
+                                     reason="MEMBER_ACTIVITY_HOLD_EXPIRED")
+                    else:
+                        value.update(state="needs-assignment", reason="NEEDS_HUMAN_VERIFICATION")
                 else:
                     value.update(complete=True, state="normal", hold_auto_reply=False,
                                  reason="NO_HUMAN_ASSIGNMENT")

@@ -202,6 +202,31 @@ def rows(actor, root: str, connection=None, schema=None, *, deadline=None) -> li
     return read(connection)
 
 
+def timestamps(actor, ids) -> dict:
+    """Stored message time, in epoch seconds, of the scoped rows with these ids.
+
+    A row without a usable time is absent from the answer.
+    """
+    from datetime import timezone
+
+    table = Email.__table__
+    wanted = sorted({value for value in ids if isinstance(value, str)})
+    found = {}
+    with db.get_engine().connect() as conn:
+        for start in range(0, len(wanted), 500):
+            query = select(table.c.id, table.c.date, table.c.date_timestamp).where(
+                table.c.owner_id == actor.mailbox, table.c.id.in_(wanted[start:start + 500]))
+            for row in conn.execute(query).mappings():
+                stamp, moment = row["date_timestamp"], row["date"]
+                if type(stamp) is int:
+                    found[row["id"]] = float(stamp)
+                elif moment is not None:
+                    if moment.tzinfo is None:
+                        moment = moment.replace(tzinfo=timezone.utc)
+                    found[row["id"]] = moment.timestamp()
+    return found
+
+
 def component(actor, root, connection=None, schema=None, *, deadline=None):
     known = rows(actor, root, connection, schema, deadline=deadline)
     graph = Ancestry(root, known, deadline=deadline)
