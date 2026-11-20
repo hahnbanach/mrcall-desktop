@@ -121,8 +121,13 @@ name it.
   when a member answered last from their own mailbox and the customer then
   wrote only to another account's mailbox.
 - One email intake of the Café 124 production unit took 177 seconds against
-  the 180 the operator kernel waits; the cause is not established. No reply
-  has left on this release. The plan holds both records.
+  the 180 the operator kernel waits; the cause is not established. The plan
+  holds the record.
+- `create_draft` refuses a References chain that is folded over lines, as
+  the archive stores about half of them, and the operator kernel does not
+  send a reply whose preparation had a refused call. No reply has left on
+  this release. Branch `fix/draft-references-unfold-20261120` holds the
+  reviewed fix; its release waits for the operator's word.
 - Staff units `C06x…` and `YZNI…` log about 230 `reanalyze_task` refusals a
   day (`llm/budget_pricing.py`, the 200000-token window). The mailbox of
   staff unit `ZwpL…` rejects its login.

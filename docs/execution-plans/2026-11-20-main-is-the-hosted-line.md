@@ -340,6 +340,20 @@ directory restart every unit at once.
 - Through that tick the support engine logged 26 release records and the
   second account's engine 2; neither logged a traceback, an `ERROR` or a
   `CRITICAL` record, and neither restarted.
+- The scheduled MrCall tick of 14:50 UTC took the released conversation
+  that the hand tick had deferred, and composed a reply. `create_draft`
+  refused the model's first call, "Draft references contain a line break"
+  (`tools/gmail_tools.py`): the model passed the thread's References chain
+  as the archive stores it, folded over lines. The second call, on one line,
+  saved the draft, and the scoped draft policy admitted it. The kernel's
+  `cs draft-reply` exits 4 when a `create_draft` call of the turn failed, so
+  the reply was not sent and the tick ended with exit 1. The draft waits for
+  a person.
+- In the support store 575 of 1,202 mails with a References value hold a
+  line break, 73 of 128 in the last 30 days. Branch
+  `fix/draft-references-unfold-20261120` (`fbcf0c8f`) makes a line break
+  between two identifiers whitespace; a fresh reviewer approved it. Its
+  release, a new package on the seven units, waits for the operator's word.
 - No reply has left on `dev4`. The criterion for the tick after a reply to a
   released thread is not exercised yet.
 
@@ -387,6 +401,9 @@ directory restart every unit at once.
   before the switch did. Through it the production unit logged 6 mail runs,
   19 release records and no error record; staff unit `C06x…` logged the
   budget refusals it logged before.
-- Open: the scheduled Café 124 tick of 14:00 UTC, the first scheduled one
-  with the mail loop on.
+- The scheduled Café 124 tick of 14:00 UTC, the first scheduled one with
+  the mail loop on, ended at 14:55:36 UTC with exit 0 after its work: one
+  conversation escalated, one held for a person, the notice
+  `assignment_read_incomplete`. Its mail intake took 5 seconds and the unit
+  logged no error record through it.
 
