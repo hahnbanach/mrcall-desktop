@@ -164,8 +164,9 @@ def _member_hold_lapsed(actor, known, replies, aliases) -> bool:
     A member's own message keeps a thread for people. The hold ends when the
     newest message from outside the company is older than the limit and newer
     than every holding member message: the customer wrote last and nobody
-    answered in time. While a member wrote last the hold stays. A missing
-    time keeps the hold.
+    answered in time. While a member wrote last the hold stays. An automatic
+    message from outside, such as an out-of-office reply, is not the customer
+    writing. A missing time keeps the hold.
     """
     limit = _member_hold_seconds()
     if limit is None:
@@ -177,10 +178,13 @@ def _member_hold_lapsed(actor, known, replies, aliases) -> bool:
     outside = [times.get(row["id"]) for row in known
                if not mail.addresses(row["from_email"] or "") <= aliases]
     members = [times.get(value) for value in holding]
-    if not outside or None in outside or None in members:
+    if None in outside or None in members:
         return False
-    newest = max(outside)
-    return max(members) < newest and time.time() - newest > limit
+    written = [stamp for stamp, automatic in outside if not automatic]
+    if not written:
+        return False
+    newest = max(written)
+    return max(stamp for stamp, _ in members) < newest and time.time() - newest > limit
 
 
 def _project(root: str, deadline: float) -> dict:
@@ -288,7 +292,8 @@ def _project(root: str, deadline: float) -> dict:
                 if any(not item["complete"] for item in replies):
                     value["reason"] = "REPLY_SOURCE_UNAVAILABLE"
                 elif any(item["judgement"] in _HOLDING for item in replies):
-                    if _member_hold_lapsed(actor, known, replies, aliases):
+                    # Only after the complete Sent membership, read above.
+                    if (full or recheck) and _member_hold_lapsed(actor, known, replies, aliases):
                         logger.info("[tasks.assignment] member hold expired")
                         value.update(complete=True, state="normal", hold_auto_reply=False,
                                      reason="MEMBER_ACTIVITY_HOLD_EXPIRED")

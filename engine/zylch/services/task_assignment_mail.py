@@ -203,7 +203,7 @@ def rows(actor, root: str, connection=None, schema=None, *, deadline=None) -> li
 
 
 def timestamps(actor, ids) -> dict:
-    """Stored message time, in epoch seconds, of the scoped rows with these ids.
+    """Stored time, in epoch seconds, and automatic flag of the scoped rows with these ids.
 
     A row without a usable time is absent from the answer.
     """
@@ -214,16 +214,16 @@ def timestamps(actor, ids) -> dict:
     found = {}
     with db.get_engine().connect() as conn:
         for start in range(0, len(wanted), 500):
-            query = select(table.c.id, table.c.date, table.c.date_timestamp).where(
+            query = select(table.c.id, table.c.date, table.c.date_timestamp, table.c.is_auto_reply).where(
                 table.c.owner_id == actor.mailbox, table.c.id.in_(wanted[start:start + 500]))
             for row in conn.execute(query).mappings():
                 stamp, moment = row["date_timestamp"], row["date"]
                 if type(stamp) is int:
-                    found[row["id"]] = float(stamp)
+                    found[row["id"]] = (float(stamp), bool(row["is_auto_reply"]))
                 elif moment is not None:
                     if moment.tzinfo is None:
                         moment = moment.replace(tzinfo=timezone.utc)
-                    found[row["id"]] = moment.timestamp()
+                    found[row["id"]] = (moment.timestamp(), bool(row["is_auto_reply"]))
     return found
 
 

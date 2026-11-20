@@ -23,12 +23,13 @@ def mail(env, monkeypatch):
     index.clear()
 
 
-def stamp(source_id, hours_ago, *, epoch=True):
+def stamp(source_id, hours_ago, *, epoch=True, automatic=False):
     moment = datetime.now(timezone.utc) - timedelta(hours=hours_ago)
     with db.get_session() as session:
         session.query(Email).filter(Email.id == source_id).update({
             "date": moment.replace(tzinfo=None),
             "date_timestamp": int(moment.timestamp()) if epoch else None,
+            "is_auto_reply": automatic,
         })
 
 
@@ -89,6 +90,34 @@ def test_limit_follows_the_setting(env, mail, monkeypatch, hours, expect):
 def test_missing_time_keeps_the_hold(env, mail, monkeypatch):
     thread(mail, root=120, reply=100, again=80)
     monkeypatch.setattr(scoped_mail, "timestamps", lambda actor, ids: {})
+    assert held(projection.project(ROOT))
+
+
+def test_every_holding_message_must_be_older_than_the_customers_newest_mail(env, mail):
+    """Two hand-written replies: the customer's newest mail is newer than one and older than the other."""
+    thread(mail, root=200, reply=150, again=100)
+    second = mail.add("<alice-second@example.test>", "alice@example.test", "customer@example.test",
+                      folder='"Sent"', headers={"In-Reply-To": AGAIN, "References": f"{ROOT} {REPLY} {AGAIN}"})
+    stamp(second, 80)
+    value = projection.project(ROOT)
+    assert held(value)
+    assert len({item["source_id"] for item in value["reply_evidence"]}) == 2
+
+
+def test_another_members_mail_is_not_the_customer_writing(env, mail):
+    thread(mail, root=120, reply=100)
+    note = mail.add("<bob-note@example.test>", "bob@example.test", "alice@example.test",
+                    headers={"In-Reply-To": REPLY, "References": f"{ROOT} {REPLY}"})
+    stamp(note, 80)
+    assert held(projection.project(ROOT))
+
+
+def test_an_automatic_reply_from_outside_is_not_the_customer_writing(env, mail):
+    thread(mail, root=200, reply=150)
+    away = mail.add("<customer-away@example.test>", "customer@example.test", "alice@example.test",
+                    headers={"In-Reply-To": REPLY, "References": f"{ROOT} {REPLY}",
+                             "Auto-Submitted": "auto-replied"})
+    stamp(away, 100, automatic=True)
     assert held(projection.project(ROOT))
 
 

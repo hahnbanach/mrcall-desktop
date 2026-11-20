@@ -70,14 +70,17 @@ Verification:
 - `tests/assignments/test_member_hold_limit.py`: release past the limit with
   each time column, hold inside the limit, hold while a member wrote last,
   the setting, a missing time, the complete Sent membership, one evidence
-  item per holding message.
+  item per holding message, two holding messages around the customer's
+  newest mail, another member's mail, an automatic reply from outside.
 - `tests/storage/test_insert_sent_email.py`: a sync after a send, a sync
   that stores the first copy, an automatic message no draft sent, another
   owner's draft.
-- Six deliberate bugs, each in its own copy of the package: no Sent
+- Nine deliberate bugs, each in its own copy of the package: no Sent
   recheck, no member-last test, an inverted limit, a release that never
-  happens, the flag rule removed, the flag rule without its owner. Each
-  fails at least one new test.
+  happens, the oldest holding message in place of the newest, another
+  member's mail counted as the customer's, an automatic reply counted as
+  the customer's, the flag rule removed, the flag rule without its owner.
+  Each fails at least one new test.
 - The tag's test tree of 2026-11-19, with its shim, runs one directory at a
   time against the new package in the same environment. No case that passed
   on the `dev3` package fails.

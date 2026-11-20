@@ -124,7 +124,8 @@ Terms, as the engine computes them:
   (`task_assignment_mail.rows`).
 - A message from outside the company is a stored row whose sender is not a
   member address of the company space. This is the test that already builds
-  `current_message_ids`.
+  `current_message_ids`. A row the archive flags automatic, such as an
+  out-of-office reply, is not the customer writing and does not count.
 - A holding member message is a reply-evidence item judged
   `MEMBER_ACTIVITY_REQUIRES_HUMAN_VERIFICATION`,
   `NONAUTOMATIC_MEMBER_REPLY_CANDIDATE`, `INTERNAL_MEMBER_CORRESPONDENCE` or
@@ -184,7 +185,9 @@ reply and could select the thread again. `store_emails_batch` therefore
 keeps the flag false for a record whose Message-ID is the sent message of
 one of the owner's drafts (`storage/storage.py`,
 `_own_sent_replies_stay_answers`), on insert and on update. So a released
-thread the operator answered leaves the open work.
+thread the operator answered leaves the open work. One instant stays
+uncovered: a sync that stores the Sent copy between the send and the write
+of the draft's sent message id.
 
 When the customer then writes again, the member's earlier message still
 holds the thread: the limit runs again from the new mail.
@@ -197,7 +200,8 @@ holds the thread: the limit runs again from the new mail.
   `services/task_assignment_mail.py`, `storage/storage.py` and the version.
 - The Café 124 production unit, its three staff units and the personal
   mailbox unit: what the one-build brief lists under "What changes for a
-  unit", and the rule. The rule applies to the Café 124 operator as well.
+  unit", the rule and the stored flag of a sent reply. The rule applies to
+  the Café 124 operator as well.
 
 ## Constraints
 

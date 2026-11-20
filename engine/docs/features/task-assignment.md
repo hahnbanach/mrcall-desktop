@@ -136,8 +136,9 @@ The hold of a member's own message has a limit. `_project`
 (`services/task_assignment_projection.py`) releases the thread when the
 newest message from outside the company is newer than every holding member
 message and older than `MEMBER_ACTIVITY_HOLD_HOURS`: the customer wrote last
-and nobody answered in time. The default is 72; `0` or a negative value keeps
-the hold without a limit. The released projection is `normal` with reason
+and nobody answered in time. A message the archive flags automatic, such as
+an out-of-office reply, is not the customer writing. The default is 72; `0`
+or a negative value keeps the hold without a limit. The released projection is `normal` with reason
 `MEMBER_ACTIVITY_HOLD_EXPIRED` and keeps its reply evidence. While a member
 wrote last, the thread stays held. A release reads the complete Sent
 membership first, so a newer member message that only the Sent folder holds
