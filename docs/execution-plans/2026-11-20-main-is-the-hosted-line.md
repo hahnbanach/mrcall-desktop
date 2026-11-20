@@ -28,6 +28,11 @@ Owner of every milestone: Claude session
   base checkout, runs `pip install -e` on the base environment because
   `engine/pyproject.toml` changed, and restarts every unit with no check for
   a call in progress. A restarted unit comes back on its last drop-in.
+  `zylch-reconcile.path` runs the same script when a new profile directory
+  appears.
+- `zylch-provisiond.service` is the one service that runs code from `main`'s
+  checkout (`python -m zylch.provisiond`). Its import chain is the same in
+  `ecba4c06` and in the merged tree, and the reconcile does not restart it.
 
 ## M1 — `main` takes the production engine
 
@@ -46,14 +51,18 @@ Verification:
 - `tests/stripe` passes on the merged tree.
 - Tag `main-before-hosted-line-20261120` on `ecba4c06`.
 
-Rollback before the push: drop the commit. After the push: revert the merge
-on `main`; no unit loads code from `main`'s checkout.
+Rollback before the push: drop the commit. After the push: one commit on
+`main` that restores `engine/zylch`, `engine/tests`, `engine/pyproject.toml`
+and the removed script from `main-before-hosted-line-20261120`. No hosted
+unit loads its engine from `main`'s checkout once M6 is done.
 
 ## M2 — the limit
 
 `services/task_assignment_projection.py` gains `_member_hold_seconds` and
 `_member_hold_lapsed`, and `_project` uses them as the brief's rule states.
-`services/task_assignment_mail.py` gains `timestamps`. Version
+`services/task_assignment_mail.py` gains `timestamps`.
+`storage/storage.py` gains `_own_sent_replies_stay_answers`, which
+`store_emails_batch` applies before it writes. Version
 `0.1.57.dev4+hosted20261120.mrcall`.
 
 Verification:
@@ -62,13 +71,20 @@ Verification:
   each time column, hold inside the limit, hold while a member wrote last,
   the setting, a missing time, the complete Sent membership, one evidence
   item per holding message.
-- Four deliberate bugs, each in its own copy of the package: no Sent
+- `tests/storage/test_insert_sent_email.py`: a sync after a send, a sync
+  that stores the first copy, an automatic message no draft sent, another
+  owner's draft.
+- Six deliberate bugs, each in its own copy of the package: no Sent
   recheck, no member-last test, an inverted limit, a release that never
-  happens. Each fails at least one new test.
+  happens, the flag rule removed, the flag rule without its owner. Each
+  fails at least one new test.
 - The tag's test tree of 2026-11-19, with its shim, runs one directory at a
   time against the new package in the same environment. No case that passed
   on the `dev3` package fails.
 - A fresh reviewer reads the diff.
+
+Rollback before the push: drop the commit. After the push: revert it on
+`main`; the units return through their own drop-ins.
 
 ## M3 — tag, push, release
 
@@ -85,7 +101,10 @@ Verification:
    own interpreter, a throwaway start.
 
 The store steps of the new package are those of `dev3`: the two differ in
-two service files. The rehearsals of 2026-11-19 stand.
+two service files and in one method of `storage/storage.py` that adds no
+step. The rehearsals of 2026-11-19 stand.
+
+Rollback: a release directory no unit loads changes nothing. The tag stays.
 
 ## M4 — the two MrCall units
 
@@ -93,7 +112,7 @@ The procedure of M3 of the one-build plan, the second account first, with a
 drop-in named to sort after the one of 2026-11-19.
 
 Acceptance: the brief's criteria for the first MrCall tick on the new
-package.
+package and for the tick after a reply to a released thread.
 
 Rollback, per unit: remove the new drop-in, `daemon-reload`, restart. The
 unit returns to `hosted-engine-0.1.57.dev3`.
@@ -130,8 +149,9 @@ Rollback, per unit: as M5 of the one-build plan.
   [task assignment contract](../../engine/docs/features/task-assignment.md)
   state the one line, the release and the limit.
 - The one-build plan is `superseded` by this one.
-- The first reconcile after the push is read the next morning: its exit code
-  and the units' restart times.
+- The first reconcile after the push is read the next morning. Expected:
+  exit 3 with the same six units refused, `pip install -e` on the base
+  environment, seven units restarted, each back on the `dev4` package hash.
 
 ## Evidence
 

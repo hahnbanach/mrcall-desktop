@@ -591,6 +591,7 @@ class Storage:
 
         total_stored = 0
         with get_session() as session:
+            self._own_sent_replies_stay_answers(session, owner_id, records)
             marked = self._mark_duplicate_copies(session, owner_id, records)
             if marked:
                 logger.info(
@@ -615,6 +616,31 @@ class Storage:
 
         logger.debug(f"Stored {total_stored} emails with embeddings")
         return total_stored
+
+    @staticmethod
+    def _own_sent_replies_stay_answers(session, owner_id: str, records: List[Dict[str, Any]]) -> int:
+        """A reply the engine sent from a draft is stored as an answer.
+
+        The engine marks a scheduled reply ``Auto-Submitted`` and stores its
+        own copy with ``is_auto_reply`` false. A mail sync that fetches the
+        same message from the Sent folder reads that header as automatic,
+        and the upsert would write the flag over the stored copy: a reader
+        of the flag would then no longer count the reply as an answer. A
+        record whose Message-ID is the sent message of one of the owner's
+        drafts keeps the flag false, on insert and on update.
+        """
+        flagged = sorted({r["message_id_header"] for r in records
+                          if r.get("is_auto_reply") and r.get("message_id_header")})
+        sent = set()
+        for start in range(0, len(flagged), 500):
+            sent.update(row[0] for row in session.query(Draft.sent_message_id).filter(
+                Draft.owner_id == owner_id, Draft.sent_message_id.in_(flagged[start:start + 500])))
+        kept = 0
+        for r in records:
+            if r.get("is_auto_reply") and r.get("message_id_header") in sent:
+                r["is_auto_reply"] = False
+                kept += 1
+        return kept
 
     @staticmethod
     def _mark_duplicate_copies(session, owner_id: str, records: List[Dict[str, Any]]) -> int:

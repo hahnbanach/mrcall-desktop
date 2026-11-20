@@ -113,3 +113,67 @@ def test_dedup_and_parent_lookup_ignore_other_mailboxes(store):
     st.store_emails_batch(OWNER, [_row_for("<parent@client.test>", "primary-thread")])
     reply = _sent(st, message_id="<sent-3@company.test>", in_reply_to="<parent@client.test>")
     assert reply["thread_id"] == "primary-thread"
+
+
+def _synced_sent_copy(message_id: str) -> dict:
+    """The Sent-folder copy of our own reply, as the mail sync hands it over: flagged by its header."""
+    return {
+        "id": message_id,
+        "thread_id": "customer-thread",
+        "from_email": OWNER,
+        "to_email": "customer@client.test",
+        "subject": "Re: order",
+        "date": SENT_AT.isoformat(),
+        "date_timestamp": int(SENT_AT.timestamp()),
+        "message_id_header": message_id,
+        "is_auto_reply": True,
+    }
+
+
+def _flag(db_path: str, message_id: str):
+    return _rows(db_path, "SELECT is_auto_reply FROM emails WHERE message_id_header = ?", (message_id,))
+
+
+def _sent_draft(st, message_id: str) -> None:
+    draft = st.create_draft(OWNER, "customer@client.test", "Re: order", "On its way.")
+    assert st.mark_draft_sent(OWNER, draft["id"], message_id) is not None
+
+
+def test_a_sync_does_not_flag_the_stored_copy_of_a_reply_the_engine_sent(store):
+    st, db_path = store
+    _sent_draft(st, "<sent-1@company.test>")
+    assert _sent(st) is not None
+    assert _flag(db_path, "<sent-1@company.test>") == [(0,)]
+
+    st.store_emails_batch(OWNER, [_synced_sent_copy("<sent-1@company.test>")])
+
+    assert _flag(db_path, "<sent-1@company.test>") == [(0,)]
+
+
+def test_a_sync_that_stores_the_first_copy_of_a_sent_reply_does_not_flag_it(store):
+    """The local insert after a send is best-effort: the sync may be the first to store the reply."""
+    st, db_path = store
+    _sent_draft(st, "<sent-1@company.test>")
+
+    st.store_emails_batch(OWNER, [_synced_sent_copy("<sent-1@company.test>")])
+
+    assert _flag(db_path, "<sent-1@company.test>") == [(0,)]
+
+
+def test_an_automatic_message_that_no_draft_sent_keeps_its_flag(store):
+    st, db_path = store
+    _sent_draft(st, "<sent-1@company.test>")
+
+    st.store_emails_batch(OWNER, [_synced_sent_copy("<acknowledgement@company.test>")])
+
+    assert _flag(db_path, "<acknowledgement@company.test>") == [(1,)]
+
+
+def test_another_owners_draft_does_not_clear_the_flag(store):
+    st, db_path = store
+    draft = st.create_draft("other@company.test", "customer@client.test", "Re: order", "On its way.")
+    assert st.mark_draft_sent("other@company.test", draft["id"], "<sent-1@company.test>") is not None
+
+    st.store_emails_batch(OWNER, [_synced_sent_copy("<sent-1@company.test>")])
+
+    assert _flag(db_path, "<sent-1@company.test>") == [(1,)]

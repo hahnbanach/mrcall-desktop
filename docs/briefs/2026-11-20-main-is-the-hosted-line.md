@@ -26,16 +26,21 @@ The operator ordered both on 2026-11-20: every unit on the same build, on
   mail.
 - The MrCall operator tick of 2026-11-20 06:50 UTC lists 18 inbound
   conversations and holds every one. Two are `conflict`
-  (`RFC_ANCESTRY_CONFLICT`). Sixteen are held by member activity:
-  - in six, a member's message is newer than the customer's newest mail;
-  - in five, the customer's newest mail is newer than every holding member
+  (`RFC_ANCESTRY_CONFLICT`). Sixteen are held by member activity. Counted by
+  the engine's thread, the RFC component of each row:
+  - in five, a member's message is newer than the newest mail from outside
+    the company;
+  - in six, the newest mail from outside is newer than every holding member
     message and older than 72 hours;
   - in five, it is newer than every holding member message and younger than
     72 hours.
+- The kernel keys a conversation by one thread key, and two of its rows can
+  be one component. Two of the six are such a pair: the customer's first
+  mail has a member's answer, the second has none.
 - The kernel lists a held thread before it checks whether the thread is
   answered (`cs/unanswered.py`, `sweep`: `split_inbound` runs before
-  `_partition`). So the six answered conversations appear in its list of
-  conversations that wait for a person.
+  `_partition`). So a conversation a person has answered appears in its list
+  of conversations that wait for a person.
 
 ## Scope
 
@@ -45,7 +50,9 @@ The operator ordered both on 2026-11-20: every unit on the same build, on
    tree plus `main`'s Stripe connection and identity tests. Every other path
    keeps `main`'s content.
 2. **The hold gets a limit.** `_project` releases a thread held by member
-   activity when the rule below says so.
+   activity when the rule below says so. A reply the engine sent stays
+   stored as an answer, so that a released thread the operator answered is
+   not opened again.
 3. **One release from `main`.** Tag `hosted-engine-0.1.57.dev4` on `main`,
    one release directory, the seven units, with the per-unit procedure of the
    [one-build plan](../execution-plans/2026-11-19-one-hosted-engine-build.md).
@@ -89,10 +96,11 @@ Both sets stay in history.
   that only that line has. They are M10 evaluations and plans, measurement
   scripts and the app's model-role settings code.
 
-`engine/scripts/server` and `engine/scripts/systemd` keep `main`'s content.
-The nightly reconcile runs `update-daemons.sh` from that directory as root
-and installs the unit file from it, and the base checkout carries a local
-change to that unit file, so a merge that touched it would stop the pull.
+`engine/scripts/systemd` and every other file of `engine/scripts/server`
+keep `main`'s content. The nightly reconcile runs `update-daemons.sh` from
+that directory as root and installs the unit file from it, and the base
+checkout carries a local change to that unit file, so a merge that touched
+it would stop the pull.
 
 `engine/pyproject.toml` differs from `main`'s in the version and the
 package-data list, not in a dependency. The reconcile reinstalls the base
@@ -140,16 +148,53 @@ stays `unknown` until the mail loop stores it.
 A missing time keeps the hold.
 
 Each engine applies the rule to what it holds: its own archive and the Sent
-folders of its own mailboxes. The kernel holds a thread while any account's
-engine holds it. One case stays held: a member answered last from their own
-mailbox, and the customer then wrote only to another account's mailbox. That
-member's engine does not see the later mail.
+folders of its own mailboxes. Only a message its own member sent from one of
+those mailboxes holds a thread. The kernel holds a thread while any
+account's engine holds it. Three cases follow.
+
+- A thread stays held although the customer waits: a member answered last
+  from their own mailbox, and the customer then wrote only to another
+  account's mailbox. That member's engine does not see the later mail.
+- A thread is released although a person answered: the answer is nowhere an
+  engine of the clone can read it. That is a telephone call, a chat, or a
+  mailbox that is not an account of the clone's kernel. The hold of the
+  earlier hand-written message used to cover such a thread without a limit.
+  The kernel's own record for it is `cs handled`, which keeps the contact's
+  mail out of the open work.
+- A colleague's reply that reaches this archive as received mail does not
+  hold the thread here. It holds it when that colleague's engine is an
+  account of the clone's kernel, as the two MrCall accounts are.
+
+### After the operator answers
+
+The kernel settles a `normal` thread when Gmail Sent holds a message of ours
+newer than the customer's newest mail and the engine does not flag that
+message automatic (`cs/unanswered.py`, `_thread_state`;
+`cs/engine_view.py`, `classify`). The engine stores a reply it sends itself
+with `is_auto_reply` false (`storage/storage.py`, `insert_sent_email`). The
+five replies the MrCall support engine sent from 2026-11-13 to 2026-11-18
+are stored once each, not automatic.
+
+A mail sync could turn that flag on. It reads the known message ids once per
+run (`tools/email_archive.py`), so a reply sent during a run is fetched from
+the Sent folder, read as automatic by its `Auto-Submitted` header and
+written over the stored copy; and the copy stored at send time is
+best-effort (`tools/gmail_tools.py`). The kernel would then not count the
+reply and could select the thread again. `store_emails_batch` therefore
+keeps the flag false for a record whose Message-ID is the sent message of
+one of the owner's drafts (`storage/storage.py`,
+`_own_sent_replies_stay_answers`), on insert and on update. So a released
+thread the operator answered leaves the open work.
+
+When the customer then writes again, the member's earlier message still
+holds the thread: the limit runs again from the new mail.
 
 ## What changes for a unit
 
-- The two MrCall units: the rule, and nothing else. The package differs from
-  the one they run in `services/task_assignment_projection.py`,
-  `services/task_assignment_mail.py` and the version.
+- The two MrCall units: the rule and the stored flag of a sent reply, and
+  nothing else. The package differs from the one they run in
+  `services/task_assignment_projection.py`,
+  `services/task_assignment_mail.py`, `storage/storage.py` and the version.
 - The Café 124 production unit, its three staff units and the personal
   mailbox unit: what the one-build brief lists under "What changes for a
   unit", and the rule. The rule applies to the Café 124 operator as well.
@@ -162,9 +207,14 @@ member's engine does not see the later mail.
   unit's newest drop-in and a restart.
 - The repository is public. No customer name, address or subject enters a
   commit.
-- No unit restarts between 23:30 and 00:15 UTC, or while a tick of its clone
-  runs. The Café 124 production unit restarts only after
+- This work restarts no unit between 23:30 and 00:15 UTC, or while a tick
+  of its clone runs, and it restarts the Café 124 production unit only after
   `calls_available: true`.
+- The nightly reconcile is outside that rule and is not changed. After the
+  push it restarts every unit at 00:00 UTC, the telephone unit included,
+  with no check for a call, as it does after every commit on `main`. The
+  same script also runs when a new profile directory appears
+  (`zylch-reconcile.path`).
 - The kernel and the clones do not change.
 
 ## Acceptance
@@ -172,7 +222,8 @@ member's engine does not see the later mail.
 Source:
 
 - `git diff hosted-engine-0.1.57.dev3 <new tag> -- engine/zylch
-  engine/pyproject.toml` names the two service files and the version line.
+  engine/pyproject.toml` names the two service files, the storage file and
+  the version line.
 - The new tests pass, and each of four deliberate bugs in the rule, run on a
   copy, fails at least one of them.
 - No case that passed on the `dev3` package on 2026-11-19 fails on the new
@@ -180,16 +231,23 @@ Source:
 
 Each unit, after its switch: the checks of the one-build plan for that unit.
 
-The MrCall operator, in its first tick on the new package:
+The MrCall operator, in its first tick on the new package. A row's set is
+decided by its engine component at the time of the tick, on both accounts:
 
-- the conversations whose customer mail is older than the limit and newer
-  than every holding member message are no longer among the held ones;
-- the conversations where a member wrote last, or whose customer mail is
-  younger than the limit, are still held;
-- both engines log `[tasks.assignment] member hold expired` and no error
-  record;
+- a row whose component's newest mail from outside is older than the limit
+  and newer than every holding member message is no longer among the held
+  ones, unless the kernel keeps its contact with a person by its own
+  `escalated` record;
+- a row whose component has a member's message as its newest, or a newest
+  mail from outside younger than the limit, is still held;
+- an engine that releases a thread logs
+  `[tasks.assignment] member hold expired`, and neither engine logs an
+  error record;
 - the tick drafts, sends or escalates what it selects, and its exit code and
   health verdict are recorded.
+
+The tick after a reply to a released thread: that thread is not selected
+again unless the customer wrote again.
 
 The fleet: the package inventory shows one hash on seven units, equal to the
 hash of `git archive <new tag> engine/zylch`.
@@ -199,6 +257,6 @@ Codex connection used after the switch. Both need a person.
 
 ## Assumptions
 
-- The stored time of a mail is its `Date` header in UTC. In the MrCall
-  support store the two time columns agree on all 3,078 rows.
+- The stored time of a mail is its `Date` header in UTC. In both MrCall
+  stores the two time columns agree on every row.
 - The operator's order covers `main`, the tag, the push and the seven units.
