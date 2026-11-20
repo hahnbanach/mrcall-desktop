@@ -202,6 +202,10 @@ holds the thread: the limit runs again from the new mail.
   mailbox unit: what the one-build brief lists under "What changes for a
   unit", the rule and the stored flag of a sent reply. The rule applies to
   the Café 124 operator as well.
+- One point of that list does not hold: the Café 124 production unit runs
+  the mail loop like every other unit. Its auto-update pipeline stops at the
+  spending gate before it fetches mail, and a sync that runs only when a
+  tick asks, every two hours, takes longer than the kernel waits.
 
 ## Constraints
 
@@ -244,9 +248,11 @@ decided by its engine component at the time of the tick, on both accounts:
   `escalated` record;
 - a row whose component has a member's message as its newest, or a newest
   mail from outside younger than the limit, is still held;
-- an engine that releases a thread logs
-  `[tasks.assignment] member hold expired`, and neither engine logs an
-  error record;
+- an engine that releases a thread logs one INFO record of
+  `zylch.services.task_assignment_projection`, the module's only INFO
+  record. The projection runs in the private logging scope, which renders
+  the record as `logger=… level=INFO event=processing` without its text.
+  Neither engine logs an error record;
 - the tick drafts, sends or escalates what it selects, and its exit code and
   health verdict are recorded.
 

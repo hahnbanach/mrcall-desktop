@@ -123,8 +123,10 @@ unit returns to `hosted-engine-0.1.57.dev3`.
 ## M5 — Café 124 production
 
 The procedure of M4 of the one-build plan: the drop-in with the two extra
-arguments and `MAIL_SYNC_INTERVAL_MINUTES=0`, the checks before the restart
-with `calls_available: true` in the same command, the checks after it.
+arguments, the checks before the restart with `calls_available: true` in the
+same command, the checks after it. The unit runs the mail loop like every
+other unit; the evidence of M5 below says why the drop-in no longer turns it
+off.
 
 Acceptance: the next scheduled Café 124 tick ends as its ticks of the same
 day ended before the switch, and the unit logs no error record through it.
@@ -186,3 +188,159 @@ Results of each milestone are added below as they exist.
   `engine/scripts/server/assignment_enroll.py`.
 - `tests/stripe` on the merged tree: 35 passed.
 - Tag `main-before-hosted-line-20261120` on `ecba4c06`.
+
+### M2, 2026-11-20
+
+- Commits `81bf192a`, `6244b480` and `6454b9a2`.
+  `git diff hosted-engine-0.1.57.dev3 hosted-engine-0.1.57.dev4 -- engine/zylch
+  engine/pyproject.toml` names `services/task_assignment_mail.py`,
+  `services/task_assignment_projection.py`, `storage/storage.py` and the
+  version line.
+- New cases: 17 in `tests/assignments/test_member_hold_limit.py` and 4 in
+  `tests/storage/test_insert_sent_email.py`. All pass.
+- The nine deliberate bugs fail 7, 5, 9, 6, 1, 1, 1, 2 and 1 of the new
+  cases, in the order M2 lists them.
+- Test comparison, `checks/test-comparison.txt`. The eleven directories that
+  exercise the changed code ran on the tagged commit: 2,527 cases pass
+  against 2,495 on the `dev3` package, none lost, 32 gained. The twelve
+  other directories ran on the first of the three commits: 903 pass on both
+  packages, none lost.
+
+### M3, 2026-11-20
+
+- `main` is `58ee858f`, a fast-forward from `ecba4c06`, pushed at 10:45:48
+  UTC with tag `hosted-engine-0.1.57.dev4` on `6454b9a2` and tag
+  `main-before-hosted-line-20261120`. The 845 added lines hold addresses of
+  test fixtures only.
+- Release `/home/mrcalld/releases/hosted-engine-0.1.57.dev4-9f6812dbd997`:
+  root-owned, no bytecode, no writable file, every script on its own
+  interpreter, `uv pip check` clean, 478 package files identical to
+  `git archive hosted-engine-0.1.57.dev4 engine/zylch`, imported by each of
+  the seven tenant users. Digests in `release/release-facts.txt`. Throwaway
+  start: four loops, `[mail-sync] skipped: no mail credentials`.
+
+### The reconcile of 10:49 UTC, not planned
+
+`mrcall-tenant create` for the personal mailbox unit modified the profiles
+directory. `zylch-reconcile.path` then ran the reconcile, which pulled
+`main` from `ecba4c06` to `58ee858f`, ran `pip install -e` on the base
+environment and restarted all seven units between 10:49:35 and 10:49:39 UTC,
+exit 3. The telephone unit restarted with no call check and during a tick of
+the Café 124 clone.
+
+- Café 124 production: no voice call line in its journal from 10:30:06 UTC
+  to the restart; `calls_available: true` at 10:36:46 and 10:50:10 UTC; voice
+  runtime line at 10:49:49 UTC.
+- The Café 124 tick that ran through it ended at 10:54:17 UTC with exit 1:
+  `assignment_read_incomplete` and `execution_read_failed`, with transport
+  and connection failures in its report. The tick before it ended with exit
+  0.
+- Each unit came back on its last drop-in: the three already switched on
+  `dev4`, the other four on the package they ran.
+
+After a push to `main`, `mrcall-tenant` and any change to the profiles
+directory restart every unit at once.
+
+### M6, 2026-11-20
+
+| Unit | Switch (UTC) | Store steps | First mail run | Errors after |
+| --- | --- | --- | --- | --- |
+| staff `YZNI…` | 10:45:56 | `0007`, `0008`, backup written | `run completed new=0` | the `reanalyze_task` budget refusal it logged before |
+| staff `ZwpL…` | 10:48:14 | `0007`, `0008`, backup written | `run finished with errors: Email login rejected` | the IMAP login rejection it logged before |
+| personal mailbox | 10:49:09 | `0007`, `0008`, backup written | `run completed new=772` | none |
+| staff `C06x…` | 10:56:36 | `0007`, `0008`, backup written | `run completed new=0` | the `reanalyze_task` budget refusal it logged before |
+
+- Each: active, package digest `9f6812dbd997`, the release's interpreter, no
+  `PYTHONPATH` in the process.
+- The personal mailbox unit: declaration
+  `/etc/mrcalld/tenant-exec/<uid>` with `INTERPRETER=<release>/venv/bin/zylch`,
+  drop-in `t1-hosted-engine-20261120.conf`, `mrcall-tenant create`. The
+  reconcile of 10:49 UTC restarted it and it came back on the release.
+- `system.capabilities` of `C06x…`, the one staff unit a clone reads: 5 keys
+  before, 14 after, none lost. No client of ours holds a session for the
+  other three units.
+- The error shapes of every unit before its switch are in
+  `rollout/errors-before-switch.txt`. `YZNI…` and `C06x…` log about 230
+  `reanalyze_task` refusals a day, "request exceeds the supported
+  200000-token context window", from `llm/budget_pricing.py`, which is the
+  same file in their earlier package and in this one.
+
+### M5, 2026-11-20
+
+- Switch at 10:56:07 UTC, after `calls_available: true` in the same command
+  and with no tick of the Café 124 clone running.
+- After it: `calls_available: true` at 10:56:21 UTC; the process listens on
+  `127.0.0.1:8787`, `ws.sock` and `operator-mcp.sock`;
+  `[voice] production runtime module=<release path>` at 10:56:13 UTC;
+  `StreamableHTTP session manager started` at 10:56:14 UTC;
+  `[ws] mail sync started (disabled)` and `[mail-sync] skipped: disabled`;
+  the public MCP route answers 401 and both OAuth metadata documents answer
+  200; package digest `9f6812dbd997`; no store step; no error record.
+- `system.capabilities`: 13 keys before, 14 after, none lost,
+  `stripe_payment_method_links` gained.
+- Its automatic cycle logs the warning it logged before the switch,
+  "Preparation is paused".
+
+### M4, 2026-11-20
+
+- The MrCall tick of 10:50 UTC ran on `dev3` and ended at 11:28:34 UTC. The
+  second account switched at 11:29:01 UTC and support at 11:29:19 UTC: each
+  active, package digest `9f6812dbd997`, no store step, the encryption
+  self-check passed, `[ws] mail sync started (every 10 min)`, no error
+  record, the 14 capability keys of before.
+- The fleet inventory after it, `fleet-packages-after.txt`: seven units, one
+  package digest, `9f6812dbd997`.
+- The projection asked of both engines for five held rows of the 10:50 UTC
+  scan, through the clone's `cs rpc tasks.assignment.project`:
+
+  | Row's component | Support engine | Second account's engine |
+  | --- | --- | --- |
+  | customer last, past the limit | `normal`, `MEMBER_ACTIVITY_HOLD_EXPIRED`, two holding items kept | `normal`, no evidence |
+  | customer last, past the limit, both mailboxes answered earlier | `normal`, `MEMBER_ACTIVITY_HOLD_EXPIRED` | `normal`, `MEMBER_ACTIVITY_HOLD_EXPIRED` |
+  | a member wrote last from the support mailbox | `needs-assignment` | `normal`, no evidence |
+  | a member wrote last from the second account's mailbox | `normal`, no evidence | `needs-assignment`, three holding items |
+  | customer last, inside the limit | `needs-assignment` | `normal`, no evidence |
+- The MrCall clone ran one tick by hand on the new package, with the
+  schedule's own command: 11:34:25 to 12:20:46 UTC, exit 0, run
+  `run-df8whgxh`. Row by row against the scan of 10:50 UTC,
+  `rollout/mrcall-hand-tick-expect.txt`:
+  - the six rows the rule releases left the held list: one is `open`, two
+    are `resumed`, one is `courtesy`, one is not listed because a member's
+    answer follows that row's mail, one is in the kernel's `escalated` list;
+  - the six member-last rows and the four rows inside the limit are still
+    `needs-assignment`, the two `conflict` rows are still `conflict`.
+- The tick's work queue took the `open` row and one older root, and both
+  owed nothing: the open row's newest mail is a closing thanks. It deferred
+  one `resumed` row by its limit of two, and held the root of the other two
+  released rows by the kernel's own `escalated` record of 2026-09-11.
+  Result: 0 drafted, 0 sent, 0 escalated.
+- Through that tick the support engine logged 26 release records and the
+  second account's engine 2; neither logged a traceback, an `ERROR` or a
+  `CRITICAL` record, and neither restarted.
+- No reply has left on `dev4`. The criterion for the tick after a reply to a
+  released thread is not exercised yet.
+
+### M5, after its first scheduled tick
+
+- The Café 124 tick of 12:00 UTC ended after three minutes with exit 1,
+  `mail intake failed (TimeoutError)`. The engine's email intake ran from
+  12:00:03 to 12:03:00 UTC, 177 seconds; the kernel allows 180 seconds for
+  the connection and the call together. On the earlier package the same
+  call took 5 to 20 seconds in the ticks of 06:00, 08:00 and 10:00 UTC.
+- The same call repeated from the clone took 30 seconds after a gap of 12
+  minutes, then 9 and 6 seconds, then 10 seconds after 2.5 minutes. Each run
+  reads the message ids of the last seven days in every folder
+  (`[IMAP] scan_folder`, criteria `OR UID <next>:* SINCE <date>`), and that
+  read is slow after a long gap.
+- The unit's auto-update loop fetches no mail: its pipeline stops at the
+  spending gate, "Preparation is paused", before the sync stage. So with
+  `MAIL_SYNC_INTERVAL_MINUTES=0` the unit synced only when a tick asked,
+  every two hours.
+- The drop-in no longer sets `MAIL_SYNC_INTERVAL_MINUTES`. The unit
+  restarted at 12:19:12 UTC after `calls_available: true`:
+  `[ws] mail sync started (every 10 min)`, the first
+  `[mail-sync] run completed new=0` at 12:20:56 UTC, and the checks of the
+  first switch pass again.
+- The Café 124 clone ran the lost tick by hand from 12:21:50 UTC; its mail
+  intake took 5 seconds.
+

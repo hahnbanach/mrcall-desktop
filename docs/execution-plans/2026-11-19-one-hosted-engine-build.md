@@ -1,10 +1,15 @@
 ---
-status: active
+status: superseded
 ---
 
 # One build for every hosted engine — execution plan
 
 [Brief](../briefs/2026-11-19-one-hosted-engine-build.md).
+
+Superseded by the plan
+[Main is the hosted line](2026-11-20-main-is-the-hosted-line.md), which
+switched the seven units to release `hosted-engine-0.1.57.dev4` with the
+procedures of M3, M4 and M5 below.
 
 Owner of every milestone: Claude session
 `617dd083-145f-41e1-975e-e50096c231f4`. The operator approved the single

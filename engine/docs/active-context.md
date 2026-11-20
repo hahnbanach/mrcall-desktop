@@ -17,12 +17,11 @@ reads and shared project acceptance; private task/email cross-owner probes refus
 [Operational record](../../docs/execution-plans/2026-10-08-mrcall-company-memory-sharing.md).
 No real assignment or paid work is part of this acceptance.
 
-The unreleased [contextual-email
-candidate](../../docs/execution-plans/2026-10-08-contextual-email-assignment-guard.md) guards
-actual reply create/update/send and preserves known email/task context across chat and worker
-hops. [Enrollment](features/assignment-enrollment.md) distinguishes never-enabled, managed and
-ambiguous legacy stores; managed authority cannot be removed by deleting trust. No candidate
-source, enrollment or caller patch is activated in hosted services or installed clones.
+The [contextual-email
+candidate](../../docs/execution-plans/2026-10-08-contextual-email-assignment-guard.md), its
+[enrollment](features/assignment-enrollment.md) and the typed Qonto credentials are not in
+`main`'s tree. Tag `main-before-hosted-line-20261120` holds their modules. No hosted service
+or installed clone ran them.
 
 The statements about hosted services below are the latest recorded acceptance,
 not live rechecks by the local hardening closure. Detailed historical trial
@@ -30,9 +29,7 @@ receipts and diagnostic sequences are in the archive and owning plans.
 
 Native [Qonto](features/qonto.md) has authenticated support-only banking,
 restart/reconnect, source-comparison and managed-answer acceptance. Packaged
-GUI and provider-UI comparison remain unverified. Current source accepts Qonto
-credentials only as typed request arguments; no published Desktop or hosted
-engine has that change. Released source combines
+GUI and provider-UI comparison remain unverified. Released source combines
 Qonto and [additional mailboxes/PEC](features/mailboxes.md). Six company units
 have verified mailbox migration, primary registration, encryption startup and
 row preservation; personal Gmail keeps its separate attachment source pin. The
@@ -112,35 +109,59 @@ engine that clients only read keeps its archive current. Its
 [plan](../../docs/execution-plans/2026-11-18-engine-owned-mail-sync.md) owns
 that evidence.
 
-Seven hosted units run four packages. The two MrCall units, support and the
-second account, run tag `hosted-engine-0.1.57.dev3` of branch
-`release/hosted-engine-20261118` since 2026-11-19: the support line united
-with the Café 124 production package, in the Café 124 dependency set. Café
-124 production, its three staff units and the personal mailbox unit run
-older packages that are in no commit as a whole. `main` runs on no unit. The
-[one-build plan](../../docs/execution-plans/2026-11-19-one-hosted-engine-build.md)
-owns the per-unit state, the release, the store rehearsals and each rollback.
+Seven hosted units run one package since 2026-11-20: tag
+`hosted-engine-0.1.57.dev4` on `main`, release
+`/home/mrcalld/releases/hosted-engine-0.1.57.dev4-9f6812dbd997`, in one
+Python environment. `main`'s `engine/zylch` is the tree those units run. The
+[plan](../../docs/execution-plans/2026-11-20-main-is-the-hosted-line.md) owns
+the per-unit state, the release and each rollback.
+
+A member's own message holds a thread for people until the customer's newest
+mail has waited `MEMBER_ACTIVITY_HOLD_HOURS`, 72 by default, with no member
+answer after it. Then the thread is the operator's again. The
+[assignment contract](features/task-assignment.md) holds the rule.
 
 ## Unresolved
 
-- Five hosted units are not on the united package. Café 124 production needs
-  a decision on its finance-content rule first: the united package lets a
-  session authenticated as the profile's owner reuse that profile's finance
-  content, as support does, where the Café 124 package refuses by text
-  similarity. 26 Qonto tests pin the older rule and no test covers
-  `qonto/owner_content.py`. The three Café 124 staff units and the personal
-  mailbox unit wait for the operator's word.
-- `main` and the hosted line are two lines. Commit `0cf4790c` replaced the
-  hosted line's tree with the production runtime, so its git ancestry does
-  not describe its content. A merge from the content ancestor `v0.1.56` has
-  32 conflicted paths, 17 in the engine package. `main` holds the contextual
-  email guard with its enrollment and the typed Qonto credentials, which no
-  unit ever ran.
+- The contextual email guard with its enrollment and the typed Qonto
+  credentials wait to be brought onto `main` again. The engine looks the
+  guard's modules up with `find_spec`: with them present it applies the guard
+  to stores that were never enrolled.
+- 26 Qonto cases of the engine's test tree pin a finance-content rule no
+  unit runs: a session authenticated as the profile's owner reuses that
+  profile's finance content on every unit. No test covers
+  `qonto/owner_content.py`.
+- The repository's checks on `main` fail: the RPC contract check, and the
+  engine test tree, which has cases that fail on every package that ran it.
+  `docs/ipc-contract.md` and `docs/rpc-contract-inventory.json` are not
+  reconciled with the engine's method registry.
+- A Desktop build from this engine is unverified.
 - Six hosted units carry drop-ins that sort after `tenant.conf`. The nightly
   reconcile exits 3 and a `tenant.conf` change does not reach them.
-- The two MrCall units log RPC calls at DEBUG to the journal, mailbox and
-  customer addresses included. `checks/journal-address-shapes.txt` in the
-  one-build plan's evidence folder lists the line shapes with their counts.
+- `zylch-reconcile.path` runs the reconcile when the profiles directory
+  changes, and `mrcall-tenant create` changes it. With new commits on `main`
+  the reconcile then restarts every unit at once, the telephone unit
+  included, with no check for a call.
+- The seven units log at DEBUG to the journal, mailbox and customer
+  addresses included. `checks/journal-address-shapes.txt` in the one-build
+  plan's evidence folder lists the line shapes of the two MrCall units.
+- The operator kernel lists a held thread among those that wait for a person
+  before it checks whether a member answered it, works on two conversations
+  per tick, and keeps a contact with a person through its own `escalated`
+  record whatever the engine answers.
+- A thread stays held without a limit when a member answered last from their
+  own mailbox and the customer then wrote only to another account's mailbox.
+- An email intake after a long gap is slow. On Café 124 production it took
+  177 seconds after two hours without a sync, against 5 to 20 seconds on its
+  earlier package and the 180 seconds the operator kernel waits. Each run
+  reads the message ids of the last seven days in every folder. With the
+  mail loop on, a run takes 6 to 10 seconds there.
+- No reply has left on `hosted-engine-0.1.57.dev4`: the first tick on it
+  found nothing owed in the two conversations it took.
+- Staff units `C06x…` and `YZNI…` log about 230 `reanalyze_task` refusals a
+  day: the request exceeds the 200000-token window
+  (`llm/budget_pricing.py`). The mailbox of staff unit `ZwpL…` rejects its
+  login.
 - On the MrCall support profile the assignment projection of three threads
   that carry a waiting draft is `unknown` on the primary account: two with
   `REPLY_SOURCE_UNAVAILABLE`, one of them from `SENT_REPLY_NOT_SYNCED`
@@ -148,14 +169,6 @@ owns the per-unit state, the release, the store rehearsals and each rollback.
   since 2026-11-16 that kept its review lists them, on three engine
   releases. The cause is not established. `rollout/m3-tick-1850.txt` in the
   one-build plan's evidence folder holds the counts.
-- A member's message without automatic-reply headers in a thread's Sent mail
-  holds that thread as `needs-assignment` with no time limit
-  (`services/task_assignment_evidence.py`, `_member_activity`;
-  `services/task_assignment_projection.py`, `_project`). On 2026-11-19 that
-  rule holds 16 of the 18 inbound conversations of the MrCall support
-  mailbox, the oldest for 10 days, one of them in part through five replies
-  the engine itself sent in September. Whether the hold gets a limit is the
-  operator's decision.
 - Live PEC.net acceptance and provider marker comparison,
   Qonto installed Electron and provider UI remain open in their owning plans.
 - Remaining Café124 billing choices and funded credit acceptance remain open;
