@@ -464,3 +464,29 @@ The operator ordered the mail work first on 2026-11-20 16:45 UTC.
   "/etc/mrcalld/tenant-exec/<uid>.voice.env"` in the drop-in's command
   line, once the admission is ready again.
 
+### The evening of 2026-11-20
+
+- The reply saved by the 14:50 UTC tick was in the engine only: the kernel
+  copies a draft to Gmail Drafts after a clean turn, and the Desktop app
+  lists no engine drafts. At 18:16 UTC `cs draft-reply --resume-draft`
+  published it as a Gmail review copy. At 18:24 UTC the operator's own
+  shorter reply left through `cs draft-send --operator-request`: exit 5,
+  `sent-with-cleanup-pending`, `exact_sent_verified`. It is the first reply
+  sent on this release, and its stored copy is not flagged automatic. The
+  longer draft and its review copy remain, `superseded`, until a person
+  retires them.
+- The Café 124 tick of 18:00 UTC, the first on `dev5`, ended with exit 1:
+  both roots read and escalated, nothing drafted, discovery exit 3. The
+  unit logged the AI provider's HTTP 429 twice, as on the old line, and one
+  chat request over the context window at the time of an interactive
+  `cs ask`. The assignment projection took 1,630 s in `review`, as in the
+  ticks of the two days before.
+- The MrCall tick of 18:50 UTC ended with exit 0: both selected roots held,
+  nothing drafted or sent, no `create_draft` call, no error record. The
+  thread answered at 18:24 UTC was held as `needs-assignment` and not
+  selected, so the brief's criterion for the tick after a reply to a
+  released thread holds. The kernel lists that thread as human work while
+  our message is the last one.
+- No tick has composed or sent a reply on this release: the scheduled send
+  path and the draft references fix are not exercised by a tick yet.
+

@@ -126,14 +126,20 @@ name it.
 - One email intake of the Café 124 production unit took 177 seconds against
   the 180 the operator kernel waits; the cause is not established. The plan
   holds the record.
-- No reply has left on this release. The operator kernel does not send a
-  reply whose preparation had a refused `create_draft` call; this release
-  removes one cause, the refusal of a References chain folded over lines.
+- No scheduled tick has sent a reply on this release; one left on the
+  operator's request on 2026-11-20. The kernel sends no reply whose
+  preparation had a refused `create_draft` call, and its draft then stays in
+  the engine, which the Desktop app does not list. This release removes one
+  cause: the refusal of a References chain folded over lines.
 - With the telephone listener configured, a voice admission that is not
   ready stops the whole daemon at start, its WebSocket and its MCP listener
   included. The admission of the Café 124 number is not ready since
   2026-11-20 16:39 UTC and its cause is not established; the plan holds the
   record.
+- `emails.search` with `folder: sent` keeps only threads whose latest message
+  is the user's, unlike Gmail's `in:sent`: a Café 124 subject search over 33
+  sent threads returned 4. Superhuman reminders are stored with
+  `is_auto_reply = 0`, so they count as written by an outside person.
 - Staff units `C06x…` and `YZNI…` log about 230 `reanalyze_task` refusals a
   day (`llm/budget_pricing.py`, the 200000-token window). The mailbox of
   staff unit `ZwpL…` rejects its login.
