@@ -7,6 +7,7 @@ key-or-credits selection. Every paid dispatch uses the common durable budget.
 from __future__ import annotations
 
 import asyncio
+from zylch.observability_producers import observed, observed_sync
 import contextvars
 import logging
 from dataclasses import dataclass, field
@@ -313,6 +314,7 @@ class LLMClient:
         """
         return self.transport == "proxy"
 
+    @observed("generation", "model.await", private=True)
     async def create_message(
         self,
         messages: List[Dict[str, Any]],
@@ -371,6 +373,7 @@ class LLMClient:
         except Exception as exc:  # noqa: BLE001 - never mask the real refusal
             logger.warning(f"[llm] could not release an undispatched reservation: {exc}")
 
+    @observed_sync("generation", "model.request", private=True)
     def create_message_sync(
         self,
         messages: List[Dict[str, Any]],
@@ -426,8 +429,11 @@ class LLMClient:
             validate_k3(request_kwargs)
 
         publication_guard.constrain_request(request_kwargs)
+        evidence_recheck = None
         if not finance_history.is_managed():
-            finance_history.reject_known_evidence(request_kwargs)
+            from zylch.qonto.public_definitions import reject_request_evidence
+
+            evidence_recheck = reject_request_evidence(request_kwargs)
 
         num_tools = len(tools) if tools else 0
         logger.debug(
@@ -451,9 +457,13 @@ class LLMClient:
         quote = self._client.quote(request_kwargs) if self.transport == "proxy" else None
         finance_history.check_before_disclosure()
         publication_guard.check_before_disclosure()
+        if evidence_recheck is not None:
+            evidence_recheck()
         reservation = reserve(request_kwargs, self.transport, quote=quote)
         try:
             record_dispatch()
+            if evidence_recheck is not None:
+                evidence_recheck()
             finance_history.check_before_disclosure()
             publication_guard.check_before_disclosure()
         except (

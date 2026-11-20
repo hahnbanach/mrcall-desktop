@@ -1,0 +1,56 @@
+{
+  "common": {
+    "tools": true,
+    "min_context": 200000,
+    "excluded_variants": [
+      ":free",
+      ":batch"
+    ],
+    "excluded_prefixes": [
+      "anthropic/claude-haiku"
+    ],
+    "required_scores": [
+      "intelligence"
+    ]
+  },
+  "presets": {
+    "economy": {
+      "ceiling": 10
+    },
+    "balanced": {
+      "ceiling": 20
+    }
+  },
+  "roles": {
+    "SMART": {
+      "rule": "maximise",
+      "index": "intelligence"
+    },
+    "AGENT": {
+      "rule": "maximise",
+      "index": "agentic"
+    },
+    "CHEAP": {
+      "rule": "satisfice",
+      "index": "intelligence",
+      "floor": 40
+    },
+    "HIGHFLOOR": {
+      "rule": "satisfice",
+      "index": "intelligence",
+      "floor": 60
+    }
+  },
+  "allowlist": {
+    "claude-mid-2": {
+      "transport": "direct",
+      "price": {
+        "input": "2",
+        "output": "10"
+      }
+    }
+  },
+  "mrcall_served": [
+    "claude-mid-2"
+  ]
+}

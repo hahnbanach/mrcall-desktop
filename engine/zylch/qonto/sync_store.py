@@ -67,7 +67,7 @@ def daily_windows(start, end):
         cursor = following
 
 
-def plan(authority, binding, started, *, initial):
+def plan(authority, binding, started, *, initial, history=None):
     with guard.commit_guard(authority, binding) as session:
         for account_id in binding.account_ids:
             account = session.get(QontoAccount, (binding.dataset_id, account_id))
@@ -77,6 +77,16 @@ def plan(authority, binding, started, *, initial):
                 account.initial_to = utc(started)
             for start, end in daily_windows(account.initial_from, account.initial_to):
                 add_window(session, binding, account_id, "emitted_at", start, end, "initial")
+            if history is not None:
+                for start, end in daily_windows(*history):
+                    backfill = add_window(
+                        session, binding, account_id, "emitted_at", start, end, "backfill"
+                    )
+                    if (
+                        backfill.status == "completed"
+                        and (backfill.completed_at or 0) < time.time() - 86400
+                    ):
+                        backfill.status = "pending"
             if not initial or not fresh:
                 start = instant(account.updated_watermark or account.initial_from) - timedelta(
                     hours=48
@@ -344,7 +354,9 @@ def coverage(binding):
             "status": ("partial" if unfinished or unplanned or last_error else "completed"),
             "completed_windows": len(rows) - len(unfinished),
             "remaining_windows": len(unfinished) + unplanned * 30,
-            "remaining_backfill_windows": sum(row.purpose == "initial" for row in unfinished)
+            "remaining_backfill_windows": sum(
+                row.purpose in ("initial", "backfill") for row in unfinished
+            )
             + unplanned * 30,
             "history_planned": not bool(unplanned),
             "error": last_error,

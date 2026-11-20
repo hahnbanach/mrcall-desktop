@@ -101,3 +101,114 @@ def test_actual_transport_lifecycle(env, monkeypatch, transport):
             assert projection["task"]["state"] == "closed" and len(projection["events"]) == 2
 
     asyncio.run(journey())
+
+
+class SocketMailFixture(MailFixture):
+    def __init__(self, monkeypatch):
+        super().__init__(monkeypatch)
+        self.clients = []
+        self.sockets = []
+
+    def client(self, mailbox):
+        import socket
+        from zylch.email.imap_client import IMAPClient
+
+        class Connection:
+            def __init__(connection, owner):
+                connection.owner = owner
+                connection.sock, connection.remote = socket.socketpair()
+                owner.sockets.extend([connection.sock, connection.remote])
+
+            def __getattr__(connection, name):
+                return getattr(connection.owner, name)
+
+            def shutdown(connection):
+                connection.sock.close()
+                connection.remote.close()
+
+            def logout(connection):
+                connection.owner.closed += 1
+                connection.shutdown()
+                return "BYE", []
+
+        client = IMAPClient(mailbox.address, "fixture-only")
+        connection = Connection(self)
+        client._conn = connection
+        if hasattr(client, "_deadline_connection"):
+            client._deadline_connection = connection
+        self.clients.append(client)
+        return client
+
+    def assert_clean(self):
+        assert self.clients
+        assert all(client._conn is None for client in self.clients)
+        assert all(sock.fileno() == -1 for sock in self.sockets)
+        for client in self.clients:
+            if hasattr(client, "_provider_deadline"):
+                assert client._provider_deadline is None
+                assert client._deadline_connection is None
+                assert client._imap_lock.acquire(blocking=False)
+                client._imap_lock.release()
+
+
+@pytest.mark.parametrize("operation", ["reply", "snapshot"])
+def test_socket_provider_cleanup_preserves_valid_evidence(env, monkeypatch, operation):
+    from zylch.services import task_assignment_evidence as evidence
+
+    mail = SocketMailFixture(monkeypatch)
+    try:
+        if operation == "reply":
+            result = evidence.reply(mail.reply_id, ROOT)
+            assert result["complete"] is True
+            assert result["judgement"] == "NONAUTOMATIC_MEMBER_REPLY_CANDIDATE"
+            assert result["source"] and result["digest"]
+        else:
+            result = evidence.snapshot(ROOT)
+            assert result["covered_inbound"] and result["digest"]
+    finally:
+        mail.assert_clean()
+
+
+@pytest.mark.parametrize("operation", ["reply", "snapshot"])
+@pytest.mark.parametrize("failure", ["fetch", "metadata", "expiry"])
+def test_socket_provider_cleanup_keeps_failures_closed(env, monkeypatch, operation, failure):
+    import time
+    from zylch.email.imap_client import IMAPError
+    from zylch.services import task_assignment_evidence as evidence
+    from zylch.services.task_assignment_types import AssignmentError
+
+    target = evidence.reply if operation == "reply" else evidence.snapshot
+    mail = SocketMailFixture(monkeypatch)
+    kwargs = {}
+    if failure == "fetch":
+        mail.fail_fetch = True
+    elif failure == "metadata":
+        from email import message_from_bytes
+
+        folder = '"Sent"' if operation == "reply" else '"Archive"'
+        uid, raw = next(iter(mail.messages[folder].items()))
+        message = message_from_bytes(raw)
+        message.replace_header("From", "intruder@example.test")
+        mail.messages[folder][uid] = message.as_bytes()
+    else:
+        original_uid = mail.uid
+
+        def expire_fetch(command, *args):
+            if command == "FETCH":
+                time.sleep(0.30)
+            return original_uid(command, *args)
+
+        monkeypatch.setattr(mail, "uid", expire_fetch)
+        kwargs["deadline"] = time.monotonic() + 0.25
+    try:
+        if operation == "reply":
+            result = target(mail.reply_id, ROOT, **kwargs)
+            assert result["complete"] is False
+            assert result["judgement"] == "UNKNOWN"
+            assert result["reason"] == "SOURCE_UNAVAILABLE"
+            assert result["source"] is None and result["digest"] is None
+        else:
+            with pytest.raises((AssignmentError, IMAPError)):
+                target(ROOT, **kwargs)
+    finally:
+        mail.assert_clean()

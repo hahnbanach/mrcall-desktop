@@ -15,20 +15,25 @@ async def qonto_connect(params, notify):
 
 
 async def qonto_status(params, notify):
-    """qonto.status() -> safe connection state, generation, stored-credential flag and persisted coverage."""
+    """qonto.status() -> safe connection and bootstrap availability."""
     return connection.status()
 
 
 async def qonto_disconnect(params, notify):
-    """qonto.disconnect() -> application credential removal, disconnected status and generation."""
+    """qonto.disconnect() -> application credential removal and retained bootstrap availability."""
     return connection.disconnect()
 
 
 async def qonto_sync(params, notify):
-    """qonto.sync() -> bounded source-only refresh and durable partial coverage."""
+    """qonto.sync(date_from?, date_to?) -> bounded source-only refresh and coverage."""
+    from zylch.qonto.errors import QontoError
     from zylch.qonto.sync import run
 
-    return await run()
+    if set(params) - {"date_from", "date_to"} or (
+        bool(params) and (set(params) != {"date_from", "date_to"} or None in params.values())
+    ):
+        raise QontoError("operation_failed")
+    return await run(**params)
 
 
 async def qonto_delete_imported_data(params, notify):

@@ -1,0 +1,43 @@
+"""Frozen full-schema hashes observed from the controlled built-in tool factory."""
+
+from types import MappingProxyType
+
+
+PUBLIC_TOOL_SCHEMA_FINGERPRINTS = MappingProxyType({
+    'close_email_threads': frozenset(['e1875af23331823553fda5988e704f09ca2e51d058f8ad079493c5e08cfc4325']),
+    'compose_email': frozenset(['43d9a6738b9e1674bb0dda08651bad6776499597de983e2a8c0785f4da0cedcc']),
+    'create_draft': frozenset(['0d3662bc88e2c0eaa55421d2aa1e572578a7e5938b50b61c64a48dead5edd681']),
+    'create_memory': frozenset(['db285750270444a2420736eaaaa7451e4b44dbdf2fc733d15c0bac93eb2761c9']),
+    'delete_draft': frozenset(['bcfd6c051bac4aa1933dad890954251dce4aa5b2faa0634c8af75a2ca99da34d']),
+    'download_attachment': frozenset(['4da8231298a777452ba9131cf9b89e787a528de164dbb3570f655573cf255be6']),
+    'email_stats': frozenset(['9f656a4667ed25717e42101ee04b651cb0dea2a5c8119b489b814dd48ac1ee59']),
+    'get_contact': frozenset(['24dd509919c7a613c0513800b39dbd0f0aefe462cabefa8b37bed29d1456b775']),
+    'get_contact_timeline': frozenset(['d41879c67cebd9c3aac165cf1ca1bae7d3a5f647e3d9e2412d095a88d05bcbf9']),
+    'get_pipedrive_deals': frozenset(['4f9ee2340fc251748f9f2296c31f6cb8e3824fcce7415cc2057833cf1ce32047']),
+    'get_tasks': frozenset(['790fa192f8ad78a4d38d1847c368286539da835d3b06161973ac13c8e7ac7c9d']),
+    'get_whatsapp_conversation': frozenset(['96ee458105b42f5106dabff85c63f3969c87d0371832fcbdd62aa9caff61b696']),
+    'initiate_call': frozenset(['033831270da57162c6a6be268d12765d5208df72b5589b274a52c7c24ad985d7']),
+    'list_drafts': frozenset(['91883f59c2a99ce81f29d272f943de14f414b7b6ca975121b10472f09e1fc67c']),
+    'list_mrcall_assistants': frozenset(['e29617a4d3880dcca6d5a2f9750c5dc71b9dc418743b4a6f9035b0dd816f48a0']),
+    'qonto_accounts': frozenset(['7a77a0afa712d862dc00df9ea7260a8016c773de89ec7f995d022c9f681b2010']),
+    'qonto_summary': frozenset(['8bc3661fd9a61ec268259a3daa191c925d31b7d7756637033f32163c8e5db043']),
+    'qonto_transaction': frozenset(['6f78cd55a1ed1e1ff0e87a8f655350f6332d0586ba051b7511c1145be5f82778']),
+    'qonto_transactions': frozenset(['6294e091252cd63ad2372e57c91b1c9db1bf6c8d3bffdacdd93921080f4e4735']),
+    'read_document': frozenset(['41c9ab30f87b6b109d0eb76d29b071700767c0575135f122e201bd4bc6195c41']),
+    'read_email': frozenset(['f1ee61ee15a456604607828e37d9499b7f8264559cb3ca251a8ee61475d94c85']),
+    'run_python': frozenset(['54d3808611445841f29ab1869ab8287770b1084dfd1ea11cb01b31281063f2b9']),
+    'search_emails': frozenset(['4d30e8706e98201a3e5ede86e034924a136bd23c9830d63dc5a1972c66f327d3']),
+    'search_local_emails': frozenset(['f762f147103bcbc00918b83e683b7abfb9bb6bbef6daf559d836dc545ce6e4a9']),
+    'search_local_memory': frozenset(['70320f8c20af6a0bc322aaea925364862d0563f6226a44b4cd488d19d7b7751c']),
+    'search_pipedrive_person': frozenset(['276511fc988f3c96ff7f1bf8ac7af300d11e56111cdf24069d1f14f328c25d9b']),
+    'search_provider_emails': frozenset(['842e6f4d92082d5abd73982dde4c1fbdbfe148798857b606e285e6a9671ef78b']),
+    'search_whatsapp': frozenset(['5a5751335e1e4cfb235899e4fd27827d512a87185af6ce89494e0c50680c6237']),
+    'send_draft': frozenset(['48baf1affba8d3b8640ae92bbdcac990e99cbf7bfc63cdaf694a81adf623d51b']),
+    'send_sms': frozenset(['80ee3d0a31e340db6f1280bc61666512168c959e334daa212b5b57565cc32ef7']),
+    'send_whatsapp_message': frozenset(['8364ba175d5c2df05062dc1f7f8187530974339d5967892be4523e14f1b5bdd9']),
+    'sync_emails': frozenset(['8032f97e1cb9f1f86d7037114edf5cdc17243bb5040aa036b39fc14fe1b02d27']),
+    'update_draft': frozenset(['b75b4f0921305b288a2ce56cd3b755e478fd2dd61629045c984bec564ce5e42d']),
+    'update_memory': frozenset(['b08203cdfa6e312d174e08f77678094f33a5e0f59a9455c68b8dd06a91c65548']),
+    'web_search': frozenset(['41461fe5314a728dc1f8d8c75efc55fb0bb6646f56a063d034fcf64c2af00140', 'e5fe899ae8d1192679132b9fa94358f5440cb2221436c2ff290c3dc437718383']),
+    'whatsapp_gap_analysis': frozenset(['454b6457cc1234646dea3179e8f44381d5703f3aa0f8acebd6dfbadeaae8f020']),
+})

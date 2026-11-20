@@ -65,7 +65,10 @@ def _pre_journal_store(path, *, blobs: int = 2) -> None:
 
     engine = create_engine(f"sqlite:///{path}")
     tables = [t for t in Base.metadata.sorted_tables if t.name in set(MEMORY_TABLE_NAMES)]
-    Base.metadata.create_all(engine, tables=[t for t in tables if t.name != JOURNAL])
+    # Older stores predate enrollment; its installer owns the initial marker.
+    Base.metadata.create_all(
+        engine, tables=[t for t in tables if t.name not in {JOURNAL, "assignment_enrollment"}]
+    )
     with engine.begin() as conn:
         conn.execute(
             text(

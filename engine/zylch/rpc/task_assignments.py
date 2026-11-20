@@ -1,6 +1,7 @@
 """Strict versioned company-assigned task RPC; ordinary tasks stay private."""
 
 import asyncio
+import time
 
 from zylch.services import task_assignment_evidence as evidence
 from zylch.services import task_assignment_identity as identity
@@ -30,6 +31,10 @@ async def get(params, notify):
 
 def _preview(params):
     root = thread(params["thread_key"])
+    resolved = store.get(root)
+    if not resolved["complete"]:
+        raise AssignmentError("RFC assignment component unavailable")
+    root = resolved["authoritative_thread_key"]
     extras = {}
     if params["operation"] == "close":
         if params.get("source_id") is not None:
@@ -77,8 +82,21 @@ async def commit(params, notify):
 
 async def project(params, notify):
     """tasks.assignment.project(thread_key) -> held/assigned/closed exact-identity projection."""
-    return await asyncio.to_thread(projection.project, thread(params["thread_key"]))
+    root = thread(params["thread_key"])
+    started = time.monotonic()
+    projection._diagnostic("assignment.enqueued", "start", root, started, stage="rpc")
 
+    def run():
+        projection._diagnostic("assignment.worker.start", "start", root, started, stage="rpc")
+        return projection.project(root)
+
+    try:
+        value = await asyncio.to_thread(run)
+    except BaseException as error:
+        projection._diagnostic("assignment.rpc.failed", "failed", root, started, error=error, stage="rpc")
+        raise
+    projection._diagnostic_result("assignment.rpc.terminal", root, started, value, stage="rpc")
+    return value
 
 async def reply_evidence(params, notify):
     """tasks.assignment.reply_evidence(source_id, thread_key) -> owner-scoped live Sent evidence without mail content."""

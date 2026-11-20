@@ -133,6 +133,30 @@ def test_create_message_sync_preserves_cache_block():
     assert _dt.date.today().isoformat() in sysv[-1]["text"]
 
 
+def test_a_run_clock_fixes_the_line_for_every_request_of_a_run(monkeypatch):
+    """One loop, one line — a minute that changes mid-loop changes nothing;
+    a request without a clock still reads the moment fresh."""
+    from zylch.llm import client as client_mod
+    from zylch.llm.client import RunClock
+
+    minutes = iter(range(60))
+    monkeypatch.setattr(
+        client_mod, "current_datetime_line", lambda: f"Datetime=12:{next(minutes):02d}"
+    )
+    clock = RunClock()
+    c, fake = _client()
+    sent = []
+    for _ in range(2):
+        c.create_message_sync(
+            messages=[{"role": "user", "content": "hi"}], system="BASE", run_clock=clock
+        )
+        sent.append(fake.messages.captured["system"])
+    assert sent == ["BASE\n\nDatetime=12:00", "BASE\n\nDatetime=12:00"]
+    c.create_message_sync(messages=[{"role": "user", "content": "hi"}], system="BASE")
+    assert fake.messages.captured["system"] == "BASE\n\nDatetime=12:01"
+    assert _with_datetime([{"type": "text", "text": "X"}], clock)[-1]["text"] == clock.line
+
+
 # ─── chat_compaction bypass also injects ──────────────────────────────
 
 

@@ -183,8 +183,8 @@ def test_the_pipeline_ends_its_run_on_the_fence_instead_of_logging_a_memory_fail
     errors: list = []
 
     class _Preflight:
-        async def create_message(self, **kwargs):
-            return object()
+        async def check_transport(self):
+            return None
 
     tasks = AsyncMock(return_value="tasks ran")
     with (

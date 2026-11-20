@@ -60,7 +60,12 @@ def test_disabled_wire_matches_existing_transport(module):
     plain = {k: v for k, v in req.items() if k != "thinking"}
     OpenRouterClient("synthetic", http_client=old).create(**plain)
     module.ReasoningEvaluationClient("synthetic", http_client=new).create(**req)
-    assert old.calls == new.calls
+    # Brief D3: the production adapter no longer adds a blanket `disabled`, so
+    # the experiment's arm is the production wire plus its explicit control.
+    (old_url, old_sent), (new_url, new_sent) = old.calls[0], new.calls[0]
+    assert len(old.calls) == len(new.calls) == 1 and old_url == new_url
+    assert new_sent["headers"] == old_sent["headers"]
+    assert new_sent["json"] == {**old_sent["json"], "thinking": {"type": "disabled"}}
 
 
 @pytest.mark.parametrize("cap", [2048, 4096, 8192])

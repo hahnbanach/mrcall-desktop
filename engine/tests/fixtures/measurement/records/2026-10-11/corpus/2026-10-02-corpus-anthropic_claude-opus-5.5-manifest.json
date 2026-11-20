@@ -1,0 +1,187 @@
+{
+  "arm": "openrouter:anthropic/claude-opus-5.5",
+  "arm_id": "anthropic/claude-opus-5.5",
+  "arm_source": "arms-final.json:anthropic/claude-opus-5.5",
+  "provider": "openrouter",
+  "mode": "live",
+  "model": "anthropic/claude-opus-5.5",
+  "case_set_sha256": "acb2e22448a6569da3707a2a8df7d7919d2cecc920237f088ea704af3970a01d",
+  "snapshot_version": "81998270380cb1927ada4bddf4d8869802edb73a9b042fb8560e2db95c610e05",
+  "prompt_version_sha256": "9d4a1fdfe1f5fbb8e4f3876e602c24e3c729e05f7786f4d59a71a64164715d1b",
+  "extraction_prompt_sha256": "352eaba92e38fd718125eb3572a6b429b6a4b35be57ba4498ebcb6b6f3f84cc1",
+  "mnemonic_max_tokens": 2048,
+  "cap_usd": 3.0,
+  "engine_commit": "8b18ea69f183dcbbefc73e7814f354232448b221",
+  "kernel_commit": "unavailable",
+  "embedder": "EmbeddingEngine",
+  "cases": [
+    "unrelated_same_name_people",
+    "shared_switchboard",
+    "corroborated_same_person",
+    "customer_forwarding_number_correction",
+    "customer_price_correction",
+    "global_opening_hours",
+    "account_feedback",
+    "planned_not_completed",
+    "contradictory_legacy_fact_rule",
+    "multi_entity_source"
+  ],
+  "excluded": [
+    "malformed_output"
+  ],
+  "checks": {
+    "canary": {
+      "verdict": "refused",
+      "validator": "accepted",
+      "calls": 1,
+      "cost_usd": 0.0152
+    },
+    "budget_refusal": {
+      "outcome": "retryable_failure",
+      "reason": "paid decision unavailable: AI paused: daily budget $0.00; used or reserved $0.41. This request needs up to $0.23. Daily usage resets at 2026-10-05T00:00:00Z; unresolved calls remain reserved.",
+      "allowance_untouched": true,
+      "open_holds": 0,
+      "wire_calls": "live",
+      "calls": 0,
+      "cost_usd": 0.0
+    },
+    "unpriced_refusal": {
+      "outcome": "retryable_failure",
+      "reason": "paid decision unavailable: AI paused: OpenRouter model has no verified price ceiling.",
+      "message_matches": true,
+      "label": "fail-closed behaviour, not semantic health",
+      "calls": 0,
+      "cost_usd": 0.0
+    },
+    "truncation_refusal": {
+      "override": 16,
+      "restored": true,
+      "outcome": "skipped",
+      "attempts": 1,
+      "calls": 1,
+      "cost_usd": 0.017756
+    }
+  },
+  "record_only_rewrites": 0,
+  "intents": [
+    {
+      "intent_id": "f240a6bb3183495fbae3b0b1a2d080a0",
+      "case_id": "unrelated_same_name_people",
+      "bound_micro_usd": 1051340,
+      "committed_before_micro_usd": 0,
+      "opened_at": "2026-10-04T17:29:11.549613",
+      "open": false
+    },
+    {
+      "intent_id": "177e8572dbe1432f82e9bd99c4ea8fa1",
+      "case_id": "shared_switchboard",
+      "bound_micro_usd": 1053340,
+      "committed_before_micro_usd": 65532,
+      "opened_at": "2026-10-04T17:29:34.898150",
+      "open": false
+    },
+    {
+      "intent_id": "038375e7c7cb41c5a9738b9173223708",
+      "case_id": "corroborated_same_person",
+      "bound_micro_usd": 1052370,
+      "committed_before_micro_usd": 123108,
+      "opened_at": "2026-10-04T17:29:56.850147",
+      "open": false
+    },
+    {
+      "intent_id": "7e2fa46de08447708d3a48a3655c045e",
+      "case_id": "planned_not_completed",
+      "bound_micro_usd": 1045760,
+      "committed_before_micro_usd": 156868,
+      "opened_at": "2026-10-04T17:30:12.472181",
+      "open": false
+    },
+    {
+      "intent_id": "6edc430fc8df4704b6246e4965edfc23",
+      "case_id": "contradictory_legacy_fact_rule",
+      "bound_micro_usd": 1062100,
+      "committed_before_micro_usd": 218004,
+      "opened_at": "2026-10-04T17:30:37.459294",
+      "open": false
+    },
+    {
+      "intent_id": "c46d20a273ad4c2d99411100db30dc3f",
+      "case_id": "multi_entity_source",
+      "bound_micro_usd": 1877680,
+      "committed_before_micro_usd": 247440,
+      "opened_at": "2026-10-04T17:30:49.885564",
+      "open": false
+    },
+    {
+      "intent_id": "8dc8679bb6ad479580f58e6acc922f58",
+      "case_id": "customer_forwarding_number_correction",
+      "bound_micro_usd": 858320,
+      "committed_before_micro_usd": 305144,
+      "opened_at": "2026-10-04T17:31:09.902720",
+      "open": false
+    },
+    {
+      "intent_id": "b27950d53f5a420889852958d18936af",
+      "case_id": "customer_price_correction",
+      "bound_micro_usd": 859160,
+      "committed_before_micro_usd": 328984,
+      "opened_at": "2026-10-04T17:31:17.611455",
+      "open": false
+    },
+    {
+      "intent_id": "82560a4422d4454eb7564759326efa46",
+      "case_id": "global_opening_hours",
+      "bound_micro_usd": 840760,
+      "committed_before_micro_usd": 350432,
+      "opened_at": "2026-10-04T17:31:37.096738",
+      "open": false
+    },
+    {
+      "intent_id": "9e395667f0bf45bf8de0146685911f90",
+      "case_id": "account_feedback",
+      "bound_micro_usd": 843800,
+      "committed_before_micro_usd": 370140,
+      "opened_at": "2026-10-04T17:31:42.213896",
+      "open": false
+    },
+    {
+      "intent_id": "2207780e4b4f4331a596d67c1f97a27c",
+      "case_id": "check:canary",
+      "bound_micro_usd": 630570,
+      "committed_before_micro_usd": 391828,
+      "opened_at": "2026-10-04T17:31:48.171226",
+      "open": false
+    },
+    {
+      "intent_id": "bc53597613e348ca885c442e560e21fc",
+      "case_id": "check:budget",
+      "bound_micro_usd": 630570,
+      "committed_before_micro_usd": 407028,
+      "opened_at": "2026-10-04T17:31:51.683608",
+      "open": false
+    },
+    {
+      "intent_id": "69e0f88fbaa8452eb3258cac922b7e54",
+      "case_id": "check:unpriced",
+      "bound_micro_usd": 630570,
+      "committed_before_micro_usd": 407028,
+      "opened_at": "2026-10-04T17:31:51.945523",
+      "open": false
+    },
+    {
+      "intent_id": "07a9bb4bfad64762b4d67a3a5e6e7894",
+      "case_id": "check:truncation",
+      "bound_micro_usd": 630570,
+      "committed_before_micro_usd": 407028,
+      "opened_at": "2026-10-04T17:31:52.473691",
+      "open": false
+    }
+  ],
+  "totals_usd": {
+    "settled": 0.424784,
+    "held": 0.0,
+    "open_intents": 0.0
+  },
+  "open_holds": 0,
+  "written_at": "2026-10-04T17:31:57.552070"
+}

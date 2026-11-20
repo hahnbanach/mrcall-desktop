@@ -1,0 +1,21 @@
+{
+ "schema": 1,
+ "about": "The only rows of this plan's runs that derive_thresholds leaves out by entry (measurement_plan.apply_exclusions verifies each claim). Rows stale for the shape need no entry: measurement_runs.supersede_stale drops them when the arm has a current-shape run of the role, and otherwise they leave the arm unmeasured.",
+ "exclusions": [
+  {
+   "run": "s4c",
+   "role": "CHAT",
+   "arms": "*",
+   "kind": "prompt",
+   "why": "Measured on CHAT's prompt 64a1a517, which main replaced (86bf2f10, a68ea7b8; re-captured in 185bd1a3, today's c55f551c). Every arm was measured again on today's prompt in rerun3 and rerun4."
+  },
+  {
+   "run": "rerun3",
+   "role": "CHAT",
+   "arms": ["anthropic/claude-opus-5.5"],
+   "kind": "denied",
+   "superseded_by": "rerun4",
+   "why": "Cut short when the OpenRouter account ran out of credit: chat-13 and chat-14 were refused with HTTP 402 before any inference. Opus 5.5 answered every CHAT case in rerun4, with that run's K3."
+  }
+ ]
+}

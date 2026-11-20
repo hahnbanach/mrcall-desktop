@@ -1241,9 +1241,7 @@ For simple drafts without context, use the `compose_email` tool in chat."""
                     gmail = GmailClient(account=user_email, owner_id=owner_id)
 
                     # Build and send message
-                    from zylch.services.task_assignment_email_effect import send as guarded_send
-
-                    sent_message = guarded_send(gmail.send_message, owner_id=owner_id, draft=draft,
+                    sent_message = gmail.send_message(
                         to=to_str,
                         subject=draft.get("subject", ""),
                         body=draft.get("body", ""),
@@ -1268,9 +1266,7 @@ For simple drafts without context, use the `compose_email` tool in chat."""
                         graph_token=graph_token["access_token"], account=user_email
                     )
 
-                    from zylch.services.task_assignment_email_effect import send as guarded_send
-
-                    sent_message = guarded_send(outlook.send_message, owner_id=owner_id, draft=draft,
+                    sent_message = outlook.send_message(
                         to=to_str,
                         subject=draft.get("subject", ""),
                         body=draft.get("body", ""),
@@ -1319,9 +1315,7 @@ For simple drafts without context, use the `compose_email` tool in chat."""
                     if isinstance(refs, list):
                         refs = " ".join(refs) if refs else None
 
-                    from zylch.services.task_assignment_email_effect import send as guarded_send
-
-                    sent_message = guarded_send(imap_client.send_message, owner_id=owner_id, draft=draft,
+                    sent_message = imap_client.send_message(
                         to=to_str,
                         subject=draft.get("subject", ""),
                         body=draft.get("body", ""),

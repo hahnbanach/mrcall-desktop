@@ -1,0 +1,69 @@
+{
+  "schema": 1,
+  "role": "INTENT",
+  "rule": "trim_measurement_cases.py: authored and reviewed, not measured; --restore puts them back",
+  "kept": 14,
+  "order": ["intent-01", "intent-02", "intent-03", "intent-04", "intent-05", "intent-06", "intent-07", "intent-08", "intent-09", "intent-10", "intent-11", "intent-12", "intent-13", "intent-14", "intent-15", "intent-16", "intent-17", "intent-18", "intent-19", "intent-20"],
+  "cases": [
+    {
+      "id": "intent-07",
+      "lang": "it",
+      "input": {"user_input": "Prepara una mail per il fornitore degli imballaggi e chiedigli il listino 2027"},
+      "label": {"primary_skill": "draft_composer"},
+      "critical": false,
+      "critical_on": [],
+      "expect_lang": null,
+      "why": "Asks for a new email to a supplier; 'listino' is the message's subject matter, not a fact to save."
+    },
+    {
+      "id": "intent-08",
+      "lang": "it",
+      "input": {"user_input": "Manda un WhatsApp a Gianni: ci vediamo alle 9 in magazzino"},
+      "label": {"primary_skill": "draft_composer"},
+      "critical": false,
+      "critical_on": [],
+      "expect_lang": null,
+      "why": "A WhatsApp message to send, which the draft skill covers; the time is the message's content, not a meeting to book."
+    },
+    {
+      "id": "intent-11",
+      "lang": "it",
+      "input": {"user_input": "Segna come fatto il task del preventivo Rossi"},
+      "label": {"primary_skill": "task_manager"},
+      "critical": false,
+      "critical_on": [],
+      "expect_lang": null,
+      "why": "Closes one of the user's tasks; an update the user explicitly asked for."
+    },
+    {
+      "id": "intent-14",
+      "lang": "it",
+      "input": {"user_input": "Sposta la riunione di venerdì alle 11"},
+      "label": {"primary_skill": "calendar"},
+      "critical": false,
+      "critical_on": [],
+      "expect_lang": null,
+      "why": "Moves an existing meeting to a new time; a calendar change the user ordered."
+    },
+    {
+      "id": "intent-17",
+      "lang": "en",
+      "input": {"user_input": "Do we have an email address for the new buyer at Example Retail?"},
+      "label": {"primary_skill": "contact_lookup"},
+      "critical": false,
+      "critical_on": [],
+      "expect_lang": null,
+      "why": "Asks whether an email address is known for a person: a contact lookup, not a mail search or a draft."
+    },
+    {
+      "id": "intent-20",
+      "lang": "en",
+      "input": {"user_input": "Note that Example Logistics changed their phone number to +39 02 0000 0188"},
+      "label": {"primary_skill": "memory_notes"},
+      "critical": false,
+      "critical_on": [],
+      "expect_lang": null,
+      "why": "The user supplies a new fact to save; the lookup skill only finds what is already known."
+    }
+  ]
+}

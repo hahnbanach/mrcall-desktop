@@ -1,7 +1,7 @@
 """Native Stripe lifecycle and explicit private read RPCs."""
 
 from zylch.qonto.logging import private_rpc
-from zylch.stripe import connection
+from zylch.stripe import connection, payment_links, portal
 
 
 async def stripe_status(params, notify):
@@ -49,6 +49,16 @@ async def stripe_detail(params, notify):
     return await connection.read("detail", params)
 
 
+async def stripe_payment_method_update_link(params, notify):
+    """stripe.payment_method_update_link(customer, request_id) -> private portal session URL."""
+    return await portal.payment_method_update_link(params)
+
+
+async def stripe_payment_link_create(params, notify):
+    """stripe.payment_link_create(amount_minor, label, request_id) -> dict"""
+    return await payment_links.create(params)
+
+
 METHODS = {
     "stripe." + name: private_rpc(globals()["stripe_" + name])
     for name in (
@@ -61,5 +71,7 @@ METHODS = {
         "invoices",
         "subscriptions",
         "detail",
+        "payment_method_update_link",
+        "payment_link_create",
     )
 }

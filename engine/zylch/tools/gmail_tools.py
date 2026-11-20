@@ -6,14 +6,19 @@ SendDraftTool uses IMAPClient.send_message() via SMTP.
 CreateDraftTool and ListDraftsTool use Storage (DB drafts).
 """
 
+from zylch.observability_producers import observed, observe, failure
+import html
 import logging
+import re
 import os
 import smtplib
 import socket
 from typing import List, Optional
 
 from ..services.approval_gate import draft_approval_card, draft_updates_from_card
+from ..services import operator_reply_origin
 from ..utils.safe_paths import PathRefused
+from ..utils.msgid import canonical_draft_thread_id, clean_references
 from .base import Tool, ToolResult, ToolStatus
 
 logger = logging.getLogger(__name__)
@@ -371,6 +376,27 @@ class GmailSearchTool(Tool):
         }
 
 
+def _draft_rfc_identifier(value):
+    if not isinstance(value, str):
+        return value
+    if "\r" in value or "\n" in value:
+        raise ValueError("Draft threading identifier contains a line break")
+    if value.startswith("<") and value.endswith(">"):
+        return value
+    decoded = html.unescape(value)
+    if decoded == value or not any(c in decoded + html.unescape(decoded) for c in "<>"):
+        return value
+    if (
+        not value.startswith("&lt;")
+        or not value.endswith("&gt;")
+        or decoded != html.unescape(decoded)
+        or value not in (html.escape(decoded, quote=False), html.escape(decoded, quote=True))
+        or re.fullmatch(r"<[^<>\s@]+@[^<>\s@]+>", decoded) is None
+    ):
+        raise ValueError("Draft threading identifier encoding is ambiguous")
+    return decoded
+
+
 class CreateDraftTool(Tool):
     """Create a draft email in database."""
 
@@ -382,6 +408,7 @@ class CreateDraftTool(Tool):
         self.storage = storage
         self.owner_id = owner_id
 
+    @observed("persistence", "create_draft", private=True)
     async def execute(
         self,
         to: str,
@@ -395,6 +422,10 @@ class CreateDraftTool(Tool):
         bcc: Optional[List[str]] = None,
     ):
         try:
+            thread_id = _draft_rfc_identifier(thread_id)
+            in_reply_to = _draft_rfc_identifier(in_reply_to)
+            if isinstance(references, str) and ("\r" in references or "\n" in references):
+                raise ValueError("Draft references contain a line break")
             refs_list = None
             if references:
                 refs_list = (
@@ -402,6 +433,8 @@ class CreateDraftTool(Tool):
                     if isinstance(references, str)
                     else references
                 )
+                if isinstance(refs_list, list):
+                    refs_list = [_draft_rfc_identifier(value) for value in refs_list]
 
             # Normalize + verify attachments BEFORE persisting so we fail fast.
             try:
@@ -429,7 +462,7 @@ class CreateDraftTool(Tool):
                 body=body,
                 in_reply_to=in_reply_to,
                 references=refs_list,
-                thread_id=thread_id,
+                thread_id=canonical_draft_thread_id(thread_id),
                 attachment_paths=norm_paths,
                 cc=cc_list,
                 bcc=bcc_list,
@@ -482,6 +515,7 @@ class CreateDraftTool(Tool):
                 ),
             )
         except Exception as e:
+            failure("persistence", e)
             logger.error(f"Failed to create draft: {e}")
             return ToolResult(
                 status=ToolStatus.ERROR,
@@ -649,6 +683,7 @@ class UpdateDraftTool(Tool):
         self.storage = storage
         self.owner_id = owner_id
 
+    @observed("persistence", "update_draft", private=True)
     async def execute(
         self,
         draft_id: str,
@@ -717,6 +752,7 @@ class UpdateDraftTool(Tool):
                 message=("Draft updated successfully!\n" + "\n".join(updates)),
             )
         except Exception as e:
+            failure("persistence", e)
             logger.error(f"Failed to update draft: {e}")
             return ToolResult(
                 status=ToolStatus.ERROR,
@@ -958,6 +994,7 @@ class SendDraftTool(Tool):
             return data
         return draft_approval_card(draft, data.get("draft_id"))
 
+    @observed("provider", "send_draft", private=True)
     async def execute(
         self,
         draft_id: str = None,
@@ -1050,14 +1087,20 @@ class SendDraftTool(Tool):
                         data=None,
                         error=(f"Attachment no longer exists: {p}." " Email NOT sent."),
                     )
+            from zylch.services.exact_operator_send_context import preflight
+
+            preflight(self.owner_id, draft)
+            origin_binding = await operator_reply_origin.admit(self.owner_id, draft)
         except DraftHandleError as e:
             # An unclear handle, not a missing draft: say which, so the
             # operator adds characters instead of hunting for a lost draft.
+            failure("provider", e, draft_id=draft_id, reason="incomplete-input", effect_certainty="none")
             logger.info(f"[send_draft] unresolvable handle: {e}")
             return ToolResult(status=ToolStatus.ERROR, data=None, error=str(e))
         except Exception as e:
             # Phase 1 failure: the draft was never claimed, so there is
             # nothing to roll back and it stays exactly as sendable as it was.
+            failure("provider", e, draft_id=draft_id, effect_certainty="none")
             logger.error(f"Failed to prepare draft for sending: {e}")
             return ToolResult(
                 status=ToolStatus.ERROR,
@@ -1087,11 +1130,13 @@ class SendDraftTool(Tool):
             )
             if edits:
                 logger.debug(f"[send_draft] applying card edits keys={list(edits.keys())}")
-                from zylch.services.task_assignment_draft_transaction import claim_edits
-
-                with claim_edits(self.owner_id, draft_id):
-                    self.storage.update_draft(self.owner_id, draft_id, edits)
+                self.storage.update_draft(self.owner_id, draft_id, edits)
                 draft = self.storage.get_draft(self.owner_id, draft_id) or draft
+
+            if origin_binding is not None:
+                draft = self.storage.get_draft(self.owner_id, draft_id)
+                if not draft:
+                    raise ValueError("Scheduled reply draft disappeared after claim")
 
             to_addresses = draft.get("to_addresses", [])
             to_str = ", ".join(to_addresses) if to_addresses else None
@@ -1115,6 +1160,7 @@ class SendDraftTool(Tool):
         except Exception as e:
             # Still short of the transport, so the mail provably did not go
             # out: hand the claim back and leave the draft visible.
+            failure("provider", e, draft_id=draft_id, effect_certainty="none")
             logger.error(f"Failed to prepare claimed draft for sending: {e}")
             self.storage.release_draft_claim(self.owner_id, draft_id, "draft", str(e))
             return ToolResult(
@@ -1124,19 +1170,22 @@ class SendDraftTool(Tool):
             )
 
         try:
-            from zylch.services.task_assignment_email_effect import send as guarded_send
+            with operator_reply_origin.handoff(origin_binding, self.owner_id, draft):
+                observe("provider", "start", draft_id=draft_id, reason="none")
+                from zylch.services.exact_operator_send_admission import send as guarded_send
 
-            sent_message = guarded_send(self.imap.send_message, owner_id=self.owner_id, draft=draft,
-                to=to_str,
-                subject=subject,
-                body=body,
-                cc=cc_addresses or None,
-                bcc=bcc_addresses or None,
-                in_reply_to=in_reply_to,
-                references=(" ".join(references) if references else None),
-                attachment_paths=attachment_paths or None,
-            )
+                sent_message = guarded_send(self.imap.send_message, owner_id=self.owner_id, draft=draft,
+                    to=to_str,
+                    subject=subject,
+                    body=body,
+                    cc=cc_addresses or None,
+                    bcc=bcc_addresses or None,
+                    in_reply_to=in_reply_to,
+                    references=(" ".join(references) if references else None),
+                    attachment_paths=attachment_paths or None,
+                )
         except Exception as e:
+            failure("provider", e, draft_id=draft_id, effect_certainty="unknown" if delivery_is_uncertain(e) else "none")
             logger.error(f"Failed to send draft: {e}")
             uncertain = delivery_is_uncertain(e)
             try:
@@ -1197,9 +1246,11 @@ class SendDraftTool(Tool):
 
         # --- phase 3: the mail is out. Only `sent` from here on. ---
         sent_id = sent_message.get("id", "")
+        observe("provider", "accepted", draft_id=draft_id, provider_id=sent_id, reason="none", effect_certainty="accepted")
         try:
             self.storage.mark_draft_sent(self.owner_id, draft_id, sent_id)
         except Exception as e:
+            failure("persistence", e)
             logger.error(f"[send_draft] mark_draft_sent failed after delivery: {e}")
             try:
                 self.storage.force_draft_sent(self.owner_id, draft_id, sent_id)
@@ -1234,8 +1285,10 @@ class SendDraftTool(Tool):
                 sent_at=datetime.now(timezone.utc),
                 attachment_filenames=attachment_filenames,
                 in_reply_to=in_reply_to,
+                references=clean_references(" ".join(references) if references else None),
             )
         except Exception as e:
+            failure("persistence", e)
             logger.warning(f"[send_draft] persist failed (non-blocking): {e}")
 
         return ToolResult(

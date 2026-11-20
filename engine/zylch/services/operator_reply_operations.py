@@ -148,56 +148,19 @@ def _instruction_identity(bundle):
     return out
 
 
-def reply_headers(source):
-    from .task_assignment_mail import references
-    target = source.get("message_id_header")
-    refs = list(dict.fromkeys([*references(source.get("references") or ""), target]))
-    return {"thread_id": source.get("thread_id"), "in_reply_to": target, "references": refs}
-
-
-def _native_effect_source(session, actor, expected):
-    from zylch.storage.models import Email
-    from .task_assignment_email_effect import current_binding
-    from .task_assignment_mail import row_identity
-    binding = current_binding()
-    if (not isinstance(binding, dict) or binding.get("root") != expected.get("thread_id")
-            or binding.get("target") != expected.get("message_id_header")):
-        raise ReplyRefusal("matching_native_email_effect_required")
-    fresh = session.execute(select(Email.__table__).where(
-        Email.owner_id == actor.mailbox_address, Email.mailbox_id == actor.mailbox_id,
-        Email.id == expected.get("id"))).mappings().one_or_none()
-    if (fresh is None or row_identity(dict(fresh)) != binding.get("source")
-            or row_identity(dict(fresh)) != row_identity(expected)):
-        raise ReplyRefusal("native_effect_source_changed")
-    fields = ("id", "mailbox_id", "message_id_header", "thread_id", "from_email", "to_email", "cc_email", "references", "subject", "body_plain", "body_html")
-    if any(fresh.get(key) != expected.get(key) for key in fields):
-        raise ReplyRefusal("exact_source_changed_before_private_commit")
-    return dict(fresh)
-
-
 def _published_locked(session, actor):
-    import sqlite3
-    from contextlib import closing
-    from urllib.parse import quote
-    from zylch.storage.database import current_memory_engine
-    active = _active.get()
-    if active is None or len(active) < 6 or active[1] != actor:
-        raise ReplyRefusal("matching_native_email_effect_required")
-    _native_effect_source(session, actor, active[4])
-    engine = current_memory_engine()
-    if engine is None or not engine.url.database:
+    conn = session.get_bind()
+    if not conn.exec_driver_sql("PRAGMA main.table_info(project_space)").fetchall():
         raise ReplyRefusal("locked_company_instruction_accessor_required")
+    space = conn.exec_driver_sql("SELECT space_id FROM main.project_space WHERE id=1").scalar_one()
+    if space != actor.company_space_id:
+        raise ReplyRefusal("locked_instruction_company_mismatch")
     paths = ("procedures.md", "mail/" + actor.mailbox_address.lower() + ".md")
-    with closing(sqlite3.connect("file:" + quote(engine.url.database, safe="/") + "?mode=ro", uri=True)) as conn:
-        conn.row_factory = sqlite3.Row
-        space = conn.execute("SELECT space_id FROM project_space WHERE id=1").fetchone()
-        if space is None or space[0] != actor.company_space_id:
-            raise ReplyRefusal("locked_instruction_company_mismatch")
-        rows = conn.execute(
-            "SELECT d.path,d.revision,r.sha256 FROM project_documents d "
-            "JOIN project_revisions r ON r.project=d.project AND r.path=d.path AND r.revision=d.revision "
-            "WHERE d.project=? AND d.path IN (?,?)", ("operator-instructions", *paths))
-        return [dict(row) for row in rows]
+    rows = conn.exec_driver_sql(
+        "SELECT d.path,d.revision,r.sha256 FROM main.project_documents d "
+        "JOIN main.project_revisions r ON r.project=d.project AND r.path=d.path AND r.revision=d.revision "
+        "WHERE d.project=? AND d.path IN (?,?)", ("operator-instructions", *paths)).mappings()
+    return [dict(row) for row in rows]
 
 
 def finish_draft_write(session, draft):
@@ -209,12 +172,6 @@ def finish_draft_write(session, draft):
     before_draft_write(draft["owner_id"])
     if len(active) < 6:
         raise ReplyRefusal("frozen_instruction_bundle_required")
-    source = _native_effect_source(session, actor, active[4])
-    from email.utils import getaddresses
-    recipients = getaddresses([source.get("from_email") or ""])
-    if (len(recipients) != 1 or [value.lower() for value in draft.get("to_addresses", [])] != [recipients[0][1].lower()]
-            or draft.get("cc_addresses") or draft.get("bcc_addresses")):
-        raise ReplyRefusal("exact_source_recipient_required")
     current_instructions = service.locked_instruction_reader(session, actor)
     if _instruction_identity(current_instructions) != _instruction_identity(active[5]):
         raise ReplyRefusal("instructions_changed_before_private_commit")
@@ -353,24 +310,28 @@ class ReplyOperations:
 
     def _finish_review(self, actor, operation, context, review):
         from .operator_reply_context import check_locked
-        from .task_assignment_email_effect import effect
-        from .task_assignment_draft_transaction import create_transaction, session as draft_session
-        with effect(actor.mailbox_address, reply_headers(context["source"])):
-            with create_transaction():
-                with draft_session() as session:
-                    self._check(actor)
-                    _native_effect_source(session, actor, context["source"])
-                    if _instruction_identity(self.locked_instruction_reader(session, actor)) != _instruction_identity(context["instructions"]):
-                        raise ReplyRefusal("instructions_changed_before_private_commit")
-                    check_locked(session, actor, context["source"], context.get("correspondence"))
-                    changed = session.execute(update(_operations).where(
-                        _operations.c.id == operation, *_where(actor), _operations.c.state == "running",
-                        _operations.c.executor == _process(), _operations.c.result.is_(None),
-                    ).values(state="needs_review", result=_json(asdict(review)), updated_at=time.time())).rowcount
-                    if changed != 1:
-                        raise ReplyRefusal("operation_not_claimed_or_already_completed")
-                    session.flush()
-                    _active.get()[3][0] = True
+        from . import project_store, task_assignment_evidence, task_assignment_store
+        native_actor, space, _ = task_assignment_evidence.admission()
+        if native_actor.uid != actor.profile_uid or native_actor.mailbox != actor.mailbox_address or space != actor.company_space_id:
+            raise ReplyRefusal("native_review_profile_mismatch")
+        with project_store.connection(actor.company_space_id, write=True) as (conn, _):
+            task_assignment_store._admit(native_actor, space, conn)
+            task, _, keys = task_assignment_store.authority(native_actor, space, context["source"]["thread_id"], conn, locked=True)
+            if context["source"].get("message_id_header") not in keys or (task or {}).get("state") == "assigned":
+                raise ReplyRefusal("native_review_source_scope_held")
+            with Session(bind=conn.execution_options(schema_translate_map={None: "assignment_profile"}), expire_on_commit=False) as session:
+                self._check(actor)
+                if _instruction_identity(self.locked_instruction_reader(session, actor)) != _instruction_identity(context["instructions"]):
+                    raise ReplyRefusal("instructions_changed_before_private_commit")
+                check_locked(session, actor, context["source"], context.get("correspondence"))
+                changed = session.execute(update(_operations).where(
+                    _operations.c.id == operation, *_where(actor), _operations.c.state == "running",
+                    _operations.c.executor == _process(), _operations.c.result.is_(None),
+                ).values(state="needs_review", result=_json(asdict(review)), updated_at=time.time())).rowcount
+                if changed != 1:
+                    raise ReplyRefusal("operation_not_claimed_or_already_completed")
+                session.flush()
+                _active.get()[3][0] = True
 
     async def recover(self, *, actor_binding, operation_id=None, request_key=None):
         actor = actor_binding

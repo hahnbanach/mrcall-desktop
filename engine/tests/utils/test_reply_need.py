@@ -235,8 +235,12 @@ async def test_courtesy_verdict_carries_the_model_reason(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_adjudication_is_one_batched_call_at_temperature_zero(monkeypatch):
-    """N messages must not become N requests, and the verdict must not wander."""
+async def test_adjudication_is_one_batched_call_naming_its_tool(monkeypatch):
+    """N messages must not become N requests; the tool is named, never forced.
+
+    Brief D3: no sampling (the temperature 0 that pinned the verdict went with
+    the one request shape) and tool_choice auto with an explicit instruction.
+    """
     import zylch.llm as llm_mod
 
     seen = []
@@ -246,8 +250,10 @@ async def test_adjudication_is_one_batched_call_at_temperature_zero(monkeypatch)
     )
     await reply_need.adjudicate([_msg("ok"), _msg("grazie"), _msg("perfetto")])
     assert len(seen) == 1
-    assert seen[0]["temperature"] == 0
-    assert seen[0]["tool_choice"]["name"] == "reply_need_decision"
+    assert "temperature" not in seen[0]
+    assert seen[0]["tool_choice"] == {"type": "auto"}
+    assert "reply_need_decision" in seen[0]["messages"][0]["content"]
+    assert "reply_need_decision tool call exactly once" in seen[0]["system"][0]["text"]
 
 
 @pytest.mark.asyncio

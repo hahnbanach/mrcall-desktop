@@ -197,19 +197,10 @@ def _setup_log_file():
     if not profile_dir:
         return
 
-    log_path = os.path.join(profile_dir, "zylch.log")
-    # RotatingFileHandler (not plain FileHandler): a long-running `serve`
-    # daemon must never write an unbounded log. 100 MB × 5 backups caps the
-    # on-disk footprint at ~600 MB even if a profile loops on a failing LLM
-    # (a 1.6 GB zylch.log was observed before this cap).
-    from logging.handlers import RotatingFileHandler
+    from zylch.observability_retention import ProfileLogHandler
 
-    handler = RotatingFileHandler(
-        log_path,
-        maxBytes=100 * 1024 * 1024,
-        backupCount=5,
-        encoding="utf-8",
-    )
+    log_path = os.path.join(profile_dir, "zylch.log")
+    handler = ProfileLogHandler(Path(profile_dir))
     handler.setLevel(logging.DEBUG)
     handler.setFormatter(
         logging.Formatter(
@@ -458,14 +449,24 @@ def rpc(ctx):
     default=None,
     help="Protected production voice configuration for this one daemon.",
 )
+@click.option("--mcp", default=None, help="Optional MCP HTTP bind address HOST:PORT.")
+@click.option("--mcp-unix", default=None, help="Optional separate MCP HTTP Unix socket.")
+@click.option("--mcp-host", multiple=True, help="Exact permitted MCP HTTP Host; repeatable.")
+@click.option("--mcp-origin", multiple=True, help="Exact permitted MCP Origin; repeatable.")
+@click.option(
+    "--mcp-trust-file",
+    type=click.Path(path_type=Path),
+    default=None,
+    help="Protected operator registration file for native legal sessions.",
+)
+@click.pass_context
 @click.option(
     "--operator-config",
     type=click.Path(path_type=Path, exists=True, dir_okay=False),
     default=None,
     help="Protected opt-in Linux operator MCP configuration for this profile.",
 )
-@click.pass_context
-def serve(ctx, ws_addr, unix_path, voice_config, operator_config):
+def serve(ctx, ws_addr, unix_path, voice_config, operator_config, mcp, mcp_unix, mcp_host, mcp_origin, mcp_trust_file):
     """WebSocket JSON-RPC backend for cross-machine clients.
 
     Same RPC surface as `rpc` (stdio) but over a WebSocket, so an
@@ -477,6 +478,10 @@ def serve(ctx, ws_addr, unix_path, voice_config, operator_config):
     """
     import asyncio
     import sys
+
+    from zylch.cli.mcp import run_with_listener, validate_listener
+
+    mcp_options = validate_listener(mcp, mcp_unix, mcp_host, mcp_origin, mcp_trust_file)
 
     _configure_logging()
 
@@ -584,7 +589,7 @@ def serve(ctx, ws_addr, unix_path, voice_config, operator_config):
         coro = serve_ws(host, port)
 
     try:
-        asyncio.run(coro)
+        asyncio.run(run_with_listener(coro, mcp_options))
     except KeyboardInterrupt:
         logger.info("[CLI] serve interrupted, shutting down")
 

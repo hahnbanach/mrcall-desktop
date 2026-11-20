@@ -12,7 +12,16 @@ def tool(**changes):
     )
 
 
-@pytest.mark.parametrize("blocks", [[tool()], [NS(type="text", text=""), tool()]])
+@pytest.mark.parametrize(
+    "blocks",
+    [
+        [tool()],
+        [NS(type="text", text=""), tool()],
+        [NS(type="thinking", thinking="private", signature="sig"), tool()],
+        [NS(type="thinking", thinking="private"), tool()],
+        [NS(type="redacted_thinking", data="opaque"), tool()],
+    ],
+)
 def test_complete_tools_normalize_without_mutating_raw(blocks):
     raw = NS(stop_reason="end_turn", content=blocks)
     response = LLMResponse(raw)
@@ -39,7 +48,10 @@ def test_complete_tools_normalize_without_mutating_raw(blocks):
         [tool(input=[])],
         [tool(), tool(input=[])],
         [tool(), NS(type="refusal", refusal="refused")],
-        [tool(), NS(type="thinking", thinking="private")],
+        # A reasoning block is part of a complete turn (brief D3); a malformed one is not.
+        [tool(), NS(type="thinking", thinking=None)],
+        [tool(), NS(type="thinking", thinking="private", signature=7)],
+        [tool(), NS(type="redacted_thinking", data="")],
         [tool(refusal="refused")],
         [tool(), {}],
     ],

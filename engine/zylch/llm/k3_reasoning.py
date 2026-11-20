@@ -6,7 +6,7 @@ from decimal import ROUND_CEILING, Decimal
 from types import SimpleNamespace
 
 from . import openrouter_pricing as pricing
-from .budget_pricing import BudgetError
+from .budget_pricing import CONTEXT_WINDOW_TOKENS, BudgetError, _context_tokens
 
 MODEL = "moonshotai/kimi-k3"
 OUTPUT_CAP = 8192
@@ -37,17 +37,17 @@ def request_bound(request):
     plain = {k: v for k, v in request.items() if k not in ("thinking", "output_config")}
     original = pricing.request_bound(plain)
     wire = chat_request(request)
-    tokens = (
-        len(json.dumps(wire, ensure_ascii=False, allow_nan=False).encode())
-        + 4096
+    payload_bytes = len(json.dumps(wire, ensure_ascii=False, allow_nan=False).encode())
+    input_bound = (
+        payload_bytes + 4096
         + 1024 * (len(wire["messages"]) + len(wire.get("tools", [])))
     )
-    if tokens + wire["max_tokens"] > 200000:
+    if _context_tokens(payload_bytes) + wire["max_tokens"] > CONTEXT_WINDOW_TOKENS:
         raise BudgetError("K3 Chat request exceeds supported context bound.")
     i, o = pricing.RATES[MODEL]
     return max(
         original,
-        int((tokens * i + wire["max_tokens"] * o).to_integral_value(rounding=ROUND_CEILING)),
+        int((input_bound * i + wire["max_tokens"] * o).to_integral_value(rounding=ROUND_CEILING)),
     )
 
 

@@ -1,6 +1,7 @@
 """Real IMAP protocol bytes and private SQLite rows for task acceptance."""
 
 import re
+import socket
 import uuid
 from datetime import datetime
 from email.message import EmailMessage
@@ -12,6 +13,29 @@ from zylch.storage.models import Email
 
 ROOT = "<customer-root@example.test>"
 REPLY = "<alice-reply@example.test>"
+
+
+class MailConnection:
+    def __init__(self, fixture):
+        self.fixture = fixture
+        self.sock, self.peer = socket.socketpair()
+        self.on_close = lambda: None
+
+    def __getattr__(self, name):
+        return getattr(self.fixture, name)
+
+    def shutdown(self):
+        if self.sock.fileno() == -1:
+            return
+        self.sock.close()
+        assert self.peer.recv(1) == b''
+        self.peer.close()
+        self.fixture.closed += 1
+        self.on_close()
+
+    def logout(self):
+        self.shutdown()
+        return 'BYE', []
 
 
 class MailFixture:
@@ -28,7 +52,7 @@ class MailFixture:
 
     def client(self, mailbox):
         client = IMAPClient(mailbox.address, "fixture-only")
-        client._conn = self
+        client._conn = MailConnection(self)
         return client
 
     def add(
@@ -94,10 +118,6 @@ class MailFixture:
     def noop(self):
         return "OK", []
 
-    def logout(self):
-        self.closed += 1
-        return "BYE", []
-
     def list(self):
         return "OK", [b'(\\Sent) "/" "Sent"', b'(\\Archive) "/" "Archive"']
 
@@ -116,6 +136,8 @@ class MailFixture:
             if self.fail_search:
                 return "NO", [b"fixture unavailable"]
             criteria = args[-1]
+            if criteria == "ALL":
+                return "OK", [b" ".join(str(uid).encode() for uid in self.messages[self.selected])]
             targets = re.findall(r'"(<[^" ]+>)"', criteria)
             result = []
             for uid, raw in self.messages[self.selected].items():
@@ -139,9 +161,19 @@ class MailFixture:
                     continue
                 assert "BODY.PEEK" in args[1]
                 if "HEADER.FIELDS" in args[1]:
+                    message = message_from_bytes(raw)
+                    fields = re.search(r"HEADER.FIELDS \(([^)]*)\)", args[1]).group(1).split()
                     raw = (
-                        "Message-ID: " + str(message_from_bytes(raw)["Message-ID"]) + "\r\n\r\n"
+                        "".join(
+                            f"{name}: {value}\r\n"
+                            for name in fields
+                            for value in message.get_all(name, [])
+                        )
+                        + "\r\n"
                     ).encode()
-                result.append((f"1 (UID {uid} BODY[] {{{len(raw)}}}".encode(), raw))
+                    prefix = f"1 (UID {uid} FLAGS () BODY[HEADER.FIELDS ({' '.join(fields)})] {{{len(raw)}}}"
+                else:
+                    prefix = f"1 (UID {uid} BODY[] {{{len(raw)}}}"
+                result.append((prefix.encode(), raw))
             return "OK", result
         raise AssertionError(command)

@@ -201,7 +201,12 @@ def test_email_capacity_keeps_complete_entities_and_rejects_truncation(profile, 
         worker._custom_prompt = "Extract the email: {body}"
     ok = run(worker, "process_email", mail)
     kwargs = worker.client._client.messages.create.call_args.kwargs
-    assert kwargs["max_tokens"] == 4096
+    # The worker asks for 4096; the one shape adds the reasoning headroom,
+    # because Haiku 4.5's snapshot entry may reason (`default_enabled: null`,
+    # `reasoning` among its parameters).
+    from zylch.llm.request_shape import REASONING_HEADROOM
+
+    assert kwargs["max_tokens"] == 4096 + REASONING_HEADROOM
     # The modern path sends the trained prompt as a cached system block and the
     # mail as the user turn; the legacy path interpolates the mail into the
     # prompt and sends it as the user turn, with no cached block.

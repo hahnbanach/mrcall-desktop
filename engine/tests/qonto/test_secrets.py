@@ -1,6 +1,5 @@
 """Direct Fernet, real private files, the single typed credential source and safe errors."""
 
-import json
 import logging
 import os
 import subprocess
@@ -13,7 +12,7 @@ from cryptography.fernet import Fernet
 from zylch import runtime
 from zylch.auth import clear_session
 from zylch.qonto import provider
-from zylch.qonto.credentials import credentials
+from zylch.qonto.bootstrap import credentials
 from zylch.qonto.errors import QontoError
 from zylch.qonto.repository import read_binding
 from zylch.qonto.secrets import cipher, decrypt_credentials
@@ -171,56 +170,37 @@ def test_strict_credential_format(key, login, expected):
         assert credentials(login, key) == credentials(LOGIN, KEY)
 
 
-def test_retired_bootstrap_source_is_refused_before_any_provider_request(env, leftover):
+def test_bootstrap_is_explicit_read_only_and_cannot_mix_with_typed_input(env, leftover):
     status = env.rpc("qonto.status")["result"]
-    assert status["status"] == "disconnected"
-    assert "bootstrap" not in status
-    save = save_parameters("never-issued")
-    for response in (
-        env.rpc("qonto.test", credential_source="bootstrap"),
-        env.rpc("qonto.test", credential_source="bootstrap", **env.credentials),
-        env.rpc("qonto.connect", credential_source="bootstrap", **save),
-        env.rpc("qonto.connect", credential_source="bootstrap", **env.credentials, **save),
-    ):
-        assert refusal(response) == "credentials_required"
-        assert "credentials_required" in response["error"]["message"]
-        assert LEFTOVER_KEY not in repr(response) and LEFTOVER_LOGIN not in repr(response)
-    unconfirmed = save_parameters("never-issued", authority_confirmed=False)
-    assert (
-        refusal(env.rpc("qonto.connect", credential_source="bootstrap", **unconfirmed))
-        == "authority_required"
-    )
-    for method, required in (("qonto.test", {}), ("qonto.connect", save)):
-        response = env.rpc(method, credential_source="file", **env.credentials, **required)
-        assert refusal(response) == "invalid_credentials"
-    assert env.provider.calls == []
-    assert env.rpc("qonto.status")["result"]["status"] == "disconnected"
+    assert status["bootstrap"] == {"available": True, "status": "available"}
+    assert not env.provider.calls
+    tested = env.rpc("qonto.test", credential_source="bootstrap")["result"]
+    assert tested["ok"] and env.provider.calls[-1].login == "second-" + LEFTOVER_LOGIN
     assert read_binding(UID) is None or read_binding(UID).encrypted_credentials is None
+    response = env.rpc("qonto.test", credential_source="bootstrap", **env.credentials)
+    assert refusal(response) == "invalid_credentials"
+    response = env.rpc(
+        "qonto.connect", credential_source="bootstrap", **save_parameters(tested["challenge_id"])
+    )
+    assert response["result"]["ok"]
+    disconnected = env.rpc("qonto.disconnect")["result"]
+    assert disconnected["bootstrap_retained"] is True
+    assert disconnected["bootstrap"]["available"] is True
+    assert read_binding(UID).encrypted_credentials is None
     assert {path: path.read_bytes() for path in leftover} == leftover
 
 
-def test_refused_bootstrap_request_leaves_an_existing_connection_connected(env, leftover):
+def test_bootstrap_override_refusal_does_not_revoke_saved_connection(env, leftover, monkeypatch):
+    monkeypatch.setattr(runtime, "_serving", True)
+    monkeypatch.setenv("QONTO_HOST_ID_FILE", str(env.home / "host-id"))
+    monkeypatch.setenv("ENCRYPTION_KEY", Fernet.generate_key().decode())
     assert env.connect()["result"]["ok"]
-    tested = env.rpc("qonto.test", **env.credentials)["result"]
-    save = save_parameters(tested["challenge_id"])
-    before = env.rpc("qonto.status")["result"]
-    assert before["status"] == "connected" and before["credential_stored"] is True
-    calls = len(env.provider.calls)
-    assert refusal(env.rpc("qonto.test", credential_source="bootstrap")) == "credentials_required"
+    before = read_binding(UID)
     assert (
-        refusal(env.rpc("qonto.connect", credential_source="bootstrap", **save))
-        == "credentials_required"
+        refusal(env.rpc("qonto.test", credential_source="bootstrap"))
+        == "bootstrap_override_disabled"
     )
-    assert len(env.provider.calls) == calls
-    after = env.rpc("qonto.status")["result"]
-    assert "bootstrap" not in after
-    assert (after["status"], after["generation"]) == ("connected", before["generation"])
-    assert after["credential_stored"] is True
-    saved = read_binding(UID).encrypted_credentials
-    assert decrypt_credentials(saved, env.directory) == credentials(LOGIN, KEY)
-    # The challenge of the typed Test stays redeemable after the refused Save.
-    replaced = env.rpc("qonto.connect", **env.credentials, **save)["result"]
-    assert replaced["ok"] and replaced["generation"] == before["generation"] + 1
+    assert read_binding(UID) == before
     assert {path: path.read_bytes() for path in leftover} == leftover
 
 
@@ -255,7 +235,7 @@ def test_every_source_other_than_input_and_bootstrap_is_invalid(env, leftover, m
 
 
 @pytest.mark.parametrize("source", [{}, {"credential_source": "input"}], ids=["omitted", "input"])
-def test_typed_test_and_save_pass_and_removal_results_name_no_bootstrap(env, leftover, source):
+def test_typed_test_and_save_preserve_explicit_bootstrap_status(env, leftover, source):
     tested = env.rpc("qonto.test", **source, **env.credentials)["result"]
     assert tested["ok"] and tested["organization"]["id"] == "org-id"
     saved = env.rpc(
@@ -268,13 +248,16 @@ def test_typed_test_and_save_pass_and_removal_results_name_no_bootstrap(env, lef
     stored = read_binding(UID).encrypted_credentials
     assert decrypt_credentials(stored, env.directory) == credentials(LOGIN, KEY)
     status = env.rpc("qonto.status")["result"]
-    assert status["status"] == "connected" and "bootstrap" not in status
+    assert status["status"] == "connected" and status["bootstrap"]["available"] is True
     disconnected = env.rpc("qonto.disconnect")["result"]
     assert disconnected["status"] == "disconnected"
-    assert "bootstrap" not in disconnected and "bootstrap_retained" not in disconnected
+    assert (
+        disconnected["bootstrap"]["available"] is True
+        and disconnected["bootstrap_retained"] is True
+    )
     deleted = env.rpc("qonto.delete_imported_data", confirmed=True)["result"]
     assert deleted["deleted"] is True
-    assert "bootstrap" not in deleted and "bootstrap_retained" not in deleted
+    assert deleted["deleted"] is True
     assert read_binding(UID).encrypted_credentials is None
     assert {path: path.read_bytes() for path in leftover} == leftover
 
@@ -303,49 +286,30 @@ def test_identity_checks_precede_the_source_refusal(env, leftover, method, state
     assert {path: path.read_bytes() for path in leftover} == leftover
 
 
-@pytest.mark.parametrize(
-    "override", [True, False], ids=["second_file_named", "second_file_unnamed"]
-)
-def test_serving_engine_refuses_bootstrap_and_saves_only_typed_values(
+@pytest.mark.parametrize("override", [True, False])
+def test_serving_engine_preserves_profile_bootstrap_but_refuses_override(
     env, leftover, monkeypatch, override
 ):
     if not override:
         monkeypatch.delenv("QONTO_BOOTSTRAP_ENV_FILE")
     monkeypatch.setattr(runtime, "_serving", True)
-    hosted_key = Fernet.generate_key()
-    monkeypatch.setenv("ENCRYPTION_KEY", hosted_key.decode())
     monkeypatch.setenv("QONTO_HOST_ID_FILE", str(env.home / "host-id"))
-    status = env.rpc("qonto.status")["result"]
-    assert status["status"] == "disconnected" and "bootstrap" not in status
-    save = save_parameters("never-issued")
-    for method, required in (("qonto.test", {}), ("qonto.connect", save)):
-        for carried in ({}, env.credentials):
-            response = env.rpc(method, credential_source="bootstrap", **carried, **required)
-            assert refusal(response) == "credentials_required"
-            assert LEFTOVER_KEY not in repr(response) and LEFTOVER_LOGIN not in repr(response)
-        response = env.rpc(method, credential_source="file", **env.credentials, **required)
-        assert refusal(response) == "invalid_credentials"
-    assert env.provider.calls == []
-    tested = env.rpc("qonto.test", **env.credentials)["result"]
-    assert tested["engine_location"] == "hosted"
-    saved = env.rpc("qonto.connect", **env.credentials, **save_parameters(tested["challenge_id"]))[
-        "result"
-    ]
-    assert saved["ok"]
-    assert env.provider.calls and all(
-        value == credentials(LOGIN, KEY) for value in env.provider.calls
+    expected = (
+        {"available": False, "status": "bootstrap_override_disabled"}
+        if override
+        else {"available": True, "status": "available"}
     )
-    token = read_binding(UID).encrypted_credentials
-    envelope = json.loads(Fernet(hosted_key).decrypt(token.encode()))
-    assert envelope == {"version": 1, "login": LOGIN, "key": KEY}
-    assert not (env.directory / "qonto.key").exists()
-    calls = len(env.provider.calls)
-    assert refusal(env.rpc("qonto.test", credential_source="bootstrap")) == "credentials_required"
-    assert len(env.provider.calls) == calls
-    after = env.rpc("qonto.status")["result"]
-    assert (after["status"], after["generation"]) == ("connected", 1)
-    assert "bootstrap" not in after
-    assert set(env.rpc("qonto.disconnect")["result"]) == {"ok", "status", "generation"}
+    assert env.rpc("qonto.status")["result"]["bootstrap"] == expected
+    if override:
+        assert (
+            refusal(env.rpc("qonto.test", credential_source="bootstrap"))
+            == "bootstrap_override_disabled"
+        )
+        assert not env.provider.calls
+    else:
+        assert env.rpc("qonto.test", credential_source="bootstrap")["result"]["ok"]
+        assert env.provider.calls[-1].login == LEFTOVER_LOGIN
+    assert read_binding(UID) is None or read_binding(UID).encrypted_credentials is None
     assert {path: path.read_bytes() for path in leftover} == leftover
 
 
@@ -380,17 +344,15 @@ def test_logs_never_carry_leftover_or_typed_values(env, leftover, caplog):
         assert secret not in caplog.text
 
 
-def test_no_engine_source_file_names_the_retired_credential_variables():
+def test_bootstrap_variables_are_confined_to_read_only_bootstrap_module():
     root = Path(__file__).resolve().parents[2] / "zylch"
-    assert (root / "qonto" / "credentials.py").is_file()
-    # Source files only: bytecode of a deleted module can outlive it in a used checkout.
-    found = sorted(
-        f"{path.relative_to(root)}: {name}"
+    found = {
+        str(path.relative_to(root))
         for path in root.rglob("*.py")
         for name in RETIRED_NAMES
         if name.encode() in path.read_bytes()
-    )
-    assert found == []
+    }
+    assert found == {"qonto/bootstrap.py"}
 
 
 def test_logs_and_provider_exception_never_include_credentials_or_lengths(env, monkeypatch, caplog):

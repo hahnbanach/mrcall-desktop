@@ -1,4 +1,4 @@
-"""Fixed-host, GET-only Stripe transport and minimal resource projections."""
+"""Fixed-host Stripe reads, explicit portal and payment-link creation, minimal projections."""
 
 from __future__ import annotations
 
@@ -205,3 +205,76 @@ async def probe(api_key: str) -> dict:
         "mode": mode,
         "capabilities": CAPABILITIES,
     }
+
+
+async def create_portal_session(api_key: str, customer: str, idempotency_key: str) -> dict:
+    """POST one fixed portal flow; uncertain submissions are never retried here."""
+    key(api_key)
+    identifier(customer, "cus")
+    if not re.fullmatch(r"portal_[a-f0-9]{64}", idempotency_key):
+        raise StripeError("invalid_params")
+    try:
+        async with httpx.AsyncClient(timeout=15, follow_redirects=False) as client:
+            response = await client.post(
+                "https://api.stripe.com/v1/billing_portal/sessions",
+                data={
+                    "customer": customer,
+                    "flow_data[type]": "payment_method_update",
+                    "flow_data[after_completion][type]": "hosted_confirmation",
+                },
+                headers={
+                    "Authorization": "Bearer " + api_key,
+                    "Stripe-Version": API_VERSION,
+                    "Idempotency-Key": idempotency_key,
+                },
+            )
+    except httpx.HTTPError:
+        raise StripeError("submission_unknown") from None
+    if response.status_code != 200:
+        outcomes = {
+            400: "portal_unavailable",
+            401: "auth",
+            403: "portal_permission",
+            404: "not_found",
+            409: "idempotency_conflict",
+            429: "rate_limited",
+        }
+        raise StripeError(outcomes.get(response.status_code, "submission_unknown"))
+    if len(response.content) > 100_000:
+        raise StripeError("invalid_response")
+    try:
+        result = response.json()
+    except ValueError:
+        raise StripeError("invalid_response") from None
+    if not isinstance(result, dict):
+        raise StripeError("invalid_response")
+    return result
+
+
+async def post(api_key: str, resource: str, fields: dict, idempotency_key: str) -> dict:
+    key(api_key)
+    if resource not in {"prices", "payment_links"}:
+        raise StripeError("invalid_params")
+    try:
+        async with httpx.AsyncClient(timeout=15, follow_redirects=False) as client:
+            response = await client.post(
+                "https://api.stripe.com/v1/" + resource,
+                data=fields,
+                headers={
+                    "Authorization": "Bearer " + api_key,
+                    "Stripe-Version": API_VERSION,
+                    "Idempotency-Key": idempotency_key,
+                },
+            )
+        if response.status_code != 200:
+            if response.status_code == 403:
+                raise StripeError("price_write_permission" if resource == "prices" else "payment_link_write_permission")
+            raise StripeError({401: "auth", 429: "rate_limited"}.get(response.status_code, "operation_pending"))
+        if len(response.content) > 2_000_000:
+            raise StripeError("invalid_response")
+        result = response.json()
+        if not isinstance(result, dict):
+            raise StripeError("invalid_response")
+        return result
+    except (httpx.HTTPError, ValueError):
+        raise StripeError("operation_pending") from None

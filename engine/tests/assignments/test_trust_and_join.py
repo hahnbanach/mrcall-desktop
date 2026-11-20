@@ -22,6 +22,27 @@ PROTECTED_READ = trust.protected_read
 THREAD = "<join@example.test>"
 
 
+@pytest.fixture(autouse=True)
+def assignment_source(env):
+    from datetime import datetime
+    from zylch.storage.models import Email
+    from zylch.storage import database as db
+
+    with db.get_session() as session:
+        session.add(
+            Email(
+                id="assignment-source",
+                owner_id="alice@example.test",
+                gmail_id=THREAD,
+                thread_id=THREAD,
+                message_id_header=THREAD,
+                from_email="customer@example.test",
+                to_email="alice@example.test",
+                date=datetime(2026, 10, 8),
+            )
+        )
+
+
 def test_unprivileged_actual_signing_process_refuses_without_reading_intent(env, tmp_path):
     result = subprocess.run(
         [

@@ -7,9 +7,17 @@ import pytest
 from zylch.llm.budget import BudgetError, budget_snapshot
 from zylch.llm.client import LLMClient
 from zylch.llm.openrouter_client import OpenRouterClient
-from zylch.llm.openrouter_pricing import MODEL
+MODEL = "z-ai/glm-5.2"  # an allowlisted OpenRouter model, billed at 0.6/2
 from zylch.storage import database
 from zylch.storage.models import LlmReservation, LlmUsage
+
+
+@pytest.fixture(autouse=True)
+def prices(billed_snapshot):
+    """Milestone 10 S3: prices come from the committed fixture snapshot as 10a
+    billed them, never from the build copy; only the margin (1.25) moves this
+    module's OpenRouter ceilings (brief AC 4)."""
+    yield billed_snapshot
 
 
 @pytest.fixture
@@ -41,14 +49,33 @@ def response(cost=0.00002):
 ARGS = {"messages": [{"role": "user", "content": "test fixture"}], "max_tokens": 20}
 
 
-def test_real_adapter_reserves_before_http_and_settles_receipt(ledger):
+# GLM 5.2's reasoning in the 2026-10-02 catalogue capture: optional, on by
+# default, efforts xhigh and high — so the one shape turns it on at `high`.
+GLM_5_2 = {
+    "reasoning": {"mandatory": False, "efforts": ["xhigh", "high"], "default_enabled": True},
+    "parameters": [],
+    "forced_tool": True,
+    "structured_outputs": True,
+    "context_length": 202752,
+    "expiration_date": None,
+}
+
+
+def test_real_adapter_reserves_before_http_and_settles_receipt(ledger, monkeypatch):
+    from zylch.llm import request_shape
+
+    monkeypatch.setattr(request_shape, "_metadata", lambda model: GLM_5_2)
     calls = []
     def upstream(req):
         assert budget_snapshot("uid")["reserved_usd"] > 0
         body = json.loads(req.content)
-        assert body["provider"]["allow_fallbacks"] is False
+        # S3c: fallbacks only within `only`, the endpoints the snapshot admitted.
+        assert body["provider"]["allow_fallbacks"] is True and body["provider"]["only"]
         assert body["provider"]["max_price"]["request"] == "0"
-        assert body["thinking"] == {"type": "disabled"}
+        # Brief D3: the body's reasoning is the model's (no blanket `disabled`).
+        assert body["thinking"] == {"type": "adaptive"}
+        assert body["output_config"] == {"effort": "high"}
+        assert body["max_tokens"] == 20 + request_shape.REASONING_HEADROOM
         assert req.headers["Authorization"] == "Bearer fake-test-key"
         calls.append(body)
         return response()
@@ -139,8 +166,14 @@ def test_sonnet_wire_omits_default_sampling_without_weakening_price_policy(ledge
         body = json.loads(req.content)
         assert 'temperature' not in body
         assert body['provider']['require_parameters'] is True
-        assert body['provider']['allow_fallbacks'] is False
-        assert body['provider']['max_price'] == {'prompt': '2', 'completion': '10', 'request': '0'}
+        # S3c: fallbacks only within `only`, the endpoints the snapshot admitted.
+        assert body["provider"]["allow_fallbacks"] is True and body["provider"]["only"]
+        # Sonnet 5's 2/10 × the margin 1.25 (brief D5): before slice S3, 2/10.
+        assert body["provider"]["max_price"] == {
+            "prompt": "2.5",
+            "completion": "12.5",
+            "request": "0",
+        }
         seen.append(body)
         data = response().json()
         data['model'] = 'anthropic/claude-sonnet-5'
@@ -152,13 +185,81 @@ def test_sonnet_wire_omits_default_sampling_without_weakening_price_policy(ledge
 
 
 @pytest.mark.parametrize('sampling', [{'temperature': 0.2}, {'temperature': True}, {'top_p': 1}, {'top_k': 1}])
-def test_unsupported_sonnet_sampling_refuses_before_reservation_and_network(ledger, sampling):
-    def forbidden(req):
-        pytest.fail('unsupported sampling reached network')
-    c = client(forbidden)
-    c.model = 'anthropic/claude-sonnet-5'
-    with pytest.raises(BudgetError, match='default sampling'):
-        c.create_message_sync(**ARGS, **sampling)
+def test_sampling_never_reaches_the_network_for_sonnet_5(ledger, sampling):
+    # Brief D3: the one shape drops sampling for every model before admission,
+    # so the Sonnet 5 refusal rule went with it; nothing of it is sent or priced.
+    sent = []
+
+    def upstream(req):
+        body = json.loads(req.content)
+        assert not {"temperature", "top_p", "top_k"} & set(body)
+        sent.append(body)
+        data = response().json()
+        data["model"] = "anthropic/claude-sonnet-5"
+        return httpx.Response(200, json=data)
+
+    c = client(upstream)
+    c.model = "anthropic/claude-sonnet-5"
+    c.create_message_sync(**ARGS, **sampling)
+    assert len(sent) == 1
     with database.get_session() as session:
-        assert session.query(LlmReservation).count() == 0
-        assert session.query(LlmUsage).count() == 0
+        assert session.query(LlmReservation).count() == 1
+        assert session.query(LlmUsage).count() == 1
+
+
+K3 = "moonshotai/kimi-k3"
+PATHS = {MODEL: "/api/v1/messages", K3: "/api/v1/chat/completions"}
+
+
+@pytest.mark.parametrize("model", [MODEL, K3])
+@pytest.mark.parametrize("status, released", [(429, True), (402, True), (503, False)])
+def test_a_refused_call_releases_its_hold_and_a_server_error_keeps_it(
+    ledger, model, status, released
+):
+    """S3c: OpenRouter's refusal carries its HTTP status (`status_code`), so a
+    status that proves no work was done, a 429 from a rate-limited endpoint's
+    shared pool, releases the hold, as an SDK refusal does on the direct
+    transport; a 402 (the account out of credit, refused before any inference,
+    2026-10-11) releases it too; a 5xx, after which the provider may have
+    worked, keeps it. On
+    the Messages path and on K3's Chat path alike."""
+    calls = []
+
+    def upstream(req):
+        calls.append(req.url.path)
+        assert budget_snapshot("uid")["reserved_usd"] > 0
+        error = {"code": status, "message": "Provider returned error"}
+        return httpx.Response(status, json={"error": error})
+
+    c = client(upstream)
+    c.model = model
+    with pytest.raises(BudgetError, match=f"HTTP {status}") as refused:
+        c.create_message_sync(**ARGS)
+    assert refused.value.status_code == status
+    assert calls == [PATHS[model]]  # one attempt, never retried
+    state = budget_snapshot("uid")
+    assert state["spent_usd"] == 0
+    assert (state["reserved_usd"] == 0) is released
+
+
+def test_a_dispatch_revoked_after_admission_releases_its_openrouter_hold(ledger, monkeypatch):
+    """A hold whose request never left the process goes back on OpenRouter too.
+
+    OpenRouter settles on a receipt's `cost`, so a release that states only
+    token counts is refused by the ledger and the hold stays forever; the
+    release states `cost: 0`, as the release of a refused call does."""
+    from zylch.memory.mnemonic.authorization import MnemonicAuthorizationError
+    from zylch.services import preparation
+
+    def revoked():
+        assert budget_snapshot("uid")["reserved_usd"] > 0  # admitted, then revoked
+        raise MnemonicAuthorizationError("revoked between admission and dispatch")
+
+    monkeypatch.setattr(preparation, "record_dispatch", revoked)
+    calls = []
+    c = client(lambda req: calls.append(req) or response())
+    with pytest.raises(MnemonicAuthorizationError):
+        c.create_message_sync(**ARGS)
+    assert calls == []  # nothing reached the provider
+    state = budget_snapshot("uid")
+    assert state["reserved_usd"] == 0 and state["spent_usd"] == 0

@@ -387,7 +387,11 @@ def test_the_role_is_never_handed_a_tool():
 
     sent = llm._client.messages.create.call_args.kwargs
     assert "tools" not in sent and "tool_choice" not in sent
-    assert sent["max_tokens"] == c.MNEMONIC_MAX_TOKENS
+    # The role's cap plus the shape's reasoning headroom: the test's model
+    # (Haiku 4.5) may reason, so the one shape adds it.
+    from zylch.llm.request_shape import REASONING_HEADROOM
+
+    assert sent["max_tokens"] == c.MNEMONIC_MAX_TOKENS + REASONING_HEADROOM
 
 
 def test_an_event_for_another_account_is_refused_before_any_paid_work():

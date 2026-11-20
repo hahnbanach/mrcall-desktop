@@ -71,15 +71,22 @@ class GrantedEffects:
                            or type(doc['revision']) is not int for doc in versions)
                     or sorted(versions, key=lambda doc: str(doc['path'])) != expected):
                 raise ReadError('read_current_instruction_versions_before_preparing')
-            fields = ('id', 'mailbox_id', 'thread_id', 'message_id_header', 'in_reply_to', 'references',
+            fields = ('id', 'mailbox_id', 'thread_id', 'message_id_header', 'references',
                       'from_email', 'to_email', 'cc_email', 'subject', 'body_plain', 'body_html')
             # Run the existing free native scope gate before spending. The
             # native writer still repeats its locked admission before commit.
             def preflight():
-                from zylch.services.task_assignment_email_effect import effect
-                from zylch.services.operator_reply_operations import reply_headers
-                with effect(binding.email, reply_headers(raw)):
-                    pass
+                from zylch.services import task_assignment_projection, task_assignment_mail
+                projected = task_assignment_projection.project(source['thread_key'])
+                target = raw.get('message_id_header')
+                keys = projected.get('component_thread_keys')
+                refs = task_assignment_mail.references(raw.get('references') or '')
+                if (projected.get('complete') is not True or projected.get('hold_auto_reply') is not False
+                        or not isinstance(keys, list) or target not in keys
+                        or target not in projected.get('current_message_ids', [])
+                        or any(ref not in keys for ref in refs)
+                        or (projected.get('task') or {}).get('state') == 'assigned'):
+                    raise ReadError('native_source_scope_held_before_generation')
             await asyncio.to_thread(preflight)
             from zylch.services.operator_reply_context import snapshot
             rows = await asyncio.to_thread(Storage.get_instance().get_thread_emails,

@@ -1,0 +1,4 @@
+interface:
+  display_name: "Ricerca giuridica italiana"
+  short_description: "Fonti, rimedi, prove e scadenze verificabili"
+  default_prompt: "Usa $ricerca-giuridica-it per analizzare il caso, verificare le fonti e preparare i passi concretamente praticabili."

@@ -13,7 +13,7 @@ from sqlalchemy.orm import aliased
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 
 from zylch.services.preparation import task_checkpoint
-from zylch.utils.msgid import clean_message_id, clean_references
+from zylch.utils.msgid import canonical_draft_thread_id, clean_message_id, clean_references
 
 from .database import get_session
 from .models import (
@@ -274,7 +274,7 @@ def _draft_identity(
         tuple(_normalize_addresses(to)),
         (subject or ""),
         (body or ""),
-        (thread_id or ""),
+        (canonical_draft_thread_id(thread_id) or ""),
         tuple(_normalize_addresses(cc)),
         tuple(_normalize_addresses(bcc)),
         tuple(sorted(p for p in (attachment_paths or []) if isinstance(p, str))),
@@ -1836,11 +1836,7 @@ class Storage:
 
     from zylch.services.task_assignment_draft_policy import guard as _assignment_draft_guard
 
-    from zylch.services.task_assignment_email_effect import create_guard as _email_create_guard
-    from zylch.services.task_assignment_email_effect import update_guard as _email_update_guard
-
     @_assignment_draft_guard
-    @_email_create_guard
     def create_draft(
         self,
         owner_id: str,
@@ -1896,25 +1892,37 @@ class Storage:
         # parent, so the conversation reads as unanswered forever. Normalise
         # before the identity is computed, so a repaired draft still dedups
         # against its twin. See `zylch/utils/msgid.py`.
+        thread_id = canonical_draft_thread_id(thread_id)
         in_reply_to = clean_message_id(in_reply_to)
         references = clean_references(references)
-        wanted = _draft_identity(
-            to=to_list,
-            subject=subject,
-            body=body,
-            thread_id=thread_id,
-            cc=cc_list,
-            bcc=bcc_list,
-            attachment_paths=attach_list,
-            in_reply_to=in_reply_to,
-            references=references,
-        )
-        from zylch.services.task_assignment_email_effect import current_binding
-
         cutoff = _naive_utcnow() - timedelta(hours=DRAFT_DEDUP_WINDOW_HOURS)
-        from zylch.services.task_assignment_draft_transaction import session as draft_session
+        from zylch.services.task_assignment_draft_policy import draft_session
 
         with draft_session() as session:
+            if thread_id is None and in_reply_to:
+                sources = session.query(Email.thread_id).filter(
+                    Email.owner_id == owner_id,
+                    Email.message_id_header == in_reply_to,
+                ).limit(2).all()
+                if len(sources) == 1:
+                    from zylch.services.task_assignment_types import AssignmentError, thread
+
+                    source_root = canonical_draft_thread_id(sources[0][0])
+                    try:
+                        thread_id = thread(source_root)
+                    except AssignmentError:
+                        pass
+            wanted = _draft_identity(
+                to=to_list,
+                subject=subject,
+                body=body,
+                thread_id=thread_id,
+                cc=cc_list,
+                bcc=bcc_list,
+                attachment_paths=attach_list,
+                in_reply_to=in_reply_to,
+                references=references,
+            )
             # Body equality narrows the scan in SQL; the rest of the identity
             # needs normalization the DB cannot do (the same recipients are
             # stored as "a@x, b@y" by one call site and ["a@x","b@y"] by
@@ -1951,9 +1959,6 @@ class Storage:
                     # `drafts.list` around a turn sees no new id and would
                     # otherwise conclude that nothing was composed. See
                     # `rpc/draft_queries.py`.
-                    if row.reply_binding is not None and row.reply_binding != current_binding():
-                        continue
-                    row.reply_binding = current_binding()
                     row.updated_at = _naive_utcnow()
                     session.flush()
                     logger.info(
@@ -1965,7 +1970,6 @@ class Storage:
                     return result
 
             draft = Draft(
-                reply_binding=current_binding(),
                 owner_id=owner_id,
                 to_addresses=to_list,
                 cc_addresses=cc_list,
@@ -2045,14 +2049,11 @@ class Storage:
             )
             return row.to_dict() if row else None
 
-    @_email_update_guard
     def update_draft(
         self, owner_id: str, draft_id: str, updates: Dict[str, Any]
     ) -> Dict[str, Any] | None:
         """Update a draft."""
-        from zylch.services.task_assignment_draft_transaction import session as draft_session
-
-        with draft_session() as session:
+        with get_session() as session:
             row = (
                 session.query(Draft)
                 .filter(Draft.owner_id == owner_id, Draft.id == draft_id)
@@ -2062,7 +2063,7 @@ class Storage:
                 return None
             for k, v in updates.items():
                 if hasattr(row, k):
-                    setattr(row, k, v)
+                    setattr(row, k, canonical_draft_thread_id(v) if k == "thread_id" else v)
             session.flush()
             return row.to_dict()
 
@@ -2122,6 +2123,10 @@ class Storage:
         if provider in ("google", "microsoft"):
             values["provider"] = provider
         with get_session() as session:
+            from zylch.services.exact_operator_send_context import claim_allowed
+
+            if not claim_allowed(session, owner_id, draft_id):
+                return False
             # Read the recipients first: the window a stale claim is measured
             # against is a property of THIS draft's send, not a constant. The
             # read decides only the window — the UPDATE below is still what
@@ -2166,6 +2171,8 @@ class Storage:
             f" draft_id={draft_id}, provider={provider},"
             f" recipients={recipients}) -> claimed={claimed}"
         )
+        from zylch.services.exact_operator_send_context import claimed as exact_claimed
+        exact_claimed(claimed == 1)
         return claimed == 1
 
     def mark_draft_sent(
@@ -2303,6 +2310,7 @@ class Storage:
         sent_at: datetime,
         attachment_filenames: Optional[List[str]] = None,
         in_reply_to: Optional[str] = None,
+        references: Optional[str] = None,
     ) -> Optional[Dict[str, Any]]:
         """Persist a just-sent email as a row in the `emails` table.
 
@@ -2393,7 +2401,7 @@ class Storage:
                     labels="[]",
                     message_id_header=message_id,
                     in_reply_to=in_reply_to,
-                    references=None,
+                    references=clean_references(references),
                     is_auto_reply=False,
                     task_processed_at=None,
                     has_attachments=bool(attachment_list),

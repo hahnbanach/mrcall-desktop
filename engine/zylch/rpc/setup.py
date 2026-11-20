@@ -18,11 +18,12 @@ This module backs (1) with ``sync.run`` and the gating in (2)/(3) with
 from __future__ import annotations
 
 import asyncio
-import contextvars
 import logging
 import os
 import threading
 from typing import Any, Awaitable, Callable, Dict, Optional
+
+from zylch.observability_producers import copied, failure, observe, observed
 
 logger = logging.getLogger(__name__)
 
@@ -80,6 +81,7 @@ def _no_notify(method: str, params: Dict[str, Any]) -> None:
     return None
 
 
+@observed("acquisition", "sync.run", private=True)
 async def sync_run(params: Dict[str, Any], notify: NotifyFn) -> Any:
     """sync.run(days_back?, scope?) -> result dict.
 
@@ -122,11 +124,16 @@ async def sync_run(params: Dict[str, Any], notify: NotifyFn) -> Any:
     return await _email_intake(params, notify, from_loop=False)
 
 
+@observed("acquisition", "sync.run", private=True)
 async def email_intake_from_daemon() -> dict:
     """One email-only intake asked for by the daemon's own mail loop.
 
     It never queues and never joins: when any intake is already in flight the
     answer is the ``busy`` refusal and the loop waits for its next interval.
+
+    It carries the private scope of ``sync.run``: while the run is in flight
+    its log records, the worker thread's included, are metadata only. An RPC
+    caller that joins the run is served by this same worker.
     """
     return await _email_intake(dict(EMAIL_INTAKE_PARAMS), _no_notify, from_loop=True)
 
@@ -148,15 +155,23 @@ async def _email_intake(params: Dict[str, Any], notify: NotifyFn, *, from_loop: 
 
     def worker() -> dict:
         try:
+            observe("job", "start", method="sync.run", reason="none")
             result = asyncio.run(_sync_run(params, notify, email_only=True))
+            observe(
+                "job",
+                "failed" if result.get("success") is False else "result",
+                method="sync.run",
+                complete=result.get("success") is True,
+            )
             return {**result, "scope": "email", "busy": False}
+        except Exception as error:
+            failure("job", error, method="sync.run")
+            raise
         finally:
             _email_intake_lock.release()
 
     try:
-        future = asyncio.get_running_loop().run_in_executor(
-            None, contextvars.copy_context().run, worker
-        )
+        future = asyncio.get_running_loop().run_in_executor(None, copied(worker))
     except Exception:
         _email_intake_lock.release()
         logger.exception("[sync.run] could not start email intake worker")
@@ -277,6 +292,7 @@ async def _sync_run(params: Dict[str, Any], notify: NotifyFn, *, email_only: boo
         # Last-resort guard: run_sync_only already routes per-stage
         # failures into stage_errors, so this branch only fires if the
         # function itself blew up before reaching its try blocks.
+        failure("acquisition", e, method="sync.run")
         logger.exception("[rpc] sync.run failed")
         stage_errors.append({"stage": "pipeline", "error": e})
         result = {"sync_new": 0, "wa_messages": 0, "wa_contacts": 0}

@@ -1,0 +1,197 @@
+{
+  "import_date": "2026-10-12",
+  "review_basis": "Approved brief and implementation plan; canonical legal variant retains stricter interactive company-own-affairs scope. Legal currency is not certified. No source installation removed.",
+  "files": [
+    {
+      "input": "financial-global",
+      "relative_path": "SKILL.md",
+      "source_root": "/home/mal/.codex/skills/financial-statements",
+      "size": 15911,
+      "sha256": "00cf915c36830bb39236f30b8bdcb635962aaba8fb303b8b057ab4042113828b",
+      "original": "migration/2026-10-12/originals/financial-global/SKILL.md",
+      "canonical": "cs-financial-statements/SKILL.md",
+      "adaptation": "Renamed identifier; engine invocation/documents/calculation/authority instructions added. Canonical repair 2026-10-16: engine-owned version-bound reference delivery; source-linked net/tax/gross versus bank/settlement coverage; unknown party identity and explicit overlap evidence. Preserved original bytes unchanged.",
+      "canonical_sha256": "f44ae8791457a7466dad5c82d68547ff141d4cd2cd89e429dfb5c666886a46fe"
+    },
+    {
+      "input": "financial-global",
+      "relative_path": "references/reconstruction.md",
+      "source_root": "/home/mal/.codex/skills/financial-statements",
+      "size": 8981,
+      "sha256": "796826a99cef44c67bf8fc98db24171b3a0d26c6c362cd21bdab6a4a472a30ce",
+      "original": "migration/2026-10-12/originals/financial-global/references/reconstruction.md",
+      "canonical": "cs-financial-statements/references/reconstruction.md",
+      "adaptation": "Reference retained unchanged. Canonical repair 2026-10-16: engine-owned version-bound reference delivery; source-linked net/tax/gross versus bank/settlement coverage; unknown party identity and explicit overlap evidence. Preserved original bytes unchanged.",
+      "canonical_sha256": "a285f06a19a20ba1aab08f221b9509ef5caf7b76bc3fed4ee4bce5035abf4790"
+    },
+    {
+      "input": "legal-global",
+      "relative_path": "PROVENANCE.md",
+      "source_root": "/home/mal/.codex/skills/ricerca-giuridica-it",
+      "size": 1215,
+      "sha256": "6a55ad3c2010685cc22db1150e67878055375248f02ace2fc27d3d20e3f52340",
+      "original": "migration/2026-10-12/originals/legal-global/PROVENANCE.md",
+      "canonical": null,
+      "adaptation": "Preserved original; superseded by kernel variant."
+    },
+    {
+      "input": "legal-global",
+      "relative_path": "SKILL.md",
+      "source_root": "/home/mal/.codex/skills/ricerca-giuridica-it",
+      "size": 6465,
+      "sha256": "b0b665c5437664c61e8ae0f299d7a4daaa021586c9fdd002dc2bb5f2f1062083",
+      "original": "migration/2026-10-12/originals/legal-global/SKILL.md",
+      "canonical": null,
+      "adaptation": "Preserved original; superseded by kernel variant."
+    },
+    {
+      "input": "legal-global",
+      "relative_path": "agents/openai.yaml",
+      "source_root": "/home/mal/.codex/skills/ricerca-giuridica-it",
+      "size": 261,
+      "sha256": "63e736b248c974fee2bb8cb23acfd73d38eb35de85ced84232933edb8cfd9527",
+      "original": "migration/2026-10-12/originals/legal-global/agents/openai.yaml",
+      "canonical": null,
+      "adaptation": "Host discovery metadata preserved as retired input only; never runtime metadata."
+    },
+    {
+      "input": "legal-global",
+      "relative_path": "references/administrative-remedies.md",
+      "source_root": "/home/mal/.codex/skills/ricerca-giuridica-it",
+      "size": 9647,
+      "sha256": "e5f41994199e19a6f248b38da43cec40de0177f647ad5fc4d8eedbca5ddc465b",
+      "original": "migration/2026-10-12/originals/legal-global/references/administrative-remedies.md",
+      "canonical": null,
+      "adaptation": "Preserved original; superseded by kernel variant."
+    },
+    {
+      "input": "legal-global",
+      "relative_path": "references/deadlines.md",
+      "source_root": "/home/mal/.codex/skills/ricerca-giuridica-it",
+      "size": 4872,
+      "sha256": "d2f9ee5a2d4be07d0ae7d2d236f958721e74da40084e04b4667495d899e3dd86",
+      "original": "migration/2026-10-12/originals/legal-global/references/deadlines.md",
+      "canonical": null,
+      "adaptation": "Preserved original; superseded by kernel variant."
+    },
+    {
+      "input": "legal-global",
+      "relative_path": "references/evidence.md",
+      "source_root": "/home/mal/.codex/skills/ricerca-giuridica-it",
+      "size": 3633,
+      "sha256": "ec693466f0d91bc749516147d659f443ac4e03b25f198f31d2cab5d9977e7a99",
+      "original": "migration/2026-10-12/originals/legal-global/references/evidence.md",
+      "canonical": null,
+      "adaptation": "Preserved original; superseded by kernel variant."
+    },
+    {
+      "input": "legal-global",
+      "relative_path": "references/sources.md",
+      "source_root": "/home/mal/.codex/skills/ricerca-giuridica-it",
+      "size": 3849,
+      "sha256": "46639a4e2e50bf677f8dffd39f2f3fa007a6afdb45c90e2d4d710a5893075c37",
+      "original": "migration/2026-10-12/originals/legal-global/references/sources.md",
+      "canonical": null,
+      "adaptation": "Preserved original; superseded by kernel variant."
+    },
+    {
+      "input": "legal-global",
+      "relative_path": "scripts/count_days.py",
+      "source_root": "/home/mal/.codex/skills/ricerca-giuridica-it",
+      "size": 3499,
+      "sha256": "1fac35e1e3bf1ffedc49bcb3df256ba8f06d968b481e814261862a4fe908cb07",
+      "original": "migration/2026-10-12/originals/legal-global/scripts/count_days.py",
+      "canonical": null,
+      "adaptation": "Preserved original; superseded by kernel variant."
+    },
+    {
+      "input": "legal-kernel",
+      "relative_path": "PROVENANCE.md.j2",
+      "source_root": "/home/mal/hb/cs-kernel/cs/templates/project/.claude/skills/cs-legal-research",
+      "size": 1202,
+      "sha256": "12a87d05bf51459297827f3fdc517a82eb9d4e8a12634a538b82e713b84302e3",
+      "original": "migration/2026-10-12/originals/legal-kernel/PROVENANCE.md.j2",
+      "canonical": "cs-legal-research/PROVENANCE.md",
+      "adaptation": "Template wrappers removed; canonical stricter interactive scope retained. Engine import date and retained migration evidence recorded. Authenticated owner-session admission replaces repeated human form and manual registration on 2026-10-16; preserved original bytes unchanged. Canonical drafting quality repair: consult relevant reference guidance, verify each proposition/pinpoint against the selected excerpt, and provide conditional proposed revisions in existing nonoperative reasoning; original bytes unchanged.",
+      "canonical_sha256": "7c257f2a9d2396bcedb27b7c27d5b253a4b045545143376dbab965f7b002fade"
+    },
+    {
+      "input": "legal-kernel",
+      "relative_path": "SKILL.md.j2",
+      "source_root": "/home/mal/hb/cs-kernel/cs/templates/project/.claude/skills/cs-legal-research",
+      "size": 6964,
+      "sha256": "cc228534c0b358a35d5525bd889b7f70e5a5055698cb57070b6c4e9dd5c193cf",
+      "original": "migration/2026-10-12/originals/legal-kernel/SKILL.md.j2",
+      "canonical": "cs-legal-research/SKILL.md",
+      "adaptation": "Template wrappers removed; canonical stricter interactive scope retained. Host triage reference replaced by explicit exclusion; engine tools/admission added. Authenticated owner-session admission replaces repeated human form and manual registration on 2026-10-16; preserved original bytes unchanged. Canonical drafting quality repair: consult relevant reference guidance, verify each proposition/pinpoint against the selected excerpt, and provide conditional proposed revisions in existing nonoperative reasoning; original bytes unchanged.",
+      "canonical_sha256": "26169c7be8f5d8ef9f6528d42deff9f2cd1eea7d642657045ae13e9147c2e938"
+    },
+    {
+      "input": "legal-kernel",
+      "relative_path": "references/administrative-remedies.md.j2",
+      "source_root": "/home/mal/hb/cs-kernel/cs/templates/project/.claude/skills/cs-legal-research",
+      "size": 9671,
+      "sha256": "342b477d65c95efe8fa9a336cbd515c96c2febe50ba124c04a6a0baa3c1adc86",
+      "original": "migration/2026-10-12/originals/legal-kernel/references/administrative-remedies.md.j2",
+      "canonical": "cs-legal-research/references/administrative-remedies.md",
+      "adaptation": "Template wrappers removed; canonical stricter interactive scope retained.",
+      "canonical_sha256": "e5f41994199e19a6f248b38da43cec40de0177f647ad5fc4d8eedbca5ddc465b"
+    },
+    {
+      "input": "legal-kernel",
+      "relative_path": "references/deadlines.md.j2",
+      "source_root": "/home/mal/hb/cs-kernel/cs/templates/project/.claude/skills/cs-legal-research",
+      "size": 5018,
+      "sha256": "7536f7063f4bd6c47dceddabb47ac5392eb0d6bc08765e8216f4ada6b3efad35",
+      "original": "migration/2026-10-12/originals/legal-kernel/references/deadlines.md.j2",
+      "canonical": "cs-legal-research/references/deadlines.md",
+      "adaptation": "Template wrappers removed; canonical stricter interactive scope retained. Local invocation replaced by equivalent bounded engine JSON inputs.",
+      "canonical_sha256": "aea367720ec57054787232c77d0c0e157fc1ecac9dc8e73f480a485297824f03"
+    },
+    {
+      "input": "legal-kernel",
+      "relative_path": "references/evidence.md.j2",
+      "source_root": "/home/mal/hb/cs-kernel/cs/templates/project/.claude/skills/cs-legal-research",
+      "size": 3657,
+      "sha256": "908ca3d766d3aec374cec5d4570bc1de54233feb7b6f615077e63a6b271750b4",
+      "original": "migration/2026-10-12/originals/legal-kernel/references/evidence.md.j2",
+      "canonical": "cs-legal-research/references/evidence.md",
+      "adaptation": "Template wrappers removed; canonical stricter interactive scope retained.",
+      "canonical_sha256": "ec693466f0d91bc749516147d659f443ac4e03b25f198f31d2cab5d9977e7a99"
+    },
+    {
+      "input": "legal-kernel",
+      "relative_path": "references/sources.md.j2",
+      "source_root": "/home/mal/hb/cs-kernel/cs/templates/project/.claude/skills/cs-legal-research",
+      "size": 3873,
+      "sha256": "ec72bcc565c46dfb657565f577eb29bec97b2bea82805ac83fccac1eab8c952a",
+      "original": "migration/2026-10-12/originals/legal-kernel/references/sources.md.j2",
+      "canonical": "cs-legal-research/references/sources.md",
+      "adaptation": "Template wrappers removed; canonical stricter interactive scope retained.",
+      "canonical_sha256": "46639a4e2e50bf677f8dffd39f2f3fa007a6afdb45c90e2d4d710a5893075c37"
+    },
+    {
+      "input": "legal-kernel",
+      "relative_path": "scripts/count_days.py.j2",
+      "source_root": "/home/mal/hb/cs-kernel/cs/templates/project/.claude/skills/cs-legal-research",
+      "size": 3523,
+      "sha256": "b24d03de8862ed8db384bb5524c2c89a63c89816e80b0fb1a4dde3b2c09270b9",
+      "original": "migration/2026-10-12/originals/legal-kernel/scripts/count_days.py.j2",
+      "canonical": "cs-legal-research/scripts/count_days.py",
+      "adaptation": "Template wrappers removed; canonical stricter interactive scope retained.",
+      "canonical_sha256": "1fac35e1e3bf1ffedc49bcb3df256ba8f06d968b481e814261862a4fe908cb07"
+    }
+  ],
+  "financial_canonical_adaptation": {
+    "date": "2026-10-16",
+    "workflow_version": "18cf01c465fdec464d2f99cdfd7902c8bf267ca76be553dd524271e2cc3d255a",
+    "provenance_sha256": "e72e0262ea81fed120f2dafd9c486bb4712efac5300313cfe1a2328c992b813c",
+    "scope": "Selected reference preload and exact receipt, material invoice coverage and evidence-grounded overlap guidance; no certification of accounting truth."
+  },
+  "legal_canonical_adaptation": {
+    "date": "2026-10-16",
+    "workflow_version": "858a320678f6b68c02da330ddaa7fe65f8f3fe2f780ac79e9f0d0f7ee88c0029",
+    "provenance_sha256": "7c257f2a9d2396bcedb27b7c27d5b253a4b045545143376dbab965f7b002fade",
+    "scope": "Authenticated owner-session invocation without repeated human confirmation or manual registration; explicit public lookup bounds and external-action restrictions retained. Authentication does not establish physical-human presence or independently verify purpose. General drafting guidance requires exact excerpt-to-proposition/pinpoint comparison and concrete conditional proposed revisions through existing nonoperative reasoning; no schema or verifier change."
+  }
+}

@@ -202,6 +202,14 @@ async def tasks_list(params: Dict[str, Any], notify: NotifyFn) -> Any:
     )
     if not include_skipped:
         tasks = [t for t in tasks if not (t.get("sources") or {}).get("skipped_at")]
+    from zylch.services import task_assignment_identity, task_source_roots
+
+    if any(task_source_roots.email_backed(row) for row in tasks):
+        import time
+
+        actor = await asyncio.to_thread(task_assignment_identity.actor)
+        tasks = await asyncio.to_thread(task_source_roots.enrich, actor, owner_id, tasks,
+                                       deadline=time.monotonic() + 10)
     logger.debug(f"[rpc] tasks.list -> {len(tasks)} tasks")
     return tasks
 
@@ -703,7 +711,6 @@ async def tasks_solve(params: Dict[str, Any], notify: NotifyFn) -> Any:
                 store,
                 owner_id,
                 SOLVE_TOOLS,
-                email_task=task,
             )
             _active_executor = executor
             # What this solve is working on, kept apart: the instruction the
@@ -714,9 +721,7 @@ async def tasks_solve(params: Dict[str, Any], notify: NotifyFn) -> Any:
             try:
                 final: Dict[str, Any] = {}
                 done_event: Dict[str, Any] = {}
-                from zylch.services.contextual_email_policy import from_task, scope as email_scope
-
-                with revocable_turn(), solve_scope(solve_context), email_scope(from_task(owner_id, task)):
+                with revocable_turn(), solve_scope(solve_context):
                     async for event in executor.run():
                         if event["type"] == "done":
                             # Hold the done event back — we may decorate it
@@ -862,15 +867,85 @@ async def tasks_solve_cancel(
 # ─── Chat ────────────────────────────────────────────────────
 
 
+async def _admit_operator_reply(owner_id, draft, notify):
+    from sqlalchemy import select
+    from zylch.storage import database as db
+    from zylch.storage.models import Email
+    from zylch.services import task_assignment_evidence as evidence
+    from zylch.services import task_assignment_identity as identity
+    from zylch.services import task_assignment_mail as mail
+    from zylch.services.operator_reply_origin import snapshot
+    from zylch.services.task_assignment_types import AssignmentError, thread
+    from zylch.rpc import task_assignments
+
+    target = thread(draft.get('in_reply_to'))
+
+    def source():
+        actor, space, _ = evidence.admission()
+        if owner_id != actor.mailbox:
+            raise AssignmentError('Scheduled reply profile owner mismatch')
+        with db.get_engine().connect() as conn:
+            found = list(conn.execute(select(Email.__table__).where(
+                Email.owner_id == actor.mailbox, Email.message_id_header == target,
+            ).limit(2)).mappings())
+        if len(found) != 1:
+            raise AssignmentError('Exact scheduled reply original unavailable')
+        original = dict(found[0])
+        root = thread(draft.get('thread_id'))
+        keys, _, known = mail.component(actor, root)
+        members = [row for row in known if row['id'] == original['id']]
+        if len(members) != 1 or mail.row_identity(members[0]) != mail.row_identity(original):
+            raise AssignmentError('Scheduled reply original identity unavailable')
+        refs = draft.get('references') or []
+        refs = mail.references(' '.join(refs) if isinstance(refs, list) else refs)
+        if not refs or refs[-1] != target or any(ref not in keys for ref in refs):
+            raise AssignmentError('Scheduled reply headers must retain exact original')
+        identity.recheck(actor, space)
+        return actor, space, root, mail.row_identity(original)
+
+    actor, space, root, original = await asyncio.to_thread(source)
+    value = await task_assignments.project({'thread_key': root}, notify)
+    if (not isinstance(value, dict) or type(value.get('version')) is not int
+            or value['version'] != 1 or value.get('actor_uid') != actor.uid
+            or value.get('source_owner_uid') != actor.uid or value.get('space_id') != space
+            or value.get('thread_key') != root or value.get('complete') is not True
+            or value.get('hold_auto_reply') is not False
+            or value.get('state') not in {'normal', 'later-inbound'}):
+        raise AssignmentError('Assignment authority holds the scheduled reply')
+    for name in ('current_message_ids', 'covered_message_ids'):
+        ids = value.get(name)
+        if not isinstance(ids, list) or any(not isinstance(mid, str) for mid in ids):
+            raise AssignmentError('Scheduled reply coverage unavailable')
+        for mid in ids:
+            thread(mid)
+    if (target not in value['current_message_ids']
+            or value['state'] == 'later-inbound' and target in value['covered_message_ids']):
+        raise AssignmentError('Scheduled reply original is not current unanswered work')
+    current_actor, current_space, current_root, current_original = await asyncio.to_thread(source)
+    if (current_actor != actor or current_space != space or current_root != root
+            or current_original != original):
+        raise AssignmentError('Scheduled reply source changed during admission')
+    await asyncio.to_thread(identity.recheck, actor, space)
+    return {**snapshot(owner_id, draft), '_assignment': {
+        'space_id': space, 'task': value.get('task'), 'route_digest': value['route_digest'],
+        'authoritative_thread_key': value['authoritative_thread_key'],
+        'component_thread_keys': value['component_thread_keys'],
+        'source': original,
+    }}
+
+
 async def chat_send(params: Dict[str, Any], notify: NotifyFn) -> Any:
     """chat.send(message, conversation_history=[], conversation_id="general",
     context={}, mutation_policy?, policy_version?, history_mode?,
     history_handle?, history_revision?, assignment_thread_key?,
-    assignment_policy_version?, email_context?, contextual_email_policy_version?) -> ChatService result with managed binding fields.
+    assignment_policy_version?, operator_origin?, operator_origin_version?) -> ChatService result with managed binding fields.
 
     Destructive tools trigger `chat.pending_approval` notifications; the
     client must respond via `chat.approve` to resume.
     """
+    from zylch.services import operator_reply_origin
+
+    scheduled_origin = operator_reply_origin.validate(params)
     from zylch.services.chat_service import ChatService
     from zylch.services.request_policy import (
         READ_ONLY_POLICY,
@@ -889,13 +964,6 @@ async def chat_send(params: Dict[str, Any], notify: NotifyFn) -> Any:
     elif params.get("assignment_policy_version") is not None:
         raise AssignmentError("Assignment draft thread required", -32602)
 
-    from zylch.services.contextual_email_policy import VERSION as EMAIL_POLICY_VERSION
-    email_context = params.get("email_context")
-    if email_context is not None and params.get("contextual_email_policy_version") != EMAIL_POLICY_VERSION:
-        raise AssignmentError("Contextual email policy version required", -32602)
-    if email_context is None and params.get("contextual_email_policy_version") is not None:
-        raise AssignmentError("Contextual email source required", -32602)
-
     message = params.get("message")
     if not message:
         raise ValueError("message is required")
@@ -904,10 +972,6 @@ async def chat_send(params: Dict[str, Any], notify: NotifyFn) -> Any:
     req_context = params.get("context") or {}
     if not isinstance(req_context, dict):
         req_context = {}
-    if email_context is not None:
-        if "email_context" in req_context and req_context["email_context"] != email_context:
-            raise AssignmentError("Contextual email sources disagree", -32602)
-        req_context = {**req_context, "email_context": email_context}
     mutation_policy = params.get("mutation_policy")
     policy_version = params.get("policy_version")
     if mutation_policy is not None and mutation_policy != READ_ONLY_POLICY:
@@ -1072,6 +1136,10 @@ async def chat_send(params: Dict[str, Any], notify: NotifyFn) -> Any:
             policy_scope(mutation_policy),
             assignment_scope(assignment_root),
             revocable_turn(turn),
+            operator_reply_origin.scope(
+                (lambda owner, draft: _admit_operator_reply(owner, draft, notify))
+                if scheduled_origin else None
+            ),
         ):
             service = ChatService()
             result = await service.process_message(
@@ -1116,7 +1184,9 @@ async def system_capabilities(params: Dict[str, Any], notify: NotifyFn) -> Any:
     """system.capabilities() -> protocol capabilities supported by this engine."""
     from zylch.services.request_policy import READ_ONLY_POLICY_VERSION
 
-    return {"chat_read_only_policy": READ_ONLY_POLICY_VERSION, "chat_history_binding": 1, "stripe": 1, "assignment_draft_policy": 1, "contextual_email_policy": 1}
+    from zylch.workflows.resources import list_workflows
+
+    return {"observability": 1, "private_workflows": 1, "workflow_selection_method": "workflows.suggest", "workflows": list_workflows(), "chat_read_only_policy": READ_ONLY_POLICY_VERSION, "chat_history_binding": 1, "assignment_draft_policy": 1, "operator_reply_provenance": 1, "stripe": 1, "stripe_payment_method_links": 1, "stripe_payment_links": 1, "exact_draft_publication": 1, "sent_mirror_recovery": 1, "interactive_exact_send": 1}
 
 
 async def chat_approve(params: Dict[str, Any], notify: NotifyFn) -> Any:
@@ -2654,15 +2724,33 @@ for _name, _fn in _ASSIGNMENT_METHODS.items():
         raise RuntimeError(f"Duplicate RPC method name: {_name}")
     METHODS[_name] = _fn
 
+from zylch.rpc.exact_drafts import METHODS as _EXACT_DRAFT_METHODS
+METHODS.update(_EXACT_DRAFT_METHODS)
+
+# Scoped transitional workflow registry; existing actor methods are preserved.
+from zylch.rpc.workflows import METHODS as _workflow_bridge_methods
+for _name, _fn in _workflow_bridge_methods.items():
+    if _name in METHODS:
+        raise RuntimeError("Duplicate workflow method")
+    METHODS[_name] = _fn
+
 from zylch.rpc.stripe import METHODS as _STRIPE_METHODS
+
 
 for _name, _fn in _STRIPE_METHODS.items():
     if _name in METHODS:
-        raise RuntimeError(f"Duplicate RPC method name: {_name}")
+        raise RuntimeError(f"duplicate RPC method registration: {_name}")
     METHODS[_name] = _fn
 
 from zylch.rpc.operator_operations import METHODS as _OPERATOR_MANAGEMENT_METHODS
 for _name, _fn in _OPERATOR_MANAGEMENT_METHODS.items():
+    if _name in METHODS:
+        raise RuntimeError(f"Duplicate RPC method name: {_name}")
+    METHODS[_name] = _fn
+
+from zylch.rpc.diagnostics import METHODS as _DIAGNOSTIC_METHODS
+
+for _name, _fn in _DIAGNOSTIC_METHODS.items():
     if _name in METHODS:
         raise RuntimeError(f"Duplicate RPC method name: {_name}")
     METHODS[_name] = _fn

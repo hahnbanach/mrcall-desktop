@@ -8,7 +8,7 @@ Rates are USD per million tokens; provider caps enforce the catalog ceiling.
 import json
 from decimal import ROUND_CEILING, Decimal
 
-from .budget_pricing import BudgetError, micro_usd
+from .budget_pricing import CONTEXT_WINDOW_TOKENS, BudgetError, _context_tokens, micro_usd
 from .budget_pricing import request_bound as validate_direct
 
 MODEL = "z-ai/glm-5.2"
@@ -42,16 +42,16 @@ def request_bound(request):
             raise BudgetError("AI paused: OpenRouter Sonnet 5 supports only default sampling (temperature 1, no top_p/top_k).")
     # Reuse the central text/function feature validation, never its model price.
     validate_direct({**request, "model": "claude-haiku-4-5"}, "direct")
-    payload = len(json.dumps(request, ensure_ascii=False, allow_nan=False).encode())
-    tokens = payload + 4096 + 1024 * (len(request["messages"]) + len(request.get("tools") or []))
-    if tokens + request["max_tokens"] > 200000:
+    payload_bytes = len(json.dumps(request, ensure_ascii=False, allow_nan=False).encode())
+    input_bound = payload_bytes + 4096 + 1024 * (len(request["messages"]) + len(request.get("tools") or []))
+    if _context_tokens(payload_bytes) + request["max_tokens"] > CONTEXT_WINDOW_TOKENS:
         raise BudgetError("AI paused: OpenRouter request exceeds the supported context bound.")
     i, o = RATES[model]
     # Anthropic cache writes may be introduced upstream even after dropping
     # caller cache hints. Reserve the documented one-hour write ceiling (2x).
     if model.startswith("anthropic/"):
         i *= 2
-    return int((tokens * i + request["max_tokens"] * o).to_integral_value(rounding=ROUND_CEILING))
+    return int((input_bound * i + request["max_tokens"] * o).to_integral_value(rounding=ROUND_CEILING))
 
 
 def provider_policy(model):

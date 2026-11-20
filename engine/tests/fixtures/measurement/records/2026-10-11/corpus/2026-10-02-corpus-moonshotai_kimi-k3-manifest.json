@@ -1,0 +1,187 @@
+{
+  "arm": "openrouter:moonshotai/kimi-k3",
+  "arm_id": "moonshotai/kimi-k3",
+  "arm_source": "arms-final.json:moonshotai/kimi-k3",
+  "provider": "openrouter",
+  "mode": "live",
+  "model": "moonshotai/kimi-k3",
+  "case_set_sha256": "acb2e22448a6569da3707a2a8df7d7919d2cecc920237f088ea704af3970a01d",
+  "snapshot_version": "81998270380cb1927ada4bddf4d8869802edb73a9b042fb8560e2db95c610e05",
+  "prompt_version_sha256": "9d4a1fdfe1f5fbb8e4f3876e602c24e3c729e05f7786f4d59a71a64164715d1b",
+  "extraction_prompt_sha256": "352eaba92e38fd718125eb3572a6b429b6a4b35be57ba4498ebcb6b6f3f84cc1",
+  "mnemonic_max_tokens": 2048,
+  "cap_usd": 2.5,
+  "engine_commit": "8b18ea69f183dcbbefc73e7814f354232448b221",
+  "kernel_commit": "unavailable",
+  "embedder": "EmbeddingEngine",
+  "cases": [
+    "unrelated_same_name_people",
+    "shared_switchboard",
+    "corroborated_same_person",
+    "customer_forwarding_number_correction",
+    "customer_price_correction",
+    "global_opening_hours",
+    "account_feedback",
+    "planned_not_completed",
+    "contradictory_legacy_fact_rule",
+    "multi_entity_source"
+  ],
+  "excluded": [
+    "malformed_output"
+  ],
+  "checks": {
+    "canary": {
+      "verdict": "refused",
+      "validator": "accepted",
+      "calls": 1,
+      "cost_usd": 0.009821
+    },
+    "budget_refusal": {
+      "outcome": "retryable_failure",
+      "reason": "paid decision unavailable: AI paused: daily budget $0.00; used or reserved $0.53. This request needs up to $0.18. Daily usage resets at 2026-10-05T00:00:00Z; unresolved calls remain reserved.",
+      "allowance_untouched": true,
+      "open_holds": 0,
+      "wire_calls": "live",
+      "calls": 0,
+      "cost_usd": 0.0
+    },
+    "unpriced_refusal": {
+      "outcome": "retryable_failure",
+      "reason": "paid decision unavailable: AI paused: OpenRouter model has no verified price ceiling.",
+      "message_matches": true,
+      "label": "fail-closed behaviour, not semantic health",
+      "calls": 0,
+      "cost_usd": 0.0
+    },
+    "truncation_refusal": {
+      "override": 16,
+      "restored": true,
+      "outcome": "skipped",
+      "attempts": 1,
+      "calls": 1,
+      "cost_usd": 0.007519
+    }
+  },
+  "record_only_rewrites": 0,
+  "intents": [
+    {
+      "intent_id": "e3f75ed18f0e48a3b2712f90095da40d",
+      "case_id": "unrelated_same_name_people",
+      "bound_micro_usd": 876890,
+      "committed_before_micro_usd": 0,
+      "opened_at": "2026-10-04T17:11:00.262277",
+      "open": false
+    },
+    {
+      "intent_id": "d522e322572c4febad2527651838dad8",
+      "case_id": "shared_switchboard",
+      "bound_micro_usd": 877527,
+      "committed_before_micro_usd": 61619,
+      "opened_at": "2026-10-04T17:12:36.686794",
+      "open": false
+    },
+    {
+      "intent_id": "bd244b6bef33474c947d7554ad1d0555",
+      "case_id": "corroborated_same_person",
+      "bound_micro_usd": 877217,
+      "committed_before_micro_usd": 132156,
+      "opened_at": "2026-10-04T17:14:28.533057",
+      "open": false
+    },
+    {
+      "intent_id": "c3ce585906704aa18c4c3751dbde3c79",
+      "case_id": "planned_not_completed",
+      "bound_micro_usd": 875109,
+      "committed_before_micro_usd": 169074,
+      "opened_at": "2026-10-04T17:15:27.601453",
+      "open": false
+    },
+    {
+      "intent_id": "2f146c91c5094dfca5cd40d733fec47b",
+      "case_id": "contradictory_legacy_fact_rule",
+      "bound_micro_usd": 880316,
+      "committed_before_micro_usd": 174845,
+      "opened_at": "2026-10-04T17:15:36.639403",
+      "open": false
+    },
+    {
+      "intent_id": "dc2632b490934c469ece1c3bbce15f2b",
+      "case_id": "multi_entity_source",
+      "bound_micro_usd": 1586763,
+      "committed_before_micro_usd": 279116,
+      "opened_at": "2026-10-04T17:18:23.621040",
+      "open": false
+    },
+    {
+      "intent_id": "f2a984d6a6bd48a4b1d88233e9b566ed",
+      "case_id": "customer_forwarding_number_correction",
+      "bound_micro_usd": 720064,
+      "committed_before_micro_usd": 411153,
+      "opened_at": "2026-10-04T17:21:44.487198",
+      "open": false
+    },
+    {
+      "intent_id": "a5b1b690f72a45329e76ccef3b6f7777",
+      "case_id": "customer_price_correction",
+      "bound_micro_usd": 720332,
+      "committed_before_micro_usd": 440234,
+      "opened_at": "2026-10-04T17:22:29.945048",
+      "open": false
+    },
+    {
+      "intent_id": "6dec6a9a63d04a4bbf06f89b4bcf3647",
+      "case_id": "global_opening_hours",
+      "bound_micro_usd": 714468,
+      "committed_before_micro_usd": 494196,
+      "opened_at": "2026-10-04T17:23:52.391301",
+      "open": false
+    },
+    {
+      "intent_id": "3fce00d2c43e4735b342b77a56def3e2",
+      "case_id": "account_feedback",
+      "bound_micro_usd": 715436,
+      "committed_before_micro_usd": 509043,
+      "opened_at": "2026-10-04T17:24:15.349830",
+      "open": false
+    },
+    {
+      "intent_id": "295aff62a7a34d0b88eb1b9a26d3e2b0",
+      "case_id": "check:canary",
+      "bound_micro_usd": 535851,
+      "committed_before_micro_usd": 518531,
+      "opened_at": "2026-10-04T17:24:28.785504",
+      "open": false
+    },
+    {
+      "intent_id": "9be60d239c2f45c3b2033e3d55fcb66a",
+      "case_id": "check:budget",
+      "bound_micro_usd": 535851,
+      "committed_before_micro_usd": 528352,
+      "opened_at": "2026-10-04T17:24:42.948076",
+      "open": false
+    },
+    {
+      "intent_id": "da5dcc30b719423687fb9cf00114c271",
+      "case_id": "check:unpriced",
+      "bound_micro_usd": 535851,
+      "committed_before_micro_usd": 528352,
+      "opened_at": "2026-10-04T17:24:43.319159",
+      "open": false
+    },
+    {
+      "intent_id": "96f5cf6b990947b288a1d8e67f7035b1",
+      "case_id": "check:truncation",
+      "bound_micro_usd": 535851,
+      "committed_before_micro_usd": 528352,
+      "opened_at": "2026-10-04T17:24:43.868784",
+      "open": false
+    }
+  ],
+  "totals_usd": {
+    "settled": 0.535871,
+    "held": 0.0,
+    "open_intents": 0.0
+  },
+  "open_holds": 0,
+  "written_at": "2026-10-04T17:24:54.054447"
+}

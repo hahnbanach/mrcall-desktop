@@ -1,0 +1,316 @@
+{
+  "_doc": "K3's OpenRouter Chat body and the `request` part of its MrCall credits quote body, captured on model-selection-m10a 40b84ed (before milestone 10 slice S1) through LLMClient.create_message_sync with the clock fixed; the scenarios are in tests/llm/test_k3_pinned.py. The client's temperature 1.0 default is part of these bodies; the pin compares everything else.",
+  "bodies": {
+    "forced_tool": {
+      "openrouter": {
+        "max_tokens": 8192,
+        "messages": [
+          {
+            "content": "Decide.\n\nDatetime=2026-10-02T12:00+00:00 (Friday) — current moment; use it for any relative date reasoning.",
+            "role": "system"
+          },
+          {
+            "content": "Order 7?",
+            "role": "user"
+          }
+        ],
+        "model": "moonshotai/kimi-k3",
+        "provider": {
+          "allow_fallbacks": false,
+          "max_price": {
+            "completion": "13.28272425",
+            "prompt": "2.648138063",
+            "request": "0"
+          },
+          "only": [
+            "digitalocean"
+          ],
+          "require_parameters": true,
+          "sort": "price"
+        },
+        "reasoning": {
+          "effort": "max"
+        },
+        "stream": false,
+        "temperature": 1.0,
+        "tool_choice": {
+          "function": {
+            "name": "lookup"
+          },
+          "type": "function"
+        },
+        "tools": [
+          {
+            "function": {
+              "description": "Look up an order.",
+              "name": "lookup",
+              "parameters": {
+                "properties": {
+                  "q": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "q"
+                ],
+                "type": "object"
+              }
+            },
+            "type": "function"
+          }
+        ]
+      },
+      "quote_request": {
+        "max_tokens": 8192,
+        "messages": [
+          {
+            "content": "Order 7?",
+            "role": "user"
+          }
+        ],
+        "model": "moonshotai/kimi-k3",
+        "output_config": {
+          "effort": "max"
+        },
+        "system": "Decide.\n\nDatetime=2026-10-02T12:00+00:00 (Friday) — current moment; use it for any relative date reasoning.",
+        "temperature": 1.0,
+        "thinking": {
+          "type": "adaptive"
+        },
+        "tool_choice": {
+          "name": "lookup",
+          "type": "tool"
+        },
+        "tools": [
+          {
+            "description": "Look up an order.",
+            "input_schema": {
+              "properties": {
+                "q": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "q"
+              ],
+              "type": "object"
+            },
+            "name": "lookup"
+          }
+        ]
+      }
+    },
+    "loop_auto": {
+      "openrouter": {
+        "max_tokens": 8192,
+        "messages": [
+          {
+            "content": "You are a fixture.\n\nDatetime=2026-10-02T12:00+00:00 (Friday) — current moment; use it for any relative date reasoning.",
+            "role": "system"
+          },
+          {
+            "content": "Find order 7.",
+            "role": "user"
+          },
+          {
+            "content": [
+              {
+                "text": "Searching.",
+                "type": "text"
+              }
+            ],
+            "role": "assistant",
+            "tool_calls": [
+              {
+                "function": {
+                  "arguments": "{\"q\": \"order 7\"}",
+                  "name": "lookup"
+                },
+                "id": "call-1",
+                "type": "function"
+              }
+            ]
+          },
+          {
+            "content": "shipped",
+            "role": "tool",
+            "tool_call_id": "call-1"
+          }
+        ],
+        "model": "moonshotai/kimi-k3",
+        "provider": {
+          "allow_fallbacks": false,
+          "max_price": {
+            "completion": "13.28272425",
+            "prompt": "2.648138063",
+            "request": "0"
+          },
+          "only": [
+            "digitalocean"
+          ],
+          "require_parameters": true,
+          "sort": "price"
+        },
+        "reasoning": {
+          "effort": "max"
+        },
+        "stream": false,
+        "temperature": 1.0,
+        "tool_choice": "auto",
+        "tools": [
+          {
+            "function": {
+              "description": "Look up an order.",
+              "name": "lookup",
+              "parameters": {
+                "properties": {
+                  "q": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "q"
+                ],
+                "type": "object"
+              }
+            },
+            "type": "function"
+          }
+        ]
+      },
+      "quote_request": {
+        "max_tokens": 8192,
+        "messages": [
+          {
+            "content": "Find order 7.",
+            "role": "user"
+          },
+          {
+            "content": [
+              {
+                "text": "Searching.",
+                "type": "text"
+              },
+              {
+                "id": "call-1",
+                "input": {
+                  "q": "order 7"
+                },
+                "name": "lookup",
+                "type": "tool_use"
+              }
+            ],
+            "role": "assistant"
+          },
+          {
+            "content": [
+              {
+                "content": "shipped",
+                "tool_use_id": "call-1",
+                "type": "tool_result"
+              }
+            ],
+            "role": "user"
+          }
+        ],
+        "model": "moonshotai/kimi-k3",
+        "output_config": {
+          "effort": "max"
+        },
+        "system": [
+          {
+            "cache_control": {
+              "type": "ephemeral"
+            },
+            "text": "You are a fixture.",
+            "type": "text"
+          },
+          {
+            "text": "Datetime=2026-10-02T12:00+00:00 (Friday) — current moment; use it for any relative date reasoning.",
+            "type": "text"
+          }
+        ],
+        "temperature": 1.0,
+        "thinking": {
+          "type": "adaptive"
+        },
+        "tool_choice": {
+          "type": "auto"
+        },
+        "tools": [
+          {
+            "cache_control": {
+              "type": "ephemeral"
+            },
+            "description": "Look up an order.",
+            "input_schema": {
+              "properties": {
+                "q": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "q"
+              ],
+              "type": "object"
+            },
+            "name": "lookup"
+          }
+        ]
+      }
+    },
+    "no_system": {
+      "openrouter": {
+        "max_tokens": 8192,
+        "messages": [
+          {
+            "content": "Datetime=2026-10-02T12:00+00:00 (Friday) — current moment; use it for any relative date reasoning.",
+            "role": "system"
+          },
+          {
+            "content": "ping",
+            "role": "user"
+          }
+        ],
+        "model": "moonshotai/kimi-k3",
+        "provider": {
+          "allow_fallbacks": false,
+          "max_price": {
+            "completion": "13.28272425",
+            "prompt": "2.648138063",
+            "request": "0"
+          },
+          "only": [
+            "digitalocean"
+          ],
+          "require_parameters": true,
+          "sort": "price"
+        },
+        "reasoning": {
+          "effort": "max"
+        },
+        "stream": false,
+        "temperature": 1.0
+      },
+      "quote_request": {
+        "max_tokens": 8192,
+        "messages": [
+          {
+            "content": "ping",
+            "role": "user"
+          }
+        ],
+        "model": "moonshotai/kimi-k3",
+        "output_config": {
+          "effort": "max"
+        },
+        "system": "Datetime=2026-10-02T12:00+00:00 (Friday) — current moment; use it for any relative date reasoning.",
+        "temperature": 1.0,
+        "thinking": {
+          "type": "adaptive"
+        }
+      }
+    }
+  },
+  "clock": "Datetime=2026-10-02T12:00+00:00 (Friday) — current moment; use it for any relative date reasoning."
+}
