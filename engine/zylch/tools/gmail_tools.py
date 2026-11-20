@@ -424,10 +424,12 @@ class CreateDraftTool(Tool):
         try:
             thread_id = _draft_rfc_identifier(thread_id)
             in_reply_to = _draft_rfc_identifier(in_reply_to)
-            if isinstance(references, str) and ("\r" in references or "\n" in references):
-                raise ValueError("Draft references contain a line break")
             refs_list = None
             if references:
+                # A References header is folded over several lines, and the
+                # archive stores it that way: a line break between two
+                # identifiers is whitespace. Each identifier is checked
+                # below, so none of them carries one.
                 refs_list = (
                     [r.strip() for r in references.split()]
                     if isinstance(references, str)
