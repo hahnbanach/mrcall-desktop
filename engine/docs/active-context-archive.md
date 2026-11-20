@@ -1,3 +1,66 @@
+## 2026-11-20 — Before the hosted units ran one package from `main`
+
+Seven hosted units run four packages. The two MrCall units, support and the
+second account, run tag `hosted-engine-0.1.57.dev3` of branch
+`release/hosted-engine-20261118` since 2026-11-19: the support line united
+with the Café 124 production package, in the Café 124 dependency set. Café
+124 production, its three staff units and the personal mailbox unit run
+older packages that are in no commit as a whole. `main` runs on no unit. The
+[one-build plan](../../docs/execution-plans/2026-11-19-one-hosted-engine-build.md)
+owns the per-unit state, the release, the store rehearsals and each rollback.
+
+- Five hosted units are not on the united package. Café 124 production needs
+  a decision on its finance-content rule first: the united package lets a
+  session authenticated as the profile's owner reuse that profile's finance
+  content, as support does, where the Café 124 package refuses by text
+  similarity. 26 Qonto tests pin the older rule and no test covers
+  `qonto/owner_content.py`. The three Café 124 staff units and the personal
+  mailbox unit wait for the operator's word.
+- `main` and the hosted line are two lines. Commit `0cf4790c` replaced the
+  hosted line's tree with the production runtime, so its git ancestry does
+  not describe its content. A merge from the content ancestor `v0.1.56` has
+  32 conflicted paths, 17 in the engine package. `main` holds the contextual
+  email guard with its enrollment and the typed Qonto credentials, which no
+  unit ever ran.
+- A member's message without automatic-reply headers in a thread's Sent mail
+  holds that thread as `needs-assignment` with no time limit
+  (`services/task_assignment_evidence.py`, `_member_activity`;
+  `services/task_assignment_projection.py`, `_project`). On 2026-11-19 that
+  rule holds 16 of the 18 inbound conversations of the MrCall support
+  mailbox, the oldest for 10 days, one of them in part through five replies
+  the engine itself sent in September. Whether the hold gets a limit is the
+  operator's decision.
+
+The unreleased [contextual-email
+candidate](../../docs/execution-plans/2026-10-08-contextual-email-assignment-guard.md) guards
+actual reply create/update/send and preserves known email/task context across chat and worker
+hops. [Enrollment](features/assignment-enrollment.md) distinguishes never-enabled, managed and
+ambiguous legacy stores; managed authority cannot be removed by deleting trust. No candidate
+source, enrollment or caller patch is activated in hosted services or installed clones.
+
+## 2026-11-20 — State paragraphs moved out of the living context
+
+The statements about hosted services below are the latest recorded acceptance,
+not live rechecks by the local hardening closure. Detailed historical trial
+receipts and diagnostic sequences are in the archive and owning plans.
+
+Mnemonic product rollout remains pending. AC 5 failed on the rejected Haiku arm
+and awaits M10 re-measurement using the resolver-selected model. The paid corpus
+retains one critical failure; incomplete automatic extraction can remain pending
+without a reason and be repaid. The corpus also lacks per-round proposal/latency
+evidence and recorded Italian preservation misses. The hb plan at
+`docs/execution-plans/2026-09-30-mnemonic-rollout.md` is present as historical
+planned work. Refresh its host/source pins and prerequisites, review the current
+product-rollout plan and rehearse migration on a store copy before use. Accepted
+source activation and sandbox acceptance do not establish mnemonic product quality.
+
+The local hardening closure repairs the model-catalog parameter declaration and
+preserves typed preparation refusal through task dispatch. Synthetic contract,
+task ownership/stale-view, transport, memory, cursor and billing checks pass.
+The [closure plan](../../docs/execution-plans/2026-10-07-desktop-kernel-hardening-closure.md)
+owns exact results and limitations. No installed-app, fleet or live-data cleanup
+acceptance is implied.
+
 ## 2026-10-08 — Before restored mnemonic rollout-plan reference
 
 Mnemonic product rollout remains pending. AC 5 failed on the rejected Haiku arm

@@ -23,16 +23,12 @@ candidate](../../docs/execution-plans/2026-10-08-contextual-email-assignment-gua
 `main`'s tree. Tag `main-before-hosted-line-20261120` holds their modules. No hosted service
 or installed clone ran them.
 
-The statements about hosted services below are the latest recorded acceptance,
-not live rechecks by the local hardening closure. Detailed historical trial
-receipts and diagnostic sequences are in the archive and owning plans.
-
 Native [Qonto](features/qonto.md) has authenticated support-only banking,
 restart/reconnect, source-comparison and managed-answer acceptance. Packaged
 GUI and provider-UI comparison remain unverified. Released source combines
 Qonto and [additional mailboxes/PEC](features/mailboxes.md). Six company units
 have verified mailbox migration, primary registration, encryption startup and
-row preservation; personal Gmail keeps its separate attachment source pin. The
+row preservation; the personal mailbox unit runs the same release. The
 [Qonto plan](../../docs/execution-plans/2026-10-04-qonto-connection.md) and
 [integration plan](../../docs/execution-plans/2026-10-05-mailboxes-qonto-release-integration.md)
 own remaining acceptance and rollout.
@@ -65,16 +61,6 @@ correctly classified. Current contracts: [decisions](features/mnemonic-decisions
 [commit](features/mnemonic-commit.md), [join](features/company-memory-join.md) and
 [writer inventory](features/mnemonic-writer-inventory.md).
 
-Mnemonic product rollout remains pending. AC 5 failed on the rejected Haiku arm
-and awaits M10 re-measurement using the resolver-selected model. The paid corpus
-retains one critical failure; incomplete automatic extraction can remain pending
-without a reason and be repaid. The corpus also lacks per-round proposal/latency
-evidence and recorded Italian preservation misses. The hb plan at
-`docs/execution-plans/2026-09-30-mnemonic-rollout.md` is present as historical
-planned work. Refresh its host/source pins and prerequisites, review the current
-product-rollout plan and rehearse migration on a store copy before use. Accepted
-source activation and sandbox acceptance do not establish mnemonic product quality.
-
 The engine owns revisioned company [written projects](features/project-memory.md).
 Company membership is the capability changed only by `memory.join`; account
 rules stay private. Profile stores retain mail, tasks, tokens and sync cursors.
@@ -96,79 +82,53 @@ Support exposes approval-gated [outbound calls](features/outbound-calls.md) with
 prior authenticated started/conversation evidence. Automatic diagnostic scripting
 is not configured; caller permission and assistant ID remain required.
 
-The local hardening closure repairs the model-catalog parameter declaration and
-preserves typed preparation refusal through task dispatch. Synthetic contract,
-task ownership/stale-view, transport, memory, cursor and billing checks pass.
-The [closure plan](../../docs/execution-plans/2026-10-07-desktop-kernel-hardening-closure.md)
-owns exact results and limitations. No installed-app, fleet or live-data cleanup
-acceptance is implied.
-
 The hosted daemon runs a mail loop: every `MAIL_SYNC_INTERVAL_MINUTES` it
 runs the email-only intake of `sync.run {scope: "email"}` by itself, so an
 engine that clients only read keeps its archive current. Its
 [plan](../../docs/execution-plans/2026-11-18-engine-owned-mail-sync.md) owns
 that evidence.
 
-Seven hosted units run one package since 2026-11-20: tag
-`hosted-engine-0.1.57.dev4` on `main`, release
-`/home/mrcalld/releases/hosted-engine-0.1.57.dev4-9f6812dbd997`, in one
-Python environment. `main`'s `engine/zylch` is the tree those units run. The
+Seven hosted units run one package: tag `hosted-engine-0.1.57.dev4` on
+`main`, release
+`/home/mrcalld/releases/hosted-engine-0.1.57.dev4-9f6812dbd997`. `main`'s
+`engine/zylch` is the tree they run. A member's own message holds a thread
+until the customer's newest mail has waited `MEMBER_ACTIVITY_HOLD_HOURS`, 72
+by default, with no member answer after it
+([assignment contract](features/task-assignment.md)). The
 [plan](../../docs/execution-plans/2026-11-20-main-is-the-hosted-line.md) owns
-the per-unit state, the release and each rollback.
-
-A member's own message holds a thread for people until the customer's newest
-mail has waited `MEMBER_ACTIVITY_HOLD_HOURS`, 72 by default, with no member
-answer after it. Then the thread is the operator's again. The
-[assignment contract](features/task-assignment.md) holds the rule.
+the per-unit state, each rollback and the evidence of the bullets below that
+name it.
 
 ## Unresolved
 
-- The contextual email guard with its enrollment and the typed Qonto
-  credentials wait to be brought onto `main` again. The engine looks the
-  guard's modules up with `find_spec`: with them present it applies the guard
-  to stores that were never enrolled.
-- 26 Qonto cases of the engine's test tree pin a finance-content rule no
-  unit runs: a session authenticated as the profile's owner reuses that
-  profile's finance content on every unit. No test covers
-  `qonto/owner_content.py`.
-- The repository's checks on `main` fail: the RPC contract check, and the
-  engine test tree, which has cases that fail on every package that ran it.
-  `docs/ipc-contract.md` and `docs/rpc-contract-inventory.json` are not
-  reconciled with the engine's method registry.
-- A Desktop build from this engine is unverified.
-- Six hosted units carry drop-ins that sort after `tenant.conf`. The nightly
-  reconcile exits 3 and a `tenant.conf` change does not reach them.
-- `zylch-reconcile.path` runs the reconcile when the profiles directory
-  changes, and `mrcall-tenant create` changes it. With new commits on `main`
-  the reconcile then restarts every unit at once, the telephone unit
-  included, with no check for a call.
-- The seven units log at DEBUG to the journal, mailbox and customer
-  addresses included. `checks/journal-address-shapes.txt` in the one-build
-  plan's evidence folder lists the line shapes of the two MrCall units.
-- The operator kernel lists a held thread among those that wait for a person
-  before it checks whether a member answered it, works on two conversations
-  per tick, and keeps a contact with a person through its own `escalated`
-  record whatever the engine answers.
-- A thread stays held without a limit when a member answered last from their
-  own mailbox and the customer then wrote only to another account's mailbox.
-- An email intake after a long gap is slow. On Café 124 production it took
-  177 seconds after two hours without a sync, against 5 to 20 seconds on its
-  earlier package and the 180 seconds the operator kernel waits. Each run
-  reads the message ids of the last seven days in every folder. With the
-  mail loop on, a run takes 6 to 10 seconds there.
-- No reply has left on `hosted-engine-0.1.57.dev4`: the first tick on it
-  found nothing owed in the two conversations it took.
+- Out of `main`'s tree: the contextual email guard with its enrollment and
+  the typed Qonto credentials. Tag `main-before-hosted-line-20261120` holds
+  them. With the guard's modules present the engine applies it to stores
+  that were never enrolled.
+- `main`'s checks fail: the RPC contract check, and the engine test tree,
+  whose failing cases include 26 Qonto cases of a finance-content rule no
+  unit runs. `docs/ipc-contract.md` is not reconciled with the method
+  registry. A Desktop build from this engine is unverified.
+- Six units carry drop-ins that sort after `tenant.conf`, so the reconcile
+  exits 3. `zylch-reconcile.path` runs the reconcile when the profiles
+  directory changes, as `mrcall-tenant create` does: with new commits on
+  `main` every unit then restarts at once, with no check for a telephone
+  call.
+- The seven units log at DEBUG to the journal, addresses included.
+- The operator kernel lists a held thread as waiting before it checks for a
+  member's answer, works on two conversations per tick, and keeps a contact
+  with a person through its own `escalated` record. A thread also stays held
+  when a member answered last from their own mailbox and the customer then
+  wrote only to another account's mailbox.
+- One email intake of the Café 124 production unit took 177 seconds against
+  the 180 the operator kernel waits; the cause is not established. No reply
+  has left on this release. The plan holds both records.
 - Staff units `C06x…` and `YZNI…` log about 230 `reanalyze_task` refusals a
-  day: the request exceeds the 200000-token window
-  (`llm/budget_pricing.py`). The mailbox of staff unit `ZwpL…` rejects its
-  login.
+  day (`llm/budget_pricing.py`, the 200000-token window). The mailbox of
+  staff unit `ZwpL…` rejects its login.
 - On the MrCall support profile the assignment projection of three threads
-  that carry a waiting draft is `unknown` on the primary account: two with
-  `REPLY_SOURCE_UNAVAILABLE`, one of them from `SENT_REPLY_NOT_SYNCED`
-  evidence, and one with `SOURCE_UNAVAILABLE`. Each of the 29 operator ticks
-  since 2026-11-16 that kept its review lists them, on three engine
-  releases. The cause is not established. `rollout/m3-tick-1850.txt` in the
-  one-build plan's evidence folder holds the counts.
+  that carry a waiting draft is `unknown` on the primary account, on four
+  engine releases since 2026-11-16. The cause is not established.
 - Live PEC.net acceptance and provider marker comparison,
   Qonto installed Electron and provider UI remain open in their owning plans.
 - Remaining Café124 billing choices and funded credit acceptance remain open;

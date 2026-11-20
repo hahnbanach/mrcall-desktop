@@ -98,13 +98,14 @@ The model:
   drop-ins alone. `mrcall-tenant create` refuses a pin it cannot vouch
   for — outside the checkout and the releases tree, through a symbolic
   link or `..`, unreadable by the tenant, or set by an `EnvironmentFile` —
-  and any other drop-in that sets `ExecStart`: a migrated unit runs
+  and any other drop-in that sets `ExecStart`: a unit `create` accepts runs
   `tenant.conf`'s command line only. It also refuses a drop-in that loads
   an `EnvironmentFile` other than a declared unit's voice file (a migrated
   unit reads only its key file and, when declared, its voice copy), a first
   migration of a unit that is not stopped, and a result whose user,
   `ProtectHome` or environment files are not `tenant.conf`'s.
-- **Operator drop-ins sort before `tenant.conf`.** `create` refuses a unit
+- **On a unit `create` accepts, operator drop-ins sort before
+  `tenant.conf`.** `create` refuses a unit
   with an applied drop-in whose name sorts after it, so a pin named
   `zz-<name>.conf` is refused. Name a pin meant to apply after every other
   operator drop-in `t0-<name>.conf`: that still sorts before
@@ -151,8 +152,15 @@ The model:
   profile's `downloads/` and `scratch/` folders on a hosted engine (M1, on
   `main` since `c2b3ca5`). All seven existing profiles run as `mc-…`, use
   derived company-store paths and have their own
-  egress enforcement, including production voice on its pinned release
-  through a tenant-exec declaration. Newly provisioned profiles still use
+  egress enforcement. All seven run release
+  `/home/mrcalld/releases/hosted-engine-0.1.57.dev4-9f6812dbd997`, tag
+  `hosted-engine-0.1.57.dev4` on `main`. Six of them, production voice
+  included, take their command line from a drop-in that sorts after
+  `tenant.conf`, `<z…>-hosted-engine-20261120.conf`, which sets `ExecStart`
+  to the release's interpreter and unsets `PYTHONPATH`; `create` refuses
+  such a unit, so the reconcile exits 3 for them. The personal mailbox unit
+  takes its interpreter from a tenant-exec declaration and passes `create`.
+  Newly provisioned profiles still use
   the transitional shared-key template until explicit tenant migration.
   Self-serve provisioning stays closed.
   The plan's VPS rollout record is the authority.
@@ -331,6 +339,10 @@ sudo /home/mrcalld/mrcall-desktop/engine/scripts/server/update-daemons.sh --prun
   pull brings a commit, documentation included, it restarts every daemon,
   with no check for a telephone call in progress. A unit pinned by a drop-in
   comes back on that drop-in.
+- **A change to the profiles directory runs the same reconcile at once.**
+  `zylch-reconcile.path` watches `/home/mrcalld/.zylch/profiles`, and
+  `mrcall-tenant create` changes it. With a commit on `main` that the base
+  checkout has not pulled, every daemon then restarts at that moment.
 - **Never open a live profile DB or company store as any user but the
   daemon's — not even read-only.** `sqlite3 'file:.../zylch.db?mode=ro'` run
   as your login user (or as root, or as `mrcalld` on a migrated profile)
@@ -571,7 +583,7 @@ row. Contract and data-loss window:
 [additional mailboxes](../engine/docs/features/mailboxes.md).
 
 The six company tenants now have verified primary-mailbox migration on the
-released source; personal Gmail retains its separate attachment pin. For future
+released source; the personal mailbox unit runs the same release. For future
 tenants, stage rollout using the current sandbox and release-pin runbook above;
 retain the tenant Unix user, encryption key, filesystem restrictions and
 egress policy. Rehearse the migration and a second boot on a disposable

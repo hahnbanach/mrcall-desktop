@@ -204,8 +204,9 @@ holds the thread: the limit runs again from the new mail.
   the Café 124 operator as well.
 - One point of that list does not hold: the Café 124 production unit runs
   the mail loop like every other unit. Its auto-update pipeline stops at the
-  spending gate before it fetches mail, and a sync that runs only when a
-  tick asks, every two hours, takes longer than the kernel waits.
+  spending gate before it fetches mail, so with the loop off the unit synced
+  only when a tick asked. The first such intake on the new package took 177
+  seconds against the 180 the kernel waits; the cause is not established.
 
 ## Constraints
 
@@ -213,8 +214,9 @@ holds the thread: the limit runs again from the new mail.
   user, no secret is printed or recorded, a release directory is root-owned
   and holds no bytecode, one unit at a time, a rollback is the removal of the
   unit's newest drop-in and a restart.
-- The repository is public. No customer name, address or subject enters a
-  commit.
+- The repository is public. No name, address or mail subject of a customer
+  of either company enters a commit. The two companies that operate the
+  units, MrCall and Café 124, are named.
 - This work restarts no unit between 23:30 and 00:15 UTC, or while a tick
   of its clone runs, and it restarts the Café 124 production unit only after
   `calls_available: true`.
