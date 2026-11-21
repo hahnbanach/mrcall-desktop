@@ -11,7 +11,7 @@ import asyncio
 from datetime import datetime, timezone
 from email.utils import parsedate_to_datetime
 
-from zylch.storage.draft_operations import DraftOperations
+from zylch.storage.draft_operations import DraftOperations, OperationConflict
 
 from . import person_request
 from .exact_draft_delivery import EvidenceRefusal, addresses, snapshot
@@ -116,15 +116,31 @@ def preflight(owner, uid, draft, root, target, mailbox):
     return None
 
 
+RETIREMENT_ATTEMPTS = 3
+
+
+def retirement_ids(retirement_id):
+    """The base retirement id, then the ids of the retries it may spawn."""
+    from uuid import UUID, uuid5
+
+    return [retirement_id, *(str(uuid5(UUID(retirement_id), f"retire:{n}")) for n in range(1, RETIREMENT_ATTEMPTS + 1))]
+
+
 def retire(owner, uid, draft_id, root, retirement_id, recheck, mailbox_factory):
-    """Move the exact review copy of a sent draft to Trash, with Sent proof."""
+    """Move the exact review copy of a sent draft to Trash, with Sent proof.
+
+    A retry reads the retirement's own journal first: an attempt that moved
+    the copy and lost its acknowledgment is finished under the same id with
+    its stored target, never reported as a missing copy; an attempt stranded
+    before dispatch is closed and a new one starts, one per call.
+    """
     from zylch.storage.storage import Storage
 
     from . import exact_draft_retirement as retirement
 
     draft = Storage.get_instance().get_draft(owner, draft_id)
 
-    def pending(cause):
+    def pending(cause, **extra):
         return {
             "version": 1,
             "ok": False,
@@ -132,15 +148,47 @@ def retire(owner, uid, draft_id, root, retirement_id, recheck, mailbox_factory):
             "state": "sent-with-cleanup-pending",
             "cleanup_certainty": "not-dispatched",
             "next_action": "retire-sent-mirror",
+            **extra,
         }
 
     if draft is None:
         return pending("draft_not_found")
-    mailbox = mailbox_factory(owner)
+    store = DraftOperations()
+    ids = retirement_ids(retirement_id)
+    found = []
+    for attempt in ids:
+        entry = store.read(uid, attempt)
+        if entry is None:
+            break
+        found.append((attempt, entry))
+    attempt = ids[0]
+    if found:
+        attempt, latest = found[-1]
+        if latest.get("operation_type") != "retire_sent_mirror":
+            return pending("retirement_operation_conflict", operation_id=attempt)
+        if latest["stage"] in {"completed", "dispatch_possible", "acknowledged"}:
+            return retirement.retire(
+                owner, uid, draft_id, latest["expected_snapshot"], latest["binding"]["root"], attempt,
+                latest["binding"]["target"], True, recheck, mailbox_factory=mailbox_factory,
+            )
+        if latest["stage"] in {"reserved", "inventoried"} and latest["active"]:
+            try:
+                store.reconcile(uid, attempt, expected_version=latest["version"], stage="not_dispatched",
+                                evidence={"cause": "recovered_before_dispatch"})
+            except OperationConflict:
+                return pending("retirement_in_progress", operation_id=attempt)
+        index = ids.index(attempt)
+        if index + 1 >= len(ids):
+            return pending("retirement_attempts_exhausted", operation_id=attempt)
+        attempt = ids[index + 1]
+    try:
+        mailbox = mailbox_factory(owner)
+    except Exception as error:
+        return pending(_inventory_cause(error))
     try:
         rows, inventory = mailbox.inventory()
-    except EvidenceRefusal as error:
-        return pending(str(error))
+    except Exception as error:
+        return pending(_inventory_cause(error))
     finally:
         mailbox.close()
     copies = related(rows, draft, root)
@@ -157,9 +205,16 @@ def retire(owner, uid, draft_id, root, retirement_id, recheck, mailbox_factory):
         return pending("residual_copy_conflict")
     target = handle(copies[0], inventory)
     return retirement.retire(
-        owner, uid, draft_id, snapshot(draft), root, retirement_id, target, True, recheck,
+        owner, uid, draft_id, snapshot(draft), root, attempt, target, True, recheck,
         mailbox_factory=mailbox_factory,
     )
+
+
+def _inventory_cause(error):
+    """The named cause of a failed mailbox read; provider errors get one stable name."""
+    if isinstance(error, EvidenceRefusal):
+        return str(error)
+    return "drafts_inventory_unavailable:provider_observation_unavailable"
 
 
 def send(owner, uid, draft_id, operation_id, retirement_id, recheck, *, mailbox_factory=None):
@@ -189,11 +244,14 @@ def send(owner, uid, draft_id, operation_id, retirement_id, recheck, *, mailbox_
                 bound = {key: value for key, value in previous["binding"].items() if key != "transport"}
             else:
                 expected, bound = selected["expected_snapshot"], selected["binding"]
-                mailbox = factory(owner)
+                try:
+                    mailbox = factory(owner)
+                except Exception as error:
+                    return _held(draft_id, operation_id, _inventory_cause(error))
                 try:
                     refusal = preflight(owner, uid, draft, bound["root"], bound["target"], mailbox)
-                except EvidenceRefusal as error:
-                    return _held(draft_id, operation_id, str(error))
+                except Exception as error:
+                    return _held(draft_id, operation_id, _inventory_cause(error))
                 finally:
                     mailbox.close()
                 if refusal is not None:

@@ -154,7 +154,8 @@ def test_same_key_twice_sends_once_and_returns_the_saved_outcome(mcp):
     again = send(mcp, draft_id)
     assert again["ok"] and again["cause"] == "exact_sent_verified", again
     assert again["operation_id"] == first["operation_id"]
-    assert again["cleanup"]["cause"] == "no_review_copy"
+    # The retry reads the retirement's journal: the copy was already retired.
+    assert again["cleanup"]["ok"] and again["cleanup"]["cause"] == "sent_mirror_reconciled"
     assert mcp.smtp.sendmail.call_count == 1
 
 
@@ -214,6 +215,61 @@ def test_a_reply_already_sent_from_gmail_refuses(mcp, case):
     else:
         assert answer["ok"], answer
         assert mcp.smtp.sendmail.call_count == 1
+
+
+def test_a_retried_send_finishes_an_interrupted_retirement(mcp, monkeypatch):
+    from zylch.storage.draft_operations import DraftOperations
+
+    class Dropping(Mailbox):
+        dropped = False
+
+        def move(self, target, trash):
+            acknowledgment = super().move(target, trash)
+            if not Dropping.dropped:
+                Dropping.dropped = True
+                raise OSError("connection reset after the move")
+            return acknowledgment
+
+    monkeypatch.setattr("zylch.services.exact_draft_retirement_imap.RetirementMailbox", Dropping)
+    draft_id = prepared(mcp)
+    first = send(mcp, draft_id)
+    assert first["ok"] and first["cause"] == "exact_sent_verified"
+    assert not first["cleanup"]["ok"] and first["cleanup"]["cause"] == "provider_observation_unavailable", first["cleanup"]
+    retirement_id = first["cleanup"]["operation_id"]
+    entry = DraftOperations().read(UID, retirement_id)
+    assert entry["stage"] == "dispatch_possible" and entry["active"]
+    again = send(mcp, draft_id)
+    assert again["ok"] and again["cause"] == "exact_sent_verified", again
+    assert again["cleanup"]["ok"] and again["cleanup"]["cause"] == "sent_mirror_reconciled", again["cleanup"]
+    assert again["cleanup"]["cleanup_certainty"] == "verified"
+    assert DraftOperations().read(UID, retirement_id)["stage"] == "completed"
+    assert mcp.smtp.sendmail.call_count == 1
+    _compact("Drafts")
+    assert Mailbox.folders["Drafts"] == [] and len(Mailbox.folders["Trash"]) == 1
+    # The thread is free again: a new request publishes.
+    assert prepared(mcp, key="person-request-key-0002")
+
+
+def test_sent_date_offsets_are_read_in_utc(mcp):
+    from datetime import datetime, timedelta, timezone
+    from email.utils import format_datetime
+
+    draft_id = prepared(mcp)
+    created = datetime.fromisoformat(Storage.get_instance().get_draft(OWNER, draft_id)["created_at"])
+    # Thirty minutes after creation on the wall clock of a +01:00 zone is
+    # thirty minutes before creation in UTC: an older reply, not a duplicate.
+    local = (created - timedelta(minutes=30)).replace(tzinfo=timezone.utc).astimezone(timezone(timedelta(hours=1)))
+    sent_reply(mcp, format_datetime(local))
+    assert send(mcp, draft_id)["ok"]
+    Mailbox.reset(mcp.sent)
+    mcp.sent.clear()
+    second = prepared(mcp, key="person-request-key-0002")
+    created = datetime.fromisoformat(Storage.get_instance().get_draft(OWNER, second)["created_at"])
+    # Thirty minutes before creation on a -05:00 wall clock is after creation in UTC.
+    local = (created + timedelta(minutes=30)).replace(tzinfo=timezone.utc).astimezone(timezone(timedelta(hours=-5)))
+    sent_reply(mcp, format_datetime(local))
+    answer = send(mcp, second, key="person-send-key-000002")
+    assert not answer["ok"] and answer["cause"] == "reply_already_sent", answer
 
 
 def test_no_review_copy_sends_and_reports_it(mcp):

@@ -34,6 +34,20 @@ def server_for(operator_enabled):
     return create_server(verifier, port, path="/mcp", allowed_hosts=["operator.example"]), client
 
 
+@pytest.mark.parametrize("full", [True, False])
+def test_identity_lists_send_reply_with_full_access_only(full):
+    from cs.operator_read import ReadGrant
+
+    binding = ProfileBinding("alice", "alice@example.test", "company", frozenset({"mailbox"}), True)
+    port = NativeReadPort(lambda: binding, {name: (lambda params, notify: None) for name in ("emails.search", "emails.list_by_thread", "drafts.list")})
+    scopes = {"operator.read", "email.read", "draft.read", "instructions.read", "draft.prepare"} | ({"operator.use"} if full else set())
+    grant = ReadGrant("alice", "alice", "company", "client", RESOURCE, int(time.time()) + 240, frozenset(scopes),
+                      frozenset({"mail", "drafts", "instructions"}), frozenset({"mailbox"}), "grant")
+    capabilities = asyncio.run(port.identity(grant))["capabilities"]
+    assert ("send_reply" in capabilities) is full
+    assert {"prepare_reply", "recover_reply"} <= set(capabilities)
+
+
 @pytest.mark.parametrize("operator_enabled", [True, False])
 def test_send_reply_follows_full_operator_access(operator_enabled):
     server, client = server_for(operator_enabled)

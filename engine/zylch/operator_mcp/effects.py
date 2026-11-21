@@ -106,8 +106,17 @@ class GrantedEffects:
             return {'source': {key: raw.get(key) for key in fields}, 'instructions': documents,
                     'correspondence': correspondence}
 
-        def conflicts(root):
-            return asyncio.to_thread(publication.conflicts, actor.mailbox_address, root)
+        async def conflicts(root):
+            from zylch.services.exact_draft_delivery import EvidenceRefusal
+
+            try:
+                return await asyncio.to_thread(publication.conflicts, actor.mailbox_address, root)
+            except EvidenceRefusal as error:
+                # The Drafts folder could not be read before any spending: the
+                # cause is the person's to act on, and no operation row exists.
+                raise replies.ReplyRefusal('drafts_inventory_unavailable:' + str(error)) from None
+            except Exception:
+                raise replies.ReplyRefusal('drafts_inventory_unavailable:provider_observation_unavailable') from None
 
         return replies.ReplyOperations(revalidate=revalidate, context_reader=context_reader,
                                        conflicts=conflicts), actor

@@ -186,6 +186,28 @@ def test_a_copy_on_the_root_refuses_before_generating(mcp):
     assert not mcp.calls and not draft_rows()
 
 
+def test_an_unreadable_drafts_folder_names_its_cause_before_generating(mcp, monkeypatch):
+    from zylch.services.exact_draft_delivery import EvidenceRefusal
+
+    class Oversized(Drafts):
+        def inventory(self, *args, **kw):
+            raise EvidenceRefusal("inventory_byte_limit")
+
+    monkeypatch.setattr("zylch.services.exact_draft_publication_imap.ReviewMailbox", Oversized)
+    with pytest.raises(ReplyRefusal, match="drafts_inventory_unavailable:inventory_byte_limit"):
+        prepare(mcp)
+    assert not mcp.calls and not draft_rows()
+
+    class Dropped(Drafts):
+        def inventory(self, *args, **kw):
+            raise OSError("connection reset")
+
+    monkeypatch.setattr("zylch.services.exact_draft_publication_imap.ReviewMailbox", Dropped)
+    with pytest.raises(ReplyRefusal, match="drafts_inventory_unavailable:provider_observation_unavailable"):
+        prepare(mcp)
+    assert not mcp.calls and not draft_rows()
+
+
 def journal(uid, operation_id):
     return DraftOperations().read(uid, operation_id)
 
