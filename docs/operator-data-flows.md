@@ -65,12 +65,24 @@ Native legacy decision/import endpoints cannot be authorized by mail content or
 a delegated MCP bearer. Kernel scheduled sessions retain their protected denials.
 Standing instructions do not grant sending, payment, budget or tool permissions.
 
-Reply generation uses the native engine budget and one causal reservation. Native
-enrollment, assignment, exact source/recipient and claim controls remain in force.
-Draft and saved-result mutation share the private writer transaction; instruction
-revisions are checked while the native company writer guard is held. Recovery
-reads the saved result without another model call. No sending tool or alternate
-send path is added. Internal review can finish without a customer draft.
+Reply generation uses the native engine budget and one causal reservation. The
+request is a person's: it is admitted on every assignment state, and keeps the
+exact source and recipient binding and the claim controls. Draft and saved-result
+mutation share the private writer transaction; instruction revisions are checked
+while the native company writer guard is held. The saved draft is plain text with
+root-first References; its review copy is published to the mailbox's Drafts
+folder inside the same operation, one copy per thread root, and recovery finishes
+an interrupted publication from the operation journal without another model call.
+Internal review can finish without a customer draft.
+
+`send_reply` is the one sending tool. It needs full operator access
+(`operator.use`), runs only as its own tool so the client shows it and asks the
+person first, and is idempotent on its request key. Before a new send it refuses,
+naming them, a review copy edited in Gmail and a reply to the same message already
+sent from Gmail; after the verified send it retires the review copy with Sent
+proof and reports the send's certainty and the cleanup's separately. Scheduled
+operator runs never carry this authority: the connection lives outside the clone
+directory and the scheduled guard keeps its refusals.
 
 An AI-chat attachment, a shared project record and a local filesystem path are
 different sources. A path alone transfers no bytes. The MCP does not grant general

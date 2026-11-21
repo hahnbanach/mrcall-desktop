@@ -94,7 +94,27 @@ that evidence.
 Seven hosted units run one package: tag `hosted-engine-0.1.57.dev5` on
 `main`, release
 `/home/mrcalld/releases/hosted-engine-0.1.57.dev5-e1c1af32d0d0`. `main`'s
-`engine/zylch` is the tree they run. A member's own message holds a thread
+`engine/zylch` at that tag is the tree they run.
+
+A person's request through the profile's operator MCP is admitted on every
+assignment state: `prepare_reply` saves a plain-text draft bound to the
+exact source row, with root-first References, and publishes its review copy
+in the mailbox's Gmail Drafts inside the same operation; `recover_reply`
+finishes an interrupted publication from the operation journal and never
+generates; `send_reply` sends one saved draft on the person's explicit
+instruction, gated per call on `operator.use`, refused by `operator_action`,
+idempotent on its request key, and retires the review copy after the verified
+send. Before a new send, a review copy edited in Gmail or a reply to the same
+message already sent from Gmail refuses, named. The admission is one
+in-process marker (`services/person_request.py`) that the MCP effects set
+around a request; under it the draft write, the review write, the exact send
+and `resolve()` keep the binding to the source row and compute no projection,
+component or ancestry proof. Scheduled ticks and the kernel's RPC routes keep
+every refusal. `resolve()` roots an In-Reply-To-only ordinary source at its
+stored `thread_id` on every route. This is on `main` after
+`hosted-engine-0.1.57.dev5` and not released; the
+[plan](../../../docs/execution-plans/2026-11-21-interactive-drafts-through-operator-mcp.md)
+in the hb repository owns its release and live acceptance. A member's own message holds a thread
 until the customer's newest mail has waited `MEMBER_ACTIVITY_HOLD_HOURS`, 72
 by default, with no member answer after it
 ([assignment contract](features/task-assignment.md)). The
@@ -131,6 +151,12 @@ name it.
   preparation had a refused `create_draft` call, and its draft then stays in
   the engine, which the Desktop app does not list. This release removes one
   cause: the refusal of a References chain folded over lines.
+- The MCP route for a person's drafts and sends is unreleased and has no live
+  acceptance: no client of this work is connected, the route exists for the
+  Café 124 production profile only, and every full delegation already
+  approved gains `send_reply` at release. The Drafts inventories it runs read
+  the whole folder (1,000 messages, 8 MiB, 2 MiB per message); a folder beyond
+  that refuses with the cause named.
 - With the telephone listener configured, a voice admission that is not
   ready stops the whole daemon at start, its WebSocket and its MCP listener
   included. The admission of the Café 124 number is not ready since
