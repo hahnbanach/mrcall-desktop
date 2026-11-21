@@ -66,6 +66,9 @@ def install_routes(server, verifier, port):
         tool = (await available(grant)).get(name)
         if tool is None:
             raise ReadError('operator_action_unavailable')
+        if name == 'send_reply':
+            # A send runs only as its own tool, so the client shows it and asks first.
+            raise ReadError('use_send_reply_directly')
         is_read = bool(tool.annotations and tool.annotations.readOnlyHint)
         if read_only and not is_read:
             raise ReadError('operator_read_refuses_changes')

@@ -7,10 +7,27 @@ import importlib.util
 from sqlalchemy import select
 
 from . import exact_operator_send_context as context
+from . import person_request
+from .exact_draft_delivery import EvidenceRefusal
 from .exact_draft_publication_mime import identifier, identifiers
 from .task_assignment_types import AssignmentError
 
 _legacy = ContextVar("legacy_exact_send_effect", default=None)
+
+
+def _stored_root(source):
+    """The engine's own thread anchor of an ordinary row, when it is an RFC identifier.
+
+    A row that carries only In-Reply-To is stored with its parent as
+    ``thread_id``; a PEC-wrapped row keeps the envelope's identity and gets
+    no anchor here.
+    """
+    if source.get("original_message_id") or source.get("pec_markers") or not source.get("thread_id"):
+        return None
+    try:
+        return identifier(source["thread_id"])
+    except EvidenceRefusal:
+        return None
 
 
 def modern():
@@ -42,7 +59,7 @@ def resolve(owner, draft):
         raise AssignmentError("exact_source_unavailable")
     source = dict(rows[0])
     refs = identifiers(source.get("references") or "")
-    root = refs[0] if refs else target
+    root = refs[0] if refs else (_stored_root(source) or target)
     draft_refs = draft.get("references") or [target]
     if (
         draft.get("thread_id") not in (None, root)
@@ -50,11 +67,19 @@ def resolve(owner, draft):
         or source.get("thread_id") not in (None, root)
     ):
         raise AssignmentError("exact_source_conflict")
-    from types import SimpleNamespace
-    from .task_assignment_mail import rows
-
     known = {root, target, *refs}
-    known.update(row["message_id_header"] for row in rows(SimpleNamespace(mailbox=owner), root))
+    request = person_request.active()
+    if request is not None:
+        # A person's request: the source row alone identifies the thread; the
+        # ancestry proof over the stored rows is not built, so a thread the
+        # assignment store cannot resolve is still answerable.
+        if identifier(request.target) != target or request.source_id != source["id"]:
+            raise AssignmentError("person_request_source_mismatch")
+    else:
+        from types import SimpleNamespace
+        from .task_assignment_mail import rows
+
+        known.update(row["message_id_header"] for row in rows(SimpleNamespace(mailbox=owner), root))
     if not {identifier(value) for value in draft_refs} <= known:
         raise AssignmentError("exact_references_conflict")
     bound = {"root": root, "target": target, "source": row_identity(source)}
@@ -68,6 +93,12 @@ def _legacy_recheck(owner, draft, source, projected, actor, space, conn):
     from . import task_assignment_trust as trust
 
     store._admit(actor, space, conn)
+    if projected is None:
+        # A person's request carries no projection: only the exact binding
+        # to the named source is rechecked under the writer lock.
+        if person_request.active() is None or resolve(owner, draft) != source:
+            raise AssignmentError("exact_source_or_authority_changed")
+        return
     task, authority, component = store.authority(actor, space, source["root"], conn)
     if (
         task != projected["task"]
@@ -94,6 +125,21 @@ def effect(owner, draft):
     actor = identity.actor()
     if actor.mailbox != owner:
         raise AssignmentError("exact_owner_changed")
+    if person_request.active() is not None:
+        # A person's explicit send: no hold, assignment, conflict or
+        # inbound-coverage refusal; the company membership, the writer lock
+        # and the exact source binding stay.
+        from . import task_assignment_evidence as evidence
+
+        _, space, _ = evidence.admission()
+        with project_store.connection(space, write=True) as (conn, space):
+            _legacy_recheck(owner, draft, source, None, actor, space, conn)
+            token = _legacy.set((source, None, actor, space, conn))
+            try:
+                yield
+            finally:
+                _legacy.reset(token)
+        return
     projected = projection.project(source["root"])
     allowed = context.permits(owner, draft, source, projected)
     if (

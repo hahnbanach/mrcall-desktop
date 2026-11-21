@@ -1,10 +1,13 @@
-"""Granted draft and company-rule adapters; no sending surface."""
+"""Granted draft, send and company-rule adapters for a person's explicit requests."""
 
 import asyncio
 
 from cs.operator_read import ReadError
 from zylch.services import operator_reply_operations as replies
+from zylch.services import operator_reply_publication as publication
 from zylch.services import operator_rule_proposals as rules
+from zylch.services import person_request
+from zylch.services.task_assignment_types import AssignmentError
 from .permissions import DRAFT_SCOPE, PROPOSAL_SCOPE
 
 
@@ -62,6 +65,9 @@ class GrantedEffects:
                     or any(presented.get(key) != selected[0].get(key) for key in
                            ('id', 'mailbox_id', 'from_email', 'subject', 'body_plain', 'body_html'))):
                 raise ReadError('selected_source_changed')
+            request = person_request.active()
+            if request is not None and not person_request.matches_row(request, raw):
+                raise ReadError('selected_source_changed')
             instructions = await self.port.instructions(grant)
             documents = instructions['documents']
             expected = sorted([{'path': doc['path'], 'revision': doc['revision'], 'sha256': doc['sha256']}
@@ -87,7 +93,8 @@ class GrantedEffects:
                         or any(ref not in keys for ref in refs)
                         or (projected.get('task') or {}).get('state') == 'assigned'):
                     raise ReadError('native_source_scope_held_before_generation')
-            await asyncio.to_thread(preflight)
+            if request is None:
+                await asyncio.to_thread(preflight)
             from zylch.services.operator_reply_context import snapshot
             rows = await asyncio.to_thread(Storage.get_instance().get_thread_emails,
                                            binding.email, source['thread_key'])
@@ -99,17 +106,88 @@ class GrantedEffects:
             return {'source': {key: raw.get(key) for key in fields}, 'instructions': documents,
                     'correspondence': correspondence}
 
-        return replies.ReplyOperations(revalidate=revalidate, context_reader=context_reader), actor
+        def conflicts(root):
+            return asyncio.to_thread(publication.conflicts, actor.mailbox_address, root)
+
+        return replies.ReplyOperations(revalidate=revalidate, context_reader=context_reader,
+                                       conflicts=conflicts), actor
+
+    @staticmethod
+    def _recheck(actor):
+        """The owner binding as the exact publication and send services recheck it, in a thread."""
+        replies._owned(actor)
+        return actor.mailbox_address, actor.profile_uid
+
+    async def _published(self, actor, result):
+        """Publish or recover the review copy of a completed result; the outcome rides beside it."""
+        saved = result.get('result') if isinstance(result, dict) else None
+        if not isinstance(saved, dict) or not saved.get('draft_id') or not result.get('operation_id'):
+            return result
+
+        def run():
+            from zylch.storage.storage import Storage
+
+            draft = Storage.get_instance().get_draft(actor.mailbox_address, saved['draft_id'])
+            if draft is None:
+                return {'ok': False, 'cause': 'draft_not_found', 'draft_id': saved['draft_id']}
+            return publication.publish(actor.mailbox_address, actor.profile_uid, draft,
+                                       result['operation_id'], lambda: self._recheck(actor))
+
+        outcome = await asyncio.to_thread(run)
+        return {**result, 'publication': outcome}
+
+    @staticmethod
+    def _person_request(actor, thread_key, source_email_id):
+        """The exact source a person named, read from the engine store, or a refusal."""
+        from zylch.storage.storage import Storage
+
+        raw = Storage.get_instance().get_email_by_supabase_id(actor.mailbox_address, source_email_id)
+        if (not isinstance(raw, dict) or raw.get('mailbox_id') != actor.mailbox_id
+                or raw.get('thread_id') != thread_key):
+            raise ReadError('exact_source_required')
+        try:
+            return person_request.from_row(actor.mailbox_address, raw)
+        except AssignmentError:
+            raise ReadError('exact_source_required') from None
 
     async def prepare(self, token, request_key, thread_key, source_email_id, instruction_versions, request_text):
         service, actor = await self._service(token)
-        return await service.prepare(request_key,
-            {'thread_key': thread_key, 'source_email_id': source_email_id},
-            instruction_versions, request_text, actor)
+        request = await asyncio.to_thread(self._person_request, actor, thread_key, source_email_id)
+        try:
+            with person_request.scope(request):
+                result = await service.prepare(request_key,
+                    {'thread_key': thread_key, 'source_email_id': source_email_id},
+                    instruction_versions, request_text, actor)
+        except AssignmentError as error:
+            raise ReadError(str(error)) from None
+        return await self._published(actor, result)
 
     async def recover(self, token, operation_id=None, request_key=None):
         service, actor = await self._service(token)
-        return await service.recover(actor_binding=actor, operation_id=operation_id, request_key=request_key)
+        result = await service.recover(actor_binding=actor, operation_id=operation_id, request_key=request_key)
+        return await self._published(actor, result)
+
+    async def send(self, token, request_key, draft_id):
+        """Send one saved draft on the person's explicit instruction; the same key never sends twice."""
+        import re
+        from uuid import NAMESPACE_URL, uuid5
+
+        from zylch.services import operator_reply_send as sending
+        from .permissions import FULL_SCOPE
+
+        grant, binding = await self._grant(token, FULL_SCOPE)
+        actor = self._actor(grant, binding)
+        if not isinstance(request_key, str) or not re.fullmatch(r'[A-Za-z0-9_.:-]{16,128}', request_key):
+            raise ReadError('stable_request_key_required')
+        if not isinstance(draft_id, str) or not draft_id.strip():
+            raise ReadError('draft_id_required')
+        base = f'mrcall-operator-send:{actor.mailbox_id}:{request_key}'
+        operation_id = str(uuid5(NAMESPACE_URL, base))
+        retirement_id = str(uuid5(NAMESPACE_URL, base + ':retire'))
+        result = await asyncio.to_thread(sending.send, actor.mailbox_address, actor.profile_uid, draft_id,
+                                         operation_id, retirement_id, lambda: self._recheck(actor))
+        await self._grant(token, FULL_SCOPE, grant)
+        return {**result, 'request_key': request_key}
 
     async def propose(self, token, target, content, base_revision):
         grant, binding = await self._grant(token, PROPOSAL_SCOPE)

@@ -168,7 +168,7 @@ class NativeReadPort:
         if 'projects.write' in grant.scopes:
             capabilities.extend(['create_project', 'write_project'])
         if "operator.use" in grant.scopes:
-            capabilities.extend(["search_memory", "read_memory"])
+            capabilities.extend(["search_memory", "read_memory", "send_reply"])
         return {"subject": grant.subject, "profile_uid": binding.profile_uid, "email": binding.email, "company_ref": binding.company_ref, "client_id": grant.client_id, "grant_id": grant.grant_id, "capabilities": capabilities}
 
     async def search(self, grant: ReadGrant, query: str, limit: int) -> dict:

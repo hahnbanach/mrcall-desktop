@@ -34,13 +34,18 @@ def inspect(owner, uid, draft_id):
     source = resolve(owner, draft)
     if source is None or source["root"] != bound["root"] or source["target"] != bound["target"]:
         raise EvidenceRefusal("exact_source_unavailable")
+    from . import person_request
+
     original = source["source"]
     sender = addresses(original.get("from_email"))
     participants = addresses(original.get("to_email")) + addresses(original.get("cc_email"))
+    # A person's request may answer mail delivered through an alias or Bcc:
+    # the mailbox need not appear among the source's recipients. The reply
+    # still goes to the sender alone, and never to the mailbox itself.
     if (
         not sender
         or owner.lower() in sender
-        or owner.lower() not in participants
+        or (person_request.active() is None and owner.lower() not in participants)
         or bound["recipients"] != sender
         or not set(bound["cc"]) <= set(participants) - {owner.lower()} - set(sender)
     ):

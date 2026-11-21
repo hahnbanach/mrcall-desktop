@@ -1,5 +1,4 @@
 import json
-import html
 from email.utils import getaddresses
 
 from .operator_reply_operations import ReplyRefusal, ReviewRequired
@@ -64,10 +63,12 @@ def persist(source, body, actor):
     if not subject.lower().startswith("re:"):
         subject = "Re: " + subject
     from zylch.services.task_assignment_mail import references
-    refs = references(source.get("references") or "")
-    refs = list(dict.fromkeys([*refs, target]))
+    # Root first, the source's chain, the target last: the order the review
+    # publication and the exact send require. Plain text, as the outbound
+    # MIME is plain text and the review copy is rendered text/plain.
+    refs = list(dict.fromkeys([root, *references(source.get("references") or ""), target]))
     with scope(binding):
         return Storage.get_instance().create_draft(
-            actor.mailbox_address, to=[recipients[0][1]], subject=subject, body=html.escape(body).replace("\n", "<br>"),
-            in_reply_to=target, references=refs, thread_id=root,
+            actor.mailbox_address, to=[recipients[0][1]], subject=subject, body=body,
+            in_reply_to=target, references=refs, thread_id=root, body_format="plain",
         )

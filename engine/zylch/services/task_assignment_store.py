@@ -49,20 +49,27 @@ def listing() -> dict:
         return {"complete": True, "space_id": space, "items": items}
 
 
+def attach_profile(actor, conn):
+    """Attach the actor's profile database as ``assignment_profile`` and take its write lock.
+
+    The private draft and review writes run through this schema on the company
+    writer connection; the no-op UPDATE takes the profile's write lock first.
+    """
+    attached = {row[1]: row[2] for row in conn.exec_driver_sql("PRAGMA database_list")}
+    path = actor.binding[2]
+    if "assignment_profile" in attached and attached["assignment_profile"] != path:
+        conn.exec_driver_sql("DETACH DATABASE assignment_profile")
+        attached.pop("assignment_profile")
+    if "assignment_profile" not in attached:
+        conn.exec_driver_sql("ATTACH DATABASE ? AS assignment_profile", (path,))
+    conn.exec_driver_sql("UPDATE assignment_profile.emails SET id=id WHERE 0")
+    return "assignment_profile"
+
+
 def authority(actor, space, root, conn, *, locked=False, deadline=None):
     from . import task_assignment_mail as mail
 
-    schema = None
-    if locked:
-        attached = {row[1]: row[2] for row in conn.exec_driver_sql("PRAGMA database_list")}
-        path = actor.binding[2]
-        if "assignment_profile" in attached and attached["assignment_profile"] != path:
-            conn.exec_driver_sql("DETACH DATABASE assignment_profile")
-            attached.pop("assignment_profile")
-        if "assignment_profile" not in attached:
-            conn.exec_driver_sql("ATTACH DATABASE ? AS assignment_profile", (path,))
-        conn.exec_driver_sql("UPDATE assignment_profile.emails SET id=id WHERE 0")
-        schema = "assignment_profile"
+    schema = attach_profile(actor, conn) if locked else None
     keys, earliest, known = mail.component(actor, root, conn if schema else None, schema, deadline=deadline)
     matches = [dict(row) for row in conn.execute(
         select(T).where(T.c.space_id == space, T.c.thread_key.in_(keys))

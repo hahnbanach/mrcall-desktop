@@ -209,12 +209,17 @@ def link_reservation(conn, reservation, request_kwargs):
 
 
 class ReplyOperations:
-    def __init__(self, *, revalidate, context_reader, generator=None, locked_instruction_reader=None):
+    def __init__(self, *, revalidate, context_reader, generator=None, locked_instruction_reader=None, conflicts=None):
         if not callable(revalidate) or not callable(context_reader):
             raise TypeError("trusted revalidation and context reader required")
+        if conflicts is not None and not callable(conflicts):
+            raise TypeError("conflicts must be callable")
         self.revalidate, self.context_reader = revalidate, context_reader
         self.generator = generator
         self.locked_instruction_reader = locked_instruction_reader or _published_locked
+        # Handles of review copies already on the thread root; a new request
+        # refuses before it spends when one exists.
+        self.conflicts = conflicts
 
     capability = staticmethod(capability)
 
@@ -259,6 +264,16 @@ class ReplyOperations:
                    "mailbox_address": actor.mailbox_address, "context": context}
         payload_hash = _hash(payload)
         self._ensure()
+        if self.conflicts is not None:
+            with _transaction() as conn:
+                known = conn.execute(select(_operations.c.id).where(*_where(actor), _operations.c.request_key == request_key)).first()
+            if known is None:
+                copies = self.conflicts(context["source"]["thread_id"])
+                if inspect.isawaitable(copies):
+                    copies = await copies
+                if copies:
+                    named = ",".join(f"{copy['folder']}/{copy['uidvalidity']}/{copy['uid']}" for copy in copies)
+                    raise ReplyRefusal("review_copy_exists_on_thread:" + named)
         with _transaction() as conn:
             existing = conn.execute(select(_operations).where(*_where(actor), _operations.c.request_key == request_key)).mappings().one_or_none()
             if existing is not None:
@@ -314,11 +329,22 @@ class ReplyOperations:
         native_actor, space, _ = task_assignment_evidence.admission()
         if native_actor.uid != actor.profile_uid or native_actor.mailbox != actor.mailbox_address or space != actor.company_space_id:
             raise ReplyRefusal("native_review_profile_mismatch")
+        from . import person_request
         with project_store.connection(actor.company_space_id, write=True) as (conn, _):
             task_assignment_store._admit(native_actor, space, conn)
-            task, _, keys = task_assignment_store.authority(native_actor, space, context["source"]["thread_id"], conn, locked=True)
-            if context["source"].get("message_id_header") not in keys or (task or {}).get("state") == "assigned":
-                raise ReplyRefusal("native_review_source_scope_held")
+            request = person_request.active()
+            if request is None:
+                task, _, keys = task_assignment_store.authority(native_actor, space, context["source"]["thread_id"], conn, locked=True)
+                if context["source"].get("message_id_header") not in keys or (task or {}).get("state") == "assigned":
+                    raise ReplyRefusal("native_review_source_scope_held")
+            else:
+                # A person's request: the review records on the exact message
+                # they named, whatever the thread's assignment state.
+                if (context["source"].get("id") != request.source_id
+                        or context["source"].get("thread_id") != request.root
+                        or context["source"].get("message_id_header") != request.target):
+                    raise ReplyRefusal("native_review_source_scope_held")
+                task_assignment_store.attach_profile(native_actor, conn)
             with Session(bind=conn.execution_options(schema_translate_map={None: "assignment_profile"}), expire_on_commit=False) as session:
                 self._check(actor)
                 if _instruction_identity(self.locked_instruction_reader(session, actor)) != _instruction_identity(context["instructions"]):

@@ -10,6 +10,7 @@ import logging
 from sqlalchemy.orm import Session
 
 from zylch.services import project_store
+from . import person_request
 from . import task_assignment_evidence as evidence
 from . import task_assignment_identity as identity
 from . import task_assignment_mail as mail
@@ -37,6 +38,59 @@ def scope(root):
         _scope.reset(token)
 
 
+def _person_write(method, args, kwargs, values, root, request):
+    """Write the draft a person asked for: bound to the named source, held by nothing.
+
+    The projection, the RFC component and the ancestry proof are not computed:
+    a thread the assignment store cannot resolve is still the thread the
+    person named. The exact binding to the source row and the company writer
+    lock stay.
+    """
+    from zylch.storage import database as db
+    from zylch.storage.models import Email
+    from .task_assignment_store import _admit, attach_profile
+
+    actor, space, _ = evidence.admission()
+    if (
+        values["owner_id"] != actor.mailbox
+        or values["owner_id"].strip().lower() != request.mailbox
+        or root != request.root
+        or values["thread_id"] != root
+    ):
+        raise AssignmentError("Person request draft must target the requested thread")
+    if thread(values["in_reply_to"]) != request.target:
+        raise AssignmentError("Person request draft must reply to the requested message")
+    refs = values["references"] or []
+    if not isinstance(refs, (list, str)):
+        raise AssignmentError("Scoped draft references unavailable")
+    refs = mail.references(refs if isinstance(refs, str) else " ".join(refs))
+    known = request.known_identifiers()
+    if any(ref not in known for ref in refs):
+        raise AssignmentError("Person request draft must retain the requested message identifiers")
+    with db.get_session() as session:
+        row = (
+            session.query(Email)
+            .filter(Email.owner_id == actor.mailbox, Email.id == request.source_id)
+            .one_or_none()
+        )
+        stored = row.to_dict() if row is not None else None
+    if not person_request.matches_row(request, stored):
+        raise AssignmentError("Person request source changed before draft write")
+    with project_store.connection(space, write=True) as (conn, _):
+        _admit(actor, space, conn)
+        identity.recheck(actor, space)
+        attach_profile(actor, conn)
+        logger.debug("[tasks.assignment] person request draft admitted before write")
+        with Session(bind=conn.execution_options(schema_translate_map={None: "assignment_profile"}), expire_on_commit=False) as session:
+            token = _write_session.set(session)
+            try:
+                result = method(*args, **kwargs)
+                session.flush()
+                return result
+            finally:
+                _write_session.reset(token)
+
+
 def guard(method):
     signature = inspect.signature(method)
 
@@ -51,6 +105,9 @@ def guard(method):
         params = signature.bind(*args, **kwargs)
         params.apply_defaults()
         values = params.arguments
+        request = person_request.active()
+        if request is not None:
+            return _person_write(method, args, kwargs, values, root, request)
         actor, space, _ = evidence.admission()
         if values["owner_id"] != actor.mailbox or values["thread_id"] != root:
             raise AssignmentError("Scoped draft must target the exact authorized thread")

@@ -43,6 +43,8 @@ class MailFixture:
         self.messages = {"INBOX": {}, '"Archive"': {}, '"Sent"': {}}
         self.calls, self.fail_search, self.fail_fetch = [], False, False
         self.uidvalidity, self.closed, self.selected, self.next_uid = 11, 0, None, 1
+        # imaplib exposes the selected folder's UIDVALIDITY here after SELECT.
+        self.untagged_responses = {"UIDVALIDITY": [str(self.uidvalidity).encode()]}
         self.box = mailboxes.ensure_primary_mailbox()
         monkeypatch.setattr(mailboxes, "build_imap_client", self.client)
         self.root_id = self.add(ROOT, "customer@example.test", "alice@example.test")
@@ -142,11 +144,15 @@ class MailFixture:
             result = []
             for uid, raw in self.messages[self.selected].items():
                 msg = message_from_bytes(raw)
-                fields = (
-                    ["Message-ID"]
-                    if "OR" not in criteria
-                    else ["Message-ID", "References", "In-Reply-To"]
-                )
+                if len(args) >= 4 and args[1] == "HEADER":
+                    # UID SEARCH HEADER <name> <value>: match the named header alone.
+                    fields = [args[2]]
+                else:
+                    fields = (
+                        ["Message-ID"]
+                        if "OR" not in criteria
+                        else ["Message-ID", "References", "In-Reply-To"]
+                    )
                 if any(target in str(msg.get(field, "")) for target in targets for field in fields):
                     result.append(str(uid).encode())
             return "OK", [b" ".join(result)]

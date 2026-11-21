@@ -3,6 +3,8 @@
 import hashlib
 import json
 import re
+from email import policy
+from email.parser import BytesParser
 from typing import Any
 
 from .exact_draft_delivery import EvidenceRefusal
@@ -23,13 +25,8 @@ class ReviewMailbox:
     def close(self) -> None:
         self.client.disconnect()
 
-    def inventory(
-        self,
-        special_use: str = "Drafts",
-        *,
-        search_header: str | None = None,
-        search_value: str | None = None,
-    ) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+    def _select(self, special_use: str) -> str:
+        """Select the one folder with this special use, read-only; returns its UIDVALIDITY."""
         status, folders = self.conn.list()
         if status != "OK" or not isinstance(folders, list):
             raise EvidenceRefusal("drafts_folder_unavailable")
@@ -46,7 +43,74 @@ class ReviewMailbox:
         values = self.conn.untagged_responses.get("UIDVALIDITY", [])
         if len(values) != 1 or not values[0].isdigit():
             raise EvidenceRefusal("uidvalidity_unavailable")
-        validity = values[0].decode("ascii")
+        return values[0].decode("ascii")
+
+    def headers(
+        self,
+        special_use: str,
+        search_header: str,
+        search_value: str,
+        *,
+        limit: int = 200,
+    ) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+        """From, Date and the two identifiers of the messages matching one header, no body.
+
+        Bounded by message count, never by body size: a reply with a large
+        attachment does not fail it. More matches than ``limit`` refuse.
+        """
+        validity = self._select(special_use)
+        if (
+            search_header not in {"Message-ID", "X-CS-Engine-Draft-ID", "In-Reply-To"}
+            or not search_value
+            or any(c in search_value for c in "\r\n")
+        ):
+            raise EvidenceRefusal("invalid_inventory_query")
+        quoted = '"' + search_value.replace("\\", "\\\\").replace('"', '\\"') + '"'
+        search = ("HEADER", search_header, quoted)
+        status, data = self.conn.uid("SEARCH", None, *search)
+        if (
+            status != "OK"
+            or not isinstance(data, list)
+            or len(data) != 1
+            or not isinstance(data[0], bytes)
+        ):
+            raise EvidenceRefusal("incomplete_inventory")
+        uids = data[0].split()
+        if len(set(uids)) != len(uids) or any(not uid.isdigit() for uid in uids):
+            raise EvidenceRefusal("incomplete_inventory")
+        if len(uids) > limit:
+            raise EvidenceRefusal("sent_search_exceeds_bound")
+        fields = "FROM DATE IN-REPLY-TO MESSAGE-ID"
+        rows = []
+        for uid in uids:
+            status, parts = self.conn.uid("FETCH", uid.decode("ascii"), f"(UID BODY.PEEK[HEADER.FIELDS ({fields})])")
+            payloads = [part for part in parts or [] if isinstance(part, tuple)]
+            if status != "OK" or len(payloads) != 1:
+                raise EvidenceRefusal("incomplete_inventory")
+            meta, raw = payloads[0]
+            actual = re.search(rb"\bUID (\d+)\b", meta)
+            if not actual or actual[1] != uid or not isinstance(raw, bytes):
+                raise EvidenceRefusal("incomplete_inventory")
+            message = BytesParser(policy=policy.default).parsebytes(raw)
+            rows.append(
+                {
+                    "uid": uid.decode(),
+                    "from": str(message.get("From") or ""),
+                    "date": str(message.get("Date") or ""),
+                    "message_id": str(message.get("Message-ID") or ""),
+                    "in_reply_to": str(message.get("In-Reply-To") or ""),
+                }
+            )
+        return rows, {"complete": True, "search": list(search), "folder": self.folder, "uidvalidity": validity}
+
+    def inventory(
+        self,
+        special_use: str = "Drafts",
+        *,
+        search_header: str | None = None,
+        search_value: str | None = None,
+    ) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+        validity = self._select(special_use)
         search = ("ALL",)
         if search_header is not None:
             if (

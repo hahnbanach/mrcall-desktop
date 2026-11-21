@@ -1876,8 +1876,12 @@ class Storage:
         attachment_paths: list = None,
         cc: list = None,
         bcc: list = None,
+        body_format: str = None,
     ) -> Dict[str, Any]:
         """Create a draft email, or return the identical one that already exists.
+
+        ``body_format`` is ``plain`` or ``html``; left out, the row keeps the
+        table default. It is not part of the draft identity below.
 
         Idempotent within DRAFT_DEDUP_WINDOW_HOURS: an unsent draft for the
         same owner with the same recipients, subject, body, thread, cc, bcc
@@ -2008,6 +2012,7 @@ class Storage:
                 provider=provider,
                 status="draft",
                 attachment_paths=attach_list,
+                **({"body_format": body_format} if body_format else {}),
             )
             session.add(draft)
             session.flush()
