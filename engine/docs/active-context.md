@@ -154,10 +154,10 @@ name it.
   preparation had a refused `create_draft` call, and its draft then stays in
   the engine, which the Desktop app does not list. This release removes one
   cause: the refusal of a References chain folded over lines.
-- The MCP route for a person's drafts and sends is unreleased and has no live
-  acceptance: no client of this work is connected, the route exists for the
-  Café 124 production profile only, and every full delegation already
-  approved gains `send_reply` at release. The Drafts inventories it runs read
+- Live client acceptance of the MCP draft and send route is pending.
+  The hosted endpoint is configured for Café 124 production only.
+  A full delegation includes `send_reply` when its engine runs dev6.
+  The Drafts inventories it runs read
   the whole folder (1,000 messages, 8 MiB, 2 MiB per message); a folder beyond
   that refuses with the cause named.
 - With the telephone listener configured, a voice admission that is not
