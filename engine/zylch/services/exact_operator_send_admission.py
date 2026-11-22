@@ -73,7 +73,7 @@ def resolve(owner, draft):
         # A person's request: the source row alone identifies the thread; the
         # ancestry proof over the stored rows is not built, so a thread the
         # assignment store cannot resolve is still answerable.
-        if identifier(request.target) != target or request.source_id != source["id"]:
+        if request.mailbox != owner.strip().lower() or not person_request.matches_row(request, source):
             raise AssignmentError("person_request_source_mismatch")
     else:
         from types import SimpleNamespace

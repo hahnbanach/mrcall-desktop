@@ -4,11 +4,22 @@ import hashlib
 import json
 import re
 from email import policy
+from email.errors import HeaderParseError
 from email.parser import BytesParser
 from typing import Any
 
 from .exact_draft_delivery import EvidenceRefusal
 from .exact_draft_publication_mime import observation
+
+
+def _single_header(message, name):
+    try:
+        values = message.get_all(name, [])
+        if len(values) == 1 and not values[0].defects:
+            return str(values[0])
+    except (HeaderParseError, IndexError, ValueError):
+        pass
+    return ""
 
 
 class ReviewMailbox:
@@ -95,10 +106,10 @@ class ReviewMailbox:
             rows.append(
                 {
                     "uid": uid.decode(),
-                    "from": str(message.get("From") or ""),
-                    "date": str(message.get("Date") or ""),
-                    "message_id": str(message.get("Message-ID") or ""),
-                    "in_reply_to": str(message.get("In-Reply-To") or ""),
+                    "from": _single_header(message, "From"),
+                    "date": _single_header(message, "Date"),
+                    "message_id": _single_header(message, "Message-ID"),
+                    "in_reply_to": _single_header(message, "In-Reply-To"),
                 }
             )
         return rows, {"complete": True, "search": list(search), "folder": self.folder, "uidvalidity": validity}

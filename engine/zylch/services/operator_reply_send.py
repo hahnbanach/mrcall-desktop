@@ -9,13 +9,15 @@ review copy after a verified send. Nothing here generates text.
 
 import asyncio
 from datetime import datetime, timezone
+from email import policy
+from email.errors import HeaderParseError
 from email.utils import parsedate_to_datetime
 
 from zylch.storage.draft_operations import DraftOperations, OperationConflict
 
 from . import person_request
-from .exact_draft_delivery import EvidenceRefusal, addresses, snapshot
-from .exact_draft_publication_mime import identifier, matches
+from .exact_draft_delivery import EvidenceRefusal, snapshot
+from .exact_draft_publication_mime import identifier, identifiers, matches
 from .exact_draft_retirement_evidence import handle, related
 from .task_assignment_types import AssignmentError
 
@@ -39,7 +41,7 @@ def _held(draft_id, operation_id, cause, **extra):
     }
 
 
-def request_for(owner, draft):
+def request_for(owner, mailbox_id, draft):
     """The person's source: the one stored ordinary row the draft replies to."""
     from sqlalchemy import select
 
@@ -58,6 +60,8 @@ def request_for(owner, draft):
     if len(rows) != 1:
         raise AssignmentError("exact_source_required")
     row = dict(rows[0])
+    if row.get("mailbox_id") != mailbox_id:
+        raise AssignmentError("person_request_source_mismatch")
     if draft.get("thread_id") not in (None, row.get("thread_id")):
         raise AssignmentError("exact_source_required")
     return person_request.from_row(owner, row)
@@ -80,13 +84,26 @@ def _created(draft):
 def _sent_date(value):
     try:
         parsed = parsedate_to_datetime(value)
+        if parsed is None:
+            return None
+        if parsed.tzinfo is None:
+            parsed = parsed.replace(tzinfo=timezone.utc)
+        return parsed.astimezone(timezone.utc).replace(tzinfo=None)
     except (TypeError, ValueError, IndexError, OverflowError):
         return None
-    if parsed is None:
+
+
+def _sent_sender(value):
+    if not value:
         return None
-    if parsed.tzinfo is None:
-        parsed = parsed.replace(tzinfo=timezone.utc)
-    return parsed.astimezone(timezone.utc).replace(tzinfo=None)
+    try:
+        header = policy.default.header_factory("From", value)
+        if header.defects or len(header.addresses) != 1:
+            return None
+        address = header.addresses[0]
+    except (HeaderParseError, IndexError, ValueError):
+        return None
+    return address.addr_spec.lower() if address.username and address.domain else None
 
 
 def preflight(owner, uid, draft, root, target, mailbox):
@@ -105,11 +122,14 @@ def preflight(owner, uid, draft, root, target, mailbox):
     created = _created(draft)
     sent, info = mailbox.headers("Sent", "In-Reply-To", target, limit=SENT_SEARCH_LIMIT)
     for row in sent:
-        sender = addresses([row["from"]]) if row["from"] else []
-        if sender and sender != [owner.lower()]:
+        targets = identifiers(row["in_reply_to"])
+        if not targets:
+            raise EvidenceRefusal("incomplete_inventory")
+        if targets != [target]:
             continue
+        sender = _sent_sender(row["from"])
         when = _sent_date(row["date"])
-        if not sender or when is None or created is None or when >= created:
+        if sender is None or when is None or created is None or (sender == owner.lower() and when >= created):
             return "reply_already_sent", [
                 {"folder": info["folder"], "uidvalidity": info["uidvalidity"], "uid": row["uid"], "date": row["date"]}
             ]
@@ -153,6 +173,11 @@ def retire(owner, uid, draft_id, root, retirement_id, recheck, mailbox_factory):
 
     if draft is None:
         return pending("draft_not_found")
+    try:
+        if recheck() != (owner, uid):
+            return pending("owner_profile_mismatch")
+    except (AssignmentError, EvidenceRefusal) as error:
+        return pending(str(error))
     store = DraftOperations()
     ids = retirement_ids(retirement_id)
     found = []
@@ -217,7 +242,7 @@ def _inventory_cause(error):
     return "drafts_inventory_unavailable:provider_observation_unavailable"
 
 
-def send(owner, uid, draft_id, operation_id, retirement_id, recheck, *, mailbox_factory=None):
+def send(owner, uid, mailbox_id, draft_id, operation_id, retirement_id, recheck, *, mailbox_factory=None):
     """One send on a person's instruction; the same operation id never sends twice."""
     from zylch.storage.storage import Storage
 
@@ -229,9 +254,15 @@ def send(owner, uid, draft_id, operation_id, retirement_id, recheck, *, mailbox_
     if draft is None:
         return _held(draft_id, operation_id, "draft_not_found")
     try:
-        request = request_for(owner, draft)
+        request = request_for(owner, mailbox_id, draft)
     except (AssignmentError, EvidenceRefusal) as error:
         return _held(draft_id, operation_id, str(error))
+    def recheck_source():
+        binding = recheck()
+        if request_for(owner, mailbox_id, draft) != request:
+            raise AssignmentError("person_request_source_mismatch")
+        return binding
+
     try:
         with person_request.scope(request):
             try:
@@ -257,10 +288,10 @@ def send(owner, uid, draft_id, operation_id, retirement_id, recheck, *, mailbox_
                 if refusal is not None:
                     cause, handles = refusal
                     return _held(draft_id, operation_id, cause, provider_handles=handles)
-            answer = asyncio.run(exact.send(owner, uid, draft_id, expected, operation_id, bound, recheck))
+            answer = asyncio.run(exact.send(owner, uid, draft_id, expected, operation_id, bound, recheck_source))
     except AssignmentError as error:
         return _held(draft_id, operation_id, str(error))
     if not answer.get("ok"):
         return {**answer, "cleanup": None}
-    cleanup = retire(owner, uid, draft_id, bound["root"], retirement_id, recheck, factory)
+    cleanup = retire(owner, uid, draft_id, bound["root"], retirement_id, recheck_source, factory)
     return {**answer, "cleanup": cleanup}

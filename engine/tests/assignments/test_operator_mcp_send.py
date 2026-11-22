@@ -47,15 +47,17 @@ class Mailbox:
     def reset(cls, sent):
         cls.folders = {"Drafts": [], "Sent": sent, "Trash": []}
 
-    def _rows(self, special_use, flags):
-        return [observation(raw, str(index + 1), flags)
-                for index, raw in enumerate(Mailbox.folders[special_use]) if raw is not None]
-
     def inventory(self, special_use="Drafts", *, search_header=None, search_value=None):
         flags = ["\\Draft"] if special_use == "Drafts" else []
-        rows = self._rows(special_use, flags)
-        if search_header is not None:
-            rows = [row for row in rows if str(row["message"].get(search_header) or "").strip() == search_value]
+        rows = []
+        for index, raw in enumerate(Mailbox.folders[special_use]):
+            if raw is None:
+                continue
+            if search_header is not None:
+                message = message_from_bytes(raw, policy=default)
+                if search_value.lower() not in str(message.get(search_header) or "").lower():
+                    continue
+            rows.append(observation(raw, str(index + 1), flags))
         return rows, {"complete": True, "folder": special_use, "uidvalidity": Mailbox.validity[special_use],
                       "digest": hashlib.sha256(str([(r["uid"], r["raw_fingerprint"]) for r in rows]).encode()).hexdigest()}
 
@@ -65,7 +67,7 @@ class Mailbox:
             if raw is None:
                 continue
             message = message_from_bytes(raw, policy=default)
-            if str(message.get(search_header) or "").strip() != search_value:
+            if search_value.lower() not in str(message.get(search_header) or "").lower():
                 continue
             rows.append({"uid": str(index + 1), "from": str(message.get("From") or ""),
                          "date": str(message.get("Date") or ""), "message_id": str(message.get("Message-ID") or ""),
@@ -129,6 +131,56 @@ def test_a_grant_without_full_access_cannot_send(env, mail, monkeypatch):
         asyncio.run(effects.send("token", KEY, "any-draft"))
 
 
+def change_source_mailbox(mcp):
+    from zylch.storage import database as db
+    from zylch.storage.models import Email, Mailbox as StoredMailbox
+
+    with db.get_session() as session:
+        box = StoredMailbox(owner_id=OWNER, address="second@example.test")
+        session.add(box)
+        session.flush()
+        session.get(Email, mcp.mail.root_id).mailbox_id = box.id
+
+
+@pytest.mark.parametrize("when", ["initial", "preflight", "retry"])
+def test_send_requires_the_granted_source_mailbox(mcp, monkeypatch, when):
+    draft_id = prepared(mcp)
+    if when == "preflight":
+        original = sending.preflight
+
+        def checked(*args):
+            result = original(*args)
+            change_source_mailbox(mcp)
+            return result
+
+        monkeypatch.setattr(sending, "preflight", checked)
+    else:
+        if when == "retry":
+            assert send(mcp, draft_id)["ok"]
+        change_source_mailbox(mcp)
+    result = send(mcp, draft_id)
+    assert not result["ok"] and result["cause"] == "person_request_source_mismatch", result
+    assert mcp.smtp.sendmail.call_count == int(when == "retry")
+
+
+def test_verified_send_preserves_review_copy_if_mailbox_changes_before_cleanup(mcp, monkeypatch):
+    draft_id = prepared(mcp)
+    original = send_service.send
+
+    async def complete(*args):
+        result = await original(*args)
+        assert result["ok"]
+        change_source_mailbox(mcp)
+        return result
+
+    monkeypatch.setattr(send_service, "send", complete)
+    result = send(mcp, draft_id)
+    assert result["ok"] and result["effect_certainty"] == "verified"
+    assert not result["cleanup"]["ok"] and result["cleanup"]["cause"] == "person_request_source_mismatch"
+    assert len(Mailbox.folders["Drafts"]) == 1 and not Mailbox.folders["Trash"]
+    assert mcp.smtp.sendmail.call_count == 1
+
+
 def test_send_on_a_held_thread_sends_once_and_retires_the_copy(mcp):
     draft_id = prepared(mcp)
     mcp.mail.add(REPLY, OWNER, "customer@example.test", folder='"Sent"', reply=ROOT)
@@ -189,14 +241,15 @@ def test_an_edited_review_copy_refuses_and_sends_nothing(mcp):
     assert Storage.get_instance().get_draft(OWNER, draft_id)["status"] == "draft"
 
 
-def sent_reply(mcp, date, sender=OWNER):
+def sent_reply(mcp, date, sender=OWNER, target=ROOT):
     lines = [f"From: {sender}" if sender else None, f"Date: {date}" if date else None,
-             "To: customer@example.test", "Subject: Re: earlier", f"In-Reply-To: {ROOT}", f"References: {ROOT}",
+             "To: customer@example.test", "Subject: Re: earlier", f"In-Reply-To: {target}", f"References: {ROOT}",
              "Message-ID: <gmail-sent@example.test>", "", "Sent from Gmail"]
     mcp.sent.append("\r\n".join(line for line in lines if line is not None).encode())
 
 
-@pytest.mark.parametrize("case", ["after", "before", "undated", "other_sender"])
+@pytest.mark.parametrize("case", ["after", "before", "undated", "other_sender", "malformed_sender",
+                                  "multiple_senders", "unknown_date_other_sender", "multiple_targets"])
 def test_a_reply_already_sent_from_gmail_refuses(mcp, case):
     draft_id = prepared(mcp)
     if case == "after":
@@ -205,15 +258,23 @@ def test_a_reply_already_sent_from_gmail_refuses(mcp, case):
         sent_reply(mcp, "Thu, 01 Jan 2015 12:00:00 +0000")
     elif case == "undated":
         sent_reply(mcp, None)
+    elif case == "unknown_date_other_sender":
+        sent_reply(mcp, None, sender="colleague@example.test")
+    elif case == "malformed_sender":
+        sent_reply(mcp, "Sat, 21 Nov 2099 12:00:00 +0000", sender="not-a-mailbox")
+    elif case == "multiple_senders":
+        sent_reply(mcp, "Sat, 21 Nov 2099 12:00:00 +0000", sender=f"{OWNER}, other@example.test")
+    elif case == "multiple_targets":
+        sent_reply(mcp, "Sat, 21 Nov 2099 12:00:00 +0000", target=f"{ROOT} <other@example.test>")
     else:
         sent_reply(mcp, "Sat, 21 Nov 2099 12:00:00 +0000", sender="colleague@example.test")
     answer = send(mcp, draft_id)
-    if case in {"after", "undated"}:
+    if case in {"after", "undated", "malformed_sender", "multiple_senders", "unknown_date_other_sender"}:
         assert not answer["ok"] and answer["cause"] == "reply_already_sent", answer
         assert answer["provider_handles"][0]["folder"] == "Sent"
         assert mcp.smtp.sendmail.call_count == 0
     else:
-        assert answer["ok"], answer
+        assert answer["ok"], answer["cause"]
         assert mcp.smtp.sendmail.call_count == 1
 
 
