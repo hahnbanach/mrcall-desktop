@@ -234,7 +234,7 @@ def _reply_source(actor, space, current, source_id, root, box, client, folder, m
         return mail._member_fetch(client, folder, mid, deadline=deadline)
 
 
-def reply(source_id: str, root: str, *, deadline=None) -> dict:
+def reply(source_id: str, root: str, *, deadline=None, mailbox_scope=None) -> dict:
     deadline = time.monotonic() + 40 if deadline is None else deadline
     thread(root)
     identifier(source_id)
@@ -256,9 +256,11 @@ def reply(source_id: str, root: str, *, deadline=None) -> dict:
     try:
         route_digest = trust.delivery_routes_digest(space)
         row = mail.scoped_source(actor, source_id)
-        boxes = mail.configured(actor, current)
-        box = mailboxes.by_id(actor.mailbox, row["mailbox_id"])
-        if box is None or box.removed or box.id not in {item.id for item in boxes}:
+        boxes = mail.evidence_boxes(actor, current, root, mailbox_scope)
+        box = next((item for item in boxes if item.id == row["mailbox_id"]), None)
+        if box is not None and mailbox_scope is None:
+            box = mailboxes.by_id(actor.mailbox, box.id)
+        if box is None or box.removed:
             raise AssignmentError("Scoped reply mailbox unavailable")
         mid = thread(row["message_id_header"])
         scoped = [item for item in mail.rows(actor, root, deadline=deadline) if item["mailbox_id"] == box.id]
@@ -435,7 +437,7 @@ class _MemberActivity:
     payload: dict | None
 
 
-def _member_activity(source_id, root, *, deadline, local_hint=False):
+def _member_activity(source_id, root, *, deadline, local_hint=False, mailbox_scope=None):
     thread(root)
     identifier(source_id)
     actor, space, current = admission()
@@ -445,11 +447,11 @@ def _member_activity(source_id, root, *, deadline, local_hint=False):
     status = _ActivityStatus.UNKNOWN
     try:
         routes = trust.delivery_routes_digest(space)
-        mailbox_scope = mail.mailbox_digest(actor)
+        inventory_digest = mail.mailbox_digest(actor)
         component = mail.component_digest(actor, root, deadline=deadline)
         row = mail.scoped_source(actor, source_id)
         mid = thread(row["message_id_header"])
-        boxes = mail.configured(actor, current)
+        boxes = mail.evidence_boxes(actor, current, root, mailbox_scope)
         box = next((item for item in boxes if item.id == row["mailbox_id"] and not item.removed), None)
         if box is None:
             raise AssignmentError("Member observation mailbox unavailable")
@@ -516,7 +518,7 @@ def _member_activity(source_id, root, *, deadline, local_hint=False):
                                   reason="NEEDS_HUMAN_VERIFICATION", source=source, digest=digest(source))
                     status = _ActivityStatus.POSITIVE
         if (identity.recheck(actor, space) != current or trust.delivery_routes_digest(space) != routes
-                or mail.mailbox_digest(actor) != mailbox_scope
+                or mail.mailbox_digest(actor) != inventory_digest
                 or mail.component_digest(actor, root, deadline=deadline) != component
                 or mail.row_digest([mail.scoped_source(actor, source_id)]) != mail.row_digest([row])
                 or time.monotonic() >= deadline):

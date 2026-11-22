@@ -5,13 +5,14 @@
 The explicit company task subtype ships in Desktop `v0.1.56`. Signed operations,
 RPC, provider protocol fixtures and scoped draft enforcement have executable
 local acceptance under the [delivery plan](../../../docs/execution-plans/2026-10-08-explicit-task-assignment.md).
-Six hosted company engines have compatible source, verified root-owned trust,
-tenant-inaccessible independent signing material and complete assignment reads.
-Both maintained clones install kernel `v0.51.0`. Café 124's four profiles share
+The original acceptance verified six hosted company engines with root-owned
+trust, independent signing material and complete reads on the tested assignments.
+Both clones used kernel `v0.51.0` for that acceptance. Café 124's four profiles share
 one space. MrCall support and Mario share support's company space after the
 separately authorized [fenced join](../../../docs/execution-plans/2026-10-08-mrcall-company-memory-sharing.md),
-with complete authenticated assignment reads for both members and private mailbox/task
-isolation. No real assignment or customer send is part of that acceptance.
+with private mailbox and task isolation. The join acceptance verified
+authenticated assignment reads for both members. It used no real assignment
+or customer send.
 
 Private [ordinary tasks](task-management.md), including Qonto financial rows,
 retain their own storage and visibility. Assignment records share only company
@@ -72,8 +73,16 @@ of the address, when available. The same `evidence_ref` is present in the
 profile's private `diagnostics.events` response for the request trace. Match
 it to an active row from `mailboxes.list` by taking the lowercase hexadecimal
 SHA-256 of the row's UTF-8 `id`. This also distinguishes identical masked labels.
-The rejected row may differ from the conversation's source mailbox.
-The projection still holds the conversation. Hosted dev5 predates this diagnostic.
+In dev6, an unrelated active mailbox could make an entire projection unavailable.
+Starting with hosted dev7, an unassigned thread whose archived component is
+wholly in the actor's verified mailboxes can be projected even if the profile
+also connects mailboxes verified to other company members. Provider reads
+remain inside the actor's verified mailboxes. A complete Sent scan includes
+every such mailbox, including aliases with no archived row in the thread.
+Before returning a result based on this narrower scope, the engine rechecks
+membership, active mailbox bindings and the thread rows. A mixed component,
+an unbound active address or a source whose mailbox cannot be identified stays
+held. Direct source confirmation and closure keep their existing full checks.
 
 The engine reads public trust at the fixed path
 `/etc/mrcalld/assignment-trust/<space-id>.json`. Version 1 requires exactly:

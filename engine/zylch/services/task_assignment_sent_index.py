@@ -296,13 +296,13 @@ def _correspondence(actor, box, root, scoped, mid, count, deadline, folder, stat
         pass
 
 
-def candidates(actor, current, known, root, *, deadline):
+def candidates(actor, current, known, root, *, deadline, mailbox_scope=None):
     """Fresh complete Sent membership; never publish another owner's mail content."""
     from . import task_assignment_evidence as evidence
 
     scope = mail.mailbox_digest(actor)
     result = []
-    for box in mail.configured(actor, current):
+    for box in mail.evidence_boxes(actor, current, root, mailbox_scope):
         entry = _entry(actor, box, scope, deadline)
         remaining = deadline - time.monotonic()
         if remaining <= 0 or not entry.lock.acquire(timeout=max(0, remaining)):

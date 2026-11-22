@@ -69,10 +69,10 @@ def project(root: str) -> dict:
     _diagnostic_result("assignment.projection.terminal", root, started, value)
     return value
 
-def _early_source_sent(actor, current, observed, root, deadline):
+def _early_source_sent(actor, current, observed, root, deadline, *, mailbox_scope=None):
     source = observed["source"]
     provider = source["provider"]
-    box = next((box for box in mail.configured(actor, current) if box.id == source["mailbox_id"]), None)
+    box = next((box for box in mail.evidence_boxes(actor, current, root, mailbox_scope) if box.id == source["mailbox_id"]), None)
     if box is None:
         raise AssignmentError("Early reply mailbox unavailable")
     with evidence.provider_client(actor, box, root, deadline) as client:
@@ -94,7 +94,7 @@ class _EarlyReplies(list):
         self.force_full_scan = force_full_scan
 
 
-def _early_replies(actor, current, known, root, deadline):
+def _early_replies(actor, current, known, root, deadline, **read_scope):
     own = set(current["members"][actor.uid])
     candidates, mids = {}, set()
     try:
@@ -119,18 +119,18 @@ def _early_replies(actor, current, known, root, deadline):
     for source_id in candidates:
         if time.monotonic() >= deadline:
             raise AssignmentError("Ownership evidence deadline exceeded")
-        activity = evidence._member_activity(source_id, root, deadline=deadline, local_hint=True)
+        activity = evidence._member_activity(source_id, root, deadline=deadline, local_hint=True, **read_scope)
         if activity.status is evidence._ActivityStatus.ABSENT:
             absent = True
         elif activity.status is evidence._ActivityStatus.NON_WITNESS:
-            replies.append(evidence.reply(source_id, root, deadline=deadline))
+            replies.append(evidence.reply(source_id, root, deadline=deadline, **read_scope))
         else:
-            if activity.status is evidence._ActivityStatus.POSITIVE and not _early_source_sent(actor, current, activity.payload, root, deadline):
+            if activity.status is evidence._ActivityStatus.POSITIVE and not _early_source_sent(actor, current, activity.payload, root, deadline, **read_scope):
                 raise AssignmentError("Early member source no longer sent")
             replies.append(activity.payload)
     if absent:
         scope = mail.mailbox_digest(actor)
-        for box in mail.configured(actor, current):
+        for box in mail.evidence_boxes(actor, current, root, read_scope.get("mailbox_scope")):
             entry = sent_index._entry(actor, box, scope, deadline)
             sent_index._acquire(entry.lock, deadline)
             try:
@@ -215,6 +215,8 @@ def _project(root: str, deadline: float) -> dict:
         "route_digest": None,
         "reason": "SOURCE_UNAVAILABLE",
     }
+    mailbox_scope = None
+    checking_scope = False
     try:
         value["route_digest"] = trust.delivery_routes_digest(space)
         if not stored["complete"]:
@@ -265,13 +267,17 @@ def _project(root: str, deadline: float) -> dict:
                 value.update(complete=True, state="assigned", hold_auto_reply=True,
                              reason="HUMAN_ASSIGNMENT_ACTIVE")
             else:
-                replies = _early_replies(actor, current, known, root, deadline)
+                checking_scope = True
+                mailbox_scope = mail.ProjectionMailboxes.capture(actor, current, root, known)
+                checking_scope = False
+                read_scope = {"mailbox_scope": mailbox_scope} if mailbox_scope is not None else {}
+                replies = _early_replies(actor, current, known, root, deadline, **read_scope)
                 full = getattr(replies, "force_full_scan", False) or not replies or any(not item["complete"] for item in replies)
                 # A hold ends only on the complete Sent membership: a newer
                 # member message can sit in Sent before the archive holds it.
                 recheck = not full and _member_hold_lapsed(actor, known, replies, aliases)
                 if full or recheck:
-                    discovered = sent_index.candidates(actor, current, known, root, deadline=deadline)
+                    discovered = sent_index.candidates(actor, current, known, root, deadline=deadline, **read_scope)
                     seen = {item.get("source_id") for item in replies} if recheck else set()
                     for item in discovered:
                         if time.monotonic() >= deadline:
@@ -280,8 +286,8 @@ def _project(root: str, deadline: float) -> dict:
                             continue
                         if "source_id" in item:
                             # Signed-source confirmation retains the same live checks.
-                            activity = evidence._member_activity(item["source_id"], root, deadline=deadline)
-                            replies.append(evidence.reply(item["source_id"], root, deadline=deadline)
+                            activity = evidence._member_activity(item["source_id"], root, deadline=deadline, **read_scope)
+                            replies.append(evidence.reply(item["source_id"], root, deadline=deadline, **read_scope)
                                            if activity.status is evidence._ActivityStatus.NON_WITNESS else activity.payload)
                         else:
                             replies.append(item)
@@ -312,7 +318,14 @@ def _project(root: str, deadline: float) -> dict:
                 complete=False, state="conflict", hold_auto_reply=True, reason="ASSIGNMENT_CHANGED"
             )
             value["task"], value["events"] = latest["task"], latest["events"]
+        if mailbox_scope is not None:
+            mailbox_scope.recheck(actor, identity.recheck(actor, space), root, deadline)
     except Exception as error:
+        if checking_scope or mailbox_scope is not None:
+            verified = (isinstance(error, mail.ProjectionScopeChanged) and error.requested_row_verified
+                        and root in value["current_message_ids"])
+            value.update(authoritative_thread_key=root, component_thread_keys=[root], component_scope_present=False,
+                         current_message_ids=[root] if verified else [], reply_evidence=[])
         _diagnostic("assignment.source.failed", "failed", root, started, error=error)
         logger.warning("[tasks.assignment] projection held type=%s", type(error).__name__)
         value.update(

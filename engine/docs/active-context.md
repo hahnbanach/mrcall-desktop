@@ -94,9 +94,11 @@ engine that clients only read keeps its archive current. Its
 [plan](../../docs/execution-plans/2026-11-18-engine-owned-mail-sync.md) owns
 that evidence.
 
-The hosted source release is `hosted-engine-0.1.57.dev6`. The previous release
-for per-unit rollback is `/home/mrcalld/releases/hosted-engine-0.1.57.dev5-e1c1af32d0d0`.
-The HB operator plan records the individual service switches.
+The hosted dev7 source narrows [assignment reads](features/task-assignment.md)
+to the member's verified mailboxes when a profile also connects another
+verified member's mailbox. Dev7 rolls back to the dev6 release. The
+[delivery plan](../../docs/execution-plans/2026-11-22-assignment-mailbox-scope.md)
+and HB runtime record track the hosted rollout.
 
 A person's request through the profile's operator MCP is admitted on every
 assignment state: `prepare_reply` saves a plain-text draft bound to the
@@ -154,7 +156,8 @@ name it.
   preparation had a refused `create_draft` call, and its draft then stays in
   the engine, which the Desktop app does not list. This release removes one
   cause: the refusal of a References chain folded over lines.
-- Live client acceptance of the MCP draft and send route is pending.
+- A real MCP reply was drafted and sent. Retirement of the review copy
+  was verified. The outer receipt can still report pending cleanup.
   The hosted endpoint is configured for Café 124 production only.
   A full delegation includes `send_reply` when its engine runs dev6.
   The Drafts inventories it runs read

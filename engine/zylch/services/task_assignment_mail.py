@@ -4,6 +4,7 @@ import hashlib
 import logging
 import re
 import time
+from dataclasses import dataclass
 from email.utils import getaddresses
 from typing import Any
 
@@ -336,17 +337,86 @@ def _report_unverified_mailbox(box) -> None:
         pass
 
 
-def configured(actor, current: dict) -> list:
-    result = mailboxes.for_owner(actor.mailbox)
-    if not result or len(result) > 20:
+def _inventory(actor):
+    boxes = mailboxes.for_owner(actor.mailbox)
+    if not boxes or len(boxes) > 20:
         raise AssignmentError("Mail provider scope is unavailable")
+    return boxes
+
+
+def configured(actor, current: dict) -> list:
+    boxes = _inventory(actor)
     aliases = set(current["members"][actor.uid])
-    unverified = [box for box in result if box.address.strip().lower() not in aliases]
+    unverified = [box for box in boxes if box.address.strip().lower() not in aliases]
     if unverified:
         for box in unverified:
             _report_unverified_mailbox(box)
         raise AssignmentError("Mailbox lacks verified member binding")
-    return result
+    return boxes
+
+
+class ProjectionScopeChanged(AssignmentError):
+    def __init__(self, message, *, requested_row_verified=False):
+        super().__init__(message)
+        self.requested_row_verified = requested_row_verified
+
+
+def _inventory_binding(boxes):
+    return tuple(sorted((box.id, box.address, box.imap_host, box.imap_port, box.is_primary)
+                        for box in boxes))
+
+
+@dataclass(frozen=True)
+class ProjectionMailboxes:
+    actor: object
+    root: str
+    trust_digest: str
+    inventory: tuple
+    component_rows: str
+    actor_ids: frozenset
+
+    @classmethod
+    def capture(cls, actor, current, root, known):
+        boxes = _inventory(actor)
+        own = set(current["members"][actor.uid])
+        excluded = [box for box in boxes if box.address.strip().lower() not in own]
+        owned_ids = frozenset(box.id for box in boxes if box.address.strip().lower() in own)
+        component_ids = {row.get("mailbox_id") for row in known}
+        others = {alias for uid, aliases in current["members"].items() if uid != actor.uid
+                  for alias in aliases}
+        if (excluded and not component_ids) or not component_ids <= owned_ids:
+            for box in excluded:
+                if box.id in component_ids or box.address.strip().lower() not in others:
+                    _report_unverified_mailbox(box)
+            raise ProjectionScopeChanged("Thread mailbox lacks verified member binding")
+        if not excluded:
+            return None
+        unbound = [box for box in excluded if box.address.strip().lower() not in others]
+        if unbound:
+            for box in unbound:
+                _report_unverified_mailbox(box)
+            raise ProjectionScopeChanged("Mailbox lacks verified member binding",
+                                         requested_row_verified=any(row["message_id_header"] == root for row in known))
+        return cls(actor, root, digest(current), _inventory_binding(boxes), row_digest(known), owned_ids)
+
+    def boxes(self, actor, current, root):
+        boxes = _inventory(actor)
+        if (actor != self.actor or root != self.root or digest(current) != self.trust_digest
+                or _inventory_binding(boxes) != self.inventory):
+            raise ProjectionScopeChanged("Projection mailbox scope changed")
+        return [box for box in boxes if box.id in self.actor_ids]
+
+    def recheck(self, actor, current, root, deadline):
+        self.boxes(actor, current, root)
+        if (row_digest(rows(actor, root, deadline=deadline)) != self.component_rows
+                or time.monotonic() >= deadline):
+            raise ProjectionScopeChanged("Projection thread mailbox bindings changed or expired")
+
+
+def evidence_boxes(actor, current, root, mailbox_scope):
+    if mailbox_scope is None:
+        return configured(actor, current)
+    return mailbox_scope.boxes(actor, current, root)
 
 
 def scoped_source(actor, source_id: str) -> dict:
