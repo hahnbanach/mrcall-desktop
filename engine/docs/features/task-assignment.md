@@ -148,6 +148,15 @@ folders of its own mailboxes: when a member answered last from their own
 mailbox and the customer then wrote only to another account's mailbox, that
 member's engine keeps the hold.
 
+The holds bind the scheduled operator. A person's request through the
+profile's operator MCP is admitted on every assignment state: under the
+person-request marker (`services/person_request.py`, set only by the MCP
+effects around one request, refused under a scheduled origin) the draft write
+guard, the review write and the exact send admission compute no projection,
+no RFC component and no ancestry proof, and keep the exact binding to the
+source row the person named. Scheduled runs and the kernel's RPC routes never
+carry the marker.
+
 Close requires nonempty complete fresh inbound identity coverage, including archived mail.
 It rechecks source immediately before commit and rechecks private-store identities
 inside the company CAS transaction. Dates are annotations, not a closure cutoff:

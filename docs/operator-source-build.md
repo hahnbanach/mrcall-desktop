@@ -109,12 +109,14 @@ chat rule writes use delegated revisioned authority directly; they require no
 per-rule Desktop confirmation. Desktop configures accounts, services and access.
 A source registration does not certify a new configurator GUI build.
 
-A prepared reply retains native source, recipient, enrollment, assignment and
-claim controls. Its draft and saved receipt share the private writer transaction;
-published instruction revisions are read while the matching native company writer
-guard is held. Recovery returns saved results without another generation. No MCP
-sending tool or new sending authority is part of this slice. Source-free ordinary
-work retains its native budget and admission behavior.
+A prepared reply retains native source, recipient and claim controls; it is a
+person's request, admitted on every assignment state ([request flow](operator-data-flows.md)).
+Its draft and saved receipt share the private writer transaction; published
+instruction revisions are read while the matching native company writer guard is
+held. Recovery returns saved results without another generation and finishes an
+interrupted review-copy publication. `send_reply` is the one MCP sending tool,
+under full operator access and the person's explicit instruction. Source-free
+ordinary work retains its native budget and admission behavior.
 
 ## Remaining product boundaries
 

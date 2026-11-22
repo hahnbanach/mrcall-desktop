@@ -94,6 +94,7 @@ those coverage limits. Uploaded/native file workflows remain separately owned.
 - [HTTP/tool server](../engine/zylch/operator_mcp/server.py), [authorization](../engine/zylch/operator_mcp/auth.py) and [resource routing](../engine/zylch/operator_mcp/routing.py).
 - [Issuer](../engine/zylch/operator_mcp/issuer.py) and [grant persistence](../engine/zylch/operator_mcp/broker_store.py).
 - [Native reads](../engine/zylch/operator_mcp/read_port.py), [effects](../engine/zylch/operator_mcp/effects.py) and [saved reply operations](../engine/zylch/services/operator_reply_operations.py).
+- [A person's request marker](../engine/zylch/services/person_request.py), [review copy publication and recovery](../engine/zylch/services/operator_reply_publication.py) and [the send on a person's instruction](../engine/zylch/services/operator_reply_send.py).
 - [Rule changes](../engine/zylch/services/operator_rule_changes.py) and [native management](../engine/zylch/rpc/operator_operations.py).
 - [Identity, company memory and spending](cross-cutting-contracts.md), [IPC](ipc-contract.md) and [host operations](remote-backend.md).
 

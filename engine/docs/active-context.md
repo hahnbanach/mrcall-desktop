@@ -109,12 +109,13 @@ message already sent from Gmail refuses, named. The admission is one
 in-process marker (`services/person_request.py`) that the MCP effects set
 around a request; under it the draft write, the review write, the exact send
 and `resolve()` keep the binding to the source row and compute no projection,
-component or ancestry proof. Scheduled ticks and the kernel's RPC routes keep
-every refusal. `resolve()` roots an In-Reply-To-only ordinary source at its
-stored `thread_id` on every route. This is on `main` after
-`hosted-engine-0.1.57.dev5` and not released; the
-[plan](../../../docs/execution-plans/2026-11-21-interactive-drafts-through-operator-mcp.md)
-in the hb repository owns its release and live acceptance. A member's own message holds a thread
+component or ancestry proof. Scheduled ticks keep every refusal; the kernel's
+RPC routes change only by the root rule of `resolve()`, which roots an
+In-Reply-To-only ordinary source at its stored `thread_id` on every route and
+so accepts a case it refused. This is on branch
+`feat/person-request-operator-mcp-20261121`, not on `main` and not released;
+the hb repository's plan `docs/execution-plans/2026-11-21-interactive-drafts-through-operator-mcp.md`
+owns its merge, release and live acceptance. A member's own message holds a thread
 until the customer's newest mail has waited `MEMBER_ACTIVITY_HOLD_HOURS`, 72
 by default, with no member answer after it
 ([assignment contract](features/task-assignment.md)). The
