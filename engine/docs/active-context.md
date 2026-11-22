@@ -8,9 +8,8 @@ are preserved in [active-context-archive.md](active-context-archive.md).
 
 ## State now
 
-The source branch adds a [mailbox membership diagnostic](features/task-assignment.md#operator-configuration)
-to the unit journal and the private request trace. Hosted dev5 continues to return
-the ordinary assignment hold without this mailbox reference.
+Hosted dev6 adds a [mailbox membership diagnostic](features/task-assignment.md#operator-configuration)
+to the unit journal and private request trace.
 
 [Company assignments](features/task-assignment.md) ship in Desktop `v0.1.56`. Six hosted company
 engines have verified assignment reads, root-owned public trust and tenant-inaccessible signing
@@ -95,10 +94,9 @@ engine that clients only read keeps its archive current. Its
 [plan](../../docs/execution-plans/2026-11-18-engine-owned-mail-sync.md) owns
 that evidence.
 
-Seven hosted units run one package: tag `hosted-engine-0.1.57.dev5` on
-`main`, release
-`/home/mrcalld/releases/hosted-engine-0.1.57.dev5-e1c1af32d0d0`. `main`'s
-`engine/zylch` at that tag is the tree they run.
+The hosted source release is `hosted-engine-0.1.57.dev6`. The previous release
+for per-unit rollback is `/home/mrcalld/releases/hosted-engine-0.1.57.dev5-e1c1af32d0d0`.
+The HB operator plan records the individual service switches.
 
 A person's request through the profile's operator MCP is admitted on every
 assignment state: `prepare_reply` saves a plain-text draft bound to the
@@ -116,10 +114,10 @@ and `resolve()` keep the binding to the source row and compute no projection,
 component or ancestry proof. Scheduled ticks keep every refusal; the kernel's
 RPC routes change only by the root rule of `resolve()`, which roots an
 In-Reply-To-only ordinary source at its stored `thread_id` on every route and
-so accepts a case it refused. This is on branch
-`feat/person-request-operator-mcp-20261121`, not on `main` and not released;
-the hb repository's plan `docs/execution-plans/2026-11-21-interactive-drafts-through-operator-mcp.md`
-owns its merge, release and live acceptance. A member's own message holds a thread
+so accepts a case it refused. The send checks the source against the granted
+mailbox before dispatch and on retry. The HB plan
+`docs/execution-plans/2026-11-21-interactive-drafts-through-operator-mcp.md`
+owns the hosted rollout and live acceptance. A member's own message holds a thread
 until the customer's newest mail has waited `MEMBER_ACTIVITY_HOLD_HOURS`, 72
 by default, with no member answer after it
 ([assignment contract](features/task-assignment.md)). The

@@ -65,7 +65,7 @@ contextual campaign queue path refuses an additional Gmail copy.
 
 ## Operator configuration
 
-On the diagnostic source branch, a failed mailbox membership check writes
+Starting with hosted dev6, a failed mailbox membership check writes
 `assignment.mailbox_binding.unverified` once per rejected active mailbox to
 the engine unit journal. The label shows only the first ASCII letter or digit
 of the address, when available. The same `evidence_ref` is present in the
