@@ -8,6 +8,10 @@ are preserved in [active-context-archive.md](active-context-archive.md).
 
 ## State now
 
+The source branch adds a [mailbox membership diagnostic](features/task-assignment.md#operator-configuration)
+to the unit journal and the private request trace. Hosted dev5 continues to return
+the ordinary assignment hold without this mailbox reference.
+
 [Company assignments](features/task-assignment.md) ship in Desktop `v0.1.56`. Six hosted company
 engines have verified assignment reads, root-owned public trust and tenant-inaccessible signing
 keys. Scoped draft and three-host workflows retain local acceptance. Ordinary/Qonto tasks remain

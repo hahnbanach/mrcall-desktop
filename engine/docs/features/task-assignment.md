@@ -65,6 +65,16 @@ contextual campaign queue path refuses an additional Gmail copy.
 
 ## Operator configuration
 
+On the diagnostic source branch, a failed mailbox membership check writes
+`assignment.mailbox_binding.unverified` once per rejected active mailbox to
+the engine unit journal. The label shows only the first ASCII letter or digit
+of the address, when available. The same `evidence_ref` is present in the
+profile's private `diagnostics.events` response for the request trace. Match
+it to an active row from `mailboxes.list` by taking the lowercase hexadecimal
+SHA-256 of the row's UTF-8 `id`. This also distinguishes identical masked labels.
+The rejected row may differ from the conversation's source mailbox.
+The projection still holds the conversation. Hosted dev5 predates this diagnostic.
+
 The engine reads public trust at the fixed path
 `/etc/mrcalld/assignment-trust/<space-id>.json`. Version 1 requires exactly:
 

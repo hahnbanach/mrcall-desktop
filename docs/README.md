@@ -101,3 +101,4 @@ anywhere in the repo):
 - [One build for every hosted engine](briefs/2026-11-19-one-hosted-engine-build.md) — how the united hosted package is composed and what it changes for each unit; its [execution plan](execution-plans/2026-11-19-one-hosted-engine-build.md) is superseded and keeps the per-unit procedures.
 
 - [Main is the hosted line](briefs/2026-11-20-main-is-the-hosted-line.md) — `main` carries the engine that runs in production, and a thread a member answered by hand returns to the operator after three days; [execution plan](execution-plans/2026-11-20-main-is-the-hosted-line.md) with the per-unit state, the release and each rollback.
+- [Assignment mailbox diagnostics](briefs/2026-11-22-assignment-mailbox-diagnostics.md) and [verification plan](execution-plans/2026-11-22-assignment-mailbox-diagnostics.md) cover mailbox identification when a profile fails its membership check.

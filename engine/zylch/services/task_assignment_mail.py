@@ -1,5 +1,6 @@
 """Bounded exact message identities from scoped private rows and live IMAP."""
 
+import hashlib
 import logging
 import re
 import time
@@ -312,12 +313,38 @@ def _member_fetch(client: Any, folder: str, root: str, *, deadline: float) -> tu
     return result, provider, scan.state
 
 
+def _report_unverified_mailbox(box) -> None:
+    """Identify the rejected inventory row without exposing its address or changing admission."""
+    command = "assignment.mailbox_binding.unverified"
+    try:
+        initial = box.address.strip()[:1]
+        label = initial.lower() if initial.isascii() and initial.isalnum() else "*"
+        reference = hashlib.sha256(box.id.encode("utf-8")).hexdigest()
+        logger.warning("%s mailbox=%s*** evidence_ref=%s", command, label, reference)
+    except Exception:
+        pass
+
+    try:
+        from zylch.email import provider_diagnostics
+        from zylch.observability_producers import observe
+
+        recorder = provider_diagnostics.current()
+        projection = {"method": "tasks.assignment.project", "root_id": recorder.root} if recorder else {}
+        # The event store hashes the original ID when it accepts evidence_ref.
+        observe("authority", "failed", reason="permission", command=command, evidence_ref=box.id, **projection)
+    except Exception:
+        pass
+
+
 def configured(actor, current: dict) -> list:
     result = mailboxes.for_owner(actor.mailbox)
     if not result or len(result) > 20:
         raise AssignmentError("Mail provider scope is unavailable")
     aliases = set(current["members"][actor.uid])
-    if any(box.address.strip().lower() not in aliases for box in result):
+    unverified = [box for box in result if box.address.strip().lower() not in aliases]
+    if unverified:
+        for box in unverified:
+            _report_unverified_mailbox(box)
         raise AssignmentError("Mailbox lacks verified member binding")
     return result
 

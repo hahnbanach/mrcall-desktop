@@ -8,6 +8,7 @@ from pathlib import Path
 import tempfile
 import threading
 import time
+from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
 
@@ -123,7 +124,6 @@ class ProjectionDiagnostics(unittest.TestCase):
         self.assertNotIn('SECRET', str(rows))
 
     def test_existing_inner_source_catch_is_observed(self):
-        from types import SimpleNamespace
         stored = {'task': None, 'complete': True, 'authoritative_thread_key': ROOT, 'component_thread_keys': [ROOT], 'component_scope_present': True, 'events': []}
         actor = SimpleNamespace(uid='diagnostic-owner')
         with patch.object(projection.evidence, 'admission', return_value=(actor, 'space', {'members': {}})), patch.object(projection.store, 'get', return_value=stored), patch.object(projection.trust, 'delivery_routes_digest', return_value='digest'), patch.object(projection.mail, 'rows', side_effect=TimeoutError('SECRET source')):
@@ -135,6 +135,80 @@ class ProjectionDiagnostics(unittest.TestCase):
             self.assertEqual(row['error_file'], 'services/task_assignment_projection.py')
         else:
             self.assertNotIn('error_file', row)
+
+    def test_unverified_mailboxes_reach_the_journal_and_the_request_trace(self):
+        from zylch.rpc import diagnostics
+
+        command = 'assignment.mailbox_binding.unverified'
+        primary, first, second = [
+            SimpleNamespace(id=f'00000000-0000-4000-8000-{n:012d}', address=address)
+            for n, address in enumerate(('primary@example.test', 'sable@example.test', 'silver@example.test'), 1)
+        ]
+        actor = SimpleNamespace(uid='diagnostic-owner', mailbox=primary.address)
+        membership = {'members': {actor.uid: [primary.address]}}
+        stored = {'task': None, 'complete': True, 'authoritative_thread_key': ROOT,
+                  'component_thread_keys': [ROOT], 'component_scope_present': True, 'events': []}
+        inbound = {'from_email': 'sender@example.test', 'message_id_header': ROOT, 'mailbox_id': primary.id}
+        failed_trace, control_trace = 'b' * 32, 'c' * 32
+        with (
+            patch.object(projection.evidence, 'admission', return_value=(actor, 'space', membership)),
+            patch.object(projection.store, 'get', return_value=stored),
+            patch.object(projection.trust, 'delivery_routes_digest', return_value='digest'),
+            patch.object(projection.mail, 'rows', return_value=[inbound]),
+            patch.object(projection.mail, 'mailbox_digest', return_value='inventory'),
+            patch.object(projection.mail.mailboxes, 'for_owner', return_value=[primary, first, second]) as inventory,
+            patch.object(projection.evidence, 'provider_client') as provider,
+        ):
+            with context({'trace_id': failed_trace}), self.assertLogs(projection.mail.logger, 'WARNING') as journal:
+                value = asyncio.run(rpc.project({'thread_key': ROOT}, None))
+            self.assertEqual(value['current_message_ids'], [ROOT])
+            self.assertEqual((value['state'], value['complete'], value['hold_auto_reply'], value['reason']),
+                             ('unknown', False, True, 'SOURCE_UNAVAILABLE'))
+            inventory.side_effect = RuntimeError('private inventory failure')
+            with context({'trace_id': control_trace}):
+                control = asyncio.run(rpc.project({'thread_key': ROOT}, None))
+            self.assertEqual(control['reason'], 'SOURCE_UNAVAILABLE')
+            provider.assert_not_called()
+
+        with patch.object(diagnostics, '_store', return_value=self.store):
+            failed = asyncio.run(diagnostics.events({'trace_id': failed_trace}, None))['events']
+            control = asyncio.run(diagnostics.events({'trace_id': control_trace}, None))['events']
+        self.assertTrue(any(row.get('command') == 'assignment.source.failed' for row in control))
+        self.assertFalse(any(row.get('command') == command for row in control))
+        binding = [row for row in failed if row.get('command') == command]
+        refs = [hashlib.sha256(box.id.encode()).hexdigest() for box in (first, second)]
+        self.assertCountEqual([row['evidence_ref'] for row in binding], refs)
+        for row in binding:
+            self.assertEqual(row['root_id'], hashlib.sha256(ROOT.encode()).hexdigest())
+            self.assertEqual(row['trace_id'], failed_trace)
+        warnings = [line for line in journal.output if command in line]
+        self.assertEqual(len(warnings), 2)
+        for ref in refs:
+            self.assertTrue(any(ref in line and 's***' in line for line in warnings))
+        exposed = str((failed, control, journal.output))
+        for private in (ROOT, inbound['from_email'], primary.address, first.address, second.address, 'private inventory failure'):
+            self.assertNotIn(private, exposed)
+
+    def test_binding_guard_remains_independent_of_diagnostic_sinks_and_inventory_size(self):
+        mail = projection.mail
+        box = SimpleNamespace(id='box-id', address='private@example.test')
+        actor = SimpleNamespace(uid='owner', mailbox='profile')
+        with (
+            patch.object(mail.mailboxes, 'for_owner', return_value=[box]) as inventory,
+            patch.object(mail.logger, 'warning', side_effect=RuntimeError('journal down')) as warning,
+            patch.object(self.store, 'emit', side_effect=RuntimeError('store down')),
+        ):
+            verified = {'members': {actor.uid: [box.address]}}
+            self.assertEqual(mail.configured(actor, verified), [box])
+            for boxes in ([], [box] * 21):
+                inventory.return_value = boxes
+                with self.assertRaisesRegex(mail.AssignmentError, '^Mail provider scope is unavailable$'):
+                    mail.configured(actor, verified)
+            warning.assert_not_called()
+            inventory.return_value = [box]
+            with self.assertRaisesRegex(mail.AssignmentError, '^Mailbox lacks verified member binding$'):
+                mail.configured(actor, {'members': {actor.uid: []}})
+            warning.assert_called()
 
     def test_worker_execution_elapsed_is_distinct_from_queue(self):
         def slow(*args):
