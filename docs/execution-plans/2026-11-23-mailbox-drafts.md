@@ -45,7 +45,9 @@ No candidate deployment or installed product acceptance is established here.
 - [x] Migration/compatible rollback milestone review is APPROVED, with 26 focused
   cases and independent repeated-retirement refutation. Report:
   `/tmp/mrcall-ai-kit/mailbox-migration-review/report.md`.
-- [ ] Kernel integration and both clone checks under the governing plan.
+- [x] Kernel source integration is APPROVED; the complete frozen suite exits zero.
+  The M2 report is `/tmp/mrcall-ai-kit/mailbox-kernel-integration-review/report.md`.
+- [ ] Both installed-clone FULL checks under the governing plan.
 - [ ] Documentation critic and separate final review through final-user paths.
 - [ ] Native mailbox authorization, candidate operational acceptance, publication,
   seven-engine cutover and installed acceptance.
@@ -56,6 +58,8 @@ The application OAuth client is staged at `/etc/mrcalld/gmail-oauth-client.env`.
 The service-user authorization bootstrap and checks are retained under
 `~/.local/share/mrcall-operational-evidence/2026-11-23/mailbox-gmail-auth/`.
 Actual support and Café credential checks return `gmail_authorization_required`.
+Both existing Calendar grants refresh successfully but the freshly valid tokens
+receive Gmail HTTP 403 `insufficientPermissions`; no credential row changes.
 No live consent flow, unit restart or destructive migration occurs without the
 required mailbox grant. Independent implementation and verification continue.
 

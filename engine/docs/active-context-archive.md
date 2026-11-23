@@ -1,3 +1,21 @@
+## 2026-11-23 — Mailbox engine integration before M2 source approval
+
+The [mailbox draft candidate](../../docs/mailbox-drafts.md) has approved
+engine/Desktop and [legacy migration](../../docs/mailbox-draft-migration.md)
+milestones. Its native Gmail adapter, encrypted authorization, mailbox operations,
+durable receipts, public callers and Desktop view have synthetic integration
+checks. Actual Gmail consent and installed acceptance remain open in the
+[leaf plan](../../docs/execution-plans/2026-11-23-mailbox-drafts.md) and governing
+HB November 23 plan. No candidate rollout or real acceptance tick is established.
+
+- Kernel adaptation, native Gmail Message-ID preservation, saved Gmail web edits,
+  two Café ticks, one MrCall direct-send tick, Desktop installation and fleet
+  cutover remain required. Internal rows and the exact 17 mailbox drafts are
+  separate cleanup operations; neither is performed by source checks.
+
+1. Finish independent kernel integration and documentation review for mailbox
+   drafts, then obtain mailbox consent before candidate operational acceptance.
+
 ## 2026-11-23 — Engine snapshot before mailbox draft candidate
 
 # Active Context — Engine

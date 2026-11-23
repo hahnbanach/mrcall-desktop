@@ -10,7 +10,8 @@ are preserved verbatim in [active-context-archive.md](active-context-archive.md)
 
 The [mailbox draft candidate](../../docs/mailbox-drafts.md) has approved
 engine/Desktop and [legacy migration](../../docs/mailbox-draft-migration.md)
-milestones. Its native Gmail adapter, encrypted authorization, mailbox operations,
+milestones, plus approved kernel source integration and a full kernel suite
+with observed exit zero. Its native Gmail adapter, encrypted authorization, mailbox operations,
 durable receipts, public callers and Desktop view have synthetic integration
 checks. Actual Gmail consent and installed acceptance remain open in the
 [leaf plan](../../docs/execution-plans/2026-11-23-mailbox-drafts.md) and governing
@@ -62,7 +63,7 @@ approval and prior authenticated conversation requirements.
 - All seven Gmail grant inventories lack Gmail scope. Existing app passwords,
   Calendar read-only grants and Drive service accounts cannot authorize native
   drafts. The application client is staged; account consent remains external.
-- Kernel adaptation, native Gmail Message-ID preservation, saved Gmail web edits,
+- Native Gmail Message-ID preservation, saved Gmail web edits,
   two Café ticks, one MrCall direct-send tick, Desktop installation and fleet
   cutover remain required. Internal rows and the exact 17 mailbox drafts are
   separate cleanup operations; neither is performed by source checks.
@@ -91,8 +92,8 @@ approval and prior authenticated conversation requirements.
 
 ## Next
 
-1. Finish independent kernel integration and documentation review for mailbox
-   drafts, then obtain mailbox consent before candidate operational acceptance.
+1. Complete artifact and documentation verification, then obtain mailbox consent
+   before candidate operational acceptance.
 2. Complete the exact 17-target Trash order, installed MCP/Gmail/Desktop flow,
    ordinary scheduled tests and seven-engine release checks under the HB plan.
 3. Preserve recurring pauses, actual budgets and pending receipt state; never

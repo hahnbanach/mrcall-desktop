@@ -1,3 +1,20 @@
+## 2026-11-23 — Mailbox integration before M2 source approval
+
+The [mailbox candidate](mailbox-drafts.md) replaces editable private drafts with
+native Gmail draft containers shared by Desktop, MCP and kernel requests. The
+engine/Desktop milestone and the [legacy migration](mailbox-draft-migration.md)
+have source approval. The extended campaign producer keeps native handles and
+body-free recovery metadata. Migration compatibility has independent approval after seven copied-profile
+rehearsals. Kernel integration, final review and installed acceptance remain open under the [leaf plan](execution-plans/2026-11-23-mailbox-drafts.md)
+and its governing HB plan.
+
+- Mailbox delivery needs Gmail account consent, integrated kernel review, a
+  reviewed complete package and all installed-product acceptance checks. Synthetic
+  browser/provider tests are source evidence only. The exact 17-target Trash
+  instruction remains separate from private-row retirement and later drafts.
+
+1. Finish mailbox integration and source checks while account consent is absent.
+
 ## 2026-11-23 — Cross-cutting snapshot before mailbox consolidation
 
 ---
