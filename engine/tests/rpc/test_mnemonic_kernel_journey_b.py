@@ -35,6 +35,7 @@ with ``MNEMONIC_JOURNEY_REQUIRED=1`` a missing kernel is an error.
 
 from __future__ import annotations
 
+import json
 import threading
 
 import pytest
@@ -213,7 +214,10 @@ def test_case_7_changed_action_is_committed_and_recorded_on_both_sides(journey, 
     assert journey.versions(beta_id) == []
     # The tool's response carries the same departure back to the model.
     (tool_result,) = cases.tool_results(outer)
-    assert '"action": "updated"' in tool_result and "changed_action" in tool_result
+    payload = json.loads(tool_result)
+    assert payload["status"] == "success"
+    assert payload["data"]["action"] == "updated"
+    assert payload["data"]["departure"] == op["departure"]
     assert journey.read_back(acme_id, ACCOUNT_A)["content"] == ACME_ORDERS
     assert journey.hybrid_ids(ACCOUNT_A, "orders@acme.test") == [acme_id]
     assert journey.search_tool_ids(ACCOUNT_A, "Acme Srl") == [acme_id]
