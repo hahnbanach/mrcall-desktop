@@ -71,7 +71,16 @@ class NativeReadPort:
             else:
                 handler = self._handlers[name]
             result = await handler(params, lambda method, values: None)
-        except Exception:
+        except Exception as error:
+            from zylch.email.gmail_auth import GmailError
+            from zylch.services.mailbox_draft_mime import MailboxDraftError
+            from zylch.services.task_assignment_types import AssignmentError
+            if isinstance(error, GmailError):
+                raise ReadError(error.reason) from None
+            if isinstance(error, MailboxDraftError):
+                raise ReadError(error.cause) from None
+            if name == "drafts.list" and isinstance(error, AssignmentError) and error.code == -32030:
+                raise ReadError(str(error)) from None
             raise ReadError("Native read unavailable") from None
         if self._check(grant, kind) != before:
             raise ReadError("Profile binding changed")

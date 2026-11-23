@@ -97,7 +97,7 @@ anywhere in the repo):
 
 - [Current-main operator MCP integration](execution-plans/2026-11-06-operator-mcp-main-integration.md) — isolated guard-preserving source integration; [brief](briefs/2026-11-06-operator-mcp-main-integration.md).
 
-- [Current-main operator source build](operator-source-build.md) — fixed paired packages, native admission and source-verification limits.
+- [Retained dev1 operator source build](operator-source-build.md) — fixed historical paired packages and their verification limits; the [mailbox contract](mailbox-drafts.md) owns the current candidate.
 
 - [Engine-owned mail sync](briefs/2026-11-18-engine-owned-mail-sync.md) — a free mail loop in the hosted daemon, so a client that only reads an engine finds a current archive; [execution plan](execution-plans/2026-11-18-engine-owned-mail-sync.md).
 

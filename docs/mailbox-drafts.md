@@ -119,7 +119,10 @@ draft read or a new reservation. Another client's key is a separate operation.
 
 ## Authorization and migration
 
-Gmail uses mailbox-bound encrypted `google_gmail` credentials with
+Gmail credential writes require working encryption in both hosted and local
+engines. Missing or failing encryption refuses with
+`gmail_encrypted_storage_required` before any credential upsert. Gmail uses
+mailbox-bound encrypted `google_gmail` credentials with
 `gmail.modify` scope. Calendar read-only credentials and app passwords do not
 grant this access. The dedicated OAuth RPCs are `google.gmail.begin`,
 `google.gmail.complete`, `google.gmail.status` and `google.gmail.disconnect`.

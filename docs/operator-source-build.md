@@ -114,14 +114,12 @@ chat rule writes use delegated revisioned authority directly; they require no
 per-rule Desktop confirmation. Desktop configures accounts, services and access.
 A source registration does not certify a new configurator GUI build.
 
-A prepared reply retains native source, recipient and claim controls; it is a
-person's request, admitted on every assignment state ([request flow](operator-data-flows.md)).
-In this retained dev1 build, its private draft and saved receipt share the writer
-transaction and recovery finishes a review-copy publication. The mailbox candidate
-replaces that pair with a native draft and body-free operation receipts; its
-current contract is [documented separately](mailbox-drafts.md). `send_reply` is the one MCP sending tool,
-under full operator access and the person's explicit instruction. Source-free
-ordinary work retains its native budget and admission behavior.
+The fixed dev1 pair prepares an engine draft and recovers its saved operation by
+reading `Storage.get_draft`, returning `current_draft`. Its MCP registry includes
+`prepare_reply` and `recover_reply`; it provides neither native Gmail draft
+publication nor `send_reply`. The later mailbox candidate's person-request
+admission, current native MIME sending and Sent proof are
+[documented separately](mailbox-drafts.md).
 
 ## Remaining product boundaries
 

@@ -14,13 +14,12 @@ local clone, Python, Git, terminal, local skill or second MCP. Opted-in ordinary
 rule changes save directly from chat with revisions and recovery. Initial native
 management and legacy import/decision operations retain their owner protections.
 
-The [current-main integration](execution-plans/2026-11-06-operator-mcp-main-integration.md)
-contains the profile Linux MCP server, central authorization/grant components,
-scoped native readers, rule CAS/history, pricing/projects and normal-engine draft
-preparation/recovery. The [paired source contract](operator-source-build.md)
-identifies exact source, resources, checks and retained limits. Current source
-registration does not establish a newly packaged configurator GUI or a new
-installed service. Dated real-client acceptance belongs to the parent operator
+The [retained integration plan](execution-plans/2026-11-06-operator-mcp-main-integration.md)
+records the baseline profile MCP, authorization, native readers, rule history,
+pricing/projects and draft preparation. Its [dev1 paired source contract](operator-source-build.md)
+identifies fixed historical package inputs and limits. The [mailbox contract](mailbox-drafts.md)
+owns the current candidate's native draft flow. Source registration does not
+establish a newly packaged configurator GUI or a new installed service. Dated real-client acceptance belongs to the parent operator
 workstream; controlled package fixtures do not replace it.
 
 An AI-provider account and the MrCall Firebase profile are distinct identities.
@@ -76,8 +75,9 @@ another generation or blind provider retry. Internal review can finish without
 a customer draft. The candidate is not installed on the dev7 fleet.
 
 `send_reply` is the one MCP sending tool. It needs full operator access
-(`operator.use`), runs only as its own tool so the client shows it and asks the
-person first, and is idempotent on its request key. In the mailbox candidate it
+(`operator.use`) and is idempotent on its request key. The server exposes a
+separate destructive tool and validates its grant; each client owns its
+presentation and approval interaction. In the mailbox candidate it
 sends the named native draft with its current MIME and recipients, including
 Gmail edits. A missing draft is never recreated. Only exact Message-ID proof in
 Sent confirms delivery; uncertainty remains attached to the original operation
@@ -109,7 +109,7 @@ and the earlier [authentication](operator-data-flows/authentication.md),
 and [local-connector](operator-data-flows/local-connector.md) sequences retain the
 original proposal and local nine-tool prototype. Their candidate counts,
 unimplemented labels, optional/local setup, isolated quota and workspace/STDIO
-choices describe that historical design. The source/build contract above owns
-current backend behavior. Those sequences do not require a local connector or
+choices describe that historical design. The retained dev1 source/build contract owns only that fixed package. The
+mailbox contract above owns the current candidate backend behavior. Those sequences do not require a local connector or
 workspace installation for daily remote users, and do not certify current GUI,
 provider, automatic-bootstrap or release acceptance.

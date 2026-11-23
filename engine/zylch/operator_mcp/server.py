@@ -202,6 +202,12 @@ def create_server(verifier, port, *, path='/mcp', allowed_hosts, admission_clock
         except Exception as error:
             from zylch.services.operator_reply_operations import ReplyRefusal
             from zylch.services.project_store import ProjectError
+            from zylch.email.gmail_auth import GmailError
+            from zylch.services.mailbox_draft_mime import MailboxDraftError
+            if isinstance(error, GmailError):
+                raise ReadError(error.reason) from None
+            if isinstance(error, MailboxDraftError):
+                raise ReadError(error.cause) from None
             if isinstance(error, ReplyRefusal):
                 raise ReadError(str(error)) from None
             if isinstance(error, ProjectError):
@@ -213,15 +219,15 @@ def create_server(verifier, port, *, path='/mcp', allowed_hosts, admission_clock
             raise ReadError('operator_operation_unavailable_recover_with_same_request_key') from None
 
     if effects is not None and DRAFT_SCOPE in verifier.allowed_scopes:
-        @server.tool(annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=False, idempotentHint=True, openWorldHint=False))
+        @server.tool(annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=False, idempotentHint=True, openWorldHint=True))
         async def prepare_reply(request_key: str, thread_key: str, source_email_id: str,
                                 instruction_versions: list[dict[str, object]], request_text: str) -> dict[str, object]:
             'Version 2: prepare one plain-text reply in the mailbox Drafts folder, or needs_review without a draft. Uses one paid generation and exact source/instruction revisions. The same request_key recovers the original result without recreating a draft removed or sent elsewhere.'
             return await invoke_effect(effects.prepare, request_key, thread_key, source_email_id, instruction_versions, request_text)
 
-        @server.tool(annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=False, idempotentHint=True, openWorldHint=False))
+        @server.tool(annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=False, idempotentHint=True, openWorldHint=True))
         async def recover_reply(operation_id: str | None = None, request_key: str | None = None) -> dict[str, object]:
-            """Version 1: recover an owned reply result using exactly one operation ID or original request key, and finish its review copy when the publication was interrupted, one new attempt at most. Never generates or sends."""
+            """Version 2: recover the original owned mailbox reply operation using exactly one operation ID or original request key. Read current mailbox state without recreating a removed draft, publishing a copy, generating or transmitting."""
             return await invoke_effect(effects.recover, operation_id, request_key)
 
     if effects is not None and FULL_SCOPE in verifier.allowed_scopes:

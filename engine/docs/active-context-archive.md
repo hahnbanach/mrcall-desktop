@@ -2,11 +2,7 @@
 
 # Active Context — Engine
 
-<!-- doc-scope:start -->
-Scope: current engine capabilities, verified deployment and unresolved work.
-Durable references are routed by [README.md](README.md); previous observations
-are preserved in [active-context-archive.md](active-context-archive.md).
-<!-- doc-scope:end -->
+
 
 ## State now
 

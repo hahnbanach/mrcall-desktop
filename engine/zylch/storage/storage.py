@@ -2542,13 +2542,40 @@ class Storage:
         email: Optional[str] = None,
     ) -> bool:
         """Save credentials for any provider (encrypted)."""
-        from zylch.utils.encryption import encrypt
+        from zylch.utils.encryption import decrypt, encrypt
+
+        strict = provider_key in {"google_gmail", "google_gmail_pending"}
+        if strict:
+            from zylch.utils.encryption import EncryptionUnavailable, decrypt_required, encrypt_required
+
+            def encrypt(plaintext):
+                try:
+                    return encrypt_required(plaintext)
+                except EncryptionUnavailable:
+                    from zylch.email.gmail_auth import GmailError
+
+                    raise GmailError("gmail_encrypted_storage_required") from None
+
+            def decrypt(ciphertext):
+                try:
+                    return decrypt_required(ciphertext)
+                except EncryptionUnavailable:
+                    from zylch.email.gmail_auth import GmailError
+
+                    raise GmailError("gmail_encrypted_storage_required") from None
 
         token_row = self.get_oauth_token(owner_id, provider_key)
         if token_row and token_row.get("credentials"):
-            from zylch.utils.encryption import decrypt
+            try:
+                existing_creds = json.loads(decrypt(token_row["credentials"]))
+                if strict and not isinstance(existing_creds, dict):
+                    raise ValueError("credential object required")
+            except Exception:
+                if strict:
+                    from zylch.email.gmail_auth import GmailError
 
-            existing_creds = json.loads(decrypt(token_row["credentials"]))
+                    raise GmailError("gmail_encrypted_storage_required") from None
+                raise
         else:
             existing_creds = {}
 
@@ -2593,6 +2620,10 @@ class Storage:
         """Get credentials for any provider using unified JSONB storage."""
         from zylch.utils.encryption import decrypt
 
+        strict = provider_key in {"google_gmail", "google_gmail_pending"}
+        if strict:
+            from zylch.utils.encryption import decrypt_required as decrypt
+
         token_row = self.get_oauth_token(owner_id, provider_key)
         if not token_row:
             return None
@@ -2624,6 +2655,10 @@ class Storage:
 
                 return decrypted_creds
             except Exception as e:
+                if strict:
+                    from zylch.email.gmail_auth import GmailError
+
+                    raise GmailError("gmail_encrypted_storage_required") from None
                 logger.error(f"Failed to decrypt credentials for {provider_key}: {e}")
 
         return None

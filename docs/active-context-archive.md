@@ -7,17 +7,7 @@ doc_baseline_date: 2026-11-22
 
 # Active Context — Cross-cutting
 
-<!-- doc-scope:start -->
-Scope: the cross-cutting volatile state of mrcall-desktop — what spans
-engine ↔ app or describes the repo as a whole (the JSON-RPC contract, the
-release pipeline, the brand rename, monorepo conventions). Engine-only state
-lives in [`../engine/docs/active-context.md`](../engine/docs/active-context.md),
-app-only state in [`../app/docs/active-context.md`](../app/docs/active-context.md),
-durable cross-cutting facts in [`../AGENTS.md`](../AGENTS.md) and the documents
-[`README.md`](README.md) routes to, pruned narrative in
-[`active-context-archive.md`](active-context-archive.md). A living snapshot of
-what is *current*, targeting ≤ ~120 lines.
-<!-- doc-scope:end -->
+
 
 ## State now
 

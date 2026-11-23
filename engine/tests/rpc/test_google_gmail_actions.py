@@ -59,3 +59,31 @@ def test_dispatch_redacts_oauth_codes_state_and_redirect_parameters():
     params = {"code": "private-code", "state": "private-state", "redirect_uri": "https://engine.example.test/cb"}
     redacted = _redact_params("google.gmail.complete", params)
     assert "private-code" not in str(redacted) and "private-state" not in str(redacted)
+
+
+@pytest.mark.asyncio
+async def test_local_oauth_begin_reports_required_encryption_without_writing_pending_state(actor, monkeypatch, tmp_path):
+    from zylch import runtime
+    from zylch.config import settings
+    from zylch.storage import Storage, database
+    from zylch.storage.models import OAuthToken
+    from zylch.utils import encryption
+
+    monkeypatch.setenv("EMAIL_ADDRESS", OWNER)
+    monkeypatch.setenv("ZYLCH_DB_PATH", str(tmp_path / "profile.db"))
+    monkeypatch.delenv("ENCRYPTION_KEY", raising=False)
+    monkeypatch.setattr(settings, "encryption_key", None)
+    monkeypatch.setattr(runtime, "_serving", False)
+    monkeypatch.setattr(actions.gmail_auth, "_client_settings", lambda: ("synthetic-client-id", "synthetic-client-secret"))
+    encryption.reset_for_tests()
+    database.dispose_engine()
+    try:
+        OAuthToken.__table__.create(database.get_engine())
+        monkeypatch.setattr(actions.gmail_auth, "_store", lambda: Storage.__new__(Storage))
+        with pytest.raises(GmailError, match="gmail_encrypted_storage_required"):
+            await actions.google_gmail_begin({}, lambda *args: None)
+        with database.get_engine().connect() as conn:
+            assert conn.exec_driver_sql("SELECT count(*) FROM oauth_tokens").scalar() == 0
+    finally:
+        database.dispose_engine()
+        encryption.reset_for_tests()
