@@ -88,7 +88,7 @@ jobs:
           echo "Building with include_win=$INCLUDE_WIN"
 
           ENGINE_BASE='[
-            {"os":"macos-14","platform":"mac","arch":"arm64","sidecar_name":"zylch"}
+            {"os":"macos-15","platform":"mac","arch":"arm64","sidecar_name":"zylch"}
           ]'
           WIN_ENTRY='{"os":"windows-latest","platform":"win","arch":"x64","sidecar_name":"zylch.exe"}'
           INTEL_ENTRY='{"os":"macos-13-large","platform":"mac","arch":"x64","sidecar_name":"zylch"}'
@@ -307,7 +307,7 @@ jobs:
         # `win.target` deliberately do NOT carry an `arch` list — when
         # they do, electron-builder treats the CLI flag as additive
         # (the config-declared archs always run too), which made the
-        # default `v*` runner on macos-14 build BOTH arm64 and x64
+        # default `v*` runner build BOTH arm64 and x64
         # dmgs. The x64 dmg then carried an arm64 sidecar (silent
         # corruption) and the run failed at the second electron
         # download whenever GitHub's DNS hiccuped. v0.1.27 is the
