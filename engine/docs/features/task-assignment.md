@@ -57,12 +57,15 @@ kernel first-contact bulk delivery remains outside this engine reply policy.
 Legacy task-orchestrator Gmail/Outlook modules remain unavailable; guarded call
 sites do not establish working OAuth provider integration.
 
-This policy certifies engine effects, not external mailbox actions. The existing
-kernel `draft-reply` Gmail review copy checks current projection immediately
-before append, but that append occurs outside the engine company lock. It is
-not an atomic assignment-guarded external draft write. Manual edits/sends from
-Gmail and other external clients remain outside engine enforcement. The new
-contextual campaign queue path refuses an additional Gmail copy.
+This policy certifies engine effects, not external mailbox actions. The installed
+v0.74.1 kernel review append remains outside the engine company lock. In the
+[mailbox candidate](../../../docs/mailbox-drafts.md), the kernel delegates
+composition and every draft effect to the engine. The engine commits a body-free
+operation reservation before entering the company policy lock for source-bound
+creation or transmission. Sparse interactive edits retain the native source
+headers and use the same operation fences. Scheduled composition checks current Sent and existing native drafts
+before generation. Manual edits/sends from Gmail remain outside engine enforcement.
+This change does not activate the separate contextual-email enrollment candidate.
 
 ## Operator configuration
 
@@ -169,12 +172,12 @@ member's engine keeps the hold.
 
 The holds bind the scheduled operator. A person's request through the
 profile's operator MCP is admitted on every assignment state: under the
-person-request marker (`services/person_request.py`, set only by the MCP
-effects around one request, refused under a scheduled origin) the draft write
-guard, the review write and the exact send admission compute no projection,
-no RFC component and no ancestry proof, and keep the exact binding to the
-source row the person named. Scheduled runs and the kernel's RPC routes never
-carry the marker.
+person-request marker (`services/person_request.py`, scoped to an explicit
+person action and refused under a scheduled origin) the mailbox effect policy
+keeps the exact source binding without applying a scheduled assignment hold.
+The mailbox candidate also scopes explicit interactive composition this way.
+Scheduled runs never carry the marker. Their composition and transport retain
+current source, ownership and launcher restrictions.
 
 Close requires nonempty complete fresh inbound identity coverage, including archived mail.
 It rechecks source immediately before commit and rechecks private-store identities

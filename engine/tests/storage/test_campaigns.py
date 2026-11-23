@@ -57,14 +57,13 @@ def test_campaign_roundtrip(fresh_db, owner):
                 "stratum": "ex",
                 "verdict": "legit",
                 "language": "it",
-                "draft_subject": "s",
-                "draft_body": "b",
             },
             _notify,
         )
     )
     assert c1["email"] == "a@example.com"  # normalized
     assert c1["state"] == "drafted"
+    assert c1["draft_subject"] is None and c1["draft_body"] is None
 
     # idempotent upsert: same email updates, no duplicate
     c1bis = _run(

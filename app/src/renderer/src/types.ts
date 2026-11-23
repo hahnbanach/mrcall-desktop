@@ -1,5 +1,6 @@
 import type { StripeAPI } from './stripe'
 import type { ChatSendOptions, ChatSendResult, QontoAPI } from './finance'
+import type { MailboxDraftAPI } from './drafts'
 
 export interface ZylchTask {
   id: string
@@ -338,6 +339,7 @@ export interface PreparationResult extends PreparationStatus {
 }
 
 export interface ZylchAPI {
+  drafts: MailboxDraftAPI
   system: { capabilities: () => Promise<{ chat_history_binding?: number }> }
   stripe: StripeAPI
   qonto: QontoAPI

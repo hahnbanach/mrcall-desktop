@@ -5,6 +5,7 @@ import { MAILBOXES_CHANGED_EVENT } from '../lib/mailboxes'
 import { useThread } from '../store/thread'
 import HtmlEmailBody from '../components/HtmlEmailBody'
 import Icon from '../components/Icon'
+import MailboxDrafts from './MailboxDrafts'
 // EmailComposeModal intentionally not imported: the "Open" flow
 // replaces the old "Compose from Email" entrypoint. A future blank
 // compose icon will re-add this.
@@ -40,6 +41,7 @@ function formatFullDate(iso: string): string {
 }
 
 interface EmailProps {
+  profileId?: string
   /**
    * Navigate to the Tasks view filtered by the opened thread. Called by
    * the "Open" button after `taskThreadFilter` has been set on the thread
@@ -73,7 +75,7 @@ interface EmailProps {
  *   Enter          — scroll selected into view
  *   C              — Open the selected thread in Workspace
  */
-export default function Email({ onOpenTasks, active = true }: EmailProps = {}): JSX.Element {
+export default function Email({ onOpenTasks, active = true, profileId = 'unbound' }: EmailProps = {}): JSX.Element {
   const [folder, setFolder] = useState<Folder>('inbox')
   const [threads, setThreads] = useState<InboxThread[]>([])
   const [loading, setLoading] = useState(false)
@@ -81,7 +83,7 @@ export default function Email({ onOpenTasks, active = true }: EmailProps = {}): 
   const [hasMore, setHasMore] = useState(false)
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [pinning, setPinning] = useState<Set<string>>(new Set())
-  const [draftsCount, setDraftsCount] = useState<number>(0)
+  const [draftsCount, setDraftsCount] = useState<number | undefined>()
   const [folderMenuOpen, setFolderMenuOpen] = useState(false)
   const [archiving, setArchiving] = useState<Set<string>>(new Set())
   const [deleting, setDeleting] = useState<Set<string>>(new Set())
@@ -115,11 +117,6 @@ export default function Email({ onOpenTasks, active = true }: EmailProps = {}): 
         const trimmed = searchQuery.trim()
         const mailboxId = mailboxFilter ?? undefined
         if (target === 'drafts') {
-          // Drafts use the existing chat-side endpoint — no dedicated RPC
-          // is exposed for the desktop today. We just surface the count,
-          // and the user edits drafts via the chat flow. The middle column
-          // shows a stub; clicking a draft in the future could reuse the
-          // compose modal pre-populated.
           setThreads([])
           setHasMore(false)
           return
@@ -226,15 +223,21 @@ export default function Email({ onOpenTasks, active = true }: EmailProps = {}): 
     setSearchQuery('')
   }, [folder])
 
-  // Drafts badge: refresh on mount + every 30s. Uses the existing
-  // tasks.list RPC? No — there's no public list_drafts RPC yet. Rather
-  // than add one in this round, we derive a best-effort count from the
-  // chat pipeline's narration output. To stay within the "no new deps,
-  // no new RPC beyond spec" constraint, we just leave this at 0 until
-  // a future round wires up drafts.list. Keeps the UI element visible.
   useEffect(() => {
-    setDraftsCount(0)
-  }, [])
+    if (!active || folder === 'drafts') return
+    let cancelled = false
+    const refresh = async (): Promise<void> => {
+      try {
+        const rows = await window.zylch.drafts.list(mailboxFilter ? { mailbox_id: mailboxFilter } : {})
+        if (!cancelled) setDraftsCount(Array.isArray(rows) ? rows.length : undefined)
+      } catch {
+        if (!cancelled) setDraftsCount(undefined)
+      }
+    }
+    void refresh()
+    const timer = window.setInterval(() => void refresh(), 30000)
+    return () => { cancelled = true; window.clearInterval(timer) }
+  }, [active, folder, mailboxFilter])
 
   // ─── selection ────────────────────────────────────────────────────
   const selectedIndex = useMemo(() => {
@@ -649,22 +652,19 @@ export default function Email({ onOpenTasks, active = true }: EmailProps = {}): 
           </div>
         )}
 
-        <div ref={listRef} className="flex-1 overflow-y-auto">
+        {folder === 'drafts' ? (
+          <MailboxDrafts key={mailboxFilter || 'all'} mailboxId={mailboxFilter || undefined}
+            profileId={profileId} active={active} onCountChange={setDraftsCount} />
+        ) : <div ref={listRef} className="flex-1 overflow-y-auto">
           {loading && threads.length === 0 && (
             <div className="p-4 text-sm text-brand-grey-80">Loading…</div>
           )}
           {error && (
             <div className="p-4 text-sm text-brand-danger">Failed: {error}</div>
           )}
-          {!loading && !error && threads.length === 0 && folder !== 'drafts' && (
+          {!loading && !error && threads.length === 0 && (
             <div className="p-4 text-sm text-brand-grey-80">
               {searchQuery ? 'No matches.' : 'No threads.'}
-            </div>
-          )}
-          {folder === 'drafts' && (
-            <div className="p-4 text-sm text-brand-grey-80">
-              Drafts live in the chat flow for now. Open a thread to
-              reply via Workspace chat.
             </div>
           )}
           <ul className="flex flex-col">
@@ -750,7 +750,7 @@ export default function Email({ onOpenTasks, active = true }: EmailProps = {}): 
               </button>
             </div>
           )}
-        </div>
+        </div>}
       </section>
 
       {/* Reading pane: only mounted when a thread is selected.

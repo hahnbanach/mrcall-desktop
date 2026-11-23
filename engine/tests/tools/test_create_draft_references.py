@@ -1,67 +1,42 @@
-"""`create_draft` takes a References chain as the archive stores it: folded over lines."""
-
-from __future__ import annotations
-
+"""Folded RFC chains survive mailbox creation; malformed header inputs never append."""
 import asyncio
-import json
-import sqlite3
 
 import pytest
 
-from zylch.storage import database as dbm
+from mailbox_tools_fixture import OWNER, cleanup_test_data, mailbox, message
 from zylch.tools.base import ToolStatus
+from zylch.tools.gmail_tools import CreateDraftTool
 
-OWNER = "owner@company.test"
 IDS = ["<first@client.test>", "<second@company.test>", "<third@client.test>"]
 
 
-@pytest.fixture
-def tool(tmp_path, monkeypatch):
-    db_path = str(tmp_path / "zylch.db")
-    monkeypatch.setenv("ZYLCH_DB_PATH", db_path)
-    monkeypatch.setenv("EMAIL_ADDRESS", OWNER)
-    dbm.dispose_engine()
-    dbm.init_db()
-    from zylch.storage.storage import Storage
-    from zylch.tools.gmail_tools import CreateDraftTool
-
-    yield CreateDraftTool(Storage(), OWNER), db_path
-    dbm.dispose_engine()
-
-
-def create(tool, references, **overrides):
-    args = {"to": "customer@client.test", "subject": "Re: order", "body": "On its way.",
-            "in_reply_to": IDS[-1], "references": references, "thread_id": IDS[0]}
-    args.update(overrides)
-    return asyncio.run(tool.execute(**args))
-
-
-def stored(db_path):
-    conn = sqlite3.connect(db_path)
-    try:
-        return [json.loads(row[0]) for row in conn.execute('SELECT "references" FROM drafts')]
-    finally:
-        conn.close()
+def create(mailbox, references, **overrides):
+    values = {"to": "customer@example.test", "subject": "Synthetic reply", "body": "Reply body.",
+              "in_reply_to": IDS[-1], "references": references, "thread_id": IDS[0]}
+    values.update(overrides)
+    return asyncio.run(CreateDraftTool(mailbox.storage, OWNER).execute(**values))
 
 
 @pytest.mark.parametrize("separator", [" ", "\n", "\r\n ", "\n\t", " \n "])
-def test_a_folded_chain_gives_the_same_draft_as_a_chain_on_one_line(tool, separator):
-    draft, db_path = tool
-    result = create(draft, separator.join(IDS))
+def test_folded_reference_chain_is_saved_as_the_same_native_headers(mailbox, separator):
+    result = create(mailbox, separator.join(IDS))
     assert result.status is ToolStatus.SUCCESS, result.error
-    assert stored(db_path) == [IDS]
+    assert len(mailbox.state.create_calls) == 1
+    saved = message(mailbox.state.create_calls[0])
+    assert str(saved["References"]).split() == IDS
+    assert str(saved["In-Reply-To"]) == IDS[-1]
+    assert "Bcc" not in saved
+    mailbox.no_private_drafts()
 
 
-def test_a_line_break_inside_the_reply_target_is_still_refused(tool):
-    draft, db_path = tool
-    result = create(draft, " ".join(IDS), in_reply_to="<third@client.test>\nBcc: other@client.test")
+@pytest.mark.parametrize("field,value", [
+    ("in_reply_to", "<third@client.test>\nBcc: other@example.test"),
+    ("references", "<first@client.test>\r\nBcc: other@example.test\r\n<third@client.test>"),
+    ("references", ["<first@client.test>\nBcc: other@example.test", IDS[-1]]),
+])
+def test_malformed_or_injected_identifier_refuses_before_any_append(mailbox, field, value):
+    result = create(mailbox, " ".join(IDS), **{field: value}) if field != "references" else create(mailbox, value)
     assert result.status is ToolStatus.ERROR
-    assert stored(db_path) == []
-
-
-def test_no_identifier_of_a_folded_chain_carries_a_line_break(tool):
-    draft, db_path = tool
-    result = create(draft, "<first@client.test>\r\nBcc: other@client.test\r\n<third@client.test>")
-    assert result.status is ToolStatus.SUCCESS, result.error
-    (chain,) = stored(db_path)
-    assert all("\n" not in item and "\r" not in item for item in chain)
+    assert mailbox.state.create_calls == [] and mailbox.state.send_calls == []
+    assert mailbox.storage.list_drafts(OWNER) == []
+    mailbox.no_private_drafts()

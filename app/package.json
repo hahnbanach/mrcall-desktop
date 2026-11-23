@@ -1,7 +1,7 @@
 {
   "name": "mrcall-desktop",
   "productName": "MrCall Desktop",
-  "version": "0.1.57-stripe.3",
+  "version": "0.1.57-mailbox.1",
   "description": "MrCall Desktop (Electron + React)",
   "main": "out/main/index.js",
   "author": "Alex Doe",
@@ -18,6 +18,7 @@
     "test:onboarding": "node scripts/test-onboarding.mjs",
     "test:auth": "node scripts/test-auth-main.mjs && node scripts/test-auth-renderer.mjs",
     "test:rpc-contracts": "node scripts/rpc-contract-inventory.cjs --negative-proof",
+    "test:drafts": "node scripts/test-drafts-browser.mjs",
     "inventory:rpc": "node scripts/rpc-contract-inventory.cjs --write"
   },
   "dependencies": {

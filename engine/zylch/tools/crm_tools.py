@@ -296,7 +296,12 @@ class ComposeEmailTool(Tool):
                 thread_id=result.get("thread_id"),
             )
 
-            draft_id = draft.get("id", "") if draft else ""
+            if not isinstance(draft, dict) or not draft.get("id"):
+                raise RuntimeError("Mailbox draft preparation returned no mailbox identity")
+            subject, body = draft.get("subject", ""), draft.get("body", "")
+            to_email = ", ".join(draft.get("to_addresses") or [])
+            result = {**result, "subject": subject, "body": body, "recipient_email": to_email}
+            draft_id = draft["id"]
             # `create_draft` returns an identical unsent draft instead of
             # duplicating it, so the caller has to be told which of the two
             # happened — a reused id is not a newly composed reply.

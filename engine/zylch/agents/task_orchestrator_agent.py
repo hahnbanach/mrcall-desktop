@@ -15,6 +15,7 @@
 
 
 import logging
+import asyncio
 from typing import Any, Dict, Optional
 
 from zylch.agents.base import BaseConversationalAgent
@@ -34,8 +35,6 @@ from zylch.services.approval_gate import (
 )
 from zylch.services.request_policy import is_read_only, refusal_text as read_only_refusal_text
 from zylch.storage import Storage
-from zylch.storage.database import get_session
-from zylch.storage.models import Draft
 from zylch.tools.factory import SessionState
 
 logger = logging.getLogger(__name__)
@@ -381,7 +380,13 @@ The sub-agents can handle multi-step workflows. Give them the full picture.
                 previous_draft = None
                 last_result = self.session_state.get_last_action_result()
                 if last_result and last_result.get("tool_used") == "write_email":
-                    previous_draft = last_result.get("result", {})
+                    from zylch.services.mailbox_drafts import MailboxDrafts
+                    previous_id = last_result.get("result", {}).get("draft_id")
+                    previous_draft = (await asyncio.to_thread(MailboxDrafts(self.owner_id).get, previous_id)
+                                      if previous_id else None)
+                    if previous_id and previous_draft is None:
+                        return "The pending mailbox draft no longer exists: " + previous_id
+                    previous_draft = previous_draft or {}
                     logger.debug(
                         f"[TaskOrchestrator] Passing previous_draft to EmailerAgent: subject={previous_draft.get('subject', '?')}"
                     )
@@ -414,250 +419,60 @@ The sub-agents can handle multi-step workflows. Give them the full picture.
             return f"Error calling {agent_name}: {str(e)}"
 
     async def _handle_send_email(self) -> str:
-        """Handle send_email tool - send the pending draft from database.
+        """Approve and send the exact current mailbox draft, retaining one request identity."""
+        from uuid import uuid4
+        from zylch.services.mailbox_drafts import MailboxDrafts
+        from zylch.services.request_policy import assert_tool_allowed
 
-        Uses the draft_id from last_action_result to fetch and send the
-        email via the user's connected email provider (Gmail or Outlook).
-        No id, no send: there is no fallback to "whatever draft is newest".
-
-        Returns:
-            Success/error message for the user
-        """
         if is_read_only():
             return read_only_refusal_text("send_email")
-
-        from zylch.api.token_storage import get_provider, get_email, get_graph_token
-
-        # 1. Get draft_id from session state.
-        #
-        # The id recorded by the preceding compose step is the ONLY identifier
-        # of "the pending draft": this tool fires on a bare "send it", the
-        # model is never shown a draft id, and a mailbox normally holds several
-        # drafts. Falling back to the newest row in the DB would answer
-        # "send it" with a different customer's email.
-        draft_id = None
-        last_result = self.session_state.get_last_action_result()
-
-        if last_result and last_result.get("tool_used") == "write_email":
-            draft_id = last_result.get("result", {}).get("draft_id")
-            logger.debug(
-                f"[TaskOrchestrator] send_email: draft_id from last_action_result = {draft_id}"
-            )
-
+        assert_tool_allowed("send_email")
+        last = self.session_state.get_last_action_result()
+        pending = (last or {}).get("result") or {}
+        draft_id = pending.get("draft_id") if (last or {}).get("tool_used") in {"write_email", "send_email"} else None
         if not draft_id:
-            return '⚠️ No pending email draft to send.\n\nCompose an email first, then say "send it" — or send a specific draft with `/email send <draft_id>` (`/email list --draft` shows the ids).'
+            return "No pending email draft. Compose an email first or name a mailbox draft explicitly."
+        request_key = pending.get("send_request_key")
+        mailbox = MailboxDrafts(self.owner_id)
 
-        # 2. Fetch draft from database
-        try:
-            with get_session() as session:
-                draft_row = (
-                    session.query(Draft)
-                    .filter(Draft.id == draft_id, Draft.owner_id == self.owner_id)
-                    .one_or_none()
-                )
-
-                if not draft_row:
-                    return f"⚠️ Draft not found (id: {draft_id}). It may have been deleted."
-
-                draft = draft_row.to_dict()
-        except Exception as e:
-            logger.error(f"[TaskOrchestrator] Failed to fetch draft {draft_id}: {e}")
-            return f"❌ Failed to load draft: {str(e)}"
-
-        # 3. Get email provider for this user
-        provider = get_provider(self.owner_id)
-        user_email = get_email(self.owner_id)
-
-        if not provider:
-            return "❌ No email provider connected.\n\nUse `/connect google` or `/connect microsoft` first."
-
-        # Every reason to REFUSE is decided BEFORE the draft is marked
-        # `sending`. That write means "handed to a transport"; a refusal after
-        # it leaves the draft in a status `/email send` filters out, so the
-        # draft this code could never mail becomes unsendable by any later
-        # attempt either.
-        if provider not in ("google", "microsoft"):
-            return f"❌ Unknown email provider: {provider}"
-
-        graph_token = None
-        if provider == "microsoft":
-            graph_token = get_graph_token(self.owner_id)
-            if not graph_token:
-                return "❌ Microsoft token expired. Please reconnect with `/connect microsoft`."
-
-        # 3b. Approval. Same gate and same tool name as every other send in the
-        # engine, placed after the cheap refusals (so nobody is asked to approve
-        # a send that cannot happen) and before the `sending` write. `send_email`
-        # is what `APPROVAL_TOOLS` calls this act on the solve surface, so a
-        # client's allow-list decides it once for both.
-        decision, edited = await request_approval(
-            self.approval_callback,
-            "send_email",
-            draft_approval_card(draft, draft_id),
-        )
-        if decision != APPROVED:
-            return refusal_text(decision, "Sending this draft", "send_email")
-
-        # 4. Claim the draft for this send attempt.
-        #
-        # A conditional UPDATE that reports whether it matched, not a blind
-        # write: the draft was read several steps ago and an approval was
-        # awaited in between, so another caller may already own it. Only the
-        # caller that wins the claim reaches the transport.
-        #
-        # It comes BEFORE the approval-card edits are persisted: a caller that
-        # loses the race must not write the operator's corrections into a row
-        # another request is at that moment mailing. Everything from here to
-        # the transport call is synchronous, so no cancellation can land in
-        # between and strand the draft in `sending`.
-        if not self.storage.claim_draft_for_send(self.owner_id, draft_id, provider=provider):
-            logger.info(f"[TaskOrchestrator] Draft {draft_id} already claimed — not sending")
-            current = self.storage.get_draft(self.owner_id, draft_id) or {}
-            if (current.get("status") or "").lower() == "sent":
-                return (
-                    f"Draft {draft_id} has already been sent. Nothing was sent."
-                    " Compose a new draft if you meant to write again."
-                )
-            return f"Draft {draft_id} is already being sent by another request. Nothing was sent."
+        def remember(outcome):
+            self.session_state.set_last_action_result({"tool_used": "send_email", "result": {
+                "draft_id": draft_id, "send_request_key": request_key, "send_outcome": outcome}})
 
         try:
-            # A human who corrected the recipient or body in the card must get
-            # the corrected mail, so persist the edits and re-read before
-            # extracting.
-            updates = draft_updates_from_card(edited)
-            if updates:
-                try:
-                    self.storage.update_draft(self.owner_id, draft_id, updates)
-                    draft = self.storage.get_draft(self.owner_id, draft_id) or draft
-                except Exception as e:
-                    logger.warning(f"[TaskOrchestrator] Failed to apply approval-card edits: {e}")
-
-            # 5. Extract draft fields
-            to_addresses = draft.get("to_addresses", [])
-            to_str = ", ".join(to_addresses) if isinstance(to_addresses, list) else to_addresses
-            subject = draft.get("subject", "")
-            body = draft.get("body", "")
-            in_reply_to = draft.get("in_reply_to")
-            references = draft.get("references", [])
-            thread_id = draft.get("thread_id")
-
-            if not to_str:
-                # Nothing was handed to a transport, so give the claim back.
-                self.storage.release_draft_claim(
-                    self.owner_id, draft_id, "draft", "No recipient specified"
-                )
-                return "❌ No recipient specified in the email draft."
-
-            logger.info(
-                f"[TaskOrchestrator] Sending email to {to_str}"
-                f" via {provider} (draft_id={draft_id})"
-            )
-
-            # 5. Send via appropriate provider
-            if provider == "google":
-                from zylch.tools.gmail import GmailClient
-
-                gmail = GmailClient(account=user_email, owner_id=self.owner_id)
-
-                # Convert references list to string if needed
-                refs_str = None
-                if references:
-                    refs_str = " ".join(references) if isinstance(references, list) else references
-
-                sent_message = gmail.send_message(
-                    to=to_str,
-                    subject=subject,
-                    body=body,
-                    in_reply_to=in_reply_to,
-                    references=refs_str,
-                    thread_id=thread_id,
-                )
-
-                sent_id = sent_message.get("id", "")
-
-            elif provider == "microsoft":
-                from zylch.tools.outlook import OutlookClient
-
-                outlook = OutlookClient(graph_token=graph_token["access_token"], account=user_email)
-
-                sent_message = outlook.send_message(
-                    to=to_str,
-                    subject=subject,
-                    body=body,
-                )
-
-                sent_id = sent_message.get("id", "")
-
-            else:
-                # Unreachable while the whitelist above holds. Raise rather
-                # than return, so any future provider added in one place and
-                # not the other unwinds through the handler below, which puts
-                # the draft back to `draft`.
-                raise RuntimeError(f"Unknown email provider: {provider}")
-
-        except Exception as e:
-            # The try block ends at the transport call on purpose: an
-            # exception raised after the message was accepted must NOT put the
-            # draft back to `draft`, or the delivered mail becomes sendable a
-            # second time.
-            from zylch.tools.gmail_tools import delivery_is_uncertain
-
-            logger.error(f"[TaskOrchestrator] Failed to send email: {e}", exc_info=True)
-            uncertain = delivery_is_uncertain(e)
-            try:
-                # Conditional on still holding the claim: if a second caller
-                # has re-claimed and delivered this draft meanwhile, reopening
-                # it here would offer a delivered mail for sending again.
-                self.storage.release_draft_claim(
-                    self.owner_id,
-                    draft_id,
-                    "sending" if uncertain else "draft",
-                    str(e),
-                )
-            except Exception as restore_error:
-                logger.error(
-                    f"[TaskOrchestrator] draft {draft_id} left in `sending`:"
-                    f" restore after transport error failed: {restore_error}"
-                )
-
-            if uncertain:
-                return (
-                    f"**Connection lost while sending:** {str(e)}\n\nIt is NOT"
-                    f" known whether the email went out. Check the mailbox before"
-                    f" resending `{draft_id}`."
-                )
-            return f"❌ **Failed to send email:** {str(e)}\n\nNothing was sent. The draft is still saved — try again with `/email send {draft_id}` or modify the email."
-
-        # ── The transport accepted the message. Only `sent`/deleted from here.
-        # 6. Delete draft after successful send
-        try:
-            with get_session() as session:
-                session.query(Draft).filter(Draft.id == draft_id).delete()
-            logger.debug(f"[TaskOrchestrator] Deleted draft {draft_id} after sending")
-        except Exception as e:
-            logger.error(f"[TaskOrchestrator] Failed to delete draft after send: {e}")
-            try:
-                # The row survives; make sure it survives as `sent` and not as
-                # a `sending` row the stale-claim window would hand out again.
-                self.storage.force_draft_sent(self.owner_id, draft_id, sent_id)
-            except Exception as force_error:
-                logger.error(
-                    f"[TaskOrchestrator] draft {draft_id} DELIVERED but could not"
-                    f" be marked sent: {force_error}"
-                )
-
-        # 7. Clear the pending draft from session state
-        self.session_state.set_last_action_result(None)
-
-        logger.info(f"[TaskOrchestrator] Email sent successfully: {sent_id}")
-
-        return f"""✅ **Email sent!**
-
-**To:** {to_str}
-**Subject:** {subject}
-**Via:** {provider.title()}
-
-The task may now be complete. Use `/tasks exit` to return to normal chat, or continue working on this task."""
+            previous = await asyncio.to_thread(mailbox.operation, request_key) if request_key else None
+            if previous is not None and previous.get("stage") == "not_dispatched":
+                previous = None
+            if previous is None:
+                request_key = "task-send:" + str(uuid4())
+                draft = await asyncio.to_thread(mailbox.get, draft_id)
+                if draft is None:
+                    return f"Draft not found: {draft_id}. It is not recreated."
+                card = draft_approval_card(draft, draft_id)
+                card["request_key"] = request_key
+                decision, edited = await request_approval(self.approval_callback, "send_email", card)
+                if decision != APPROVED:
+                    return refusal_text(decision, "Sending this draft", "send_email")
+                updates = draft_updates_from_card(edited, original=card)
+                if updates:
+                    aliases = {"to_addresses": "to", "cc_addresses": "cc", "bcc_addresses": "bcc"}
+                    current = await asyncio.to_thread(mailbox.update, draft_id,
+                        **{aliases.get(key, key): value for key, value in updates.items()})
+                    if current is None:
+                        return f"Draft not found after approval: {draft_id}. Nothing was sent."
+                # Keep only the approved handle and request identity, not another editable draft.
+                remember({"state": "approved", "effect_certainty": "not-dispatched"})
+            # A repeated task action resumes the established operation without edits or redispatch.
+            outcome = await asyncio.to_thread(mailbox.send, draft_id, request_key)
+            remember(outcome)
+            if outcome.get("ok") and outcome.get("state") == "sent":
+                return "Email confirmed in Sent. Message-ID: " + str(outcome.get("message_id"))
+            return ("Email delivery " + str(outcome.get("state", "unconfirmed")) + ": "
+                    + str(outcome.get("cause", "Sent confirmation pending"))
+                    + ". Repeat this action to check the same operation; request " + request_key + ".")
+        except Exception as error:
+            logger.exception("[TaskOrchestrator] mailbox send operation failed")
+            return "Mailbox operation failed: " + str(error) + ". Check the same draft and request before retrying."
 
     def _format_emailer_result(self, result: Dict[str, Any]) -> str:
         """Format EmailerAgent result for display."""

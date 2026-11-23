@@ -174,7 +174,7 @@ def _redact_params(method: Optional[str], params: Dict[str, Any]) -> Dict[str, A
         return {key: "<redacted narration>" for key in params}
     if (method or "").startswith("workflows."):
         return {"payload": "<redacted private workflow>"}
-    if (method or "").startswith(("qonto.", "stripe.", "tasks.")):
+    if (method or "").startswith(("qonto.", "stripe.", "tasks.", "google.gmail.", "drafts.", "campaign.")):
         return {key: "<redacted>" for key in params}
     if method in {"drafts.publish_review", "drafts.operation_status", "drafts.retire_sent_mirror",
                   "drafts.operator_send_inspect", "drafts.send_operator"}:

@@ -2,11 +2,11 @@
 
 Refactored for IMAP/SMTP (no Gmail/Outlook OAuth API).
 GmailSearchTool uses IMAPClient.search().
-SendDraftTool uses IMAPClient.send_message() via SMTP.
-CreateDraftTool and ListDraftsTool use Storage (DB drafts).
+Draft tools operate on the mailbox through the engine's mailbox service.
 """
 
 from zylch.observability_producers import observed, observe, failure
+import asyncio
 import html
 import logging
 import re
@@ -60,31 +60,6 @@ _DELIVERY_UNKNOWN = (
     BrokenPipeError,
     OSError,  # every remaining socket / TLS failure
 )
-
-
-#: Shortest abbreviated draft handle the send path will resolve. It is the
-#: length the operator's review digest prints (`cs-kernel/cs/review.py`
-#: renders `engine <id[:8]>` and calls it the form a draft is retired by), and
-#: it is short enough to type while leaving collision risk at roughly 1e-6 for
-#: a mailbox holding tens of drafts. Below it, a handle is refused rather than
-#: guessed: resolving "ab" to whatever matches is how "send THAT draft" turns
-#: into a mail to a different customer.
-DRAFT_HANDLE_MIN_LENGTH = 8
-
-#: How many matches an ambiguous handle is worth listing. The lookup asks for
-#: one more than this so a saturated result can say "at least N" instead of
-#: quoting the cap as if it were the count.
-DRAFT_HANDLE_MATCH_CAP = 10
-
-
-class DraftHandleError(Exception):
-    """An abbreviated draft handle that cannot be resolved to ONE draft.
-
-    Carries the sentence the operator should read. Distinct from "no such
-    draft": an ambiguous or too-short handle means the send did not happen
-    because the request was unclear, and the fix is to type more of the id —
-    not to conclude that the draft is gone.
-    """
 
 
 def delivery_is_uncertain(error: BaseException) -> bool:
@@ -477,6 +452,12 @@ class CreateDraftTool(Tool):
                     error=("Failed to create draft" " in database"),
                 )
 
+            # The provider may return an existing human-edited draft. Present
+            # its saved bytes rather than unpersisted model output.
+            to = ", ".join(draft.get("to_addresses") or [])
+            subject, body = draft.get("subject", ""), draft.get("body", "")
+            cc_list, bcc_list = draft.get("cc_addresses") or [], draft.get("bcc_addresses") or []
+            in_reply_to = draft.get("in_reply_to")
             thread_info = " (in reply to thread)" if in_reply_to else ""
             attach_info = ""
             if norm_paths:
@@ -892,60 +873,14 @@ class SendDraftTool(Tool):
         self.owner_id = owner_id
 
     def _resolve_draft(self, draft_id):
-        """Return the draft named by ``draft_id``, or ``None``.
-
-        Accepts either the full id or an abbreviated handle of at least
-        DRAFT_HANDLE_MIN_LENGTH characters, because the abbreviated form is
-        what the operator is handed: the review digest prints the first 8
-        characters and calls that the handle a draft is retired by. A send
-        path that only accepts the full uuid refuses the only id its operator
-        has in front of them.
-
-        There is deliberately NO "most recent draft" fallback, and an
-        abbreviated handle that matches two drafts RAISES rather than picking
-        one. A mailbox normally holds several drafts, so resolving an unknown
-        or ambiguous id to whatever happens to be newest turns "send THAT
-        draft" into an email to a different recipient. An id that does not
-        resolve must fail the send, never redirect it.
-
-        Raises:
-            DraftHandleError: the handle is too short to be safe, or it
-                matches more than one draft.
-        """
+        """Read only the exact mailbox-bound handle; preserve provider failures."""
         if not draft_id:
             return None
         handle = str(draft_id).strip()
         if not handle:
             return None
 
-        exact = self.storage.get_draft(self.owner_id, handle)
-        if exact:
-            return exact
-
-        if len(handle) < DRAFT_HANDLE_MIN_LENGTH:
-            raise DraftHandleError(
-                f"'{handle}' is too short to identify a draft. Give at least"
-                f" the first {DRAFT_HANDLE_MIN_LENGTH} characters of its id."
-                " Nothing was sent."
-            )
-
-        matches = self.storage.find_drafts_by_id_prefix(
-            self.owner_id, handle, limit=DRAFT_HANDLE_MATCH_CAP + 1
-        )
-        if not matches:
-            return None
-        if len(matches) > 1:
-            listed = matches[:DRAFT_HANDLE_MATCH_CAP]
-            saturated = len(matches) > DRAFT_HANDLE_MATCH_CAP
-            count = f"at least {len(listed)}" if saturated else str(len(matches))
-            ids = ", ".join(str(m.get("id")) for m in listed)
-            more = ", and others" if saturated else ""
-            raise DraftHandleError(
-                f"'{handle}' matches {count} drafts ({ids}{more}). Give more"
-                " of the id. Nothing was sent."
-            )
-        logger.debug(f"[send_draft] handle {handle} resolved to {matches[0].get('id')}")
-        return matches[0]
+        return self.storage.get_draft(self.owner_id, handle)
 
     def _claim_refusal(self, draft_id: str) -> str:
         """Word the refusal after a lost claim by what the row now says.
@@ -980,330 +915,46 @@ class SendDraftTool(Tool):
         ``execute`` accepts the edited To / Subject / Body / Cc back and
         applies them to the draft before sending.
 
-        It resolves the handle exactly the way ``execute`` does, abbreviated
-        forms included — the card and the send must never disagree about which
-        draft an id names. An unresolvable handle hydrates nothing and leaves
-        the refusal to ``execute``, which is the only place that can say
-        "nothing was sent" truthfully.
+        It reads the same full mailbox-bound handle used by ``execute``.
+        An unresolved handle hydrates nothing and remains unchanged for the
+        eventual send refusal.
         """
         data = dict(tool_input or {})
         try:
             draft = self._resolve_draft(data.get("draft_id"))
-        except Exception as e:  # ambiguous handle or storage hiccup
+        except Exception as e:  # Invalid mailbox handle or provider read failure.
             logger.warning(f"[send_draft] approval_input could not load draft: {e}")
             return data
         if not draft:
             return data
         return draft_approval_card(draft, data.get("draft_id"))
 
-    @observed("provider", "send_draft", private=True)
-    async def execute(
-        self,
-        draft_id: str = None,
-        to: str = None,
-        subject: str = None,
-        body: str = None,
-        cc=None,
-        bcc=None,
-    ):
-        # to / subject / body / cc / bcc arrive ONLY when the user edited
-        # the send approval card (see approval_input). They override the
-        # stored draft and are persisted before sending, so the sent copy
-        # and the stored/thread copy stay in sync. Absent -> send as-is.
-        #
-        # The body runs in three phases and the split is load-bearing.
-        #   1. Decide. Nothing is claimed yet, so any failure is a plain
-        #      refusal and the draft is untouched.
-        #   2. Claim the draft, then edit / extract / send. Everything that
-        #      mutates the row happens INSIDE the claim, so a caller that lost
-        #      the race never rewrites a row somebody else is mailing. Giving
-        #      the claim back is conditional on still holding it.
-        #   3. Bookkeeping, AFTER the mail is out. This phase may only ever
-        #      drive the draft towards `sent`. A rollback here would make a
-        #      delivered mail sendable again — which is exactly what a single
-        #      try block spanning the transport call used to do.
+    async def execute(self, draft_id=None, to=None, subject=None, body=None, cc=None, bcc=None):
+        """Send current mailbox content, with one durable key for this draft."""
+        from zylch.services.mailbox_drafts import MailboxDrafts
+        from zylch.services.request_policy import assert_tool_allowed
         try:
-            draft = self._resolve_draft(draft_id)
-            if not draft:
-                return ToolResult(
-                    status=ToolStatus.ERROR,
-                    data=None,
-                    error=(
-                        f"Draft not found: {draft_id}. Nothing was sent."
-                        if draft_id
-                        else (
-                            "send_draft requires the draft_id of the draft to"
-                            " send. Nothing was sent."
-                        )
-                    ),
-                )
-            # From here on `draft_id` is the RESOLVED row id, never the
-            # argument. Every write below — the claim above all — must key on
-            # this: `_resolve_draft` is where an operator-supplied handle
-            # becomes a row, and a claim keyed on the raw argument would stop
-            # matching the moment that handle is anything but a full uuid.
-            draft_id = draft.get("id") or draft_id
-
-            # A draft is sendable unless it has already been handed to a
-            # transport. `get_draft` deliberately does NOT filter on status —
-            # hiding rows there would surprise `approval_input`, the card
-            # hydrator and `update_draft`, all of which must still see a sent
-            # draft — so the refusal lives here. Without it, calling
-            # `send_draft(draft_id=X)` twice mails the same customer twice.
-            #
-            # Only `sent` is refused here, and only because that refusal is
-            # final and deserves its own words. `sending` is left to
-            # `storage.claim_draft_for_send` in phase 2: a live claim loses
-            # there anyway, while a claim abandoned by a killed daemon is
-            # taken over rather than refused. Refusing every `sending` row up
-            # front would leave those rows unsendable while no listing shows
-            # them either (`drafts.list` filters `status='draft'`).
-            #
-            # `failed` stays sendable, and `/email send` agrees. A transport
-            # error is the case where a retry by id is exactly what the
-            # operator wants, and the two paths must not disagree about which
-            # draft is sendable. Note that no live path writes `failed` any
-            # more (both send paths restore the draft to `draft` on error,
-            # which is also what keeps it visible in `drafts.list`); accepting
-            # it is what makes rows stranded by the old behaviour recoverable.
-            status = (draft.get("status") or "draft").lower()
-            if status == "sent":
-                return ToolResult(
-                    status=ToolStatus.ERROR,
-                    data=None,
-                    error=(
-                        f"Draft {draft_id} has already been sent. Nothing was"
-                        " sent. Compose a new draft if you meant to write again."
-                    ),
-                )
-
-            # Verify every attachment still exists -- never send a partial
-            # email when an attachment has been moved or deleted since the
-            # draft was created. The approval card cannot edit attachments,
-            # so this decision does not depend on the edits applied below and
-            # belongs in the cheap, unclaimed phase.
-            for p in draft.get("attachment_paths") or []:
-                if not os.path.isfile(p):
-                    return ToolResult(
-                        status=ToolStatus.ERROR,
-                        data=None,
-                        error=(f"Attachment no longer exists: {p}." " Email NOT sent."),
-                    )
-            from zylch.services.exact_operator_send_context import preflight
-
-            preflight(self.owner_id, draft)
-            origin_binding = await operator_reply_origin.admit(self.owner_id, draft)
-        except DraftHandleError as e:
-            # An unclear handle, not a missing draft: say which, so the
-            # operator adds characters instead of hunting for a lost draft.
-            failure("provider", e, draft_id=draft_id, reason="incomplete-input", effect_certainty="none")
-            logger.info(f"[send_draft] unresolvable handle: {e}")
-            return ToolResult(status=ToolStatus.ERROR, data=None, error=str(e))
-        except Exception as e:
-            # Phase 1 failure: the draft was never claimed, so there is
-            # nothing to roll back and it stays exactly as sendable as it was.
-            failure("provider", e, draft_id=draft_id, effect_certainty="none")
-            logger.error(f"Failed to prepare draft for sending: {e}")
-            return ToolResult(
-                status=ToolStatus.ERROR,
-                data=None,
-                error=(f"Error sending email: {str(e)}"),
-            )
-
-        # --- phase 2: claim FIRST, then mutate. NO await anywhere here. ---
-        #
-        # The claim precedes the card edits on purpose: a caller that loses
-        # the race must not have written the operator's corrections into a row
-        # another request is already mailing, or the delivered mail and the
-        # stored `sent` copy say different things.
-        if not self.storage.claim_draft_for_send(self.owner_id, draft_id):
-            return ToolResult(
-                status=ToolStatus.ERROR,
-                data=None,
-                error=self._claim_refusal(draft_id),
-            )
-
-        try:
-            # Same translation the slash-command gate uses, so a correction
-            # made in the approval card lands on the draft identically
-            # whichever path is sending it.
-            edits = draft_updates_from_card(
-                {"to": to, "subject": subject, "body": body, "cc": cc, "bcc": bcc}
-            )
+            assert_tool_allowed("send_draft")
+            if not draft_id:
+                raise ValueError("draft_id is required")
+            service = MailboxDrafts(self.owner_id)
+            edits = {key: value for key, value in
+                     {"to": to, "subject": subject, "body": body, "cc": cc, "bcc": bcc}.items()
+                     if value is not None}
             if edits:
-                logger.debug(f"[send_draft] applying card edits keys={list(edits.keys())}")
-                self.storage.update_draft(self.owner_id, draft_id, edits)
-                draft = self.storage.get_draft(self.owner_id, draft_id) or draft
-
-            if origin_binding is not None:
-                draft = self.storage.get_draft(self.owner_id, draft_id)
-                if not draft:
-                    raise ValueError("Scheduled reply draft disappeared after claim")
-
-            to_addresses = draft.get("to_addresses", [])
-            to_str = ", ".join(to_addresses) if to_addresses else None
-            subject = draft.get("subject", "")
-            body = draft.get("body", "")
-            in_reply_to = draft.get("in_reply_to")
-            references = draft.get("references")
-            attachment_paths = draft.get("attachment_paths") or []
-            cc_addresses = draft.get("cc_addresses") or []
-            bcc_addresses = draft.get("bcc_addresses") or []
-
-            if not to_str:
-                raise ValueError("Draft has no recipient address")
-
-            logger.debug(
-                f"[send_draft] Sending to={to_str},"
-                f" cc={cc_addresses}, bcc={len(bcc_addresses)},"
-                f" subject={subject},"
-                f" attachments={len(attachment_paths)}"
-            )
-        except Exception as e:
-            # Still short of the transport, so the mail provably did not go
-            # out: hand the claim back and leave the draft visible.
-            failure("provider", e, draft_id=draft_id, effect_certainty="none")
-            logger.error(f"Failed to prepare claimed draft for sending: {e}")
-            self.storage.release_draft_claim(self.owner_id, draft_id, "draft", str(e))
-            return ToolResult(
-                status=ToolStatus.ERROR,
-                data=None,
-                error=(f"Error sending email: {str(e)}"),
-            )
-
-        try:
-            with operator_reply_origin.handoff(origin_binding, self.owner_id, draft):
-                observe("provider", "start", draft_id=draft_id, reason="none")
-                from zylch.services.exact_operator_send_admission import send as guarded_send
-
-                sent_message = guarded_send(self.imap.send_message, owner_id=self.owner_id, draft=draft,
-                    to=to_str,
-                    subject=subject,
-                    body=body,
-                    cc=cc_addresses or None,
-                    bcc=bcc_addresses or None,
-                    in_reply_to=in_reply_to,
-                    references=(" ".join(references) if references else None),
-                    attachment_paths=attachment_paths or None,
-                )
-        except Exception as e:
-            failure("provider", e, draft_id=draft_id, effect_certainty="unknown" if delivery_is_uncertain(e) else "none")
-            logger.error(f"Failed to send draft: {e}")
-            uncertain = delivery_is_uncertain(e)
-            try:
-                # Back to `draft`, not `failed` — the same thing `/email
-                # send` does on the same error, so the two paths agree.
-                # Every surface that shows drafts (`drafts.list`, `/email
-                # list --draft`, `list_drafts`) filters `status == "draft"`
-                # and NOTHING reads `failed`, so parking a transport error
-                # there deleted the draft from the operator's view: an
-                # email nobody can see is an email nobody retries.
-                # `error_message` keeps the diagnosis.
-                #
-                # Unless the transport died in a way that leaves delivery
-                # UNKNOWN — a dropped socket may well have dropped after the
-                # server took the message. Such a draft stays in `sending`,
-                # which holds it for its claim window: neither sendable nor
-                # discardable until that expires. The operator is told to
-                # check the mailbox instead of being promised that nothing
-                # went out.
-                self.storage.release_draft_claim(
-                    self.owner_id,
-                    draft_id,
-                    "sending" if uncertain else "draft",
-                    str(e),
-                )
-            except Exception as restore_error:
-                # The draft stays in `sending` and only the stale-claim
-                # window will free it. Say so rather than swallowing it.
-                logger.error(
-                    f"[send_draft] draft {draft_id} left in `sending`:"
-                    f" restore after transport error failed: {restore_error}"
-                )
-            if uncertain:
-                from zylch.storage.storage import (
-                    send_claim_recipient_count,
-                    send_claim_window_minutes,
-                )
-
-                held_for = send_claim_window_minutes(
-                    send_claim_recipient_count(to_addresses, cc_addresses, bcc_addresses)
-                )
-                return ToolResult(
-                    status=ToolStatus.ERROR,
-                    data=None,
-                    error=(
-                        f"The connection to the mail server dropped while sending"
-                        f" draft {draft_id}: {str(e)}. It is NOT known whether the"
-                        f" email went out — check the mailbox. The draft is held"
-                        f" for {held_for} minutes and can be neither sent nor"
-                        f" discarded until then."
-                    ),
-                )
-            return ToolResult(
-                status=ToolStatus.ERROR,
-                data=None,
-                error=(f"Error sending email: {str(e)}. Nothing was sent."),
-            )
-
-        # --- phase 3: the mail is out. Only `sent` from here on. ---
-        sent_id = sent_message.get("id", "")
-        observe("provider", "accepted", draft_id=draft_id, provider_id=sent_id, reason="none", effect_certainty="accepted")
-        try:
-            self.storage.mark_draft_sent(self.owner_id, draft_id, sent_id)
-        except Exception as e:
-            failure("persistence", e)
-            logger.error(f"[send_draft] mark_draft_sent failed after delivery: {e}")
-            try:
-                self.storage.force_draft_sent(self.owner_id, draft_id, sent_id)
-            except Exception as force_error:
-                # Worst case: a delivered mail whose draft is stuck in
-                # `sending`, which the stale-claim window will eventually
-                # offer up again. Loud, because only a human can settle it.
-                logger.error(
-                    f"[send_draft] draft {draft_id} DELIVERED but could not be"
-                    f" marked sent: {force_error}"
-                )
-
-        # Persist the sent email so the thread view and task
-        # reanalysis reflect that the user replied. Best-effort:
-        # never block the send on a local-DB failure.
-        try:
-            from datetime import datetime, timezone
-
-            from zylch.api.token_storage import get_email
-
-            owner_email = get_email(self.owner_id) or ""
-            attachment_filenames = [os.path.basename(p) for p in (attachment_paths or [])]
-            self.storage.insert_sent_email(
-                owner_id=self.owner_id,
-                thread_id=draft.get("thread_id"),
-                message_id=sent_id,
-                from_email=owner_email,
-                to_email=to_str,
-                cc=cc_addresses,
-                subject=subject,
-                body_plain=body,
-                sent_at=datetime.now(timezone.utc),
-                attachment_filenames=attachment_filenames,
-                in_reply_to=in_reply_to,
-                references=clean_references(" ".join(references) if references else None),
-            )
-        except Exception as e:
-            failure("persistence", e)
-            logger.warning(f"[send_draft] persist failed (non-blocking): {e}")
-
-        return ToolResult(
-            status=ToolStatus.SUCCESS,
-            data={"message_id": sent_id},
-            message=(
-                f"Email sent successfully!\n"
-                f"To: {to_str}\n"
-                f"Subject: {subject}\n\n"
-                f"Email sent and draft"
-                f" marked as sent."
-            ),
-        )
+                await asyncio.to_thread(service.update, draft_id, **edits)
+            from uuid import uuid4
+            # Each newly approved action is an attempt. The durable per-draft
+            # fence returns any earlier uncertain/confirmed send across keys.
+            result = await asyncio.to_thread(service.send, draft_id, "chat-send:" + str(uuid4()))
+            if not result.get("ok"):
+                return ToolResult(status=ToolStatus.ERROR, data=result,
+                    error="Mailbox send " + str(result.get("state")) + ": " + str(result.get("cause", "Sent confirmation pending")))
+            return ToolResult(status=ToolStatus.SUCCESS, data=result,
+                message="Email confirmed in Sent. Message-ID: " + str(result.get("message_id", "")))
+        except Exception as error:
+            logger.exception("[send_draft] mailbox operation failed")
+            return ToolResult(status=ToolStatus.ERROR, data=None, error=str(error))
 
     def get_schema(self):
         return {

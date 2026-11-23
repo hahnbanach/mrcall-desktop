@@ -618,27 +618,16 @@ class Storage:
         return total_stored
 
     @staticmethod
-    def _own_sent_replies_stay_answers(session, owner_id: str, records: List[Dict[str, Any]]) -> int:
-        """A reply the engine sent from a draft is stored as an answer.
-
-        The engine marks a scheduled reply ``Auto-Submitted`` and stores its
-        own copy with ``is_auto_reply`` false. A mail sync that fetches the
-        same message from the Sent folder reads that header as automatic,
-        and the upsert would write the flag over the stored copy: a reader
-        of the flag would then no longer count the reply as an answer. A
-        record whose Message-ID is the sent message of one of the owner's
-        drafts keeps the flag false, on insert and on update.
-        """
-        flagged = sorted({r["message_id_header"] for r in records
-                          if r.get("is_auto_reply") and r.get("message_id_header")})
-        sent = set()
-        for start in range(0, len(flagged), 500):
-            sent.update(row[0] for row in session.query(Draft.sent_message_id).filter(
-                Draft.owner_id == owner_id, Draft.sent_message_id.in_(flagged[start:start + 500])))
+    def _own_sent_replies_stay_answers(session, owner_id, records):
+        """Keep confirmed engine answers classified as answers when Sent syncs."""
+        from zylch.storage.mailbox_operations import confirmed_message_ids
+        flagged = {row["message_id_header"] for row in records
+                   if row.get("is_auto_reply") and row.get("message_id_header")}
+        sent = confirmed_message_ids(owner_id, flagged, session=session)
         kept = 0
-        for r in records:
-            if r.get("is_auto_reply") and r.get("message_id_header") in sent:
-                r["is_auto_reply"] = False
+        for row in records:
+            if row.get("is_auto_reply") and row.get("message_id_header") in sent:
+                row["is_auto_reply"] = False
                 kept += 1
         return kept
 
@@ -1860,473 +1849,71 @@ class Storage:
     # DRAFTS
     # ─────────────────────────────────────────────────────────────────────────
 
-    from zylch.services.task_assignment_draft_policy import guard as _assignment_draft_guard
-
-    @_assignment_draft_guard
-    def create_draft(
-        self,
-        owner_id: str,
-        to: str | list,
-        subject: str,
-        body: str,
-        in_reply_to: str = None,
-        references: list = None,
-        thread_id: str = None,
-        provider: str = "google",
-        attachment_paths: list = None,
-        cc: list = None,
-        bcc: list = None,
-        body_format: str = None,
-    ) -> Dict[str, Any]:
-        """Create a draft email, or return the identical one that already exists.
-
-        ``body_format`` is ``plain`` or ``html``; left out, the row keeps the
-        table default. It is not part of the draft identity below.
-
-        Idempotent within DRAFT_DEDUP_WINDOW_HOURS: an unsent draft for the
-        same owner with the same recipients, subject, body, thread, cc, bcc
-        and attachments is returned instead of inserting a second row. A turn
-        that outlives its caller and re-composes byte-identical text therefore
-        leaves ONE approvable draft, not two.
-
-        The check is deliberately in the application and not a unique index:
-        there is no body hash column, SQLite has no `sha1()` for an expression
-        index and treats NULLs as distinct (so every draft without a thread
-        would be exempt), `storage/database.py` migrates by ALTER TABLE ADD
-        COLUMN only, and index creation would fail outright on the profile
-        databases that already hold duplicates.
-
-        Only `status='draft'` rows match. A deliberate second mail on a thread
-        already answered must produce a new draft; returning the earlier, now
-        `sent` row would hand back an id every send path refuses.
-
-        cc/bcc: optional lists of email addresses. Stored as JSON lists;
-        empty list if None.
-
-        Returns:
-            The draft row, plus `created`: True when this call inserted it,
-            False when an identical draft already existed. Callers that
-            report "a new draft is waiting" must read that flag — the id
-            alone cannot tell the two cases apart.
-        """
-        from zylch.services.operator_reply_operations import before_draft_write, finish_draft_write
-
-        before_draft_write(owner_id)
-        to_list = to if isinstance(to, list) else [to]
-        cc_list = list(cc) if cc else []
-        bcc_list = list(bcc) if bcc else []
-        attach_list = list(attachment_paths) if attachment_paths else []
-        # Threading ids arrive as free strings (the model types them into
-        # `create_draft`), and an invalid one is worse than none: it breaks
-        # threading for the recipient AND makes the sent mirror miss its
-        # parent, so the conversation reads as unanswered forever. Normalise
-        # before the identity is computed, so a repaired draft still dedups
-        # against its twin. See `zylch/utils/msgid.py`.
-        thread_id = canonical_draft_thread_id(thread_id)
-        in_reply_to = clean_message_id(in_reply_to)
-        references = clean_references(references)
-        cutoff = _naive_utcnow() - timedelta(hours=DRAFT_DEDUP_WINDOW_HOURS)
-        from zylch.services.task_assignment_draft_policy import draft_session
-
-        with draft_session() as session:
-            if thread_id is None and in_reply_to:
-                sources = session.query(Email.thread_id).filter(
-                    Email.owner_id == owner_id,
-                    Email.message_id_header == in_reply_to,
-                ).limit(2).all()
-                if len(sources) == 1:
-                    from zylch.services.task_assignment_types import AssignmentError, thread
-
-                    source_root = canonical_draft_thread_id(sources[0][0])
-                    try:
-                        thread_id = thread(source_root)
-                    except AssignmentError:
-                        pass
-            wanted = _draft_identity(
-                to=to_list,
-                subject=subject,
-                body=body,
-                thread_id=thread_id,
-                cc=cc_list,
-                bcc=bcc_list,
-                attachment_paths=attach_list,
-                in_reply_to=in_reply_to,
-                references=references,
-            )
-            # Body equality narrows the scan in SQL; the rest of the identity
-            # needs normalization the DB cannot do (the same recipients are
-            # stored as "a@x, b@y" by one call site and ["a@x","b@y"] by
-            # another), so it is compared in Python.
-            candidates = (
-                session.query(Draft)
-                .filter(
-                    Draft.owner_id == owner_id,
-                    Draft.status == "draft",
-                    Draft.body == body,
-                    Draft.created_at >= cutoff,
-                )
-                .order_by(Draft.created_at.desc())
-                .all()
-            )
-            for row in candidates:
-                existing = _draft_identity(
-                    to=row.to_addresses,
-                    subject=row.subject,
-                    body=row.body,
-                    thread_id=row.thread_id,
-                    cc=row.cc_addresses,
-                    bcc=row.bcc_addresses,
-                    attachment_paths=row.attachment_paths,
-                    in_reply_to=row.in_reply_to,
-                    references=row.references,
-                )
-                if existing == wanted:
-                    # Stamp the reuse. `updated_at` is the row's "when did
-                    # this last change" field, and a re-compose IS a change of
-                    # standing: it says this draft is still the current answer
-                    # as of now. It is also the ONLY channel a caller outside
-                    # the process has for the reuse — an operator that diffs
-                    # `drafts.list` around a turn sees no new id and would
-                    # otherwise conclude that nothing was composed. See
-                    # `rpc/draft_queries.py`.
-                    row.updated_at = _naive_utcnow()
-                    session.flush()
-                    logger.info(
-                        f"[create_draft] identical draft already exists"
-                        f" (owner_id={owner_id}, draft_id={row.id}) -> reusing"
-                    )
-                    result = {**row.to_dict(), "created": False}
-                    finish_draft_write(session, result)
-                    return result
-
-            draft = Draft(
-                owner_id=owner_id,
-                to_addresses=to_list,
-                cc_addresses=cc_list,
-                bcc_addresses=bcc_list,
-                subject=subject,
-                body=body,
-                in_reply_to=in_reply_to,
-                references=references or [],
-                thread_id=thread_id,
-                provider=provider,
-                status="draft",
-                attachment_paths=attach_list,
-                **({"body_format": body_format} if body_format else {}),
-            )
-            session.add(draft)
-            session.flush()
-            result = {**draft.to_dict(), "created": True}
-            finish_draft_write(session, result)
-            return result
+    def create_draft(self, owner_id, to, subject, body, in_reply_to=None, references=None,
+                     thread_id=None, provider="google", attachment_paths=None, cc=None,
+                     bcc=None, body_format=None):
+        """Create the only draft in the mailbox; retain no editable private row."""
+        from zylch.services.mailbox_drafts import MailboxDrafts
+        if attachment_paths:
+            raise ValueError("Mailbox draft attachment composition is not supported")
+        return MailboxDrafts(owner_id).create(to=to, subject=subject, body=body,
+            in_reply_to=in_reply_to, references=references, thread_id=thread_id,
+            cc=cc, bcc=bcc, body_format=body_format or "plain")
 
     create_draft.operator_reply_receipts = True
 
-    def list_drafts(self, owner_id: str, status: str = "draft") -> List[Dict[str, Any]]:
-        """List drafts for a user."""
-        with get_session() as session:
-            rows = (
-                session.query(Draft)
-                .filter(Draft.owner_id == owner_id, Draft.status == status)
-                .order_by(Draft.created_at.desc())
-                .all()
-            )
-            return [r.to_dict() for r in rows]
+    def list_drafts(self, owner_id, status="draft"):
+        """Read the selected owner's mailbox Drafts folder."""
+        from zylch.services.mailbox_drafts import MailboxDrafts
+        return MailboxDrafts(owner_id).list() if status == "draft" else []
 
-    def find_drafts_by_id_prefix(
-        self, owner_id: str, prefix: str, limit: int = 5
-    ) -> List[Dict[str, Any]]:
-        """Drafts whose id starts with `prefix`, for this owner, any status.
+    def find_drafts_by_id_prefix(self, owner_id, prefix, limit=5):
+        """Resolve abbreviated mailbox handles only within the selected mailbox."""
+        return [row for row in self.list_drafts(owner_id) if row["id"].startswith(prefix)][:limit]
 
-        Backs the abbreviated handle the operator is actually given: the
-        review digest prints the first 8 characters of the id and calls that
-        the handle, so the send path has to be able to resolve one. Owner
-        scoping is what keeps that safe — a prefix is only ever matched inside
-        one mailbox.
+    def get_draft(self, owner_id, draft_id):
+        """Read the current mailbox object; a removed draft stays absent."""
+        from zylch.services.mailbox_drafts import MailboxDrafts
+        return MailboxDrafts(owner_id).get(draft_id)
 
-        Every status is searched on purpose: the caller decides what a `sent`
-        or `sending` row means (the approval card still has to hydrate one),
-        and a lookup that hid rows would answer "no such draft" for a draft
-        that plainly exists.
+    def update_draft(self, owner_id, draft_id, updates):
+        """Apply editable fields to the mailbox draft itself."""
+        from zylch.services.mailbox_drafts import MailboxDrafts
+        aliases = {"to_addresses": "to", "cc_addresses": "cc", "bcc_addresses": "bcc"}
+        editable = {"to", "cc", "bcc", "subject", "body", "body_format"}
+        values = {aliases.get(key, key): value for key, value in updates.items()}
+        if set(values) - editable:
+            raise ValueError("Mailbox draft update contains non-editable fields")
+        return MailboxDrafts(owner_id).update(draft_id, **values)
 
-        `limit` is small because the only question asked of this result is
-        "exactly one, or more than one".
-        """
-        with get_session() as session:
-            rows = (
-                session.query(Draft)
-                .filter(
-                    Draft.owner_id == owner_id,
-                    Draft.id.startswith(prefix, autoescape=True),
-                )
-                .order_by(Draft.created_at.desc())
-                .limit(limit)
-                .all()
-            )
-            out = [r.to_dict() for r in rows]
-        logger.debug(
-            f"[find_drafts_by_id_prefix] prefix={prefix} owner_id={owner_id}"
-            f" -> matches={len(out)}"
-        )
-        return out
+    def trash_draft_operation(self, owner_id, draft_id):
+        """Retry uncertain Trash by its original key; a new explicit attempt gets a new key."""
+        from uuid import uuid4
+        from zylch.services.mailbox_drafts import MailboxDrafts
+        mailbox = MailboxDrafts(owner_id)
+        active = mailbox.operations.for_draft(owner_id, draft_id, kind="trash", active_only=True)
+        request_key = active["request_key"] if active else "trash:" + str(uuid4())
+        return mailbox.trash(draft_id, request_key=request_key)
 
-    def get_draft(self, owner_id: str, draft_id: str) -> Dict[str, Any] | None:
-        """Get a specific draft by ID."""
-        with get_session() as session:
-            row = (
-                session.query(Draft)
-                .filter(Draft.owner_id == owner_id, Draft.id == draft_id)
-                .one_or_none()
-            )
-            return row.to_dict() if row else None
+    def delete_draft(self, owner_id, draft_id):
+        """Move the named mailbox draft to recoverable Trash."""
+        return bool(self.trash_draft_operation(owner_id, draft_id).get("ok"))
 
-    def update_draft(
-        self, owner_id: str, draft_id: str, updates: Dict[str, Any]
-    ) -> Dict[str, Any] | None:
-        """Update a draft."""
-        with get_session() as session:
-            row = (
-                session.query(Draft)
-                .filter(Draft.owner_id == owner_id, Draft.id == draft_id)
-                .one_or_none()
-            )
-            if not row:
-                return None
-            for k, v in updates.items():
-                if hasattr(row, k):
-                    setattr(row, k, canonical_draft_thread_id(v) if k == "thread_id" else v)
-            session.flush()
-            return row.to_dict()
+    def claim_draft_for_send(self, owner_id, draft_id, provider=None):
+        """Retired private claims cannot authorize transport or revive legacy rows."""
+        return False
 
-    def delete_draft(self, owner_id: str, draft_id: str) -> bool:
-        """Delete a draft."""
-        with get_session() as session:
-            count = (
-                session.query(Draft)
-                .filter(Draft.owner_id == owner_id, Draft.id == draft_id)
-                .delete()
-            )
-            return count > 0
+    def mark_draft_sent(self, owner_id, draft_id, sent_message_id):
+        """Delivery truth comes from Sent through mailbox operation receipts."""
+        raise RuntimeError("Private draft sent bookkeeping is retired")
 
-    def claim_draft_for_send(
-        self,
-        owner_id: str,
-        draft_id: str,
-        provider: str | None = None,
-    ) -> bool:
-        """Take exclusive ownership of a draft for one send attempt.
+    def release_draft_claim(self, owner_id, draft_id, status, error_message=None):
+        """Private draft claims are retired and cannot become sendable again."""
+        return False
 
-        Moves the draft to `sending` with a single conditional UPDATE and
-        returns True only for the caller whose UPDATE actually matched. Two
-        callers racing on the same id therefore get exactly one True: the
-        loser sends nothing. Reading the status first and then writing it —
-        which all three send paths used to do — leaves a window in which both
-        callers believe the draft is theirs.
-
-        Sendable means "not yet handed to a transport", so the predicate is
-        `status IN ('draft','failed')`: a `failed` draft is deliberately
-        retryable by id and `/email send` accepts it too. A `sending` claim
-        older than this draft's own window (`send_claim_window_minutes`, which
-        depends on how many recipients its send has to walk) is also taken
-        over — the daemon that made it is gone and no surface would ever show
-        the row again.
-
-        MUST stay synchronous. Every caller runs it immediately before handing
-        the mail to a transport; an await in between would let a cancelled
-        turn strand the draft in `sending`.
-
-        Args:
-            owner_id: Owner of the draft.
-            draft_id: Exact draft id.
-            provider: Persisted only for 'google' / 'microsoft' — the table
-                carries CHECK (provider IN ('google','microsoft')), so writing
-                'imap' would raise.
-
-        Returns:
-            True if this call won the claim, False otherwise.
-        """
-        now = _naive_utcnow()
-        values: Dict[str, Any] = {
-            "status": "sending",
-            "updated_at": now,
-            "error_message": None,
-        }
-        if provider in ("google", "microsoft"):
-            values["provider"] = provider
-        with get_session() as session:
-            from zylch.services.exact_operator_send_context import claim_allowed
-
-            if not claim_allowed(session, owner_id, draft_id):
-                return False
-            # Read the recipients first: the window a stale claim is measured
-            # against is a property of THIS draft's send, not a constant. The
-            # read decides only the window — the UPDATE below is still what
-            # picks the single winner, so two callers cannot both claim.
-            row = (
-                session.query(Draft.to_addresses, Draft.cc_addresses, Draft.bcc_addresses, Draft.status, Draft.updated_at)
-                .filter(Draft.owner_id == owner_id, Draft.id == draft_id)
-                .one_or_none()
-            )
-            # No row means the UPDATE below will match nothing either, so the
-            # window it is measured against is moot: fall to the floor, which
-            # is what `drafts.discard` also gets for a row with no recipients.
-            # The two must degrade the same way or they disagree about one id.
-            recipients = (
-                send_claim_recipient_count(row[0], row[1], row[2]) if row is not None else 0
-            )
-            stale_before = now - timedelta(minutes=send_claim_window_minutes(recipients))
-            # Fresh claims need no writer attempt: a live transport retains the
-            # private reservation, so waiting here would stall a losing caller.
-            if row is not None and (row[3] == "sent" or (row[3] == "sending" and row[4] is not None and row[4] >= stale_before)):
-                return False
-            claimed = (
-                session.query(Draft)
-                .filter(
-                    Draft.owner_id == owner_id,
-                    Draft.id == draft_id,
-                    or_(
-                        Draft.status.in_(("draft", "failed")),
-                        and_(
-                            Draft.status == "sending",
-                            or_(
-                                Draft.updated_at.is_(None),
-                                Draft.updated_at < stale_before,
-                            ),
-                        ),
-                    ),
-                )
-                .update(values, synchronize_session=False)
-            )
-        logger.debug(
-            f"[claim_draft_for_send] claim(owner_id={owner_id},"
-            f" draft_id={draft_id}, provider={provider},"
-            f" recipients={recipients}) -> claimed={claimed}"
-        )
-        from zylch.services.exact_operator_send_context import claimed as exact_claimed
-        exact_claimed(claimed == 1)
-        return claimed == 1
-
-    def mark_draft_sent(
-        self, owner_id: str, draft_id: str, sent_message_id: str
-    ) -> Dict[str, Any] | None:
-        """Mark draft as sent after email was delivered."""
-        return self.update_draft(
-            owner_id,
-            draft_id,
-            {
-                "status": "sent",
-                "sent_at": datetime.now(timezone.utc),
-                "sent_message_id": sent_message_id,
-            },
-        )
-
-    def release_draft_claim(
-        self,
-        owner_id: str,
-        draft_id: str,
-        status: str,
-        error_message: str | None = None,
-    ) -> bool:
-        """Give a claimed draft back, but only if this caller still holds it.
-
-        The counterpart of `claim_draft_for_send`, and guarded the same way:
-        the UPDATE matches only while the row is still `sending`. Writing the
-        status unconditionally is the defect this method exists to prevent —
-        a send that outlives the stale window is re-claimed and delivered by
-        somebody else, and the first caller's unguarded rollback then drags
-        the now-`sent` row back to `draft`, making a delivered mail sendable a
-        third time. A conditional write simply does nothing in that case,
-        which is exactly right: the row is no longer this caller's to move.
-
-        What the guard enforces is narrower than it looks, and the difference
-        matters: it compares STATUS, not ownership. It stops a release from
-        overwriting a row that has since become `sent` or has been deleted. It
-        cannot tell "still mine" from "re-claimed by a second sender", so a
-        late release CAN free a claim somebody else currently holds, and that
-        second sender may then be joined by a third. Nothing here prevents
-        that; what does is `send_claim_window_minutes`, sized so a claim
-        outlives the send it covers.
-
-        Args:
-            status: Where to park the draft — `draft` when the mail provably
-                did not go out, `sending` when that is unknown.
-            error_message: Diagnosis kept on the row for the operator.
-
-        Returns:
-            True if this caller still owned the row and the write landed.
-        """
-        values: Dict[str, Any] = {
-            "status": status,
-            "error_message": error_message,
-            "updated_at": _naive_utcnow(),
-        }
-        with get_session() as session:
-            released = (
-                session.query(Draft)
-                .filter(
-                    Draft.owner_id == owner_id,
-                    Draft.id == draft_id,
-                    Draft.status == "sending",
-                )
-                .update(values, synchronize_session=False)
-            )
-        logger.debug(
-            f"[release_draft_claim] release(owner_id={owner_id},"
-            f" draft_id={draft_id}, status={status}) -> released={released}"
-        )
-        if not released:
-            logger.warning(
-                f"[release_draft_claim] draft {draft_id} was no longer `sending`"
-                " — another request owns it now; leaving it alone"
-            )
-        return released > 0
-
-    def force_draft_sent(self, owner_id: str, draft_id: str, sent_message_id: str) -> bool:
-        """Pin a draft to `sent` when its mail has already been delivered.
-
-        The last-resort partner of `mark_draft_sent`, used by the send paths
-        when the normal bookkeeping write fails AFTER the transport accepted
-        the message. It writes with one UPDATE instead of loading the row, so
-        it does not depend on the path that has just failed. It never moves a
-        draft back to a sendable status: once the mail is out, the only
-        correct direction is `sent`.
-
-        Guarded on `status='sending'` for the same reason as
-        `release_draft_claim`, and with the same limit: the guard reads a
-        STATUS, not an owner. It stops this call from overwriting a row that
-        is already `sent` (which needs nothing from it) or gone, but if a
-        second sender has re-claimed the row this write can still stamp the
-        first sender's message id on the second sender's claim. It never makes
-        a delivered draft sendable, which is the property this method exists
-        for.
-
-        Returns:
-            True if a row was updated.
-        """
-        now = _naive_utcnow()
-        with get_session() as session:
-            updated = (
-                session.query(Draft)
-                .filter(
-                    Draft.owner_id == owner_id,
-                    Draft.id == draft_id,
-                    Draft.status == "sending",
-                )
-                .update(
-                    {
-                        "status": "sent",
-                        "sent_at": now,
-                        "sent_message_id": sent_message_id,
-                        "updated_at": now,
-                    },
-                    synchronize_session=False,
-                )
-            )
-        logger.debug(
-            f"[force_draft_sent] force(owner_id={owner_id}, draft_id={draft_id})"
-            f" -> updated={updated}"
-        )
-        return updated > 0
+    def force_draft_sent(self, owner_id, draft_id, sent_message_id):
+        """Retired: a private assertion cannot establish delivery."""
+        raise RuntimeError("Private draft sent bookkeeping is retired")
 
     def insert_sent_email(
         self,

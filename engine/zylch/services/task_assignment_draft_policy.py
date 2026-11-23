@@ -23,6 +23,68 @@ _scope = contextvars.ContextVar("assignment_draft_thread", default=None)
 _write_session = contextvars.ContextVar("assignment_draft_session", default=None)
 
 
+@contextlib.contextmanager
+def mailbox_effect(owner, fields):
+    """Keep source/company admission around a provider effect without a profile writer.
+
+    The provider operation commits its dispatch receipt before entering here.
+    No attached profile Session is held while the mailbox operation runs.
+    """
+    from .request_policy import assert_tool_allowed
+    from .operator_reply_origin import is_scheduled
+    from zylch.storage.storage import Storage
+
+    assert_tool_allowed("create_draft")
+    request = person_request.active()
+    root = current() or fields.get("thread_id")
+    if request is None and current() is None and not is_scheduled():
+        yield
+        return
+    if not root:
+        raise AssignmentError("Exact mailbox effect thread required")
+    root = thread(root)
+    target = thread(fields.get("in_reply_to"))
+    refs = fields.get("references") or []
+    refs = mail.references(" ".join(refs) if isinstance(refs, list) else refs)
+    actor, space, _ = evidence.admission()
+    if owner != actor.mailbox or fields.get("thread_id") != root:
+        raise AssignmentError("Mailbox effect profile or thread mismatch")
+    if request is not None:
+        if (owner.strip().lower() != request.mailbox or root != request.root
+                or target != request.target or any(ref not in request.known_identifiers() for ref in refs)):
+            raise AssignmentError("Person request must retain the exact requested source")
+        stored = Storage.get_instance().get_email_by_supabase_id(owner, request.source_id)
+        if not person_request.matches_row(request, stored):
+            raise AssignmentError("Person request source changed before mailbox effect")
+        projected = None
+    else:
+        projected = projection.project(root)
+        if (not projected.get("complete") or projected.get("hold_auto_reply")
+                or target not in projected.get("current_message_ids", [])
+                or target not in projected.get("component_thread_keys", [])
+                or any(ref not in projected.get("component_thread_keys", []) for ref in refs)):
+            raise AssignmentError("Assignment scope holds this mailbox effect")
+    with project_store.connection(space, write=True) as (conn, _):
+        from . import task_assignment_store as store
+        store._admit(actor, space, conn)
+        identity.recheck(actor, space)
+        if request is not None:
+            stored = Storage.get_instance().get_email_by_supabase_id(owner, request.source_id)
+            if not person_request.matches_row(request, stored):
+                raise AssignmentError("Person request source changed before mailbox effect")
+        else:
+            from .task_assignment_trust import delivery_routes_digest
+            task, authoritative, keys = store.authority(actor, space, root, conn, locked=True)
+            if (delivery_routes_digest(space) != projected["route_digest"]
+                    or authoritative != projected["authoritative_thread_key"]
+                    or keys != projected["component_thread_keys"]
+                    or task != projected["task"] or task and task["state"] == "assigned"):
+                raise AssignmentError("Assignment changed before mailbox effect", -32061)
+        from .operator_reply_operations import check_mailbox_write
+        check_mailbox_write(owner, conn)
+        yield
+
+
 def current():
     return _scope.get()
 

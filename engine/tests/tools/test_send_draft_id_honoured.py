@@ -1,304 +1,99 @@
-"""The send paths must honour the draft id they are given, or send nothing.
+"""Named native handles never fall back to a newer or similarly named draft.
 
-Both engine send paths used to fall back to "the most recent draft" when no
-id reached them: the `send_draft` tool (schema made draft_id optional) and the
-`/email send` slash command. A mailbox normally holds several drafts, so that
-fallback does not degrade — it mails a different customer.
-
-The id can be lost upstream too: the semantic command matcher declares a
-`send draft {draft_id:text}` template, but `_extract_params` has no extractor
-for `text`, so an id the user spelled out never lands in `params`. Rewriting
-to a bare `/email send` then turned "send THAT draft" into "send whichever
-draft the handler picks".
-
-Runs against a real temp SQLite DB — no storage mocks. Only the outbound SMTP
-boundary (IMAPClient.send_message) is stubbed.
+The mailbox-only contract replaces UUID prefix resolution with a complete,
+mailbox-bound native handle. The missing-ID and target-versus-decoy risks remain.
 """
-
 import asyncio
+import json
 from unittest.mock import MagicMock
 
 import pytest
 
-OWNER = "owner-send-draft-id-test"
-
-
-@pytest.fixture
-def fresh_storage(tmp_path, monkeypatch):
-    db_path = tmp_path / "send_draft_id_test.db"
-    monkeypatch.setenv("ZYLCH_DB_PATH", str(db_path))
-    from zylch.storage import database as db_mod
-    from zylch.storage.storage import Storage
-
-    db_mod.dispose_engine()
-    db_mod.init_db()
-    yield Storage()
-    db_mod.dispose_engine()
-
-
-def _run(coro):
-    return asyncio.run(coro)
-
-
-def _two_drafts(storage):
-    """An older target draft and a newer decoy — the decoy is what every
-    "most recent" fallback would reach for."""
-    target = storage.create_draft(
-        owner_id=OWNER,
-        to="target@example.com",
-        subject="Re: the one the operator meant",
-        body="Target body.",
-    )
-    decoy = storage.create_draft(
-        owner_id=OWNER,
-        to="decoy@example.com",
-        subject="Re: a different customer",
-        body="Decoy body.",
-    )
-    return target, decoy
-
-
-# --------------------------------------------------------------- send_draft
-
-
-def test_tool_sends_the_named_draft_not_the_newest(fresh_storage):
-    from zylch.tools.base import ToolStatus
-    from zylch.tools.gmail_tools import SendDraftTool
-
-    target, decoy = _two_drafts(fresh_storage)
-
-    imap = MagicMock()
-    imap.send_message.return_value = {"id": "sent-msg-target"}
-
-    tool = SendDraftTool(imap_client=imap, storage=fresh_storage, owner_id=OWNER)
-    result = _run(tool.execute(draft_id=target["id"]))
-
-    assert result.status == ToolStatus.SUCCESS
-    _, kwargs = imap.send_message.call_args
-    assert kwargs["to"] == "target@example.com"
-    assert kwargs["subject"] == "Re: the one the operator meant"
-
-    assert fresh_storage.get_draft(OWNER, target["id"])["status"] == "sent"
-    assert fresh_storage.get_draft(OWNER, decoy["id"])["status"] == "draft"
-
-
-def test_tool_refuses_an_unknown_id_and_sends_nothing(fresh_storage):
-    from zylch.tools.base import ToolStatus
-    from zylch.tools.gmail_tools import SendDraftTool
-
-    target, decoy = _two_drafts(fresh_storage)
-
-    imap = MagicMock()
-    tool = SendDraftTool(imap_client=imap, storage=fresh_storage, owner_id=OWNER)
-    result = _run(tool.execute(draft_id="9bde5315-0000-0000-0000-000000000000"))
-
-    assert result.status == ToolStatus.ERROR
-    assert "not found" in result.error.lower()
-    imap.send_message.assert_not_called()
-    assert fresh_storage.get_draft(OWNER, target["id"])["status"] == "draft"
-    assert fresh_storage.get_draft(OWNER, decoy["id"])["status"] == "draft"
-
-
-def test_tool_refuses_a_missing_id_and_sends_nothing(fresh_storage):
-    from zylch.tools.base import ToolStatus
-    from zylch.tools.gmail_tools import SendDraftTool
-
-    _two_drafts(fresh_storage)
-
-    imap = MagicMock()
-    tool = SendDraftTool(imap_client=imap, storage=fresh_storage, owner_id=OWNER)
-    result = _run(tool.execute())
-
-    imap.send_message.assert_not_called()
-    assert result.status == ToolStatus.ERROR
-    assert "draft_id" in result.error
-
-
-def test_tool_schema_requires_the_draft_id(fresh_storage):
-    """The model can only pass an id the schema declares as required."""
-    from zylch.tools.gmail_tools import SendDraftTool
-
-    tool = SendDraftTool(imap_client=MagicMock(), storage=fresh_storage, owner_id=OWNER)
-    schema = tool.get_schema()
-
-    assert schema["input_schema"]["required"] == ["draft_id"]
-    assert "draft_id" in schema["input_schema"]["properties"]
-
-
-# ------------------------------------------------------- abbreviated handles
-
-
-def test_an_unambiguous_prefix_resolves_and_sends(fresh_storage):
-    """The 8-character handle is the form the operator is actually given —
-    `cs review` prints `engine <id[:8]>` and calls it the handle a draft is
-    retired by. A send path that only takes the full uuid refuses the only id
-    the operator has in front of them."""
-    from zylch.tools.base import ToolStatus
-    from zylch.tools.gmail_tools import SendDraftTool
-
-    target, decoy = _two_drafts(fresh_storage)
-
-    imap = MagicMock()
-    imap.send_message.return_value = {"id": "sent-msg-target"}
-    tool = SendDraftTool(imap_client=imap, storage=fresh_storage, owner_id=OWNER)
-
-    result = _run(tool.execute(draft_id=target["id"][:8]))
-
-    assert result.status == ToolStatus.SUCCESS
-    _, kwargs = imap.send_message.call_args
-    assert kwargs["to"] == "target@example.com"
-    assert fresh_storage.get_draft(OWNER, target["id"])["status"] == "sent"
-    assert fresh_storage.get_draft(OWNER, decoy["id"])["status"] == "draft"
-
-
-def test_an_ambiguous_prefix_errors_explicitly_and_sends_nothing(fresh_storage):
-    """Two drafts, one prefix: picking either is how "send THAT draft" becomes
-    a mail to a different customer."""
-    from zylch.tools.base import ToolStatus
-    from zylch.tools.gmail_tools import SendDraftTool
-
-    shared = "abcd1234"
-    first = fresh_storage.create_draft(
-        owner_id=OWNER, to="one@example.com", subject="One", body="One body."
-    )
-    second = fresh_storage.create_draft(
-        owner_id=OWNER, to="two@example.com", subject="Two", body="Two body."
-    )
-    # Force the collision the prefix length makes unlikely but not impossible.
-    from zylch.storage import database as db
-    from zylch.storage.models import Draft
-
-    with db.get_session() as session:
-        session.query(Draft).filter(Draft.id == first["id"]).one().id = f"{shared}-1111"
-        session.query(Draft).filter(Draft.id == second["id"]).one().id = f"{shared}-2222"
-
-    imap = MagicMock()
-    tool = SendDraftTool(imap_client=imap, storage=fresh_storage, owner_id=OWNER)
-    result = _run(tool.execute(draft_id=shared))
-
-    assert result.status == ToolStatus.ERROR
-    assert "matches 2 drafts" in result.error
-    assert f"{shared}-1111" in result.error and f"{shared}-2222" in result.error
-    imap.send_message.assert_not_called()
-    assert fresh_storage.get_draft(OWNER, f"{shared}-1111")["status"] == "draft"
-    assert fresh_storage.get_draft(OWNER, f"{shared}-2222")["status"] == "draft"
-
-
-def test_a_too_short_handle_is_refused_rather_than_guessed(fresh_storage):
-    from zylch.tools.base import ToolStatus
-    from zylch.tools.gmail_tools import SendDraftTool
-
-    target, decoy = _two_drafts(fresh_storage)
-
-    imap = MagicMock()
-    tool = SendDraftTool(imap_client=imap, storage=fresh_storage, owner_id=OWNER)
-    result = _run(tool.execute(draft_id=target["id"][:4]))
-
-    assert result.status == ToolStatus.ERROR
-    assert "too short" in result.error
-    imap.send_message.assert_not_called()
-    assert fresh_storage.get_draft(OWNER, target["id"])["status"] == "draft"
-    assert fresh_storage.get_draft(OWNER, decoy["id"])["status"] == "draft"
-
-
-def test_the_approval_card_accepts_the_same_handle_as_execute(fresh_storage):
-    """The card and the send must not disagree about which draft an id names."""
-    from zylch.tools.gmail_tools import SendDraftTool
-
-    target, _decoy = _two_drafts(fresh_storage)
-    tool = SendDraftTool(imap_client=MagicMock(), storage=fresh_storage, owner_id=OWNER)
-
-    card = tool.approval_input({"draft_id": target["id"][:8]})
-
-    assert card["to"] == "target@example.com"
-    assert card["subject"] == "Re: the one the operator meant"
-    # The card carries the RESOLVED id back, so the approval the human sees
-    # and the send that follows it name the same row without re-resolving an
-    # abbreviation that another draft could have joined in the meantime.
-    assert card["draft_id"] == target["id"]
-
-
-def test_a_prefix_of_a_sent_draft_still_hydrates_the_card(fresh_storage):
-    """Handle resolution searches every status: hiding rows would answer "no
-    such draft" for a draft that plainly exists."""
-    from zylch.tools.gmail_tools import SendDraftTool
-
-    target, _decoy = _two_drafts(fresh_storage)
-    fresh_storage.mark_draft_sent(OWNER, target["id"], "already-sent")
-
-    tool = SendDraftTool(imap_client=MagicMock(), storage=fresh_storage, owner_id=OWNER)
-    card = tool.approval_input({"draft_id": target["id"][:8]})
-
-    assert card["to"] == "target@example.com"
-
-
-def test_a_handle_resolved_from_a_prefix_is_what_the_claim_keys_on(fresh_storage):
-    """The claim must key on the RESOLVED id. Keyed on the raw argument it
-    would silently stop matching the moment a handle is not a full uuid, and
-    every chat send would refuse."""
-    from zylch.tools.base import ToolStatus
-    from zylch.tools.gmail_tools import SendDraftTool
-
-    target, _decoy = _two_drafts(fresh_storage)
-    imap = MagicMock()
-    imap.send_message.return_value = {"id": "sent-msg-target"}
-    tool = SendDraftTool(imap_client=imap, storage=fresh_storage, owner_id=OWNER)
-
-    first = _run(tool.execute(draft_id=target["id"][:8]))
-    second = _run(tool.execute(draft_id=target["id"][:8]))
-
-    assert first.status == ToolStatus.SUCCESS
-    assert second.status == ToolStatus.ERROR
-    assert "already been sent" in second.error
-    assert imap.send_message.call_count == 1
-
-
-# -------------------------------------------------------------- /email send
-
-
-def test_email_send_without_an_id_refuses(fresh_storage):
+from mailbox_tools_fixture import OWNER, cleanup_test_data, mailbox
+from zylch.services.mailbox_draft_mime import handle
+from zylch.tools.base import ToolStatus
+
+
+def two_drafts(mailbox):
+    return (mailbox.draft(to=["target@example.test"], subject="Target", body="Target body."),
+            mailbox.draft(to=["decoy@example.test"], subject="Decoy", body="Decoy body."))
+
+
+def test_tool_sends_the_named_draft_not_the_newest(mailbox):
+    target, decoy = two_drafts(mailbox)
+    result = asyncio.run(mailbox.tool().execute(draft_id=target["id"]))
+    assert result.status is ToolStatus.SUCCESS, result.error
+    sent = mailbox.state.sent_message()
+    assert str(sent["To"]) == "target@example.test" and str(sent["Subject"]) == "Target"
+    assert mailbox.storage.get_draft(OWNER, target["id"]) is None
+    assert mailbox.storage.get_draft(OWNER, decoy["id"])["id"] == decoy["id"]
+    mailbox.no_private_drafts()
+
+
+def test_unknown_full_handle_and_missing_id_send_nothing(mailbox):
+    target, decoy = two_drafts(mailbox)
+    unknown = asyncio.run(mailbox.tool().execute(draft_id=handle(OWNER, "missing-native-container")))
+    missing = asyncio.run(mailbox.tool().execute())
+    assert unknown.status is ToolStatus.ERROR and "named_draft_not_found" in unknown.error
+    assert missing.status is ToolStatus.ERROR and "draft_id" in missing.error
+    assert mailbox.state.send_calls == []
+    assert {row["id"] for row in mailbox.storage.list_drafts(OWNER)} == {target["id"], decoy["id"]}
+
+
+def test_tool_schema_requires_the_full_draft_id(mailbox):
+    schema = mailbox.tool().get_schema()["input_schema"]
+    assert schema["required"] == ["draft_id"] and "draft_id" in schema["properties"]
+
+
+@pytest.mark.parametrize("form", ["short", "shared_mailbox_prefix", "unique_prefix", "bare_native_id", "foreign_mailbox"])
+def test_partial_or_foreign_handles_never_resolve_or_hydrate(mailbox, form):
+    target, decoy = two_drafts(mailbox)
+    values = {"short": target["id"][:4],
+              "shared_mailbox_prefix": target["id"].rsplit(":", 1)[0] + ":native-draft-",
+              "unique_prefix": target["id"][:-5],
+              "bare_native_id": target["provider_draft_id"],
+              "foreign_mailbox": handle("foreign@example.test", target["provider_draft_id"])}
+    value = values[form]
+    card = mailbox.tool().approval_input({"draft_id": value})
+    result = asyncio.run(mailbox.tool().execute(draft_id=value))
+    assert result.status is ToolStatus.ERROR
+    assert card == {"draft_id": value}, "A partial handle must not authorize a resolved container through the approval card"
+    assert mailbox.state.send_calls == []
+    assert len(mailbox.storage.list_drafts(OWNER)) == 2
+
+
+def test_full_handle_hydrates_current_card_and_sent_handle_has_no_editable_copy(mailbox):
+    target, decoy = two_drafts(mailbox)
+    tool = mailbox.tool()
+    assert tool.approval_input({"draft_id": target["id"]})["to"] == "target@example.test"
+    sent = asyncio.run(tool.execute(draft_id=target["id"]))
+    assert sent.status is ToolStatus.SUCCESS
+    assert tool.approval_input({"draft_id": target["id"]}) == {"draft_id": target["id"]}
+    assert mailbox.storage.get_draft(OWNER, decoy["id"]) is not None
+    mailbox.no_private_drafts()
+
+
+def test_slash_send_names_the_same_target_and_refuses_missing_or_unknown_id(mailbox):
     from zylch.services.command_handlers import handle_email
-
-    target, decoy = _two_drafts(fresh_storage)
-
-    out = _run(handle_email(["send"], MagicMock(), OWNER))
-
-    assert "Missing draft ID" in out
-    assert fresh_storage.get_draft(OWNER, target["id"])["status"] == "draft"
-    assert fresh_storage.get_draft(OWNER, decoy["id"])["status"] == "draft"
-
-
-def test_email_send_with_an_unknown_id_refuses(fresh_storage):
-    from zylch.services.command_handlers import handle_email
-
-    target, decoy = _two_drafts(fresh_storage)
-
-    out = _run(handle_email(["send", "9bde5315-0000-0000-0000-000000000000"], MagicMock(), OWNER))
-
-    assert "Draft not found" in out
-    assert fresh_storage.get_draft(OWNER, target["id"])["status"] == "draft"
-    assert fresh_storage.get_draft(OWNER, decoy["id"])["status"] == "draft"
+    target, decoy = two_drafts(mailbox)
+    missing = asyncio.run(handle_email(["send"], MagicMock(), OWNER))
+    unknown = asyncio.run(handle_email(["send", handle(OWNER, "unknown")], MagicMock(), OWNER))
+    assert "Missing draft ID" in missing
+    assert json.loads(unknown)["cause"] == "named_draft_not_found"
+    assert mailbox.state.send_calls == []
+    result = json.loads(asyncio.run(handle_email(["send", target["id"]], MagicMock(), OWNER)))
+    assert result["ok"] and mailbox.state.sent_message()["To"] == "target@example.test"
+    assert mailbox.storage.get_draft(OWNER, decoy["id"]) is not None
 
 
-# ---------------------------------------------------------- command matcher
-
-
-def test_matcher_declines_a_send_rewrite_that_lost_the_draft_id():
-    """The id-less rewrite is what actually fired: the message named a draft,
-    the matcher emitted `/email send`, and the handler picked another one."""
+def test_matcher_declines_send_rewrites_that_lose_the_named_id():
     from zylch.services.command_matcher import SemanticCommandMatcher
-
     matcher = SemanticCommandMatcher()
-
-    assert matcher._format_email({}, "send draft {draft_id:text}") is None
-    assert matcher._format_email({}, "send draft") is None
-    assert matcher._format_email({}, "send the email") is None
+    for pattern in ("send draft {draft_id:text}", "send draft", "send the email"):
+        assert matcher._format_email({}, pattern) is None
 
 
-def test_matcher_keeps_a_send_rewrite_that_carries_the_draft_id():
+def test_matcher_preserves_the_complete_opaque_handle():
     from zylch.services.command_matcher import SemanticCommandMatcher
-
-    matcher = SemanticCommandMatcher()
-    out = matcher._format_email({"draft_id": "abc123"}, "send draft {draft_id:text}")
-
-    assert out == "/email send abc123"
+    identifier = handle(OWNER, "native-container")
+    assert SemanticCommandMatcher()._format_email({"draft_id": identifier}, "send draft {draft_id:text}") == "/email send " + identifier

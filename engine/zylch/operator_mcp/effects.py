@@ -110,7 +110,10 @@ class GrantedEffects:
             from zylch.services.exact_draft_delivery import EvidenceRefusal
 
             try:
-                return await asyncio.to_thread(publication.conflicts, actor.mailbox_address, root)
+                from zylch.services.mailbox_drafts import MailboxDrafts
+                rows = await asyncio.to_thread(MailboxDrafts(actor.mailbox_address).list)
+                return [{"folder": "Drafts", "uidvalidity": "native", "uid": row["id"]}
+                        for row in rows if row.get("thread_id") == root]
             except EvidenceRefusal as error:
                 # The Drafts folder could not be read before any spending: the
                 # cause is the person's to act on, and no operation row exists.
@@ -128,22 +131,8 @@ class GrantedEffects:
         return actor.mailbox_address, actor.profile_uid
 
     async def _published(self, actor, result):
-        """Publish or recover the review copy of a completed result; the outcome rides beside it."""
-        saved = result.get('result') if isinstance(result, dict) else None
-        if not isinstance(saved, dict) or not saved.get('draft_id') or not result.get('operation_id'):
-            return result
-
-        def run():
-            from zylch.storage.storage import Storage
-
-            draft = Storage.get_instance().get_draft(actor.mailbox_address, saved['draft_id'])
-            if draft is None:
-                return {'ok': False, 'cause': 'draft_not_found', 'draft_id': saved['draft_id']}
-            return publication.publish(actor.mailbox_address, actor.profile_uid, draft,
-                                       result['operation_id'], lambda: self._recheck(actor))
-
-        outcome = await asyncio.to_thread(run)
-        return {**result, 'publication': outcome}
+        """The preparation receipt already names the only mailbox draft."""
+        return result
 
     @staticmethod
     def _person_request(actor, thread_key, source_email_id):
@@ -177,26 +166,40 @@ class GrantedEffects:
         return await self._published(actor, result)
 
     async def send(self, token, request_key, draft_id):
-        """Send one saved draft on the person's explicit instruction; the same key never sends twice."""
-        import re
-        from uuid import NAMESPACE_URL, uuid5
-
-        from zylch.services import operator_reply_send as sending
+        """Send saved mailbox edits; replay the original operation after any restart."""
+        from zylch.services.mailbox_drafts import MailboxDrafts
         from .permissions import FULL_SCOPE
-
         grant, binding = await self._grant(token, FULL_SCOPE)
         actor = self._actor(grant, binding)
-        if not isinstance(request_key, str) or not re.fullmatch(r'[A-Za-z0-9_.:-]{16,128}', request_key):
-            raise ReadError('stable_request_key_required')
-        if not isinstance(draft_id, str) or not draft_id.strip():
-            raise ReadError('draft_id_required')
-        base = f'mrcall-operator-send:{actor.mailbox_id}:{request_key}'
-        operation_id = str(uuid5(NAMESPACE_URL, base))
-        retirement_id = str(uuid5(NAMESPACE_URL, base + ':retire'))
-        result = await asyncio.to_thread(sending.send, actor.mailbox_address, actor.profile_uid, actor.mailbox_id, draft_id,
-                                         operation_id, retirement_id, lambda: self._recheck(actor))
+        mailbox = MailboxDrafts(actor.mailbox_address)
+        known = await asyncio.to_thread(mailbox.operation, request_key)
+        if known is not None:
+            result = await asyncio.to_thread(mailbox.send, draft_id, request_key)
+        else:
+            draft = await asyncio.to_thread(mailbox.get, draft_id)
+            if draft is None:
+                raise ReadError("draft_not_found:" + str(draft_id))
+            from zylch.storage.storage import Storage
+            rows = await asyncio.to_thread(Storage.get_instance().get_thread_emails,
+                                          actor.mailbox_address, draft.get("thread_id"))
+            selected = [row for row in rows if row.get("mailbox_id") == actor.mailbox_id
+                        and row.get("message_id_header") == draft.get("in_reply_to")]
+            if len(selected) != 1:
+                raise ReadError("exact_reply_source_unavailable:" + str(draft_id))
+            request = person_request.from_row(actor.mailbox_address, selected[0])
+            with person_request.scope(request):
+                result = await asyncio.to_thread(mailbox.send, draft_id, request_key)
         await self._grant(token, FULL_SCOPE, grant)
-        return {**result, 'request_key': request_key}
+        return result
+
+    async def delete(self, token, request_key, draft_id):
+        """Move one explicitly named mailbox draft to recoverable Trash."""
+        from zylch.services.mailbox_drafts import MailboxDrafts
+        from .permissions import FULL_SCOPE
+        grant, binding = await self._grant(token, FULL_SCOPE)
+        result = await asyncio.to_thread(MailboxDrafts(binding.email).trash, draft_id, request_key)
+        await self._grant(token, FULL_SCOPE, grant)
+        return result
 
     async def propose(self, token, target, content, base_revision):
         grant, binding = await self._grant(token, PROPOSAL_SCOPE)

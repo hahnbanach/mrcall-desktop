@@ -15,6 +15,8 @@ onboarding).
 
 ## Index
 
+- [Mailbox drafts](mailbox-drafts.md): mailbox listing, editing, send/Trash recovery and browser verification.
+
 The app-side doc tree is younger than the engine's. Files appear here as
 state crystallises out of `app/CLAUDE.md` — the long-form starting
 point. Likely first entries:

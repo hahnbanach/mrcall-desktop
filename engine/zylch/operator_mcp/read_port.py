@@ -23,7 +23,7 @@ class ProfileBinding:
 
 _SUMMARY_FIELDS = frozenset({"thread_id", "subject", "from_email", "from_name", "to_email", "date", "snippet", "unread", "has_attachments", "pinned", "message_count", "mailbox_ids", "last_email_id"})
 _EMAIL_FIELDS = frozenset({"id", "message_id_header", "from_email", "from_name", "to_email", "cc_email", "date", "subject", "body_plain", "body_html", "is_auto_reply", "is_user_sent", "has_attachments", "attachment_filenames", "mailbox_id", "mailbox_address", "original_message_id", "pec_markers"})
-_DRAFT_FIELDS = frozenset({"id", "to_addresses", "cc_addresses", "bcc_addresses", "subject", "body", "body_format", "in_reply_to", "references", "thread_id", "status", "created_at", "updated_at", "reply_binding"})
+_DRAFT_FIELDS = frozenset({"id", "to_addresses", "cc_addresses", "bcc_addresses", "subject", "body", "body_format", "in_reply_to", "references", "thread_id", "status", "created_at", "updated_at", "reply_binding", "owner_id", "mailbox_id", "attachments", "has_attachments", "provider", "provider_id"})
 _HANDLERS = frozenset({"emails.search", "emails.list_by_thread", "drafts.list"})
 
 
@@ -168,7 +168,7 @@ class NativeReadPort:
         if 'projects.write' in grant.scopes:
             capabilities.extend(['create_project', 'write_project'])
         if "operator.use" in grant.scopes:
-            capabilities.extend(["search_memory", "read_memory", "send_reply"])
+            capabilities.extend(["search_memory", "read_memory", "send_reply", "delete_draft"])
         return {"subject": grant.subject, "profile_uid": binding.profile_uid, "email": binding.email, "company_ref": binding.company_ref, "client_id": grant.client_id, "grant_id": grant.grant_id, "capabilities": capabilities}
 
     async def search(self, grant: ReadGrant, query: str, limit: int) -> dict:
@@ -260,91 +260,39 @@ class NativeReadPort:
         return result['drafts']
 
     async def draft_listing(self, grant: ReadGrant, limit: int, thread_key: str | None = None) -> dict:
+        """List the actual mailbox, including drafts created or edited by a person."""
         before = self._check(grant, "drafts")
         self._limit(limit)
-        threads = {}
+        targets = None
         if thread_key is not None:
             if not isinstance(thread_key, str) or not thread_key or len(thread_key) > 512:
                 raise ReadError("Invalid thread key")
-            threads[thread_key] = (await self.thread(grant, thread_key))["emails"]
-            if not threads[thread_key]:
+            emails = (await self.thread(grant, thread_key))["emails"]
+            if not emails:
                 raise ReadError("Selected thread unavailable")
+            targets = {row.get("message_id_header") for row in emails}
         result = await self._call(grant, "drafts.list", {"status": "draft"}, "drafts")
         if not isinstance(result, list):
             raise ReadError("Draft read unavailable")
-        out = []
-        unverified = unlinked = verified = 0
+        out, unverified = [], 0
         for row in result:
             self._check(grant, "drafts")
-            if not isinstance(row, dict):
+            if not isinstance(row, dict) or not row.get("id") or row.get("status") != "draft":
                 unverified += 1
                 continue
-            if not isinstance(row.get('owner_id'), str) or not row['owner_id']:
-                unverified += 1
+            if row.get("owner_id") != before.email or row.get("mailbox_id") not in grant.mailbox_ids:
+                raise ReadError("Mailbox draft provenance mismatch")
+            if targets is not None and row.get("thread_id") != thread_key and row.get("in_reply_to") not in targets:
                 continue
-            if row.get("owner_id") != before.email:
-                continue
-            binding = row.get("reply_binding")
-            source = binding.get("source") if isinstance(binding, dict) else None
-            root = binding.get("root") if isinstance(binding, dict) else row.get("thread_id")
-            if isinstance(source, dict) and isinstance(source.get("mailbox_id"), str) and source["mailbox_id"] and source["mailbox_id"] not in grant.mailbox_ids:
-                continue
-            if thread_key is not None and root and root != thread_key and row.get('thread_id') != thread_key:
-                continue
-            if (row.get('status') != 'draft' or not isinstance(row.get('id'), str) or not row['id']
-                    or not isinstance(root, str) or not root
-                    or len(root) > 512 or row.get("thread_id") != root):
-                unverified += 1
-                unlinked += int(not row.get('thread_id'))
-                continue
-            try:
-                if root not in threads:
-                    threads[root] = (await self.thread(grant, root))["emails"]
-                emails = threads[root]
-            except ReadError:
-                self._check(grant, "drafts")
-                unverified += 1
-                continue
-            if binding is None:
-                # Older native drafts have no reply_binding field. Only an
-                # exact, unique RFC source inside this granted thread proves it.
-                header = row.get('in_reply_to')
-                matches = [email for email in emails if isinstance(header, str) and header
-                           and email.get('message_id_header') == header]
-                if len(matches) == 1:
-                    source = {'id': matches[0]['id'], 'mailbox_id': matches[0]['mailbox_id']}
-                    binding = {'root': root, 'source': source}
-            elif (not isinstance(binding, dict) or not isinstance(source, dict)
-                    or not isinstance(source.get('id'), str) or not source['id']
-                    or not isinstance(source.get('mailbox_id'), str)
-                    or source.get('mailbox_id') not in grant.mailbox_ids):
-                unverified += 1
-                continue
-            else:
-                matches = [email for email in emails if email.get("id") == source["id"] and email.get("mailbox_id") == source["mailbox_id"]]
-            if len(matches) != 1:
-                unverified += 1
-                continue
-            if (not isinstance(matches[0].get('id'), str) or not matches[0]['id']
-                    or row.get('in_reply_to') and row['in_reply_to'] != matches[0].get('message_id_header')):
-                unverified += 1
-                continue
-            projected = {key: value for key, value in row.items() if key in _DRAFT_FIELDS}
-            target = binding.get("target")
-            if target is not None and not isinstance(target, str):
-                unverified += 1
-                continue
-            projected["reply_binding"] = {"root": root, "target": target, "source": {"id": source["id"], "mailbox_id": source["mailbox_id"]}}
-            verified += 1
-            if len(out) < limit:
-                out.append(projected)
+            out.append({key: value for key, value in row.items() if key in _DRAFT_FIELDS})
         if self._check(grant, "drafts") != before:
             raise ReadError("Profile binding changed")
-        return {'drafts': out, 'coverage': {
-            'complete': unverified == 0 and verified <= limit,
-            'scope': 'recorded_thread' if thread_key is not None else 'granted_mailbox',
-            'thread_key': thread_key, 'verified_count': verified, 'returned_count': len(out),
-            'limit_reached': verified > limit, 'unverified_count': unverified,
-            'unlinked_count': unlinked,
-            'absence_confirmed': unverified == 0 and verified == 0,
-            'note': 'Partial or limited results do not prove absence. Unlinked legacy drafts remain unverified.'}}
+        total = len(out)
+        return {"drafts": out[:limit], "coverage": {
+            "complete": unverified == 0 and total <= limit,
+            "scope": "recorded_thread" if thread_key is not None else "granted_mailbox",
+            "thread_key": thread_key, "verified_count": total, "returned_count": min(total, limit),
+            "limit_reached": total > limit, "unverified_count": unverified,
+            "unlinked_count": sum(not row.get("thread_id") for row in out),
+            "absence_confirmed": unverified == 0 and total == 0,
+            "note": "The mailbox is authoritative. A partial or limited inventory cannot prove absence."}}

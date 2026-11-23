@@ -13,6 +13,7 @@ stays behind the existing approval-gated paths.
 from __future__ import annotations
 
 import logging
+import asyncio
 from datetime import datetime, timezone
 from typing import Any, Awaitable, Callable, Dict
 
@@ -95,7 +96,7 @@ async def campaign_list(params: Dict[str, Any], notify: NotifyFn) -> Any:
 
 async def campaign_add_contact(params: Dict[str, Any], notify: NotifyFn) -> Any:
     """campaign.add_contact(campaign_id, email, uid?, stratum?, verdict?, language?,
-    dossier?, draft_subject?, draft_body?, state?, message_id?) -> contact dict.
+    dossier?, draft_subject?, draft_body?, draft_body_format?, draft_cc?, draft_request_key?, state?, message_id?) -> contact dict.
 
     Idempotent on (campaign_id, email): re-adding an existing contact
     updates the provided fields instead of failing on the unique
@@ -103,7 +104,9 @@ async def campaign_add_contact(params: Dict[str, Any], notify: NotifyFn) -> Any:
     """
     from zylch.storage.database import get_session
     from zylch.storage.models import Campaign, CampaignContact
+    from zylch.services import campaign_mailbox
 
+    draft_fields, draft_key = campaign_mailbox.material(params)
     campaign_id = params.get("campaign_id")
     email = (params.get("email") or "").strip().lower()
     if not campaign_id:
@@ -114,35 +117,35 @@ async def campaign_add_contact(params: Dict[str, Any], notify: NotifyFn) -> Any:
     if state not in CONTACT_STATES:
         raise ValueError(f"state must be one of {sorted(CONTACT_STATES)}")
 
-    fields = {k: params[k] for k in _CONTACT_FIELDS if k in params}
+    fields = {k: params[k] for k in _CONTACT_FIELDS if k in params and k not in {"draft_body", "draft_subject", "dossier"}}
     fields["email"] = email
     fields["state"] = state
 
     owner_id = _owner_id()
-    with get_session() as session:
-        camp = (
-            session.query(Campaign)
-            .filter(Campaign.id == campaign_id, Campaign.owner_id == owner_id)
-            .one_or_none()
-        )
+    with campaign_mailbox.contact_writer() as session:
+        camp = session.query(Campaign).filter(Campaign.id == campaign_id, Campaign.owner_id == owner_id).one_or_none()
         if camp is None:
             raise ValueError("campaign not found")
-        row = (
-            session.query(CampaignContact)
-            .filter(
-                CampaignContact.campaign_id == campaign_id,
-                CampaignContact.email == email,
-            )
-            .one_or_none()
-        )
+        if draft_fields and camp.status != "open":
+            raise campaign_mailbox.CampaignMailboxError("campaign_closed")
+        row = session.query(CampaignContact).filter(
+            CampaignContact.campaign_id == campaign_id, CampaignContact.email == email).one_or_none()
+        if row is not None and row.owner_id != owner_id:
+            raise ValueError("contact owner mismatch")
         if row is None:
             row = CampaignContact(owner_id=owner_id, campaign_id=campaign_id, **fields)
             session.add(row)
         else:
-            for k, v in fields.items():
-                setattr(row, k, v)
+            for key, value in fields.items():
+                setattr(row, key, value)
+        if "dossier" in params:
+            row.dossier = campaign_mailbox.dossier(params["dossier"], row.dossier)
+        # Old editable campaign fields never receive newly supplied text.
+        row.draft_subject, row.draft_body = None, None
         session.flush()
         out = row.to_dict()
+    if draft_fields:
+        out = await asyncio.to_thread(campaign_mailbox.prepare, owner_id, out["id"], draft_fields, draft_key)
     logger.debug(f"[rpc:campaign.add_contact] campaign={campaign_id} email={email} state={state}")
     return out
 
@@ -171,40 +174,41 @@ async def campaign_contacts(params: Dict[str, Any], notify: NotifyFn) -> Any:
 
 async def campaign_update_contact(params: Dict[str, Any], notify: NotifyFn) -> Any:
     """campaign.update_contact(contact_id, uid?, stratum?, verdict?, language?,
-    dossier?, draft_subject?, draft_body?, state?, message_id?) -> {ok, contact}.
+    dossier?, draft_subject?, draft_body?, draft_body_format?, draft_cc?, draft_request_key?, state?, message_id?) -> {ok, contact}.
 
     `state=sent` stamps `sent_at` server-side.
     """
-    from zylch.storage.database import get_session
     from zylch.storage.models import CampaignContact
+    from zylch.services import campaign_mailbox
 
+    draft_fields, draft_key = campaign_mailbox.material(params)
     contact_id = params.get("contact_id")
     if not contact_id:
         raise ValueError("contact_id is required")
     state = params.get("state")
     if state is not None and state not in CONTACT_STATES:
         raise ValueError(f"state must be one of {sorted(CONTACT_STATES)}")
-
-    fields = {k: params[k] for k in _CONTACT_FIELDS if k in params and k != "email"}
-
+    fields = {key: params[key] for key in _CONTACT_FIELDS if key in params
+              and key not in {"email", "draft_body", "draft_subject", "dossier"}}
     owner_id = _owner_id()
-    with get_session() as session:
-        row = (
-            session.query(CampaignContact)
-            .filter(
-                CampaignContact.id == contact_id,
-                CampaignContact.owner_id == owner_id,
-            )
-            .one_or_none()
-        )
+    with campaign_mailbox.contact_writer() as session:
+        row = session.query(CampaignContact).filter(
+            CampaignContact.id == contact_id, CampaignContact.owner_id == owner_id).one_or_none()
         if row is None:
             return {"ok": False, "error": "contact not found"}
-        for k, v in fields.items():
-            setattr(row, k, v)
+        if draft_fields:
+            campaign_mailbox._contact(session, owner_id, contact_id, preparing=True)
+        for key, value in fields.items():
+            setattr(row, key, value)
+        if "dossier" in params:
+            row.dossier = campaign_mailbox.dossier(params["dossier"], row.dossier)
+        row.draft_subject, row.draft_body = None, None
         if state == "sent" and row.sent_at is None:
             row.sent_at = datetime.now(timezone.utc)
         session.flush()
         out = row.to_dict()
+    if draft_fields:
+        out = await asyncio.to_thread(campaign_mailbox.prepare, owner_id, contact_id, draft_fields, draft_key)
     logger.debug(f"[rpc:campaign.update_contact] id={contact_id} state={state}")
     return {"ok": True, "contact": out}
 

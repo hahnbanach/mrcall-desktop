@@ -1,183 +1,114 @@
-"""Coverage for the send_draft approval-card hydration (2026-07-08).
+"""Approval cards show the current native draft and apply only deliberate edits.
 
-SendDraftTool.approval_input() lets a reference-style tool (the model only
-supplies draft_id) hydrate the approval card with editable To/Subject/Body,
-mirroring the affordance WhatsApp's send tool gets for free from its
-direct-field schema. execute() then accepts the edited fields back and
-persists them before sending.
-
-Also locks ToolFactory._create_email_tools() against import/registration
-drift from gmail_tools.py — this exact regression (EditDraftTool deleted
-from gmail_tools.py but left imported/registered in factory.py) broke
-collection of unrelated test modules that import the factory.
-
-Runs against a real temp SQLite DB — no storage mocks. Only the outbound
-SMTP boundary (IMAPClient.send_message) is stubbed.
+The factory registration risk remains. Approval integration runs the real
+assistant tool loop rather than reproducing its hydration branch in a test.
 """
-
 import asyncio
+from types import SimpleNamespace
 from unittest.mock import MagicMock
 
 import pytest
 
-OWNER = "owner-send-draft-test"
+from mailbox_tools_fixture import OWNER, cleanup_test_data, mailbox
+from zylch.tools.base import ToolStatus
 
 
-@pytest.fixture
-def fresh_storage(tmp_path, monkeypatch):
-    db_path = tmp_path / "send_draft_test.db"
-    monkeypatch.setenv("ZYLCH_DB_PATH", str(db_path))
-    from zylch.storage import database as db_mod
-    from zylch.storage.storage import Storage
-
-    db_mod.dispose_engine()
-    db_mod.init_db()
-    yield Storage()
-    db_mod.dispose_engine()
+def approved_agent(mailbox, monkeypatch):
+    from zylch.assistant.core import ZylchAIAgent
+    monkeypatch.setattr("zylch.assistant.core.make_llm_client", lambda: MagicMock())
+    return ZylchAIAgent(tools=[mailbox.tool()])
 
 
-def _run(coro):
-    return asyncio.run(coro)
+def block(draft):
+    return SimpleNamespace(type="tool_use", id="synthetic-send-use", name="send_draft", input={"draft_id": draft["id"]})
 
 
-def test_factory_builds_email_tools_without_edit_draft(fresh_storage):
-    """Regression guard: factory.py must not import a class gmail_tools.py
-    no longer defines (broke pytest collection of unrelated modules)."""
+def test_factory_builds_the_current_email_tool_set(mailbox):
     from zylch.tools.factory import ToolFactory
-
-    tools = ToolFactory._create_email_tools(
-        imap_client=MagicMock(),
-        storage=fresh_storage,
-        owner_id=OWNER,
-    )
-    names = {t.name for t in tools}
+    tools = ToolFactory._create_email_tools(imap_client=MagicMock(), storage=mailbox.storage, owner_id=OWNER)
+    names = [tool.name for tool in tools]
     assert "edit_draft" not in names
-    assert "send_draft" in names
+    assert {"create_draft", "list_drafts", "update_draft", "delete_draft", "send_draft"} <= set(names)
+    assert len(names) == len(set(names))
 
 
-def test_approval_input_hydrates_draft_content(fresh_storage):
-    from zylch.tools.gmail_tools import SendDraftTool
-
-    draft = fresh_storage.create_draft(
-        owner_id=OWNER,
-        to="customer@example.com",
-        subject="Re: Order status",
-        body="Your order ships tomorrow.",
-        cc=["sales@example.com"],
-    )
-
-    tool = SendDraftTool(imap_client=MagicMock(), storage=fresh_storage, owner_id=OWNER)
-    card = tool.approval_input({"draft_id": draft["id"]})
-
-    assert card["draft_id"] == draft["id"]
-    assert card["to"] == "customer@example.com"
-    assert card["subject"] == "Re: Order status"
-    assert card["body"] == "Your order ships tomorrow."
-    assert card["cc"] == "sales@example.com"
+def test_approval_input_reads_current_native_content_and_cc(mailbox):
+    draft = mailbox.draft(to=["customer@example.test"], subject="Original subject", body="Original body.",
+                          cc=["copy@example.test"])
+    mailbox.state.edit(draft, to=["saved@example.test"], subject="Saved Gmail subject", body="Saved Gmail body.")
+    card = mailbox.tool().approval_input({"draft_id": draft["id"]})
+    assert card["draft_id"] == draft["id"] and card["to"] == "saved@example.test"
+    assert card["subject"] == "Saved Gmail subject" and card["body"].strip() == "Saved Gmail body."
+    assert card["cc"] == "copy@example.test"
 
 
-def test_approval_input_hydrates_nothing_without_an_id(fresh_storage):
-    """No id, no card content — hydrating from "the most recent draft" would
-    put a different customer's email in front of the approver."""
-    from zylch.tools.gmail_tools import SendDraftTool
-
-    fresh_storage.create_draft(owner_id=OWNER, to="first@example.com", subject="First", body="...")
-    fresh_storage.create_draft(
-        owner_id=OWNER, to="second@example.com", subject="Second", body="..."
-    )
-
-    tool = SendDraftTool(imap_client=MagicMock(), storage=fresh_storage, owner_id=OWNER)
-    card = tool.approval_input({})
-
-    assert card == {}
+def test_approval_input_without_id_never_hydrates_the_newest_draft(mailbox):
+    mailbox.draft(subject="First")
+    mailbox.draft(subject="Newer")
+    assert mailbox.tool().approval_input({}) == {}
 
 
-def test_execute_applies_card_edits_before_sending(fresh_storage):
-    from zylch.tools.gmail_tools import SendDraftTool
-    from zylch.tools.base import ToolStatus
-
-    draft = fresh_storage.create_draft(
-        owner_id=OWNER,
-        to="customer@example.com",
-        subject="Original subject",
-        body="Original body.",
-    )
-
-    imap = MagicMock()
-    imap.send_message.return_value = {"id": "sent-msg-1"}
-
-    tool = SendDraftTool(imap_client=imap, storage=fresh_storage, owner_id=OWNER)
-    result = _run(
-        tool.execute(
-            draft_id=draft["id"],
-            to="edited@example.com",
-            subject="Edited subject",
-            body="Edited body.",
-        )
-    )
-
-    assert result.status == ToolStatus.SUCCESS
-
-    # The edit must have been persisted, not just sent — so the stored/
-    # thread copy matches what actually went out.
-    stored = fresh_storage.get_draft(OWNER, draft["id"])
-    assert stored["to_addresses"] == ["edited@example.com"]
-    assert stored["subject"] == "Edited subject"
-    assert stored["body"] == "Edited body."
-
-    imap.send_message.assert_called_once()
-    _, kwargs = imap.send_message.call_args
-    assert kwargs["to"] == "edited@example.com"
-    assert kwargs["subject"] == "Edited subject"
-    assert kwargs["body"] == "Edited body."
+def test_execute_applies_explicit_card_edits_to_native_content_before_sending(mailbox):
+    draft = mailbox.draft()
+    result = asyncio.run(mailbox.tool().execute(draft_id=draft["id"], to="edited@example.test",
+        subject="Edited subject", body="Edited body.", cc="copy@example.test", bcc="private@example.test"))
+    assert result.status is ToolStatus.SUCCESS, result.error
+    sent = mailbox.state.sent_message()
+    assert str(sent["To"]) == "edited@example.test" and str(sent["Subject"]) == "Edited subject"
+    assert sent.get_content().strip() == "Edited body."
+    assert str(sent["Cc"]) == "copy@example.test" and str(sent["Bcc"]) == "private@example.test"
+    assert len(mailbox.state.update_calls) == len(mailbox.state.send_calls) == 1
+    assert mailbox.storage.get_draft(OWNER, draft["id"]) is None
+    mailbox.no_private_drafts()
 
 
-def test_execute_sends_as_is_when_card_not_edited(fresh_storage):
-    from zylch.tools.gmail_tools import SendDraftTool
-    from zylch.tools.base import ToolStatus
-
-    draft = fresh_storage.create_draft(
-        owner_id=OWNER,
-        to="customer@example.com",
-        subject="Unedited subject",
-        body="Unedited body.",
-    )
-
-    imap = MagicMock()
-    imap.send_message.return_value = {"id": "sent-msg-2"}
-
-    tool = SendDraftTool(imap_client=imap, storage=fresh_storage, owner_id=OWNER)
-    result = _run(tool.execute(draft_id=draft["id"]))
-
-    assert result.status == ToolStatus.SUCCESS
-    _, kwargs = imap.send_message.call_args
-    assert kwargs["to"] == "customer@example.com"
-    assert kwargs["subject"] == "Unedited subject"
-    assert kwargs["body"] == "Unedited body."
+def test_execute_without_edits_sends_saved_content_without_rewriting_it(mailbox):
+    draft = mailbox.draft(subject="Unedited subject", body="Unedited body.")
+    result = asyncio.run(mailbox.tool().execute(draft_id=draft["id"]))
+    assert result.status is ToolStatus.SUCCESS
+    assert mailbox.state.update_calls == []
+    sent = mailbox.state.sent_message()
+    assert str(sent["Subject"]) == "Unedited subject" and sent.get_content().strip() == "Unedited body."
 
 
-def test_approval_gate_uses_tool_approval_input(fresh_storage):
-    """Locks the assistant/core.py wiring: the approval callback must be
-    given the hydrated card, not the model's raw {draft_id} input."""
-    from zylch.tools.gmail_tools import SendDraftTool
+@pytest.mark.parametrize("body_edit", [None, "Deliberate approval edit."])
+def test_actual_approval_loop_hydrates_and_preserves_unedited_gmail_changes(mailbox, monkeypatch, body_edit):
+    draft = mailbox.draft(to=["original@example.test"], subject="Original subject", body="Original body.")
+    agent = approved_agent(mailbox, monkeypatch)
+    observed = []
+    async def approve(use_id, name, card):
+        observed.append(dict(card))
+        assert name == "send_draft" and card["draft_id"] == draft["id"]
+        assert card["to"] == "original@example.test" and card["body"].strip() == "Original body."
+        mailbox.state.edit(draft, to=["later@example.test"], subject="Later Gmail subject", body="Later Gmail body.")
+        answer = dict(card)
+        if body_edit is not None:
+            answer["body"] = body_edit
+        return True, answer
+    results, _ = asyncio.run(agent._execute_tools([block(draft)], approve))
+    assert observed and len(mailbox.state.send_calls) == 1
+    sent = mailbox.state.sent_message()
+    assert str(sent["To"]) == "later@example.test" and str(sent["Subject"]) == "Later Gmail subject"
+    assert sent.get_content().strip() == (body_edit or "Later Gmail body.")
+    assert len(mailbox.state.update_calls) == int(body_edit is not None)
 
-    draft = fresh_storage.create_draft(
-        owner_id=OWNER,
-        to="customer@example.com",
-        subject="Gate check",
-        body="Body.",
-    )
-    tool = SendDraftTool(imap_client=MagicMock(), storage=fresh_storage, owner_id=OWNER)
-    tool_map = {"send_draft": tool}
 
-    # Mirrors the exact call assistant/core.py makes at the approval gate.
-    raw_model_input = {"draft_id": draft["id"]}
-    gate_tool = tool_map.get("send_draft")
-    card_input = (
-        gate_tool.approval_input(dict(raw_model_input))
-        if gate_tool is not None
-        else dict(raw_model_input)
-    )
+@pytest.mark.parametrize("decision", [None, False])
+def test_real_send_tool_cannot_dispatch_without_approval(mailbox, monkeypatch, decision):
+    draft = mailbox.draft()
+    agent = approved_agent(mailbox, monkeypatch)
+    async def refuse(*args):
+        return decision, None
+    results, _ = asyncio.run(agent._execute_tools([block(draft)], None if decision is None else refuse))
+    assert results and mailbox.state.send_calls == [] and mailbox.state.update_calls == []
+    assert mailbox.storage.get_draft(OWNER, draft["id"]) is not None
 
-    assert card_input != raw_model_input
-    assert card_input["subject"] == "Gate check"
+
+def test_failed_save_of_approval_edits_never_falls_through_to_send(mailbox, monkeypatch):
+    draft = mailbox.draft()
+    mailbox.state.update_error = RuntimeError("Synthetic lost update acknowledgement")
+    async def approve(use_id, name, card):
+        return True, {**card, "body": "An explicit edit"}
+    results, _ = asyncio.run(approved_agent(mailbox, monkeypatch)._execute_tools([block(draft)], approve))
+    assert results and len(mailbox.state.update_calls) == 1
+    assert mailbox.state.send_calls == [] and mailbox.state.sent_rows == []

@@ -1,8 +1,8 @@
 {
   "version": 1,
   "source_sha256": {
-    "preload": "47f7006d4871ff3d23b509f8abe2cf6f2a358efb2f64c183dab4cb4772b1dfc7",
-    "renderer": "601d5663d3473604d33ead7ab7a04cb4bc939fd2116183d4afe64cafa7e2b2c7",
+    "preload": "8bd6d88b6fe6934b80d78179b29425133694313256f70fdb57349c9585f311cf",
+    "renderer": "061d86212103d2ea4c4fc3450aaf190adfa84fc0818a87d152bff7433afc18c7",
     "finance": "85643cf1d0e4848ca801c5d177ef50451ad043ea86e25c8c16039e2bf246db6e"
   },
   "command": "ENGINE_PYTHON=../engine/venv/bin/python CS_KERNEL_ROOT=../../cs-kernel npm run test:rpc-contracts",
@@ -79,6 +79,9 @@
         "campaign_id",
         "dossier",
         "draft_body",
+        "draft_body_format",
+        "draft_cc",
+        "draft_request_key",
         "draft_subject",
         "email",
         "language",
@@ -128,6 +131,9 @@
         "contact_id",
         "dossier",
         "draft_body",
+        "draft_body_format",
+        "draft_cc",
+        "draft_request_key",
         "draft_subject",
         "language",
         "message_id",
@@ -160,15 +166,15 @@
         "assignment_policy_version",
         "assignment_thread_key",
         "context",
-        "contextual_email_policy_version",
         "conversation_history",
         "conversation_id",
-        "email_context",
         "history_handle",
         "history_mode",
         "history_revision",
         "message",
         "mutation_policy",
+        "operator_origin",
+        "operator_origin_version",
         "policy_version"
       ],
       "required": [
@@ -177,22 +183,237 @@
       "declared_return": "ChatService result with managed binding fields.",
       "open": false
     },
+    "diagnostics.events": {
+      "accepted": [
+        "cursor",
+        "limit",
+        "recent",
+        "trace_id"
+      ],
+      "required": [],
+      "declared_return": "bounded event page.",
+      "open": false
+    },
+    "diagnostics.health": {
+      "accepted": [],
+      "required": [],
+      "declared_return": "owner-scoped diagnostic coverage health.",
+      "open": false
+    },
+    "diagnostics.locations": {
+      "accepted": [],
+      "required": [],
+      "declared_return": "owner-scoped diagnostic locations.",
+      "open": false
+    },
+    "drafts.compose_reply": {
+      "accepted": [
+        "instruction_versions",
+        "mode",
+        "operator_origin",
+        "operator_origin_version",
+        "recover_only",
+        "request_key",
+        "request_text",
+        "source_email_id",
+        "thread_key"
+      ],
+      "required": [
+        "request_key",
+        "source_email_id",
+        "thread_key"
+      ],
+      "declared_return": "reply operation outcome.",
+      "open": false
+    },
+    "drafts.create": {
+      "accepted": [
+        "bcc",
+        "body",
+        "body_format",
+        "cc",
+        "in_reply_to",
+        "references",
+        "request_key",
+        "source_id",
+        "subject",
+        "thread_id",
+        "to"
+      ],
+      "required": [
+        "body",
+        "request_key",
+        "subject",
+        "to"
+      ],
+      "declared_return": "mailbox draft.",
+      "open": false
+    },
     "drafts.discard": {
+      "accepted": [
+        "draft_id",
+        "request_key"
+      ],
+      "required": [
+        "draft_id"
+      ],
+      "declared_return": "compatibility alias for mailbox Trash.",
+      "open": false
+    },
+    "drafts.discard_exact": {
+      "accepted": [
+        "draft_id",
+        "dry_run",
+        "expected_snapshot"
+      ],
+      "required": [],
+      "declared_return": "retired route refusal.",
+      "open": false
+    },
+    "drafts.get": {
       "accepted": [
         "draft_id"
       ],
       "required": [
         "draft_id"
       ],
-      "declared_return": "{ok, discarded, draft_id, reason?}.",
+      "declared_return": "{ok, draft?, cause?} from the mailbox.",
+      "open": false
+    },
+    "drafts.inspect": {
+      "accepted": [
+        "draft_id"
+      ],
+      "required": [
+        "draft_id"
+      ],
+      "declared_return": "compatibility read of the actual mailbox draft.",
       "open": false
     },
     "drafts.list": {
       "accepted": [
+        "mailbox_id",
         "status"
       ],
       "required": [],
-      "declared_return": "list of draft dicts.",
+      "declared_return": "complete current mailbox draft array.",
+      "open": false
+    },
+    "drafts.operation_status": {
+      "accepted": [
+        "operation_id"
+      ],
+      "required": [
+        "operation_id"
+      ],
+      "declared_return": "retained owner-scoped legacy operation evidence.",
+      "open": false
+    },
+    "drafts.operator_send_inspect": {
+      "accepted": [
+        "draft_id"
+      ],
+      "required": [],
+      "declared_return": "retired route refusal.",
+      "open": false
+    },
+    "drafts.publish_review": {
+      "accepted": [
+        "draft_id",
+        "expected_snapshot",
+        "operation_id",
+        "thread_id"
+      ],
+      "required": [],
+      "declared_return": "retired route refusal.",
+      "open": false
+    },
+    "drafts.reconcile_external": {
+      "accepted": [
+        "draft_id",
+        "sent_message_id"
+      ],
+      "required": [],
+      "declared_return": "retired route refusal.",
+      "open": false
+    },
+    "drafts.retire_sent_mirror": {
+      "accepted": [
+        "commit",
+        "draft_id",
+        "expected_snapshot",
+        "operation_id",
+        "target",
+        "thread_id"
+      ],
+      "required": [],
+      "declared_return": "retired route refusal.",
+      "open": false
+    },
+    "drafts.send": {
+      "accepted": [
+        "draft_id",
+        "request_key"
+      ],
+      "required": [
+        "draft_id",
+        "request_key"
+      ],
+      "declared_return": "Sent-confirmed delivery or unconfirmed outcome.",
+      "open": false
+    },
+    "drafts.send_operator": {
+      "accepted": [
+        "binding",
+        "draft_id",
+        "expected_snapshot",
+        "operation_id",
+        "reason",
+        "version"
+      ],
+      "required": [],
+      "declared_return": "retired route refusal.",
+      "open": false
+    },
+    "drafts.send_status": {
+      "accepted": [
+        "draft_id",
+        "request_key"
+      ],
+      "required": [
+        "draft_id",
+        "request_key"
+      ],
+      "declared_return": "read-only Sent recovery of an existing send operation.",
+      "open": false
+    },
+    "drafts.trash": {
+      "accepted": [
+        "draft_id",
+        "request_key"
+      ],
+      "required": [
+        "draft_id",
+        "request_key"
+      ],
+      "declared_return": "confirmed recoverable Trash outcome.",
+      "open": false
+    },
+    "drafts.update": {
+      "accepted": [
+        "bcc",
+        "body",
+        "body_format",
+        "cc",
+        "draft_id",
+        "request_key",
+        "subject",
+        "to"
+      ],
+      "required": [
+        "draft_id"
+      ],
+      "declared_return": "current mailbox draft.",
       "open": false
     },
     "emails.archive": {
@@ -311,6 +532,38 @@
       "accepted": [],
       "required": [],
       "declared_return": "{connected, signed_in, email?}",
+      "open": false
+    },
+    "google.gmail.begin": {
+      "accepted": [
+        "redirect_uri"
+      ],
+      "required": [],
+      "declared_return": "{auth_url, state, redirect_uri, expires_in}.",
+      "open": false
+    },
+    "google.gmail.complete": {
+      "accepted": [
+        "code",
+        "state"
+      ],
+      "required": [
+        "code",
+        "state"
+      ],
+      "declared_return": "{ok, email, scope}.",
+      "open": false
+    },
+    "google.gmail.disconnect": {
+      "accepted": [],
+      "required": [],
+      "declared_return": "{ok}.",
+      "open": false
+    },
+    "google.gmail.status": {
+      "accepted": [],
+      "required": [],
+      "declared_return": "{connected, email?, scope?, reason?}.",
       "open": false
     },
     "instructions.preview": {
@@ -726,7 +979,7 @@
     "qonto.disconnect": {
       "accepted": [],
       "required": [],
-      "declared_return": "application credential removal, disconnected status and generation.",
+      "declared_return": "application credential removal and retained bootstrap availability.",
       "open": false
     },
     "qonto.prepare": {
@@ -756,7 +1009,7 @@
     "qonto.status": {
       "accepted": [],
       "required": [],
-      "declared_return": "safe connection state, generation, stored-credential flag and persisted coverage.",
+      "declared_return": "safe connection and bootstrap availability.",
       "open": false
     },
     "qonto.summary": {
@@ -779,9 +1032,12 @@
       "open": false
     },
     "qonto.sync": {
-      "accepted": [],
+      "accepted": [
+        "date_from",
+        "date_to"
+      ],
       "required": [],
-      "declared_return": "bounded source-only refresh and durable partial coverage.",
+      "declared_return": "bounded source-only refresh and coverage.",
       "open": false
     },
     "qonto.test": {
@@ -930,6 +1186,32 @@
       ],
       "required": [],
       "declared_return": "bounded invoice evidence.",
+      "open": false
+    },
+    "stripe.payment_link_create": {
+      "accepted": [
+        "amount_minor",
+        "label",
+        "request_id"
+      ],
+      "required": [
+        "amount_minor",
+        "label",
+        "request_id"
+      ],
+      "declared_return": "dict",
+      "open": false
+    },
+    "stripe.payment_method_update_link": {
+      "accepted": [
+        "customer",
+        "request_id"
+      ],
+      "required": [
+        "customer",
+        "request_id"
+      ],
+      "declared_return": "private portal session URL.",
       "open": false
     },
     "stripe.payments": {
@@ -1335,11 +1617,267 @@
       "required": [],
       "declared_return": "{ok, contacts?, groups?, lid?, error?}.",
       "open": false
+    },
+    "workflows.artifacts.get": {
+      "accepted": [
+        "artifact_id",
+        "limit",
+        "offset"
+      ],
+      "required": [
+        "artifact_id"
+      ],
+      "declared_return": "{content_base64, next_offset}.",
+      "open": false
+    },
+    "workflows.cancel": {
+      "accepted": [
+        "run_id"
+      ],
+      "required": [
+        "run_id"
+      ],
+      "declared_return": "{run_id, state}.",
+      "open": false
+    },
+    "workflows.documents.download": {
+      "accepted": [
+        "document_id",
+        "limit",
+        "offset"
+      ],
+      "required": [
+        "document_id"
+      ],
+      "declared_return": "{content_base64, next_offset}.",
+      "open": false
+    },
+    "workflows.documents.finish_upload": {
+      "accepted": [
+        "document_id"
+      ],
+      "required": [
+        "document_id"
+      ],
+      "declared_return": "{document_id, state, limitations}.",
+      "open": false
+    },
+    "workflows.documents.prepare_upload": {
+      "accepted": [
+        "name",
+        "sha256",
+        "size"
+      ],
+      "required": [
+        "name",
+        "sha256",
+        "size"
+      ],
+      "declared_return": "{document_id, state}.",
+      "open": false
+    },
+    "workflows.documents.read": {
+      "accepted": [
+        "document_id",
+        "limit",
+        "offset"
+      ],
+      "required": [
+        "document_id"
+      ],
+      "declared_return": "{text, next_offset}.",
+      "open": false
+    },
+    "workflows.documents.upload_chunk": {
+      "accepted": [
+        "content_base64",
+        "document_id",
+        "offset"
+      ],
+      "required": [
+        "content_base64",
+        "document_id",
+        "offset"
+      ],
+      "declared_return": "{received}.",
+      "open": false
+    },
+    "workflows.interactive.confirm": {
+      "accepted": [
+        "challenge_id",
+        "human_requested",
+        "own_affairs",
+        "public_lookups_approved"
+      ],
+      "required": [],
+      "declared_return": "{deprecated}.",
+      "open": false
+    },
+    "workflows.interactive.prepare": {
+      "accepted": [
+        "approved_urls",
+        "document_ids",
+        "message",
+        "public_queries"
+      ],
+      "required": [],
+      "declared_return": "{deprecated}.",
+      "open": false
+    },
+    "workflows.interactive.respond": {
+      "accepted": [
+        "message",
+        "run_id"
+      ],
+      "required": [
+        "message",
+        "run_id"
+      ],
+      "declared_return": "{run_id, state}.",
+      "open": false
+    },
+    "workflows.interactive.session": {
+      "accepted": [],
+      "required": [],
+      "declared_return": "{schema_version, protocol_version, session_id, authenticated, direct_start}.",
+      "open": false
+    },
+    "workflows.interactive.start": {
+      "accepted": [
+        "approved_urls",
+        "document_ids",
+        "message",
+        "public_queries"
+      ],
+      "required": [
+        "message"
+      ],
+      "declared_return": "{run_id, state}.",
+      "open": false
+    },
+    "workflows.list": {
+      "accepted": [],
+      "required": [],
+      "declared_return": "{schema_version, workflows}.",
+      "open": false
+    },
+    "workflows.respond": {
+      "accepted": [
+        "message",
+        "run_id"
+      ],
+      "required": [
+        "message",
+        "run_id"
+      ],
+      "declared_return": "{run_id, state}.",
+      "open": false
+    },
+    "workflows.start": {
+      "accepted": [
+        "document_ids",
+        "message",
+        "qonto",
+        "workflow_id"
+      ],
+      "required": [
+        "message",
+        "workflow_id"
+      ],
+      "declared_return": "{run_id, state}.",
+      "open": false
+    },
+    "workflows.status": {
+      "accepted": [
+        "run_id"
+      ],
+      "required": [
+        "run_id"
+      ],
+      "declared_return": "{run_id, state, progress, output}.",
+      "open": false
+    },
+    "workflows.suggest": {
+      "accepted": [
+        "message"
+      ],
+      "required": [
+        "message"
+      ],
+      "declared_return": "{state, candidates, question, launch}.",
+      "open": false
     }
   },
   "preload_calls": [
     {
-      "line": 164,
+      "line": 168,
+      "method": "drafts.list",
+      "payload_keys": [
+        "mailbox_id"
+      ],
+      "guaranteed_keys": [],
+      "dynamic_payload": false,
+      "declared_return": "Promise<MailboxDraft[]>"
+    },
+    {
+      "line": 170,
+      "method": "drafts.get",
+      "payload_keys": [
+        "draft_id"
+      ],
+      "guaranteed_keys": [
+        "draft_id"
+      ],
+      "dynamic_payload": false,
+      "declared_return": "Promise<MailboxDraftResult>"
+    },
+    {
+      "line": 172,
+      "method": "drafts.update",
+      "payload_keys": [
+        "bcc",
+        "body",
+        "cc",
+        "draft_id",
+        "subject",
+        "to"
+      ],
+      "guaranteed_keys": [
+        "draft_id"
+      ],
+      "dynamic_payload": false,
+      "declared_return": "Promise<MailboxDraftResult>"
+    },
+    {
+      "line": 174,
+      "method": "drafts.send",
+      "payload_keys": [
+        "draft_id",
+        "request_key"
+      ],
+      "guaranteed_keys": [
+        "draft_id",
+        "request_key"
+      ],
+      "dynamic_payload": false,
+      "declared_return": "Promise<MailboxDraftOutcome>"
+    },
+    {
+      "line": 176,
+      "method": "drafts.trash",
+      "payload_keys": [
+        "draft_id",
+        "request_key"
+      ],
+      "guaranteed_keys": [
+        "draft_id",
+        "request_key"
+      ],
+      "dynamic_payload": false,
+      "declared_return": "Promise<MailboxDraftOutcome>"
+    },
+    {
+      "line": 179,
       "method": "system.capabilities",
       "payload_keys": [],
       "guaranteed_keys": [],
@@ -1347,7 +1885,7 @@
       "declared_return": "Promise<{ chat_history_binding?: number | undefined; }>"
     },
     {
-      "line": 167,
+      "line": 182,
       "method": "stripe.status",
       "payload_keys": [],
       "guaranteed_keys": [],
@@ -1355,7 +1893,7 @@
       "declared_return": "Promise<StripeStatus>"
     },
     {
-      "line": 168,
+      "line": 183,
       "method": "stripe.test",
       "payload_keys": [
         "api_key"
@@ -1367,7 +1905,7 @@
       "declared_return": "Promise<StripeTestResult>"
     },
     {
-      "line": 169,
+      "line": 184,
       "method": "stripe.connect",
       "payload_keys": [
         "api_key",
@@ -1383,7 +1921,7 @@
       "declared_return": "Promise<StripeStatus>"
     },
     {
-      "line": 170,
+      "line": 185,
       "method": "stripe.disconnect",
       "payload_keys": [],
       "guaranteed_keys": [],
@@ -1391,7 +1929,7 @@
       "declared_return": "Promise<StripeStatus>"
     },
     {
-      "line": 173,
+      "line": 188,
       "method": "qonto.status",
       "payload_keys": [],
       "guaranteed_keys": [],
@@ -1399,7 +1937,7 @@
       "declared_return": "Promise<{ status: string; generation: number; account_count: number; source_access: boolean; credential_stored: boolean; error?: string | undefined; }>"
     },
     {
-      "line": 178,
+      "line": 193,
       "method": "qonto.test",
       "payload_keys": [
         "api_key",
@@ -1413,7 +1951,7 @@
       "declared_return": "Promise<QontoTestResult>"
     },
     {
-      "line": 180,
+      "line": 195,
       "method": "qonto.connect",
       "payload_keys": [
         "account_ids",
@@ -1435,7 +1973,7 @@
       "declared_return": "Promise<QontoConnectResult>"
     },
     {
-      "line": 181,
+      "line": 196,
       "method": "qonto.sync",
       "payload_keys": [],
       "guaranteed_keys": [],
@@ -1443,7 +1981,7 @@
       "declared_return": "Promise<QontoSyncResult>"
     },
     {
-      "line": 182,
+      "line": 197,
       "method": "qonto.disconnect",
       "payload_keys": [],
       "guaranteed_keys": [],
@@ -1451,7 +1989,7 @@
       "declared_return": "Promise<QontoRemovalResult>"
     },
     {
-      "line": 183,
+      "line": 198,
       "method": "qonto.delete_imported_data",
       "payload_keys": [
         "confirmed"
@@ -1463,7 +2001,7 @@
       "declared_return": "Promise<QontoRemovalResult>"
     },
     {
-      "line": 184,
+      "line": 199,
       "method": "qonto.prepare",
       "payload_keys": [
         "resume"
@@ -1475,7 +2013,7 @@
       "declared_return": "Promise<{ success?: boolean | undefined; summary?: string | undefined; attempted?: number | undefined; completed?: number | undefined; failed?: number | undefined; errors?: { detail: string; }[] | undefined; }>"
     },
     {
-      "line": 185,
+      "line": 200,
       "method": "qonto.publication_preview",
       "payload_keys": [],
       "guaranteed_keys": [],
@@ -1483,7 +2021,7 @@
       "declared_return": "Promise<{ preview_id: string; fact_text: string; disclosure: string; }>"
     },
     {
-      "line": 186,
+      "line": 201,
       "method": "qonto.publish",
       "payload_keys": [
         "confirmed",
@@ -1499,7 +2037,7 @@
       "declared_return": "Promise<QontoPublicationResult>"
     },
     {
-      "line": 187,
+      "line": 202,
       "method": "qonto.transaction",
       "payload_keys": [
         "source_id"
@@ -1511,7 +2049,7 @@
       "declared_return": "Promise<QontoTransactionResult>"
     },
     {
-      "line": 189,
+      "line": 204,
       "method": "llm.models",
       "payload_keys": [
         "provider"
@@ -1521,7 +2059,7 @@
       "declared_return": "Promise<{ provider: string; models: { id: string; label: string; provider: string; }[]; available: boolean; reason: string; }>"
     },
     {
-      "line": 191,
+      "line": 206,
       "method": "usage.reconcile",
       "payload_keys": [
         "cursor"
@@ -1531,7 +2069,7 @@
       "declared_return": "Promise<{ recovered: number; unresolved: number; message: string; next_cursor: string | null; }>"
     },
     {
-      "line": 192,
+      "line": 207,
       "method": "usage.today",
       "payload_keys": [],
       "guaranteed_keys": [],
@@ -1539,7 +2077,7 @@
       "declared_return": "Promise<{ spent_usd: number; budget_usd: number; reserved_usd: number; pricing_fault: boolean; billing_supported: boolean; billing_reason?: string | undefined; model_policy?: { provider: string; preset: string; model: string; roles: Record<string, string>; quality_status: string; credential_configured: boolean; } | undefined; remaining_usd: number; exceeded: boolean; paused: boolean; resets_at: string; calls_today: number; by_site: Record<string, { calls: number; est_usd: number; }>; }>"
     },
     {
-      "line": 210,
+      "line": 225,
       "method": "tasks.list",
       "payload_keys": [
         "include_completed",
@@ -1550,7 +2088,7 @@
       "declared_return": "Promise<any[]>"
     },
     {
-      "line": 212,
+      "line": 227,
       "method": "tasks.complete",
       "payload_keys": [
         "note",
@@ -1564,7 +2102,7 @@
       "declared_return": "Promise<{ ok: boolean; }>"
     },
     {
-      "line": 213,
+      "line": 228,
       "method": "tasks.reopen",
       "payload_keys": [
         "task_id"
@@ -1576,7 +2114,7 @@
       "declared_return": "Promise<{ ok: boolean; }>"
     },
     {
-      "line": 214,
+      "line": 229,
       "method": "tasks.skip",
       "payload_keys": [
         "task_id"
@@ -1588,7 +2126,7 @@
       "declared_return": "Promise<{ ok: boolean; }>"
     },
     {
-      "line": 216,
+      "line": 231,
       "method": "tasks.pin",
       "payload_keys": [
         "pinned",
@@ -1602,7 +2140,7 @@
       "declared_return": "Promise<{ ok: boolean; }>"
     },
     {
-      "line": 218,
+      "line": 233,
       "method": "tasks.reanalyze",
       "payload_keys": [
         "task_id"
@@ -1614,7 +2152,7 @@
       "declared_return": "Promise<{ ok: boolean; action: \"kept\" | \"closed\" | \"updated\"; reason: string; task_id: string; usage?: Record<string, unknown> | undefined; }>"
     },
     {
-      "line": 230,
+      "line": 245,
       "method": "tasks.list_by_thread",
       "payload_keys": [
         "thread_id"
@@ -1626,7 +2164,7 @@
       "declared_return": "Promise<any[]>"
     },
     {
-      "line": 237,
+      "line": 252,
       "method": "tasks.dedup_now",
       "payload_keys": [],
       "guaranteed_keys": [],
@@ -1634,7 +2172,7 @@
       "declared_return": "Promise<{ clusters_examined: number; clusters_with_dups: number; tasks_closed: number; skipped_recently_reopened: number; skipped_oversize: number; no_llm: boolean; }>"
     },
     {
-      "line": 253,
+      "line": 268,
       "method": "tasks.solve",
       "payload_keys": [
         "instructions",
@@ -1648,7 +2186,7 @@
       "declared_return": "Promise<{ ok: boolean; result?: unknown; error?: string | undefined; }>"
     },
     {
-      "line": 262,
+      "line": 277,
       "method": "tasks.solve.approve",
       "payload_keys": [
         "approved",
@@ -1664,7 +2202,7 @@
       "declared_return": "Promise<{ ok: boolean; }>"
     },
     {
-      "line": 272,
+      "line": 287,
       "method": "tasks.solve.cancel",
       "payload_keys": [
         "task_id"
@@ -1674,7 +2212,7 @@
       "declared_return": "Promise<{ ok: boolean; task_id?: string | undefined; cancelled_pending?: number | undefined; error?: string | undefined; }>"
     },
     {
-      "line": 280,
+      "line": 295,
       "method": "memory.reconsolidate_now",
       "payload_keys": [],
       "guaranteed_keys": [],
@@ -1682,7 +2220,7 @@
       "declared_return": "Promise<{ ok: boolean; error?: string | undefined; groups_examined?: number | undefined; blobs_examined?: number | undefined; blobs_merged?: number | undefined; blobs_kept_distinct?: number | undefined; pair_cap_hit?: boolean | undefined; no_llm?: boolean | undefined; skipped?: boolean | undefined; reason?: string | undefined; }>"
     },
     {
-      "line": 298,
+      "line": 313,
       "method": "memory.key_mint",
       "payload_keys": [],
       "guaranteed_keys": [],
@@ -1690,7 +2228,7 @@
       "declared_return": "Promise<{ key: string; minted: boolean; }>"
     },
     {
-      "line": 300,
+      "line": 315,
       "method": "memory.key_validate",
       "payload_keys": [
         "key"
@@ -1702,7 +2240,7 @@
       "declared_return": "Promise<{ well_formed: boolean; reason: string; }>"
     },
     {
-      "line": 302,
+      "line": 317,
       "method": "memory.status",
       "payload_keys": [],
       "guaranteed_keys": [],
@@ -1710,7 +2248,7 @@
       "declared_return": "Promise<{ has_key: boolean; available: boolean; reason: string; self_notion?: string | null | undefined; blob_count?: number | undefined; fact_count?: number | undefined; contributors?: string[] | undefined; }>"
     },
     {
-      "line": 312,
+      "line": 327,
       "method": "memory.join_preview",
       "payload_keys": [
         "key"
@@ -1722,7 +2260,7 @@
       "declared_return": "Promise<{ well_formed: boolean; exists: boolean; reason: string; self_notion?: string | null | undefined; blob_count?: number | undefined; fact_count?: number | undefined; contributors?: string[] | undefined; }>"
     },
     {
-      "line": 322,
+      "line": 337,
       "method": "memory.join",
       "payload_keys": [
         "key"
@@ -1734,7 +2272,7 @@
       "declared_return": "Promise<{ ok: boolean; reason?: string | undefined; already?: boolean | undefined; merged?: Record<string, number> | undefined; self_notion?: string | null | undefined; blob_count?: number | undefined; contributors?: string[] | undefined; }>"
     },
     {
-      "line": 341,
+      "line": 356,
       "method": "chat.send",
       "payload_keys": [
         "context",
@@ -1755,7 +2293,7 @@
       "declared_return": "Promise<any>"
     },
     {
-      "line": 373,
+      "line": 388,
       "method": "chat.approve",
       "payload_keys": [
         "approved",
@@ -1770,7 +2308,7 @@
       "declared_return": "Promise<{ ok: boolean; }>"
     },
     {
-      "line": 377,
+      "line": 392,
       "method": "preparation.status",
       "payload_keys": [],
       "guaranteed_keys": [],
@@ -1778,7 +2316,7 @@
       "declared_return": "Promise<any>"
     },
     {
-      "line": 378,
+      "line": 393,
       "method": "preparation.pause",
       "payload_keys": [],
       "guaranteed_keys": [],
@@ -1786,7 +2324,7 @@
       "declared_return": "Promise<any>"
     },
     {
-      "line": 380,
+      "line": 395,
       "method": "preparation.resume",
       "payload_keys": [],
       "guaranteed_keys": [],
@@ -1794,7 +2332,7 @@
       "declared_return": "Promise<any>"
     },
     {
-      "line": 382,
+      "line": 397,
       "method": "preparation.reset_failures",
       "payload_keys": [
         "source",
@@ -1808,7 +2346,7 @@
       "declared_return": "Promise<{ reset: boolean; }>"
     },
     {
-      "line": 389,
+      "line": 404,
       "method": "update.run",
       "payload_keys": [],
       "guaranteed_keys": [],
@@ -1816,7 +2354,7 @@
       "declared_return": "Promise<any>"
     },
     {
-      "line": 396,
+      "line": 411,
       "method": "sync.run",
       "payload_keys": [
         "days_back"
@@ -1826,7 +2364,7 @@
       "declared_return": "Promise<{ success: boolean; summary: string; result: { sync_new: number; wa_messages: number; wa_contacts: number; wa_skipped_reason?: string | null | undefined; }; errors: { severity?: string | undefined; title?: string | undefined; detail?: string | undefined; action?: string | undefined; mailbox?: string | undefined; }[]; }>"
     },
     {
-      "line": 420,
+      "line": 435,
       "method": "setup.state",
       "payload_keys": [],
       "guaranteed_keys": [],
@@ -1834,7 +2372,7 @@
       "declared_return": "Promise<{ has_synced: boolean; has_trained: boolean; emails_count: number; whatsapp_messages_count: number; agents_trained: string[]; emails_analyzed_count?: number | null | undefined; emails_pending_analysis?: number | null | undefined; last_email_analyzed_at?: string | null | undefined; mailboxes?: { mailbox_id: string; address: string; emails_count: number; emails_pending_analysis: number; }[] | undefined; }>"
     },
     {
-      "line": 451,
+      "line": 466,
       "method": "agents.train_all",
       "payload_keys": [],
       "guaranteed_keys": [],
@@ -1842,7 +2380,7 @@
       "declared_return": "Promise<{ ok: boolean; error?: string | undefined; results: Record<string, { ok: boolean; error?: string | undefined; threads_analyzed?: number | undefined; whatsapp_chats_analyzed?: number | undefined; }>; }>"
     },
     {
-      "line": 467,
+      "line": 482,
       "method": "emails.list_by_thread",
       "payload_keys": [
         "thread_id"
@@ -1854,7 +2392,7 @@
       "declared_return": "Promise<any>"
     },
     {
-      "line": 471,
+      "line": 486,
       "method": "emails.list_inbox",
       "payload_keys": [
         "limit",
@@ -1869,7 +2407,7 @@
       "declared_return": "Promise<{ threads: any[]; }>"
     },
     {
-      "line": 481,
+      "line": 496,
       "method": "emails.list_sent",
       "payload_keys": [
         "limit",
@@ -1884,7 +2422,7 @@
       "declared_return": "Promise<{ threads: any[]; }>"
     },
     {
-      "line": 500,
+      "line": 515,
       "method": "emails.search",
       "payload_keys": [
         "folder",
@@ -1903,7 +2441,7 @@
       "declared_return": "Promise<{ threads: any[]; }>"
     },
     {
-      "line": 512,
+      "line": 527,
       "method": "emails.pin",
       "payload_keys": [
         "pinned",
@@ -1917,7 +2455,7 @@
       "declared_return": "Promise<{ ok: boolean; affected: number; }>"
     },
     {
-      "line": 518,
+      "line": 533,
       "method": "emails.mark_read",
       "payload_keys": [
         "thread_id"
@@ -1929,7 +2467,7 @@
       "declared_return": "Promise<{ ok: boolean; affected: number; }>"
     },
     {
-      "line": 529,
+      "line": 544,
       "method": "emails.archive",
       "payload_keys": [
         "thread_id"
@@ -1941,7 +2479,7 @@
       "declared_return": "Promise<{ ok: boolean; archived: number; mailboxes: { mailbox_id: string; attempted: number; moved: number; error: string | null; }[]; }>"
     },
     {
-      "line": 543,
+      "line": 558,
       "method": "emails.delete",
       "payload_keys": [
         "thread_id"
@@ -1953,7 +2491,7 @@
       "declared_return": "Promise<{ ok: boolean; deleted: number; }>"
     },
     {
-      "line": 554,
+      "line": 569,
       "method": "mailboxes.list",
       "payload_keys": [],
       "guaranteed_keys": [],
@@ -1961,7 +2499,7 @@
       "declared_return": "Promise<{ mailboxes: any[]; }>"
     },
     {
-      "line": 555,
+      "line": 570,
       "method": "mailboxes.presets",
       "payload_keys": [],
       "guaranteed_keys": [],
@@ -1969,7 +2507,7 @@
       "declared_return": "Promise<{ presets: any[]; }>"
     },
     {
-      "line": 563,
+      "line": 578,
       "method": "mailboxes.test",
       "payload_keys": [
         "address",
@@ -1987,7 +2525,7 @@
       "declared_return": "Promise<MailboxTestResult>"
     },
     {
-      "line": 573,
+      "line": 588,
       "method": "mailboxes.add",
       "payload_keys": [
         "address",
@@ -2006,7 +2544,7 @@
       "declared_return": "Promise<MailboxMutationResult>"
     },
     {
-      "line": 587,
+      "line": 602,
       "method": "mailboxes.update",
       "payload_keys": [
         "imap_host",
@@ -2024,7 +2562,7 @@
       "declared_return": "Promise<MailboxMutationResult>"
     },
     {
-      "line": 593,
+      "line": 608,
       "method": "mailboxes.remove",
       "payload_keys": [
         "mailbox_id"
@@ -2036,7 +2574,7 @@
       "declared_return": "Promise<MailboxMutationResult>"
     },
     {
-      "line": 624,
+      "line": 639,
       "method": "profiles.create",
       "payload_keys": [
         "email",
@@ -2050,7 +2588,7 @@
       "declared_return": "Promise<{ ok: boolean; profile: string; }>"
     },
     {
-      "line": 636,
+      "line": 651,
       "method": "narration.summarize",
       "payload_keys": [
         "context",
@@ -2064,7 +2602,7 @@
       "declared_return": "Promise<{ text: string; }>"
     },
     {
-      "line": 638,
+      "line": 653,
       "method": "narration.predict",
       "payload_keys": [
         "context",
@@ -2078,7 +2616,7 @@
       "declared_return": "Promise<{ text: string; }>"
     },
     {
-      "line": 642,
+      "line": 657,
       "method": "settings.schema",
       "payload_keys": [],
       "guaranteed_keys": [],
@@ -2086,7 +2624,7 @@
       "declared_return": "Promise<{ fields: { key: string; label: string; type: \"number\" | \"text\" | \"password\" | \"select\" | \"textarea\"; group: string; optional?: boolean | undefined; options?: string[] | undefined; help?: string | undefined; secret?: boolean | undefined; }[]; }>"
     },
     {
-      "line": 654,
+      "line": 669,
       "method": "settings.get",
       "payload_keys": [],
       "guaranteed_keys": [],
@@ -2094,7 +2632,7 @@
       "declared_return": "Promise<{ values: Record<string, string>; }>"
     },
     {
-      "line": 660,
+      "line": 675,
       "method": "settings.get_secret",
       "payload_keys": [
         "key"
@@ -2106,7 +2644,7 @@
       "declared_return": "Promise<{ key: string; value: string; }>"
     },
     {
-      "line": 662,
+      "line": 677,
       "method": "settings.update",
       "payload_keys": [
         "updates"
@@ -2118,7 +2656,7 @@
       "declared_return": "Promise<{ ok: boolean; applied: string[]; skipped_unchanged: string[]; }>"
     },
     {
-      "line": 771,
+      "line": 786,
       "method": "account.set_firebase_token",
       "payload_keys": [
         "email",
@@ -2136,7 +2674,7 @@
       "declared_return": "Promise<{ ok: boolean; }>"
     },
     {
-      "line": 779,
+      "line": 794,
       "method": "account.sign_out",
       "payload_keys": [],
       "guaranteed_keys": [],
@@ -2144,7 +2682,7 @@
       "declared_return": "Promise<{ ok: boolean; }>"
     },
     {
-      "line": 787,
+      "line": 802,
       "method": "account.who_am_i",
       "payload_keys": [],
       "guaranteed_keys": [],
@@ -2152,7 +2690,7 @@
       "declared_return": "Promise<{ signed_in: boolean; uid?: string | undefined; email?: string | null | undefined; expires_at_ms?: number | undefined; }>"
     },
     {
-      "line": 802,
+      "line": 817,
       "method": "account.balance",
       "payload_keys": [],
       "guaranteed_keys": [],
@@ -2160,7 +2698,7 @@
       "declared_return": "Promise<{ balance_credits: number; balance_micro_usd: number; balance_usd: number; granularity_micro_usd?: number | undefined; estimate_messages_remaining?: number | undefined; } | { error: \"auth_expired\"; }>"
     },
     {
-      "line": 809,
+      "line": 824,
       "method": "sms.get_sender",
       "payload_keys": [],
       "guaranteed_keys": [],
@@ -2168,7 +2706,7 @@
       "declared_return": "Promise<{ sender: string; business_id?: string | undefined; } | { error: \"auth_expired\"; }>"
     },
     {
-      "line": 813,
+      "line": 828,
       "method": "sms.set_sender",
       "payload_keys": [
         "sender"
@@ -2180,7 +2718,7 @@
       "declared_return": "Promise<{ sender: string; business_id?: string | undefined; } | { error: \"auth_expired\"; }>"
     },
     {
-      "line": 822,
+      "line": 837,
       "method": "mrcall.list_my_businesses",
       "payload_keys": [
         "limit",
@@ -2194,7 +2732,7 @@
       "declared_return": "Promise<{ businesses: unknown[]; role: string; }>"
     },
     {
-      "line": 848,
+      "line": 863,
       "method": "mrcall.search_businesses",
       "payload_keys": [
         "address",
@@ -2219,7 +2757,7 @@
       "declared_return": "Promise<{ businesses: unknown[]; role: string; }>"
     },
     {
-      "line": 863,
+      "line": 878,
       "method": "google.calendar.connect",
       "payload_keys": [],
       "guaranteed_keys": [],
@@ -2227,7 +2765,7 @@
       "declared_return": "Promise<{ ok: boolean; email: string; scope: string; }>"
     },
     {
-      "line": 869,
+      "line": 884,
       "method": "google.calendar.disconnect",
       "payload_keys": [],
       "guaranteed_keys": [],
@@ -2235,7 +2773,7 @@
       "declared_return": "Promise<{ ok: boolean; }>"
     },
     {
-      "line": 876,
+      "line": 891,
       "method": "google.calendar.status",
       "payload_keys": [],
       "guaranteed_keys": [],
@@ -2243,7 +2781,7 @@
       "declared_return": "Promise<{ connected: boolean; signed_in?: boolean | undefined; email?: string | null | undefined; }>"
     },
     {
-      "line": 881,
+      "line": 896,
       "method": "google.calendar.cancel",
       "payload_keys": [],
       "guaranteed_keys": [],
@@ -2251,7 +2789,7 @@
       "declared_return": "Promise<{ cancelled: boolean; }>"
     },
     {
-      "line": 892,
+      "line": 907,
       "method": "whatsapp.connect",
       "payload_keys": [],
       "guaranteed_keys": [],
@@ -2259,7 +2797,7 @@
       "declared_return": "Promise<{ ok: boolean; phone?: string | null | undefined; display_name?: string | null | undefined; reason?: string | undefined; }>"
     },
     {
-      "line": 901,
+      "line": 916,
       "method": "whatsapp.disconnect",
       "payload_keys": [
         "forget_session"
@@ -2271,7 +2809,7 @@
       "declared_return": "Promise<{ ok: boolean; forgot: boolean; error?: string | undefined; }>"
     },
     {
-      "line": 908,
+      "line": 923,
       "method": "whatsapp.status",
       "payload_keys": [],
       "guaranteed_keys": [],
@@ -2279,7 +2817,7 @@
       "declared_return": "Promise<{ connected: boolean; has_session: boolean; phone?: string | null | undefined; display_name?: string | null | undefined; }>"
     },
     {
-      "line": 914,
+      "line": 929,
       "method": "whatsapp.cancel",
       "payload_keys": [],
       "guaranteed_keys": [],
@@ -2287,7 +2825,7 @@
       "declared_return": "Promise<{ cancelled: boolean; }>"
     },
     {
-      "line": 916,
+      "line": 931,
       "method": "whatsapp.list_threads",
       "payload_keys": [
         "limit",
@@ -2301,7 +2839,7 @@
       "declared_return": "Promise<{ threads: WhatsAppThread[]; total_messages?: number | undefined; owner_id?: string | undefined; breakdown_by_server?: Record<string, number> | undefined; error?: string | undefined; }>"
     },
     {
-      "line": 927,
+      "line": 942,
       "method": "whatsapp.list_messages",
       "payload_keys": [
         "chat_jid",
@@ -2317,7 +2855,7 @@
       "declared_return": "Promise<{ messages: WhatsAppMessage[]; error?: string | undefined; }>"
     },
     {
-      "line": 939,
+      "line": 954,
       "method": "whatsapp.search_messages",
       "payload_keys": [
         "limit",
@@ -2331,7 +2869,7 @@
       "declared_return": "Promise<{ threads: WhatsAppThread[]; query?: string | undefined; error?: string | undefined; }>"
     },
     {
-      "line": 949,
+      "line": 964,
       "method": "whatsapp.send_message",
       "payload_keys": [
         "chat_jid",
@@ -2346,6 +2884,41 @@
     }
   ],
   "renderer_linkage": [
+    {
+      "api": "drafts.list",
+      "renderer": "(params?: { mailbox_id?: string | undefined; } | undefined) => Promise<MailboxDraft[]>",
+      "preload": "(params?: { mailbox_id?: string | undefined; }) => Promise<MailboxDraft[]>",
+      "renderer_arguments_accepted": true,
+      "declared_return_assignable": true
+    },
+    {
+      "api": "drafts.get",
+      "renderer": "(draftId: string) => Promise<MailboxDraftResult>",
+      "preload": "(draftId: string) => Promise<MailboxDraftResult>",
+      "renderer_arguments_accepted": true,
+      "declared_return_assignable": true
+    },
+    {
+      "api": "drafts.update",
+      "renderer": "(params: MailboxDraftPatch) => Promise<MailboxDraftResult>",
+      "preload": "(params: MailboxDraftPatch) => Promise<MailboxDraftResult>",
+      "renderer_arguments_accepted": true,
+      "declared_return_assignable": true
+    },
+    {
+      "api": "drafts.send",
+      "renderer": "(draftId: string, requestKey: string) => Promise<MailboxDraftOutcome>",
+      "preload": "(draftId: string, requestKey: string) => Promise<MailboxDraftOutcome>",
+      "renderer_arguments_accepted": true,
+      "declared_return_assignable": true
+    },
+    {
+      "api": "drafts.trash",
+      "renderer": "(draftId: string, requestKey: string) => Promise<MailboxDraftOutcome>",
+      "preload": "(draftId: string, requestKey: string) => Promise<MailboxDraftOutcome>",
+      "renderer_arguments_accepted": true,
+      "declared_return_assignable": true
+    },
     {
       "api": "system.capabilities",
       "renderer": "() => Promise<{ chat_history_binding?: number | undefined; }>",
@@ -3148,7 +3721,7 @@
   "kernel_calls": [
     {
       "file": "cs/assignment_cli.py",
-      "line": 59,
+      "line": 86,
       "callee": "rpc.call_sync",
       "method": "tasks.assignment.preview",
       "method_expression": "'tasks.assignment.preview'",
@@ -3158,7 +3731,7 @@
     },
     {
       "file": "cs/campaign.py",
-      "line": 99,
+      "line": 102,
       "callee": "rpc.call_sync",
       "method": "campaign.list",
       "method_expression": "'campaign.list'",
@@ -3168,7 +3741,7 @@
     },
     {
       "file": "cs/campaign.py",
-      "line": 201,
+      "line": 204,
       "callee": "rpc.call_sync",
       "method": "campaign.contacts",
       "method_expression": "'campaign.contacts'",
@@ -3180,7 +3753,7 @@
     },
     {
       "file": "cs/campaign.py",
-      "line": 407,
+      "line": 410,
       "callee": "rpc.call_sync",
       "method": "campaign.contacts",
       "method_expression": "'campaign.contacts'",
@@ -3192,7 +3765,7 @@
     },
     {
       "file": "cs/campaign.py",
-      "line": 462,
+      "line": 465,
       "callee": "rpc.call_sync",
       "method": "campaign.update_contact",
       "method_expression": "'campaign.update_contact'",
@@ -3202,7 +3775,7 @@
     },
     {
       "file": "cs/campaign.py",
-      "line": 481,
+      "line": 484,
       "callee": "rpc.call_sync",
       "method": "campaign.update_contact",
       "method_expression": "'campaign.update_contact'",
@@ -3212,7 +3785,17 @@
     },
     {
       "file": "cs/campaign.py",
-      "line": 591,
+      "line": 543,
+      "callee": "rpc.call_sync",
+      "method": "campaign.update_contact",
+      "method_expression": "'campaign.update_contact'",
+      "keys": [],
+      "dynamic_payload": true,
+      "return": "Any at EngineClient.call; no runtime return schema"
+    },
+    {
+      "file": "cs/campaign.py",
+      "line": 553,
       "callee": "rpc.call_sync",
       "method": "campaign.update_contact",
       "method_expression": "'campaign.update_contact'",
@@ -3226,7 +3809,7 @@
     },
     {
       "file": "cs/campaign.py",
-      "line": 613,
+      "line": 722,
       "callee": "rpc.call_sync",
       "method": "campaign.update_contact",
       "method_expression": "'campaign.update_contact'",
@@ -3239,7 +3822,20 @@
     },
     {
       "file": "cs/campaign.py",
-      "line": 640,
+      "line": 728,
+      "callee": "rpc.call_sync",
+      "method": "campaign.update_contact",
+      "method_expression": "'campaign.update_contact'",
+      "keys": [
+        "contact_id",
+        "dossier"
+      ],
+      "dynamic_payload": false,
+      "return": "Any at EngineClient.call; no runtime return schema"
+    },
+    {
+      "file": "cs/campaign.py",
+      "line": 828,
       "callee": "rpc.call_sync",
       "method": "campaign.update_contact",
       "method_expression": "'campaign.update_contact'",
@@ -3253,73 +3849,7 @@
     },
     {
       "file": "cs/campaign.py",
-      "line": 712,
-      "callee": "rpc.call_sync",
-      "method": "campaign.update_contact",
-      "method_expression": "'campaign.update_contact'",
-      "keys": [
-        "contact_id",
-        "dossier"
-      ],
-      "dynamic_payload": false,
-      "return": "Any at EngineClient.call; no runtime return schema"
-    },
-    {
-      "file": "cs/campaign.py",
-      "line": 811,
-      "callee": "rpc.call_sync",
-      "method": "campaign.update_contact",
-      "method_expression": "'campaign.update_contact'",
-      "keys": [
-        "contact_id",
-        "dossier"
-      ],
-      "dynamic_payload": false,
-      "return": "Any at EngineClient.call; no runtime return schema"
-    },
-    {
-      "file": "cs/campaign.py",
-      "line": 817,
-      "callee": "rpc.call_sync",
-      "method": "campaign.update_contact",
-      "method_expression": "'campaign.update_contact'",
-      "keys": [
-        "contact_id",
-        "dossier"
-      ],
-      "dynamic_payload": false,
-      "return": "Any at EngineClient.call; no runtime return schema"
-    },
-    {
-      "file": "cs/campaign.py",
-      "line": 909,
-      "callee": "rpc.call_sync",
-      "method": "campaign.update_contact",
-      "method_expression": "'campaign.update_contact'",
-      "keys": [
-        "contact_id",
-        "dossier"
-      ],
-      "dynamic_payload": false,
-      "return": "Any at EngineClient.call; no runtime return schema"
-    },
-    {
-      "file": "cs/campaign.py",
-      "line": 920,
-      "callee": "rpc.call_sync",
-      "method": "campaign.update_contact",
-      "method_expression": "'campaign.update_contact'",
-      "keys": [
-        "contact_id",
-        "message_id",
-        "state"
-      ],
-      "dynamic_payload": false,
-      "return": "Any at EngineClient.call; no runtime return schema"
-    },
-    {
-      "file": "cs/campaign.py",
-      "line": 978,
+      "line": 886,
       "callee": "rpc.call_sync",
       "method": "campaign.update_contact",
       "method_expression": "'campaign.update_contact'",
@@ -3342,7 +3872,7 @@
     },
     {
       "file": "cs/cli.py",
-      "line": 164,
+      "line": 206,
       "callee": "rpc.call_sync",
       "method": null,
       "method_expression": "args.method",
@@ -3352,7 +3882,7 @@
     },
     {
       "file": "cs/cli.py",
-      "line": 169,
+      "line": 211,
       "callee": "rpc.call_sync",
       "method": "emails.search",
       "method_expression": "'emails.search'",
@@ -3366,7 +3896,7 @@
     },
     {
       "file": "cs/cli.py",
-      "line": 203,
+      "line": 247,
       "callee": "rpc.call_sync",
       "method": "emails.list_by_thread",
       "method_expression": "'emails.list_by_thread'",
@@ -3378,7 +3908,20 @@
     },
     {
       "file": "cs/cli.py",
-      "line": 569,
+      "line": 515,
+      "callee": "rpc.call_sync",
+      "method": "sync.run",
+      "method_expression": "'sync.run'",
+      "keys": [
+        "days_back",
+        "scope"
+      ],
+      "dynamic_payload": false,
+      "return": "Any at EngineClient.call; no runtime return schema"
+    },
+    {
+      "file": "cs/cli.py",
+      "line": 726,
       "callee": "rpc.call_sync",
       "method": "tasks.list",
       "method_expression": "'tasks.list'",
@@ -3391,7 +3934,7 @@
     },
     {
       "file": "cs/cli.py",
-      "line": 615,
+      "line": 779,
       "callee": "rpc.call_sync",
       "method": "tasks.create",
       "method_expression": "'tasks.create'",
@@ -3401,7 +3944,7 @@
     },
     {
       "file": "cs/cli.py",
-      "line": 637,
+      "line": 801,
       "callee": "rpc.call_sync",
       "method": "tasks.complete",
       "method_expression": "'tasks.complete'",
@@ -3411,7 +3954,7 @@
     },
     {
       "file": "cs/cli.py",
-      "line": 800,
+      "line": 964,
       "callee": "rpc.call_sync",
       "method": "tasks.list",
       "method_expression": "'tasks.list'",
@@ -3424,7 +3967,7 @@
     },
     {
       "file": "cs/cli.py",
-      "line": 813,
+      "line": 977,
       "callee": "rpc.call_sync",
       "method": "tasks.complete",
       "method_expression": "'tasks.complete'",
@@ -3439,7 +3982,7 @@
     },
     {
       "file": "cs/cli.py",
-      "line": 1140,
+      "line": 1344,
       "callee": "rpc.call_sync",
       "method": "tasks.list",
       "method_expression": "'tasks.list'",
@@ -3451,51 +3994,7 @@
     },
     {
       "file": "cs/cli.py",
-      "line": 1307,
-      "callee": "rpc.call_sync",
-      "method": "drafts.list",
-      "method_expression": "'drafts.list'",
-      "keys": [
-        "status"
-      ],
-      "dynamic_payload": false,
-      "return": "Any at EngineClient.call; no runtime return schema"
-    },
-    {
-      "file": "cs/cli.py",
-      "line": 1604,
-      "callee": "rpc.call_sync",
-      "method": "drafts.list",
-      "method_expression": "'drafts.list'",
-      "keys": [],
-      "dynamic_payload": false,
-      "return": "Any at EngineClient.call; no runtime return schema"
-    },
-    {
-      "file": "cs/cli.py",
-      "line": 1626,
-      "callee": "rpc.call_sync",
-      "method": "drafts.list",
-      "method_expression": "'drafts.list'",
-      "keys": [],
-      "dynamic_payload": false,
-      "return": "Any at EngineClient.call; no runtime return schema"
-    },
-    {
-      "file": "cs/cli.py",
-      "line": 1712,
-      "callee": "rpc.call_sync",
-      "method": "drafts.list",
-      "method_expression": "'drafts.list'",
-      "keys": [
-        "status"
-      ],
-      "dynamic_payload": false,
-      "return": "Any at EngineClient.call; no runtime return schema"
-    },
-    {
-      "file": "cs/cli.py",
-      "line": 1811,
+      "line": 1679,
       "callee": "rpc.call_sync",
       "method": "sync.run",
       "method_expression": "'sync.run'",
@@ -3505,7 +4004,7 @@
     },
     {
       "file": "cs/cli.py",
-      "line": 1816,
+      "line": 1684,
       "callee": "rpc.call_sync",
       "method": "update.run",
       "method_expression": "'update.run'",
@@ -3525,24 +4024,25 @@
     },
     {
       "file": "cs/contextual_email.py",
-      "line": 25,
+      "line": 23,
       "callee": "rpc.call_sync",
-      "method": "drafts.list",
-      "method_expression": "'drafts.list'",
+      "method": "drafts.get",
+      "method_expression": "'drafts.get'",
       "keys": [
-        "status"
+        "draft_id"
       ],
       "dynamic_payload": false,
       "return": "Any at EngineClient.call; no runtime return schema"
     },
     {
       "file": "cs/contextual_email.py",
-      "line": 66,
+      "line": 47,
       "callee": "rpc.call_sync",
-      "method": "drafts.list",
-      "method_expression": "'drafts.list'",
+      "method": null,
+      "method_expression": "method",
       "keys": [
-        "status"
+        "draft_id",
+        "request_key"
       ],
       "dynamic_payload": false,
       "return": "Any at EngineClient.call; no runtime return schema"
@@ -3571,19 +4071,7 @@
     },
     {
       "file": "cs/engine_view.py",
-      "line": 102,
-      "callee": "rpc.call_sync",
-      "method": "emails.list_by_thread",
-      "method_expression": "'emails.list_by_thread'",
-      "keys": [
-        "thread_id"
-      ],
-      "dynamic_payload": false,
-      "return": "Any at EngineClient.call; no runtime return schema"
-    },
-    {
-      "file": "cs/engine_view.py",
-      "line": 180,
+      "line": 190,
       "callee": "rpc.call_sync",
       "method": "emails.needs_reply",
       "method_expression": "'emails.needs_reply'",
@@ -3609,6 +4097,48 @@
       "return": "Any at EngineClient.call; no runtime return schema"
     },
     {
+      "file": "cs/interactive_draft.py",
+      "line": 151,
+      "callee": "rpc.call_sync",
+      "method": "emails.list_by_thread",
+      "method_expression": "'emails.list_by_thread'",
+      "keys": [
+        "thread_id"
+      ],
+      "dynamic_payload": false,
+      "return": "Any at EngineClient.call; no runtime return schema"
+    },
+    {
+      "file": "cs/interactive_draft.py",
+      "line": 242,
+      "callee": "rpc.call_sync",
+      "method": "system.capabilities",
+      "method_expression": "'system.capabilities'",
+      "keys": [],
+      "dynamic_payload": false,
+      "return": "Any at EngineClient.call; no runtime return schema"
+    },
+    {
+      "file": "cs/interactive_draft.py",
+      "line": 295,
+      "callee": "rpc.call_sync",
+      "method": null,
+      "method_expression": "'drafts.' + action",
+      "keys": [],
+      "dynamic_payload": true,
+      "return": "Any at EngineClient.call; no runtime return schema"
+    },
+    {
+      "file": "cs/interactive_draft.py",
+      "line": 359,
+      "callee": "rpc.call_sync",
+      "method": "drafts.compose_reply",
+      "method_expression": "'drafts.compose_reply'",
+      "keys": [],
+      "dynamic_payload": true,
+      "return": "Any at EngineClient.call; no runtime return schema"
+    },
+    {
       "file": "cs/login.py",
       "line": 421,
       "callee": "rpc.call_sync",
@@ -3616,6 +4146,26 @@
       "method_expression": "'account.who_am_i'",
       "keys": [],
       "dynamic_payload": false,
+      "return": "Any at EngineClient.call; no runtime return schema"
+    },
+    {
+      "file": "cs/logs_cli.py",
+      "line": 140,
+      "callee": "client.call",
+      "method": "system.capabilities",
+      "method_expression": "'system.capabilities'",
+      "keys": [],
+      "dynamic_payload": false,
+      "return": "Any at EngineClient.call; no runtime return schema"
+    },
+    {
+      "file": "cs/logs_cli.py",
+      "line": 144,
+      "callee": "client.call",
+      "method": null,
+      "method_expression": "'diagnostics.' + view",
+      "keys": [],
+      "dynamic_payload": true,
       "return": "Any at EngineClient.call; no runtime return schema"
     },
     {
@@ -3642,7 +4192,20 @@
     },
     {
       "file": "cs/operator_recovery.py",
-      "line": 232,
+      "line": 998,
+      "callee": "client.call",
+      "method": "sync.run",
+      "method_expression": "'sync.run'",
+      "keys": [
+        "days_back",
+        "scope"
+      ],
+      "dynamic_payload": false,
+      "return": "Any at EngineClient.call; no runtime return schema"
+    },
+    {
+      "file": "cs/operator_recovery.py",
+      "line": 1027,
       "callee": "client.call",
       "method": "settings.get_secret",
       "method_expression": "'settings.get_secret'",
@@ -3664,7 +4227,7 @@
     },
     {
       "file": "cs/project_init.py",
-      "line": 185,
+      "line": 186,
       "callee": "rpc.call_sync",
       "method": "settings.get_secret",
       "method_expression": "'settings.get_secret'",
@@ -3676,7 +4239,7 @@
     },
     {
       "file": "cs/project_init.py",
-      "line": 208,
+      "line": 209,
       "callee": "rpc.call_sync",
       "method": "settings.get",
       "method_expression": "'settings.get'",
@@ -3686,7 +4249,7 @@
     },
     {
       "file": "cs/review.py",
-      "line": 118,
+      "line": 160,
       "callee": "rpc.call_sync",
       "method": "campaign.contacts",
       "method_expression": "'campaign.contacts'",
@@ -3698,7 +4261,7 @@
     },
     {
       "file": "cs/review.py",
-      "line": 202,
+      "line": 244,
       "callee": "rpc.call_sync",
       "method": "emails.list_by_thread",
       "method_expression": "'emails.list_by_thread'",
@@ -3710,7 +4273,7 @@
     },
     {
       "file": "cs/review.py",
-      "line": 243,
+      "line": 300,
       "callee": "rpc.call_sync",
       "method": "drafts.list",
       "method_expression": "'drafts.list'",
@@ -3720,7 +4283,7 @@
     },
     {
       "file": "cs/review.py",
-      "line": 271,
+      "line": 328,
       "callee": "rpc.call_sync",
       "method": "tasks.list",
       "method_expression": "'tasks.list'",
@@ -3732,7 +4295,7 @@
     },
     {
       "file": "cs/rpc.py",
-      "line": 228,
+      "line": 290,
       "callee": "c.call",
       "method": null,
       "method_expression": "method",
@@ -3742,7 +4305,7 @@
     },
     {
       "file": "cs/rpc.py",
-      "line": 345,
+      "line": 408,
       "callee": "client.call",
       "method": "chat.approve",
       "method_expression": "'chat.approve'",
@@ -3755,7 +4318,7 @@
     },
     {
       "file": "cs/rpc.py",
-      "line": 351,
+      "line": 414,
       "callee": "c.call",
       "method": "system.capabilities",
       "method_expression": "'system.capabilities'",
@@ -3765,7 +4328,7 @@
     },
     {
       "file": "cs/rpc.py",
-      "line": 360,
+      "line": 429,
       "callee": "c.call",
       "method": "chat.send",
       "method_expression": "'chat.send'",
@@ -3775,7 +4338,7 @@
     },
     {
       "file": "cs/rpc.py",
-      "line": 377,
+      "line": 446,
       "callee": "client.call",
       "method": "system.capabilities",
       "method_expression": "'system.capabilities'",
@@ -3785,7 +4348,7 @@
     },
     {
       "file": "cs/rpc.py",
-      "line": 383,
+      "line": 452,
       "callee": "client.call",
       "method": "chat.send",
       "method_expression": "'chat.send'",
@@ -3796,6 +4359,16 @@
         "policy_version"
       ],
       "dynamic_payload": false,
+      "return": "Any at EngineClient.call; no runtime return schema"
+    },
+    {
+      "file": "cs/rpc_reads.py",
+      "line": 130,
+      "callee": "client.call",
+      "method": null,
+      "method_expression": "method",
+      "keys": [],
+      "dynamic_payload": true,
       "return": "Any at EngineClient.call; no runtime return schema"
     },
     {
@@ -3829,8 +4402,38 @@
       "return": "Any at EngineClient.call; no runtime return schema"
     },
     {
+      "file": "cs/stripe_cli.py",
+      "line": 30,
+      "callee": "client.call",
+      "method": null,
+      "method_expression": "method",
+      "keys": [],
+      "dynamic_payload": true,
+      "return": "Any at EngineClient.call; no runtime return schema"
+    },
+    {
+      "file": "cs/stripe_cli.py",
+      "line": 42,
+      "callee": "call",
+      "method": null,
+      "method_expression": "client",
+      "keys": [],
+      "dynamic_payload": true,
+      "return": "Any at EngineClient.call; no runtime return schema"
+    },
+    {
+      "file": "cs/stripe_cli.py",
+      "line": 63,
+      "callee": "call",
+      "method": null,
+      "method_expression": "client",
+      "keys": [],
+      "dynamic_payload": true,
+      "return": "Any at EngineClient.call; no runtime return schema"
+    },
+    {
       "file": "cs/task_assignment.py",
-      "line": 44,
+      "line": 62,
       "callee": "rpc.call_sync",
       "method": "tasks.assignment.list",
       "method_expression": "'tasks.assignment.list'",
@@ -3840,7 +4443,7 @@
     },
     {
       "file": "cs/task_assignment.py",
-      "line": 59,
+      "line": 131,
       "callee": "rpc.call_sync",
       "method": "tasks.assignment.project",
       "method_expression": "'tasks.assignment.project'",
@@ -3852,7 +4455,7 @@
     },
     {
       "file": "cs/task_assignment.py",
-      "line": 180,
+      "line": 766,
       "callee": "rpc.call_sync",
       "method": "tasks.assignment.commit",
       "method_expression": "'tasks.assignment.commit'",
@@ -3865,7 +4468,7 @@
     },
     {
       "file": "cs/worker_llm.py",
-      "line": 146,
+      "line": 150,
       "callee": "call",
       "method": null,
       "method_expression": "prompt",
@@ -3875,12 +4478,242 @@
     },
     {
       "file": "cs/worker_llm.py",
-      "line": 203,
+      "line": 207,
       "callee": "call",
       "method": null,
       "method_expression": "prompt",
       "keys": [],
       "dynamic_payload": false,
+      "return": "Any at EngineClient.call; no runtime return schema"
+    },
+    {
+      "file": "cs/workflow_cli.py",
+      "line": 28,
+      "callee": "client.call",
+      "method": null,
+      "method_expression": "method",
+      "keys": [],
+      "dynamic_payload": true,
+      "return": "Any at EngineClient.call; no runtime return schema"
+    },
+    {
+      "file": "cs/workflow_cli.py",
+      "line": 39,
+      "callee": "call",
+      "method": null,
+      "method_expression": "client",
+      "keys": [],
+      "dynamic_payload": true,
+      "return": "Any at EngineClient.call; no runtime return schema"
+    },
+    {
+      "file": "cs/workflow_cli.py",
+      "line": 70,
+      "callee": "call",
+      "method": null,
+      "method_expression": "client",
+      "keys": [],
+      "dynamic_payload": true,
+      "return": "Any at EngineClient.call; no runtime return schema"
+    },
+    {
+      "file": "cs/workflow_cli.py",
+      "line": 119,
+      "callee": "call",
+      "method": null,
+      "method_expression": "client",
+      "keys": [],
+      "dynamic_payload": true,
+      "return": "Any at EngineClient.call; no runtime return schema"
+    },
+    {
+      "file": "cs/workflow_cli.py",
+      "line": 127,
+      "callee": "call",
+      "method": null,
+      "method_expression": "client",
+      "keys": [],
+      "dynamic_payload": true,
+      "return": "Any at EngineClient.call; no runtime return schema"
+    },
+    {
+      "file": "cs/workflow_cli.py",
+      "line": 133,
+      "callee": "call",
+      "method": null,
+      "method_expression": "client",
+      "keys": [],
+      "dynamic_payload": true,
+      "return": "Any at EngineClient.call; no runtime return schema"
+    },
+    {
+      "file": "cs/workflow_cli.py",
+      "line": 215,
+      "callee": "call",
+      "method": null,
+      "method_expression": "client",
+      "keys": [],
+      "dynamic_payload": true,
+      "return": "Any at EngineClient.call; no runtime return schema"
+    },
+    {
+      "file": "cs/workflow_cli.py",
+      "line": 219,
+      "callee": "call",
+      "method": null,
+      "method_expression": "client",
+      "keys": [],
+      "dynamic_payload": true,
+      "return": "Any at EngineClient.call; no runtime return schema"
+    },
+    {
+      "file": "cs/workflow_cli.py",
+      "line": 229,
+      "callee": "call",
+      "method": null,
+      "method_expression": "client",
+      "keys": [],
+      "dynamic_payload": true,
+      "return": "Any at EngineClient.call; no runtime return schema"
+    },
+    {
+      "file": "cs/workflow_cli.py",
+      "line": 244,
+      "callee": "call",
+      "method": null,
+      "method_expression": "client",
+      "keys": [],
+      "dynamic_payload": true,
+      "return": "Any at EngineClient.call; no runtime return schema"
+    },
+    {
+      "file": "cs/workflow_cli.py",
+      "line": 248,
+      "callee": "call",
+      "method": null,
+      "method_expression": "client",
+      "keys": [],
+      "dynamic_payload": true,
+      "return": "Any at EngineClient.call; no runtime return schema"
+    },
+    {
+      "file": "cs/workflow_cli.py",
+      "line": 252,
+      "callee": "call",
+      "method": null,
+      "method_expression": "client",
+      "keys": [],
+      "dynamic_payload": true,
+      "return": "Any at EngineClient.call; no runtime return schema"
+    },
+    {
+      "file": "cs/workflow_cli.py",
+      "line": 264,
+      "callee": "call",
+      "method": null,
+      "method_expression": "client",
+      "keys": [],
+      "dynamic_payload": true,
+      "return": "Any at EngineClient.call; no runtime return schema"
+    },
+    {
+      "file": "cs/workflow_cli.py",
+      "line": 276,
+      "callee": "call",
+      "method": null,
+      "method_expression": "client",
+      "keys": [],
+      "dynamic_payload": true,
+      "return": "Any at EngineClient.call; no runtime return schema"
+    },
+    {
+      "file": "cs/workflow_cli.py",
+      "line": 280,
+      "callee": "call",
+      "method": null,
+      "method_expression": "client",
+      "keys": [],
+      "dynamic_payload": true,
+      "return": "Any at EngineClient.call; no runtime return schema"
+    },
+    {
+      "file": "cs/workflow_cli.py",
+      "line": 284,
+      "callee": "call",
+      "method": null,
+      "method_expression": "client",
+      "keys": [],
+      "dynamic_payload": true,
+      "return": "Any at EngineClient.call; no runtime return schema"
+    },
+    {
+      "file": "cs/workflow_cli.py",
+      "line": 293,
+      "callee": "call",
+      "method": null,
+      "method_expression": "client",
+      "keys": [],
+      "dynamic_payload": true,
+      "return": "Any at EngineClient.call; no runtime return schema"
+    },
+    {
+      "file": "cs/workflow_cli.py",
+      "line": 302,
+      "callee": "call",
+      "method": null,
+      "method_expression": "client",
+      "keys": [],
+      "dynamic_payload": true,
+      "return": "Any at EngineClient.call; no runtime return schema"
+    },
+    {
+      "file": "cs/workflow_cli.py",
+      "line": 323,
+      "callee": "call",
+      "method": null,
+      "method_expression": "client",
+      "keys": [],
+      "dynamic_payload": true,
+      "return": "Any at EngineClient.call; no runtime return schema"
+    },
+    {
+      "file": "cs/workflow_cli.py",
+      "line": 325,
+      "callee": "call",
+      "method": null,
+      "method_expression": "client",
+      "keys": [],
+      "dynamic_payload": true,
+      "return": "Any at EngineClient.call; no runtime return schema"
+    },
+    {
+      "file": "cs/workflow_cli.py",
+      "line": 331,
+      "callee": "call",
+      "method": null,
+      "method_expression": "client",
+      "keys": [],
+      "dynamic_payload": true,
+      "return": "Any at EngineClient.call; no runtime return schema"
+    },
+    {
+      "file": "cs/workflow_cli.py",
+      "line": 334,
+      "callee": "call",
+      "method": null,
+      "method_expression": "client",
+      "keys": [],
+      "dynamic_payload": true,
+      "return": "Any at EngineClient.call; no runtime return schema"
+    },
+    {
+      "file": "cs/workflow_cli.py",
+      "line": 342,
+      "callee": "call",
+      "method": null,
+      "method_expression": "client",
+      "keys": [],
+      "dynamic_payload": true,
       "return": "Any at EngineClient.call; no runtime return schema"
     }
   ]

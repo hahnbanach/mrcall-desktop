@@ -1186,7 +1186,7 @@ async def system_capabilities(params: Dict[str, Any], notify: NotifyFn) -> Any:
 
     from zylch.workflows.resources import list_workflows
 
-    return {"observability": 1, "private_workflows": 1, "workflow_selection_method": "workflows.suggest", "workflows": list_workflows(), "chat_read_only_policy": READ_ONLY_POLICY_VERSION, "chat_history_binding": 1, "assignment_draft_policy": 1, "operator_reply_provenance": 1, "stripe": 1, "stripe_payment_method_links": 1, "stripe_payment_links": 1, "exact_draft_publication": 1, "sent_mirror_recovery": 1, "interactive_exact_send": 1}
+    return {"observability": 1, "private_workflows": 1, "workflow_selection_method": "workflows.suggest", "workflows": list_workflows(), "chat_read_only_policy": READ_ONLY_POLICY_VERSION, "chat_history_binding": 1, "assignment_draft_policy": 1, "operator_reply_provenance": 1, "stripe": 1, "stripe_payment_method_links": 1, "stripe_payment_links": 1, "mailbox_drafts": 1, "mailbox_reply": 1}
 
 
 async def chat_approve(params: Dict[str, Any], notify: NotifyFn) -> Any:
@@ -2751,6 +2751,12 @@ for _name, _fn in _OPERATOR_MANAGEMENT_METHODS.items():
 from zylch.rpc.diagnostics import METHODS as _DIAGNOSTIC_METHODS
 
 for _name, _fn in _DIAGNOSTIC_METHODS.items():
+    if _name in METHODS:
+        raise RuntimeError(f"Duplicate RPC method name: {_name}")
+    METHODS[_name] = _fn
+
+from zylch.rpc.google_gmail_actions import METHODS as _GOOGLE_GMAIL_METHODS
+for _name, _fn in _GOOGLE_GMAIL_METHODS.items():
     if _name in METHODS:
         raise RuntimeError(f"Duplicate RPC method name: {_name}")
     METHODS[_name] = _fn

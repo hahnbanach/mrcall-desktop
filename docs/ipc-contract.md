@@ -10,12 +10,12 @@ description: |
 
 # IPC Contract — Engine ↔ App
 
-The method registry on `main` is the production engine's. This file is not
-reconciled with it: it does not name several methods the registry holds,
-among them `drafts.publish_review`, `drafts.send_operator` and
-`instructions.store`, and its `chat.send` parameters `email_context` and
-`contextual_email_policy_version` belong to modules `main` does not carry
-(see [assignment enrollment](../engine/docs/features/assignment-enrollment.md)).
+The assembled registry is the authority. The mailbox draft candidate below is
+source-only relative to the installed dev7 fleet. Its new methods supersede the
+private-row draft surface; retired publication/exact-pair methods refuse instead
+of recreating a private copy. The historical index remains dated and partial.
+The separately unreleased contextual-email fields described below must be checked
+against the selected build; this candidate does not activate their enrollment.
 
 ## Voice agent configuration (M2)
 
@@ -67,9 +67,10 @@ fixture acceptance does not establish deployed-client support.
 `system.capabilities` additionally returns `contextual_email_policy: 1` in the
 local candidate. This capability covers source-bound draft creation/update and
 final engine transport admission; `assignment_draft_policy: 1` alone does not.
-It does not certify external/manual mailbox writes. The retained kernel
-`draft-reply` Gmail review append is preceded by a projection check but is
-outside the engine/company lock; contextual campaign queue copying refuses.
+It does not certify external/manual mailbox writes. The installed kernel
+review append remains outside the engine/company lock. The mailbox candidate
+removes that append and delegates draft effects to the engine; it does not
+activate contextual-email enrollment.
 Published Desktop `v0.1.56` and the current hosted release retain the old scoped
 contract until a separately authorized rollout.
 
@@ -82,7 +83,7 @@ more of the following nonempty identifiers; unknown keys refuse:
 | `thread_key` | Exact RFC conversation root; the actual effect still requires an exact original source target. |
 | `source_email_id` | Original email ID resolved in the authenticated owner's private store. |
 | `target_message_id` | Exact original RFC Message-ID, resolved in that same store. |
-| `draft_id` | Full persisted engine draft identity; reply binding is re-resolved from the actual row. |
+| `draft_id` | In the separately unreleased contextual-email candidate, a persisted private draft identity. The mailbox candidate uses opaque native handles through its own methods below. |
 
 All supplied source identities must agree. A version without context, or context
 without the supported version, refuses. Explicit context cannot contradict
@@ -92,9 +93,9 @@ become standalone. This context restricts effects and grants no assignment or
 send authority. Existing approval and request-read-only policies still apply.
 
 Chat, email-backed ordinary tasks and executor hops retain known source context.
-Final write and transport admission rechecks current company authority and the
-persisted draft under their writer reservations; old drafts and stale copies
-receive the same checks. Enrollment and source-free semantic limits are in the
+The mailbox candidate reserves operation identity before checking current company
+authority under the writer guard for the provider effect. Current native MIME
+provides the editable draft state; old private rows cannot authorize sending. Enrollment and source-free semantic limits are in the
 [assignment contract](../engine/docs/features/task-assignment.md#contextual-email-enforcement--unreleased-development).
 The source-level [RPC inventory](rpc-contract-inventory.json) records registration
 and declared signatures. Its six `operator.*` entries are refreshed from the
@@ -277,11 +278,11 @@ registry on 2026-08-15 (65 methods), plus `emails.needs_reply` added
 
 | Method | Declared parameters | Returns |
 |---|---|---|
-| `campaign.add_contact` | `campaign_id, email, uid?, stratum?, verdict?, language?, dossier?, draft_subject?, draft_body?, state?, message_id?` | contact dict |
+| `campaign.add_contact` | `campaign_id, email, uid?, stratum?, verdict?, language?, dossier?, draft_subject?, draft_body?, draft_body_format?, draft_cc?, draft_request_key?, state?, message_id?` | contact dict |
 | `campaign.contacts` | `campaign_id, state?` | list of contact dicts |
 | `campaign.create` | `name, brief?` | campaign dict |
 | `campaign.list` | — | list of campaigns with contact/state counts |
-| `campaign.update_contact` | `contact_id, uid?, stratum?, verdict?, language?, dossier?, draft_subject?, draft_body?, state?, message_id?` | {ok, contact} |
+| `campaign.update_contact` | `contact_id, uid?, stratum?, verdict?, language?, dossier?, draft_subject?, draft_body?, draft_body_format?, draft_cc?, draft_request_key?, state?, message_id?` | {ok, contact} |
 
 **`chat.*`**
 
@@ -794,39 +795,49 @@ no transport, spend cap, malformed answer, a verdict missing for one index —
 resolves to `needs_reply: true`. Nothing in this method can produce silence
 by breaking.
 
-### `drafts.list(status?)`
+### Mailbox draft methods — candidate
 
-Read-only enumeration of composed reply/outreach drafts for the owner,
-ordered `created_at` descending, each row's `to_dict()`. `status` defaults
-to `"draft"` (the unsent ones). Returns a bare array. Sends nothing.
+`system.capabilities` exposes `mailbox_drafts: 1` and `mailbox_reply: 1`.
+The [mailbox contract](mailbox-drafts.md) owns identity, MIME limits and certainty.
+All draft identifiers are opaque mailbox-bound native Gmail handles. These methods
+use current Gmail state and never insert an editable engine draft row.
 
-### `drafts.discard(draft_id)`
+| Method | Parameters | Result |
+|---|---|---|
+| `drafts.list` | `status?, mailbox_id?` | Complete bare array of current native drafts. Only `status=draft` is listed. A provider failure raises a named application error, never an empty success. |
+| `drafts.get` | `draft_id` | `{ok, draft, cause, draft_id}`; missing native container gives `draft_not_found`. |
+| `drafts.create` | `to, subject, body, request_key, cc?, bcc?, in_reply_to?, references?, thread_id?, body_format?, source_id?` | Current native draft or durable operation outcome. |
+| `drafts.update` | `draft_id, request_key?, to?, cc?, bcc?, subject?, body?, body_format?` | `{ok, draft, draft_id}` or named refusal. Only supplied fields change. |
+| `drafts.send_status` | `draft_id, request_key` | Existing operation plus exact Sent lookup only. Missing operation returns `named_send_operation_not_found` without a reservation, draft read or transmission. |
+| `drafts.send` | `draft_id, request_key` | Sent-confirmed delivery or unconfirmed/refused outcome. Current native MIME and recipients are used. |
+| `drafts.trash` | `draft_id, request_key` | Confirmed recoverable Trash outcome or named uncertainty/refusal. |
+| `drafts.discard` | `draft_id, request_key?` | Compatibility alias for native Trash, including `discarded`. It never deletes a private row. |
+| `drafts.compose_reply` | `source_email_id, thread_key, request_key, mode?, request_text?, instruction_versions?, operator_origin?, operator_origin_version?, recover_only?` | Durable reply operation outcome; `mode=draft` prepares a native draft, `mode=send` sends directly without creating one. |
 
-Retires ONE engine draft, owner-scoped: the row is **deleted**, so it
-leaves `drafts.list`, `/email list --draft` and the UI drafts count
-together. This is the only way out of `status='draft'` other than being
-sent, and it exists so a draft the conversation has moved past (the
-customer wrote again, someone answered another way) can be taken off the
-operator's screen.
+Compose requires an exact owner-scoped source. `mode=send` requires scheduled
+origin; interactive sending names an existing draft through `drafts.send`.
+Scheduled calls check the live
+conversation and Sent, preserve existing drafts in both modes and retain assignment
+and launcher restrictions. Replays resolve the original operation before generation.
+`recover_only=true` refuses a missing engine admission before generation or any
+provider mutation; a local pre-dispatch record grants no new effect.
+A named draft sent or deleted externally is never recreated by send/recovery.
+An uncertain dispatch only checks Sent, including after process restart. Empty or
+failed reads never authorize another transmission. Attachments are visible and
+trashable, but send refuses them. Multipart body edits require Gmail.
 
-Deletion rather than a new terminal status: `drafts.status` carries a
-SQLite `CHECK (status IN ('draft','sending','sent','failed'))` baked into
-every existing profile database, and `storage/database.py` migrates by
-`ALTER TABLE ADD COLUMN` only. The chat `delete_draft` tool already
-retires drafts from the same table the same way.
+### Gmail authorization — candidate
 
-Refusals are answers, not errors — `{ok: false, discarded: false,
-reason}` with `reason` one of:
+These calls require the authenticated selected profile and store separate encrypted
+Gmail credentials. Calendar consent and IMAP app passwords do not grant Gmail API
+access. OAuth client configuration is host-owned; no secret is returned.
 
-| `reason` | When |
-|---|---|
-| `not_found` | no such draft for this owner (an id alone never reaches another owner's row) |
-| `send_in_flight` | `status == "sending"` **and the claim is still fresh** — a transport is holding it right now. Past that draft's own claim window (`storage.send_claim_window_minutes`, which grows with the recipient count because the SMTP worst case does) the claim counts as abandoned and the discard succeeds: nothing else surfaces a stranded `sending` row, so refusing forever would make it unreachable. |
-| `already_sent` | `status == "sent"` — the row is the record of what left the mailbox |
-
-`failed` stays discardable, matching `send_draft` keeping it sendable. On
-success the answer echoes the discarded draft's `to` and `subject` so the
-caller can log what it retired. Missing `draft_id` is a `-32602`.
+| Method | Parameters | Result |
+|---|---|---|
+| `google.gmail.begin` | `redirect_uri?` | `{auth_url, state, redirect_uri, expires_in}` for a bounded PKCE consent flow. |
+| `google.gmail.complete` | `code, state` | `{ok, email, scope}` after exact mailbox/profile validation. |
+| `google.gmail.status` | none | `{connected, email?, scope?, reason?}`. |
+| `google.gmail.disconnect` | none | `{ok}` after removing the selected Gmail credential. |
 
 ### `llm.models(provider?)`
 
@@ -1611,18 +1622,30 @@ the field descriptors, no values.
 
 ### `campaign.*`
 
-Durable state for operator-driven outreach (the `mrcall-cs` support
-sessions). **None of these send anything** — they are the ledger, not the
-transport. `campaign.create(name, brief?)` and `campaign.list()` manage
-campaigns; `campaign.add_contact` / `campaign.update_contact` /
-`campaign.contacts` manage the contact rows, carrying the operator's
-per-contact working state (`stratum`, `verdict`, `language`, `dossier`,
-`draft_subject`, `draft_body`, `state`, `message_id`).
+Durable contact and campaign metadata for operator-driven outreach. None of these
+methods sends mail. Supplying non-null string `draft_subject` or `draft_body` to
+`campaign.add_contact` or `campaign.update_contact` in the mailbox candidate
+prepares or edits the native Gmail draft through the engine. These requests require
+a stable `draft_request_key` of 16–128 characters. `draft_body_format` accepts
+`plain` or `html`; `draft_cc` accepts an address list, preserving fixed-template
+pack MIME and copy recipients through the same producer. A new contact draft is created
+once; an existing native handle updates only the explicitly supplied fields.
+A replay recovers before updating, preserving later Gmail edits. A missing named
+container is never recreated. Null draft fields are housekeeping, not Gmail edits.
 
-`add_contact` is idempotent on `(campaign_id, email)`: re-adding an
-existing contact updates the supplied fields rather than failing the
-unique constraint, so re-running a backfill never duplicates.
-`update_contact` with `state="sent"` stamps `sent_at` server-side.
+`draft_subject` and `draft_body` remain null in stored contacts. Engine-owned
+`dossier.mailbox_draft_id` holds the opaque native handle and
+`dossier.mailbox_draft_request` holds body-free recovery keys, digests and state.
+Caller dossier replacement cannot erase or rebind these reserved fields. A
+metadata writer claim serializes concurrent preparation without retaining a
+SQLite writer across provider IO. Provider failure never persists generated text.
+Other dossier content remains research context, with ordinary campaign metadata
+writes unchanged. Campaign/draft RPC parameter values are redacted in DEBUG logs.
+
+`add_contact` is idempotent on `(campaign_id, email)`; re-adding updates supplied
+metadata. `update_contact` with `state="sent"` stamps `sent_at` server-side.
+The [migration](mailbox-draft-migration.md) discards old campaign text without
+publishing it and preserves the remaining contact/dossier metadata.
 
 ### Keeping this file honest
 

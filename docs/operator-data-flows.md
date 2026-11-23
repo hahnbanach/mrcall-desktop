@@ -67,22 +67,25 @@ Standing instructions do not grant sending, payment, budget or tool permissions.
 
 Reply generation uses the native engine budget and one causal reservation. The
 request is a person's: it is admitted on every assignment state, and keeps the
-exact source and recipient binding and the claim controls. Draft and saved-result
-mutation share the private writer transaction; instruction revisions are checked
-while the native company writer guard is held. The saved draft is plain text with
-root-first References; its review copy is published to the mailbox's Drafts
-folder inside the same operation, one copy per thread root, and recovery finishes
-an interrupted publication from the operation journal without another model call.
-Internal review can finish without a customer draft.
+exact source and recipient binding and the claim controls. The [mailbox candidate](mailbox-drafts.md) creates the sole native Gmail draft
+through the engine. Generation retains source and instruction digests and a
+causal receipt, without a saved editable body. The final provider effect checks
+current instruction revisions under the company writer guard after reserving
+its durable operation identity. Recovery resolves the original operation without
+another generation or blind provider retry. Internal review can finish without
+a customer draft. The candidate is not installed on the dev7 fleet.
 
-`send_reply` is the one sending tool. It needs full operator access
+`send_reply` is the one MCP sending tool. It needs full operator access
 (`operator.use`), runs only as its own tool so the client shows it and asks the
-person first, and is idempotent on its request key. Before a new send it refuses,
-naming them, a review copy edited in Gmail and a reply to the same message already
-sent from Gmail; after the verified send it retires the review copy with Sent
-proof and reports the send's certainty and the cleanup's separately. Scheduled
-operator runs never carry this authority: the connection lives outside the clone
-directory and the scheduled guard keeps its refusals.
+person first, and is idempotent on its request key. In the mailbox candidate it
+sends the named native draft with its current MIME and recipients, including
+Gmail edits. A missing draft is never recreated. Only exact Message-ID proof in
+Sent confirms delivery; uncertainty remains attached to the original operation
+across restarts and triggers reads, never another transmission. `delete_draft`
+moves the named native draft to recoverable Trash. Scheduled operators never
+carry person-request authority; their separate engine composition checks Sent
+and existing drafts before generation and can send directly only when the
+ordinary launcher permits it.
 
 An AI-chat attachment, a shared project record and a local filesystem path are
 different sources. A path alone transfers no bytes. The MCP does not grant general
@@ -94,7 +97,7 @@ those coverage limits. Uploaded/native file workflows remain separately owned.
 - [HTTP/tool server](../engine/zylch/operator_mcp/server.py), [authorization](../engine/zylch/operator_mcp/auth.py) and [resource routing](../engine/zylch/operator_mcp/routing.py).
 - [Issuer](../engine/zylch/operator_mcp/issuer.py) and [grant persistence](../engine/zylch/operator_mcp/broker_store.py).
 - [Native reads](../engine/zylch/operator_mcp/read_port.py), [effects](../engine/zylch/operator_mcp/effects.py) and [saved reply operations](../engine/zylch/services/operator_reply_operations.py).
-- [A person's request marker](../engine/zylch/services/person_request.py), [review copy publication and recovery](../engine/zylch/services/operator_reply_publication.py) and [the send on a person's instruction](../engine/zylch/services/operator_reply_send.py).
+- [A person's request marker](../engine/zylch/services/person_request.py), [native mailbox draft operations](../engine/zylch/services/mailbox_drafts.py), [durable identities](../engine/zylch/storage/mailbox_operations.py) and [native sending](../engine/zylch/services/mailbox_draft_send.py).
 - [Rule changes](../engine/zylch/services/operator_rule_changes.py) and [native management](../engine/zylch/rpc/operator_operations.py).
 - [Identity, company memory and spending](cross-cutting-contracts.md), [IPC](ipc-contract.md) and [host operations](remote-backend.md).
 

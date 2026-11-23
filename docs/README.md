@@ -22,6 +22,8 @@ The repo has three parallel doc trees, mirroring the three index files. Each tre
 
 ## Index
 
+- [Mailbox draft contract](mailbox-drafts.md) — shared engine operations, native Gmail identity, sending and replay; [legacy retirement](mailbox-draft-migration.md).
+
 - [Assignment reads in a multi-mailbox profile](briefs/2026-11-22-assignment-mailbox-scope.md) and their [delivery plan](execution-plans/2026-11-22-assignment-mailbox-scope.md).
 - [Stripe test installer](execution-plans/2026-10-16-stripe-test-installer.md) — isolated test candidate, source checks and unverified installed acceptance; [brief](briefs/2026-10-16-stripe-test-installer.md).
 - [Stripe startup recovery](execution-plans/2026-10-16-stripe-startup-recovery.md) — bounded Settings startup, session recovery and replacement test installer; [brief](briefs/2026-10-16-stripe-startup-recovery.md).

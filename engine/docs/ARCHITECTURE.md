@@ -48,8 +48,10 @@ zylch/
 │   ├── unified_conversation.py # Multi-channel conversation timeline
 │   └── job_executor.py   # Background job runner (REPL mode)
 │
-├── email/                # Email access (IMAP/SMTP)
-│   └── imap_client.py    # IMAP client with auto-detect presets
+├── email/                # Archived email + native mailbox operations
+│   ├── gmail_auth.py     # Separate encrypted Gmail grant and PKCE
+│   ├── gmail_mailbox.py  # Native Gmail containers, mutation and Sent reads
+│   └── imap_client.py    # IMAP/SMTP client with auto-detect presets
 │
 ├── whatsapp/             # WhatsApp (neonize/whatsmeow)
 │   ├── client.py         # WhatsApp client (QR login, send, receive)
@@ -69,7 +71,7 @@ zylch/
 │   ├── base.py           # Tool, ToolResult, ToolStatus base classes
 │   ├── session_state.py  # SessionState (runtime context)
 │   ├── factory.py        # ToolFactory (tool registry)
-│   ├── gmail_tools.py    # Email search/draft/send tools (IMAP)
+│   ├── gmail_tools.py    # Archived search + engine-owned native mailbox draft operations
 │   ├── email_sync_tools.py # Email sync tools
 │   ├── email_sync.py     # EmailSyncManager (IMAP incremental)
 │   ├── email_archive.py  # Email archive manager
@@ -168,6 +170,17 @@ zylch/
 └── config.py             # Pydantic Settings (from profile ~/.zylch/.env)
 ```
 
+## Mailbox drafts
+
+The [mailbox candidate](../../docs/mailbox-drafts.md) uses Gmail native draft
+containers through `services/mailbox_drafts.py` and `email/gmail_mailbox.py`.
+Desktop, MCP, chat and kernel requests share those operations. SQLite stores
+body-free request identities in `storage/mailbox_operations.py`; it stores no
+editable draft copy. IMAP remains the synced archive reader. Scheduled direct
+replies use native `messages.send` without an intermediate draft. Migration
+discards the legacy store and preserves uncertain sends without provider writes.
+The installed fleet remains dev7 until the separately verified cutover.
+
 ## Data Flow
 
 ```
@@ -192,7 +205,7 @@ User
 
 | Channel | Protocol | Implementation |
 |---------|----------|---------------|
-| Email | IMAP/SMTP | `zylch/email/imap_client.py` |
+| Email | IMAP/SMTP and candidate native Gmail API | `zylch/email/imap_client.py`, `zylch/email/gmail_mailbox.py`; [mailbox contract](../../docs/mailbox-drafts.md) |
 | WhatsApp | neonize (whatsmeow) | `zylch/whatsapp/client.py` — QR login, sync on demand |
 | MrCall | StarChat HTTP with Firebase identity | `zylch/tools/mrcall/starchat_firebase.py` |
 | Telegram | python-telegram-bot | `zylch/telegram/bot.py` — bot interface (long-polling) |

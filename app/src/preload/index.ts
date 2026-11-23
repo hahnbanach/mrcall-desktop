@@ -5,6 +5,9 @@ import type {
   QontoTestResult, QontoTransactionResult
 } from '../renderer/src/finance'
 import type { MailboxMutationResult, MailboxTestResult } from '../renderer/src/types'
+import type {
+  MailboxDraft, MailboxDraftOutcome, MailboxDraftPatch, MailboxDraftResult
+} from '../renderer/src/drafts'
 
 type NotifyCb = (params: unknown) => void
 const listeners = new Map<string, Set<NotifyCb>>()
@@ -160,6 +163,18 @@ const call = <T = unknown>(method: string, params: unknown = {}, timeout?: numbe
   ipcRenderer.invoke('rpc:call', method, params, timeout) as Promise<T>
 
 const api = {
+  drafts: {
+    list: (params: { mailbox_id?: string } = {}) =>
+      call<MailboxDraft[]>('drafts.list', params, 60000),
+    get: (draftId: string) =>
+      call<MailboxDraftResult>('drafts.get', { draft_id: draftId }, 60000),
+    update: (params: MailboxDraftPatch) =>
+      call<MailboxDraftResult>('drafts.update', params, 60000),
+    send: (draftId: string, requestKey: string) =>
+      call<MailboxDraftOutcome>('drafts.send', { draft_id: draftId, request_key: requestKey }, 120000),
+    trash: (draftId: string, requestKey: string) =>
+      call<MailboxDraftOutcome>('drafts.trash', { draft_id: draftId, request_key: requestKey }, 60000)
+  },
   system: {
     capabilities: () => call<{ chat_history_binding?: number }>('system.capabilities', {}, 15_000)
   },

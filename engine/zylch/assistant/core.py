@@ -609,6 +609,7 @@ class ZylchAIAgent(BaseConversationalAgent):
                         card_input = gate_tool.approval_input(dict(tool_input or {}))
                     else:
                         card_input = dict(tool_input or {})
+                    approval_baseline = dict(card_input)
                     try:
                         decision = await approval_callback(block.id, tool_name, card_input)
                         # New shape: (approved, edited_input). Tolerate a
@@ -642,7 +643,15 @@ class ZylchAIAgent(BaseConversationalAgent):
                     # The user may have edited the draft in the approval
                     # card (corrected recipient / body). Swap the edited
                     # input in before the tool runs.
-                    if isinstance(edited_input, dict) and edited_input:
+                    if tool_name == "send_draft":
+                        # Hydrated fields are a preview. Only deliberate card changes
+                        # override the current saved mailbox content at dispatch.
+                        from ..services.approval_gate import draft_updates_from_card
+                        updates = draft_updates_from_card(edited_input, original=approval_baseline)
+                        aliases = {"to_addresses": "to", "cc_addresses": "cc", "bcc_addresses": "bcc"}
+                        tool_input = {"draft_id": approval_baseline.get("draft_id"),
+                                      **{aliases.get(key, key): value for key, value in updates.items()}}
+                    elif isinstance(edited_input, dict) and edited_input:
                         logger.info(
                             f"[approval] tool={tool_name} using edited input "
                             f"keys={list(edited_input.keys())}"

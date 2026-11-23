@@ -1,4 +1,9 @@
-# Current-main operator MCP source
+# Fixed operator MCP source build
+
+This is the retained dev1 paired-build recipe. It does not describe the installed
+dev7 payload or build the [mailbox draft candidate](mailbox-drafts.md). The fixed
+manifest below excludes the new mailbox modules. The mailbox delivery must use a
+new reviewed complete hosted package and retain its own source and build evidence.
 
 The candidate packages the current-main engine and an explicitly reviewed kernel
 MCP helper slice. Desktop remains the configurator. This build does not establish
@@ -111,10 +116,10 @@ A source registration does not certify a new configurator GUI build.
 
 A prepared reply retains native source, recipient and claim controls; it is a
 person's request, admitted on every assignment state ([request flow](operator-data-flows.md)).
-Its draft and saved receipt share the private writer transaction; published
-instruction revisions are read while the matching native company writer guard is
-held. Recovery returns saved results without another generation and finishes an
-interrupted review-copy publication. `send_reply` is the one MCP sending tool,
+In this retained dev1 build, its private draft and saved receipt share the writer
+transaction and recovery finishes a review-copy publication. The mailbox candidate
+replaces that pair with a native draft and body-free operation receipts; its
+current contract is [documented separately](mailbox-drafts.md). `send_reply` is the one MCP sending tool,
 under full operator access and the person's explicit instruction. Source-free
 ordinary work retains its native budget and admission behavior.
 

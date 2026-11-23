@@ -1,601 +1,267 @@
-"""A draft already handed to a transport must not go out a second time.
+"""Once dispatch may have occurred, only Sent observation can settle the operation.
 
-`storage.get_draft` filters on owner + id and NOT on status, while `/email
-send` filters `status == "draft"`. So `send_draft(draft_id=X)` called twice
-mailed the same customer the same email twice, and the two send paths
-disagreed about which drafts were sendable at all.
-
-The rule all three send paths hold: a draft is sendable unless it has already
-been handed to a transport. `sent` refuses, `failed` does not, and `sending`
-is decided by `storage.claim_draft_for_send` — a live claim refuses, one
-abandoned longer than that draft's own window is taken over, because no
-listing shows a `sending` row (`drafts.discard` reads the same window, so such
-a row can also be retired). The claim is a conditional UPDATE, so two callers
-racing on one id produce one delivery and one refusal rather than two mails.
-
-The matching half of that decision is where a transport error parks the draft:
-`draft`, not `failed`, because every surface that lists drafts filters
-`status == "draft"` and nothing anywhere reads `failed`, so a failed send used
-to vanish from the operator's view entirely. And the rollback stops at the
-transport call, is conditional on still holding the claim, and only says
-"nothing was sent" when the transport actually said so.
-
-Runs against a real temp SQLite DB — no storage mocks. Only the outbound SMTP
-boundary is stubbed.
+Private row claims, recipient-sized leases and SMTP bookkeeping are retired.
+Their functional risks remain: races, delayed visibility, failed readback,
+late cleanup, explicit retries after definite refusal, and editing a live send.
+These tests exercise tools/commands with real persistent receipt transactions.
 """
-
 import asyncio
-import smtplib
-import threading
-from datetime import datetime, timedelta, timezone
-from unittest.mock import MagicMock, patch
+from concurrent.futures import ThreadPoolExecutor
+import json
+from threading import Event
+from unittest.mock import MagicMock
 
 import pytest
 
-OWNER = "owner-double-send-test"
+from mailbox_tools_fixture import OWNER, cleanup_test_data, mailbox
+from zylch.email.gmail_auth import GmailError
+from zylch.tools.base import ToolStatus
 
 
-def _naive_utcnow():
-    """The shape the DateTime columns store (naive UTC)."""
-    return datetime.now(timezone.utc).replace(tzinfo=None)
-
-
-@pytest.fixture
-def fresh_storage(tmp_path, monkeypatch):
-    db_path = tmp_path / "double_send_test.db"
-    monkeypatch.setenv("ZYLCH_DB_PATH", str(db_path))
-    from zylch.storage import database as db_mod
-    from zylch.storage.storage import Storage
-
-    db_mod.dispose_engine()
-    db_mod.init_db()
-    yield Storage()
-    db_mod.dispose_engine()
-
-
-def _run(coro):
-    return asyncio.run(coro)
-
-
-def _draft(storage, **kw):
-    return storage.create_draft(
-        owner_id=OWNER,
-        to=kw.get("to", "customer@example.com"),
-        subject=kw.get("subject", "Re: your request"),
-        body=kw.get("body", "Body."),
-    )
-
-
-def _tool(storage, imap):
-    from zylch.tools.gmail_tools import SendDraftTool
-
-    return SendDraftTool(imap_client=imap, storage=storage, owner_id=OWNER)
-
-
-# ------------------------------------------------------------- send_draft
-
-
-def test_sending_the_same_draft_twice_mails_the_customer_once(fresh_storage):
-    from zylch.tools.base import ToolStatus
-
-    draft = _draft(fresh_storage)
-    imap = MagicMock()
-    imap.send_message.return_value = {"id": "sent-1"}
-    tool = _tool(fresh_storage, imap)
-
-    first = _run(tool.execute(draft_id=draft["id"]))
-    second = _run(tool.execute(draft_id=draft["id"]))
-
-    assert first.status == ToolStatus.SUCCESS
-    assert second.status == ToolStatus.ERROR
-    assert "already been sent" in second.error
-    assert imap.send_message.call_count == 1
-
-
-def test_a_draft_stuck_in_sending_is_refused(fresh_storage):
-    """`sending` means another request already owns this draft."""
-    from zylch.tools.base import ToolStatus
-
-    draft = _draft(fresh_storage)
-    fresh_storage.update_draft(OWNER, draft["id"], {"status": "sending"})
-
-    imap = MagicMock()
-    result = _run(_tool(fresh_storage, imap).execute(draft_id=draft["id"]))
-
-    assert result.status == ToolStatus.ERROR
-    imap.send_message.assert_not_called()
-
-
-# ------------------------------------------------- the claim, under a race
-
-
-def test_two_concurrent_sends_mail_the_customer_once(fresh_storage):
-    """The second request arrives while the first is inside SMTP.
-
-    This is the window the old check-then-act code lost: both callers read
-    `status='draft'`, both wrote `sending`, both sent. Only the caller that
-    wins the conditional update may reach the transport.
-    """
-    from zylch.tools.base import ToolStatus
-
-    draft = _draft(fresh_storage)
-    in_smtp = threading.Event()
-    may_return = threading.Event()
-
-    def slow_send(**kwargs):
-        in_smtp.set()
-        assert may_return.wait(10), "second send never completed"
-        return {"id": "sent-concurrent"}
-
-    imap = MagicMock()
-    imap.send_message.side_effect = slow_send
-    tool = _tool(fresh_storage, imap)
-
-    outcome = {}
-
-    def first():
-        outcome["first"] = _run(tool.execute(draft_id=draft["id"]))
-
-    worker = threading.Thread(target=first)
-    worker.start()
-    assert in_smtp.wait(10), "first send never reached the transport"
-
-    second = _run(tool.execute(draft_id=draft["id"]))
-
-    may_return.set()
-    worker.join(10)
-
-    assert outcome["first"].status == ToolStatus.SUCCESS
-    assert second.status == ToolStatus.ERROR
-    assert "already being sent" in second.error
-    assert imap.send_message.call_count == 1
-    assert fresh_storage.get_draft(OWNER, draft["id"])["status"] == "sent"
-
-
-def test_only_one_racing_claim_wins(fresh_storage):
-    """The guarantee itself, with no transport in the picture."""
-    draft = _draft(fresh_storage)
-    start = threading.Barrier(4)
-    won = []
-    lock = threading.Lock()
-
-    def claim():
-        start.wait(10)
-        ok = fresh_storage.claim_draft_for_send(OWNER, draft["id"])
-        with lock:
-            won.append(ok)
-
-    threads = [threading.Thread(target=claim) for _ in range(4)]
-    for t in threads:
-        t.start()
-    for t in threads:
-        t.join(10)
-
-    assert won.count(True) == 1, f"expected exactly one winner, got {won}"
-    assert fresh_storage.get_draft(OWNER, draft["id"])["status"] == "sending"
-
-
-def test_a_failed_draft_can_still_be_claimed(fresh_storage):
-    """The claim predicate is `('draft','failed')`, not `('draft',)`."""
-    draft = _draft(fresh_storage)
-    fresh_storage.update_draft(OWNER, draft["id"], {"status": "failed"})
-
-    assert fresh_storage.claim_draft_for_send(OWNER, draft["id"]) is True
-    assert fresh_storage.claim_draft_for_send(OWNER, draft["id"]) is False
-
-
-def test_a_draft_stranded_in_sending_is_recoverable(fresh_storage):
-    """A daemon killed mid-send leaves a row no listing shows.
-
-    `drafts.list` filters `status='draft'`, so without a stale window the
-    claim would trade a rare double-send for a permanent black hole.
-    """
-    from zylch.storage.storage import send_claim_window_minutes
-    from zylch.tools.base import ToolStatus
-
-    draft = _draft(fresh_storage)
-    # One recipient, so one recipient's window — the row decides it.
-    stale_after = send_claim_window_minutes(1)
-    abandoned = _naive_utcnow() - timedelta(minutes=stale_after + 1)
-    fresh_storage.update_draft(OWNER, draft["id"], {"status": "sending", "updated_at": abandoned})
-
-    imap = MagicMock()
-    imap.send_message.return_value = {"id": "sent-recovered"}
-    result = _run(_tool(fresh_storage, imap).execute(draft_id=draft["id"]))
-
-    assert result.status == ToolStatus.SUCCESS
-    assert imap.send_message.call_count == 1
-    assert fresh_storage.get_draft(OWNER, draft["id"])["status"] == "sent"
-
-
-def test_a_fresh_sending_claim_is_not_treated_as_stale(fresh_storage):
-    """The recovery window must not swallow a send that is genuinely running."""
-    draft = _draft(fresh_storage)
-    assert fresh_storage.claim_draft_for_send(OWNER, draft["id"]) is True
-    assert fresh_storage.claim_draft_for_send(OWNER, draft["id"]) is False
-
-
-def test_the_window_covers_the_send_the_draft_actually_costs(fresh_storage):
-    """A window measured for one recipient double-sends a mail to ten.
-
-    Every recipient is one more RCPT TO, each with its own socket deadline, so
-    a ten-recipient send can still be inside SMTP long after a one-recipient
-    window has expired. If the claim went stale there, a second caller would
-    take the row and deliver the same mail again — and no rollback guard can
-    undo a delivery.
-    """
-    from zylch.storage.storage import (
-        SMTP_FIXED_ROUND_TRIPS,
-        SMTP_TRANSPORT_TIMEOUT_SECONDS,
-        send_claim_window_minutes,
-    )
-
-    many = _draft(
-        fresh_storage,
-        to=", ".join(f"person{i}@example.com" for i in range(10)),
-    )
-    one_recipient_window = send_claim_window_minutes(1)
-    assert fresh_storage.claim_draft_for_send(OWNER, many["id"]) is True
-
-    # The moment a one-recipient window would have expired, this draft's send
-    # may still be running: its claim must hold.
-    fresh_storage.update_draft(
-        OWNER,
-        many["id"],
-        {"updated_at": _naive_utcnow() - timedelta(minutes=one_recipient_window + 1)},
-    )
-    assert fresh_storage.claim_draft_for_send(OWNER, many["id"]) is False, (
-        "a 10-recipient claim went stale after a 1-recipient window — a second"
-        " caller would deliver the same mail again"
-    )
-
-    # And the window it does get covers the worst case its transport can take.
-    worst_case_minutes = (SMTP_FIXED_ROUND_TRIPS + 10) * SMTP_TRANSPORT_TIMEOUT_SECONDS / 60
-    assert send_claim_window_minutes(10) >= worst_case_minutes
-
-    # Past its own window it is recoverable, like any other stranded claim.
-    fresh_storage.update_draft(
-        OWNER,
-        many["id"],
-        {"updated_at": _naive_utcnow() - timedelta(minutes=send_claim_window_minutes(10) + 1)},
-    )
-    assert fresh_storage.claim_draft_for_send(OWNER, many["id"]) is True
-
-
-def test_cc_and_bcc_count_towards_the_window(fresh_storage):
-    """One envelope carries To, Cc and Bcc, so each of them is a RCPT TO."""
-    from zylch.storage.storage import send_claim_recipient_count
-
-    assert send_claim_recipient_count("a@x.com, b@x.com", ["c@x.com"], ["d@x.com"]) == 4
-    # The string and list shapes of `to` count the same.
-    assert send_claim_recipient_count(["a@x.com", "b@x.com"]) == 2
-
-
-def test_a_late_rollback_never_resurrects_a_delivered_draft(fresh_storage):
-    """A delayed failure cleanup must not resurrect a subsequently delivered row.
-
-    The private writer now prevents ageing a claim while its transport is
-    active. Exercise the retained cleanup CAS directly after delivery instead.
-    """
-    from zylch.tools.base import ToolStatus
-
-    draft = _draft(fresh_storage)
-    imap = MagicMock()
-    imap.send_message.return_value = {"id": "delivered"}
-    result = _run(_tool(fresh_storage, imap).execute(draft_id=draft["id"]))
-    assert result.status == ToolStatus.SUCCESS
-    assert fresh_storage.release_draft_claim(OWNER, draft["id"], "draft", "late failure") is False
-    assert fresh_storage.get_draft(OWNER, draft["id"])["status"] == "sent"
-    third = _run(_tool(fresh_storage, MagicMock()).execute(draft_id=draft["id"]))
-    assert third.status == ToolStatus.ERROR
-
-
-def test_discarding_a_draft_a_live_send_owns_destroys_nothing(fresh_storage, monkeypatch):
-    """`drafts.discard` decides on a read; a send can claim in between.
-
-    The row is deleted while the transport is mid-send: the customer gets the
-    mail, `mark_draft_sent` updates zero rows, and nothing anywhere records
-    that it went out. Reproduced with the exact interleaving — the discard
-    reads the draft BEFORE the send claims it — by giving the handler that
-    pre-claim snapshot. Everything else, the claim and the delete included,
-    runs against the real database.
-    """
-    import asyncio as _asyncio
-
-    from zylch.rpc import draft_actions
-    from zylch.tools.base import ToolStatus
-
-    draft = _draft(fresh_storage)
-    snapshot = fresh_storage.get_draft(OWNER, draft["id"])  # read: status 'draft'
-
-    in_smtp = threading.Event()
-    may_return = threading.Event()
-
-    def slow_send(**kwargs):
-        in_smtp.set()
-        assert may_return.wait(10), "the discard never returned"
-        return {"id": "sent-while-discarding"}
-
-    imap = MagicMock()
-    imap.send_message.side_effect = slow_send
-    outcome = {}
-
-    def send():
-        outcome["send"] = _run(_tool(fresh_storage, imap).execute(draft_id=draft["id"]))
-
-    worker = threading.Thread(target=send)
-    worker.start()
-    assert in_smtp.wait(10), "the send never reached the transport"
-
-    class _StaleRead:
-        """Real storage, except the one read that opens the race."""
-
-        def get_draft(self, owner_id, draft_id):
-            return dict(snapshot)
-
-        def claim_draft_for_send(self, *args, **kwargs):
-            return fresh_storage.claim_draft_for_send(*args, **kwargs)
-
-        def delete_draft(self, *args, **kwargs):
-            return fresh_storage.delete_draft(*args, **kwargs)
-
-    monkeypatch.setattr("zylch.storage.storage.Storage.get_instance", lambda: _StaleRead())
-    monkeypatch.setattr("zylch.cli.utils.get_owner_id", lambda: OWNER)
-
-    result = _asyncio.run(draft_actions.drafts_discard({"draft_id": draft["id"]}, lambda *a: None))
-
-    may_return.set()
-    worker.join(10)
-
-    assert result["ok"] is False, "discarded a draft a live send owns"
-    assert result["reason"] == "send_in_flight"
-    assert outcome["send"].status == ToolStatus.SUCCESS
-    stored = fresh_storage.get_draft(OWNER, draft["id"])
-    assert stored is not None, "the record of a delivered mail was deleted"
-    assert stored["status"] == "sent"
-    assert stored["sent_message_id"] == "sent-while-discarding"
-
-
-def test_a_caller_that_lost_the_claim_does_not_rewrite_the_row(fresh_storage):
-    """Approval-card edits are persisted INSIDE the claim.
-
-    Editing first would let a losing caller rewrite the recipient or body of a
-    row another request is mailing at that moment, so the delivered mail and
-    the stored `sent` copy would say different things.
-    """
-    from zylch.tools.base import ToolStatus
-
-    draft = _draft(fresh_storage)
-    assert fresh_storage.claim_draft_for_send(OWNER, draft["id"]) is True  # somebody else
-
-    imap = MagicMock()
-    result = _run(
-        _tool(fresh_storage, imap).execute(
-            draft_id=draft["id"], to="hijack@example.com", body="EDITED BODY"
-        )
-    )
-
-    assert result.status == ToolStatus.ERROR
-    imap.send_message.assert_not_called()
-    stored = fresh_storage.get_draft(OWNER, draft["id"])
-    assert stored["body"] == "Body."
-    assert stored["to_addresses"] == ["customer@example.com"]
-
-
-def test_the_refusal_says_sent_when_the_row_is_sent(fresh_storage):
-    """ "Already being sent by another request" is the wrong news for a row
-    that has already gone out."""
-    draft = _draft(fresh_storage)
-    fresh_storage.update_draft(OWNER, draft["id"], {"status": "sent"})
-
-    refusal = _tool(fresh_storage, MagicMock())._claim_refusal(draft["id"])
-
-    assert "already been sent" in refusal
-
-
-# ------------------------------------------------ what the operator is told
-
-
-def test_a_server_refusal_says_nothing_was_sent(fresh_storage):
-    """The server answered with a code: the mail provably did not go out."""
-    from zylch.tools.base import ToolStatus
-
-    draft = _draft(fresh_storage)
-    imap = MagicMock()
-    imap.send_message.side_effect = smtplib.SMTPRecipientsRefused(
-        {"customer@example.com": (550, b"no such user")}
-    )
-
-    result = _run(_tool(fresh_storage, imap).execute(draft_id=draft["id"]))
-
-    assert result.status == ToolStatus.ERROR
-    assert "Nothing was sent" in result.error
-    assert fresh_storage.get_draft(OWNER, draft["id"])["status"] == "draft"
-
-
-def test_a_dropped_socket_admits_that_delivery_is_unknown(fresh_storage):
-    """A socket that dies mid-DATA may have died AFTER the server took the
-    message. Claiming "nothing was sent" there is a confident lie, and
-    re-opening the draft invites a duplicate of a mail already delivered."""
-    from zylch.tools.base import ToolStatus
-
-    draft = _draft(fresh_storage)
-    imap = MagicMock()
-    imap.send_message.side_effect = ConnectionResetError("connection reset by peer")
-
-    result = _run(_tool(fresh_storage, imap).execute(draft_id=draft["id"]))
-
-    from zylch.storage.storage import send_claim_window_minutes
-
-    assert result.status == ToolStatus.ERROR
-    assert "NOT known" in result.error
-    assert "Nothing was sent" not in result.error
-    # And it names the hold rather than pointing at an action that will be
-    # refused for the whole window.
-    assert f"{send_claim_window_minutes(1)} minutes" in result.error
-    stored = fresh_storage.get_draft(OWNER, draft["id"])
-    assert stored["status"] == "sending"
-    assert "connection reset" in (stored.get("error_message") or "")
-
-
-def test_a_missing_attachment_is_a_refusal_not_an_unknown(fresh_storage):
-    """`IMAPClient.send` reads attachments while BUILDING the message, before
-    any socket exists, so a file that moved since the draft was written raises
-    `FileNotFoundError` — an OSError like a dead socket, but nothing was ever
-    offered to a server. Calling it "delivery unknown" parks a mail that never
-    left in `sending`, where for the whole claim window it can be neither sent
-    nor discarded."""
-    from zylch.tools.base import ToolStatus
-
-    draft = _draft(fresh_storage)
-    imap = MagicMock()
-    imap.send_message.side_effect = FileNotFoundError("Attachment not found: /tmp/quote.pdf")
-
-    result = _run(_tool(fresh_storage, imap).execute(draft_id=draft["id"]))
-
-    assert result.status == ToolStatus.ERROR
-    assert "Nothing was sent" in result.error
-    stored = fresh_storage.get_draft(OWNER, draft["id"])
-    assert stored["status"] == "draft", "a mail that never left parked in `sending`"
-
-
-def test_a_connection_refused_is_a_refusal_not_an_unknown(fresh_storage):
-    """It happens before any message byte is offered, so it is definite —
-    even though it is an OSError like the uncertain cases."""
-    from zylch.tools.base import ToolStatus
-
-    draft = _draft(fresh_storage)
-    imap = MagicMock()
-    imap.send_message.side_effect = ConnectionRefusedError("connection refused")
-
-    result = _run(_tool(fresh_storage, imap).execute(draft_id=draft["id"]))
-
-    assert result.status == ToolStatus.ERROR
-    assert "Nothing was sent" in result.error
-    assert fresh_storage.get_draft(OWNER, draft["id"])["status"] == "draft"
-
-
-# ------------------------------------------- bookkeeping after the transport
-
-
-def test_a_bookkeeping_failure_after_delivery_leaves_the_draft_sent(fresh_storage, monkeypatch):
-    """The rollback must not span the transport call.
-
-    The old handler reset the status to `draft` for ANY exception in the send
-    block, including one raised after the mail had gone out — which made a
-    delivered mail sendable again.
-    """
-    from zylch.tools.base import ToolStatus
-
-    draft = _draft(fresh_storage)
-
-    def boom(*args, **kwargs):
-        raise RuntimeError("DB write failed after the SMTP handshake")
-
-    monkeypatch.setattr(fresh_storage, "mark_draft_sent", boom)
-
-    imap = MagicMock()
-    imap.send_message.return_value = {"id": "sent-then-crash"}
-    tool = _tool(fresh_storage, imap)
-
-    result = _run(tool.execute(draft_id=draft["id"]))
-
-    assert result.status == ToolStatus.SUCCESS
-    assert fresh_storage.get_draft(OWNER, draft["id"])["status"] == "sent"
-
-    # And the delivered mail is not sendable a second time.
-    second = _run(tool.execute(draft_id=draft["id"]))
-    assert second.status == ToolStatus.ERROR
-    assert imap.send_message.call_count == 1
-
-
-def test_a_failed_draft_is_still_retryable_by_id(fresh_storage):
-    """A transport error is exactly the case where a retry is wanted."""
-    from zylch.tools.base import ToolStatus
-
-    draft = _draft(fresh_storage)
-    fresh_storage.update_draft(OWNER, draft["id"], {"status": "failed"})
-
-    imap = MagicMock()
-    imap.send_message.return_value = {"id": "sent-retry"}
-    result = _run(_tool(fresh_storage, imap).execute(draft_id=draft["id"]))
-
-    assert result.status == ToolStatus.SUCCESS
-    assert imap.send_message.call_count == 1
-    assert fresh_storage.get_draft(OWNER, draft["id"])["status"] == "sent"
-
-
-def test_a_transport_error_leaves_the_draft_visible_and_sendable(fresh_storage):
-    """`failed` hid the draft from every listing; `draft` keeps it in view."""
-    from zylch.tools.base import ToolStatus
-
-    draft = _draft(fresh_storage)
-    imap = MagicMock()
-    imap.send_message.side_effect = RuntimeError("SMTP 421 service unavailable")
-
-    result = _run(_tool(fresh_storage, imap).execute(draft_id=draft["id"]))
-
-    assert result.status == ToolStatus.ERROR
-    stored = fresh_storage.get_draft(OWNER, draft["id"])
-    assert stored["status"] == "draft"
-    assert "421" in (stored.get("error_message") or "")
-    assert draft["id"] in [d["id"] for d in fresh_storage.list_drafts(OWNER)]
-
-
-def test_the_approval_card_still_hydrates_a_sent_draft(fresh_storage):
-    """The guard belongs in `execute`, not in `get_draft`: a lookup that hid
-    rows would leave the card hydrator with nothing to show."""
-    draft = _draft(fresh_storage)
-    fresh_storage.update_draft(OWNER, draft["id"], {"status": "sent"})
-
-    card = _tool(fresh_storage, MagicMock()).approval_input({"draft_id": draft["id"]})
-
-    assert card["to"] == "customer@example.com"
-    assert card["subject"] == "Re: your request"
-
-
-# ------------------------------------------------------------ /email send
-
-
-def _imap_env(monkeypatch):
-    monkeypatch.setenv("EMAIL_ADDRESS", "support@example.com")
-    monkeypatch.setenv("EMAIL_PASSWORD", "secret")
-
-
-def test_email_send_agrees_that_a_failed_draft_is_sendable(fresh_storage, monkeypatch):
+def send(mailbox, draft, route="tool", **edits):
+    if route == "tool":
+        return asyncio.run(mailbox.tool().execute(draft_id=draft["id"], **edits))
     from zylch.services.command_handlers import handle_email
-
-    _imap_env(monkeypatch)
-    draft = _draft(fresh_storage)
-    fresh_storage.update_draft(OWNER, draft["id"], {"status": "failed"})
-
-    client = MagicMock()
-    client.send_message.return_value = {"id": "sent-via-slash"}
-    with (
-        patch("zylch.api.token_storage.get_provider", return_value="imap"),
-        patch("zylch.api.token_storage.get_email", return_value="support@example.com"),
-        patch("zylch.email.imap_client.IMAPClient", return_value=client),
-    ):
-        out = _run(handle_email(["send", draft["id"]], MagicMock(), OWNER))
-
-    assert "Email sent" in out
-    assert client.send_message.call_count == 1
+    return json.loads(asyncio.run(handle_email(["send", draft["id"]], MagicMock(), OWNER)))
 
 
-def test_email_send_refuses_a_draft_already_sent(fresh_storage, monkeypatch):
-    from zylch.services.command_handlers import handle_email
+def test_repeated_send_returns_original_confirmed_message_once(mailbox):
+    draft = mailbox.draft()
+    first, replay = send(mailbox, draft), send(mailbox, draft)
+    assert first.status is replay.status is ToolStatus.SUCCESS
+    assert first.data["message_id"] == replay.data["message_id"]
+    assert len(mailbox.state.send_calls) == len(mailbox.state.sent_rows) == 1
+    assert mailbox.storage.get_draft(OWNER, draft["id"]) is None
+    mailbox.no_private_drafts()
 
-    _imap_env(monkeypatch)
-    draft = _draft(fresh_storage)
-    fresh_storage.update_draft(OWNER, draft["id"], {"status": "sent"})
 
-    client = MagicMock()
-    with (
-        patch("zylch.api.token_storage.get_provider", return_value="imap"),
-        patch("zylch.api.token_storage.get_email", return_value="support@example.com"),
-        patch("zylch.email.imap_client.IMAPClient", return_value=client),
-    ):
-        out = _run(handle_email(["send", draft["id"]], MagicMock(), OWNER))
+def test_two_concurrent_requests_share_one_dispatch(mailbox):
+    draft = mailbox.draft()
+    entered, release = Event(), Event()
+    def wait():
+        entered.set()
+        assert release.wait(5), "Synthetic dispatch was not released"
+    mailbox.state.before_send = wait
+    with ThreadPoolExecutor(max_workers=1) as pool:
+        first = pool.submit(send, mailbox, draft)
+        assert entered.wait(5)
+        try:
+            second = send(mailbox, draft)
+            assert second.status is ToolStatus.ERROR and second.data["state"] == "unconfirmed"
+            assert len(mailbox.state.send_calls) == 1
+        finally:
+            release.set()
+        assert first.result(timeout=5).status is ToolStatus.SUCCESS
+    assert len(mailbox.state.sent_rows) == 1
 
-    assert "not found" in out.lower()
-    client.send_message.assert_not_called()
+
+@pytest.mark.parametrize("recipient_count", [1, 10])
+def test_lost_ack_receipt_never_expires_and_storage_reopen_only_rechecks_sent(mailbox, recipient_count):
+    from zylch.storage import database as db
+    draft = mailbox.draft(to=[f"recipient{n}@example.test" for n in range(recipient_count)],
+                          cc=["copy@example.test"], bcc=["hidden@example.test"])
+    mailbox.state.sent_visible, mailbox.state.lose_ack = False, True
+    first = send(mailbox, draft)
+    assert first.status is ToolStatus.ERROR and first.data["state"] == "unconfirmed"
+    original_id = first.data["message_id"]
+    # Passage of time cannot turn possible dispatch into permission to transmit.
+    with db.get_engine().begin() as conn:
+        conn.exec_driver_sql("UPDATE mailbox_operation_receipts SET created_at=0, updated_at=0 WHERE kind='send'")
+    db.dispose_engine()
+    replay = send(mailbox, draft)
+    assert replay.status is ToolStatus.ERROR and replay.data["message_id"] == original_id
+    assert len(mailbox.state.send_calls) == 1
+    mailbox.state.sent_visible = True
+    confirmed = send(mailbox, draft)
+    assert confirmed.status is ToolStatus.SUCCESS and confirmed.data["message_id"] == original_id
+    assert len(mailbox.state.send_calls) == len(mailbox.state.sent_rows) == 1
+    received = mailbox.state.sent_message()
+    assert len(received["To"].addresses) == recipient_count
+    assert str(received["Cc"]) == "copy@example.test" and str(received["Bcc"]) == "hidden@example.test"
+
+
+def test_unknown_wire_failure_and_empty_sent_never_authorize_another_transmission(mailbox):
+    draft = mailbox.draft()
+    mailbox.state.transport_error = ConnectionResetError("Synthetic connection loss")
+    first = send(mailbox, draft)
+    assert first.status is ToolStatus.ERROR and first.data["effect_certainty"] == "unconfirmed"
+    assert "Nothing was sent" not in first.error
+    for _ in range(2):
+        assert send(mailbox, draft).data["state"] == "unconfirmed"
+    assert len(mailbox.state.send_calls) == 1 and mailbox.state.sent_rows == []
+    assert mailbox.storage.get_draft(OWNER, draft["id"]) is not None
+
+
+@pytest.mark.parametrize("route", ["tool", "slash"])
+@pytest.mark.parametrize("status", [400, 403])
+def test_definite_provider_refusal_stays_visible_and_new_explicit_attempt_can_retry(mailbox, route, status):
+    draft = mailbox.draft()
+    error = GmailError("gmail_provider_refused", status)
+    error.non_dispatch = True
+    mailbox.state.refusal = error
+    first = send(mailbox, draft, route)
+    outcome = first.data if route == "tool" else first
+    assert outcome["state"] == "not_dispatched" and outcome["effect_certainty"] == "not-dispatched"
+    assert mailbox.storage.get_draft(OWNER, draft["id"]) is not None
+    assert len(mailbox.state.sent_rows) == 0
+    mailbox.state.refusal = None
+    retry = send(mailbox, draft, route)
+    retry_outcome = retry.data if route == "tool" else retry
+    assert retry_outcome["ok"] and retry_outcome["state"] == "sent"
+    assert retry_outcome["operation_id"] != outcome["operation_id"]
+    assert len(mailbox.state.send_calls) == 2 and len(mailbox.state.sent_rows) == 1
+    send(mailbox, draft, route)
+    assert len(mailbox.state.send_calls) == 2
+
+
+def test_native_attachment_is_refused_before_dispatch_without_hiding_the_draft(mailbox):
+    draft = mailbox.draft()
+    native = mailbox.state.native(draft)
+    from mailbox_tools_fixture import message
+    mime = message(native["raw"])
+    mime.add_attachment(b"Synthetic attachment", maintype="application", subtype="octet-stream", filename="fixture.bin")
+    native["raw"] = mime.as_bytes()
+    result = send(mailbox, draft)
+    assert result.status is ToolStatus.ERROR and "draft_attachments_not_supported" in result.error
+    assert result.data["effect_certainty"] == "not-dispatched"
+    assert mailbox.state.send_calls == []
+    assert mailbox.storage.get_draft(OWNER, draft["id"])["attachments"]
+
+
+def test_lost_ack_is_settled_immediately_when_sent_already_proves_delivery(mailbox):
+    draft = mailbox.draft()
+    mailbox.state.lose_ack = True
+    result = send(mailbox, draft)
+    assert result.status is ToolStatus.SUCCESS
+    assert len(mailbox.state.send_calls) == len(mailbox.state.sent_rows) == 1
+
+
+def test_sent_read_failure_cannot_reclassify_an_accepted_send_as_not_dispatched(mailbox):
+    draft = mailbox.draft()
+    error = GmailError("gmail_read_unavailable", 403)
+    error.non_dispatch = True  # Even this read error cannot undo an earlier mutation.
+    mailbox.state.sent_error = error
+    first = send(mailbox, draft)
+    assert first.status is ToolStatus.ERROR and first.data["state"] == "unconfirmed"
+    assert first.data["effect_certainty"] == "unconfirmed"
+    mailbox.state.sent_error = None
+    assert send(mailbox, draft).status is ToolStatus.SUCCESS
+    assert len(mailbox.state.send_calls) == 1
+
+
+def test_receipt_write_failure_after_delivery_never_reopens_dispatch(mailbox, monkeypatch):
+    from zylch.storage.mailbox_operations import MailboxOperations
+    original = MailboxOperations.advance
+    fail_once = [True]
+    def advance(self, receipt, token, stage, **kwargs):
+        if receipt["kind"] == "send" and stage == "completed" and fail_once[0]:
+            fail_once[0] = False
+            raise RuntimeError("Synthetic receipt completion failure")
+        return original(self, receipt, token, stage, **kwargs)
+    monkeypatch.setattr(MailboxOperations, "advance", advance)
+    draft = mailbox.draft()
+    first = send(mailbox, draft)
+    assert first.status is ToolStatus.ERROR and first.data["state"] == "unconfirmed"
+    replay = send(mailbox, draft)
+    assert replay.status is ToolStatus.SUCCESS
+    assert replay.data["message_id"] == first.data["message_id"]
+    assert len(mailbox.state.send_calls) == len(mailbox.state.sent_rows) == 1
+
+
+def test_cleanup_of_consumed_draft_cannot_erase_uncertain_send_receipt(mailbox):
+    draft = mailbox.draft()
+    mailbox.state.lose_ack, mailbox.state.sent_visible = True, False
+    first = send(mailbox, draft)
+    assert first.data["state"] == "unconfirmed"
+    assert mailbox.storage.delete_draft(OWNER, draft["id"]) is False
+    assert send(mailbox, draft).data["state"] == "unconfirmed"
+    mailbox.state.sent_visible = True
+    assert send(mailbox, draft).data["message_id"] == first.data["message_id"]
+    assert len(mailbox.state.send_calls) == len(mailbox.state.sent_rows) == 1
+
+
+def test_losing_send_attempt_cannot_apply_edits_to_a_draft_already_dispatching(mailbox):
+    draft = mailbox.draft()
+    entered, release = Event(), Event()
+    def wait():
+        entered.set()
+        assert release.wait(5)
+    mailbox.state.before_send = wait
+    with ThreadPoolExecutor(max_workers=1) as pool:
+        first = pool.submit(send, mailbox, draft)
+        assert entered.wait(5)
+        try:
+            second = send(mailbox, draft, to="different@example.test", body="A competing edit")
+            assert second.status is ToolStatus.ERROR
+            assert mailbox.state.update_calls == [], "An active send receipt must fence approval-card updates"
+        finally:
+            release.set()
+        assert first.result(timeout=5).status is ToolStatus.SUCCESS
+    assert mailbox.state.sent_message().get_content().strip() == "Saved body."
+    assert len(mailbox.state.send_calls) == 1
+
+
+def test_send_cannot_dispatch_a_draft_while_an_update_is_in_flight(mailbox):
+    draft = mailbox.draft()
+    entered, release = Event(), Event()
+    def wait():
+        entered.set()
+        assert release.wait(5)
+    mailbox.state.before_update = wait
+    with ThreadPoolExecutor(max_workers=1) as pool:
+        updating = pool.submit(mailbox.service().update, draft["id"],
+                               request_key="explicit-update-request-0001", body="The approved edit")
+        assert entered.wait(5)
+        try:
+            competing = send(mailbox, draft)
+            assert competing.status is ToolStatus.ERROR
+            assert "draft_update_operation_unconfirmed" in competing.error
+            assert mailbox.state.send_calls == [], "Send must wait until the native update is settled"
+        finally:
+            release.set()
+        assert updating.result(timeout=5)["body"].strip() == "The approved edit"
+    assert send(mailbox, draft).status is ToolStatus.SUCCESS
+    assert mailbox.state.sent_message().get_content().strip() == "The approved edit"
+    assert len(mailbox.state.send_calls) == len(mailbox.state.sent_rows) == 1
+
+
+def test_competing_updates_cannot_overwrite_a_native_save_in_flight(mailbox):
+    draft = mailbox.draft()
+    entered, release = Event(), Event()
+    def wait():
+        entered.set()
+        assert release.wait(5)
+    mailbox.state.before_update = wait
+    with ThreadPoolExecutor(max_workers=1) as pool:
+        first = pool.submit(mailbox.service().update, draft["id"], body="First approved edit")
+        assert entered.wait(5)
+        try:
+            from zylch.services.mailbox_drafts import MailboxDraftError
+            with pytest.raises(MailboxDraftError, match="draft_update_operation_unconfirmed"):
+                mailbox.service().update(draft["id"], body="A competing overwrite")
+            assert len(mailbox.state.update_calls) == 1
+        finally:
+            release.set()
+        assert first.result(timeout=5)["body"].strip() == "First approved edit"
+
+
+def test_uncertain_update_fence_survives_storage_reopen_and_original_request_replay(mailbox):
+    from zylch.storage import database as db
+    from zylch.services.mailbox_drafts import MailboxDraftError
+    draft = mailbox.draft()
+    key = "lost-update-ack-request-0001"
+    mailbox.state.update_error = TimeoutError("Synthetic update acknowledgement lost")
+    with pytest.raises(MailboxDraftError):
+        mailbox.service().update(draft["id"], request_key=key, body="An uncertain edit")
+    original = mailbox.service().operation(key)
+    assert original["stage"] == "unconfirmed"
+    with db.get_engine().begin() as conn:
+        conn.exec_driver_sql("UPDATE mailbox_operation_receipts SET created_at=0, updated_at=0 WHERE kind='update'")
+    db.dispose_engine()
+    mailbox.state.update_error = None
+    replay = mailbox.service().update(draft["id"], request_key=key, body="An uncertain edit")
+    assert replay["operation_id"] == original["id"] and replay["state"] == "unconfirmed"
+    assert send(mailbox, draft).status is ToolStatus.ERROR
+    with pytest.raises(MailboxDraftError, match="draft_update_operation_unconfirmed"):
+        mailbox.service().update(draft["id"], body="A fresh overwrite")
+    assert len(mailbox.state.update_calls) == 1 and mailbox.state.send_calls == []

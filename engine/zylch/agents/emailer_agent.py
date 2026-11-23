@@ -558,7 +558,8 @@ Use the write_email tool to output your composed email."""
             )
 
             # Handle tool response
-            result = self._handle_tool_response(response, context, recipient_email)
+            result = self._handle_tool_response(response, context, recipient_email,
+                existing_draft_id=((previous_draft or {}).get("id") or (previous_draft or {}).get("draft_id")))
             tool_used = result.get("tool_used")
 
             logger.debug(f"[EMAILER] run() iteration {iteration + 1}: tool_used={tool_used}")
@@ -769,7 +770,8 @@ IMPORTANT: Your goal is to COMPLETE the user's request. If you searched for info
 use that information to write the email or provide the answer. Don't just report search results."""
 
     def _handle_tool_response(
-        self, response, context: EmailContext, recipient_email: Optional[str] = None
+        self, response, context: EmailContext, recipient_email: Optional[str] = None,
+        existing_draft_id: Optional[str] = None,
     ) -> Dict[str, Any]:
         """Handle the LLM's tool response.
 
@@ -792,7 +794,7 @@ use that information to write the email or provide the answer. Don't just report
                     # Process based on tool
                     if block.name == "write_email":
                         result["result"] = self._process_write_email(
-                            block.input, context, recipient_email
+                            block.input, context, recipient_email, existing_draft_id=existing_draft_id
                         )
                     elif block.name == "search_memory":
                         result["result"] = self._process_search_memory(block.input)
@@ -818,11 +820,12 @@ use that information to write the email or provide the answer. Don't just report
         tool_input: Dict[str, Any],
         context: EmailContext,
         recipient_email: Optional[str] = None,
+        existing_draft_id: Optional[str] = None,
     ) -> Dict[str, Any]:
         """Process write_email tool output.
 
         Adds threading headers if replying to a task with source emails.
-        SAVES the draft to the database so it can be sent later via draft_id.
+        Saves the only draft in the mailbox and returns its current saved content.
 
         Args:
             tool_input: The write_email tool's input (subject, body, to)
@@ -855,64 +858,25 @@ use that information to write the email or provide the answer. Don't just report
             if not to_email:
                 to_email = latest_email.get("from_email")
 
-        # Get user's email provider.
-        #
-        # Only 'google' and 'microsoft' may be persisted: the drafts table
-        # carries CHECK (provider IN ('google','microsoft')), and storing an
-        # IMAP profile's 'imap' raises IntegrityError, which loses the draft.
-        # Anything else is stored as NULL — the CHECK admits it, and it is the
-        # truth: this row's provider is not one of the two the column can
-        # name. Writing 'google' on an IMAP profile would be a lie the next
-        # reader has no way to detect. The send paths do not consult it; they
-        # resolve the provider at send time via get_provider(owner_id).
-        from zylch.api.token_storage import get_provider
-
-        provider = get_provider(self.owner_id)
-        if provider not in ("google", "microsoft"):
-            provider = None
-
-        # SAVE DRAFT TO DATABASE
-        draft_id = None
-        draft_created = False
-        if to_email:
-            try:
-                draft = self.storage.create_draft(
-                    owner_id=self.owner_id,
-                    to=to_email,
-                    subject=subject,
-                    body=body,
-                    in_reply_to=in_reply_to,
-                    references=references,
-                    thread_id=thread_id,
-                    provider=provider,
-                )
-                if draft:
-                    draft_id = draft.get("id")
-                    draft_created = draft.get("created", True)
-                    observe("persistence", "accepted", draft_id=draft_id, reason="none", effect_certainty="accepted")
-                    logger.info(
-                        f"[EMAILER] Draft saved to DB with id={draft_id}"
-                        f" created={draft_created}"
-                    )
-            except Exception as e:
-                failure("persistence", e, method="email.write")
-                logger.error(f"[EMAILER] Failed to save draft to DB: {e}")
-                # Continue without draft_id - the email can still be shown but not sent
-
-        result = {
-            "subject": subject,
-            "body": body,
-            "recipient_email": to_email,
-            "in_reply_to": in_reply_to,
-            "references": references,
-            "thread_id": thread_id,
-            "draft_id": draft_id,  # For sending later
-            # False when an identical unsent draft already existed and
-            # `create_draft` handed that row back instead of duplicating it.
-            "created": draft_created,
+        # Persist once through the mailbox service. A provider failure remains a failure;
+        # no caller may show or retry an unconfirmed draft as another private copy.
+        if existing_draft_id:
+            draft = self.storage.update_draft(self.owner_id, existing_draft_id, {
+                "to_addresses": [to_email] if isinstance(to_email, str) else to_email or [],
+                "subject": subject, "body": body})
+        else:
+            draft = self.storage.create_draft(
+                owner_id=self.owner_id, to=to_email or [], subject=subject, body=body,
+                in_reply_to=in_reply_to, references=references, thread_id=thread_id)
+        if not isinstance(draft, dict) or not draft.get("id"):
+            raise RuntimeError("Mailbox draft preparation returned no mailbox identity")
+        return {
+            "subject": draft.get("subject", ""), "body": draft.get("body", ""),
+            "recipient_email": ", ".join(draft.get("to_addresses") or []),
+            "in_reply_to": draft.get("in_reply_to"), "references": draft.get("references") or [],
+            "thread_id": draft.get("thread_id"), "draft_id": draft["id"],
+            "created": draft.get("created", True),
         }
-
-        return result
 
     def _process_search_memory(self, tool_input: Dict[str, Any]) -> Dict[str, Any]:
         """Process search_memory tool by executing the search.

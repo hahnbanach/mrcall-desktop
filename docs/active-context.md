@@ -19,74 +19,74 @@ what is *current*, targeting ≤ ~120 lines.
 
 ## State now
 
-The [current-main operator source](execution-plans/2026-11-06-operator-mcp-main-integration.md)
-combines scoped MCP reads, managed rule writing and normal-engine draft/recovery
-with main's existing contextual guards. M1 admission/rule wiring and M2 guarded
-causal transactions and M3 packaging are independently APPROVED. Source commit
-`9ecd8aae418f71ea93b18695f9763858a6e10de4` rebuilds the same wheel hashes from
-fixed Git inputs; its combined guarded/SDK collection passes 42 cases. The [paired build contract](operator-source-build.md)
-binds 373 engine paths and 136 kernel paths to reviewed source, resources and guards.
-Kernel source `67bf9ddc` is published under main `f8085ba`; its broader exact-publication,
-sent-mirror and exact-send engine capabilities are outside this Desktop slice.
-Source/package verification and publication status belong to that plan and its
-completion record. Shared P5 sources and the original MCP candidates are preserved.
+All seven hosted engines run dev7. Both installed operator clones use kernel
+v0.74.1 and their recurring schedules are paused. Café 124 Production is the
+routed operator MCP profile. The current runtime is separate from the source
+candidate described below.
 
-Desktop is the configurator for accounts, services and client access. Opted-in
-ordinary rule changes use direct revisioned chat writes without per-rule Desktop
-confirmation. Native legacy decision/import APIs retain owner admission and the
-kernel scheduled denials. The existing operator has dated actual Codex evidence
-for identity, mail/context, memory/project reads, rules and saved results; these
-source packages do not establish a new native GUI or installed composition.
+The [mailbox candidate](mailbox-drafts.md) replaces editable private drafts with
+native Gmail draft containers shared by Desktop, MCP and kernel requests. The
+engine/Desktop milestone and the [legacy migration](mailbox-draft-migration.md)
+have source approval. The extended campaign producer keeps native handles and
+body-free recovery metadata. Kernel integration, actual-schema migration compatibility, final review and installed
+acceptance remain open under the [leaf plan](execution-plans/2026-11-23-mailbox-drafts.md)
+and its governing HB plan.
 
-Published Desktop v0.1.56 assignment reads and company sharing retain their
-[assignment](execution-plans/2026-10-08-explicit-task-assignment.md) and
-[fenced-join](execution-plans/2026-10-08-mrcall-company-memory-sharing.md) evidence.
-The new contextual guards are source-only relative to the hosted fleet. This
-source work activates no enrollment, real assignment or sending authority.
+Gmail authorization is absent from all seven live credential inventories. The
+existing application client and service-user consent bootstrap are ready. No
+candidate cutover, destructive migration or real operator acceptance tick is
+established. The previous dev1 paired-build recipe remains
+[historical source evidence](operator-source-build.md), with its own unchanged
+publication and reconstruction obligations.
 
-The Stripe prerelease and hosted evidence remain with its
+Desktop configures accounts, services and client access. Daily operator work
+uses the remote MCP. Ordinary opted-in rule changes are direct revisioned chat
+writes; privileged legacy management retains verified-owner admission. Source
+checks do not establish a new installed configurator or provider acceptance.
+The [data flow](operator-data-flows.md) owns these boundaries.
+
+Hosted profiles retain separate private stores and company-memory capabilities
+under the [runtime contract](cross-cutting-contracts.md). The completed sandbox
+work does not enable self-serve provisioning. Current task-assignment and company
+sharing evidence retain their [assignment](execution-plans/2026-10-08-explicit-task-assignment.md)
+and [fenced-join](execution-plans/2026-10-08-mrcall-company-memory-sharing.md) owners.
+The separate contextual-email enrollment candidate remains unreleased.
+
+The Stripe prerelease and hosted verification remain with the
 [installer](execution-plans/2026-10-16-stripe-test-installer.md) and
-[startup](execution-plans/2026-10-16-stripe-startup-recovery.md) plans. Native Qonto
-banking and source-grounded answers retain their own
-[plan](execution-plans/2026-10-04-qonto-connection.md); typed-credential source,
-packaged GUI/provider comparison and runtime adoption remain distinct gates.
-No new installer, banking operation or provider comparison follows here.
+[startup](execution-plans/2026-10-16-stripe-startup-recovery.md) plans. Qonto typed
+credentials, packaged GUI and provider comparison remain with the
+[banking plan](execution-plans/2026-10-04-qonto-connection.md). No new banking or
+payment effect follows from the mailbox candidate.
 
-Hosted separate-profile/company-store isolation retains its completed
-[sandbox plan](execution-plans/2026-09-29-toward-sandbox.md) and
-[contract](cross-cutting-contracts.md#separate-profiles-shared-company-memory).
-Self-serve provisioning stays closed. Production voice, revisioned phone
-instructions and archive acceptance retain their
+Production voice and revisioned company instructions retain their
 [source](execution-plans/2026-10-01-telephone-notes-source-is-phone-md.md) and
-[knowledge](execution-plans/2026-09-28-voice-company-knowledge.md) plans; broader
-spoken detail, repetition and latency remain separate.
-
-Settings separates API provider/models, budget and bounded preparation. Headless
-operator and direct kernel classifier controls remain independent; see
-[setup](operator-setup.md#ai-execution-and-controls). Existing spending/pause and
-profile configuration are preserved. K3/funded-credit and mnemonic corpus/model
-acceptance retain their owning engine and
-[K3](execution-plans/2026-09-16-k3-production.md) gates.
+[knowledge](execution-plans/2026-09-28-voice-company-knowledge.md) owners. Settings
+keeps engine provider, model, budget and preparation controls separate from
+headless operator and direct kernel classifier controls; see
+[setup](operator-setup.md#ai-execution-and-controls).
 
 ## Unresolved
 
-- Source Git-ref reconstruction, final documentation review and publication are
-  governed by the integration plan; source results do not certify a new
-  installation, native GUI, provider effects or complete dependency installation.
+- Mailbox delivery needs Gmail account consent, integrated kernel review, a
+  reviewed complete package and all installed-product acceptance checks. Synthetic
+  browser/provider tests are source evidence only. The exact 17-target Trash
+  instruction remains separate from private-row retirement and later drafts.
 - Native automatic bootstrap, broad RPC parity, customer reply quality and full
-  Desktop packaging retain the parent operator obligations. Wider kernel CLI,
-  P5 operational/FULL and exact-send adoption are outside MCP-helper pairing.
-- Qonto packaged/provider-UI comparison, Stripe installed GUI, live PEC and Windows
-  imports/loose-file behavior retain their existing owners. Intel installer
-  acceptance is separate from the old ARM release matrix.
+  Desktop packaging retain the parent operator obligations. Historical MCP helper
+  pairing does not establish wider kernel CLI or installed FULL acceptance.
+- Qonto packaged/provider comparison, Stripe GUI acceptance, live PEC, Windows
+  imports and Intel installer acceptance retain their existing owners.
 - Provisioning/membership, same-value Settings catalog reload, product chat,
-  approval isolation, Calendar, voice detail/latency and broader security review
-  retain their existing owners. No paid preparation run is part of source checks.
+  approval isolation, Calendar and broader security verification remain open with
+  their existing owners. Source checks make no paid preparation call.
+- Broader spoken voice detail, repetition and latency, K3 funded-credit behavior
+  and mnemonic corpus/model acceptance remain separate verification boundaries.
 
 ## Next
 
-1. Retain exact paired source/build/final receipts and publish only reviewed source.
-2. Coordinate any later installed/P5 adoption under its separate authorization,
-   preserving profile controls and actual-source identity.
-3. Continue parent native/product gates from their existing evidence without
-   repeating accepted memory, rule or recovery trials.
+1. Finish mailbox integration and source checks while account consent is absent.
+2. Complete Gmail consent, the reviewed cutover and actual Desktop/MCP and ordinary
+   launcher tests; preserve paused recurring schedules and operation receipts.
+3. Continue unrelated work under its existing plan, without treating the mailbox
+   source milestone as acceptance of another installation or provider flow.

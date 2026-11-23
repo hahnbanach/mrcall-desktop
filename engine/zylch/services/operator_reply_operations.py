@@ -163,6 +163,33 @@ def _published_locked(session, actor):
     return [dict(row) for row in rows]
 
 
+
+def check_mailbox_write(owner, conn):
+    """Recheck frozen source/instructions under the company writer, without profile writes."""
+    active = _active.get()
+    if active is None:
+        return
+    from types import SimpleNamespace
+    from zylch.storage.storage import Storage
+    from .operator_reply_context import snapshot
+    service, actor = active[:2]
+    if actor.mailbox_address != owner:
+        raise ReplyRefusal("mailbox_reply_owner_changed")
+    service._check(actor)
+    current_instructions = service.locked_instruction_reader(SimpleNamespace(get_bind=lambda: conn), actor)
+    if _instruction_identity(current_instructions) != _instruction_identity(active[5]):
+        raise ReplyRefusal("instructions_changed_before_mailbox_effect")
+    source = Storage.get_instance().get_email_by_supabase_id(owner, active[4]["id"])
+    keys = ("id", "mailbox_id", "thread_id", "message_id_header", "from_email", "subject", "body_plain", "body_html")
+    if source is None or any(source.get(key) != active[4].get(key) for key in keys):
+        raise ReplyRefusal("source_changed_before_mailbox_effect")
+    if active[6] is not None:
+        rows = Storage.get_instance().get_thread_emails(owner, active[4]["thread_id"])
+        rows = [row for row in rows if row.get("mailbox_id") == actor.mailbox_id]
+        if snapshot(rows, actor, active[4]["thread_id"]) != active[6]:
+            raise ReplyRefusal("correspondence_changed_before_mailbox_effect")
+
+
 def finish_draft_write(session, draft):
     active = _active.get()
     if active is None:
@@ -209,11 +236,14 @@ def link_reservation(conn, reservation, request_kwargs):
 
 
 class ReplyOperations:
-    def __init__(self, *, revalidate, context_reader, generator=None, locked_instruction_reader=None, conflicts=None):
+    def __init__(self, *, revalidate, context_reader, generator=None, locked_instruction_reader=None, conflicts=None, mode="draft"):
         if not callable(revalidate) or not callable(context_reader):
             raise TypeError("trusted revalidation and context reader required")
         if conflicts is not None and not callable(conflicts):
             raise TypeError("conflicts must be callable")
+        if mode not in {"draft", "send"}:
+            raise ValueError("Reply mode must be draft or send")
+        self.mode = mode
         self.revalidate, self.context_reader = revalidate, context_reader
         self.generator = generator
         self.locked_instruction_reader = locked_instruction_reader or _published_locked
@@ -249,6 +279,17 @@ class ReplyOperations:
             raise ReplyRefusal("generation_context_too_large")
         return json.loads(_json(value))
 
+    def admitted_request(self, actor, request_key):
+        """Read immutable request input before consulting mutable mailbox/context state."""
+        self._check(actor)
+        if not isinstance(request_key, str) or not re.fullmatch(r"[A-Za-z0-9_.:-]{16,128}", request_key):
+            raise ReplyRefusal("stable_request_key_required")
+        self._ensure()
+        with _transaction() as conn:
+            row = conn.execute(select(_operations.c.id, _operations.c.payload).where(
+                *_where(actor), _operations.c.request_key == request_key)).mappings().one_or_none()
+        return {"id": row["id"], "payload": json.loads(row["payload"])} if row else None
+
     async def prepare(self, request_key, exact_source, instruction_versions, request_text, actor_binding):
         actor = actor_binding
         await self._acheck(actor)
@@ -258,10 +299,19 @@ class ReplyOperations:
             raise ReplyRefusal("stable_request_key_required")
         if not isinstance(request_text, str) or not request_text.strip() or len(request_text.encode()) > 16384:
             raise ReplyRefusal("bounded_request_required")
+        self._ensure()
+        with _transaction() as conn:
+            known = conn.execute(select(_operations).where(*_where(actor), _operations.c.request_key == request_key)).mappings().one_or_none()
+        if known is not None:
+            admitted = json.loads(known["payload"])
+            if (admitted["source"] != exact_source or admitted["instructions"] != instruction_versions
+                    or admitted["request"] != request_text or admitted.get("mode", "draft") != self.mode):
+                raise ReplyRefusal("request_key_payload_conflict")
+            return await self.recover(operation_id=known["id"], actor_binding=actor)
         context = await self._context(exact_source, instruction_versions, actor)
         payload = {"source": exact_source, "instructions": instruction_versions, "request": request_text,
                    "profile": actor.profile_uid, "company": actor.company_space_id, "mailbox": actor.mailbox_id,
-                   "mailbox_address": actor.mailbox_address, "context": context}
+                   "mailbox_address": actor.mailbox_address, "context": context, "mode": self.mode}
         payload_hash = _hash(payload)
         self._ensure()
         if self.conflicts is not None:
@@ -309,19 +359,50 @@ class ReplyOperations:
                 await asyncio.to_thread(self._finish_review, actor, operation, context, body)
             else:
                 from .operator_reply_generation import persist
-                await asyncio.to_thread(persist, context["source"], body, actor)
+                outcome = await asyncio.to_thread(persist, context["source"], body, actor,
+                                                  request_key="prepare:" + operation, mode=self.mode)
+                await asyncio.to_thread(self._finish_mailbox, actor, operation, outcome, body)
             if not _active.get()[3][0]:
                 raise ReplyRefusal("native_draft_receipt_missing")
         except BaseException:
+            from zylch.services.mailbox_drafts import MailboxDrafts
+            mailbox_attempt = MailboxDrafts(actor.mailbox_address).operation("prepare:" + operation)
             with _transaction() as conn:
                 row = conn.execute(select(_operations).where(_operations.c.id == operation)).mappings().one()
                 if row["state"] == "running":
                     conn.execute(update(_operations).where(_operations.c.id == operation).values(
-                        state="uncertain" if json.loads(row["reservation_ids"]) else "failed_before_dispatch", updated_at=time.time()))
+                        state="uncertain" if mailbox_attempt is not None or json.loads(row["reservation_ids"]) else "failed_before_dispatch", updated_at=time.time()))
             raise
         finally:
             _active.reset(token)
         return await self.recover(operation_id=operation, actor_binding=actor)
+
+    def _finish_mailbox(self, actor, operation, outcome, body=None):
+        """Record only immutable mailbox identity and hashes, never another draft body."""
+        self._check(actor)
+        if not isinstance(outcome, dict):
+            raise ReplyRefusal("mailbox_operation_receipt_required")
+        if self.mode == "draft":
+            draft_id = outcome.get("id") or outcome.get("draft_id")
+            if not draft_id:
+                raise ReplyRefusal("mailbox_draft_receipt_required")
+            result = {"draft_id": draft_id, "created": outcome.get("created", True),
+                      "mailbox_operation": "prepare:" + operation}
+        else:
+            result = {key: outcome.get(key) for key in ("ok", "state", "message_id", "operation_id", "effect_certainty", "cause")}
+            result["mailbox_operation"] = "prepare:" + operation
+        if body is not None:
+            result["body_sha256"] = hashlib.sha256(body.encode()).hexdigest()
+        with _transaction() as conn:
+            changed = conn.execute(update(_operations).where(
+                _operations.c.id == operation, *_where(actor),
+                _operations.c.state.in_(("running", "uncertain")), _operations.c.result.is_(None),
+            ).values(state="completed", result=_json(result), updated_at=time.time())).rowcount
+            if changed != 1:
+                raise ReplyRefusal("operation_not_claimed_or_already_completed")
+        active = _active.get()
+        if active is not None:
+            active[3][0] = True
 
     def _finish_review(self, actor, operation, context, review):
         from .operator_reply_context import check_locked
@@ -392,13 +473,27 @@ class ReplyOperations:
         if review is not None:
             ReviewRequired(**review)
             result = None
+        from zylch.services.mailbox_drafts import MailboxDrafts
+        mailbox = MailboxDrafts(actor.mailbox_address)
         current = None
-        if result is not None:
-            from zylch.storage.storage import Storage
-            from zylch.services.exact_draft_delivery import snapshot
-            current_row = Storage.get_instance().get_draft(actor.mailbox_address, result["draft_id"])
-            current = {"exists": current_row is not None, "snapshot_hash": snapshot(current_row) if current_row else None,
-                       "matches_original": current_row is not None and snapshot(current_row) == result["snapshot_hash"]}
+        if result is None and row["state"] in {"running", "uncertain"}:
+            # A crash may follow provider acceptance but precede the outer receipt.
+            # Recovery reads the original operation and never repeats generation.
+            recovered = await asyncio.to_thread(mailbox.recover, "prepare:" + row["id"])
+            if isinstance(recovered, dict) and recovered.get("ok"):
+                self.mode = payload.get("mode", "draft")
+                outcome = recovered.get("draft") or recovered.get("result") or recovered
+                if isinstance(outcome, dict):
+                    await asyncio.to_thread(self._finish_mailbox, actor, row["id"], outcome)
+                    return await self.recover(actor_binding=actor, operation_id=row["id"])
+        if result is not None and result.get("draft_id"):
+            current_row = await asyncio.to_thread(mailbox.get, result["draft_id"])
+            current = {"exists": current_row is not None}
+        elif result is not None and result.get("mailbox_operation"):
+            recovered = await asyncio.to_thread(mailbox.recover, result["mailbox_operation"])
+            if isinstance(recovered, dict):
+                result = {**result, **{key: recovered[key] for key in
+                    ("ok", "state", "message_id", "effect_certainty", "cause") if key in recovered}}
         await self._acheck(actor)
         return {"operation_id": row["id"], "request_key": row["request_key"], "state": row["state"],
                 "source": {key: historical["source"].get(key) for key in

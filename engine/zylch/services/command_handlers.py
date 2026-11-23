@@ -5,6 +5,7 @@ No Anthropic API calls in these handlers.
 """
 
 import asyncio
+import json
 from zylch.qonto.task_access import ordinary_tasks
 
 import logging
@@ -945,8 +946,7 @@ def _force_sent_after_delivery(owner_id: str, draft_id: str, sent_id: str) -> No
 async def handle_email(args: List[str], config: ToolConfig, owner_id: str) -> str:
     """Handle /email command - email listing, drafts, and search.
 
-    Drafts are stored in Supabase (Superhuman-style).
-    Sending routes through Gmail or Outlook API based on user's provider.
+    Drafts are stored in the mailbox. Sending is confirmed by its Sent folder.
 
     Usage:
         /email list [--limit N]                  - List recent emails
@@ -985,7 +985,7 @@ async def handle_email(args: List[str], config: ToolConfig, owner_id: str) -> st
 • `/email search "contract" --days 30 --limit 10`
 • `/email send abc123`
 
-**Note:** Drafts are stored in Zylch. When you send, it routes through your connected Gmail or Outlook."""
+**Note:** Drafts live in your mailbox. Changes made in your mail client are used when sending."""
 
     # --help option (check first)
     if "--help" in args:
@@ -1019,15 +1019,8 @@ async def handle_email(args: List[str], config: ToolConfig, owner_id: str) -> st
 
             # If --draft flag, list drafts
             if has_flag("--draft"):
-                with get_session() as session:
-                    drafts = (
-                        session.query(Draft)
-                        .filter(Draft.owner_id == owner_id, Draft.status == "draft")
-                        .order_by(Draft.updated_at.desc())
-                        .limit(limit)
-                        .all()
-                    )
-                    drafts_data = [d.to_dict() for d in drafts]
+                from zylch.services.mailbox_drafts import MailboxDrafts
+                drafts_data = (await asyncio.to_thread(MailboxDrafts(owner_id).list))[:limit]
 
                 if not drafts_data:
                     return "**📭 No drafts**\n\nCreate one with `/email create --to <email> --subject <text>`"
@@ -1147,285 +1140,25 @@ For simple drafts without context, use the `compose_email` tool in chat."""
 
         # --- SEND DRAFT ---
         if subcommand == "send":
-            # Get draft_id from first positional arg after 'send'
-            draft_id = sub_args[0] if sub_args and not sub_args[0].startswith("--") else None
-
-            # No id, no send. A mailbox normally holds several drafts, so
-            # picking "the most recent" for the caller mails a real customer
-            # something they did not ask to send. Same rule as `/email delete`.
-            if not draft_id:
-                return "❌ Missing draft ID\n\nUsage: `/email send <draft_id>`\n\nUse `/email list` to see your drafts."
-
-            # Find the draft by ID.
-            #
-            # Sendable means "not yet handed to a transport": `sent` is
-            # excluded, `failed` is not. The same rule holds in
-            # `SendDraftTool.execute`, so the two send paths cannot disagree
-            # about which draft may go out — they used to, and a draft one path
-            # marked `failed` became unsendable by the other. `failed` is
-            # legacy (both paths now restore a failed send to `draft`), and
-            # accepting it is what makes those rows recoverable.
-            #
-            # `sending` is fetched but not decided here: the claim below
-            # refuses a live one and takes over an abandoned one. Excluding it
-            # from the lookup would answer "draft not found" for a row that a
-            # killed daemon left mid-send and that no other surface can reach.
-            with get_session() as session:
-                draft_row = (
-                    session.query(Draft)
-                    .filter(
-                        Draft.owner_id == owner_id,
-                        Draft.status.in_(("draft", "failed", "sending")),
-                        Draft.id == draft_id,
-                    )
-                    .first()
-                )
-                draft = draft_row.to_dict() if draft_row else None
-
-            if not draft:
-                return f"❌ Draft not found: `{draft_id}`\n\nUse `/email list` to see your drafts."
-
-            # Get user's email provider
-            provider = get_provider(owner_id)
-            user_email = get_email(owner_id)
-
-            if not provider:
-                return "❌ No email provider connected\n\nUse `/connect google` or `/connect microsoft` first."
-
-            # Claim the draft for this send attempt.
-            #
-            # The claim is a conditional UPDATE that returns whether it
-            # matched (`storage.claim_draft_for_send`), not a blind write:
-            # reading the status above and writing `sending` here left a
-            # window in which two callers both believed the draft was theirs
-            # and both mailed it. Only the caller that wins the claim sends.
-            #
-            # NOTE: only persist `provider` for OAuth providers. The drafts
-            # table has CHECK (provider IN ('google','microsoft')), so writing
-            # 'imap' would raise sqlite3.IntegrityError. For IMAP the provider
-            # is recoverable at runtime via get_provider(owner_id). The helper
-            # applies that rule itself.
-            from zylch.storage import Storage as _Storage
-
-            if not _Storage().claim_draft_for_send(owner_id, draft["id"], provider=provider):
-                return (
-                    f"❌ Draft `{draft_id}` is already being sent by another request."
-                    "\n\nNothing was sent."
-                )
-
-            # Everything from here to the transport call may fail without a
-            # mail going out, so it rolls the draft back to `draft`. Nothing
-            # AFTER the transport call may do that: once the message is
-            # accepted, a rollback would make a delivered mail sendable again.
-            try:
-                # Convert list fields to comma-separated strings for email APIs
-                to_str = (
-                    ", ".join(draft["to_addresses"])
-                    if isinstance(draft["to_addresses"], list)
-                    else draft["to_addresses"]
-                )
-                cc_str = (
-                    ", ".join(draft["cc_addresses"])
-                    if draft.get("cc_addresses") and isinstance(draft["cc_addresses"], list)
-                    else draft.get("cc_addresses")
-                )
-                bcc_str = (
-                    ", ".join(draft["bcc_addresses"])
-                    if draft.get("bcc_addresses") and isinstance(draft["bcc_addresses"], list)
-                    else draft.get("bcc_addresses")
-                )
-
-                if provider == "google":
-                    from zylch.tools.gmail import GmailClient
-
-                    gmail = GmailClient(account=user_email, owner_id=owner_id)
-
-                    # Build and send message
-                    sent_message = gmail.send_message(
-                        to=to_str,
-                        subject=draft.get("subject", ""),
-                        body=draft.get("body", ""),
-                        cc=cc_str,
-                        bcc=bcc_str,
-                        in_reply_to=draft.get("in_reply_to"),
-                        references=draft.get("references"),
-                        thread_id=draft.get("thread_id"),
-                    )
-
-                    sent_id = sent_message.get("id", "")
-
-                elif provider == "microsoft":
-                    from zylch.tools.outlook import OutlookClient
-                    from zylch.api.token_storage import get_graph_token
-
-                    graph_token = get_graph_token(owner_id)
-                    if not graph_token:
-                        raise Exception("Microsoft token expired. Please reconnect.")
-
-                    outlook = OutlookClient(
-                        graph_token=graph_token["access_token"], account=user_email
-                    )
-
-                    sent_message = outlook.send_message(
-                        to=to_str,
-                        subject=draft.get("subject", ""),
-                        body=draft.get("body", ""),
-                        cc=cc_str,
-                        bcc=bcc_str,
-                    )
-
-                    sent_id = sent_message.get("id", "")
-
-                elif provider == "imap":
-                    import os as _os
-                    from zylch.email.imap_client import IMAPClient
-
-                    email_addr = _os.environ.get("EMAIL_ADDRESS", "") or user_email or ""
-                    email_pass = _os.environ.get("EMAIL_PASSWORD", "")
-                    if not email_addr or not email_pass:
-                        raise Exception(
-                            "IMAP not configured: EMAIL_ADDRESS or EMAIL_PASSWORD missing."
-                        )
-
-                    imap_port_str = _os.environ.get("IMAP_PORT")
-                    smtp_port_str = _os.environ.get("SMTP_PORT")
-                    imap_client = IMAPClient(
-                        email_addr=email_addr,
-                        password=email_pass,
-                        imap_host=_os.environ.get("IMAP_HOST") or None,
-                        imap_port=(int(imap_port_str) if imap_port_str else None),
-                        smtp_host=_os.environ.get("SMTP_HOST") or None,
-                        smtp_port=(int(smtp_port_str) if smtp_port_str else None),
-                    )
-
-                    # IMAPClient.send_message expects cc/bcc as List[str] (or None)
-                    # — pass the original list fields, not the comma-joined strings.
-                    cc_list = (
-                        draft["cc_addresses"]
-                        if draft.get("cc_addresses") and isinstance(draft["cc_addresses"], list)
-                        else None
-                    )
-                    bcc_list = (
-                        draft["bcc_addresses"]
-                        if draft.get("bcc_addresses") and isinstance(draft["bcc_addresses"], list)
-                        else None
-                    )
-
-                    refs = draft.get("references")
-                    if isinstance(refs, list):
-                        refs = " ".join(refs) if refs else None
-
-                    sent_message = imap_client.send_message(
-                        to=to_str,
-                        subject=draft.get("subject", ""),
-                        body=draft.get("body", ""),
-                        cc=cc_list,
-                        bcc=bcc_list,
-                        in_reply_to=draft.get("in_reply_to"),
-                        references=refs,
-                        attachment_paths=draft.get("attachment_paths") or None,
-                    )
-
-                    sent_id = sent_message.get("id", "")
-
-                else:
-                    raise Exception(f"Unknown provider: {provider}")
-
-            except Exception as e:
-                from zylch.tools.gmail_tools import delivery_is_uncertain
-
-                logger.error(f"Failed to send email: {e}", exc_info=True)
-
-                # Hand the claim back CONDITIONALLY — the write lands only
-                # while this caller still owns the row. An unguarded write
-                # here re-opened a draft that a second caller had meanwhile
-                # re-claimed and delivered, which turned a race into a
-                # repeatable double-send.
-                if delivery_is_uncertain(e):
-                    # The socket died without a verdict: the message may be
-                    # in the recipient's mailbox already. Leave the draft in
-                    # `sending` and tell the operator the truth instead of
-                    # promising that nothing went out.
-                    #
-                    # The draft is held for the length of its own claim window
-                    # and cannot be sent OR discarded until that expires, so
-                    # the message must not point at an action that will be
-                    # refused for the next twenty minutes.
-                    from zylch.storage.storage import (
-                        send_claim_recipient_count,
-                        send_claim_window_minutes,
-                    )
-
-                    held_for = send_claim_window_minutes(
-                        send_claim_recipient_count(
-                            draft.get("to_addresses"),
-                            draft.get("cc_addresses"),
-                            draft.get("bcc_addresses"),
-                        )
-                    )
-                    _Storage().release_draft_claim(owner_id, draft["id"], "sending", str(e))
-                    return (
-                        f"**Connection lost while sending:** {str(e)}\n\n"
-                        f"It is NOT known whether the email went out. Check the"
-                        f" mailbox. Draft `{draft_id}` is held for {held_for}"
-                        f" minutes and can be neither sent nor discarded until"
-                        f" then; after that, send it again if the mail never"
-                        f" arrived, or retire it with `drafts.discard`."
-                    )
-
-                _Storage().release_draft_claim(owner_id, draft["id"], "draft", str(e))
-                return f"❌ **Failed to send:** {str(e)}\n\nNothing was sent. Draft saved — fix the issue and try again with `/email send {draft_id}`"
-
-            # ── The transport accepted the message. From here the draft may
-            # only move towards `sent` (or be deleted); a rollback would make
-            # a delivered mail sendable again.
-            if provider == "imap":
-                # Mark draft as sent (status='sent', sent_at, sent_message_id).
-                # Do NOT delete — per task spec, status must become 'sent'.
-                try:
-                    _Storage().mark_draft_sent(owner_id, draft["id"], sent_id)
-                except Exception as e:
-                    logger.error(f"mark_draft_sent failed after delivery: {e}", exc_info=True)
-                    _force_sent_after_delivery(owner_id, draft["id"], sent_id)
-                via = "IMAP/SMTP"
-            else:
-                # Delete draft after successful send (google/microsoft only —
-                # the provider keeps its own copy of the sent message).
-                try:
-                    with get_session() as session:
-                        session.query(Draft).filter(Draft.id == draft["id"]).delete()
-                except Exception as e:
-                    logger.error(f"draft delete failed after delivery: {e}", exc_info=True)
-                    _force_sent_after_delivery(owner_id, draft["id"], sent_id)
-                via = provider.title()
-
-            return f"""✅ **Email sent!**
-
-**To:** {to_str}
-**Subject:** {draft.get('subject', '(no subject)')}
-**Via:** {via}
-
-Message ID: `{sent_id if sent_id else 'N/A'}`"""
+            from zylch.services.mailbox_drafts import MailboxDrafts
+            from zylch.services.request_policy import assert_tool_allowed
+            assert_tool_allowed("send_draft")
+            if not sub_args or sub_args[0].startswith("--"):
+                return "Missing draft ID. Usage: /email send <draft_id>"
+            from uuid import uuid4
+            value = await asyncio.to_thread(MailboxDrafts(owner_id).send, sub_args[0], "command-send:" + str(uuid4()))
+            return json.dumps(value, ensure_ascii=False)
 
         # --- DELETE DRAFT ---
         if subcommand == "delete":
-            # Get draft_id from first positional arg after 'delete'
-            draft_id = sub_args[0] if sub_args and not sub_args[0].startswith("--") else None
-
-            if not draft_id:
-                return "❌ Missing draft ID\n\nUsage: `/email delete <draft_id>`"
-
-            with get_session() as session:
-                deleted_count = (
-                    session.query(Draft)
-                    .filter(Draft.owner_id == owner_id, Draft.id == draft_id)
-                    .delete()
-                )
-
-            if deleted_count:
-                return f"✅ Draft `{draft_id}` deleted"
-            else:
-                return f"❌ Draft not found: `{draft_id}`"
+            from zylch.services.mailbox_drafts import MailboxDrafts
+            from zylch.services.request_policy import assert_tool_allowed
+            assert_tool_allowed("delete_draft")
+            if not sub_args or sub_args[0].startswith("--"):
+                return "Missing draft ID. Usage: /email delete <draft_id>"
+            from zylch.storage.storage import Storage
+            value = await asyncio.to_thread(Storage.get_instance().trash_draft_operation, owner_id, sub_args[0])
+            return json.dumps(value, ensure_ascii=False)
 
         # --- RESET (delete all emails) ---
         if subcommand == "reset":
@@ -3019,21 +2752,12 @@ to use MrCall credits."""
             draft_id = tool_result.get("draft_id") or ""
             created = bool(tool_result.get("created", True))
             if not draft_id:
-                # The agent could not persist — it only saves when it
-                # resolved a recipient. Keep the draft anyway, so the composed
-                # text is not lost and the operator can add the address.
-                to_addresses = [recipient] if recipient and recipient != "(not specified)" else []
-                draft = storage.create_draft(
-                    owner_id=owner_id,
-                    to=to_addresses,
-                    subject=subject,
-                    body=body,
-                    in_reply_to=tool_result.get("in_reply_to"),
-                    references=tool_result.get("references"),
-                    thread_id=tool_result.get("thread_id"),
-                )
-                draft_id = draft.get("id", "") if draft else ""
-                created = draft.get("created", True) if draft else False
+                return "Mailbox draft preparation did not return a saved draft. Inspect the original operation before retrying."
+            current = storage.get_draft(owner_id, draft_id)
+            if current is None:
+                return "The prepared mailbox draft no longer exists: " + draft_id
+            subject, body = current.get("subject", ""), current.get("body", "")
+            recipient = ", ".join(current.get("to_addresses") or [])
 
             headline = "📝 Draft Created" if created else "📝 Draft Already Exists"
             return f"""**{headline}** (ID: `{draft_id}`)

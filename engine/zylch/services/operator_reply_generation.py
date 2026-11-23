@@ -41,7 +41,7 @@ async def generate(context, request_text):
     raise ReplyRefusal("structured_reply_decision_required")
 
 
-def persist(source, body, actor):
+def persist(source, body, actor, *, request_key=None, mode="draft"):
     from zylch.storage.storage import Storage
     import importlib.util
     if not isinstance(source, dict) or source.get("mailbox_id") != actor.mailbox_id:
@@ -53,22 +53,14 @@ def persist(source, body, actor):
     recipients = getaddresses([source.get("from_email") or ""])
     if len(recipients) != 1 or not recipients[0][1] or recipients[0][1].lower() == actor.mailbox_address.lower():
         raise ReplyRefusal("one_external_source_sender_required")
-    if importlib.util.find_spec("zylch.services.contextual_email_policy") is not None:
-        from .contextual_email_policy import source_binding, scope
-        binding = source_binding(actor.mailbox_address, {"source_email_id": source_id, "thread_key": root, "target_message_id": target})
-    else:
-        from .task_assignment_draft_policy import scope
-        binding = root
     subject = source.get("subject") or ""
     if not subject.lower().startswith("re:"):
         subject = "Re: " + subject
     from zylch.services.task_assignment_mail import references
-    # Root first, the source's chain, the target last: the order the review
-    # publication and the exact send require. Plain text, as the outbound
-    # MIME is plain text and the review copy is rendered text/plain.
+    from zylch.services.mailbox_drafts import MailboxDrafts
     refs = list(dict.fromkeys([root, *references(source.get("references") or ""), target]))
-    with scope(binding):
-        return Storage.get_instance().create_draft(
-            actor.mailbox_address, to=[recipients[0][1]], subject=subject, body=body,
-            in_reply_to=target, references=refs, thread_id=root, body_format="plain",
-        )
+    mailbox = MailboxDrafts(actor.mailbox_address)
+    method = mailbox.create if mode == "draft" else mailbox.send_message
+    return method(to=[recipients[0][1]], subject=subject, body=body,
+        in_reply_to=target, references=refs, thread_id=root, body_format="plain",
+        request_key=request_key, source_id=source_id)

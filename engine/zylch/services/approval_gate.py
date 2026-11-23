@@ -129,8 +129,9 @@ def _addresses(value: Any) -> list:
     return list(value)
 
 
-def draft_updates_from_card(card: Optional[Mapping[str, Any]]) -> Dict[str, Any]:
-    """Translate approval-card fields back into Draft column updates.
+def draft_updates_from_card(card: Optional[Mapping[str, Any]], *,
+                            original: Optional[Mapping[str, Any]] = None) -> Dict[str, Any]:
+    """Translate explicit approval edits into mailbox field updates.
 
     A human who corrects the recipient in the card must not have the correction
     dropped on the floor, so whatever comes back from the gate is persisted to
@@ -148,6 +149,8 @@ def draft_updates_from_card(card: Optional[Mapping[str, Any]]) -> Dict[str, Any]
         ("bcc", "bcc_addresses", True),
     ):
         if card_key not in card or card[card_key] is None:
+            continue
+        if original is not None and card_key in original and card[card_key] == original[card_key]:
             continue
         updates[column] = _addresses(card[card_key]) if is_list else card[card_key]
     return updates
@@ -255,10 +258,13 @@ async def gate_slash_command(
             "Nothing was changed."
         )
 
-    updates = draft_updates_from_card(edited)
+    updates = draft_updates_from_card(edited, original=card)
     if is_send and updates and draft_id:
         try:
-            storage.update_draft(owner_id, draft_id, updates)
+            changed = storage.update_draft(owner_id, draft_id, updates)
+            if changed is None:
+                return f"Draft not found after approval: {draft_id}. Nothing was sent."
         except Exception as e:
-            logger.warning(f"[approval] could not apply card edits to {draft_id}: {e}")
+            logger.exception("[approval] mailbox card edit failed; send refused")
+            return f"Could not save the approved changes to draft {draft_id}: {e}. Nothing was sent."
     return None
