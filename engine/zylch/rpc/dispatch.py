@@ -331,7 +331,13 @@ async def _dispatch_raw(raw: str, notify: NotifyFn) -> Optional[Dict[str, Any]]:
         if method.startswith("tasks."):
             from zylch.qonto.errors import QontoError
             from zylch.services.preparation import PreparationStopped
+            from zylch.services.task_assignment_types import AssignmentError
 
+            if isinstance(e, AssignmentError):
+                logger.warning("[rpc] task source authority refused code=%s", e.code)
+                return None if is_notification else _error(
+                    req_id, e.code, "Task source authority is unavailable"
+                )
             if isinstance(e, PreparationStopped):
                 logger.warning("[rpc] task preparation refused code=%s", e.code)
                 return None if is_notification else _error(

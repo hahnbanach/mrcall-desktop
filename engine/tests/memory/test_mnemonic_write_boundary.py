@@ -115,12 +115,17 @@ BUILT_SQL = Counter(
         ("zylch/storage/step_emails_mailbox.py", "_columns", "exec_driver_sql"): 1,
         ("zylch/storage/step_emails_mailbox.py", "_migrate_cursors", "exec_driver_sql"): 3,
         ("zylch/storage/step_emails_mailbox.py", "_rebuild_emails", "exec_driver_sql"): 3,
+        ("zylch/storage/step_exact_send.py", "apply", "exec_driver_sql"): 1,
         ("zylch/storage/step_identifiers_company_unique.py", "apply", "exec_driver_sql"): 2,
         ("zylch/storage/step_memory_operations_drop_approval.py", "apply", "exec_driver_sql"): 1,
         ("zylch/storage/step_memory_split.py", "_columns", "exec_driver_sql"): 1,
         ("zylch/storage/step_memory_split.py", "apply", "exec_driver_sql"): 1,
         ("zylch/storage/step_memory_split.py", "copy_if_absent", "exec_driver_sql"): 2,
         ("zylch/storage/step_memory_split.py", "reverse_into_profile", "exec_driver_sql"): 2,
+        ("zylch/workflows/document_snapshot.py", "commit", "exec_driver_sql"): 1,
+        ("zylch/workflows/document_snapshot.py", "receipt_rows", "text"): 1,
+        ("zylch/workflows/document_snapshot.py", "sources", "text"): 1,
+        ("zylch/workflows/document_snapshot.py", "zero_busy", "exec_driver_sql"): 1,
     }
 )
 

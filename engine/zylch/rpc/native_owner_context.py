@@ -11,10 +11,14 @@ from contextlib import contextmanager
 _owner = contextvars.ContextVar("native_owner_request", default=None)
 
 
+class NativeOwnerError(PermissionError):
+    code = -32060
+
+
 @contextmanager
 def authenticated_owner_request(uid):
     if not isinstance(uid, str) or not uid or uid != os.environ.get("OWNER_ID"):
-        raise PermissionError("Native owner transport required")
+        raise NativeOwnerError("Native owner transport required")
     token = _owner.set(uid)
     try:
         yield
@@ -26,8 +30,8 @@ def require_owner():
     from zylch.services import task_assignment_identity as identity
 
     if _owner.get() is None or _owner.get() != os.environ.get("OWNER_ID"):
-        raise PermissionError("Confirm this action in the authenticated Desktop")
+        raise NativeOwnerError("Confirm this action in the authenticated Desktop")
     actor = identity.actor()
     if actor.uid != _owner.get():
-        raise PermissionError("Native owner changed")
+        raise NativeOwnerError("Native owner changed")
     return actor

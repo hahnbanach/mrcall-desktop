@@ -9,14 +9,23 @@ import json
 import os
 from pathlib import Path
 import sqlite3
+import subprocess
 import sys
 
 import pytest
 
 
 ENGINE = Path(__file__).resolve().parents[2]
-BOOTSTRAP = r'''
+FIXTURE_BOOTSTRAP = r'''
 import asyncio, json, os, time
+from pathlib import Path
+from pytest import MonkeyPatch
+from tests.assignments.conftest import env as assignment_env
+fixture_patch = MonkeyPatch()
+fixture_scope = assignment_env.__wrapped__(Path(os.environ['TEST_FIXTURE_ROOT']), fixture_patch)
+fixture = next(fixture_scope)
+'''
+BOOTSTRAP = FIXTURE_BOOTSTRAP + r'''
 from zylch.storage.storage import Storage
 store = Storage.get_instance()
 foreign = {}
@@ -31,7 +40,7 @@ for state in ('open', 'closed'):
     foreign[state] = task['id']
     if state == 'closed':
         store.complete_task_item('other@example.test', task['id'], actor='human', why='foreign close')
-print(json.dumps({'fixture_seed': foreign}), flush=True)
+print(json.dumps({'fixture_seed': foreign, 'fixture_db_path': os.environ['ZYLCH_DB_PATH']}), flush=True)
 async def main():
     if os.environ['TEST_TRANSPORT'] == 'stdio':
         from zylch.rpc.server import serve
@@ -40,9 +49,9 @@ async def main():
         from websockets.asyncio.server import serve
         from zylch.rpc.server_ws import _handle_connection
         async def fixture_handshake(connection, request):
-            assert request.headers.get('Authorization') == 'Bearer fixture-token'
-            connection._fb_claims = {'sub': 'fixture-owner', 'email': 'owner@example.test', 'exp': int(time.time()) + 3600}
-            connection._fb_token = 'fixture-token'
+            assert request.headers.get('Authorization') == 'Bearer fixture:alice'
+            connection._fb_claims = {'sub': 'alice', 'email': 'alice@example.test', 'exp': int(time.time()) + 3600}
+            connection._fb_token = 'fixture:alice'
         async with serve(_handle_connection, '127.0.0.1', 0, process_request=fixture_handshake) as server:
             print(json.dumps({'fixture_url': 'ws://127.0.0.1:' + str(server.sockets[0].getsockname()[1])}), flush=True)
             await asyncio.Event().wait()
@@ -58,7 +67,7 @@ def snapshot(db):
         ) + ') FROM task_items'))
 
 
-async def exercise(transport, tmp_path):
+def fixture_environment(transport, tmp_path):
     home = tmp_path / 'home'
     home.mkdir()
     db = tmp_path / 'ledger.db'
@@ -68,8 +77,14 @@ async def exercise(transport, tmp_path):
         'ZYLCH_PROFILE_DIR': str(tmp_path), 'ZYLCH_HOME': str(home),
         'EMAIL_ADDRESS': 'owner@example.test', 'EMAIL_PASSWORD': 'fixture-only',
         'OWNER_ID': 'fixture-owner', 'TEST_TRANSPORT': transport,
+        'TEST_FIXTURE_ROOT': str(tmp_path),
         'SYSTEM_LLM_PROVIDER': 'anthropic', 'AUTO_UPDATE_ENABLED': 'n',
     }
+    return environment
+
+
+async def exercise(transport, tmp_path):
+    environment = fixture_environment(transport, tmp_path)
     with (tmp_path / 'server.stderr').open('wb') as stderr:
         process = await asyncio.create_subprocess_exec(
             sys.executable, '-c', BOOTSTRAP, cwd=tmp_path, env=environment,
@@ -82,13 +97,15 @@ async def exercise(transport, tmp_path):
                 assert raw, (tmp_path / 'server.stderr').read_text()
                 return json.loads(raw)
 
-            foreign = (await line())['fixture_seed']
+            seed = await line()
+            foreign = seed['fixture_seed']
+            db = Path(seed['fixture_db_path'])
             if transport == 'stdio':
                 assert (await line())['method'] == 'engine.ready'
             else:
                 from websockets.asyncio.client import connect
                 socket = await connect((await line())['fixture_url'], additional_headers={
-                    'Authorization': 'Bearer fixture-token',
+                    'Authorization': 'Bearer fixture:alice',
                 })
             serial = 0
 
@@ -136,7 +153,9 @@ async def exercise(transport, tmp_path):
             assert (await rpc('tasks.create', payload))['task_id'] == task_id
             snoozed = await rpc('tasks.snooze', {'task_id': task_id, 'days': 1, 'actor': 'operator', 'why': 'wait'})
             assert snoozed['ok'] and snoozed['due_at'] > 0
-            assert [row['id'] for row in await rpc('tasks.list', {'due_filter': 'due_now'})] == [second['task_id']]
+            due_rows = await rpc('tasks.list', {'due_filter': 'due_now'})
+            assert [row['id'] for row in due_rows] == [second['task_id']]
+            assert due_rows[0]['source_root_state'] == 'unresolved'
             assert await rpc('tasks.complete', {'task_id': task_id, 'actor': 'human', 'why': 'Handled personally', 'note': 'Done'}) == {'ok': True}
             closed = await rpc('tasks.get', {'task_id': task_id})
             assert closed['completed_at'] and closed['close_actor'] == 'human'
@@ -169,3 +188,56 @@ async def exercise(transport, tmp_path):
 @pytest.mark.parametrize('transport', ['stdio', 'websocket'])
 def test_task_contract_across_production_transports(transport, tmp_path):
     asyncio.run(exercise(transport, tmp_path))
+
+
+@pytest.mark.parametrize('session_state', ['missing', 'foreign'])
+def test_email_task_listing_refuses_unadmitted_session_without_mutation(tmp_path, session_state):
+    script = FIXTURE_BOOTSTRAP + r'''
+from zylch.auth import clear_session, set_session
+from zylch.rpc.dispatch import dispatch_raw
+from zylch.storage.storage import Storage
+store = Storage.get_instance()
+owner = 'alice@example.test'
+store.store_task_item(owner, {
+    'event_type': 'email', 'event_id': 'unresolved-source',
+    'contact_email': 'fixture@example.test', 'title': 'Answer fixture',
+    'action_required': True,
+})
+before = repr(store.get_task_items(owner, include_completed=True))
+if os.environ['TEST_SESSION_STATE'] == 'missing':
+    clear_session()
+else:
+    set_session('bob', 'bob@example.test', 'fixture:bob', int(time.time() * 1000) + 3600000)
+async def check():
+    for method in ('tasks.list', 'operator.rules.list'):
+        response = await dispatch_raw(json.dumps({
+            'jsonrpc': '2.0', 'id': 1, 'method': method, 'params': {},
+        }), lambda *_: None)
+        assert response['error']['code'] == -32060, response
+        assert repr(store.get_task_items(owner, include_completed=True)) == before
+    print(json.dumps({'typed_refusals': 2, 'task_mutations': 0}), flush=True)
+asyncio.run(check())
+'''
+    environment = fixture_environment('dispatch', tmp_path)
+    environment['TEST_SESSION_STATE'] = session_state
+    result = subprocess.run([sys.executable, '-c', script], cwd=tmp_path, env=environment,
+                            capture_output=True, text=True, timeout=30)
+    assert result.returncode == 0, result.stderr
+    assert json.loads(result.stdout.splitlines()[-1]) == {'typed_refusals': 2, 'task_mutations': 0}
+
+
+@pytest.mark.asyncio
+async def test_task_assignment_refusal_redacts_untrusted_exception_text(monkeypatch):
+    from zylch.rpc.dispatch import dispatch_raw
+    from zylch.rpc.methods import METHODS
+    from zylch.services.task_assignment_types import AssignmentError
+
+    async def fail(_params, _notify):
+        raise AssignmentError('private-source-material')
+
+    monkeypatch.setitem(METHODS, 'tasks.list', fail)
+    response = await dispatch_raw(json.dumps({
+        'jsonrpc': '2.0', 'id': 1, 'method': 'tasks.list', 'params': {},
+    }), lambda *_: None)
+    assert response['error'] == {'code': -32060, 'message': 'Task source authority is unavailable'}
+    assert 'private-source-material' not in repr(response)
