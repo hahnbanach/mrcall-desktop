@@ -188,7 +188,13 @@ def answered(service, source):
     with service.provider() as client:
         values = client.conversation(target)
     messages = [(value, parse(value["raw"])) for value in values]
-    selected = [(value, msg) for value, msg in messages if str(msg.get("Message-ID") or "") == target]
+    selected = []
+    for value, msg in messages:
+        headers = msg.get_all("Message-ID", [])
+        # Match the provider's singleton-header normalization on full MIME too.
+        if (len(headers) == 1 and not getattr(headers[0], "defects", [])
+                and str(headers[0]).strip() == target):
+            selected.append((value, msg))
     if len(selected) != 1:
         raise MailboxDraftError("mailbox_source_unavailable")
     source_date = _date(selected[0][1])

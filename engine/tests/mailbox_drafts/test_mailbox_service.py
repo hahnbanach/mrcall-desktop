@@ -144,6 +144,40 @@ def prepare(value, request_key="prepare-operation-0001"):
                         source_id="source-uuid", request_key=request_key)
 
 
+@pytest.mark.parametrize("message_id_header", [
+    b"Message-ID: <original@example.test>\r\n",
+    b"Message-ID:\r\n <original@example.test>\r\n",
+    b"Message-ID: <original@example.test> \r\n",
+])
+@pytest.mark.parametrize("has_sent_reply", [False, True])
+def test_preflight_normalizes_single_full_mime_source_header(state, monkeypatch, message_id_header, has_sent_reply):
+    value = service(state)
+    raw = (message_id_header + b"From: customer@example.test\r\n"
+           b"To: owner@example.test\r\nDate: Tue, 24 Nov 2026 12:00:00 +0000\r\n"
+           b"Content-Type: text/plain; charset=utf-8\r\n\r\nOriginal request.\r\n")
+    conversation = [{"raw": raw, "labels": []}]
+    if has_sent_reply:
+        conversation.append({"raw": (
+            b"Message-ID: <human-reply@example.test>\r\nFrom: owner@example.test\r\n"
+            b"To: customer@example.test\r\nDate: Tue, 24 Nov 2026 12:01:00 +0000\r\n"
+            b"In-Reply-To: <original@example.test>\r\n\r\nHuman reply.\r\n"), "labels": ["SENT"]})
+    monkeypatch.setattr(state[1], "conversation", lambda target: conversation, raising=False)
+    assert value.answered({"message_id_header": TARGET}) is has_sent_reply
+    assert state[1].creations == state[1].transmissions == 0
+
+
+@pytest.mark.parametrize("duplicate", ["header", "message"])
+def test_preflight_rejects_ambiguous_full_mime_source_identity(state, monkeypatch, duplicate):
+    raw = (b"Message-ID: <original@example.test>\r\n"
+           + (b"Message-ID: <original@example.test>\r\n" if duplicate == "header" else b"")
+           + b"Date: Tue, 24 Nov 2026 12:00:00 +0000\r\n\r\nOriginal request.\r\n")
+    conversation = [{"raw": raw, "labels": []}] * (2 if duplicate == "message" else 1)
+    monkeypatch.setattr(state[1], "conversation", lambda target: conversation, raising=False)
+    with pytest.raises(MailboxDraftError, match="mailbox_source_unavailable"):
+        service(state).answered({"message_id_header": TARGET})
+    assert state[1].creations == state[1].transmissions == 0
+
+
 def test_saved_external_edit_uses_fresh_handle_current_body_and_recipients(state):
     value = service(state)
     draft = prepare(value)
